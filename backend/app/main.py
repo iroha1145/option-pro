@@ -80,6 +80,22 @@ def _scope_token(scope) -> str:
     return _scope_header(scope, b"x-app-token").strip()
 
 
+def _cors_headers(scope) -> list[tuple[bytes, bytes]]:
+    if not _origins:
+        return []
+    origin = _scope_header(scope, b"origin")
+    if not origin:
+        return []
+    allow_origin = origin if "*" in _origins or origin in _origins else ""
+    if not allow_origin:
+        return []
+    return [
+        (b"access-control-allow-origin", allow_origin.encode("latin-1")),
+        (b"access-control-allow-credentials", b"true"),
+        (b"vary", b"Origin"),
+    ]
+
+
 def _prune_rl_buckets(now: float) -> None:
     """Drop stale/empty buckets. Called at most once per window."""
     global _rl_last_prune
@@ -135,6 +151,7 @@ class _GatewayMiddleware:
                     return await _send_json(
                         send, 401,
                         {"error": "unauthorized", "message": "Missing or invalid API token"},
+                        extra_headers=_cors_headers(scope),
                     )
 
             # ── Per-IP rate limit ──
@@ -160,7 +177,7 @@ class _GatewayMiddleware:
                 return await _send_json(
                     send, 429,
                     {"error": "rate_limited", "message": f"Too many requests; try again in {_RL_WINDOW}s"},
-                    extra_headers=[(b"retry-after", str(_RL_WINDOW).encode())],
+                    extra_headers=_cors_headers(scope) + [(b"retry-after", str(_RL_WINDOW).encode())],
                 )
             bucket.append(now)
 

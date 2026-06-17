@@ -157,7 +157,7 @@ KNOWN_TICKERS = {
     "BA": "Boeing", "CAT": "Caterpillar", "DE": "Deere", "UPS": "UPS", "FDX": "FedEx",
     "GE": "GE Aerospace", "HON": "Honeywell", "RTX": "RTX Corp", "LMT": "Lockheed Martin",
     # Tech / Internet
-    "UBER": "Uber", "SHOP": "Shopify", "SQ": "Block Inc", "COIN": "Coinbase",
+    "UBER": "Uber", "SHOP": "Shopify", "XYZ": "Block Inc", "COIN": "Coinbase",
     "SNAP": "Snap Inc", "PINS": "Pinterest", "RBLX": "Roblox", "U": "Unity Software",
     "DDOG": "Datadog", "MDB": "MongoDB", "ZS": "Zscaler", "OKTA": "Okta",
     "TEAM": "Atlassian", "TWLO": "Twilio", "HUBS": "HubSpot",
@@ -174,6 +174,7 @@ KNOWN_TICKERS = {
     "XLF": "Financials ETF", "XLE": "Energy ETF", "XLV": "Healthcare ETF",
     "ARKK": "ARK Innovation ETF", "SOXX": "Semiconductor ETF", "GLD": "Gold ETF",
     "TLT": "20Y Treasury ETF", "HYG": "High Yield Bond ETF",
+    "PSKY": "Paramount Skydance", "WULF": "TeraWulf",
 }
 
 
@@ -190,77 +191,53 @@ async def _build_watchlist():
         all_tickers.extend(sec["tickers"])
     all_tickers = list(dict.fromkeys(all_tickers))
 
-    # Cap concurrent yfinance calls so we don't 228-blast Yahoo and trip its
-    # per-IP rate limiter. Empirically Yahoo is fine with 8 concurrent from a
-    # single browser-impersonating session, but stalls hard above ~50.
-    sem = asyncio.Semaphore(8)
-
-    async def fetch_one(ticker):
-        def _work():
-            # Retry once with backoff on rate limit
-            import random, time as _t
-            for attempt in range(2):
-                try:
-                    tk = yf.Ticker(ticker)
-                    info = tk.fast_info
-                    price = float(info.last_price)
-                    prev = float(info.previous_close) if info.previous_close else price
-                    from app.services.zh_names import get_zh_name
-                    return {
-                        "ticker": ticker,
-                        "name": get_zh_name(ticker) or ticker,
-                        "price": round(price, 2),
-                        "change_percent": round((price - prev) / prev * 100, 2) if prev else 0,
-                    }
-                except Exception as e:
-                    if attempt == 0 and "rate" in str(e).lower():
-                        _t.sleep(0.5 + random.random())
-                        continue
-                    return None
-
-        async with sem:
-            return await asyncio.to_thread(_work)
-
-    # Fetch real sparkline data (5-day daily closes) using yfinance batch download.
-    # ONE HTTP call for all 228 tickers — much cheaper than per-ticker history().
-    def _fetch_sparks():
+    # Fetch daily closes once and derive both card prices and sparklines from
+    # the same batch. This avoids one fast_info request per ticker on cold load.
+    def _fetch_quotes():
         try:
             import yfinance as yf_mod
-            # group_by='ticker' returns nested cols; auto_adjust=False to get raw close
             df = yf_mod.download(
                 tickers=" ".join(all_tickers),
-                period="5d",
+                period="7d",
                 interval="1d",
                 group_by="ticker",
-                threads=False,  # we already control concurrency
+                threads=True,
                 progress=False,
                 auto_adjust=False,
                 session=getattr(__import__("app.services.yahoo", fromlist=["_yf_session"]),
                                 "_yf_session", None),
             )
-            sparks = {}
+            from app.services.zh_names import get_zh_name
+            quotes = {}
             for t in all_tickers:
                 try:
-                    if t in df.columns.get_level_values(0):
-                        closes = df[t]["Close"].dropna().tolist()
-                        if closes:
-                            sparks[t] = [round(float(c), 2) for c in closes[-7:]]
+                    frame = None
+                    if getattr(df.columns, "nlevels", 1) > 1 and t in df.columns.get_level_values(0):
+                        frame = df[t]
+                    elif len(all_tickers) == 1:
+                        frame = df
+                    if frame is None or frame.empty:
+                        continue
+                    close_col = "Close" if "Close" in frame.columns else "Adj Close"
+                    closes = [float(c) for c in frame[close_col].dropna().tolist() if math.isfinite(float(c))]
+                    if not closes:
+                        continue
+                    price = closes[-1]
+                    prev = closes[-2] if len(closes) > 1 else price
+                    quotes[t] = {
+                        "ticker": t,
+                        "name": get_zh_name(t) or t,
+                        "price": round(price, 2),
+                        "change_percent": round((price - prev) / prev * 100, 2) if prev else 0,
+                        "spark": [round(c, 2) for c in closes[-7:]],
+                    }
                 except Exception:
                     continue
-            return sparks
+            return quotes
         except Exception:
             return {}
 
-    # Run sparkline batch + per-ticker price fetches concurrently
-    sparks_task = asyncio.to_thread(_fetch_sparks)
-    results, sparks = await asyncio.gather(
-        asyncio.gather(*[fetch_one(t) for t in all_tickers], return_exceptions=True),
-        sparks_task,
-    )
-    price_map = {r["ticker"]: r for r in results if isinstance(r, dict)}
-    # Attach real sparkline to each stock
-    for ticker, stock in price_map.items():
-        stock["spark"] = sparks.get(ticker, [])
+    price_map = await asyncio.to_thread(_fetch_quotes)
 
     # If yfinance limited us hard, less than 30% succeeded — treat as failure
     # so the cache returns the previous (stale) snapshot instead of an empty one.

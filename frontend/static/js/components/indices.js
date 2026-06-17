@@ -26,6 +26,17 @@ function renderItem(idx) {
   </button>`;
 }
 
+function normalizeStockQuote(idx, quote) {
+  if (!quote || quote.__error) return idx;
+  const price = Number(quote.price ?? quote.regularMarketPrice ?? quote.last);
+  if (!Number.isFinite(price)) return idx;
+  return {
+    ...idx,
+    price,
+    changePercent: Number(quote.change_percent ?? quote.changePercent ?? quote.regularMarketChangePercent)
+  };
+}
+
 export async function mountIndexTicker() {
   const track = document.getElementById('index-ticker-track');
   if (!track) return;
@@ -45,18 +56,16 @@ export async function mountIndexTicker() {
       if (!q || q.price == null) return idx;
       return { ...idx, price: Number(q.price), changePercent: Number(q.change_percent) };
     });
+    const missing = data.filter(idx => !Number.isFinite(Number(idx.price)));
+    if (missing.length) {
+      const fallbackResults = await Promise.all(missing.map(i => safe(api.stock(i.symbol))));
+      const fallbackBySymbol = new Map(missing.map((idx, i) => [idx.symbol, fallbackResults[i]]));
+      data = data.map(idx => normalizeStockQuote(idx, fallbackBySymbol.get(idx.symbol)));
+    }
   } else {
     // Fallback to per-ticker overview endpoint (older backend)
     const results = await Promise.all(INDICES.map(i => safe(api.stock(i.symbol))));
-    data = INDICES.map((idx, i) => {
-      const r = results[i];
-      if (r?.__error) return idx;
-      return {
-        ...idx,
-        price: Number(r.price ?? r.regularMarketPrice ?? r.last),
-        changePercent: Number(r.change_percent ?? r.changePercent ?? r.regularMarketChangePercent)
-      };
-    });
+    data = INDICES.map((idx, i) => normalizeStockQuote(idx, results[i]));
   }
 
   track.innerHTML = data.map(renderItem).join('');
