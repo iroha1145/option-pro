@@ -230,6 +230,9 @@ a { color: inherit; }
   border-radius: 8px;
   box-shadow: var(--shadow-lift);
 }
+.search-results-dropdown[hidden] {
+  display: none !important;
+}
 .search-result-item {
   display: flex;
   align-items: center;
