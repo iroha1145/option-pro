@@ -23,6 +23,7 @@ from app.services.strength.marketdata import (
     marketdata_is_enabled,
 )
 from app.services.strength.market_regime import MARKET_BENCHMARKS, compute_market_regime
+from app.services.strength.price_action import compute_price_action
 from app.services.strength.vol_price_match import compute_vol_price_match
 from app.services.strength.yahoo_options import (
     enrich_rows_with_yahoo_options,
@@ -573,6 +574,7 @@ def _feature_row(ticker: str, hist: pd.DataFrame, spy: pd.DataFrame, sector_meta
     high_52w = _safe_float(close.tail(252).max() if len(close) >= 120 else close.max(), 4)
     high_3m = _safe_float(close.tail(63).max(), 4)
     vol_price_match = compute_vol_price_match(hist)
+    price_action = compute_price_action(hist)
 
     spy_close = spy["Close"].dropna() if not spy.empty and "Close" in spy.columns else pd.Series(dtype=float)
     stock_ret_63 = _ret(close, 63)
@@ -611,6 +613,7 @@ def _feature_row(ticker: str, hist: pd.DataFrame, spy: pd.DataFrame, sector_meta
         "follow_through": bool(len(close) >= 5 and close.tail(3).min() >= close.tail(20).mean()),
         "vol_price_match": vol_price_match,
         "volume_truth": vol_price_match,
+        "price_action": price_action,
         "history_days": len(close),
     }
 
@@ -705,12 +708,16 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
     option_mult = float(rules.get("option_heat_weight_multiplier", 1.0) or 1.0)
     risk_mult = float(rules.get("risk_penalty_multiplier", 1.0) or 1.0)
     weights = {
-        "short": .18 * momentum_mult,
-        "mid": .26 * relative_mult,
-        "long": .16 * long_mult,
+        "short": .16 * momentum_mult,
+        "mid": .24 * relative_mult,
+        "long": .14 * long_mult,
         "breakout": .12 * breakout_mult,
-        "sector": .10 * sector_mult,
-        "option": .08 * option_mult,
+        # Pure price-action structure (HH/HL, candle patterns, spring/upthrust).
+        # Not tied to a market-regime multiplier: structure reads the same in
+        # any regime — the regime already scales momentum/breakout weights.
+        "pa": .10,
+        "sector": .09 * sector_mult,
+        "option": .07 * option_mult,
         "market": .08,
     }
     weight_total = sum(weights.values()) or 1.0
@@ -756,6 +763,8 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
         option_heat_score = 50.0
         risk_penalty, risk_flags, warnings = _risk_penalty(row, min_avg_dollar_volume, profile)
         vol_price = row.get("vol_price_match") if isinstance(row.get("vol_price_match"), dict) else {}
+        price_action = row.get("price_action") if isinstance(row.get("price_action"), dict) else {}
+        pa_score = _clamp(price_action.get("score"), default=50.0)
         base_breakout_score = (_clamp(row.get("ath_proximity")) + ret20) / 2
         breakout_quality_score = _clamp(
             base_breakout_score +
@@ -771,18 +780,20 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
             mid_score * weights["mid"] +
             long_score * weights["long"] +
             breakout_quality_score * weights["breakout"] +
+            pa_score * weights["pa"] +
             sector_score * weights["sector"] +
             option_heat_score * weights["option"] +
             market["score"] * weights["market"]
         ) / weight_total - risk_penalty * risk_mult
         market_adjustment = _safe_float(
             raw_final - (
-                short_score * .18 +
-                mid_score * .26 +
-                long_score * .16 +
+                short_score * .16 +
+                mid_score * .24 +
+                long_score * .14 +
                 base_breakout_score * .12 +
-                sector_score * .10 +
-                option_heat_score * .08 +
+                pa_score * .10 +
+                sector_score * .09 +
+                option_heat_score * .07 +
                 market["score"] * .08 -
                 risk_penalty
             ),
@@ -805,6 +816,18 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
         for tag in vol_price.get("tags", [])[:2]:
             if tag not in {"未明显收缩", "量价样本不足"}:
                 tags.append(str(tag))
+        # Price-action structure tags/reasons (pure K线).
+        for tag in price_action.get("tags", [])[:2]:
+            if tag not in {"K线数据不足", "K线样本不足", "区间震荡"}:
+                tags.append(str(tag))
+        if price_action.get("structure") == "uptrend":
+            reasons.append("HH/HL 上升结构完好")
+        elif price_action.get("spring"):
+            reasons.append("Spring 假跌破后回收，结构偏多")
+        elif price_action.get("structure") == "downtrend":
+            warnings.append("LH/LL 下降结构未破坏")
+        if price_action.get("upthrust"):
+            warnings.append("前高假突破（Upthrust），追高需谨慎")
         if row.get("ma_alignment", 0) >= 66:
             tags.append("均线多头")
             reasons.append("价格位于关键均线上方")
@@ -830,6 +853,18 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
             "volume": round(rv_rank, 1),
             "breakout": round(breakout_quality_score, 1),
             "base_breakout": round(base_breakout_score, 1),
+            "price_action": round(pa_score, 1),
+            "price_action_detail": {
+                "structure": price_action.get("structure"),
+                "structure_label": price_action.get("structure_label"),
+                "patterns": price_action.get("pattern_labels") or [],
+                "spring": bool(price_action.get("spring")),
+                "upthrust": bool(price_action.get("upthrust")),
+                "support": price_action.get("support"),
+                "resistance": price_action.get("resistance"),
+                "support_dist_pct": price_action.get("support_dist_pct"),
+                "resistance_dist_pct": price_action.get("resistance_dist_pct"),
+            },
             "technical": round((_score_rsi(row.get("rsi14")) + _score_signed_pct(row.get("macd_direction"), 40)) / 2, 1),
             "sector": round(sector_score, 1),
             "option_heat": round(option_heat_score, 1),
@@ -851,6 +886,7 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
             "score_mid": round(_clamp(mid_score), 1),
             "score_long": round(_clamp(long_score), 1),
             "sector_score": round(sector_score, 1),
+            "price_action_score": round(pa_score, 1),
             "breakout_quality_score": round(breakout_quality_score, 1),
             "option_heat_score": round(option_heat_score, 1),
             "option_score_weight": effective_weights["option"],
@@ -1103,7 +1139,7 @@ async def scan_strength(
         f":yo:{int(yahoo_options_is_enabled(settings) and include_options)}:{settings.yahoo_options_enrich_limit}"
         f":ydte:{settings.yahoo_option_target_dte}:ywin:{settings.yahoo_option_strike_window_pct}"
         f":opt:{int(include_options)}"
-        ":mr:v3:spread:voltruth"
+        ":mr:v3:spread:voltruth:pa1"
     )
 
     async def produce() -> dict[str, Any]:

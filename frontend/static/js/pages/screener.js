@@ -276,8 +276,14 @@ function renderResultCard(row, index) {
   const optionProvider = row.option_context?.provider || '';
   const volumeTruth = row.volume_truth || row.vol_price_match || {};
   const effortResult = Number(volumeTruth.effort_result_ratio);
+  const priceAction = row.price_action || row.breakdown?.price_action_detail || {};
+  const paSupport = Number(priceAction.support);
+  const paResistance = Number(priceAction.resistance);
   const metaChips = [
     Number.isFinite(quality) ? `数据覆盖 ${quality}%` : '',
+    priceAction.structure_label && priceAction.structure !== 'range' ? `结构 ${priceAction.structure_label}` : '',
+    Number.isFinite(paSupport) ? `支撑 ${formatMoney(paSupport)}` : '',
+    Number.isFinite(paResistance) ? `阻力 ${formatMoney(paResistance)}` : '',
     volumeTruth.setup_label && volumeTruth.status === 'active' ? `量价 ${volumeTruth.setup_label}` : '',
     Number.isFinite(effortResult) ? `努力/结果 ${effortResult.toFixed(2)}` : '',
     optionStatus === 'active' && optionProvider ? `期权源 ${optionProvider}` : '',
@@ -311,6 +317,7 @@ function renderResultCard(row, index) {
           ${renderScoreBar(row.score_mid, '中')}
           ${renderScoreBar(row.score_long, '长')}
           ${renderScoreBar(row.breakout_quality_score ?? row.breakdown?.breakout, '突破')}
+          ${renderScoreBar(row.price_action_score ?? row.breakdown?.price_action, '结构')}
           ${renderScoreBar(row.sector_score, '板块')}
         </div>
         ${metaChips.length ? `<div class="strength-meta-row">${metaChips.map((chip) => `<span>${escapeHtml(chip)}</span>`).join('')}</div>` : ''}
