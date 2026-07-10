@@ -117,6 +117,7 @@ export function renderTopBottomSignals(container, ticker, data) {
     btn.innerHTML = '<span style="width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;display:inline-block"></span> 正在分析信号一致性...';
     btn.disabled = true;
     const ai = await safe(api.analyzeTopBottomSignals(ticker));
+    if (!container.isConnected || !btn.isConnected || !result.isConnected) return;
     result.style.display = 'block';
     result.innerHTML = renderAiCard(ai);
     btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px">psychology</span> 重新分析';

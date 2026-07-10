@@ -7,7 +7,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import yfinance as yf
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.services.cache import cache
 
@@ -197,10 +197,10 @@ async def _build_upcoming_earnings(today: date):
                     or _next_future_date(timestamp_dates, today)
                 )
                 if next_date is None:
-                    return None
+                    return {"ticker": ticker, "ok": True, "data": None}
                 earnings_date = next_date.isoformat()
 
-                return {
+                return {"ticker": ticker, "ok": True, "data": {
                     "ticker": ticker,
                     "name": name,
                     "earnings_date": earnings_date,
@@ -211,14 +211,31 @@ async def _build_upcoming_earnings(today: date):
                     "revenue_estimate": _to_optional_float(_first(_calendar_get(cal, "Revenue Average"))),
                     "market_cap": _to_optional_float(info.get("marketCap")),
                     "sector": info.get("sector", ""),
-                }
+                }}
             except Exception:
-                return None
+                return {"ticker": ticker, "ok": False, "data": None}
 
         async with sem:
             return await asyncio.to_thread(_work)
 
     results = await asyncio.gather(*[fetch_one(t) for t in EARNINGS_TICKERS], return_exceptions=True)
-    earnings = [r for r in results if isinstance(r, dict)]
+    completed = [r for r in results if isinstance(r, dict)]
+    succeeded = [r for r in completed if r.get("ok")]
+    failed_symbols = [
+        ticker
+        for ticker, result in zip(EARNINGS_TICKERS, results)
+        if not isinstance(result, dict) or not result.get("ok")
+    ]
+    if not succeeded:
+        raise HTTPException(status_code=503, detail="Yahoo earnings data is currently unavailable")
+    earnings = [r["data"] for r in succeeded if isinstance(r.get("data"), dict)]
     earnings.sort(key=lambda x: x.get("earnings_date", "9999"))
-    return _sanitize({"earnings": earnings})
+    return _sanitize({
+        "earnings": earnings,
+        "attempted": len(EARNINGS_TICKERS),
+        "succeeded": len(succeeded),
+        "failed_symbols": failed_symbols,
+        "data_limited": bool(failed_symbols),
+        "source_status": "active" if not failed_symbols else "degraded",
+        "as_of": datetime.now(MARKET_TZ).isoformat(),
+    })

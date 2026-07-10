@@ -22,10 +22,19 @@ const routeTitles = {
 };
 
 function parseHash() {
-  const [route = 'watchlist', ticker = ''] = window.location.hash.replace('#', '').split('/');
+  const [route = 'watchlist', encodedTicker = ''] = window.location.hash.replace(/^#/, '').split('/');
+  let ticker = '';
+  try {
+    const decoded = decodeURIComponent(encodedTicker || '').trim().toUpperCase();
+    // Yahoo-style symbols used by the app only need letters, numbers and a
+    // small set of punctuation. Reject malformed/injected hashes early.
+    if (/^[A-Z0-9.^_=-]{1,32}$/.test(decoded)) ticker = decoded;
+  } catch (_) {
+    // A malformed percent-escape must not break the whole router.
+  }
   return {
     route: routes[route] ? route : 'watchlist',
-    ticker: decodeURIComponent(ticker || '').toUpperCase()
+    ticker
   };
 }
 
@@ -35,8 +44,15 @@ function getRouteFromHash() {
 
 function getActiveSidebarRoute(route) {
   if (route !== 'detail') return route;
-  const previous = sessionStorage.getItem('ethosPreviousListRoute') || '#watchlist';
-  return previous.replace('#', '').split('/')[0] || 'watchlist';
+  const previous = getPreviousListRoute();
+  return previous.replace('#', '');
+}
+
+export function getPreviousListRoute() {
+  let stored = '#watchlist';
+  try { stored = sessionStorage.getItem('ethosPreviousListRoute') || stored; } catch (_) { /* storage unavailable */ }
+  const candidate = stored.replace(/^#/, '').split('/')[0];
+  return routes[candidate] && candidate !== 'detail' ? `#${candidate}` : '#watchlist';
 }
 
 function setActiveNav(route) {
@@ -88,10 +104,10 @@ function renderShellPage(route, eyebrow, copy) {
 function renderDetailRoute() {
   const { ticker } = parseHash();
   if (!ticker) {
-    window.location.hash = '#watchlist';
+    window.location.hash = getPreviousListRoute();
     return;
   }
-  mountDetail(ticker);
+  mountDetail(ticker, { backRoute: getPreviousListRoute() });
 }
 
 let __tickerMounted = false;
@@ -100,13 +116,12 @@ export function router() {
   initResponsiveSidebar();
   if (!__tickerMounted) { __tickerMounted = true; mountIndexTicker().catch(() => {}); }
   const route = getRouteFromHash();
-  if (!window.location.hash || !routes[window.location.hash.replace('#', '').split('/')[0]]) {
-    if (!window.location.hash) {
-      history.replaceState(null, '', '#watchlist');
-    }
+  const rawRoute = window.location.hash.replace(/^#/, '').split('/')[0];
+  if (!window.location.hash || !routes[rawRoute]) {
+    history.replaceState(null, '', '#watchlist');
   }
   if (route !== 'detail') {
-    sessionStorage.setItem('ethosPreviousListRoute', window.location.hash || '#watchlist');
+    try { sessionStorage.setItem('ethosPreviousListRoute', window.location.hash || '#watchlist'); } catch (_) { /* storage unavailable */ }
   }
   setActiveNav(route);
   routes[route]();

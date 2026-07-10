@@ -116,15 +116,38 @@ def _last(series: pd.Series, default: float | None = None) -> float | None:
         return default
 
 
+def compute_period_return(close: pd.Series, days: int) -> float | None:
+    """Return the price change across exactly ``days`` trading intervals."""
+    if close is None or days <= 0:
+        return None
+    clean = close.dropna()
+    if len(clean) <= days:
+        return None
+    base = _safe_float(clean.iloc[-(days + 1)])
+    current = _safe_float(clean.iloc[-1])
+    if base is None or current is None or base <= 0:
+        return None
+    return _safe_float(current / base - 1, 6)
+
+
 def compute_rsi(close: pd.Series, period: int = 14) -> float | None:
     if close is None or len(close) < period + 1:
         return None
     delta = close.diff()
     gain = delta.clip(lower=0).ewm(alpha=1 / period, adjust=False).mean()
     loss = (-delta.clip(upper=0)).ewm(alpha=1 / period, adjust=False).mean()
-    rs = gain / loss.replace(0, math.nan)
-    rsi = 100 - (100 / (1 + rs))
-    return _last(rsi, 50)
+    avg_gain = _last(gain)
+    avg_loss = _last(loss)
+    if avg_gain is None or avg_loss is None:
+        return None
+    if avg_gain == 0 and avg_loss == 0:
+        return 50.0
+    if avg_loss == 0:
+        return 100.0
+    if avg_gain == 0:
+        return 0.0
+    rs = avg_gain / avg_loss
+    return _safe_float(100 - (100 / (1 + rs)), 2)
 
 
 def compute_atr(hist: pd.DataFrame, period: int = 14) -> pd.Series:
@@ -142,8 +165,9 @@ def compute_obv_divergence(close: pd.Series, volume: pd.Series, lookback: int = 
         return None
     direction = close.diff().apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
     obv = (direction * volume).fillna(0).cumsum()
-    price_ret = close.iloc[-1] / close.iloc[-lookback] - 1
-    obv_ret = (obv.iloc[-1] - obv.iloc[-lookback]) / max(abs(obv.iloc[-lookback]), volume.iloc[-lookback], 1)
+    base_idx = -(lookback + 1)
+    price_ret = close.iloc[-1] / close.iloc[base_idx] - 1
+    obv_ret = (obv.iloc[-1] - obv.iloc[base_idx]) / max(abs(obv.iloc[base_idx]), volume.iloc[base_idx], 1)
     divergence = (price_ret - obv_ret) * 100
     return _safe_float(divergence, 2)
 
@@ -262,22 +286,34 @@ def compute_market_signals() -> dict:
         add("sma50_distance", (close.iloc[-1] / close.rolling(50).mean().iloc[-1] - 1) * 100, "SPY距50日线偏离%")
         add("sma200_distance", (close.iloc[-1] / close.rolling(200).mean().iloc[-1] - 1) * 100 if len(close) >= 200 else None, "SPY距200日线偏离%")
         add("rsi14", compute_rsi(close, 14), "SPY RSI(14)")
-        add("return_20d", (close.iloc[-1] / close.iloc[-20] - 1) * 100, "SPY 20日涨幅%")
-        if not rsp.empty and len(rsp) >= 5: add("rsp_spy_5d", ((rsp["Close"].iloc[-1] / rsp["Close"].iloc[-5]) / (close.iloc[-1] / close.iloc[-5]) - 1) * 100, "等权重/SPY 5日相对强弱%")
-        if not iwm.empty and len(iwm) >= 5: add("iwm_spy_5d", ((iwm["Close"].iloc[-1] / iwm["Close"].iloc[-5]) / (close.iloc[-1] / close.iloc[-5]) - 1) * 100, "小盘/SPY 5日相对强弱%")
-        if not qqq.empty and len(qqq) >= 5: add("qqq_spy_5d", ((qqq["Close"].iloc[-1] / qqq["Close"].iloc[-5]) / (close.iloc[-1] / close.iloc[-5]) - 1) * 100, "QQQ/SPY 5日相对强弱%")
+        spy_ret20 = compute_period_return(close, 20)
+        add("return_20d", spy_ret20 * 100 if spy_ret20 is not None else None, "SPY 20日涨幅%")
+        for frame, key, label in (
+            (rsp, "rsp_spy_5d", "等权重/SPY 5日相对强弱%"),
+            (iwm, "iwm_spy_5d", "小盘/SPY 5日相对强弱%"),
+            (qqq, "qqq_spy_5d", "QQQ/SPY 5日相对强弱%"),
+        ):
+            left_ret = compute_period_return(frame["Close"], 5) if not frame.empty else None
+            spy_ret5 = compute_period_return(close, 5)
+            relative = ((1 + left_ret) / (1 + spy_ret5) - 1) * 100 if left_ret is not None and spy_ret5 is not None else None
+            add(key, relative, label)
         add("sectors_above_50dma", sum(1 for s in SECTOR_ETFS if _is_above_sma_frame(frames.get(s), 50)) / len(SECTOR_ETFS) * 100, "板块ETF在50日线上方%")
-        if not vix.empty and len(vix) >= 5:
+        if not vix.empty:
             v = vix["Close"].iloc[-1]
             add("vix", v, "VIX")
             add("vix_percentile", _percentile_rank(vix["Close"], v), "VIX 1年分位%")
-            add("vix_5d_change", (v / vix["Close"].iloc[-5] - 1) * 100, "VIX 5日变化%")
-        if not hyg.empty and not tlt.empty and len(hyg) >= 20 and len(tlt) >= 20:
-            add("credit_risk", ((hyg["Close"].iloc[-1] / tlt["Close"].iloc[-1]) / (hyg["Close"].iloc[-20] / tlt["Close"].iloc[-20]) - 1) * 100, "信用风险(HYG/TLT) 20日变化%")
-        if not tnx.empty and len(tnx) >= 20:
+            vix_ret5 = compute_period_return(vix["Close"], 5)
+            add("vix_5d_change", vix_ret5 * 100 if vix_ret5 is not None else None, "VIX 5日变化%")
+        if not hyg.empty and not tlt.empty:
+            hyg_ret20 = compute_period_return(hyg["Close"], 20)
+            tlt_ret20 = compute_period_return(tlt["Close"], 20)
+            relative = ((1 + hyg_ret20) / (1 + tlt_ret20) - 1) * 100 if hyg_ret20 is not None and tlt_ret20 is not None else None
+            add("credit_risk", relative, "信用风险(HYG/TLT) 20日变化%")
+        if not tnx.empty:
             y = tnx["Close"].iloc[-1]
             add("yield_10y", y, "10年期收益率%")
-            add("yield_10y_20d_change", y - tnx["Close"].iloc[-20], "10Y收益率20日变化")
+            change20 = y - tnx["Close"].iloc[-21] if len(tnx) > 20 else None
+            add("yield_10y_20d_change", change20, "10Y收益率20日变化")
         return signals
     return _cached("market_signals", 300, load)
 
@@ -310,7 +346,8 @@ def compute_stock_signals(ticker: str) -> dict:
 
         add("rsi14", safe(compute_rsi(close, 14)), "RSI(14)")
 
-        ret20 = safe((close.iloc[-1] / close.iloc[-20] - 1) * 100) if len(close) >= 20 else None
+        period_ret20 = compute_period_return(close, 20)
+        ret20 = safe(period_ret20 * 100) if period_ret20 is not None else None
         add("return_20d", ret20, "20日涨幅%")
 
         atr = compute_atr(hist, 14)
@@ -328,9 +365,9 @@ def compute_stock_signals(ticker: str) -> dict:
 
         add("obv_divergence", safe(compute_obv_divergence(close, volume)), "OBV背离")
 
-        if not spy.empty and len(spy) >= 20 and len(close) >= 20:
-            stock_ret = safe((close.iloc[-1] / close.iloc[-20] - 1))
-            spy_ret = safe((spy["Close"].iloc[-1] / spy["Close"].iloc[-20] - 1))
+        if not spy.empty:
+            stock_ret = safe(compute_period_return(close, 20))
+            spy_ret = safe(compute_period_return(spy["Close"], 20))
             rs = safe((stock_ret - spy_ret) * 100) if stock_ret is not None and spy_ret is not None else None
             add("relative_strength_spy", rs, "相对强弱(vs SPY)%")
         else:
@@ -341,7 +378,7 @@ def compute_stock_signals(ticker: str) -> dict:
             iv = get_stock_iv(symbol)
         except Exception:
             iv = None
-        add("iv_rank", round(iv * 100, 1) if iv else None, "IV Rank/ATM IV%")
+        add("atm_iv_percent", round(iv * 100, 1) if iv is not None else None, "当前ATM IV%")
 
         day_range = safe(hist["High"].iloc[-1] - hist["Low"].iloc[-1])
         close_pos = safe((close.iloc[-1] - hist["Low"].iloc[-1]) / day_range * 100) if day_range and day_range > 0 else 50

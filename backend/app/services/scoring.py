@@ -2,7 +2,18 @@ from __future__ import annotations
 
 
 def _valid_scores(signals: dict) -> list[dict]:
-    return [s for s in signals.values() if isinstance(s, dict) and s.get("value") is not None]
+    # Metadata entries such as ``_volume_today`` are dictionaries too, but they
+    # are not scored signals and must not inflate the reported data quality.
+    return [
+        signal
+        for signal in signals.values()
+        if (
+            isinstance(signal, dict)
+            and signal.get("value") is not None
+            and "top_score" in signal
+            and "bottom_score" in signal
+        )
+    ]
 
 
 def _avg(signals: dict, keys: list[str], side: str) -> float | None:

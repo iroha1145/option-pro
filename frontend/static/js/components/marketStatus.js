@@ -1,3 +1,5 @@
+import { api, invalidateCache, safe } from '../api.js';
+
 /**
  * Compute current trading status for US / Japan / China stock markets.
  * No backend dependency — purely based on user's local time vs each market's TZ.
@@ -13,8 +15,8 @@ const MARKETS = [
   {
     label: '日股',
     tz: 'Asia/Tokyo',
-    // Tokyo: 9:00-11:30, 12:30-15:00 (weekdays)
-    hours: { morning: [9*60, 11*60+30], afternoon: [12*60+30, 15*60] }
+    // Tokyo regular session was extended to 15:30 in November 2024.
+    hours: { morning: [9*60, 11*60+30], afternoon: [12*60+30, 15*60+30] }
   },
   {
     label: '上证',
@@ -134,7 +136,7 @@ function formatLocal(date) {
   }).format(date);
 }
 
-function getMarketSnapshot(market) {
+function getMarketSnapshot(market, calendarVerified = false) {
   const t = getMarketLocalTime(market.tz);
   const ymd = { year: t.year, month: t.month, day: t.day, isWeekend: t.isWeekend };
   const currentSession = !t.isWeekend ? findCurrentSession(market, t.minutes) : null;
@@ -146,7 +148,10 @@ function getMarketSnapshot(market) {
     status = { phase: '周末休市', tone: 'off', dotColor: '#9fb4d9', title: 'Closed' };
     nextEventDate = findNextOpenDate(market, t);
   } else if (currentSession) {
-    status = { phase: market.label === '美股' ? '盘中交易' : currentSession.name === 'morning' ? '上午交易' : '下午交易', tone: 'live', dotColor: 'var(--color-emerald)', title: 'Open' };
+    const phase = market.label === '美股' ? '常规交易时段' : currentSession.name === 'morning' ? '上午交易时段' : '下午交易时段';
+    status = calendarVerified
+      ? { phase, tone: 'live', dotColor: 'var(--color-emerald)', title: 'Open' }
+      : { phase: `${phase}（交易日未校验）`, tone: 'pre', dotColor: '#c98a14', title: 'Schedule' };
     nextEventLabel = '闭市';
     nextEventDate = wallTimeToDate(market.tz, ymd, currentSession.end);
   } else if (market.label === '美股') {
@@ -180,12 +185,67 @@ function getMarketSnapshot(market) {
     nextEventDate,
     nextEventMarketText: formatInZone(nextEventDate, market.tz),
     nextEventLocalText: formatLocal(nextEventDate),
-    isOpen: status.tone === 'live',
+    isOpen: calendarVerified && status.tone === 'live',
+    calendarVerified,
   };
 }
 
-function getStatus(market) {
-  return getMarketSnapshot(market);
+function usStatusFromBackend(payload) {
+  if (!payload || payload.__error || typeof payload.market !== 'string') return null;
+  const base = getMarketSnapshot(MARKETS[0], true);
+  const states = {
+    open: { phase: '盘中交易', tone: 'live', dotColor: 'var(--color-emerald)', title: 'Open', isOpen: true },
+    'pre-market': { phase: '盘前交易', tone: 'pre', dotColor: '#c98a14', title: 'Pre-market', isOpen: false },
+    'after-hours': { phase: '盘后交易', tone: 'pre', dotColor: '#c98a14', title: 'After-hours', isOpen: false },
+    closed: { phase: payload.phase === 'holiday' ? '节假日休市' : payload.phase === 'weekend' ? '周末休市' : '已休市', tone: 'off', dotColor: '#9fb4d9', title: 'Closed', isOpen: false },
+  };
+  const exact = states[payload.market];
+  if (!exact) return null;
+  const nextRaw = payload.market === 'open' ? payload.next_close : payload.next_open;
+  const parsedNext = nextRaw ? new Date(nextRaw) : null;
+  const nextEventDate = parsedNext && !Number.isNaN(parsedNext.getTime()) ? parsedNext : base.nextEventDate;
+  const nextEventLabel = payload.market === 'open' ? '闭市' : '开市';
+  return {
+    ...base,
+    ...exact,
+    calendarVerified: true,
+    nextEventLabel,
+    nextEventDate,
+    nextEventMarketText: formatInZone(nextEventDate, MARKETS[0].tz),
+    nextEventLocalText: formatLocal(nextEventDate),
+  };
+}
+
+function marketForTicker(ticker, exchange = '') {
+  const symbol = String(ticker || '').trim().toUpperCase();
+  const venue = String(exchange || '').trim().toUpperCase();
+  if (symbol === '^N225' || /\.(T|JP)$/.test(symbol) || /^(JPX|TSE|TOKYO)$/.test(venue)) return MARKETS[1];
+  if (/\.(SS|SZ)$/.test(symbol) || /^(SSE|SZSE|SHH|SHZ|SHANGHAI|SHENZHEN)$/.test(venue)) return MARKETS[2];
+  if (/\.(HK|L|PA|DE|AX|TO|V)$/.test(symbol) || (venue && !/^(NYSE|NASDAQ|NMS|NGM|NCM|PCX|AMEX|US)$/.test(venue))) {
+    return { label: venue || '海外市场', unsupported: true };
+  }
+  return MARKETS[0];
+}
+
+export function getMarketStatusForTicker(ticker, backendStatus = null, exchange = '') {
+  const market = marketForTicker(ticker, exchange);
+  if (market.unsupported) {
+    return {
+      phase: '交易时段未配置', tone: 'off', dotColor: '#9fb4d9', title: 'Unknown',
+      market, localClock: '—', nextEventLabel: '交易日历', nextEventDate: null,
+      nextEventMarketText: '—', nextEventLocalText: '—', isOpen: false, calendarVerified: false,
+    };
+  }
+  if (market === MARKETS[0]) return usStatusFromBackend(backendStatus) || getMarketSnapshot(market, false);
+  // The backend currently only has an exchange calendar for the US. Japan and
+  // China therefore stay explicitly schedule-only on weekdays.
+  return getMarketSnapshot(market, false);
+}
+
+function getStatus(market, usBackendStatus = null) {
+  return market === MARKETS[0]
+    ? (usStatusFromBackend(usBackendStatus) || getMarketSnapshot(market, false))
+    : getMarketSnapshot(market, false);
 }
 
 function fmtLocalTime(tz) {
@@ -194,8 +254,8 @@ function fmtLocalTime(tz) {
   }).format(new Date());
 }
 
-function renderRow(market) {
-  const status = getStatus(market);
+function renderRow(market, usBackendStatus = null) {
+  const status = getStatus(market, usBackendStatus);
   const icon = status.tone === 'live' ? 'wb_sunny' : status.tone === 'pre' ? 'schedule' : 'dark_mode';
   return `<div class="market-hour-card market-hour-card--${status.tone}">
     <span class="market-hour-rail" aria-hidden="true"></span>
@@ -213,22 +273,41 @@ function renderRow(market) {
 
 export function renderMarketStatus(container) {
   if (!container) return;
+  let cancelled = false;
+  let usBackendStatus = null;
   const draw = () => {
+    if (cancelled || !container.isConnected) return;
     container.innerHTML = `<div class="panel market-status-card">
       <div class="market-status-head">
         <span class="label-caps">市场状态</span>
-        <span class="market-status-caption">本地时区显示</span>
+        <span class="market-status-caption">美股交易日已校验 · 亚股仅时段参考</span>
       </div>
-      ${MARKETS.map(renderRow).join('')}
+      ${MARKETS.map((market) => renderRow(market, usBackendStatus)).join('')}
     </div>`;
   };
+  const refresh = async () => {
+    invalidateCache('mkt');
+    const result = await safe(api.marketStatus());
+    if (cancelled || !container.isConnected) return;
+    if (!result.__error) usBackendStatus = result;
+    draw();
+  };
   draw();
+  refresh();
   // Refresh every minute
-  const timer = setInterval(draw, 60 * 1000);
+  const timer = setInterval(() => {
+    if (!document.hidden) refresh();
+  }, 60 * 1000);
   // Stop on hash change
-  window.addEventListener('hashchange', () => clearInterval(timer), { once: true });
+  const cleanup = () => {
+    cancelled = true;
+    clearInterval(timer);
+    window.removeEventListener('hashchange', cleanup);
+  };
+  window.addEventListener('hashchange', cleanup, { once: true });
+  return cleanup;
 }
 
 export function getPrimaryMarketStatus() {
-  return getMarketSnapshot(MARKETS[0]);
+  return getMarketSnapshot(MARKETS[0], false);
 }

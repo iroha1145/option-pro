@@ -64,22 +64,32 @@ export function normalizeHeatmapPayload(payload) {
 
   return items.map((item) => {
     const ticker = String(item.ticker ?? item.symbol ?? item.name ?? item.sector ?? '').toUpperCase();
-    // Detect IV mode vs performance mode
-    const ivVal = item.iv_percentile ?? item.iv ?? item.ivRank ?? item.iv_rank ?? item.impliedVolatility ?? item.implied_volatility;
+    // Absolute ATM IV and historical/cross-sectional rank are different
+    // metrics. Prefer the real absolute IV value and label it explicitly.
+    let ivVal = item.atm_iv_percent ?? item.iv_pct ?? item.iv_current;
+    let ivLabel = 'ATM IV';
+    if (ivVal == null && (item.iv != null || item.impliedVolatility != null || item.implied_volatility != null)) {
+      ivVal = Number(item.iv ?? item.impliedVolatility ?? item.implied_volatility) * 100;
+    }
+    if (ivVal == null) {
+      ivVal = item.iv_percentile ?? item.ivRank ?? item.iv_rank ?? item.sector_iv_rank;
+      ivLabel = item.sector_iv_rank != null ? '板块 IV 排名' : 'IV 历史分位';
+    }
     const perfVal = item.changePercent ?? item.change_percentage ?? item.changePct ?? item.change_pct ?? item.percentChange ?? item.performance ?? item.change;
     const isIv = ivVal != null;
-    const rawValue = isIv ? ivVal : (perfVal ?? 0);
-    const value = Number(rawValue);
+    const rawValue = isIv ? ivVal : perfVal;
+    const value = rawValue === null || rawValue === undefined || rawValue === '' ? NaN : Number(rawValue);
     const rawWeight = item.weight ?? item.marketCapWeight ?? item.market_cap_weight ?? item.size ?? 1;
     const weight = Number(rawWeight);
     return {
       ticker,
       label: item.label ?? item.companyName ?? item.company_name ?? item.name ?? ticker,
-      value: Number.isFinite(value) ? value : 0,
+      value,
       mode: isIv ? 'iv' : 'perf',
+      metricLabel: isIv ? ivLabel : '涨跌幅',
       weight: Number.isFinite(weight) && weight > 0 ? weight : 1
     };
-  }).filter((item) => item.ticker);
+  }).filter((item) => item.ticker && Number.isFinite(item.value));
 }
 
 export function renderHeatmap(payload = []) {
@@ -96,7 +106,7 @@ export function renderHeatmap(payload = []) {
         const intense = item.mode === 'iv' ? distance > 25 : distance > 2.6;
         const textColor = intense ? '#ffffff' : '#000000';
         const valueLabel = item.mode === 'iv'
-          ? `IV ${Number(item.value).toFixed(0)}`
+          ? `${item.metricLabel} ${Number(item.value).toFixed(1)}%`
           : formatPercent(item.value);
         // Hide duplicate label when label == ticker
         const showLabel = item.label && String(item.label).toUpperCase() !== item.ticker;
@@ -104,7 +114,7 @@ export function renderHeatmap(payload = []) {
           <button class="heatmap-tile" type="button" data-ticker="${escapeHtml(item.ticker)}" style="--tile-bg: ${color}; --tile-text: ${textColor};" aria-label="打开 ${escapeHtml(item.ticker)} 详情">
             <span class="heatmap-tile__ticker mono font-data-mono" data-numeric>${escapeHtml(item.ticker)}</span>
             ${showLabel ? `<span class="heatmap-tile__label">${escapeHtml(item.label)}</span>` : '<span></span>'}
-            <strong class="heatmap-tile__change mono font-data-mono" data-numeric>${valueLabel}</strong>
+            <strong class="heatmap-tile__change mono font-data-mono" data-numeric>${escapeHtml(valueLabel)}</strong>
           </button>
         `;
       }).join('')}

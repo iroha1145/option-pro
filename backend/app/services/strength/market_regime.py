@@ -15,6 +15,10 @@ MARKET_BENCHMARKS = (
 
 SECTOR_ETFS = ("XLK", "XLF", "XLV", "XLE", "XLI", "XLC", "XLY", "XLP", "XLU", "XLRE", "XLB")
 
+# A regime score is only meaningful when its core trend and breadth inputs are
+# present. Optional spreads/sectors may degrade to neutral, but these may not.
+MINIMUM_HISTORY = {"SPY": 220, "QQQ": 200, "IWM": 50, "RSP": 50}
+
 
 def _safe_float(value: Any, ndigits: int = 4) -> float | None:
     try:
@@ -49,7 +53,7 @@ def _volume(df: pd.DataFrame) -> pd.Series:
 def _ret(close: pd.Series, days: int) -> float | None:
     if len(close) <= days:
         return None
-    base = close.iloc[-days]
+    base = close.iloc[-(days + 1)]
     if not base or base <= 0:
         return None
     return _safe_float(close.iloc[-1] / base - 1, 5)
@@ -238,7 +242,7 @@ def _compute_risk_appetite_score(closes: dict[str, pd.Series]) -> tuple[float, f
     vix_last = _safe_float(vix.iloc[-1], 2) if len(vix) else None
     vix_percentile = _percentile(vix.tail(252), vix_last) if len(vix) else None
     credit_20d = _relative_return(hyg, tlt, 20)
-    rate_20d_change = _safe_float(tnx.iloc[-1] - tnx.iloc[-20], 4) if len(tnx) >= 20 else None
+    rate_20d_change = _safe_float(tnx.iloc[-1] - tnx.iloc[-21], 4) if len(tnx) > 20 else None
     spy_dd50 = _drawdown_from_high(spy, 50)
     qqq_dd50 = _drawdown_from_high(qqq, 50)
 
@@ -342,6 +346,54 @@ def _rules_for_score(score: float, breadth_score: float, risk_penalty: float, ri
 
 def compute_market_regime(index_data: dict[str, pd.DataFrame]) -> dict[str, Any]:
     closes = {symbol: _close(frame) for symbol, frame in index_data.items()}
+    missing = [
+        {"symbol": symbol, "required": required, "available": len(closes.get(symbol, pd.Series(dtype=float)))}
+        for symbol, required in MINIMUM_HISTORY.items()
+        if len(closes.get(symbol, pd.Series(dtype=float))) < required
+    ]
+    if missing:
+        missing_text = "、".join(f"{item['symbol']}({item['available']}/{item['required']})" for item in missing)
+        warning = f"核心市场行情不足：{missing_text}，不生成市场强弱分数"
+        return {
+            "status": "insufficient_data",
+            "score": None,
+            "label": "数据不足",
+            "index_trend_score": None,
+            "market_momentum_score": None,
+            "market_breadth_score": None,
+            "market_volume_score": None,
+            "risk_appetite_score": None,
+            "risk_on_spread_score": None,
+            "risk_on_spread_label": "数据不足",
+            "market_risk_penalty": None,
+            "rules": {},
+            "warnings": [warning],
+            "missing_requirements": missing,
+            "trend": {},
+            "momentum": {},
+            "volume": {},
+            "breadth": {},
+            "risk": {},
+            "spread_matrix": {},
+            "market_context": {
+                "status": "insufficient_data",
+                "score": None,
+                "label": "数据不足",
+                "trend_momentum_score": None,
+                "breadth_score": None,
+                "risk_on_spread_score": None,
+                "liquidity_credit_score": None,
+                "sentiment_score": None,
+                "sector_flow_score": None,
+                "valuation_status": "not_available",
+                "valuation_risk_penalty": 0.0,
+            },
+            "spy_20d": None,
+            "qqq_20d": None,
+            "iwm_20d": None,
+            "spy_above_sma200": None,
+            "vix": None,
+        }
     trend_score, trend = _compute_trend_score(closes)
     momentum_score, momentum = _compute_momentum_score(closes)
     volume_score, volume = _compute_volume_score(index_data, closes)
@@ -370,6 +422,7 @@ def compute_market_regime(index_data: dict[str, pd.DataFrame]) -> dict[str, Any]
     rules, warnings = _rules_for_score(score, breadth_score, risk_penalty, risk_on_spread_score)
     warnings = [*warnings, *spread_matrix.get("warnings", [])]
     return {
+        "status": "active",
         "score": score,
         "label": label,
         "index_trend_score": trend_score,

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time as datetime_time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import yfinance as yf
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.services.cache import cache as _shared_cache
 
@@ -43,7 +43,17 @@ async def _build_indices():
             return {"symbol": symbol, "price": None, "change_percent": None}
 
     results = await asyncio.gather(*[asyncio.to_thread(_one, s) for s in INDEX_SYMBOLS])
-    return {"indices": list(results)}
+    succeeded = sum(result.get("price") is not None for result in results)
+    if succeeded == 0:
+        raise HTTPException(status_code=503, detail="Yahoo index data is currently unavailable")
+    return {
+        "indices": list(results),
+        "attempted": len(INDEX_SYMBOLS),
+        "succeeded": succeeded,
+        "data_limited": succeeded < len(INDEX_SYMBOLS),
+        "source_status": "active" if succeeded == len(INDEX_SYMBOLS) else "degraded",
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def _observed(d: date) -> date:
@@ -115,6 +125,29 @@ def _early_close_minutes(d: date) -> int | None:
     return 13 * 60 if d in early_dates and d.weekday() < 5 else None
 
 
+def _is_trading_day(d: date) -> bool:
+    return d.weekday() < 5 and d not in _market_holidays(d.year)
+
+
+def _next_trading_day(start: date, *, include_start: bool = False) -> date:
+    candidate = start if include_start else start + timedelta(days=1)
+    # Eight calendar days always cover at least one ordinary exchange session;
+    # keep a larger defensive bound for unusual adjacent holidays.
+    for _ in range(15):
+        if _is_trading_day(candidate):
+            return candidate
+        candidate += timedelta(days=1)
+    raise RuntimeError("Unable to determine the next US trading day")
+
+
+def _market_datetime(d: date, minutes: int) -> datetime:
+    return datetime.combine(
+        d,
+        datetime_time(hour=minutes // 60, minute=minutes % 60),
+        tzinfo=ET,
+    )
+
+
 @router.get("/status")
 async def market_status():
     """Determine US market status from current time (no external API needed)."""
@@ -156,11 +189,23 @@ async def market_status():
             market = "closed"
             phase = "overnight"
 
+        next_open: datetime | None = None
+        next_close: datetime | None = None
+        if market == "open":
+            next_close = _market_datetime(today, early_close or 16 * 60)
+        elif phase in {"pre-market", "overnight"} and _is_trading_day(today) and t < 9 * 60 + 30:
+            next_open = _market_datetime(today, 9 * 60 + 30)
+        else:
+            next_day = _next_trading_day(today)
+            next_open = _market_datetime(next_day, 9 * 60 + 30)
+
         return {
             "market": market,
             "phase": phase,
             "holiday": holiday,
             "early_close": bool(early_close),
+            "next_open": next_open.isoformat() if next_open else None,
+            "next_close": next_close.isoformat() if next_close else None,
             "server_time": et.isoformat(),
             "exchanges": {
                 "nasdaq": market if market in ("open", "closed") else "extended",

@@ -23,12 +23,17 @@ export function renderAlertAnalysisButton(container, ticker, alerts, underlyingP
   const resultDiv = wrap.querySelector('#ai-analysis-result');
 
   btn.onclick = async () => {
+    const requestContainer = container;
     btn.innerHTML = '<span style="width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;display:inline-block"></span> 正在分析...';
     btn.disabled = true;
 
     const result = await safe(api.analyzeAlerts({
       ticker, alerts, underlying_price: underlyingPrice, expiration
     }));
+
+    // The user may have changed expiration/ticker while the AI request ran.
+    // Detached mounts must never write into the newly mounted detail page.
+    if (!requestContainer.isConnected || !wrap.isConnected) return;
 
     resultDiv.style.display = 'block';
     resultDiv.innerHTML = renderAnalysisCard(result);
@@ -109,6 +114,7 @@ export function renderEarningsCorrelation(container) {
     btn.innerHTML = '<span style="width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;display:inline-block"></span> 分析中…';
     btn.disabled = true;
     const result = await safe(api.earningsCorrelation());
+    if (!container.isConnected || !wrap.isConnected) return;
     resultDiv.innerHTML = renderEarningsCorrelationCard(result);
     btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;margin-right:6px;vertical-align:middle">auto_awesome</span> 重新分析';
     btn.disabled = false;

@@ -3,20 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://financialmodelingprep.com https://static2.finnhub.io https://eodhd.com; connect-src 'self'; form-action 'self'" />
   <title>Optix Pro · Signal Desk</title>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800;900&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet" />
 
   <!--
-    Tailwind Play CDN removed: it runs a JIT compiler in the browser on every
-    page load (render-blocking, explicitly "not for production"). All styling
-    lives in styles.css; the two utility-class usages in chart.js were inlined.
-    lightweight-charts is deferred — only the detail page needs it.
+    Application scripts are same-origin only. The chart implementation is
+    bundled with the app, so no third-party script can read the local API token.
   -->
-  <script defer src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
-
   <link rel="stylesheet" href="./static/css/styles.css" />
 </head>
 <body>

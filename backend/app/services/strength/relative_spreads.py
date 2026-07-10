@@ -136,7 +136,7 @@ def _close(frame: pd.DataFrame) -> pd.Series:
 def _ret(close: pd.Series, days: int) -> float | None:
     if len(close) <= days:
         return None
-    base = close.iloc[-days]
+    base = close.iloc[-(days + 1)]
     if not base or base <= 0:
         return None
     return _safe_float(close.iloc[-1] / base - 1, 5)
@@ -194,8 +194,8 @@ def _ratio_features(
             "defensive_relative_strength": False,
         }
 
-    momentum_20d = log_ratio.iloc[-1] - log_ratio.iloc[-20]
-    momentum_60d = log_ratio.iloc[-1] - log_ratio.iloc[-60]
+    momentum_20d = log_ratio.iloc[-1] - log_ratio.iloc[-21]
+    momentum_60d = log_ratio.iloc[-1] - log_ratio.iloc[-61]
     slope_20d = _slope(log_ratio.tail(20))
     slope_60d = _slope(log_ratio.tail(60))
     acceleration = slope_20d - slope_60d if slope_20d is not None and slope_60d is not None else None

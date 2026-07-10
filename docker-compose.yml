@@ -1,5 +1,6 @@
 services:
   backend:
+    init: true
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -8,10 +9,13 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - ALLOW_CUSTOM_OPENAI_BASE_URL=${ALLOW_CUSTOM_OPENAI_BASE_URL:-false}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-5.4-mini-2026-03-17}
-      # low keeps signal/alert analysis <10s; xhigh routinely blew past the
-      # API-side AI timeout and burned tokens for little gain.
       - OPENAI_REASONING=${OPENAI_REASONING:-low}
+      - OPENAI_TIMEOUT_SECONDS=${OPENAI_TIMEOUT_SECONDS:-45}
+      - OPENAI_MAX_RETRIES=${OPENAI_MAX_RETRIES:-0}
+      - OPENAI_MAX_OUTPUT_TOKENS=${OPENAI_MAX_OUTPUT_TOKENS:-1200}
+      - OPENAI_MAX_CONCURRENCY=${OPENAI_MAX_CONCURRENCY:-2}
       - APP_AUTH_TOKEN=${APP_AUTH_TOKEN:-}
       - TRUST_PROXY_HEADERS=${TRUST_PROXY_HEADERS:-false}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
@@ -19,4 +23,8 @@ services:
       - "${HOST_BIND:-127.0.0.1}:${PORT:-2000}:8000"
     volumes:
       - ./frontend:/app/frontend:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped

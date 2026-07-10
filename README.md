@@ -1,136 +1,164 @@
-# Optix Pro — 美股期权可视化平台
+# Optix Pro
 
-一个个人使用的美股期权链可视化工具。当前版本主要通过 yfinance 获取行情、期权链和财报日历，并可选接入 OpenAI-compatible Responses API 做 AI 分析。
+Optix Pro 是一个面向个人使用的美股行情、期权链和信号观察工具。后端使用 FastAPI，前端是无构建步骤的 Vanilla JavaScript SPA；行情主要来自 Yahoo Finance / yfinance，并可选接入 OpenAI Responses API。
 
-## 功能
+> 本项目不是实时行情终端，也不构成投资建议。Yahoo 数据可能延迟、缺失或临时不可用；下单前请用券商行情确认价格、交易时段和合约信息。
 
-### 📊 市场仪表盘
-- 股票搜索（自动补全）
-- K线图（分时/5日/1月/1年/全部）
-- 期权链表格（看涨/看跌，按行权价分组）
-- 到期日选择器
-- 即将公布的财报日历
-- 恐惧与贪婪指数
+## 当前能力
 
-### ⚡ 期权异动
-- 全市场实时异常期权活动扫描
-- 按类型筛选（全部/看涨/看跌）
-- 成交量/持仓量比率过滤
-- 市场热度指标（看涨/看跌比率）
+- 自选总览、股票搜索、价格走势和公司详情
+- 指定到期日的期权链、成交量/持仓量和异动提示
+- 板块内当前 ATM IV 对比和热力图
+- 顶部/底部程序化信号、强势股雷达
+- 预设美股列表的财报日历
+- 可选 AI 分析：
+  - 期权异动和顶部/底部信号只分析应用提供的结构化数据，不联网补行情或事件
+  - 财报关联/影响分析会启用模型的 web search 工具
 
-### 🔥 板块分析
-- 板块 IV（隐含波动率）百分位排名
-- IV 热力图（可视化各标的波动率水平）
-- 板块：半导体、软件基础设施、生物技术、消费电子、能源
-- 点击标的查看期权链
+### “期权异动扫描”的准确范围
 
-### 🤖 AI 财报中心
-- 财报日历与影响分析
-- 板块隐含波动率概览
-- 分析师情绪展示
+`GET /api/options/unusual` 不是全市场实时扫描。它会扫描以下 10 个热门标的：
 
-## 技术栈
+`NVDA, TSLA, AAPL, AMD, AMZN, META, MSFT, SPY, QQQ, GOOGL`
 
-- **后端**: Python FastAPI + httpx (async)
-- **前端**: Vanilla JS SPA + Tailwind CSS + TradingView Lightweight Charts
-- **数据源**: yfinance / Yahoo Finance；Massive.com 客户端为遗留备用代码
-- **部署**: Docker + docker-compose
+每个标的只检查 Yahoo 返回的前两个到期日，结果缓存 120 秒并最多返回 50 条。数据频率、延迟和可用性由 Yahoo/yfinance 决定；接口会在部分标的失败时返回降级状态。
 
-## 快速开始
+## Docker 快速开始
 
-### Docker 部署（推荐）
+要求 Docker Engine / Docker Desktop，以及支持 `docker compose up --wait` 的 Docker Compose v2。
 
 ```bash
-# 1. 复制环境变量文件
+git clone https://github.com/iroha1145/option-pro.git
+cd option-pro
 cp .env.example .env
-
-# 2. 如需 AI 分析，填入 OpenAI-compatible API 配置
-# 编辑 .env 文件，设置 OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL
-
-# 3. 启动
-docker compose up --build
-
-# 访问 http://localhost:2000
+chmod 600 .env
+docker compose up --build -d --wait
 ```
 
-默认 Docker 只绑定 `127.0.0.1`，适合个人本机使用。如果需要局域网或公网访问，先在 `.env` 设置 `APP_AUTH_TOKEN`，再把 `HOST_BIND` 改成需要监听的地址。前端带 token 的方式：
+访问 <http://localhost:2000>，健康检查地址为 <http://localhost:2000/health>。
+
+也可以运行交互式安装脚本：
+
+```bash
+./setup.sh
+```
+
+脚本会在仓库根目录创建权限为 `0600` 的 `.env`，等待容器通过健康检查后才报告启动成功。
+
+### OpenAI 配置（可选）
+
+默认不启用 AI。使用 OpenAI 官方服务时只填写 key，`OPENAI_BASE_URL` 保持为空：
+
+```dotenv
+OPENAI_API_KEY=
+OPENAI_BASE_URL=
+ALLOW_CUSTOM_OPENAI_BASE_URL=false
+OPENAI_MODEL=gpt-5.4-mini-2026-03-17
+OPENAI_REASONING=low
+```
+
+如果使用 OpenAI-compatible 代理，`OPENAI_BASE_URL` 才填写代理地址，同时必须显式设置 `ALLOW_CUSTOM_OPENAI_BASE_URL=true`，并且只能使用该代理签发的专属 key。自定义公网地址必须是 HTTPS（本机回环地址除外）。不要把 OpenAI 官方 key 交给第三方代理。兼容服务还需要支持 Responses API；财报联网分析需要支持 `web_search_preview` 工具。
+
+从旧版升级且 `.env` 中已有非空 `OPENAI_BASE_URL` 时，部署前必须完成上述 key 确认并补上 `ALLOW_CUSTOM_OPENAI_BASE_URL=true`，否则应用会拒绝启动 AI 配置。
+
+AI 请求默认总超时 45 秒、不自动重试、最多输出 1200 tokens，整个进程最多同时访问模型 2 次。可通过以下变量调整，但不建议为个人部署大幅提高：
+
+```dotenv
+OPENAI_TIMEOUT_SECONDS=45
+OPENAI_MAX_RETRIES=0
+OPENAI_MAX_OUTPUT_TOKENS=1200
+OPENAI_MAX_CONCURRENCY=2
+```
+
+## 安全的远程访问
+
+Compose 默认只发布到 `127.0.0.1:2000`。推荐保持这个默认值，并选择以下方式之一：
+
+1. SSH 隧道：
+
+   ```bash
+   ssh -L 2000:127.0.0.1:2000 user@your-server
+   ```
+
+   然后在本机打开 <http://localhost:2000>。
+
+2. 通过可信 VPN（例如 WireGuard/Tailscale）访问服务器内网。
+3. 放在配置了 HTTPS 的反向代理后，并设置强随机 `APP_AUTH_TOKEN`。
+
+不要把 `HOST_BIND` 改成 `0.0.0.0` 后直接通过公网 HTTP 暴露服务。HTTP 不加密浏览器 token；内置 token 也只是个人部署的轻量保护，不是多用户权限系统。
+
+设置 `APP_AUTH_TOKEN` 后，在同源页面的浏览器控制台保存同一个 token：
 
 ```js
-localStorage.setItem('optix.app.token', 'your-token-here');
+sessionStorage.setItem('optix.app.token', 'same-strong-random-token');
 location.reload();
 ```
 
-### 本地开发
+只有部署在可信 HTTPS/SSH/VPN 链路上时才这样使用。若反向代理与前端跨域，再精确设置 `ALLOWED_ORIGINS`；只有在可信代理已经覆盖并清洗转发头时才设置 `TRUST_PROXY_HEADERS=true`。
+
+## 本地开发
+
+本地开发使用 Python 3.12。根目录 `.env` 会按绝对路径加载，因此从 `backend/` 启动时也能可靠读取配置：
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+cp .env.example .env
 cd backend
-pip install -r requirements.txt
-OPENAI_API_KEY=your_key_here uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-## API 文档
+访问 <http://localhost:8000>，API 文档位于 <http://localhost:8000/docs>。
 
-Docker 启动后访问 http://localhost:2000/docs 查看 Swagger 文档；本地 `uvicorn --port 8000` 开发时访问 http://localhost:8000/docs。
-
-### 主要接口
+## 常用接口
 
 | 接口 | 说明 |
-|------|------|
+| --- | --- |
+| `GET /health` | 容器/服务健康检查 |
+| `GET /api/stocks/watchlist` | 预设自选行情 |
 | `GET /api/stocks/search?q=nvidia` | 搜索股票 |
 | `GET /api/stocks/{ticker}` | 股票概况 |
-| `GET /api/stocks/{ticker}/chart?range=1d` | K线数据 |
+| `GET /api/stocks/{ticker}/chart?range=1d` | 日 K 线数据 |
 | `GET /api/options/{ticker}/expirations` | 可用到期日 |
-| `GET /api/options/{ticker}/chain?expiration=2026-07-18` | 期权链 |
-| `GET /api/options/unusual` | 期权异动 |
-| `GET /api/sectors` | 板块列表 |
-| `GET /api/sectors/{id}/iv-ranking` | 板块 IV 排名 |
-| `GET /api/sectors/{id}/heatmap` | IV 热力图 |
-| `GET /api/market/status` | 市场状态 |
+| `GET /api/options/{ticker}/chain?expiration=2026-07-17` | 指定期权链 |
+| `GET /api/options/unusual` | 10 个热门标的的有限异动扫描 |
+| `GET /api/earnings/upcoming` | 预设列表财报日历 |
+| `GET /api/sectors/{id}/iv-ranking` | 板块当前 IV 对比 |
+| `GET /api/signals/stock/{ticker}` | 程序化顶部/底部信号 |
+| `GET /api/strength/scan` | 强势股扫描 |
+
+## 运维
+
+```bash
+docker compose ps
+docker compose logs -f backend
+docker compose restart backend
+docker compose down
+```
+
+容器以非 root 用户运行并带有 `/health` 健康检查。镜像构建上下文通过 `.dockerignore` 排除 `.env`、Git 历史、缓存和本地虚拟环境。
 
 ## 项目结构
 
-```
+```text
 option-pro/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI 入口
-│   │   ├── config.py            # 配置管理
-│   │   ├── api/                 # API 路由
-│   │   │   ├── stocks.py
-│   │   │   ├── options.py
-│   │   │   ├── sectors.py
-│   │   │   └── market.py
-│   │   ├── services/            # 业务逻辑
-│   │   │   ├── massive.py       # Massive.com 备用客户端（当前主流程未使用）
-│   │   │   ├── cache.py         # 内存 TTL 缓存
-│   │   │   └── sectors.py       # 板块定义 & IV 计算
-│   │   └── models/
-│   │       └── schemas.py       # Pydantic 数据模型
+│   │   ├── api/          # FastAPI 路由
+│   │   ├── services/     # 行情、评分和 AI 服务
+│   │   ├── models/       # Pydantic 模型
+│   │   └── main.py
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
-│   ├── index.html               # SPA 主页
+│   ├── index.html
 │   └── static/
-│       ├── css/styles.css
-│       └── js/
-│           ├── app.js           # 路由 & 状态管理
-│           ├── api.js           # API 封装
-│           ├── pages/           # 4 个页面
-│           └── components/      # 共享组件
 ├── docker-compose.yml
-├── .env.example
-└── README.md
+├── setup.sh
+└── .env.example
 ```
-
-## 设计系统
-
-基于 "Precision Fluidity" 设计语言：
-- **主色**: Deep Indigo `#2a14b4`
-- **涨**: Mint Green `#006c49`
-- **跌**: Coral Red `#ba1a1a`
-- **字体**: Inter
-- **风格**: 轻盈、通透、专业
 
 ## License
 
-MIT
+[MIT](LICENSE)

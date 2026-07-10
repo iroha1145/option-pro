@@ -8,6 +8,9 @@ const state = {
   loading: false,
   payload: null,
   profiles: null,
+  error: '',
+  mountGeneration: 0,
+  requestGeneration: 0,
 };
 
 const FALLBACK_OPTION_SOURCES = [
@@ -23,24 +26,43 @@ function escapeHtml(value = '') {
   })[character]);
 }
 
+function safeExternalUrl(value) {
+  try {
+    const url = new URL(String(value || ''));
+    return url.protocol === 'https:' ? url.href : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function isMounted(generation = state.mountGeneration) {
+  return generation === state.mountGeneration
+    && window.location.hash.replace(/^#/, '').split('/')[0] === 'screener'
+    && Boolean(document.querySelector('.screener-page'));
+}
+
 function formatScore(value) {
+  if (value === null || value === undefined || value === '') return '—';
   const number = Number(value);
   return Number.isFinite(number) ? number.toFixed(1) : '—';
 }
 
 function formatMoney(value) {
+  if (value === null || value === undefined || value === '') return '—';
   const number = Number(value);
   if (!Number.isFinite(number)) return '—';
   return `$${number.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatPercent(value, digits = 2) {
+  if (value === null || value === undefined || value === '') return '—';
   const number = Number(value);
   if (!Number.isFinite(number)) return '—';
   return `${number > 0 ? '+' : ''}${number.toFixed(digits)}%`;
 }
 
 function scoreTone(score) {
+  if (score === null || score === undefined || score === '') return 'neutral';
   const value = Number(score);
   if (!Number.isFinite(value)) return 'neutral';
   if (value >= 72) return 'strong';
@@ -251,12 +273,15 @@ function renderDataSourcePanel(dataSources = {}) {
         ` : ''}
       </div>
       <div class="strength-option-source-list" aria-label="可选免费期权数据源">
-        ${candidates.slice(0, 4).map((item) => `
-          <a href="${escapeHtml(item.url || '#')}" target="_blank" rel="noreferrer">
-            <strong>${escapeHtml(item.name)}</strong>
-            <span>${escapeHtml(item.access || '')}</span>
-          </a>
-        `).join('')}
+        ${candidates.slice(0, 4).map((item) => {
+          const href = safeExternalUrl(item.url);
+          return href ? `
+            <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">
+              <strong>${escapeHtml(item.name)}</strong>
+              <span>${escapeHtml(item.access || '')}</span>
+            </a>
+          ` : '';
+        }).join('')}
       </div>
       <p class="strength-source-note">${escapeHtml(options.message || '期权热度当前为中性占位，待接入真实期权流/IV历史。')}</p>
     </section>
@@ -265,14 +290,15 @@ function renderDataSourcePanel(dataSources = {}) {
 
 function renderResultCard(row, index) {
   const tone = scoreTone(row.final_score);
-  const changeTone = Number(row.change_pct) >= 0 ? 'up' : 'down';
+  const changeValue = row.change_pct == null ? null : Number(row.change_pct);
+  const changeTone = !Number.isFinite(changeValue) ? '' : changeValue >= 0 ? 'up' : 'down';
   const warnings = Array.isArray(row.warnings) ? row.warnings : [];
   const reasons = Array.isArray(row.reasons) ? row.reasons : [];
   const tags = Array.isArray(row.tags) ? row.tags : [];
-  const quality = Number(row.data_quality);
+  const quality = row.data_quality == null ? null : Number(row.data_quality);
   const optionStatus = row.option_context?.source_status || 'placeholder';
-  const optionHeat = Number(row.option_heat_score);
-  const avgIv = Number(row.option_context?.iv_average);
+  const optionHeat = row.option_heat_score == null ? null : Number(row.option_heat_score);
+  const avgIv = row.option_context?.iv_average == null ? null : Number(row.option_context.iv_average);
   const optionProvider = row.option_context?.provider || '';
   const volumeTruth = row.volume_truth || row.vol_price_match || {};
   const effortResult = Number(volumeTruth.effort_result_ratio);
@@ -334,6 +360,15 @@ function renderResults(payload) {
   const rows = Array.isArray(payload?.rows) ? payload.rows : [];
   if (state.loading) {
     return '<section class="strength-results-panel"><div class="strength-loading">正在扫描主题股票池…</div></section>';
+  }
+  if (state.error) {
+    return `<section class="strength-results-panel">
+      <div class="detail-muted" style="padding:32px;text-align:center">
+        <strong style="display:block;margin-bottom:8px;color:var(--color-crimson)">扫描失败</strong>
+        <span>${escapeHtml(state.error)}</span>
+        <button id="strength-retry" class="strength-run-button" type="button" style="margin:16px auto 0">重试</button>
+      </div>
+    </section>`;
   }
   if (!rows.length) {
     return '<section class="strength-results-panel"><div class="detail-muted">暂无符合条件的结果。</div></section>';
@@ -436,6 +471,7 @@ function bindEvents() {
     runScan();
   });
   document.getElementById('strength-run')?.addEventListener('click', () => runScan());
+  document.getElementById('strength-retry')?.addEventListener('click', () => runScan());
   document.querySelectorAll('.strength-sector-item').forEach((button) => {
     button.addEventListener('click', () => {
       state.sectorId = button.dataset.sectorId || '';
@@ -455,26 +491,39 @@ async function loadProfiles() {
   }
 }
 
-async function runScan() {
+async function runScan(mountGeneration = state.mountGeneration) {
+  if (!isMounted(mountGeneration)) return;
+  const requestGeneration = ++state.requestGeneration;
   state.loading = true;
+  state.error = '';
   renderShell();
   try {
-    state.payload = await api.strengthScan({
+    const payload = await api.strengthScan({
       timeframe: state.timeframe,
       profile: state.profile,
       top: state.top,
       sector_id: state.sectorId,
     });
+    if (!isMounted(mountGeneration) || requestGeneration !== state.requestGeneration) return;
+    state.payload = payload;
   } catch (error) {
-    state.payload = { rows: [], sectors: [], market_regime: {}, error: error.message };
+    if (!isMounted(mountGeneration) || requestGeneration !== state.requestGeneration) return;
+    state.payload = { rows: [], sectors: [], market_regime: {} };
+    state.error = error?.message || '请求失败';
   } finally {
+    if (!isMounted(mountGeneration) || requestGeneration !== state.requestGeneration) return;
     state.loading = false;
     renderShell();
   }
 }
 
-export async function renderScreener() {
-  if (!state.profiles) await loadProfiles();
+export function renderScreener() {
+  const mountGeneration = ++state.mountGeneration;
+  // Supersede every outstanding scan before this page renders again.
+  state.requestGeneration += 1;
+  state.loading = false;
+  state.error = '';
   renderShell();
-  runScan();
+  if (!state.profiles) loadProfiles();
+  runScan(mountGeneration);
 }

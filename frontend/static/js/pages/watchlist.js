@@ -1,10 +1,15 @@
-import { api } from '../api.js';
+import { api, invalidateCache } from '../api.js';
 import { renderHeatmap } from '../components/heatmap.js';
 import { renderMarketStatus } from '../components/marketStatus.js';
 import {
   getCustomTickers, initCustomFromBackend, applyCustomOrder,
   addTicker, removeTicker, moveTicker, saveCustomTickers
 } from '../components/customWatchlist.js';
+
+const WATCHLIST_REFRESH_MS = 60 * 1000;
+const WATCHLIST_PAGE_SIZE = 48;
+let activeMountGeneration = 0;
+let visibleCardLimit = WATCHLIST_PAGE_SIZE;
 
 const SECTOR_BY_TICKER = {
   AAPL: 'TECH', MSFT: 'TECH', GOOGL: 'TECH', GOOG: 'TECH', META: 'TECH', AMZN: 'TECH', NFLX: 'TECH', CRM: 'TECH', ORCL: 'TECH', ADBE: 'TECH',
@@ -36,12 +41,14 @@ function escapeHtml(value = '') {
 }
 
 function formatPrice(value) {
+  if (value === null || value === undefined || value === '') return '—';
   const number = Number(value);
   if (!Number.isFinite(number)) return '—';
   return `$${number.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatChange(value) {
+  if (value === null || value === undefined || value === '') return '—';
   const number = Number(value);
   if (!Number.isFinite(number)) return '—';
   const sign = number > 0 ? '+' : '';
@@ -102,17 +109,20 @@ function normalizeSpark(stock) {
 
 function getChangePercent(stock, spark) {
   const raw = stock.changePercent ?? stock.change_percentage ?? stock.changePct ?? stock.change_pct ?? stock.percentChange ?? stock.change_percent ?? stock.change;
-  const number = Number(raw);
-  if (Number.isFinite(number)) return Math.abs(number) > 50 && Math.abs(number) < 1000 ? number / 100 : number;
+  const number = raw === null || raw === undefined || raw === '' ? NaN : Number(raw);
+  // API change_percent fields are percentage points. Never guess the unit from
+  // magnitude: +60% is a valid move and must remain +60%, not +0.60%.
+  if (Number.isFinite(number)) return number;
   if (spark.length >= 2 && spark[0] !== 0) return ((spark[spark.length - 1] - spark[0]) / spark[0]) * 100;
-  return 0;
+  return null;
 }
 
 function normalizeStock(stock) {
   const ticker = String(stock.ticker ?? stock.symbol ?? stock.code ?? '').toUpperCase();
   const spark = normalizeSpark(stock);
   const latestSpark = spark.length ? spark[spark.length - 1] : undefined;
-  const price = Number(stock.price ?? stock.last ?? stock.lastPrice ?? stock.close ?? latestSpark);
+  const rawPrice = stock.price ?? stock.last ?? stock.lastPrice ?? stock.close ?? latestSpark;
+  const price = rawPrice === null || rawPrice === undefined || rawPrice === '' ? null : Number(rawPrice);
   const changePercent = getChangePercent(stock, spark);
   return {
     ticker,
@@ -205,8 +215,9 @@ function renderSparkline(points, isPositive) {
 }
 
 function renderStockCard(stock, editMode = false) {
-  const isPositive = stock.changePercent >= 0;
-  const toneClass = isPositive ? 'positive' : 'negative';
+  const hasChange = Number.isFinite(stock.changePercent);
+  const isPositive = hasChange && stock.changePercent >= 0;
+  const toneClass = !hasChange ? 'neutral' : isPositive ? 'positive' : 'negative';
   const editControls = editMode ? `
       <div class="stock-card__edit-controls">
         <button type="button" class="card-edit-btn" data-edit-action="left" data-ticker="${escapeHtml(stock.ticker)}" aria-label="向前移动" title="向前">
@@ -245,25 +256,27 @@ function renderStockCard(stock, editMode = false) {
 }
 
 function bindHeatmapNavigation() {
-  document.querySelectorAll('.terminal-heatmap .heatmap-tile[data-ticker]').forEach((tile) => {
-    tile.addEventListener('click', () => {
-      const ticker = tile.dataset.ticker;
-      if (!ticker) return;
-      window.location.hash = `#detail/${encodeURIComponent(ticker)}`;
-    });
+  const heatmap = document.getElementById('terminal-heatmap');
+  if (!heatmap || heatmap.dataset.eventsBound === 'true') return;
+  heatmap.dataset.eventsBound = 'true';
+  heatmap.addEventListener('click', (event) => {
+    const tile = event.target.closest('.heatmap-tile[data-ticker]');
+    const ticker = tile?.dataset.ticker;
+    if (ticker) window.location.hash = `#detail/${encodeURIComponent(ticker)}`;
   });
 }
 
-function renderWatchlistShell(isLoading = false) {
+function renderWatchlistShell(isLoading = false, mountGeneration = activeMountGeneration) {
   const app = document.getElementById('app');
   if (!app) return;
   app.innerHTML = `
-    <section class="terminal-page" aria-labelledby="terminal-title">
+    <section class="terminal-page" data-watchlist-mount="${mountGeneration}" aria-labelledby="terminal-title">
       <header class="terminal-header">
         <div>
           <span class="label-caps">自选</span>
           <h1 id="terminal-title">Signal Deck</h1>
           <p>信号分析与波动率监控 · 自定义自选已存储在本机</p>
+          <small id="watchlist-updated" class="detail-muted">等待行情更新</small>
         </div>
         <div class="terminal-header-right">
           <div id="market-status-panel" class="market-status-panel"></div>
@@ -312,6 +325,12 @@ function renderWatchlistShell(isLoading = false) {
 let __watchlistState = { backendStocks: [], heatmapData: [] };
 let __editMode = false;
 
+function isWatchlistMounted(generation = activeMountGeneration) {
+  return generation === activeMountGeneration
+    && window.location.hash.replace(/^#/, '').split('/')[0] === 'watchlist'
+    && Boolean(document.querySelector(`[data-watchlist-mount="${generation}"]`));
+}
+
 function renderUpcomingEarnings(items) {
   const list = document.getElementById('upcoming-earnings-list');
   if (!list) return;
@@ -338,19 +357,23 @@ function renderUpcomingEarnings(items) {
   });
 }
 
-async function loadUpcomingEarnings() {
+async function loadUpcomingEarnings(mountGeneration = activeMountGeneration) {
   try {
     const payload = await api.earnings();
+    if (!isWatchlistMounted(mountGeneration)) return;
     renderUpcomingEarnings(normalizeUpcomingEarnings(payload));
   } catch (e) {
+    if (!isWatchlistMounted(mountGeneration)) return;
     const list = document.getElementById('upcoming-earnings-list');
     if (list) list.innerHTML = '<li class="terminal-panel-empty">财报数据暂不可用</li>';
   }
 }
 
-async function fetchAndCacheBackend() {
+async function fetchAndCacheBackend(mountGeneration = activeMountGeneration, force = false) {
   try {
+    if (force) invalidateCache('wl');
     const payload = await api.watchlist();
+    if (!isWatchlistMounted(mountGeneration)) return null;
     const groups = payload?.groups || [];
     // Initialize custom from backend on first visit
     initCustomFromBackend(groups);
@@ -359,8 +382,15 @@ async function fetchAndCacheBackend() {
     __watchlistState.heatmapData = stocks.slice(0, 20).map(s => ({
       ticker: s.ticker, label: s.companyName, changePercent: s.changePercent, weight: 1 + Math.abs(s.changePercent) / 2
     }));
+    __watchlistState.fetchError = '';
+    const updated = document.getElementById('watchlist-updated');
+    if (updated) {
+      const stale = payload?._stale || payload?.stale;
+      updated.textContent = `${stale ? '陈旧数据' : '更新'} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
     return stocks;
   } catch (e) {
+    if (!isWatchlistMounted(mountGeneration)) return null;
     console.warn('api.watchlist() failed; showing empty state.', e);
     __watchlistState.backendStocks = [];
     __watchlistState.heatmapData = [];
@@ -375,35 +405,42 @@ function renderCardsFromCustom() {
   const customTickers = getCustomTickers() || __watchlistState.backendStocks.map(s => s.ticker);
   const ordered = applyCustomOrder(__watchlistState.backendStocks, customTickers).map(s => {
     if (s._placeholder) {
-      return normalizeStock({
-        ticker: s.ticker, price: 0, change_percent: 0, name: s.ticker, sector: 'CUSTOM'
-      });
+      return normalizeStock({ ticker: s.ticker, price: null, change_percent: null, name: s.ticker, sector: 'CUSTOM' });
     }
     return s;
   });
   if (!ordered.length) {
     const msg = __watchlistState.fetchError
-      ? `<div class="detail-muted" style="padding:32px;text-align:center"><strong style="display:block;margin-bottom:6px;color:var(--color-crimson)">数据暂不可用</strong>API 返回失败 · 请稍后刷新</div>`
+      ? `<div class="detail-muted" style="padding:32px;text-align:center"><strong style="display:block;margin-bottom:6px;color:var(--color-crimson)">数据暂不可用</strong>API 返回失败 <button type="button" data-watchlist-retry>重试</button></div>`
       : '<div class="detail-muted" style="padding:32px;text-align:center">自选列表为空 · 点击右上角「编辑」添加代码</div>';
     grid.innerHTML = msg;
     return;
   }
-  grid.innerHTML = ordered.map((s) => renderStockCard(s, __editMode)).join('');
+  const visible = ordered.slice(0, visibleCardLimit);
+  const remaining = ordered.length - visible.length;
+  grid.innerHTML = `${visible.map((s) => renderStockCard(s, __editMode)).join('')}
+    ${remaining > 0 ? `<button type="button" class="panel detail-muted" data-watchlist-load-more>再显示 ${remaining} 只</button>` : ''}`;
   bindCardEvents();
 }
 
 function bindCardEvents() {
-  document.querySelectorAll('.stock-card[data-ticker]').forEach((card) => {
-    card.addEventListener('click', (e) => {
-      // Don't navigate when clicking edit buttons
-      if (e.target.closest('[data-edit-action]')) return;
-      if (__editMode) return;
-      const ticker = card.dataset.ticker;
-      if (ticker) window.location.hash = `#detail/${encodeURIComponent(ticker)}`;
-    });
-  });
-  document.querySelectorAll('[data-edit-action]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
+  const grid = document.getElementById('watchlist-grid');
+  if (!grid || grid.dataset.eventsBound === 'true') return;
+  grid.dataset.eventsBound = 'true';
+  grid.addEventListener('click', (e) => {
+    const retry = e.target.closest('[data-watchlist-retry]');
+    if (retry) {
+      retry.disabled = true;
+      refreshWatchlist(activeMountGeneration, true);
+      return;
+    }
+    if (e.target.closest('[data-watchlist-load-more]')) {
+      visibleCardLimit += WATCHLIST_PAGE_SIZE;
+      renderCardsFromCustom();
+      return;
+    }
+    const btn = e.target.closest('[data-edit-action]');
+    if (btn) {
       e.stopPropagation();
       const action = btn.dataset.editAction;
       const ticker = btn.dataset.ticker;
@@ -412,11 +449,16 @@ function bindCardEvents() {
       else if (action === 'left') moveTicker(ticker, 'left');
       else if (action === 'right') moveTicker(ticker, 'right');
       renderCardsFromCustom();
-    });
+      return;
+    }
+    const card = e.target.closest('.stock-card[data-ticker]');
+    if (!card || __editMode) return;
+    const ticker = card.dataset.ticker;
+    if (ticker) window.location.hash = `#detail/${encodeURIComponent(ticker)}`;
   });
 }
 
-function bindEditToolbar() {
+function bindEditToolbar(mountGeneration = activeMountGeneration) {
   const editBtn = document.getElementById('watchlist-edit-btn');
   const addBar = document.getElementById('watchlist-add-bar');
   const addInput = document.getElementById('watchlist-add-input');
@@ -443,6 +485,7 @@ function bindEditToolbar() {
     renderCardsFromCustom();
     // Try fetching the new ticker's data and re-render to fill placeholder
     api.stock(v).then(data => {
+      if (!isWatchlistMounted(mountGeneration) || !data || data.__error) return;
       const existing = __watchlistState.backendStocks.find(s => s.ticker === v);
       if (!existing && data) {
         __watchlistState.backendStocks.push(normalizeStock({
@@ -463,17 +506,39 @@ function bindEditToolbar() {
   });
 }
 
-export async function renderWatchlist() {
-  renderWatchlistShell(true);
-  renderMarketStatus(document.getElementById('market-status-panel'));
-  loadUpcomingEarnings();
+async function refreshWatchlist(mountGeneration, force = false) {
+  const result = await fetchAndCacheBackend(mountGeneration, force);
+  if (result === null || !isWatchlistMounted(mountGeneration)) return;
   const grid = document.getElementById('watchlist-grid');
   const heatmap = document.getElementById('terminal-heatmap');
-
-  await fetchAndCacheBackend();
   renderCardsFromCustom();
   if (heatmap) heatmap.innerHTML = renderHeatmap(__watchlistState.heatmapData);
-  grid.classList.remove('is-loading');
+  grid?.classList.remove('is-loading');
   bindHeatmapNavigation();
-  bindEditToolbar();
+}
+
+export function renderWatchlist() {
+  const mountGeneration = ++activeMountGeneration;
+  visibleCardLimit = WATCHLIST_PAGE_SIZE;
+  __editMode = false;
+  renderWatchlistShell(true, mountGeneration);
+  renderMarketStatus(document.getElementById('market-status-panel'));
+  loadUpcomingEarnings(mountGeneration);
+  bindCardEvents();
+  bindEditToolbar(mountGeneration);
+  refreshWatchlist(mountGeneration);
+
+  const timer = setInterval(() => {
+    if (!document.hidden && isWatchlistMounted(mountGeneration)) refreshWatchlist(mountGeneration, true);
+  }, WATCHLIST_REFRESH_MS);
+  const onVisibility = () => {
+    if (!document.hidden && isWatchlistMounted(mountGeneration)) refreshWatchlist(mountGeneration, true);
+  };
+  document.addEventListener('visibilitychange', onVisibility);
+  const cleanup = () => {
+    clearInterval(timer);
+    document.removeEventListener('visibilitychange', onVisibility);
+    window.removeEventListener('hashchange', cleanup);
+  };
+  window.addEventListener('hashchange', cleanup, { once: true });
 }

@@ -3,6 +3,7 @@
  * click to load per-company AI impact analysis (which other stocks will move).
  */
 import { api } from '../api.js';
+let activeEarningsGeneration = 0;
 
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>'"]/g, (c) => ({
@@ -11,7 +12,7 @@ function escapeHtml(value = '') {
 }
 
 function navigateToDetail(ticker) {
-  if (ticker) location.hash = `#detail/${ticker.toUpperCase()}`;
+  if (ticker) location.hash = `#detail/${encodeURIComponent(String(ticker).toUpperCase())}`;
 }
 
 function fmtLargeMoney(v) {
@@ -98,11 +99,11 @@ function colorForCount(n) {
   return 'rgba(5,150,105,0.32)';
 }
 
-function renderShell() {
+function renderShell(generation) {
   const app = document.getElementById('app');
   if (!app) return;
   app.innerHTML = `
-    <section class="earnings-page" aria-labelledby="earnings-title">
+    <section class="earnings-page" data-earnings-mount="${generation}" aria-labelledby="earnings-title">
       <header class="terminal-header">
         <div>
           <span class="label-caps">财报日历</span>
@@ -190,7 +191,7 @@ function renderCalendar(year, month, byDate) {
       ? `<div style="font-size:10px;color:var(--color-muted);margin-top:2px">+${c.items.length - 4} 家</div>`
       : '';
     return `
-      <div data-day-iso="${c.iso}" ${c.isToday ? 'data-today="1"' : ''}
+      <div data-day-iso="${escapeHtml(c.iso)}" ${c.isToday ? 'data-today="1"' : ''}
         style="background:${bg};min-height:96px;border-radius:6px;padding:6px 8px;border:${border};display:flex;flex-direction:column;opacity:${opacity}">
         <div style="font-size:12px;font-weight:700;margin-bottom:4px">${dayLabel}</div>
         <div style="flex:1;display:flex;flex-wrap:wrap;align-content:flex-start">${chips}${more}</div>
@@ -325,7 +326,7 @@ function renderImpactCard(ticker, item, result) {
 }
 
 let __impactLoadToken = 0;
-async function loadImpact(ticker, byTicker) {
+async function loadImpact(ticker, byTicker, mountGeneration) {
   const panel = document.getElementById('earnings-impact-panel');
   const title = document.getElementById('earnings-impact-title');
   const body = document.getElementById('earnings-impact-body');
@@ -337,29 +338,34 @@ async function loadImpact(ticker, byTicker) {
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   try {
     const result = await api.earningsImpact(ticker);
-    if (myToken !== __impactLoadToken) return;
+    if (myToken !== __impactLoadToken || mountGeneration !== activeEarningsGeneration || !body.isConnected) return;
     body.innerHTML = renderImpactCard(ticker, byTicker.get(ticker), result);
     body.querySelectorAll('[data-ticker]').forEach(b => {
       b.addEventListener('click', () => navigateToDetail(b.dataset.ticker));
     });
   } catch (e) {
-    if (myToken !== __impactLoadToken) return;
+    if (myToken !== __impactLoadToken || mountGeneration !== activeEarningsGeneration || !body.isConnected) return;
     body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--color-crimson)">AI 分析失败: ${escapeHtml(e.message || '未知错误')}</div>`;
   }
 }
 
 export async function renderEarnings() {
-  renderShell();
+  const mountGeneration = ++activeEarningsGeneration;
+  __impactLoadToken += 1;
+  renderShell(mountGeneration);
   const cal = document.getElementById('earnings-cal');
   cal.innerHTML = '<div style="padding:48px;text-align:center;color:var(--color-muted)">加载财报日历中…</div>';
 
   let earnings;
   try {
     const payload = await api.earnings();
+    if (mountGeneration !== activeEarningsGeneration || !cal.isConnected) return;
     earnings = normalizeEarnings(payload);
     if (!earnings.length) throw new Error('no earnings');
   } catch (e) {
-    cal.innerHTML = `<div style="padding:48px;text-align:center;color:var(--color-muted)"><strong style="display:block;margin-bottom:6px;color:var(--color-crimson)">数据暂不可用</strong>财报 API 请求失败 · 请稍后刷新</div>`;
+    if (mountGeneration !== activeEarningsGeneration || !cal.isConnected) return;
+    cal.innerHTML = `<div style="padding:48px;text-align:center;color:var(--color-muted)"><strong style="display:block;margin-bottom:6px;color:var(--color-crimson)">数据暂不可用</strong>财报 API 请求失败 <button type="button" data-earnings-retry>重试</button></div>`;
+    cal.querySelector('[data-earnings-retry]')?.addEventListener('click', () => renderEarnings());
     return;
   }
 
@@ -407,7 +413,7 @@ export async function renderEarnings() {
     renderMonthNav(months, currentIdx, pick, todayIdx);
     renderCalendar(months[idx].year, months[idx].month, byDate);
     cal.querySelectorAll('.earnings-chip').forEach(btn => {
-      btn.addEventListener('click', () => loadImpact(btn.dataset.ticker, byTicker));
+      btn.addEventListener('click', () => loadImpact(btn.dataset.ticker, byTicker, mountGeneration));
     });
     // Scroll today into view if visible
     if (idx === todayIdx) {
@@ -419,7 +425,7 @@ export async function renderEarnings() {
   renderMonthNav(months, currentIdx, pick, todayIdx);
   renderCalendar(months[currentIdx].year, months[currentIdx].month, byDate);
   cal.querySelectorAll('.earnings-chip').forEach(btn => {
-    btn.addEventListener('click', () => loadImpact(btn.dataset.ticker, byTicker));
+    btn.addEventListener('click', () => loadImpact(btn.dataset.ticker, byTicker, mountGeneration));
   });
   bindHover(byTicker);
 }

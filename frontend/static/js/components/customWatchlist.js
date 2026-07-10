@@ -4,6 +4,13 @@
  */
 
 const KEY = 'optix.watchlist.custom.v1';
+const MAX_CUSTOM_TICKERS = 100;
+const DEFAULT_TICKER_LIMIT = 60;
+
+function normalizeTicker(value) {
+  const ticker = String(value || '').toUpperCase().trim();
+  return /^[A-Z0-9.^_=-]{1,32}$/.test(ticker) ? ticker : '';
+}
 
 export function getCustomTickers() {
   try {
@@ -11,39 +18,40 @@ export function getCustomTickers() {
     if (!raw) return null;
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr)) return null;
-    return arr.map(t => String(t).toUpperCase()).filter(Boolean);
+    return arr.map(normalizeTicker).filter(Boolean).slice(0, MAX_CUSTOM_TICKERS);
   } catch {
     return null;
   }
 }
 
 export function saveCustomTickers(tickers) {
-  const clean = (tickers || []).map(t => String(t).toUpperCase().trim()).filter(Boolean);
+  const clean = (tickers || []).map(normalizeTicker).filter(Boolean);
   // Dedup while preserving order
   const seen = new Set();
   const out = [];
   for (const t of clean) { if (!seen.has(t)) { seen.add(t); out.push(t); } }
-  localStorage.setItem(KEY, JSON.stringify(out));
-  return out;
+  const limited = out.slice(0, MAX_CUSTOM_TICKERS);
+  localStorage.setItem(KEY, JSON.stringify(limited));
+  return limited;
 }
 
 export function addTicker(ticker) {
   const list = getCustomTickers() || [];
-  const t = String(ticker).toUpperCase().trim();
-  if (!t || list.includes(t)) return list;
+  const t = normalizeTicker(ticker);
+  if (!t || list.includes(t) || list.length >= MAX_CUSTOM_TICKERS) return list;
   list.push(t);
   return saveCustomTickers(list);
 }
 
 export function removeTicker(ticker) {
   const list = getCustomTickers() || [];
-  const t = String(ticker).toUpperCase();
+  const t = normalizeTicker(ticker);
   return saveCustomTickers(list.filter(x => x !== t));
 }
 
 export function moveTicker(ticker, direction) {
   const list = (getCustomTickers() || []).slice();
-  const t = String(ticker).toUpperCase();
+  const t = normalizeTicker(ticker);
   const i = list.indexOf(t);
   if (i < 0) return list;
   const j = direction === 'left' ? i - 1 : i + 1;
@@ -62,14 +70,14 @@ export function resetCustom() {
  */
 export function initCustomFromBackend(backendGroups) {
   const existing = getCustomTickers();
-  if (existing && existing.length) return existing;
+  if (existing !== null) return existing;
   // Pull all tickers from backend groups, dedup
   const all = [];
   const seen = new Set();
   for (const g of backendGroups || []) {
     for (const s of (g.stocks || [])) {
       const t = String(s.ticker || '').toUpperCase();
-      if (t && !seen.has(t)) { seen.add(t); all.push(t); }
+      if (t && !seen.has(t) && all.length < DEFAULT_TICKER_LIMIT) { seen.add(t); all.push(t); }
     }
   }
   saveCustomTickers(all);

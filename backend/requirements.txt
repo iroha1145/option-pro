@@ -3,12 +3,12 @@ uvicorn[standard]==0.34.0
 httpx==0.28.1
 pydantic==2.10.4
 pydantic-settings==2.7.0
-python-dotenv==1.0.1
-yfinance>=0.2.40
-# pandas/numpy are used directly throughout the codebase — pin them explicitly
-# instead of relying on yfinance's transitive dependency set.
-pandas>=2.0
-numpy>=1.26
-curl_cffi>=0.7.0
-lxml>=5.0
-openai>=1.80.0
+python-dotenv==1.2.2
+yfinance==1.2.0
+# Direct numerical/network dependencies are pinned so a rebuild cannot silently
+# change calculation or transport behavior through transitive upgrades.
+pandas==2.3.3
+numpy==2.0.2
+curl_cffi==0.13.0
+lxml==5.4.0
+openai==1.80.0

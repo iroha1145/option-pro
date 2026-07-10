@@ -45,13 +45,26 @@ const REQUEST_TIMEOUT_MS = 90 * 1000;
 
 function getAuthHeaders(initHeaders = {}) {
   const headers = new Headers(initHeaders || {});
+  let token = '';
   try {
-    const token = localStorage.getItem('optix.app.token') || '';
-    if (token && !headers.has('Authorization')) {
-      headers.set('Authorization', `Bearer ${token}`);
-    }
+    token = sessionStorage.getItem('optix.app.token') || '';
   } catch (_) {
-    // localStorage can be unavailable in some privacy modes; unauthenticated is fine.
+    // sessionStorage can be unavailable in some privacy modes.
+  }
+  try {
+    // One-time migration from older builds. Keep the token for this tab only
+    // and remove the persistent copy immediately.
+    const legacyToken = localStorage.getItem('optix.app.token') || '';
+    if (!token && legacyToken) {
+      token = legacyToken;
+      try { sessionStorage.setItem('optix.app.token', legacyToken); } catch (_) { /* tab storage unavailable */ }
+    }
+    if (legacyToken) localStorage.removeItem('optix.app.token');
+  } catch (_) {
+    // Legacy storage may be unavailable; the session token still works.
+  }
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
   }
   return headers;
 }
@@ -64,7 +77,7 @@ async function fetchJson(url, init, timeoutMs = REQUEST_TIMEOUT_MS) {
     const response = await fetch(url, { ...init, headers, signal: controller.signal });
     if (!response.ok) {
       if (response.status === 401) {
-        throw new Error('401 Unauthorized: set localStorage optix.app.token to your APP_AUTH_TOKEN');
+        throw new Error('401 Unauthorized: set sessionStorage optix.app.token to your APP_AUTH_TOKEN');
       }
       throw new Error(`${response.status} ${response.statusText}`);
     }

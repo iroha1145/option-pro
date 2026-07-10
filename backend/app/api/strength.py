@@ -51,7 +51,7 @@ async def scan(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Strength scan failed: {exc}") from exc
+        raise HTTPException(status_code=503, detail="Strength data is currently unavailable") from exc
 
 
 @router.get("/stocks/{ticker}")
@@ -61,17 +61,25 @@ async def stock(ticker: str, profile: str = Query("balanced", pattern="^(conserv
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Ticker not found in theme universe: {ticker}") from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Stock strength failed: {exc}") from exc
+        raise HTTPException(status_code=503, detail="Strength data is currently unavailable") from exc
 
 
 @router.get("/sectors")
 async def sectors(period: str = Query("3mo", pattern="^(1mo|3mo|6mo)$")) -> dict[str, Any]:
-    return sanitize(await sector_strength(period=period))
+    try:
+        return sanitize(await sector_strength(period=period))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Strength data is currently unavailable") from exc
 
 
 @router.get("/market")
 async def market() -> dict[str, Any]:
-    return sanitize(await market_strength())
+    try:
+        return sanitize(await market_strength())
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Strength data is currently unavailable") from exc
 
 
 @router.get("/profiles")

@@ -61,18 +61,18 @@ def _weighted_average(values: list[Any], weights: list[Any]) -> float | None:
     return round(numerator / denominator, 4)
 
 
-def _parse_expiration(value: str) -> tuple[str, int] | None:
+def _parse_expiration(value: str, now: datetime | None = None) -> tuple[str, float] | None:
     try:
-        expiry = datetime.strptime(value, "%Y-%m-%d").date()
+        expiry = yahoo.option_expiry_metrics(value, now=now)
     except (TypeError, ValueError):
         return None
-    dte = (expiry - datetime.now().date()).days
+    dte = float(expiry["dte"])
     if dte <= 0:
         return None
-    return value, dte
+    return value, round(dte, 6)
 
 
-def _pick_expiration(expirations: list[str], settings: Settings) -> tuple[str, int] | None:
+def _pick_expiration(expirations: list[str], settings: Settings) -> tuple[str, float] | None:
     parsed = [item for value in expirations if (item := _parse_expiration(value))]
     if not parsed:
         return None
@@ -148,7 +148,8 @@ def _load_raw_metrics(row: dict[str, Any], settings: Settings) -> dict[str, Any]
     if not symbol:
         return None
 
-    expirations = yahoo.get_expirations(symbol)
+    expiration_snapshot = yahoo.get_expirations_snapshot(symbol)
+    expirations = expiration_snapshot.get("expirations") or []
     selected_expiration = _pick_expiration(expirations, settings)
     if not selected_expiration:
         return None
@@ -193,6 +194,12 @@ def _load_raw_metrics(row: dict[str, Any], settings: Settings) -> dict[str, Any]
             premium_flow += volume * option_price * 100
 
     alerts = chain.get("alerts") if isinstance(chain.get("alerts"), list) else []
+    stale = bool(expiration_snapshot.get("_stale") or chain.get("_stale"))
+    as_of_values = [
+        str(value)
+        for value in (expiration_snapshot.get("as_of"), chain.get("as_of"))
+        if value
+    ]
     return {
         "ticker": symbol,
         "expiration": expiration,
@@ -208,6 +215,9 @@ def _load_raw_metrics(row: dict[str, Any], settings: Settings) -> dict[str, Any]
         "iv_average": avg_iv,
         "unusual_count": len(alerts),
         "underlying_price": price,
+        "_stale": stale,
+        "as_of": min(as_of_values) if as_of_values else None,
+        "source_status": "stale" if stale else "active",
     }
 
 
@@ -247,7 +257,7 @@ def _score_metrics(raw_metrics: list[dict[str, Any]]) -> dict[str, dict[str, Any
         volume_rank = ranks["total_volume"].get(ticker, 35.0 if total_volume else 25.0)
         oi_rank = ranks["total_open_interest"].get(ticker, 35.0 if total_oi else 25.0)
         premium_rank = ranks["premium_flow"].get(ticker, 35.0)
-        iv_rank = ranks["iv_average"].get(ticker, 50.0)
+        option_pool_iv_rank = ranks["iv_average"].get(ticker, 50.0)
         unusual_rank = ranks["unusual_count"].get(ticker, 50.0)
         iv_abs_score = _clamp((avg_iv or 0.35) * 100 * 1.2, 20, 95)
         imbalance = abs(math.log((call_volume + 1) / (put_volume + 1)))
@@ -273,11 +283,15 @@ def _score_metrics(raw_metrics: list[dict[str, Any]]) -> dict[str, dict[str, Any
         scored[ticker] = {
             **metrics,
             "option_heat_score": round(_clamp(option_heat), 1),
-            "iv_rank": iv_rank,
+            "atm_iv_percent": round(avg_iv * 100, 1) if avg_iv is not None else None,
+            "option_pool_iv_rank": option_pool_iv_rank,
+            # Historical IV rank/percentile is unavailable from a single chain snapshot.
+            "iv_rank": None,
+            "iv_percentile": None,
             "iv_label": iv_label,
             "put_call_volume": put_call_volume,
             "put_call_open_interest": put_call_oi,
-            "source_status": "active",
+            "source_status": metrics.get("source_status") or "active",
             "provider": PROVIDER,
             "confidence": "broad_screen",
             "provider_note": "Yahoo/yfinance 只提供期权链快照，无法判断真实买卖方向",

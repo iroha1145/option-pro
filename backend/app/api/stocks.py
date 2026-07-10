@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
+from datetime import datetime, timezone
 import math
 import time
 from typing import Any
@@ -18,9 +20,20 @@ router = APIRouter(prefix="/api/stocks", tags=["stocks"])
 # ──────────────────────────────────────────────────────────────────────────────
 # Server-side TTL cache
 # Backstop against Yahoo rate-limiting + much faster page loads.
-# Returns stale on errors so a flaky API doesn't nuke the UI.
+# Returns stale on errors for a bounded period so a flaky API does not nuke the
+# UI without allowing old financial data to masquerade as live indefinitely.
 # ──────────────────────────────────────────────────────────────────────────────
-_endpoint_cache: dict[str, tuple[float, Any]] = {}
+
+
+@dataclass
+class _EndpointCacheEntry:
+    expires_at: float
+    stale_until: float
+    fetched_at: float
+    value: Any
+
+
+_endpoint_cache: dict[str, _EndpointCacheEntry] = {}
 # Per-key lock prevents thundering herd: concurrent requests for the same
 # cold key would otherwise all kick off their own yfinance fetch.
 _endpoint_locks: dict[str, asyncio.Lock] = {}
@@ -38,32 +51,66 @@ def _maybe_purge_endpoint_cache(now: float) -> None:
     in a long-lived process otherwise."""
     if len(_endpoint_cache) < _ENDPOINT_PURGE_THRESHOLD and len(_endpoint_locks) < _ENDPOINT_PURGE_THRESHOLD:
         return
-    for key in [k for k, (expires_at, _) in _endpoint_cache.items() if expires_at <= now]:
+    for key in [k for k, entry in _endpoint_cache.items() if entry.stale_until <= now]:
         _endpoint_cache.pop(key, None)
     for key in [k for k, lock in _endpoint_locks.items() if k not in _endpoint_cache and not lock.locked()]:
         _endpoint_locks.pop(key, None)
 
-async def _cached_endpoint(key: str, ttl: int, loader):
-    now = time.time()
+def _cache_result(entry: _EndpointCacheEntry, *, stale: bool) -> Any:
+    value = entry.value
+    if not isinstance(value, dict) or isinstance(value.get("content"), (bytes, bytearray)):
+        return value
+    result = dict(value)
+    is_stale = stale or bool(result.get("_stale"))
+    result["_stale"] = is_stale
+    result.setdefault(
+        "as_of",
+        datetime.fromtimestamp(entry.fetched_at, timezone.utc).isoformat(),
+    )
+    if is_stale:
+        result["source_status"] = "degraded"
+        result.setdefault("stale_reason", "upstream_refresh_failed")
+    else:
+        result.setdefault("source_status", "active")
+    return result
+
+
+def _usable_hit(key: str, now: float) -> _EndpointCacheEntry | None:
     hit = _endpoint_cache.get(key)
-    if hit and hit[0] > now:
-        return hit[1]
+    if hit and hit.stale_until <= now:
+        _endpoint_cache.pop(key, None)
+        return None
+    return hit
+
+
+async def _cached_endpoint(key: str, ttl: int, loader, *, stale_ttl: int | None = None):
+    stale_ttl = ttl if stale_ttl is None else max(0, stale_ttl)
+    now = time.time()
+    hit = _usable_hit(key, now)
+    if hit and hit.expires_at > now:
+        return _cache_result(hit, stale=False)
     # Serialize cold-cache fills per key
     async with _lock_for(key):
         # Re-check after acquiring lock (another waiter may have filled it)
         now = time.time()
-        hit = _endpoint_cache.get(key)
-        if hit and hit[0] > now:
-            return hit[1]
+        hit = _usable_hit(key, now)
+        if hit and hit.expires_at > now:
+            return _cache_result(hit, stale=False)
         try:
             value = await loader()
         except Exception:
-            if hit:
-                return hit[1]  # stale fallback
+            if hit and now <= hit.stale_until:
+                return _cache_result(hit, stale=True)
             raise
         _maybe_purge_endpoint_cache(now)
-        _endpoint_cache[key] = (now + ttl, value)
-        return value
+        entry = _EndpointCacheEntry(
+            expires_at=now + ttl,
+            stale_until=now + ttl + stale_ttl,
+            fetched_at=now,
+            value=value,
+        )
+        _endpoint_cache[key] = entry
+        return _cache_result(entry, stale=False)
 
 
 from app.services.utils import sanitize as _sanitize
@@ -180,7 +227,10 @@ KNOWN_TICKERS = {
 
 @router.get("/watchlist")
 async def watchlist():
-    return await _cached_endpoint("watchlist", 300, _build_watchlist)
+    try:
+        return await _cached_endpoint("watchlist", 300, _build_watchlist, stale_ttl=900)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Yahoo watchlist data is currently unavailable") from exc
 
 
 async def _build_watchlist():
@@ -251,7 +301,14 @@ async def _build_watchlist():
         if items:
             groups.append({"id": sec_id, "name": sec["name"], "stocks": items})
 
-    return _sanitize({"groups": groups})
+    return _sanitize({
+        "groups": groups,
+        "attempted": len(all_tickers),
+        "succeeded": len(price_map),
+        "failed": len(all_tickers) - len(price_map),
+        "data_limited": success_ratio < 1.0,
+        "source_status": "active" if success_ratio == 1.0 else "degraded",
+    })
 
 
 @router.get("/search")
@@ -322,7 +379,7 @@ async def stock_signals(ticker: str):
             tk = yf.Ticker(symbol)
             hist = tk.history(period="100d")
             if hist.empty or len(hist) < 50:
-                return {"ticker": symbol, "score": 50, "overall": "neutral", "signals": {}}
+                raise RuntimeError(f"Insufficient price history for {symbol}")
 
             close = hist["Close"]
             volume = hist["Volume"]
@@ -331,27 +388,32 @@ async def stock_signals(ticker: str):
             delta = close.diff()
             gain = delta.clip(lower=0).rolling(14).mean()
             loss = (-delta.clip(upper=0)).rolling(14).mean()
-            rs = gain / loss
-            rsi_series = 100 - (100 / (1 + rs))
-            current_rsi = _safe_number(rsi_series.iloc[-1])
-            if current_rsi is None:
-                current_rsi = 50.0
+            avg_gain = _safe_number(gain.iloc[-1])
+            avg_loss = _safe_number(loss.iloc[-1])
+            if avg_gain is None or avg_loss is None:
+                raise RuntimeError(f"RSI unavailable for {symbol}")
+            if avg_loss == 0:
+                current_rsi = 100.0 if avg_gain > 0 else 50.0
+            elif avg_gain == 0:
+                current_rsi = 0.0
+            else:
+                current_rsi = 100 - (100 / (1 + avg_gain / avg_loss))
 
             # MACD
-            ema12 = close.ewm(span=12).mean()
-            ema26 = close.ewm(span=26).mean()
+            ema12 = close.ewm(span=12, adjust=False).mean()
+            ema26 = close.ewm(span=26, adjust=False).mean()
             macd_line = ema12 - ema26
-            signal_line = macd_line.ewm(span=9).mean()
+            signal_line = macd_line.ewm(span=9, adjust=False).mean()
             histogram = macd_line - signal_line
             macd_val = _safe_number(histogram.iloc[-1]) or 0.0
             macd_prev = _safe_number(histogram.iloc[-2]) or 0.0
 
             # EMAs
-            ema20 = _safe_number(close.ewm(span=20).mean().iloc[-1])
+            ema20 = _safe_number(close.ewm(span=20, adjust=False).mean().iloc[-1])
             sma50 = _safe_number(close.rolling(50).mean().iloc[-1])
             price = _safe_number(close.iloc[-1])
             if ema20 is None or sma50 is None or price is None:
-                return {"ticker": symbol, "score": 50, "overall": "neutral", "signals": {}}
+                raise RuntimeError(f"Technical indicators unavailable for {symbol}")
 
             # Volume
             avg_vol = _safe_number(volume.rolling(20).mean().iloc[-1]) or 0.0
@@ -424,11 +486,16 @@ async def stock_signals(ticker: str):
                 "signals": signals,
                 "tags": [tag for tag in tags if tag],
             }
-        except Exception:
-            return {"ticker": symbol, "score": 50, "overall": "neutral", "signals": {}, "tags": []}
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(f"Price provider unavailable for {symbol}") from exc
 
-    result = await asyncio.to_thread(_compute)
-    return _sanitize(result)
+    try:
+        result = await asyncio.to_thread(_compute)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return _sanitize({**result, "source_status": "active"})
 
 
 @router.get("/{ticker}/logo")
@@ -449,7 +516,10 @@ async def stock_logo(ticker: str):
 
 @router.get("/{ticker}")
 async def stock_overview(ticker: str):
-    return await _cached_endpoint(f"stock:{ticker.upper()}", 300, lambda: _stock_overview_impl(ticker))
+    try:
+        return await _cached_endpoint(f"stock:{ticker.upper()}", 300, lambda: _stock_overview_impl(ticker))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Yahoo stock data is currently unavailable") from exc
 
 
 async def _stock_overview_impl(ticker: str):
@@ -553,11 +623,14 @@ def _normalize_extended_quote_bar(
 
 @router.get("/{ticker}/chart")
 async def stock_chart(ticker: str, range: str = Query("1d", pattern="^(5m|15m|1h|1d|1w)$")):
-    return await _cached_endpoint(
-        f"chart:{ticker.upper()}:{range}",
-        _CHART_TTL.get(range, 600),
-        lambda: _stock_chart_impl(ticker, range)
-    )
+    try:
+        return await _cached_endpoint(
+            f"chart:{ticker.upper()}:{range}",
+            _CHART_TTL.get(range, 600),
+            lambda: _stock_chart_impl(ticker, range),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Yahoo chart data is currently unavailable") from exc
 
 
 async def _stock_chart_impl(ticker: str, range: str):

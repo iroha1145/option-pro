@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time as datetime_time, timedelta, timezone
 import math
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import logging
 import warnings as _warnings
@@ -45,16 +46,22 @@ if _yf_session is not None:
         _orig_init(self, ticker, session=session, **kwargs)
     yf.Ticker.__init__ = _patched_init
 
-# Simple in-memory cache for yfinance data. Values are (expires_at, data).
-_cache: dict[str, tuple[datetime, Any]] = {}
+# Simple in-memory cache for yfinance data. Values are
+# (expires_at, fetched_at, data) so stale fallbacks have a hard age limit and
+# can disclose their provenance to API callers.
+_cache: dict[str, tuple[datetime, datetime, Any]] = {}
 _CACHE_PURGE_THRESHOLD = 1024
+_MAX_STALE_SECONDS = 30 * 60
+
+NEW_YORK_TZ = ZoneInfo("America/New_York")
+_SECONDS_PER_YEAR = 365.0 * 24 * 60 * 60
 
 
 def _purge_cache(now: datetime) -> None:
     """Drop expired entries so per-ticker/expiration keys can't pile up forever."""
     if len(_cache) < _CACHE_PURGE_THRESHOLD:
         return
-    for key in [k for k, (expires_at, _) in _cache.items() if expires_at <= now]:
+    for key in [k for k, (_, fetched_at, _) in _cache.items() if (now - fetched_at).total_seconds() > _MAX_STALE_SECONDS]:
         _cache.pop(key, None)
     if len(_cache) >= _CACHE_PURGE_THRESHOLD:
         # Still too big (all entries fresh): drop the oldest-expiring half.
@@ -62,21 +69,73 @@ def _purge_cache(now: datetime) -> None:
             _cache.pop(key, None)
 
 
-def _cached(key: str, ttl_seconds: int, loader):
+def _cache_value(value: Any, metadata: dict[str, Any], with_metadata: bool) -> Any:
+    if with_metadata:
+        return value, metadata
+    if isinstance(value, dict):
+        result = dict(value)
+        result["_stale"] = bool(metadata["_stale"])
+        result.setdefault("as_of", metadata["as_of"])
+        if metadata["_stale"]:
+            result["source_status"] = "stale"
+        else:
+            result.setdefault("source_status", "active")
+        return result
+    return value
+
+
+def _cached(
+    key: str,
+    ttl_seconds: int,
+    loader,
+    *,
+    max_stale_seconds: int = _MAX_STALE_SECONDS,
+    with_metadata: bool = False,
+):
     now = datetime.now(timezone.utc)
     hit = _cache.get(key)
     if hit and hit[0] > now:
-        return hit[1]
+        _, fetched_at, value = hit
+        metadata = {"_stale": False, "as_of": fetched_at.isoformat(), "source_status": "active"}
+        return _cache_value(value, metadata, with_metadata)
     try:
         value = loader()
     except Exception:
-        # On rate-limit or transient error, return stale cache if available
         if hit:
-            return hit[1]
+            _, fetched_at, stale_value = hit
+            stale_age = (now - fetched_at).total_seconds()
+            if stale_age <= max(0, int(max_stale_seconds)):
+                metadata = {
+                    "_stale": True,
+                    "as_of": fetched_at.isoformat(),
+                    "source_status": "stale",
+                    "stale_age_seconds": round(max(stale_age, 0.0), 1),
+                }
+                return _cache_value(stale_value, metadata, with_metadata)
+            _cache.pop(key, None)
         raise
-    _purge_cache(now)
-    _cache[key] = (now + timedelta(seconds=ttl_seconds), value)
-    return value
+    fetched_at = datetime.now(timezone.utc)
+    _purge_cache(fetched_at)
+    _cache[key] = (fetched_at + timedelta(seconds=ttl_seconds), fetched_at, value)
+    metadata = {"_stale": False, "as_of": fetched_at.isoformat(), "source_status": "active"}
+    return _cache_value(value, metadata, with_metadata)
+
+
+def option_expiry_metrics(expiration: str, now: datetime | None = None) -> dict[str, Any]:
+    """Time remaining to the standard US equity-option close (16:00 New York)."""
+    expiry_date = datetime.strptime(expiration, "%Y-%m-%d").date()
+    current = now or datetime.now(NEW_YORK_TZ)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=NEW_YORK_TZ)
+    else:
+        current = current.astimezone(NEW_YORK_TZ)
+    expiration_at = datetime.combine(expiry_date, datetime_time(16, 0), tzinfo=NEW_YORK_TZ)
+    seconds = max((expiration_at - current).total_seconds(), 0.0)
+    return {
+        "expiration_at": expiration_at.isoformat(),
+        "dte": round(seconds / (24 * 60 * 60), 6),
+        "time_to_expiry_years": seconds / _SECONDS_PER_YEAR,
+    }
 
 
 def _get_ticker(symbol: str) -> yf.Ticker:
@@ -85,10 +144,25 @@ def _get_ticker(symbol: str) -> yf.Ticker:
     return yf.Ticker(symbol.upper())
 
 
-def get_expirations(ticker: str) -> list[str]:
-    """Get available option expiration dates."""
+def _get_expirations_cached(ticker: str, *, with_metadata: bool = False) -> Any:
     symbol = ticker.upper()
-    return _cached(f"expirations:{symbol}", 300, lambda: list(_get_ticker(symbol).options))
+    return _cached(
+        f"expirations:{symbol}",
+        300,
+        lambda: list(_get_ticker(symbol).options),
+        with_metadata=with_metadata,
+    )
+
+
+def get_expirations(ticker: str) -> list[str]:
+    """Get available option expiration dates (compatibility list form)."""
+    return _get_expirations_cached(ticker, with_metadata=False)
+
+
+def get_expirations_snapshot(ticker: str) -> dict[str, Any]:
+    """Get expirations with explicit cache freshness metadata."""
+    expirations, metadata = _get_expirations_cached(ticker, with_metadata=True)
+    return {"expirations": expirations, **metadata}
 
 
 def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
@@ -105,10 +179,9 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
             price = None
 
         chain = t.option_chain(expiration)
-        exp_date = datetime.strptime(expiration, "%Y-%m-%d").date()
-        today = datetime.now().date()
-        dte = max((exp_date - today).days, 0)
-        T = max(dte, 1) / 365.0
+        expiry = option_expiry_metrics(expiration)
+        dte = expiry["dte"]
+        T = expiry["time_to_expiry_years"]
 
         def _resolve_iv(row, strike, last_price, stock_price, is_call=True):
             """Use yfinance IV if meaningful, else compute from last_price via BS.
@@ -266,6 +339,9 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
         return {
             "ticker": symbol,
             "expiration": expiration,
+            "expiration_at": expiry["expiration_at"],
+            "dte": dte,
+            "time_to_expiry_years": T,
             "underlying_price": price,
             "strikes": strikes,
             "calls": calls,
@@ -278,74 +354,82 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
     return _cached(f"chain:{symbol}:{expiration}", 300, load)
 
 
-def get_stock_iv(ticker: str) -> float | None:
+def _get_stock_iv_cached(ticker: str, *, with_metadata: bool = False) -> Any:
     """Get meaningful ATM implied volatility using an expiration 20-60 days out."""
     symbol = ticker.upper()
 
     def load() -> float | None:
-        try:
-            t = _get_ticker(symbol)
-            exps = t.options
-            if not exps:
+        t = _get_ticker(symbol)
+        exps = t.options
+        if not exps:
+            return None
+
+        price = float(t.fast_info.last_price)
+
+        # Very near-term expirations often have unusable/zero IV. Prefer an
+        # expiration around one month out for sector/stock displays.
+        target_exp = None
+        now_ny = datetime.now(NEW_YORK_TZ)
+
+        def _parse_exp(s):
+            try:
+                return option_expiry_metrics(s, now=now_ny)
+            except (ValueError, TypeError):
                 return None
 
-            price = float(t.fast_info.last_price)
-
-            # Very near-term expirations often have unusable/zero IV. Prefer an
-            # expiration around one month out for sector/stock displays.
-            target_exp = None
-            today = datetime.now().date()
-
-            def _parse_exp(s):
-                try:
-                    return datetime.strptime(s, "%Y-%m-%d").date()
-                except (ValueError, TypeError):
-                    return None
-
+        for exp in exps:
+            expiry = _parse_exp(exp)
+            if not expiry:
+                continue
+            days_out = expiry["dte"]
+            if 20 <= days_out <= 60:
+                target_exp = exp
+                break
+        if not target_exp:
             for exp in exps:
-                exp_date = _parse_exp(exp)
-                if not exp_date:
-                    continue
-                days_out = (exp_date - today).days
-                if 20 <= days_out <= 60:
+                expiry = _parse_exp(exp)
+                if expiry and expiry["dte"] > 7:
                     target_exp = exp
                     break
-            if not target_exp:
-                for exp in exps:
-                    exp_date = _parse_exp(exp)
-                    if exp_date and (exp_date - today).days > 7:
-                        target_exp = exp
-                        break
-            if not target_exp and exps:
-                target_exp = exps[-1]
+        if not target_exp and exps:
+            target_exp = exps[-1]
 
-            chain = t.option_chain(target_exp)
-            calls = chain.calls
-            atm_calls = calls.iloc[(calls["strike"] - price).abs().argsort()[:5]]
+        chain = t.option_chain(target_exp)
+        calls = chain.calls
+        atm_calls = calls.iloc[(calls["strike"] - price).abs().argsort()[:5]]
 
-            # 1) Try yfinance IV first (must be >10% to be realistic for stocks)
-            for _, row in atm_calls.iterrows():
-                iv = _safe_float(row.get("impliedVolatility"))
-                if iv is not None and iv > 0.10:
-                    return round(iv, 4)
+        # 1) Try yfinance IV first (must be >10% to be realistic for stocks)
+        for _, row in atm_calls.iterrows():
+            iv = _safe_float(row.get("impliedVolatility"))
+            if iv is not None and iv > 0.10:
+                return round(iv, 4)
 
-            # 2) Fallback: compute IV from last_price via Black-Scholes
-            exp_date = _parse_exp(target_exp)
-            if not exp_date:
-                return None
-            T = max((exp_date - today).days, 1) / 365.0
-            for _, row in atm_calls.iterrows():
-                last = _safe_float(row.get("lastPrice"))
-                strike = _safe_float(row.get("strike"))
-                if last and last > 0.01 and strike:
-                    computed = compute_iv(last, price, strike, T, r=0.05, is_call=True)
-                    if computed and 0.05 < computed < 3.0:
-                        return round(computed, 4)
-        except Exception:
-            pass
+        # 2) Fallback: compute IV from last_price via Black-Scholes
+        expiry = _parse_exp(target_exp)
+        if not expiry:
+            return None
+        T = expiry["time_to_expiry_years"]
+        for _, row in atm_calls.iterrows():
+            last = _safe_float(row.get("lastPrice"))
+            strike = _safe_float(row.get("strike"))
+            if last and last > 0.01 and strike:
+                computed = compute_iv(last, price, strike, T, r=0.05, is_call=True)
+                if computed and 0.05 < computed < 3.0:
+                    return round(computed, 4)
         return None
 
-    return _cached(f"stock_iv:{symbol}", 300, load)
+    return _cached(f"stock_iv:{symbol}", 300, load, with_metadata=with_metadata)
+
+
+def get_stock_iv(ticker: str) -> float | None:
+    """Return current ATM IV as a decimal (for example, ``0.325`` = 32.5%)."""
+    return _get_stock_iv_cached(ticker, with_metadata=False)
+
+
+def get_stock_iv_snapshot(ticker: str) -> dict[str, Any]:
+    """Return current ATM IV together with cache freshness metadata."""
+    iv, metadata = _get_stock_iv_cached(ticker, with_metadata=True)
+    return {"atm_iv": iv, **metadata}
 
 
 def get_last_price(ticker: str) -> float | None:

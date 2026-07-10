@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import io
 import math
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from time import monotonic
+from typing import Any, Callable
 
 import httpx
 import pandas as pd
@@ -35,6 +37,11 @@ TIMEFRAMES = ("short", "mid", "long", "all")
 PROFILES = ("conservative", "balanced", "aggressive")
 UNIVERSES = ("themes",)
 BENCHMARKS = MARKET_BENCHMARKS
+SECTOR_PERIOD_DAYS = {"1mo": 20, "3mo": 63, "6mo": 126}
+
+_FALLBACK_MAX_WORKERS = 8
+_FALLBACK_TOTAL_BUDGET_SECONDS = 20.0
+_FALLBACK_FAILURE_LIMIT = 8
 
 PROFILE_TILT = {
     "conservative": {"trend": 1.12, "risk": 1.22, "volume": .88, "breakout": .90},
@@ -132,6 +139,82 @@ def _period_to_days(period: str) -> int:
     return 365
 
 
+def _bounded_history_fetch(
+    symbols: list[str],
+    fetch_one: Callable[[str], pd.DataFrame],
+    *,
+    max_workers: int = _FALLBACK_MAX_WORKERS,
+    total_budget_seconds: float = _FALLBACK_TOTAL_BUDGET_SECONDS,
+    request_timeout_seconds: float = 6.0,
+    failure_limit: int = _FALLBACK_FAILURE_LIMIT,
+) -> dict[str, pd.DataFrame]:
+    """Fetch fallback candles with bounded parallelism and a circuit breaker.
+
+    New work is only scheduled while enough total budget remains for one
+    request. A run of provider failures stops scheduling the rest of a large
+    universe, preventing the old ``N * timeout`` worst case.
+    """
+    ordered = list(dict.fromkeys(symbol for symbol in symbols if symbol))
+    if not ordered:
+        return {}
+
+    workers = max(1, min(int(max_workers), len(ordered)))
+    failure_limit = max(1, int(failure_limit))
+    budget = max(float(total_budget_seconds), 0.01)
+    request_window = max(min(float(request_timeout_seconds), budget), 0.01)
+    deadline = monotonic() + budget
+    iterator = iter(ordered)
+    futures: dict[Any, str] = {}
+    results: dict[str, pd.DataFrame] = {}
+    consecutive_failures = 0
+    stopped = False
+
+    executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="price-fallback")
+
+    def submit_one() -> bool:
+        nonlocal stopped
+        if stopped or deadline - monotonic() < request_window:
+            return False
+        try:
+            symbol = next(iterator)
+        except StopIteration:
+            stopped = True
+            return False
+        futures[executor.submit(fetch_one, symbol)] = symbol
+        return True
+
+    for _ in range(workers):
+        if not submit_one():
+            break
+
+    try:
+        while futures and monotonic() < deadline:
+            remaining = max(0.0, deadline - monotonic())
+            done, _ = wait(futures, timeout=min(0.25, remaining), return_when=FIRST_COMPLETED)
+            if not done:
+                continue
+            for future in done:
+                symbol = futures.pop(future)
+                try:
+                    frame = future.result()
+                except Exception:
+                    frame = pd.DataFrame()
+                if isinstance(frame, pd.DataFrame) and not frame.empty:
+                    results[symbol] = frame
+                    consecutive_failures = 0
+                else:
+                    consecutive_failures += 1
+                    if consecutive_failures >= failure_limit:
+                        stopped = True
+                if not stopped:
+                    submit_one()
+    finally:
+        for future in futures:
+            future.cancel()
+        executor.shutdown(wait=True, cancel_futures=True)
+    return results
+
+
 def _history_status(
     *,
     provider: str,
@@ -203,42 +286,32 @@ def _download_marketdata_history(tickers: list[str], period: str) -> tuple[pd.Da
     end_date = datetime.now(timezone.utc).date()
     start_date = end_date - timedelta(days=_period_to_days(period) + 10)
     symbols = [symbol for symbol in tickers if symbol and not symbol.startswith("^")][:limit]
-    timeout = min(float(settings.request_timeout or 20.0), 8.0)
-    frames: list[pd.DataFrame] = []
-    loaded: list[str] = []
-    missing: list[str] = []
+    timeout = min(float(settings.request_timeout or 20.0), 6.0)
 
     try:
         with httpx.Client(timeout=timeout) as client:
-            for symbol in symbols:
-                try:
-                    response = client.get(
-                        f"{base_url}/v1/stocks/candles/D/{symbol}/",
-                        params={
-                            "from": start_date.isoformat(),
-                            "to": end_date.isoformat(),
-                            "token": token,
-                        },
-                    )
-                    response.raise_for_status()
-                    frame = _finnhub_candle_frame(symbol, response.json())
-                    if frame.empty:
-                        missing.append(symbol)
-                        continue
-                    frames.append(frame)
-                    loaded.append(symbol)
-                except Exception:
-                    missing.append(symbol)
+            def fetch_one(symbol: str) -> pd.DataFrame:
+                response = client.get(
+                    f"{base_url}/v1/stocks/candles/D/{symbol}/",
+                    params={
+                        "from": start_date.isoformat(),
+                        "to": end_date.isoformat(),
+                        "token": token,
+                    },
+                )
+                response.raise_for_status()
+                return _finnhub_candle_frame(symbol, response.json())
+
+            fetched = _bounded_history_fetch(symbols, fetch_one, request_timeout_seconds=timeout)
     except Exception:
-        return pd.DataFrame(), loaded, tickers
+        fetched = {}
 
-    for symbol in tickers:
-        if symbol.startswith("^") or symbol not in symbols:
-            missing.append(symbol)
-
+    loaded = [symbol for symbol in symbols if symbol in fetched]
+    frames = [fetched[symbol] for symbol in loaded]
+    missing = [symbol for symbol in tickers if symbol not in fetched]
     if not frames:
-        return pd.DataFrame(), loaded, list(dict.fromkeys(missing))
-    return pd.concat(frames, axis=1).sort_index(), loaded, list(dict.fromkeys(missing))
+        return pd.DataFrame(), loaded, missing
+    return pd.concat(frames, axis=1).sort_index(), loaded, missing
 
 
 def _stooq_symbol(symbol: str) -> str | None:
@@ -283,45 +356,35 @@ def _download_stooq_history(tickers: list[str], period: str) -> tuple[pd.DataFra
     start_date = end_date - timedelta(days=_period_to_days(period) + 10)
     symbols = [symbol for symbol in tickers if _stooq_symbol(symbol)][:limit]
     timeout = min(float(settings.request_timeout or 20.0), 6.0)
-    frames: list[pd.DataFrame] = []
-    loaded: list[str] = []
-    missing: list[str] = []
 
     try:
         with httpx.Client(timeout=timeout) as client:
-            for symbol in symbols:
+            def fetch_one(symbol: str) -> pd.DataFrame:
                 stooq_symbol = _stooq_symbol(symbol)
                 if not stooq_symbol:
-                    continue
-                try:
-                    response = client.get(
-                        "https://stooq.com/q/d/l/",
-                        params={
-                            "s": stooq_symbol,
-                            "i": "d",
-                            "d1": start_date.strftime("%Y%m%d"),
-                            "d2": end_date.strftime("%Y%m%d"),
-                        },
-                    )
-                    response.raise_for_status()
-                    frame = _stooq_candle_frame(symbol, response.text)
-                    if frame.empty:
-                        missing.append(symbol)
-                        continue
-                    frames.append(frame)
-                    loaded.append(symbol)
-                except Exception:
-                    missing.append(symbol)
+                    return pd.DataFrame()
+                response = client.get(
+                    "https://stooq.com/q/d/l/",
+                    params={
+                        "s": stooq_symbol,
+                        "i": "d",
+                        "d1": start_date.strftime("%Y%m%d"),
+                        "d2": end_date.strftime("%Y%m%d"),
+                    },
+                )
+                response.raise_for_status()
+                return _stooq_candle_frame(symbol, response.text)
+
+            fetched = _bounded_history_fetch(symbols, fetch_one, request_timeout_seconds=timeout)
     except Exception:
-        return pd.DataFrame(), loaded, tickers
+        fetched = {}
 
-    for symbol in tickers:
-        if symbol not in symbols:
-            missing.append(symbol)
-
+    loaded = [symbol for symbol in symbols if symbol in fetched]
+    frames = [fetched[symbol] for symbol in loaded]
+    missing = [symbol for symbol in tickers if symbol not in fetched]
     if not frames:
-        return pd.DataFrame(), loaded, list(dict.fromkeys(missing))
-    return pd.concat(frames, axis=1).sort_index(), loaded, list(dict.fromkeys(missing))
+        return pd.DataFrame(), loaded, missing
+    return pd.concat(frames, axis=1).sort_index(), loaded, missing
 
 
 def _download_finnhub_history(tickers: list[str], period: str) -> tuple[pd.DataFrame, list[str], list[str]]:
@@ -337,45 +400,35 @@ def _download_finnhub_history(tickers: list[str], period: str) -> tuple[pd.DataF
     base_url = str(settings.finnhub_base_url).rstrip("/")
     end_ts = int(datetime.now(timezone.utc).timestamp())
     start_ts = end_ts - (_period_to_days(period) + 10) * 24 * 60 * 60
-    frames: list[pd.DataFrame] = []
-    loaded: list[str] = []
-    missing: list[str] = []
     symbols = [symbol for symbol in tickers if symbol and not symbol.startswith("^")][:limit]
-    timeout = min(float(settings.request_timeout or 20.0), 8.0)
+    timeout = min(float(settings.request_timeout or 20.0), 6.0)
 
     try:
         with httpx.Client(timeout=timeout, headers={"X-Finnhub-Token": token}) as client:
-            for symbol in symbols:
-                try:
-                    response = client.get(
-                        f"{base_url}/stock/candle",
-                        params={
-                            "symbol": symbol,
-                            "resolution": "D",
-                            "from": start_ts,
-                            "to": end_ts,
-                            "token": token,
-                        },
-                    )
-                    response.raise_for_status()
-                    frame = _finnhub_candle_frame(symbol, response.json())
-                    if frame.empty:
-                        missing.append(symbol)
-                        continue
-                    frames.append(frame)
-                    loaded.append(symbol)
-                except Exception:
-                    missing.append(symbol)
+            def fetch_one(symbol: str) -> pd.DataFrame:
+                response = client.get(
+                    f"{base_url}/stock/candle",
+                    params={
+                        "symbol": symbol,
+                        "resolution": "D",
+                        "from": start_ts,
+                        "to": end_ts,
+                        "token": token,
+                    },
+                )
+                response.raise_for_status()
+                return _finnhub_candle_frame(symbol, response.json())
+
+            fetched = _bounded_history_fetch(symbols, fetch_one, request_timeout_seconds=timeout)
     except Exception:
-        return pd.DataFrame(), loaded, tickers
+        fetched = {}
 
-    for symbol in tickers:
-        if symbol.startswith("^") or symbol not in symbols:
-            missing.append(symbol)
-
+    loaded = [symbol for symbol in symbols if symbol in fetched]
+    frames = [fetched[symbol] for symbol in loaded]
+    missing = [symbol for symbol in tickers if symbol not in fetched]
     if not frames:
-        return pd.DataFrame(), loaded, list(dict.fromkeys(missing))
-    return pd.concat(frames, axis=1).sort_index(), loaded, list(dict.fromkeys(missing))
+        return pd.DataFrame(), loaded, missing
+    return pd.concat(frames, axis=1).sort_index(), loaded, missing
 
 
 def _merge_history(primary: pd.DataFrame, fallback: pd.DataFrame) -> pd.DataFrame:
@@ -514,9 +567,17 @@ def _rsi(close: pd.Series, period: int = 14) -> float | None:
     delta = close.diff()
     gain = delta.clip(lower=0).ewm(alpha=1 / period, adjust=False).mean()
     loss = (-delta.clip(upper=0)).ewm(alpha=1 / period, adjust=False).mean()
-    rs = gain / loss.replace(0, math.nan)
-    rsi = 100 - (100 / (1 + rs))
-    return _safe_float(rsi.dropna().iloc[-1], 2) if not rsi.dropna().empty else None
+    avg_gain = _safe_float(gain.dropna().iloc[-1], 8) if not gain.dropna().empty else None
+    avg_loss = _safe_float(loss.dropna().iloc[-1], 8) if not loss.dropna().empty else None
+    if avg_gain is None or avg_loss is None:
+        return None
+    if avg_gain == 0 and avg_loss == 0:
+        return 50.0
+    if avg_loss == 0:
+        return 100.0
+    if avg_gain == 0:
+        return 0.0
+    return _safe_float(100 - (100 / (1 + avg_gain / avg_loss)), 2)
 
 
 def _macd_direction(close: pd.Series) -> float | None:
@@ -547,7 +608,7 @@ def _atr_pct(hist: pd.DataFrame) -> float | None:
 def _ret(close: pd.Series, days: int) -> float | None:
     if len(close) <= days:
         return None
-    base = close.iloc[-days]
+    base = close.iloc[-(days + 1)]
     if not base or base <= 0:
         return None
     return _safe_float(close.iloc[-1] / base - 1, 5)
@@ -707,6 +768,8 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
     sector_mult = float(rules.get("sector_strength_weight_multiplier", 1.0) or 1.0)
     option_mult = float(rules.get("option_heat_weight_multiplier", 1.0) or 1.0)
     risk_mult = float(rules.get("risk_penalty_multiplier", 1.0) or 1.0)
+    market_score = _safe_float(market.get("score"), 1)
+    market_score_for_scoring = market_score if market_score is not None else 50.0
     weights = {
         "short": .16 * momentum_mult,
         "mid": .24 * relative_mult,
@@ -783,7 +846,7 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
             pa_score * weights["pa"] +
             sector_score * weights["sector"] +
             option_heat_score * weights["option"] +
-            market["score"] * weights["market"]
+            market_score_for_scoring * weights["market"]
         ) / weight_total - risk_penalty * risk_mult
         market_adjustment = _safe_float(
             raw_final - (
@@ -794,7 +857,7 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
                 pa_score * .10 +
                 sector_score * .09 +
                 option_heat_score * .07 +
-                market["score"] * .08 -
+                market_score_for_scoring * .08 -
                 risk_penalty
             ),
             2,
@@ -831,10 +894,12 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
         if row.get("ma_alignment", 0) >= 66:
             tags.append("均线多头")
             reasons.append("价格位于关键均线上方")
-        if market["score"] >= 64:
+        if market_score is not None and market_score >= 64:
             tags.append("市场顺风")
-        elif market["score"] < 40:
+        elif market_score is not None and market_score < 40:
             tags.append("弱市降权")
+        elif market_score is None:
+            warnings.append("市场行情不足，市场维度按中性值处理")
         tags.extend(risk_flags[:2])
         if not reasons:
             reasons.append("综合强度处于股票池前列")
@@ -869,7 +934,8 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
             "sector": round(sector_score, 1),
             "option_heat": round(option_heat_score, 1),
             "risk_penalty": round(risk_penalty, 1),
-            "market_regime": round(market.get("score") or 50, 1),
+            "market_regime": market_score,
+            "market_regime_scoring_value": market_score_for_scoring,
             "risk_on_spread": round(market.get("risk_on_spread_score") or 50, 1),
             "volume_truth": {
                 "setup_type": vol_price.get("setup_type"),
@@ -890,7 +956,7 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
             "breakout_quality_score": round(breakout_quality_score, 1),
             "option_heat_score": round(option_heat_score, 1),
             "option_score_weight": effective_weights["option"],
-            "market_regime_score": market["score"],
+            "market_regime_score": market_score,
             "risk_on_spread_score": market.get("risk_on_spread_score"),
             "risk_penalty": risk_penalty,
             "final_score": final_score,
@@ -946,7 +1012,9 @@ def _sort_scored(rows: list[dict[str, Any]], timeframe: str) -> None:
     rows.sort(key=lambda item: item.get("final_score") or 0, reverse=True)
 
 
-def _sector_strength(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _sector_strength(rows: list[dict[str, Any]], period: str = "3mo") -> list[dict[str, Any]]:
+    if period not in SECTOR_PERIOD_DAYS:
+        raise ValueError(f"Unsupported sector period: {period}")
     grouped: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         sid = row.get("sector_id")
@@ -954,19 +1022,38 @@ def _sector_strength(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             grouped.setdefault(sid, []).append(row)
     sectors = []
     for sid, items in grouped.items():
-        ret63 = [x.get("return_63d") for x in items if x.get("return_63d") is not None]
+        period_averages: dict[str, float | None] = {}
+        for period_name, days in SECTOR_PERIOD_DAYS.items():
+            values = [x.get(f"return_{days}d") for x in items if x.get(f"return_{days}d") is not None]
+            period_averages[period_name] = round(sum(values) / len(values) * 100, 2) if values else None
         final = [x.get("final_score") for x in items if x.get("final_score") is not None]
         leaders = sorted(items, key=lambda x: x.get("final_score") or 0, reverse=True)[:4]
+        selected_return = period_averages[period]
         sectors.append({
             "sector_id": sid,
             "id": sid,
             "name": SECTORS.get(sid, {}).get("name", sid),
             "count": len(items),
-            "avg_return_3m": round(sum(ret63) / len(ret63) * 100, 2) if ret63 else None,
+            "period": period,
+            "period_days": SECTOR_PERIOD_DAYS[period],
+            "avg_return": selected_return,
+            "avg_return_period": selected_return,
+            "avg_return_1mo": period_averages["1mo"],
+            "avg_return_3mo": period_averages["3mo"],
+            "avg_return_6mo": period_averages["6mo"],
+            # Backward-compatible alias; it always remains a true 63-day value.
+            "avg_return_3m": period_averages["3mo"],
             "avg_strength": round(sum(final) / len(final), 1) if final else None,
             "leaders": [{"ticker": x["ticker"], "score": x["final_score"]} for x in leaders],
         })
-    sectors.sort(key=lambda s: s.get("avg_strength") or 0, reverse=True)
+    sectors.sort(
+        key=lambda sector: (
+            sector.get("avg_return") is not None,
+            sector.get("avg_return") if sector.get("avg_return") is not None else float("-inf"),
+            sector.get("avg_strength") or 0,
+        ),
+        reverse=True,
+    )
     return sectors
 
 
@@ -1132,6 +1219,7 @@ async def scan_strength(
     ttl: int = 600,
     include_options: bool = True,
 ) -> dict[str, Any]:
+    ttl = max(1, int(ttl))
     settings = get_settings()
     key = (
         f"strength:{universe}:{timeframe}:{profile}:{top}:{sector_id}:{min_price}:{min_avg_dollar_volume}"
@@ -1139,7 +1227,8 @@ async def scan_strength(
         f":yo:{int(yahoo_options_is_enabled(settings) and include_options)}:{settings.yahoo_options_enrich_limit}"
         f":ydte:{settings.yahoo_option_target_dte}:ywin:{settings.yahoo_option_strike_window_pct}"
         f":opt:{int(include_options)}"
-        ":mr:v3:spread:voltruth:pa1"
+        f":ttl:{ttl}"
+        ":mr:v4:spread:voltruth:pa1"
     )
 
     async def produce() -> dict[str, Any]:
@@ -1166,13 +1255,37 @@ async def scan_strength(
 
 
 async def sector_strength(period: str = "3mo") -> dict[str, Any]:
-    # Period is reserved for the next data provider; P0 ranks by 3-month theme strength.
+    if period not in SECTOR_PERIOD_DAYS:
+        raise ValueError(f"Unsupported sector period: {period}")
     payload = await scan_strength(timeframe="all", profile="balanced", top=120)
+    selected_key = f"avg_return_{period}"
+    sectors = []
+    for item in payload.get("sectors", []):
+        selected_return = item.get(selected_key)
+        sectors.append({
+            **item,
+            "period": period,
+            "period_days": SECTOR_PERIOD_DAYS[period],
+            "avg_return": selected_return,
+            "avg_return_period": selected_return,
+        })
+    sectors.sort(
+        key=lambda sector: (
+            sector.get("avg_return") is not None,
+            sector.get("avg_return") if sector.get("avg_return") is not None else float("-inf"),
+            sector.get("avg_strength") or 0,
+        ),
+        reverse=True,
+    )
     return {
         "as_of": payload["as_of"],
         "period": period,
-        "sectors": payload.get("sectors", []),
-        "count": len(payload.get("sectors", [])),
+        "period_days": SECTOR_PERIOD_DAYS[period],
+        "sectors": sectors,
+        "count": len(sectors),
+        "_cached": payload.get("_cached", False),
+        "cache_ttl_seconds": payload.get("cache_ttl_seconds"),
+        "cache_expires_at": payload.get("cache_expires_at"),
     }
 
 
