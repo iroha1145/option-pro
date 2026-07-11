@@ -332,7 +332,7 @@ function scanStatus(payload = {}) {
     return {
       tone: 'loading',
       title: state.payload ? '正在更新候选' : '正在扫描股票池',
-      description: state.payload ? '市场背景暂时保留上次结果' : '正在汇总趋势、量价与风险环境',
+      description: state.payload ? '市场背景暂时保留上次结果' : '首次扫描通常约需 30 秒，正在汇总趋势、量价与风险环境',
     };
   }
   if (state.error) {

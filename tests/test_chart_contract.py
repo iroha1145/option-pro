@@ -122,18 +122,142 @@ def test_intraday_chart_has_explicit_adjustment_sessions_and_regular_only_indica
     assert pre["ext"] is True
     assert pre["quote_only"] is True
     assert pre["o"] == pytest.approx(0.123456)
-    assert pre["h"] == pytest.approx(0.199999)
+    assert pre["h"] == pytest.approx(max(pre["o"], pre["c"]))
+    assert pre["l"] == pytest.approx(min(pre["o"], pre["c"]))
 
     post = bars[-1]
     assert post["session"] == "post"
     assert post["ext"] is True
     assert post["quote_only"] is True
+    assert post["h"] == pytest.approx(max(post["o"], post["c"]))
+    assert post["l"] == pytest.approx(min(post["o"], post["c"]))
 
     regular_times = [bar["t"] for bar in bars if bar["session"] == "regular"]
     assert payload["ema20"][0]["time"] == regular_times[19]
     assert payload["sma50"][0]["time"] == regular_times[49]
     assert all(point["time"] in regular_times for point in payload["ema20"] + payload["sma50"])
     assert payload["ema20"][0]["value"] != round(payload["ema20"][0]["value"], 2)
+
+
+def test_extended_hours_bar_with_volume_keeps_real_extreme_prices() -> None:
+    bar = {
+        "o": 100.0,
+        "h": 160.0,
+        "l": 70.0,
+        "c": 101.0,
+        "v": 25,
+        "ext": True,
+        "session": "pre",
+        "quote_only": False,
+    }
+
+    result = stocks._normalize_extended_quote_bar(bar, reference_close=100.0)
+
+    assert result is bar
+    assert result["h"] == pytest.approx(160.0)
+    assert result["l"] == pytest.approx(70.0)
+    assert result["quote_only"] is False
+
+
+def test_zero_volume_extended_isolated_open_rejoins_previous_close(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    eastern = ZoneInfo("America/New_York")
+    history = pd.DataFrame(
+        [
+            {"Open": 315.12, "High": 315.2, "Low": 315.0, "Close": 315.1019, "Volume": 0},
+            {"Open": 331.7827, "High": 331.7827, "Low": 315.0, "Close": 315.0559, "Volume": 0},
+            {"Open": 315.05, "High": 315.3, "Low": 315.0, "Close": 315.1861, "Volume": 0},
+        ],
+        index=pd.DatetimeIndex(
+            [
+                datetime(2026, 7, 10, 17, 15, tzinfo=eastern),
+                datetime(2026, 7, 10, 17, 20, tzinfo=eastern),
+                datetime(2026, 7, 10, 17, 25, tzinfo=eastern),
+            ]
+        ),
+    )
+
+    class FakeTicker:
+        def __init__(self, symbol: str):
+            assert symbol == "AAPL"
+
+        def history(self, **_kwargs):
+            return history
+
+    monkeypatch.setattr(stocks.yf, "Ticker", FakeTicker)
+
+    payload = asyncio.run(stocks._stock_chart_impl("AAPL", "5m", "raw"))
+
+    assert len(payload["bars"]) == 3
+    previous, repaired, following = payload["bars"]
+    assert datetime.fromtimestamp(repaired["t"], ZoneInfo("UTC")).isoformat() == "2026-07-10T21:20:00+00:00"
+    assert repaired["session"] == "post"
+    assert repaired["v"] == 0
+    assert repaired["quote_only"] is True
+    assert repaired["o"] == pytest.approx(previous["c"])
+    assert repaired["o"] == pytest.approx(315.1019)
+    assert repaired["c"] == pytest.approx(315.0559)
+    assert repaired["h"] == pytest.approx(max(repaired["o"], repaired["c"]))
+    assert repaired["l"] == pytest.approx(min(repaired["o"], repaired["c"]))
+    assert following["c"] == pytest.approx(315.1861)
+
+
+def test_zero_volume_extended_real_close_jump_is_not_reanchored() -> None:
+    bar = {
+        "o": 105.5,
+        "h": 106.0,
+        "l": 104.5,
+        "c": 105.0,
+        "v": 0,
+        "ext": True,
+        "session": "post",
+        "quote_only": False,
+    }
+
+    result = stocks._normalize_extended_quote_bar(bar, reference_close=100.0)
+
+    assert result is bar
+    assert result["o"] == pytest.approx(105.5)
+    assert result["c"] == pytest.approx(105.0)
+    assert result["h"] == pytest.approx(105.5)
+    assert result["l"] == pytest.approx(105.0)
+    assert result["quote_only"] is True
+
+
+def test_daily_raw_and_adjusted_keep_zero_volume_high_low(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    history = pd.DataFrame(
+        [{"Open": 100.0, "High": 160.0, "Low": 70.0, "Close": 101.0, "Volume": 0}],
+        index=pd.DatetimeIndex(["2026-07-10"]),
+    )
+    calls: list[dict] = []
+
+    class FakeTicker:
+        def __init__(self, _symbol: str):
+            pass
+
+        def history(self, **kwargs):
+            calls.append(kwargs)
+            return history
+
+    monkeypatch.setattr(stocks.yf, "Ticker", FakeTicker)
+
+    raw = asyncio.run(stocks._stock_chart_impl("AAPL", "1d", "raw"))
+    adjusted = asyncio.run(stocks._stock_chart_impl("AAPL", "1d", "adjusted"))
+
+    for payload in (raw, adjusted):
+        assert len(payload["bars"]) == 1
+        bar = payload["bars"][0]
+        assert bar["h"] == pytest.approx(160.0)
+        assert bar["l"] == pytest.approx(70.0)
+        assert bar["v"] == 0
+        assert bar["session"] == "regular"
+        assert bar["quote_only"] is False
+
+    assert [call["prepost"] for call in calls] == [False, False]
+    assert [call["auto_adjust"] for call in calls] == [False, True]
 
 
 def test_adjusted_chart_explicitly_enables_yfinance_auto_adjust(

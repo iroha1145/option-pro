@@ -707,6 +707,8 @@ def _compute_sma(data, period):
 # cap prevents the current candle from feeling stale during active sessions.
 _CHART_TTL = {"5m": 300, "15m": 300, "1h": 300, "1d": 300, "1w": 300}
 _NEW_YORK_TZ = ZoneInfo("America/New_York")
+_EXTENDED_QUOTE_OPEN_OUTLIER_RATIO = 0.03
+_EXTENDED_QUOTE_CLOSE_REJOIN_RATIO = 0.01
 
 
 def _normalize_extended_quote_bar(
@@ -721,16 +723,40 @@ def _normalize_extended_quote_bar(
     """
     if int(bar.get("v") or 0) > 0:
         return bar
-    body_high = max(float(bar["o"]), float(bar["c"]))
-    body_low = min(float(bar["o"]), float(bar["c"]))
+    open_price = float(bar["o"])
+    close_price = float(bar["c"])
+    reference = float(reference_close) if reference_close is not None else None
+    if reference is not None and math.isfinite(reference) and reference > 0:
+        open_move = abs(open_price / reference - 1)
+        close_move = abs(close_price / reference - 1)
+        if (
+            open_move >= _EXTENDED_QUOTE_OPEN_OUTLIER_RATIO
+            and close_move <= _EXTENDED_QUOTE_CLOSE_REJOIN_RATIO
+        ):
+            # A lone opening quote can be stale even while the bar closes back
+            # on the prevailing quote path. Anchor only that anomalous open to
+            # the prior accepted close; a close that genuinely moves away from
+            # the reference never enters this branch.
+            open_price = reference
+            bar["o"] = reference
+    body_high = max(open_price, close_price)
+    body_low = min(open_price, close_price)
     if body_low <= 0:
         return None
     if (body_high - body_low) / body_low > 0.08:
         return None
-    if reference_close and reference_close > 0:
-        ref_move = max(abs(float(bar["o"]) / reference_close - 1), abs(float(bar["c"]) / reference_close - 1))
+    if reference is not None and math.isfinite(reference) and reference > 0:
+        ref_move = max(abs(open_price / reference - 1), abs(close_price / reference - 1))
         if ref_move > 0.20:
             return None
+    # A zero-volume extended-hours row represents a quote path, not traded
+    # OHLC. Yahoo may still attach stale or crossed quote extrema to High/Low;
+    # keeping those values lets downstream candlestick renderers draw phantom
+    # wicks. Preserve the quoted open/close movement, but make the public OHLC
+    # envelope match that movement. Bars with reported volume return above and
+    # therefore retain every genuine extreme unchanged.
+    bar["h"] = body_high
+    bar["l"] = body_low
     bar["quote_only"] = True
     return bar
 
