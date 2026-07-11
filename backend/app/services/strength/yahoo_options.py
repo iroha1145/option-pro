@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+from bisect import bisect_left, bisect_right
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
 
@@ -8,6 +10,8 @@ from app.config import Settings, get_settings
 from app.services import yahoo
 
 PROVIDER = "Yahoo/yfinance"
+_OPTION_POOL_CAP = 20
+_OPTION_MAX_WORKERS = 4
 
 
 def yahoo_options_is_enabled(settings: Settings | None = None) -> bool:
@@ -233,8 +237,10 @@ def _pct_rank(metrics: list[dict[str, Any]], key: str) -> dict[str, float]:
         value = _safe_float(item.get(key), 6)
         if value is None:
             continue
-        below = sum(1 for candidate in values if candidate <= value)
-        ranks[item["ticker"]] = round((below - 1) / denom * 100, 1)
+        below = bisect_left(values, value)
+        tied = bisect_right(values, value) - below
+        midrank = below + (tied - 1) / 2
+        ranks[item["ticker"]] = round(midrank / denom * 100, 1)
     return ranks
 
 
@@ -352,8 +358,9 @@ def enrich_rows_with_yahoo_options(
             "enriched": 0,
             "message": "YAHOO_OPTIONS_ENRICH_LIMIT 为 0，Yahoo 期权粗筛已跳过",
         }
-    display_cap = max(int(display_top * 1.5), display_top + 10, 20)
-    limit = min(configured_limit, display_cap, len(rows))
+    # A full option-chain request is expensive. Keep the broad screen small and
+    # deterministic even when the caller asks to display many stock rows.
+    limit = min(configured_limit, _OPTION_POOL_CAP, len(rows))
 
     option_pool = _build_option_pool(rows, limit, display_top)
     raw_metrics: list[dict[str, Any]] = []
@@ -361,18 +368,28 @@ def enrich_rows_with_yahoo_options(
     hard_failures = 0
     failure_limit = max(1, int(cfg.yahoo_options_failure_limit or 8))
 
-    for row in option_pool:
+    def load_one(row: dict[str, Any]) -> tuple[dict[str, Any] | None, bool]:
         try:
-            metrics = _load_raw_metrics(row, cfg)
-            if metrics:
-                raw_metrics.append(metrics)
-            else:
-                failed += 1
+            return _load_raw_metrics(row, cfg), False
         except Exception:
-            failed += 1
-            hard_failures += 1
-            if hard_failures >= failure_limit and not raw_metrics:
-                break
+            return None, True
+
+    workers = min(_OPTION_MAX_WORKERS, len(option_pool))
+    if workers:
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="yahoo-options") as executor:
+            # Submit one small batch at a time so the existing failure circuit
+            # breaker can stop the remaining symbols when Yahoo is unavailable.
+            for offset in range(0, len(option_pool), workers):
+                batch = option_pool[offset:offset + workers]
+                for metrics, hard_failure in executor.map(load_one, batch):
+                    if metrics:
+                        raw_metrics.append(metrics)
+                    else:
+                        failed += 1
+                    if hard_failure:
+                        hard_failures += 1
+                if hard_failures >= failure_limit and not raw_metrics:
+                    break
 
     scored_metrics = _score_metrics(raw_metrics)
     enriched = 0

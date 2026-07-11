@@ -6,21 +6,24 @@
 const KEY = 'optix.watchlist.custom.v1';
 const MAX_CUSTOM_TICKERS = 100;
 const DEFAULT_TICKER_LIMIT = 60;
+const TICKER_PATTERN = /^(?:\^[A-Z0-9][A-Z0-9.^_=-]{0,30}|[A-Z0-9][A-Z0-9.^_=-]{0,31})$/;
+let memoryTickers = null;
 
 function normalizeTicker(value) {
   const ticker = String(value || '').toUpperCase().trim();
-  return /^[A-Z0-9.^_=-]{1,32}$/.test(ticker) ? ticker : '';
+  return TICKER_PATTERN.test(ticker) ? ticker : '';
 }
 
 export function getCustomTickers() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
+    if (!raw) return memoryTickers ? [...memoryTickers] : null;
     const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return null;
-    return arr.map(normalizeTicker).filter(Boolean).slice(0, MAX_CUSTOM_TICKERS);
+    if (!Array.isArray(arr)) return memoryTickers ? [...memoryTickers] : null;
+    memoryTickers = arr.map(normalizeTicker).filter(Boolean).slice(0, MAX_CUSTOM_TICKERS);
+    return [...memoryTickers];
   } catch {
-    return null;
+    return memoryTickers ? [...memoryTickers] : null;
   }
 }
 
@@ -31,8 +34,9 @@ export function saveCustomTickers(tickers) {
   const out = [];
   for (const t of clean) { if (!seen.has(t)) { seen.add(t); out.push(t); } }
   const limited = out.slice(0, MAX_CUSTOM_TICKERS);
-  localStorage.setItem(KEY, JSON.stringify(limited));
-  return limited;
+  memoryTickers = limited;
+  try { localStorage.setItem(KEY, JSON.stringify(limited)); } catch (_) { /* keep the in-memory list */ }
+  return [...limited];
 }
 
 export function addTicker(ticker) {
@@ -61,7 +65,8 @@ export function moveTicker(ticker, direction) {
 }
 
 export function resetCustom() {
-  localStorage.removeItem(KEY);
+  memoryTickers = null;
+  try { localStorage.removeItem(KEY); } catch (_) { /* storage unavailable */ }
 }
 
 /**

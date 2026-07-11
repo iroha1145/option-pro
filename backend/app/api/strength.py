@@ -28,12 +28,8 @@ async def scan(
     sector_id: Optional[str] = Query(None),
     min_price: float = Query(5.0, ge=0),
     min_avg_dollar_volume: float = Query(10_000_000, ge=0),
-    cache_ttl: int = Query(900, ge=300, le=900),
 ) -> dict[str, Any]:
-    """Run the Strength Radar scan across the current theme universe.
-
-    ``cache_ttl`` is seconds, clamped by FastAPI to 5-15 minutes.
-    """
+    """Run the Strength Radar scan across the current theme universe."""
     if universe not in UNIVERSES or timeframe not in TIMEFRAMES or profile not in PROFILES:
         raise HTTPException(status_code=400, detail="Invalid screener parameters")
     try:
@@ -45,7 +41,6 @@ async def scan(
             sector_id=sector_id,
             min_price=min_price,
             min_avg_dollar_volume=min_avg_dollar_volume,
-            ttl=cache_ttl,
         )
         return sanitize(payload)
     except ValueError as exc:

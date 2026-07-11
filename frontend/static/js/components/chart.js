@@ -1,41 +1,50 @@
 /**
- * Dependency-free market chart.
+ * Dependency-free market chart for the instrument detail page.
  *
- * Canvas keeps the detail page usable in offline/private deployments while
- * retaining candles/line mode, volume, EMA20, SMA50 and extended-hours styling.
+ * The backend owns price adjustment and session classification. This renderer
+ * keeps those semantics visible while supporting mouse, touch and keyboard
+ * navigation without loading a third-party chart bundle.
  */
 export function renderChart(container, data = {}, visibleBars = 0, options = {}) {
   container.replaceChildren();
 
+  const payload = Array.isArray(data) ? { bars: data } : (data || {});
   const mode = options.mode === 'line' ? 'line' : 'candles';
-  const bars = normalizeBars(Array.isArray(data) ? data : data.bars || []);
-  const ema20 = normalizeMA(Array.isArray(data) ? [] : data.ema20 || []);
-  const sma50 = normalizeMA(Array.isArray(data) ? [] : data.sma50 || []);
+  const bars = normalizeBars(payload.bars || []);
+  const ema20 = normalizeMA(payload.ema20 || []);
+  const sma50 = normalizeMA(payload.sma50 || []);
+  const exchangeTimezone = payload.exchange_timezone || options.exchangeTimezone || 'America/New_York';
+  const intraday = /(?:m|h)$/.test(String(payload.interval || ''));
+
   if (!bars.length) {
     const empty = document.createElement('div');
-    empty.style.cssText = 'height:100%;min-height:256px;display:flex;align-items:center;justify-content:center;color:#70726f;font-size:14px';
-    empty.textContent = '暂无数据';
+    empty.className = 'market-chart-empty';
+    empty.textContent = '所选周期暂无可用价格数据';
     container.appendChild(empty);
     return null;
   }
 
   const root = document.createElement('div');
-  root.className = 'chart-viewport native-chart-viewport';
-  root.style.cssText = 'position:relative;width:100%;height:calc(100% - 28px);min-height:320px;touch-action:none;user-select:none';
+  root.className = 'market-chart';
 
   const canvas = document.createElement('canvas');
+  canvas.className = 'market-chart__canvas';
+  canvas.tabIndex = 0;
   canvas.setAttribute('role', 'img');
-  canvas.setAttribute('aria-label', mode === 'line' ? '价格线图' : '价格蜡烛图');
-  canvas.style.cssText = 'display:block;width:100%;height:100%;cursor:crosshair';
+  canvas.setAttribute(
+    'aria-label',
+    `${mode === 'line' ? '价格线图' : '价格蜡烛图'}。方向键平移，加号和减号缩放，结束键回到最新数据。`,
+  );
   root.appendChild(canvas);
 
   const tooltip = document.createElement('div');
+  tooltip.className = 'market-chart__tooltip';
   tooltip.hidden = true;
-  tooltip.style.cssText = 'position:absolute;z-index:3;pointer-events:none;padding:7px 9px;border:1px solid rgba(20,22,25,.12);border-radius:6px;background:rgba(255,255,255,.94);box-shadow:0 4px 16px rgba(0,0,0,.08);font:11px/1.45 JetBrains Mono,monospace;color:#202320;white-space:nowrap';
+  tooltip.setAttribute('role', 'tooltip');
   root.appendChild(tooltip);
   container.appendChild(root);
 
-  const legend = buildLegend(mode, bars.some((bar) => bar.extended));
+  const legend = buildLegend(mode, bars);
   container.appendChild(legend);
 
   const initialCount = visibleBars > 0 ? Math.max(12, Math.floor(visibleBars)) : bars.length;
@@ -48,30 +57,45 @@ export function renderChart(container, data = {}, visibleBars = 0, options = {})
     dragStart: 0,
     dragEnd: bars.length,
     frame: 0,
+    palette: readPalette(root),
   };
 
   const scheduleDraw = () => {
     if (state.destroyed || state.frame) return;
     state.frame = requestAnimationFrame(() => {
       state.frame = 0;
-      drawChart(canvas, bars, ema20, sma50, mode, state);
+      state.palette = readPalette(root);
+      drawChart(
+        canvas,
+        bars,
+        ema20,
+        sma50,
+        mode,
+        state,
+        exchangeTimezone,
+        intraday,
+      );
     });
   };
 
   const indexAtPointer = (event) => {
     const rect = canvas.getBoundingClientRect();
     const count = Math.max(1, state.end - state.start);
-    const plotLeft = 12;
-    const plotRight = Math.max(plotLeft + 1, rect.width - 58);
+    const plotLeft = 14;
+    const plotRight = Math.max(plotLeft + 1, rect.width - 66);
     const ratio = clamp((event.clientX - rect.left - plotLeft) / (plotRight - plotLeft), 0, 1);
-    return clamp(state.start + Math.round(ratio * Math.max(0, count - 1)), state.start, state.end - 1);
+    return clamp(
+      state.start + Math.round(ratio * Math.max(0, count - 1)),
+      state.start,
+      state.end - 1,
+    );
   };
 
   const onPointerMove = (event) => {
     if (state.dragX != null && event.buttons === 1) {
       const rect = canvas.getBoundingClientRect();
       const count = Math.max(1, state.dragEnd - state.dragStart);
-      const pixelsPerBar = Math.max(2, (rect.width - 70) / count);
+      const pixelsPerBar = Math.max(2, (rect.width - 80) / count);
       const offset = Math.round((state.dragX - event.clientX) / pixelsPerBar);
       setWindow(state, bars.length, state.dragStart + offset, state.dragEnd + offset);
       state.hoverIndex = null;
@@ -81,19 +105,22 @@ export function renderChart(container, data = {}, visibleBars = 0, options = {})
     }
     const index = indexAtPointer(event);
     state.hoverIndex = index;
-    showTooltip(tooltip, root, event, bars[index]);
+    showTooltip(tooltip, root, event, bars[index], exchangeTimezone, intraday);
     scheduleDraw();
   };
+
   const onPointerDown = (event) => {
     state.dragX = event.clientX;
     state.dragStart = state.start;
     state.dragEnd = state.end;
     canvas.setPointerCapture?.(event.pointerId);
   };
+
   const stopDrag = (event) => {
     state.dragX = null;
     canvas.releasePointerCapture?.(event.pointerId);
   };
+
   const onPointerLeave = () => {
     if (state.dragX == null) {
       state.hoverIndex = null;
@@ -101,22 +128,51 @@ export function renderChart(container, data = {}, visibleBars = 0, options = {})
       scheduleDraw();
     }
   };
+
+  const zoomAt = (nextCount, anchor) => {
+    const count = state.end - state.start;
+    const boundedCount = clamp(nextCount, Math.min(12, bars.length), bars.length);
+    const ratio = count > 1 ? (anchor - state.start) / (count - 1) : 1;
+    let start = Math.round(anchor - ratio * (boundedCount - 1));
+    start = clamp(start, 0, Math.max(0, bars.length - boundedCount));
+    setWindow(state, bars.length, start, start + boundedCount);
+  };
+
   const onWheel = (event) => {
     event.preventDefault();
     const count = state.end - state.start;
     if (event.ctrlKey || Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
       const direction = event.deltaY > 0 ? 1 : -1;
       const delta = Math.max(2, Math.round(count * 0.12)) * direction;
-      const nextCount = clamp(count + delta, 12, bars.length);
-      const anchor = indexAtPointer(event);
-      const ratio = count > 1 ? (anchor - state.start) / (count - 1) : 1;
-      let start = Math.round(anchor - ratio * (nextCount - 1));
-      start = clamp(start, 0, Math.max(0, bars.length - nextCount));
-      setWindow(state, bars.length, start, start + nextCount);
+      zoomAt(count + delta, indexAtPointer(event));
     } else {
       const offset = Math.sign(event.deltaX) * Math.max(1, Math.round(count * 0.08));
       setWindow(state, bars.length, state.start + offset, state.end + offset);
     }
+    scheduleDraw();
+  };
+
+  const onKeyDown = (event) => {
+    const count = state.end - state.start;
+    const panStep = Math.max(1, Math.round(count * 0.08));
+    if (event.key === 'ArrowLeft') {
+      setWindow(state, bars.length, state.start - panStep, state.end - panStep);
+    } else if (event.key === 'ArrowRight') {
+      setWindow(state, bars.length, state.start + panStep, state.end + panStep);
+    } else if (event.key === '+' || event.key === '=') {
+      zoomAt(count - Math.max(2, Math.round(count * 0.12)), state.end - 1);
+    } else if (event.key === '-' || event.key === '_') {
+      zoomAt(count + Math.max(2, Math.round(count * 0.12)), state.end - 1);
+    } else if (event.key === 'Home') {
+      setWindow(state, bars.length, 0, count);
+    } else if (event.key === 'End') {
+      setWindow(state, bars.length, bars.length - count, bars.length);
+    } else {
+      return;
+    }
+    event.preventDefault();
+    tooltip.hidden = true;
+    state.hoverIndex = null;
     scheduleDraw();
   };
 
@@ -126,6 +182,7 @@ export function renderChart(container, data = {}, visibleBars = 0, options = {})
   canvas.addEventListener('pointercancel', stopDrag);
   canvas.addEventListener('pointerleave', onPointerLeave);
   canvas.addEventListener('wheel', onWheel, { passive: false });
+  canvas.addEventListener('keydown', onKeyDown);
 
   const resizeObserver = typeof ResizeObserver === 'function'
     ? new ResizeObserver(scheduleDraw)
@@ -148,13 +205,14 @@ export function renderChart(container, data = {}, visibleBars = 0, options = {})
       canvas.removeEventListener('pointercancel', stopDrag);
       canvas.removeEventListener('pointerleave', onPointerLeave);
       canvas.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('keydown', onKeyDown);
       root.remove();
       legend.remove();
     },
   };
 }
 
-function drawChart(canvas, bars, ema20, sma50, mode, state) {
+function drawChart(canvas, bars, ema20, sma50, mode, state, exchangeTimezone, intraday) {
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(320, Math.round(rect.width));
   const height = Math.max(260, Math.round(rect.height));
@@ -165,6 +223,7 @@ function drawChart(canvas, bars, ema20, sma50, mode, state) {
     canvas.width = pixelWidth;
     canvas.height = pixelHeight;
   }
+
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -173,19 +232,25 @@ function drawChart(canvas, bars, ema20, sma50, mode, state) {
   const visible = bars.slice(state.start, state.end);
   if (!visible.length) return;
   const plot = {
-    left: 12,
-    right: width - 58,
-    top: 10,
-    bottom: Math.round(height * 0.74),
-    volumeTop: Math.round(height * 0.8),
-    volumeBottom: height - 24,
+    left: 14,
+    right: width - 66,
+    top: 12,
+    bottom: Math.round(height * 0.72),
+    volumeTop: Math.round(height * 0.79),
+    volumeBottom: height - 30,
   };
   const timeToIndex = new Map(visible.map((bar, index) => [bar.time, index]));
   const maValues = [...ema20, ...sma50]
     .filter((point) => timeToIndex.has(point.time))
     .map((point) => point.value);
-  let minPrice = Math.min(...visible.map((bar) => bar.low), ...maValues);
-  let maxPrice = Math.max(...visible.map((bar) => bar.high), ...maValues);
+  const visibleLows = visible.map((bar) => (
+    bar.quoteOnly ? Math.min(bar.open, bar.close) : bar.low
+  ));
+  const visibleHighs = visible.map((bar) => (
+    bar.quoteOnly ? Math.max(bar.open, bar.close) : bar.high
+  ));
+  let minPrice = Math.min(...visibleLows, ...maValues);
+  let maxPrice = Math.max(...visibleHighs, ...maValues);
   const pad = Math.max((maxPrice - minPrice) * 0.06, maxPrice * 0.001);
   minPrice -= pad;
   maxPrice += pad;
@@ -193,19 +258,31 @@ function drawChart(canvas, bars, ema20, sma50, mode, state) {
   const xFor = (index) => plot.left + ((index + 0.5) / visible.length) * (plot.right - plot.left);
   const yFor = (price) => plot.bottom - ((price - minPrice) / priceRange) * (plot.bottom - plot.top);
 
-  drawGrid(ctx, plot, minPrice, maxPrice, width, visible);
-  drawVolumes(ctx, visible, xFor, plot);
-  if (mode === 'line') drawCloseLine(ctx, visible, xFor, yFor);
-  else drawCandles(ctx, visible, xFor, yFor, plot);
-  drawMovingAverage(ctx, ema20, timeToIndex, xFor, yFor, '#2d66c3', []);
-  drawMovingAverage(ctx, sma50, timeToIndex, xFor, yFor, '#747571', [5, 4]);
+  drawSessionBands(ctx, visible, xFor, plot, state.palette);
+  drawGrid(
+    ctx,
+    plot,
+    minPrice,
+    maxPrice,
+    width,
+    visible,
+    exchangeTimezone,
+    intraday,
+    state.palette,
+  );
+  drawVolumes(ctx, visible, xFor, plot, state.palette);
+  if (mode === 'line') drawCloseLine(ctx, visible, xFor, yFor, state.palette);
+  else drawCandles(ctx, visible, xFor, yFor, plot, state.palette);
+  drawMovingAverage(ctx, ema20, timeToIndex, xFor, yFor, state.palette.ema, []);
+  drawMovingAverage(ctx, sma50, timeToIndex, xFor, yFor, state.palette.sma, [5, 4]);
 
   const hoverLocal = state.hoverIndex == null ? null : state.hoverIndex - state.start;
   if (hoverLocal != null && hoverLocal >= 0 && hoverLocal < visible.length) {
     const x = xFor(hoverLocal);
     const y = yFor(visible[hoverLocal].close);
     ctx.save();
-    ctx.strokeStyle = 'rgba(20,22,25,.22)';
+    ctx.globalAlpha = 0.48;
+    ctx.strokeStyle = state.palette.muted;
     ctx.setLineDash([3, 4]);
     ctx.beginPath();
     ctx.moveTo(x, plot.top);
@@ -217,12 +294,25 @@ function drawChart(canvas, bars, ema20, sma50, mode, state) {
   }
 }
 
-function drawGrid(ctx, plot, minPrice, maxPrice, width, visible) {
+function drawSessionBands(ctx, visible, xFor, plot, palette) {
+  if (!visible.some((bar) => bar.extended)) return;
+  const slot = (plot.right - plot.left) / visible.length;
   ctx.save();
-  ctx.font = '11px JetBrains Mono, monospace';
+  visible.forEach((bar, index) => {
+    if (!bar.extended) return;
+    ctx.globalAlpha = bar.quoteOnly ? 0.075 : 0.04;
+    ctx.fillStyle = palette.extended;
+    ctx.fillRect(xFor(index) - slot / 2, plot.top, slot, plot.volumeBottom - plot.top);
+  });
+  ctx.restore();
+}
+
+function drawGrid(ctx, plot, minPrice, maxPrice, width, visible, exchangeTimezone, intraday, palette) {
+  ctx.save();
+  ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#747571';
-  ctx.strokeStyle = 'rgba(20,22,25,.07)';
+  ctx.fillStyle = palette.muted;
+  ctx.strokeStyle = palette.grid;
   for (let step = 0; step <= 4; step += 1) {
     const y = plot.top + ((plot.bottom - plot.top) * step) / 4;
     const price = maxPrice - ((maxPrice - minPrice) * step) / 4;
@@ -230,51 +320,55 @@ function drawGrid(ctx, plot, minPrice, maxPrice, width, visible) {
     ctx.moveTo(plot.left, y);
     ctx.lineTo(plot.right, y);
     ctx.stroke();
-    ctx.fillText(formatPriceAxis(price), plot.right + 6, y);
+    ctx.fillText(formatPrice(price), plot.right + 7, y);
   }
   ctx.textBaseline = 'bottom';
   const tickCount = Math.min(5, visible.length);
   for (let step = 0; step < tickCount; step += 1) {
-    const index = tickCount === 1 ? 0 : Math.round((step / (tickCount - 1)) * (visible.length - 1));
+    const index = tickCount === 1
+      ? 0
+      : Math.round((step / (tickCount - 1)) * (visible.length - 1));
     const x = plot.left + ((index + 0.5) / visible.length) * (plot.right - plot.left);
-    const date = new Date(visible[index].time * 1000);
-    const label = date.toLocaleDateString([], { month: 'numeric', day: 'numeric' });
+    const label = formatAxisTime(visible[index].time, exchangeTimezone, intraday);
     const textWidth = ctx.measureText(label).width;
-    ctx.fillText(label, clamp(x - textWidth / 2, plot.left, width - textWidth), plot.volumeBottom + 19);
+    ctx.fillText(label, clamp(x - textWidth / 2, plot.left, width - textWidth), plot.volumeBottom + 23);
   }
   ctx.restore();
 }
 
-function drawVolumes(ctx, visible, xFor, plot) {
+function drawVolumes(ctx, visible, xFor, plot, palette) {
   const maxVolume = Math.max(1, ...visible.map((bar) => Math.max(0, bar.volume)));
   const slot = (plot.right - plot.left) / visible.length;
   const barWidth = Math.max(1, slot * 0.68);
   visible.forEach((bar, index) => {
     const height = (Math.max(0, bar.volume) / maxVolume) * (plot.volumeBottom - plot.volumeTop);
     const positive = bar.close >= bar.open;
-    ctx.fillStyle = positive
-      ? (bar.extended ? 'rgba(0,140,114,.10)' : 'rgba(0,140,114,.22)')
-      : (bar.extended ? 'rgba(216,71,71,.10)' : 'rgba(216,71,71,.20)');
+    ctx.save();
+    ctx.globalAlpha = bar.extended ? 0.12 : 0.24;
+    ctx.fillStyle = positive ? palette.positive : palette.negative;
     ctx.fillRect(xFor(index) - barWidth / 2, plot.volumeBottom - height, barWidth, height);
+    ctx.restore();
   });
 }
 
-function drawCandles(ctx, visible, xFor, yFor, plot) {
+function drawCandles(ctx, visible, xFor, yFor, plot, palette) {
   const slot = (plot.right - plot.left) / visible.length;
   const bodyWidth = clamp(slot * 0.62, 1, 14);
   visible.forEach((bar, index) => {
     const x = xFor(index);
     const up = bar.close >= bar.open;
-    const color = up ? '#008c72' : '#d84747';
+    const color = up ? palette.positive : palette.negative;
     ctx.save();
-    ctx.globalAlpha = bar.extended ? 0.46 : 1;
+    ctx.globalAlpha = bar.extended ? 0.58 : 1;
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x, yFor(bar.high));
-    ctx.lineTo(x, yFor(bar.low));
-    ctx.stroke();
+    if (!bar.quoteOnly) {
+      ctx.beginPath();
+      ctx.moveTo(x, yFor(bar.high));
+      ctx.lineTo(x, yFor(bar.low));
+      ctx.stroke();
+    }
     const openY = yFor(bar.open);
     const closeY = yFor(bar.close);
     const top = Math.min(openY, closeY);
@@ -289,22 +383,26 @@ function drawCandles(ctx, visible, xFor, yFor, plot) {
   });
 }
 
-function drawCloseLine(ctx, visible, xFor, yFor) {
+function drawCloseLine(ctx, visible, xFor, yFor, palette) {
+  if (visible.length < 2) return;
   ctx.save();
-  ctx.strokeStyle = '#008c72';
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 2.25;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  ctx.beginPath();
-  visible.forEach((bar, index) => {
-    const x = xFor(index);
-    const y = yFor(bar.close);
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
+  for (let index = 1; index < visible.length; index += 1) {
+    const previous = visible[index - 1];
+    const current = visible[index];
+    ctx.globalAlpha = previous.extended || current.extended ? 0.48 : 1;
+    ctx.strokeStyle = palette.accent;
+    ctx.setLineDash(current.quoteOnly ? [3, 3] : []);
+    ctx.beginPath();
+    ctx.moveTo(xFor(index - 1), yFor(previous.close));
+    ctx.lineTo(xFor(index), yFor(current.close));
+    ctx.stroke();
+  }
   const last = visible[visible.length - 1];
-  ctx.fillStyle = '#008c72';
+  ctx.globalAlpha = last.extended ? 0.55 : 1;
+  ctx.fillStyle = palette.accent;
   ctx.beginPath();
   ctx.arc(xFor(visible.length - 1), yFor(last.close), 3.5, 0, Math.PI * 2);
   ctx.fill();
@@ -312,7 +410,9 @@ function drawCloseLine(ctx, visible, xFor, yFor) {
 }
 
 function drawMovingAverage(ctx, points, timeToIndex, xFor, yFor, color, dash) {
-  const visible = points.filter((point) => timeToIndex.has(point.time));
+  const visible = points
+    .filter((point) => timeToIndex.has(point.time))
+    .map((point) => ({ ...point, index: timeToIndex.get(point.time) }));
   if (visible.length < 2) return;
   ctx.save();
   ctx.strokeStyle = color;
@@ -320,44 +420,75 @@ function drawMovingAverage(ctx, points, timeToIndex, xFor, yFor, color, dash) {
   ctx.setLineDash(dash);
   ctx.beginPath();
   visible.forEach((point, index) => {
-    const x = xFor(timeToIndex.get(point.time));
+    const x = xFor(point.index);
     const y = yFor(point.value);
-    if (index === 0) ctx.moveTo(x, y);
+    const previous = visible[index - 1];
+    if (!previous || point.index - previous.index > 1) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
   ctx.stroke();
   ctx.restore();
 }
 
-function buildLegend(mode, hasExtendedBars) {
+function buildLegend(mode, bars) {
   const legend = document.createElement('div');
-  legend.className = 'chart-legend';
+  legend.className = 'market-chart-legend';
   const items = mode === 'line'
-    ? [['#008c72', 'CLOSE', false], ['#2d66c3', 'EMA 20', false], ['#747571', 'SMA 50', true]]
-    : [['#2d66c3', 'EMA 20', false], ['#747571', 'SMA 50', true]];
-  if (hasExtendedBars) items.push(['rgba(20,22,25,.28)', 'EXT 盘前/盘后', false]);
-  items.forEach(([color, label, dashed]) => {
+    ? [
+      ['accent', '收盘价', false],
+      ['ema', '指数移动平均线（EMA 20）· 常规盘', false],
+      ['sma', '简单移动平均线（SMA 50）· 常规盘', true],
+    ]
+    : [
+      ['ema', '指数移动平均线（EMA 20）· 常规盘', false],
+      ['sma', '简单移动平均线（SMA 50）· 常规盘', true],
+    ];
+  if (bars.some((bar) => bar.extended)) {
+    items.push(['extended', '盘前 / 盘后', false]);
+  }
+  if (bars.some((bar) => bar.quoteOnly)) {
+    items.push(['extended', '仅报价', true]);
+  }
+  items.forEach(([tone, label, dashed]) => {
     const item = document.createElement('span');
-    item.className = 'chart-legend__item';
+    item.className = 'market-chart-legend__item';
     const swatch = document.createElement('span');
-    swatch.className = 'chart-legend__swatch';
-    swatch.style.background = dashed ? 'transparent' : color;
-    if (dashed) swatch.style.borderTop = `2px dashed ${color}`;
+    swatch.className = `market-chart-legend__swatch is-${tone}${dashed ? ' is-dashed' : ''}`;
     item.append(swatch, document.createTextNode(label));
     legend.appendChild(item);
   });
   return legend;
 }
 
-function showTooltip(tooltip, root, event, bar) {
+function showTooltip(tooltip, root, event, bar, exchangeTimezone, intraday) {
   if (!bar) return;
-  const date = new Date(bar.time * 1000);
-  tooltip.textContent = `${date.toLocaleString()}  O ${formatNumber(bar.open)}  H ${formatNumber(bar.high)}  L ${formatNumber(bar.low)}  C ${formatNumber(bar.close)}  V ${formatVolume(bar.volume)}${bar.extended ? '  EXT' : ''}`;
+  tooltip.replaceChildren();
+
+  const exchangeLine = document.createElement('strong');
+  exchangeLine.textContent = `交易所时间 · ${formatFullTime(bar.time, exchangeTimezone, intraday)}`;
+  const localLine = document.createElement('span');
+  localLine.textContent = `本地时间 · ${formatFullTime(bar.time, undefined, intraday)}`;
+  const sessionLine = document.createElement('span');
+  sessionLine.className = 'market-chart__tooltip-session';
+  sessionLine.textContent = sessionLabel(bar);
+  const priceLine = document.createElement('span');
+  priceLine.className = 'market-chart__tooltip-prices';
+  const high = bar.quoteOnly ? '—' : formatPrice(bar.high);
+  const low = bar.quoteOnly ? '—' : formatPrice(bar.low);
+  priceLine.textContent = `开 ${formatPrice(bar.open)}  高 ${high}  低 ${low}  收 ${formatPrice(bar.close)}`;
+  const volumeLine = document.createElement('span');
+  volumeLine.textContent = `成交量 ${bar.quoteOnly ? '未报告' : formatVolume(bar.volume)}`;
+  tooltip.append(exchangeLine, localLine, sessionLine, priceLine, volumeLine);
   tooltip.hidden = false;
+
   const rootRect = root.getBoundingClientRect();
   const maxLeft = Math.max(6, rootRect.width - tooltip.offsetWidth - 6);
   tooltip.style.left = `${clamp(event.clientX - rootRect.left + 12, 6, maxLeft)}px`;
-  tooltip.style.top = `${clamp(event.clientY - rootRect.top - tooltip.offsetHeight - 10, 6, rootRect.height - tooltip.offsetHeight - 6)}px`;
+  tooltip.style.top = `${clamp(
+    event.clientY - rootRect.top - tooltip.offsetHeight - 10,
+    6,
+    rootRect.height - tooltip.offsetHeight - 6,
+  )}px`;
 }
 
 function setWindow(state, total, requestedStart, requestedEnd) {
@@ -369,15 +500,65 @@ function setWindow(state, total, requestedStart, requestedEnd) {
   state.end = Math.round(start + count);
 }
 
-function formatPriceAxis(value) {
-  const abs = Math.abs(value);
-  if (abs >= 1000) return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  if (abs >= 10) return value.toFixed(2);
-  return value.toFixed(3);
+function sessionLabel(bar) {
+  const labels = {
+    regular: '常规交易时段',
+    pre: '盘前交易时段',
+    post: '盘后交易时段',
+    extended: '盘前 / 盘后交易时段',
+  };
+  const base = labels[bar.session] || labels.regular;
+  return bar.quoteOnly ? `${base} · 仅报价` : base;
 }
 
-function formatNumber(value) {
-  return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+function formatAxisTime(timestamp, timeZone, intraday) {
+  const options = intraday
+    ? { timeZone, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }
+    : { timeZone, year: '2-digit', month: '2-digit', day: '2-digit' };
+  return safeDateFormat(timestamp, options);
+}
+
+function formatFullTime(timestamp, timeZone, intraday) {
+  const options = intraday
+    ? {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZoneName: 'short',
+    }
+    : { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' };
+  return safeDateFormat(timestamp, options);
+}
+
+function safeDateFormat(timestamp, options) {
+  try {
+    return new Intl.DateTimeFormat('zh-CN', options).format(new Date(timestamp * 1000));
+  } catch (_) {
+    const fallback = { ...options };
+    delete fallback.timeZone;
+    return new Intl.DateTimeFormat('zh-CN', fallback).format(new Date(timestamp * 1000));
+  }
+}
+
+function formatPrice(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  const abs = Math.abs(number);
+  let maximumFractionDigits = 2;
+  let minimumFractionDigits = 2;
+  if (abs < 1) {
+    maximumFractionDigits = abs < 0.01 ? 8 : 6;
+    minimumFractionDigits = 4;
+  } else if (abs < 10) {
+    maximumFractionDigits = 4;
+  } else if (abs >= 1000) {
+    maximumFractionDigits = 2;
+  }
+  return number.toLocaleString(undefined, { minimumFractionDigits, maximumFractionDigits });
 }
 
 function formatVolume(value) {
@@ -393,38 +574,76 @@ function clamp(value, min, max) {
 }
 
 function normalizeBars(bars) {
-  return bars
-    .map((bar) => ({
-      time: Math.floor(Number(bar.t ?? bar.time) > 1e12 ? Number(bar.t ?? bar.time) / 1000 : Number(bar.t ?? bar.time)),
-      open: Number(bar.o ?? bar.open),
-      high: Number(bar.h ?? bar.high),
-      low: Number(bar.l ?? bar.low),
-      close: Number(bar.c ?? bar.close),
-      volume: Number(bar.v ?? bar.volume ?? 0),
-      extended: Boolean(bar.ext ?? bar.extended),
+  const byTime = new Map();
+  bars.forEach((bar) => {
+    const rawTime = Number(bar.t ?? bar.time);
+    const time = Math.floor(rawTime > 1e12 ? rawTime / 1000 : rawTime);
+    const open = Number(bar.o ?? bar.open);
+    const high = Number(bar.h ?? bar.high);
+    const low = Number(bar.l ?? bar.low);
+    const close = Number(bar.c ?? bar.close);
+    const rawVolume = Number(bar.v ?? bar.volume ?? 0);
+    const volume = Number.isFinite(rawVolume) && rawVolume >= 0 ? Math.floor(rawVolume) : -1;
+    const sourceSession = String(bar.session || '');
+    const extended = Boolean(bar.ext ?? bar.extended) || sourceSession === 'pre' || sourceSession === 'post';
+    const session = ['regular', 'pre', 'post'].includes(sourceSession)
+      ? sourceSession
+      : (extended ? 'extended' : 'regular');
+    const normalized = {
+      time,
+      open,
+      high,
+      low,
+      close,
+      volume,
+      extended,
       quoteOnly: Boolean(bar.quote_only ?? bar.quoteOnly),
-      session: String(bar.session || ''),
-    }))
-    .filter((bar) => (
-      Number.isFinite(bar.time)
-      && Number.isFinite(bar.open)
-      && Number.isFinite(bar.high)
-      && Number.isFinite(bar.low)
-      && Number.isFinite(bar.close)
-      && bar.time > 0
-      && bar.low > 0
-      && bar.high >= Math.max(bar.open, bar.close)
-      && bar.low <= Math.min(bar.open, bar.close)
-    ))
-    .sort((a, b) => a.time - b.time);
+      session,
+    };
+    if (
+      Number.isFinite(time)
+      && Number.isFinite(open)
+      && Number.isFinite(high)
+      && Number.isFinite(low)
+      && Number.isFinite(close)
+      && time > 0
+      && open > 0
+      && close > 0
+      && low > 0
+      && high >= Math.max(open, close)
+      && low <= Math.min(open, close)
+      && volume >= 0
+    ) {
+      byTime.set(time, normalized);
+    }
+  });
+  return [...byTime.values()].sort((a, b) => a.time - b.time);
 }
 
 function normalizeMA(points) {
-  return points
-    .map((point) => ({
-      time: Math.floor(Number(point.time ?? point.t) > 1e12 ? Number(point.time ?? point.t) / 1000 : Number(point.time ?? point.t)),
-      value: Number(point.value),
-    }))
-    .filter((point) => Number.isFinite(point.time) && Number.isFinite(point.value) && point.time > 0)
-    .sort((a, b) => a.time - b.time);
+  const byTime = new Map();
+  points.forEach((point) => {
+    const rawTime = Number(point.time ?? point.t);
+    const time = Math.floor(rawTime > 1e12 ? rawTime / 1000 : rawTime);
+    const value = Number(point.value);
+    if (Number.isFinite(time) && Number.isFinite(value) && time > 0 && value > 0) {
+      byTime.set(time, { time, value });
+    }
+  });
+  return [...byTime.values()].sort((a, b) => a.time - b.time);
+}
+
+function readPalette(root) {
+  const styles = getComputedStyle(root);
+  const color = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
+  return {
+    accent: color('--accent', '#256b68'),
+    positive: color('--positive', '#08745b'),
+    negative: color('--negative', '#c13d4b'),
+    muted: color('--ink-muted', '#66737b'),
+    grid: color('--border-subtle', '#dde4e7'),
+    ema: color('--chart-ema', color('--accent', '#256b68')),
+    sma: color('--chart-sma', '#7a6d61'),
+    extended: color('--chart-extended', '#b57419'),
+  };
 }

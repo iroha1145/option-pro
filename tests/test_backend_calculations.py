@@ -5,6 +5,7 @@ import math
 import time
 from datetime import datetime
 from threading import Lock
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -57,6 +58,23 @@ def test_n_day_returns_use_exact_number_of_intervals() -> None:
     assert scanner._ret(too_short, 20) is None
 
 
+def test_cross_sectional_percentiles_use_midranks_for_ties() -> None:
+    all_tied = [
+        {"ticker": "AAA", "value": 1.0},
+        {"ticker": "BBB", "value": 1.0},
+        {"ticker": "CCC", "value": 1.0},
+    ]
+    partially_tied = [
+        {"ticker": "AAA", "value": 1.0},
+        {"ticker": "BBB", "value": 1.0},
+        {"ticker": "CCC", "value": 2.0},
+    ]
+
+    for ranker in (scanner._pct_rank, yahoo_options._pct_rank):
+        assert ranker(all_tied, "value") == {"AAA": 50.0, "BBB": 50.0, "CCC": 50.0}
+        assert ranker(partially_tied, "value") == {"AAA": 25.0, "BBB": 25.0, "CCC": 100.0}
+
+
 def test_relative_spread_20d_feature_uses_21_observations() -> None:
     numerator = pd.Series([100.0] * 65)
     denominator = pd.Series([100.0] * 65)
@@ -85,6 +103,42 @@ def test_market_regime_reports_insufficient_data_instead_of_bearish_score() -> N
     assert result["label"] == "数据不足"
     assert result["market_context"]["score"] is None
     assert result["missing_requirements"]
+
+
+def test_market_signal_breadth_ignores_missing_sector_funds_and_marks_degraded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signals._cache.clear()
+    monkeypatch.setattr(signals, "_bulk_history", lambda _symbols: {"SPY": _history()})
+
+    result = signals.compute_market_signals()
+
+    assert result["sectors_above_50dma"]["value"] is None
+    assert result["_breadth_coverage"] == {
+        "available": 0,
+        "expected": len(signals.SECTOR_ETFS),
+        "ratio": 0.0,
+    }
+    assert result["_source_status"]["value"] == "degraded"
+
+
+def test_market_signal_breadth_uses_only_available_funds_in_denominator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signals._cache.clear()
+    history = _history()
+    available = signals.SECTOR_ETFS[:7]
+    monkeypatch.setattr(
+        signals,
+        "_bulk_history",
+        lambda _symbols: {"SPY": history, **{symbol: history for symbol in available}},
+    )
+
+    result = signals.compute_market_signals()
+
+    assert result["sectors_above_50dma"]["value"] == 100.0
+    assert result["_breadth_coverage"]["available"] == 7
+    assert result["_source_status"]["value"] == "degraded"
 
 
 def test_data_quality_excludes_metadata_dictionaries() -> None:
@@ -129,29 +183,74 @@ def test_sector_periods_map_to_20_63_and_126_day_returns() -> None:
     assert one_month["avg_return_3m"] == 30.0
 
 
-def test_scan_cache_key_and_metadata_use_requested_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scan_uses_server_fixed_cache_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
     keys: list[tuple[str, int]] = []
+    values: dict[str, tuple[dict, float]] = {}
+    scan_calls = 0
 
     class FakeCache:
         async def get_or_set_with_meta(self, key, ttl, producer):
             keys.append((key, ttl))
-            return await producer(), False, time.time() + ttl
+            if key in values:
+                value, expires_at = values[key]
+                return value, True, expires_at
+            value = await producer()
+            expires_at = time.time() + ttl
+            values[key] = (value, expires_at)
+            return value, False, expires_at
+
+    def fake_scan(**kwargs):
+        nonlocal scan_calls
+        scan_calls += 1
+        return {"as_of": "now", "sectors": [], "market_regime": {}, "rows": [], "results": []}
 
     monkeypatch.setattr(scanner, "cache", FakeCache())
-    monkeypatch.setattr(
-        scanner,
-        "_scan_sync",
-        lambda **kwargs: {"as_of": "now", "sectors": [], "market_regime": {}, "rows": [], "results": []},
+    monkeypatch.setattr(scanner, "_scan_sync", fake_scan)
+
+    first = asyncio.run(scanner.scan_strength(include_options=False))
+    second = asyncio.run(scanner.scan_strength(include_options=False))
+
+    assert keys[0][0] == keys[1][0]
+    assert ":ttl:" not in keys[0][0]
+    assert keys[0][1] == scanner.STRENGTH_CACHE_TTL_SECONDS
+    assert keys[1][1] == scanner.STRENGTH_CACHE_TTL_SECONDS
+    assert scan_calls == 1
+    assert first["_cached"] is False
+    assert second["_cached"] is True
+    assert first["cache_ttl_seconds"] == scanner.STRENGTH_CACHE_TTL_SECONDS
+    assert second["cache_ttl_seconds"] == scanner.STRENGTH_CACHE_TTL_SECONDS
+
+
+def test_yahoo_option_enrichment_caps_pool_and_uses_small_parallel_batches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [{"ticker": f"T{index:02d}", "final_score": 100 - index} for index in range(30)]
+    settings = SimpleNamespace(
+        yahoo_options_enabled=True,
+        yahoo_options_enrich_limit=90,
+        yahoo_options_failure_limit=100,
+        yahoo_option_target_dte=30,
+        yahoo_option_strike_window_pct=0.16,
     )
+    state = {"active": 0, "max_active": 0, "calls": 0}
+    lock = Lock()
 
-    short = asyncio.run(scanner.scan_strength(ttl=300, include_options=False))
-    long = asyncio.run(scanner.scan_strength(ttl=900, include_options=False))
+    def slow_empty(_row, _settings):
+        with lock:
+            state["active"] += 1
+            state["calls"] += 1
+            state["max_active"] = max(state["max_active"], state["active"])
+        time.sleep(0.02)
+        with lock:
+            state["active"] -= 1
+        return None
 
-    assert keys[0][0] != keys[1][0]
-    assert ":ttl:300" in keys[0][0]
-    assert ":ttl:900" in keys[1][0]
-    assert short["cache_ttl_seconds"] == 300
-    assert long["cache_ttl_seconds"] == 900
+    monkeypatch.setattr(yahoo_options, "_load_raw_metrics", slow_empty)
+    status = yahoo_options.enrich_rows_with_yahoo_options(rows, display_top=30, settings=settings)
+
+    assert status["candidate_pool"] == 20
+    assert state["calls"] == 20
+    assert 2 <= state["max_active"] <= 4
 
 
 def test_expiry_clock_uses_new_york_1600_and_fractional_dte() -> None:
@@ -221,6 +320,50 @@ def test_bounded_fallback_fetch_limits_concurrency_and_breaks_on_failures() -> N
     assert len(failed_calls) <= 7
 
 
+def test_finnhub_fallback_keeps_token_out_of_url_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+    settings = SimpleNamespace(
+        finnhub_api_key="secret-token",
+        finnhub_candle_fallback_enabled=True,
+        finnhub_candle_fallback_limit=1,
+        finnhub_base_url="https://finnhub.example/api/v1",
+        request_timeout=2.0,
+    )
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"s": "ok", "t": [1], "o": [1], "h": [2], "l": [0.5], "c": [1.5], "v": [100]}
+
+    class FakeClient:
+        def __init__(self, *, timeout, headers):
+            captured["headers"] = headers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def get(self, url, *, params):
+            captured["url"] = url
+            captured["params"] = dict(params)
+            return FakeResponse()
+
+    monkeypatch.setattr(scanner, "get_settings", lambda: settings)
+    monkeypatch.setattr(scanner.httpx, "Client", FakeClient)
+
+    frame, loaded, missing = scanner._download_finnhub_history(["AAA"], "1mo")
+
+    assert not frame.empty
+    assert loaded == ["AAA"]
+    assert missing == []
+    assert captured["headers"] == {"X-Finnhub-Token": "secret-token"}
+    assert "token" not in captured["params"]
+
+
 def test_price_action_dimension_survives_feature_and_scoring_pipeline() -> None:
     hist = _history()
     row = scanner._feature_row("TEST", hist, hist, {"sector_id": "test", "sector_name": "Test"})
@@ -253,7 +396,6 @@ def test_strength_api_masks_upstream_errors_as_503(monkeypatch: pytest.MonkeyPat
                 sector_id=None,
                 min_price=5.0,
                 min_avg_dollar_volume=10_000_000,
-                cache_ttl=300,
             )
         )
     assert captured.value.status_code == 503

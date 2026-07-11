@@ -1,7 +1,6 @@
 import { api } from '../api.js';
 
-const ETHOS_SEARCH_INPUT_STYLE = 'background:#ffffff;border:1px solid #E8E4E1;border-radius:8px;box-shadow:inset 0 1px 2px rgba(0,0,0,0.06), inset 0 -1px 0 rgba(255,255,255,0.72);';
-const ETHOS_SEARCH_DROPDOWN_STYLE = 'background:#ffffff;border:1px solid #E8E4E1;border-radius:8px;box-shadow:0px 8px 24px rgba(0,0,0,0.08);';
+const SEARCH_UNIVERSE_TTL_MS = 5 * 60 * 1000;
 
 const FALLBACK_SYMBOLS = [
   { ticker: 'AAPL', company: 'Apple Inc.', sector: 'TECH' },
@@ -28,7 +27,7 @@ function normalizeSearchItem(item = {}) {
   if (!ticker) return null;
   return {
     ticker,
-    company: item.company ?? item.companyName ?? item.company_name ?? item.name ?? '上市公司',
+    company: String(item.company ?? item.companyName ?? item.company_name ?? item.name ?? '上市公司'),
     sector: String(item.sector ?? item.industry ?? item.assetClass ?? 'EQUITY').toUpperCase()
   };
 }
@@ -85,10 +84,17 @@ export function initSearch(root = document) {
   if (!input || !dropdown || input.dataset.searchBound === 'true') return;
 
   input.dataset.searchBound = 'true';
-  input.setAttribute('style', ETHOS_SEARCH_INPUT_STYLE);
-  dropdown.setAttribute('style', ETHOS_SEARCH_DROPDOWN_STYLE);
 
-  let universePromise = loadSearchUniverse();
+  let universePromise = null;
+  let universeRequestedAt = 0;
+  const ensureUniverse = () => {
+    const expired = universeRequestedAt > 0 && Date.now() - universeRequestedAt >= SEARCH_UNIVERSE_TTL_MS;
+    if (!universePromise || expired) {
+      universeRequestedAt = Date.now();
+      universePromise = loadSearchUniverse();
+    }
+    return universePromise;
+  };
 
   const closeDropdown = () => {
     dropdown.hidden = true;
@@ -113,9 +119,12 @@ export function initSearch(root = document) {
     bindSearchNavigation(dropdown);
   };
 
+  input.addEventListener('focus', () => { ensureUniverse(); });
+
   input.addEventListener('input', async () => {
     const query = input.value;
-    const universe = await universePromise;
+    const universe = await ensureUniverse();
+    if (query !== input.value) return;
     renderResults(filterUniverse(universe, query), query);
   });
 
@@ -131,6 +140,5 @@ export function initSearch(root = document) {
   window.addEventListener('hashchange', () => {
     input.value = '';
     closeDropdown();
-    universePromise = loadSearchUniverse();
   });
 }

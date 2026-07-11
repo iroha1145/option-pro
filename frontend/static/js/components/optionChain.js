@@ -1,183 +1,213 @@
+import { renderIcon } from '../icons.js';
+
 const money = (n) => n == null || Number.isNaN(Number(n)) ? '—' : Number(n).toFixed(2);
 const int = (n) => n == null || Number.isNaN(Number(n)) ? '—' : Number(n).toLocaleString();
 const pct = (n) => n == null || Number.isNaN(Number(n)) ? '—' : (Number(n) * 100).toFixed(1) + '%';
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-// Pick first non-null finite number across aliased field names.
-// IMPORTANT: 0 is a VALID value (zero volume, zero OI both happen and matter).
-// Old version treated 0 as missing and fell through to next alias.
+// Pick the first finite number across aliases. Zero is a valid volume or OI value.
 const firstValid = (...values) => {
-  for (const v of values) {
-    if (v == null) continue;
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
+  for (const value of values) {
+    if (value == null) continue;
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
   }
   return null;
 };
 
-// IV is special: 0 IV almost always means "data not available" (no live quotes),
-// so we keep the old skip-zero behavior here.
+// A zero IV normally represents an unavailable quote, so it stays distinct from volume and OI.
 const firstValidNonZero = (...values) => {
-  for (const v of values) {
-    if (v == null) continue;
-    const n = Number(v);
-    if (Number.isFinite(n) && n !== 0) return n;
+  for (const value of values) {
+    if (value == null) continue;
+    const number = Number(value);
+    if (Number.isFinite(number) && number !== 0) return number;
   }
   return null;
 };
 
-const optionVolume = (o = {}) => firstValid(o.volume, o.vol);
-const optionOI = (o = {}) => firstValid(o.open_interest, o.oi, o.openInterest);
-const optionIV = (o = {}) => firstValidNonZero(o.implied_volatility, o.iv);
+const optionVolume = (option = {}) => firstValid(option.volume, option.vol);
+const optionOI = (option = {}) => firstValid(option.open_interest, option.oi, option.openInterest);
+const optionIV = (option = {}) => firstValidNonZero(option.implied_volatility, option.iv);
+
+function groupOptionChain(chain = {}) {
+  const groups = {};
+  const suppliedGroups = chain.grouped_by_strike && typeof chain.grouped_by_strike === 'object'
+    ? chain.grouped_by_strike
+    : {};
+
+  Object.entries(suppliedGroups).forEach(([rawStrike, group]) => {
+    const strike = Number(rawStrike);
+    if (!Number.isFinite(strike) || !group || typeof group !== 'object') return;
+    groups[String(strike)] = { call: group.call || null, put: group.put || null };
+  });
+
+  const addFallback = (contracts, side) => {
+    if (!Array.isArray(contracts)) return;
+    contracts.forEach((contract) => {
+      const strike = Number(contract?.strike);
+      if (!Number.isFinite(strike)) return;
+      const key = String(strike);
+      if (!groups[key]) groups[key] = { call: null, put: null };
+      if (!groups[key][side]) groups[key][side] = contract;
+    });
+  };
+
+  addFallback(chain.calls, 'call');
+  addFallback(chain.puts, 'put');
+  return groups;
+}
+
+function alertMeta(alert = {}) {
+  const direction = alert.inferred_direction || alert.signal || 'unknown';
+  if (direction === 'bullish') return { icon: 'trending_up', tone: 'bullish', label: '方向推断偏多' };
+  if (direction === 'bearish') return { icon: 'trending_down', tone: 'bearish', label: '方向推断偏空' };
+  return { icon: 'help', tone: 'neutral', label: '方向尚不明确' };
+}
 
 /** Render unusual activity alerts above the chain. */
 export function renderAlerts(alerts = []) {
   if (!alerts.length) return '';
-  const meta = (a = {}) => {
-    const dir = a.inferred_direction || a.signal || 'unknown';
-    if (dir === 'bullish') return {
-      icon: 'trending_up',
-      tone: 'bullish',
-      label: '方向推断偏多'
-    };
-    if (dir === 'bearish') return {
-      icon: 'trending_down',
-      tone: 'bearish',
-      label: '方向推断偏空'
-    };
-    return {
-      icon: 'help',
-      tone: 'neutral',
-      label: '方向未知'
-    };
-  };
 
-  return `<div class="option-alert-shell">
+  return `<section class="option-alert-shell" aria-labelledby="option-alert-title">
     <div class="option-alert-head">
       <div>
-        <span class="label-caps">Unusual Flow</span>
-        <h3>期权异动</h3>
+        <span class="label-caps">异动提醒</span>
+        <h3 id="option-alert-title">期权成交异动</h3>
       </div>
-      <span>方向推断 · 非确定性判断</span>
+      <span>方向来自成交特征推断，不代表确定走势</span>
     </div>
     <div class="option-alert-grid">
-      ${alerts.map(a => {
-        const m = meta(a);
-        const expText = a.expiration ? `${String(a.expiration).slice(5).replace('-', '/')}到期` : '到期日—';
-        return `<article class="option-alert-card option-alert-card--${m.tone}">
-          <div class="option-alert-card__icon">
-            <span class="material-symbols-outlined" style="font-size:18px">${m.icon}</span>
+      ${alerts.map((alert) => {
+        const meta = alertMeta(alert);
+        const type = String(alert.type || '').toLowerCase() === 'call' ? '看涨' : '看跌';
+        const expiration = alert.expiration
+          ? `${String(alert.expiration).slice(5).replace('-', '/')} 到期`
+          : '到期日待确认';
+        const daysToExpiration = alert.dte == null ? '剩余天数待确认' : `距到期 ${esc(alert.dte)} 天`;
+        const premium = firstValid(alert.premium_flow);
+        const volume = optionVolume(alert);
+        const openInterest = optionOI(alert);
+
+        return `<article class="option-alert-card option-alert-card--${meta.tone}">
+          <div class="option-alert-card__icon" aria-hidden="true">
+            ${renderIcon(meta.icon, { size: 18 })}
           </div>
           <div class="option-alert-card__body">
             <div class="option-alert-card__top">
-              <strong class="mono">${a.type === 'call' ? 'CALL' : 'PUT'} ${money(a.strike)}</strong>
-              <span>${m.label}</span>
+              <strong data-numeric>${type} ${money(alert.strike)}</strong>
+              <span>${meta.label}</span>
             </div>
-            <p>${esc(expText)} · DTE ${esc(a.dte ?? '—')}</p>
-            <div class="option-alert-card__metrics">
-              <span class="mono">Vol ${int(a.volume)}</span>
-              <span class="mono">OI ${int(a.open_interest)}</span>
-              ${a.premium_flow ? `<strong class="mono">$${Number(a.premium_flow).toLocaleString()}</strong>` : ''}
-            </div>
-            ${(a.reasons || []).length ? `<div class="option-alert-card__reasons">
-              ${(a.reasons || []).slice(0, 3).map(r => `<span>${esc(r)}</span>`).join('')}
+            <p>${esc(expiration)} · ${daysToExpiration}</p>
+            <dl class="option-alert-card__metrics">
+              <div><dt>成交量</dt><dd data-numeric>${int(volume)}</dd></div>
+              <div><dt>持仓量</dt><dd data-numeric>${int(openInterest)}</dd></div>
+              ${premium == null ? '' : `<div class="option-alert-card__premium"><dt>权利金</dt><dd data-numeric>$${int(premium)}</dd></div>`}
+            </dl>
+            ${(alert.reasons || []).length ? `<div class="option-alert-card__reasons" aria-label="触发依据">
+              ${(alert.reasons || []).slice(0, 3).map((reason) => `<span>${esc(reason)}</span>`).join('')}
             </div>` : ''}
           </div>
         </article>`;
       }).join('')}
     </div>
-  </div>`;
+  </section>`;
+}
+
+function deltaTone(delta) {
+  if (delta == null || !Number.isFinite(Number(delta))) return 'is-missing';
+  const absolute = Math.abs(Number(delta));
+  if (absolute >= 0.5) return 'is-strong';
+  if (absolute >= 0.2) return 'is-medium';
+  return 'is-quiet';
 }
 
 export function renderOptionChain(chain) {
-  if (!chain || chain.__error) return `<div style="padding:32px;text-align:center;color:var(--color-muted);font-size:13px">期权链暂无数据</div>`;
-
-  const underlying = Number(chain.underlying_price || 0);
-  const groups = chain.grouped_by_strike || {};
-  let allStrikes = Object.keys(groups).map(Number).sort((a, b) => a - b);
-
-  // ── Filter to ATM ± 10 strikes ──
-  if (underlying > 0 && allStrikes.length > 20) {
-    const atmIdx = allStrikes.reduce((best, s, i) =>
-      Math.abs(s - underlying) < Math.abs(allStrikes[best] - underlying) ? i : best, 0);
-    const lo = Math.max(0, atmIdx - 10);
-    const hi = Math.min(allStrikes.length, atmIdx + 11);
-    allStrikes = allStrikes.slice(lo, hi);
+  if (!chain || chain.__error) {
+    return '<div class="option-chain-empty" role="status">期权链暂无数据</div>';
   }
 
-  const fmtDelta = (d) => (d == null || Number.isNaN(Number(d))) ? '—' : Number(d).toFixed(2);
-  const fmtGamma = (g) => (g == null || Number.isNaN(Number(g))) ? '—' : Number(g).toFixed(3);
+  const underlyingValue = Number(chain.underlying_price);
+  const underlying = Number.isFinite(underlyingValue) ? underlyingValue : 0;
+  const groups = groupOptionChain(chain);
+  let allStrikes = Object.keys(groups)
+    .map(Number)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+
+  // Keep the chain readable while preserving the nearest ten strikes on both sides of ATM.
+  if (underlying > 0 && allStrikes.length > 20) {
+    const atmIndex = allStrikes.reduce((best, strike, index) =>
+      Math.abs(strike - underlying) < Math.abs(allStrikes[best] - underlying) ? index : best, 0);
+    const lowerBound = Math.max(0, atmIndex - 10);
+    const upperBound = Math.min(allStrikes.length, atmIndex + 11);
+    allStrikes = allStrikes.slice(lowerBound, upperBound);
+  }
+
+  const fmtDelta = (delta) => delta == null || Number.isNaN(Number(delta)) ? '—' : Number(delta).toFixed(2);
+  const fmtGamma = (gamma) => gamma == null || Number.isNaN(Number(gamma)) ? '—' : Number(gamma).toFixed(3);
 
   const rows = allStrikes.map((strike) => {
-    const g = groups[strike] || groups[String(strike)] || groups[strike.toFixed(1)] || groups[strike + '.0'] || {};
-    const c = g.call || {};
-    const p = g.put || {};
-    const atm = underlying > 0 && Math.abs(strike - underlying) < Math.max(1, underlying * 0.008);
-    const cVol = optionVolume(c);
-    const pVol = optionVolume(p);
-    const cOI = optionOI(c);
-    const pOI = optionOI(p);
-    const cIV = optionIV(c);
-    const pIV = optionIV(p);
+    const group = groups[String(strike)] || {};
+    const call = group.call || {};
+    const put = group.put || {};
+    const isAtm = underlying > 0 && Math.abs(strike - underlying) < Math.max(1, underlying * 0.008);
+    const callVolume = optionVolume(call);
+    const putVolume = optionVolume(put);
+    const callOI = optionOI(call);
+    const putOI = optionOI(put);
+    const callIV = optionIV(call);
+    const putIV = optionIV(put);
 
-    const cellStyle = 'padding:8px 10px;font-size:12px;text-align:right';
-    const strikeCellStyle = atm
-      ? 'padding:8px 10px;text-align:center;background:#000;color:#fff;font-weight:800;font-family:"JetBrains Mono"'
-      : 'padding:8px 10px;text-align:center;background:var(--color-surface);font-weight:800;font-family:"JetBrains Mono"';
-
-    // Delta color: green for ITM, fade for OTM
-    const deltaColor = (d) => {
-      if (d == null) return 'var(--color-muted)';
-      const abs = Math.abs(Number(d));
-      if (abs >= 0.5) return 'var(--color-on-surface)';
-      if (abs >= 0.2) return 'var(--color-muted)';
-      return '#9c9c9c';
-    };
-
-    return `<tr style="${atm ? 'background:#fafaf8' : ''};border-bottom:1px solid var(--color-border)">
-      <td class="mono" style="${cellStyle}">${cVol != null ? int(cVol) : '—'}</td>
-      <td class="mono" style="${cellStyle};color:var(--color-muted)">${cOI != null ? int(cOI) : '—'}</td>
-      <td class="mono" style="${cellStyle};color:${deltaColor(c.delta)}">${fmtDelta(c.delta)}</td>
-      <td class="mono" style="${cellStyle};color:var(--color-muted)">${fmtGamma(c.gamma)}</td>
-      <td class="mono" style="${cellStyle};color:var(--color-muted)">${cIV ? pct(cIV) : '—'}</td>
-      <td style="${strikeCellStyle}">${money(strike)}</td>
-      <td class="mono" style="${cellStyle};color:var(--color-muted)">${pIV ? pct(pIV) : '—'}</td>
-      <td class="mono" style="${cellStyle};color:var(--color-muted)">${fmtGamma(p.gamma)}</td>
-      <td class="mono" style="${cellStyle};color:${deltaColor(p.delta)}">${fmtDelta(p.delta)}</td>
-      <td class="mono" style="${cellStyle};color:var(--color-muted)">${pOI != null ? int(pOI) : '—'}</td>
-      <td class="mono" style="${cellStyle}">${pVol != null ? int(pVol) : '—'}</td>
+    return `<tr class="option-chain-row${isAtm ? ' is-atm' : ''}">
+      <td class="option-chain-cell option-chain-cell--primary" data-numeric>${callVolume == null ? '—' : int(callVolume)}</td>
+      <td class="option-chain-cell" data-numeric>${callOI == null ? '—' : int(callOI)}</td>
+      <td class="option-chain-cell option-chain-cell--delta ${deltaTone(call.delta)}" data-numeric>${fmtDelta(call.delta)}</td>
+      <td class="option-chain-cell" data-numeric>${fmtGamma(call.gamma)}</td>
+      <td class="option-chain-cell" data-numeric>${callIV == null ? '—' : pct(callIV)}</td>
+      <th class="option-chain-strike" scope="row" data-numeric>
+        ${money(strike)}${isAtm ? '<span class="option-chain-atm-label">平值</span>' : ''}
+      </th>
+      <td class="option-chain-cell" data-numeric>${putIV == null ? '—' : pct(putIV)}</td>
+      <td class="option-chain-cell" data-numeric>${fmtGamma(put.gamma)}</td>
+      <td class="option-chain-cell option-chain-cell--delta ${deltaTone(put.delta)}" data-numeric>${fmtDelta(put.delta)}</td>
+      <td class="option-chain-cell" data-numeric>${putOI == null ? '—' : int(putOI)}</td>
+      <td class="option-chain-cell option-chain-cell--primary" data-numeric>${putVolume == null ? '—' : int(putVolume)}</td>
     </tr>`;
   }).join('');
 
-  return `<div style="overflow-x:auto;border:1px solid var(--color-border);border-radius:8px;background:#fff">
-    <table style="width:100%;border-collapse:collapse">
+  return `<div class="option-chain-table-wrap">
+    <table class="option-chain-table">
+      <caption class="option-chain-caption">期权链：看涨与看跌合约关键指标</caption>
       <thead>
-        <tr style="background:var(--color-surface);border-bottom:1px solid var(--color-border)">
-          <th colspan="5" class="label-caps" style="padding:10px;text-align:center">← CALLS</th>
-          <th class="label-caps" style="padding:10px;text-align:center;background:#fff;color:#000;font-weight:800">STRIKE</th>
-          <th colspan="5" class="label-caps" style="padding:10px;text-align:center">PUTS →</th>
+        <tr class="option-chain-groups">
+          <th colspan="5" scope="colgroup">看涨期权</th>
+          <th class="option-chain-groups__strike" scope="col">行权价</th>
+          <th colspan="5" scope="colgroup">看跌期权</th>
         </tr>
-        <tr style="background:var(--color-surface);border-bottom:1px solid var(--color-border)">
-          <th class="label-caps" style="padding:8px 10px;text-align:right">VOL</th>
-          <th class="label-caps" style="padding:8px 10px;text-align:right">OI</th>
-          <th class="label-caps" style="padding:8px 10px;text-align:right">Δ</th>
-          <th class="label-caps" style="padding:8px 10px;text-align:right">Γ</th>
-          <th class="label-caps" style="padding:8px 10px;text-align:right">IV</th>
-          <th class="label-caps" style="padding:8px 10px;text-align:center">行权价</th>
-          <th class="label-caps" style="padding:8px 10px;text-align:right">IV</th>
-          <th class="label-caps" style="padding:8px 10px;text-align:right">Γ</th>
-          <th class="label-caps" style="padding:8px 10px;text-align:right">Δ</th>
-          <th class="label-caps" style="padding:8px 10px;text-align:right">OI</th>
-          <th class="label-caps" style="padding:8px 10px;text-align:right">VOL</th>
+        <tr class="option-chain-columns">
+          <th scope="col">成交量</th>
+          <th scope="col">持仓量</th>
+          <th scope="col"><abbr title="德尔塔（Delta）">Δ</abbr></th>
+          <th scope="col"><abbr title="伽马（Gamma）">Γ</abbr></th>
+          <th scope="col"><abbr title="隐含波动率（Implied Volatility）">隐波</abbr></th>
+          <th scope="col">行权价</th>
+          <th scope="col"><abbr title="隐含波动率（Implied Volatility）">隐波</abbr></th>
+          <th scope="col"><abbr title="伽马（Gamma）">Γ</abbr></th>
+          <th scope="col"><abbr title="德尔塔（Delta）">Δ</abbr></th>
+          <th scope="col">持仓量</th>
+          <th scope="col">成交量</th>
         </tr>
       </thead>
-      <tbody>${rows || '<tr><td colspan="11" style="padding:32px;text-align:center;color:var(--color-muted)">暂无期权链</td></tr>'}</tbody>
+      <tbody>${rows || '<tr><td class="option-chain-empty option-chain-empty--row" colspan="11">暂无可显示的期权合约</td></tr>'}</tbody>
     </table>
+    <p class="option-chain-method" role="note">
+      希腊值按布莱克—斯科尔斯模型（Black-Scholes）估算，固定无风险利率 5%，未计股息；方向提示缺少成交方向数据，仅作推断。
+    </p>
   </div>`;
 }
 
 export function renderExpirationSelect(expirations = [], selected = '') {
-  return `<select id="expiration-select" class="option-expiration-select">
-    ${expirations.map(e => `<option value="${esc(e)}" ${e === selected ? 'selected' : ''}>${esc(e)}</option>`).join('')}
+  return `<select id="expiration-select" class="option-expiration-select" aria-label="期权到期日">
+    ${expirations.map((expiration) => `<option value="${esc(expiration)}" ${expiration === selected ? 'selected' : ''}>${esc(expiration)}</option>`).join('')}
   </select>`;
 }

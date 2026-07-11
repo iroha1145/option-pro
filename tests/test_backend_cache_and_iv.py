@@ -1,17 +1,48 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from app.api import sectors as sector_api
 from app.services import yahoo
+from app.services.cache import TTLCache
 
 
 def _raise_error():
     raise RuntimeError("provider down")
+
+
+def test_shared_ttl_cache_has_a_hard_capacity_limit() -> None:
+    bounded = TTLCache()
+
+    for index in range(bounded._MAX_ENTRIES + 100):
+        bounded.set(f"key:{index}", index, 300)
+
+    assert len(bounded._store) == bounded._MAX_ENTRIES
+    assert "key:0" not in bounded._store
+    assert bounded.get(f"key:{bounded._MAX_ENTRIES + 99}") == bounded._MAX_ENTRIES + 99
+
+
+def test_shared_ttl_cache_failed_unique_loads_do_not_retain_locks() -> None:
+    bounded = TTLCache()
+
+    async def scenario() -> None:
+        async def fail():
+            raise RuntimeError("provider down")
+
+        for index in range(20):
+            with pytest.raises(RuntimeError, match="provider down"):
+                await bounded.get_or_set(f"failure:{index}", 60, fail)
+
+    asyncio.run(scenario())
+
+    assert bounded._locks == {}
+    assert bounded._lock_users == {}
 
 
 def test_yahoo_stale_cache_is_marked_and_has_a_hard_limit() -> None:
@@ -37,6 +68,93 @@ def test_yahoo_stale_cache_is_marked_and_has_a_hard_limit() -> None:
     with pytest.raises(RuntimeError, match="provider down"):
         yahoo._cached("old", 300, _raise_error, max_stale_seconds=120)
     assert "old" not in yahoo._cache
+
+
+def test_yahoo_cache_coalesces_concurrent_cold_loads() -> None:
+    yahoo._cache.clear()
+    yahoo._key_locks.clear()
+    calls = 0
+    calls_lock = threading.Lock()
+    start = threading.Barrier(8)
+
+    def loader():
+        nonlocal calls
+        with calls_lock:
+            calls += 1
+        time.sleep(0.05)
+        return {"value": 42}
+
+    def run(_index: int):
+        start.wait()
+        return yahoo._cached("single-flight", 60, loader)
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(run, range(8)))
+
+    assert calls == 1
+    assert [result["value"] for result in results] == [42] * 8
+
+
+def test_yahoo_empty_refresh_keeps_bounded_stale_value() -> None:
+    yahoo._cache.clear()
+    yahoo._key_locks.clear()
+    now = datetime.now(timezone.utc)
+    yahoo._cache["expirations:TEST"] = (
+        now - timedelta(seconds=1),
+        now - timedelta(seconds=60),
+        ["2026-08-21"],
+    )
+
+    value, metadata = yahoo._cached(
+        "expirations:TEST",
+        300,
+        lambda: [],
+        max_stale_seconds=120,
+        with_metadata=True,
+        is_valid=bool,
+    )
+
+    assert value == ["2026-08-21"]
+    assert metadata["_stale"] is True
+    assert metadata["source_status"] == "stale"
+
+
+def test_yahoo_invalid_cached_value_is_not_reused_as_stale() -> None:
+    yahoo._cache.clear()
+    yahoo._key_locks.clear()
+    now = datetime.now(timezone.utc)
+    yahoo._cache["expirations:EMPTY"] = (
+        now - timedelta(seconds=1),
+        now - timedelta(seconds=60),
+        [],
+    )
+
+    with pytest.raises(RuntimeError, match="provider down"):
+        yahoo._cached(
+            "expirations:EMPTY",
+            300,
+            _raise_error,
+            max_stale_seconds=120,
+            with_metadata=True,
+            is_valid=bool,
+        )
+
+    assert "expirations:EMPTY" not in yahoo._cache
+
+
+def test_yahoo_failed_unique_loads_do_not_retain_key_locks() -> None:
+    yahoo._cache.clear()
+    yahoo._key_locks.clear()
+    if hasattr(yahoo, "_key_lock_users"):
+        yahoo._key_lock_users.clear()
+
+    for index in range(20):
+        with pytest.raises(RuntimeError, match="provider down"):
+            yahoo._cached(f"failure:{index}", 60, _raise_error)
+
+    assert yahoo._key_locks == {}
+    if hasattr(yahoo, "_key_lock_users"):
+        assert yahoo._key_lock_users == {}
 
 
 def test_expiration_snapshot_and_stock_iv_snapshot_expose_freshness(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -37,9 +37,18 @@ class _BoundedBodyRoute(APIRoute):
                         raise HTTPException(status_code=413, detail="AI request body exceeds 64 KiB")
                 except ValueError as exc:
                     raise HTTPException(status_code=400, detail="Invalid Content-Length") from exc
-            body = await request.body()
-            if len(body) > _MAX_AI_BODY_BYTES:
-                raise HTTPException(status_code=413, detail="AI request body exceeds 64 KiB")
+            # Content-Length is optional (for example with chunked transfer), so
+            # enforce the limit while reading instead of buffering an unbounded
+            # body first. Starlette reuses ``request._body`` when the endpoint
+            # later asks for JSON, keeping this compatible with normal parsing.
+            chunks: list[bytes] = []
+            total = 0
+            async for chunk in request.stream():
+                total += len(chunk)
+                if total > _MAX_AI_BODY_BYTES:
+                    raise HTTPException(status_code=413, detail="AI request body exceeds 64 KiB")
+                chunks.append(chunk)
+            request._body = b"".join(chunks)
             return await original_handler(request)
 
         return bounded_handler

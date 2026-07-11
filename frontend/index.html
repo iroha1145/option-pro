@@ -2,51 +2,74 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Optix Pro：面向个人投资研究的美股、期权与选股工作台。" />
+  <meta name="theme-color" content="#f4f6fb" />
   <meta name="referrer" content="no-referrer" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://financialmodelingprep.com https://static2.finnhub.io https://eodhd.com; connect-src 'self'; form-action 'self'" />
-  <title>Optix Pro · Signal Desk</title>
-
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800;900&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet" />
-
-  <!--
-    Application scripts are same-origin only. The chart implementation is
-    bundled with the app, so no third-party script can read the local API token.
-  -->
-  <link rel="stylesheet" href="./static/css/styles.css" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'" />
+  <title>Optix Pro · 个人投资研究</title>
+  <link rel="icon" href="./static/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./static/css/optix-core-v3.css?v=20260711" />
+  <link rel="stylesheet" href="./static/css/optix-watchlist-v3.css?v=20260711" />
+  <link rel="modulepreload" href="./static/js/pages/watchlist.js" />
 </head>
-<body>
-  <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="打开导航">
-    <span></span><span></span><span></span>
-  </button>
+<body class="optix-app">
+  <a class="skip-link" href="#app">跳到主要内容</a>
   <div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
 
-  <aside id="sidebar" class="sidebar app-sidebar">
-    <a href="#watchlist" class="sidebar-logo" aria-label="Optix Pro 总览">
-      <span class="logo-mark">O</span>
-      <span class="logo-copy"><strong>Optix Pro</strong><small>Signal Desk</small></span>
-    </a>
+  <header class="app-header">
+    <div class="app-header__inner">
+      <a href="#watchlist" class="sidebar-logo brand" aria-label="Optix Pro 自选首页">
+        <span class="logo-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" focusable="false">
+            <path d="M7 21.5V10.7c0-2 1.6-3.7 3.7-3.7h10.6c2 0 3.7 1.6 3.7 3.7v10.6c0 2-1.6 3.7-3.7 3.7H10.7C8.7 25 7 23.4 7 21.5Z" />
+            <path d="m10.5 19 3.4-3.5 2.8 2.1 4.8-5" />
+          </svg>
+        </span>
+        <span class="logo-copy"><strong>Optix Pro</strong><small>投资研究</small></span>
+      </a>
 
-    <div class="sidebar-search" role="search">
-      <label class="sr-only" for="global-search">搜索股票</label>
-      <input id="global-search" type="search" placeholder="搜索代码 / 公司" autocomplete="off" aria-autocomplete="list" aria-controls="global-search-results" aria-expanded="false" />
-      <div id="global-search-results" class="search-results-dropdown" role="listbox" hidden></div>
+      <div id="sidebar" class="sidebar app-sidebar primary-navigation">
+        <nav class="sidebar-nav" aria-label="主导航">
+          <a class="sidebar-nav-item sidebar-link" href="#watchlist" data-route="watchlist"><svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="./static/icons.svg#icon-dashboard"></use></svg><span class="sidebar-link-label">自选</span></a>
+          <a class="sidebar-nav-item sidebar-link" href="#screener" data-route="screener"><svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="./static/icons.svg#icon-filter_alt"></use></svg><span class="sidebar-link-label">选股</span></a>
+          <a class="sidebar-nav-item sidebar-link" href="#sectors" data-route="sectors"><svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="./static/icons.svg#icon-layers"></use></svg><span class="sidebar-link-label">板块</span></a>
+          <a class="sidebar-nav-item sidebar-link" href="#earnings" data-route="earnings"><svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="./static/icons.svg#icon-event_note"></use></svg><span class="sidebar-link-label">财报</span></a>
+        </nav>
+
+        <div class="sidebar-search" role="search">
+          <label class="sr-only" for="global-search">搜索股票</label>
+          <svg class="ui-icon search-leading-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="./static/icons.svg#icon-search"></use></svg>
+          <input id="global-search" type="search" placeholder="搜索股票" autocomplete="off" aria-autocomplete="list" aria-controls="global-search-results" aria-expanded="false" />
+          <kbd class="search-shortcut">⌘ K</kbd>
+          <div id="global-search-results" class="search-results-dropdown" role="listbox" hidden></div>
+        </div>
+      </div>
+
+      <div class="header-session" aria-label="本地时间">
+        <span class="session-dot" aria-hidden="true"></span>
+        <time id="workspace-clock">--:--</time>
+      </div>
+
+      <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="打开导航">
+        <span></span><span></span><span></span>
+      </button>
     </div>
-
-    <nav class="sidebar-nav" aria-label="主导航">
-      <a class="sidebar-nav-item sidebar-link" href="#watchlist" data-route="watchlist"><span class="material-symbols-outlined" aria-hidden="true">dashboard</span><span class="sidebar-link-label">总览</span></a>
-      <a class="sidebar-nav-item sidebar-link" href="#sectors" data-route="sectors"><span class="material-symbols-outlined" aria-hidden="true">layers</span><span class="sidebar-link-label">板块</span></a>
-      <a class="sidebar-nav-item sidebar-link" href="#earnings" data-route="earnings"><span class="material-symbols-outlined" aria-hidden="true">event_note</span><span class="sidebar-link-label">财报</span></a>
-      <a class="sidebar-nav-item sidebar-link" href="#screener" data-route="screener"><span class="material-symbols-outlined" aria-hidden="true">filter_alt</span><span class="sidebar-link-label">选股</span></a>
-    </nav>
-  </aside>
+  </header>
 
   <div class="app-shell">
-    <section class="ticker-bar" aria-label="市场指数">
+    <section class="ticker-bar" aria-label="主要市场指数">
       <div id="index-ticker-track" class="ticker-track"></div>
     </section>
-    <main id="app" class="main-content" tabindex="-1" aria-live="polite"></main>
+    <main id="app" class="main-content" tabindex="-1"></main>
   </div>
+
+  <nav class="mobile-dock" aria-label="手机主导航">
+    <a class="sidebar-link" href="#watchlist" data-route="watchlist"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><use href="./static/icons.svg#icon-dashboard"></use></svg><span>自选</span></a>
+    <a class="sidebar-link" href="#screener" data-route="screener"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><use href="./static/icons.svg#icon-filter_alt"></use></svg><span>选股</span></a>
+    <a class="sidebar-link" href="#sectors" data-route="sectors"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><use href="./static/icons.svg#icon-layers"></use></svg><span>板块</span></a>
+    <a class="sidebar-link" href="#earnings" data-route="earnings"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><use href="./static/icons.svg#icon-event_note"></use></svg><span>财报</span></a>
+  </nav>
 
   <div id="modal-root"></div>
   <script type="module" src="./static/js/app.js"></script>

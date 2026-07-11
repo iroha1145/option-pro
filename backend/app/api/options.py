@@ -39,13 +39,18 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
         rows = []
         try:
             t = yf.Ticker(symbol)
-            exps = t.options[:2]
+            exps = list(t.options[:2])
+            if not exps:
+                return {"symbol": symbol, "ok": False, "rows": [], "reason": "no_expirations"}
             try:
                 price = yahoo._safe_float(t.fast_info.last_price)
             except Exception:
                 price = None
+            usable_chains = 0
             for exp in exps:
                 chain = t.option_chain(exp)
+                if not chain.calls.empty or not chain.puts.empty:
+                    usable_chains += 1
                 for side, df in [("call", chain.calls), ("put", chain.puts)]:
                     if type != "all" and type != side:
                         continue
@@ -78,6 +83,8 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
                         })
         except Exception:
             return {"symbol": symbol, "ok": False, "rows": []}
+        if usable_chains == 0:
+            return {"symbol": symbol, "ok": False, "rows": [], "reason": "empty_chains"}
         return {"symbol": symbol, "ok": True, "rows": rows}
 
     # 5 in flight at a time — fast but doesn't trip Yahoo's rate limiter

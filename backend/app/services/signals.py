@@ -1,28 +1,101 @@
 from __future__ import annotations
 
 import math
+import threading
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 import pandas as pd
 import yfinance as yf
 
-_cache: dict[str, tuple[datetime, Any]] = {}
+_cache: OrderedDict[str, tuple[datetime, Any]] = OrderedDict()
+_cache_lock = threading.RLock()
+_key_locks: dict[str, threading.Lock] = {}
+_key_lock_users: dict[str, int] = {}
+_CACHE_MAX_ENTRIES = 512
 
 SECTOR_ETFS = ["XLK", "XLF", "XLV", "XLE", "XLI", "XLC", "XLY", "XLP", "XLU", "XLRE", "XLB"]
+_MIN_SECTOR_BREADTH_COVERAGE = 0.60
+
+
+def _acquire_key_lock(key: str) -> threading.Lock:
+    with _cache_lock:
+        key_lock = _key_locks.get(key)
+        if key_lock is None:
+            key_lock = threading.Lock()
+            _key_locks[key] = key_lock
+        _key_lock_users[key] = _key_lock_users.get(key, 0) + 1
+    key_lock.acquire()
+    return key_lock
+
+
+def _release_key_lock(key: str, key_lock: threading.Lock) -> None:
+    key_lock.release()
+    with _cache_lock:
+        remaining = _key_lock_users.get(key, 1) - 1
+        if remaining > 0:
+            _key_lock_users[key] = remaining
+            return
+        _key_lock_users.pop(key, None)
+        if key not in _cache and _key_locks.get(key) is key_lock:
+            _key_locks.pop(key, None)
+
+
+def _fresh_cache_hit(key: str, now: datetime) -> tuple[datetime, Any] | None:
+    """Read and promote one entry while holding the cache lock."""
+    hit = _cache.get(key)
+    if not hit:
+        return None
+    if hit[0] <= now:
+        _cache.pop(key, None)
+        if _key_lock_users.get(key, 0) == 0:
+            _key_locks.pop(key, None)
+        return None
+    _cache.move_to_end(key)
+    return hit
+
+
+def _cached_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {**value, "_cached": True}
+    return value
 
 
 def _cached(key: str, ttl_seconds: int, loader: Callable[[], Any]) -> Any:
-    now = datetime.now(timezone.utc)
-    hit = _cache.get(key)
-    if hit and hit[0] > now:
-        value = hit[1]
-        if isinstance(value, dict):
-            return {**value, "_cached": True}
+    with _cache_lock:
+        hit = _fresh_cache_hit(key, datetime.now(timezone.utc))
+    if hit:
+        return _cached_value(hit[1])
+
+    key_lock = _acquire_key_lock(key)
+    try:
+        with _cache_lock:
+            hit = _fresh_cache_hit(key, datetime.now(timezone.utc))
+        if hit:
+            return _cached_value(hit[1])
+
+        value = loader()
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
+        with _cache_lock:
+            current = datetime.now(timezone.utc)
+            for stale_key in [
+                stale_key
+                for stale_key, (stale_at, _) in _cache.items()
+                if stale_at <= current
+            ]:
+                _cache.pop(stale_key, None)
+                if _key_lock_users.get(stale_key, 0) == 0:
+                    _key_locks.pop(stale_key, None)
+            while len(_cache) >= _CACHE_MAX_ENTRIES:
+                evicted_key, _ = _cache.popitem(last=False)
+                if _key_lock_users.get(evicted_key, 0) == 0:
+                    _key_locks.pop(evicted_key, None)
+            _cache[key] = (expires_at, value)
+            _cache.move_to_end(key)
         return value
-    value = loader()
-    _cache[key] = (now + timedelta(seconds=ttl_seconds), value)
-    return value
+    finally:
+        _release_key_lock(key, key_lock)
 
 
 def clamp(value: float | int | None, lo: float = 0, hi: float = 100) -> float:
@@ -297,7 +370,31 @@ def compute_market_signals() -> dict:
             spy_ret5 = compute_period_return(close, 5)
             relative = ((1 + left_ret) / (1 + spy_ret5) - 1) * 100 if left_ret is not None and spy_ret5 is not None else None
             add(key, relative, label)
-        add("sectors_above_50dma", sum(1 for s in SECTOR_ETFS if _is_above_sma_frame(frames.get(s), 50)) / len(SECTOR_ETFS) * 100, "板块ETF在50日线上方%")
+        valid_sector_frames = []
+        for symbol in SECTOR_ETFS:
+            frame = frames.get(symbol)
+            if frame is None or frame.empty or "Close" not in frame.columns:
+                continue
+            if len(frame["Close"].dropna()) >= 50:
+                valid_sector_frames.append(frame)
+        sector_coverage = len(valid_sector_frames) / len(SECTOR_ETFS)
+        breadth_value = None
+        if valid_sector_frames and sector_coverage >= _MIN_SECTOR_BREADTH_COVERAGE:
+            breadth_value = (
+                sum(1 for frame in valid_sector_frames if _is_above_sma_frame(frame, 50))
+                / len(valid_sector_frames)
+                * 100
+            )
+        add("sectors_above_50dma", breadth_value, "板块ETF在50日线上方%")
+        signals["_breadth_coverage"] = {
+            "available": len(valid_sector_frames),
+            "expected": len(SECTOR_ETFS),
+            "ratio": round(sector_coverage, 3),
+        }
+        signals["_source_status"] = {
+            "value": "active" if len(valid_sector_frames) == len(SECTOR_ETFS) else "degraded",
+            "label": "板块广度数据完整" if len(valid_sector_frames) == len(SECTOR_ETFS) else "板块广度数据不完整",
+        }
         if not vix.empty:
             v = vix["Close"].iloc[-1]
             add("vix", v, "VIX")

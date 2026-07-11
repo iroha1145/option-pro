@@ -4,6 +4,8 @@ const API_BASE = '/api';
 // In-memory cache per API call. Cleared only when page reloads.
 const cache = new Map();      // key → { data, ts }
 const inflight = new Map();   // key → Promise (dedup concurrent requests)
+const latestCancellableRequest = new Map();
+let cancellableRequestSequence = 0;
 
 // Hard cap on in-memory cache to prevent unbounded growth in long sessions.
 const CACHE_MAX = 200;
@@ -13,29 +15,73 @@ function markClientCached(data) {
   return { ...data, _client_cached: true };
 }
 
-function cached(key, ttl, fn) {
+function remember(key, data) {
+  if (cache.size >= CACHE_MAX) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey) cache.delete(oldestKey);
+  }
+  cache.set(key, { data, ts: Date.now() });
+  return data;
+}
+
+function createAbortError() {
+  if (typeof DOMException === 'function') return new DOMException('Request aborted', 'AbortError');
+  const error = new Error('Request aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+function cached(key, ttl, fn, signal = null) {
   const now = Date.now();
   const entry = cache.get(key);
   if (entry && now - entry.ts < ttl) return Promise.resolve(markClientCached(entry.data));
+  if (signal?.aborted) return Promise.reject(createAbortError());
+
+  // A page-scoped request must own its fetch so leaving that page can truly
+  // abort network and server work. Shared, non-cancellable calls still use the
+  // inflight map below for cross-component de-duplication.
+  if (signal) {
+    const requestId = ++cancellableRequestSequence;
+    latestCancellableRequest.set(key, requestId);
+    return fn(signal).then(
+      (data) => {
+        // Detail-page requests may overlap when the ticker, timeframe or
+        // visibility changes quickly. Only the newest request may update the
+        // shared cache; every caller still receives its own response.
+        if (latestCancellableRequest.get(key) !== requestId) return data;
+        latestCancellableRequest.delete(key);
+        return remember(key, data);
+      },
+      (error) => {
+        if (latestCancellableRequest.get(key) === requestId) latestCancellableRequest.delete(key);
+        throw error;
+      }
+    );
+  }
+
   if (inflight.has(key)) return inflight.get(key);
   const p = fn()
     .then(data => {
-      // Simple LRU-ish: drop oldest when over cap
-      if (cache.size >= CACHE_MAX) {
-        const oldestKey = cache.keys().next().value;
-        if (oldestKey) cache.delete(oldestKey);
-      }
-      cache.set(key, { data, ts: Date.now() });
       inflight.delete(key);
-      return data;
+      return remember(key, data);
     })
     .catch(err => { inflight.delete(key); throw err; });
   inflight.set(key, p);
   return p;
 }
 
-export function invalidateCache(prefix = '') {
-  for (const k of cache.keys()) if (k.startsWith(prefix)) cache.delete(k);
+export function invalidateCache(key = '', options = {}) {
+  if (!key) {
+    cache.clear();
+    return;
+  }
+  if (options.prefix === true) {
+    for (const cachedKey of cache.keys()) {
+      if (cachedKey.startsWith(key)) cache.delete(cachedKey);
+    }
+    return;
+  }
+  cache.delete(key);
 }
 
 // Hard request timeout — prevents inflight Map from getting clogged with
@@ -69,34 +115,77 @@ function getAuthHeaders(initHeaders = {}) {
   return headers;
 }
 
-async function fetchJson(url, init, timeoutMs = REQUEST_TIMEOUT_MS) {
+async function fetchPayload(url, init, timeoutMs, readResponse) {
   const controller = new AbortController();
-  const tid = setTimeout(() => controller.abort(), timeoutMs);
+  const { signal: externalSignal, ...requestInit } = init || {};
+  let timedOut = false;
+  const abortFromPage = () => controller.abort();
+  if (externalSignal?.aborted) controller.abort();
+  else externalSignal?.addEventListener('abort', abortFromPage, { once: true });
+  const tid = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
   try {
-    const headers = getAuthHeaders(init?.headers);
-    const response = await fetch(url, { ...init, headers, signal: controller.signal });
+    const headers = getAuthHeaders(requestInit.headers);
+    const response = await fetch(url, { ...requestInit, headers, signal: controller.signal });
     if (!response.ok) {
       if (response.status === 401) {
         throw new Error('401 Unauthorized: set sessionStorage optix.app.token to your APP_AUTH_TOKEN');
       }
       throw new Error(`${response.status} ${response.statusText}`);
     }
-    return await response.json();
+    // Keep the timeout and external abort listener alive while the response
+    // body is still downloading/decoding, not only until headers arrive.
+    return await readResponse(response);
   } catch (e) {
-    if (e.name === 'AbortError') {
+    if (externalSignal?.aborted) throw createAbortError();
+    if (e.name === 'AbortError' && timedOut) {
       throw new Error(`Request timeout (${timeoutMs / 1000}s): ${url}`);
     }
     throw e;
   } finally {
     clearTimeout(tid);
+    externalSignal?.removeEventListener('abort', abortFromPage);
   }
+}
+
+async function fetchJson(url, init, timeoutMs = REQUEST_TIMEOUT_MS) {
+  return fetchPayload(url, init, timeoutMs, (response) => response.json());
+}
+
+async function fetchBlob(url, init, timeoutMs = 15 * 1000) {
+  return fetchPayload(url, init, timeoutMs, (response) => response.blob());
 }
 
 function enc(ticker) { return encodeURIComponent(String(ticker).toUpperCase()); }
 
+const WATCHLIST_TICKER_PATTERN = /^(?:\^[A-Z0-9][A-Z0-9.^_=-]{0,30}|[A-Z0-9][A-Z0-9.^_=-]{0,31})$/;
+const WATCHLIST_TICKER_LIMIT = 100;
+
+function normalizeWatchlistTickers(values) {
+  if (!Array.isArray(values)) return [];
+  const tickers = [];
+  const seen = new Set();
+  for (const value of values) {
+    const ticker = String(value || '').trim().toUpperCase();
+    if (!WATCHLIST_TICKER_PATTERN.test(ticker)) {
+      throw new Error(`Invalid watchlist ticker: ${ticker || '(empty)'}`);
+    }
+    if (seen.has(ticker)) continue;
+    seen.add(ticker);
+    tickers.push(ticker);
+    if (tickers.length > WATCHLIST_TICKER_LIMIT) {
+      throw new Error(`Watchlist supports at most ${WATCHLIST_TICKER_LIMIT} tickers`);
+    }
+  }
+  return tickers;
+}
+
 // TTL constants (ms)
 const T = {
   PRICES:  60 * 1000,        // 1 min — live-ish
+  WATCHLIST: 5 * 60 * 1000,  // 5 min — aligned with the backend snapshot
   CHART:   60 * 1000,        // 1 min
   SIGNALS: 5  * 60 * 1000,   // 5 min — daily data
   SLOW:    10 * 60 * 1000,   // 10 min — expensive endpoints
@@ -107,33 +196,55 @@ const T = {
 
 export const api = {
   // Live-ish data — short cache
-  watchlist()           { return cached('wl', T.PRICES, () => fetchJson(`${API_BASE}/stocks/watchlist`)); },
-  stock(ticker)         { return cached(`s:${enc(ticker)}`, T.PRICES, () => fetchJson(`${API_BASE}/stocks/${enc(ticker)}`)); },
-  chart(ticker, range = '1d') { return cached(`c:${enc(ticker)}:${range}`, T.CHART, () => fetchJson(`${API_BASE}/stocks/${enc(ticker)}/chart?range=${encodeURIComponent(range)}`)); },
-  search(q)             { return fetchJson(`${API_BASE}/stocks/search?q=${encodeURIComponent(q)}`); },
+  watchlist(options = {}) {
+    const isTargeted = Array.isArray(options.tickers);
+    const tickers = normalizeWatchlistTickers(options.tickers);
+    if (isTargeted && tickers.length === 0) {
+      return Promise.resolve({ groups: [], attempted: 0, succeeded: 0, source_status: 'empty' });
+    }
+    const cacheScope = tickers.length ? [...tickers].sort().join(',') : 'all';
+    const query = tickers.length ? `?tickers=${encodeURIComponent(tickers.join(','))}` : '';
+    return cached(`wl:${cacheScope}`, T.WATCHLIST, (signal) => fetchJson(`${API_BASE}/stocks/watchlist${query}`, { signal }), options.signal);
+  },
+  stock(ticker, options = {}) { return cached(`s:${enc(ticker)}`, T.PRICES, (signal) => fetchJson(`${API_BASE}/stocks/${enc(ticker)}`, { signal }), options.signal); },
+  stockLogo(ticker, options = {}) { return fetchBlob(`${API_BASE}/stocks/${enc(ticker)}/logo`, { signal: options.signal }); },
+  chart(ticker, range = '1d', options = {}) {
+    const adjustment = options.adjustment === 'adjusted' ? 'adjusted' : 'raw';
+    const query = new URLSearchParams({ range, adjustment });
+    return cached(
+      `c:${enc(ticker)}:${range}:${adjustment}`,
+      T.CHART,
+      (signal) => fetchJson(`${API_BASE}/stocks/${enc(ticker)}/chart?${query}`, { signal }),
+      options.signal,
+    );
+  },
+  search(q, options = {}) { return fetchJson(`${API_BASE}/stocks/search?q=${encodeURIComponent(q)}`, { signal: options.signal }); },
 
   // Signals — daily aggregation
-  signals(ticker)       { return cached(`sig:${enc(ticker)}`, T.SIGNALS, () => fetchJson(`${API_BASE}/signals/stock/${enc(ticker)}`)); },
-  topBottomSignals(ticker) { return cached(`tb:${enc(ticker)}`, T.SIGNALS, () => fetchJson(`${API_BASE}/signals/stock/${enc(ticker)}`)); },
-  signalAI(ticker)      { return fetchJson(`${API_BASE}/signals/stock/${enc(ticker)}/ai-analysis`, { method:'POST', headers:{'Content-Type':'application/json'} }); },
-  analyzeTopBottomSignals(ticker) { return fetchJson(`${API_BASE}/signals/stock/${enc(ticker)}/ai-analysis`, { method:'POST', headers:{'Content-Type':'application/json'} }); },
+  signals(ticker, options = {}) { return cached(`sig:${enc(ticker)}`, T.SIGNALS, (signal) => fetchJson(`${API_BASE}/signals/stock/${enc(ticker)}`, { signal }), options.signal); },
+  topBottomSignals(ticker, options = {}) { return cached(`tb:${enc(ticker)}`, T.SIGNALS, (signal) => fetchJson(`${API_BASE}/signals/stock/${enc(ticker)}`, { signal }), options.signal); },
+  signalAI(ticker, options = {}) { return fetchJson(`${API_BASE}/signals/stock/${enc(ticker)}/ai-analysis`, { method:'POST', headers:{'Content-Type':'application/json'}, signal: options.signal }); },
+  analyzeTopBottomSignals(ticker, options = {}) { return fetchJson(`${API_BASE}/signals/stock/${enc(ticker)}/ai-analysis`, { method:'POST', headers:{'Content-Type':'application/json'}, signal: options.signal }); },
 
   // Options — cache, but short
-  expirations(ticker)   { return cached(`exp:${enc(ticker)}`, T.SIGNALS, () => fetchJson(`${API_BASE}/options/${enc(ticker)}/expirations`)); },
-  optionChain(ticker, exp) {
+  expirations(ticker, options = {}) { return cached(`exp:${enc(ticker)}`, T.SIGNALS, (signal) => fetchJson(`${API_BASE}/options/${enc(ticker)}/expirations`, { signal }), options.signal); },
+  optionChain(ticker, exp, options = {}) {
     const q = exp ? `?expiration=${encodeURIComponent(exp)}` : '';
-    return cached(`oc:${enc(ticker)}:${exp || ''}`, T.OPTION, () => fetchJson(`${API_BASE}/options/${enc(ticker)}/chain${q}`));
+    return cached(`oc:${enc(ticker)}:${exp || ''}`, T.OPTION, (signal) => fetchJson(`${API_BASE}/options/${enc(ticker)}/chain${q}`, { signal }), options.signal);
   },
 
   // AI — never cached (user explicitly requests)
-  analyzeAlerts(arg1, alerts = [], extra = {}) {
-    const body = (typeof arg1 === 'object' && arg1 !== null && !Array.isArray(arg1))
+  analyzeAlerts(arg1, alertsOrOptions = [], extra = {}) {
+    const objectPayload = typeof arg1 === 'object' && arg1 !== null && !Array.isArray(arg1);
+    const options = objectPayload && !Array.isArray(alertsOrOptions) ? alertsOrOptions : {};
+    const body = objectPayload
       ? arg1
-      : { ticker: String(arg1).toUpperCase(), alerts, ...extra };
+      : { ticker: String(arg1).toUpperCase(), alerts: alertsOrOptions, ...extra };
     return fetchJson(`${API_BASE}/ai/analyze-alerts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: options.signal,
     });
   },
 
@@ -143,7 +254,7 @@ export const api = {
   sectorHeatmap(sectorId) { return cached(`shm:${sectorId}`, T.SLOW, () => fetchJson(`${API_BASE}/sectors/${encodeURIComponent(sectorId)}/heatmap`)); },
 
   // Status
-  marketStatus()        { return cached('mkt', T.PRICES, () => fetchJson(`${API_BASE}/market/status`)); },
+  marketStatus(options = {}) { return cached('mkt', T.PRICES, (signal) => fetchJson(`${API_BASE}/market/status`, { signal }), options.signal); },
   marketIndices()       { return cached('mkt-idx', T.PRICES, () => fetchJson(`${API_BASE}/market/indices`)); },
   earnings()            { return cached('earn', T.STATIC, () => fetchJson(`${API_BASE}/earnings/upcoming`)); },
 
@@ -159,7 +270,6 @@ export const api = {
   strengthScan(params = {}) {
     const query = new URLSearchParams();
     const scanParams = { ...params };
-    if (!scanParams.cache_ttl) scanParams.cache_ttl = 15 * 60;
     Object.entries(scanParams).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') query.set(key, value);
     });

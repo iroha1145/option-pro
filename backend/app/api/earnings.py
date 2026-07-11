@@ -179,28 +179,39 @@ async def _build_upcoming_earnings(today: date):
         def _work():
             try:
                 tk = yf.Ticker(ticker)
-                info = tk.info
-                name = info.get("shortName", ticker)
-
-                cal = tk.calendar
-
+                try:
+                    cal = tk.calendar
+                except Exception:
+                    cal = None
                 calendar_dates = _collect_dates(_calendar_get(cal, "Earnings Date"))
-                table_dates = _earnings_dates_from_table(tk)
-                timestamp_dates = []
-                timestamp_dates.extend(_collect_dates(info.get("earningsTimestamp")))
-                timestamp_dates.extend(_collect_dates(info.get("earningsTimestampStart")))
-                timestamp_dates.extend(_collect_dates(info.get("earningsTimestampEnd")))
-
-                next_date = (
-                    _next_future_date(calendar_dates, today)
-                    or _next_future_date(table_dates, today)
-                    or _next_future_date(timestamp_dates, today)
-                )
+                next_date = _next_future_date(calendar_dates, today)
+                table_dates: list[date] = []
                 if next_date is None:
-                    return {"ticker": ticker, "ok": True, "data": None}
+                    # The dates table is a slower fallback. Avoid it when the
+                    # lightweight calendar already has a usable future date.
+                    table_dates = _earnings_dates_from_table(tk)
+                    next_date = _next_future_date(table_dates, today)
+
+                source_observed = bool(calendar_dates or table_dates)
+                if next_date is None:
+                    return {
+                        "ticker": ticker,
+                        "ok": source_observed,
+                        "source_observed": source_observed,
+                        "data": None,
+                    }
                 earnings_date = next_date.isoformat()
 
-                return {"ticker": ticker, "ok": True, "data": {
+                # Full quote-summary info is expensive. Fetch it only after a
+                # ticker has been confirmed as an upcoming earnings match.
+                try:
+                    info_value = tk.info
+                    info = info_value if isinstance(info_value, dict) else {}
+                except Exception:
+                    info = {}
+                name = info.get("shortName", ticker)
+
+                return {"ticker": ticker, "ok": True, "source_observed": True, "data": {
                     "ticker": ticker,
                     "name": name,
                     "earnings_date": earnings_date,
@@ -213,7 +224,7 @@ async def _build_upcoming_earnings(today: date):
                     "sector": info.get("sector", ""),
                 }}
             except Exception:
-                return {"ticker": ticker, "ok": False, "data": None}
+                return {"ticker": ticker, "ok": False, "source_observed": False, "data": None}
 
         async with sem:
             return await asyncio.to_thread(_work)

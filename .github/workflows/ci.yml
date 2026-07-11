@@ -13,27 +13,48 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     env:
       PYTHONPATH: backend
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - name: Set up Python 3.12.13
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: "3.12"
+          python-version: "3.12.13"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-ci.txt
 
-      - name: Install locked runtime and test dependencies
+      - name: Prepare build metadata and environment
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r backend/requirements.txt pytest==8.3.4
+          cp .env.example .env
+          echo "APP_COMMIT=${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "APP_VERSION=${GITHUB_SHA:0:12}" >> "$GITHUB_ENV"
+
+      - name: Verify dependency locks match their source files
+        shell: bash
+        run: |
+          runtime_hash="$(sha256sum backend/requirements.in | awk '{print $1}')"
+          ci_hash="$(cat backend/requirements.in backend/requirements-ci.in | sha256sum | awk '{print $1}')"
+          grep -qx "# source-sha256: ${runtime_hash}" backend/requirements.txt
+          grep -qx "# source-sha256: ${ci_hash}" backend/requirements-ci.txt
+
+      - name: Install locked test and audit dependencies
+        run: python -m pip install --require-hashes -r backend/requirements-ci.txt
+
+      - name: Check installed dependency consistency
+        run: python -m pip check
+
+      - name: Audit locked runtime dependencies
+        run: python -m pip_audit --require-hashes --disable-pip -r backend/requirements.txt
 
       - name: Run Python tests
         run: python -m pytest -q
@@ -48,10 +69,37 @@ jobs:
             node --check "$file"
           done < <(git ls-files -z 'frontend/**/*.js')
 
-      - name: Check setup script syntax
-        run: bash -n setup.sh
+      - name: Check shell script syntax
+        run: bash -n setup.sh scripts/deploy.sh scripts/lock-dependencies.sh
 
       - name: Validate Docker Compose configuration
+        run: docker compose config -q
+
+      - name: Build production image
+        run: docker compose build backend
+
+      - name: Start production container and wait for readiness
+        run: docker compose up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180
+
+      - name: Smoke-test version, frontend, headers, and compression
+        shell: bash
         run: |
-          cp .env.example .env
-          docker compose config -q
+          curl --fail --silent --show-error --retry 5 http://127.0.0.1:2000/ready |
+            python -c 'import json, os, sys; p=json.load(sys.stdin); assert p["status"] == "ready"; assert p["app_commit"] == os.environ["APP_COMMIT"]; assert p["frontend"]["ready"] is True'
+          curl --fail --silent --show-error http://127.0.0.1:2000/health |
+            python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "ok"; assert len(p["frontend"]["sha256"]) == 64'
+          curl --fail --silent --show-error -D /tmp/optix-root.headers -o /tmp/optix-root.html http://127.0.0.1:2000/
+          grep -qi '^content-security-policy:' /tmp/optix-root.headers
+          grep -qi '^cache-control:.*no-store' /tmp/optix-root.headers
+          grep -q '<title>Optix Pro' /tmp/optix-root.html
+          curl --fail --silent --show-error -H 'Accept-Encoding: gzip' -D /tmp/optix-static.headers -o /tmp/optix-styles.gz http://127.0.0.1:2000/static/css/optix-core-v3.css
+          grep -qi '^content-encoding: gzip' /tmp/optix-static.headers
+          grep -qi '^cache-control:.*max-age=300' /tmp/optix-static.headers
+
+      - name: Show container logs after failure
+        if: failure()
+        run: docker compose logs --tail=200 backend
+
+      - name: Clean up containers
+        if: always()
+        run: docker compose down --remove-orphans

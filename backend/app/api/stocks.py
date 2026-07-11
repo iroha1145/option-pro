@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
 import math
+import re
 import time
-from typing import Any
+from typing import Annotated, Any, Optional
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -37,14 +39,26 @@ _endpoint_cache: dict[str, _EndpointCacheEntry] = {}
 # Per-key lock prevents thundering herd: concurrent requests for the same
 # cold key would otherwise all kick off their own yfinance fetch.
 _endpoint_locks: dict[str, asyncio.Lock] = {}
+_endpoint_lock_users: dict[str, int] = {}
 _ENDPOINT_PURGE_THRESHOLD = 2048
+_ENDPOINT_MAX_ENTRIES = 2048
 
 def _lock_for(key: str) -> asyncio.Lock:
     lock = _endpoint_locks.get(key)
     if lock is None:
         lock = asyncio.Lock()
         _endpoint_locks[key] = lock
+    _endpoint_lock_users[key] = _endpoint_lock_users.get(key, 0) + 1
     return lock
+
+def _release_lock(key: str, lock: asyncio.Lock) -> None:
+    remaining = _endpoint_lock_users.get(key, 1) - 1
+    if remaining > 0:
+        _endpoint_lock_users[key] = remaining
+        return
+    _endpoint_lock_users.pop(key, None)
+    if key not in _endpoint_cache and _endpoint_locks.get(key) is lock:
+        _endpoint_locks.pop(key, None)
 
 def _maybe_purge_endpoint_cache(now: float) -> None:
     """Bound memory: per-ticker keys (stock:/chart:/logo:) accumulate forever
@@ -53,7 +67,14 @@ def _maybe_purge_endpoint_cache(now: float) -> None:
         return
     for key in [k for k, entry in _endpoint_cache.items() if entry.stale_until <= now]:
         _endpoint_cache.pop(key, None)
-    for key in [k for k, lock in _endpoint_locks.items() if k not in _endpoint_cache and not lock.locked()]:
+    if len(_endpoint_cache) >= _ENDPOINT_MAX_ENTRIES:
+        remove_count = len(_endpoint_cache) - _ENDPOINT_MAX_ENTRIES + 1
+        for key, _ in sorted(
+            _endpoint_cache.items(),
+            key=lambda item: item[1].stale_until,
+        )[:remove_count]:
+            _endpoint_cache.pop(key, None)
+    for key in [k for k in _endpoint_locks if k not in _endpoint_cache and _endpoint_lock_users.get(k, 0) == 0]:
         _endpoint_locks.pop(key, None)
 
 def _cache_result(entry: _EndpointCacheEntry, *, stale: bool) -> Any:
@@ -90,27 +111,31 @@ async def _cached_endpoint(key: str, ttl: int, loader, *, stale_ttl: int | None 
     if hit and hit.expires_at > now:
         return _cache_result(hit, stale=False)
     # Serialize cold-cache fills per key
-    async with _lock_for(key):
-        # Re-check after acquiring lock (another waiter may have filled it)
-        now = time.time()
-        hit = _usable_hit(key, now)
-        if hit and hit.expires_at > now:
-            return _cache_result(hit, stale=False)
-        try:
-            value = await loader()
-        except Exception:
-            if hit and now <= hit.stale_until:
-                return _cache_result(hit, stale=True)
-            raise
-        _maybe_purge_endpoint_cache(now)
-        entry = _EndpointCacheEntry(
-            expires_at=now + ttl,
-            stale_until=now + ttl + stale_ttl,
-            fetched_at=now,
-            value=value,
-        )
-        _endpoint_cache[key] = entry
-        return _cache_result(entry, stale=False)
+    lock = _lock_for(key)
+    try:
+        async with lock:
+            # Re-check after acquiring lock (another waiter may have filled it)
+            now = time.time()
+            hit = _usable_hit(key, now)
+            if hit and hit.expires_at > now:
+                return _cache_result(hit, stale=False)
+            try:
+                value = await loader()
+            except Exception:
+                if hit and now <= hit.stale_until:
+                    return _cache_result(hit, stale=True)
+                raise
+            _maybe_purge_endpoint_cache(now)
+            entry = _EndpointCacheEntry(
+                expires_at=now + ttl,
+                stale_until=now + ttl + stale_ttl,
+                fetched_at=now,
+                value=value,
+            )
+            _endpoint_cache[key] = entry
+            return _cache_result(entry, stale=False)
+    finally:
+        _release_lock(key, lock)
 
 
 from app.services.utils import sanitize as _sanitize
@@ -225,21 +250,85 @@ KNOWN_TICKERS = {
 }
 
 
+_WATCHLIST_MAX_TICKERS = 100
+_WATCHLIST_QUERY_MAX_LENGTH = 4096
+_WATCHLIST_TICKER_PATTERN = re.compile(
+    r"^(?:\^[A-Z0-9][A-Z0-9.^_=-]{0,30}|[A-Z0-9][A-Z0-9.^_=-]{0,31})$"
+)
+
+
+def _parse_watchlist_tickers(raw: str | None) -> list[str] | None:
+    """Normalize an optional comma-separated watchlist query.
+
+    ``None`` means the caller wants the original full watchlist. An explicit
+    but empty value is rejected so a malformed targeted request cannot
+    accidentally trigger the substantially larger full-universe download.
+    """
+    if raw is None:
+        return None
+    if len(raw) > _WATCHLIST_QUERY_MAX_LENGTH:
+        raise HTTPException(status_code=400, detail="Watchlist query is too long")
+
+    parts = raw.split(",")
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        ticker = part.strip().upper()
+        if not ticker or not _WATCHLIST_TICKER_PATTERN.fullmatch(ticker):
+            raise HTTPException(status_code=400, detail=f"Invalid ticker: {part.strip() or '(empty)'}")
+        if ticker in seen:
+            continue
+        seen.add(ticker)
+        normalized.append(ticker)
+        if len(normalized) > _WATCHLIST_MAX_TICKERS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"A maximum of {_WATCHLIST_MAX_TICKERS} tickers is allowed",
+            )
+    return normalized
+
+
+def _watchlist_cache_key(tickers: list[str] | None) -> str:
+    if tickers is None:
+        return "watchlist"
+    canonical_set = ",".join(sorted(tickers))
+    digest = hashlib.sha256(canonical_set.encode("ascii")).hexdigest()
+    return f"watchlist:set:{digest}"
+
+
 @router.get("/watchlist")
-async def watchlist():
+async def watchlist(
+    tickers: Annotated[
+        Optional[str],
+        Query(max_length=_WATCHLIST_QUERY_MAX_LENGTH),
+    ] = None,
+):
+    requested_tickers = _parse_watchlist_tickers(tickers)
+    cache_key = _watchlist_cache_key(requested_tickers)
+    # Keep the zero-argument loader for the original endpoint. Besides
+    # preserving behavior, this remains compatible with tests and callers
+    # that replace ``_build_watchlist`` with a zero-argument function.
+    loader = (
+        _build_watchlist
+        if requested_tickers is None
+        else lambda: _build_watchlist(requested_tickers)
+    )
     try:
-        return await _cached_endpoint("watchlist", 300, _build_watchlist, stale_ttl=900)
+        return await _cached_endpoint(cache_key, 300, loader, stale_ttl=900)
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Yahoo watchlist data is currently unavailable") from exc
 
 
-async def _build_watchlist():
+async def _build_watchlist(requested_tickers: list[str] | None = None):
     from app.services.sectors import SECTORS
 
-    all_tickers = []
-    for sec in SECTORS.values():
-        all_tickers.extend(sec["tickers"])
-    all_tickers = list(dict.fromkeys(all_tickers))
+    if requested_tickers is None:
+        all_tickers = []
+        for sec in SECTORS.values():
+            all_tickers.extend(sec["tickers"])
+        all_tickers = list(dict.fromkeys(all_tickers))
+    else:
+        all_tickers = requested_tickers
 
     # Fetch daily closes once and derive both card prices and sparklines from
     # the same batch. This avoids one fast_info request per ticker on cold load.
@@ -296,10 +385,34 @@ async def _build_watchlist():
         raise RuntimeError(f"watchlist mostly failed ({len(price_map)}/{len(all_tickers)} succeeded)")
 
     groups = []
-    for sec_id, sec in SECTORS.items():
-        items = [price_map[t] for t in sec["tickers"] if t in price_map]
-        if items:
-            groups.append({"id": sec_id, "name": sec["name"], "stocks": items})
+    if requested_tickers is None:
+        # Preserve the full-watchlist response exactly, including symbols that
+        # intentionally appear in more than one sector.
+        for sec_id, sec in SECTORS.items():
+            items = [price_map[t] for t in sec["tickers"] if t in price_map]
+            if items:
+                groups.append({"id": sec_id, "name": sec["name"], "stocks": items})
+    else:
+        # A targeted response contains each requested ticker at most once.
+        # Assign known symbols to their first matching sector, then retain
+        # arbitrary valid Yahoo symbols in a custom group.
+        requested_set = set(requested_tickers)
+        assigned: set[str] = set()
+        for sec_id, sec in SECTORS.items():
+            items = []
+            for ticker in sec["tickers"]:
+                if ticker in requested_set and ticker in price_map and ticker not in assigned:
+                    items.append(price_map[ticker])
+                    assigned.add(ticker)
+            if items:
+                groups.append({"id": sec_id, "name": sec["name"], "stocks": items})
+        custom_items = [
+            price_map[ticker]
+            for ticker in requested_tickers
+            if ticker in price_map and ticker not in assigned
+        ]
+        if custom_items:
+            groups.append({"id": "custom", "name": "自定义", "stocks": custom_items})
 
     return _sanitize({
         "groups": groups,
@@ -541,12 +654,15 @@ async def _stock_overview_impl(ticker: str):
             "website": website,
             "logo_url": logo_urls[0] if logo_urls else None,
             "logo_urls": logo_urls,
-            "price": round(last_price, 2),
-            "change": round(last_price - prev_close, 2),
-            "change_percent": round((last_price - prev_close) / prev_close * 100, 2) if prev_close else 0,
+            # Preserve provider precision here. Presentation layers can choose
+            # the appropriate decimals without turning a sub-dollar quote into
+            # a different price from the raw K-line shown on the same page.
+            "price": last_price,
+            "change": last_price - prev_close,
+            "change_percent": (last_price - prev_close) / prev_close * 100 if prev_close else 0,
             "volume": int(fi.last_volume) if fi.last_volume else None,
             "market_cap": float(fi.market_cap) if fi.market_cap else None,
-            "prev_close": round(prev_close, 2),
+            "prev_close": prev_close,
             "high": info.get("dayHigh"),
             "low": info.get("dayLow"),
             "open": info.get("open"),
@@ -615,25 +731,27 @@ def _normalize_extended_quote_bar(
         ref_move = max(abs(float(bar["o"]) / reference_close - 1), abs(float(bar["c"]) / reference_close - 1))
         if ref_move > 0.20:
             return None
-    bar["h"] = round(body_high, 2)
-    bar["l"] = round(body_low, 2)
     bar["quote_only"] = True
     return bar
 
 
 @router.get("/{ticker}/chart")
-async def stock_chart(ticker: str, range: str = Query("1d", pattern="^(5m|15m|1h|1d|1w)$")):
+async def stock_chart(
+    ticker: str,
+    range: str = Query("1d", pattern="^(5m|15m|1h|1d|1w)$"),
+    adjustment: str = Query("raw", pattern="^(raw|adjusted)$"),
+):
     try:
         return await _cached_endpoint(
-            f"chart:{ticker.upper()}:{range}",
+            f"chart:{ticker.upper()}:{range}:{adjustment}",
             _CHART_TTL.get(range, 600),
-            lambda: _stock_chart_impl(ticker, range),
+            lambda: _stock_chart_impl(ticker, range, adjustment),
         )
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Yahoo chart data is currently unavailable") from exc
 
 
-async def _stock_chart_impl(ticker: str, range: str):
+async def _stock_chart_impl(ticker: str, range: str, adjustment: str = "raw"):
     def _work():
         # Buttons = K-line intervals (周期), fetch plenty of data for scrolling
         # (yf_period, yf_interval, prepost, visible_bars)
@@ -646,40 +764,91 @@ async def _stock_chart_impl(ticker: str, range: str):
             "1w":  ("5y",   "1wk", False, 104),    # 周K线, fetch 5 years
         }
         yf_period, interval, prepost, visible = config.get(range, ("1y", "1d", False, 120))
+        symbol = ticker.upper()
+        auto_adjust = adjustment == "adjusted"
 
-        tk = yf.Ticker(ticker.upper())
-        hist = tk.history(period=yf_period, interval=interval, prepost=prepost)
+        def response_metadata(*, source_status: str, bars: list[dict[str, Any]]) -> dict[str, Any]:
+            fetched_at = datetime.now(timezone.utc).isoformat()
+            last_bar_at = (
+                datetime.fromtimestamp(int(bars[-1]["t"]), timezone.utc).isoformat()
+                if bars
+                else None
+            )
+            return {
+                "ticker": symbol,
+                "range": range,
+                "period": yf_period,
+                "interval": interval,
+                "exchange_timezone": "America/New_York",
+                "price_adjustment": adjustment,
+                "include_extended_hours": prepost,
+                "moving_average_scope": "regular_session_only",
+                "as_of": fetched_at,
+                "last_bar_at": last_bar_at,
+                "source_status": source_status,
+                "visible": visible,
+            }
+
+        tk = yf.Ticker(symbol)
+        hist = tk.history(
+            period=yf_period,
+            interval=interval,
+            prepost=prepost,
+            auto_adjust=auto_adjust,
+        )
         if hist.empty:
-            return {"bars": [], "ema20": [], "sma50": []}
+            return {
+                **response_metadata(source_status="empty", bars=[]),
+                "bars": [],
+                "ema20": [],
+                "sma50": [],
+            }
 
-        raw_bars = []
+        raw_bars_by_time: dict[int, dict[str, Any]] = {}
         for idx, row in hist.iterrows():
-            t = int(idx.timestamp())
             try:
-                o, h, l, c = (
-                    round(float(row["Open"]), 2),
-                    round(float(row["High"]), 2),
-                    round(float(row["Low"]), 2),
-                    round(float(row["Close"]), 2),
-                )
+                dt = idx.to_pydatetime()
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=_NEW_YORK_TZ)
+                t = int(dt.timestamp())
+                o = float(row["Open"])
+                h = float(row["High"])
+                l = float(row["Low"])
+                c = float(row["Close"])
             except Exception:
                 continue
             if not all(math.isfinite(v) and v > 0 for v in (o, h, l, c)):
                 continue
+            if l > min(o, c) or h < max(o, c) or l > h:
+                continue
             try:
                 volume_raw = float(row.get("Volume", 0))
-                v = max(0, int(volume_raw)) if math.isfinite(volume_raw) else 0
+                if math.isfinite(volume_raw) and volume_raw < 0:
+                    continue
+                v = int(volume_raw) if math.isfinite(volume_raw) else 0
             except Exception:
                 v = 0
-            bar = {"t": t, "o": o, "h": h, "l": l, "c": c, "v": v}
+            bar = {
+                "t": t,
+                "o": o,
+                "h": h,
+                "l": l,
+                "c": c,
+                "v": v,
+                "ext": False,
+                "quote_only": False,
+            }
             if prepost:
-                dt = idx.to_pydatetime()
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=_NEW_YORK_TZ)
-                else:
-                    dt = dt.astimezone(_NEW_YORK_TZ)
-                bar["_ny_min"] = dt.hour * 60 + dt.minute
-            raw_bars.append(bar)
+                ny_dt = dt.astimezone(_NEW_YORK_TZ)
+                bar["_ny_min"] = ny_dt.hour * 60 + ny_dt.minute
+            else:
+                bar["session"] = "regular"
+            # Yahoo can occasionally return duplicate timestamps after a data
+            # repair. Keep the last valid row and sort once below so the public
+            # contract is strictly increasing and deterministic.
+            raw_bars_by_time[t] = bar
+
+        raw_bars = [raw_bars_by_time[t] for t in sorted(raw_bars_by_time)]
 
         # For intraday with prepost: keep valid extended-hours bars and tag
         # them so the frontend can visually distinguish pre/post-market.
@@ -709,18 +878,27 @@ async def _stock_chart_impl(ticker: str, range: str):
         else:
             bars = raw_bars
 
-        # Compute EMA/SMA on FULL fetch window (more data = smoother lines)
-        closes = [b["c"] for b in bars]
-        times = [b["t"] for b in bars]
+        # Extended-hours quotes do not belong in regular-session indicators.
+        # Daily and weekly bars are tagged regular above, so the same rule is
+        # explicit and consistent for every interval.
+        indicator_bars = [b for b in bars if b.get("session") == "regular"]
+        closes = [b["c"] for b in indicator_bars]
+        times = [b["t"] for b in indicator_bars]
 
         ema20 = _compute_ema(closes, 20)
         sma50 = _compute_sma(closes, 50)
 
-        ema20_data = [{"time": times[i + len(closes) - len(ema20)], "value": round(v, 2)} for i, v in enumerate(ema20)]
-        sma50_data = [{"time": times[i + len(closes) - len(sma50)], "value": round(v, 2)} for i, v in enumerate(sma50)]
+        ema20_data = [{"time": times[i + len(closes) - len(ema20)], "value": v} for i, v in enumerate(ema20)]
+        sma50_data = [{"time": times[i + len(closes) - len(sma50)], "value": v} for i, v in enumerate(sma50)]
 
         # Send ALL data to frontend — let TradingView handle scrolling
         # visible tells frontend how many bars to show initially
-        return {"bars": bars, "ema20": ema20_data, "sma50": sma50_data, "visible": visible}
+        source_status = "active" if bars else "empty"
+        return {
+            **response_metadata(source_status=source_status, bars=bars),
+            "bars": bars,
+            "ema20": ema20_data,
+            "sma50": sma50_data,
+        }
 
     return _sanitize(await asyncio.to_thread(_work))

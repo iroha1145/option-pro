@@ -202,6 +202,24 @@ def _hash_payload(obj) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
+def _analysis_cache_key(prefix: str, payload: Any, *, use_web_search: bool) -> str:
+    """Bind cached analysis to its inputs and the model configuration.
+
+    Web-backed answers also roll over daily so a 24-hour cache cannot survive
+    into a new market day merely because the ticker stayed the same.
+    """
+    settings = get_settings()
+    envelope: dict[str, Any] = {
+        "payload": _sanitize_ai(payload),
+        "model": settings.openai_model,
+        "reasoning": settings.openai_reasoning,
+        "web_search": use_web_search,
+    }
+    if use_web_search:
+        envelope["utc_date"] = datetime.now(timezone.utc).date().isoformat()
+    return f"{prefix}:{_hash_payload(envelope)}"
+
+
 def _format_number(value: Any, decimals: int = 0) -> str:
     try:
         number = float(value)
@@ -420,7 +438,12 @@ def analyze_signals(ticker: str, signals: dict, scores: dict, fingerprint: str =
 
 
 def analyze_earnings_correlation(earnings: list[dict], fingerprint: str = "") -> dict:
-    cache_key = "earnings_correlation"
+    prompt_earnings = earnings[:10]
+    cache_key = _analysis_cache_key(
+        "earnings_correlation",
+        prompt_earnings,
+        use_web_search=True,
+    )
     cached = _cache_get(cache_key)
     if cached is not None:
         return {**cached, "_cached": True}
@@ -431,7 +454,7 @@ def analyze_earnings_correlation(earnings: list[dict], fingerprint: str = "") ->
     earnings_text = "\n".join([
         f"- {e.get('ticker', '')} ({e.get('name','')}): 财报日期 {e.get('earnings_date','')}, "
         f"EPS预估 {e.get('eps_estimate','N/A')}, 行业: {e.get('sector','')}"
-        for e in earnings[:10]
+        for e in prompt_earnings
     ])
 
     prompt = f"""你是一位资深美股分析师。分析以下即将发布的财报，使用联网搜索获取最新市场信息，判断每家公司财报对关联公司的潜在影响。
@@ -461,7 +484,11 @@ def analyze_single_earnings_impact(earning: dict, fingerprint: str = "") -> dict
     if not ticker:
         return {"summary": "缺少代码", "impacted": []}
 
-    cache_key = f"earnings_impact:{ticker}"
+    cache_key = _analysis_cache_key(
+        f"earnings_impact:{ticker}",
+        earning,
+        use_web_search=True,
+    )
     cached = _cache_get(cache_key)
     if cached is not None:
         return {**cached, "_cached": True}

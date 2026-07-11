@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -101,6 +102,56 @@ def test_ai_route_rejects_body_larger_than_64_kib():
     assert response.status_code == 413
 
 
+def test_ai_route_rejects_chunked_body_larger_than_64_kib():
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+
+    def chunks():
+        yield b"x" * (_MAX_AI_BODY_BYTES // 2)
+        yield b"x" * (_MAX_AI_BODY_BYTES // 2 + 1)
+
+    response = client.post(
+        "/api/ai/analyze-alerts",
+        content=chunks(),
+        headers={"content-type": "application/json"},
+    )
+    assert response.status_code == 413
+
+
+def test_ai_route_reparses_valid_chunked_json(monkeypatch):
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    monkeypatch.setattr(
+        ai_analysis,
+        "analyze_option_alerts",
+        lambda *_args, **_kwargs: {"summary": "ok"},
+    )
+    body = json.dumps(
+        {
+            "ticker": "AAPL",
+            "alerts": [],
+            "underlying_price": 0,
+            "expiration": "",
+        }
+    ).encode()
+
+    def chunks():
+        midpoint = len(body) // 2
+        yield body[:midpoint]
+        yield body[midpoint:]
+
+    response = client.post(
+        "/api/ai/analyze-alerts",
+        content=chunks(),
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"summary": "ok"}
+
+
 def test_identical_ai_requests_use_single_flight(monkeypatch):
     settings = SimpleNamespace(
         openai_model="test-model",
@@ -137,3 +188,49 @@ def test_identical_ai_requests_use_single_flight(monkeypatch):
     assert len(calls) == 1
     assert calls[0]["max_output_tokens"] == 256
     assert "tools" not in calls[0]
+
+
+def test_earnings_analysis_cache_is_bound_to_inputs_and_model(monkeypatch):
+    settings = SimpleNamespace(openai_model="model-a", openai_reasoning="low")
+    calls: list[str] = []
+
+    def fake_ask(prompt: str, use_web_search: bool = False) -> str:
+        calls.append(prompt)
+        return '{"summary":"ok","correlations":[]}'
+
+    monkeypatch.setattr(ai_analysis, "get_settings", lambda: settings)
+    monkeypatch.setattr(ai_analysis, "_ask", fake_ask)
+    ai_analysis._cache.clear()
+
+    first = [{"ticker": "AAA", "earnings_date": "2026-07-15"}]
+    second = [{"ticker": "BBB", "earnings_date": "2026-07-16"}]
+    ai_analysis.analyze_earnings_correlation(first)
+    cached = ai_analysis.analyze_earnings_correlation(first)
+    ai_analysis.analyze_earnings_correlation(second)
+    settings.openai_model = "model-b"
+    ai_analysis.analyze_earnings_correlation(second)
+
+    assert cached["_cached"] is True
+    assert len(calls) == 3
+
+
+def test_single_earnings_cache_changes_with_event_data(monkeypatch):
+    settings = SimpleNamespace(openai_model="model-a", openai_reasoning="low")
+    calls: list[str] = []
+
+    def fake_ask(prompt: str, use_web_search: bool = False) -> str:
+        calls.append(prompt)
+        return '{"summary":"ok","impacted":[]}'
+
+    monkeypatch.setattr(ai_analysis, "get_settings", lambda: settings)
+    monkeypatch.setattr(ai_analysis, "_ask", fake_ask)
+    ai_analysis._cache.clear()
+
+    ai_analysis.analyze_single_earnings_impact(
+        {"ticker": "AAA", "earnings_date": "2026-07-15", "eps_estimate": 1.0}
+    )
+    ai_analysis.analyze_single_earnings_impact(
+        {"ticker": "AAA", "earnings_date": "2026-07-16", "eps_estimate": 1.1}
+    )
+
+    assert len(calls) == 2

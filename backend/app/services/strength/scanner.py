@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import math
+from bisect import bisect_left, bisect_right
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime, timedelta, timezone
 from time import monotonic
@@ -38,6 +39,7 @@ PROFILES = ("conservative", "balanced", "aggressive")
 UNIVERSES = ("themes",)
 BENCHMARKS = MARKET_BENCHMARKS
 SECTOR_PERIOD_DAYS = {"1mo": 20, "3mo": 63, "6mo": 126}
+STRENGTH_CACHE_TTL_SECONDS = 900
 
 _FALLBACK_MAX_WORKERS = 8
 _FALLBACK_TOTAL_BUDGET_SECONDS = 20.0
@@ -104,11 +106,13 @@ def _pct_rank(items: list[dict[str, Any]], key: str) -> dict[str, float]:
     denom = max(len(values) - 1, 1)
     ranks: dict[str, float] = {}
     for row in items:
-      value = row.get(key)
-      if value is None:
-          continue
-      below = sum(1 for candidate in values if candidate <= value)
-      ranks[row["ticker"]] = round((below - 1) / denom * 100, 1)
+        value = row.get(key)
+        if value is None:
+            continue
+        below = bisect_left(values, value)
+        tied = bisect_right(values, value) - below
+        midrank = below + (tied - 1) / 2
+        ranks[row["ticker"]] = round(midrank / denom * 100, 1)
     return ranks
 
 
@@ -413,7 +417,6 @@ def _download_finnhub_history(tickers: list[str], period: str) -> tuple[pd.DataF
                         "resolution": "D",
                         "from": start_ts,
                         "to": end_ts,
-                        "token": token,
                     },
                 )
                 response.raise_for_status()
@@ -1216,10 +1219,8 @@ async def scan_strength(
     sector_id: str | None = None,
     min_price: float = 5.0,
     min_avg_dollar_volume: float = 10_000_000,
-    ttl: int = 600,
     include_options: bool = True,
 ) -> dict[str, Any]:
-    ttl = max(1, int(ttl))
     settings = get_settings()
     key = (
         f"strength:{universe}:{timeframe}:{profile}:{top}:{sector_id}:{min_price}:{min_avg_dollar_volume}"
@@ -1227,7 +1228,6 @@ async def scan_strength(
         f":yo:{int(yahoo_options_is_enabled(settings) and include_options)}:{settings.yahoo_options_enrich_limit}"
         f":ydte:{settings.yahoo_option_target_dte}:ywin:{settings.yahoo_option_strike_window_pct}"
         f":opt:{int(include_options)}"
-        f":ttl:{ttl}"
         ":mr:v4:spread:voltruth:pa1"
     )
 
@@ -1245,11 +1245,15 @@ async def scan_strength(
             include_options=include_options,
         )
 
-    payload, was_cached, expires_at = await cache.get_or_set_with_meta(key, ttl, produce)
+    payload, was_cached, expires_at = await cache.get_or_set_with_meta(
+        key,
+        STRENGTH_CACHE_TTL_SECONDS,
+        produce,
+    )
     return {
         **payload,
         "_cached": was_cached,
-        "cache_ttl_seconds": ttl,
+        "cache_ttl_seconds": STRENGTH_CACHE_TTL_SECONDS,
         "cache_expires_at": datetime.fromtimestamp(expires_at, timezone.utc).isoformat(),
     }
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from datetime import date, datetime, time as datetime_time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -33,7 +34,17 @@ async def _build_indices():
         try:
             fi = yf.Ticker(symbol).fast_info
             price = float(fi.last_price)
-            prev = float(fi.previous_close) if fi.previous_close else price
+            if not math.isfinite(price) or price <= 0:
+                raise ValueError("non-finite index price")
+            try:
+                previous_close = getattr(fi, "previous_close", None)
+                prev = float(previous_close) if previous_close is not None else price
+                if not math.isfinite(prev) or prev <= 0:
+                    prev = price
+            except Exception:
+                # Some yfinance fast_info properties raise independently. A
+                # missing previous close should not discard a valid live price.
+                prev = price
             return {
                 "symbol": symbol,
                 "price": round(price, 2),

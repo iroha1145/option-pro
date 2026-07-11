@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, time as datetime_time, timedelta, timezone
 import math
+import threading
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -50,6 +51,9 @@ if _yf_session is not None:
 # (expires_at, fetched_at, data) so stale fallbacks have a hard age limit and
 # can disclose their provenance to API callers.
 _cache: dict[str, tuple[datetime, datetime, Any]] = {}
+_cache_lock = threading.RLock()
+_key_locks: dict[str, threading.Lock] = {}
+_key_lock_users: dict[str, int] = {}
 _CACHE_PURGE_THRESHOLD = 1024
 _MAX_STALE_SECONDS = 30 * 60
 
@@ -59,14 +63,43 @@ _SECONDS_PER_YEAR = 365.0 * 24 * 60 * 60
 
 def _purge_cache(now: datetime) -> None:
     """Drop expired entries so per-ticker/expiration keys can't pile up forever."""
-    if len(_cache) < _CACHE_PURGE_THRESHOLD:
-        return
-    for key in [k for k, (_, fetched_at, _) in _cache.items() if (now - fetched_at).total_seconds() > _MAX_STALE_SECONDS]:
-        _cache.pop(key, None)
     if len(_cache) >= _CACHE_PURGE_THRESHOLD:
-        # Still too big (all entries fresh): drop the oldest-expiring half.
-        for key, _ in sorted(_cache.items(), key=lambda item: item[1][0])[: len(_cache) // 2]:
+        for key in [k for k, (_, fetched_at, _) in _cache.items() if (now - fetched_at).total_seconds() > _MAX_STALE_SECONDS]:
             _cache.pop(key, None)
+        if len(_cache) >= _CACHE_PURGE_THRESHOLD:
+            # Still too big (all entries fresh): drop the oldest-expiring half.
+            for key, _ in sorted(_cache.items(), key=lambda item: item[1][0])[: len(_cache) // 2]:
+                _cache.pop(key, None)
+    for key in [
+        key
+        for key in _key_locks
+        if key not in _cache and _key_lock_users.get(key, 0) == 0
+    ]:
+        _key_locks.pop(key, None)
+
+
+def _acquire_key_lock(key: str) -> threading.Lock:
+    """Reserve a per-key lock without leaving failed unique keys behind."""
+    with _cache_lock:
+        key_lock = _key_locks.get(key)
+        if key_lock is None:
+            key_lock = threading.Lock()
+            _key_locks[key] = key_lock
+        _key_lock_users[key] = _key_lock_users.get(key, 0) + 1
+    key_lock.acquire()
+    return key_lock
+
+
+def _release_key_lock(key: str, key_lock: threading.Lock) -> None:
+    key_lock.release()
+    with _cache_lock:
+        remaining = _key_lock_users.get(key, 1) - 1
+        if remaining > 0:
+            _key_lock_users[key] = remaining
+            return
+        _key_lock_users.pop(key, None)
+        if key not in _cache and _key_locks.get(key) is key_lock:
+            _key_locks.pop(key, None)
 
 
 def _cache_value(value: Any, metadata: dict[str, Any], with_metadata: bool) -> Any:
@@ -79,7 +112,7 @@ def _cache_value(value: Any, metadata: dict[str, Any], with_metadata: bool) -> A
         if metadata["_stale"]:
             result["source_status"] = "stale"
         else:
-            result.setdefault("source_status", "active")
+            result.setdefault("source_status", metadata["source_status"])
         return result
     return value
 
@@ -91,20 +124,52 @@ def _cached(
     *,
     max_stale_seconds: int = _MAX_STALE_SECONDS,
     with_metadata: bool = False,
+    is_valid=None,
 ):
     now = datetime.now(timezone.utc)
-    hit = _cache.get(key)
+    with _cache_lock:
+        hit = _cache.get(key)
     if hit and hit[0] > now:
         _, fetched_at, value = hit
-        metadata = {"_stale": False, "as_of": fetched_at.isoformat(), "source_status": "active"}
+        valid = is_valid(value) if is_valid is not None else True
+        metadata = {
+            "_stale": False,
+            "as_of": fetched_at.isoformat(),
+            "source_status": "active" if valid else "insufficient_data",
+        }
         return _cache_value(value, metadata, with_metadata)
+
+    key_lock = _acquire_key_lock(key)
     try:
-        value = loader()
-    except Exception:
-        if hit:
+        now = datetime.now(timezone.utc)
+        with _cache_lock:
+            hit = _cache.get(key)
+        if hit and hit[0] > now:
+            _, fetched_at, value = hit
+            valid = is_valid(value) if is_valid is not None else True
+            metadata = {
+                "_stale": False,
+                "as_of": fetched_at.isoformat(),
+                "source_status": "active" if valid else "insufficient_data",
+            }
+            return _cache_value(value, metadata, with_metadata)
+
+        try:
+            value = loader()
+        except Exception as exc:
+            value = None
+            load_error = exc
+            load_failed = True
+        else:
+            load_error = None
+            load_failed = False
+
+        valid = not load_failed and (is_valid(value) if is_valid is not None else True)
+        if not valid and hit:
             _, fetched_at, stale_value = hit
             stale_age = (now - fetched_at).total_seconds()
-            if stale_age <= max(0, int(max_stale_seconds)):
+            stale_valid = is_valid(stale_value) if is_valid is not None else True
+            if stale_valid and stale_age <= max(0, int(max_stale_seconds)):
                 metadata = {
                     "_stale": True,
                     "as_of": fetched_at.isoformat(),
@@ -112,13 +177,27 @@ def _cached(
                     "stale_age_seconds": round(max(stale_age, 0.0), 1),
                 }
                 return _cache_value(stale_value, metadata, with_metadata)
-            _cache.pop(key, None)
-        raise
-    fetched_at = datetime.now(timezone.utc)
-    _purge_cache(fetched_at)
-    _cache[key] = (fetched_at + timedelta(seconds=ttl_seconds), fetched_at, value)
-    metadata = {"_stale": False, "as_of": fetched_at.isoformat(), "source_status": "active"}
-    return _cache_value(value, metadata, with_metadata)
+            with _cache_lock:
+                _cache.pop(key, None)
+        if load_failed:
+            assert load_error is not None
+            raise load_error
+
+        fetched_at = datetime.now(timezone.utc)
+        # Negative results get a short cache to avoid hammering the provider
+        # while still recovering quickly when a transient empty payload clears.
+        effective_ttl = ttl_seconds if valid else min(ttl_seconds, 30)
+        with _cache_lock:
+            _purge_cache(fetched_at)
+            _cache[key] = (fetched_at + timedelta(seconds=effective_ttl), fetched_at, value)
+        metadata = {
+            "_stale": False,
+            "as_of": fetched_at.isoformat(),
+            "source_status": "active" if valid else "insufficient_data",
+        }
+        return _cache_value(value, metadata, with_metadata)
+    finally:
+        _release_key_lock(key, key_lock)
 
 
 def option_expiry_metrics(expiration: str, now: datetime | None = None) -> dict[str, Any]:
@@ -151,6 +230,7 @@ def _get_expirations_cached(ticker: str, *, with_metadata: bool = False) -> Any:
         300,
         lambda: list(_get_ticker(symbol).options),
         with_metadata=with_metadata,
+        is_valid=bool,
     )
 
 
@@ -351,7 +431,12 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
             "data_limited": False,
         }
 
-    return _cached(f"chain:{symbol}:{expiration}", 300, load)
+    return _cached(
+        f"chain:{symbol}:{expiration}",
+        300,
+        load,
+        is_valid=lambda value: bool(value.get("calls") or value.get("puts")),
+    )
 
 
 def _get_stock_iv_cached(ticker: str, *, with_metadata: bool = False) -> Any:
@@ -418,7 +503,13 @@ def _get_stock_iv_cached(ticker: str, *, with_metadata: bool = False) -> Any:
                     return round(computed, 4)
         return None
 
-    return _cached(f"stock_iv:{symbol}", 300, load, with_metadata=with_metadata)
+    return _cached(
+        f"stock_iv:{symbol}",
+        300,
+        load,
+        with_metadata=with_metadata,
+        is_valid=lambda value: value is not None,
+    )
 
 
 def get_stock_iv(ticker: str) -> float | None:

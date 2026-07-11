@@ -1,4 +1,5 @@
 import { api, invalidateCache, safe } from '../api.js';
+import { renderIcon } from '../icons.js';
 
 /**
  * Compute current trading status for US / Japan / China stock markets.
@@ -145,34 +146,34 @@ function getMarketSnapshot(market, calendarVerified = false) {
   let nextEventDate = null;
 
   if (t.isWeekend) {
-    status = { phase: '周末休市', tone: 'off', dotColor: '#9fb4d9', title: 'Closed' };
+    status = { phase: '周末休市', tone: 'off', dotColor: 'var(--muted)', title: 'Closed' };
     nextEventDate = findNextOpenDate(market, t);
   } else if (currentSession) {
     const phase = market.label === '美股' ? '常规交易时段' : currentSession.name === 'morning' ? '上午交易时段' : '下午交易时段';
     status = calendarVerified
       ? { phase, tone: 'live', dotColor: 'var(--color-emerald)', title: 'Open' }
-      : { phase: `${phase}（交易日未校验）`, tone: 'pre', dotColor: '#c98a14', title: 'Schedule' };
+      : { phase: `${phase}（交易日未校验）`, tone: 'pre', dotColor: 'var(--warning)', title: 'Schedule' };
     nextEventLabel = '闭市';
     nextEventDate = wallTimeToDate(market.tz, ymd, currentSession.end);
   } else if (market.label === '美股') {
     const h = market.hours;
     if (t.minutes >= h.pre[0] && t.minutes < h.pre[1]) {
-      status = { phase: '盘前交易', tone: 'pre', dotColor: '#c98a14', title: 'Pre-market' };
+      status = { phase: '盘前交易', tone: 'pre', dotColor: 'var(--warning)', title: 'Pre-market' };
       nextEventDate = wallTimeToDate(market.tz, ymd, h.regular[0]);
     } else if (t.minutes >= h.after[0] && t.minutes < h.after[1]) {
-      status = { phase: '盘后交易', tone: 'pre', dotColor: '#c98a14', title: 'After-hours' };
+      status = { phase: '盘后交易', tone: 'pre', dotColor: 'var(--warning)', title: 'After-hours' };
       nextEventDate = findNextOpenDate(market, t);
     } else {
-      status = { phase: '已休市', tone: 'off', dotColor: '#9fb4d9', title: 'Closed' };
+      status = { phase: '已休市', tone: 'off', dotColor: 'var(--muted)', title: 'Closed' };
       nextEventDate = findNextOpenDate(market, t);
     }
   } else {
     const h = market.hours;
     if (t.minutes >= h.morning[1] && t.minutes < h.afternoon[0]) {
-      status = { phase: '午间休市', tone: 'pre', dotColor: '#c98a14', title: 'Break' };
+      status = { phase: '午间休市', tone: 'pre', dotColor: 'var(--warning)', title: 'Break' };
       nextEventDate = wallTimeToDate(market.tz, ymd, h.afternoon[0]);
     } else {
-      status = { phase: '已休市', tone: 'off', dotColor: '#9fb4d9', title: 'Closed' };
+      status = { phase: '已休市', tone: 'off', dotColor: 'var(--muted)', title: 'Closed' };
       nextEventDate = findNextOpenDate(market, t);
     }
   }
@@ -195,9 +196,9 @@ function usStatusFromBackend(payload) {
   const base = getMarketSnapshot(MARKETS[0], true);
   const states = {
     open: { phase: '盘中交易', tone: 'live', dotColor: 'var(--color-emerald)', title: 'Open', isOpen: true },
-    'pre-market': { phase: '盘前交易', tone: 'pre', dotColor: '#c98a14', title: 'Pre-market', isOpen: false },
-    'after-hours': { phase: '盘后交易', tone: 'pre', dotColor: '#c98a14', title: 'After-hours', isOpen: false },
-    closed: { phase: payload.phase === 'holiday' ? '节假日休市' : payload.phase === 'weekend' ? '周末休市' : '已休市', tone: 'off', dotColor: '#9fb4d9', title: 'Closed', isOpen: false },
+    'pre-market': { phase: '盘前交易', tone: 'pre', dotColor: 'var(--warning)', title: 'Pre-market', isOpen: false },
+    'after-hours': { phase: '盘后交易', tone: 'pre', dotColor: 'var(--warning)', title: 'After-hours', isOpen: false },
+    closed: { phase: payload.phase === 'holiday' ? '节假日休市' : payload.phase === 'weekend' ? '周末休市' : '已休市', tone: 'off', dotColor: 'var(--muted)', title: 'Closed', isOpen: false },
   };
   const exact = states[payload.market];
   if (!exact) return null;
@@ -231,7 +232,7 @@ export function getMarketStatusForTicker(ticker, backendStatus = null, exchange 
   const market = marketForTicker(ticker, exchange);
   if (market.unsupported) {
     return {
-      phase: '交易时段未配置', tone: 'off', dotColor: '#9fb4d9', title: 'Unknown',
+      phase: '交易时段未配置', tone: 'off', dotColor: 'var(--muted)', title: 'Unknown',
       market, localClock: '—', nextEventLabel: '交易日历', nextEventDate: null,
       nextEventMarketText: '—', nextEventLocalText: '—', isOpen: false, calendarVerified: false,
     };
@@ -254,12 +255,20 @@ function fmtLocalTime(tz) {
   }).format(new Date());
 }
 
-function renderRow(market, usBackendStatus = null) {
+function renderRow(market, usBackendStatus = null, compact = false) {
   const status = getStatus(market, usBackendStatus);
-  const icon = status.tone === 'live' ? 'wb_sunny' : status.tone === 'pre' ? 'schedule' : 'dark_mode';
+  if (compact) {
+    return `<div class="market-status-chip market-status-chip--${status.tone}" title="${status.nextEventLabel}: ${status.nextEventMarketText} · 本地 ${status.nextEventLocalText}">
+      <span class="market-status-chip__dot" aria-hidden="true"></span>
+      <strong>${market.label}</strong>
+      <span>${status.phase}</span>
+      <time>${status.localClock}</time>
+    </div>`;
+  }
+  const iconName = status.tone === 'live' ? 'wb_sunny' : status.tone === 'pre' ? 'schedule' : 'dark_mode';
   return `<div class="market-hour-card market-hour-card--${status.tone}">
     <span class="market-hour-rail" aria-hidden="true"></span>
-    <span class="material-symbols-outlined market-hour-icon" aria-hidden="true">${icon}</span>
+    ${renderIcon(iconName, { className: 'market-hour-icon', size: 34 })}
     <div class="market-hour-copy">
       <div class="market-hour-title">
         <strong>${market.label}</strong>
@@ -271,19 +280,30 @@ function renderRow(market, usBackendStatus = null) {
   </div>`;
 }
 
-export function renderMarketStatus(container) {
+export function renderMarketStatus(container, options = {}) {
   if (!container) return;
+  const compact = options.compact === true;
   let cancelled = false;
   let usBackendStatus = null;
   const draw = () => {
     if (cancelled || !container.isConnected) return;
-    container.innerHTML = `<div class="panel market-status-card">
-      <div class="market-status-head">
-        <span class="label-caps">市场状态</span>
-        <span class="market-status-caption">美股交易日已校验 · 亚股仅时段参考</span>
-      </div>
-      ${MARKETS.map((market) => renderRow(market, usBackendStatus)).join('')}
-    </div>`;
+    container.innerHTML = compact
+      ? `<section class="market-status-card market-status-card--compact" aria-label="主要市场状态">
+          <div class="watchlist-strip-title">
+            <span class="label-caps">交易时段</span>
+            <h2>市场时段</h2>
+          </div>
+          <div class="market-status-chip-list">
+            ${MARKETS.map((market) => renderRow(market, usBackendStatus, true)).join('')}
+          </div>
+        </section>`
+      : `<div class="panel market-status-card">
+          <div class="market-status-head">
+            <span class="label-caps">市场状态</span>
+            <span class="market-status-caption">美股交易日已校验 · 亚股仅时段参考</span>
+          </div>
+          ${MARKETS.map((market) => renderRow(market, usBackendStatus)).join('')}
+        </div>`;
   };
   const refresh = async () => {
     invalidateCache('mkt');

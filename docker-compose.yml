@@ -1,9 +1,13 @@
 services:
   backend:
     init: true
+    image: "option-pro:${APP_COMMIT:-local}"
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        APP_VERSION: "${APP_VERSION:-dev}"
+        APP_COMMIT: "${APP_COMMIT:-unknown}"
     env_file:
       - .env
     environment:
@@ -19,12 +23,24 @@ services:
       - APP_AUTH_TOKEN=${APP_AUTH_TOKEN:-}
       - TRUST_PROXY_HEADERS=${TRUST_PROXY_HEADERS:-false}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+      - HOST_BIND=${HOST_BIND:-127.0.0.1}
+      - ALLOW_INSECURE_PUBLIC_BIND=${ALLOW_INSECURE_PUBLIC_BIND:-false}
+      - APP_VERSION=${APP_VERSION:-dev}
+      - APP_COMMIT=${APP_COMMIT:-unknown}
     ports:
       - "${HOST_BIND:-127.0.0.1}:${PORT:-2000}:8000"
-    volumes:
-      - ./frontend:/app/frontend:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=134217728,mode=1777
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    pids_limit: 256
+    stop_grace_period: 60s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped

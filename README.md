@@ -32,10 +32,12 @@ git clone https://github.com/iroha1145/option-pro.git
 cd option-pro
 cp .env.example .env
 chmod 600 .env
-docker compose up --build -d --wait
+./scripts/deploy.sh
 ```
 
-访问 <http://localhost:2000>，健康检查地址为 <http://localhost:2000/health>。
+部署脚本会读取当前 Git 提交号，将它写入镜像标签和运行环境；为避免版本标记失真，Git 工作区存在未提交源码时会拒绝部署。镜像完整构建后才一次性重建容器，并核对 `/ready` 返回的提交号和前端文件完整性。前端已经打入同一个镜像，不会出现“新前端配旧后端”的混合版本。这个过程会有短暂的容器重启窗口，不是双机零停机切换。
+
+访问 <http://localhost:2000>。进程健康信息位于 <http://localhost:2000/health>，部署就绪检查位于 <http://localhost:2000/ready>，两者都会返回 `app_version`、`app_commit` 和前端完整性摘要。
 
 也可以运行交互式安装脚本：
 
@@ -44,6 +46,15 @@ docker compose up --build -d --wait
 ```
 
 脚本会在仓库根目录创建权限为 `0600` 的 `.env`，等待容器通过健康检查后才报告启动成功。
+
+从 GitHub 更新已经部署的服务器时，使用：
+
+```bash
+git pull --ff-only
+./scripts/deploy.sh
+```
+
+不要在拉取代码后只运行 `docker compose restart`；重启不会构建新的后端镜像。
 
 ### OpenAI 配置（可选）
 
@@ -85,7 +96,9 @@ Compose 默认只发布到 `127.0.0.1:2000`。推荐保持这个默认值，并�
 2. 通过可信 VPN（例如 WireGuard/Tailscale）访问服务器内网。
 3. 放在配置了 HTTPS 的反向代理后，并设置强随机 `APP_AUTH_TOKEN`。
 
-不要把 `HOST_BIND` 改成 `0.0.0.0` 后直接通过公网 HTTP 暴露服务。HTTP 不加密浏览器 token；内置 token 也只是个人部署的轻量保护，不是多用户权限系统。
+不要把 `HOST_BIND` 改成 `0.0.0.0` 后直接通过公网 HTTP 暴露服务。HTTP 不加密浏览器 token；内置 token 也只是个人部署的轻量保护，不是多用户权限系统。应用默认会拒绝“非本机监听且 `APP_AUTH_TOKEN` 为空”的组合。
+
+只有服务位于外部防火墙或 VPN 保护的私有网络、并且确实需要无 token 访问时，才可显式设置 `ALLOW_INSECURE_PUBLIC_BIND=true`。它只是解除启动保护，不会自动提供加密或访问控制，不能用于普通公网 HTTP。
 
 设置 `APP_AUTH_TOKEN` 后，在同源页面的浏览器控制台保存同一个 token：
 
@@ -103,7 +116,7 @@ location.reload();
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r backend/requirements.txt
+python -m pip install --require-hashes -r backend/requirements.txt
 cp .env.example .env
 cd backend
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
@@ -111,11 +124,26 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 访问 <http://localhost:8000>，API 文档位于 <http://localhost:8000/docs>。
 
+### 依赖锁定
+
+- `backend/requirements.in` 保存直接运行依赖。
+- `backend/requirements.txt` 保存完整间接依赖和 PyPI 发行文件哈希，Docker 使用它安装。
+- `backend/requirements-ci.in` 与 `backend/requirements-ci.txt` 另外锁定测试和依赖审计工具。
+
+修改 `.in` 文件后，安装 `uv` 并重新生成锁文件：
+
+```bash
+./scripts/lock-dependencies.sh
+```
+
+持续集成会以 Python 3.12.13 安装哈希锁定文件，运行依赖漏洞审计、测试、镜像构建、容器就绪检查，以及首页和压缩响应的冒烟测试。
+
 ## 常用接口
 
 | 接口 | 说明 |
 | --- | --- |
-| `GET /health` | 容器/服务健康检查 |
+| `GET /health` | 进程健康、版本和前端完整性信息 |
+| `GET /ready` | 容器部署就绪检查；前端文件不完整时返回 503 |
 | `GET /api/stocks/watchlist` | 预设自选行情 |
 | `GET /api/stocks/search?q=nvidia` | 搜索股票 |
 | `GET /api/stocks/{ticker}` | 股票概况 |
@@ -137,7 +165,11 @@ docker compose restart backend
 docker compose down
 ```
 
-容器以非 root 用户运行并带有 `/health` 健康检查。镜像构建上下文通过 `.dockerignore` 排除 `.env`、Git 历史、缓存和本地虚拟环境。
+`restart` 只适合重启当前镜像；部署新提交应运行 `./scripts/deploy.sh`。
+
+容器以非 root 用户运行，应用源码由 root 所有且根文件系统只读；运行时缓存限制在 `/tmp` 内存文件系统。Docker 日志使用轮转，健康检查访问 `/ready`。镜像构建上下文通过 `.dockerignore` 排除 `.env`、Git 历史、缓存和本地虚拟环境。
+
+当前仓库没有绑定某台服务器的自动部署任务。持续集成通过只能证明该提交通过测试与容器冒烟检查；服务器是否已经更新，应以服务器 `/ready` 返回的 `app_commit` 为准。
 
 ## 项目结构
 
@@ -149,12 +181,18 @@ option-pro/
 │   │   ├── services/     # 行情、评分和 AI 服务
 │   │   ├── models/       # Pydantic 模型
 │   │   └── main.py
+│   ├── requirements.in
 │   ├── requirements.txt
+│   ├── requirements-ci.in
+│   ├── requirements-ci.txt
 │   └── Dockerfile
 ├── frontend/
 │   ├── index.html
 │   └── static/
 ├── docker-compose.yml
+├── scripts/
+│   ├── deploy.sh
+│   └── lock-dependencies.sh
 ├── setup.sh
 └── .env.example
 ```

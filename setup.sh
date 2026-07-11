@@ -115,6 +115,7 @@ PORT=2000
 APP_AUTH_TOKEN=
 TRUST_PROXY_HEADERS=false
 ALLOWED_ORIGINS=
+ALLOW_INSECURE_PUBLIC_BIND=false
 EOF
 
     chmod 600 .env
@@ -125,17 +126,9 @@ fi
 
 # ── 3. Build & Start ──
 echo ""
-echo -e "${BOLD}构建 Docker 镜像...${NC}"
-if ! docker compose build; then
-    echo -e "${RED}✗ 镜像构建失败${NC}" >&2
-    exit 1
-fi
-
-echo -e "${BOLD}启动服务...${NC}"
-if ! docker compose up -d --wait --wait-timeout 180; then
-    echo -e "${RED}✗ 服务未能通过健康检查，最近日志如下：${NC}" >&2
-    docker compose ps >&2 || true
-    docker compose logs --tail=200 backend >&2 || true
+echo -e "${BOLD}按当前 Git 提交构建并重建服务...${NC}"
+if ! ./scripts/deploy.sh; then
+    echo -e "${RED}✗ 部署未能通过构建、健康或版本检查${NC}" >&2
     exit 1
 fi
 

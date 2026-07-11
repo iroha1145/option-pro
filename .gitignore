@@ -21,3 +21,5 @@ dist/
 build/
 .pycache_tmp/
 *.cpython-*.pyc
+output/
+.playwright-cli/
