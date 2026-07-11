@@ -7,6 +7,13 @@ const INDICES = [
   { symbol: '^N225',     label: '日经 225' },
   { symbol: '000001.SS', label: '上证综指' }
 ];
+const INDEX_DETAIL_SYMBOLS = Object.freeze({
+  'S&P 500': '^GSPC',
+  NASDAQ: '^IXIC',
+  DOW: '^DJI',
+  '日经 225': '^N225',
+  '上证综指': '000001.SS',
+});
 const REFRESH_MS = 60 * 1000;
 let mountGeneration = 0;
 let refreshTimer = null;
@@ -22,14 +29,20 @@ const fmtPct = (n) => {
   return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
 };
 
+function detailSymbol(idx) {
+  const payloadSymbol = typeof idx?.symbol === 'string' ? idx.symbol.trim() : '';
+  return payloadSymbol || INDEX_DETAIL_SYMBOLS[idx?.label] || '^GSPC';
+}
+
 function renderItem(idx) {
   const pct = idx.changePercent == null ? null : Number(idx.changePercent);
   const toneClass = !Number.isFinite(pct) ? '' : pct > 0 ? 'up' : pct < 0 ? 'down' : '';
-  return `<button class="ticker-item" type="button" data-index-symbol="${esc(idx.symbol)}" title="打开 ${esc(idx.label)} 详情">
+  const symbol = detailSymbol(idx);
+  return `<a class="ticker-item" href="#detail/${encodeURIComponent(symbol)}" data-index-symbol="${esc(symbol)}" title="打开 ${esc(idx.label)} 详情" aria-label="打开 ${esc(idx.label)} 详情">
     <strong>${esc(idx.label)}</strong>
     <span class="mono" data-numeric>${fmtPrice(idx.price)}</span>
     <em class="${toneClass} mono" data-numeric>${fmtPct(pct)}</em>
-  </button>`;
+  </a>`;
 }
 
 function normalizeStockQuote(idx, quote) {
@@ -45,12 +58,18 @@ function normalizeStockQuote(idx, quote) {
 
 export async function mountIndexTicker() {
   const track = document.getElementById('index-ticker-track');
-  if (!track) return;
+  const updated = document.getElementById('index-ticker-updated');
+  if (!track || !updated) return;
   const generation = ++mountGeneration;
 
   // Initial skeleton with labels only
-  track.innerHTML = INDICES.map(i => `<button class="ticker-item" type="button" data-index-symbol="${esc(i.symbol)}" title="加载中"><strong>${esc(i.label)}</strong><span class="mono">—</span><em class="mono">—</em></button>`).join('');
-  bindClicks();
+  track.innerHTML = INDICES.map(i => {
+    const symbol = detailSymbol(i);
+    return `<a class="ticker-item" href="#detail/${encodeURIComponent(symbol)}" data-index-symbol="${esc(symbol)}" title="${esc(i.label)} 行情加载中" aria-label="打开 ${esc(i.label)} 详情"><strong>${esc(i.label)}</strong><span class="mono">—</span><em class="mono">—</em></a>`;
+  }).join('');
+  updated.textContent = '行情加载中';
+  updated.dataset.compactLabel = '载入中';
+  updated.removeAttribute('datetime');
 
   const refresh = async (force = false) => {
     if (force) invalidateCache('mkt-idx');
@@ -67,6 +86,7 @@ export async function mountIndexTicker() {
       if (!q || q.price == null) return idx;
       return {
         ...idx,
+        symbol: typeof q.symbol === 'string' && q.symbol.trim() ? q.symbol.trim() : idx.symbol,
         price: Number(q.price),
         changePercent: q.change_percent == null ? null : Number(q.change_percent),
       };
@@ -88,9 +108,12 @@ export async function mountIndexTicker() {
   const hasAnyPrice = data.some((item) => Number.isFinite(Number(item.price)));
   if (hasAnyPrice) lastData = data;
   const displayData = hasAnyPrice ? data : (lastData || data);
-  const updatedLabel = `${hasAnyPrice ? '更新' : '刷新失败'} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-  track.innerHTML = `${displayData.map(renderItem).join('')}<span class="ticker-updated mono" aria-live="polite">${esc(updatedLabel)}</span>`;
-  bindClicks();
+  const refreshedAt = new Date();
+  const timeLabel = refreshedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  track.innerHTML = displayData.map(renderItem).join('');
+  updated.textContent = `${hasAnyPrice ? '更新' : '刷新失败'} ${timeLabel}`;
+  updated.dataset.compactLabel = hasAnyPrice ? timeLabel : '失败';
+  updated.dateTime = refreshedAt.toISOString();
   };
 
   await refresh();
@@ -101,15 +124,4 @@ export async function mountIndexTicker() {
   if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
   visibilityHandler = () => { if (!document.hidden) refresh(true); };
   document.addEventListener('visibilitychange', visibilityHandler);
-}
-
-function bindClicks() {
-  const track = document.getElementById('index-ticker-track');
-  if (!track || track.dataset.eventsBound === 'true') return;
-  track.dataset.eventsBound = 'true';
-  track.addEventListener('click', (event) => {
-    const btn = event.target.closest('[data-index-symbol]');
-    const sym = btn?.dataset.indexSymbol;
-    if (sym) location.hash = `#detail/${encodeURIComponent(sym)}`;
-  });
 }

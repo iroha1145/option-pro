@@ -5,6 +5,12 @@ import { renderTopBottomSignals } from '../components/topBottomSignals.js';
 import { renderOptionChain, renderAlerts } from '../components/optionChain.js';
 import { renderAlertAnalysisButton } from '../components/aiAnalysis.js';
 import { renderIcon } from '../icons.js';
+import {
+  getMajorIndexBadge,
+  getMajorIndexDisplayName,
+  isMajorMarketIndex,
+  renderMarketStrengthPlaceholder,
+} from '../components/marketStrengthPlaceholder.js';
 
 const DETAIL_STYLES_ID = 'optix-detail-v3-styles';
 
@@ -181,16 +187,18 @@ function queryInMount(state, selector) {
 }
 
 function renderShell(ticker, backRoute, mountId) {
-  return `<section class="instrument-page" data-detail-mount="${mountId}" data-detail-ticker="${esc(ticker)}" aria-labelledby="instrument-title">
-    <nav class="instrument-breadcrumb" aria-label="详情路径">
+  return `<section class="instrument-page" data-detail-mount="${mountId}" data-detail-ticker="${esc(ticker)}" data-motion-page="detail" data-motion-key="detail-${esc(ticker)}" aria-labelledby="instrument-title">
+    <nav class="instrument-breadcrumb" data-motion-reveal data-motion-key="detail-breadcrumb-${esc(ticker)}" aria-label="详情路径">
       <a href="${esc(backRoute)}" data-back-breadcrumb>返回列表</a>
       <span aria-hidden="true">/</span>
       <span class="mono">${esc(ticker)}</span>
     </nav>
 
-    <header id="modal-header" class="instrument-quote"></header>
+    <header id="modal-header" class="instrument-quote" data-motion-reveal data-motion-card data-motion-lens data-motion-spotlight data-motion-key="detail-quote-${esc(ticker)}"></header>
 
-    <section class="instrument-chart-panel" aria-labelledby="instrument-chart-title">
+    ${isMajorMarketIndex(ticker) ? renderMarketStrengthPlaceholder({ variant: 'detail', ticker }) : ''}
+
+    <section class="instrument-chart-panel" data-motion-static data-motion-key="detail-chart-${esc(ticker)}" aria-labelledby="instrument-chart-title">
       <div class="instrument-chart-heading">
         <div>
           <span class="instrument-eyebrow">价格走势</span>
@@ -208,13 +216,13 @@ function renderShell(ticker, backRoute, mountId) {
       <div id="chart-context" class="instrument-chart-context" role="status" aria-live="polite">
         正在确认图表口径与数据时间…
       </div>
-      <div id="modal-chart" class="instrument-chart-stage"></div>
+      <div id="modal-chart" class="instrument-chart-stage" data-motion-static></div>
     </section>
 
-    <section id="modal-stats" class="instrument-key-stats" aria-label="关键市场数据"></section>
+    <section id="modal-stats" class="instrument-key-stats" data-motion-reveal data-motion-key="detail-stats-${esc(ticker)}" aria-label="关键市场数据"></section>
 
     <div class="instrument-disclosures">
-      <details class="instrument-disclosure" data-detail-panel="signals">
+      <details class="instrument-disclosure" data-detail-panel="signals" data-motion-reveal data-motion-key="detail-signals-${esc(ticker)}">
         <summary>
           <span><strong>技术信号</strong><small>顶底信号、强弱判断与分析</small></span>
           <span data-signals-state>展开后读取</span>
@@ -224,7 +232,7 @@ function renderShell(ticker, backRoute, mountId) {
         </div>
       </details>
 
-      <details class="instrument-disclosure" data-detail-panel="options">
+      <details class="instrument-disclosure" data-detail-panel="options" data-motion-reveal data-motion-key="detail-options-${esc(ticker)}">
         <summary>
           <span><strong>期权与异动</strong><small>到期日、平值附近合约与异动提示</small></span>
           <span data-options-state>展开后读取</span>
@@ -252,13 +260,15 @@ function renderHeaderAndStats(stock, backendMarketStatus = null, state = null) {
   const price = firstFinite(stock.price);
   const changePercent = firstFinite(stock.change_percent);
   const absoluteChange = firstFinite(stock.change);
+  const indexInstrument = isMajorMarketIndex(stock.ticker);
   const toneClass = changePercent > 0 ? 'is-positive' : changePercent < 0 ? 'is-negative' : 'is-neutral';
   const changeText = changePercent == null
     ? '行情暂不可用'
-    : `${changePercent > 0 ? '+' : ''}${changePercent.toFixed(2)}%${absoluteChange == null ? '' : ` · ${absoluteChange > 0 ? '+' : ''}${formatPrice(absoluteChange)}`}`;
-  const titleText = stock.name || stock.ticker;
+    : `${changePercent > 0 ? '+' : ''}${changePercent.toFixed(2)}%${absoluteChange == null ? '' : ` · ${absoluteChange > 0 ? '+' : ''}${formatPrice(absoluteChange, { currency: !indexInstrument })}`}`;
+  const indexDisplayName = getMajorIndexDisplayName(stock.ticker);
+  const titleText = indexDisplayName || stock.name || stock.ticker;
   const showTicker = String(titleText || '').trim().toUpperCase() !== String(stock.ticker || '').trim().toUpperCase();
-  const initial = (stock.ticker || '?')[0];
+  const initial = getMajorIndexBadge(stock.ticker) || (stock.ticker || '?')[0];
   const logoUrl = state?.logoDataUrl || '';
   const marketStatus = getMarketStatusForTicker(
     stock.ticker,
@@ -271,7 +281,7 @@ function renderHeaderAndStats(stock, backendMarketStatus = null, state = null) {
   header.innerHTML = `
     <div class="instrument-identity">
       <div class="instrument-logo" data-logo-shell>
-        ${state ? `<img ${logoUrl ? `src="${esc(logoUrl)}"` : ''} alt="${esc(stock.name_en || stock.ticker)} 标志" decoding="async" data-company-logo>` : ''}
+        ${state && !indexInstrument ? `<img ${logoUrl ? `src="${esc(logoUrl)}"` : ''} alt="${esc(stock.name_en || stock.ticker)} 标志" decoding="async" data-company-logo>` : ''}
         <span data-logo-fallback>${esc(initial)}</span>
       </div>
       <div>
@@ -286,14 +296,14 @@ function renderHeaderAndStats(stock, backendMarketStatus = null, state = null) {
       </div>
     </div>
     <div class="instrument-live-quote">
-      <span>最新价格</span>
-      <strong class="mono">${formatPrice(price)}</strong>
+      <span>${indexInstrument ? '最新点位' : '最新价格'}</span>
+      <strong class="mono">${formatPrice(price, { currency: !indexInstrument })}</strong>
       <span class="mono ${toneClass}">${esc(changeText)}</span>
       <small data-detail-updated aria-live="polite">${esc(stock._updatedLabel || '等待行情更新')}</small>
     </div>`;
 
   const logoImage = header.querySelector('[data-company-logo]');
-  if (state && logoImage) {
+  if (state && logoImage && !indexInstrument) {
     const showLogo = (url) => {
       if (!url || !isDetailActive(state)) return;
       const currentImage = queryInMount(state, '[data-company-logo]');
@@ -323,17 +333,26 @@ function renderHeaderAndStats(stock, backendMarketStatus = null, state = null) {
     }
   }
 
-  const quickStats = [
-    ['开盘', formatPrice(stock.open ?? stock.o)],
-    ['最高', formatPrice(stock.day_high ?? stock.high)],
-    ['最低', formatPrice(stock.day_low ?? stock.low)],
-    ['成交量', num(stock.volume)],
-    ['市值', large(stock.market_cap)],
-    ['市盈率（P/E）', firstFinite(stock.pe_ratio, stock.pe)?.toLocaleString(undefined, { maximumFractionDigits: 2 }) || '—'],
-  ];
+  const quickStats = indexInstrument
+    ? [
+      ['开盘点位', formatPrice(stock.open ?? stock.o, { currency: false })],
+      ['日内高点', formatPrice(stock.day_high ?? stock.high, { currency: false })],
+      ['日内低点', formatPrice(stock.day_low ?? stock.low, { currency: false })],
+      ['成交量', num(stock.volume)],
+      ['52周高点', formatPrice(stock.year_high, { currency: false })],
+      ['52周低点', formatPrice(stock.year_low, { currency: false })],
+    ]
+    : [
+      ['开盘', formatPrice(stock.open ?? stock.o)],
+      ['最高', formatPrice(stock.day_high ?? stock.high)],
+      ['最低', formatPrice(stock.day_low ?? stock.low)],
+      ['成交量', num(stock.volume)],
+      ['市值', large(stock.market_cap)],
+      ['市盈率（P/E）', firstFinite(stock.pe_ratio, stock.pe)?.toLocaleString(undefined, { maximumFractionDigits: 2 }) || '—'],
+    ];
   stats.innerHTML = `<div class="instrument-key-stats-heading">
       <span class="instrument-eyebrow">关键数据</span>
-      <h2>今日价格与估值</h2>
+      <h2>${indexInstrument ? '今日点位与成交' : '今日价格与估值'}</h2>
     </div>
     <dl>
       ${quickStats.map(([key, value]) => `<div><dt>${esc(key)}</dt><dd class="mono">${esc(value)}</dd></div>`).join('')}
@@ -351,7 +370,10 @@ function renderChartContext(data, state) {
   const lastBarLocal = formatChartTimestamp(data?.last_bar_at, undefined, { dateOnly: !intraday });
   const fetchedLocal = formatChartTimestamp(data?.as_of, undefined);
   const period = PERIOD_LABELS[data?.period] || data?.period || TIMEFRAMES.find(([range]) => range === state.range)?.[1] || state.range;
-  const adjustment = data?.price_adjustment === 'adjusted' ? '复权价格' : '原始价格';
+  const priceAdjustment = ['raw', 'adjusted'].includes(data?.price_adjustment)
+    ? data.price_adjustment
+    : state.adjustment;
+  const adjustment = priceAdjustment === 'adjusted' ? '复权价格' : '原始价格';
   const extended = data?.include_extended_hours ? '含盘前 / 盘后' : '不含盘前 / 盘后';
   const statusLabel = stale ? '陈旧数据' : empty ? '暂无数据' : '数据正常';
   context.innerHTML = `

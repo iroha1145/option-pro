@@ -1,3 +1,5 @@
+import { mountMotion } from './components/motion.js';
+
 const routeLoaders = {
   watchlist: (url) => import(url).then((module) => module.renderWatchlist),
   sectors: (url) => import(url).then((module) => module.renderSectors),
@@ -139,6 +141,7 @@ let __searchImportAttempt = 0;
 let __routeGeneration = 0;
 let __shellInteractionsBound = false;
 let __clockTimer = null;
+let __disposePageMotion = null;
 
 function retryableModuleUrl(path, attempt) {
   return attempt === 0 ? path : `${path}?retry=${attempt}`;
@@ -202,6 +205,8 @@ function initGlobalShell() {
 
 export async function router(event) {
   const generation = ++__routeGeneration;
+  try { __disposePageMotion?.(); } catch (_) { /* motion is optional */ }
+  __disposePageMotion = null;
   initResponsiveSidebar();
   initGlobalShell();
   const route = getRouteFromHash();
@@ -240,7 +245,15 @@ export async function router(event) {
   } finally {
     if (generation === __routeGeneration) {
       app?.setAttribute('aria-busy', 'false');
-      if (event?.type === 'hashchange') app?.focus({ preventScroll: true });
+      if (event?.type === 'hashchange') {
+        window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+        app?.focus({ preventScroll: true });
+      }
+      try {
+        __disposePageMotion = mountMotion(app);
+      } catch (_) {
+        __disposePageMotion = null;
+      }
     }
   }
 }

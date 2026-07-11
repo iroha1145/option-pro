@@ -150,8 +150,8 @@ function renderShell(generation) {
   const app = document.getElementById('app');
   if (!app) return;
   app.innerHTML = `
-    <section class="earnings-page" data-earnings-mount="${generation}" aria-labelledby="earnings-title">
-      <header class="earnings-page__header">
+    <section class="earnings-page" data-earnings-mount="${generation}" aria-labelledby="earnings-title" data-motion-page="earnings">
+      <header class="earnings-page__header" data-motion-reveal data-motion-key="earnings-header">
         <div>
           <span class="earnings-kicker">事件日历</span>
           <h1 id="earnings-title">财报日历</h1>
@@ -168,7 +168,7 @@ function renderShell(generation) {
         </div>
       </header>
 
-      <section class="earnings-calendar" aria-labelledby="earnings-timeline-title">
+      <section class="earnings-calendar" aria-labelledby="earnings-timeline-title" data-motion-reveal data-motion-key="earnings-calendar">
         <header class="earnings-section-heading">
           <div>
             <span class="earnings-kicker">选择日期</span>
@@ -181,7 +181,7 @@ function renderShell(generation) {
         </div>
       </section>
 
-      <section class="earnings-events" aria-labelledby="earnings-events-title">
+      <section class="earnings-events" aria-labelledby="earnings-events-title" data-motion-reveal data-motion-key="earnings-events">
         <header class="earnings-section-heading earnings-events__heading">
           <div>
             <span id="earnings-events-eyebrow" class="earnings-kicker">所选日期</span>
@@ -194,7 +194,7 @@ function renderShell(generation) {
         </div>
       </section>
 
-      <section id="earnings-impact-panel" class="earnings-impact" aria-labelledby="earnings-inspector-title" hidden>
+      <section id="earnings-impact-panel" class="earnings-impact" aria-labelledby="earnings-inspector-title" data-motion-reveal data-motion-key="earnings-impact" data-motion-lens hidden>
         <header class="earnings-impact__header">
           <div>
             <span class="earnings-kicker">按需展开</span>
@@ -202,7 +202,8 @@ function renderShell(generation) {
           </div>
           <button type="button" data-impact-close>关闭关联分析</button>
         </header>
-        <div id="earnings-impact-body" class="earnings-impact__body" role="status" aria-live="polite" aria-busy="false"></div>
+        <p id="earnings-impact-status" class="earnings-visually-hidden" role="status" aria-live="polite"></p>
+        <div id="earnings-impact-body" class="earnings-impact__body" aria-busy="false"></div>
       </section>
 
       <div id="earnings-tooltip" class="earnings-tooltip" role="tooltip" hidden></div>
@@ -245,9 +246,11 @@ function renderTimeline(root, start, selectedISO, byDate, today) {
     return `
       <button type="button" class="earnings-day${selected ? ' is-selected' : ''}${isToday ? ' is-today' : ''}"
         data-earnings-date="${iso}" aria-pressed="${selected ? 'true' : 'false'}" tabindex="${selected ? '0' : '-1'}"
+        data-motion-card data-motion-key="earnings-day-${iso}"
         aria-label="${escapeHtml(formatFullDate(date))}，${countLabel}">
         <span class="earnings-day__weekday">${isToday ? '今天' : WEEKDAY_LABELS[date.getDay()]}</span>
         <strong class="earnings-day__date">${date.getMonth() + 1}.${String(date.getDate()).padStart(2, '0')}</strong>
+        <i class="earnings-day__node" aria-hidden="true"></i>
         <span class="earnings-day__count">${countLabel}</span>
         <small>${escapeHtml(preview || '暂无安排')}</small>
       </button>
@@ -293,20 +296,24 @@ function renderEvents(root, dateISO, items, selectedTicker, nextEvent, today) {
     || a.ticker.localeCompare(b.ticker)
   ));
   list.innerHTML = sorted.map((item, index) => `
-    <article class="earnings-event${selectedTicker === item.ticker ? ' is-selected' : ''}" data-event-row="${escapeHtml(item.ticker)}">
+    <article class="earnings-event${selectedTicker === item.ticker ? ' is-selected' : ''}"
+      role="button" tabindex="0" data-event-row="${escapeHtml(item.ticker)}"
+      data-earnings-impact="${escapeHtml(item.ticker)}" data-ticker="${escapeHtml(item.ticker)}"
+      data-motion-card data-motion-key="earnings-${escapeHtml(item.date)}-${escapeHtml(item.ticker)}"
+      aria-controls="earnings-impact-panel" aria-expanded="${selectedTicker === item.ticker ? 'true' : 'false'}"
+      aria-label="打开 ${escapeHtml(item.ticker)} ${escapeHtml(item.name)} 的财报关联影响。行业 ${escapeHtml(item.sector || '待确认')}，每股收益预估 ${escapeHtml(fmtEps(item.epsEstimate))}，营收预估 ${escapeHtml(fmtLargeMoney(item.revenueEstimate))}"
+      >
       <span class="earnings-event__index" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span>
-      <button type="button" class="earnings-event__identity" data-earnings-impact="${escapeHtml(item.ticker)}"
-        data-ticker="${escapeHtml(item.ticker)}" aria-describedby="earnings-tooltip"
-        aria-label="检查 ${escapeHtml(item.ticker)} 财报关联影响">
+      <div class="earnings-event__identity">
         <strong>${escapeHtml(item.ticker)}</strong>
-        <span>${escapeHtml(item.name)}</span>
-        <small>${escapeHtml(item.sector || '行业待确认')}</small>
-      </button>
+        <h3>${escapeHtml(item.name)}</h3>
+        <span>${escapeHtml(item.sector || '行业待确认')}</span>
+      </div>
       <dl class="earnings-event__metrics">
         <div><dt>每股收益预估</dt><dd data-numeric>${fmtEps(item.epsEstimate)}</dd></div>
         <div><dt>营收预估</dt><dd data-numeric>${fmtLargeMoney(item.revenueEstimate)}</dd></div>
       </dl>
-      <span class="earnings-event__action" aria-hidden="true">查看关联影响 →</span>
+      <span class="earnings-event__hint" aria-hidden="true">关联研究 <span>↗</span></span>
     </article>
   `).join('');
 }
@@ -383,7 +390,9 @@ function renderImpactResult(item, result) {
 
 function syncSelectedEvent(root, ticker) {
   root?.querySelectorAll('[data-event-row]').forEach((row) => {
-    row.classList.toggle('is-selected', row.dataset.eventRow === ticker);
+    const selected = row.dataset.eventRow === ticker;
+    row.classList.toggle('is-selected', selected);
+    row.setAttribute('aria-expanded', String(selected));
   });
 }
 
@@ -394,10 +403,15 @@ function revealImpact(root) {
 
 function closeImpact(root) {
   impactLoadToken += 1;
-  root?.querySelectorAll('[data-event-row]').forEach((row) => row.classList.remove('is-selected'));
+  root?.querySelectorAll('[data-event-row]').forEach((row) => {
+    row.classList.remove('is-selected');
+    row.setAttribute('aria-expanded', 'false');
+  });
   const panel = root?.querySelector('#earnings-impact-panel');
   const body = root?.querySelector('#earnings-impact-body');
+  const status = root?.querySelector('#earnings-impact-status');
   if (panel) panel.hidden = true;
+  if (status) status.textContent = '';
   if (body) {
     body.setAttribute('aria-busy', 'false');
     body.replaceChildren();
@@ -413,12 +427,14 @@ function scrollImpactOnSmallScreen(root) {
 
 async function loadImpact(root, ticker, byTicker, mountGeneration) {
   const body = root?.querySelector('#earnings-impact-body');
+  const status = root?.querySelector('#earnings-impact-status');
   const item = byTicker.get(ticker);
   if (!body || !item) return;
   const requestToken = ++impactLoadToken;
   revealImpact(root);
   syncSelectedEvent(root, ticker);
   body.setAttribute('aria-busy', 'true');
+  if (status) status.textContent = `正在检查 ${ticker} 的关联影响`;
   body.innerHTML = renderInspectorCompany(item, `
     <div class="earnings-impact-loading">
       <span aria-hidden="true"></span>
@@ -433,9 +449,11 @@ async function loadImpact(root, ticker, byTicker, mountGeneration) {
     if (requestToken !== impactLoadToken || !isEarningsMounted(mountGeneration) || !body.isConnected) return;
     body.setAttribute('aria-busy', 'false');
     body.innerHTML = renderImpactResult(item, result);
+    if (status) status.textContent = `${ticker} 的关联影响已经载入`;
   } catch (error) {
     if (requestToken !== impactLoadToken || !isEarningsMounted(mountGeneration) || !body.isConnected) return;
     body.setAttribute('aria-busy', 'false');
+    if (status) status.textContent = `${ticker} 的关联检查没有完成`;
     body.innerHTML = renderInspectorCompany(item, `
       <div class="earnings-impact-error">
         <strong>关联检查没有完成</strong>
@@ -459,7 +477,7 @@ function tooltipMarkup(item) {
       <div><dt>营收预估</dt><dd>${fmtLargeMoney(item.revenueEstimate)}</dd></div>
       <div><dt>市值</dt><dd>${fmtLargeMoney(item.marketCap)}</dd></div>
     </dl>
-    <span>按回车查看关联影响</span>
+    <span>点击卡片打开关联研究</span>
   `;
 }
 
@@ -467,52 +485,50 @@ function bindTooltip(root, byTicker) {
   const list = root?.querySelector('#earnings-events-list');
   const tooltip = root?.querySelector('#earnings-tooltip');
   if (!list || !tooltip) return;
+  if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
 
-  const targetFromEvent = (event) => event.target.closest('.earnings-event__identity[data-ticker]');
-  const show = (button) => {
-    const item = button ? byTicker.get(button.dataset.ticker) : null;
+  const targetFromEvent = (event) => event.target.closest('.earnings-event[data-ticker]');
+  let pointerX = 0;
+  let pointerY = 0;
+  let placementFrame = 0;
+  const show = (card) => {
+    const item = card ? byTicker.get(card.dataset.ticker) : null;
     if (!item) return;
     tooltip.innerHTML = tooltipMarkup(item);
     tooltip.hidden = false;
   };
-  const hide = () => { tooltip.hidden = true; };
-  const placeByPoint = (x, y) => {
+  const hide = () => {
+    tooltip.hidden = true;
+    if (placementFrame) cancelAnimationFrame(placementFrame);
+    placementFrame = 0;
+  };
+  const placeByPoint = () => {
+    placementFrame = 0;
     const rect = tooltip.getBoundingClientRect();
     const gap = 14;
-    const left = x + rect.width + gap > window.innerWidth ? x - rect.width - gap : x + gap;
-    const top = y + rect.height + gap > window.innerHeight ? y - rect.height - gap : y + gap;
-    tooltip.style.left = `${Math.max(8, left)}px`;
-    tooltip.style.top = `${Math.max(8, top)}px`;
+    const left = pointerX + rect.width + gap > window.innerWidth ? pointerX - rect.width - gap : pointerX + gap;
+    const top = pointerY + rect.height + gap > window.innerHeight ? pointerY - rect.height - gap : pointerY + gap;
+    tooltip.style.transform = `translate3d(${Math.max(8, left)}px, ${Math.max(8, top)}px, 0)`;
   };
-  const placeByButton = (button) => {
-    const anchor = button.getBoundingClientRect();
-    const rect = tooltip.getBoundingClientRect();
-    let left = anchor.left;
-    let top = anchor.bottom + 9;
-    if (left + rect.width > window.innerWidth - 8) left = window.innerWidth - rect.width - 8;
-    if (top + rect.height > window.innerHeight - 8) top = anchor.top - rect.height - 9;
-    tooltip.style.left = `${Math.max(8, left)}px`;
-    tooltip.style.top = `${Math.max(8, top)}px`;
+  const schedulePlacement = (x, y) => {
+    pointerX = x;
+    pointerY = y;
+    if (!placementFrame) placementFrame = requestAnimationFrame(placeByPoint);
   };
 
-  list.addEventListener('mouseover', (event) => {
-    const button = targetFromEvent(event);
-    if (button) show(button);
+  list.addEventListener('pointerover', (event) => {
+    const card = targetFromEvent(event);
+    if (card && !card.contains(event.relatedTarget)) {
+      show(card);
+      schedulePlacement(event.clientX, event.clientY);
+    }
   });
-  list.addEventListener('mousemove', (event) => {
-    if (!tooltip.hidden) placeByPoint(event.clientX, event.clientY);
+  list.addEventListener('pointermove', (event) => {
+    if (!tooltip.hidden) schedulePlacement(event.clientX, event.clientY);
   });
-  list.addEventListener('mouseout', (event) => {
-    if (targetFromEvent(event)) hide();
-  });
-  list.addEventListener('focusin', (event) => {
-    const button = targetFromEvent(event);
-    if (!button) return;
-    show(button);
-    placeByButton(button);
-  });
-  list.addEventListener('focusout', (event) => {
-    if (targetFromEvent(event)) hide();
+  list.addEventListener('pointerout', (event) => {
+    const card = targetFromEvent(event);
+    if (card && !card.contains(event.relatedTarget)) hide();
   });
 }
 
@@ -655,21 +671,36 @@ export async function renderEarnings() {
     renderWindow();
   });
 
-  root.querySelector('#earnings-events-list')?.addEventListener('click', (event) => {
+  const eventsList = root.querySelector('#earnings-events-list');
+  const openEventImpact = (card) => {
+    if (!card?.dataset.earningsImpact) return;
+    selectedTicker = card.dataset.earningsImpact;
+    loadImpact(root, selectedTicker, byTicker, mountGeneration);
+  };
+
+  eventsList?.addEventListener('click', (event) => {
     const jump = event.target.closest('[data-jump-date]');
     if (jump) {
       moveToDate(jump.dataset.jumpDate);
       return;
     }
-    const impact = event.target.closest('[data-earnings-impact]');
-    if (!impact) return;
-    selectedTicker = impact.dataset.earningsImpact;
-    loadImpact(root, selectedTicker, byTicker, mountGeneration);
+    const card = event.target.closest('.earnings-event[data-earnings-impact]');
+    if (!card) return;
+    const nestedInteractive = event.target.closest('a, button, input, select, textarea, summary, [role="button"], [role="link"], [contenteditable="true"]');
+    if (nestedInteractive && nestedInteractive !== card) return;
+    openEventImpact(card);
+  });
+
+  eventsList?.addEventListener('keydown', (event) => {
+    const card = event.target.closest('.earnings-event[data-earnings-impact]');
+    if (!card || event.target !== card || !['Enter', ' '].includes(event.key)) return;
+    event.preventDefault();
+    openEventImpact(card);
   });
 
   root.querySelector('#earnings-impact-panel')?.addEventListener('click', (event) => {
     if (event.target.closest('[data-impact-close]')) {
-      const returnTarget = root.querySelector('.earnings-event.is-selected .earnings-event__identity');
+      const returnTarget = root.querySelector('.earnings-event.is-selected');
       selectedTicker = '';
       closeImpact(root);
       returnTarget?.focus();

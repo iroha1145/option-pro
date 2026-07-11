@@ -361,14 +361,17 @@ function renderSparkline(points, isPositive) {
   const first = coords[0];
   const last = coords[coords.length - 1];
   return `
-    <svg class="sparkline sparkline--${trend}" viewBox="0 0 ${width} ${height}" role="img" aria-label="7-day price sparkline" data-spark="7-day">
+    <svg class="sparkline sparkline--${trend}" viewBox="0 0 ${width} ${height}" role="img" aria-label="七日价格走势" data-spark="7-day">
+      <line class="sparkline-baseline" x1="${paddingX}" y1="${first.y.toFixed(2)}" x2="${width - paddingX}" y2="${first.y.toFixed(2)}"></line>
       <path class="sparkline-fill" d="${d} L ${last.x.toFixed(2)} ${baseline} L ${first.x.toFixed(2)} ${baseline} Z"></path>
       <path class="sparkline-line" d="${d}" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
+      <circle class="sparkline-endpoint" cx="${last.x.toFixed(2)}" cy="${last.y.toFixed(2)}" r="3"></circle>
+      <text class="sparkline-period" x="${paddingX}" y="9">7日</text>
     </svg>
   `;
 }
 
-function renderStockCard(stock, editMode = false) {
+function renderStockCard(stock, editMode = false, index = 0) {
   const hasChange = Number.isFinite(stock.changePercent);
   const isPositive = hasChange && stock.changePercent >= 0;
   const toneClass = !hasChange ? 'neutral' : isPositive ? 'positive' : 'negative';
@@ -384,22 +387,25 @@ function renderStockCard(stock, editMode = false) {
           ${renderIcon('chevron_right', { size: 16 })}
         </button>
       </div>` : '';
+  const cardBody = `
+    <span class="stock-card__body">
+      <span class="stock-card__identity">
+        <span><strong class="stock-ticker">${escapeHtml(stock.ticker)}</strong><small class="sector-tag">${escapeHtml(stock.sector)}</small></span>
+        <small class="company-name">${escapeHtml(stock.companyName)}</small>
+      </span>
+      <span class="stock-card__quote">
+        <strong class="stock-price" data-numeric data-motion-key>${formatPrice(stock.price)}</strong>
+        <small class="stock-change ${toneClass}" data-numeric data-motion-key>${formatChange(stock.changePercent)}</small>
+      </span>
+      <span class="stock-card__spark">${renderSparkline(stock.spark, isPositive)}</span>
+      <span class="quote-row__signal">${stock.signalSummary ? escapeHtml(stock.signalSummary) : (isPositive ? '动能向上' : hasChange ? '承压整理' : '等待行情')}</span>
+    </span>`;
   return `
-    <article class="stock-card quote-row ${editMode ? 'stock-card--editing' : ''}" data-ticker="${escapeHtml(stock.ticker)}">
+    <article class="stock-card quote-row ${editMode ? 'stock-card--editing' : ''}" data-ticker="${escapeHtml(stock.ticker)}" data-motion-card data-motion-key="${escapeHtml(stock.ticker)}" role="listitem" style="--card-index:${Math.min(index, 8)}">
+      ${editMode
+        ? cardBody
+        : `<a class="stock-card__link" href="#detail/${encodeURIComponent(stock.ticker)}" data-card-link="${escapeHtml(stock.ticker)}" data-motion-spotlight aria-label="打开 ${escapeHtml(stock.ticker)} 详情">${cardBody}</a>`}
       ${editControls}
-      <button class="stock-card__select" type="button" data-focus-ticker="${escapeHtml(stock.ticker)}" aria-label="聚焦 ${escapeHtml(stock.ticker)}" ${editMode ? 'disabled aria-disabled="true"' : ''}>
-        <span class="stock-card__identity">
-          <span><strong class="stock-ticker">${escapeHtml(stock.ticker)}</strong><small class="sector-tag">${escapeHtml(stock.sector)}</small></span>
-          <small class="company-name">${escapeHtml(stock.companyName)}</small>
-        </span>
-        <span class="stock-card__spark">${renderSparkline(stock.spark, isPositive)}</span>
-        <span class="stock-card__quote">
-          <strong class="stock-price" data-numeric>${formatPrice(stock.price)}</strong>
-          <small class="stock-change ${toneClass}" data-numeric>${formatChange(stock.changePercent)}</small>
-        </span>
-        <span class="quote-row__signal">${stock.signalSummary ? escapeHtml(stock.signalSummary) : (isPositive ? '动能向上' : hasChange ? '承压整理' : '等待行情')}</span>
-      </button>
-      <button class="stock-card__open" type="button" data-open-ticker="${escapeHtml(stock.ticker)}" aria-label="打开 ${escapeHtml(stock.ticker)} 完整详情" ${editMode ? 'disabled aria-disabled="true"' : ''}>${renderIcon('arrow_up_right', { size: 18 })}</button>
     </article>
   `;
 }
@@ -426,17 +432,18 @@ function renderSpotlightStock(stock) {
   const change = Number.isFinite(stock.changePercent) ? stock.changePercent : null;
   const tone = change == null ? 'neutral' : change >= 0 ? 'positive' : 'negative';
   panel.dataset.ticker = stock.ticker;
+  panel.dataset.motionKey = stock.ticker;
   panel.innerHTML = `
-    <div class="focus-panel__eyebrow">
+    <div class="focus-panel__eyebrow" data-motion-key>
       <span>当前焦点</span>
       <span>${escapeHtml(stock.sector)}</span>
     </div>
-    <div class="focus-panel__identity">
+    <div class="focus-panel__identity" data-motion-key>
       <div><strong>${escapeHtml(stock.ticker)}</strong><small>${escapeHtml(stock.companyName)}</small></div>
       <span class="focus-panel__change ${tone}" data-numeric>${formatChange(change)}</span>
     </div>
-    <div class="focus-panel__price" data-numeric>${formatPrice(stock.price)}</div>
-    <div class="focus-panel__chart">${renderSparkline(stock.spark, change == null || change >= 0)}</div>
+    <div class="focus-panel__price" data-numeric data-motion-key>${formatPrice(stock.price)}</div>
+    <div class="focus-panel__chart" data-motion-key>${renderSparkline(stock.spark, change == null || change >= 0)}</div>
     <div class="focus-panel__footer">
       <span>${stock.signalSummary ? escapeHtml(stock.signalSummary) : '七日价格节奏'}</span>
       <button type="button" data-spotlight-open="${escapeHtml(stock.ticker)}">查看详情 ${renderIcon('arrow_up_right', { size: 17 })}</button>
@@ -483,11 +490,11 @@ function renderWatchlistShell(isLoading = false, mountGeneration = activeMountGe
   const app = document.getElementById('app');
   if (!app) return;
   app.innerHTML = `
-    <section class="watchlist-page" data-watchlist-mount="${mountGeneration}" aria-labelledby="watchlist-title">
-      <header class="watchlist-header page-intro">
+    <section class="watchlist-page" data-watchlist-mount="${mountGeneration}" data-motion-page aria-labelledby="watchlist-title">
+      <header class="watchlist-header page-intro" data-motion-reveal style="--motion-delay:20ms">
         <div class="watchlist-heading">
-          <span class="page-kicker">今日自选</span>
-          <h1 id="watchlist-title">看清关注的标的</h1>
+          <span class="page-kicker">自选研究</span>
+          <h1 id="watchlist-title">自选观察</h1>
           <p id="watchlist-summary">正在整理你的自选行情</p>
           <div class="watchlist-freshness-row">
             <small id="watchlist-updated" class="watchlist-freshness" data-state="loading" aria-live="polite">正在获取行情</small>
@@ -500,7 +507,7 @@ function renderWatchlistShell(isLoading = false, mountGeneration = activeMountGe
           </button>
         </div>
       </header>
-      <div class="watchlist-context-row">
+      <div class="watchlist-context-row" data-motion-reveal style="--motion-delay:80ms">
         <div id="market-status-panel" class="market-status-panel market-status-panel--compact"></div>
         <section class="watchlist-earnings-strip" aria-labelledby="watchlist-earnings-title">
           <div class="watchlist-strip-title">
@@ -520,20 +527,19 @@ function renderWatchlistShell(isLoading = false, mountGeneration = activeMountGe
         <span id="watchlist-add-feedback" class="watchlist-add-feedback" role="status" aria-live="polite"></span>
       </div>
 
-      <section class="watchlist-stage" aria-label="自选摘要">
-        <article id="watchlist-spotlight" class="focus-panel" data-spotlight-surface>
+      <section class="watchlist-stage" data-motion-reveal style="--motion-delay:140ms" aria-label="自选摘要">
+        <article id="watchlist-spotlight" class="focus-panel" data-spotlight-surface data-motion-spotlight data-motion-lens>
           ${isLoading ? '<div class="focus-panel__skeleton"><span></span><span></span><span></span></div>' : ''}
         </article>
-        <aside id="watchlist-pulse" class="pulse-panel">
+        <aside id="watchlist-pulse" class="pulse-panel" data-motion-reveal>
           ${isLoading ? '<div class="pulse-panel__skeleton"><span></span><span></span><span></span></div>' : ''}
         </aside>
       </section>
 
-      <section class="watchlist-list-section" aria-labelledby="watchlist-list-title">
+      <section class="watchlist-list-section" data-motion-reveal style="--motion-delay:200ms" aria-labelledby="watchlist-list-title">
         <div class="watchlist-section-heading">
           <div class="watchlist-list-title">
-            <span>观察清单</span>
-            <h2 id="watchlist-list-title">我的标的</h2>
+            <h2 id="watchlist-list-title">观察清单</h2>
             <span id="watchlist-card-count" class="watchlist-card-count">—</span>
           </div>
           <div class="watchlist-controls">
@@ -557,18 +563,11 @@ function renderWatchlistShell(isLoading = false, mountGeneration = activeMountGe
                     <option value="ticker">代码顺序</option>
                   </select>
                 </label>
-                <div class="watchlist-view-switch" role="group" aria-label="显示方式">
-                  <button type="button" data-watchlist-view="list" aria-pressed="true">列表</button>
-                  <button type="button" data-watchlist-view="grid" aria-pressed="false">矩阵</button>
-                </div>
               </div>
             </details>
           </div>
         </div>
-        <div class="watchlist-column-head" aria-hidden="true">
-          <span>标的</span><span>七日走势</span><span>价格与涨跌</span><span>判断</span><span></span>
-        </div>
-        <div id="watchlist-grid" class="watchlist-grid ${isLoading ? 'is-loading' : ''}" data-view="list">
+        <div id="watchlist-grid" class="watchlist-grid ${isLoading ? 'is-loading' : ''}" data-view="cards" data-motion-reveal role="list">
           ${isLoading ? Array.from({ length: 8 }, () => '<div class="watchlist-skeleton" aria-hidden="true"><span></span><span></span><span></span><span></span></div>').join('') : ''}
         </div>
       </section>
@@ -589,7 +588,6 @@ let __editMode = false;
 let __watchlistFilter = 'all';
 let __watchlistSort = 'custom';
 let __watchlistQuery = '';
-let __watchlistView = 'list';
 let __spotlightTicker = '';
 let watchlistRequestSequence = 0;
 let activeWatchlistController = null;
@@ -607,23 +605,24 @@ function renderUpcomingEarnings(items) {
     list.innerHTML = '<li class="terminal-panel-empty">暂无未来财报数据</li>';
     return;
   }
-  list.innerHTML = items.slice(0, 3).map((item) => `
+  list.innerHTML = items.slice(0, 3).map((item) => {
+    const date = item.dateObj;
+    const fullDate = String(item.date).slice(0, 10);
+    const shortDate = date
+      ? `${date.getMonth() + 1}月${date.getDate()}日`
+      : fullDate;
+    return `
     <li class="terminal-earnings-item">
-      <button type="button" class="terminal-earnings-ticker" data-earnings-ticker="${escapeHtml(item.ticker)}" title="${escapeHtml(item.name)}">
-        ${escapeHtml(item.ticker)}
-      </button>
-      <span class="terminal-earnings-date">
-        <span class="mono font-data-mono" data-numeric>${escapeHtml(formatEarningsDelta(item))}</span>
-        <small>${escapeHtml(String(item.date).slice(0, 10))}</small>
-      </span>
+      <a class="terminal-earnings-card" href="#detail/${encodeURIComponent(item.ticker)}" data-motion-card data-motion-key="${escapeHtml(item.ticker)}-earnings" title="${escapeHtml(item.name)} · ${escapeHtml(fullDate)}" aria-label="打开 ${escapeHtml(item.ticker)} 详情，财报 ${escapeHtml(fullDate)}">
+        <strong class="terminal-earnings-ticker">${escapeHtml(item.ticker)}</strong>
+        <span class="terminal-earnings-date">
+          <span class="mono font-data-mono" data-numeric>${escapeHtml(formatEarningsDelta(item))}</span>
+          <time datetime="${escapeHtml(fullDate)}">${escapeHtml(shortDate)}</time>
+        </span>
+      </a>
     </li>
-  `).join('');
-  list.querySelectorAll('[data-earnings-ticker]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const ticker = button.dataset.earningsTicker;
-      if (ticker) window.location.hash = `#detail/${encodeURIComponent(ticker)}`;
-    });
-  });
+  `;
+  }).join('');
 }
 
 async function loadUpcomingEarnings(mountGeneration = activeMountGeneration) {
@@ -751,7 +750,7 @@ function renderCardsFromCustom() {
     return s;
   });
   updateWatchlistOverview(ordered);
-  grid.dataset.view = __watchlistView;
+  grid.dataset.view = 'cards';
   if (!ordered.length) {
     if (count) count.textContent = '0 个标的';
     const msg = __watchlistState.fetchError
@@ -791,7 +790,7 @@ function renderCardsFromCustom() {
     grid.innerHTML = '<div class="watchlist-empty"><strong>没有符合条件的标的</strong><span>换一个筛选条件或搜索词</span></div>';
     return;
   }
-  grid.innerHTML = `${visible.map((s) => renderStockCard(s, __editMode)).join('')}
+  grid.innerHTML = `${visible.map((s, index) => renderStockCard(s, __editMode, index)).join('')}
     ${remaining > 0 ? `<button type="button" class="watchlist-load-more" data-watchlist-load-more>继续显示 ${remaining} 只</button>` : ''}`;
   grid.querySelector(`[data-ticker="${CSS.escape(__spotlightTicker)}"]`)?.classList.add('is-focused');
   bindCardEvents();
@@ -840,15 +839,6 @@ function bindCardEvents() {
       renderCardsFromCustom();
       return;
     }
-    const open = e.target.closest('[data-open-ticker]');
-    if (open?.dataset.openTicker && !__editMode) {
-      window.location.hash = `#detail/${encodeURIComponent(open.dataset.openTicker)}`;
-      return;
-    }
-    const focus = e.target.closest('[data-focus-ticker]');
-    if (focus?.dataset.focusTicker && !__editMode) {
-      focusWatchlistTicker(focus.dataset.focusTicker, { navigateOnMobile: true });
-    }
   });
   grid.addEventListener('pointerover', (event) => {
     if (__editMode || window.matchMedia('(max-width: 767px)').matches) return;
@@ -857,17 +847,21 @@ function bindCardEvents() {
       focusWatchlistTicker(row.dataset.ticker);
     }
   });
+  grid.addEventListener('focusin', (event) => {
+    if (__editMode) return;
+    const link = event.target.closest('[data-card-link]');
+    if (link?.dataset.cardLink && link.dataset.cardLink !== __spotlightTicker) {
+      focusWatchlistTicker(link.dataset.cardLink);
+    }
+  });
 }
 
 function bindWatchlistControls() {
   const page = document.querySelector('.watchlist-page');
   if (!page || page.dataset.controlsBound === 'true') return;
   page.dataset.controlsBound = 'true';
-  page.querySelectorAll('[data-watchlist-view]').forEach((button) => {
-    button.setAttribute('aria-pressed', String(button.dataset.watchlistView === __watchlistView));
-  });
   const grid = document.getElementById('watchlist-grid');
-  if (grid) grid.dataset.view = __watchlistView;
+  if (grid) grid.dataset.view = 'cards';
   const queryInput = document.getElementById('watchlist-filter-input');
   queryInput?.addEventListener('input', () => {
     __watchlistQuery = queryInput.value.trim().toLowerCase();
@@ -886,16 +880,6 @@ function bindWatchlistControls() {
         button.setAttribute('aria-pressed', String(button === filter));
       });
       visibleCardLimit = WATCHLIST_PAGE_SIZE;
-      renderCardsFromCustom();
-      return;
-    }
-    const view = event.target.closest('[data-watchlist-view]');
-    if (view) {
-      __watchlistView = view.dataset.watchlistView === 'grid' ? 'grid' : 'list';
-      page.querySelectorAll('[data-watchlist-view]').forEach((button) => {
-        button.setAttribute('aria-pressed', String(button === view));
-      });
-      try { localStorage.setItem('optix.watchlist.view.v1', __watchlistView); } catch (_) { /* storage unavailable */ }
       renderCardsFromCustom();
       return;
     }
@@ -1006,11 +990,6 @@ export function renderWatchlist() {
   __watchlistSort = 'custom';
   __watchlistQuery = '';
   __spotlightTicker = '';
-  try {
-    __watchlistView = localStorage.getItem('optix.watchlist.view.v1') === 'grid' ? 'grid' : 'list';
-  } catch (_) {
-    __watchlistView = 'list';
-  }
   const snapshot = readStoredSnapshot();
   const hasSnapshot = Boolean(snapshot?.stocks?.length);
   if (!hasSnapshot) {

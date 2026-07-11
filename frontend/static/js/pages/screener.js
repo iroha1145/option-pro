@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { renderIcon } from '../icons.js';
+import { renderMarketStrengthPlaceholder } from '../components/marketStrengthPlaceholder.js';
 
 const SCREENER_STYLES_ID = 'optix-screener-v3-styles';
 
@@ -133,11 +134,6 @@ function sourceStatusTone(status) {
   return 'muted';
 }
 
-function navigateToDetail(ticker) {
-  if (!ticker) return;
-  window.location.hash = `#detail/${encodeURIComponent(ticker)}`;
-}
-
 function currentFocusDescriptor() {
   const active = document.activeElement;
   if (!(active instanceof HTMLElement) || !active.closest('.screening-page')) return null;
@@ -147,7 +143,6 @@ function currentFocusDescriptor() {
   }
   if (active.dataset.sectorId !== undefined) return { type: 'sector', value: active.dataset.sectorId };
   if (active.dataset.resultToggle) return { type: 'toggle', value: active.dataset.resultToggle };
-  if (active.dataset.resultOpen) return { type: 'open', value: active.dataset.resultOpen };
   return null;
 }
 
@@ -158,7 +153,6 @@ function restoreFocus(descriptor) {
   if (descriptor.type === 'timeframe') candidates = [...document.querySelectorAll('[data-control="timeframe"] [data-value]')].filter((item) => item.dataset.value === descriptor.value);
   if (descriptor.type === 'sector') candidates = [...document.querySelectorAll('[data-sector-id]')].filter((item) => item.dataset.sectorId === descriptor.value);
   if (descriptor.type === 'toggle') candidates = [...document.querySelectorAll('[data-result-toggle]')].filter((item) => item.dataset.resultToggle === descriptor.value);
-  if (descriptor.type === 'open') candidates = [...document.querySelectorAll('[data-result-open]')].filter((item) => item.dataset.resultOpen === descriptor.value);
   candidates[0]?.focus({ preventScroll: true });
 }
 
@@ -199,7 +193,7 @@ function renderSectorPicker(sectors = []) {
 
 function renderControls(sectors = []) {
   return `
-    <section class="screening-section screening-controls" aria-labelledby="screening-filter-title">
+    <section class="screening-section screening-controls" aria-labelledby="screening-filter-title" data-motion-reveal data-motion-key="screener-controls">
       <div class="screening-section-topline">
         ${renderStepHeading('01', '扫描设置', '设定候选范围', '更改条件后会自动重新扫描')}
         <button id="strength-run" class="screening-run-button" type="button" ${state.loading ? 'disabled' : ''}>
@@ -361,7 +355,7 @@ function renderMarketContext(payload = {}) {
   const marketLabel = market.label || (state.loading ? '计算中' : '暂无判断');
   const firstWarning = Array.isArray(market.warnings) ? market.warnings[0] : '';
   return `
-    <section class="screening-section screening-context" aria-labelledby="screening-context-title" aria-busy="${state.loading}">
+    <section class="screening-section screening-context" aria-labelledby="screening-context-title" aria-busy="${state.loading}" data-motion-reveal data-motion-key="screener-context">
       ${renderStepHeading('02', '扫描状态', '理解市场背景', '先判断环境，再查看个股')}
       <div class="screening-context-strip">
         <div class="screening-status screening-status--${status.tone}" ${state.error ? 'role="alert"' : 'role="status"'}>
@@ -403,7 +397,7 @@ function renderScoreBar(value, label) {
   const score = Number.isFinite(numeric) ? Math.max(0, Math.min(100, numeric)) : 0;
   const display = Number.isFinite(numeric) ? score.toFixed(0) : '—';
   return `
-    <span class="screening-scorebar" aria-label="${escapeHtml(label)}评分 ${display}">
+    <span class="screening-scorebar" role="progressbar" aria-label="${escapeHtml(label)}评分" aria-valuemin="0" aria-valuemax="100" ${Number.isFinite(numeric) ? `aria-valuenow="${score.toFixed(0)}"` : 'aria-valuetext="暂无数据"'}>
       <small>${escapeHtml(label)}</small>
       <i aria-hidden="true"><b style="width:${score}%"></b></i>
       <strong class="screening-data">${display}</strong>
@@ -415,6 +409,8 @@ function renderResultCard(row, index) {
   const ticker = String(row.ticker || '').toUpperCase();
   const expanded = state.expandedTicker === ticker;
   const explanationId = `screening-explanation-${index}`;
+  const toggleId = `screening-explanation-toggle-${index}`;
+  const detailHref = `#detail/${encodeURIComponent(ticker)}`;
   const reasons = Array.isArray(row.reasons) ? row.reasons.filter(Boolean) : [];
   const warnings = Array.isArray(row.warnings) ? row.warnings.filter(Boolean) : [];
   const tags = Array.isArray(row.tags) ? row.tags.filter(Boolean) : [];
@@ -440,30 +436,64 @@ function renderResultCard(row, index) {
     optionStatus === 'active' && Number.isFinite(optionHeat) ? `期权热度 ${formatScore(optionHeat)}` : '',
     optionStatus !== 'active' ? `期权信号 ${sourceStatusLabel(optionStatus)}` : '',
   ].filter(Boolean);
+  const rank = String(index + 1).padStart(2, '0');
+  const lead = index === 0;
+  const leadDimensions = [
+    ['短期', row.score_short],
+    ['中期', row.score_mid],
+    ['长期', row.score_long],
+  ];
   return `
-    <article class="screening-candidate screening-candidate--${tone} ${expanded ? 'is-expanded' : ''}" role="listitem" style="--row-index:${Math.min(index, 7)}">
+    <article class="screening-candidate screening-candidate--${tone} ${lead ? 'screening-candidate--lead' : ''} ${expanded ? 'is-expanded' : ''}" role="listitem"
+      data-motion-card data-motion-key="screener-${escapeHtml(ticker)}" ${lead ? 'data-motion-lens data-motion-spotlight' : ''}>
       <div class="screening-candidate-summary">
-        <button type="button" class="screening-candidate-identity" data-result-open="${escapeHtml(ticker)}" aria-label="打开 ${escapeHtml(ticker)} 研究页">
-          <strong class="screening-data">${escapeHtml(ticker || '—')}</strong>
-          <small>${escapeHtml(row.name || row.sector_name || '名称暂缺')}</small>
-        </button>
-        <span class="screening-candidate-price">
-          <strong class="screening-data">${formatMoney(row.price)}</strong>
-          <small class="screening-change screening-change--${movement}"><span aria-hidden="true">${changeSymbol}</span>${formatPercent(row.change_pct)}</small>
-        </span>
-        <span class="screening-candidate-score">
-          <small>总分</small>
-          <strong class="screening-data">${formatScore(row.final_score, 0)}</strong>
-        </span>
-        <span class="screening-verdict screening-verdict--${tone}"><i aria-hidden="true"></i>${escapeHtml(verdict)}</span>
-        <p class="screening-primary-reason">${escapeHtml(primaryReason)}</p>
-        <button type="button" class="screening-explain-button" data-result-toggle="${escapeHtml(ticker)}" aria-expanded="${expanded}" aria-controls="${explanationId}" aria-label="${expanded ? '收起' : '展开'} ${escapeHtml(ticker)} 入选理由">
-          <span>${expanded ? '收起' : '理由'}</span>
+        <a class="screening-candidate-link" href="${detailHref}" aria-label="打开 ${escapeHtml(ticker)} 研究页">
+          <span class="screening-candidate-rank" aria-hidden="true">
+            <b class="screening-data">${rank}</b>
+            ${lead ? '<small>本轮首选</small>' : '<small>研究序列</small>'}
+          </span>
+          <span class="screening-candidate-main">
+            <span class="screening-candidate-identity">
+              <strong class="screening-data">${escapeHtml(ticker || '—')}</strong>
+              <small>${escapeHtml(row.name || row.sector_name || '名称暂缺')}</small>
+            </span>
+            <span class="screening-candidate-price">
+              <strong class="screening-data">${formatMoney(row.price)}</strong>
+              <small class="screening-change screening-change--${movement}"><span aria-hidden="true">${changeSymbol}</span>${formatPercent(row.change_pct)}</small>
+            </span>
+            <span class="screening-primary-reason">${escapeHtml(primaryReason)}</span>
+          </span>
+          <span class="screening-candidate-evaluation">
+            <span class="screening-candidate-score">
+              <small>综合评分</small>
+              <strong class="screening-data">${formatScore(row.final_score, 0)}</strong>
+              <em>/ 100</em>
+            </span>
+            <span class="screening-verdict screening-verdict--${tone}"><i aria-hidden="true"></i>${escapeHtml(verdict)}</span>
+            ${lead ? `
+              <span class="screening-lead-dimensions" aria-label="首选标的核心维度">
+                ${leadDimensions.map(([label, value]) => {
+                  const numeric = Number(value);
+                  const dimensionScore = Number.isFinite(numeric) ? Math.max(0, Math.min(100, numeric)) : 0;
+                  return `
+                    <span>
+                      <small>${escapeHtml(label)}</small>
+                      <i aria-hidden="true"><b style="width:${dimensionScore}%"></b></i>
+                      <strong class="screening-data">${formatScore(value, 0)}</strong>
+                    </span>
+                  `;
+                }).join('')}
+              </span>
+            ` : ''}
+          </span>
+        </a>
+        <button id="${toggleId}" type="button" class="screening-explain-button" data-result-toggle="${escapeHtml(ticker)}" aria-expanded="${expanded}" aria-controls="${explanationId}" aria-label="${expanded ? '收起' : '展开'} ${escapeHtml(ticker)} 入选理由">
+          <span>${expanded ? '收起理由' : '查看理由'}</span>
           ${renderIcon('chevron_right', { size: 17 })}
         </button>
       </div>
       ${expanded ? `
-        <div id="${explanationId}" class="screening-candidate-detail">
+        <div id="${explanationId}" class="screening-candidate-detail" role="region" aria-labelledby="${toggleId}">
           <div class="screening-explanation-copy">
             <div>
               <h3>入选依据</h3>
@@ -485,7 +515,6 @@ function renderResultCard(row, index) {
               ${detailFacts.map((fact) => `<span>${escapeHtml(fact)}</span>`).join('')}
             </div>
           ` : ''}
-          <button type="button" class="screening-open-research" data-result-open="${escapeHtml(ticker)}">打开完整研究 ${renderIcon('arrow_up_right', { size: 17 })}</button>
         </div>
       ` : ''}
     </article>
@@ -504,21 +533,15 @@ function renderResults(payload = {}) {
       </div>
     `;
   } else if (state.error) {
-    body = '<div class="screening-result-state"><strong>候选列表暂不可用</strong><span>返回上方重试扫描，不会更改当前条件。</span></div>';
+    body = '<div class="screening-result-state" role="status"><strong>候选列表暂不可用</strong><span>返回上方重试扫描，不会更改当前条件。</span></div>';
   } else if (!rows.length) {
-    body = '<div class="screening-result-state"><strong>本轮没有候选</strong><span>放宽板块范围或切换评分偏好后会自动重扫。</span></div>';
+    body = '<div class="screening-result-state" role="status"><strong>本轮没有候选</strong><span>放宽板块范围或切换评分偏好后会自动重扫。</span></div>';
   } else {
-    body = `
-      <div class="screening-candidate-columns" aria-hidden="true">
-        <span>标的</span><span>价格与涨跌</span><span>总分</span><span>判断</span><span>首要理由</span><span></span>
-      </div>
-      <div class="screening-candidate-list" role="list">
-        ${rows.map(renderResultCard).join('')}
-      </div>
-    `;
+    body = rows.map(renderResultCard).join('');
   }
+  const hasCandidates = !state.loading && !state.error && rows.length > 0;
   return `
-    <section class="screening-section screening-results" aria-labelledby="screening-results-title" aria-busy="${state.loading}">
+    <section class="screening-section screening-results" aria-labelledby="screening-results-title" aria-busy="${state.loading}" data-motion-reveal data-motion-key="screener-results">
       <div class="screening-results-heading">
         ${renderStepHeading('03', '候选列表', '查看优先研究标的', '默认只显示最重要的判断与理由')}
         <span class="screening-result-context">
@@ -526,7 +549,7 @@ function renderResults(payload = {}) {
           <small>${escapeHtml(profileLabel)} · ${escapeHtml(timeframeLabel)}${state.sectorId ? ' · 已限板块' : ''}</small>
         </span>
       </div>
-      <div class="screening-results-surface">
+      <div class="screening-results-surface" data-result-state="${hasCandidates ? 'ready' : state.loading ? 'loading' : state.error ? 'error' : 'empty'}" ${hasCandidates ? 'role="list"' : ''}>
         ${body}
       </div>
     </section>
@@ -544,8 +567,8 @@ function renderShell() {
     ? payload.sectors
     : (state.profiles?.sectors || []);
   app.innerHTML = `
-    <section class="screening-page" aria-labelledby="screener-title">
-      <header class="screening-intro">
+    <section class="screening-page" aria-labelledby="screener-title" data-motion-page="screener">
+      <header class="screening-intro" data-motion-reveal data-motion-key="screener-intro">
         <div>
           <span class="screening-kicker">Optix Pro · 股票扫描</span>
           <h1 id="screener-title">从市场里，筛出值得研究的股票</h1>
@@ -558,8 +581,11 @@ function renderShell() {
         </div>
       </header>
       <div class="screening-flow">
-        ${renderControls(sectors)}
-        ${renderMarketContext(payload)}
+        <div class="screening-console" data-motion-key="screener-console" data-motion-lens>
+          ${renderControls(sectors)}
+          ${renderMarketContext(payload)}
+          ${renderMarketStrengthPlaceholder({ variant: 'screener' })}
+        </div>
         ${renderResults(payload)}
       </div>
     </section>
@@ -609,15 +635,12 @@ function bindEvents() {
       runScan();
     });
   });
-  document.querySelectorAll('[data-result-open]').forEach((button) => {
-    button.addEventListener('click', () => navigateToDetail(button.dataset.resultOpen));
-  });
-  document.querySelectorAll('[data-result-toggle]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const ticker = button.dataset.resultToggle || '';
-      state.expandedTicker = state.expandedTicker === ticker ? '' : ticker;
-      renderShell();
-    });
+  document.querySelector('.screening-results-surface')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-result-toggle]');
+    if (!button) return;
+    const ticker = button.dataset.resultToggle || '';
+    state.expandedTicker = state.expandedTicker === ticker ? '' : ticker;
+    renderShell();
   });
   document.querySelectorAll('[data-arrow-nav]').forEach(bindArrowNavigation);
 }

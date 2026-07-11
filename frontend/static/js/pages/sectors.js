@@ -172,8 +172,8 @@ function renderShell(generation) {
   const app = document.getElementById('app');
   if (!app) return;
   app.innerHTML = `
-    <section class="sector-page" data-sectors-mount="${generation}" data-mobile-view="map" aria-labelledby="sectors-title">
-      <header class="sector-page__header">
+    <section class="sector-page" data-sectors-mount="${generation}" data-mobile-view="map" data-motion-page="sectors" data-motion-key="sectors" aria-labelledby="sectors-title">
+      <header class="sector-page__header" data-motion-reveal data-motion-lens data-motion-key="sectors-header">
         <div>
           <span class="sector-kicker">市场概览</span>
           <h1 id="sectors-title">板块</h1>
@@ -185,7 +185,7 @@ function renderShell(generation) {
         </div>
       </header>
 
-      <section class="sector-overview" aria-labelledby="sector-overview-title">
+      <section class="sector-overview" data-motion-reveal data-motion-key="sectors-overview" aria-labelledby="sector-overview-title">
         <div class="sector-overview__statement">
           <span class="sector-kicker">今日宽度</span>
           <h2 id="sector-overview-title">正在计算板块强弱</h2>
@@ -198,7 +198,7 @@ function renderShell(generation) {
         </dl>
       </section>
 
-      <section class="sector-explorer" aria-labelledby="sector-ranking-title">
+      <section class="sector-explorer" data-motion-reveal data-motion-key="sectors-ranking" aria-labelledby="sector-ranking-title">
         <header class="sector-section-heading">
           <div>
             <span class="sector-kicker">选择观察方向</span>
@@ -216,8 +216,8 @@ function renderShell(generation) {
         <button type="button" data-sector-mobile-view="inspector" aria-pressed="false">板块详情</button>
       </div>
 
-      <div class="sector-workspace">
-        <section class="sector-map-stage" aria-labelledby="heatmap-title">
+      <div class="sector-workspace" data-motion-reveal data-motion-key="sectors-workspace">
+        <section class="sector-map-stage" data-motion-lens data-motion-spotlight data-motion-key="sector-map" aria-labelledby="heatmap-title">
           <header class="sector-map-header">
             <div>
               <span class="sector-kicker">成分股地图</span>
@@ -236,7 +236,7 @@ function renderShell(generation) {
           </div>
         </section>
 
-        <aside class="sector-inspector" aria-labelledby="sector-inspector-title">
+        <aside class="sector-inspector" data-motion-reveal data-motion-key="sector-inspector" aria-labelledby="sector-inspector-title">
           <header class="sector-inspector__header">
             <span class="sector-kicker">选中板块</span>
             <h2 id="sector-inspector-title">等待选择</h2>
@@ -304,7 +304,7 @@ function renderSectorRankings(root, sectors, activeSectorId = '') {
     const leaders = sector.leaders.length ? sector.leaders.join(' · ') : (sector.ticker || '成分股待同步');
     const performance = formatPercent(sector.performance);
     return `
-      <button class="sector-rank-button" type="button" data-sector-select
+      <button class="sector-rank-button" type="button" data-sector-select data-motion-card data-motion-spotlight data-motion-key="sector-${escapeHtml(sector.id)}"
         data-sector-id="${escapeHtml(sector.id)}" data-sector-name="${escapeHtml(sector.name)}"
         aria-pressed="false" aria-label="查看 ${escapeHtml(sector.name)}，日内表现 ${escapeHtml(performance)}" tabindex="-1">
         <span class="sector-rank-button__number" data-numeric>${String(index + 1).padStart(2, '0')}</span>
@@ -365,7 +365,7 @@ function renderConstituents(stocks, { pending = false, unavailable = false } = {
       const ticker = String(stock.ticker ?? stock.symbol ?? '').trim().toUpperCase();
       const change = finiteValue(stock.change_percent, stock.changePercent, stock.change);
       return `
-        <button type="button" class="sector-constituent-row" data-ticker="${escapeHtml(ticker)}" aria-label="打开 ${escapeHtml(ticker)} 详情">
+        <button type="button" class="sector-constituent-row" data-ticker="${escapeHtml(ticker)}" data-motion-card data-motion-key="constituent-${escapeHtml(ticker)}" aria-label="打开 ${escapeHtml(ticker)} 详情">
           <span class="sector-list-rank" data-numeric>${String(index + 1).padStart(2, '0')}</span>
           <span class="sector-list-identity"><strong>${escapeHtml(ticker)}</strong><small>${escapeHtml(stock.name_cn ?? stock.name ?? stock.company ?? '上市公司')}</small></span>
           <span class="sector-list-price" data-numeric>${formatPrice(stock.price)}</span>
@@ -381,7 +381,7 @@ function renderIvRanking(items) {
   if (!items.length) return '<div class="sector-inline-state">暂无有效波动率数据。</div>';
   return `<div class="sector-iv-list">
     ${items.map((item, index) => `
-      <button class="sector-iv-row" type="button" data-ticker="${escapeHtml(item.ticker)}" aria-label="打开 ${escapeHtml(item.ticker)} 详情">
+      <button class="sector-iv-row" type="button" data-ticker="${escapeHtml(item.ticker)}" data-motion-card data-motion-key="iv-${escapeHtml(item.ticker)}" aria-label="打开 ${escapeHtml(item.ticker)} 详情">
         <span class="sector-list-rank" data-numeric>${String(index + 1).padStart(2, '0')}</span>
         <span class="sector-list-identity"><strong>${escapeHtml(item.ticker)}</strong><small>${escapeHtml(item.name || item.sector)}</small></span>
         <span class="sector-iv-metric"><small>${escapeHtml(item.rankLabel)}</small><b data-numeric>${Number.isFinite(item.ivRank) ? item.ivRank.toFixed(0) : '—'}</b></span>
@@ -520,6 +520,11 @@ async function loadSectorDetail(sectorId, sectorName, watchlistGroups = [], moun
     map.innerHTML = heatmapResult.status === 'fulfilled'
       ? renderHeatmap(heatmapResult.value ?? EMPTY_HEATMAP)
       : renderDetailError('成分股地图暂时无法读取');
+    map.querySelectorAll('.heatmap-tile[data-ticker]').forEach((tile) => {
+      tile.setAttribute('data-motion-card', '');
+      tile.setAttribute('data-motion-spotlight', '');
+      tile.setAttribute('data-motion-key', `heatmap-${sectorId}-${tile.dataset.ticker || 'item'}`);
+    });
   }
   if (constituents) {
     constituents.innerHTML = renderConstituents(sectorStocks, {
