@@ -93,7 +93,8 @@ const linkedStyles = [...index.matchAll(/<link\s+rel="stylesheet"\s+href="([^"]+
 assert.deepEqual(linkedStyles, [
   './static/css/optix-core-v3.css',
   './static/css/optix-watchlist-v3.css',
-], 'the shell should load only the core and initial-route v3 styles');
+  './static/css/optix-nightday-v4.css',
+], 'the shell should load the core, initial-route, and night/day theme styles');
 
 // Core Optix Pro shell.
 assert.match(index, /<title>Optix Pro · 个人投资研究<\/title>/, 'the product name must stay unified');

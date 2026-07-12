@@ -705,6 +705,79 @@ function renderRangePersistenceDetail(view) {
   `;
 }
 
+/* ---- 候选完整证据(夜昼版增量):贡献构成 / 配置→有效权重 / 覆盖与降级 ----
+   字段全部来自 /api/strength/scan 行输出;任一字段缺失则对应小节不渲染,不伪造。 */
+const EVIDENCE_COMPONENT_LABELS = {
+  technical: '技术面', breakout_quality: '突破质量', price_action: '价格结构', sector_relative: '板块相对',
+  market_fit: '市场适配', option_heat: '期权热度', momentum: '动量', relative_strength: '相对强弱',
+  long_trend: '长期趋势', sector_strength: '板块强度', intrinsic: '内在强度', ranking: '排序评分',
+  profile_fit: '偏好适配', range_persistence: '区间持续性', liquidity: '流动性', volume: '量能', trend: '趋势',
+};
+const evidenceLabel = (key) => EVIDENCE_COMPONENT_LABELS[key] || key;
+const evidenceWeight = (value) => (Number.isFinite(Number(value)) ? `${Math.round(Number(value) * 100)}%` : '—');
+
+function renderCandidateEvidence(row, payload = {}) {
+  const contributions = Object.entries(row.contributions || {})
+    .filter(([, value]) => Number.isFinite(Number(value)))
+    .sort((a, b) => Number(b[1]) - Number(a[1]));
+  const configured = row.configured_weights || {};
+  const effective = row.effective_weights || {};
+  const weightKeys = [...new Set([...Object.keys(configured), ...Object.keys(effective)])];
+  const coverage = row.coverage || {};
+  const coverageRows = [['ranking', '排序评分'], ['intrinsic', '内在强度'], ['profile_fit', '偏好适配'], ['market_fit', '市场适配']]
+    .map(([key, label]) => {
+      const value = coverage[key];
+      if (value == null) return null;
+      const ratio = Number.isFinite(Number(value?.ratio)) ? Number(value.ratio) : (Number.isFinite(Number(value)) ? Number(value) : null);
+      return { label, ratio, status: value?.status || null };
+    })
+    .filter(Boolean);
+  const missing = Array.isArray(row.missing_components) ? row.missing_components.filter(Boolean) : [];
+  const versions = [
+    payload.score_version ? `评分 ${payload.score_version}` : '',
+    payload.feature_version ? `特征 ${payload.feature_version}` : '',
+    payload.normalization_version ? `归一化 ${payload.normalization_version}` : '',
+  ].filter(Boolean).join(' · ');
+  if (!contributions.length && !weightKeys.length && !coverageRows.length && !missing.length) return '';
+  return `
+    <details class="screening-evidence">
+      <summary>完整证据:贡献构成 · 权重再分配 · 数据覆盖</summary>
+      <div class="screening-evidence__body">
+        ${contributions.length ? `
+          <div class="screening-evidence__block">
+            <h4>贡献构成</h4>
+            <dl class="screening-evidence__grid">
+              ${contributions.map(([key, value]) => `<div><dt>${escapeHtml(evidenceLabel(key))}</dt><dd class="screening-data">${Number(value).toFixed(1)}</dd></div>`).join('')}
+            </dl>
+          </div>
+        ` : ''}
+        ${weightKeys.length ? `
+          <div class="screening-evidence__block">
+            <h4>配置权重 → 有效权重</h4>
+            <dl class="screening-evidence__grid">
+              ${weightKeys.map((key) => `<div><dt>${escapeHtml(evidenceLabel(key))}</dt><dd class="screening-data">${evidenceWeight(configured[key])} → ${effective[key] == null ? '0%(降级/再分配)' : evidenceWeight(effective[key])}</dd></div>`).join('')}
+            </dl>
+          </div>
+        ` : ''}
+        ${coverageRows.length || missing.length ? `
+          <div class="screening-evidence__block">
+            <h4>数据覆盖与降级</h4>
+            <div class="screening-evidence__chips">
+              ${coverageRows.map((item) => {
+                const warn = item.status === 'degraded' || (item.ratio != null && item.ratio < 0.85);
+                const shown = item.ratio != null ? `${Math.round(item.ratio * 100)}%` : sourceStatusLabel(item.status || 'unavailable');
+                return `<span class="${warn ? 'is-warn' : 'is-ok'}"><i aria-hidden="true"></i>${escapeHtml(item.label)} · ${escapeHtml(shown)}</span>`;
+              }).join('')}
+              ${missing.map((key) => `<span class="is-warn"><i aria-hidden="true"></i>缺失 · ${escapeHtml(evidenceLabel(key))}</span>`).join('')}
+            </div>
+          </div>
+        ` : ''}
+        ${versions ? `<p class="screening-evidence__meta">${escapeHtml(versions)} · 缺失分量按规则再分配权重,不以默认分填充。</p>` : ''}
+      </div>
+    </details>
+  `;
+}
+
 function renderResultCard(row, index, payload = {}) {
   const ticker = String(row.ticker || '').toUpperCase();
   const expanded = state.expandedTicker === ticker;
@@ -812,6 +885,7 @@ function renderResultCard(row, index, payload = {}) {
             ${renderScoreBar(row.sector_score, '板块')}
           </div>
           ${renderRangePersistenceDetail(rangePersistence)}
+          ${renderCandidateEvidence(row, payload)}
           ${detailFacts.length || tags.length ? `
             <div class="screening-detail-facts">
               ${tags.slice(0, 4).map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}
