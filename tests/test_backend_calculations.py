@@ -14,6 +14,7 @@ from fastapi import HTTPException
 
 from app.api import market, strength as strength_api
 from app.services import scoring, signals, yahoo
+from app.services.cache import TTLCache
 from app.services.strength import (
     market_regime,
     marketdata,
@@ -291,7 +292,7 @@ def test_scan_uses_server_fixed_cache_ttl(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(
         scanner,
         "_download_history",
-        lambda _symbols, period="1y": pd.DataFrame(),
+        lambda _symbols, period="1y": _history(5),
     )
 
     first = asyncio.run(scanner.scan_strength(include_options=False))
@@ -310,6 +311,96 @@ def test_scan_uses_server_fixed_cache_ttl(monkeypatch: pytest.MonkeyPatch) -> No
     assert second["_cached"] is True
     assert first["cache_ttl_seconds"] == scanner.STRENGTH_CACHE_TTL_SECONDS
     assert second["cache_ttl_seconds"] == scanner.STRENGTH_CACHE_TTL_SECONDS
+
+
+@pytest.mark.parametrize("initial_shape", ["empty", "all_nan"])
+def test_history_download_retries_a_transient_unusable_yahoo_response(
+    monkeypatch: pytest.MonkeyPatch,
+    initial_shape: str,
+) -> None:
+    history = _history(300)
+    history.columns = pd.MultiIndex.from_product([["AAA"], history.columns])
+    unusable = pd.DataFrame()
+    if initial_shape == "all_nan":
+        unusable = pd.DataFrame(
+            [[float("nan"), float("nan")]],
+            columns=pd.MultiIndex.from_product([["AAA"], ["Close", "Volume"]]),
+        )
+    responses = iter([unusable, history])
+    calls = 0
+
+    def download(**_kwargs):
+        nonlocal calls
+        calls += 1
+        return next(responses)
+
+    monkeypatch.setattr(scanner.yf, "download", download)
+
+    result = scanner._download_history(["AAA"], period="2y")
+
+    assert calls == 2
+    assert not result.empty
+    assert result.attrs["price_source"]["status"] == "active"
+    assert not scanner._slice_ticker(result, "AAA").empty
+
+
+def test_unusable_strength_history_is_not_cached_as_a_valid_scan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+    benchmark_only = pd.concat({"SPY": _history(300)}, axis=1)
+
+    def unusable_history(*_args, **_kwargs):
+        nonlocal attempts
+        attempts += 1
+        return benchmark_only.copy()
+
+    monkeypatch.setattr(scanner, "cache", TTLCache())
+    monkeypatch.setattr(scanner, "_download_history", unusable_history)
+    monkeypatch.setattr(
+        scanner,
+        "_theme_universe",
+        lambda sector_id=None: (
+            ["AAA"],
+            {"AAA": {"sector_id": "software", "sector_name": "软件"}},
+        ),
+    )
+
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match="strength_price_history_unavailable"):
+            asyncio.run(scanner.scan_strength(include_options=False))
+
+    assert attempts == 2
+
+
+@pytest.mark.parametrize("history_shape", ["empty", "all_nan"])
+def test_unusable_market_history_is_not_cached_as_a_valid_regime(
+    monkeypatch: pytest.MonkeyPatch,
+    history_shape: str,
+) -> None:
+    attempts = 0
+    unusable = pd.DataFrame()
+    if history_shape == "all_nan":
+        unusable = pd.DataFrame(
+            [[float("nan") for _ in scanner.MARKET_BENCHMARKS]],
+            columns=pd.MultiIndex.from_tuples(
+                [(symbol, "Close") for symbol in scanner.MARKET_BENCHMARKS]
+            ),
+        )
+
+    def unusable_history(*_args, **_kwargs):
+        nonlocal attempts
+        attempts += 1
+        return unusable.copy()
+
+    monkeypatch.setattr(scanner, "cache", TTLCache())
+    monkeypatch.setattr(scanner, "_download_history", unusable_history)
+
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match="market_price_history_unavailable"):
+            asyncio.run(scanner.market_strength())
+
+    assert attempts == 2
 
 
 def test_yahoo_option_enrichment_caps_pool_and_uses_small_parallel_batches(

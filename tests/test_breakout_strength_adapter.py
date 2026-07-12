@@ -11,6 +11,7 @@ import pytest
 import app.services.breakouts.adapters.strength as strength_adapter_module
 from app.services.breakouts.adapters.strength import ExistingStrengthAdapter
 from app.services.breakouts.config import BreakoutSettings
+from app.services.cache import TTLCache
 from app.services.strength import scanner
 
 
@@ -325,6 +326,35 @@ def test_explicit_ticker_set_daily_cache_avoids_duplicate_downloads(monkeypatch)
     assert second["_cached"] is True
     assert changed["_cached"] is False
     scanner.cache.clear()
+
+
+def test_explicit_ticker_set_does_not_cache_benchmark_only_history(monkeypatch) -> None:
+    attempts = 0
+    benchmark_only = pd.concat({"SPY": _history(-5)}, axis=1)
+
+    def download(_tickers, period="2y"):
+        nonlocal attempts
+        attempts += 1
+        return benchmark_only.copy()
+
+    monkeypatch.setattr(scanner, "cache", TTLCache())
+    monkeypatch.setattr(scanner, "_download_history", download)
+    as_of = datetime(2026, 7, 10, 12, 0, tzinfo=timezone.utc)
+
+    for _ in range(2):
+        with pytest.raises(
+            RuntimeError,
+            match="strength_ticker_set_history_unavailable",
+        ):
+            asyncio.run(
+                scanner.score_ticker_set(
+                    ["AAA"],
+                    as_of=as_of,
+                    range_mode="shadow",
+                )
+            )
+
+    assert attempts == 2
 
 
 def test_public_single_stock_lookup_preserves_profile_and_market_semantics(monkeypatch) -> None:

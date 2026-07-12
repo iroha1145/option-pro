@@ -58,6 +58,7 @@ SECTOR_PERIOD_DAYS = {"1mo": 20, "3mo": 63, "6mo": 126}
 STRENGTH_CACHE_TTL_SECONDS = 900
 MARKET_STRENGTH_CACHE_TTL_SECONDS = 900
 STRENGTH_HISTORY_PERIOD = "2y"
+_YAHOO_HISTORY_DOWNLOAD_ATTEMPTS = 2
 INTRINSIC_STRENGTH_VERSION = STRENGTH_SCORE_VERSION
 _NEW_YORK = ZoneInfo("America/New_York")
 
@@ -513,6 +514,12 @@ def _merge_history(primary: pd.DataFrame, fallback: pd.DataFrame) -> pd.DataFram
     return merged.loc[:, ~merged.columns.duplicated()]
 
 
+def _has_usable_history(df: pd.DataFrame, tickers: list[str] | tuple[str, ...]) -> bool:
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return False
+    return any(not _slice_ticker(df, ticker).empty for ticker in tickers)
+
+
 def _download_history(tickers: list[str], period: str = "1y") -> pd.DataFrame:
     session = getattr(yahoo, "_yf_session", None)
     kwargs: dict[str, Any] = {
@@ -526,10 +533,18 @@ def _download_history(tickers: list[str], period: str = "1y") -> pd.DataFrame:
     }
     if session is not None:
         kwargs["session"] = session
-    try:
-        primary = yf.download(**kwargs)
-    except Exception:
-        primary = pd.DataFrame()
+    primary = pd.DataFrame()
+    # A fresh yfinance session can occasionally return an immediate empty
+    # frame while its cookie/crumb state is being initialized. Retry that
+    # transient shape once before falling back or reporting unavailability.
+    for _attempt in range(_YAHOO_HISTORY_DOWNLOAD_ATTEMPTS):
+        try:
+            candidate = yf.download(**kwargs)
+        except Exception:
+            candidate = pd.DataFrame()
+        if isinstance(candidate, pd.DataFrame) and _has_usable_history(candidate, tickers):
+            primary = candidate
+            break
 
     missing = [ticker for ticker in tickers if _slice_ticker(primary, ticker).empty]
     if not primary.empty and not missing:
@@ -1661,11 +1676,17 @@ async def scan_strength(
             )
 
             async def load_history() -> pd.DataFrame:
-                return await asyncio.to_thread(
+                history = await asyncio.to_thread(
                     _download_history,
                     all_symbols,
                     period=STRENGTH_HISTORY_PERIOD,
                 )
+                # Frames without a usable theme ticker are transient provider
+                # failures, not valid 15-minute scan snapshots. Raising keeps
+                # both cache layers from retaining a false empty result.
+                if not _has_usable_history(history, tickers):
+                    raise RuntimeError("strength_price_history_unavailable")
+                return history
 
             raw_history, _, _ = await cache.get_or_set_with_meta(
                 history_key,
@@ -1843,6 +1864,10 @@ def _score_ticker_set_sync(
     symbols = list(dict.fromkeys(normalize_ticker(value) for value in tickers))
     all_symbols = list(dict.fromkeys([*symbols, "SPY"]))
     raw = _download_history(all_symbols, period=STRENGTH_HISTORY_PERIOD)
+    if not _has_usable_history(raw, symbols):
+        # SPY alone cannot produce a valid requested-ticker score. Raising here
+        # prevents the outer 15-minute cache from retaining a false empty set.
+        raise RuntimeError("strength_ticker_set_history_unavailable")
     source = raw.attrs.get("price_source") or _history_status(
         provider="Yahoo/yfinance",
         status="active",
@@ -2088,6 +2113,8 @@ def _market_strength_sync(as_of: datetime) -> dict[str, Any]:
     """Load only market benchmarks; never trigger the full stock-universe scan."""
 
     raw = _download_history(list(MARKET_BENCHMARKS), period="2y")
+    if not _has_usable_history(raw, MARKET_BENCHMARKS):
+        raise RuntimeError("market_price_history_unavailable")
     price_source = raw.attrs.get("price_source") or _history_status(
         provider="Yahoo/yfinance",
         status="active",
