@@ -2,34 +2,58 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import math
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import StrictBool
 
+from app.api.ai import _create_job, _job_repository, _require_runtime_capability
 from app.api.stocks import _sanitize
-from app.services import ai_analysis
+from app.services.ai_jobs.models import StrictModel
+from app.services.ai_jobs.security import require_expensive_action
 from app.services.scoring import compute_market_scores, compute_stock_scores
 from app.services.signals import compute_market_signals, compute_stock_signals
-from app.services.request_security import request_client_ip
 
 router = APIRouter(prefix="/api/signals", tags=["signals"])
 logger = logging.getLogger(__name__)
 _TICKER_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.^_-]{0,11}$")
 
 
+class SignalAnalysisJobCreateRequest(StrictModel):
+    force: StrictBool = False
+
+
 def today_str() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _client_ip(request: Request) -> str:
-    return request_client_ip(request)
-
-
-def _fingerprint(request: Request) -> str:
-    return hashlib.md5(_client_ip(request).encode()).hexdigest()[:12]
+def _signal_analysis_payload(
+    symbol: str,
+    signals: dict,
+    scores: dict,
+) -> dict:
+    evidence = {
+        "ticker": symbol,
+        "signals": _sanitize(signals),
+        "scores": _sanitize(scores),
+    }
+    canonical = json.dumps(
+        evidence,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return {
+        **evidence,
+        "as_of": datetime.now(timezone.utc).date().isoformat(),
+        "evidence_hash": hashlib.sha256(canonical).hexdigest(),
+    }
 
 
 def _normalize_ticker(ticker: str) -> str:
@@ -130,38 +154,46 @@ async def stock_signals(ticker: str):
         raise HTTPException(503, "Stock signals are currently unavailable") from exc
 
 
-@router.post("/stock/{ticker}/ai-analysis")
-async def stock_ai_analysis(ticker: str, request: Request):
-    """LLM confidence analysis on computed signals. Triggered only by explicit user action."""
+@router.post(
+    "/stock/{ticker}/ai-analysis",
+    dependencies=[Depends(require_expensive_action)],
+)
+async def stock_ai_analysis(
+    ticker: str,
+    request: SignalAnalysisJobCreateRequest = Body(
+        default_factory=SignalAnalysisJobCreateRequest
+    ),
+):
+    """Snapshot deterministic evidence and queue the paid model work."""
+
+    _require_runtime_capability()
+    symbol = _normalize_ticker(ticker)
     try:
-        fp = _fingerprint(request)
-        symbol = _normalize_ticker(ticker)
         signals = await asyncio.to_thread(compute_stock_signals, symbol)
         if isinstance(signals, dict):
             signals.pop("_cached", None)
         scores = compute_stock_scores(signals)
-        # 60s ceiling — fallback to programmatic-only response if AI hangs
-        _AI_TIMEOUT_S = 60
-        try:
-            llm_result = await asyncio.wait_for(
-                asyncio.to_thread(ai_analysis.analyze_signals, symbol, signals, scores, fp),
-                timeout=_AI_TIMEOUT_S
-            )
-        except asyncio.TimeoutError:
-            llm_result = {
-                "asset": symbol,
-                "dominant_regime": "ai_timeout",
-                "summary": f"AI 分析超时（>{_AI_TIMEOUT_S}秒），仅展示程序化分数",
-                "top_risk_confidence": scores.get("top_score"),
-                "bottom_opportunity_confidence": scores.get("bottom_score"),
-                "dip_buy_quality": scores.get("dip_buy_quality"),
-                "data_quality": scores.get("data_quality"),
-                "final_bias": "insufficient_data",
-                "error": "ai_timeout",
-            }
-        return _sanitize({**llm_result, "raw_signals": signals, "raw_scores": scores, "as_of": today_str()})
-    except HTTPException:
+        row, created = _create_job(
+            "signal_analysis",
+            _signal_analysis_payload(symbol, signals, scores),
+            force_retry=request.force,
+        )
+    except ValueError as exc:
+        if str(exc) == "ai_job_payload_too_large":
+            raise HTTPException(
+                status_code=413,
+                detail="Signal snapshot is too large for AI analysis",
+            ) from exc
         raise
-    except Exception as exc:
-        logger.warning("AI signal analysis failed (%s)", type(exc).__name__)
-        raise HTTPException(503, "AI signal analysis is currently unavailable") from exc
+    public = _job_repository().public(
+        row,
+        cached=(not created and row["status"] == "completed"),
+    )
+    return JSONResponse(
+        public,
+        status_code=202,
+        headers={
+            "Location": f"/api/ai/jobs/{row['job_id']}",
+            "Retry-After": "2",
+        },
+    )

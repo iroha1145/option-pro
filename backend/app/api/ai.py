@@ -1,22 +1,37 @@
 from __future__ import annotations
 
-import asyncio
-import hashlib
-import logging
 from datetime import date
 from typing import Annotated, Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Path, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StringConstraints,
+    field_validator,
+)
 
 from app.api.stocks import _sanitize
-from app.services import ai_analysis
-from app.services.request_security import request_client_ip
-
-logger = logging.getLogger(__name__)
+from app.config import get_settings
+from app.services.ai_jobs import runtime as ai_job_runtime
+from app.services.ai_jobs.models import (
+    CancelRequest,
+    EarningsImpactJobRequest,
+    OptionAlertJobRequest,
+)
+from app.services.ai_jobs.repository import AIJobRepository
+from app.services.ai_jobs.security import require_expensive_action
 
 _MAX_AI_BODY_BYTES = 64 * 1024
+_PROMPT_VERSIONS = {
+    "earnings_impact": "earnings-impact-v2",
+    "option_alerts": "option-alerts-v2",
+    "signal_analysis": "signal-analysis-v2",
+}
 
 
 class _BoundedBodyRoute(APIRoute):
@@ -71,15 +86,6 @@ Expiration = Annotated[
 ]
 
 
-def _client_ip(request: Request) -> str:
-    return request_client_ip(request)
-
-
-def _fingerprint(request: Request) -> str:
-    """Generate a fingerprint from client IP to distinguish different users."""
-    return hashlib.sha256(_client_ip(request).encode()).hexdigest()[:12]
-
-
 class AlertItem(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
 
@@ -119,6 +125,7 @@ class AlertsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
 
     ticker: Ticker
+    force: StrictBool = False
     alerts: list[AlertItem] = Field(default_factory=list, max_length=10)
     underlying_price: float = Field(default=0, ge=0, le=10_000_000)
     expiration: Expiration = ""
@@ -136,65 +143,191 @@ class AlertsRequest(BaseModel):
         return value
 
 
-@router.post("/analyze-alerts")
-async def analyze_alerts(req: AlertsRequest, request: Request):
-    try:
-        fp = _fingerprint(request)
-        result = await asyncio.to_thread(
-            ai_analysis.analyze_option_alerts,
-            req.ticker,
-            [alert.model_dump(mode="json") for alert in req.alerts],
-            req.underlying_price,
-            req.expiration,
-            fp,
+def _job_repository() -> AIJobRepository:
+    return AIJobRepository(get_settings().openai_job_db_path)
+
+
+def _require_runtime_capability() -> None:
+    settings = get_settings()
+    capability = ai_job_runtime.capability_status(settings)
+    if not capability.get("supported"):
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": capability.get("status") or "capability_disabled",
+                "message": "Persistent AI analysis is not available",
+            },
         )
-        return _sanitize(result)
-    except HTTPException:
+
+
+def _create_job(
+    job_type: str,
+    payload: dict,
+    *,
+    force_retry: bool = False,
+) -> tuple[dict, bool]:
+    settings = get_settings()
+    schema_version, schema_sha256 = ai_job_runtime.schema_identity(job_type)
+    try:
+        return _job_repository().create_job(
+            job_type=job_type,
+            payload=payload,
+            model=settings.openai_model,
+            reasoning=settings.openai_reasoning,
+            execution_mode=settings.openai_execution_mode,
+            prompt_version=_PROMPT_VERSIONS[job_type],
+            schema_version=schema_version,
+            schema_sha256=schema_sha256,
+            max_queued=settings.openai_job_max_queued,
+            priority=80,
+            force_retry=force_retry,
+        )
+    except RuntimeError as exc:
+        if str(exc) == "ai_job_queue_full":
+            raise HTTPException(
+                status_code=429,
+                detail={"code": "ai_job_queue_full", "retry_after": 60},
+                headers={"Retry-After": "60"},
+            ) from exc
         raise
-    except Exception as exc:
-        logger.warning("AI alert analysis endpoint failed (%s)", type(exc).__name__)
-        raise HTTPException(500, "AI analysis unavailable") from exc
+
+
+@router.get("/status")
+async def ai_status():
+    settings = get_settings()
+    capability = ai_job_runtime.capability_status(settings)
+    return {
+        "enabled": bool(capability.get("supported")),
+        "status": capability.get("status"),
+        "provider_capability_supported": bool(capability.get("supported")),
+        "sdk_capability_supported": bool(capability.get("sdk_supported")),
+        "methods": capability.get("methods", {}),
+        "model": settings.openai_model,
+        "reasoning": settings.openai_reasoning,
+        "execution_mode": settings.openai_execution_mode,
+        "background_poll_timeout_seconds": (
+            settings.openai_background_poll_timeout_seconds
+        ),
+    }
+
+
+@router.post("/analyze-alerts")
+async def analyze_alerts(req: AlertsRequest):
+    """Compatibility endpoint: validation remains, paid work moved to jobs."""
+
+    return JSONResponse(
+        {
+            "status": "analysis_required",
+            "message": "Create a persistent option-alerts job with POST /api/ai/jobs/option-alerts",
+        },
+        status_code=409,
+    )
 
 
 @router.get("/earnings-correlation")
-async def earnings_correlation(request: Request):
-    try:
-        fp = _fingerprint(request)
-        from app.api.earnings import upcoming_earnings
-        data = await upcoming_earnings()
-        earnings = data.get("earnings", []) if isinstance(data, dict) else []
-        result = await asyncio.to_thread(ai_analysis.analyze_earnings_correlation, earnings, fp)
-        return _sanitize(result)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.warning("AI earnings correlation endpoint failed (%s)", type(exc).__name__)
-        raise HTTPException(500, "AI analysis unavailable") from exc
+async def earnings_correlation():
+    return JSONResponse(
+        {
+            "status": "analysis_required",
+            "message": "Synchronous GET no longer creates paid analysis",
+        },
+        status_code=409,
+    )
 
 
 @router.get("/earnings-impact/{ticker}")
 async def earnings_impact(
     ticker: Annotated[Ticker, Path(description="US-listed ticker symbol")],
-    request: Request,
 ):
-    """Per-company earnings impact: which other companies will this report move?"""
-    try:
-        fp = _fingerprint(request)
-        # Find the company's earnings info
-        from app.api.earnings import upcoming_earnings
-        data = await upcoming_earnings()
-        earnings = data.get("earnings", []) if isinstance(data, dict) else []
-        target = next((e for e in earnings if e.get("ticker", "").upper() == ticker.upper()), None)
-        if not target:
-            # Use bare ticker — AI can still reason about generic company
-            target = {"ticker": ticker.upper(), "name": ticker.upper(),
-                      "sector": "", "earnings_date": "", "eps_estimate": None}
-        result = await asyncio.to_thread(
-            ai_analysis.analyze_single_earnings_impact, target, fp
+    """Return a completed cache entry; GET never creates paid work."""
+
+    repository = _job_repository()
+    row = repository.latest_completed("earnings_impact", ticker)
+    if row:
+        result = repository.public(row, cached=True)["result"] or {}
+        return _sanitize(
+            {
+                **result,
+                "_cached": True,
+                "_job_id": row["job_id"],
+                "_generated_at": row.get("completed_at"),
+            }
         )
-        return _sanitize(result)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.warning("AI earnings impact endpoint failed (%s)", type(exc).__name__)
-        raise HTTPException(500, "AI analysis unavailable") from exc
+    return JSONResponse(
+        {
+            "status": "analysis_required",
+            "ticker": ticker.upper(),
+            "message": "Create a persistent job with POST /api/ai/jobs/earnings-impact",
+        },
+        status_code=409,
+    )
+
+
+@router.post(
+    "/jobs/earnings-impact",
+    dependencies=[Depends(require_expensive_action)],
+)
+async def create_earnings_impact_job(req: EarningsImpactJobRequest):
+    _require_runtime_capability()
+    request_payload = req.model_dump(mode="json", exclude={"force"})
+    row, created = _create_job(
+        "earnings_impact",
+        request_payload,
+        force_retry=req.force,
+    )
+    payload = _job_repository().public(
+        row,
+        cached=(not created and row["status"] == "completed"),
+    )
+    return JSONResponse(
+        payload,
+        status_code=202,
+        headers={"Location": f"/api/ai/jobs/{row['job_id']}", "Retry-After": "2"},
+    )
+
+
+@router.post(
+    "/jobs/option-alerts",
+    dependencies=[Depends(require_expensive_action)],
+)
+async def create_option_alert_job(req: AlertsRequest):
+    _require_runtime_capability()
+    payload = OptionAlertJobRequest.model_validate(
+        req.model_dump(mode="json", exclude={"force"})
+    ).model_dump(mode="json")
+    row, created = _create_job(
+        "option_alerts",
+        payload,
+        force_retry=req.force,
+    )
+    public = _job_repository().public(
+        row,
+        cached=(not created and row["status"] == "completed"),
+    )
+    return JSONResponse(
+        public,
+        status_code=202,
+        headers={"Location": f"/api/ai/jobs/{row['job_id']}", "Retry-After": "2"},
+    )
+
+
+@router.get("/jobs/{job_id}")
+async def get_ai_job(job_id: Annotated[str, Path(min_length=10, max_length=80)]):
+    row = _job_repository().get_job(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="AI job not found")
+    return _job_repository().public(row)
+
+
+@router.post(
+    "/jobs/{job_id}/cancel",
+    dependencies=[Depends(require_expensive_action)],
+)
+async def cancel_ai_job(
+    job_id: Annotated[str, Path(min_length=10, max_length=80)],
+    req: CancelRequest,
+):
+    row = _job_repository().request_cancel(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="AI job not found")
+    return _job_repository().public(row)

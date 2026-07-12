@@ -12,4 +12,4 @@ pandas==2.3.3
 numpy==2.0.2
 curl-cffi==0.15.0
 lxml==6.1.1
-openai==1.80.0
+openai==2.45.0

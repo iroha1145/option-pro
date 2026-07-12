@@ -1,0 +1,4652 @@
+{
+  "contract": "MacroLens Option Pro Integration API",
+  "models": {
+    "AnalysisJobCreateRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_change_sequence": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Change Sequence"
+        },
+        "expected_content_hash": {
+          "maxLength": 128,
+          "minLength": 8,
+          "title": "Expected Content Hash",
+          "type": "string"
+        },
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "news_id": {
+          "minimum": 1,
+          "title": "News Id",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "news_id",
+        "expected_content_hash"
+      ],
+      "title": "AnalysisJobCreateRequest",
+      "type": "object"
+    },
+    "AnalysisJobResponse": {
+      "$defs": {
+        "AffectedCommodityImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "name": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "impact_score",
+            "reason"
+          ],
+          "title": "AffectedCommodityImpact",
+          "type": "object"
+        },
+        "AffectedStockImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "company": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Company",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "horizon": {
+              "$ref": "#/$defs/ImpactHorizon"
+            },
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "mechanism": {
+              "$ref": "#/$defs/ImpactMechanism"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            },
+            "ticker": {
+              "maxLength": 20,
+              "minLength": 1,
+              "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+              "title": "Ticker",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ticker",
+            "company",
+            "impact_score",
+            "confidence",
+            "horizon",
+            "mechanism",
+            "reason"
+          ],
+          "title": "AffectedStockImpact",
+          "type": "object"
+        },
+        "AnalysisJobStatus": {
+          "enum": [
+            "pending",
+            "queued",
+            "in_progress",
+            "completed",
+            "failed",
+            "cancelled",
+            "insufficient_context",
+            "budget_blocked"
+          ],
+          "title": "AnalysisJobStatus",
+          "type": "string"
+        },
+        "ImpactHorizon": {
+          "enum": [
+            "intraday",
+            "days",
+            "weeks",
+            "uncertain"
+          ],
+          "title": "ImpactHorizon",
+          "type": "string"
+        },
+        "ImpactMechanism": {
+          "enum": [
+            "direct_company",
+            "supplier_customer",
+            "sector_readthrough",
+            "macro_rate",
+            "commodity_input",
+            "regulatory",
+            "competitive",
+            "other"
+          ],
+          "title": "ImpactMechanism",
+          "type": "string"
+        },
+        "PublicAnalysis": {
+          "additionalProperties": false,
+          "properties": {
+            "affected_commodities": {
+              "items": {
+                "$ref": "#/$defs/AffectedCommodityImpact"
+              },
+              "maxItems": 30,
+              "title": "Affected Commodities",
+              "type": "array"
+            },
+            "affected_sectors": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "title": "Affected Sectors",
+              "type": "array"
+            },
+            "affected_stocks": {
+              "items": {
+                "$ref": "#/$defs/AffectedStockImpact"
+              },
+              "maxItems": 50,
+              "title": "Affected Stocks",
+              "type": "array"
+            },
+            "analysis_id": {
+              "minimum": 1,
+              "title": "Analysis Id",
+              "type": "integer"
+            },
+            "analyzed_at": {
+              "format": "date-time",
+              "title": "Analyzed At",
+              "type": "string"
+            },
+            "available_at": {
+              "format": "date-time",
+              "title": "Available At",
+              "type": "string"
+            },
+            "causal_summary": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Causal Summary",
+              "type": "string"
+            },
+            "classification": {
+              "$ref": "#/$defs/Sentiment"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "headline_summary": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Headline Summary",
+              "type": "string"
+            },
+            "insufficient_context": {
+              "title": "Insufficient Context",
+              "type": "boolean"
+            },
+            "key_factors": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Key Factors",
+              "type": "array"
+            },
+            "market_relevance": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Market Relevance",
+              "type": "integer"
+            },
+            "model": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Model",
+              "type": "string"
+            },
+            "overall_sentiment": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Overall Sentiment",
+              "type": "integer"
+            },
+            "prompt_version": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Prompt Version",
+              "type": "string"
+            },
+            "reasoning": {
+              "enum": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "title": "Reasoning",
+              "type": "string"
+            },
+            "revision": {
+              "minimum": 1,
+              "title": "Revision",
+              "type": "integer"
+            },
+            "schema_version": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Schema Version",
+              "type": "string"
+            },
+            "title_zh": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Title Zh",
+              "type": "string"
+            },
+            "uncertainty_notes": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Uncertainty Notes",
+              "type": "array"
+            }
+          },
+          "required": [
+            "title_zh",
+            "headline_summary",
+            "overall_sentiment",
+            "classification",
+            "confidence",
+            "market_relevance",
+            "causal_summary",
+            "insufficient_context",
+            "analysis_id",
+            "revision",
+            "model",
+            "reasoning",
+            "prompt_version",
+            "schema_version",
+            "analyzed_at",
+            "available_at"
+          ],
+          "title": "PublicAnalysis",
+          "type": "object"
+        },
+        "Sentiment": {
+          "enum": [
+            "bullish",
+            "bearish",
+            "neutral"
+          ],
+          "title": "Sentiment",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "change_sequence": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Change Sequence"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed At"
+        },
+        "content_hash": {
+          "maxLength": 128,
+          "minLength": 8,
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        },
+        "input_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Input Hash",
+          "type": "string"
+        },
+        "job_id": {
+          "maxLength": 100,
+          "minLength": 8,
+          "title": "Job Id",
+          "type": "string"
+        },
+        "model": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "news_id": {
+          "minimum": 1,
+          "title": "News Id",
+          "type": "integer"
+        },
+        "reasoning": {
+          "enum": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "title": "Reasoning",
+          "type": "string"
+        },
+        "request_id": {
+          "maxLength": 100,
+          "minLength": 8,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PublicAnalysis"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "retry_after": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retry After"
+        },
+        "schema_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Schema Sha256",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "macrolens-option-pro-v1",
+          "default": "macrolens-option-pro-v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/AnalysisJobStatus"
+        },
+        "submitted_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Submitted At"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_sha256",
+        "request_id",
+        "job_id",
+        "news_id",
+        "content_hash",
+        "input_hash",
+        "status",
+        "model",
+        "reasoning",
+        "updated_at"
+      ],
+      "title": "AnalysisJobResponse",
+      "type": "object"
+    },
+    "CalendarResponse": {
+      "$defs": {
+        "CalendarEvent": {
+          "additionalProperties": false,
+          "properties": {
+            "actual": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Actual"
+            },
+            "available_at": {
+              "format": "date-time",
+              "title": "Available At",
+              "type": "string"
+            },
+            "currency": {
+              "pattern": "^[A-Z]{3}$",
+              "title": "Currency",
+              "type": "string"
+            },
+            "event_id": {
+              "maxLength": 128,
+              "minLength": 8,
+              "title": "Event Id",
+              "type": "string"
+            },
+            "forecast": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Forecast"
+            },
+            "impact": {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "holiday"
+              ],
+              "title": "Impact",
+              "type": "string"
+            },
+            "is_stale": {
+              "title": "Is Stale",
+              "type": "boolean"
+            },
+            "previous": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Previous"
+            },
+            "scheduled_at": {
+              "format": "date-time",
+              "title": "Scheduled At",
+              "type": "string"
+            },
+            "source_fetched_at": {
+              "format": "date-time",
+              "title": "Source Fetched At",
+              "type": "string"
+            },
+            "title": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "event_id",
+            "currency",
+            "title",
+            "impact",
+            "scheduled_at",
+            "is_stale",
+            "source_fetched_at",
+            "available_at"
+          ],
+          "title": "CalendarEvent",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "as_of": {
+          "format": "date-time",
+          "title": "As Of",
+          "type": "string"
+        },
+        "data_through": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data Through"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/CalendarEvent"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "request_id": {
+          "maxLength": 100,
+          "minLength": 8,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "schema_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Schema Sha256",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "macrolens-option-pro-v1",
+          "default": "macrolens-option-pro-v1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_sha256",
+        "request_id",
+        "as_of",
+        "items"
+      ],
+      "title": "CalendarResponse",
+      "type": "object"
+    },
+    "CatalystBatchRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "as_of": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "As Of"
+        },
+        "include_neutral": {
+          "default": false,
+          "title": "Include Neutral",
+          "type": "boolean"
+        },
+        "limit": {
+          "default": 20,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "min_confidence": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Min Confidence",
+          "type": "integer"
+        },
+        "tickers": {
+          "items": {
+            "maxLength": 20,
+            "minLength": 1,
+            "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Tickers",
+          "type": "array"
+        },
+        "window_hours": {
+          "default": 72,
+          "maximum": 720,
+          "minimum": 1,
+          "title": "Window Hours",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tickers"
+      ],
+      "title": "CatalystBatchRequest",
+      "type": "object"
+    },
+    "CatalystBatchResponse": {
+      "$defs": {
+        "AffectedCommodityImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "name": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "impact_score",
+            "reason"
+          ],
+          "title": "AffectedCommodityImpact",
+          "type": "object"
+        },
+        "AffectedStockImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "company": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Company",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "horizon": {
+              "$ref": "#/$defs/ImpactHorizon"
+            },
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "mechanism": {
+              "$ref": "#/$defs/ImpactMechanism"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            },
+            "ticker": {
+              "maxLength": 20,
+              "minLength": 1,
+              "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+              "title": "Ticker",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ticker",
+            "company",
+            "impact_score",
+            "confidence",
+            "horizon",
+            "mechanism",
+            "reason"
+          ],
+          "title": "AffectedStockImpact",
+          "type": "object"
+        },
+        "AnalysisStatus": {
+          "enum": [
+            "not_requested",
+            "pending",
+            "queued",
+            "in_progress",
+            "completed",
+            "failed",
+            "cancelled",
+            "insufficient_context",
+            "budget_blocked"
+          ],
+          "title": "AnalysisStatus",
+          "type": "string"
+        },
+        "BatchTickerResult": {
+          "additionalProperties": false,
+          "properties": {
+            "data_through": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Data Through"
+            },
+            "items": {
+              "items": {
+                "$ref": "#/$defs/CatalystItem"
+              },
+              "title": "Items",
+              "type": "array"
+            },
+            "next_cursor": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Next Cursor"
+            },
+            "status": {
+              "$ref": "#/$defs/PublicDataStatus"
+            }
+          },
+          "required": [
+            "status",
+            "items"
+          ],
+          "title": "BatchTickerResult",
+          "type": "object"
+        },
+        "CatalystItem": {
+          "additionalProperties": false,
+          "properties": {
+            "analysis": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PublicAnalysis"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "analysis_status": {
+              "$ref": "#/$defs/AnalysisStatus"
+            },
+            "analyzed_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Analyzed At"
+            },
+            "available_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Available At"
+            },
+            "change_sequence": {
+              "minimum": 1,
+              "title": "Change Sequence",
+              "type": "integer"
+            },
+            "content_hash": {
+              "maxLength": 128,
+              "minLength": 8,
+              "title": "Content Hash",
+              "type": "string"
+            },
+            "fetched_at": {
+              "format": "date-time",
+              "title": "Fetched At",
+              "type": "string"
+            },
+            "is_stale": {
+              "default": false,
+              "title": "Is Stale",
+              "type": "boolean"
+            },
+            "news_id": {
+              "minimum": 1,
+              "title": "News Id",
+              "type": "integer"
+            },
+            "published_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Published At"
+            },
+            "source": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Source",
+              "type": "string"
+            },
+            "source_tickers": {
+              "items": {
+                "maxLength": 20,
+                "minLength": 1,
+                "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+                "type": "string"
+              },
+              "maxItems": 100,
+              "title": "Source Tickers",
+              "type": "array"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "maxLength": 20000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Summary"
+            },
+            "title": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Title",
+              "type": "string"
+            },
+            "updated_at": {
+              "format": "date-time",
+              "title": "Updated At",
+              "type": "string"
+            },
+            "url": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "news_id",
+            "content_hash",
+            "source",
+            "title",
+            "url",
+            "fetched_at",
+            "updated_at",
+            "change_sequence",
+            "analysis_status"
+          ],
+          "title": "CatalystItem",
+          "type": "object"
+        },
+        "ImpactHorizon": {
+          "enum": [
+            "intraday",
+            "days",
+            "weeks",
+            "uncertain"
+          ],
+          "title": "ImpactHorizon",
+          "type": "string"
+        },
+        "ImpactMechanism": {
+          "enum": [
+            "direct_company",
+            "supplier_customer",
+            "sector_readthrough",
+            "macro_rate",
+            "commodity_input",
+            "regulatory",
+            "competitive",
+            "other"
+          ],
+          "title": "ImpactMechanism",
+          "type": "string"
+        },
+        "PublicAnalysis": {
+          "additionalProperties": false,
+          "properties": {
+            "affected_commodities": {
+              "items": {
+                "$ref": "#/$defs/AffectedCommodityImpact"
+              },
+              "maxItems": 30,
+              "title": "Affected Commodities",
+              "type": "array"
+            },
+            "affected_sectors": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "title": "Affected Sectors",
+              "type": "array"
+            },
+            "affected_stocks": {
+              "items": {
+                "$ref": "#/$defs/AffectedStockImpact"
+              },
+              "maxItems": 50,
+              "title": "Affected Stocks",
+              "type": "array"
+            },
+            "analysis_id": {
+              "minimum": 1,
+              "title": "Analysis Id",
+              "type": "integer"
+            },
+            "analyzed_at": {
+              "format": "date-time",
+              "title": "Analyzed At",
+              "type": "string"
+            },
+            "available_at": {
+              "format": "date-time",
+              "title": "Available At",
+              "type": "string"
+            },
+            "causal_summary": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Causal Summary",
+              "type": "string"
+            },
+            "classification": {
+              "$ref": "#/$defs/Sentiment"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "headline_summary": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Headline Summary",
+              "type": "string"
+            },
+            "insufficient_context": {
+              "title": "Insufficient Context",
+              "type": "boolean"
+            },
+            "key_factors": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Key Factors",
+              "type": "array"
+            },
+            "market_relevance": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Market Relevance",
+              "type": "integer"
+            },
+            "model": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Model",
+              "type": "string"
+            },
+            "overall_sentiment": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Overall Sentiment",
+              "type": "integer"
+            },
+            "prompt_version": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Prompt Version",
+              "type": "string"
+            },
+            "reasoning": {
+              "enum": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "title": "Reasoning",
+              "type": "string"
+            },
+            "revision": {
+              "minimum": 1,
+              "title": "Revision",
+              "type": "integer"
+            },
+            "schema_version": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Schema Version",
+              "type": "string"
+            },
+            "title_zh": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Title Zh",
+              "type": "string"
+            },
+            "uncertainty_notes": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Uncertainty Notes",
+              "type": "array"
+            }
+          },
+          "required": [
+            "title_zh",
+            "headline_summary",
+            "overall_sentiment",
+            "classification",
+            "confidence",
+            "market_relevance",
+            "causal_summary",
+            "insufficient_context",
+            "analysis_id",
+            "revision",
+            "model",
+            "reasoning",
+            "prompt_version",
+            "schema_version",
+            "analyzed_at",
+            "available_at"
+          ],
+          "title": "PublicAnalysis",
+          "type": "object"
+        },
+        "PublicDataStatus": {
+          "enum": [
+            "active",
+            "empty",
+            "stale",
+            "unavailable"
+          ],
+          "title": "PublicDataStatus",
+          "type": "string"
+        },
+        "Sentiment": {
+          "enum": [
+            "bullish",
+            "bearish",
+            "neutral"
+          ],
+          "title": "Sentiment",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "as_of": {
+          "format": "date-time",
+          "title": "As Of",
+          "type": "string"
+        },
+        "request_id": {
+          "maxLength": 100,
+          "minLength": 8,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "results": {
+          "patternProperties": {
+            "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$": {
+              "$ref": "#/$defs/BatchTickerResult"
+            }
+          },
+          "propertyNames": {
+            "maxLength": 20,
+            "minLength": 1
+          },
+          "title": "Results",
+          "type": "object"
+        },
+        "schema_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Schema Sha256",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "macrolens-option-pro-v1",
+          "default": "macrolens-option-pro-v1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_sha256",
+        "request_id",
+        "as_of",
+        "results"
+      ],
+      "title": "CatalystBatchResponse",
+      "type": "object"
+    },
+    "CatalystItem": {
+      "$defs": {
+        "AffectedCommodityImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "name": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "impact_score",
+            "reason"
+          ],
+          "title": "AffectedCommodityImpact",
+          "type": "object"
+        },
+        "AffectedStockImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "company": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Company",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "horizon": {
+              "$ref": "#/$defs/ImpactHorizon"
+            },
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "mechanism": {
+              "$ref": "#/$defs/ImpactMechanism"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            },
+            "ticker": {
+              "maxLength": 20,
+              "minLength": 1,
+              "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+              "title": "Ticker",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ticker",
+            "company",
+            "impact_score",
+            "confidence",
+            "horizon",
+            "mechanism",
+            "reason"
+          ],
+          "title": "AffectedStockImpact",
+          "type": "object"
+        },
+        "AnalysisStatus": {
+          "enum": [
+            "not_requested",
+            "pending",
+            "queued",
+            "in_progress",
+            "completed",
+            "failed",
+            "cancelled",
+            "insufficient_context",
+            "budget_blocked"
+          ],
+          "title": "AnalysisStatus",
+          "type": "string"
+        },
+        "ImpactHorizon": {
+          "enum": [
+            "intraday",
+            "days",
+            "weeks",
+            "uncertain"
+          ],
+          "title": "ImpactHorizon",
+          "type": "string"
+        },
+        "ImpactMechanism": {
+          "enum": [
+            "direct_company",
+            "supplier_customer",
+            "sector_readthrough",
+            "macro_rate",
+            "commodity_input",
+            "regulatory",
+            "competitive",
+            "other"
+          ],
+          "title": "ImpactMechanism",
+          "type": "string"
+        },
+        "PublicAnalysis": {
+          "additionalProperties": false,
+          "properties": {
+            "affected_commodities": {
+              "items": {
+                "$ref": "#/$defs/AffectedCommodityImpact"
+              },
+              "maxItems": 30,
+              "title": "Affected Commodities",
+              "type": "array"
+            },
+            "affected_sectors": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "title": "Affected Sectors",
+              "type": "array"
+            },
+            "affected_stocks": {
+              "items": {
+                "$ref": "#/$defs/AffectedStockImpact"
+              },
+              "maxItems": 50,
+              "title": "Affected Stocks",
+              "type": "array"
+            },
+            "analysis_id": {
+              "minimum": 1,
+              "title": "Analysis Id",
+              "type": "integer"
+            },
+            "analyzed_at": {
+              "format": "date-time",
+              "title": "Analyzed At",
+              "type": "string"
+            },
+            "available_at": {
+              "format": "date-time",
+              "title": "Available At",
+              "type": "string"
+            },
+            "causal_summary": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Causal Summary",
+              "type": "string"
+            },
+            "classification": {
+              "$ref": "#/$defs/Sentiment"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "headline_summary": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Headline Summary",
+              "type": "string"
+            },
+            "insufficient_context": {
+              "title": "Insufficient Context",
+              "type": "boolean"
+            },
+            "key_factors": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Key Factors",
+              "type": "array"
+            },
+            "market_relevance": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Market Relevance",
+              "type": "integer"
+            },
+            "model": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Model",
+              "type": "string"
+            },
+            "overall_sentiment": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Overall Sentiment",
+              "type": "integer"
+            },
+            "prompt_version": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Prompt Version",
+              "type": "string"
+            },
+            "reasoning": {
+              "enum": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "title": "Reasoning",
+              "type": "string"
+            },
+            "revision": {
+              "minimum": 1,
+              "title": "Revision",
+              "type": "integer"
+            },
+            "schema_version": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Schema Version",
+              "type": "string"
+            },
+            "title_zh": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Title Zh",
+              "type": "string"
+            },
+            "uncertainty_notes": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Uncertainty Notes",
+              "type": "array"
+            }
+          },
+          "required": [
+            "title_zh",
+            "headline_summary",
+            "overall_sentiment",
+            "classification",
+            "confidence",
+            "market_relevance",
+            "causal_summary",
+            "insufficient_context",
+            "analysis_id",
+            "revision",
+            "model",
+            "reasoning",
+            "prompt_version",
+            "schema_version",
+            "analyzed_at",
+            "available_at"
+          ],
+          "title": "PublicAnalysis",
+          "type": "object"
+        },
+        "Sentiment": {
+          "enum": [
+            "bullish",
+            "bearish",
+            "neutral"
+          ],
+          "title": "Sentiment",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "analysis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PublicAnalysis"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "analysis_status": {
+          "$ref": "#/$defs/AnalysisStatus"
+        },
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "available_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Available At"
+        },
+        "change_sequence": {
+          "minimum": 1,
+          "title": "Change Sequence",
+          "type": "integer"
+        },
+        "content_hash": {
+          "maxLength": 128,
+          "minLength": 8,
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "fetched_at": {
+          "format": "date-time",
+          "title": "Fetched At",
+          "type": "string"
+        },
+        "is_stale": {
+          "default": false,
+          "title": "Is Stale",
+          "type": "boolean"
+        },
+        "news_id": {
+          "minimum": 1,
+          "title": "News Id",
+          "type": "integer"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "source": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "source_tickers": {
+          "items": {
+            "maxLength": 20,
+            "minLength": 1,
+            "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Source Tickers",
+          "type": "array"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 20000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary"
+        },
+        "title": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "url": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "news_id",
+        "content_hash",
+        "source",
+        "title",
+        "url",
+        "fetched_at",
+        "updated_at",
+        "change_sequence",
+        "analysis_status"
+      ],
+      "title": "CatalystItem",
+      "type": "object"
+    },
+    "CatalystTickerResponse": {
+      "$defs": {
+        "AffectedCommodityImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "name": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "impact_score",
+            "reason"
+          ],
+          "title": "AffectedCommodityImpact",
+          "type": "object"
+        },
+        "AffectedStockImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "company": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Company",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "horizon": {
+              "$ref": "#/$defs/ImpactHorizon"
+            },
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "mechanism": {
+              "$ref": "#/$defs/ImpactMechanism"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            },
+            "ticker": {
+              "maxLength": 20,
+              "minLength": 1,
+              "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+              "title": "Ticker",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ticker",
+            "company",
+            "impact_score",
+            "confidence",
+            "horizon",
+            "mechanism",
+            "reason"
+          ],
+          "title": "AffectedStockImpact",
+          "type": "object"
+        },
+        "AnalysisStatus": {
+          "enum": [
+            "not_requested",
+            "pending",
+            "queued",
+            "in_progress",
+            "completed",
+            "failed",
+            "cancelled",
+            "insufficient_context",
+            "budget_blocked"
+          ],
+          "title": "AnalysisStatus",
+          "type": "string"
+        },
+        "CatalystItem": {
+          "additionalProperties": false,
+          "properties": {
+            "analysis": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PublicAnalysis"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "analysis_status": {
+              "$ref": "#/$defs/AnalysisStatus"
+            },
+            "analyzed_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Analyzed At"
+            },
+            "available_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Available At"
+            },
+            "change_sequence": {
+              "minimum": 1,
+              "title": "Change Sequence",
+              "type": "integer"
+            },
+            "content_hash": {
+              "maxLength": 128,
+              "minLength": 8,
+              "title": "Content Hash",
+              "type": "string"
+            },
+            "fetched_at": {
+              "format": "date-time",
+              "title": "Fetched At",
+              "type": "string"
+            },
+            "is_stale": {
+              "default": false,
+              "title": "Is Stale",
+              "type": "boolean"
+            },
+            "news_id": {
+              "minimum": 1,
+              "title": "News Id",
+              "type": "integer"
+            },
+            "published_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Published At"
+            },
+            "source": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Source",
+              "type": "string"
+            },
+            "source_tickers": {
+              "items": {
+                "maxLength": 20,
+                "minLength": 1,
+                "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+                "type": "string"
+              },
+              "maxItems": 100,
+              "title": "Source Tickers",
+              "type": "array"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "maxLength": 20000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Summary"
+            },
+            "title": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Title",
+              "type": "string"
+            },
+            "updated_at": {
+              "format": "date-time",
+              "title": "Updated At",
+              "type": "string"
+            },
+            "url": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "news_id",
+            "content_hash",
+            "source",
+            "title",
+            "url",
+            "fetched_at",
+            "updated_at",
+            "change_sequence",
+            "analysis_status"
+          ],
+          "title": "CatalystItem",
+          "type": "object"
+        },
+        "ImpactHorizon": {
+          "enum": [
+            "intraday",
+            "days",
+            "weeks",
+            "uncertain"
+          ],
+          "title": "ImpactHorizon",
+          "type": "string"
+        },
+        "ImpactMechanism": {
+          "enum": [
+            "direct_company",
+            "supplier_customer",
+            "sector_readthrough",
+            "macro_rate",
+            "commodity_input",
+            "regulatory",
+            "competitive",
+            "other"
+          ],
+          "title": "ImpactMechanism",
+          "type": "string"
+        },
+        "PublicAnalysis": {
+          "additionalProperties": false,
+          "properties": {
+            "affected_commodities": {
+              "items": {
+                "$ref": "#/$defs/AffectedCommodityImpact"
+              },
+              "maxItems": 30,
+              "title": "Affected Commodities",
+              "type": "array"
+            },
+            "affected_sectors": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "title": "Affected Sectors",
+              "type": "array"
+            },
+            "affected_stocks": {
+              "items": {
+                "$ref": "#/$defs/AffectedStockImpact"
+              },
+              "maxItems": 50,
+              "title": "Affected Stocks",
+              "type": "array"
+            },
+            "analysis_id": {
+              "minimum": 1,
+              "title": "Analysis Id",
+              "type": "integer"
+            },
+            "analyzed_at": {
+              "format": "date-time",
+              "title": "Analyzed At",
+              "type": "string"
+            },
+            "available_at": {
+              "format": "date-time",
+              "title": "Available At",
+              "type": "string"
+            },
+            "causal_summary": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Causal Summary",
+              "type": "string"
+            },
+            "classification": {
+              "$ref": "#/$defs/Sentiment"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "headline_summary": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Headline Summary",
+              "type": "string"
+            },
+            "insufficient_context": {
+              "title": "Insufficient Context",
+              "type": "boolean"
+            },
+            "key_factors": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Key Factors",
+              "type": "array"
+            },
+            "market_relevance": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Market Relevance",
+              "type": "integer"
+            },
+            "model": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Model",
+              "type": "string"
+            },
+            "overall_sentiment": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Overall Sentiment",
+              "type": "integer"
+            },
+            "prompt_version": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Prompt Version",
+              "type": "string"
+            },
+            "reasoning": {
+              "enum": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "title": "Reasoning",
+              "type": "string"
+            },
+            "revision": {
+              "minimum": 1,
+              "title": "Revision",
+              "type": "integer"
+            },
+            "schema_version": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Schema Version",
+              "type": "string"
+            },
+            "title_zh": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Title Zh",
+              "type": "string"
+            },
+            "uncertainty_notes": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Uncertainty Notes",
+              "type": "array"
+            }
+          },
+          "required": [
+            "title_zh",
+            "headline_summary",
+            "overall_sentiment",
+            "classification",
+            "confidence",
+            "market_relevance",
+            "causal_summary",
+            "insufficient_context",
+            "analysis_id",
+            "revision",
+            "model",
+            "reasoning",
+            "prompt_version",
+            "schema_version",
+            "analyzed_at",
+            "available_at"
+          ],
+          "title": "PublicAnalysis",
+          "type": "object"
+        },
+        "PublicDataStatus": {
+          "enum": [
+            "active",
+            "empty",
+            "stale",
+            "unavailable"
+          ],
+          "title": "PublicDataStatus",
+          "type": "string"
+        },
+        "Sentiment": {
+          "enum": [
+            "bullish",
+            "bearish",
+            "neutral"
+          ],
+          "title": "Sentiment",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "as_of": {
+          "format": "date-time",
+          "title": "As Of",
+          "type": "string"
+        },
+        "data_through": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data Through"
+        },
+        "has_more": {
+          "title": "Has More",
+          "type": "boolean"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/CatalystItem"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Cursor"
+        },
+        "request_id": {
+          "maxLength": 100,
+          "minLength": 8,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "schema_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Schema Sha256",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "macrolens-option-pro-v1",
+          "default": "macrolens-option-pro-v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/PublicDataStatus"
+        },
+        "ticker": {
+          "maxLength": 20,
+          "minLength": 1,
+          "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+          "title": "Ticker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_sha256",
+        "request_id",
+        "ticker",
+        "status",
+        "as_of",
+        "items",
+        "has_more"
+      ],
+      "title": "CatalystTickerResponse",
+      "type": "object"
+    },
+    "ErrorBody": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "request_id": {
+          "maxLength": 100,
+          "minLength": 8,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "retry_after_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retry After Seconds"
+        },
+        "retryable": {
+          "title": "Retryable",
+          "type": "boolean"
+        },
+        "schema_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Schema Sha256",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "macrolens-option-pro-v1",
+          "default": "macrolens-option-pro-v1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_sha256",
+        "request_id",
+        "code",
+        "message",
+        "retryable"
+      ],
+      "title": "ErrorBody",
+      "type": "object"
+    },
+    "FeedResponse": {
+      "$defs": {
+        "AffectedCommodityImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "name": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "impact_score",
+            "reason"
+          ],
+          "title": "AffectedCommodityImpact",
+          "type": "object"
+        },
+        "AffectedStockImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "company": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Company",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "horizon": {
+              "$ref": "#/$defs/ImpactHorizon"
+            },
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "mechanism": {
+              "$ref": "#/$defs/ImpactMechanism"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            },
+            "ticker": {
+              "maxLength": 20,
+              "minLength": 1,
+              "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+              "title": "Ticker",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ticker",
+            "company",
+            "impact_score",
+            "confidence",
+            "horizon",
+            "mechanism",
+            "reason"
+          ],
+          "title": "AffectedStockImpact",
+          "type": "object"
+        },
+        "AnalysisStatus": {
+          "enum": [
+            "not_requested",
+            "pending",
+            "queued",
+            "in_progress",
+            "completed",
+            "failed",
+            "cancelled",
+            "insufficient_context",
+            "budget_blocked"
+          ],
+          "title": "AnalysisStatus",
+          "type": "string"
+        },
+        "CatalystItem": {
+          "additionalProperties": false,
+          "properties": {
+            "analysis": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PublicAnalysis"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "analysis_status": {
+              "$ref": "#/$defs/AnalysisStatus"
+            },
+            "analyzed_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Analyzed At"
+            },
+            "available_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Available At"
+            },
+            "change_sequence": {
+              "minimum": 1,
+              "title": "Change Sequence",
+              "type": "integer"
+            },
+            "content_hash": {
+              "maxLength": 128,
+              "minLength": 8,
+              "title": "Content Hash",
+              "type": "string"
+            },
+            "fetched_at": {
+              "format": "date-time",
+              "title": "Fetched At",
+              "type": "string"
+            },
+            "is_stale": {
+              "default": false,
+              "title": "Is Stale",
+              "type": "boolean"
+            },
+            "news_id": {
+              "minimum": 1,
+              "title": "News Id",
+              "type": "integer"
+            },
+            "published_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Published At"
+            },
+            "source": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Source",
+              "type": "string"
+            },
+            "source_tickers": {
+              "items": {
+                "maxLength": 20,
+                "minLength": 1,
+                "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+                "type": "string"
+              },
+              "maxItems": 100,
+              "title": "Source Tickers",
+              "type": "array"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "maxLength": 20000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Summary"
+            },
+            "title": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Title",
+              "type": "string"
+            },
+            "updated_at": {
+              "format": "date-time",
+              "title": "Updated At",
+              "type": "string"
+            },
+            "url": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "news_id",
+            "content_hash",
+            "source",
+            "title",
+            "url",
+            "fetched_at",
+            "updated_at",
+            "change_sequence",
+            "analysis_status"
+          ],
+          "title": "CatalystItem",
+          "type": "object"
+        },
+        "ImpactHorizon": {
+          "enum": [
+            "intraday",
+            "days",
+            "weeks",
+            "uncertain"
+          ],
+          "title": "ImpactHorizon",
+          "type": "string"
+        },
+        "ImpactMechanism": {
+          "enum": [
+            "direct_company",
+            "supplier_customer",
+            "sector_readthrough",
+            "macro_rate",
+            "commodity_input",
+            "regulatory",
+            "competitive",
+            "other"
+          ],
+          "title": "ImpactMechanism",
+          "type": "string"
+        },
+        "PublicAnalysis": {
+          "additionalProperties": false,
+          "properties": {
+            "affected_commodities": {
+              "items": {
+                "$ref": "#/$defs/AffectedCommodityImpact"
+              },
+              "maxItems": 30,
+              "title": "Affected Commodities",
+              "type": "array"
+            },
+            "affected_sectors": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "title": "Affected Sectors",
+              "type": "array"
+            },
+            "affected_stocks": {
+              "items": {
+                "$ref": "#/$defs/AffectedStockImpact"
+              },
+              "maxItems": 50,
+              "title": "Affected Stocks",
+              "type": "array"
+            },
+            "analysis_id": {
+              "minimum": 1,
+              "title": "Analysis Id",
+              "type": "integer"
+            },
+            "analyzed_at": {
+              "format": "date-time",
+              "title": "Analyzed At",
+              "type": "string"
+            },
+            "available_at": {
+              "format": "date-time",
+              "title": "Available At",
+              "type": "string"
+            },
+            "causal_summary": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Causal Summary",
+              "type": "string"
+            },
+            "classification": {
+              "$ref": "#/$defs/Sentiment"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "headline_summary": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Headline Summary",
+              "type": "string"
+            },
+            "insufficient_context": {
+              "title": "Insufficient Context",
+              "type": "boolean"
+            },
+            "key_factors": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Key Factors",
+              "type": "array"
+            },
+            "market_relevance": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Market Relevance",
+              "type": "integer"
+            },
+            "model": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Model",
+              "type": "string"
+            },
+            "overall_sentiment": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Overall Sentiment",
+              "type": "integer"
+            },
+            "prompt_version": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Prompt Version",
+              "type": "string"
+            },
+            "reasoning": {
+              "enum": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "title": "Reasoning",
+              "type": "string"
+            },
+            "revision": {
+              "minimum": 1,
+              "title": "Revision",
+              "type": "integer"
+            },
+            "schema_version": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Schema Version",
+              "type": "string"
+            },
+            "title_zh": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Title Zh",
+              "type": "string"
+            },
+            "uncertainty_notes": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Uncertainty Notes",
+              "type": "array"
+            }
+          },
+          "required": [
+            "title_zh",
+            "headline_summary",
+            "overall_sentiment",
+            "classification",
+            "confidence",
+            "market_relevance",
+            "causal_summary",
+            "insufficient_context",
+            "analysis_id",
+            "revision",
+            "model",
+            "reasoning",
+            "prompt_version",
+            "schema_version",
+            "analyzed_at",
+            "available_at"
+          ],
+          "title": "PublicAnalysis",
+          "type": "object"
+        },
+        "Sentiment": {
+          "enum": [
+            "bullish",
+            "bearish",
+            "neutral"
+          ],
+          "title": "Sentiment",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "as_of": {
+          "format": "date-time",
+          "title": "As Of",
+          "type": "string"
+        },
+        "data_through": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data Through"
+        },
+        "has_more": {
+          "title": "Has More",
+          "type": "boolean"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/CatalystItem"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Cursor"
+        },
+        "request_id": {
+          "maxLength": 100,
+          "minLength": 8,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "schema_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Schema Sha256",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "macrolens-option-pro-v1",
+          "default": "macrolens-option-pro-v1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_sha256",
+        "request_id",
+        "as_of",
+        "items",
+        "has_more"
+      ],
+      "title": "FeedResponse",
+      "type": "object"
+    },
+    "IntegrationHealthResponse": {
+      "$defs": {
+        "ComponentHealth": {
+          "additionalProperties": false,
+          "properties": {
+            "consecutive_failures": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Consecutive Failures",
+              "type": "integer"
+            },
+            "data_through": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Data Through"
+            },
+            "detail": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Detail"
+            },
+            "duplicates_count": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Duplicates Count"
+            },
+            "inserted_count": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Inserted Count"
+            },
+            "last_attempt_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Last Attempt At"
+            },
+            "last_success_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Last Success At"
+            },
+            "next_attempt_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Next Attempt At"
+            },
+            "raw_count": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Raw Count"
+            },
+            "status": {
+              "enum": [
+                "ok",
+                "degraded",
+                "unavailable",
+                "not_configured",
+                "disabled"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "title": "ComponentHealth",
+          "type": "object"
+        },
+        "QueueHealth": {
+          "additionalProperties": false,
+          "properties": {
+            "budget_status": {
+              "enum": [
+                "ok",
+                "budget_unbounded",
+                "budget_blocked"
+              ],
+              "title": "Budget Status",
+              "type": "string"
+            },
+            "in_progress": {
+              "minimum": 0,
+              "title": "In Progress",
+              "type": "integer"
+            },
+            "oldest_job_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Oldest Job At"
+            },
+            "pending": {
+              "minimum": 0,
+              "title": "Pending",
+              "type": "integer"
+            },
+            "queued": {
+              "minimum": 0,
+              "title": "Queued",
+              "type": "integer"
+            },
+            "status": {
+              "enum": [
+                "ok",
+                "degraded",
+                "unavailable",
+                "not_configured"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "pending",
+            "queued",
+            "in_progress",
+            "budget_status"
+          ],
+          "title": "QueueHealth",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "analysis_queue": {
+          "$ref": "#/$defs/QueueHealth"
+        },
+        "analysis_trigger_enabled": {
+          "title": "Analysis Trigger Enabled",
+          "type": "boolean"
+        },
+        "as_of": {
+          "format": "date-time",
+          "title": "As Of",
+          "type": "string"
+        },
+        "data_through": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data Through"
+        },
+        "database": {
+          "$ref": "#/$defs/ComponentHealth"
+        },
+        "execution_mode": {
+          "enum": [
+            "background",
+            "worker_sync"
+          ],
+          "title": "Execution Mode",
+          "type": "string"
+        },
+        "model": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "reasoning": {
+          "enum": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "title": "Reasoning",
+          "type": "string"
+        },
+        "request_id": {
+          "maxLength": 100,
+          "minLength": 8,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "scheduler": {
+          "$ref": "#/$defs/ComponentHealth"
+        },
+        "schema_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Schema Sha256",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "macrolens-option-pro-v1",
+          "default": "macrolens-option-pro-v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "sources": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ComponentHealth"
+          },
+          "propertyNames": {
+            "maxLength": 100,
+            "minLength": 1
+          },
+          "title": "Sources",
+          "type": "object"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "degraded",
+            "unavailable",
+            "not_configured"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_sha256",
+        "request_id",
+        "status",
+        "as_of",
+        "database",
+        "scheduler",
+        "analysis_queue",
+        "model",
+        "reasoning",
+        "execution_mode",
+        "analysis_trigger_enabled",
+        "sources",
+        "warnings"
+      ],
+      "title": "IntegrationHealthResponse",
+      "type": "object"
+    },
+    "LatestResponse": {
+      "$defs": {
+        "AffectedCommodityImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "name": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "impact_score",
+            "reason"
+          ],
+          "title": "AffectedCommodityImpact",
+          "type": "object"
+        },
+        "AffectedStockImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "company": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Company",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "horizon": {
+              "$ref": "#/$defs/ImpactHorizon"
+            },
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "mechanism": {
+              "$ref": "#/$defs/ImpactMechanism"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            },
+            "ticker": {
+              "maxLength": 20,
+              "minLength": 1,
+              "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+              "title": "Ticker",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ticker",
+            "company",
+            "impact_score",
+            "confidence",
+            "horizon",
+            "mechanism",
+            "reason"
+          ],
+          "title": "AffectedStockImpact",
+          "type": "object"
+        },
+        "AnalysisStatus": {
+          "enum": [
+            "not_requested",
+            "pending",
+            "queued",
+            "in_progress",
+            "completed",
+            "failed",
+            "cancelled",
+            "insufficient_context",
+            "budget_blocked"
+          ],
+          "title": "AnalysisStatus",
+          "type": "string"
+        },
+        "CatalystItem": {
+          "additionalProperties": false,
+          "properties": {
+            "analysis": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PublicAnalysis"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "analysis_status": {
+              "$ref": "#/$defs/AnalysisStatus"
+            },
+            "analyzed_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Analyzed At"
+            },
+            "available_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Available At"
+            },
+            "change_sequence": {
+              "minimum": 1,
+              "title": "Change Sequence",
+              "type": "integer"
+            },
+            "content_hash": {
+              "maxLength": 128,
+              "minLength": 8,
+              "title": "Content Hash",
+              "type": "string"
+            },
+            "fetched_at": {
+              "format": "date-time",
+              "title": "Fetched At",
+              "type": "string"
+            },
+            "is_stale": {
+              "default": false,
+              "title": "Is Stale",
+              "type": "boolean"
+            },
+            "news_id": {
+              "minimum": 1,
+              "title": "News Id",
+              "type": "integer"
+            },
+            "published_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Published At"
+            },
+            "source": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Source",
+              "type": "string"
+            },
+            "source_tickers": {
+              "items": {
+                "maxLength": 20,
+                "minLength": 1,
+                "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+                "type": "string"
+              },
+              "maxItems": 100,
+              "title": "Source Tickers",
+              "type": "array"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "maxLength": 20000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Summary"
+            },
+            "title": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Title",
+              "type": "string"
+            },
+            "updated_at": {
+              "format": "date-time",
+              "title": "Updated At",
+              "type": "string"
+            },
+            "url": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "news_id",
+            "content_hash",
+            "source",
+            "title",
+            "url",
+            "fetched_at",
+            "updated_at",
+            "change_sequence",
+            "analysis_status"
+          ],
+          "title": "CatalystItem",
+          "type": "object"
+        },
+        "ImpactHorizon": {
+          "enum": [
+            "intraday",
+            "days",
+            "weeks",
+            "uncertain"
+          ],
+          "title": "ImpactHorizon",
+          "type": "string"
+        },
+        "ImpactMechanism": {
+          "enum": [
+            "direct_company",
+            "supplier_customer",
+            "sector_readthrough",
+            "macro_rate",
+            "commodity_input",
+            "regulatory",
+            "competitive",
+            "other"
+          ],
+          "title": "ImpactMechanism",
+          "type": "string"
+        },
+        "PublicAnalysis": {
+          "additionalProperties": false,
+          "properties": {
+            "affected_commodities": {
+              "items": {
+                "$ref": "#/$defs/AffectedCommodityImpact"
+              },
+              "maxItems": 30,
+              "title": "Affected Commodities",
+              "type": "array"
+            },
+            "affected_sectors": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "title": "Affected Sectors",
+              "type": "array"
+            },
+            "affected_stocks": {
+              "items": {
+                "$ref": "#/$defs/AffectedStockImpact"
+              },
+              "maxItems": 50,
+              "title": "Affected Stocks",
+              "type": "array"
+            },
+            "analysis_id": {
+              "minimum": 1,
+              "title": "Analysis Id",
+              "type": "integer"
+            },
+            "analyzed_at": {
+              "format": "date-time",
+              "title": "Analyzed At",
+              "type": "string"
+            },
+            "available_at": {
+              "format": "date-time",
+              "title": "Available At",
+              "type": "string"
+            },
+            "causal_summary": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Causal Summary",
+              "type": "string"
+            },
+            "classification": {
+              "$ref": "#/$defs/Sentiment"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "headline_summary": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Headline Summary",
+              "type": "string"
+            },
+            "insufficient_context": {
+              "title": "Insufficient Context",
+              "type": "boolean"
+            },
+            "key_factors": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Key Factors",
+              "type": "array"
+            },
+            "market_relevance": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Market Relevance",
+              "type": "integer"
+            },
+            "model": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Model",
+              "type": "string"
+            },
+            "overall_sentiment": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Overall Sentiment",
+              "type": "integer"
+            },
+            "prompt_version": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Prompt Version",
+              "type": "string"
+            },
+            "reasoning": {
+              "enum": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "title": "Reasoning",
+              "type": "string"
+            },
+            "revision": {
+              "minimum": 1,
+              "title": "Revision",
+              "type": "integer"
+            },
+            "schema_version": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Schema Version",
+              "type": "string"
+            },
+            "title_zh": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Title Zh",
+              "type": "string"
+            },
+            "uncertainty_notes": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Uncertainty Notes",
+              "type": "array"
+            }
+          },
+          "required": [
+            "title_zh",
+            "headline_summary",
+            "overall_sentiment",
+            "classification",
+            "confidence",
+            "market_relevance",
+            "causal_summary",
+            "insufficient_context",
+            "analysis_id",
+            "revision",
+            "model",
+            "reasoning",
+            "prompt_version",
+            "schema_version",
+            "analyzed_at",
+            "available_at"
+          ],
+          "title": "PublicAnalysis",
+          "type": "object"
+        },
+        "Sentiment": {
+          "enum": [
+            "bullish",
+            "bearish",
+            "neutral"
+          ],
+          "title": "Sentiment",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "data_through": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data Through"
+        },
+        "has_more": {
+          "title": "Has More",
+          "type": "boolean"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/CatalystItem"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Cursor"
+        },
+        "next_updated_after": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Updated After"
+        },
+        "request_id": {
+          "maxLength": 100,
+          "minLength": 8,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "schema_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Schema Sha256",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "macrolens-option-pro-v1",
+          "default": "macrolens-option-pro-v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "snapshot_token": {
+          "maxLength": 200,
+          "minLength": 8,
+          "title": "Snapshot Token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_sha256",
+        "request_id",
+        "snapshot_token",
+        "has_more",
+        "items"
+      ],
+      "title": "LatestResponse",
+      "type": "object"
+    },
+    "NewsImpactAnalysis": {
+      "$defs": {
+        "AffectedCommodityImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "name": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "impact_score",
+            "reason"
+          ],
+          "title": "AffectedCommodityImpact",
+          "type": "object"
+        },
+        "AffectedStockImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "company": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Company",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "horizon": {
+              "$ref": "#/$defs/ImpactHorizon"
+            },
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "mechanism": {
+              "$ref": "#/$defs/ImpactMechanism"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            },
+            "ticker": {
+              "maxLength": 20,
+              "minLength": 1,
+              "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+              "title": "Ticker",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ticker",
+            "company",
+            "impact_score",
+            "confidence",
+            "horizon",
+            "mechanism",
+            "reason"
+          ],
+          "title": "AffectedStockImpact",
+          "type": "object"
+        },
+        "ImpactHorizon": {
+          "enum": [
+            "intraday",
+            "days",
+            "weeks",
+            "uncertain"
+          ],
+          "title": "ImpactHorizon",
+          "type": "string"
+        },
+        "ImpactMechanism": {
+          "enum": [
+            "direct_company",
+            "supplier_customer",
+            "sector_readthrough",
+            "macro_rate",
+            "commodity_input",
+            "regulatory",
+            "competitive",
+            "other"
+          ],
+          "title": "ImpactMechanism",
+          "type": "string"
+        },
+        "Sentiment": {
+          "enum": [
+            "bullish",
+            "bearish",
+            "neutral"
+          ],
+          "title": "Sentiment",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "affected_commodities": {
+          "items": {
+            "$ref": "#/$defs/AffectedCommodityImpact"
+          },
+          "maxItems": 30,
+          "title": "Affected Commodities",
+          "type": "array"
+        },
+        "affected_sectors": {
+          "items": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Affected Sectors",
+          "type": "array"
+        },
+        "affected_stocks": {
+          "items": {
+            "$ref": "#/$defs/AffectedStockImpact"
+          },
+          "maxItems": 50,
+          "title": "Affected Stocks",
+          "type": "array"
+        },
+        "causal_summary": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Causal Summary",
+          "type": "string"
+        },
+        "classification": {
+          "$ref": "#/$defs/Sentiment"
+        },
+        "confidence": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "integer"
+        },
+        "headline_summary": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Headline Summary",
+          "type": "string"
+        },
+        "insufficient_context": {
+          "title": "Insufficient Context",
+          "type": "boolean"
+        },
+        "key_factors": {
+          "items": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 30,
+          "title": "Key Factors",
+          "type": "array"
+        },
+        "market_relevance": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Market Relevance",
+          "type": "integer"
+        },
+        "overall_sentiment": {
+          "maximum": 100,
+          "minimum": -100,
+          "title": "Overall Sentiment",
+          "type": "integer"
+        },
+        "title_zh": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Title Zh",
+          "type": "string"
+        },
+        "uncertainty_notes": {
+          "items": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 30,
+          "title": "Uncertainty Notes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "title_zh",
+        "headline_summary",
+        "overall_sentiment",
+        "classification",
+        "confidence",
+        "market_relevance",
+        "causal_summary",
+        "insufficient_context"
+      ],
+      "title": "NewsImpactAnalysis",
+      "type": "object"
+    },
+    "NewsResponse": {
+      "$defs": {
+        "AffectedCommodityImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "name": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "impact_score",
+            "reason"
+          ],
+          "title": "AffectedCommodityImpact",
+          "type": "object"
+        },
+        "AffectedStockImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "company": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Company",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "horizon": {
+              "$ref": "#/$defs/ImpactHorizon"
+            },
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "mechanism": {
+              "$ref": "#/$defs/ImpactMechanism"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            },
+            "ticker": {
+              "maxLength": 20,
+              "minLength": 1,
+              "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+              "title": "Ticker",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ticker",
+            "company",
+            "impact_score",
+            "confidence",
+            "horizon",
+            "mechanism",
+            "reason"
+          ],
+          "title": "AffectedStockImpact",
+          "type": "object"
+        },
+        "AnalysisStatus": {
+          "enum": [
+            "not_requested",
+            "pending",
+            "queued",
+            "in_progress",
+            "completed",
+            "failed",
+            "cancelled",
+            "insufficient_context",
+            "budget_blocked"
+          ],
+          "title": "AnalysisStatus",
+          "type": "string"
+        },
+        "CatalystItem": {
+          "additionalProperties": false,
+          "properties": {
+            "analysis": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PublicAnalysis"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "analysis_status": {
+              "$ref": "#/$defs/AnalysisStatus"
+            },
+            "analyzed_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Analyzed At"
+            },
+            "available_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Available At"
+            },
+            "change_sequence": {
+              "minimum": 1,
+              "title": "Change Sequence",
+              "type": "integer"
+            },
+            "content_hash": {
+              "maxLength": 128,
+              "minLength": 8,
+              "title": "Content Hash",
+              "type": "string"
+            },
+            "fetched_at": {
+              "format": "date-time",
+              "title": "Fetched At",
+              "type": "string"
+            },
+            "is_stale": {
+              "default": false,
+              "title": "Is Stale",
+              "type": "boolean"
+            },
+            "news_id": {
+              "minimum": 1,
+              "title": "News Id",
+              "type": "integer"
+            },
+            "published_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Published At"
+            },
+            "source": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Source",
+              "type": "string"
+            },
+            "source_tickers": {
+              "items": {
+                "maxLength": 20,
+                "minLength": 1,
+                "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+                "type": "string"
+              },
+              "maxItems": 100,
+              "title": "Source Tickers",
+              "type": "array"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "maxLength": 20000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Summary"
+            },
+            "title": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Title",
+              "type": "string"
+            },
+            "updated_at": {
+              "format": "date-time",
+              "title": "Updated At",
+              "type": "string"
+            },
+            "url": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "news_id",
+            "content_hash",
+            "source",
+            "title",
+            "url",
+            "fetched_at",
+            "updated_at",
+            "change_sequence",
+            "analysis_status"
+          ],
+          "title": "CatalystItem",
+          "type": "object"
+        },
+        "ImpactHorizon": {
+          "enum": [
+            "intraday",
+            "days",
+            "weeks",
+            "uncertain"
+          ],
+          "title": "ImpactHorizon",
+          "type": "string"
+        },
+        "ImpactMechanism": {
+          "enum": [
+            "direct_company",
+            "supplier_customer",
+            "sector_readthrough",
+            "macro_rate",
+            "commodity_input",
+            "regulatory",
+            "competitive",
+            "other"
+          ],
+          "title": "ImpactMechanism",
+          "type": "string"
+        },
+        "PublicAnalysis": {
+          "additionalProperties": false,
+          "properties": {
+            "affected_commodities": {
+              "items": {
+                "$ref": "#/$defs/AffectedCommodityImpact"
+              },
+              "maxItems": 30,
+              "title": "Affected Commodities",
+              "type": "array"
+            },
+            "affected_sectors": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "title": "Affected Sectors",
+              "type": "array"
+            },
+            "affected_stocks": {
+              "items": {
+                "$ref": "#/$defs/AffectedStockImpact"
+              },
+              "maxItems": 50,
+              "title": "Affected Stocks",
+              "type": "array"
+            },
+            "analysis_id": {
+              "minimum": 1,
+              "title": "Analysis Id",
+              "type": "integer"
+            },
+            "analyzed_at": {
+              "format": "date-time",
+              "title": "Analyzed At",
+              "type": "string"
+            },
+            "available_at": {
+              "format": "date-time",
+              "title": "Available At",
+              "type": "string"
+            },
+            "causal_summary": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Causal Summary",
+              "type": "string"
+            },
+            "classification": {
+              "$ref": "#/$defs/Sentiment"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "headline_summary": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Headline Summary",
+              "type": "string"
+            },
+            "insufficient_context": {
+              "title": "Insufficient Context",
+              "type": "boolean"
+            },
+            "key_factors": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Key Factors",
+              "type": "array"
+            },
+            "market_relevance": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Market Relevance",
+              "type": "integer"
+            },
+            "model": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Model",
+              "type": "string"
+            },
+            "overall_sentiment": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Overall Sentiment",
+              "type": "integer"
+            },
+            "prompt_version": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Prompt Version",
+              "type": "string"
+            },
+            "reasoning": {
+              "enum": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "title": "Reasoning",
+              "type": "string"
+            },
+            "revision": {
+              "minimum": 1,
+              "title": "Revision",
+              "type": "integer"
+            },
+            "schema_version": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Schema Version",
+              "type": "string"
+            },
+            "title_zh": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Title Zh",
+              "type": "string"
+            },
+            "uncertainty_notes": {
+              "items": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 30,
+              "title": "Uncertainty Notes",
+              "type": "array"
+            }
+          },
+          "required": [
+            "title_zh",
+            "headline_summary",
+            "overall_sentiment",
+            "classification",
+            "confidence",
+            "market_relevance",
+            "causal_summary",
+            "insufficient_context",
+            "analysis_id",
+            "revision",
+            "model",
+            "reasoning",
+            "prompt_version",
+            "schema_version",
+            "analyzed_at",
+            "available_at"
+          ],
+          "title": "PublicAnalysis",
+          "type": "object"
+        },
+        "Sentiment": {
+          "enum": [
+            "bullish",
+            "bearish",
+            "neutral"
+          ],
+          "title": "Sentiment",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "item": {
+          "$ref": "#/$defs/CatalystItem"
+        },
+        "request_id": {
+          "maxLength": 100,
+          "minLength": 8,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "schema_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Schema Sha256",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "macrolens-option-pro-v1",
+          "default": "macrolens-option-pro-v1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_sha256",
+        "request_id",
+        "item"
+      ],
+      "title": "NewsResponse",
+      "type": "object"
+    },
+    "PublicAnalysis": {
+      "$defs": {
+        "AffectedCommodityImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "name": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "impact_score",
+            "reason"
+          ],
+          "title": "AffectedCommodityImpact",
+          "type": "object"
+        },
+        "AffectedStockImpact": {
+          "additionalProperties": false,
+          "properties": {
+            "company": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Company",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "integer"
+            },
+            "horizon": {
+              "$ref": "#/$defs/ImpactHorizon"
+            },
+            "impact_score": {
+              "maximum": 100,
+              "minimum": -100,
+              "title": "Impact Score",
+              "type": "integer"
+            },
+            "mechanism": {
+              "$ref": "#/$defs/ImpactMechanism"
+            },
+            "reason": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            },
+            "ticker": {
+              "maxLength": 20,
+              "minLength": 1,
+              "pattern": "^[A-Z0-9][A-Z0-9.^/_-]{0,19}$",
+              "title": "Ticker",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ticker",
+            "company",
+            "impact_score",
+            "confidence",
+            "horizon",
+            "mechanism",
+            "reason"
+          ],
+          "title": "AffectedStockImpact",
+          "type": "object"
+        },
+        "ImpactHorizon": {
+          "enum": [
+            "intraday",
+            "days",
+            "weeks",
+            "uncertain"
+          ],
+          "title": "ImpactHorizon",
+          "type": "string"
+        },
+        "ImpactMechanism": {
+          "enum": [
+            "direct_company",
+            "supplier_customer",
+            "sector_readthrough",
+            "macro_rate",
+            "commodity_input",
+            "regulatory",
+            "competitive",
+            "other"
+          ],
+          "title": "ImpactMechanism",
+          "type": "string"
+        },
+        "Sentiment": {
+          "enum": [
+            "bullish",
+            "bearish",
+            "neutral"
+          ],
+          "title": "Sentiment",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "affected_commodities": {
+          "items": {
+            "$ref": "#/$defs/AffectedCommodityImpact"
+          },
+          "maxItems": 30,
+          "title": "Affected Commodities",
+          "type": "array"
+        },
+        "affected_sectors": {
+          "items": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Affected Sectors",
+          "type": "array"
+        },
+        "affected_stocks": {
+          "items": {
+            "$ref": "#/$defs/AffectedStockImpact"
+          },
+          "maxItems": 50,
+          "title": "Affected Stocks",
+          "type": "array"
+        },
+        "analysis_id": {
+          "minimum": 1,
+          "title": "Analysis Id",
+          "type": "integer"
+        },
+        "analyzed_at": {
+          "format": "date-time",
+          "title": "Analyzed At",
+          "type": "string"
+        },
+        "available_at": {
+          "format": "date-time",
+          "title": "Available At",
+          "type": "string"
+        },
+        "causal_summary": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Causal Summary",
+          "type": "string"
+        },
+        "classification": {
+          "$ref": "#/$defs/Sentiment"
+        },
+        "confidence": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "integer"
+        },
+        "headline_summary": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Headline Summary",
+          "type": "string"
+        },
+        "insufficient_context": {
+          "title": "Insufficient Context",
+          "type": "boolean"
+        },
+        "key_factors": {
+          "items": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 30,
+          "title": "Key Factors",
+          "type": "array"
+        },
+        "market_relevance": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Market Relevance",
+          "type": "integer"
+        },
+        "model": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "overall_sentiment": {
+          "maximum": 100,
+          "minimum": -100,
+          "title": "Overall Sentiment",
+          "type": "integer"
+        },
+        "prompt_version": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Prompt Version",
+          "type": "string"
+        },
+        "reasoning": {
+          "enum": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "title": "Reasoning",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "schema_version": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "title_zh": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Title Zh",
+          "type": "string"
+        },
+        "uncertainty_notes": {
+          "items": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 30,
+          "title": "Uncertainty Notes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "title_zh",
+        "headline_summary",
+        "overall_sentiment",
+        "classification",
+        "confidence",
+        "market_relevance",
+        "causal_summary",
+        "insufficient_context",
+        "analysis_id",
+        "revision",
+        "model",
+        "reasoning",
+        "prompt_version",
+        "schema_version",
+        "analyzed_at",
+        "available_at"
+      ],
+      "title": "PublicAnalysis",
+      "type": "object"
+    }
+  },
+  "schema_version": "macrolens-option-pro-v1"
+}
