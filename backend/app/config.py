@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     )
     openai_max_retries: int = Field(default=0, ge=0, le=2, alias="OPENAI_MAX_RETRIES")
     openai_max_output_tokens: int = Field(
-        default=1200,
+        default=4096,
         ge=256,
         le=4096,
         alias="OPENAI_MAX_OUTPUT_TOKENS",

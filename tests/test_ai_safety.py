@@ -49,6 +49,14 @@ def test_root_env_path_is_independent_of_working_directory():
     assert Path(Settings.model_config["env_file"]) == expected
 
 
+def test_default_ai_output_budget_can_complete_web_search_json(monkeypatch):
+    monkeypatch.delenv("OPENAI_MAX_OUTPUT_TOKENS", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.openai_max_output_tokens == 4096
+
+
 def test_custom_openai_base_url_requires_explicit_opt_in(monkeypatch):
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
     monkeypatch.delenv("ALLOW_CUSTOM_OPENAI_BASE_URL", raising=False)

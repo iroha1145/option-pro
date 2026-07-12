@@ -73,12 +73,12 @@ OPENAI_REASONING=low
 
 从旧版升级且 `.env` 中已有非空 `OPENAI_BASE_URL` 时，部署前必须完成上述 key 确认并补上 `ALLOW_CUSTOM_OPENAI_BASE_URL=true`，否则应用会拒绝启动 AI 配置。
 
-AI 请求默认总超时 45 秒、不自动重试、最多输出 1200 tokens，整个进程最多同时访问模型 2 次。可通过以下变量调整，但不建议为个人部署大幅提高：
+AI 请求默认总超时 45 秒、不自动重试、最多输出 4096 tokens，整个进程最多同时访问模型 2 次。联网检索会与最终 JSON 共用输出预算，因此过低的上限可能截断结构化结果。可通过以下变量调整：
 
 ```dotenv
 OPENAI_TIMEOUT_SECONDS=45
 OPENAI_MAX_RETRIES=0
-OPENAI_MAX_OUTPUT_TOKENS=1200
+OPENAI_MAX_OUTPUT_TOKENS=4096
 OPENAI_MAX_CONCURRENCY=2
 ```
 
