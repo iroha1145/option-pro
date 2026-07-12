@@ -24,6 +24,9 @@ def _isolated_environment() -> dict[str, str]:
             environment.pop(key, None)
     environment.pop("APP_COMMIT", None)
     environment.pop("APP_VERSION", None)
+    for key in tuple(environment):
+        if key.startswith("COMPOSE_"):
+            environment.pop(key, None)
     return environment
 
 
