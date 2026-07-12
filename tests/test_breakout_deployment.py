@@ -43,6 +43,11 @@ def test_breakout_bootstrap_environment_is_complete_and_off_by_default() -> None
         "BREAKOUT_SCAN_INTERVAL_PREMARKET_SECONDS": "600",
         "BREAKOUT_SCAN_INTERVAL_REGULAR_SECONDS": "300",
         "BREAKOUT_SCAN_INTERVAL_CLOSED_SECONDS": "1800",
+        "BREAKOUT_WORKER_LEASE_TTL_SECONDS": "90",
+        "BREAKOUT_WORKER_HEALTH_STALE_SECONDS": "120",
+        "BREAKOUT_RAW_PAYLOAD_RETENTION_HOURS": "24",
+        "BREAKOUT_SCAN_RETENTION_DAYS": "30",
+        "BREAKOUT_RETENTION_BATCH_SIZE": "500",
         "BREAKOUT_PROVIDER_RESULT_LIMIT": "150",
         "BREAKOUT_DAILY_ENRICH_LIMIT": "60",
         "BREAKOUT_INTRADAY_ENRICH_LIMIT": "30",
@@ -132,4 +137,3 @@ def test_image_runs_as_non_root_and_prepares_private_data_directory() -> None:
     assert "COPY third_party/BreakoutAnalysis-LICENSE /licenses/BreakoutAnalysis-LICENSE" in dockerfile
     assert 'org.opencontainers.image.revision="${APP_COMMIT}"' in dockerfile
     assert dockerfile.rfind("USER app") > dockerfile.rfind("COPY ")
-

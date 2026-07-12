@@ -146,3 +146,69 @@ def test_include_current_bar_is_an_explicit_opt_in() -> None:
     partial_allowed = complete_only.model_copy(update={"include_current_bar": True})
     assert trim_intraday_bars(frame, complete_only).index.max().minute == 25
     assert trim_intraday_bars(frame, partial_allowed).index.max().minute == 30
+
+
+def test_vwap_and_cumulative_volume_use_only_the_event_session() -> None:
+    day = datetime(2026, 7, 10, tzinfo=NY)
+    index = pd.DatetimeIndex(
+        [
+            day.replace(day=9, hour=9, minute=30),
+            day.replace(day=9, hour=9, minute=35),
+            day.replace(hour=9, minute=30),
+            day.replace(hour=9, minute=35),
+        ]
+    )
+    intraday = pd.DataFrame(
+        {
+            "Open": [10, 10, 100, 100],
+            "High": [11, 11, 101, 101],
+            "Low": [9, 9, 99, 99],
+            "Close": [10, 10, 100, 100],
+            "Volume": [3_000_000, 3_000_000, 1_000, 2_000],
+        },
+        index=index,
+    )
+    cutoff = TemporalCutoff(
+        event_at=day.replace(hour=9, minute=40),
+        completed_daily_session=_daily().index[-1].date(),
+        session=MarketSession.REGULAR,
+    )
+    result = compute_feature_snapshot(daily=_daily(), intraday=intraday, cutoff=cutoff)
+    assert result["vwap"] == 100.0
+    assert result["cumulative_volume"] == 3_000.0
+    assert result["cumulative_dollar_volume"] == 300_000.0
+
+
+def test_opening_range_uses_six_complete_bars_and_ignores_future_tail() -> None:
+    day = datetime(2026, 7, 10, tzinfo=NY)
+    index = pd.date_range(day.replace(hour=9, minute=30), periods=10, freq="5min")
+    close = np.linspace(100, 109, len(index))
+    intraday = pd.DataFrame(
+        {
+            "Open": close - 0.2,
+            "High": close + 1,
+            "Low": close - 1,
+            "Close": close,
+            "Volume": 10_000,
+        },
+        index=index,
+    )
+    before = TemporalCutoff(
+        event_at=day.replace(hour=9, minute=59),
+        completed_daily_session=_daily().index[-1].date(),
+        session=MarketSession.REGULAR,
+    )
+    complete = before.model_copy(
+        update={"event_at": day.replace(hour=10, minute=0)}
+    )
+    assert compute_feature_snapshot(
+        daily=_daily(), intraday=intraday, cutoff=before
+    )["opening_range_complete"] is False
+    first = compute_feature_snapshot(daily=_daily(), intraday=intraday, cutoff=complete)
+    second = compute_feature_snapshot(
+        daily=_daily(), intraday=intraday.iloc[:6], cutoff=complete
+    )
+    assert first["opening_range_complete"] is True
+    assert first["opening_range_high"] == 106.0
+    assert first["opening_range_low"] == 99.0
+    assert first == second

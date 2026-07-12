@@ -8,7 +8,9 @@ The worker is the only writer.  API callers construct the repository with
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
+import hmac
 import json
 import sqlite3
 from dataclasses import asdict, dataclass, is_dataclass
@@ -25,7 +27,7 @@ MAX_PROVIDER_JSON_BYTES = 2_000_000
 MAX_DEBUG_JSON_BYTES = 16_384
 MAX_EVENT_JSON_BYTES = 262_144
 MAX_GENERIC_JSON_BYTES = 65_536
-_CURSOR_VERSION = 1
+_CURSOR_VERSION = 2
 
 
 class BreakoutRepositoryError(RuntimeError):
@@ -412,7 +414,13 @@ class BreakoutRepository:
         """Create and verify v1.  This method is never valid on an API reader."""
         connection = self._write_connection()
         try:
-            connection.execute("PRAGMA journal_mode=WAL")
+            effective_mode = str(
+                connection.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+            ).lower()
+            if effective_mode != "wal":
+                raise BreakoutRepositoryError(
+                    f"SQLite WAL mode is required, got {effective_mode}"
+                )
             connection.execute("BEGIN IMMEDIATE")
             for statement in _SCHEMA:
                 connection.execute(statement)
@@ -601,14 +609,24 @@ class BreakoutRepository:
     def abandon_running_scans(
         self,
         *,
+        owner_id: str,
+        lease_token: int,
         except_scan_id: str | None = None,
         now: datetime | None = None,
+        lock_name: str = DEFAULT_LOCK_NAME,
     ) -> int:
         current = _timestamp(self._now(now))
         connection = self._write_connection()
         try:
             connection.execute("BEGIN IMMEDIATE")
             self._require_schema(connection)
+            self._verify_lease(
+                connection,
+                owner_id,
+                lease_token,
+                current,
+                lock_name,
+            )
             if except_scan_id is None:
                 cursor = connection.execute(
                     """
@@ -1014,7 +1032,12 @@ class BreakoutRepository:
         now_text: str,
     ) -> None:
         body = dict(provider_snapshot)
-        body.setdefault("candidates", list(candidates))
+        safe_candidates = []
+        for value in candidates:
+            candidate = _mapping(value)
+            candidate.pop("raw_provider_fields", None)
+            safe_candidates.append(candidate)
+        body["candidates"] = safe_candidates
         warnings = list(body.get("warnings") or ())
         status = str(_enum_value(body.get("status")) or "unavailable")
         as_of = body.get("as_of") or run["scheduled_at"]
@@ -1641,14 +1664,23 @@ class BreakoutRepository:
         return result
 
     @staticmethod
-    def _encode_cursor(scan_id: str, row: sqlite3.Row) -> str:
+    def _encode_cursor(
+        scan_id: str,
+        row: sqlite3.Row,
+        filter_hash: str,
+    ) -> str:
         value = {
             "v": _CURSOR_VERSION,
             "scan_run_id": scan_id,
             "event_at": row["event_at"],
             "priority": row["sort_priority"],
             "event_id": row["event_id"],
+            "filter_hash": filter_hash,
         }
+        signature = hashlib.sha256(
+            (_json_dumps(value) + SCHEMA_CHECKSUM).encode("utf-8")
+        ).hexdigest()[:32]
+        value["signature"] = signature
         raw = _json_dumps(value).encode("utf-8")
         return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
@@ -1657,6 +1689,14 @@ class BreakoutRepository:
         try:
             padding = "=" * (-len(cursor) % 4)
             value = json.loads(base64.urlsafe_b64decode(cursor + padding).decode("utf-8"))
+            signature = value.pop("signature", None) if isinstance(value, dict) else None
+            expected = (
+                hashlib.sha256(
+                    (_json_dumps(value) + SCHEMA_CHECKSUM).encode("utf-8")
+                ).hexdigest()[:32]
+                if isinstance(value, dict)
+                else ""
+            )
             if (
                 not isinstance(value, dict)
                 or value.get("v") != _CURSOR_VERSION
@@ -1664,10 +1704,19 @@ class BreakoutRepository:
                 or not isinstance(value.get("event_at"), str)
                 or not isinstance(value.get("event_id"), str)
                 or not isinstance(value.get("priority"), (int, float))
+                or not isinstance(value.get("filter_hash"), str)
+                or not isinstance(signature, str)
+                or not hmac.compare_digest(signature, expected)
             ):
                 raise ValueError
             return value
-        except (ValueError, TypeError, UnicodeError, json.JSONDecodeError) as exc:
+        except (
+            ValueError,
+            TypeError,
+            UnicodeError,
+            binascii.Error,
+            json.JSONDecodeError,
+        ) as exc:
             raise InvalidCursorError("invalid breakout event cursor") from exc
 
     def list_events(
@@ -1698,8 +1747,23 @@ class BreakoutRepository:
         scan_run_id = values.get("scan_run_id", scan_run_id)
         if limit < 1 or limit > 200:
             raise ValueError("limit must be between 1 and 200")
+        normalized_filters = {
+            "date": str(date) if date is not None else None,
+            "ticker": str(ticker).strip().upper() if ticker is not None else None,
+            "setup_type": str(_enum_value(setup_type)) if setup_type is not None else None,
+            "lifecycle_state": str(_enum_value(lifecycle_state))
+            if lifecycle_state is not None
+            else None,
+            "session": str(_enum_value(session)) if session is not None else None,
+            "min_priority": float(min_priority) if min_priority is not None else None,
+        }
+        filter_hash = hashlib.sha256(
+            _json_dumps(normalized_filters).encode("utf-8")
+        ).hexdigest()[:24]
         cursor_data = self._decode_cursor(cursor) if cursor else None
         if cursor_data is not None:
+            if cursor_data["filter_hash"] != filter_hash:
+                raise InvalidCursorError("cursor filters do not match request")
             if scan_run_id is not None and scan_run_id != cursor_data["scan_run_id"]:
                 raise InvalidCursorError("cursor belongs to a different scan")
             scan_run_id = cursor_data["scan_run_id"]
@@ -1774,7 +1838,7 @@ class BreakoutRepository:
             page = rows[:limit]
             events = [_json_loads(row["event_snapshot_json"], {}) for row in page]
             next_cursor = (
-                self._encode_cursor(scan_run_id, page[-1])
+                self._encode_cursor(scan_run_id, page[-1], filter_hash)
                 if len(rows) > limit and page
                 else None
             )
@@ -1905,6 +1969,7 @@ class BreakoutRepository:
         connection = self._read_connection()
         try:
             self._require_schema(connection)
+            connection.execute("BEGIN")
             schema = connection.execute(
                 "SELECT version,checksum,applied_at FROM breakout_schema_version"
             ).fetchone()
@@ -1916,17 +1981,25 @@ class BreakoutRepository:
                 ORDER BY published_at DESC,scan_run_id DESC LIMIT 1
                 """
             ).fetchone()
-            worker = connection.execute(
-                "SELECT * FROM breakout_worker_status ORDER BY updated_at DESC LIMIT 1"
-            ).fetchone()
-            providers = connection.execute(
-                "SELECT * FROM breakout_provider_health ORDER BY provider"
-            ).fetchall()
             lock = connection.execute(
                 "SELECT * FROM breakout_worker_lock WHERE lock_name=?",
                 (DEFAULT_LOCK_NAME,),
             ).fetchone()
-            return {
+            lock_owner = str(lock["owner_id"]) if lock is not None and lock["owner_id"] else None
+            worker = (
+                connection.execute(
+                    "SELECT * FROM breakout_worker_status WHERE worker_id=?",
+                    (lock_owner,),
+                ).fetchone()
+                if lock_owner is not None
+                else connection.execute(
+                    "SELECT * FROM breakout_worker_status ORDER BY updated_at DESC LIMIT 1"
+                ).fetchone()
+            )
+            providers = connection.execute(
+                "SELECT * FROM breakout_provider_health ORDER BY provider"
+            ).fetchall()
+            payload = {
                 "database": {
                     "status": "active",
                     "path": str(self.path),
@@ -1939,6 +2012,128 @@ class BreakoutRepository:
                 "provider_health": [self._row_dict(row) for row in providers],
                 "worker_lock": self._row_dict(lock) if lock is not None else None,
             }
+            connection.commit()
+            return payload
+        except Exception:
+            if connection.in_transaction:
+                connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def prune_retention(
+        self,
+        *,
+        owner_id: str,
+        lease_token: int,
+        raw_payload_hours: int = 24,
+        scan_days: int = 30,
+        batch_size: int = 500,
+        now: datetime | None = None,
+        lock_name: str = DEFAULT_LOCK_NAME,
+    ) -> Mapping[str, int]:
+        """Bound debug payload growth without deleting event history.
+
+        Event rows, transitions and shadow research records are retained. Old
+        scan attachments are removed only when a newer completed scan still
+        references the same event.
+        """
+        if raw_payload_hours < 1 or scan_days < 1:
+            raise ValueError("retention windows must be positive")
+        if batch_size < 1 or batch_size > 5000:
+            raise ValueError("batch_size must be between 1 and 5000")
+        current = self._now(now)
+        current_text = _timestamp(current)
+        raw_cutoff = _timestamp(current - timedelta(hours=raw_payload_hours))
+        scan_cutoff = _timestamp(current - timedelta(days=scan_days))
+        connection = self._write_connection()
+        counts = {"provider_payloads": 0, "candidate_raw": 0, "scan_attachments": 0}
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            self._require_schema(connection)
+            self._verify_lease(
+                connection,
+                owner_id,
+                lease_token,
+                current_text,
+                lock_name,
+            )
+            raw_ids = [
+                str(row["scan_run_id"])
+                for row in connection.execute(
+                    """
+                    SELECT scan_run_id FROM breakout_provider_snapshots
+                    WHERE created_at<? AND payload_json<>'{"redacted":true}'
+                    ORDER BY created_at LIMIT ?
+                    """,
+                    (raw_cutoff, batch_size),
+                ).fetchall()
+            ]
+            if raw_ids:
+                placeholders = ",".join("?" for _ in raw_ids)
+                counts["provider_payloads"] = connection.execute(
+                    f"UPDATE breakout_provider_snapshots SET payload_json='{{\"redacted\":true}}' "
+                    f"WHERE scan_run_id IN ({placeholders})",
+                    raw_ids,
+                ).rowcount
+                counts["candidate_raw"] = connection.execute(
+                    f"UPDATE breakout_candidates SET raw_provider_fields_json='{{}}' "
+                    f"WHERE scan_run_id IN ({placeholders}) AND raw_provider_fields_json<>'{{}}'",
+                    raw_ids,
+                ).rowcount
+
+            old_ids = [
+                str(row["scan_run_id"])
+                for row in connection.execute(
+                    """
+                    SELECT scan_run_id FROM breakout_scan_runs
+                    WHERE status<>'running' AND updated_at<?
+                      AND scan_run_id<>COALESCE(
+                        (SELECT scan_run_id FROM breakout_scan_runs
+                         WHERE status='completed'
+                         ORDER BY published_at DESC,scan_run_id DESC LIMIT 1),
+                        ''
+                      )
+                    ORDER BY updated_at LIMIT ?
+                    """,
+                    (scan_cutoff, batch_size),
+                ).fetchall()
+            ]
+            if old_ids:
+                placeholders = ",".join("?" for _ in old_ids)
+                counts["scan_attachments"] += connection.execute(
+                    f"""
+                    DELETE FROM breakout_scan_events AS old
+                    WHERE old.scan_run_id IN ({placeholders})
+                      AND EXISTS(
+                        SELECT 1 FROM breakout_scan_events newer
+                        JOIN breakout_scan_runs run
+                          ON run.scan_run_id=newer.scan_run_id
+                         AND run.status='completed'
+                        WHERE newer.event_id=old.event_id
+                          AND newer.scan_run_id<>old.scan_run_id
+                      )
+                    """,
+                    old_ids,
+                ).rowcount
+                counts["scan_attachments"] += connection.execute(
+                    f"DELETE FROM breakout_structures WHERE scan_run_id IN ({placeholders})",
+                    old_ids,
+                ).rowcount
+                counts["scan_attachments"] += connection.execute(
+                    f"DELETE FROM breakout_candidates WHERE scan_run_id IN ({placeholders})",
+                    old_ids,
+                ).rowcount
+                counts["scan_attachments"] += connection.execute(
+                    f"DELETE FROM breakout_provider_snapshots WHERE scan_run_id IN ({placeholders})",
+                    old_ids,
+                ).rowcount
+            connection.commit()
+            return counts
+        except Exception:
+            if connection.in_transaction:
+                connection.rollback()
+            raise
         finally:
             connection.close()
 

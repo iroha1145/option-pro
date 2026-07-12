@@ -114,3 +114,21 @@ def test_range_adjustment_is_capped_and_not_double_counted() -> None:
     base = score_breakout(features, intrinsic_strength=75)
     assert adjusted.breakout_confirmation_score - base.breakout_confirmation_score <= 4
     assert blocked.breakout_confirmation_score == base.breakout_confirmation_score
+    detail = adjusted.details["breakout_confirmation"]
+    assert abs(
+        sum(detail.contribution_breakdown.values())
+        - adjusted.breakout_confirmation_score
+    ) <= 0.1
+
+
+def test_range_adjustment_reports_only_the_applied_clamped_delta() -> None:
+    features = _features(99)
+    adjusted = score_breakout(
+        features,
+        intrinsic_strength=75,
+        range_persistence_adjustment=4,
+    )
+    detail = adjusted.details["breakout_confirmation"]
+    assert adjusted.breakout_confirmation_score == 100
+    assert detail.contribution_breakdown["range_persistence_adjustment"] == 1
+    assert abs(sum(detail.contribution_breakdown.values()) - 100) <= 0.1

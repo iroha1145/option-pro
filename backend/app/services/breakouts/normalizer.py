@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import math
 from datetime import datetime
 from typing import Any, Iterable, Mapping, Sequence
+
+from pydantic import ValidationError
 
 from app.services.breakouts.config import BreakoutSettings
 from app.services.breakouts.models import (
@@ -87,7 +90,7 @@ def normalize_provider_row(
         previous_close = None
     relative_volume = finite_number(data.get("relative_volume_10d_calc"))
     market_cap = finite_number(data.get("market_cap_basic"))
-    if price is None or change is None or volume is None:
+    if price is None or price <= 0 or change is None or volume is None:
         return None, ["provider_non_numeric_required_field"]
     if relative_volume is None and session is MarketSession.REGULAR:
         warnings.append("provider_relative_volume_missing")
@@ -108,10 +111,19 @@ def normalize_provider_row(
             "market_cap_basic",
         )
     }
-    return (
-        BreakoutCandidate(
+    raw["description"] = str(raw.get("description") or "")[:200]
+    raw["type"] = str(raw.get("type") or "")[:80]
+    specs = raw.get("typespecs")
+    if isinstance(specs, (list, tuple, set)):
+        raw["typespecs"] = [str(item)[:80] for item in list(specs)[:16]]
+    else:
+        raw["typespecs"] = str(specs or "")[:512]
+    if len(json.dumps(raw, default=str).encode("utf-8")) > 8_192:
+        return None, ["provider_debug_fields_too_large"]
+    try:
+        candidate = BreakoutCandidate(
             ticker=ticker,
-            exchange=str(data.get("exchange") or "").strip().upper() or None,
+            exchange=str(data.get("exchange") or "").strip().upper()[:24] or None,
             asset_type=asset_type,
             name=str(data.get("description") or "").strip()[:200] or None,
             sector=str(data.get("sector") or "").strip()[:120] or None,
@@ -129,9 +141,10 @@ def normalize_provider_row(
             quality=1.0 if not warnings else 0.85,
             warnings=warnings,
             raw_provider_fields=raw,
-        ),
-        warnings,
-    )
+        )
+    except (ValidationError, TypeError, ValueError):
+        return None, ["provider_row_validation_failed"]
+    return candidate, warnings
 
 
 def filter_and_deduplicate(

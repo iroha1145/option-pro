@@ -135,6 +135,16 @@ class Market:
         )
 
 
+class Universe:
+    version = "fixture-universe-v1"
+
+    async def tickers(self, *, as_of):
+        return []
+
+    def primary_sector(self, ticker):
+        return None
+
+
 def test_service_revalidates_candidate_without_optional_context() -> None:
     candidate = BreakoutCandidate(
         ticker="TEST",
@@ -160,10 +170,15 @@ def test_service_revalidates_candidate_without_optional_context() -> None:
         cache_key="fixture-snapshot",
     )
     service = BreakoutRadarService(
-        BreakoutSettings(_env_file=None),
+        BreakoutSettings(
+            _env_file=None,
+            RANGE_PERSISTENCE_MODE="shadow",
+            RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED=True,
+        ),
         price_data=Prices(),
         strength=Strength(),
         market_shape=Market(),
+        universe=Universe(),
     )
     payload = asyncio.run(service.build_snapshot(discovery))
     assert len(payload["events"]) == 1
@@ -173,6 +188,13 @@ def test_service_revalidates_candidate_without_optional_context() -> None:
     assert event.scores.market_fit_score is None
     assert event.source_snapshot_id == "fixture-snapshot"
     assert payload["range_persistence_shadow"][0]["production_score"] == 75
+    assert (
+        payload["range_persistence_shadow"][0]["breakout_production_priority"]
+        == event.scores.alert_priority_score
+    )
+    assert payload["range_persistence_shadow"][0]["production_rank"] == 1
+    assert payload["range_persistence_shadow"][0]["hypothetical_rank"] == 1
+    assert payload["range_persistence_shadow"][0]["rank_delta"] == 0
     assert event.features["range_persistence_global_percentile"] is None
     assert event.features["canonical_universe_member"] is False
 
@@ -235,6 +257,7 @@ def test_real_worker_service_repository_chain_publishes_and_preserves_first_seen
             price_data=Prices(),
             strength=Strength(),
             market_shape=Market(),
+            universe=Universe(),
         )
         worker = BreakoutWorker(
             settings,
@@ -261,3 +284,123 @@ def test_real_worker_service_repository_chain_publishes_and_preserves_first_seen
     assert detail is not None
     assert detail["transitions"]
     assert all(item.get("evidence_at") for item in detail["transitions"])
+
+
+class NoIntradayPrices(Prices):
+    async def daily(self, tickers, *, cutoff, period):
+        index = pd.bdate_range(end="2026-07-09", periods=220)
+        close = np.linspace(80, 90, 220)
+        phase = np.arange(60)
+        close[-60:] = 95.0 + np.sin(phase * np.pi / 3.0) * 3.5 + phase * 0.01
+        frame = pd.DataFrame(
+            {
+                "Open": close - 0.2,
+                "High": close + 1.0,
+                "Low": close - 1.0,
+                "Close": close,
+                "Volume": np.linspace(2_000_000, 1_100_000, 220),
+            },
+            index=index,
+        )
+        return {
+            ticker: PriceDataSnapshot(
+                ticker=ticker,
+                frame=frame,
+                source="fixture",
+                raw_as_of=AS_OF.astimezone(timezone.utc),
+                cutoff=cutoff,
+                session=cutoff.session,
+                adjustment="adjusted",
+                completeness="complete",
+            )
+            for ticker in tickers
+        }
+
+    async def intraday(self, tickers, *, cutoff, interval):
+        return {}
+
+
+def test_provider_price_cannot_trigger_without_a_complete_intraday_bar() -> None:
+    candidate = BreakoutCandidate(
+        ticker="TEST",
+        exchange="NASDAQ",
+        asset_type=AssetType.COMMON_STOCK,
+        price=120,
+        provider_change_pct=20,
+        provider_volume=3_000_000,
+        provider_relative_volume=4,
+        provider_market_cap=1_000_000_000,
+        provider_timestamp=AS_OF,
+        source="fixture",
+        session=MarketSession.REGULAR,
+    )
+    discovery = DiscoverySnapshot(
+        provider="fixture",
+        status=ProviderStatus.ACTIVE,
+        as_of=AS_OF,
+        session=MarketSession.REGULAR,
+        schema_version="fixture-v1",
+        candidate_count=1,
+        candidates=[candidate],
+    )
+    service = BreakoutRadarService(
+        BreakoutSettings(_env_file=None),
+        price_data=NoIntradayPrices(),
+        strength=Strength(),
+        market_shape=Market(),
+        universe=Universe(),
+    )
+    event = asyncio.run(service.build_snapshot(discovery))["events"][0]
+    assert event.structure is not None
+    assert event.lifecycle_state.name == "WATCHING"
+    assert event.features["detection"]["triggered"] is False
+    assert event.scores.breakout_confirmation_score is None
+
+
+class FailingStrength:
+    version = "fixture-strength-failed"
+
+    async def score_ticker_set(self, *args, **kwargs):
+        raise RuntimeError("strength unavailable")
+
+
+class FailingMarket:
+    version = "fixture-market-failed"
+
+    async def snapshot(self, *, as_of):
+        raise RuntimeError("market unavailable")
+
+
+def test_optional_adapter_failures_degrade_instead_of_aborting_scan() -> None:
+    candidate = BreakoutCandidate(
+        ticker="TEST",
+        price=104,
+        provider_change_pct=8,
+        provider_volume=2_000_000,
+        provider_relative_volume=3,
+        provider_market_cap=1_000_000_000,
+        provider_timestamp=AS_OF,
+        source="fixture",
+        session=MarketSession.REGULAR,
+    )
+    discovery = DiscoverySnapshot(
+        provider="fixture",
+        status=ProviderStatus.ACTIVE,
+        as_of=AS_OF,
+        session=MarketSession.REGULAR,
+        schema_version="fixture-v1",
+        candidate_count=1,
+        candidates=[candidate],
+    )
+    service = BreakoutRadarService(
+        BreakoutSettings(_env_file=None),
+        price_data=Prices(),
+        strength=FailingStrength(),
+        market_shape=FailingMarket(),
+        universe=Universe(),
+    )
+    payload = asyncio.run(service.build_snapshot(discovery))
+    assert payload["events"]
+    assert payload["events"][0].scores.intrinsic_strength_score is None
+    assert payload["source_status"]["strength"] == "unavailable"
+    assert payload["source_status"]["market_shape"] == "unavailable"

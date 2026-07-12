@@ -148,9 +148,14 @@ def score_breakout(
     if adjustment > 0 and "range_persistence" in included:
         adjustment = 0.0
     if confirmation.score is not None and adjustment:
-        adjusted = max(0.0, min(100.0, confirmation.score + adjustment))
+        original = confirmation.score
+        adjusted = max(0.0, min(100.0, original + adjustment))
+        applied = adjusted - original
         confirmation.score = round(adjusted, 4)
-        confirmation.penalties["range_persistence_adjustment"] = round(-adjustment, 4)
+        confirmation.contribution_breakdown["range_persistence_adjustment"] = round(
+            applied,
+            6,
+        )
     liquidity = weighted_score(
         _feature_components(features, tuple(liquidity_weights)),
         liquidity_weights,

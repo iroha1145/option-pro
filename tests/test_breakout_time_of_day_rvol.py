@@ -21,7 +21,7 @@ def _panel(history_sessions: int = 6, current_multiplier: float = 2.0) -> pd.Dat
         if day.weekday() >= 5:
             continue
         multiplier = current_multiplier if day.date() == current.date() else 1.0
-        for hour, minute in ((9, 35), (9, 40), (9, 45)):
+        for hour, minute in ((9, 30), (9, 35), (9, 40), (9, 45)):
             index.append(day.replace(hour=hour, minute=minute))
             rows.append(
                 {
@@ -49,8 +49,8 @@ def test_rvol_compares_only_same_minute_of_session() -> None:
     assert result["rvol_time_of_day"] == 2.0
     # The 09:40 bar is stamped at its start and completes at 09:45, so a
     # 09:40 cutoff compares cumulative volume through the 09:35 bar.
-    assert result["observed_cumulative_volume"] == 2000.0
-    assert result["expected_cumulative_volume"] == 1000.0
+    assert result["observed_cumulative_volume"] == 4000.0
+    assert result["expected_cumulative_volume"] == 2000.0
     assert result["comparison_sessions"] == 5
 
 
@@ -85,7 +85,19 @@ def test_zero_volume_is_missing_not_real_zero() -> None:
         min_sessions=3,
     )
     assert result["comparison_sessions"] < 10
-    assert result["expected_cumulative_volume"] == 1000.0
+    assert result["expected_cumulative_volume"] == 2000.0
+
+
+def test_missing_internal_bar_excludes_the_session_from_rvol() -> None:
+    frame = _panel(10)
+    frame = frame[~((frame.index.hour == 9) & (frame.index.minute == 30))]
+    cutoff = TemporalCutoff(
+        event_at=datetime(2026, 7, 10, 9, 40, tzinfo=NY),
+        session=MarketSession.REGULAR,
+    )
+    result = compute_time_of_day_rvol(frame, cutoff, lookback_sessions=10, min_sessions=3)
+    assert result["rvol_time_of_day"] is None
+    assert result["comparison_sessions"] == 0
 
 
 def test_premarket_does_not_use_full_day_rvol() -> None:
@@ -96,3 +108,47 @@ def test_premarket_does_not_use_full_day_rvol() -> None:
     result = compute_time_of_day_rvol(_panel(10), cutoff)
     assert result["rvol_time_of_day"] is None
     assert result["comparison_sessions"] == 0
+
+
+def test_rvol_respects_early_close_session_grid() -> None:
+    from app.api.market import _is_trading_day
+
+    current = datetime(2026, 11, 27, tzinfo=NY)
+    days = [current.date()]
+    candidate = current.date() - timedelta(days=1)
+    while len(days) < 7:
+        if _is_trading_day(candidate):
+            days.append(candidate)
+        candidate -= timedelta(days=1)
+    rows = []
+    index = []
+    for day in days:
+        multiplier = 2 if day == current.date() else 1
+        for minute in range(9 * 60 + 30, 12 * 60 + 51, 5):
+            index.append(
+                datetime(
+                    day.year,
+                    day.month,
+                    day.day,
+                    minute // 60,
+                    minute % 60,
+                    tzinfo=NY,
+                )
+            )
+            rows.append(
+                {
+                    "Open": 10,
+                    "High": 11,
+                    "Low": 9,
+                    "Close": 10,
+                    "Volume": 100 * multiplier,
+                }
+            )
+    frame = pd.DataFrame(rows, index=pd.DatetimeIndex(index))
+    cutoff = TemporalCutoff(
+        event_at=current.replace(hour=12, minute=55),
+        session=MarketSession.REGULAR,
+    )
+    result = compute_time_of_day_rvol(frame, cutoff, lookback_sessions=5, min_sessions=3)
+    assert result["rvol_time_of_day"] == 2
+    assert result["comparison_sessions"] == 5

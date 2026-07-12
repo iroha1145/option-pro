@@ -161,3 +161,41 @@ def test_retry_is_bounded_and_can_recover() -> None:
     asyncio.run(client.aclose())
     assert calls == 2
     assert snapshot.status is ProviderStatus.ACTIVE
+
+
+def test_same_day_replay_never_reuses_a_future_cached_snapshot() -> None:
+    calls = 0
+
+    async def handler(_request):
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json=FIXTURE)
+
+    async def run() -> tuple:
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        provider = TradingViewDiscoveryProvider(
+            _settings(provider_cache_ttl_seconds=60),
+            client=client,
+        )
+        later = NOW.replace(second=50)
+        earlier = NOW.replace(second=10)
+        try:
+            first = await provider.scan(
+                session=MarketSession.REGULAR,
+                as_of=later,
+                profile=DiscoveryProfile.REGULAR_MOVERS,
+            )
+            second = await provider.scan(
+                session=MarketSession.REGULAR,
+                as_of=earlier,
+                profile=DiscoveryProfile.REGULAR_MOVERS,
+            )
+            return first, second
+        finally:
+            await client.aclose()
+
+    first, replay = asyncio.run(run())
+    assert first.as_of > replay.as_of
+    assert replay.as_of == NOW.replace(second=10)
+    assert all(candidate.provider_timestamp <= replay.as_of for candidate in replay.candidates)
+    assert calls == 2

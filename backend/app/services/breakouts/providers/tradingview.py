@@ -179,6 +179,8 @@ class TradingViewDiscoveryProvider:
             "session": session.value,
             "profile": profile.value,
             "source_date": as_of.date().isoformat(),
+            "source_time_bucket": int(as_of.timestamp())
+            // max(1, min(self.settings.provider_cache_ttl_seconds, 60)),
             "schema": self.settings.provider_schema_version,
             "payload": self._payload(session),
         }
@@ -308,10 +310,13 @@ class TradingViewDiscoveryProvider:
         cached: tuple[float, DiscoverySnapshot] | None,
         *,
         warning: str,
+        requested_as_of: datetime,
     ) -> DiscoverySnapshot | None:
         if cached is None:
             return None
         fetched_at, snapshot = cached
+        if snapshot.as_of > requested_as_of:
+            return None
         age = self._monotonic() - fetched_at
         if age > self.settings.provider_stale_ttl_seconds:
             return None
@@ -359,10 +364,18 @@ class TradingViewDiscoveryProvider:
         key = self._cache_key(session=session, profile=profile, as_of=as_of)
         now = self._monotonic()
         cached = self._cache.get(key)
-        if cached and now - cached[0] <= self.settings.provider_cache_ttl_seconds:
+        if (
+            cached
+            and cached[1].as_of <= as_of
+            and now - cached[0] <= self.settings.provider_cache_ttl_seconds
+        ):
             return cached[1]
         if self._circuit_open_until > now:
-            stale = self._stale(cached, warning="provider_circuit_open")
+            stale = self._stale(
+                cached,
+                warning="provider_circuit_open",
+                requested_as_of=as_of,
+            )
             if stale is not None:
                 return stale
             return DiscoverySnapshot(
@@ -415,7 +428,11 @@ class TradingViewDiscoveryProvider:
                 self._circuit_open_until = (
                     self._monotonic() + self.settings.provider_circuit_open_seconds
                 )
-            stale = self._stale(cached, warning=self._last_error_code)
+            stale = self._stale(
+                cached,
+                warning=self._last_error_code,
+                requested_as_of=as_of,
+            )
             if stale is not None:
                 return stale
             return DiscoverySnapshot(

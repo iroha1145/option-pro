@@ -472,7 +472,7 @@ def status() -> BreakoutStatusResponse:
             enabled=False,
             range_persistence_mode=settings.range_persistence_mode,
             versions=_versions(settings),
-            database={"status": "not_opened", "path": str(settings.db_path)},
+            database={"status": "not_opened"},
             strength_adapter={"status": "available", "version": "strength-intrinsic-v1"},
             market_shape_adapter={
                 "status": "unavailable",
@@ -496,13 +496,26 @@ def status() -> BreakoutStatusResponse:
         )
     except (FileNotFoundError, sqlite3.Error, BreakoutRepositoryError, SchemaVersionError, OSError):
         payload = {
-            "database": {"status": "unavailable", "path": str(settings.db_path)},
+            "database": {"status": "unavailable"},
             "worker": None,
             "latest_completed_scan": None,
             "provider_health": [],
             "worker_lock": None,
         }
         overall = "unavailable"
+    database = dict(payload.get("database") or {})
+    database.pop("path", None)
+    database.pop("schema_checksum", None)
+    worker = dict(payload.get("worker") or {}) or None
+    if worker is not None:
+        worker.pop("worker_id", None)
+    lock = dict(payload.get("worker_lock") or {}) or None
+    if lock is not None:
+        lock = {
+            "status": "held" if lock.get("owner_id") else "released",
+            "heartbeat_at": lock.get("heartbeat_at"),
+            "expires_at": lock.get("expires_at"),
+        }
     return BreakoutStatusResponse(
         as_of=_now(),
         status=overall,
@@ -512,11 +525,11 @@ def status() -> BreakoutStatusResponse:
             settings,
             (payload.get("latest_completed_scan") or {}).get("versions"),
         ),
-        database=dict(payload.get("database") or {}),
-        worker=payload.get("worker"),
+        database=database,
+        worker=worker,
         latest_completed_scan=payload.get("latest_completed_scan"),
         provider_health=list(payload.get("provider_health") or []),
-        worker_lock=payload.get("worker_lock"),
+        worker_lock=lock,
         strength_adapter={"status": "available", "version": "strength-intrinsic-v1"},
         market_shape_adapter={
             "status": "unavailable",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from datetime import date, datetime
@@ -156,6 +157,17 @@ class BreakoutCandidate(_StrictModel):
         if not math.isfinite(number):
             raise ValueError("numeric fields must be finite")
         return number
+
+    @field_validator("raw_provider_fields")
+    @classmethod
+    def validate_raw_provider_fields(cls, value: dict[str, Any]) -> dict[str, Any]:
+        try:
+            encoded = json.dumps(value, allow_nan=False, default=str).encode("utf-8")
+        except (TypeError, ValueError) as exc:
+            raise ValueError("raw provider fields must be serializable") from exc
+        if len(encoded) > 8_192:
+            raise ValueError("raw provider fields exceed 8192 bytes")
+        return value
 
 
 class DiscoverySnapshot(_StrictModel):

@@ -16,6 +16,14 @@ if ! docker info >/dev/null 2>&1; then
     echo "Docker is not running or is not accessible." >&2
     exit 1
 fi
+compose_version="$(docker compose version --short | sed 's/^v//')"
+IFS=. read -r compose_major compose_minor _compose_patch <<<"$compose_version"
+if [ "${compose_major:-0}" -lt 2 ] || {
+    [ "${compose_major:-0}" -eq 2 ] && [ "${compose_minor:-0}" -lt 24 ];
+}; then
+    echo "Docker Compose 2.24 or newer is required; found ${compose_version}." >&2
+    exit 1
+fi
 if [ ! -f .env ]; then
     echo ".env is missing. Copy .env.example to .env and configure it first." >&2
     exit 1

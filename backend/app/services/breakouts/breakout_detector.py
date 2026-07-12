@@ -31,7 +31,9 @@ def detect_breakout(
     settings: BreakoutSettings | None = None,
 ) -> dict[str, Any]:
     config = settings or get_breakout_settings()
-    price = _number(features, "event_price") or candidate.price
+    # Discovery prices are coarse screening inputs only. A completed local bar
+    # is required before any regular-session trigger or confirmation.
+    price = _number(features, "event_price")
     atr = _number(features, "atr20")
     clv = _number(features, "close_location_value")
     rvol = _number(features, "rvol_time_of_day")

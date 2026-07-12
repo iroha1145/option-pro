@@ -140,3 +140,39 @@ def test_heartbeat_does_not_revive_expired_token_and_release_increments_token(tm
         NOW + timedelta(seconds=17),
     )
     assert reacquired == takeover + 1
+
+
+def test_expired_owner_cannot_abandon_new_owners_running_scan(tmp_path):
+    repo = BreakoutRepository(tmp_path / "breakouts.db")
+    repo.initialize()
+    old_token = repo.acquire_lock(DEFAULT_LOCK_NAME, "old-worker", 10, NOW)
+    takeover_at = NOW + timedelta(seconds=11)
+    new_token = repo.acquire_lock(
+        DEFAULT_LOCK_NAME,
+        "new-worker",
+        30,
+        takeover_at,
+    )
+    scan = repo.begin_scan(
+        "fixture",
+        "regular",
+        takeover_at,
+        config_hash="config",
+        versions_hash="versions",
+    )
+    with pytest.raises(LeaseLostError):
+        repo.abandon_running_scans(
+            owner_id="old-worker",
+            lease_token=old_token,
+            now=takeover_at,
+        )
+    connection = repo.open_read_connection()
+    try:
+        status = connection.execute(
+            "SELECT status FROM breakout_scan_runs WHERE scan_run_id=?",
+            (scan,),
+        ).fetchone()[0]
+    finally:
+        connection.close()
+    assert status == "running"
+    assert new_token == old_token + 1

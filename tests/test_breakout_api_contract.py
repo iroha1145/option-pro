@@ -260,6 +260,22 @@ def test_event_cursor_remains_bound_to_original_completed_scan(tmp_path, monkeyp
     ).json()
     assert [item["ticker"] for item in second_page["events"]] == ["NVDA"]
     assert second_page["scan_run_id"] == first_page["scan_run_id"]
+    changed_filter = client.get(
+        "/api/breakouts/events",
+        params={
+            "limit": 2,
+            "ticker": "AAPL",
+            "cursor": first_page["next_cursor"],
+        },
+    )
+    assert changed_filter.status_code == 400
+    tampered = first_page["next_cursor"][:-1] + (
+        "A" if first_page["next_cursor"][-1] != "A" else "B"
+    )
+    assert client.get(
+        "/api/breakouts/events",
+        params={"limit": 2, "cursor": tampered},
+    ).status_code == 400
 
 
 def test_status_and_detail_degrade_without_hiding_contract(tmp_path, monkeypatch) -> None:

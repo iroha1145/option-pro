@@ -15,7 +15,13 @@ class ThemeCanonicalUniverseAdapter:
 
     def __init__(self) -> None:
         normalized = {
-            sector_id: sorted({str(ticker).upper() for ticker in data["tickers"]})
+            sector_id: sorted(
+                {
+                    str(ticker).upper()
+                    for ticker in data["tickers"]
+                    if not str(ticker).upper().endswith(".PA")
+                }
+            )
             for sector_id, data in sorted(SECTORS.items())
         }
         digest = hashlib.sha256(
@@ -38,7 +44,10 @@ class ThemeCanonicalUniverseAdapter:
 
     def primary_sector(self, ticker: str) -> str | None:
         memberships = self.memberships(ticker)
-        return memberships[0] if memberships else None
+        # The existing map contains investment themes, not authoritative
+        # primary-sector classifications. Multi-theme members must not be
+        # assigned an arbitrary first theme for sector normalization.
+        return memberships[0] if len(memberships) == 1 else None
 
     async def distributions(
         self,

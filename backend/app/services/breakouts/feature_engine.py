@@ -210,20 +210,35 @@ def compute_time_of_day_rvol(
     current_day = event.date()
 
     def cumulative_for(day: date) -> float | None:
+        if target_minute > _regular_close_minutes(day):
+            return None
         session = regular[pd.Index(regular.index.date) == day]
         through = session[
             (session.index.hour * 60 + session.index.minute) <= target_minute
         ]
         if through.empty or through["Volume"].isna().any():
             return None
-        last_minute = int(through.index[-1].hour * 60 + through.index[-1].minute)
-        if last_minute != target_minute:
+        observed_minutes = {
+            int(timestamp.hour * 60 + timestamp.minute)
+            for timestamp in through.index
+        }
+        expected_minutes = set(range(9 * 60 + 30, target_minute + 1, 5))
+        if observed_minutes != expected_minutes:
             return None
         return _finite(through["Volume"].sum())
 
     observed = cumulative_for(current_day)
     history: list[float] = []
-    for day in sorted({day for day in regular.index.date if day < current_day}, reverse=True):
+    from app.api.market import _is_trading_day
+
+    for day in sorted(
+        {
+            day
+            for day in regular.index.date
+            if day < current_day and _is_trading_day(day)
+        },
+        reverse=True,
+    ):
         value = cumulative_for(day)
         if value is not None:
             history.append(value)
@@ -264,13 +279,23 @@ def compute_feature_snapshot(
             "calculation_cutoff_at": cutoff.event_at.isoformat(),
             "warnings": ["no_complete_intraday_bars"],
         }
-    bar = intraday_visible.iloc[-1]
+    event_local = cutoff.event_at.astimezone(NEW_YORK)
+    current_session = intraday_visible[
+        pd.Index(intraday_visible.index.tz_convert(NEW_YORK).date) == event_local.date()
+    ]
+    if current_session.empty:
+        return {
+            "status": "insufficient_data",
+            "calculation_cutoff_at": cutoff.event_at.isoformat(),
+            "warnings": ["no_complete_current_session_bars"],
+        }
+    bar = current_session.iloc[-1]
     atr20 = compute_atr(daily_visible, 20)
-    vwap = compute_vwap(intraday_visible)
+    vwap = compute_vwap(current_session)
     close = _finite(bar["Close"])
     previous_close = _finite(daily_visible["Close"].iloc[-1]) if not daily_visible.empty else None
     cumulative_volume = _finite(
-        intraday_visible["Volume"].where(intraday_visible["Volume"] > 0).sum()
+        current_session["Volume"].where(current_session["Volume"] > 0).sum()
     )
     cumulative_dollar = (
         _finite(cumulative_volume * close)
@@ -290,6 +315,27 @@ def compute_feature_snapshot(
         if None not in (close, open_, high, candle_range) and candle_range > 0
         else None
     )
+    lower_wick = (
+        _finite((min(open_, close) - low) / candle_range)
+        if None not in (close, open_, low, candle_range) and candle_range > 0
+        else None
+    )
+    local_index = current_session.index.tz_convert(NEW_YORK)
+    local_minutes = local_index.hour * 60 + local_index.minute
+    opening = current_session[
+        (local_minutes >= 9 * 60 + 30) & (local_minutes < 10 * 60)
+    ]
+    opening_minutes = {
+        int(timestamp.hour * 60 + timestamp.minute)
+        for timestamp in opening.index.tz_convert(NEW_YORK)
+    }
+    opening_complete = bool(
+        cutoff.session is MarketSession.REGULAR
+        and event_local.hour * 60 + event_local.minute >= 10 * 60
+        and opening_minutes == set(range(9 * 60 + 30, 10 * 60, 5))
+    )
+    opening_high = _finite(opening["High"].max()) if opening_complete else None
+    opening_low = _finite(opening["Low"].min()) if opening_complete else None
     return {
         "status": "active",
         "event_price": close,
@@ -302,6 +348,7 @@ def compute_feature_snapshot(
         "close_location_value": compute_clv(open_, high, low, close),
         "candle_body_ratio": body_ratio,
         "upper_wick_ratio": upper_wick,
+        "lower_wick_ratio": lower_wick,
         "session_change_pct": (
             _finite((close / previous_close - 1.0) * 100.0)
             if close is not None and previous_close
@@ -314,6 +361,9 @@ def compute_feature_snapshot(
             if None not in (close, vwap, atr20) and atr20 > 0
             else None
         ),
+        "opening_range_high": opening_high,
+        "opening_range_low": opening_low,
+        "opening_range_complete": opening_complete,
         **rvol,
         "raw_as_of": cutoff.event_at.isoformat(),
         "feature_cutoff_at": cutoff.event_at.isoformat(),

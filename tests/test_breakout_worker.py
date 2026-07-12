@@ -199,3 +199,44 @@ def test_restart_abandons_legacy_running_scan_without_touching_completed(tmp_pat
         ).fetchone()[0] == "abandoned"
     finally:
         connection.close()
+
+
+def test_slow_scan_renews_lease_and_prevents_takeover(tmp_path):
+    settings = Settings(tmp_path / "slow.db")
+
+    class SlowProvider(Provider):
+        async def scan(self, *, session, as_of, profile):
+            self.calls += 1
+            await asyncio.sleep(0.25)
+            return Discovery(
+                provider="fixture",
+                status="active",
+                as_of=as_of,
+                session=session.value,
+            )
+
+    repository = BreakoutRepository(settings.db_path)
+    worker = BreakoutWorker(
+        settings,
+        repository,
+        provider=SlowProvider(),
+        scan_service=ScanService(),
+        clock=MarketClock(now=lambda: datetime.now(timezone.utc)),
+        owner_id="slow-worker",
+        lease_ttl_seconds=0.15,
+    )
+
+    async def scenario():
+        running = asyncio.create_task(worker.run_once())
+        await asyncio.sleep(0.18)
+        takeover = repository.acquire_lock(
+            "breakout-worker",
+            "contender",
+            1.0,
+            datetime.now(timezone.utc),
+        )
+        return takeover, await running
+
+    takeover, result = asyncio.run(scenario())
+    assert takeover is None
+    assert result["status"] == "completed"

@@ -255,6 +255,38 @@ class BreakoutWorker:
             details=details,
         )
 
+    async def _run_with_lease_heartbeat(
+        self,
+        operation: Awaitable[Any],
+        lease_token: int,
+        scan_id: str,
+    ) -> Any:
+        """Keep the fencing lease alive while Provider/enrichment is running."""
+        task = asyncio.create_task(operation)
+        interval = max(0.05, min(30.0, self.lease_ttl_seconds / 3.0))
+        try:
+            while True:
+                done, _ = await asyncio.wait({task}, timeout=interval)
+                if task in done:
+                    return await task
+                if not self.repository.heartbeat_lock(
+                    DEFAULT_LOCK_NAME,
+                    self.owner_id,
+                    lease_token,
+                    self.lease_ttl_seconds,
+                    self.clock.now(),
+                ):
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+                    raise LeaseLostError("worker lost its lease while scanning")
+                self._status("running", current_scan_id=scan_id)
+        finally:
+            if not task.done():
+                task.cancel()
+
     async def _run_cycle(
         self,
         lease_token: int,
@@ -276,12 +308,23 @@ class BreakoutWorker:
         self._status("running", current_scan_id=scan_id)
         provider = self._provider_instance()
         try:
-            discovery = await provider.scan(
-                session=market.session,
-                as_of=market.as_of,
-                profile=profile,
+            async def discover_and_enrich() -> tuple[Any, Any]:
+                discovery_value = await provider.scan(
+                    session=market.session,
+                    as_of=market.as_of,
+                    profile=profile,
+                )
+                service_value = await self._invoke_scan_service(
+                    discovery_value,
+                    market,
+                )
+                return discovery_value, service_value
+
+            discovery, service_result = await self._run_with_lease_heartbeat(
+                discover_and_enrich(),
+                lease_token,
+                scan_id,
             )
-            service_result = await self._invoke_scan_service(discovery, market)
             if not self.repository.heartbeat_lock(
                 DEFAULT_LOCK_NAME,
                 self.owner_id,
@@ -309,9 +352,25 @@ class BreakoutWorker:
             self._last_completed_scan_id = scan_id
             self._last_completed_at = self.clock.now()
             event_count = len(publication.get("events") or ())
+            maintenance: Mapping[str, int] | None = None
+            try:
+                maintenance = self.repository.prune_retention(
+                    owner_id=self.owner_id,
+                    lease_token=lease_token,
+                    raw_payload_hours=self.settings.raw_payload_retention_hours,
+                    scan_days=self.settings.scan_retention_days,
+                    batch_size=self.settings.retention_batch_size,
+                    now=self.clock.now(),
+                )
+            except Exception:
+                maintenance = None
             self._status(
                 "idle",
-                details={"last_event_count": event_count, "session": market.session.value},
+                details={
+                    "last_event_count": event_count,
+                    "session": market.session.value,
+                    "retention": maintenance,
+                },
             )
             return {
                 "status": "completed",
@@ -360,7 +419,11 @@ class BreakoutWorker:
         if lease_token is None:
             return {"status": "locked", "scan_run_id": None}
         try:
-            self.repository.abandon_running_scans(now=self.clock.now())
+            self.repository.abandon_running_scans(
+                owner_id=self.owner_id,
+                lease_token=lease_token,
+                now=self.clock.now(),
+            )
             return await self._run_cycle(lease_token)
         finally:
             self.repository.release_lock(
@@ -415,7 +478,11 @@ class BreakoutWorker:
                     await self._sleep(min(5.0, self.lease_ttl_seconds / 3.0))
             if lease_token is None:
                 return
-            self.repository.abandon_running_scans(now=self.clock.now())
+            self.repository.abandon_running_scans(
+                owner_id=self.owner_id,
+                lease_token=lease_token,
+                now=self.clock.now(),
+            )
             self._status("idle")
             deadline = float(self._monotonic())
             consecutive_degraded = 0

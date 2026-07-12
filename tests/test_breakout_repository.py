@@ -187,3 +187,70 @@ def test_non_finite_or_oversized_json_is_rejected(tmp_path):
     payload["candidates"] = [candidate]
     with pytest.raises(ValueError, match="16384"):
         repo.publish_scan(scan, payload)
+
+
+def test_retention_is_fenced_redacts_raw_payloads_and_keeps_event_history(tmp_path):
+    path = tmp_path / "retention.db"
+    repo = BreakoutRepository(path)
+    repo.initialize()
+
+    old_at = NOW - timedelta(days=40)
+    old_scan = _begin(repo, old_at)
+    repo.publish_scan(
+        old_scan,
+        _snapshot(old_at, [_event("event-old", "OLD", old_at)]),
+        now=old_at,
+    )
+
+    raw_at = NOW - timedelta(days=2)
+    raw_scan = _begin(repo, raw_at)
+    raw_payload = _snapshot(raw_at, [_event("event-raw", "RAW", raw_at)])
+    raw_payload["provider_snapshot"]["candidates"] = [
+        {
+            "ticker": "RAW",
+            "source": "fixture",
+            "provider_timestamp": raw_at,
+            "raw_provider_fields": {"debug": "sensitive"},
+        }
+    ]
+    repo.publish_scan(raw_scan, raw_payload, now=raw_at)
+
+    latest = _begin(repo, NOW)
+    repo.publish_scan(latest, _snapshot(NOW, [_event("event-new", "NEW", NOW)]), now=NOW)
+    token = repo.acquire_lock(
+        "breakout-worker",
+        "retention-worker",
+        90,
+        NOW + timedelta(seconds=1),
+    )
+    counts = repo.prune_retention(
+        owner_id="retention-worker",
+        lease_token=token,
+        now=NOW + timedelta(seconds=1),
+        raw_payload_hours=24,
+        scan_days=30,
+    )
+    assert counts["provider_payloads"] >= 1
+    assert counts["candidate_raw"] == 1
+    assert repo.get_event("event-old") is not None
+    assert repo.latest_completed_scan()["scan_run_id"] == latest
+
+    connection = repo.open_read_connection()
+    try:
+        redacted = connection.execute(
+            "SELECT payload_json FROM breakout_provider_snapshots WHERE scan_run_id=?",
+            (raw_scan,),
+        ).fetchone()[0]
+        raw_debug = connection.execute(
+            "SELECT raw_provider_fields_json FROM breakout_candidates WHERE scan_run_id=?",
+            (raw_scan,),
+        ).fetchone()[0]
+        archived_provider = connection.execute(
+            "SELECT count(*) FROM breakout_provider_snapshots WHERE scan_run_id=?",
+            (old_scan,),
+        ).fetchone()[0]
+    finally:
+        connection.close()
+    assert redacted == '{"redacted":true}'
+    assert raw_debug == "{}"
+    assert archived_provider == 0

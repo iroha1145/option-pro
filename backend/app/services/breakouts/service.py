@@ -23,6 +23,7 @@ from app.services.breakouts.feature_engine import (
     compute_atr,
     compute_feature_snapshot,
     trim_daily_bars,
+    trim_intraday_bars,
 )
 from app.services.breakouts.lifecycle import event_identity, transition_state
 from app.services.breakouts.models import (
@@ -31,6 +32,7 @@ from app.services.breakouts.models import (
     BreakoutLifecycleState,
     BreakoutSetupType,
     MarketSession,
+    MarketShapeSnapshot,
     TemporalCutoff,
 )
 from app.services.breakouts.scoring import score_breakout
@@ -178,6 +180,51 @@ class BreakoutRadarService:
             "breakout_distance_atr": distance,
         }
 
+    def _structure_intraday_features(
+        self,
+        structure: Any,
+        intraday: pd.DataFrame,
+        cutoff: TemporalCutoff,
+        atr: float | None,
+    ) -> dict[str, Any]:
+        if structure is None or not isinstance(intraday, pd.DataFrame):
+            return {"hold_bars_above_pivot": None}
+        visible = trim_intraday_bars(intraday, cutoff)
+        if visible.empty:
+            return {"hold_bars_above_pivot": None}
+        local = visible.index.tz_convert("America/New_York")
+        event_date = cutoff.event_at.astimezone(local.tz).date()
+        current = visible[pd.Index(local.date) == event_date]
+        if current.empty:
+            return {"hold_bars_above_pivot": None}
+        resistance = float(structure.resistance_zone.high)
+        latest_close = _finite(current["Close"].iloc[-1])
+        buffer = max(
+            (latest_close or resistance) * self.settings.break_buffer_pct,
+            (atr or 0.0) * self.settings.break_buffer_atr,
+        )
+        threshold = resistance + buffer
+        hold_bars = 0
+        for raw in reversed(list(pd.to_numeric(current["Close"], errors="coerce"))):
+            close = _finite(raw)
+            if close is None or close <= threshold:
+                break
+            hold_bars += 1
+        return {
+            "hold_bars_above_pivot": hold_bars,
+            "resistance_price": structure.pivot_price,
+            "support_zone": structure.support_zone.model_dump(mode="json")
+            if structure.support_zone is not None
+            else None,
+            "resistance_zone": structure.resistance_zone.model_dump(mode="json"),
+            "invalidation_price": structure.invalidation_price,
+            "close_above_resistance_atr": (
+                (latest_close - resistance) / atr
+                if latest_close is not None and atr is not None and atr > 0
+                else None
+            ),
+        }
+
     async def build_snapshot(
         self,
         discovery: Any,
@@ -217,24 +264,56 @@ class BreakoutRadarService:
             ]
         )
         cached_distribution = self._range_distribution_cache.get(distribution_key)
-        canonical_tickers = (
-            []
-            if cached_distribution is not None
-            else await self.universe.tickers(as_of=observed_at)
-        )
-        daily_symbols = list(dict.fromkeys([*tickers, *canonical_tickers]))
+        if cached_distribution is not None:
+            canonical_tickers = []
+        else:
+            try:
+                canonical_tickers = list(
+                    await self.universe.tickers(as_of=observed_at)
+                )
+            except Exception:
+                canonical_tickers = []
+        daily_symbols = list(dict.fromkeys([*tickers, *canonical_tickers, "SPY"]))
         daily_task = self.price_data.daily(daily_symbols, cutoff=cutoff, period="2y")
-        strength_task = self.strength.score_ticker_set(
-            tickers,
-            as_of=observed_at,
-            include_options=False,
-        )
         market_task = self.market_shape.snapshot(as_of=observed_at)
-        daily_map, strength_map, market = await asyncio.gather(
+        daily_result, market_result = await asyncio.gather(
             daily_task,
-            strength_task,
             market_task,
+            return_exceptions=True,
         )
+        daily_map = {} if isinstance(daily_result, Exception) else dict(daily_result)
+        market = (
+            MarketShapeSnapshot(
+                status="unavailable",
+                state=None,
+                confidence=0.0,
+                as_of=observed_at,
+                warnings=["market_shape_adapter_failed"],
+                version=getattr(self.market_shape, "version", "unknown"),
+            )
+            if isinstance(market_result, Exception)
+            else market_result
+        )
+        try:
+            from_daily = getattr(self.strength, "score_from_daily_snapshots", None)
+            if callable(from_daily):
+                strength_map = await from_daily(
+                    tickers,
+                    snapshots=daily_map,
+                    as_of=observed_at,
+                    include_options=False,
+                    range_mode=self.settings.range_persistence_mode,
+                    range_trend_weight=self.settings.range_persistence_trend_family_weight,
+                    range_final_cap=self.settings.range_persistence_final_weight_cap,
+                )
+            else:
+                strength_map = await self.strength.score_ticker_set(
+                    tickers,
+                    as_of=observed_at,
+                    include_options=False,
+                )
+        except Exception:
+            strength_map = {}
 
         if cached_distribution is None:
             global_values: list[float] = []
@@ -263,14 +342,29 @@ class BreakoutRadarService:
                 sector = self.universe.primary_sector(ticker)
                 if sector is not None:
                     sector_values.setdefault(sector, []).append(value)
+            minimum_global = max(30, int(len(canonical_tickers) * 0.60))
+            coverage_ratio = len(member_values) / max(len(canonical_tickers), 1)
+            global_active = len(global_values) >= minimum_global
+            usable_sectors = {
+                key: tuple(value)
+                for key, value in sector_values.items()
+                if len(value) >= 5
+            }
             cached_distribution = {
                 "as_of": completed_daily_session(cutoff).isoformat(),
                 "universe_version": getattr(self.universe, "version", "unknown"),
                 "members": frozenset(canonical_tickers),
                 "member_values": member_values,
-                "global": tuple(global_values),
-                "sectors": {key: tuple(value) for key, value in sector_values.items()},
-                "status": "active" if global_values else "unavailable",
+                "global": tuple(global_values) if global_active else (),
+                "sectors": usable_sectors if global_active else {},
+                "coverage_ratio": coverage_ratio,
+                "status": (
+                    "active"
+                    if global_active
+                    else "degraded"
+                    if global_values
+                    else "unavailable"
+                ),
             }
             self._range_distribution_cache[distribution_key] = cached_distribution
             while len(self._range_distribution_cache) > 5:
@@ -327,11 +421,14 @@ class BreakoutRadarService:
             reverse=True,
         )
         refined = prepared[: self.settings.intraday_enrich_limit]
-        intraday_map = await self.price_data.intraday(
-            [item[0].ticker for item in refined],
-            cutoff=cutoff,
-            interval="5m",
-        )
+        try:
+            intraday_map = await self.price_data.intraday(
+                [item[0].ticker for item in refined],
+                cutoff=cutoff,
+                interval="5m",
+            )
+        except Exception:
+            intraday_map = {}
 
         events = []
         transitions = []
@@ -352,15 +449,23 @@ class BreakoutRadarService:
             if intraday_snapshot is None:
                 features = {
                     "status": "insufficient_data",
-                    "event_price": candidate.price,
+                    "event_price": None,
                     "atr20": compute_atr(daily_snapshot.frame),
-                    "event_freshness_score": 100.0,
+                    "warnings": ["intraday_snapshot_unavailable"],
                 }
             else:
                 features = compute_feature_snapshot(
                     daily=daily_snapshot.frame,
                     intraday=intraday_snapshot.frame,
                     cutoff=cutoff,
+                )
+                features.update(
+                    self._structure_intraday_features(
+                        structure,
+                        intraday_snapshot.frame,
+                        cutoff,
+                        _finite(features.get("atr20")),
+                    )
                 )
             features.update(self._base_features(structure))
             features.update(
@@ -375,17 +480,24 @@ class BreakoutRadarService:
                     "current_price": _finite(features.get("event_price"))
                     or candidate.price,
                     "gap_pct": (
-                        (candidate.price / candidate.previous_regular_close - 1.0)
+                        (
+                            float(features["event_price"])
+                            / candidate.previous_regular_close
+                            - 1.0
+                        )
                         * 100.0
-                        if candidate.price is not None
+                        if _finite(features.get("event_price")) is not None
                         and candidate.previous_regular_close is not None
                         and candidate.previous_regular_close > 0
                         else None
                     ),
                     "gap_atr": (
-                        (candidate.price - candidate.previous_regular_close)
+                        (
+                            float(features["event_price"])
+                            - candidate.previous_regular_close
+                        )
                         / float(features["atr20"])
-                        if candidate.price is not None
+                        if _finite(features.get("event_price")) is not None
                         and candidate.previous_regular_close is not None
                         and _finite(features.get("atr20")) is not None
                         and float(features["atr20"]) > 0
@@ -468,7 +580,16 @@ class BreakoutRadarService:
                         (slope or 0.0) * 0.25,
                     ),
                 )
-            scores = score_breakout(
+            production_scores = score_breakout(
+                features,
+                intrinsic_strength=intrinsic,
+                market_fit=None,
+                sector_fit=None,
+                strength_included_features=included,
+                range_persistence_adjustment=0.0,
+                score_version=self.settings.scoring_version,
+            )
+            hypothetical_scores = score_breakout(
                 features,
                 intrinsic_strength=intrinsic,
                 market_fit=None,
@@ -476,6 +597,11 @@ class BreakoutRadarService:
                 strength_included_features=included,
                 range_persistence_adjustment=range_adjustment,
                 score_version=self.settings.scoring_version,
+            )
+            scores = (
+                hypothetical_scores
+                if self.settings.range_persistence_mode == "enabled"
+                else production_scores
             )
             setup = detection["setup_type"]
             pivot_id = (
@@ -676,6 +802,8 @@ class BreakoutRadarService:
                         strength_snapshot, "score_version", "unavailable"
                     ),
                     "feature_version": self.settings.range_persistence_version,
+                    "breakout_production_priority": production_scores.alert_priority_score,
+                    "breakout_hypothetical_priority": hypothetical_scores.alert_priority_score,
                 }
             )
         events.sort(
@@ -687,6 +815,35 @@ class BreakoutRadarService:
             ),
             reverse=True,
         )
+        production_rank = {
+            item["event_id"]: rank
+            for rank, item in enumerate(
+                sorted(
+                    [item for item in shadows if item.get("production_score") is not None],
+                    key=lambda item: (-float(item["production_score"]), item["ticker"]),
+                ),
+                1,
+            )
+        }
+        hypothetical_rank = {
+            item["event_id"]: rank
+            for rank, item in enumerate(
+                sorted(
+                    [item for item in shadows if item.get("hypothetical_score") is not None],
+                    key=lambda item: (-float(item["hypothetical_score"]), item["ticker"]),
+                ),
+                1,
+            )
+        }
+        for item in shadows:
+            item["production_rank"] = production_rank.get(item["event_id"])
+            item["hypothetical_rank"] = hypothetical_rank.get(item["event_id"])
+            item["rank_delta"] = (
+                item["hypothetical_rank"] - item["production_rank"]
+                if item["production_rank"] is not None
+                and item["hypothetical_rank"] is not None
+                else None
+            )
         return {
             "events": events,
             "structures": structures,

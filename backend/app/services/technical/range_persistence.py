@@ -8,14 +8,16 @@ uninformative and never turns missing information into a neutral score.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable, Literal, Sequence
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
 
 
 RANGE_PERSISTENCE_VERSION = "range-persistence-v1"
+_NEW_YORK = ZoneInfo("America/New_York")
 _VALUE_FIELDS = (
     "range_position",
     "range_persistence_fast",
@@ -72,10 +74,19 @@ def _cut_frame(
     if isinstance(bounded.index, pd.DatetimeIndex):
         bounded = bounded[~bounded.index.duplicated(keep="last")].sort_index()
         if cutoff_ts is not None:
-            if bounded.index.tz is None:
-                bounded = bounded[pd.Index(bounded.index.date) <= cutoff_ts.date()]
-            else:
-                bounded = bounded[bounded.index <= cutoff_ts.tz_convert(bounded.index.tz)]
+            from app.api.market import _early_close_minutes, _is_trading_day
+
+            local = cutoff_ts.tz_convert(_NEW_YORK)
+            completed: date = local.date()
+            close_minutes = _early_close_minutes(completed) or 16 * 60
+            if (
+                not _is_trading_day(completed)
+                or local.hour * 60 + local.minute < close_minutes
+            ):
+                completed -= timedelta(days=1)
+                while not _is_trading_day(completed):
+                    completed -= timedelta(days=1)
+            bounded = bounded[pd.Index(bounded.index.date) <= completed]
     elif cutoff_ts is not None:
         raise ValueError("cutoff requires a DatetimeIndex")
     return bounded, cutoff_ts
@@ -269,7 +280,7 @@ def _percentile(value: float | None, distribution: Iterable[Any] | None) -> floa
         for raw in distribution
         if (number := _finite(raw, ndigits=15)) is not None
     )
-    if not finite:
+    if len(finite) < 3:
         return None
     below = sum(item < value for item in finite)
     tied = sum(item == value for item in finite)

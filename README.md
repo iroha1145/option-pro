@@ -25,7 +25,7 @@ Optix Pro 是一个面向个人使用的美股行情、期权链和信号观察�
 
 ## Docker 快速开始
 
-要求 Docker Engine / Docker Desktop，以及支持 `docker compose up --wait` 的 Docker Compose v2。
+要求 Docker Engine / Docker Desktop，以及 Docker Compose 2.24 或更高版本。
 
 ```bash
 git clone https://github.com/iroha1145/option-pro.git

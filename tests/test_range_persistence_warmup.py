@@ -60,3 +60,14 @@ def test_fixed_universe_distributions_produce_robust_shrunk_normalization() -> N
     assert 0 <= result["range_persistence_normalized_score"] <= 100
     assert result["range_persistence_global_sample_count"] == 7
     assert result["range_persistence_sector_sample_count"] == 3
+
+
+def test_single_member_distribution_is_unavailable_not_neutral_fifty() -> None:
+    result = compute_range_persistence(
+        _frame(220),
+        global_distribution=[75],
+        sector_distribution=[75],
+    )
+    assert result["range_persistence_global_percentile"] is None
+    assert result["range_persistence_sector_percentile"] is None
+    assert result["range_persistence_global_robust_z"] is None

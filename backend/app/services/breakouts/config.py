@@ -79,6 +79,21 @@ class BreakoutSettings(BaseSettings):
     scan_interval_closed_seconds: int = Field(
         default=1800, ge=300, le=7200, alias="BREAKOUT_SCAN_INTERVAL_CLOSED_SECONDS"
     )
+    worker_lease_ttl_seconds: int = Field(
+        default=90, ge=15, le=900, alias="BREAKOUT_WORKER_LEASE_TTL_SECONDS"
+    )
+    worker_health_stale_seconds: int = Field(
+        default=120, ge=30, le=1800, alias="BREAKOUT_WORKER_HEALTH_STALE_SECONDS"
+    )
+    raw_payload_retention_hours: int = Field(
+        default=24, ge=1, le=168, alias="BREAKOUT_RAW_PAYLOAD_RETENTION_HOURS"
+    )
+    scan_retention_days: int = Field(
+        default=30, ge=1, le=365, alias="BREAKOUT_SCAN_RETENTION_DAYS"
+    )
+    retention_batch_size: int = Field(
+        default=500, ge=10, le=5000, alias="BREAKOUT_RETENTION_BATCH_SIZE"
+    )
 
     min_price: float = Field(default=2.0, ge=0.01, alias="BREAKOUT_MIN_PRICE")
     min_avg_dollar_volume: float = Field(
@@ -205,6 +220,8 @@ class BreakoutSettings(BaseSettings):
             raise ValueError("connect timeout cannot exceed provider total timeout")
         if self.provider_read_timeout_seconds > self.provider_timeout_seconds:
             raise ValueError("read timeout cannot exceed provider total timeout")
+        if self.worker_health_stale_seconds <= self.worker_lease_ttl_seconds:
+            raise ValueError("worker health stale threshold must exceed lease TTL")
         return self
 
 

@@ -149,3 +149,17 @@ def test_profile_must_match_session() -> None:
             raise AssertionError("mismatched profile was accepted")
     finally:
         asyncio.run(client.aclose())
+
+
+def test_malformed_row_is_skipped_without_bypassing_provider_degradation() -> None:
+    import asyncio
+
+    payload = json.loads((FIXTURES / "provider_regular.json").read_text())
+    columns = payload.get("columns") or list(REGULAR_COLUMNS)
+    row = payload["data"][0]["d"]
+    row[columns.index("exchange")] = "X" * 200
+    row[columns.index("close")] = 0
+    snapshot = asyncio.run(_scan(payload))
+    assert snapshot.status is ProviderStatus.DEGRADED
+    assert snapshot.candidates == []
+    assert "provider_non_numeric_required_field" in snapshot.warnings

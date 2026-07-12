@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import json
+import pytest
+
 from app.services.breakouts.config import BreakoutSettings
-from app.services.breakouts.models import AssetType, MarketSession
+from app.services.breakouts.models import AssetType, BreakoutCandidate, MarketSession
 from app.services.breakouts.normalizer import (
     asset_type_from_provider,
     filter_and_deduplicate,
@@ -90,3 +93,28 @@ def test_no_technology_microcap_exemption_and_high_price_survives() -> None:
     )
     assert [item.ticker for item in kept] == ["AAPL"]
     assert kept[0].price > 100
+
+
+def test_raw_debug_fields_are_bounded_before_repository_publish() -> None:
+    candidate, warnings = normalize_provider_row(
+        symbol="NASDAQ:AAPL",
+        row=_row(typespecs=["x" * 10_000] * 50),
+        columns=REGULAR_COLUMNS,
+        session=MarketSession.REGULAR,
+        as_of=datetime(2026, 7, 10, tzinfo=timezone.utc),
+    )
+    assert candidate is not None
+    assert warnings == []
+    assert len(json.dumps(candidate.raw_provider_fields).encode("utf-8")) < 8_192
+
+    with pytest.raises(ValueError, match="8192"):
+        BreakoutCandidate(
+            ticker="AAPL",
+            price=100,
+            provider_change_pct=4,
+            provider_volume=1_000_000,
+            provider_timestamp=datetime(2026, 7, 10, tzinfo=timezone.utc),
+            source="fixture",
+            session=MarketSession.REGULAR,
+            raw_provider_fields={"oversized": "x" * 9_000},
+        )
