@@ -186,6 +186,39 @@ def test_required_breakout_gate_rejects_disabled_but_allows_interaction_off(
     assert accepted.returncode == 0, accepted.stderr
 
 
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "https://localhost",
+        "https://LOCALHOST.",
+        "https://news.localhost",
+        "https://127.0.0.1:8443",
+        "https://127.255.255.254",
+        "https://[::1]:8443",
+        "https://[0:0:0:0:0:0:0:1]",
+        "https://[::ffff:127.0.0.1]",
+    ],
+)
+def test_required_catalyst_gate_rejects_loopback_remote_urls(
+    tmp_path: Path, base_url: str
+) -> None:
+    template = (ROOT / ".env.example").read_text(encoding="utf-8")
+    required = (
+        template.replace("MACROLENS_ENABLED=false", "MACROLENS_ENABLED=true")
+        .replace("MACROLENS_BASE_URL=", f"MACROLENS_BASE_URL={base_url}", 1)
+        .replace("MACROLENS_READ_KEY_ID=", "MACROLENS_READ_KEY_ID=read-key", 1)
+        .replace("MACROLENS_READ_SECRET=", "MACROLENS_READ_SECRET=read-secret", 1)
+        .replace("MACROLENS_ACTION_KEY_ID=", "MACROLENS_ACTION_KEY_ID=action-key", 1)
+        .replace("MACROLENS_ACTION_SECRET=", "MACROLENS_ACTION_SECRET=action-secret", 1)
+        .replace("DEPLOY_REQUIRE_CATALYST=false", "DEPLOY_REQUIRE_CATALYST=true")
+        .replace("APP_AUTH_TOKEN=", "APP_AUTH_TOKEN=app-token", 1)
+    )
+    root, environment = _deployment_root(tmp_path, required)
+    result = _run_deploy(root, environment)
+    assert result.returncode != 0
+    assert "requires a non-loopback MACROLENS_BASE_URL" in result.stderr
+
+
 def test_legacy_env_and_incomplete_trusted_proxy_config_fail_before_build(
     tmp_path: Path,
 ) -> None:

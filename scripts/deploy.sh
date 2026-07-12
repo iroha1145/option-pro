@@ -69,6 +69,27 @@ is_loopback_bind() {
     esac
 }
 
+is_loopback_url() {
+    python3 - "$1" <<'PY'
+import ipaddress
+import sys
+from urllib.parse import urlsplit
+
+try:
+    hostname = (urlsplit(sys.argv[1]).hostname or "").rstrip(".").lower()
+except ValueError:
+    raise SystemExit(1)
+if hostname == "localhost" or hostname.endswith(".localhost"):
+    raise SystemExit(0)
+try:
+    address = ipaddress.ip_address(hostname)
+except ValueError:
+    raise SystemExit(1)
+mapped = getattr(address, "ipv4_mapped", None)
+raise SystemExit(0 if address.is_loopback or (mapped and mapped.is_loopback) else 1)
+PY
+}
+
 host_bind="${HOST_BIND:-$(env_value HOST_BIND)}"
 host_bind="${host_bind:-127.0.0.1}"
 auth_token="${APP_AUTH_TOKEN:-$(env_value APP_AUTH_TOKEN)}"
@@ -79,7 +100,22 @@ allowed_hosts="${ALLOWED_HOSTS:-$(env_value ALLOWED_HOSTS)}"
 breakout_enabled="${BREAKOUT_RADAR_ENABLED:-$(env_value BREAKOUT_RADAR_ENABLED)}"
 deploy_require_breakout="${DEPLOY_REQUIRE_BREAKOUT:-$(env_value DEPLOY_REQUIRE_BREAKOUT)}"
 deploy_require_breakout="${deploy_require_breakout:-false}"
+openai_api_key="${OPENAI_API_KEY:-$(env_value OPENAI_API_KEY)}"
+deploy_require_ai="${DEPLOY_REQUIRE_AI:-$(env_value DEPLOY_REQUIRE_AI)}"
+deploy_require_ai="${deploy_require_ai:-false}"
 range_mode="${RANGE_PERSISTENCE_MODE:-$(env_value RANGE_PERSISTENCE_MODE)}"
+catalyst_mode="${CATALYST_MODE:-$(env_value CATALYST_MODE)}"
+catalyst_mode="${catalyst_mode:-display}"
+macrolens_enabled="${MACROLENS_ENABLED:-$(env_value MACROLENS_ENABLED)}"
+macrolens_base_url="${MACROLENS_BASE_URL:-$(env_value MACROLENS_BASE_URL)}"
+macrolens_verify_tls="${MACROLENS_VERIFY_TLS:-$(env_value MACROLENS_VERIFY_TLS)}"
+macrolens_read_key_id="${MACROLENS_READ_KEY_ID:-$(env_value MACROLENS_READ_KEY_ID)}"
+macrolens_read_secret="${MACROLENS_READ_SECRET:-$(env_value MACROLENS_READ_SECRET)}"
+macrolens_action_key_id="${MACROLENS_ACTION_KEY_ID:-$(env_value MACROLENS_ACTION_KEY_ID)}"
+macrolens_action_secret="${MACROLENS_ACTION_SECRET:-$(env_value MACROLENS_ACTION_SECRET)}"
+macrolens_schema_sha256="${MACROLENS_SCHEMA_SHA256:-$(env_value MACROLENS_SCHEMA_SHA256)}"
+deploy_require_catalyst="${DEPLOY_REQUIRE_CATALYST:-$(env_value DEPLOY_REQUIRE_CATALYST)}"
+deploy_require_catalyst="${deploy_require_catalyst:-false}"
 
 if ! is_loopback_bind "$host_bind" && [ -z "$auth_token" ] && ! is_truthy "$allow_insecure"; then
     echo "Refusing non-loopback HOST_BIND without APP_AUTH_TOKEN." >&2
@@ -99,9 +135,62 @@ if is_truthy "$deploy_require_breakout" && ! is_truthy "$breakout_enabled"; then
     echo "DEPLOY_REQUIRE_BREAKOUT=true requires BREAKOUT_RADAR_ENABLED=true." >&2
     exit 1
 fi
+if is_truthy "$deploy_require_ai" && [ -z "$openai_api_key" ]; then
+    echo "DEPLOY_REQUIRE_AI=true requires OPENAI_API_KEY." >&2
+    exit 1
+fi
+if is_truthy "$deploy_require_ai" && [ -z "$auth_token" ]; then
+    echo "DEPLOY_REQUIRE_AI=true requires APP_AUTH_TOKEN for paid-action authentication." >&2
+    exit 1
+fi
 if [ "$range_mode" != "disabled" ] && [ "$range_mode" != "shadow" ] && [ "$range_mode" != "enabled" ]; then
     echo "RANGE_PERSISTENCE_MODE must be disabled, shadow, or enabled." >&2
     exit 1
+fi
+if [ "$catalyst_mode" != "disabled" ] && [ "$catalyst_mode" != "display" ] && [ "$catalyst_mode" != "shadow" ] && [ "$catalyst_mode" != "enabled" ]; then
+    echo "CATALYST_MODE must be disabled, display, shadow, or enabled." >&2
+    exit 1
+fi
+if is_truthy "$deploy_require_catalyst"; then
+    if ! is_truthy "$macrolens_enabled"; then
+        echo "DEPLOY_REQUIRE_CATALYST=true requires MACROLENS_ENABLED=true." >&2
+        exit 1
+    fi
+    if [ "$catalyst_mode" != "display" ]; then
+        echo "DEPLOY_REQUIRE_CATALYST=true requires CATALYST_MODE=display." >&2
+        exit 1
+    fi
+    case "$macrolens_base_url" in
+        https://*) ;;
+        *)
+            echo "DEPLOY_REQUIRE_CATALYST=true requires an HTTPS MACROLENS_BASE_URL." >&2
+            exit 1
+            ;;
+    esac
+    if is_loopback_url "$macrolens_base_url"; then
+        echo "DEPLOY_REQUIRE_CATALYST=true requires a non-loopback MACROLENS_BASE_URL." >&2
+        exit 1
+    fi
+    if ! is_truthy "$macrolens_verify_tls"; then
+        echo "DEPLOY_REQUIRE_CATALYST=true requires MACROLENS_VERIFY_TLS=true." >&2
+        exit 1
+    fi
+    if [ -z "$macrolens_read_key_id" ] || [ -z "$macrolens_read_secret" ]; then
+        echo "DEPLOY_REQUIRE_CATALYST=true requires MacroLens read credentials." >&2
+        exit 1
+    fi
+    if [ -z "$macrolens_action_key_id" ] || [ -z "$macrolens_action_secret" ]; then
+        echo "DEPLOY_REQUIRE_CATALYST=true requires MacroLens action credentials." >&2
+        exit 1
+    fi
+    if [ -z "$auth_token" ]; then
+        echo "DEPLOY_REQUIRE_CATALYST=true requires APP_AUTH_TOKEN for analysis actions." >&2
+        exit 1
+    fi
+    if [ "$macrolens_schema_sha256" != "42ea8debed54d79ad40de928ee0ce242c4428160886ff64cb626e3630956ca90" ]; then
+        echo "MACROLENS_SCHEMA_SHA256 does not match the reviewed integration contract." >&2
+        exit 1
+    fi
 fi
 
 if git rev-parse --verify HEAD >/dev/null 2>&1; then
@@ -162,6 +251,43 @@ for configured_host in os.environ.get("ALLOWED_HOSTS", "").split(","):
 print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 '
 
+ai_worker_health="$(
+    docker compose exec -T ai-worker \
+        python -m app.services.ai_jobs.worker --healthcheck
+)"
+docker compose exec -T \
+    -e "AI_WORKER_HEALTH=${ai_worker_health}" \
+    -e "DEPLOY_REQUIRE_AI=${deploy_require_ai}" \
+    backend python -c '
+import json, os, urllib.request
+p = json.loads(os.environ["AI_WORKER_HEALTH"])
+assert p["healthy"] is True
+assert p["model"] == "gpt-5.6-terra"
+assert p["reasoning"] == "max"
+assert p["execution_mode"] in {"background", "worker_sync"}
+assert p["sdk_capability_supported"] is True
+assert all(p["methods"].get(name) is True for name in ("create", "retrieve", "cancel"))
+headers = {}
+token = os.environ.get("APP_AUTH_TOKEN", "").strip()
+if token:
+    headers["Authorization"] = f"Bearer {token}"
+request = urllib.request.Request("http://127.0.0.1:8000/api/ai/status", headers=headers)
+with urllib.request.urlopen(request, timeout=5) as response:
+    status = json.load(response)
+assert status["model"] == "gpt-5.6-terra"
+assert status["reasoning"] == "max"
+assert status["execution_mode"] in {"background", "worker_sync"}
+assert status["sdk_capability_supported"] is True
+required = os.environ["DEPLOY_REQUIRE_AI"].lower() in {"1", "true", "yes"}
+if required:
+    assert p["configured"] is True
+    assert p["provider_capability_supported"] is True
+    assert p["status"] == "supported"
+    assert status["enabled"] is True
+    assert status["status"] == "supported"
+    assert status["provider_capability_supported"] is True
+'
+
 expected_breakout_enabled="$breakout_enabled"
 expected_range_mode="$range_mode"
 docker compose exec -T \
@@ -217,4 +343,67 @@ elif not enabled:
     assert p["status"] == "disabled"
 '
 
-echo "Deployment passed readiness, version, and configured Breakout Radar checks."
+catalyst_worker_health="$(
+    docker compose exec -T catalyst-sync-worker \
+        python -m app.services.catalysts.worker --healthcheck
+)"
+docker compose exec -T \
+    -e "CATALYST_WORKER_HEALTH=${catalyst_worker_health}" \
+    -e "DEPLOY_REQUIRE_CATALYST=${deploy_require_catalyst}" \
+    -e "EXPECTED_CATALYST_ENABLED=${macrolens_enabled}" \
+    backend python -c '
+import json
+import os
+import time
+import urllib.request
+
+worker = json.loads(os.environ["CATALYST_WORKER_HEALTH"])
+required = os.environ["DEPLOY_REQUIRE_CATALYST"].lower() in {"1", "true", "yes"}
+enabled = os.environ["EXPECTED_CATALYST_ENABLED"].lower() in {"1", "true", "yes"}
+assert worker["healthy"] is True
+if required:
+    assert enabled is True
+    assert worker["enabled"] is True
+    assert worker["contract"]["valid"] is True
+elif not enabled:
+    assert worker["status"] == "disabled"
+
+headers = {}
+token = os.environ.get("APP_AUTH_TOKEN", "").strip()
+if token:
+    headers["Authorization"] = f"Bearer {token}"
+payload = None
+attempts = 30 if required else 1
+for attempt in range(attempts):
+    request = urllib.request.Request(
+        "http://127.0.0.1:8000/api/catalysts/status",
+        headers=headers,
+    )
+    with urllib.request.urlopen(request, timeout=5) as response:
+        payload = json.load(response)
+    if not required or (
+        payload.get("enabled") is True
+        and payload.get("status") not in {"disabled", "unavailable"}
+        and payload.get("analysis_trigger_enabled") is True
+    ):
+        break
+    if attempt + 1 < attempts:
+        time.sleep(2)
+
+assert payload is not None
+assert payload["schema_version"] == "macrolens-option-pro-v1"
+assert payload["expected_model"] == "gpt-5.6-terra"
+assert payload["expected_reasoning"] == "max"
+if required:
+    assert payload["enabled"] is True
+    assert payload["status"] not in {"disabled", "unavailable"}
+    assert payload["analysis_trigger_enabled"] is True
+    assert payload["model"] == "gpt-5.6-terra"
+    assert payload["reasoning"] == "max"
+    assert payload["execution_mode"] in {"background", "worker_sync"}
+elif not enabled:
+    assert payload["status"] == "disabled"
+    assert payload["enabled"] is False
+'
+
+echo "Deployment passed readiness, version, AI, Catalyst, and configured Breakout Radar checks."
