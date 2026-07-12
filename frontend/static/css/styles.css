@@ -364,7 +364,7 @@ a { color: inherit; }
   background: rgba(240, 245, 247, .9);
   color: var(--color-muted);
 }
-.signal-dot, .signal-theme-dot { width: 8px; height: 8px; border-radius: 999px; background: currentColor; display: inline-block; }
+.signal-dot { width: 8px; height: 8px; border-radius: 999px; background: currentColor; display: inline-block; }
 .signal-dot.positive { color: var(--color-emerald); box-shadow: 0 0 0 5px rgba(15, 159, 110, .1); }
 .signal-dot.negative { color: var(--color-crimson); box-shadow: 0 0 0 5px rgba(216, 71, 71, .1); }
 .stock-card__identity { display: grid; gap: 4px; }
@@ -597,32 +597,6 @@ a { color: inherit; }
 .ethos-lightweight-chart { min-height: 360px; }
 .ethos-chart-empty { display: grid; place-items: center; min-height: 360px; border: 1px dashed var(--color-border); border-radius: 8px; color: var(--color-muted); }
 
-.detail-signal-column { display: grid; gap: 16px; }
-.detail-signal-panel, .ethos-signal-panel, .technical-signals-card {
-  padding: 20px;
-  background: rgba(255, 255, 252, .94);
-  border: 1px solid rgba(199, 210, 221, .82);
-  border-radius: 8px;
-  box-shadow: var(--shadow-soft);
-}
-.detail-signal-panel header, .signal-panel-header { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
-.detail-signal-panel header .label-caps { flex: 1; }
-.detail-signal-panel--bottom .signal-theme-dot, .ethos-signal-panel--bottom .signal-theme-dot { background: var(--color-emerald); }
-.detail-signal-panel--top .signal-theme-dot, .ethos-signal-panel--top .signal-theme-dot { background: var(--color-crimson); }
-.detail-signal-panel header strong, .signal-score { font-size: 24px; }
-.signal-score-bar { height: 7px; margin: 16px 0; border-radius: 999px; background: var(--color-container); }
-.signal-score-bar span { display: block; height: 100%; border-radius: 999px; background: currentColor; }
-.detail-signal-panel--bottom { color: var(--color-emerald); }
-.detail-signal-panel--top { color: var(--color-crimson); }
-.signal-metric-list { display: grid; gap: 10px; }
-.signal-metric-row { display: grid; gap: 5px; padding-top: 10px; border-top: 1px solid var(--color-border); color: var(--color-on-surface); }
-.signal-metric-row strong { font-size: 13px; line-height: 1.55; color: var(--color-on-surface); }
-.signal-intelligence-copy { margin: 14px 0 0; color: var(--color-muted); font-size: 13px; line-height: 1.65; }
-
-.technical-signal-grid { display: grid; grid-template-columns: repeat(7, minmax(90px, 1fr)); gap: 8px; margin-top: 18px; }
-.technical-signal-mini { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-container-low); }
-.technical-signal-mini strong { font-size: 18px; }
-
 .ai-analysis-panel { display: grid; gap: 16px; padding: 20px; }
 .ai-analysis-copy { display: grid; gap: 8px; }
 .ai-analysis-copy h3 { margin: 0; font-size: 20px; font-weight: 900; }
@@ -655,16 +629,6 @@ a { color: inherit; }
 .option-chain-card { display: grid; gap: 16px; padding: 24px; }
 .option-chain-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .option-chain-toolbar h2 { margin: 8px 0 0; font-size: 24px; font-weight: 900; }
-.option-expiration-field { display: grid; gap: 8px; }
-.option-expiration-select {
-  height: 36px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: #fffffc;
-  padding: 0 10px;
-  outline: none;
-}
-.option-expiration-select:focus { border-color: var(--color-emerald); box-shadow: 0 0 0 4px rgba(15, 159, 110, .12); }
 .option-chain-superhead th { text-align: center; background: #fffffc; color: var(--color-on-surface); font-size: 12px; }
 .option-chain-table td { text-align: right; }
 .option-chain-table td:nth-child(8), .option-chain-table th:nth-child(8) { text-align: center; background: var(--color-container-low); font-weight: 900; }
@@ -943,7 +907,7 @@ a { color: inherit; }
   box-shadow: none;
 }
 
-.signal-analysis-grid, .top-bottom-gauge-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.top-bottom-gauge-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .top-bottom-gauge { display: flex; align-items: center; gap: 12px; padding: 16px; background: #fffffc; border: 1px solid var(--color-border); border-radius: 8px; }
 .top-bottom-gauge svg { width: 78px; height: 78px; transform: rotate(-90deg); }
 .gauge-track { fill: none; stroke: var(--color-container); stroke-width: 10; }
@@ -1020,7 +984,6 @@ a { color: inherit; }
 @media (max-width: 1100px) {
   .terminal-layout, .detail-hero-grid, .sectors-layout { grid-template-columns: 1fr; }
   .terminal-header h1 { font-size: 44px; }
-  .technical-signal-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 }
 
 @media (max-width: 768px) {
@@ -1052,7 +1015,7 @@ a { color: inherit; }
   .terminal-status, .detail-market-price { text-align: left; }
   .iv-ranking-item { grid-template-columns: 36px 1fr; }
   .iv-ranking-item__metric { display: none; }
-  .signal-analysis-grid, .top-bottom-gauge-grid { grid-template-columns: 1fr; }
+  .top-bottom-gauge-grid { grid-template-columns: 1fr; }
   .watchlist-add-bar { align-items: stretch; flex-direction: column; }
   .watchlist-add-bar input, .watchlist-add-bar button { width: 100%; }
 }
@@ -1120,9 +1083,6 @@ body {
 .terminal-heatmap,
 .sector-section-card,
 .earnings-table-card,
-.detail-signal-panel,
-.ethos-signal-panel,
-.technical-signals-card,
 .option-alert-section,
 .tb-shell,
 .ai-result-card,
@@ -1645,8 +1605,7 @@ body {
   border: 0;
 }
 
-.watchlist-add-bar input,
-.option-expiration-select {
+.watchlist-add-bar input {
   border: 0;
   background: #eeeeec;
 }
@@ -1670,15 +1629,12 @@ body {
 }
 
 .tb-card__top strong,
-.gauge-copy strong,
-.detail-signal-panel header strong,
-.signal-score {
+.gauge-copy strong {
   font-size: 26px;
   font-weight: 800;
 }
 
-.tb-card__meter,
-.signal-score-bar {
+.tb-card__meter {
   height: 6px;
   background: #e4e3e0;
 }
@@ -2246,7 +2202,6 @@ body {
   .ai-analysis-button,
   .tb-ai-button,
   .watchlist-add-bar button,
-  .option-expiration-select,
   .sector-pill,
   .earnings-ticker-badge,
   .earnings-chip {
@@ -2502,8 +2457,6 @@ body {
 
   .option-alert-grid,
   .tb-card-grid,
-  .technical-signal-grid,
-  .signal-analysis-grid,
   .top-bottom-gauge-grid {
     grid-template-columns: minmax(0, 1fr);
   }

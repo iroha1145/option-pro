@@ -1,5 +1,18 @@
 import { api } from '../api.js?v=20260712b';
 import { renderIcon } from '../icons.js';
+import {
+  BREAKOUT_FILTER_KEYS,
+  beginBreakoutRefresh,
+  breakoutDegradedView,
+  breakoutFailureDomain,
+  breakoutFilterSnapshot,
+  isRadarPaused,
+  isRadarAwaitingFirstSnapshot,
+  settleBreakoutRefresh,
+  shouldAutoRefreshRadar,
+  snapshotsEqual,
+  transitionBreakoutHistory,
+} from '../utils/frontendState.js';
 
 const BREAKOUT_STYLE_ID = 'optix-breakouts-v3-styles';
 const PAGE_SIZE = 24;
@@ -83,7 +96,8 @@ let stylesheetPromise = null;
 let activePageGeneration = 0;
 
 const state = {
-  filters: defaultFilters(),
+  draftFilters: breakoutFilterSnapshot(defaultFilters()),
+  appliedFilters: breakoutFilterSnapshot(defaultFilters()),
   status: null,
   payload: null,
   events: [],
@@ -98,13 +112,17 @@ const state = {
   selectedTicker: '',
   detail: null,
   tickerHistory: null,
+  historyLoading: false,
+  historyError: '',
   detailLoading: false,
   detailError: '',
   detailReturnFocusKey: '',
   requestGeneration: 0,
   detailGeneration: 0,
+  historyGeneration: 0,
   controller: null,
   detailController: null,
+  historyController: null,
   refreshTimer: null,
 };
 
@@ -272,8 +290,12 @@ function lifecycleTone(event) {
   return LIFECYCLE_TONES[String(event?.lifecycle_state || '')] || 'neutral';
 }
 
-function hasActiveFilters() {
-  return Object.values(state.filters).some(Boolean);
+function hasActiveFilters(filters = state.appliedFilters) {
+  return Object.values(filters || {}).some(Boolean);
+}
+
+function filtersDirty() {
+  return !snapshotsEqual(state.draftFilters, state.appliedFilters, BREAKOUT_FILTER_KEYS);
 }
 
 function isMounted(generation = activePageGeneration) {
@@ -382,20 +404,31 @@ function systemState() {
   if (status?.database?.status === 'unavailable') {
     return { tone: 'negative', title: '雷达数据服务不可用', copy: '数据库无法读取，已有结果不会被伪装为空扫描。' };
   }
+  if (isRadarPaused(status, payload)) {
+    return {
+      tone: 'disabled',
+      title: '市场休市，扫描已暂停',
+      copy: status?.latest_completed_scan || payload?.scan_run_id
+        ? '休市期间不会制造新信号，页面继续保留最近一次完整快照。'
+        : '休市期间不执行扫描，开市后会自动恢复。',
+    };
+  }
   if (status?.status === 'stale' || payload?.status === 'stale') {
     return { tone: 'warning', title: '正在使用陈旧快照', copy: '数据源暂时不稳定，页面保留最近一次完整结果。' };
   }
+  if (isRadarAwaitingFirstSnapshot(status, payload)) {
+    return { tone: 'watching', title: '等待首次完整扫描', copy: '工作进程已经启用，完整快照发布后会自动出现。' };
+  }
   if (status?.status === 'degraded' || payload?.status === 'degraded') {
+    const degraded = breakoutDegradedView(
+      breakoutFailureDomain(status, payload),
+      Boolean(status?.latest_completed_scan || payload?.scan_run_id),
+    );
     return {
       tone: 'warning',
-      title: '部分数据源降级',
-      copy: status?.latest_completed_scan
-        ? '可用事件继续展示，缺失字段保持为空。'
-        : '尚无可靠的完整快照，雷达不会用失败扫描填充结果。',
+      title: degraded.title,
+      copy: degraded.copy,
     };
-  }
-  if (status?.enabled && !status.latest_completed_scan) {
-    return { tone: 'watching', title: '等待首次完整扫描', copy: '工作进程已经启用，完整快照发布后会自动出现。' };
   }
   if (status?.status === 'unavailable' || payload?.status === 'unavailable') {
     return { tone: 'watching', title: '尚无可用快照', copy: '后台尚未发布可读取的完整扫描。' };
@@ -432,7 +465,7 @@ function renderStatusStrip() {
   const worker = state.status?.worker;
   const workerLabels = {
     idle: '待机', running: '扫描中', publishing: '发布中', degraded: '降级',
-    lease_lost: '租约失效', stopped: '已停止',
+    lease_lost: '租约失效', stopped: '已停止', paused: '休市暂停',
   };
   const rangeMode = state.status?.range_persistence_mode;
   const rangeCopy = state.loading && !state.status
@@ -462,7 +495,9 @@ function renderStatusStrip() {
 }
 
 function renderFilters() {
-  const hasFilters = hasActiveFilters();
+  const draft = state.draftFilters;
+  const hasFilters = hasActiveFilters(draft) || hasActiveFilters(state.appliedFilters);
+  const dirty = filtersDirty();
   return `
     <section class="breakout-filter-panel" aria-labelledby="breakout-filter-title" data-motion-reveal data-motion-key="breakout-filters">
       <div class="breakout-filter-panel__heading">
@@ -472,31 +507,31 @@ function renderFilters() {
       <form id="breakout-filter-form" class="breakout-filter-grid">
         <label class="breakout-filter breakout-filter--ticker">
           <span>股票代码</span>
-          <input id="breakout-ticker-filter" data-focus-key="breakout-ticker-filter" name="ticker" type="search" value="${escapeHtml(state.filters.ticker)}" placeholder="例如 AAPL" maxlength="15" pattern="[A-Za-z](?:(?!.*(?:\\.\\.|--))[A-Za-z0-9.\\x2D]{0,13}[A-Za-z0-9])?" title="以字母开头，且不能以点或连字符结尾" autocomplete="off">
+          <input id="breakout-ticker-filter" data-focus-key="breakout-ticker-filter" name="ticker" type="search" value="${escapeHtml(draft.ticker)}" placeholder="例如 AAPL" maxlength="15" pattern="[A-Za-z](?:(?!.*(?:\\.\\.|--))[A-Za-z0-9.\\x2D]{0,13}[A-Za-z0-9])?" title="以字母开头，且不能以点或连字符结尾" autocomplete="off">
         </label>
         <label class="breakout-filter">
           <span>突破形态</span>
-          <select data-focus-key="breakout-setup-filter" name="setup_type">${renderSelectOptions(SETUP_OPTIONS, state.filters.setup_type)}</select>
+          <select data-focus-key="breakout-setup-filter" name="setup_type">${renderSelectOptions(SETUP_OPTIONS, draft.setup_type)}</select>
         </label>
         <label class="breakout-filter">
           <span>生命周期</span>
-          <select data-focus-key="breakout-state-filter" name="lifecycle_state">${renderSelectOptions(LIFECYCLE_OPTIONS, state.filters.lifecycle_state)}</select>
+          <select data-focus-key="breakout-state-filter" name="lifecycle_state">${renderSelectOptions(LIFECYCLE_OPTIONS, draft.lifecycle_state)}</select>
         </label>
         <label class="breakout-filter">
           <span>最低优先级</span>
           <select data-focus-key="breakout-priority-filter" name="min_priority">
-            ${renderSelectOptions([['', '不限'], ['50', '50 分以上'], ['65', '65 分以上'], ['80', '80 分以上'], ['90', '90 分以上']], state.filters.min_priority)}
+            ${renderSelectOptions([['', '不限'], ['50', '50 分以上'], ['65', '65 分以上'], ['80', '80 分以上'], ['90', '90 分以上']], draft.min_priority)}
           </select>
         </label>
         <label class="breakout-filter">
           <span>交易日期（美东）</span>
-          <input data-focus-key="breakout-date-filter" name="date" type="date" value="${escapeHtml(state.filters.date)}">
+          <input data-focus-key="breakout-date-filter" name="date" type="date" value="${escapeHtml(draft.date)}">
         </label>
-        <button class="breakout-filter-submit" data-focus-key="breakout-filter-submit" type="submit">应用筛选 ${renderIcon('arrow_up_right', { size: 17 })}</button>
+        <button class="breakout-filter-submit" data-focus-key="breakout-filter-submit" type="submit" data-dirty="${dirty}"><span data-breakout-filter-submit-label>${dirty ? '应用筛选' : '重新读取'}</span> ${renderIcon('arrow_up_right', { size: 17 })}</button>
       </form>
       <div class="breakout-session-filter" role="group" aria-label="交易时段" data-arrow-nav>
         ${SESSION_OPTIONS.map(([value, label]) => `
-          <button type="button" data-session-filter="${escapeHtml(value)}" data-focus-key="breakout-session-${escapeHtml(value || 'all')}" aria-pressed="${state.filters.session === value}">${escapeHtml(label)}</button>
+          <button type="button" data-session-filter="${escapeHtml(value)}" data-focus-key="breakout-session-${escapeHtml(value || 'all')}" aria-pressed="${draft.session === value}">${escapeHtml(label)}</button>
         `).join('')}
       </div>
     </section>
@@ -602,24 +637,31 @@ function renderEmptyState() {
   } else if (state.status?.database?.status === 'unavailable') {
     title = '雷达数据服务不可用';
     copy = '数据库暂时无法读取，页面不会把这种状态显示成空扫描。';
+  } else if (isRadarPaused(state.status, state.payload)) {
+    title = '休市期间，雷达保持安静';
+    copy = '后台扫描已暂停，不会把休市状态误写成零事件；开市后会自动继续。';
     action = '<button type="button" data-radar-retry data-focus-key="breakout-radar-retry">重新读取</button>';
   } else if (state.error) {
     title = '快照暂时无法读取';
     copy = state.error;
     action = '<button type="button" data-radar-retry data-focus-key="breakout-radar-retry">重新读取</button>';
-  } else if (state.status?.status === 'degraded' && !state.status?.latest_completed_scan) {
-    title = '数据源降级，尚无可靠快照';
-    copy = '工作进程已保留失败记录，但不会发布不完整结果。';
-  } else if (state.status?.enabled && !state.status?.latest_completed_scan) {
+  } else if (isRadarAwaitingFirstSnapshot(state.status, state.payload)) {
     title = '正在等待首次完整扫描';
     copy = '工作进程会先完成发现、日线复核、盘中确认和评分，再一次性发布结果。';
+  } else if (state.status?.status === 'degraded' && !state.status?.latest_completed_scan) {
+    const degraded = breakoutDegradedView(
+      breakoutFailureDomain(state.status, state.payload),
+      false,
+    );
+    title = degraded.title;
+    copy = degraded.copy;
   } else if (hasActiveFilters()) {
     title = '当前条件没有匹配事件';
     copy = '清除部分条件可以回到当前完整快照；空结果不会被补成虚构分数。';
     action = '<button type="button" data-filter-reset data-focus-key="breakout-filter-reset-empty">清除筛选</button>';
   } else if (system.tone === 'warning') {
     title = '最近快照没有可展示事件';
-    copy = '数据源处于降级或陈旧状态，雷达不会用不完整结果替代上次可靠判断。';
+    copy = '运行状态处于降级或快照已经陈旧，雷达不会用不完整结果替代上次可靠判断。';
   }
   return `
     <div class="breakout-empty" role="status">
@@ -675,7 +717,7 @@ function renderEventWorkspace() {
       </div>
       ${renderLeadEvent(lead)}
       ${queue.length ? `<div class="breakout-event-grid" role="list">${queue.map(renderEventCard).join('')}</div>` : '<p class="breakout-single-note">当前快照只有这一条事件，完整证据仍可展开查看。</p>'}
-      ${canShowMore ? `<button class="breakout-load-more" type="button" data-load-more data-focus-key="breakout-load-more" ${state.loadingMore ? 'disabled' : ''}>${state.loadingMore ? '正在载入…' : '显示更多事件'} ${renderIcon('chevron_down', { size: 17 })}</button>` : ''}
+      ${canShowMore ? `<button class="breakout-load-more" type="button" data-load-more data-focus-key="breakout-load-more" ${state.loadingMore || state.refreshing ? 'disabled' : ''}>${state.loadingMore ? '正在载入…' : state.refreshing ? '正在更新…' : '显示更多事件'} ${renderIcon('chevron_down', { size: 17 })}</button>` : ''}
     </section>
   `;
 }
@@ -714,6 +756,17 @@ function renderTransitions(transitions) {
 }
 
 function renderTickerHistory(history, currentId) {
+  if (state.historyLoading) {
+    return '<p class="breakout-detail__muted" role="status">正在读取该股票近期事件…</p>';
+  }
+  if (state.historyError) {
+    return `
+      <div class="breakout-detail__notice" role="status">
+        <p>${escapeHtml(state.historyError)}</p>
+        <button type="button" class="breakout-filter-reset" data-history-retry data-focus-key="breakout-history-retry">单独重试近期事件</button>
+      </div>
+    `;
+  }
   const events = Array.isArray(history?.events) ? history.events : [];
   if (!events.length) return '<p class="breakout-detail__muted">该股票暂无其他已发布事件。</p>';
   return `
@@ -898,14 +951,34 @@ function readFilters(form) {
     return null;
   }
   if (tickerInput instanceof HTMLInputElement) tickerInput.setCustomValidity('');
-  return {
-    ...state.filters,
+  return breakoutFilterSnapshot({
+    ...state.draftFilters,
     ticker,
     setup_type: String(data.get('setup_type') || ''),
     lifecycle_state: String(data.get('lifecycle_state') || ''),
     min_priority: String(data.get('min_priority') || ''),
     date: String(data.get('date') || ''),
-  };
+  });
+}
+
+function syncDraftFilters(form) {
+  const data = new FormData(form);
+  state.draftFilters = breakoutFilterSnapshot({
+    ...state.draftFilters,
+    ticker: String(data.get('ticker') || '').trim(),
+    setup_type: String(data.get('setup_type') || ''),
+    lifecycle_state: String(data.get('lifecycle_state') || ''),
+    min_priority: String(data.get('min_priority') || ''),
+    date: String(data.get('date') || ''),
+  });
+}
+
+function updateFilterSubmitState() {
+  const button = document.querySelector('.breakout-filter-submit');
+  const label = button?.querySelector('[data-breakout-filter-submit-label]');
+  const dirty = filtersDirty();
+  if (button) button.dataset.dirty = String(dirty);
+  if (label) label.textContent = dirty ? '应用筛选' : '重新读取';
 }
 
 function bindArrowNavigation(group) {
@@ -925,6 +998,24 @@ function bindArrowNavigation(group) {
   });
 }
 
+function clearDetailSelection() {
+  state.detailGeneration += 1;
+  state.historyGeneration += 1;
+  state.detailController?.abort();
+  state.historyController?.abort();
+  state.detailController = null;
+  state.historyController = null;
+  state.selectedEventId = '';
+  state.selectedTicker = '';
+  state.detail = null;
+  state.tickerHistory = null;
+  state.detailLoading = false;
+  state.historyLoading = false;
+  state.detailError = '';
+  state.historyError = '';
+  state.detailReturnFocusKey = '';
+}
+
 function bindEvents() {
   document.querySelector('[data-radar-refresh]')?.addEventListener('click', () => loadRadar({
     refresh: true,
@@ -938,14 +1029,13 @@ function bindEvents() {
   });
   document.querySelectorAll('[data-filter-reset]').forEach((button) => {
     button.addEventListener('click', () => {
-      state.filters = defaultFilters();
-      state.selectedEventId = '';
-      state.selectedTicker = '';
-      state.detail = null;
-      state.tickerHistory = null;
-      state.detailReturnFocusKey = '';
+      const cleared = breakoutFilterSnapshot(defaultFilters());
+      state.draftFilters = cleared;
+      state.appliedFilters = cleared;
+      clearDetailSelection();
       loadRadar({
         refresh: true,
+        syncDraft: false,
         focusDescriptor: { key: 'breakout-ticker-filter', start: 0, end: 0 },
       });
     });
@@ -953,14 +1043,20 @@ function bindEvents() {
   document.getElementById('breakout-ticker-filter')?.addEventListener('input', (event) => {
     event.currentTarget.setCustomValidity('');
   });
-  document.getElementById('breakout-filter-form')?.addEventListener('submit', (event) => {
+  const filterForm = document.getElementById('breakout-filter-form');
+  const updateDraftFromForm = () => {
+    syncDraftFilters(filterForm);
+    updateFilterSubmitState();
+  };
+  filterForm?.addEventListener('input', updateDraftFromForm);
+  filterForm?.addEventListener('change', updateDraftFromForm);
+  filterForm?.addEventListener('submit', (event) => {
     event.preventDefault();
     const filters = readFilters(event.currentTarget);
     if (!filters) return;
-    state.filters = filters;
-    state.selectedEventId = '';
-    state.selectedTicker = '';
-    state.detailReturnFocusKey = '';
+    state.draftFilters = filters;
+    state.appliedFilters = filters;
+    clearDetailSelection();
     loadRadar({
       refresh: true,
       focusDescriptor: { key: 'breakout-filter-submit', start: null, end: null },
@@ -968,17 +1064,13 @@ function bindEvents() {
   });
   document.querySelectorAll('[data-session-filter]').forEach((button) => {
     button.addEventListener('click', () => {
-      state.filters.session = button.dataset.sessionFilter || '';
-      state.selectedEventId = '';
-      state.selectedTicker = '';
-      state.detailReturnFocusKey = '';
-      loadRadar({
-        refresh: true,
-        focusDescriptor: {
-          key: button.dataset.focusKey,
-          start: null,
-          end: null,
-        },
+      state.draftFilters = breakoutFilterSnapshot({
+        ...state.draftFilters,
+        session: button.dataset.sessionFilter || '',
+      });
+      renderShell({
+        preserveFocus: false,
+        fallbackFocus: { key: button.dataset.focusKey, start: null, end: null },
       });
     });
   });
@@ -991,6 +1083,9 @@ function bindEvents() {
     if (state.selectedEventId && state.selectedTicker) {
       loadDetail(state.selectedEventId, state.selectedTicker, { refresh: true });
     }
+  });
+  document.querySelector('[data-history-retry]')?.addEventListener('click', () => {
+    if (state.selectedTicker) loadTickerHistory(state.selectedTicker, { refresh: true });
   });
   document.querySelectorAll('[data-history-event]').forEach((button) => {
     button.addEventListener('click', () => loadDetail(button.dataset.historyEvent, button.dataset.historyTicker));
@@ -1013,22 +1108,27 @@ function resetDataState() {
   state.selectedTicker = '';
   state.detail = null;
   state.tickerHistory = null;
+  state.historyLoading = false;
+  state.historyError = '';
   state.detailLoading = false;
   state.detailError = '';
   state.detailReturnFocusKey = '';
   state.requestGeneration += 1;
   state.detailGeneration += 1;
+  state.historyGeneration += 1;
   state.controller?.abort();
   state.detailController?.abort();
+  state.historyController?.abort();
   state.controller = null;
   state.detailController = null;
+  state.historyController = null;
   if (state.refreshTimer) clearInterval(state.refreshTimer);
   state.refreshTimer = null;
 }
 
-function eventParams(cursor = '') {
+function eventParams(cursor = '', filters = state.appliedFilters) {
   return {
-    ...state.filters,
+    ...filters,
     limit: PAGE_SIZE,
     cursor,
   };
@@ -1053,12 +1153,17 @@ function errorMessage(error) {
 async function loadRadar({
   append = false,
   refresh = false,
+  automatic = false,
+  syncDraft = true,
   alignmentRetry = false,
   focusDescriptor = null,
 } = {}) {
   const pageGeneration = activePageGeneration;
   if (!isMounted(pageGeneration)) return;
   const requestFocus = focusDescriptor || captureFocus();
+  const mountedFilterForm = document.getElementById('breakout-filter-form');
+  if (syncDraft && mountedFilterForm) syncDraftFilters(mountedFilterForm);
+  const refreshContext = beginBreakoutRefresh(state, requestFocus);
   if (append) {
     if (state.pageMode === 'current') {
       const firstNewEvent = state.events[state.visibleCount];
@@ -1080,7 +1185,7 @@ async function loadRadar({
     renderShell({ fallbackFocus: requestFocus });
     let appendedFocus = requestFocus;
     try {
-      const page = await api.breakoutEvents(eventParams(state.nextCursor), {
+      const page = await api.breakoutEvents(eventParams(state.nextCursor, state.appliedFilters), {
         refresh,
         signal: state.controller.signal,
       });
@@ -1117,14 +1222,14 @@ async function loadRadar({
   state.loading = !state.payload;
   state.refreshing = Boolean(state.payload);
   state.loadingMore = false;
-  state.nextCursor = null;
-  state.visibleCount = PAGE_SIZE;
-  renderShell({ fallbackFocus: requestFocus });
+  if (!automatic) state.visibleCount = PAGE_SIZE;
+  renderShell({ fallbackFocus: refreshContext.focusDescriptor });
   const options = { signal: state.controller.signal, refresh };
-  const filtered = hasActiveFilters();
+  const appliedFilters = refreshContext.requestFilters;
+  const filtered = hasActiveFilters(appliedFilters);
   const [statusResult, dataResult] = await Promise.allSettled([
     api.breakoutStatus(options),
-    filtered ? api.breakoutEvents(eventParams(), options) : api.breakoutCurrent(options),
+    filtered ? api.breakoutEvents(eventParams('', appliedFilters), options) : api.breakoutCurrent(options),
   ]);
   if (!isMounted(pageGeneration) || requestGeneration !== state.requestGeneration) return;
 
@@ -1135,8 +1240,9 @@ async function loadRadar({
       if (!alignmentRetry) {
         return loadRadar({
           refresh: true,
+          automatic,
           alignmentRetry: true,
-          focusDescriptor: requestFocus,
+          focusDescriptor: refreshContext.focusDescriptor,
         });
       }
       state.error = '运行状态与事件列表来自不同扫描，页面已保留上一份完整快照。';
@@ -1163,10 +1269,16 @@ async function loadRadar({
   }
   state.loading = false;
   state.refreshing = false;
-  renderShell({ fallbackFocus: requestFocus });
+  const interaction = settleBreakoutRefresh(state, refreshContext);
+  state.draftFilters = interaction.draftFilters;
+  state.selectedEventId = interaction.selectedEventId;
+  state.selectedTicker = interaction.selectedTicker;
+  state.detailReturnFocusKey = interaction.detailReturnFocusKey;
+  renderShell({ fallbackFocus: interaction.focusDescriptor });
 }
 
 function loadMore() {
+  if (state.refreshing || state.loading) return;
   loadRadar({ append: true });
 }
 
@@ -1184,11 +1296,13 @@ async function loadDetail(eventId, ticker, { refresh = false } = {}) {
   const pageGeneration = activePageGeneration;
   const detailGeneration = ++state.detailGeneration;
   state.detailController?.abort();
-  state.detailController = new AbortController();
+  state.historyController?.abort();
+  const detailController = new AbortController();
+  state.detailController = detailController;
   state.selectedEventId = String(eventId || '');
   state.selectedTicker = String(ticker || '').trim().toUpperCase();
   state.detail = null;
-  state.tickerHistory = null;
+  Object.assign(state, transitionBreakoutHistory(state, { type: 'start', reset: true }));
   state.detailError = '';
   state.detailLoading = true;
   renderShell({ preserveFocus: false });
@@ -1196,29 +1310,72 @@ async function loadDetail(eventId, ticker, { refresh = false } = {}) {
     block: 'start',
     behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
   }));
-  const options = { signal: state.detailController.signal, refresh };
-  const [detailResult, historyResult] = await Promise.allSettled([
-    api.breakoutEvent(eventId, options),
-    api.breakoutTicker(ticker, options),
-  ]);
-  if (!isMounted(pageGeneration) || detailGeneration !== state.detailGeneration) return;
-  if (detailResult.status === 'fulfilled') state.detail = detailResult.value;
-  else if (detailResult.reason?.name !== 'AbortError') state.detailError = errorMessage(detailResult.reason);
-  if (historyResult.status === 'fulfilled') state.tickerHistory = historyResult.value;
-  state.detailLoading = false;
-  renderShell({ preserveFocus: false });
-  requestAnimationFrame(() => document.getElementById('breakout-event-detail')?.focus({ preventScroll: true }));
+  void loadTickerHistory(state.selectedTicker, { refresh, renderStart: false });
+  try {
+    state.detail = await api.breakoutEvent(eventId, { signal: detailController.signal, refresh });
+  } catch (error) {
+    if (!isMounted(pageGeneration) || detailGeneration !== state.detailGeneration) return;
+    if (error?.name !== 'AbortError') state.detailError = errorMessage(error);
+  } finally {
+    if (!isMounted(pageGeneration) || detailGeneration !== state.detailGeneration) return;
+    state.detailLoading = false;
+    if (state.detailController === detailController) state.detailController = null;
+    renderShell({ preserveFocus: false });
+    requestAnimationFrame(() => document.getElementById('breakout-event-detail')?.focus({ preventScroll: true }));
+  }
+}
+
+async function loadTickerHistory(ticker, { refresh = false, renderStart = true } = {}) {
+  const pageGeneration = activePageGeneration;
+  const historyGeneration = ++state.historyGeneration;
+  const focus = captureFocus();
+  state.historyController?.abort();
+  const controller = new AbortController();
+  state.historyController = controller;
+  Object.assign(state, transitionBreakoutHistory(state, { type: 'start' }));
+  if (renderStart) renderShell({ fallbackFocus: focus });
+  try {
+    const history = await api.breakoutTicker(ticker, { signal: controller.signal, refresh });
+    if (!isMounted(pageGeneration) || historyGeneration !== state.historyGeneration) return;
+    Object.assign(state, transitionBreakoutHistory(state, { type: 'success', payload: history }));
+  } catch (error) {
+    if (!isMounted(pageGeneration) || historyGeneration !== state.historyGeneration) return;
+    if (error?.name !== 'AbortError') {
+      Object.assign(state, transitionBreakoutHistory(state, {
+        type: 'failure',
+        message: `近期事件未能读取。${errorMessage(error)}`,
+      }));
+    }
+  } finally {
+    if (!isMounted(pageGeneration) || historyGeneration !== state.historyGeneration) return;
+    state.historyLoading = false;
+    if (state.historyController === controller) state.historyController = null;
+    const completionFocus = captureFocus() || focus || {
+      key: 'breakout-event-detail', start: null, end: null,
+    };
+    renderShell({
+      preserveFocus: false,
+      fallbackFocus: state.historyError
+        ? { key: 'breakout-history-retry', start: null, end: null }
+        : completionFocus,
+    });
+  }
 }
 
 function closeDetail() {
   const returnFocusKey = state.detailReturnFocusKey;
   state.detailGeneration += 1;
+  state.historyGeneration += 1;
   state.detailController?.abort();
+  state.historyController?.abort();
   state.detailController = null;
+  state.historyController = null;
   state.selectedEventId = '';
   state.selectedTicker = '';
   state.detail = null;
   state.tickerHistory = null;
+  state.historyLoading = false;
+  state.historyError = '';
   state.detailLoading = false;
   state.detailError = '';
   state.detailReturnFocusKey = '';
@@ -1240,8 +1397,13 @@ function startAutoRefresh(pageGeneration) {
       state.refreshTimer = null;
       return;
     }
-    if (document.hidden || state.loading || state.refreshing || state.loadingMore) return;
-    loadRadar({ refresh: true });
+    if (!shouldAutoRefreshRadar({
+      hidden: document.hidden,
+      loading: state.loading,
+      refreshing: state.refreshing,
+      loadingMore: state.loadingMore,
+    })) return;
+    loadRadar({ refresh: true, automatic: true });
   }, AUTO_REFRESH_MS);
 }
 
@@ -1249,6 +1411,7 @@ function cleanupPage(pageGeneration) {
   if (pageGeneration !== activePageGeneration) return;
   state.controller?.abort();
   state.detailController?.abort();
+  state.historyController?.abort();
   if (state.refreshTimer) clearInterval(state.refreshTimer);
   state.refreshTimer = null;
 }
@@ -1257,7 +1420,9 @@ export async function renderBreakouts() {
   await ensureBreakoutStylesheet();
   if (window.location.hash.replace(/^#/, '').split('/')[0] !== 'breakouts') return;
   resetDataState();
-  state.filters = defaultFilters();
+  const filters = breakoutFilterSnapshot(defaultFilters());
+  state.draftFilters = filters;
+  state.appliedFilters = filters;
   const pageGeneration = ++activePageGeneration;
   renderShell({ preserveFocus: false });
   window.addEventListener('hashchange', () => cleanupPage(pageGeneration), { once: true });

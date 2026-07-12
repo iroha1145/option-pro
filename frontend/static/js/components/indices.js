@@ -1,4 +1,5 @@
-import { api, invalidateCache, safe } from '../api.js';
+import { api, safe } from '../api.js';
+import { refreshRemainingMs } from '../utils/frontendState.js';
 
 const INDICES = [
   { symbol: '^GSPC',     label: 'S&P 500' },
@@ -19,6 +20,23 @@ let mountGeneration = 0;
 let refreshTimer = null;
 let visibilityHandler = null;
 let lastData = null;
+let lastDataAt = null;
+let lastRefreshStartedAt = 0;
+
+export function createIndicesVisibilityHandler({
+  isHidden,
+  now,
+  lastStartedAt,
+  refresh,
+  intervalMs = REFRESH_MS,
+}) {
+  return () => {
+    if (isHidden()) return false;
+    if (refreshRemainingMs(lastStartedAt(), now(), intervalMs) > 0) return false;
+    void refresh(true);
+    return true;
+  };
+}
 
 const esc = (v) => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const fmtPrice = (n) => n !== null && n !== undefined && n !== '' && Number.isFinite(Number(n)) ? Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
@@ -62,18 +80,32 @@ export async function mountIndexTicker() {
   if (!track || !updated) return;
   const generation = ++mountGeneration;
 
-  // Initial skeleton with labels only
-  track.innerHTML = INDICES.map(i => {
-    const symbol = detailSymbol(i);
-    return `<a class="ticker-item" href="#detail/${encodeURIComponent(symbol)}" data-index-symbol="${esc(symbol)}" title="${esc(i.label)} 行情加载中" aria-label="打开 ${esc(i.label)} 详情"><strong>${esc(i.label)}</strong><span class="mono">—</span><em class="mono">—</em></a>`;
-  }).join('');
-  updated.textContent = '行情加载中';
-  updated.dataset.compactLabel = '载入中';
-  updated.removeAttribute('datetime');
+  if (lastData) {
+    track.innerHTML = lastData.map(renderItem).join('');
+    const timeLabel = lastDataAt?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || '最近';
+    updated.textContent = `最近更新 ${timeLabel}`;
+    updated.dataset.compactLabel = timeLabel;
+    if (lastDataAt) updated.dateTime = lastDataAt.toISOString();
+  } else {
+    // Initial skeleton with labels only
+    track.innerHTML = INDICES.map(i => {
+      const symbol = detailSymbol(i);
+      return `<a class="ticker-item" href="#detail/${encodeURIComponent(symbol)}" data-index-symbol="${esc(symbol)}" title="${esc(i.label)} 行情加载中" aria-label="打开 ${esc(i.label)} 详情"><strong>${esc(i.label)}</strong><span class="mono">—</span><em class="mono">—</em></a>`;
+    }).join('');
+    updated.textContent = '行情加载中';
+    updated.dataset.compactLabel = '载入中';
+    updated.removeAttribute('datetime');
+  }
 
+  let refreshInFlight = false;
   const refresh = async (force = false) => {
-    if (force) invalidateCache('mkt-idx');
-    const batch = await safe(api.marketIndices());
+    if (refreshInFlight) return;
+    const now = Date.now();
+    if (refreshRemainingMs(lastRefreshStartedAt, now, REFRESH_MS) > 0) return;
+    lastRefreshStartedAt = now;
+    refreshInFlight = true;
+    const batch = await safe(api.marketIndices({ refresh: force }));
+    refreshInFlight = false;
     if (generation !== mountGeneration || !track.isConnected) return;
 
   // ONE batch request (backend fast_info) instead of 5 per-ticker overview
@@ -106,9 +138,12 @@ export async function mountIndexTicker() {
   }
 
   const hasAnyPrice = data.some((item) => Number.isFinite(Number(item.price)));
-  if (hasAnyPrice) lastData = data;
+  if (hasAnyPrice) {
+    lastData = data;
+    lastDataAt = new Date();
+  }
   const displayData = hasAnyPrice ? data : (lastData || data);
-  const refreshedAt = new Date();
+  const refreshedAt = hasAnyPrice ? lastDataAt : new Date();
   const timeLabel = refreshedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   track.innerHTML = displayData.map(renderItem).join('');
   updated.textContent = `${hasAnyPrice ? '更新' : '刷新失败'} ${timeLabel}`;
@@ -122,6 +157,11 @@ export async function mountIndexTicker() {
     if (!document.hidden) refresh(true);
   }, REFRESH_MS);
   if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
-  visibilityHandler = () => { if (!document.hidden) refresh(true); };
+  visibilityHandler = createIndicesVisibilityHandler({
+    isHidden: () => document.hidden,
+    now: () => Date.now(),
+    lastStartedAt: () => lastRefreshStartedAt,
+    refresh,
+  });
   document.addEventListener('visibilitychange', visibilityHandler);
 }

@@ -1,6 +1,14 @@
 import { api } from '../api.js';
 import { renderIcon } from '../icons.js';
 import { renderMarketStrengthPanel } from '../components/marketStrengthPlaceholder.js';
+import {
+  STRENGTH_FILTER_KEYS,
+  beginStrengthFilterRequest,
+  settleStrengthFilterRequest,
+  snapshotsEqual,
+  strengthFilterSnapshot,
+  updateStrengthDraftFilters,
+} from '../utils/frontendState.js';
 
 const SCREENER_STYLES_ID = 'optix-screener-v3-styles';
 
@@ -13,13 +21,21 @@ function ensureScreenerStyles() {
   document.head.append(link);
 }
 
-const state = {
+const DEFAULT_FILTERS = strengthFilterSnapshot({
   timeframe: 'all',
   profile: 'balanced',
   top: 20,
   sectorId: '',
   minPrice: 5,
   minAvgDollarVolume: 10_000_000,
+});
+
+const state = {
+  draftFilters: DEFAULT_FILTERS,
+  appliedFilters: DEFAULT_FILTERS,
+  resultFilters: null,
+  requestFilters: null,
+  requestParams: null,
   loading: false,
   payload: null,
   profiles: null,
@@ -31,6 +47,78 @@ const state = {
   scanController: null,
   routeCleanup: null,
 };
+
+function filtersDirty() {
+  return !snapshotsEqual(state.draftFilters, state.appliedFilters, STRENGTH_FILTER_KEYS);
+}
+
+function updateDraft(patch) {
+  state.draftFilters = updateStrengthDraftFilters(state.draftFilters, patch);
+}
+
+function updateDraftSummary() {
+  const draft = state.draftFilters;
+  const dirty = filtersDirty();
+  const timeframeLabel = Object.fromEntries(TIMEFRAME_OPTIONS)[draft.timeframe] || '综合';
+  const profileLabel = Object.fromEntries(PROFILE_OPTIONS)[draft.profile] || '均衡';
+  const planProfile = document.querySelector('[data-strength-plan-profile]');
+  const planTimeframe = document.querySelector('[data-strength-plan-timeframe]');
+  const planThresholds = document.querySelector('[data-strength-plan-thresholds]');
+  const runButton = document.getElementById('strength-run');
+  const runLabel = runButton?.querySelector('span');
+  const numericInputs = [
+    document.getElementById('strength-min-price'),
+    document.getElementById('strength-min-liquidity'),
+  ].filter((input) => input instanceof HTMLInputElement);
+  const invalid = numericInputs.some((input) => !input.checkValidity());
+
+  if (planProfile) planProfile.textContent = `${profileLabel}${dirty ? ' · 待应用' : ''}`;
+  if (planTimeframe) planTimeframe.textContent = `${timeframeLabel} · 前 ${draft.top} 只`;
+  if (planThresholds) {
+    planThresholds.textContent = `股价 ≥ ${formatThresholdMoney(draft.minPrice)} · 日均额 ≥ ${formatThresholdMoney(draft.minAvgDollarVolume)}`;
+  }
+  if (runButton) {
+    runButton.dataset.dirty = String(dirty);
+    runButton.disabled = state.loading || invalid;
+  }
+  if (runLabel) runLabel.textContent = state.loading ? '扫描中' : dirty ? '应用并扫描' : '重新读取';
+}
+
+function updateNumericDraft(input, key, multiplier, message, { report = false } = {}) {
+  if (!(input instanceof HTMLInputElement)) return true;
+  const raw = String(input.value || '').trim();
+  const value = Number(raw);
+  input.setCustomValidity('');
+  const valid = raw !== ''
+    && Number.isFinite(value)
+    && value >= 0
+    && !input.validity.badInput
+    && input.checkValidity();
+  if (!valid) input.setCustomValidity(message);
+  input.setAttribute('aria-invalid', valid ? 'false' : 'true');
+  if (valid) updateDraft({ [key]: value * multiplier });
+  updateDraftSummary();
+  if (!valid && report) input.reportValidity();
+  return valid;
+}
+
+function syncNumericDraft({ report = false } = {}) {
+  const price = updateNumericDraft(
+    document.getElementById('strength-min-price'),
+    'minPrice',
+    1,
+    '请输入不小于 0 的股价门槛',
+    { report },
+  );
+  const liquidity = updateNumericDraft(
+    document.getElementById('strength-min-liquidity'),
+    'minAvgDollarVolume',
+    1_000_000,
+    '请输入不小于 0 的日均成交额门槛',
+    { report: report && price },
+  );
+  return price && liquidity;
+}
 
 const FALLBACK_OPTION_SOURCES = [
   { name: 'MarketData.app', url: 'https://www.marketdata.app/docs/api/', access: '免费额度' },
@@ -197,7 +285,7 @@ function renderSectorPicker(sectors = []) {
       <div class="screening-sector-list" role="group" aria-label="板块范围" data-arrow-nav>
         ${sectorOptions.map((sector) => {
           const id = sector.id || sector.sector_id || '';
-          const active = String(state.sectorId || '') === String(id || '');
+          const active = String(state.draftFilters.sectorId || '') === String(id || '');
           const count = Number(sector.count);
           return `
             <button type="button" class="screening-sector-button ${active ? 'is-active' : ''}" data-sector-id="${escapeHtml(id)}" aria-pressed="${active}">
@@ -212,13 +300,15 @@ function renderSectorPicker(sectors = []) {
 }
 
 function renderControls(sectors = []) {
+  const draft = state.draftFilters;
+  const dirty = filtersDirty();
   return `
     <section class="screening-section screening-controls" aria-labelledby="screening-filter-title" data-motion-reveal data-motion-key="screener-controls">
       <div class="screening-section-topline">
-        ${renderStepHeading('01', '扫描设置', '设定候选范围', '更改条件后会自动重新扫描')}
-        <button id="strength-run" class="screening-run-button" type="button" ${state.loading ? 'disabled' : ''}>
+        ${renderStepHeading('01', '扫描设置', '设定候选范围', '修改只保存在草稿中，确认后再读取新结果')}
+        <button id="strength-run" class="screening-run-button" type="button" data-dirty="${dirty}" ${state.loading ? 'disabled' : ''}>
           ${renderIcon('radar', { size: 18 })}
-          <span>${state.loading ? '扫描中' : '重新扫描'}</span>
+          <span>${state.loading ? '扫描中' : dirty ? '应用并扫描' : '重新读取'}</span>
         </button>
       </div>
       <div class="screening-control-grid">
@@ -226,34 +316,34 @@ function renderControls(sectors = []) {
           <span class="screening-field-label">观察周期</span>
           <div class="screening-segment" data-control="timeframe" role="group" aria-label="观察周期" data-arrow-nav>
             ${TIMEFRAME_OPTIONS.map(([value, label]) => `
-              <button type="button" data-value="${value}" class="${state.timeframe === value ? 'is-active' : ''}" aria-pressed="${state.timeframe === value}">${label}</button>
+              <button type="button" data-value="${value}" class="${draft.timeframe === value ? 'is-active' : ''}" aria-pressed="${draft.timeframe === value}">${label}</button>
             `).join('')}
           </div>
         </div>
         <label class="screening-control-field">
           <span class="screening-field-label">评分偏好</span>
           <select id="strength-profile">
-            ${PROFILE_OPTIONS.map(([value, label]) => `<option value="${value}" ${state.profile === value ? 'selected' : ''}>${label}</option>`).join('')}
+            ${PROFILE_OPTIONS.map(([value, label]) => `<option value="${value}" ${draft.profile === value ? 'selected' : ''}>${label}</option>`).join('')}
           </select>
         </label>
         <label class="screening-control-field">
           <span class="screening-field-label">候选数量</span>
           <select id="strength-top">
-            <option value="20" ${state.top === 20 ? 'selected' : ''}>20 只</option>
-            <option value="30" ${state.top === 30 ? 'selected' : ''}>30 只</option>
-            <option value="50" ${state.top === 50 ? 'selected' : ''}>50 只</option>
+            <option value="20" ${draft.top === 20 ? 'selected' : ''}>20 只</option>
+            <option value="30" ${draft.top === 30 ? 'selected' : ''}>30 只</option>
+            <option value="50" ${draft.top === 50 ? 'selected' : ''}>50 只</option>
           </select>
         </label>
       </div>
       <div class="screening-liquidity-grid" aria-label="价格与流动性门槛">
         <label class="screening-control-field">
           <span class="screening-field-label">最低股价（美元）</span>
-          <input id="strength-min-price" type="number" min="0" step="0.5" inputmode="decimal" value="${escapeHtml(state.minPrice)}" aria-describedby="strength-min-price-hint">
+          <input id="strength-min-price" type="number" min="0" step="0.5" inputmode="decimal" value="${escapeHtml(draft.minPrice)}" aria-describedby="strength-min-price-hint">
           <small id="strength-min-price-hint" class="screening-control-hint">0 表示不限制股价</small>
         </label>
         <label class="screening-control-field">
           <span class="screening-field-label">最低20日均成交额（百万美元）</span>
-          <input id="strength-min-liquidity" type="number" min="0" step="0.5" inputmode="decimal" value="${escapeHtml(state.minAvgDollarVolume / 1_000_000)}" aria-describedby="strength-min-liquidity-hint">
+          <input id="strength-min-liquidity" type="number" min="0" step="0.5" inputmode="decimal" value="${escapeHtml(draft.minAvgDollarVolume / 1_000_000)}" aria-describedby="strength-min-liquidity-hint">
           <small id="strength-min-liquidity-hint" class="screening-control-hint">输入 10 代表每日 1,000 万美元</small>
         </label>
       </div>
@@ -736,30 +826,31 @@ function renderResultCard(row, index, payload = {}) {
 
 function renderResults(payload = {}) {
   const rows = Array.isArray(payload.rows) ? payload.rows : [];
-  const timeframeLabel = Object.fromEntries(TIMEFRAME_OPTIONS)[state.timeframe] || '综合';
-  const profileLabel = Object.fromEntries(PROFILE_OPTIONS)[state.profile] || '均衡';
+  const resultFilters = state.resultFilters || state.appliedFilters;
+  const timeframeLabel = Object.fromEntries(TIMEFRAME_OPTIONS)[resultFilters.timeframe] || '综合';
+  const profileLabel = Object.fromEntries(PROFILE_OPTIONS)[resultFilters.profile] || '均衡';
   let body = '';
-  if (state.loading) {
+  if (state.loading && !state.payload) {
     body = `
       <div class="screening-result-skeleton" aria-hidden="true">
         ${Array.from({ length: 6 }, () => '<span><i></i><i></i><i></i><i></i></span>').join('')}
       </div>
     `;
-  } else if (state.error) {
+  } else if (state.error && !rows.length) {
     body = '<div class="screening-result-state" role="status"><strong>候选列表暂不可用</strong><span>返回上方重试扫描，不会更改当前条件。</span></div>';
   } else if (!rows.length) {
-    body = '<div class="screening-result-state" role="status"><strong>本轮没有候选</strong><span>放宽板块范围或切换评分偏好后会自动重扫。</span></div>';
+    body = '<div class="screening-result-state" role="status"><strong>本轮没有候选</strong><span>调整条件后，点击「应用并扫描」读取新结果。</span></div>';
   } else {
     body = rows.map((row, index) => renderResultCard(row, index, payload)).join('');
   }
-  const hasCandidates = !state.loading && !state.error && rows.length > 0;
+  const hasCandidates = rows.length > 0;
   return `
     <section class="screening-section screening-results" aria-labelledby="screening-results-title" aria-busy="${state.loading}" data-motion-reveal data-motion-key="screener-results">
       <div class="screening-results-heading">
         ${renderStepHeading('03', '候选列表', '查看优先研究标的', '默认只显示最重要的判断与理由')}
         <span class="screening-result-context">
-          <strong id="screening-results-title">${state.loading ? '生成中' : `${rows.length} 只候选`}</strong>
-          <small>${escapeHtml(profileLabel)} · ${escapeHtml(timeframeLabel)}${state.sectorId ? ' · 已限板块' : ''} · 股价 ≥ ${escapeHtml(formatThresholdMoney(state.minPrice))} · 日均额 ≥ ${escapeHtml(formatThresholdMoney(state.minAvgDollarVolume))}</small>
+          <strong id="screening-results-title">${state.loading && !state.payload ? '生成中' : `${rows.length} 只候选`}</strong>
+          <small>${escapeHtml(profileLabel)} · ${escapeHtml(timeframeLabel)}${resultFilters.sectorId ? ' · 已限板块' : ''} · 股价 ≥ ${escapeHtml(formatThresholdMoney(resultFilters.minPrice))} · 日均额 ≥ ${escapeHtml(formatThresholdMoney(resultFilters.minAvgDollarVolume))}</small>
         </span>
       </div>
       <div class="screening-results-surface" data-result-state="${hasCandidates ? 'ready' : state.loading ? 'loading' : state.error ? 'error' : 'empty'}" ${hasCandidates ? 'role="list"' : ''}>
@@ -774,8 +865,10 @@ function renderShell() {
   if (!app) return;
   const focusDescriptor = currentFocusDescriptor();
   const payload = state.payload || {};
-  const timeframeLabel = Object.fromEntries(TIMEFRAME_OPTIONS)[state.timeframe] || '综合';
-  const profileLabel = Object.fromEntries(PROFILE_OPTIONS)[state.profile] || '均衡';
+  const draft = state.draftFilters;
+  const dirty = filtersDirty();
+  const timeframeLabel = Object.fromEntries(TIMEFRAME_OPTIONS)[draft.timeframe] || '综合';
+  const profileLabel = Object.fromEntries(PROFILE_OPTIONS)[draft.profile] || '均衡';
   const sectors = Array.isArray(payload.sectors) && payload.sectors.length
     ? payload.sectors
     : (state.profiles?.sectors || []);
@@ -789,9 +882,9 @@ function renderShell() {
         </div>
         <div class="screening-plan" aria-label="当前扫描方案">
           <small>当前方案</small>
-          <strong>${escapeHtml(profileLabel)}</strong>
-          <span>${escapeHtml(timeframeLabel)} · 前 ${state.top} 只</span>
-          <small class="screening-plan__filters">股价 ≥ ${escapeHtml(formatThresholdMoney(state.minPrice))} · 日均额 ≥ ${escapeHtml(formatThresholdMoney(state.minAvgDollarVolume))}</small>
+          <strong data-strength-plan-profile>${escapeHtml(profileLabel)}${dirty ? ' · 待应用' : ''}</strong>
+          <span data-strength-plan-timeframe>${escapeHtml(timeframeLabel)} · 前 ${draft.top} 只</span>
+          <small class="screening-plan__filters" data-strength-plan-thresholds>股价 ≥ ${escapeHtml(formatThresholdMoney(draft.minPrice))} · 日均额 ≥ ${escapeHtml(formatThresholdMoney(draft.minAvgDollarVolume))}</small>
         </div>
       </header>
       <div class="screening-flow">
@@ -805,7 +898,7 @@ function renderShell() {
             asOf: payload.as_of,
             loading: state.loading && !state.payload,
             updating: state.loading && Boolean(state.payload),
-            error: state.error,
+            error: state.payload ? '' : state.error,
             retryable: false,
           })}
         </div>
@@ -838,48 +931,48 @@ function bindArrowNavigation(group) {
 function bindEvents() {
   document.querySelectorAll('[data-control="timeframe"] button').forEach((button) => {
     button.addEventListener('click', () => {
-      state.timeframe = button.dataset.value || 'all';
-      runScan();
+      updateDraft({ timeframe: button.dataset.value || 'all' });
+      renderShell();
     });
   });
   document.getElementById('strength-profile')?.addEventListener('change', (event) => {
-    state.profile = event.target.value;
-    runScan();
+    updateDraft({ profile: event.target.value });
+    renderShell();
   });
   document.getElementById('strength-top')?.addEventListener('change', (event) => {
-    state.top = Number(event.target.value) || 20;
-    runScan();
+    updateDraft({ top: Number(event.target.value) || 20 });
+    renderShell();
   });
-  document.getElementById('strength-min-price')?.addEventListener('change', (event) => {
-    const raw = String(event.target.value || '').trim();
-    const value = Number(event.target.value);
-    if (!raw || !Number.isFinite(value) || value < 0) {
-      event.target.setCustomValidity('请输入不小于 0 的股价门槛');
-      event.target.reportValidity();
-      return;
-    }
-    event.target.setCustomValidity('');
-    state.minPrice = value;
-    runScan();
+  const priceInput = document.getElementById('strength-min-price');
+  priceInput?.addEventListener('input', () => updateNumericDraft(
+    priceInput,
+    'minPrice',
+    1,
+    '请输入不小于 0 的股价门槛',
+  ));
+  const liquidityInput = document.getElementById('strength-min-liquidity');
+  liquidityInput?.addEventListener('input', () => updateNumericDraft(
+    liquidityInput,
+    'minAvgDollarVolume',
+    1_000_000,
+    '请输入不小于 0 的日均成交额门槛',
+  ));
+  document.getElementById('strength-run')?.addEventListener('click', () => {
+    if (!syncNumericDraft({ report: true })) return;
+    runScan(state.mountGeneration, {
+      filters: state.draftFilters,
+      applyDraft: true,
+      refresh: true,
+    });
   });
-  document.getElementById('strength-min-liquidity')?.addEventListener('change', (event) => {
-    const raw = String(event.target.value || '').trim();
-    const value = Number(event.target.value);
-    if (!raw || !Number.isFinite(value) || value < 0) {
-      event.target.setCustomValidity('请输入不小于 0 的日均成交额门槛');
-      event.target.reportValidity();
-      return;
-    }
-    event.target.setCustomValidity('');
-    state.minAvgDollarVolume = value * 1_000_000;
-    runScan();
-  });
-  document.getElementById('strength-run')?.addEventListener('click', () => runScan());
-  document.getElementById('strength-retry')?.addEventListener('click', () => runScan());
+  document.getElementById('strength-retry')?.addEventListener('click', () => runScan(state.mountGeneration, {
+    filters: state.requestFilters || state.appliedFilters,
+    refresh: true,
+  }));
   document.querySelectorAll('.screening-sector-button').forEach((button) => {
     button.addEventListener('click', () => {
-      state.sectorId = button.dataset.sectorId || '';
-      runScan();
+      updateDraft({ sectorId: button.dataset.sectorId || '' });
+      renderShell();
     });
   });
   document.querySelector('.screening-results-surface')?.addEventListener('click', (event) => {
@@ -903,8 +996,17 @@ async function loadProfiles(mountGeneration, signal) {
   }
 }
 
-async function runScan(mountGeneration = state.mountGeneration) {
+async function runScan(mountGeneration = state.mountGeneration, {
+  filters = state.appliedFilters,
+  applyDraft = false,
+  refresh = false,
+} = {}) {
   if (!isMounted(mountGeneration)) return;
+  const requestState = beginStrengthFilterRequest(state, { filters, applyDraft });
+  const { requestFilters, requestParams } = requestState;
+  state.appliedFilters = requestState.appliedFilters;
+  state.requestFilters = requestFilters;
+  state.requestParams = requestParams;
   const requestGeneration = ++state.requestGeneration;
   state.scanController?.abort();
   const scanController = new AbortController();
@@ -914,20 +1016,20 @@ async function runScan(mountGeneration = state.mountGeneration) {
   state.expandedTicker = '';
   renderShell();
   try {
-    const payload = await api.strengthScan({
-      timeframe: state.timeframe,
-      profile: state.profile,
-      top: state.top,
-      sector_id: state.sectorId,
-      min_price: state.minPrice,
-      min_avg_dollar_volume: state.minAvgDollarVolume,
-    }, { signal: scanController.signal });
+    const payload = await api.strengthScan(requestParams, {
+      signal: scanController.signal,
+      refresh,
+    });
     if (!isMounted(mountGeneration) || requestGeneration !== state.requestGeneration) return;
     state.payload = payload;
+    const settled = settleStrengthFilterRequest(state, requestFilters);
+    state.draftFilters = settled.draftFilters;
+    state.resultFilters = settled.resultFilters;
   } catch (error) {
     if (!isMounted(mountGeneration) || requestGeneration !== state.requestGeneration) return;
-    state.payload = { rows: [], sectors: [], market_regime: {}, data_sources: {} };
-    state.error = '选股服务暂时无法连接，请稍后重试。';
+    state.error = state.payload
+      ? '选股服务暂时无法连接，已保留上一次候选结果。'
+      : '选股服务暂时无法连接，请稍后重试。';
   } finally {
     if (!isMounted(mountGeneration) || requestGeneration !== state.requestGeneration) return;
     state.loading = false;

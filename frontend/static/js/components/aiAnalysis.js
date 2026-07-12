@@ -53,7 +53,7 @@ export function renderAlertAnalysisButton(container, ticker, alerts, underlyingP
   };
 }
 
-function renderAnalysisCard(data) {
+export function renderAnalysisCard(data) {
   if (data?.__error || data?.error) {
     return `<section class="ai-result-card ai-result-card--error" aria-label="异动分析状态">
       <span class="label-caps">智能解读</span>
@@ -64,11 +64,16 @@ function renderAnalysisCard(data) {
   const confidenceKey = ['high', 'medium', 'low'].includes(String(data?.confidence || '').toLowerCase())
     ? String(data.confidence).toLowerCase()
     : 'medium';
-  const directionKey = ['bullish', 'bearish', 'mixed'].includes(String(data?.direction || '').toLowerCase())
+  const directionKey = ['bullish', 'bearish', 'mixed', 'unknown'].includes(String(data?.direction || '').toLowerCase())
     ? String(data.direction).toLowerCase()
-    : 'mixed';
+    : 'unknown';
   const confidenceLabels = { high: '把握较高', medium: '把握中等', low: '把握较低' };
-  const directionLabels = { bullish: '倾向看涨', bearish: '倾向看跌', mixed: '多空交织' };
+  const directionLabels = {
+    bullish: '倾向看涨',
+    bearish: '倾向看跌',
+    mixed: '多空交织',
+    unknown: '方向无法判断',
+  };
   const keyStrikes = Array.isArray(data?.key_strikes) ? data.key_strikes : [];
 
   return `<section class="ai-result-card" aria-label="期权异动分析结果">

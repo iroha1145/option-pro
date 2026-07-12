@@ -57,11 +57,9 @@ function groupOptionChain(chain = {}) {
   return groups;
 }
 
-function alertMeta(alert = {}) {
-  const direction = alert.inferred_direction || alert.signal || 'unknown';
-  if (direction === 'bullish') return { icon: 'trending_up', tone: 'bullish', label: '方向推断偏多' };
-  if (direction === 'bearish') return { icon: 'trending_down', tone: 'bearish', label: '方向推断偏空' };
-  return { icon: 'help', tone: 'neutral', label: '方向尚不明确' };
+export function optionAlertMeta() {
+  // Contract type and moneyness cannot reveal whether the initiating trade was a buy or a sell.
+  return { icon: 'help', tone: 'neutral', label: '方向无法判断' };
 }
 
 /** Render unusual activity alerts above the chain. */
@@ -74,12 +72,17 @@ export function renderAlerts(alerts = []) {
         <span class="label-caps">异动提醒</span>
         <h3 id="option-alert-title">期权成交异动</h3>
       </div>
-      <span>方向来自成交特征推断，不代表确定走势</span>
+      <span>缺少成交主动方，合约类型不代表交易方向</span>
     </div>
     <div class="option-alert-grid">
       ${alerts.map((alert) => {
-        const meta = alertMeta(alert);
-        const type = String(alert.type || '').toLowerCase() === 'call' ? '看涨' : '看跌';
+        const meta = optionAlertMeta();
+        const contractType = String(alert.type || alert.contract_type || '').toLowerCase();
+        const type = contractType === 'call'
+          ? '看涨合约'
+          : contractType === 'put'
+            ? '看跌合约'
+            : '合约类型未知';
         const expiration = alert.expiration
           ? `${String(alert.expiration).slice(5).replace('-', '/')} 到期`
           : '到期日待确认';
@@ -201,13 +204,7 @@ export function renderOptionChain(chain) {
       <tbody>${rows || '<tr><td class="option-chain-empty option-chain-empty--row" colspan="11">暂无可显示的期权合约</td></tr>'}</tbody>
     </table>
     <p class="option-chain-method" role="note">
-      希腊值按布莱克—斯科尔斯模型（Black-Scholes）估算，固定无风险利率 5%，未计股息；方向提示缺少成交方向数据，仅作推断。
+      希腊值按布莱克—斯科尔斯模型（Black-Scholes）估算，固定无风险利率 5%，未计股息；合约类型和虚实值不代表交易方向。
     </p>
   </div>`;
-}
-
-export function renderExpirationSelect(expirations = [], selected = '') {
-  return `<select id="expiration-select" class="option-expiration-select" aria-label="期权到期日">
-    ${expirations.map((expiration) => `<option value="${esc(expiration)}" ${expiration === selected ? 'selected' : ''}>${esc(expiration)}</option>`).join('')}
-  </select>`;
 }

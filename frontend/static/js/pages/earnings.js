@@ -1,14 +1,40 @@
 import { api } from '../api.js';
 import { renderIcon } from '../icons.js';
+import { marketTodayISO } from '../utils/marketDate.js';
+import {
+  earningsCoverage,
+  earningsRefreshNotice,
+  refreshRemainingMs,
+} from '../utils/frontendState.js';
 
 const EARNINGS_STYLE_ID = 'optix-earnings-v3-styles';
 const DAYS_IN_TIMELINE = 7;
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 const RELATION_ORDER = ['competitor', 'supplier', 'customer', 'etf', 'opposing', 'other'];
+const EARNINGS_REFRESH_COOLDOWN_MS = 30 * 1000;
 
 let activeEarningsGeneration = 0;
 let impactLoadToken = 0;
 let stylesheetPromise = null;
+let lastEarningsRefreshStartedAt = 0;
+let earningsRefreshBlockedUntil = 0;
+
+function earningsRefreshRemaining(now = Date.now()) {
+  return Math.max(
+    refreshRemainingMs(lastEarningsRefreshStartedAt, now, EARNINGS_REFRESH_COOLDOWN_MS),
+    Math.max(0, Math.ceil(earningsRefreshBlockedUntil - now)),
+  );
+}
+
+function retainServerRefreshCooldown(payload, now = Date.now()) {
+  const status = String(payload?.refresh_status || '').trim().toLowerCase();
+  const seconds = Number(payload?.refresh_retry_after_seconds);
+  if (!status || !Number.isFinite(seconds) || seconds <= 0) return;
+  earningsRefreshBlockedUntil = Math.max(
+    earningsRefreshBlockedUntil,
+    now + Math.ceil(seconds * 1000),
+  );
+}
 
 function ensureEarningsStylesheet() {
   const existing = document.getElementById(EARNINGS_STYLE_ID);
@@ -44,9 +70,11 @@ function navigateToDetail(ticker) {
   if (symbol) window.location.hash = `#detail/${encodeURIComponent(symbol)}`;
 }
 
-function fmtLargeMoney(value) {
+export function formatEarningsMoney(value) {
+  if (value === null || value === undefined || value === '') return '—';
   const number = Number(value);
-  if (!Number.isFinite(number) || number === 0) return '—';
+  if (!Number.isFinite(number)) return '—';
+  if (number === 0) return '$0';
   const absolute = Math.abs(number);
   if (absolute >= 1e12) return `$${(number / 1e12).toFixed(2)}T`;
   if (absolute >= 1e9) return `$${(number / 1e9).toFixed(2)}B`;
@@ -54,7 +82,8 @@ function fmtLargeMoney(value) {
   return `$${number.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 }
 
-function fmtEps(value) {
+export function formatEarningsEps(value) {
+  if (value === null || value === undefined || value === '') return '—';
   const number = Number(value);
   return Number.isFinite(number) ? `$${number.toFixed(2)}` : '—';
 }
@@ -68,10 +97,8 @@ function parseISO(value) {
   return date;
 }
 
-function localToday() {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  return date;
+function marketTodayDate(now = Date.now()) {
+  return parseISO(marketTodayISO(now));
 }
 
 function isoFromDate(date) {
@@ -157,16 +184,23 @@ function renderShell(generation) {
           <h1 id="earnings-title">财报日历</h1>
           <p id="earnings-summary">正在整理未来财报事件…</p>
         </div>
-        <div class="earnings-week-nav" aria-label="切换七日时间范围">
-          <button type="button" data-week-action="previous" aria-label="查看前七日">
-            ${renderIcon('chevron_left', { size: 18 })}
-          </button>
-          <button type="button" class="earnings-week-nav__today" data-week-action="today">回到今天</button>
-          <button type="button" data-week-action="next" aria-label="查看后七日">
-            ${renderIcon('chevron_right', { size: 18 })}
+        <div class="earnings-page__tools">
+          <div class="earnings-week-nav" aria-label="切换七日时间范围">
+            <button type="button" data-week-action="previous" aria-label="查看前七日">
+              ${renderIcon('chevron_left', { size: 18 })}
+            </button>
+            <button type="button" class="earnings-week-nav__today" data-week-action="today">回到今天</button>
+            <button type="button" data-week-action="next" aria-label="查看后七日">
+              ${renderIcon('chevron_right', { size: 18 })}
+            </button>
+          </div>
+          <button type="button" class="earnings-data-refresh" data-earnings-refresh>
+            ${renderIcon('refresh', { size: 17 })}<span>重新读取</span>
           </button>
         </div>
       </header>
+
+      <section id="earnings-data-banner" class="earnings-data-banner" role="status" aria-live="polite" hidden></section>
 
       <section class="earnings-calendar" aria-labelledby="earnings-timeline-title" data-motion-reveal data-motion-key="earnings-calendar">
         <header class="earnings-section-heading">
@@ -301,7 +335,7 @@ function renderEvents(root, dateISO, items, selectedTicker, nextEvent, today) {
       data-earnings-impact="${escapeHtml(item.ticker)}" data-ticker="${escapeHtml(item.ticker)}"
       data-motion-card data-motion-key="earnings-${escapeHtml(item.date)}-${escapeHtml(item.ticker)}"
       aria-controls="earnings-impact-panel" aria-expanded="${selectedTicker === item.ticker ? 'true' : 'false'}"
-      aria-label="打开 ${escapeHtml(item.ticker)} ${escapeHtml(item.name)} 的财报关联影响。行业 ${escapeHtml(item.sector || '待确认')}，每股收益预估 ${escapeHtml(fmtEps(item.epsEstimate))}，营收预估 ${escapeHtml(fmtLargeMoney(item.revenueEstimate))}"
+      aria-label="打开 ${escapeHtml(item.ticker)} ${escapeHtml(item.name)} 的财报关联影响。行业 ${escapeHtml(item.sector || '待确认')}，每股收益预估 ${escapeHtml(formatEarningsEps(item.epsEstimate))}，营收预估 ${escapeHtml(formatEarningsMoney(item.revenueEstimate))}"
       >
       <span class="earnings-event__index" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span>
       <div class="earnings-event__identity">
@@ -310,8 +344,8 @@ function renderEvents(root, dateISO, items, selectedTicker, nextEvent, today) {
         <span>${escapeHtml(item.sector || '行业待确认')}</span>
       </div>
       <dl class="earnings-event__metrics">
-        <div><dt>每股收益预估</dt><dd data-numeric>${fmtEps(item.epsEstimate)}</dd></div>
-        <div><dt>营收预估</dt><dd data-numeric>${fmtLargeMoney(item.revenueEstimate)}</dd></div>
+        <div><dt>每股收益预估</dt><dd data-numeric>${formatEarningsEps(item.epsEstimate)}</dd></div>
+        <div><dt>营收预估</dt><dd data-numeric>${formatEarningsMoney(item.revenueEstimate)}</dd></div>
       </dl>
       <span class="earnings-event__hint" aria-hidden="true">关联研究 <span>↗</span></span>
     </article>
@@ -330,8 +364,8 @@ function renderInspectorCompany(item, content) {
     </div>
     <dl class="earnings-impact__facts">
       <div><dt>财报日期</dt><dd>${escapeHtml(item?.date || '—')}</dd></div>
-      <div><dt>每股收益预估</dt><dd data-numeric>${fmtEps(item?.epsEstimate)}</dd></div>
-      <div><dt>营收预估</dt><dd data-numeric>${fmtLargeMoney(item?.revenueEstimate)}</dd></div>
+      <div><dt>每股收益预估</dt><dd data-numeric>${formatEarningsEps(item?.epsEstimate)}</dd></div>
+      <div><dt>营收预估</dt><dd data-numeric>${formatEarningsMoney(item?.revenueEstimate)}</dd></div>
     </dl>
     ${content}
   `;
@@ -473,9 +507,9 @@ function tooltipMarkup(item) {
     <p>${escapeHtml(item.name)}</p>
     <dl>
       <div><dt>行业</dt><dd>${escapeHtml(item.sector || '—')}</dd></div>
-      <div><dt>每股收益预估</dt><dd>${fmtEps(item.epsEstimate)}</dd></div>
-      <div><dt>营收预估</dt><dd>${fmtLargeMoney(item.revenueEstimate)}</dd></div>
-      <div><dt>市值</dt><dd>${fmtLargeMoney(item.marketCap)}</dd></div>
+      <div><dt>每股收益预估</dt><dd>${formatEarningsEps(item.epsEstimate)}</dd></div>
+      <div><dt>营收预估</dt><dd>${formatEarningsMoney(item.revenueEstimate)}</dd></div>
+      <div><dt>市值</dt><dd>${formatEarningsMoney(item.marketCap)}</dd></div>
     </dl>
     <span>点击卡片打开关联研究</span>
   `;
@@ -555,6 +589,42 @@ function renderDataError(root, message) {
   if (summary) summary.textContent = '财报服务暂时不可用，没有改动你的任何数据。';
 }
 
+function renderDataBanner(root, payload, { error = '', retained = false } = {}) {
+  const banner = root?.querySelector('#earnings-data-banner');
+  if (!banner) return;
+  const coverage = earningsCoverage(payload);
+  const refreshNotice = earningsRefreshNotice(payload);
+  if (!error && !coverage.degraded && !refreshNotice) {
+    banner.hidden = true;
+    banner.replaceChildren();
+    banner.dataset.tone = '';
+    return;
+  }
+  const errorTone = Boolean(error) || refreshNotice?.tone === 'error';
+  const title = error
+    ? (retained ? '更新失败，继续显示上次数据' : '财报数据暂时不可用')
+    : refreshNotice?.title || '财报来源部分降级';
+  const details = [];
+  if (error) details.push(error);
+  else if (refreshNotice?.message) details.push(refreshNotice.message);
+  if (coverage.degraded) {
+    const coverageText = coverage.attempted !== null && coverage.succeeded !== null
+      ? `本次成功读取 ${coverage.succeeded}/${coverage.attempted} 个标的。`
+      : '';
+    details.push(`${coverageText}未取得的标的保持缺失，不会补成无事件。`);
+  }
+  banner.hidden = false;
+  banner.dataset.tone = errorTone ? 'error' : 'warning';
+  banner.innerHTML = `
+    ${renderIcon(errorTone ? 'info' : 'event_note', { size: 18 })}
+    <span>
+      <strong>${escapeHtml(title)}</strong>
+      <small>${escapeHtml(details.join(' '))}</small>
+    </span>
+    <button type="button" data-earnings-refresh>重新读取</button>
+  `;
+}
+
 export async function renderEarnings() {
   const mountGeneration = ++activeEarningsGeneration;
   impactLoadToken += 1;
@@ -569,34 +639,18 @@ export async function renderEarnings() {
   const root = rootForGeneration(mountGeneration);
   if (!root) return;
 
-  let earnings;
-  try {
-    const payload = await api.earnings();
-    if (!isEarningsMounted(mountGeneration)) return;
-    const today = localToday();
-    earnings = normalizeEarnings(payload).filter((item) => item.dateObj >= today);
-  } catch (error) {
-    if (!isEarningsMounted(mountGeneration)) return;
-    renderDataError(root, error?.message || '财报接口请求失败，请稍后重试。');
-    root.querySelector('[data-earnings-retry]')?.addEventListener('click', () => renderEarnings());
-    return;
-  }
-
-  const today = localToday();
-  const todayISO = isoFromDate(today);
+  let earnings = [];
+  let today = marketTodayDate();
+  let todayISO = marketTodayISO(Date.now());
   const byDate = new Map();
   const byTicker = new Map();
-  earnings.forEach((item) => {
-    if (!byDate.has(item.date)) byDate.set(item.date, []);
-    byDate.get(item.date).push(item);
-    byTicker.set(item.ticker, item);
-  });
-  renderHeaderSummary(root, earnings, today);
-
   let windowStart = today;
   let selectedDate = todayISO;
   let selectedTicker = '';
-  const latestDate = earnings.length ? earnings[earnings.length - 1].dateObj : today;
+  let latestDate = today;
+  let hasUsableData = false;
+  let loadingData = false;
+  let loadGeneration = 0;
 
   const nextEventAfter = (dateISO) => earnings.find((item) => item.date > dateISO) || null;
   const firstEventInWindow = (start) => {
@@ -606,8 +660,8 @@ export async function renderEarnings() {
   const updateWeekButtons = () => {
     const previous = root.querySelector('[data-week-action="previous"]');
     const next = root.querySelector('[data-week-action="next"]');
-    if (previous) previous.disabled = windowStart <= today;
-    if (next) next.disabled = addDays(windowStart, DAYS_IN_TIMELINE - 1) >= latestDate;
+    if (previous) previous.disabled = loadingData || windowStart <= today;
+    if (next) next.disabled = loadingData || addDays(windowStart, DAYS_IN_TIMELINE - 1) >= latestDate;
   };
   const renderSelectedDay = () => {
     renderEvents(root, selectedDate, byDate.get(selectedDate) || [], selectedTicker, nextEventAfter(selectedDate), today);
@@ -630,7 +684,89 @@ export async function renderEarnings() {
     if (focus) root.querySelector(`[data-earnings-date="${dateISO}"]`)?.focus();
   };
 
-  renderWindow();
+  const updateRefreshButtons = () => {
+    const remaining = earningsRefreshRemaining();
+    const seconds = Math.ceil(remaining / 1000);
+    root.querySelectorAll('[data-earnings-refresh], [data-earnings-retry]').forEach((button) => {
+      button.disabled = loadingData || remaining > 0;
+      const label = loadingData
+        ? '读取中'
+        : remaining > 0
+          ? `${seconds} 秒后可重试`
+          : '重新读取';
+      const span = button.querySelector('span');
+      if (span) span.textContent = label;
+      else button.textContent = label;
+    });
+  };
+
+  const rebuildIndexes = () => {
+    byDate.clear();
+    byTicker.clear();
+    earnings.forEach((item) => {
+      if (!byDate.has(item.date)) byDate.set(item.date, []);
+      byDate.get(item.date).push(item);
+      byTicker.set(item.ticker, item);
+    });
+  };
+
+  const applyPayload = (payload, { refreshRequested = false } = {}) => {
+    // A cached payload may still carry the retry hint from an older refresh.
+    // Only a refresh performed in this view may start a new local countdown.
+    if (refreshRequested && !payload?._client_cached) retainServerRefreshCooldown(payload);
+    todayISO = marketTodayISO(Date.now());
+    today = marketTodayDate();
+    earnings = normalizeEarnings(payload).filter((item) => item.date >= todayISO);
+    rebuildIndexes();
+    latestDate = earnings.length ? earnings[earnings.length - 1].dateObj : today;
+    if (!windowStart || windowStart < today) windowStart = today;
+    if (!selectedDate || selectedDate < todayISO) selectedDate = todayISO;
+    if (selectedTicker && !byTicker.has(selectedTicker)) {
+      selectedTicker = '';
+      closeImpact(root);
+    }
+    hasUsableData = true;
+    renderHeaderSummary(root, earnings, today);
+    renderWindow();
+    renderDataBanner(root, payload);
+    if (!earnings.length) {
+      const summary = root.querySelector('#earnings-summary');
+      if (summary) summary.textContent = '未来时间范围内暂无已确认财报，新的安排会自动补充。';
+    }
+  };
+
+  const loadData = async ({ refresh = false } = {}) => {
+    if (!isEarningsMounted(mountGeneration) || loadingData) return;
+    const remaining = earningsRefreshRemaining();
+    if (refresh && remaining > 0) {
+      updateRefreshButtons();
+      return;
+    }
+    const requestGeneration = ++loadGeneration;
+    loadingData = true;
+    lastEarningsRefreshStartedAt = Date.now();
+    updateWeekButtons();
+    updateRefreshButtons();
+    try {
+      const payload = await api.earnings({ refresh });
+      if (!isEarningsMounted(mountGeneration) || requestGeneration !== loadGeneration) return;
+      applyPayload(payload, { refreshRequested: refresh });
+    } catch (error) {
+      if (!isEarningsMounted(mountGeneration) || requestGeneration !== loadGeneration) return;
+      const message = error?.message || '财报接口请求失败，请稍后重试。';
+      if (hasUsableData) renderDataBanner(root, null, { error: message, retained: true });
+      else {
+        renderDataError(root, message);
+        renderDataBanner(root, null, { error: message });
+      }
+    } finally {
+      if (!isEarningsMounted(mountGeneration) || requestGeneration !== loadGeneration) return;
+      loadingData = false;
+      updateWeekButtons();
+      updateRefreshButtons();
+    }
+  };
+
   bindTooltip(root, byTicker);
 
   root.querySelector('#earnings-timeline-track')?.addEventListener('click', (event) => {
@@ -715,8 +851,19 @@ export async function renderEarnings() {
     if (retry) loadImpact(root, retry.dataset.impactRetry, byTicker, mountGeneration);
   });
 
-  if (!earnings.length) {
-    const summary = root.querySelector('#earnings-summary');
-    if (summary) summary.textContent = '未来时间范围内暂无已确认财报，新的安排会自动补充。';
-  }
+  root.addEventListener('click', (event) => {
+    const refresh = event.target.closest('[data-earnings-refresh], [data-earnings-retry]');
+    if (refresh && !refresh.disabled) loadData({ refresh: true });
+  });
+
+  const cooldownTimer = window.setInterval(updateRefreshButtons, 1000);
+  const cleanup = () => {
+    window.clearInterval(cooldownTimer);
+    loadGeneration += 1;
+    impactLoadToken += 1;
+    window.removeEventListener('hashchange', cleanup);
+  };
+  window.addEventListener('hashchange', cleanup, { once: true });
+  updateRefreshButtons();
+  await loadData();
 }

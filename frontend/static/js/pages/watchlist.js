@@ -1,10 +1,20 @@
-import { api, invalidateCache } from '../api.js';
+import { api } from '../api.js';
 import { renderMarketStatus } from '../components/marketStatus.js';
 import {
   getCustomTickers, initCustomFromBackend, applyCustomOrder,
-  addTicker, removeTicker, moveTicker, resetCustom
+  addTicker, removeTicker, moveTicker, resetCustom, saveCustomTickers,
 } from '../components/customWatchlist.js';
 import { renderIcon } from '../icons.js';
+import { marketCalendarDayDelta, marketTodayISO } from '../utils/marketDate.js';
+import {
+  beginWatchlistDefaultReset,
+  createWatchlistInitialization,
+  retainWatchlistInitialization,
+  resolveWatchlistInitialization,
+  shouldRenderWatchlistRefresh,
+  stageWatchlistTicker,
+  unstageWatchlistTicker,
+} from '../utils/frontendState.js';
 
 const WATCHLIST_REFRESH_MS = 5 * 60 * 1000;
 const WATCHLIST_VISIBILITY_REFRESH_MIN_MS = 60 * 1000;
@@ -70,19 +80,14 @@ function parseEarningsDate(value) {
   return new Date(parts[0], parts[1] - 1, parts[2]);
 }
 
-function startOfToday() {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-}
-
-function daysUntilDate(date) {
-  if (!date) return null;
-  return Math.round((date - startOfToday()) / 86400000);
+function daysUntilDate(dateISO) {
+  return marketCalendarDayDelta(marketTodayISO(Date.now()), dateISO);
 }
 
 function formatEarningsDelta(item) {
   const explicit = Number(item.days_until);
-  const days = Number.isFinite(explicit) ? explicit : daysUntilDate(item.dateObj);
+  const marketDays = daysUntilDate(item.date);
+  const days = Number.isFinite(marketDays) ? marketDays : explicit;
   if (!Number.isFinite(days)) return '—';
   if (days < 0) return '已过';
   if (days === 0) return '今天';
@@ -92,7 +97,7 @@ function formatEarningsDelta(item) {
 
 function normalizeUpcomingEarnings(payload) {
   const items = Array.isArray(payload) ? payload : (payload?.earnings ?? []);
-  const today = startOfToday();
+  const todayISO = marketTodayISO(Date.now());
   return items.map((item) => {
     const ticker = String(item.ticker || '').toUpperCase();
     const dateObj = parseEarningsDate(item.earnings_date || item.date);
@@ -103,7 +108,7 @@ function normalizeUpcomingEarnings(payload) {
       dateObj,
       days_until: item.days_until,
     };
-  }).filter((item) => item.ticker && item.dateObj && item.dateObj >= today)
+  }).filter((item) => item.ticker && item.dateObj && item.date >= todayISO)
     .sort((a, b) => a.dateObj - b.dateObj || a.ticker.localeCompare(b.ticker));
 }
 
@@ -591,6 +596,37 @@ let __watchlistQuery = '';
 let __spotlightTicker = '';
 let watchlistRequestSequence = 0;
 let activeWatchlistController = null;
+let __watchlistInitialization = createWatchlistInitialization(getCustomTickers());
+
+function stagedCustomTickers() {
+  const stored = getCustomTickers();
+  if (__watchlistInitialization.phase !== 'initializing') return stored;
+  return [...new Set([...(stored || []), ...__watchlistInitialization.pending])];
+}
+
+function backendGroupTickers(groups) {
+  const tickers = [];
+  for (const group of groups || []) {
+    for (const stock of group?.stocks || []) {
+      const ticker = String(stock?.ticker || '').trim().toUpperCase();
+      if (ticker) tickers.push(ticker);
+    }
+  }
+  return tickers;
+}
+
+function finishWatchlistInitialization(groups) {
+  if (__watchlistInitialization.phase !== 'initializing') {
+    return initCustomFromBackend(groups);
+  }
+  const resolved = resolveWatchlistInitialization(
+    __watchlistInitialization,
+    backendGroupTickers(groups).slice(0, 60),
+  );
+  const saved = saveCustomTickers(resolved.tickers);
+  __watchlistInitialization = createWatchlistInitialization(saved);
+  return saved;
+}
 
 function isWatchlistMounted(generation = activeMountGeneration) {
   return generation === activeMountGeneration
@@ -648,15 +684,17 @@ async function fetchAndCacheBackend(mountGeneration = activeMountGeneration, for
     setFreshnessStatus('loading', '');
   }
   try {
-    const requestedTickers = getCustomTickers();
+    const requestedTickers = __watchlistInitialization.phase === 'initializing'
+      ? null
+      : getCustomTickers();
     if (requestedTickers !== null && requestedTickers.length === 0) {
       setFreshnessStatus('empty', '');
       return { stocks: [], changed: false };
     }
-    if (force) invalidateCache('wl:', { prefix: true });
     const payload = await api.watchlist({
       signal: controller.signal,
       tickers: requestedTickers === null ? undefined : requestedTickers,
+      refresh: force,
     });
     if (!isWatchlistMounted(mountGeneration) || requestId !== watchlistRequestSequence) return null;
     lastWatchlistNetworkAt = Date.now();
@@ -690,7 +728,9 @@ async function fetchAndCacheBackend(mountGeneration = activeMountGeneration, for
     const changed = payloadVersion !== __watchlistState.payloadVersion;
     const recoveredFromError = Boolean(__watchlistState.fetchError);
     // Initialize custom from backend on first visit or when the backend universe changes.
-    if (changed) initCustomFromBackend(groups);
+    if (changed || __watchlistInitialization.phase === 'initializing') {
+      finishWatchlistInitialization(groups);
+    }
     if (changed) {
       __watchlistState.backendStocks = stocks;
       __watchlistState.payloadVersion = payloadVersion;
@@ -724,6 +764,14 @@ async function fetchAndCacheBackend(mountGeneration = activeMountGeneration, for
     console.warn('api.watchlist() failed; preserving the last available state.', e);
     const hadData = __watchlistState.backendStocks.length > 0;
     __watchlistState.fetchError = e.message || 'API unavailable';
+    if (__watchlistInitialization.phase === 'initializing') {
+      // Keep the first-add queue separate from an explicitly saved list. A
+      // transient default-universe failure must not turn pending additions
+      // into a permanent replacement for the backend defaults.
+      __watchlistInitialization = retainWatchlistInitialization(
+        __watchlistInitialization,
+      );
+    }
     if (hadData) {
       setFreshnessStatus('error', __watchlistState.asOf);
       return { stocks: __watchlistState.backendStocks, changed: false };
@@ -732,7 +780,7 @@ async function fetchAndCacheBackend(mountGeneration = activeMountGeneration, for
     setFreshnessStatus('unavailable', '');
     const changed = !__watchlistState.fetchErrorRendered;
     __watchlistState.fetchErrorRendered = true;
-    return { stocks: [], changed };
+    return { stocks: [], changed, retryable: true };
   } finally {
     if (activeWatchlistController === controller) activeWatchlistController = null;
   }
@@ -742,7 +790,7 @@ function renderCardsFromCustom() {
   const grid = document.getElementById('watchlist-grid');
   const count = document.getElementById('watchlist-card-count');
   if (!grid) return;
-  const customTickers = getCustomTickers() || __watchlistState.backendStocks.map(s => s.ticker);
+  const customTickers = stagedCustomTickers() || __watchlistState.backendStocks.map(s => s.ticker);
   const ordered = applyCustomOrder(__watchlistState.backendStocks, customTickers).map(s => {
     if (s._placeholder) {
       return normalizeStock({ ticker: s.ticker, price: null, change_percent: null, name: s.ticker, sector: 'CUSTOM' });
@@ -833,7 +881,22 @@ function bindCardEvents() {
       const action = btn.dataset.editAction;
       const ticker = btn.dataset.ticker;
       if (!ticker) return;
-      if (action === 'remove') removeTicker(ticker);
+      if (__watchlistInitialization.phase === 'initializing') {
+        if (action === 'remove') {
+          __watchlistInitialization = unstageWatchlistTicker(__watchlistInitialization, ticker);
+        } else {
+          const pending = [...__watchlistInitialization.pending];
+          const index = pending.indexOf(ticker);
+          const target = action === 'left' ? index - 1 : index + 1;
+          if (index >= 0 && target >= 0 && target < pending.length) {
+            [pending[index], pending[target]] = [pending[target], pending[index]];
+            __watchlistInitialization = Object.freeze({
+              phase: 'initializing',
+              pending: Object.freeze(pending),
+            });
+          }
+        }
+      } else if (action === 'remove') removeTicker(ticker);
       else if (action === 'left') moveTicker(ticker, 'left');
       else if (action === 'right') moveTicker(ticker, 'right');
       renderCardsFromCustom();
@@ -927,7 +990,7 @@ function bindEditToolbar(mountGeneration = activeMountGeneration) {
   const handleAdd = () => {
     const v = (addInput?.value || '').trim().toUpperCase();
     if (!v) return;
-    const before = getCustomTickers() || [];
+    const before = stagedCustomTickers() || [];
     if (!WATCHLIST_TICKER_PATTERN.test(v)) {
       setAddFeedback('代码格式不正确', 'error');
       return;
@@ -940,7 +1003,9 @@ function bindEditToolbar(mountGeneration = activeMountGeneration) {
       setAddFeedback('自选列表最多 100 只', 'error');
       return;
     }
-    const after = addTicker(v);
+    const after = __watchlistInitialization.phase === 'initializing'
+      ? (__watchlistInitialization = stageWatchlistTicker(__watchlistInitialization, v)).pending
+      : addTicker(v);
     if (!after.includes(v)) {
       setAddFeedback('未能添加这个代码', 'error');
       return;
@@ -966,16 +1031,26 @@ function bindEditToolbar(mountGeneration = activeMountGeneration) {
   resetBtn?.addEventListener('click', () => {
     if (!confirm('确认重置为默认自选？当前自定义将被覆盖。')) return;
     resetCustom();
-    initCustomFromBackend(__watchlistState.backendStocks.map(s => ({ stocks: [s] })));
-    setAddFeedback('已恢复默认自选');
+    removeStoredSnapshot();
+    __watchlistInitialization = beginWatchlistDefaultReset();
+    __watchlistState = {
+      backendStocks: [],
+      payloadVersion: '',
+      asOf: '',
+      source: '',
+      fetchError: '',
+      fetchErrorRendered: false,
+    };
+    setAddFeedback('正在重新读取默认自选');
     renderCardsFromCustom();
+    void refreshWatchlist(mountGeneration, true);
   });
 }
 
 async function refreshWatchlist(mountGeneration, force = false) {
   const result = await fetchAndCacheBackend(mountGeneration, force);
   if (result === null || !isWatchlistMounted(mountGeneration)) return;
-  if (!result.changed && renderedMountGeneration === mountGeneration) return;
+  if (!shouldRenderWatchlistRefresh(result, renderedMountGeneration === mountGeneration)) return;
   const grid = document.getElementById('watchlist-grid');
   renderCardsFromCustom();
   grid?.classList.remove('is-loading');
@@ -990,6 +1065,7 @@ export function renderWatchlist() {
   __watchlistSort = 'custom';
   __watchlistQuery = '';
   __spotlightTicker = '';
+  __watchlistInitialization = createWatchlistInitialization(getCustomTickers());
   const snapshot = readStoredSnapshot();
   const hasSnapshot = Boolean(snapshot?.stocks?.length);
   if (!hasSnapshot) {
@@ -1015,7 +1091,7 @@ export function renderWatchlist() {
     __watchlistState.asOf = snapshot.asOf;
     __watchlistState.source = 'snapshot';
     __watchlistState.fetchError = '';
-    initCustomFromBackend(groups);
+    finishWatchlistInitialization(groups);
     renderCardsFromCustom();
     const attempted = Number(payload?.attempted);
     const succeeded = Number(payload?.succeeded);

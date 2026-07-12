@@ -23,6 +23,7 @@
   margin-inline: auto;
   padding: clamp(14px, 1.8vw, 24px) clamp(18px, 3.2vw, 40px) 96px;
   overflow: clip;
+  overflow-clip-margin: 5rem;
   color: var(--screen-ink);
   font-family: var(--font-sans, "Avenir Next", "PingFang SC", sans-serif);
   font-size: 1rem;
@@ -82,6 +83,7 @@
 }
 
 .screening-page button:focus-visible,
+.screening-page input:focus-visible,
 .screening-page select:focus-visible,
 .screening-page summary:focus-visible,
 .screening-page a:focus-visible {
@@ -442,8 +444,10 @@
   display: flex;
   gap: 8px;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
   padding: 2px 2px 6px;
   scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
   scroll-snap-type: x proximity;
 }
 

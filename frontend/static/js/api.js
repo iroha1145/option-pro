@@ -4,7 +4,7 @@ const API_BASE = '/api';
 // In-memory cache per API call. Cleared only when page reloads.
 const cache = new Map();      // key → { data, ts }
 const inflight = new Map();   // key → Promise (dedup concurrent requests)
-const latestCancellableRequest = new Map();
+const latestCacheRequest = new Map();
 let cancellableRequestSequence = 0;
 
 // Hard cap on in-memory cache to prevent unbounded growth in long sessions.
@@ -42,32 +42,49 @@ function cached(key, ttl, fn, signal = null) {
   // inflight map below for cross-component de-duplication.
   if (signal) {
     const requestId = ++cancellableRequestSequence;
-    latestCancellableRequest.set(key, requestId);
+    latestCacheRequest.set(key, requestId);
     return fn(signal).then(
       (data) => {
         // Detail-page requests may overlap when the ticker, timeframe or
         // visibility changes quickly. Only the newest request may update the
         // shared cache; every caller still receives its own response.
-        if (latestCancellableRequest.get(key) !== requestId) return data;
-        latestCancellableRequest.delete(key);
+        if (latestCacheRequest.get(key) !== requestId) return data;
+        latestCacheRequest.delete(key);
         return remember(key, data);
       },
       (error) => {
-        if (latestCancellableRequest.get(key) === requestId) latestCancellableRequest.delete(key);
+        if (latestCacheRequest.get(key) === requestId) latestCacheRequest.delete(key);
         throw error;
       }
     );
   }
 
   if (inflight.has(key)) return inflight.get(key);
+  const requestId = ++cancellableRequestSequence;
+  latestCacheRequest.set(key, requestId);
   const p = fn()
     .then(data => {
       inflight.delete(key);
+      if (latestCacheRequest.get(key) !== requestId) return data;
+      latestCacheRequest.delete(key);
       return remember(key, data);
     })
-    .catch(err => { inflight.delete(key); throw err; });
+    .catch(err => {
+      inflight.delete(key);
+      if (latestCacheRequest.get(key) === requestId) latestCacheRequest.delete(key);
+      throw err;
+    });
   inflight.set(key, p);
   return p;
+}
+
+function refreshableCached(key, ttl, fn, options = {}) {
+  if (!options.refresh) return cached(key, ttl, fn, options.signal);
+  // Explicit user refreshes must not join an older in-flight request or reuse
+  // a browser-memory result. A private signal makes this request own its fetch.
+  invalidateCache(key);
+  const signal = options.signal || new AbortController().signal;
+  return cached(key, ttl, fn, signal);
 }
 
 export function invalidateCache(key = '', options = {}) {
@@ -205,7 +222,12 @@ export const api = {
     }
     const cacheScope = tickers.length ? [...tickers].sort().join(',') : 'all';
     const query = tickers.length ? `?tickers=${encodeURIComponent(tickers.join(','))}` : '';
-    return cached(`wl:${cacheScope}`, T.WATCHLIST, (signal) => fetchJson(`${API_BASE}/stocks/watchlist${query}`, { signal }), options.signal);
+    return refreshableCached(
+      `wl:${cacheScope}`,
+      T.WATCHLIST,
+      (signal) => fetchJson(`${API_BASE}/stocks/watchlist${query}`, { signal }),
+      options,
+    );
   },
   stock(ticker, options = {}) { return cached(`s:${enc(ticker)}`, T.PRICES, (signal) => fetchJson(`${API_BASE}/stocks/${enc(ticker)}`, { signal }), options.signal); },
   stockLogo(ticker, options = {}) { return fetchBlob(`${API_BASE}/stocks/${enc(ticker)}/logo`, { signal: options.signal }); },
@@ -276,8 +298,23 @@ export const api = {
 
   // Status
   marketStatus(options = {}) { return cached('mkt', T.PRICES, (signal) => fetchJson(`${API_BASE}/market/status`, { signal }), options.signal); },
-  marketIndices()       { return cached('mkt-idx', T.PRICES, () => fetchJson(`${API_BASE}/market/indices`)); },
-  earnings()            { return cached('earn', T.STATIC, () => fetchJson(`${API_BASE}/earnings/upcoming`)); },
+  marketIndices(options = {}) {
+    return refreshableCached(
+      'mkt-idx',
+      T.PRICES,
+      (signal) => fetchJson(`${API_BASE}/market/indices`, { signal }),
+      options,
+    );
+  },
+  earnings(options = {}) {
+    const query = options.refresh ? '?refresh=true' : '';
+    return refreshableCached(
+      'earn',
+      T.STATIC,
+      (signal) => fetchJson(`${API_BASE}/earnings/upcoming${query}`, { signal }),
+      options,
+    );
+  },
 
   earningsCorrelation() {
     return fetchJson(`${API_BASE}/ai/earnings-correlation`);
@@ -295,11 +332,11 @@ export const api = {
       if (value !== undefined && value !== null && value !== '') query.set(key, value);
     });
     const suffix = query.toString() ? `?${query}` : '';
-    return cached(
+    return refreshableCached(
       `strength:${suffix}`,
       T.STRENGTH,
       (signal) => fetchJson(`${API_BASE}/strength/scan${suffix}`, { signal }, 180 * 1000),
-      options.signal,
+      options,
     );
   },
 

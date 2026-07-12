@@ -11,14 +11,14 @@ const signalLabels = {
   volume_zscore: '成交量标准分',
   macd_hist: '指数平滑异同移动平均线柱值（MACD）',
   relative_strength_spy: '相对标普500指数强弱',
-  iv_rank: '隐含波动率分位',
   close_position: '区间收盘位置',
   obv_divergence: '能量潮背离（OBV）'
 };
 
 function normalizeScore(score) {
-  const number = Number(score || 0);
-  return Math.max(0, Math.min(100, Number.isFinite(number) ? number : 0));
+  if (score === null || score === undefined || score === '') return null;
+  const number = Number(score);
+  return Number.isFinite(number) ? Math.max(0, Math.min(100, number)) : null;
 }
 
 function scoreTone(score, role) {
@@ -37,8 +37,18 @@ function scoreTone(score, role) {
   return 'accent';
 }
 
-function gauge(title, score, label, reasons = null, role = 'neutral') {
+export function renderScoreGauge(title, score, label, reasons = null, role = 'neutral') {
   const normalized = normalizeScore(score);
+  if (normalized === null) {
+    return `<article class="tb-card tb-card--muted tb-card--missing">
+      <div class="tb-card__top">
+        <span class="label-caps">${esc(title)}</span>
+        <strong data-numeric>—</strong>
+      </div>
+      <div class="tb-card__meter tb-card__meter--missing" role="status" aria-label="${esc(title)}数据不足"></div>
+      <p>${esc(label || '数据不足')}</p>
+    </article>`;
+  }
   const rounded = Math.round(normalized);
   const raising = Array.isArray(reasons?.raising) ? reasons.raising : [];
   const suppressing = Array.isArray(reasons?.suppressing) ? reasons.suppressing : [];
@@ -61,8 +71,11 @@ function gauge(title, score, label, reasons = null, role = 'neutral') {
   </article>`;
 }
 
-function interpret(key, signal) {
-  const value = Number(signal?.value);
+export function interpretSignal(key, signal) {
+  const raw = signal?.value;
+  if (raw === null || raw === undefined || raw === '') return '数据不足';
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return '数据不足';
   if (key.includes('rsi')) return value >= 70 ? '过热' : value <= 30 ? '超卖' : value >= 60 ? '偏热' : value <= 40 ? '偏弱' : '中性';
   if (key.includes('sma')) return value > 5 ? '明显过热' : value > 1 ? '轻度过热' : value < -5 ? '明显超跌' : value < -1 ? '轻度超跌' : '贴近均线';
   if (key.includes('volume')) return value > 2 ? '放量' : value < -1 ? '缩量' : '正常';
@@ -138,10 +151,10 @@ export function renderTopBottomSignals(container, ticker, data, options = {}) {
 
   const scores = data.scores || {};
   const signals = data.signals || {};
-  const preferred = ['rsi14','sma20_dist','sma50_dist','return_20d','volume_zscore','macd_hist','relative_strength_spy','iv_rank','close_position','obv_divergence'];
+  const preferred = ['rsi14','sma20_dist','sma50_dist','return_20d','volume_zscore','macd_hist','relative_strength_spy','close_position','obv_divergence'];
   const rows = preferred.filter((key) => signals[key]).map((key) => {
     const signal = signals[key];
-    return `<li><span>${esc(signalLabels[key] || signal.label || key)}</span><strong data-numeric>${fmt(signal.value, key.includes('macd') ? 4 : 1)} <span aria-hidden="true">→</span> ${interpret(key, signal)}</strong></li>`;
+    return `<li><span>${esc(signalLabels[key] || signal.label || key)}</span><strong data-numeric>${fmt(signal.value, key.includes('macd') ? 4 : 1)} <span aria-hidden="true">→</span> ${interpretSignal(key, signal)}</strong></li>`;
   }).join('');
   const formattedTime = formatLocalTimestamp(data.as_of);
   const dataTime = formattedTime ? `数据时间 ${esc(formattedTime)}` : '数据时间待更新';
@@ -156,10 +169,10 @@ export function renderTopBottomSignals(container, ticker, data, options = {}) {
       <span class="tb-shell__time">${dataTime}${data._cached ? ' · 使用缓存' : ''}</span>
     </div>
     <div class="tb-card-grid">
-      ${gauge('趋势偏向', data.trend_bias_score ?? 50, data.trend_bias_label || '中性')}
-      ${gauge('顶部风险', scores.top_score, scores.top_label, scores.top_reasons, 'risk')}
-      ${gauge('底部机会', scores.bottom_score, scores.bottom_label, scores.bottom_reasons, 'opportunity')}
-      ${gauge('回调质量', scores.dip_buy_quality, scores.dip_buy_label, { raising: scores.dip_buy_reasons || [], suppressing: [] }, 'opportunity')}
+      ${renderScoreGauge('趋势偏向', data.trend_bias_score, data.trend_bias_label)}
+      ${renderScoreGauge('顶部风险', scores.top_score, scores.top_label, scores.top_reasons, 'risk')}
+      ${renderScoreGauge('底部机会', scores.bottom_score, scores.bottom_label, scores.bottom_reasons, 'opportunity')}
+      ${renderScoreGauge('回调质量', scores.dip_buy_quality, scores.dip_buy_label, { raising: scores.dip_buy_reasons || [], suppressing: [] }, 'opportunity')}
     </div>
     <details class="tb-breakdown">
       <summary>查看信号明细</summary>
