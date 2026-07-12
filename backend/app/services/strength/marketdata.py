@@ -161,14 +161,43 @@ def _score_option_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
 
     volume_score = _clamp(math.log10(total_volume + 1) * 20 if total_volume else 30)
     oi_score = _clamp(math.log10(total_oi + 1) * 13 if total_oi else 35)
-    iv_score = _clamp((avg_iv or 0.35) * 100 * 1.15, 20, 95)
+    iv_score = (
+        _clamp(avg_iv * 100 * 1.15, 20, 95)
+        if avg_iv is not None
+        else None
+    )
     imbalance = abs(math.log((call_volume + 1) / (put_volume + 1)))
     imbalance_score = _clamp(50 + imbalance * 12, 50, 85)
-    option_heat_score = round(_clamp(volume_score * .34 + oi_score * .30 + iv_score * .24 + imbalance_score * .12), 1)
+    option_components = [
+        (volume_score, .34),
+        (oi_score, .30),
+        (imbalance_score, .12),
+    ]
+    missing_components: list[str] = []
+    if iv_score is None:
+        missing_components.append("iv_average")
+    else:
+        option_components.append((iv_score, .24))
+    active_weight = sum(weight for _value, weight in option_components)
+    option_heat_score = round(
+        _clamp(
+            sum(value * weight for value, weight in option_components)
+            / active_weight
+        ),
+        1,
+    )
 
     put_call_volume = round(put_volume / call_volume, 2) if call_volume > 0 else (None if put_volume == 0 else 99.0)
     put_call_oi = round(put_oi / call_oi, 2) if call_oi > 0 else (None if put_oi == 0 else 99.0)
-    iv_label = "高IV" if avg_iv is not None and avg_iv >= 0.65 else ("低IV" if avg_iv is not None and avg_iv <= 0.28 else "中性IV")
+    iv_label = (
+        "隐波缺失"
+        if avg_iv is None
+        else "高IV"
+        if avg_iv >= 0.65
+        else "低IV"
+        if avg_iv <= 0.28
+        else "中性IV"
+    )
     updated = _first_number(payload, "updated")
     dte = _first_number(payload, "dte")
 
@@ -177,6 +206,9 @@ def _score_option_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
         "iv_rank": None,
         "iv_average": avg_iv,
         "iv_label": iv_label,
+        "active_weight": round(active_weight, 2),
+        "coverage": round(active_weight, 2),
+        "missing_components": missing_components,
         "source_status": "active",
         "provider": "MarketData.app",
         "contracts": len(symbols),

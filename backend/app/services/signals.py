@@ -233,16 +233,49 @@ def compute_atr(hist: pd.DataFrame, period: int = 14) -> pd.Series:
 
 
 def compute_obv_divergence(close: pd.Series, volume: pd.Series, lookback: int = 20) -> float | None:
-    """Return -100..100 style divergence: positive price vs weak OBV => top risk; negative price vs strong OBV => bottom setup."""
-    if len(close) < lookback + 1 or len(volume) < lookback + 1:
+    """Return bounded price-versus-signed-volume divergence for one window."""
+    if close is None or volume is None or lookback < 1:
         return None
-    direction = close.diff().apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
-    obv = (direction * volume).fillna(0).cumsum()
-    base_idx = -(lookback + 1)
-    price_ret = close.iloc[-1] / close.iloc[base_idx] - 1
-    obv_ret = (obv.iloc[-1] - obv.iloc[base_idx]) / max(abs(obv.iloc[base_idx]), volume.iloc[base_idx], 1)
-    divergence = (price_ret - obv_ret) * 100
-    return _safe_float(divergence, 2)
+    aligned = pd.concat(
+        [
+            pd.to_numeric(close, errors="coerce").rename("close"),
+            pd.to_numeric(volume, errors="coerce").rename("volume"),
+        ],
+        axis=1,
+        join="inner",
+    )
+    if len(aligned) < lookback + 1:
+        return None
+
+    # Select the requested calendar window before validating it.  Dropping a
+    # bad latest row first would silently backfill an older bar and publish a
+    # stale value as though the current window were complete.
+    window = aligned.tail(lookback + 1).replace([math.inf, -math.inf], pd.NA)
+    if (
+        window[["close", "volume"]].isna().any().any()
+        or (window["close"] <= 0).any()
+        or (window["volume"] < 0).any()
+    ):
+        return None
+    # The first bar establishes the starting level and has no price direction,
+    # so its volume must not dilute the signed-volume denominator.
+    total_volume = _safe_float(window["volume"].iloc[1:].sum())
+    start = _safe_float(window["close"].iloc[0])
+    end = _safe_float(window["close"].iloc[-1])
+    if total_volume is None or total_volume <= 0 or start is None or end is None:
+        return None
+
+    direction = window["close"].diff().map(
+        lambda change: 1.0 if change > 0 else (-1.0 if change < 0 else 0.0)
+    )
+    signed_volume_ratio = _safe_float(
+        (direction.iloc[1:] * window["volume"].iloc[1:]).sum() / total_volume
+    )
+    if signed_volume_ratio is None:
+        return None
+    price_return = end / start - 1.0
+    divergence = 100.0 * (price_return - signed_volume_ratio)
+    return round(max(-100.0, min(100.0, divergence)), 2)
 
 
 def compute_macd_histogram(close: pd.Series) -> float | None:
@@ -275,13 +308,29 @@ def _is_above_sma_frame(hist: pd.DataFrame, period: int = 50) -> bool:
     return bool(close.iloc[-1] > sma)
 
 
-def _with_score(key: str, value: Any, label: str, scorer: Callable[[str, Any], tuple[int, int]]) -> dict:
-    top, bottom = scorer(key, value)
-    return {"value": _safe_float(value, 4) if isinstance(value, (int, float)) else value, "label": label, "top_score": top, "bottom_score": bottom}
+def _with_score(
+    key: str,
+    value: Any,
+    label: str,
+    scorer: Callable[[str, Any], tuple[int | None, int | None]],
+) -> dict:
+    normalized = _safe_float(value, 4) if isinstance(value, (int, float)) else value
+    if normalized is None:
+        top = bottom = None
+    else:
+        top, bottom = scorer(key, normalized)
+    return {
+        "value": normalized,
+        "label": label,
+        "top_score": top,
+        "bottom_score": bottom,
+    }
 
 
-def _score_market_signal(key: str, value: Any) -> tuple[int, int]:
-    v = 0 if value is None else float(value)
+def _score_market_signal(key: str, value: Any) -> tuple[int | None, int | None]:
+    if value is None:
+        return None, None
+    v = float(value)
     top = bottom = 0.0
     if key in ("sma20_distance", "sma50_distance", "sma200_distance"):
         mult = 8 if key == "sma20_distance" else (5 if key == "sma50_distance" else 2.5)
@@ -311,9 +360,24 @@ def _score_market_signal(key: str, value: Any) -> tuple[int, int]:
     return round(clamp(top)), round(clamp(bottom))
 
 
-def _score_stock_signal(key: str, value: Any) -> tuple[int, int]:
+def _score_stock_signal(key: str, value: Any) -> tuple[int | None, int | None]:
     if value is None:
-        return 0, 0
+        return None, None
+    known_keys = {
+        "sma20_dist",
+        "sma50_dist",
+        "sma200_dist",
+        "rsi14",
+        "return_20d",
+        "atr_percentile",
+        "volume_zscore",
+        "obv_divergence",
+        "relative_strength_spy",
+        "close_position",
+        "macd_hist",
+    }
+    if key not in known_keys:
+        return None, None
     v = float(value)
     top = bottom = 0.0
     if key in ("sma20_dist", "sma50_dist", "sma200_dist"):
@@ -331,8 +395,6 @@ def _score_stock_signal(key: str, value: Any) -> tuple[int, int]:
         top, bottom = clamp(v * 3), clamp(-v * 3)
     elif key == "relative_strength_spy":
         top, bottom = clamp(v * 6), clamp(-v * 6)
-    elif key == "iv_rank":
-        top, bottom = clamp((v - 50) * 1.2), clamp((v - 70) * 0.8)
     elif key == "close_position":
         top, bottom = clamp((35 - v) * 2), clamp((v - 65) * 1.2)
     elif key == "macd_hist":
@@ -453,12 +515,32 @@ def compute_stock_signals(ticker: str) -> dict:
         vol_mean = safe(volume.rolling(20).mean().iloc[-1]) if len(volume) >= 20 else None
         vol_std = safe(volume.rolling(20).std().iloc[-1]) if len(volume) >= 20 else None
         vol_cur = safe(volume.iloc[-1])
-        vol_z = safe((vol_cur - vol_mean) / vol_std) if vol_mean and vol_std and vol_std > 0 else 0
+        vol_z = (
+            safe((vol_cur - vol_mean) / vol_std)
+            if vol_cur is not None
+            and vol_mean is not None
+            and vol_std is not None
+            and vol_std > 0
+            else None
+        )
         add("volume_zscore", vol_z, "成交量Z分数")
 
-        signals["_volume_today"] = {"value": int(vol_cur) if vol_cur else 0, "label": "今日成交量"}
-        signals["_volume_avg20"] = {"value": int(vol_mean) if vol_mean else 0, "label": "20日平均成交量"}
-        signals["_volume_ratio"] = {"value": safe(vol_cur / vol_mean) if vol_mean and vol_mean > 0 else 1.0, "label": "成交量/均量比"}
+        signals["_volume_today"] = {
+            "value": int(vol_cur) if vol_cur is not None else None,
+            "label": "今日成交量",
+        }
+        signals["_volume_avg20"] = {
+            "value": int(vol_mean) if vol_mean is not None else None,
+            "label": "20日平均成交量",
+        }
+        signals["_volume_ratio"] = {
+            "value": (
+                safe(vol_cur / vol_mean)
+                if vol_cur is not None and vol_mean is not None and vol_mean > 0
+                else None
+            ),
+            "label": "成交量/均量比",
+        }
 
         add("obv_divergence", safe(compute_obv_divergence(close, volume)), "OBV背离")
 
@@ -478,7 +560,11 @@ def compute_stock_signals(ticker: str) -> dict:
         add("atm_iv_percent", round(iv * 100, 1) if iv is not None else None, "当前ATM IV%")
 
         day_range = safe(hist["High"].iloc[-1] - hist["Low"].iloc[-1])
-        close_pos = safe((close.iloc[-1] - hist["Low"].iloc[-1]) / day_range * 100) if day_range and day_range > 0 else 50
+        close_pos = (
+            safe((close.iloc[-1] - hist["Low"].iloc[-1]) / day_range * 100)
+            if day_range is not None and day_range > 0
+            else None
+        )
         add("close_position", close_pos, "收盘位于当日区间%")
 
         add("macd_hist", safe(compute_macd_histogram(close)), "MACD柱状图方向")

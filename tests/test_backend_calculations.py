@@ -14,7 +14,13 @@ from fastapi import HTTPException
 
 from app.api import market, strength as strength_api
 from app.services import scoring, signals, yahoo
-from app.services.strength import market_regime, relative_spreads, scanner, yahoo_options
+from app.services.strength import (
+    market_regime,
+    marketdata,
+    relative_spreads,
+    scanner,
+    yahoo_options,
+)
 from app.services.breakouts.config import BreakoutSettings
 
 
@@ -338,6 +344,73 @@ def test_yahoo_option_enrichment_caps_pool_and_uses_small_parallel_batches(
     assert 2 <= state["max_active"] <= 4
 
 
+def test_yahoo_option_heat_does_not_inject_a_fake_iv_value_when_missing() -> None:
+    scored = yahoo_options._score_metrics(
+        [
+            {
+                "ticker": "TEST",
+                "total_volume": 100,
+                "total_open_interest": 100,
+                "premium_flow": 1_000,
+                "call_volume": 50,
+                "put_volume": 50,
+                "call_open_interest": 50,
+                "put_open_interest": 50,
+                "iv_average": None,
+                "unusual_count": 0,
+                "source_status": "active",
+            }
+        ]
+    )["TEST"]
+
+    assert scored["atm_iv_percent"] is None
+    assert scored["option_pool_iv_rank"] is None
+    assert scored["iv_rank"] is None
+    assert scored["iv_label"] == "隐波缺失"
+    assert scored["option_heat_score"] == 50.0
+
+
+def test_marketdata_option_heat_reweights_missing_iv_and_preserves_real_iv() -> None:
+    base_payload = {
+        "optionSymbol": ["TEST-C", "TEST-P"],
+        "side": ["call", "put"],
+        "volume": [100, 200],
+        "openInterest": [300, 400],
+        "dte": [30, 30],
+        "updated": [1_700_000_000, 1_700_000_000],
+    }
+    missing = marketdata._score_option_payload(
+        {**base_payload, "iv": [None, None]}
+    )
+    assert missing is not None
+    assert missing["iv_average"] is None
+    assert missing["iv_rank"] is None
+    assert missing["iv_label"] == "隐波缺失"
+    assert missing["active_weight"] == 0.76
+    assert missing["coverage"] == 0.76
+    assert missing["missing_components"] == ["iv_average"]
+
+    volume_score = marketdata._clamp(math.log10(301) * 20)
+    oi_score = marketdata._clamp(math.log10(701) * 13)
+    imbalance = abs(math.log(101 / 201))
+    imbalance_score = marketdata._clamp(50 + imbalance * 12, 50, 85)
+    expected_without_iv = round(
+        (volume_score * .34 + oi_score * .30 + imbalance_score * .12) / .76,
+        1,
+    )
+    assert missing["option_heat_score"] == expected_without_iv
+
+    observed = marketdata._score_option_payload(
+        {**base_payload, "iv": [0.35, 0.35]}
+    )
+    assert observed is not None
+    assert observed["iv_average"] == 0.35
+    assert observed["iv_label"] == "中性IV"
+    assert observed["active_weight"] == 1.0
+    assert observed["coverage"] == 1.0
+    assert observed["missing_components"] == []
+
+
 def test_expiry_clock_uses_new_york_1600_and_fractional_dte() -> None:
     ny = ZoneInfo("America/New_York")
     now = datetime(2026, 7, 10, 10, 0, tzinfo=ny)
@@ -349,6 +422,16 @@ def test_expiry_clock_uses_new_york_1600_and_fractional_dte() -> None:
     assert expiry["dte"] == 0.25
     assert math.isclose(expiry["time_to_expiry_years"], 0.25 / 365.0)
     assert parsed == ("2026-07-10", 0.25)
+
+
+def test_expiry_clock_uses_equity_option_early_close() -> None:
+    ny = ZoneInfo("America/New_York")
+    now = datetime(2026, 12, 24, 12, 0, tzinfo=ny)
+
+    expiry = yahoo.option_expiry_metrics("2026-12-24", now=now)
+
+    assert expiry["expiration_at"].endswith("13:15:00-05:00")
+    assert expiry["dte"] == pytest.approx(75 / (24 * 60), abs=0.000001)
 
 
 def test_stock_signal_uses_atm_iv_name_without_fake_historical_rank(monkeypatch: pytest.MonkeyPatch) -> None:

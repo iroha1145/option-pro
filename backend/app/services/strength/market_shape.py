@@ -16,11 +16,8 @@ from statistics import pstdev
 from typing import Any, Mapping, Sequence
 
 
-MARKET_SHAPE_VERSION = (
-    os.environ.get("MARKET_SHAPE_VERSION", "market-shape-v3").strip()
-    or "market-shape-v3"
-)
-HYSTERESIS_VERSION = "market-shape-hysteresis-v1"
+MARKET_SHAPE_VERSION = "market-shape-v3"
+HYSTERESIS_VERSION = "market-shape-hysteresis-v2"
 
 
 def _env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
@@ -413,6 +410,10 @@ def replay_market_shape(
     entered_at: datetime | None = None
     pending_state: str | None = None
     pending_days = 0
+    pending_phase: str | None = None
+    exit_pending_days = 0
+    enter_pending_days = 0
+    exit_confirmed = False
     days_in_state = 0
     raw_state: str | None = None
     emergency_override = False
@@ -435,6 +436,10 @@ def replay_market_shape(
         if raw_state == stable_state:
             pending_state = None
             pending_days = 0
+            pending_phase = None
+            exit_pending_days = 0
+            enter_pending_days = 0
+            exit_confirmed = False
             continue
 
         if _is_emergency_bear(regime, raw_state):
@@ -444,22 +449,52 @@ def replay_market_shape(
             days_in_state = 1
             pending_state = None
             pending_days = 0
+            pending_phase = None
+            exit_pending_days = 0
+            enter_pending_days = 0
+            exit_confirmed = False
             emergency_override = True
+            continue
+
+        if pending_phase is None:
+            pending_phase = "exit"
+            pending_state = raw_state
+            exit_pending_days = 1
+            enter_pending_days = 0
+            exit_confirmed = False
+        elif pending_phase == "exit":
+            pending_state = raw_state
+            exit_pending_days += 1
+
+        if pending_phase == "exit":
+            pending_days = exit_pending_days
+            if exit_pending_days >= cfg.exit_confirm_days:
+                pending_phase = "enter"
+                exit_confirmed = True
+                enter_pending_days = 0
+                pending_days = 0
             continue
 
         if pending_state != raw_state:
             pending_state = raw_state
-            pending_days = 1
+            enter_pending_days = 1
         else:
-            pending_days += 1
-        confirmation_days = max(cfg.enter_confirm_days, cfg.exit_confirm_days)
-        if pending_days >= confirmation_days and days_in_state > cfg.min_dwell_days:
+            enter_pending_days += 1
+        pending_days = enter_pending_days
+        if (
+            enter_pending_days >= cfg.enter_confirm_days
+            and days_in_state >= cfg.min_dwell_days
+        ):
             previous_state = stable_state
             stable_state = raw_state
             entered_at = observed_at
             days_in_state = 1
             pending_state = None
             pending_days = 0
+            pending_phase = None
+            exit_pending_days = 0
+            enter_pending_days = 0
+            exit_confirmed = False
             emergency_override = False
 
     return {
@@ -470,6 +505,10 @@ def replay_market_shape(
         "days_in_state": days_in_state if stable_state is not None else 0,
         "pending_state": pending_state,
         "pending_days": pending_days,
+        "pending_phase": pending_phase,
+        "exit_pending_days": exit_pending_days,
+        "enter_pending_days": enter_pending_days,
+        "exit_confirmed": exit_confirmed,
         "emergency_override": emergency_override,
         "processed_days": processed,
         "hysteresis_version": cfg.hysteresis_version,
@@ -498,8 +537,19 @@ def _transition_risk(
         replay.get("raw_state") is not None
         and replay.get("raw_state") != replay.get("state")
     )
-    confirm_days = max(config.enter_confirm_days, config.exit_confirm_days)
-    pending_progress = _clamp(float(replay.get("pending_days") or 0) / confirm_days)
+    pending_phase = replay.get("pending_phase")
+    if pending_phase == "exit":
+        pending_progress = 0.5 * _clamp(
+            float(replay.get("exit_pending_days") or 0)
+            / max(1, config.exit_confirm_days)
+        )
+    elif pending_phase == "enter":
+        pending_progress = 0.5 + 0.5 * _clamp(
+            float(replay.get("enter_pending_days") or 0)
+            / max(1, config.enter_confirm_days)
+        )
+    else:
+        pending_progress = 0.0
     instability = _state_instability(regime)
     days_in_state = max(0, int(replay.get("days_in_state") or 0))
     dwell_maturity = _clamp(days_in_state / max(1, config.min_dwell_days))
@@ -571,6 +621,10 @@ def build_market_shape(
             "days_in_state": 0,
             "pending_state": None,
             "pending_days": 0,
+            "pending_phase": None,
+            "exit_pending_days": 0,
+            "enter_pending_days": 0,
+            "exit_confirmed": False,
             "as_of": as_of.isoformat(),
             "rules": {},
             "evidence": {},
@@ -661,6 +715,10 @@ def build_market_shape(
         "days_in_state": replay.get("days_in_state", 0),
         "pending_state": replay.get("pending_state"),
         "pending_days": replay.get("pending_days", 0),
+        "pending_phase": replay.get("pending_phase"),
+        "exit_pending_days": replay.get("exit_pending_days", 0),
+        "enter_pending_days": replay.get("enter_pending_days", 0),
+        "exit_confirmed": bool(replay.get("exit_confirmed")),
         "as_of": as_of.isoformat(),
         "rules": rules,
         "evidence": evidence,

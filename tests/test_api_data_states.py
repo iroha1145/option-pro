@@ -94,6 +94,76 @@ def test_endpoint_cache_failed_unique_loads_do_not_retain_locks():
     assert stocks._endpoint_lock_users == {}
 
 
+def test_logo_not_found_uses_a_short_negative_cache(monkeypatch):
+    stocks._endpoint_cache.clear()
+    calls = 0
+
+    async def missing(_symbol):
+        nonlocal calls
+        calls += 1
+        raise HTTPException(status_code=404, detail="missing")
+
+    monkeypatch.setattr(stocks, "_fetch_company_logo", missing)
+
+    for _ in range(2):
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(stocks._cached_company_logo("NONE"))
+        assert exc.value.status_code == 404
+
+    assert calls == 1
+    cached = stocks._endpoint_cache["logo:NONE"]
+    assert cached.value == stocks._LOGO_NOT_FOUND
+
+
+def test_logo_response_sandboxes_svg_and_rejects_private_redirect_targets(monkeypatch):
+    async def svg(_symbol):
+        return {
+            "content": b"<svg xmlns='http://www.w3.org/2000/svg'></svg>" * 2,
+            "media_type": "image/svg+xml",
+            "source": "https://logos.example/AAPL.svg",
+        }
+
+    monkeypatch.setattr(stocks, "_cached_company_logo", svg)
+    response = asyncio.run(stocks.stock_logo("AAPL"))
+
+    assert response.headers["content-security-policy"].startswith("sandbox")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert stocks._safe_logo_url("https://127.0.0.1/internal.svg") is False
+    assert stocks._safe_logo_url("http://logos.example/AAPL.svg") is False
+    assert stocks._safe_logo_url("https://localhost/internal.svg") is False
+    assert stocks._safe_logo_url("https://internal.example/AAPL.svg") is False
+    assert stocks._safe_logo_url(
+        "https://financialmodelingprep.com/image-stock/AAPL.png"
+    ) is True
+
+
+def test_logo_invalid_variants_cannot_bypass_the_canonical_negative_cache(monkeypatch):
+    stocks._endpoint_cache.clear()
+    calls = 0
+
+    async def missing(_symbol):
+        nonlocal calls
+        calls += 1
+        raise HTTPException(status_code=404, detail="missing")
+
+    monkeypatch.setattr(stocks, "_fetch_company_logo", missing)
+
+    for symbol in ("AAPL", "US.AAPL"):
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.run(stocks._cached_company_logo(symbol))
+        assert exc_info.value.status_code == 404
+    assert calls == 1
+    assert set(key for key in stocks._endpoint_cache if key.startswith("logo:")) == {
+        "logo:AAPL"
+    }
+
+    for invalid in ("AAPL!", "AAPL@", "AAPL..", "AAPL-"):
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.run(stocks._cached_company_logo(invalid))
+        assert exc_info.value.status_code == 404
+    assert calls == 1
+
+
 def test_unusual_options_reports_total_provider_failure(monkeypatch):
     class BrokenTicker:
         def __init__(self, _symbol):

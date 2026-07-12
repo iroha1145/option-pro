@@ -734,7 +734,7 @@ def _daily_replay_as_of(index_value: Any, fallback: datetime, offset: int) -> da
             timestamp = timestamp.tz_localize(_NY)
         else:
             timestamp = timestamp.tz_convert(_NY)
-        from app.api.market import _early_close_minutes
+        from app.services.market_calendar import early_close_minutes as _early_close_minutes
 
         close_minutes = _early_close_minutes(timestamp.date()) or 16 * 60
         timestamp = timestamp.normalize() + pd.Timedelta(minutes=close_minutes)
@@ -800,7 +800,10 @@ def _bound_index_data_as_of(
     index_data: dict[str, pd.DataFrame],
     observed_at: datetime,
 ) -> dict[str, pd.DataFrame]:
-    from app.api.market import _early_close_minutes, _is_trading_day
+    from app.services.market_calendar import (
+        early_close_minutes as _early_close_minutes,
+        is_trading_day as _is_trading_day,
+    )
 
     local_observed = observed_at.astimezone(_NY)
     completed_date = local_observed.date()

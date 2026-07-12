@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+import math
+import time
 from typing import Literal
 
 import yfinance as yf
@@ -9,11 +11,81 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.services import yahoo
 from app.services.cache import cache
+from app.services.utils import sanitize
 
 router = APIRouter(prefix="/api/options", tags=["options"])
 POPULAR_TICKERS = ["NVDA", "TSLA", "AAPL", "AMD", "AMZN", "META", "MSFT", "SPY", "QQQ", "GOOGL"]
 
 _UNUSUAL_TTL = 120  # seconds; the scan costs ~30 Yahoo calls, never run it per request
+_UNUSUAL_FAILURE_TTL = 30
+_UNUSUAL_FAILURE_MAX_KEYS = 128
+_unusual_failure_deadlines: dict[str, float] = {}
+
+
+def _unusual_key(option_type: str, min_vol_oi: float) -> str:
+    return f"unusual:{option_type}:{min_vol_oi}"
+
+
+def _finite(value, *, minimum: float | None = None) -> float | None:
+    number = yahoo._safe_float(value)
+    if number is None or (minimum is not None and number < minimum):
+        return None
+    return number
+
+
+def _moneyness(side: str, strike: float, underlying_price: float | None) -> str:
+    if underlying_price is None or underlying_price <= 0:
+        return "unavailable"
+    if strike == underlying_price:
+        return "atm"
+    if side == "call":
+        return "otm" if strike > underlying_price else "itm"
+    return "otm" if strike < underlying_price else "itm"
+
+
+def _in_the_money(
+    side: str,
+    strike: float,
+    underlying_price: float | None,
+    provider_value,
+) -> bool | None:
+    if underlying_price is not None and underlying_price > 0:
+        if side == "call":
+            return strike < underlying_price
+        return strike > underlying_price
+    if isinstance(provider_value, bool):
+        return provider_value
+    if type(provider_value).__name__ == "bool_":
+        return bool(provider_value)
+    return None
+
+
+def _failure_cooldown(key: str) -> int:
+    now = time.monotonic()
+    for expired in [
+        item_key
+        for item_key, deadline in _unusual_failure_deadlines.items()
+        if deadline <= now
+    ]:
+        _unusual_failure_deadlines.pop(expired, None)
+    deadline = _unusual_failure_deadlines.get(key)
+    return max(0, math.ceil(deadline - now)) if deadline is not None else 0
+
+
+def _record_failure(key: str) -> None:
+    now = time.monotonic()
+    _unusual_failure_deadlines[key] = now + _UNUSUAL_FAILURE_TTL
+    if len(_unusual_failure_deadlines) > _UNUSUAL_FAILURE_MAX_KEYS:
+        oldest = min(_unusual_failure_deadlines, key=_unusual_failure_deadlines.get)
+        _unusual_failure_deadlines.pop(oldest, None)
+
+
+def _cooldown_error(retry_after: int) -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail="Yahoo options data is temporarily cooling down",
+        headers={"Retry-After": str(retry_after)},
+    )
 
 
 @router.get("/unusual")
@@ -26,11 +98,33 @@ async def unusual_activity(
     Cached (with a per-key lock) — previously every request re-scanned
     10 tickers x (expirations + 2 chains) against Yahoo with no cache at all.
     """
-    return await cache.get_or_set(
-        f"unusual:{type}:{min_vol_oi}",
-        _UNUSUAL_TTL,
-        lambda: _unusual_activity_impl(type, min_vol_oi),
-    )
+    key = _unusual_key(type, min_vol_oi)
+    retry_after = _failure_cooldown(key)
+    if retry_after > 0:
+        raise _cooldown_error(retry_after)
+
+    async def produce():
+        # Waiting callers re-check after the cache lock is acquired.  When the
+        # leader fails, followers therefore reuse the short negative result
+        # instead of each launching the same expensive provider scan.
+        locked_retry_after = _failure_cooldown(key)
+        if locked_retry_after > 0:
+            raise _cooldown_error(locked_retry_after)
+        try:
+            return await _unusual_activity_impl(type, min_vol_oi)
+        except HTTPException as exc:
+            if exc.status_code != 503:
+                raise
+            _record_failure(key)
+            raise HTTPException(
+                status_code=503,
+                detail=exc.detail,
+                headers={"Retry-After": str(_UNUSUAL_FAILURE_TTL)},
+            ) from exc
+
+    payload = await cache.get_or_set(key, _UNUSUAL_TTL, produce)
+    _unusual_failure_deadlines.pop(key, None)
+    return payload
 
 
 async def _unusual_activity_impl(type: str, min_vol_oi: float):
@@ -43,14 +137,23 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
             if not exps:
                 return {"symbol": symbol, "ok": False, "rows": [], "reason": "no_expirations"}
             try:
-                price = yahoo._safe_float(t.fast_info.last_price)
+                price = _finite(t.fast_info.last_price, minimum=0.0)
+                if price is not None and price <= 0:
+                    price = None
             except Exception:
                 price = None
             usable_chains = 0
+            chain_failures = 0
             for exp in exps:
-                chain = t.option_chain(exp)
-                if not chain.calls.empty or not chain.puts.empty:
-                    usable_chains += 1
+                try:
+                    chain = t.option_chain(exp)
+                except Exception:
+                    chain_failures += 1
+                    continue
+                if chain.calls.empty and chain.puts.empty:
+                    chain_failures += 1
+                    continue
+                usable_chains += 1
                 for side, df in [("call", chain.calls), ("put", chain.puts)]:
                     if type != "all" and type != side:
                         continue
@@ -62,30 +165,58 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
                         ratio = vol / oi
                         if ratio < min_vol_oi:
                             continue
-                        lp = yahoo._safe_float(row.get("lastPrice")) or 0
+                        strike = _finite(row.get("strike"), minimum=0.0)
+                        if strike is None or strike <= 0:
+                            continue
+                        lp = _finite(row.get("lastPrice"), minimum=0.0)
+                        iv = _finite(row.get("impliedVolatility"), minimum=0.0)
+                        premium = (
+                            _finite(lp * vol * 100, minimum=0.0)
+                            if lp is not None
+                            else None
+                        )
                         rows.append({
                             "ticker": symbol,
                             "contract_ticker": row.get("contractSymbol", ""),
                             "contract_type": side,
                             "type": side,
-                            "strike": float(row["strike"]),
+                            "strike": strike,
                             "expiration": exp,
                             "volume": vol,
                             "open_interest": oi,
                             "oi": oi,
                             "vol_oi_ratio": round(ratio, 2),
                             "vol_oi": round(ratio, 2),
-                            "premium": round(lp * vol * 100, 2) if lp else None,
+                            "premium": round(premium, 2) if premium is not None else None,
                             "last_price": lp,
-                            "implied_volatility": yahoo._safe_float(row.get("impliedVolatility")),
+                            "implied_volatility": iv,
                             "underlying_price": price,
-                            "in_the_money": bool(row.get("inTheMoney", False)),
+                            "in_the_money": _in_the_money(
+                                side,
+                                strike,
+                                price,
+                                row.get("inTheMoney"),
+                            ),
+                            "moneyness": _moneyness(side, strike, price),
+                            "direction": None,
+                            "direction_confidence": 0,
+                            "direction_status": "unavailable_without_trade_side",
+                            # Compatibility fields no longer pretend that the
+                            # contract type reveals buyer/seller direction.
+                            "signal": "unknown",
+                            "inferred_direction": "unknown",
+                            "direction_deprecated": True,
                         })
         except Exception:
             return {"symbol": symbol, "ok": False, "rows": []}
         if usable_chains == 0:
             return {"symbol": symbol, "ok": False, "rows": [], "reason": "empty_chains"}
-        return {"symbol": symbol, "ok": True, "rows": rows}
+        return {
+            "symbol": symbol,
+            "ok": True,
+            "rows": rows,
+            "limited": chain_failures > 0,
+        }
 
     # 5 in flight at a time — fast but doesn't trip Yahoo's rate limiter
     sem = asyncio.Semaphore(5)
@@ -99,24 +230,33 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
     results = []
     succeeded = 0
     failed_symbols = []
+    partial_symbols = []
     for symbol, result in zip(POPULAR_TICKERS, per_ticker):
         if isinstance(result, dict) and result.get("ok"):
             succeeded += 1
             results.extend(result.get("rows") or [])
+            if result.get("limited"):
+                partial_symbols.append(symbol)
         else:
             failed_symbols.append(symbol)
     if succeeded == 0:
-        raise HTTPException(status_code=503, detail="Yahoo options data is currently unavailable")
+        raise HTTPException(
+            status_code=503,
+            detail="Yahoo options data is currently unavailable",
+        )
     results.sort(key=lambda r: (r["vol_oi_ratio"], r.get("premium") or 0), reverse=True)
-    return {
+    return sanitize({
         "results": results[:50],
-        "data_limited": bool(failed_symbols),
-        "source_status": "active" if not failed_symbols else "degraded",
+        "data_limited": bool(failed_symbols or partial_symbols),
+        "source_status": (
+            "active" if not failed_symbols and not partial_symbols else "degraded"
+        ),
         "attempted": len(POPULAR_TICKERS),
         "succeeded": succeeded,
         "failed_symbols": failed_symbols,
+        "partial_symbols": partial_symbols,
         "as_of": datetime.now(timezone.utc).isoformat(),
-    }
+    })
 
 
 @router.get("/{ticker}/expirations")

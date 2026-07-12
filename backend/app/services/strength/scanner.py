@@ -34,13 +34,10 @@ from app.services.strength.scoring import (
     FEATURE_VERSION as STRENGTH_FEATURE_VERSION,
     NORMALIZATION_VERSION as STRENGTH_NORMALIZATION_VERSION,
     SCORE_VERSION as STRENGTH_SCORE_VERSION,
-    absolute_return_score,
-    rsi_score,
     score_intrinsic,
     score_market_fit,
     score_profile_fit,
     score_ranking,
-    weighted_available,
 )
 from app.services.strength.vol_price_match import compute_vol_price_match
 from app.services.strength.yahoo_options import (
@@ -104,16 +101,6 @@ def _clamp(
     if not math.isfinite(number):
         return default
     return max(lo, min(hi, number))
-
-
-def _score_signed_pct(value: float | None, scale: float, neutral: float = 50.0) -> float | None:
-    if value is None:
-        return None
-    return _clamp(neutral + (value * 100.0 * scale))
-
-
-def _score_rsi(value: float | None) -> float | None:
-    return rsi_score(value)
 
 
 def _pct_rank(items: list[dict[str, Any]], key: str) -> dict[str, float]:
@@ -821,16 +808,16 @@ def _complete_daily_frame(
 
     if as_of.tzinfo is None or as_of.utcoffset() is None:
         raise ValueError("as_of must include a timezone")
-    from app.api.market import _early_close_minutes, _is_trading_day
+    from app.services.market_calendar import early_close_minutes, is_trading_day
 
     local = as_of.astimezone(_NEW_YORK)
     completed = local.date()
-    close_minutes = _early_close_minutes(completed) or 16 * 60
-    if not _is_trading_day(completed) or local.hour * 60 + local.minute < close_minutes:
+    close_minutes = early_close_minutes(completed) or 16 * 60
+    if not is_trading_day(completed) or local.hour * 60 + local.minute < close_minutes:
         completed -= timedelta(days=1)
-        while not _is_trading_day(completed):
+        while not is_trading_day(completed):
             completed -= timedelta(days=1)
-    completed_close_minutes = _early_close_minutes(completed) or 16 * 60
+    completed_close_minutes = early_close_minutes(completed) or 16 * 60
     cutoff = datetime(
         completed.year,
         completed.month,
@@ -848,41 +835,16 @@ def _complete_daily_frame(
 def _completed_daily_key(as_of: datetime) -> str:
     if as_of.tzinfo is None or as_of.utcoffset() is None:
         raise ValueError("as_of must include a timezone")
-    from app.api.market import _early_close_minutes, _is_trading_day
+    from app.services.market_calendar import early_close_minutes, is_trading_day
 
     local = as_of.astimezone(_NEW_YORK)
     completed = local.date()
-    close_minutes = _early_close_minutes(completed) or 16 * 60
-    if not _is_trading_day(completed) or local.hour * 60 + local.minute < close_minutes:
+    close_minutes = early_close_minutes(completed) or 16 * 60
+    if not is_trading_day(completed) or local.hour * 60 + local.minute < close_minutes:
         completed -= timedelta(days=1)
-        while not _is_trading_day(completed):
+        while not is_trading_day(completed):
             completed -= timedelta(days=1)
     return completed.isoformat()
-
-
-def _absolute_score(value: Any, scale: float, *, center: float = 50.0) -> float | None:
-    number = _safe_float(value, 8)
-    if number is None:
-        return None
-    return round(max(0.0, min(100.0, center + number * scale)), 4)
-
-
-def _weighted_available(
-    components: dict[str, float | None],
-    weights: dict[str, float],
-) -> tuple[float | None, dict[str, float], dict[str, float], list[str]]:
-    result = weighted_available(
-        components,
-        weights,
-        min_active_weight=0.0,
-        score_version=STRENGTH_SCORE_VERSION,
-    )
-    return (
-        result.get("score"),
-        dict(result.get("effective_weights") or {}),
-        dict(result.get("contributions") or {}),
-        list(result.get("missing_components") or []),
-    )
 
 
 def _intrinsic_row(
@@ -2191,6 +2153,7 @@ async def stock_strength(ticker: str, profile: str = "balanced") -> dict[str, An
         timeframe="all",
         profile=profile,
         top=250,
+        min_price=0,
         min_avg_dollar_volume=0,
         include_options=False,
     )

@@ -74,7 +74,10 @@ def _cut_frame(
     if isinstance(bounded.index, pd.DatetimeIndex):
         bounded = bounded[~bounded.index.duplicated(keep="last")].sort_index()
         if cutoff_ts is not None:
-            from app.api.market import _early_close_minutes, _is_trading_day
+            from app.services.market_calendar import (
+                early_close_minutes as _early_close_minutes,
+                is_trading_day as _is_trading_day,
+            )
 
             local = cutoff_ts.tz_convert(_NEW_YORK)
             completed: date = local.date()

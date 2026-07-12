@@ -263,19 +263,28 @@ def _score_metrics(raw_metrics: list[dict[str, Any]]) -> dict[str, dict[str, Any
         volume_rank = ranks["total_volume"].get(ticker, 35.0 if total_volume else 25.0)
         oi_rank = ranks["total_open_interest"].get(ticker, 35.0 if total_oi else 25.0)
         premium_rank = ranks["premium_flow"].get(ticker, 35.0)
-        option_pool_iv_rank = ranks["iv_average"].get(ticker, 50.0)
+        option_pool_iv_rank = ranks["iv_average"].get(ticker)
         unusual_rank = ranks["unusual_count"].get(ticker, 50.0)
-        iv_abs_score = _clamp((avg_iv or 0.35) * 100 * 1.2, 20, 95)
+        iv_abs_score = (
+            _clamp(avg_iv * 100 * 1.2, 20, 95)
+            if avg_iv is not None
+            else None
+        )
         imbalance = abs(math.log((call_volume + 1) / (put_volume + 1)))
         imbalance_score = _clamp(50 + imbalance * 12, 50, 90)
-        option_heat = (
-            volume_rank * .32 +
-            oi_rank * .22 +
-            premium_rank * .18 +
-            unusual_rank * .12 +
-            iv_abs_score * .10 +
-            imbalance_score * .06
-        )
+        option_components = [
+            (volume_rank, .32),
+            (oi_rank, .22),
+            (premium_rank, .18),
+            (unusual_rank, .12),
+            (imbalance_score, .06),
+        ]
+        if iv_abs_score is not None:
+            option_components.append((iv_abs_score, .10))
+        active_weight = sum(weight for _value, weight in option_components)
+        option_heat = sum(
+            value * weight for value, weight in option_components
+        ) / active_weight
         if total_volume <= 0 and total_oi <= 0:
             option_heat = min(option_heat, 42.0)
 
@@ -285,7 +294,15 @@ def _score_metrics(raw_metrics: list[dict[str, Any]]) -> dict[str, dict[str, Any
             if (_safe_float(metrics.get("call_open_interest"), 4) or 0.0) > 0
             else None
         )
-        iv_label = "高IV" if avg_iv is not None and avg_iv >= 0.65 else ("低IV" if avg_iv is not None and avg_iv <= 0.28 else "中性IV")
+        iv_label = (
+            "隐波缺失"
+            if avg_iv is None
+            else "高IV"
+            if avg_iv >= 0.65
+            else "低IV"
+            if avg_iv <= 0.28
+            else "中性IV"
+        )
         scored[ticker] = {
             **metrics,
             "option_heat_score": round(_clamp(option_heat), 1),

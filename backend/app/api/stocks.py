@@ -4,11 +4,12 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
+import ipaddress
 import math
 import re
 import time
 from typing import Annotated, Any, Optional
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -141,6 +142,19 @@ async def _cached_endpoint(key: str, ttl: int, loader, *, stale_ttl: int | None 
 from app.services.utils import sanitize as _sanitize
 
 _LOGO_MEDIA_TYPES = {"image/png", "image/jpeg", "image/webp", "image/svg+xml"}
+_LOGO_MAX_BYTES = 512 * 1024
+_LOGO_NOT_FOUND_TTL = 60 * 60
+_LOGO_SUCCESS_TTL = 24 * 60 * 60
+_LOGO_NOT_FOUND = {"not_found": True}
+_LOGO_ALLOWED_HOSTS = frozenset(
+    {
+        "financialmodelingprep.com",
+        "static2.finnhub.io",
+        "eodhd.com",
+        "logo.clearbit.com",
+    }
+)
+_LOGO_TICKER_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,15}$")
 
 
 def _website_host(website: str | None) -> str | None:
@@ -162,8 +176,12 @@ def _logo_symbol_variants(symbol: str) -> list[str]:
     normalized = symbol.strip().upper()
     if normalized.startswith("US."):
         normalized = normalized[3:]
-    normalized = "".join(c for c in normalized if c.isalnum() or c in {".", "-"})
-    if not normalized:
+    if (
+        not _LOGO_TICKER_PATTERN.fullmatch(normalized)
+        or normalized.endswith((".", "-"))
+        or ".." in normalized
+        or "--" in normalized
+    ):
         return []
     variants = [normalized]
     if "." in normalized:
@@ -190,16 +208,122 @@ async def _fetch_company_logo(symbol: str) -> dict[str, Any]:
         "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
         "User-Agent": "Mozilla/5.0 (compatible; OptixPro/1.0)",
     }
-    async with httpx.AsyncClient(follow_redirects=True, timeout=6.0, headers=headers) as client:
+    async with httpx.AsyncClient(follow_redirects=False, timeout=6.0, headers=headers) as client:
         for url in _logo_urls(symbol):
-            try:
-                resp = await client.get(url)
-            except Exception:
-                continue
-            media_type = resp.headers.get("content-type", "").split(";")[0].strip().lower()
-            if resp.status_code == 200 and media_type in _LOGO_MEDIA_TYPES and len(resp.content) > 64:
-                return {"content": resp.content, "media_type": media_type, "source": url}
+            current = url
+            for _redirect in range(4):
+                if not _safe_logo_url(current):
+                    break
+                try:
+                    async with client.stream("GET", current) as resp:
+                        if resp.status_code in {301, 302, 303, 307, 308}:
+                            location = resp.headers.get("location")
+                            if not location:
+                                break
+                            current = urljoin(str(resp.url), location)
+                            continue
+                        media_type = (
+                            resp.headers.get("content-type", "")
+                            .split(";", 1)[0]
+                            .strip()
+                            .lower()
+                        )
+                        content_length = resp.headers.get("content-length")
+                        if content_length:
+                            try:
+                                if int(content_length) > _LOGO_MAX_BYTES:
+                                    break
+                            except ValueError:
+                                pass
+                        if resp.status_code != 200 or media_type not in _LOGO_MEDIA_TYPES:
+                            break
+                        chunks: list[bytes] = []
+                        size = 0
+                        async for chunk in resp.aiter_bytes():
+                            size += len(chunk)
+                            if size > _LOGO_MAX_BYTES:
+                                chunks = []
+                                break
+                            chunks.append(chunk)
+                        content = b"".join(chunks)
+                        if len(content) > 64:
+                            return {
+                                "content": content,
+                                "media_type": media_type,
+                                "source": current,
+                            }
+                        break
+                except Exception:
+                    break
     raise HTTPException(status_code=404, detail="Company logo not found")
+
+
+def _safe_logo_url(value: str) -> bool:
+    try:
+        parsed = urlparse(value)
+        if parsed.scheme.lower() != "https" or not parsed.hostname:
+            return False
+        hostname = parsed.hostname.strip("[]").lower().rstrip(".")
+        if hostname not in _LOGO_ALLOWED_HOSTS:
+            return False
+        try:
+            address = ipaddress.ip_address(hostname)
+        except ValueError:
+            return True
+        return not (
+            address.is_private
+            or address.is_loopback
+            or address.is_link_local
+            or address.is_multicast
+            or address.is_reserved
+            or address.is_unspecified
+        )
+    except Exception:
+        return False
+
+
+async def _cached_company_logo(symbol: str) -> dict[str, Any]:
+    variants = _logo_symbol_variants(symbol)
+    if not variants:
+        raise HTTPException(status_code=404, detail="Invalid ticker")
+    canonical_symbol = variants[0]
+    key = f"logo:{canonical_symbol}"
+    now = time.time()
+    hit = _usable_hit(key, now)
+    if hit is not None and hit.expires_at > now:
+        if hit.value == _LOGO_NOT_FOUND:
+            raise HTTPException(status_code=404, detail="Company logo not found")
+        return hit.value
+
+    lock = _lock_for(key)
+    try:
+        async with lock:
+            now = time.time()
+            hit = _usable_hit(key, now)
+            if hit is not None and hit.expires_at > now:
+                if hit.value == _LOGO_NOT_FOUND:
+                    raise HTTPException(status_code=404, detail="Company logo not found")
+                return hit.value
+            try:
+                value = await _fetch_company_logo(canonical_symbol)
+                ttl = _LOGO_SUCCESS_TTL
+            except HTTPException as exc:
+                if exc.status_code != 404:
+                    raise
+                value = dict(_LOGO_NOT_FOUND)
+                ttl = _LOGO_NOT_FOUND_TTL
+            _maybe_purge_endpoint_cache(now)
+            _endpoint_cache[key] = _EndpointCacheEntry(
+                expires_at=now + ttl,
+                stale_until=now + ttl,
+                fetched_at=now,
+                value=value,
+            )
+            if value == _LOGO_NOT_FOUND:
+                raise HTTPException(status_code=404, detail="Company logo not found")
+            return value
+    finally:
+        _release_lock(key, lock)
 
 
 KNOWN_TICKERS = {
@@ -624,14 +748,17 @@ async def stock_signals(ticker: str):
 @router.get("/{ticker}/logo")
 async def stock_logo(ticker: str):
     symbol = ticker.upper().strip()
-    if not _logo_symbol_variants(symbol):
+    variants = _logo_symbol_variants(symbol)
+    if not variants:
         raise HTTPException(status_code=404, detail="Invalid ticker")
-    logo = await _cached_endpoint(f"logo:{symbol}", 24 * 60 * 60, lambda: _fetch_company_logo(symbol))
+    logo = await _cached_company_logo(variants[0])
     return Response(
         content=logo["content"],
         media_type=logo["media_type"],
         headers={
             "Cache-Control": "public, max-age=86400",
+            "Content-Security-Policy": "sandbox; default-src 'none'",
+            "X-Content-Type-Options": "nosniff",
             "X-Logo-Source": logo["source"],
         },
     )

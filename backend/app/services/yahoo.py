@@ -6,6 +6,8 @@ import threading
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from app.services.market_calendar import options_close_minutes
+
 import logging
 import warnings as _warnings
 import yfinance as yf
@@ -201,14 +203,19 @@ def _cached(
 
 
 def option_expiry_metrics(expiration: str, now: datetime | None = None) -> dict[str, Any]:
-    """Time remaining to the standard US equity-option close (16:00 New York)."""
+    """Time remaining to the regular or early US equity-option close."""
     expiry_date = datetime.strptime(expiration, "%Y-%m-%d").date()
     current = now or datetime.now(NEW_YORK_TZ)
     if current.tzinfo is None:
         current = current.replace(tzinfo=NEW_YORK_TZ)
     else:
         current = current.astimezone(NEW_YORK_TZ)
-    expiration_at = datetime.combine(expiry_date, datetime_time(16, 0), tzinfo=NEW_YORK_TZ)
+    close_minutes = options_close_minutes(expiry_date) or 16 * 60
+    expiration_at = datetime.combine(
+        expiry_date,
+        datetime_time(close_minutes // 60, close_minutes % 60),
+        tzinfo=NEW_YORK_TZ,
+    )
     seconds = max((expiration_at - current).total_seconds(), 0.0)
     return {
         "expiration_at": expiration_at.isoformat(),
@@ -243,6 +250,54 @@ def get_expirations_snapshot(ticker: str) -> dict[str, Any]:
     """Get expirations with explicit cache freshness metadata."""
     expirations, metadata = _get_expirations_cached(ticker, with_metadata=True)
     return {"expirations": expirations, **metadata}
+
+
+def _option_moneyness(
+    side: str,
+    strike: float,
+    underlying_price: float | None,
+) -> str:
+    if underlying_price is None or underlying_price <= 0:
+        return "unavailable"
+    if strike == underlying_price:
+        return "atm"
+    if side == "call":
+        return "otm" if strike > underlying_price else "itm"
+    return "otm" if strike < underlying_price else "itm"
+
+
+def _option_in_the_money(
+    side: str,
+    strike: float,
+    underlying_price: float | None,
+    provider_value: Any,
+) -> bool | None:
+    if underlying_price is not None and underlying_price > 0:
+        if side == "call":
+            return strike < underlying_price
+        return strike > underlying_price
+    if isinstance(provider_value, bool):
+        return provider_value
+    if type(provider_value).__name__ == "bool_":
+        return bool(provider_value)
+    return None
+
+
+def _deep_otm_fraction(
+    side: str,
+    strike: float,
+    underlying_price: float | None,
+) -> float | None:
+    if underlying_price is None or underlying_price <= 0:
+        return None
+    distance = (
+        strike - underlying_price
+        if side == "call"
+        else underlying_price - strike
+    )
+    if distance <= 0:
+        return None
+    return distance / underlying_price
 
 
 def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
@@ -286,10 +341,13 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
         # itertuples is 5-10x faster than iterrows; _asdict() keeps dict access.
         for nt in chain.calls.itertuples(index=False):
             row = nt._asdict()
-            strike = float(row["strike"])
+            strike = _safe_float(row.get("strike"))
+            if strike is None or strike <= 0:
+                continue
             last_price = _safe_float(row.get("lastPrice"))
             iv = _resolve_iv(row, strike, last_price, price, is_call=True)
             greeks = _greeks_for(strike, iv, True)
+            break_even = strike + last_price if last_price is not None else None
             calls.append(
                 {
                     "ticker": row.get("contractSymbol", ""),
@@ -308,9 +366,12 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
                     "volume": _safe_int(row.get("volume")),
                     "open_interest": _safe_int(row.get("openInterest")),
                     "implied_volatility": iv,
-                    "in_the_money": bool(row.get("inTheMoney", False)),
-                    "break_even": strike + (last_price or 0),
-                    "break_even_price": strike + (last_price or 0),
+                    "in_the_money": _option_in_the_money(
+                        "call", strike, price, row.get("inTheMoney")
+                    ),
+                    "moneyness": _option_moneyness("call", strike, price),
+                    "break_even": break_even,
+                    "break_even_price": break_even,
                     **greeks,
                 }
             )
@@ -318,10 +379,13 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
         puts = []
         for nt in chain.puts.itertuples(index=False):
             row = nt._asdict()
-            strike = float(row["strike"])
+            strike = _safe_float(row.get("strike"))
+            if strike is None or strike <= 0:
+                continue
             last_price = _safe_float(row.get("lastPrice"))
             iv = _resolve_iv(row, strike, last_price, price, is_call=False)
             greeks = _greeks_for(strike, iv, False)
+            break_even = strike - last_price if last_price is not None else None
             puts.append(
                 {
                     "ticker": row.get("contractSymbol", ""),
@@ -340,9 +404,12 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
                     "volume": _safe_int(row.get("volume")),
                     "open_interest": _safe_int(row.get("openInterest")),
                     "implied_volatility": iv,
-                    "in_the_money": bool(row.get("inTheMoney", False)),
-                    "break_even": strike - (last_price or 0),
-                    "break_even_price": strike - (last_price or 0),
+                    "in_the_money": _option_in_the_money(
+                        "put", strike, price, row.get("inTheMoney")
+                    ),
+                    "moneyness": _option_moneyness("put", strike, price),
+                    "break_even": break_even,
+                    "break_even_price": break_even,
                     **greeks,
                 }
             )
@@ -353,8 +420,8 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
         for contract, side in all_contracts:
             vol = contract.get("volume") or 0
             oi = contract.get("open_interest") or 0
-            lp = contract.get("last_price") or 0
-            iv = contract.get("implied_volatility") or 0
+            lp = contract.get("last_price")
+            iv = contract.get("implied_volatility")
             strike = contract["strike"]
 
             reasons = []
@@ -368,8 +435,8 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
                 reasons.append(f"高成交量 {vol:,}")
 
             # Rule 3: Large premium flow (volume × price × 100 > $500K)
-            premium = vol * lp * 100 if lp else 0
-            if premium >= 500_000:
+            premium = vol * lp * 100 if lp is not None and lp > 0 else None
+            if premium is not None and premium >= 500_000:
                 reasons.append(f"大额权利金 ${premium:,.0f}")
 
             # Rule 4: Volume spike with low OI (new position building)
@@ -377,20 +444,12 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
                 reasons.append("可能新仓，待OI确认")
 
             # Rule 5: Deep OTM with high volume (speculative)
-            if price:
-                otm_pct = abs(strike - price) / price
+            otm_pct = _deep_otm_fraction(side, strike, price)
+            if otm_pct is not None:
                 if otm_pct > 0.10 and vol >= 2000:
                     reasons.append(f"深度虚值 ({otm_pct*100:.0f}% OTM)")
 
             if reasons:
-                inferred_direction = "unknown"
-                if price:
-                    # Conservative placeholder: infer direction from type + moneyness only; side data is unavailable.
-                    if side == "call" and strike >= price * 0.98:
-                        inferred_direction = "bullish"
-                    elif side == "put" and strike <= price * 1.02:
-                        inferred_direction = "bearish"
-
                 alerts.append({
                     "strike": strike,
                     "type": side,
@@ -400,12 +459,18 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
                     "open_interest": oi,
                     "last_price": lp,
                     "implied_volatility": iv,
-                    "premium_flow": round(premium, 0) if premium else None,
+                    "premium_flow": round(premium, 0) if premium is not None else None,
                     "vol_oi_ratio": round(vol / oi, 2) if oi > 0 else None,
                     "reasons": reasons,
-                    "signal": inferred_direction,
-                    "inferred_direction": inferred_direction,
-                    "direction_note": "方向推断，非确定性判断；缺少bid/ask成交位置数据",
+                    "moneyness": contract.get("moneyness")
+                    or _option_moneyness(side, strike, price),
+                    "direction": None,
+                    "direction_confidence": 0,
+                    "direction_status": "unavailable_without_trade_side",
+                    "signal": "unknown",
+                    "inferred_direction": "unknown",
+                    "direction_deprecated": True,
+                    "direction_note": "缺少成交主动方，无法判断真实交易方向",
                 })
 
         # Sort alerts by premium flow descending

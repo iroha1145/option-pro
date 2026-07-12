@@ -2,17 +2,22 @@ from __future__ import annotations
 
 import asyncio
 import math
-from datetime import date, datetime, time as datetime_time, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
 
 import yfinance as yf
 from fastapi import APIRouter, HTTPException
 
 from app.services.cache import cache as _shared_cache
+from app.services.market_calendar import (
+    ET,
+    early_close_minutes as _early_close_minutes,
+    is_trading_day as _is_trading_day,
+    market_datetime as _market_datetime,
+    market_holidays as _market_holidays,
+    next_trading_day as _next_trading_day,
+)
 
 router = APIRouter(prefix="/api/market", tags=["market"])
-
-ET = ZoneInfo("America/New_York")
 
 # Symbols served by the lightweight /indices batch endpoint (ticker bar).
 INDEX_SYMBOLS = ["^GSPC", "^IXIC", "^DJI", "^N225", "000001.SS"]
@@ -65,98 +70,6 @@ async def _build_indices():
         "source_status": "active" if succeeded == len(INDEX_SYMBOLS) else "degraded",
         "as_of": datetime.now(timezone.utc).isoformat(),
     }
-
-
-def _observed(d: date) -> date:
-    if d.weekday() == 5:  # Saturday
-        return d - timedelta(days=1)
-    if d.weekday() == 6:  # Sunday
-        return d + timedelta(days=1)
-    return d
-
-
-def _nth_weekday(year: int, month: int, weekday: int, n: int) -> date:
-    d = date(year, month, 1)
-    offset = (weekday - d.weekday()) % 7
-    return d + timedelta(days=offset + (n - 1) * 7)
-
-
-def _last_weekday(year: int, month: int, weekday: int) -> date:
-    d = date(year, month + 1, 1) - timedelta(days=1) if month < 12 else date(year, 12, 31)
-    return d - timedelta(days=(d.weekday() - weekday) % 7)
-
-
-def _easter(year: int) -> date:
-    # Anonymous Gregorian algorithm.
-    a = year % 19
-    b = year // 100
-    c = year % 100
-    d = b // 4
-    e = b % 4
-    f = (b + 8) // 25
-    g = (b - f + 1) // 3
-    h = (19 * a + b - d - g + 15) % 30
-    i = c // 4
-    k = c % 4
-    l = (32 + 2 * e + 2 * i - h - k) % 7
-    m = (a + 11 * h + 22 * l) // 451
-    month = (h + l - 7 * m + 114) // 31
-    day = ((h + l - 7 * m + 114) % 31) + 1
-    return date(year, month, day)
-
-
-def _market_holidays(year: int) -> dict[date, str]:
-    holidays = {
-        _observed(date(year, 1, 1)): "new_year",
-        _nth_weekday(year, 1, 0, 3): "martin_luther_king_jr_day",
-        _nth_weekday(year, 2, 0, 3): "presidents_day",
-        _easter(year) - timedelta(days=2): "good_friday",
-        _last_weekday(year, 5, 0): "memorial_day",
-        _observed(date(year, 6, 19)): "juneteenth",
-        _observed(date(year, 7, 4)): "independence_day",
-        _nth_weekday(year, 9, 0, 1): "labor_day",
-        _nth_weekday(year, 11, 3, 4): "thanksgiving",
-        _observed(date(year, 12, 25)): "christmas",
-    }
-    # Observed New Year's Day can fall in the previous year.
-    holidays[_observed(date(year + 1, 1, 1))] = "new_year"
-    return holidays
-
-
-def _early_close_minutes(d: date) -> int | None:
-    thanksgiving = _nth_weekday(d.year, 11, 3, 4)
-    early_dates = {
-        thanksgiving + timedelta(days=1),
-        date(d.year, 12, 24),
-    }
-    # If July 4 is a weekday, July 3 is commonly an early close unless it is a weekend.
-    july3 = date(d.year, 7, 3)
-    if july3.weekday() < 5:
-        early_dates.add(july3)
-    return 13 * 60 if d in early_dates and d.weekday() < 5 else None
-
-
-def _is_trading_day(d: date) -> bool:
-    return d.weekday() < 5 and d not in _market_holidays(d.year)
-
-
-def _next_trading_day(start: date, *, include_start: bool = False) -> date:
-    candidate = start if include_start else start + timedelta(days=1)
-    # Eight calendar days always cover at least one ordinary exchange session;
-    # keep a larger defensive bound for unusual adjacent holidays.
-    for _ in range(15):
-        if _is_trading_day(candidate):
-            return candidate
-        candidate += timedelta(days=1)
-    raise RuntimeError("Unable to determine the next US trading day")
-
-
-def _market_datetime(d: date, minutes: int) -> datetime:
-    return datetime.combine(
-        d,
-        datetime_time(hour=minutes // 60, minute=minutes % 60),
-        tzinfo=ET,
-    )
 
 
 @router.get("/status")

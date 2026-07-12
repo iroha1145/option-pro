@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import date, datetime
 import math
+import time
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -39,6 +40,8 @@ from app.services.utils import sanitize as _sanitize
 
 MARKET_TZ = ZoneInfo("America/New_York")
 MAX_EARNINGS_LOOKAHEAD_DAYS = 180
+EARNINGS_REFRESH_COOLDOWN_SECONDS = 60
+_refresh_deadlines: dict[str, float] = {}
 
 
 def _to_optional_float(value: Any) -> float | None:
@@ -160,7 +163,7 @@ def _next_future_date(candidates: list[date], today: date) -> date | None:
 
 
 @router.get("/upcoming")
-async def upcoming_earnings():
+async def upcoming_earnings(refresh: bool = False):
     """Fetch real upcoming earnings dates from Yahoo Finance.
 
     Uses the locked cache helper so concurrent cold-cache requests share ONE
@@ -169,7 +172,58 @@ async def upcoming_earnings():
     """
     today = _market_today()
     key = f"earnings:upcoming:{today.isoformat()}"
-    return await cache.get_or_set(key, 3600, lambda: _build_upcoming_earnings(today))
+    if not refresh:
+        return await cache.get_or_set(
+            key,
+            3600,
+            lambda: _build_upcoming_earnings(today),
+        )
+
+    now = time.monotonic()
+    for expired_key in [
+        item_key
+        for item_key, deadline in _refresh_deadlines.items()
+        if deadline <= now
+    ]:
+        _refresh_deadlines.pop(expired_key, None)
+    cached = cache.get(key)
+    deadline = _refresh_deadlines.get(key)
+    if deadline is not None and deadline > now:
+        retry_after = max(1, math.ceil(deadline - now))
+        if isinstance(cached, dict):
+            return _sanitize({
+                **cached,
+                "refresh_status": "cooldown",
+                "refresh_retry_after_seconds": retry_after,
+            })
+        raise HTTPException(
+            status_code=429,
+            detail="Earnings refresh is cooling down",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    # Reserve the cooldown before awaiting so simultaneous button presses
+    # cannot start duplicate provider scans.
+    _refresh_deadlines[key] = now + EARNINGS_REFRESH_COOLDOWN_SECONDS
+    try:
+        payload = await _build_upcoming_earnings(today)
+    except Exception:
+        if isinstance(cached, dict):
+            return _sanitize({
+                **cached,
+                "_stale": True,
+                "source_status": "stale",
+                "refresh_status": "failed_stale",
+                "refresh_error": "provider_refresh_failed",
+                "refresh_retry_after_seconds": EARNINGS_REFRESH_COOLDOWN_SECONDS,
+            })
+        raise
+    cache.set(key, payload, 3600)
+    return _sanitize({
+        **payload,
+        "refresh_status": "refreshed",
+        "refresh_retry_after_seconds": EARNINGS_REFRESH_COOLDOWN_SECONDS,
+    })
 
 
 async def _build_upcoming_earnings(today: date):
@@ -185,12 +239,15 @@ async def _build_upcoming_earnings(today: date):
                     cal = None
                 calendar_dates = _collect_dates(_calendar_get(cal, "Earnings Date"))
                 next_date = _next_future_date(calendar_dates, today)
+                earnings_date_source = "calendar" if next_date is not None else None
                 table_dates: list[date] = []
                 if next_date is None:
                     # The dates table is a slower fallback. Avoid it when the
                     # lightweight calendar already has a usable future date.
                     table_dates = _earnings_dates_from_table(tk)
                     next_date = _next_future_date(table_dates, today)
+                    if next_date is not None:
+                        earnings_date_source = "earnings_dates"
 
                 source_observed = bool(calendar_dates or table_dates)
                 if next_date is None:
@@ -201,6 +258,8 @@ async def _build_upcoming_earnings(today: date):
                         "data": None,
                     }
                 earnings_date = next_date.isoformat()
+                observed_at = datetime.now(MARKET_TZ).isoformat()
+                estimates_match_selected_date = next_date in set(calendar_dates)
 
                 # Full quote-summary info is expensive. Fetch it only after a
                 # ticker has been confirmed as an upcoming earnings match.
@@ -211,17 +270,44 @@ async def _build_upcoming_earnings(today: date):
                     info = {}
                 name = info.get("shortName", ticker)
 
+                eps_estimate = (
+                    _to_optional_float(_first(_calendar_get(cal, "Earnings Average")))
+                    if estimates_match_selected_date
+                    else None
+                )
+                eps_high = (
+                    _to_optional_float(_first(_calendar_get(cal, "Earnings High")))
+                    if estimates_match_selected_date
+                    else None
+                )
+                eps_low = (
+                    _to_optional_float(_first(_calendar_get(cal, "Earnings Low")))
+                    if estimates_match_selected_date
+                    else None
+                )
+                revenue_estimate = (
+                    _to_optional_float(_first(_calendar_get(cal, "Revenue Average")))
+                    if estimates_match_selected_date
+                    else None
+                )
+
                 return {"ticker": ticker, "ok": True, "source_observed": True, "data": {
                     "ticker": ticker,
                     "name": name,
                     "earnings_date": earnings_date,
                     "days_until": (next_date - today).days,
-                    "eps_estimate": _to_optional_float(_first(_calendar_get(cal, "Earnings Average"))),
-                    "eps_high": _to_optional_float(_first(_calendar_get(cal, "Earnings High"))),
-                    "eps_low": _to_optional_float(_first(_calendar_get(cal, "Earnings Low"))),
-                    "revenue_estimate": _to_optional_float(_first(_calendar_get(cal, "Revenue Average"))),
+                    "eps_estimate": eps_estimate,
+                    "eps_high": eps_high,
+                    "eps_low": eps_low,
+                    "revenue_estimate": revenue_estimate,
                     "market_cap": _to_optional_float(info.get("marketCap")),
                     "sector": info.get("sector", ""),
+                    "earnings_date_source": earnings_date_source,
+                    "estimate_source": (
+                        "calendar" if estimates_match_selected_date else None
+                    ),
+                    "source_status": "active",
+                    "observed_at": observed_at,
                 }}
             except Exception:
                 return {"ticker": ticker, "ok": False, "source_observed": False, "data": None}

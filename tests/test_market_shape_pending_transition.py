@@ -42,11 +42,14 @@ def test_consecutive_confirmation_changes_state_and_timestamps() -> None:
             snapshot("bull", 2),
             snapshot("distribution", 3),
             snapshot("distribution", 4),
+            snapshot("distribution", 5),
+            snapshot("distribution", 6),
         ],
         config=config,
     )
     assert changed["state"] == "RANGE_DISTRIBUTION"
     assert changed["previous_state"] == "BULL_TREND"
-    assert changed["entered_at"] == snapshot("distribution", 4)["as_of"].isoformat()
+    assert changed["entered_at"] == snapshot("distribution", 6)["as_of"].isoformat()
     assert changed["pending_state"] is None
     assert changed["pending_days"] == 0
+    assert changed["pending_phase"] is None

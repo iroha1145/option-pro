@@ -140,13 +140,24 @@ def rsi_score(value: Any) -> float | None:
     number = finite_number(value, lo=0.0, hi=100.0)
     if number is None:
         return None
-    if 50 <= number <= 68:
-        return round(min(100.0, 58.0 + (number - 50.0) * 1.7), 4)
-    if 68 < number <= 78:
-        return round(max(0.0, 88.0 - (number - 68.0) * 2.2), 4)
-    if number < 50:
-        return round(max(0.0, min(100.0, 42.0 + (number - 35.0) * 1.1)), 4)
-    return round(max(0.0, 50.0 - (number - 78.0) * 1.5), 4)
+    # Explicit knots keep the mapping continuous at every regime boundary.
+    # Strong-but-not-exhausted readings peak near 68, while both washed-out
+    # and severely extended readings score lower.
+    knots = (
+        (0.0, 0.0),
+        (35.0, 42.0),
+        (50.0, 58.0),
+        (68.0, 88.0),
+        (78.0, 66.0),
+        (100.0, 33.0),
+    )
+    for (left_x, left_y), (right_x, right_y) in zip(knots, knots[1:]):
+        if number <= right_x:
+            span = right_x - left_x
+            position = (number - left_x) / span if span > 0 else 0.0
+            interpolated = left_y + position * (right_y - left_y)
+            return round(max(0.0, min(100.0, interpolated)), 4)
+    return 33.0
 
 
 def relative_volume_score(value: Any) -> float | None:
