@@ -95,10 +95,11 @@ def test_alert_request_rejects_unbounded_or_unexpected_input():
 
 
 def test_real_chain_alert_direction_metadata_is_accepted(monkeypatch):
+    real_chain_alert = _valid_alert(dte=42.375)
     request = AlertsRequest.model_validate(
         {
             "ticker": "AAPL",
-            "alerts": [_valid_alert()],
+            "alerts": [real_chain_alert],
             "underlying_price": 200,
             "expiration": "2026-08-21",
         }
@@ -110,6 +111,7 @@ def test_real_chain_alert_direction_metadata_is_accepted(monkeypatch):
     assert alert.direction_confidence == 0
     assert alert.direction_status == "unavailable_without_trade_side"
     assert alert.direction_deprecated is True
+    assert alert.dte == pytest.approx(42.375)
 
     app = FastAPI()
     app.include_router(router)
@@ -120,19 +122,21 @@ def test_real_chain_alert_direction_metadata_is_accepted(monkeypatch):
         lambda _ticker, alerts, *_args: {
             "direction": alerts[0]["inferred_direction"],
             "direction_status": alerts[0]["direction_status"],
+            "dte": alerts[0]["dte"],
         },
     )
     response = client.post(
         "/api/ai/analyze-alerts",
         json={
             "ticker": "AAPL",
-            "alerts": [_valid_alert()],
+            "alerts": [real_chain_alert],
             "underlying_price": 200,
             "expiration": "2026-08-21",
         },
     )
     assert response.status_code == 200
     assert response.json()["direction"] == "unknown"
+    assert response.json()["dte"] == pytest.approx(42.375)
 
 
 def test_option_analysis_forces_unknown_without_trade_side(monkeypatch):

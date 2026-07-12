@@ -827,6 +827,7 @@
   font-weight: 700;
 }
 
+.screening-page .market-strength-panel__shape.is-degraded .market-strength-panel__shape-lead em,
 .screening-page .market-strength-panel__shape.is-unavailable .market-strength-panel__shape-lead em {
   color: color-mix(in oklch, var(--screen-warning), var(--screen-ink) 24%);
 }

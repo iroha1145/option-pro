@@ -219,11 +219,17 @@ function renderWarnings(warnings) {
 function renderShape(shape = {}) {
   const rules = normalizeRules(shape.rules);
   const warnings = normalizedWarnings(shape.warnings);
-  const shapeAvailable = String(shape.status || '').toLowerCase() === 'active';
-  const stateLabel = shape.state_label || shape.state || (shapeAvailable ? '形态待确认' : '形态暂不可用');
+  const shapeStatus = String(shape.status || '').toLowerCase();
+  const shapeUsable = shapeStatus === 'active' || shapeStatus === 'degraded';
+  const shapeClass = shapeStatus === 'active'
+    ? 'is-active'
+    : shapeStatus === 'degraded'
+      ? 'is-degraded'
+      : 'is-unavailable';
+  const stateLabel = shape.state_label || shape.state || (shapeUsable ? '形态待确认' : '形态暂不可用');
   const asOf = formatTimestamp(shape.as_of);
   return `
-    <section class="market-strength-panel__shape ${shapeAvailable ? 'is-active' : 'is-unavailable'}" aria-labelledby="market-shape-title">
+    <section class="market-strength-panel__shape ${shapeClass}" aria-labelledby="market-shape-title">
       <div class="market-strength-panel__shape-lead">
         <span>
           <small id="market-shape-title">市场形态</small>
@@ -232,8 +238,8 @@ function renderShape(shape = {}) {
         <em>${escapeHtml(statusText(shape.status))}</em>
       </div>
       <dl class="market-strength-panel__shape-metrics">
-        <div><dt>置信度</dt><dd>${escapeHtml(formatRatio(shapeAvailable ? shape.confidence : null))}</dd></div>
-        <div><dt>转向风险</dt><dd>${escapeHtml(formatRatio(shapeAvailable ? shape.transition_risk : null))}</dd></div>
+        <div><dt>置信度</dt><dd>${escapeHtml(formatRatio(shapeUsable ? shape.confidence : null))}</dd></div>
+        <div><dt>转向风险</dt><dd>${escapeHtml(formatRatio(shapeUsable ? shape.transition_risk : null))}</dd></div>
       </dl>
       ${(rules.length || warnings.length || shape.version || asOf) ? `
         <details class="market-strength-panel__shape-details">

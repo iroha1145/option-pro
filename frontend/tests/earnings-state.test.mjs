@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { api, invalidateCache } from '../static/js/api.js';
 import {
+  earningsImpactErrorMessage,
   formatEarningsEps,
   formatEarningsMoney,
 } from '../static/js/pages/earnings.js';
@@ -24,6 +25,18 @@ test('missing earnings estimates stay missing while real zero remains visible', 
   assert.equal(formatEarningsEps(0), '$0.00');
   assert.equal(formatEarningsMoney(null), '—');
   assert.equal(formatEarningsMoney(0), '$0');
+});
+
+test('soft AI impact failures cannot be presented as a loaded result', () => {
+  assert.equal(earningsImpactErrorMessage({ summary: 'ok' }), '');
+  assert.match(
+    earningsImpactErrorMessage({ error: 'ai_busy' }),
+    /繁忙/,
+  );
+  assert.match(
+    earningsImpactErrorMessage({ error: 'ai_unavailable' }),
+    /暂不可用/,
+  );
 });
 
 test('HTTP 200 stale fallback and cooldown responses keep data but expose a visible warning state', () => {

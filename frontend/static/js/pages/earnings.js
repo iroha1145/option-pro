@@ -88,6 +88,19 @@ export function formatEarningsEps(value) {
   return Number.isFinite(number) ? `$${number.toFixed(2)}` : '—';
 }
 
+export function earningsImpactErrorMessage(result) {
+  const code = String(result?.error || '').trim().toLowerCase();
+  if (!code) return '';
+  const messages = {
+    ai_not_configured: '智能关联分析尚未配置。',
+    ai_sdk_unavailable: '智能关联分析组件暂不可用。',
+    ai_input_too_large: '本次财报资料过多，暂时无法分析。',
+    ai_busy: '智能关联分析正在繁忙，请稍后重试。',
+    ai_timeout: '智能关联分析等待超时，请稍后重试。',
+  };
+  return messages[code] || '智能关联分析暂不可用，请稍后重试。';
+}
+
 function parseISO(value) {
   const [year, month, day] = String(value || '').slice(0, 10).split('-').map(Number);
   if (!year || !month || !day) return null;
@@ -481,6 +494,8 @@ async function loadImpact(root, ticker, byTicker, mountGeneration) {
   try {
     const result = await api.earningsImpact(ticker);
     if (requestToken !== impactLoadToken || !isEarningsMounted(mountGeneration) || !body.isConnected) return;
+    const impactError = earningsImpactErrorMessage(result);
+    if (impactError) throw new Error(impactError);
     body.setAttribute('aria-busy', 'false');
     body.innerHTML = renderImpactResult(item, result);
     if (status) status.textContent = `${ticker} 的关联影响已经载入`;

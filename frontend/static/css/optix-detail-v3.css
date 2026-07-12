@@ -1030,6 +1030,7 @@
   font-weight: 700;
 }
 
+.instrument-page .market-strength-panel__shape.is-degraded .market-strength-panel__shape-lead em,
 .instrument-page .market-strength-panel__shape.is-unavailable .market-strength-panel__shape-lead em {
   color: var(--detail-warning);
 }

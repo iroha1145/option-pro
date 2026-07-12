@@ -341,6 +341,24 @@ const degradedMarketPanel = marketStrengthModule.renderMarketStrengthPanel({
 });
 assert.match(degradedMarketPanel, /data-market-strength-state="partial"/, 'degraded market evidence must remain visibly partial');
 assert.match(degradedMarketPanel, /暂不生成市场强弱结论/, 'degraded market evidence must explain that no conclusion is produced');
+const degradedShapePanel = marketStrengthModule.renderMarketStrengthPanel({
+  marketRegime: {
+    status: 'degraded',
+    score: 68,
+    market_shape: {
+      status: 'degraded',
+      state: 'BULL_TREND',
+      state_label: '多头趋势',
+      confidence: 0.62,
+      transition_risk: 0.31,
+      warnings: ['可选风险数据不完整'],
+    },
+  },
+});
+assert.match(degradedShapePanel, /market-strength-panel__shape is-degraded/, 'a degraded but usable market shape needs a distinct visible state');
+assert.match(degradedShapePanel, /置信度<\/dt><dd>62%/, 'degraded market-shape confidence must remain visible');
+assert.match(degradedShapePanel, /转向风险<\/dt><dd>31%/, 'degraded market-shape transition risk must remain visible');
+assert.match(degradedShapePanel, /数据降级/, 'degraded market-shape evidence must retain its warning label');
 assert.doesNotMatch(marketStrengthPlaceholder, /技术分析计划待接入|目前仅预留|等待指标与规则/, 'the live panel must not retain placeholder copy');
 assert.match(marketStrengthPlaceholder, /index_trend_score[\s\S]*market_momentum_score[\s\S]*market_breadth_score[\s\S]*market_volume_score[\s\S]*risk_appetite_score[\s\S]*risk_on_spread_score/, 'all six market-regime dimensions must be rendered from production fields');
 for (const field of ['state_label', 'confidence', 'transition_risk', 'as_of', 'rules', 'warnings', 'version']) {
@@ -442,6 +460,7 @@ assert.match(earnings, /class="earnings-event__identity"[\s\S]*<h3>\$\{escapeHtm
 assert.match(earnings, /\['Enter', ' '\]\.includes\(event\.key\)/, 'earnings cards need Enter and Space keyboard activation');
 assert.match(earnings, /data-impact-close/, 'impact research must remain optional and dismissible');
 assert.match(earnings, /returnTarget\?\.focus\(\)/, 'closing impact research must restore keyboard focus');
+assert.match(earnings, /const impactError = earningsImpactErrorMessage\(result\);[\s\S]*if \(impactError\) throw new Error\(impactError\);/, 'AI soft failures must enter the visible impact error state instead of announcing success');
 assert.match(earnings, /未来时间范围内暂无已确认财报/, 'the calendar needs a truthful empty state');
 assert.match(earningsV3, /^\.earnings-page\s*\{/m, 'earnings styles must start from their page root');
 assert.match(earningsV3, /\.earnings-week-nav button[\s\S]*min-height: 2\.75rem/, 'calendar navigation needs reliable touch targets');

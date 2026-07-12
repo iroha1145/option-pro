@@ -86,7 +86,9 @@ class AlertItem(BaseModel):
     strike: float = Field(ge=0, le=10_000_000)
     type: Literal["call", "put"]
     expiration: Expiration = ""
-    dte: Optional[int] = Field(default=None, ge=0, le=3660)
+    # The option-chain service reports the precise time remaining to the
+    # market close, so DTE can legitimately contain a fractional day.
+    dte: Optional[float] = Field(default=None, ge=0, le=3660)
     volume: int = Field(ge=0, le=2_000_000_000)
     open_interest: int = Field(default=0, ge=0, le=2_000_000_000)
     last_price: Optional[float] = Field(default=None, ge=0, le=10_000_000)
