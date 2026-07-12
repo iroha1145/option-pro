@@ -1,5 +1,5 @@
 /* Optix Pro 夜间观测台 — 渲染层(生产数据版)
-   数据全部来自 OPTIX_NET(本地代理 → 生产 /api/*);接口没有的能力一律留空并如实标注。 */
+   数据全部来自 OPTIX_NET(同源 /api/*);接口没有的能力一律留空并如实标注。 */
 (function () {
   "use strict";
   const N = window.OPTIX_NET;
@@ -129,7 +129,7 @@
   let gen = 0; // 路由代际,防陈旧渲染
 
   /* ---------- 通用状态块 ---------- */
-  const loadingView = label => `<div class="view-loading" role="status"><span class="spinner" aria-hidden="true"></span><p>${esc(label)}</p><small>数据来自生产接口 · 本地代理转发</small></div>`;
+  const loadingView = label => `<div class="view-loading" role="status"><span class="spinner" aria-hidden="true"></span><p>${esc(label)}</p><small>实时读取生产数据 · 冷启动扫描约需 1—2 分钟</small></div>`;
   const errorView = (label, detail) => `<div class="view-loading is-err" role="alert"><span class="spinner spinner--err" aria-hidden="true"></span><p>${esc(label)}</p><small>${esc(detail || "")}</small><button class="btn btn--sm" data-retry>重试</button></div>`;
   const missingBlock = (title, note) => `
     <div class="missing-block">

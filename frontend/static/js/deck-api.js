@@ -1,5 +1,5 @@
 /* Optix Pro 预览 — 真实数据层
-   所有数据来自本地代理转发的生产接口(/api/* → option.openweb-ui.xyz)。
+   所有数据来自同源生产接口(/api/*)。
    本层职责:取数、TTL 缓存、并发去重、形态规整;不做任何伪造 —— 接口没有的字段一律留空。 */
 (function () {
   "use strict";
