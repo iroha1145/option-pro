@@ -292,6 +292,7 @@ def _root_from_scan(
     )
     as_of = scan.get("published_at") or scan.get("completed_at") or scan.get("scheduled_at")
     response_time = _event_time(as_of)
+    requested_at = _now()
     scan_session = str(scan.get("session") or provider.get("session") or "") or None
     return BreakoutRootResponse(
         as_of=response_time,
@@ -308,7 +309,7 @@ def _root_from_scan(
                 settings,
                 dict(item),
                 default_session=scan_session,
-                observed_at=response_time,
+                observed_at=requested_at,
             )
             for item in list(scan.get("events") or [])
         ],

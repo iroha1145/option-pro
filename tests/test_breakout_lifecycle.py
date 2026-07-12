@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from app.services.breakouts.lifecycle import event_identity, transition_state
+from app.services.breakouts.lifecycle import (
+    classify_continuation_setup,
+    event_identity,
+    transition_state,
+)
 from app.services.breakouts.models import BreakoutLifecycleState, BreakoutSetupType
 
 
@@ -39,6 +43,52 @@ def test_failure_extended_and_terminal_behavior() -> None:
     terminal = _move(failed.state, triggered=True)
     assert terminal.changed is False
     assert terminal.state is BreakoutLifecycleState.FAILED
+
+
+def test_watching_gap_can_fail_without_being_revived() -> None:
+    failed = _move(
+        BreakoutLifecycleState.WATCHING,
+        failed=True,
+        failure_reason="gap_filled_on_complete_bar",
+    )
+    assert failed.state is BreakoutLifecycleState.FAILED
+    assert failed.reason == "gap_filled_on_complete_bar"
+    assert _move(failed.state, triggered=True).changed is False
+
+
+def test_continuation_setup_labels_keep_event_identity_separate() -> None:
+    gap_hold, _ = classify_continuation_setup(
+        BreakoutSetupType.PREMARKET_GAP,
+        BreakoutLifecycleState.WATCHING,
+        {"origin_setup_type": "PREMARKET_GAP", "gap_holding": True},
+    )
+    gap_go, _ = classify_continuation_setup(
+        gap_hold,
+        BreakoutLifecycleState.HOLDING,
+        {"origin_setup_type": "PREMARKET_GAP", "gap_and_go": True},
+    )
+    gap_fade, _ = classify_continuation_setup(
+        gap_go,
+        BreakoutLifecycleState.CONFIRMED,
+        {"origin_setup_type": "PREMARKET_GAP", "gap_faded": True},
+    )
+    retest, _ = classify_continuation_setup(
+        BreakoutSetupType.DAILY_BASE_BREAKOUT,
+        BreakoutLifecycleState.RETESTING,
+        {"retest_held": True},
+    )
+    recovery, _ = classify_continuation_setup(
+        retest,
+        BreakoutLifecycleState.RETEST_HELD,
+        {"reaccelerating": True},
+    )
+    assert (gap_hold, gap_go, gap_fade) == (
+        BreakoutSetupType.GAP_HOLD,
+        BreakoutSetupType.GAP_AND_GO,
+        BreakoutSetupType.GAP_FADE,
+    )
+    assert retest is BreakoutSetupType.RETEST_BREAKOUT
+    assert recovery is BreakoutSetupType.RECOVERY_BREAKOUT
 
 
 def test_event_identity_is_stable_and_new_pivot_creates_new_event() -> None:

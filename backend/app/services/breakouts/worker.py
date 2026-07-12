@@ -55,6 +55,23 @@ def _stable_hash(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+class _ProviderUnavailableSnapshotError(RuntimeError):
+    code = "provider_unavailable"
+
+    def __init__(self, discovery: Any) -> None:
+        warnings = list(getattr(discovery, "warnings", ()) or ())
+        self.provider_warning = str(warnings[0])[:120] if warnings else None
+        super().__init__("discovery Provider returned an unavailable snapshot")
+
+
+class _ProviderDegradedEmptySnapshotError(_ProviderUnavailableSnapshotError):
+    code = "provider_degraded_empty"
+
+    def __init__(self, discovery: Any) -> None:
+        super().__init__(discovery)
+        self.args = ("degraded discovery snapshot contained no usable candidates",)
+
+
 async def _maybe_await(value: Any) -> Any:
     if inspect.isawaitable(value):
         return await value
@@ -160,15 +177,35 @@ class BreakoutWorker:
             raise TypeError("scan_service must be callable")
 
         candidates = list(getattr(discovery, "candidates", ()) or ())
-        previous_events = self.repository.latest_events_for_tickers(
-            [getattr(candidate, "ticker", "") for candidate in candidates]
+        carryover_batch = self.repository.load_carryover_events(
+            as_of=clock_snapshot.as_of,
+            event_ttl_seconds=float(
+                getattr(self.settings, "event_ttl_seconds", 86_400)
+            ),
+            limit=min(
+                200,
+                max(1, int(getattr(self.settings, "provider_result_limit", 150))),
+            ),
+            expired_due_limit=min(
+                40,
+                max(1, int(getattr(self.settings, "intraday_enrich_limit", 40))),
+            ),
         )
+        carryover_events = list(carryover_batch.events)
+        previous_events: dict[str, list[Mapping[str, Any]]] = {}
+        for event in carryover_events:
+            ticker = str(event.get("ticker") or "").strip().upper()
+            if ticker:
+                previous_events.setdefault(ticker, []).append(event)
         available = {
             "discovery": discovery,
             "discovery_snapshot": discovery,
             "provider_snapshot": discovery,
             "candidates": candidates,
             "previous_events": previous_events,
+            "carryover_events": carryover_events,
+            "expired_due_event_ids": carryover_batch.expired_due_event_ids,
+            "carryover_has_more": carryover_batch.has_more,
             "clock_snapshot": clock_snapshot,
             "as_of": clock_snapshot.as_of,
             "session": clock_snapshot.session,
@@ -314,6 +351,16 @@ class BreakoutWorker:
                     as_of=market.as_of,
                     profile=profile,
                 )
+                provider_status = getattr(discovery_value, "status", None)
+                if isinstance(provider_status, Enum):
+                    provider_status = provider_status.value
+                if str(provider_status) == "unavailable":
+                    raise _ProviderUnavailableSnapshotError(discovery_value)
+                if (
+                    str(provider_status) == "degraded"
+                    and not list(getattr(discovery_value, "candidates", ()) or ())
+                ):
+                    raise _ProviderDegradedEmptySnapshotError(discovery_value)
                 service_value = await self._invoke_scan_service(
                     discovery_value,
                     market,
@@ -389,12 +436,19 @@ class BreakoutWorker:
             error_code = str(getattr(exc, "code", "scan_failed"))[:120]
             self.repository.fail_scan(scan_id, error_code, type(exc).__name__, now=self.clock.now())
             health = self._provider_health(provider, error_code=error_code)
+            details = {
+                "error_type": type(exc).__name__,
+                "session": market.session.value,
+            }
+            provider_warning = getattr(exc, "provider_warning", None)
+            if provider_warning:
+                details["provider_warning"] = str(provider_warning)[:120]
             try:
                 self.repository.record_provider_health(health, now=self.clock.now())
                 self._status(
                     "degraded",
                     error_code=error_code,
-                    details={"error_type": type(exc).__name__},
+                    details=details,
                 )
             except Exception:
                 pass

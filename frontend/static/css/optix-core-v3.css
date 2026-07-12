@@ -1132,7 +1132,7 @@ h3 {
 
   .sidebar-nav {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 5px;
   }
 
@@ -1230,7 +1230,7 @@ h3 {
     left: 10px;
     z-index: 65;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     min-height: 60px;
     padding: 6px;
     border: 1px solid color-mix(in oklch, var(--line), transparent 5%);

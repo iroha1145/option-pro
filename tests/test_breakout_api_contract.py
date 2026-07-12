@@ -206,6 +206,7 @@ def test_current_reads_only_completed_scan_and_never_calls_provider(tmp_path, mo
     )
     settings = _settings(path)
     monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: settings)
+    monkeypatch.setattr(breakout_api, "_now", lambda: NOW + timedelta(hours=1))
 
     async def forbidden_scan(*_args, **_kwargs):
         raise AssertionError("GET API must not call the discovery Provider")
@@ -218,6 +219,7 @@ def test_current_reads_only_completed_scan_and_never_calls_provider(tmp_path, mo
     assert [item["ticker"] for item in payload["events"]] == ["AAPL"]
     assert VERSION_KEYS.issubset(payload["versions"])
     assert EVENT_KEYS.issubset(payload["events"][0])
+    assert payload["events"][0]["event_age_seconds"] == 3600
     assert datetime.fromisoformat(payload["as_of"].replace("Z", "+00:00")).utcoffset() is not None
     assert (
         datetime.fromisoformat(

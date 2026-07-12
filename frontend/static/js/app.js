@@ -5,6 +5,7 @@ const routeLoaders = {
   sectors: (url) => import(url).then((module) => module.renderSectors),
   earnings: (url) => import(url).then((module) => module.renderEarnings),
   screener: (url) => import(url).then((module) => module.renderScreener),
+  breakouts: (url) => import(url).then((module) => module.renderBreakouts),
   detail: (url) => import(url).then((module) => module.mountDetail),
 };
 const routeModulePaths = {
@@ -12,6 +13,7 @@ const routeModulePaths = {
   sectors: './pages/sectors.js',
   earnings: './pages/earnings.js',
   screener: './pages/screener.js',
+  breakouts: './pages/breakouts.js',
   detail: './pages/detail.js',
 };
 const routePromises = new Map();
@@ -23,6 +25,7 @@ const routeTitles = {
   sectors: '板块',
   earnings: '财报',
   screener: '选股',
+  breakouts: '突破雷达',
   detail: '标的详情'
 };
 

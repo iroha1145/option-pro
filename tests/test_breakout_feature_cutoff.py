@@ -5,7 +5,9 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
+import pytest
 
+from app.services.breakouts.config import BreakoutSettings
 from app.services.breakouts.feature_engine import (
     compute_feature_snapshot,
     trim_daily_bars,
@@ -212,3 +214,70 @@ def test_opening_range_uses_six_complete_bars_and_ignores_future_tail() -> None:
     assert first["opening_range_high"] == 106.0
     assert first["opening_range_low"] == 99.0
     assert first == second
+
+
+def test_opening_range_uses_configured_minutes_and_requires_every_five_minute_bar() -> None:
+    day = datetime(2026, 7, 10, tzinfo=NY)
+    index = pd.date_range(day.replace(hour=9, minute=30), periods=6, freq="5min")
+    close = np.linspace(100, 105, len(index))
+    intraday = pd.DataFrame(
+        {
+            "Open": close - 0.2,
+            "High": close + 1,
+            "Low": close - 1,
+            "Close": close,
+            "Volume": 10_000,
+        },
+        index=index,
+    )
+    cutoff = TemporalCutoff(
+        event_at=day.replace(hour=9, minute=45),
+        completed_daily_session=_daily().index[-1].date(),
+        session=MarketSession.REGULAR,
+    )
+
+    configured = compute_feature_snapshot(
+        daily=_daily(),
+        intraday=intraday,
+        cutoff=cutoff,
+        opening_range_minutes=15,
+    )
+    incomplete = compute_feature_snapshot(
+        daily=_daily(),
+        intraday=intraday.drop(index[1]),
+        cutoff=cutoff,
+        opening_range_minutes=15,
+    )
+    default_range = compute_feature_snapshot(
+        daily=_daily(),
+        intraday=intraday,
+        cutoff=cutoff,
+    )
+
+    assert configured["opening_range_complete"] is True
+    assert configured["opening_range_high"] == 103.0
+    assert configured["opening_range_low"] == 99.0
+    assert incomplete["opening_range_complete"] is False
+    assert incomplete["opening_range_high"] is None
+    assert default_range["opening_range_complete"] is False
+
+
+def test_opening_range_rejects_non_five_minute_configuration() -> None:
+    day = datetime(2026, 7, 10, tzinfo=NY)
+    cutoff = TemporalCutoff(
+        event_at=day.replace(hour=10, minute=0),
+        completed_daily_session=_daily().index[-1].date(),
+        session=MarketSession.REGULAR,
+    )
+    with pytest.raises(ValueError, match="multiple of 5"):
+        compute_feature_snapshot(
+            daily=_daily(),
+            intraday=pd.DataFrame(),
+            cutoff=cutoff,
+            opening_range_minutes=17,
+        )
+    with pytest.raises(ValueError, match="multiple of 5"):
+        BreakoutSettings(
+            _env_file=None,
+            BREAKOUT_OPENING_RANGE_MINUTES=17,
+        )

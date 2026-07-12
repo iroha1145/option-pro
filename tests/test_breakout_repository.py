@@ -62,6 +62,27 @@ def _begin(repo: BreakoutRepository, at: datetime) -> str:
     )
 
 
+def _publish(
+    repo: BreakoutRepository,
+    at: datetime,
+    events: list[dict],
+    *,
+    published_at: datetime | None = None,
+) -> str:
+    published = published_at or at
+    scan = repo.begin_scan(
+        provider="fixture",
+        session="regular",
+        scheduled_at=at,
+        config_hash="config-v1",
+        versions_hash="versions-v1",
+        versions={"database": "breakout-db-v1"},
+        now=published,
+    )
+    repo.publish_scan(scan, _snapshot(at, events), now=published)
+    return scan
+
+
 def test_schema_pragmas_and_read_only_connection(tmp_path):
     path = tmp_path / "breakouts.db"
     repo = BreakoutRepository(path)
@@ -166,6 +187,113 @@ def test_event_transition_idempotency_and_cursor_stays_on_original_scan(tmp_path
         ).fetchone()[0] == 2
 
 
+def test_event_date_filter_uses_market_trading_date_across_utc_midnight(tmp_path):
+    repo = BreakoutRepository(tmp_path / "market-date.db")
+    repo.initialize()
+    event_at = datetime(2026, 7, 11, 0, 30, tzinfo=timezone.utc)
+    event = _event("event-market-date", "AAPL", event_at)
+    event["trading_date"] = "2026-07-10"
+    _publish(repo, event_at, [event])
+
+    market_day = repo.list_events(date="2026-07-10")
+    utc_day = repo.list_events(date="2026-07-11")
+
+    assert [item["event_id"] for item in market_day["events"]] == [
+        "event-market-date"
+    ]
+    assert utc_day["events"] == []
+
+
+def test_setup_phase_changes_without_changing_event_identity(tmp_path):
+    repo = BreakoutRepository(tmp_path / "phase-change.db")
+    repo.initialize()
+    first_event = _event("event-gap-phase", "GAP", NOW)
+    first_event["setup_type"] = "PREMARKET_GAP"
+    first = _begin(repo, NOW)
+    repo.publish_scan(first, _snapshot(NOW, [first_event]), now=NOW)
+
+    later_at = NOW + timedelta(minutes=35)
+    continued = dict(first_event)
+    continued.update(
+        {
+            "setup_type": "GAP_HOLD",
+            "lifecycle_state": "HOLDING",
+            "previous_state": "WATCHING",
+            "event_at": later_at,
+            "last_seen_at": later_at,
+        }
+    )
+    second = _begin(repo, later_at)
+    repo.publish_scan(second, _snapshot(later_at, [continued]), now=later_at)
+
+    connection = repo.open_read_connection()
+    try:
+        current = connection.execute(
+            """
+            SELECT event_id,setup_type,first_seen_at
+            FROM breakout_events WHERE ticker='GAP'
+            """
+        ).fetchall()
+        phases = connection.execute(
+            """
+            SELECT scan_run_id,setup_type FROM breakout_scan_events
+            WHERE event_id='event-gap-phase' ORDER BY created_at,scan_run_id
+            """
+        ).fetchall()
+    finally:
+        connection.close()
+    assert len(current) == 1
+    assert tuple(current[0]) == (
+        "event-gap-phase",
+        "GAP_HOLD",
+        NOW.isoformat(timespec="microseconds").replace("+00:00", "Z"),
+    )
+    assert {tuple(row) for row in phases} == {
+        (first, "PREMARKET_GAP"),
+        (second, "GAP_HOLD"),
+    }
+
+
+def test_terminal_event_cannot_receive_a_rediscovery_revival_transition(tmp_path):
+    repo = BreakoutRepository(tmp_path / "terminal-monotonic.db")
+    repo.initialize()
+    failed = _event("event-terminal", "TERM", NOW)
+    failed["lifecycle_state"] = "FAILED"
+    first = _begin(repo, NOW)
+    repo.publish_scan(first, _snapshot(NOW, [failed]), now=NOW)
+
+    later = NOW + timedelta(minutes=5)
+    rediscovered = dict(failed)
+    rediscovered.update(
+        {
+            "lifecycle_state": "WATCHING",
+            "previous_state": "DISCOVERED",
+            "event_at": later,
+            "last_seen_at": later,
+        }
+    )
+    payload = _snapshot(later, [rediscovered])
+    payload["transitions"] = [
+        {
+            "event_id": "event-terminal",
+            "from_state": "DISCOVERED",
+            "to_state": "WATCHING",
+            "reason": "rediscovered",
+            "evidence_at": later,
+        }
+    ]
+    second = _begin(repo, later)
+    repo.publish_scan(second, payload, now=later)
+
+    detail = repo.get_event("event-terminal")
+    assert detail is not None
+    assert detail["lifecycle_state"] == "FAILED"
+    assert all(
+        transition["to_state"] != "WATCHING"
+        for transition in detail["transitions"]
+    )
+
+
 def test_non_finite_or_oversized_json_is_rejected(tmp_path):
     path = tmp_path / "breakouts.db"
     repo = BreakoutRepository(path)
@@ -254,3 +382,157 @@ def test_retention_is_fenced_redacts_raw_payloads_and_keeps_event_history(tmp_pa
     assert redacted == '{"redacted":true}'
     assert raw_debug == "{}"
     assert archived_provider == 0
+
+
+def test_load_carryover_events_is_point_in_time(tmp_path):
+    repo = BreakoutRepository(tmp_path / "point-in-time.db")
+    repo.initialize()
+
+    visible = _event("event-visible", "AAPL", NOW - timedelta(minutes=30))
+    future_observation = _event(
+        "event-future-observation",
+        "MSFT",
+        NOW + timedelta(minutes=1),
+    )
+    _publish(
+        repo,
+        NOW - timedelta(minutes=20),
+        [visible, future_observation],
+        published_at=NOW - timedelta(minutes=20),
+    )
+
+    future_publication = _event(
+        "event-future-publication",
+        "NVDA",
+        NOW - timedelta(minutes=15),
+    )
+    _publish(
+        repo,
+        NOW + timedelta(minutes=10),
+        [future_publication],
+        published_at=NOW + timedelta(minutes=10),
+    )
+
+    batch = repo.load_carryover_events(
+        as_of=NOW,
+        event_ttl_seconds=3_600,
+        limit=10,
+        expired_due_limit=4,
+    )
+
+    assert [event["event_id"] for event in batch.events] == ["event-visible"]
+    assert batch.expired_due_event_ids == frozenset()
+    assert batch.has_more is False
+
+
+def test_load_carryover_events_reconstructs_event_before_a_future_update(tmp_path):
+    repo = BreakoutRepository(tmp_path / "point-in-time-update.db")
+    repo.initialize()
+    original = _event(
+        "event-updated-later",
+        "AAPL",
+        NOW - timedelta(minutes=30),
+    )
+    _publish(
+        repo,
+        NOW - timedelta(minutes=20),
+        [original],
+        published_at=NOW - timedelta(minutes=20),
+    )
+    future = dict(original)
+    future.update(
+        {
+            "event_at": NOW + timedelta(minutes=10),
+            "last_seen_at": NOW + timedelta(minutes=10),
+            "lifecycle_state": "CONFIRMED",
+        }
+    )
+    _publish(
+        repo,
+        NOW + timedelta(minutes=10),
+        [future],
+        published_at=NOW + timedelta(minutes=10),
+    )
+
+    batch = repo.load_carryover_events(
+        as_of=NOW,
+        event_ttl_seconds=3_600,
+        limit=10,
+        expired_due_limit=4,
+    )
+
+    assert [event["event_id"] for event in batch.events] == [
+        "event-updated-later"
+    ]
+    assert batch.events[0]["lifecycle_state"] == original["lifecycle_state"]
+    assert batch.events[0]["last_seen_at"].startswith("2026-07-13T13:30:00")
+
+
+def test_load_carryover_events_ttl_boundary_due_and_terminal_exclusion(tmp_path):
+    repo = BreakoutRepository(tmp_path / "ttl-boundary.db")
+    repo.initialize()
+    cutoff = NOW - timedelta(hours=1)
+
+    due = _event(
+        "event-due",
+        "DUE",
+        cutoff - timedelta(microseconds=1),
+    )
+    due["last_seen_at"] = NOW - timedelta(minutes=5)
+    boundary = _event("event-boundary", "EDGE", cutoff)
+    failed = _event("event-failed", "FAIL", NOW - timedelta(minutes=20))
+    failed["lifecycle_state"] = "FAILED"
+    expired = _event("event-expired", "OLD", cutoff - timedelta(minutes=10))
+    expired["lifecycle_state"] = "EXPIRED"
+    _publish(
+        repo,
+        NOW - timedelta(minutes=5),
+        [due, boundary, failed, expired],
+        published_at=NOW - timedelta(minutes=5),
+    )
+
+    batch = repo.load_carryover_events(
+        as_of=NOW,
+        event_ttl_seconds=3_600,
+        limit=10,
+        expired_due_limit=4,
+    )
+
+    assert [event["event_id"] for event in batch.events] == [
+        "event-due",
+        "event-boundary",
+    ]
+    assert batch.expired_due_event_ids == frozenset({"event-due"})
+    assert batch.has_more is False
+
+
+def test_load_carryover_events_is_bounded_and_reports_more_work(tmp_path):
+    repo = BreakoutRepository(tmp_path / "bounded.db")
+    repo.initialize()
+
+    due_oldest = _event("event-due-oldest", "DUE1", NOW - timedelta(hours=3))
+    due_newer = _event("event-due-newer", "DUE2", NOW - timedelta(hours=2))
+    live_oldest = _event("event-live-oldest", "LIVE1", NOW - timedelta(minutes=50))
+    live_middle = _event("event-live-middle", "LIVE2", NOW - timedelta(minutes=40))
+    live_newest = _event("event-live-newest", "LIVE3", NOW - timedelta(minutes=30))
+    _publish(
+        repo,
+        NOW - timedelta(minutes=5),
+        [due_oldest, due_newer, live_oldest, live_middle, live_newest],
+        published_at=NOW - timedelta(minutes=5),
+    )
+
+    batch = repo.load_carryover_events(
+        as_of=NOW,
+        event_ttl_seconds=3_600,
+        limit=3,
+        expired_due_limit=1,
+    )
+
+    assert [event["event_id"] for event in batch.events] == [
+        "event-due-oldest",
+        "event-live-oldest",
+        "event-live-middle",
+    ]
+    assert batch.expired_due_event_ids == frozenset({"event-due-oldest"})
+    assert batch.has_more is True

@@ -270,7 +270,10 @@ def compute_feature_snapshot(
     daily: pd.DataFrame,
     intraday: pd.DataFrame,
     cutoff: TemporalCutoff,
+    opening_range_minutes: int = 30,
 ) -> dict[str, Any]:
+    if opening_range_minutes < 5 or opening_range_minutes % 5 != 0:
+        raise ValueError("opening_range_minutes must be a positive multiple of 5")
     daily_visible = trim_daily_bars(daily, cutoff)
     intraday_visible = trim_intraday_bars(intraday, cutoff)
     if intraday_visible.empty:
@@ -322,8 +325,10 @@ def compute_feature_snapshot(
     )
     local_index = current_session.index.tz_convert(NEW_YORK)
     local_minutes = local_index.hour * 60 + local_index.minute
+    opening_start = 9 * 60 + 30
+    opening_end = opening_start + opening_range_minutes
     opening = current_session[
-        (local_minutes >= 9 * 60 + 30) & (local_minutes < 10 * 60)
+        (local_minutes >= opening_start) & (local_minutes < opening_end)
     ]
     opening_minutes = {
         int(timestamp.hour * 60 + timestamp.minute)
@@ -331,8 +336,8 @@ def compute_feature_snapshot(
     }
     opening_complete = bool(
         cutoff.session is MarketSession.REGULAR
-        and event_local.hour * 60 + event_local.minute >= 10 * 60
-        and opening_minutes == set(range(9 * 60 + 30, 10 * 60, 5))
+        and event_local.hour * 60 + event_local.minute >= opening_end
+        and opening_minutes == set(range(opening_start, opening_end, 5))
     )
     opening_high = _finite(opening["High"].max()) if opening_complete else None
     opening_low = _finite(opening["Low"].min()) if opening_complete else None

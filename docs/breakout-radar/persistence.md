@@ -60,7 +60,8 @@ transition 时间线。
 - event：trading_date、ticker、setup_type、pivot_id。
 - transition：event_id、from_state、to_state、reason 和证据时点。
 
-同一扫描重试不会重复事件或转换。同日新 pivot 产生新 event_id。
+同一扫描重试不会重复事件或转换。前一事件进入终态后，同日新 pivot 产生新
+event_id；仍在跟踪的主事件不会被 Discovery 旁路复制。
 
 ## 租约
 

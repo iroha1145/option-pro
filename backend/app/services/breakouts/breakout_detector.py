@@ -39,6 +39,9 @@ def detect_breakout(
     rvol = _number(features, "rvol_time_of_day")
     upper_wick = _number(features, "upper_wick_ratio")
     hold_bars = int(features.get("hold_bars_above_pivot") or 0)
+    opening_hold_bars = int(
+        features.get("hold_bars_above_opening_range") or 0
+    )
     warnings: list[str] = []
 
     if cutoff.session is MarketSession.PREMARKET:
@@ -60,15 +63,38 @@ def detect_breakout(
     )
     if opening_complete and opening_high is not None and price is not None:
         if price > opening_high + opening_buffer:
+            opening_distance = (
+                (price - opening_high) / atr if atr is not None and atr > 0 else None
+            )
+            strong_single = (
+                clv is not None
+                and clv >= 0.70
+                and rvol is not None
+                and rvol >= 1.5
+                and upper_wick is not None
+                and upper_wick <= 0.15
+                and opening_distance is not None
+                and opening_distance >= 0.20
+            )
+            confirmed = (
+                opening_hold_bars >= config.confirmation_bars or strong_single
+            )
             return {
                 "setup_type": BreakoutSetupType.OPENING_RANGE_BREAKOUT,
-                "lifecycle_state": BreakoutLifecycleState.TRIGGERED,
-                "triggered": True,
-                "confirmed": False,
-                "transition_reason": "complete_bar_above_opening_range",
-                "opening_range_distance_atr": (
-                    (price - opening_high) / atr if atr else None
+                "lifecycle_state": (
+                    BreakoutLifecycleState.CONFIRMED
+                    if confirmed
+                    else BreakoutLifecycleState.TRIGGERED
                 ),
+                "triggered": True,
+                "confirmed": confirmed,
+                "strong_single_bar_confirmation": strong_single,
+                "transition_reason": (
+                    "opening_range_confirmation_evidence_satisfied"
+                    if confirmed
+                    else "complete_bar_above_opening_range"
+                ),
+                "opening_range_distance_atr": opening_distance,
                 "warnings": warnings,
             }
 

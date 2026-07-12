@@ -190,6 +190,7 @@ const T = {
   SIGNALS: 5  * 60 * 1000,   // 5 min — daily data
   SLOW:    10 * 60 * 1000,   // 10 min — expensive endpoints
   STRENGTH: 15 * 60 * 1000,   // 15 min — full screener scan
+  BREAKOUT: 30 * 1000,        // 30 s — completed radar snapshots
   STATIC:  60 * 60 * 1000,   // 1 hour — rarely changes
   OPTION:  30 * 1000,        // 30 s — for chain updates
 };
@@ -289,6 +290,74 @@ export const api = {
 
   strengthProfiles() {
     return cached('strength-profiles', T.STATIC, () => fetchJson(`${API_BASE}/strength/profiles`));
+  },
+
+  // Breakout Radar — read-only completed snapshots. The worker owns scanning.
+  breakoutStatus(options = {}) {
+    const key = 'breakouts:status';
+    if (options.refresh) invalidateCache(key);
+    return cached(
+      key,
+      T.BREAKOUT,
+      (signal) => fetchJson(`${API_BASE}/breakouts/status`, { signal }),
+      options.signal,
+    );
+  },
+
+  breakoutCurrent(options = {}) {
+    const key = 'breakouts:current';
+    if (options.refresh) invalidateCache(key);
+    return cached(
+      key,
+      T.BREAKOUT,
+      (signal) => fetchJson(`${API_BASE}/breakouts/current`, { signal }),
+      options.signal,
+    );
+  },
+
+  breakoutEvents(params = {}, options = {}) {
+    const query = new URLSearchParams();
+    const allowed = [
+      'date', 'ticker', 'setup_type', 'lifecycle_state', 'session',
+      'min_priority', 'limit', 'cursor',
+    ];
+    allowed.forEach((key) => {
+      const value = params[key];
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const suffix = query.toString();
+    const key = `breakouts:events:${suffix}`;
+    if (options.refresh) invalidateCache(key);
+    return cached(
+      key,
+      T.BREAKOUT,
+      (signal) => fetchJson(`${API_BASE}/breakouts/events${suffix ? `?${suffix}` : ''}`, { signal }),
+      options.signal,
+    );
+  },
+
+  breakoutEvent(eventId, options = {}) {
+    const id = encodeURIComponent(String(eventId || ''));
+    const key = `breakouts:event:${id}`;
+    if (options.refresh) invalidateCache(key);
+    return cached(
+      key,
+      T.PRICES,
+      (signal) => fetchJson(`${API_BASE}/breakouts/events/${id}`, { signal }),
+      options.signal,
+    );
+  },
+
+  breakoutTicker(ticker, options = {}) {
+    const symbol = enc(ticker);
+    const key = `breakouts:ticker:${symbol}`;
+    if (options.refresh) invalidateCache(key);
+    return cached(
+      key,
+      T.PRICES,
+      (signal) => fetchJson(`${API_BASE}/breakouts/tickers/${symbol}`, { signal }),
+      options.signal,
+    );
   },
 };
 

@@ -59,6 +59,15 @@ class LeaseInfo:
     expires_at: datetime
 
 
+@dataclass(frozen=True)
+class CarryoverBatch:
+    """A deterministic, bounded batch of events that still need evaluation."""
+
+    events: tuple[Mapping[str, Any], ...]
+    expired_due_event_ids: frozenset[str]
+    has_more: bool = False
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -1185,10 +1194,19 @@ class BreakoutRepository:
                 """
                 SELECT event_id,first_seen_at,last_seen_at,lifecycle_state,event_json
                 FROM breakout_events
-                WHERE trading_date=? AND ticker=? AND setup_type=? AND pivot_id=?
+                WHERE event_id=?
                 """,
-                (trading_date, ticker, setup, pivot_id),
+                (incoming_id,),
             ).fetchone()
+            if existing is None:
+                existing = connection.execute(
+                    """
+                    SELECT event_id,first_seen_at,last_seen_at,lifecycle_state,event_json
+                    FROM breakout_events
+                    WHERE trading_date=? AND ticker=? AND setup_type=? AND pivot_id=?
+                    """,
+                    (trading_date, ticker, setup, pivot_id),
+                ).fetchone()
             event_id = str(existing["event_id"]) if existing is not None else incoming_id
             aliases[incoming_id] = event_id
             event["event_id"] = event_id
@@ -1209,6 +1227,16 @@ class BreakoutRepository:
             priority = self._score(event, "alert_priority_score")
             confidence = self._score(event, "data_confidence_score")
             event_json = _json_dumps(event, max_bytes=MAX_EVENT_JSON_BYTES)
+            if (
+                existing is not None
+                and str(existing["lifecycle_state"]) in {"FAILED", "EXPIRED"}
+                and event["lifecycle_state"] != str(existing["lifecycle_state"])
+            ):
+                # Terminal lifecycle states are monotonic.  A rediscovered
+                # ticker may create a new event identity, but it must never
+                # revive an old terminal row through an upsert race.
+                records.append(_json_loads(existing["event_json"], {}))
+                continue
             if existing is None:
                 connection.execute(
                     """
@@ -1242,12 +1270,16 @@ class BreakoutRepository:
                 connection.execute(
                     """
                     UPDATE breakout_events
-                    SET lifecycle_state=?,event_at=?,first_seen_at=?,last_seen_at=?,
+                    SET trading_date=?,setup_type=?,pivot_id=?,lifecycle_state=?,
+                        event_at=?,first_seen_at=?,last_seen_at=?,
                         source_snapshot_id=?,alert_priority_score=?,data_confidence_score=?,
                         current_scan_run_id=?,event_json=?,updated_at=?
                     WHERE event_id=?
                     """,
                     (
+                        trading_date,
+                        setup,
+                        pivot_id,
                         event["lifecycle_state"],
                         event_at,
                         event["first_seen_at"],
@@ -1278,6 +1310,14 @@ class BreakoutRepository:
             aliases.get(str(item.get("event_id") or ""), str(item.get("event_id") or ""))
             for item in values
         }
+        terminal_by_event_id = {
+            str(event.get("event_id") or ""): str(
+                _enum_value(event.get("lifecycle_state")) or ""
+            )
+            for event in events
+            if str(_enum_value(event.get("lifecycle_state")) or "")
+            in {"FAILED", "EXPIRED"}
+        }
         for event in events:
             previous = _enum_value(event.get("previous_state"))
             current = _enum_value(event.get("lifecycle_state"))
@@ -1302,6 +1342,12 @@ class BreakoutRepository:
                 raise ValueError("transition event_id is required")
             from_state = str(_enum_value(transition.get("from_state")) or "")
             to_state = str(_enum_value(transition.get("to_state")) or "")
+            terminal_state = terminal_by_event_id.get(event_id)
+            if terminal_state is not None and to_state != terminal_state:
+                # _upsert_events may have preserved an older terminal row when
+                # discovery rediscovered the same deterministic identity.  Do
+                # not attach a synthetic revival transition to that row.
+                continue
             reason = str(transition.get("reason") or "")[:120]
             evidence = transition.get("evidence_at") or transition.get("event_at")
             if not to_state or evidence is None:
@@ -1793,7 +1839,9 @@ class BreakoutRepository:
             clauses = ["scan_run_id=?"]
             params: list[Any] = [scan_run_id]
             if date is not None:
-                clauses.append("substr(event_at,1,10)=?")
+                clauses.append(
+                    "json_extract(event_snapshot_json,'$.trading_date')=?"
+                )
                 params.append(str(date))
             if ticker is not None:
                 clauses.append("ticker=?")
@@ -1945,24 +1993,173 @@ class BreakoutRepository:
             self._require_schema(connection)
             rows = connection.execute(
                 f"""
-                SELECT ticker,event_json FROM breakout_events
-                WHERE ticker IN ({placeholders}) AND EXISTS(
-                    SELECT 1 FROM breakout_scan_events se
-                    JOIN breakout_scan_runs sr ON sr.scan_run_id=se.scan_run_id
-                    WHERE se.event_id=breakout_events.event_id AND sr.status='completed'
+                WITH ranked AS (
+                    SELECT ticker,event_json,
+                           ROW_NUMBER() OVER(
+                               PARTITION BY ticker
+                               ORDER BY last_seen_at DESC,event_id DESC
+                           ) AS position
+                    FROM breakout_events
+                    WHERE ticker IN ({placeholders}) AND EXISTS(
+                        SELECT 1 FROM breakout_scan_events se
+                        JOIN breakout_scan_runs sr ON sr.scan_run_id=se.scan_run_id
+                        WHERE se.event_id=breakout_events.event_id
+                          AND sr.status='completed'
+                    )
                 )
-                ORDER BY ticker,last_seen_at DESC,event_id DESC
+                SELECT ticker,event_json FROM ranked
+                WHERE position<=?
+                ORDER BY ticker,position
                 """,
-                symbols,
+                (*symbols, per_ticker),
             ).fetchall()
             result: dict[str, list[Mapping[str, Any]]] = {symbol: [] for symbol in symbols}
             for row in rows:
-                bucket = result[str(row["ticker"])]
-                if len(bucket) < per_ticker:
-                    bucket.append(_json_loads(row["event_json"], {}))
+                result[str(row["ticker"])].append(
+                    _json_loads(row["event_json"], {})
+                )
             return result
         finally:
             connection.close()
+
+    def load_carryover_events(
+        self,
+        *,
+        as_of: datetime,
+        event_ttl_seconds: float,
+        limit: int = 150,
+        expired_due_limit: int = 40,
+    ) -> CarryoverBatch:
+        """Load a fair, point-in-time batch of non-terminal published events.
+
+        Recent events are evaluated least-recently first.  A reserved, bounded
+        lane also returns events whose lifecycle TTL has just elapsed so the
+        service can publish the terminal ``EXPIRED`` transition instead of
+        leaving stale non-terminal rows behind after a worker outage.
+        """
+
+        observed_at = _aware_utc(as_of, field="as_of")
+        if event_ttl_seconds <= 0:
+            raise ValueError("event_ttl_seconds must be positive")
+        if limit < 1 or limit > 200:
+            raise ValueError("carryover limit must be between 1 and 200")
+        if expired_due_limit < 1 or expired_due_limit > min(limit, 40):
+            raise ValueError(
+                "expired_due_limit must be between 1 and min(limit, 40)"
+            )
+        ttl_cutoff = _timestamp(
+            observed_at - timedelta(seconds=float(event_ttl_seconds))
+        )
+        observed_text = _timestamp(observed_at)
+        connection = self._read_connection()
+        try:
+            self._require_schema(connection)
+            connection.execute("BEGIN")
+            rows = connection.execute(
+                """
+                WITH eligible_snapshots AS (
+                    SELECT event.event_id,event.event_snapshot_json,
+                           json_extract(
+                               event.event_snapshot_json,'$.first_seen_at'
+                           ) AS first_seen_at,
+                           json_extract(
+                               event.event_snapshot_json,'$.last_seen_at'
+                           ) AS last_seen_at,
+                           event.lifecycle_state,
+                           ROW_NUMBER() OVER(
+                               PARTITION BY event.event_id
+                               ORDER BY scan.published_at DESC,
+                                        event.event_at DESC,
+                                        scan.scan_run_id DESC
+                           ) AS snapshot_position
+                    FROM breakout_scan_events AS event
+                    JOIN breakout_scan_runs AS scan
+                      ON scan.scan_run_id=event.scan_run_id
+                    WHERE scan.status='completed'
+                      AND scan.published_at IS NOT NULL
+                      AND scan.published_at<=?
+                      AND event.event_at<=?
+                      AND json_extract(
+                          event.event_snapshot_json,'$.first_seen_at'
+                      )<=?
+                      AND json_extract(
+                          event.event_snapshot_json,'$.last_seen_at'
+                      )<=?
+                ),
+                latest AS (
+                    SELECT * FROM eligible_snapshots
+                    WHERE snapshot_position=1
+                      AND lifecycle_state NOT IN ('FAILED','EXPIRED')
+                ),
+                classified AS (
+                    SELECT *,first_seen_at<? AS is_due FROM latest
+                ),
+                lane_ranked AS (
+                    SELECT *,ROW_NUMBER() OVER(
+                        PARTITION BY is_due
+                        ORDER BY CASE
+                                     WHEN is_due THEN first_seen_at
+                                     ELSE last_seen_at
+                                 END ASC,
+                                 event_id ASC
+                    ) AS lane_position
+                    FROM classified
+                )
+                SELECT event_id,event_snapshot_json,is_due,lane_position
+                FROM lane_ranked
+                WHERE (is_due=1 AND lane_position<=?)
+                   OR (is_due=0 AND lane_position<=?)
+                ORDER BY is_due DESC,lane_position ASC
+                """,
+                (
+                    observed_text,
+                    observed_text,
+                    observed_text,
+                    observed_text,
+                    ttl_cutoff,
+                    expired_due_limit + 1,
+                    limit + 1,
+                ),
+            ).fetchall()
+            due_rows = [row for row in rows if int(row["is_due"]) == 1]
+            selected_due = due_rows[:expired_due_limit]
+            live_capacity = limit - len(selected_due)
+            live_rows = [row for row in rows if int(row["is_due"]) == 0]
+            selected_live = live_rows[:live_capacity]
+            selected = [*selected_due, *selected_live]
+            return CarryoverBatch(
+                events=tuple(
+                    _json_loads(row["event_snapshot_json"], {})
+                    for row in selected
+                ),
+                expired_due_event_ids=frozenset(
+                    str(row["event_id"]) for row in selected_due
+                ),
+                has_more=(
+                    len(due_rows) > len(selected_due)
+                    or len(live_rows) > len(selected_live)
+                ),
+            )
+        finally:
+            connection.close()
+
+    def active_events_for_carryover(
+        self,
+        *,
+        as_of: datetime,
+        event_ttl_seconds: float,
+        limit: int = 150,
+    ) -> list[Mapping[str, Any]]:
+        """Compatibility view of :meth:`load_carryover_events`."""
+
+        return list(
+            self.load_carryover_events(
+                as_of=as_of,
+                event_ttl_seconds=event_ttl_seconds,
+                limit=limit,
+                expired_due_limit=min(limit, 40),
+            ).events
+        )
 
     def status(self) -> Mapping[str, Any]:
         """Read database, worker and Provider status without creating the file."""
@@ -2149,6 +2346,7 @@ class BreakoutRepository:
 __all__ = [
     "BreakoutRepository",
     "BreakoutRepositoryError",
+    "CarryoverBatch",
     "DEFAULT_LOCK_NAME",
     "InvalidCursorError",
     "LeaseInfo",

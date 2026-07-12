@@ -26,6 +26,7 @@ ALLOWED_TRANSITIONS = {
     },
     BreakoutLifecycleState.WATCHING: {
         BreakoutLifecycleState.TRIGGERED,
+        BreakoutLifecycleState.FAILED,
         BreakoutLifecycleState.EXPIRED,
     },
     BreakoutLifecycleState.TRIGGERED: {
@@ -72,6 +73,83 @@ ALLOWED_TRANSITIONS = {
         BreakoutLifecycleState.EXPIRED,
     },
 }
+
+
+_GAP_SETUPS = {
+    BreakoutSetupType.PREMARKET_GAP,
+    BreakoutSetupType.GAP_AND_GO,
+    BreakoutSetupType.GAP_HOLD,
+    BreakoutSetupType.GAP_FADE,
+}
+
+
+def classify_continuation_setup(
+    current_setup: BreakoutSetupType | str,
+    previous_state: BreakoutLifecycleState | str,
+    observation: Mapping[str, Any],
+    *,
+    detection_setup: BreakoutSetupType | str | None = None,
+    market_state: str | None = None,
+) -> tuple[BreakoutSetupType, str]:
+    """Classify an existing event without changing its stable identity.
+
+    Lifecycle state and setup classification answer different questions.  The
+    former records progress; the latter records the shape currently being
+    observed.  In particular, a premarket gap keeps one ``event_id`` while its
+    setup evolves to hold, continuation, or fade after the open.
+    """
+
+    setup = (
+        current_setup
+        if isinstance(current_setup, BreakoutSetupType)
+        else BreakoutSetupType(str(current_setup))
+    )
+    state = (
+        previous_state
+        if isinstance(previous_state, BreakoutLifecycleState)
+        else BreakoutLifecycleState(str(previous_state))
+    )
+    detected = (
+        detection_setup
+        if isinstance(detection_setup, BreakoutSetupType)
+        else BreakoutSetupType(str(detection_setup))
+        if detection_setup is not None
+        else None
+    )
+    origin_raw = observation.get("origin_setup_type")
+    try:
+        origin = BreakoutSetupType(str(origin_raw)) if origin_raw is not None else setup
+    except ValueError:
+        origin = setup
+
+    if origin in _GAP_SETUPS or setup in _GAP_SETUPS:
+        if observation.get("gap_faded") or observation.get("failed"):
+            return BreakoutSetupType.GAP_FADE, "gap_reference_or_invalidation_broken"
+        if observation.get("gap_and_go"):
+            return BreakoutSetupType.GAP_AND_GO, "opening_range_breakout_confirmed"
+        if observation.get("gap_holding"):
+            return BreakoutSetupType.GAP_HOLD, "gap_held_through_opening_range"
+        return setup, "premarket_gap_waiting_for_regular_confirmation"
+
+    if state is BreakoutLifecycleState.RETESTING and observation.get("retest_held"):
+        return BreakoutSetupType.RETEST_BREAKOUT, "retest_reclaimed_breakout_zone"
+
+    if (
+        state is BreakoutLifecycleState.RETEST_HELD
+        and observation.get("reaccelerating")
+    ):
+        return BreakoutSetupType.RECOVERY_BREAKOUT, "new_event_high_after_retest"
+
+    if (
+        str(market_state or "").upper() == "CAPITULATION_RECOVERY"
+        and observation.get("recovery_reclaimed")
+        and (observation.get("triggered") or observation.get("confirmed"))
+    ):
+        return BreakoutSetupType.RECOVERY_BREAKOUT, "capitulation_recovery_level_reclaimed"
+
+    if detected is not None and setup is BreakoutSetupType.MOMENTUM_SPIKE:
+        return detected, "current_structure_classification"
+    return setup, "setup_unchanged"
 
 
 @dataclass(frozen=True)

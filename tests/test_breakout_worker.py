@@ -76,6 +76,48 @@ class Provider:
         )
 
 
+class UnavailableProvider(Provider):
+    @property
+    def health(self):
+        return {
+            "provider": "fixture",
+            "status": "unavailable",
+            "consecutive_failures": 1,
+            "stale_snapshot_available": False,
+        }
+
+    async def scan(self, *, session, as_of, profile):
+        self.calls += 1
+        return Discovery(
+            provider="fixture",
+            status="unavailable",
+            as_of=as_of,
+            session=session.value,
+            warnings=["provider_timeout"],
+        )
+
+
+class DegradedEmptyProvider(Provider):
+    @property
+    def health(self):
+        return {
+            "provider": "fixture",
+            "status": "degraded",
+            "consecutive_failures": 0,
+            "stale_snapshot_available": False,
+        }
+
+    async def scan(self, *, session, as_of, profile):
+        self.calls += 1
+        return Discovery(
+            provider="fixture",
+            status="degraded",
+            as_of=as_of,
+            session=session.value,
+            warnings=["provider_column_count_changed"],
+        )
+
+
 class ScanService:
     def __init__(self):
         self.calls = 0
@@ -104,6 +146,33 @@ class ScanService:
                 }
             ]
         }
+
+
+class CarryoverRecordingService:
+    def __init__(self):
+        self.calls = 0
+        self.discovery_candidates = None
+        self.carryover_events = None
+        self.previous_events = None
+        self.expired_due_event_ids = None
+        self.carryover_has_more = None
+
+    async def build_snapshot(
+        self,
+        discovery,
+        as_of,
+        carryover_events,
+        previous_events,
+        expired_due_event_ids,
+        carryover_has_more,
+    ):
+        self.calls += 1
+        self.discovery_candidates = list(discovery.candidates)
+        self.carryover_events = list(carryover_events)
+        self.previous_events = previous_events
+        self.expired_due_event_ids = expired_due_event_ids
+        self.carryover_has_more = carryover_has_more
+        return {"events": []}
 
 
 def test_once_disabled_does_not_create_database_or_call_provider(tmp_path):
@@ -148,6 +217,67 @@ def test_once_injects_provider_and_service_then_survives_restart(tmp_path):
     assert health.status == "active"
 
 
+def test_active_empty_snapshot_is_a_valid_completed_scan(tmp_path):
+    settings = Settings(tmp_path / "breakouts.db")
+    worker = BreakoutWorker(
+        settings,
+        BreakoutRepository(settings.db_path),
+        provider=Provider(),
+        scan_service=None,
+        clock=MarketClock(now=lambda: NOW),
+        owner_id="worker-empty",
+    )
+
+    result = asyncio.run(worker.run_once())
+
+    assert result["status"] == "completed"
+    assert result["event_count"] == 0
+    latest = BreakoutRepository(
+        settings.db_path,
+        read_only=True,
+    ).latest_completed_scan()
+    assert latest is not None
+    assert latest["events"] == []
+
+
+def test_empty_discovery_still_passes_carryover_to_scan_service(tmp_path):
+    settings = Settings(tmp_path / "carryover.db")
+    seed_at = NOW - timedelta(minutes=5)
+    seed_worker = BreakoutWorker(
+        settings,
+        BreakoutRepository(settings.db_path),
+        provider=Provider(),
+        scan_service=ScanService(),
+        clock=MarketClock(now=lambda: seed_at),
+        owner_id="worker-seed",
+    )
+    seeded = asyncio.run(seed_worker.run_once())
+    assert seeded["status"] == "completed"
+
+    recorder = CarryoverRecordingService()
+    worker = BreakoutWorker(
+        settings,
+        BreakoutRepository(settings.db_path),
+        provider=Provider(),
+        scan_service=recorder,
+        clock=MarketClock(now=lambda: NOW),
+        owner_id="worker-carryover",
+    )
+    result = asyncio.run(worker.run_once())
+
+    assert result["status"] == "completed"
+    assert recorder.calls == 1
+    assert recorder.discovery_candidates == []
+    assert [event["event_id"] for event in recorder.carryover_events] == [
+        "worker-event-1"
+    ]
+    assert [event["event_id"] for event in recorder.previous_events["AAPL"]] == [
+        "worker-event-1"
+    ]
+    assert recorder.expired_due_event_ids == frozenset()
+    assert recorder.carryover_has_more is False
+
+
 def test_provider_failure_marks_scan_failed_but_health_is_degraded_not_fatal(tmp_path):
     settings = Settings(tmp_path / "breakouts.db")
     provider = Provider(fail=True)
@@ -170,6 +300,92 @@ def test_provider_failure_marks_scan_failed_but_health_is_degraded_not_fatal(tmp
     health = check_breakout_health(settings, reader, now=NOW)
     assert health.healthy is True
     assert health.status == "degraded"
+
+
+def test_unavailable_snapshot_does_not_replace_previous_completed_scan(tmp_path):
+    settings = Settings(tmp_path / "breakouts.db")
+    service = ScanService()
+    first_worker = BreakoutWorker(
+        settings,
+        BreakoutRepository(settings.db_path),
+        provider=Provider(),
+        scan_service=service,
+        clock=MarketClock(now=lambda: NOW),
+        owner_id="worker-success",
+    )
+    first = asyncio.run(first_worker.run_once())
+    assert first["status"] == "completed"
+    assert service.calls == 1
+
+    unavailable_worker = BreakoutWorker(
+        settings,
+        BreakoutRepository(settings.db_path),
+        provider=UnavailableProvider(),
+        scan_service=service,
+        clock=MarketClock(now=lambda: NOW + timedelta(minutes=5)),
+        owner_id="worker-unavailable",
+    )
+    degraded = asyncio.run(unavailable_worker.run_once())
+
+    assert degraded["status"] == "degraded"
+    assert degraded["error_code"] == "provider_unavailable"
+    assert service.calls == 1
+    reader = BreakoutRepository(settings.db_path, read_only=True)
+    latest = reader.latest_completed_scan()
+    assert latest is not None
+    assert latest["scan_run_id"] == first["scan_run_id"]
+    assert latest["events"][0]["ticker"] == "AAPL"
+    status = reader.status()
+    assert status["worker"]["status"] == "degraded"
+    assert status["worker"]["details"]["provider_warning"] == "provider_timeout"
+    assert status["provider_health"][0]["status"] == "unavailable"
+    connection = reader.open_read_connection()
+    try:
+        scan_states = [
+            row[0]
+            for row in connection.execute(
+                "SELECT status FROM breakout_scan_runs ORDER BY scheduled_at"
+            ).fetchall()
+        ]
+    finally:
+        connection.close()
+    assert scan_states == ["completed", "failed"]
+
+
+def test_degraded_empty_snapshot_does_not_replace_previous_completed_scan(tmp_path):
+    settings = Settings(tmp_path / "breakouts.db")
+    service = ScanService()
+    first_worker = BreakoutWorker(
+        settings,
+        BreakoutRepository(settings.db_path),
+        provider=Provider(),
+        scan_service=service,
+        clock=MarketClock(now=lambda: NOW),
+        owner_id="worker-success",
+    )
+    first = asyncio.run(first_worker.run_once())
+    assert first["status"] == "completed"
+
+    degraded_worker = BreakoutWorker(
+        settings,
+        BreakoutRepository(settings.db_path),
+        provider=DegradedEmptyProvider(),
+        scan_service=service,
+        clock=MarketClock(now=lambda: NOW + timedelta(minutes=5)),
+        owner_id="worker-degraded-empty",
+    )
+    degraded = asyncio.run(degraded_worker.run_once())
+
+    assert degraded["status"] == "degraded"
+    assert degraded["error_code"] == "provider_degraded_empty"
+    assert service.calls == 1
+    latest = BreakoutRepository(
+        settings.db_path,
+        read_only=True,
+    ).latest_completed_scan()
+    assert latest is not None
+    assert latest["scan_run_id"] == first["scan_run_id"]
+    assert latest["events"][0]["ticker"] == "AAPL"
 
 
 def test_restart_abandons_legacy_running_scan_without_touching_completed(tmp_path):

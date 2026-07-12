@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import math
 from datetime import date, datetime
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -25,12 +26,17 @@ from app.services.breakouts.feature_engine import (
     trim_daily_bars,
     trim_intraday_bars,
 )
-from app.services.breakouts.lifecycle import event_identity, transition_state
+from app.services.breakouts.lifecycle import (
+    classify_continuation_setup,
+    event_identity,
+    transition_state,
+)
 from app.services.breakouts.models import (
     BreakoutCandidate,
     BreakoutEvent,
     BreakoutLifecycleState,
     BreakoutSetupType,
+    BreakoutStructure,
     MarketSession,
     MarketShapeSnapshot,
     TemporalCutoff,
@@ -52,6 +58,22 @@ def _quality(value: Any, *, low: float = 0.0, high: float = 1.0) -> float | None
     if number is None or high <= low:
         return None
     return max(0.0, min(100.0, (number - low) / (high - low) * 100.0))
+
+
+_RANGE_BACKGROUND_KEYS = (
+    "range_persistence",
+    "range_persistence_slope_5d",
+    "range_persistence_ratio_10d",
+    "range_persistence_self_percentile",
+    "range_persistence_global_percentile",
+    "range_persistence_sector_percentile",
+    "range_persistence_normalized_score",
+    "range_persistence_status",
+    "canonical_universe_as_of",
+    "canonical_universe_version",
+    "canonical_universe_status",
+    "canonical_universe_member",
+)
 
 
 def _aware_datetime(value: Any, fallback: datetime) -> datetime:
@@ -105,6 +127,37 @@ class BreakoutRadarService:
         return metrics
 
     @staticmethod
+    def _average_dollar_volume(
+        daily: pd.DataFrame,
+        lookback: int = 20,
+    ) -> float | None:
+        """Return point-in-time average dollar volume from completed daily bars."""
+        if (
+            not isinstance(daily, pd.DataFrame)
+            or daily.empty
+            or "Close" not in daily.columns
+            or "Volume" not in daily.columns
+            or lookback < 1
+        ):
+            return None
+        volume = pd.to_numeric(
+            daily["Volume"].tail(lookback),
+            errors="coerce",
+        ).replace([float("inf"), float("-inf")], float("nan"))
+        if len(volume) < lookback or volume.isna().any() or (volume < 0).any():
+            return None
+        average_volume = _finite(volume.mean())
+        latest_close = _finite(daily["Close"].iloc[-1])
+        if (
+            average_volume is None
+            or average_volume <= 0
+            or latest_close is None
+            or latest_close <= 0
+        ):
+            return None
+        return _finite(latest_close * average_volume)
+
+    @staticmethod
     def _confirmation_features(
         features: Mapping[str, Any],
         structure: Any,
@@ -124,14 +177,7 @@ class BreakoutRadarService:
         upper = _finite(features.get("upper_wick_ratio"))
         vwap_distance = _finite(features.get("distance_from_vwap_atr"))
         gap_atr = _finite(features.get("gap_atr"))
-        avg_dollar = None
-        if not daily.empty and "Volume" in daily.columns:
-            average_volume = pd.to_numeric(
-                daily["Volume"].tail(20), errors="coerce"
-            ).replace([float("inf"), float("-inf")], float("nan")).mean()
-            daily_close = _finite(daily["Close"].iloc[-1])
-            if daily_close is not None and math.isfinite(float(average_volume)):
-                avg_dollar = daily_close * float(average_volume)
+        avg_dollar = BreakoutRadarService._average_dollar_volume(daily)
         current_dollar = _finite(features.get("cumulative_dollar_volume"))
         return {
             "close_above_zone_quality": _quality(distance, low=0, high=1.0),
@@ -225,6 +271,583 @@ class BreakoutRadarService:
             ),
         }
 
+    def _opening_range_confirmation_features(
+        self,
+        intraday: pd.DataFrame,
+        cutoff: TemporalCutoff,
+        features: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Count only completed regular-session bars above the opening range."""
+
+        opening_high = _finite(features.get("opening_range_high"))
+        atr = _finite(features.get("atr20"))
+        if (
+            not features.get("opening_range_complete")
+            or opening_high is None
+            or not isinstance(intraday, pd.DataFrame)
+        ):
+            return {"hold_bars_above_opening_range": 0}
+        visible = trim_intraday_bars(intraday, cutoff)
+        if visible.empty:
+            return {"hold_bars_above_opening_range": 0}
+        local_index = visible.index.tz_convert("America/New_York")
+        event_date = cutoff.event_at.astimezone(local_index.tz).date()
+        local_minutes = local_index.hour * 60 + local_index.minute
+        opening_end = 9 * 60 + 30 + self.settings.opening_range_minutes
+        after_opening = visible[
+            (pd.Index(local_index.date) == event_date)
+            & (local_minutes >= opening_end)
+        ]
+        threshold = opening_high + max(
+            opening_high * self.settings.break_buffer_pct,
+            (atr or 0.0) * self.settings.break_buffer_atr,
+        )
+        hold_bars = 0
+        for raw in reversed(
+            list(pd.to_numeric(after_opening.get("Close"), errors="coerce"))
+        ):
+            close = _finite(raw)
+            if close is None or close <= threshold:
+                break
+            hold_bars += 1
+        return {"hold_bars_above_opening_range": hold_bars}
+
+    @staticmethod
+    def _completed_session_bars(
+        intraday: pd.DataFrame,
+        cutoff: TemporalCutoff,
+    ) -> pd.DataFrame:
+        """Return only complete bars from the cutoff's local trading date."""
+
+        if not isinstance(intraday, pd.DataFrame):
+            return pd.DataFrame()
+        visible = trim_intraday_bars(intraday, cutoff)
+        if visible.empty:
+            return visible
+        local_index = visible.index.tz_convert("America/New_York")
+        event_date = cutoff.event_at.astimezone(local_index.tz).date()
+        return visible[pd.Index(local_index.date) == event_date]
+
+    def _continuation_bar_evidence(
+        self,
+        intraday: pd.DataFrame,
+        cutoff: TemporalCutoff,
+        *,
+        event_started_at: datetime,
+        prior_last_seen_at: datetime,
+        previous_close: float | None,
+        invalidation_price: float | None,
+        atr: float | None,
+    ) -> dict[str, Any]:
+        """Aggregate complete bars so a missed scan cannot erase evidence."""
+
+        current = self._completed_session_bars(intraday, cutoff)
+        empty = {
+            "session_high": None,
+            "new_high_since_prior": None,
+            "gap_faded_on_complete_bar": False,
+            "invalidation_broken_on_complete_bar": False,
+            "gap_hold_bars": 0,
+        }
+        if current.empty:
+            return empty
+
+        local_index = current.index.tz_convert("America/New_York")
+        bar_ends = local_index + pd.Timedelta(minutes=5)
+        started_local = pd.Timestamp(event_started_at).tz_convert(local_index.tz)
+        prior_local = pd.Timestamp(prior_last_seen_at).tz_convert(local_index.tz)
+        event_bars = current[bar_ends > started_local]
+        event_closes = pd.to_numeric(event_bars.get("Close"), errors="coerce")
+        completed_after_prior = current[bar_ends > prior_local]
+        new_high = _finite(
+            pd.to_numeric(completed_after_prior.get("High"), errors="coerce").max()
+        )
+        new_closes = pd.to_numeric(
+            completed_after_prior.get("Close"),
+            errors="coerce",
+        )
+        gap_faded = bool(
+            previous_close is not None
+            and (new_closes <= previous_close).fillna(False).any()
+        )
+        invalidation_broken = bool(
+            invalidation_price is not None
+            and (new_closes < invalidation_price).fillna(False).any()
+        )
+        gap_hold_bars = 0
+        if previous_close is not None:
+            hold_threshold = previous_close + max(
+                previous_close * self.settings.break_buffer_pct,
+                (atr or 0.0) * self.settings.break_buffer_atr,
+            )
+            for raw in reversed(list(event_closes)):
+                close = _finite(raw)
+                if close is None or close <= hold_threshold:
+                    break
+                gap_hold_bars += 1
+        return {
+            "session_high": new_high,
+            "new_high_since_prior": new_high,
+            "gap_faded_on_complete_bar": gap_faded,
+            "invalidation_broken_on_complete_bar": invalidation_broken,
+            "gap_hold_bars": gap_hold_bars,
+        }
+
+    async def _intraday_batches(
+        self,
+        tickers: Sequence[str],
+        *,
+        cutoff: TemporalCutoff,
+    ) -> dict[str, Any]:
+        """Load a bounded ticker union without exceeding adapter batch limits."""
+
+        symbols = list(dict.fromkeys(str(item).upper() for item in tickers if item))
+        snapshots: dict[str, Any] = {}
+        batch_size = min(40, max(1, self.settings.intraday_enrich_limit))
+        for start in range(0, len(symbols), batch_size):
+            try:
+                result = await self.price_data.intraday(
+                    symbols[start : start + batch_size],
+                    cutoff=cutoff,
+                    interval="5m",
+                )
+            except Exception:
+                continue
+            snapshots.update(dict(result))
+        return snapshots
+
+    def _continue_event(
+        self,
+        prior_value: Mapping[str, Any],
+        *,
+        daily_snapshot: Any,
+        intraday_snapshot: Any,
+        cutoff: TemporalCutoff,
+        observed_at: datetime,
+        observed_session: MarketSession,
+        market: MarketShapeSnapshot,
+        source_snapshot_id: str,
+        versions: Mapping[str, str],
+        expired_due: bool,
+    ) -> tuple[BreakoutEvent, list[dict[str, Any]]]:
+        """Re-evaluate one already-published event with completed local bars."""
+
+        prior = BreakoutEvent.model_validate(prior_value)
+        prior_features = dict(prior.features or {})
+        structure = (
+            BreakoutStructure.model_validate(prior.structure)
+            if prior.structure is not None
+            else None
+        )
+        origin_setup = (
+            prior.origin_setup_type
+            or BreakoutSetupType(
+                str(prior_features.get("origin_setup_type") or prior.setup_type.value)
+            )
+        )
+        daily = (
+            trim_daily_bars(daily_snapshot.frame, cutoff)
+            if daily_snapshot is not None
+            else pd.DataFrame()
+        )
+        if expired_due:
+            features: dict[str, Any] = {
+                "status": "ttl_expired",
+                "event_price": None,
+                "warnings": ["carryover_ttl_expired"],
+            }
+        elif intraday_snapshot is None:
+            features = {
+                "status": "insufficient_data",
+                "event_price": None,
+                "atr20": compute_atr(daily) if not daily.empty else None,
+                "warnings": ["intraday_snapshot_unavailable"],
+            }
+        else:
+            features = compute_feature_snapshot(
+                daily=daily_snapshot.frame,
+                intraday=intraday_snapshot.frame,
+                cutoff=cutoff,
+                opening_range_minutes=self.settings.opening_range_minutes,
+            )
+            features.update(
+                self._structure_intraday_features(
+                    structure,
+                    intraday_snapshot.frame,
+                    cutoff,
+                    _finite(features.get("atr20")),
+                )
+            )
+            features.update(
+                self._opening_range_confirmation_features(
+                    intraday_snapshot.frame,
+                    cutoff,
+                    features,
+                )
+            )
+        features.update(self._base_features(structure))
+        if not daily.empty:
+            features.update(self._confirmation_features(features, structure, daily))
+
+        if self.settings.range_persistence_mode == "disabled":
+            features.update(
+                {
+                    key: "disabled" if key == "range_persistence_status" else None
+                    for key in _RANGE_BACKGROUND_KEYS
+                }
+            )
+        else:
+            features.update(
+                {
+                    key: prior_features.get(key)
+                    for key in _RANGE_BACKGROUND_KEYS
+                    if key in prior_features
+                }
+            )
+
+        previous_close = (
+            _finite(daily["Close"].iloc[-1])
+            if not daily.empty and "Close" in daily.columns
+            else _finite(prior_features.get("previous_regular_close"))
+        )
+        price = _finite(features.get("event_price"))
+        atr = _finite(features.get("atr20"))
+        resistance_high = (
+            structure.resistance_zone.high if structure is not None else None
+        )
+        invalidation = (
+            structure.invalidation_price if structure is not None else None
+        )
+        bar_evidence = (
+            self._continuation_bar_evidence(
+                intraday_snapshot.frame,
+                cutoff,
+                event_started_at=prior.first_seen_at,
+                prior_last_seen_at=prior.last_seen_at,
+                previous_close=previous_close,
+                invalidation_price=invalidation,
+                atr=atr,
+            )
+            if intraday_snapshot is not None and not expired_due
+            else {
+                "session_high": None,
+                "new_high_since_prior": None,
+                "gap_faded_on_complete_bar": False,
+                "invalidation_broken_on_complete_bar": False,
+                "gap_hold_bars": 0,
+            }
+        )
+        prior_high = _finite(prior_features.get("event_high_watermark"))
+        session_high = _finite(bar_evidence.get("session_high"))
+        high_watermark = max(
+            value for value in (session_high, prior_high) if value is not None
+        ) if session_high is not None or prior_high is not None else None
+        freshness = max(
+            0.0,
+            min(
+                100.0,
+                100.0
+                * (
+                    1.0
+                    - max(0.0, (observed_at - prior.first_seen_at).total_seconds())
+                    / self.settings.event_ttl_seconds
+                ),
+            ),
+        )
+        features.update(
+            {
+                "origin_setup_type": origin_setup.value,
+                "previous_regular_close": previous_close,
+                "event_high_watermark": high_watermark,
+                "current_price": price,
+                "gap_pct": (
+                    (price / previous_close - 1.0) * 100.0
+                    if price is not None
+                    and previous_close is not None
+                    and previous_close > 0
+                    else None
+                ),
+                "gap_atr": (
+                    (price - previous_close) / atr
+                    if price is not None
+                    and previous_close is not None
+                    and atr is not None
+                    and atr > 0
+                    else None
+                ),
+                "event_freshness_score": freshness,
+                "carryover_recheck": True,
+            }
+        )
+        candidate = BreakoutCandidate(
+            ticker=prior.ticker,
+            exchange=prior.exchange,
+            asset_type=prior.asset_type,
+            name=prior.name,
+            sector=prior.sector,
+            price=None,
+            previous_regular_close=previous_close,
+            provider_timestamp=observed_at,
+            source="carryover",
+            session=observed_session,
+            warnings=["continued_after_discovery_dropout"],
+        )
+        detection = detect_breakout(
+            candidate,
+            structure,
+            features,
+            cutoff,
+            self.settings,
+        )
+        state = prior.lifecycle_state
+        first_seen_at = prior.first_seen_at
+        pivot_buffer = max(
+            (resistance_high or price or 0.0) * self.settings.break_buffer_pct,
+            (atr or 0.0) * self.settings.break_buffer_atr,
+        )
+        gap_origin = origin_setup in {
+            BreakoutSetupType.PREMARKET_GAP,
+            BreakoutSetupType.GAP_AND_GO,
+            BreakoutSetupType.GAP_HOLD,
+            BreakoutSetupType.GAP_FADE,
+        }
+        gap_faded = bool(
+            gap_origin
+            and observed_session is MarketSession.REGULAR
+            and bar_evidence["gap_faded_on_complete_bar"]
+        )
+        gap_and_go = bool(
+            gap_origin
+            and observed_session is MarketSession.REGULAR
+            and features.get("opening_range_complete")
+            and detection.get("setup_type")
+            is BreakoutSetupType.OPENING_RANGE_BREAKOUT
+            and detection.get("confirmed")
+        )
+        gap_holding = bool(
+            gap_origin
+            and observed_session is MarketSession.REGULAR
+            and features.get("opening_range_complete")
+            and price is not None
+            and previous_close is not None
+            and price
+            > previous_close
+            + max(
+                previous_close * self.settings.break_buffer_pct,
+                (atr or 0.0) * self.settings.break_buffer_atr,
+            )
+            and not gap_faded
+            and not gap_and_go
+        )
+        gap_hold_confirmed = bool(
+            gap_holding
+            and int(bar_evidence["gap_hold_bars"])
+            >= self.settings.confirmation_bars
+        )
+        gap_hold_after_confirmation = bool(
+            gap_holding
+            and int(bar_evidence["gap_hold_bars"])
+            > self.settings.confirmation_bars
+        )
+        retesting = bool(
+            state
+            in {
+                BreakoutLifecycleState.CONFIRMED,
+                BreakoutLifecycleState.HOLDING,
+                BreakoutLifecycleState.RETEST_HELD,
+                BreakoutLifecycleState.REACCELERATING,
+                BreakoutLifecycleState.EXTENDED,
+            }
+            and price is not None
+            and resistance_high is not None
+            and price <= resistance_high + pivot_buffer
+            and (invalidation is None or price > invalidation)
+        )
+        retest_held = bool(
+            state is BreakoutLifecycleState.RETESTING
+            and price is not None
+            and resistance_high is not None
+            and price > resistance_high + pivot_buffer
+        )
+        reaccelerating = bool(
+            state
+            in {
+                BreakoutLifecycleState.HOLDING,
+                BreakoutLifecycleState.RETEST_HELD,
+            }
+            and _finite(bar_evidence.get("new_high_since_prior")) is not None
+            and prior_high is not None
+            and float(bar_evidence["new_high_since_prior"])
+            > prior_high + pivot_buffer
+            and (_finite(features.get("rvol_time_of_day")) or 0.0) >= 1.0
+        )
+        failed_below_invalidation = bool(
+            bar_evidence["invalidation_broken_on_complete_bar"]
+        )
+        observation = {
+            "origin_setup_type": origin_setup.value,
+            "triggered": bool(detection.get("triggered")) or gap_holding,
+            "confirmed": bool(detection.get("confirmed")) or gap_hold_confirmed,
+            "holding": gap_hold_after_confirmation
+            or bool(
+                state
+                in {
+                    BreakoutLifecycleState.CONFIRMED,
+                    BreakoutLifecycleState.REACCELERATING,
+                }
+                and detection.get("confirmed")
+                and not retesting
+            ),
+            "extended": bool(detection.get("extended")) and not retesting,
+            "failed": gap_faded or failed_below_invalidation,
+            "failure_reason": (
+                "gap_filled_on_complete_bar"
+                if gap_faded
+                else "complete_bar_below_invalidation"
+            ),
+            "gap_faded": gap_faded,
+            "gap_and_go": gap_and_go,
+            "gap_holding": gap_holding,
+            "retesting": retesting,
+            "retest_held": retest_held,
+            "reaccelerating": reaccelerating,
+            "recovery_reclaimed": bool(
+                reaccelerating
+                or (
+                    str(market.state or "").upper() == "CAPITULATION_RECOVERY"
+                    and price is not None
+                    and resistance_high is not None
+                    and price > resistance_high + pivot_buffer
+                )
+            ),
+            "expired": bool(
+                expired_due
+                or (observed_at - first_seen_at).total_seconds()
+                > self.settings.event_ttl_seconds
+            ),
+        }
+        setup, setup_reason = classify_continuation_setup(
+            prior.setup_type,
+            state,
+            observation,
+            detection_setup=detection.get("setup_type"),
+            market_state=market.state,
+        )
+        event_transitions: list[dict[str, Any]] = []
+        for _step in range(4):
+            step_observation = dict(observation)
+            if state is BreakoutLifecycleState.DISCOVERED:
+                step_observation = {"expired": observation["expired"]}
+            elif state is BreakoutLifecycleState.WATCHING:
+                step_observation["confirmed"] = False
+                step_observation["extended"] = False
+            result = transition_state(state, step_observation)
+            if not result.changed:
+                break
+            event_transitions.append(
+                {
+                    "event_id": prior.event_id,
+                    "from_state": result.previous_state,
+                    "to_state": result.state,
+                    "reason": result.reason,
+                    "evidence_at": observed_at,
+                    "evidence": {
+                        "source_snapshot_id": source_snapshot_id,
+                        "carryover": True,
+                    },
+                }
+            )
+            state = result.state
+        range_adjustment = 0.0
+        if (
+            self.settings.range_persistence_mode == "enabled"
+            and self.settings.range_persistence_breakout_interaction_enabled
+            and features.get("range_persistence_status") == "active"
+        ):
+            slope = _finite(features.get("range_persistence_slope_5d"))
+            range_adjustment = max(
+                -self.settings.range_persistence_breakout_interaction_cap,
+                min(
+                    self.settings.range_persistence_breakout_interaction_cap,
+                    (slope or 0.0) * 0.25,
+                ),
+            )
+        scores = score_breakout(
+            features,
+            intrinsic_strength=prior.scores.intrinsic_strength_score,
+            market_fit=prior.scores.market_fit_score,
+            sector_fit=prior.scores.sector_fit_score,
+            range_persistence_adjustment=range_adjustment,
+            score_version=self.settings.scoring_version,
+        )
+        event = BreakoutEvent(
+            event_id=prior.event_id,
+            trading_date=prior.trading_date,
+            ticker=prior.ticker,
+            name=prior.name,
+            exchange=prior.exchange,
+            asset_type=prior.asset_type,
+            sector=prior.sector,
+            session=observed_session,
+            setup_type=setup,
+            origin_setup_type=origin_setup,
+            lifecycle_state=state,
+            event_at=observed_at,
+            first_seen_at=first_seen_at,
+            last_seen_at=observed_at,
+            pivot_id=prior.pivot_id,
+            event_price=price,
+            event_bar_interval="5m",
+            source_snapshot_id=source_snapshot_id,
+            previous_state=prior.lifecycle_state,
+            transition_reason=(
+                event_transitions[-1]["reason"]
+                if event_transitions
+                else setup_reason
+            ),
+            structure=structure,
+            scores=scores,
+            data_quality={
+                **prior.data_quality,
+                "carryover": True,
+                "daily_price_source": (
+                    daily_snapshot.source if daily_snapshot is not None else None
+                ),
+                "intraday_price_source": (
+                    intraday_snapshot.source
+                    if intraday_snapshot is not None
+                    else None
+                ),
+                "market_shape_status": market.status,
+                "market_shape_state": market.state,
+            },
+            versions={**prior.versions, **dict(versions)},
+            features={
+                **features,
+                "detection": detection,
+                "continuation_setup_reason": setup_reason,
+                "secondary_setup_type": (
+                    detection["setup_type"].value
+                    if gap_origin
+                    and detection.get("setup_type")
+                    is BreakoutSetupType.OPENING_RANGE_BREAKOUT
+                    else None
+                ),
+            },
+            warnings=list(
+                dict.fromkeys(
+                    [
+                        *prior.warnings,
+                        "carryover_recheck",
+                        *list(features.get("warnings") or ()),
+                        *list(detection.get("warnings") or ()),
+                        *market.warnings,
+                    ]
+                )
+            ),
+        )
+        return event, event_transitions
+
     async def build_snapshot(
         self,
         discovery: Any,
@@ -232,13 +855,20 @@ class BreakoutRadarService:
         *,
         as_of: datetime | None = None,
         session: MarketSession | None = None,
+        trading_date: date | None = None,
         previous_events: Mapping[str, list[Mapping[str, Any]]] | None = None,
+        carryover_events: Sequence[Mapping[str, Any]] | None = None,
+        expired_due_event_ids: Sequence[str] | None = None,
+        carryover_has_more: bool = False,
         **_: Any,
     ) -> dict[str, Any]:
         observed_at = as_of or getattr(discovery, "as_of", None)
         observed_session = session or getattr(discovery, "session", None)
         if observed_at is None or observed_session is None:
             raise ValueError("scan requires as_of and session")
+        observed_trading_date = trading_date or observed_at.astimezone(
+            ZoneInfo("America/New_York")
+        ).date()
         cutoff = self._cutoff(observed_at, observed_session)
         candidates = [
             item if isinstance(item, BreakoutCandidate) else BreakoutCandidate.model_validate(item)
@@ -246,16 +876,49 @@ class BreakoutRadarService:
                 : self.settings.provider_result_limit
             ]
         ]
-        if not candidates:
+        raw_carryovers = list(carryover_events or ())
+        if len(raw_carryovers) > 200:
+            raise ValueError("at most 200 carryover events can be evaluated")
+        carryovers: list[Mapping[str, Any]] = []
+        for value in raw_carryovers:
+            event = BreakoutEvent.model_validate(value)
+            if (
+                event.lifecycle_state
+                in {
+                    BreakoutLifecycleState.FAILED,
+                    BreakoutLifecycleState.EXPIRED,
+                }
+                or event.first_seen_at > observed_at
+                or event.last_seen_at > observed_at
+            ):
+                continue
+            carryovers.append(event.model_dump(mode="python"))
+        due_ids = {str(value) for value in (expired_due_event_ids or ())}
+        carryover_tickers = {
+            str(item.get("ticker") or "").strip().upper()
+            for item in carryovers
+            if str(item.get("ticker") or "").strip()
+        }
+        live_carryover_tickers = {
+            str(item.get("ticker") or "").strip().upper()
+            for item in carryovers
+            if str(item.get("event_id") or "") not in due_ids
+        }
+        if not candidates and not carryovers:
             return {
                 "events": [],
                 "structures": [],
                 "transitions": [],
                 "range_persistence_shadow": [],
                 "source_status": {"discovery": getattr(discovery, "status", "unavailable")},
+                "warnings": ["carryover_truncated"] if carryover_has_more else [],
             }
-        stage_two = candidates[: self.settings.daily_enrich_limit]
-        tickers = [item.ticker for item in stage_two]
+        stage_two = [
+            candidate
+            for candidate in candidates
+            if candidate.ticker not in carryover_tickers
+        ][: self.settings.daily_enrich_limit]
+        discovery_tickers = [item.ticker for item in stage_two]
         distribution_key = "|".join(
             [
                 completed_daily_session(cutoff).isoformat(),
@@ -285,7 +948,16 @@ class BreakoutRadarService:
                 )
             except Exception:
                 canonical_tickers = []
-        daily_symbols = list(dict.fromkeys([*tickers, *canonical_tickers, "SPY"]))
+        daily_symbols = list(
+            dict.fromkeys(
+                [
+                    *discovery_tickers,
+                    *sorted(live_carryover_tickers),
+                    *canonical_tickers,
+                    "SPY",
+                ]
+            )
+        )
         daily_task = self.price_data.daily(daily_symbols, cutoff=cutoff, period="2y")
         market_task = self.market_shape.snapshot(as_of=observed_at)
         daily_result, market_result = await asyncio.gather(
@@ -306,26 +978,52 @@ class BreakoutRadarService:
             if isinstance(market_result, Exception)
             else market_result
         )
-        try:
-            from_daily = getattr(self.strength, "score_from_daily_snapshots", None)
-            if callable(from_daily):
-                strength_map = await from_daily(
-                    tickers,
-                    snapshots=daily_map,
-                    as_of=observed_at,
-                    include_options=False,
-                    range_mode=self.settings.range_persistence_mode,
-                    range_trend_weight=self.settings.range_persistence_trend_family_weight,
-                    range_final_cap=self.settings.range_persistence_final_weight_cap,
-                )
-            else:
-                strength_map = await self.strength.score_ticker_set(
-                    tickers,
-                    as_of=observed_at,
-                    include_options=False,
-                )
-        except Exception:
-            strength_map = {}
+        eligible_stage_two: list[BreakoutCandidate] = []
+        visible_daily: dict[str, pd.DataFrame] = {}
+        for candidate in stage_two:
+            daily_snapshot = daily_map.get(candidate.ticker)
+            if daily_snapshot is None:
+                continue
+            daily = trim_daily_bars(daily_snapshot.frame, cutoff)
+            average_dollar_volume = self._average_dollar_volume(daily)
+            if (
+                average_dollar_volume is None
+                or average_dollar_volume < self.settings.min_avg_dollar_volume
+            ):
+                continue
+            eligible_stage_two.append(candidate)
+            visible_daily[candidate.ticker] = daily
+
+        eligible_tickers = [item.ticker for item in eligible_stage_two]
+        strength_map = {}
+        if eligible_tickers:
+            try:
+                from_daily = getattr(self.strength, "score_from_daily_snapshots", None)
+                if callable(from_daily):
+                    strength_snapshots = {
+                        ticker: daily_map[ticker]
+                        for ticker in [*eligible_tickers, "SPY"]
+                        if ticker in daily_map
+                    }
+                    strength_map = await from_daily(
+                        eligible_tickers,
+                        snapshots=strength_snapshots,
+                        as_of=observed_at,
+                        include_options=False,
+                        range_mode=self.settings.range_persistence_mode,
+                        range_trend_weight=(
+                            self.settings.range_persistence_trend_family_weight
+                        ),
+                        range_final_cap=self.settings.range_persistence_final_weight_cap,
+                    )
+                else:
+                    strength_map = await self.strength.score_ticker_set(
+                        eligible_tickers,
+                        as_of=observed_at,
+                        include_options=False,
+                    )
+            except Exception:
+                strength_map = {}
 
         if cached_distribution is None:
             global_values: list[float] = []
@@ -384,11 +1082,9 @@ class BreakoutRadarService:
 
         prepared: list[tuple[BreakoutCandidate, Any, Any, dict[str, Any]]] = []
         structures = []
-        for candidate in stage_two:
-            daily_snapshot = daily_map.get(candidate.ticker)
-            if daily_snapshot is None:
-                continue
-            daily = trim_daily_bars(daily_snapshot.frame, cutoff)
+        for candidate in eligible_stage_two:
+            daily_snapshot = daily_map[candidate.ticker]
+            daily = visible_daily[candidate.ticker]
             structure = detect_base(candidate.ticker, daily, cutoff, self.settings)
             if structure is not None:
                 structures.append(structure)
@@ -448,14 +1144,13 @@ class BreakoutRadarService:
             reverse=True,
         )
         refined = prepared[: self.settings.intraday_enrich_limit]
-        try:
-            intraday_map = await self.price_data.intraday(
-                [item[0].ticker for item in refined],
-                cutoff=cutoff,
-                interval="5m",
-            )
-        except Exception:
-            intraday_map = {}
+        intraday_map = await self._intraday_batches(
+            [
+                *[item[0].ticker for item in refined],
+                *sorted(live_carryover_tickers),
+            ],
+            cutoff=cutoff,
+        )
 
         events = []
         transitions = []
@@ -485,6 +1180,7 @@ class BreakoutRadarService:
                     daily=daily_snapshot.frame,
                     intraday=intraday_snapshot.frame,
                     cutoff=cutoff,
+                    opening_range_minutes=self.settings.opening_range_minutes,
                 )
                 features.update(
                     self._structure_intraday_features(
@@ -506,6 +1202,7 @@ class BreakoutRadarService:
                 {
                     "current_price": _finite(features.get("event_price"))
                     or candidate.price,
+                    "previous_regular_close": candidate.previous_regular_close,
                     "gap_pct": (
                         (
                             float(features["event_price"])
@@ -631,13 +1328,15 @@ class BreakoutRadarService:
                 else production_scores
             )
             setup = detection["setup_type"]
+            features["origin_setup_type"] = setup.value
+            features["event_high_watermark"] = _finite(features.get("high"))
             pivot_id = (
                 structure.pivot_id
                 if structure is not None
                 else f"{setup.value.lower()}-{candidate.ticker}-{observed_at.date().isoformat()}"
             )
             event_id = event_identity(
-                trading_date=observed_at.date(),
+                trading_date=observed_trading_date,
                 ticker=candidate.ticker,
                 setup_type=setup,
                 pivot_id=pivot_id,
@@ -661,7 +1360,7 @@ class BreakoutRadarService:
                 else observed_at
             )
             prior_features = dict((prior or {}).get("features") or {})
-            price = _finite(features.get("event_price")) or candidate.price
+            price = _finite(features.get("event_price"))
             resistance_high = (
                 structure.resistance_zone.high if structure is not None else None
             )
@@ -754,7 +1453,7 @@ class BreakoutRadarService:
             transitions.extend(event_transitions)
             event = BreakoutEvent(
                 event_id=event_id,
-                trading_date=observed_at.date(),
+                trading_date=observed_trading_date,
                 ticker=candidate.ticker,
                 name=candidate.name,
                 exchange=candidate.exchange,
@@ -762,12 +1461,13 @@ class BreakoutRadarService:
                 sector=candidate.sector,
                 session=observed_session,
                 setup_type=setup,
+                origin_setup_type=setup,
                 lifecycle_state=state,
                 event_at=observed_at,
                 first_seen_at=first_seen_at,
                 last_seen_at=observed_at,
                 pivot_id=pivot_id,
-                event_price=_finite(features.get("event_price")) or candidate.price,
+                event_price=_finite(features.get("event_price")),
                 event_bar_interval="5m",
                 source_snapshot_id=source_snapshot_id,
                 previous_state=initial_state,
@@ -815,7 +1515,7 @@ class BreakoutRadarService:
             )
             shadows.append(
                 {
-                    "trading_date": observed_at.date(),
+                    "trading_date": observed_trading_date,
                     "ticker": candidate.ticker,
                     "event_id": event_id,
                     "feature": range_feature,
@@ -833,6 +1533,39 @@ class BreakoutRadarService:
                     "breakout_hypothetical_priority": hypothetical_scores.alert_priority_score,
                 }
             )
+        for prior in carryovers:
+            ticker = str(prior.get("ticker") or "").strip().upper()
+            event_id = str(prior.get("event_id") or "")
+            continued, continued_transitions = self._continue_event(
+                prior,
+                daily_snapshot=daily_map.get(ticker),
+                intraday_snapshot=intraday_map.get(ticker),
+                cutoff=cutoff,
+                observed_at=observed_at,
+                observed_session=observed_session,
+                market=market,
+                source_snapshot_id=source_snapshot_id,
+                versions=versions,
+                expired_due=event_id in due_ids,
+            )
+            events.append(continued)
+            transitions.extend(continued_transitions)
+
+        # A carryover owns its stable event identity.  This also keeps replayed
+        # scans idempotent if the same ticker was present in discovery input.
+        events = list({item.event_id: item for item in events}.values())
+        transitions = list(
+            {
+                (
+                    str(item.get("event_id") or ""),
+                    str(getattr(item.get("from_state"), "value", item.get("from_state"))),
+                    str(getattr(item.get("to_state"), "value", item.get("to_state"))),
+                    str(item.get("reason") or ""),
+                    str(item.get("evidence_at") or ""),
+                ): item
+                for item in transitions
+            }.values()
+        )
         events.sort(
             key=lambda item: (
                 item.scores.alert_priority_score is not None,
@@ -881,6 +1614,14 @@ class BreakoutRadarService:
                 "prices": "active" if daily_map else "unavailable",
                 "strength": "active" if strength_map else "unavailable",
                 "market_shape": market.status,
+                "carryover": (
+                    "truncated"
+                    if carryover_has_more
+                    else "active"
+                    if carryovers
+                    else "empty"
+                ),
             },
             "versions": versions,
+            "warnings": ["carryover_truncated"] if carryover_has_more else [],
         }

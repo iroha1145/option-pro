@@ -77,6 +77,35 @@ def test_empty_response_is_active_empty_snapshot() -> None:
     assert snapshot.candidates == []
 
 
+def test_closed_and_postmarket_return_unavailable_without_transport() -> None:
+    import asyncio
+
+    calls = 0
+
+    async def handler(_request):
+        nonlocal calls
+        calls += 1
+        raise AssertionError("unsupported sessions must not call the Provider")
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = TradingViewDiscoveryProvider(_settings(), client=client)
+    try:
+        for session in (MarketSession.POSTMARKET, MarketSession.CLOSED):
+            snapshot = asyncio.run(
+                provider.scan(
+                    session=session,
+                    as_of=NOW,
+                    profile=DiscoveryProfile.REGULAR_MOVERS,
+                )
+            )
+            assert snapshot.status is ProviderStatus.UNAVAILABLE
+            assert snapshot.candidates == []
+            assert snapshot.warnings == ["session_not_supported"]
+    finally:
+        asyncio.run(client.aclose())
+    assert calls == 0
+
+
 def test_column_count_change_degrades_and_skips_row() -> None:
     import asyncio
 

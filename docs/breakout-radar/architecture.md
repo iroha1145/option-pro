@@ -11,8 +11,10 @@ Option Pro 自有行情重新验证，保存可重放的事件生命周期，并
 发布最近一次完整快照。区间强势持续度（Range Persistence）是趋势背景，
 默认运行影子模式，不代表机构行为。
 
-不改页面、样式、导航和图表；不把新闻、期权或大语言模型（LLM）结果写入
-确定性评分；不让应用程序接口（API）请求触发全市场扫描。
+首轮后端交付不改页面、样式、导航和图表。后续的用户界面接入阶段新增独立
+`#breakouts` 路由，并且只读取本节定义的只读接口；页面刷新不会触发全市场
+扫描。无论是否接入页面，都不把新闻、期权或大语言模型（LLM）结果写入
+确定性评分。
 
 ## 进程和模块
 
@@ -46,6 +48,8 @@ Option Pro 自有行情重新验证，保存可重放的事件生命周期，并
 - app/services/breakouts/worker.py：独立运行入口。
 - app/services/breakouts/adapters：行情、强势、大盘形态和规范股票池适配器。
 - app/api/breakouts.py：Pydantic 只读响应。
+- frontend/static/js/pages/breakouts.js：只读快照、筛选、详情和个股轨迹接线。
+- frontend/static/css/optix-breakouts-v3.css：与 Optix Pro v3 隔离的响应式页面样式。
 
 禁止把新逻辑堆入 strength/scanner.py、api/stocks.py、signals.py 或单个超大
 service.py。旧模块只增加必要的窄入口。
@@ -87,6 +91,20 @@ BreakoutRepository
 
 - 保存扫描、候选、结构、事件、转换、Provider 健康、Worker 状态和影子数据。
 - 写入幂等，发布原子，读取锚定 completed scan。
+- 每轮用两条有界只读查询载入持续事件：TTL 内事件按最久未检查优先，已越界
+  事件使用最多 40 条保留通道。查询只接受事件当前版本所属的 completed scan，
+  并排除 as_of 之后写入的数据。
+
+## 事件身份与阶段分类
+
+- event_id、origin_setup_type、trading_date、pivot_id 和 first_seen_at 创建后固定。
+- setup_type 是可演化的阶段分类。PREMARKET_GAP 可依次成为 GAP_HOLD、
+  GAP_AND_GO 或 GAP_FADE；回踩与再加速可成为 RETEST_BREAKOUT 或
+  RECOVERY_BREAKOUT，但都沿用原 event_id。
+- 当前存在持续事件时，同一 ticker 不从 Discovery 旁路再建事件。新事件通道
+  始终经过平均成交额门槛；持续事件通道只能更新已有编号。
+- 持续事件只用截止时点前已完成的本地 K 线做状态判断。Discovery 价格仍可
+  展示为粗筛上下文，但不能触发失败、回补、回踩或恢复。
 
 ## 公共模型
 
@@ -153,7 +171,9 @@ BreakoutRepository
 
 ## 降级顺序
 
-1. Provider 失败：有界重试、合格旧快照、熔断；保留上一 completed scan。
+1. Provider 失败：有界重试、合格旧快照、熔断；`unavailable` 或
+   `degraded + 空候选` 不发布，保留上一 completed scan。只有无告警的 active
+   空结果才作为真实空扫描发布。
 2. 个股行情缺失：该股票组件为 null，降低覆盖与置信度。
 3. Strength 缺失：intrinsic 为 null，priority 重归一。
 4. Market shape 缺失：market_fit 为 null，不补 50。
@@ -183,7 +203,7 @@ Dockerfile、.env.example、依赖锁、迁移版本和公共 API 模型。
   只调用新增的显式 ticker 集合入口，并复用本轮日线快照。
 - 新功能默认 BREAKOUT_RADAR_ENABLED=false。
 - Range Persistence 默认 shadow，不改变正式分数、分类和排序。
-- 不修改前端文件。
+- 后续用户界面阶段只新增只读接线，不改变扫描、评分或发布语义。
 
 ## 已知限制
 

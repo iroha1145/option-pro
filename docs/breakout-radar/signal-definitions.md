@@ -52,6 +52,23 @@ PREMARKET_GAP
 - 只使用真实盘前价格和成交额。
 - 没有历史盘前数据时 premarket_rvol 为 null。
 - 不能直接标记为已确认日线突破。
+- 进入正常时段后沿用原 event_id、pivot_id、trading_date 和 first_seen_at；
+  setup_type 只表示当前阶段，不参与重新建立事件身份。
+
+GAP_HOLD / GAP_AND_GO / GAP_FADE
+
+- 开盘区间结束后，完整 K 线仍高于前收加缓冲、但尚未确认越过开盘区间，
+  标为 GAP_HOLD。
+- 连续完整 K 线保持在开盘区间高点加缓冲之上，或单根 K 线满足强确认条件，
+  标为 GAP_AND_GO。
+- 任一完整正常时段 K 线收回前收价或跌破失效位，标为 GAP_FADE，并进入
+  FAILED。
+- 三者都是既有 PREMARKET_GAP 的阶段标签，不能脱离历史事件单独创建。
+
+RETEST_BREAKOUT
+
+- 既有事件先进入 RETESTING，随后完整 K 线重新收于原阻力加缓冲之上。
+- 沿用原 event_id，生命周期进入 RETEST_HELD。
 
 MOMENTUM_SPIKE
 
@@ -60,7 +77,10 @@ MOMENTUM_SPIKE
 
 RECOVERY_BREAKOUT
 
-- 深度回撤后收复关键水平，供 CAPITULATION_RECOVERY 市场形态使用。
+- 既有事件完成回踩并重新创事件新高，同时相对成交量不少于 1 时使用；
+  生命周期进入 REACCELERATING。
+- 若未来 Market Shape 能可靠给出 CAPITULATION_RECOVERY，也可在收复关键
+  水平后使用该阶段标签；当前 unavailable 适配器不会独立制造此结论。
 
 ## 确认和生命周期
 
@@ -78,7 +98,30 @@ RECOVERY_BREAKOUT
 - EXPIRED：超时、收市、结构替换或长期无数据。
 
 FAILED 和 EXPIRED 是终态。重复扫描只更新 last_seen_at；状态变化才写
-transition。同日新 pivot 可以创建新事件。
+transition。前一事件进入终态后，同日新 pivot 可以创建新事件；非终态主事件
+保持单一身份。
+
+## 候选掉出后的延续扫描
+
+- 新事件必须来自本轮 Discovery，并通过 20 日平均成交额门槛。
+- 已发布且未终结的事件即使掉出 Discovery 或后来低于流动性门槛，也会按
+  固定 event_id 继续读取本地完整日线和 5 分钟线；这条通道不能创建新事件。
+- Worker 每轮从当前版本属于 completed scan 的事件中读取有界批次。仍在 TTL
+  内的事件按 last_seen_at 从旧到新轮转；已越过 TTL 的事件使用保留配额写入
+  EXPIRED，避免停机后遗留永久非终态记录。
+- 查询排除 first_seen_at、last_seen_at 或 published_at 晚于 as_of 的记录，
+  并从不可变扫描快照恢复当时时点的最新事件版本；同一事件后来更新也不会让
+  历史回放漏掉旧版本或读到未来状态。
+- 缺少完整本地盘中 K 线时，不回退使用 Discovery 价格判断失败、缺口回补、
+  回踩或再加速。
+- 恢复扫描会检查截止时点前全部完整 K 线。停机期间任一 K 线已回补缺口或跌破
+  失效位时，后续反弹不能抹去失败证据；事件最高价也取完整可见区间，而非只取
+  最新一根 K 线。
+- 持续事件每轮按当前完整 K 线重算确认、流动性、追高风险、数据置信度、事件
+  新鲜度和告警优先级。区间强势持续度在同一交易日沿用上一完整日线背景，影子
+  模式仍不改变正式排序。
+- 影子研究行仍锚定事件首次进入 Discovery 排名时的生产分与假设分；续扫只更新
+  同一事件的正式当前分，不复制新的影子身份或改变生产权重。
 
 ## 同时点相对成交量
 

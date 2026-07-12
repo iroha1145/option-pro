@@ -262,6 +262,7 @@ class BreakoutEvent(_StrictModel):
     sector: Optional[str] = Field(default=None, max_length=120)
     session: MarketSession
     setup_type: BreakoutSetupType
+    origin_setup_type: Optional[BreakoutSetupType] = None
     lifecycle_state: BreakoutLifecycleState
     event_at: AwareDatetime
     first_seen_at: AwareDatetime

@@ -245,6 +245,8 @@ class BreakoutSettings(BaseSettings):
             raise ValueError("read timeout cannot exceed provider total timeout")
         if self.worker_health_stale_seconds <= self.worker_lease_ttl_seconds:
             raise ValueError("worker health stale threshold must exceed lease TTL")
+        if self.opening_range_minutes % 5 != 0:
+            raise ValueError("opening range minutes must be a multiple of 5")
         return self
 
 

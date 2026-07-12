@@ -32,7 +32,13 @@ Provider：
 - TRIGGERED 不越级到 CONFIRMED；两根保持可确认。
 - HOLDING、RETESTING、RETEST_HELD、REACCELERATING、EXTENDED、FAILED。
 - 高 chase risk 不降低 breakout quality。
-- 重复扫描和 transition 幂等；同日新 pivot 新事件。
+- 重复扫描和 transition 幂等；前一事件进入终态后，同日新 pivot 创建新事件，
+  非终态主事件不会被 Discovery 旁路复制。
+- PREMARKET_GAP 进入正常时段后保持 event_id，并按完整 K 线成为 GAP_HOLD、
+  GAP_AND_GO 或 GAP_FADE。
+- RETEST_BREAKOUT 与 RECOVERY_BREAKOUT 只更新既有事件；终态不能重新激活。
+- ticker 掉出 Discovery、低于流动性门槛或 Worker 重启后仍能延续检查。
+- TTL 精确边界、首次越界、长停机恢复和有界队列轮转均有离线测试。
 
 持久化与 Worker：
 
@@ -40,6 +46,10 @@ Provider：
 - Worker 重启、过期锁接管、第二 Worker 拒绝、旧 token 无法发布。
 - WAL 下并发读取只看到旧完整或新完整快照。
 - --once、SIGTERM、调度不漂移、Provider 故障不触发容器重启风暴。
+- 持续事件查询只读取当前版本属于 completed scan 且不晚于 as_of 的记录；
+  同一事件的未来更新不遮蔽旧快照，终态和未来记录排除，队列超限返回 has_more
+  而不冻结扫描。
+- Provider 的 degraded 空候选不会替换上一完整快照；active 空候选仍可发布。
 
 适配与评分：
 
@@ -48,6 +58,8 @@ Provider：
 - 缺失组件不补 50；活跃权重不足返回 null。
 - contribution 合计与最终分误差不超过 0.1。
 - 所有浮点有限，分数和置信度范围正确。
+- 持续事件随当前完整 K 线重算分数和新鲜度，并保留同交易日的 Range
+  Persistence 影子背景；漏扫期间的任一缺口回补和完整区间最高价均可恢复。
 
 Range Persistence：
 
@@ -64,7 +76,18 @@ API 和回归：
 - 游标稳定且绑定 scan_run_id。
 - raw Provider 不泄露，时间带时区，版本完整，降级状态明确。
 - 现有 strength、signals、stocks、options、market 与 /ready 保持通过。
-- 前端静态断言保持通过，且无视觉文件变化。
+- 前端静态断言保持通过；导航、只读接口、状态语义、键盘操作和响应式布局
+  均有约束。
+
+用户界面：
+
+- 关闭、等待首次扫描、正常空结果、陈旧、降级和请求失败分别呈现。
+- `null` 分数与价位保持为空，不补零或中性值。
+- 区间强势持续度为 shadow 时明确标注“不参与排序”。
+- 事件详情和个股轨迹按需请求，不能逐行预取触发限流。
+- 桌面、平板、390 像素与 320 像素手机均保留筛选、风险位、刷新和详情。
+- 页面离开后取消请求与自动刷新；减少动态效果和强制颜色模式可用。
+- 真实浏览器中验证导航、筛选、详情、加载更多、控制台和静态资源。
 
 ## 研究验证
 

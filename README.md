@@ -10,6 +10,7 @@ Optix Pro 是一个面向个人使用的美股行情、期权链和信号观察�
 - 指定到期日的期权链、成交量/持仓量和异动提示
 - 板块内当前 ATM IV 对比和热力图
 - 顶部/底部程序化信号、强势股雷达
+- 突破雷达：全市场粗筛、点时复核、生命周期跟踪和可解释评分
 - 预设美股列表的财报日历
 - 可选 AI 分析：
   - 期权异动和顶部/底部信号只分析应用提供的结构化数据，不联网补行情或事件
@@ -155,6 +156,11 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 | `GET /api/sectors/{id}/iv-ranking` | 板块当前 IV 对比 |
 | `GET /api/signals/stock/{ticker}` | 程序化顶部/底部信号 |
 | `GET /api/strength/scan` | 强势股扫描 |
+| `GET /api/breakouts/current` | 最近一次完整突破快照 |
+| `GET /api/breakouts/events` | 可筛选、可游标分页的突破事件 |
+| `GET /api/breakouts/events/{event_id}` | 突破结构、评分和状态变化证据 |
+| `GET /api/breakouts/tickers/{ticker}` | 单只股票的近期突破轨迹 |
+| `GET /api/breakouts/status` | 雷达工作进程、数据源和数据库状态 |
 
 ## 运维
 
