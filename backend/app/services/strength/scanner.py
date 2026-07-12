@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import io
+import hashlib
 import math
 from bisect import bisect_left, bisect_right
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime, timedelta, timezone
 from time import monotonic
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 import httpx
 import pandas as pd
@@ -32,6 +34,10 @@ from app.services.strength.yahoo_options import (
     enrich_rows_with_yahoo_options,
     yahoo_options_is_enabled,
 )
+from app.services.technical.range_persistence import (
+    build_range_persistence_shadow,
+    compute_range_persistence,
+)
 from app.services.zh_names import get_zh_name
 
 TIMEFRAMES = ("short", "mid", "long", "all")
@@ -40,6 +46,8 @@ UNIVERSES = ("themes",)
 BENCHMARKS = MARKET_BENCHMARKS
 SECTOR_PERIOD_DAYS = {"1mo": 20, "3mo": 63, "6mo": 126}
 STRENGTH_CACHE_TTL_SECONDS = 900
+INTRINSIC_STRENGTH_VERSION = "strength-intrinsic-v1"
+_NEW_YORK = ZoneInfo("America/New_York")
 
 _FALLBACK_MAX_WORKERS = 8
 _FALLBACK_TOTAL_BUDGET_SECONDS = 20.0
@@ -682,6 +690,257 @@ def _feature_row(ticker: str, hist: pd.DataFrame, spy: pd.DataFrame, sector_meta
     }
 
 
+def _complete_daily_frame(
+    hist: pd.DataFrame,
+    as_of: datetime,
+) -> tuple[pd.DataFrame, datetime]:
+    """Trim a daily frame to the latest completed US regular session."""
+
+    if as_of.tzinfo is None or as_of.utcoffset() is None:
+        raise ValueError("as_of must include a timezone")
+    from app.api.market import _early_close_minutes, _is_trading_day
+
+    local = as_of.astimezone(_NEW_YORK)
+    completed = local.date()
+    close_minutes = _early_close_minutes(completed) or 16 * 60
+    if not _is_trading_day(completed) or local.hour * 60 + local.minute < close_minutes:
+        completed -= timedelta(days=1)
+        while not _is_trading_day(completed):
+            completed -= timedelta(days=1)
+    completed_close_minutes = _early_close_minutes(completed) or 16 * 60
+    cutoff = datetime(
+        completed.year,
+        completed.month,
+        completed.day,
+        completed_close_minutes // 60,
+        completed_close_minutes % 60,
+        tzinfo=_NEW_YORK,
+    )
+    bounded = hist.copy()
+    if isinstance(bounded.index, pd.DatetimeIndex):
+        bounded = bounded[pd.Index(bounded.index.date) <= completed]
+    return bounded, cutoff
+
+
+def _absolute_score(value: Any, scale: float, *, center: float = 50.0) -> float | None:
+    number = _safe_float(value, 8)
+    if number is None:
+        return None
+    return round(max(0.0, min(100.0, center + number * scale)), 4)
+
+
+def _weighted_available(
+    components: dict[str, float | None],
+    weights: dict[str, float],
+) -> tuple[float | None, dict[str, float], dict[str, float], list[str]]:
+    active = {
+        name: float(weights[name])
+        for name, value in components.items()
+        if value is not None and name in weights and weights[name] > 0
+    }
+    total = sum(active.values())
+    missing = [name for name in weights if components.get(name) is None]
+    if total <= 0:
+        return None, {}, {}, missing
+    effective = {name: weight / total for name, weight in active.items()}
+    contribution = {
+        name: round(float(components[name]) * weight, 6)
+        for name, weight in effective.items()
+    }
+    return (
+        round(sum(contribution.values()), 4),
+        {name: round(weight, 6) for name, weight in effective.items()},
+        contribution,
+        missing,
+    )
+
+
+def _trend_efficiency(close: pd.Series, days: int = 63) -> float | None:
+    clean = pd.to_numeric(close, errors="coerce").dropna()
+    if len(clean) < days + 1:
+        return None
+    window = clean.tail(days + 1)
+    path = float(window.diff().abs().sum())
+    if not math.isfinite(path) or path <= 0:
+        return None
+    signed = float(window.iloc[-1] - window.iloc[0]) / path
+    return round(max(0.0, min(100.0, 50.0 + signed * 50.0)), 4)
+
+
+def _moving_average_slope(close: pd.Series) -> float | None:
+    clean = pd.to_numeric(close, errors="coerce").dropna()
+    if len(clean) < 70:
+        return None
+    average = clean.rolling(50).mean().dropna()
+    if len(average) < 21 or not average.iloc[-21]:
+        return None
+    slope = float(average.iloc[-1] / average.iloc[-21] - 1.0)
+    return _absolute_score(slope, 500.0)
+
+
+def _trend_stability(close: pd.Series) -> float | None:
+    clean = pd.to_numeric(close, errors="coerce").dropna()
+    if len(clean) < 21:
+        return None
+    volatility = float(clean.pct_change().tail(20).std(ddof=0))
+    if not math.isfinite(volatility):
+        return None
+    return round(max(0.0, min(100.0, 100.0 - volatility * 2200.0)), 4)
+
+
+def _intrinsic_row(
+    row: dict[str, Any],
+    hist: pd.DataFrame,
+    *,
+    range_feature: dict[str, Any],
+    range_mode: str,
+) -> dict[str, Any]:
+    close = hist["Close"].dropna()
+    momentum = _absolute_score(row.get("return_63d"), 180.0)
+    relative_strength = _absolute_score(row.get("rs_spy_63d"), 220.0)
+    price_action = row.get("price_action") if isinstance(row.get("price_action"), dict) else {}
+    price_action_score = (
+        _safe_float(price_action.get("score"), 4)
+        if price_action.get("status") == "active"
+        else None
+    )
+    trend_components = {
+        "medium_term_momentum": momentum,
+        "trend_efficiency": _trend_efficiency(close),
+        "moving_average_slope": _moving_average_slope(close),
+        "range_persistence_component": (
+            _safe_float(range_feature.get("range_persistence"), 4)
+            if range_feature.get("status") == "active"
+            else None
+        ),
+        "trend_stability": _trend_stability(close),
+    }
+    trend_weights = {
+        "medium_term_momentum": 0.35,
+        "trend_efficiency": 0.25,
+        "moving_average_slope": 0.20,
+        "range_persistence_component": 0.15,
+        "trend_stability": 0.05,
+    }
+    production_components = dict(trend_components)
+    production_components["range_persistence_component"] = None
+    production_trend, production_trend_weights, _, production_missing = _weighted_available(
+        production_components,
+        trend_weights,
+    )
+    hypothetical_trend, hypothetical_trend_weights, _, hypothetical_missing = _weighted_available(
+        trend_components,
+        trend_weights,
+    )
+
+    family_weights = {
+        "momentum": 0.35,
+        "relative_strength": 0.25,
+        "trend": 0.25,
+        "price_action": 0.15,
+    }
+    production_families = {
+        "momentum": momentum,
+        "relative_strength": relative_strength,
+        "trend": production_trend,
+        "price_action": price_action_score,
+    }
+    hypothetical_families = {
+        **production_families,
+        "trend": hypothetical_trend,
+    }
+    production_score, family_effective, family_contribution, missing_families = _weighted_available(
+        production_families,
+        family_weights,
+    )
+    hypothetical_score, hypothetical_effective, _, _ = _weighted_available(
+        hypothetical_families,
+        family_weights,
+    )
+    selected = hypothetical_score if range_mode == "enabled" else production_score
+    rp_effective = (
+        hypothetical_effective.get("trend", 0.0)
+        * hypothetical_trend_weights.get("range_persistence_component", 0.0)
+    )
+    shadow = build_range_persistence_shadow(
+        mode=range_mode if range_mode in {"disabled", "shadow", "enabled"} else "shadow",
+        production_score=production_score,
+        hypothetical_score=hypothetical_score,
+        effective_weight=rp_effective,
+    )
+    available_families = sum(value is not None for value in production_families.values())
+    confidence = round(available_families / len(production_families), 4)
+    included_features = [
+        name
+        for name, value in {
+            "momentum_63d": momentum,
+            "relative_strength_63d": relative_strength,
+            "trend_efficiency": trend_components["trend_efficiency"],
+            "moving_average_slope": trend_components["moving_average_slope"],
+            "trend_stability": trend_components["trend_stability"],
+            "price_action": price_action_score,
+        }.items()
+        if value is not None
+    ]
+    if range_mode == "enabled" and trend_components["range_persistence_component"] is not None:
+        included_features.append("range_persistence")
+    final_score = round(selected, 1) if selected is not None else None
+    if final_score is None:
+        classification = "数据不足"
+    elif final_score >= 78:
+        classification = "质量趋势"
+    elif final_score >= 68:
+        classification = "相对强势"
+    elif final_score >= 58:
+        classification = "观察"
+    else:
+        classification = "偏弱"
+    breakdown = {
+        "factor_families": production_families,
+        "trend_family": {
+            "components": trend_components,
+            "production_effective_weights": production_trend_weights,
+            "hypothetical_effective_weights": hypothetical_trend_weights,
+            "production_missing": production_missing,
+            "hypothetical_missing": hypothetical_missing,
+        },
+        "effective_weights": family_effective,
+        "contributions": family_contribution,
+        "missing_families": missing_families,
+        "range_persistence": range_feature,
+        "range_persistence_shadow": shadow,
+    }
+    return {
+        **row,
+        "score": final_score,
+        "score_scope": "intrinsic",
+        "confidence": confidence,
+        "score_version": INTRINSIC_STRENGTH_VERSION,
+        "included_features": included_features,
+        "factor_breakdown": breakdown,
+        "coverage": {
+            "active_families": available_families,
+            "expected_families": len(production_families),
+            "ratio": confidence,
+        },
+        "final_score": final_score,
+        "strength_score": final_score,
+        "classification": classification,
+        "label": classification,
+        "breakdown": breakdown,
+        "data_quality": round(confidence * 100),
+        "range_persistence": range_feature,
+        "range_persistence_shadow": shadow,
+        "option_context": {
+            "status": "skipped",
+            "source_status": "skipped",
+            "reason": "intrinsic scoring excludes options",
+        },
+        "market_regime_score": None,
+        "sector_score": None,
+    }
+
+
 def _sector_scores(rows: list[dict[str, Any]]) -> dict[str, float]:
     sector_returns: dict[str, list[float]] = {}
     for row in rows:
@@ -1258,6 +1517,120 @@ async def scan_strength(
     }
 
 
+def _score_ticker_set_sync(
+    tickers: list[str],
+    *,
+    as_of: datetime,
+    range_mode: str,
+) -> dict[str, Any]:
+    from app.services.breakouts.models import normalize_ticker
+
+    symbols = list(dict.fromkeys(normalize_ticker(value) for value in tickers))
+    if not symbols:
+        raise ValueError("ticker set must not be empty")
+    if len(symbols) > 150:
+        raise ValueError("ticker set exceeds 150 symbols")
+    all_symbols = list(dict.fromkeys([*symbols, "SPY"]))
+    raw = _download_history(all_symbols, period="2y")
+    price_source = raw.attrs.get("price_source") or _history_status(
+        provider="Yahoo/yfinance",
+        status="active",
+        message="explicit ticker-set daily prices",
+    )
+    spy, _ = _complete_daily_frame(_slice_ticker(raw, "SPY"), as_of)
+    _, theme_meta = _theme_universe()
+    rows: list[dict[str, Any]] = []
+    skipped: dict[str, str] = {}
+    for symbol in symbols:
+        hist, completed_cutoff = _complete_daily_frame(_slice_ticker(raw, symbol), as_of)
+        row = _feature_row(symbol, hist, spy, theme_meta.get(symbol, {}))
+        if row is None:
+            skipped[symbol] = "insufficient_history"
+            continue
+        range_feature = compute_range_persistence(
+            hist,
+            cutoff=completed_cutoff,
+        )
+        scored = _intrinsic_row(
+            row,
+            hist,
+            range_feature=range_feature,
+            range_mode=range_mode,
+        )
+        scored["as_of"] = as_of.astimezone(timezone.utc).isoformat()
+        rows.append(scored)
+    rows.sort(
+        key=lambda item: (
+            item.get("final_score") is not None,
+            item.get("final_score") if item.get("final_score") is not None else -1,
+            item["ticker"],
+        ),
+        reverse=True,
+    )
+    return {
+        "as_of": as_of.astimezone(timezone.utc).isoformat(),
+        "score_scope": "intrinsic",
+        "score_version": INTRINSIC_STRENGTH_VERSION,
+        "range_persistence_mode": range_mode,
+        "ticker_set_hash": hashlib.sha256(
+            ",".join(sorted(symbols)).encode("ascii")
+        ).hexdigest(),
+        "count": len(rows),
+        "requested_count": len(symbols),
+        "rows": rows,
+        "results": rows,
+        "skipped": skipped,
+        "data_sources": {
+            "prices": {
+                "provider": price_source.get("provider") or "Yahoo/yfinance",
+                "status": price_source.get("status") or "active",
+                "message": price_source.get("message") or "explicit ticker-set daily prices",
+            },
+            "options": {
+                "status": "skipped",
+                "message": "intrinsic scoring excludes options",
+            },
+            "market_shape": {
+                "status": "not_used",
+                "message": "market shape never changes intrinsic score",
+            },
+        },
+    }
+
+
+async def score_ticker_set(
+    tickers: list[str],
+    *,
+    as_of: datetime | None = None,
+    profile: str = "balanced",
+    include_options: bool = False,
+    range_mode: str | None = None,
+) -> dict[str, Any]:
+    """Score an explicit ticker set without market, sector, option, or Top-N effects."""
+
+    if profile not in PROFILES:
+        raise ValueError(f"Unsupported profile: {profile}")
+    if include_options:
+        raise ValueError("intrinsic ticker-set scoring does not accept option enrichment")
+    observed_at = as_of or datetime.now(timezone.utc)
+    if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+        raise ValueError("as_of must include a timezone")
+    if range_mode is None:
+        from app.services.breakouts.config import get_breakout_settings
+
+        range_mode = get_breakout_settings().range_persistence_mode
+    if range_mode not in {"disabled", "shadow", "enabled"}:
+        raise ValueError("invalid range persistence mode")
+    import asyncio
+
+    return await asyncio.to_thread(
+        _score_ticker_set_sync,
+        list(tickers),
+        as_of=observed_at,
+        range_mode=range_mode,
+    )
+
+
 async def sector_strength(period: str = "3mo") -> dict[str, Any]:
     if period not in SECTOR_PERIOD_DAYS:
         raise ValueError(f"Unsupported sector period: {period}")
@@ -1301,17 +1674,25 @@ async def market_strength() -> dict[str, Any]:
 
 async def stock_strength(ticker: str, profile: str = "balanced") -> dict[str, Any]:
     symbol = ticker.upper().strip()
-    # include_options=False: a single-stock lookup used to trigger a full
-    # 250-row scan INCLUDING the option-chain enrichment of up to 90 tickers
-    # (minutes of sequential Yahoo calls on a cold cache). Price/trend/sector
-    # scoring is unaffected; option heat stays at its neutral placeholder.
-    payload = await scan_strength(
-        timeframe="all", profile=profile, top=250, min_avg_dollar_volume=0, include_options=False
+    payload = await score_ticker_set(
+        [symbol],
+        profile=profile,
+        include_options=False,
     )
-    for row in payload.get("rows", []):
-        if row.get("ticker") == symbol:
-            return {"as_of": payload["as_of"], "ticker": symbol, "row": row, "market_regime": payload["market_regime"]}
-    raise KeyError(symbol)
+    if not payload.get("rows"):
+        raise KeyError(symbol)
+    return {
+        "as_of": payload["as_of"],
+        "ticker": symbol,
+        "row": payload["rows"][0],
+        "market_regime": {
+            "status": "not_requested",
+            "score": None,
+            "message": "single-ticker intrinsic lookup excludes market adjustment",
+        },
+        "score_scope": "intrinsic",
+        "score_version": INTRINSIC_STRENGTH_VERSION,
+    }
 
 
 def profiles() -> dict[str, Any]:
