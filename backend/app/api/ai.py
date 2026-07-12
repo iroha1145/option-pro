@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-import os
 from datetime import date
 from typing import Annotated, Literal, Optional
 
@@ -13,11 +12,11 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 
 from app.api.stocks import _sanitize
 from app.services import ai_analysis
+from app.services.request_security import request_client_ip
 
 logger = logging.getLogger(__name__)
 
 _MAX_AI_BODY_BYTES = 64 * 1024
-_TRUST_PROXY_HEADERS = os.environ.get("TRUST_PROXY_HEADERS", "").strip().lower() in {"1", "true", "yes"}
 
 
 class _BoundedBodyRoute(APIRoute):
@@ -73,13 +72,7 @@ Expiration = Annotated[
 
 
 def _client_ip(request: Request) -> str:
-    if _TRUST_PROXY_HEADERS:
-        return (
-            request.headers.get("cf-connecting-ip")
-            or request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-            or (request.client.host if request.client else "unknown")
-        )
-    return request.client.host if request.client else "unknown"
+    return request_client_ip(request)
 
 
 def _fingerprint(request: Request) -> str:
@@ -103,6 +96,13 @@ class AlertItem(BaseModel):
     reasons: list[ShortText] = Field(default_factory=list, max_length=8)
     signal: Optional[Literal["bullish", "bearish", "mixed", "unknown"]] = None
     inferred_direction: Optional[Literal["bullish", "bearish", "mixed", "unknown"]] = None
+    moneyness: Optional[Literal["itm", "otm", "atm", "unavailable"]] = None
+    direction: Optional[Literal["bullish", "bearish", "mixed", "unknown"]] = None
+    direction_confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    direction_status: Optional[
+        Literal["available", "unavailable_without_trade_side"]
+    ] = None
+    direction_deprecated: bool = False
     direction_note: Annotated[str, StringConstraints(max_length=300)] = ""
 
     @field_validator("expiration")
@@ -150,7 +150,7 @@ async def analyze_alerts(req: AlertsRequest, request: Request):
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("AI alert analysis endpoint failed")
+        logger.warning("AI alert analysis endpoint failed (%s)", type(exc).__name__)
         raise HTTPException(500, "AI analysis unavailable") from exc
 
 
@@ -166,7 +166,7 @@ async def earnings_correlation(request: Request):
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("AI earnings correlation endpoint failed")
+        logger.warning("AI earnings correlation endpoint failed (%s)", type(exc).__name__)
         raise HTTPException(500, "AI analysis unavailable") from exc
 
 
@@ -194,5 +194,5 @@ async def earnings_impact(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("AI earnings impact endpoint failed")
+        logger.warning("AI earnings impact endpoint failed (%s)", type(exc).__name__)
         raise HTTPException(500, "AI analysis unavailable") from exc

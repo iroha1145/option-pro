@@ -19,14 +19,18 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.gzip import GZipMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api import ai, breakouts, earnings, market, options, sectors, signals, stocks, strength
+from app.services.request_security import (
+    TRUSTED_PROXY_NETWORKS as _TRUSTED_PROXY_NETWORKS,
+    TRUST_PROXY_HEADERS as _TRUST_PROXY_HEADERS,
+    client_ip_from_scope,
+    request_is_https,
+)
 
 
 _TRUTHY_VALUES = {"1", "true", "yes"}
-_TRUST_PROXY_HEADERS = (
-    _os.environ.get("TRUST_PROXY_HEADERS", "").strip().lower() in _TRUTHY_VALUES
-)
 _APP_AUTH_TOKEN = _os.environ.get("APP_AUTH_TOKEN", "").strip()
 _APP_VERSION = _os.environ.get("APP_VERSION", "").strip() or "dev"
 _APP_COMMIT = _os.environ.get("APP_COMMIT", "").strip() or "unknown"
@@ -38,6 +42,27 @@ _FRONTEND_MANIFEST_REQUIRED = (
     _os.environ.get("FRONTEND_MANIFEST_REQUIRED", "").strip().lower() in _TRUTHY_VALUES
 )
 _FRONTEND_MANIFEST_PATH = _os.environ.get("FRONTEND_MANIFEST_PATH", "").strip()
+
+
+def _configured_allowed_hosts(host_bind: str, raw: str) -> list[str]:
+    hosts = {"localhost", "127.0.0.1", "::1"}
+    normalized_bind = host_bind.strip().strip("[]")
+    if normalized_bind and normalized_bind not in {"0.0.0.0", "::"}:
+        hosts.add(normalized_bind)
+    for item in raw.split(","):
+        host = item.strip().lower().rstrip(".")
+        if not host:
+            continue
+        if "*" in host or "/" in host or "://" in host:
+            raise RuntimeError("ALLOWED_HOSTS must contain explicit host names")
+        hosts.add(host.strip("[]"))
+    return sorted(hosts)
+
+
+_ALLOWED_HOSTS = _configured_allowed_hosts(
+    _HOST_BIND,
+    _os.environ.get("ALLOWED_HOSTS", ""),
+)
 
 
 def _is_loopback_bind(value: str) -> bool:
@@ -93,6 +118,11 @@ _RL_LIGHT_LIMIT = 200   # max requests / window for cheap endpoints
 _RL_WINDOW = 60         # seconds
 _RL_MAX_KEYS = 10_000   # safety valve against IP-churn memory growth
 _rl_last_prune = 0.0
+_auth_fail_buckets: dict[str, _deque] = {}
+_AUTH_FAIL_LIMIT = 12
+_AUTH_FAIL_WINDOW = 60
+_AUTH_FAIL_MAX_KEYS = 10_000
+_auth_fail_last_prune = 0.0
 
 _HEAVY_API_PREFIXES = (
     "/api/ai/",
@@ -127,22 +157,19 @@ def _scope_header(scope, name: bytes) -> str:
 
 
 def _scope_client_ip(scope) -> str:
-    if _TRUST_PROXY_HEADERS:
-        ip = (
-            _scope_header(scope, b"cf-connecting-ip")
-            or _scope_header(scope, b"x-forwarded-for").split(",")[0].strip()
-        )
-        if ip:
-            return ip
-    client = scope.get("client")
-    return client[0] if client else "unknown"
+    return client_ip_from_scope(
+        scope,
+        enabled=_TRUST_PROXY_HEADERS,
+        networks=_TRUSTED_PROXY_NETWORKS,
+    )
 
 
 def _scope_is_https(scope) -> bool:
-    if scope.get("scheme") == "https":
-        return True
-    forwarded_proto = _scope_header(scope, b"x-forwarded-proto").split(",")[0].strip()
-    return _TRUST_PROXY_HEADERS and forwarded_proto == "https"
+    return request_is_https(
+        scope,
+        enabled=_TRUST_PROXY_HEADERS,
+        networks=_TRUSTED_PROXY_NETWORKS,
+    )
 
 
 def _scope_token(scope) -> str:
@@ -199,6 +226,42 @@ def _prune_rl_buckets(now: float) -> None:
         )[:remove_count]
         for key in oldest:
             _rl_buckets.pop(key, None)
+
+
+def _auth_failure_limited(client_ip: str, now: float) -> bool:
+    global _auth_fail_last_prune
+    cutoff = now - _AUTH_FAIL_WINDOW
+    if (
+        now - _auth_fail_last_prune >= _AUTH_FAIL_WINDOW
+        or len(_auth_fail_buckets) >= _AUTH_FAIL_MAX_KEYS
+    ):
+        _auth_fail_last_prune = now
+        for key in [
+            key
+            for key, bucket in _auth_fail_buckets.items()
+            if not bucket or bucket[-1] < cutoff
+        ]:
+            _auth_fail_buckets.pop(key, None)
+        if len(_auth_fail_buckets) >= _AUTH_FAIL_MAX_KEYS:
+            remove_count = len(_auth_fail_buckets) - _AUTH_FAIL_MAX_KEYS + 1
+            oldest = sorted(
+                _auth_fail_buckets,
+                key=lambda key: (
+                    _auth_fail_buckets[key][-1]
+                    if _auth_fail_buckets[key]
+                    else float("-inf")
+                ),
+            )[:remove_count]
+            for key in oldest:
+                _auth_fail_buckets.pop(key, None)
+
+    bucket = _auth_fail_buckets.setdefault(client_ip, _deque())
+    while bucket and bucket[0] < cutoff:
+        bucket.popleft()
+    if len(bucket) >= _AUTH_FAIL_LIMIT:
+        return True
+    bucket.append(now)
+    return False
 
 
 async def _send_json(send, status: int, payload: dict, extra_headers: list | None = None) -> None:
@@ -271,6 +334,17 @@ class _GatewayMiddleware:
                 except Exception:
                     valid = False
                 if not valid:
+                    if _auth_failure_limited(_scope_client_ip(scope), _time.time()):
+                        return await _send_json(
+                            send_with_response_headers,
+                            429,
+                            {
+                                "error": "auth_rate_limited",
+                                "message": "Too many failed authentication attempts",
+                            },
+                            extra_headers=_cors_headers(scope)
+                            + [(b"retry-after", str(_AUTH_FAIL_WINDOW).encode())],
+                        )
                     return await _send_json(
                         send_with_response_headers, 401,
                         {"error": "unauthorized", "message": "Missing or invalid API token"},
@@ -302,6 +376,7 @@ class _GatewayMiddleware:
 
 app.add_middleware(_GatewayMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS)
 
 app.include_router(stocks.router)
 app.include_router(options.router)

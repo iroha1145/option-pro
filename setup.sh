@@ -19,6 +19,38 @@ NC='\033[0m'
 
 trap 'echo -e "${RED}✗ 安装在第 ${LINENO} 行失败。请查看上方错误信息。${NC}" >&2' ERR
 
+set_env_value() {
+    local key="$1"
+    local value="$2"
+    local temporary=".env.tmp.$$"
+    case "$value" in
+        *$'\n'*|*$'\r'*)
+            echo "配置值不能包含换行符。" >&2
+            return 1
+            ;;
+    esac
+    # Compose treats single-quoted dotenv values literally. Escape only the
+    # quote delimiter so $, #, spaces and backslashes survive unchanged.
+    local encoded
+    encoded="$(ENV_VALUE="$value" awk 'BEGIN {
+        value=ENVIRON["ENV_VALUE"]
+        gsub(/\047/, "\\\047", value)
+        printf "\047%s\047", value
+    }')"
+    ENV_KEY="$key" ENV_VALUE="$encoded" awk '
+        BEGIN { key=ENVIRON["ENV_KEY"]; value=ENVIRON["ENV_VALUE"]; found=0 }
+        index($0, key "=") == 1 {
+            print key "=" value
+            found=1
+            next
+        }
+        { print }
+        END { if (!found) print key "=" value }
+    ' .env > "$temporary"
+    chmod 600 "$temporary"
+    mv "$temporary" .env
+}
+
 echo -e "${CYAN}${BOLD}"
 echo "  ┌─────────────────────────────────────┐"
 echo "  │        Optix Pro Setup              │"
@@ -107,26 +139,16 @@ else
             ;;
     esac
 
-    # Write .env (never committed to git)
-    cat > .env << EOF
-OPENAI_API_KEY=${api_key}
-OPENAI_BASE_URL=${api_base}
-ALLOW_CUSTOM_OPENAI_BASE_URL=${allow_custom_base}
-OPENAI_MODEL=${model}
-OPENAI_REASONING=${reasoning}
-OPENAI_TIMEOUT_SECONDS=45
-OPENAI_MAX_RETRIES=0
-OPENAI_MAX_OUTPUT_TOKENS=1200
-OPENAI_MAX_CONCURRENCY=2
-HOST_BIND=127.0.0.1
-PORT=2000
-APP_AUTH_TOKEN=
-TRUST_PROXY_HEADERS=false
-ALLOWED_ORIGINS=
-ALLOW_INSECURE_PUBLIC_BIND=false
-EOF
-
+    # Start from the complete, deployable template, then update only the
+    # values entered above. Values are written as data and are never sourced
+    # or evaluated as shell code.
+    cp .env.example .env
     chmod 600 .env
+    set_env_value OPENAI_API_KEY "$api_key"
+    set_env_value OPENAI_BASE_URL "$api_base"
+    set_env_value ALLOW_CUSTOM_OPENAI_BASE_URL "$allow_custom_base"
+    set_env_value OPENAI_MODEL "$model"
+    set_env_value OPENAI_REASONING "$reasoning"
 
     echo -e "${GREEN}✓${NC} .env 已生成（已加入 .gitignore，不会泄露）"
     echo -e "  默认仅监听 127.0.0.1；远程使用请优先通过 SSH 隧道或 VPN。"

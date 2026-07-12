@@ -33,6 +33,7 @@ def test_breakout_bootstrap_environment_is_complete_and_off_by_default() -> None
     values = _env_values()
     expected = {
         "BREAKOUT_RADAR_ENABLED": "false",
+        "DEPLOY_REQUIRE_BREAKOUT": "false",
         "BREAKOUT_DISCOVERY_PROVIDER": "tradingview",
         "BREAKOUT_DB_PATH": "/data/optix.db",
         "BREAKOUT_PROVIDER_TIMEOUT_SECONDS": "10",
@@ -52,6 +53,7 @@ def test_breakout_bootstrap_environment_is_complete_and_off_by_default() -> None
         "BREAKOUT_PROVIDER_RESULT_LIMIT": "150",
         "BREAKOUT_DAILY_ENRICH_LIMIT": "60",
         "BREAKOUT_INTRADAY_ENRICH_LIMIT": "30",
+        "BREAKOUT_EXPIRED_DUE_LIMIT": "40",
         "BREAKOUT_MIN_PRICE": "2.0",
         "BREAKOUT_MIN_AVG_DOLLAR_VOLUME": "10000000",
         "BREAKOUT_REGULAR_MIN_CHANGE_PCT": "3.0",
@@ -71,7 +73,6 @@ def test_breakout_bootstrap_environment_is_complete_and_off_by_default() -> None
         "BREAKOUT_FEATURE_VERSION": "breakout-features-v1",
         "BREAKOUT_DETECTOR_VERSION": "breakout-detector-v1",
         "BREAKOUT_API_SCHEMA_VERSION": "breakout-api-v1",
-        "MARKET_SHAPE_VERSION": "market-shape-v3",
         "MARKET_SHAPE_ENTER_CONFIRM_DAYS": "2",
         "MARKET_SHAPE_EXIT_CONFIRM_DAYS": "2",
         "MARKET_SHAPE_MIN_DWELL_DAYS": "3",
@@ -113,7 +114,6 @@ def test_backend_and_worker_share_one_writable_data_volume_and_image() -> None:
     assert validation_version in backend
     assert validation_version in worker
     for key in (
-        "MARKET_SHAPE_VERSION",
         "MARKET_SHAPE_ENTER_CONFIRM_DAYS",
         "MARKET_SHAPE_EXIT_CONFIRM_DAYS",
         "MARKET_SHAPE_MIN_DWELL_DAYS",
@@ -132,19 +132,23 @@ def test_backend_and_worker_share_one_writable_data_volume_and_image() -> None:
     ):
         assert f"{key}=${{{key}:-" in backend
         assert f"{key}=${{{key}:-" in worker
+    assert "BREAKOUT_EXPIRED_DUE_LIMIT=${BREAKOUT_EXPIRED_DUE_LIMIT:-40}" in worker
+    assert "MARKET_SHAPE_VERSION=${MARKET_SHAPE_VERSION:-" not in compose
     assert re.search(r"(?m)^volumes:\n  optix-data:\s*$", compose)
 
 
-def test_deployment_requires_live_radar_and_range_interactions() -> None:
+def test_deployment_respects_optional_radar_gate_and_shadow_defaults() -> None:
     script = (ROOT / "scripts" / "deploy.sh").read_text(encoding="utf-8")
-    assert "Refusing production deployment while Breakout Radar is disabled" in script
-    assert "RANGE_PERSISTENCE_MODE must be explicitly set" in script
-    assert "Range Persistence interactions are disabled" in script
+    assert "DEPLOY_REQUIRE_BREAKOUT=true requires BREAKOUT_RADAR_ENABLED=true" in script
+    assert "RANGE_PERSISTENCE_MODE must be disabled, shadow, or enabled" in script
+    assert "Range Persistence interactions are disabled" not in script
     assert "payload.get(\"enabled\")" in script
-    assert "EXPECTED_MARKET_SHAPE_VERSION" in script
+    assert "from app.services.strength.market_shape import MARKET_SHAPE_VERSION" in script
+    assert "EXPECTED_MARKET_SHAPE_VERSION" not in script
     assert "market-shape-v2" not in script
     assert "app.services.breakouts.worker --healthcheck" in script
-    assert "|\n    docker compose exec -T backend \\\n        python -c" in script
+    assert 'WORKER_HEALTH=${worker_health}' in script
+    assert "json.loads(os.environ[\"WORKER_HEALTH\"])" in script
 
 
 def test_worker_is_isolated_and_has_an_independent_healthcheck() -> None:

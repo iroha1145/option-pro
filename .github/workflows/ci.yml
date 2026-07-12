@@ -69,6 +69,9 @@ jobs:
             node --check "$file"
           done < <(git ls-files -z 'frontend/**/*.js')
 
+      - name: Run frontend behavior tests
+        run: node --test frontend/tests/*.test.mjs
+
       - name: Run frontend production assertions
         run: node frontend/tests/static_assertions.mjs
 
@@ -84,7 +87,7 @@ jobs:
       - name: Start production containers and wait for readiness
         run: docker compose up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180
 
-      - name: Smoke-test version, frontend, breakout status, headers, and compression
+      - name: Smoke-test version, frontend, APIs, headers, and compression
         shell: bash
         run: |
           curl --fail --silent --show-error --retry 5 http://127.0.0.1:2000/ready |
@@ -100,10 +103,75 @@ jobs:
           grep -qi '^cache-control:.*max-age=300' /tmp/optix-static.headers
           curl --fail --silent --show-error http://127.0.0.1:2000/api/breakouts/status |
             python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["enabled"] is False; assert p["range_persistence_mode"] == "shadow"'
+          smoke_api_route() {
+            local name="$1"
+            local url="$2"
+            local body="/tmp/optix-${name}.json"
+            local code
+            code="$(curl --silent --show-error --max-time 240 --output "$body" --write-out '%{http_code}' "$url")"
+            python - "$name" "$code" "$body" <<'PY'
+          import json
+          import sys
+
+          name, code, body = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+          with open(body, encoding="utf-8") as stream:
+              payload = json.load(stream)
+          assert isinstance(payload, dict), (name, type(payload).__name__)
+          controlled_errors = {
+              "strength-market": {"Strength data is currently unavailable"},
+              "strength-scan": {"Strength data is currently unavailable"},
+              "options-unusual": {
+                  "Yahoo options data is currently unavailable",
+                  "Yahoo options data is temporarily cooling down",
+              },
+              "earnings-upcoming": {"Yahoo earnings data is currently unavailable"},
+          }
+          if code == 503:
+              assert name in controlled_errors, (name, payload)
+              assert payload.get("detail") in controlled_errors[name], (name, payload)
+              raise SystemExit(0)
+          assert code == 200, (name, code, payload)
+          if name == "breakouts-current":
+              assert payload.get("status") == "disabled"
+              assert isinstance(payload.get("events"), list)
+          elif name == "strength-market":
+              assert isinstance(payload.get("market_regime"), dict)
+              assert isinstance(payload.get("data_sources"), dict)
+          elif name == "strength-scan":
+              assert isinstance(payload.get("results"), list)
+              assert isinstance(payload.get("count"), int)
+              assert payload.get("range_persistence_mode") == "shadow"
+          elif name == "options-unusual":
+              assert isinstance(payload.get("results"), list)
+              assert payload.get("source_status") in {"active", "degraded"}
+          elif name == "earnings-upcoming":
+              assert isinstance(payload.get("earnings"), list)
+              assert payload.get("source_status") in {"active", "degraded"}
+          else:
+              raise AssertionError(name)
+          PY
+          }
+          smoke_api_route breakouts-current http://127.0.0.1:2000/api/breakouts/current
+          smoke_api_route strength-market http://127.0.0.1:2000/api/strength/market
+          smoke_api_route strength-scan 'http://127.0.0.1:2000/api/strength/scan?top=5'
+          smoke_api_route options-unusual 'http://127.0.0.1:2000/api/options/unusual?min_vol_oi=1'
+          smoke_api_route earnings-upcoming http://127.0.0.1:2000/api/earnings/upcoming
           docker compose exec -T breakout-worker python -m app.services.breakouts.worker --healthcheck |
             python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["healthy"] is True'
           docker compose run --rm --no-deps breakout-worker python -m app.services.breakouts.worker --once |
             python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["scan_run_id"] is None'
+
+      - name: Exercise enabled closed and mocked-active Breakout Radar in the production image
+        shell: bash
+        run: |
+          docker compose run --rm --no-deps \
+            --env BREAKOUT_RADAR_ENABLED=true \
+            --env PYTHONPATH=/app/backend \
+            --volume "${GITHUB_WORKSPACE}/tests:/ci-tests:ro" \
+            breakout-worker \
+            python /ci-tests/container_breakout_runtime_smoke.py \
+              /ci-tests/fixtures/breakouts/provider_regular.json |
+            python -c 'import json, sys; p=json.load(sys.stdin); assert p["closed"]["status"] == "paused"; assert p["closed"]["scan_run_id"] is None; assert p["active"]["status"] == "completed"; assert p["active"]["event_count"] == 0'
 
       - name: Verify non-root read-only runtime and shared SQLite WAL volume
         shell: bash

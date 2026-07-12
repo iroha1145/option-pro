@@ -6,6 +6,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main
+from app.services.request_security import (
+    client_ip_from_scope,
+    parse_trusted_proxy_cidrs,
+)
+
+
+def _client() -> TestClient:
+    return TestClient(main.app, base_url="http://localhost")
 
 
 def test_public_bind_requires_auth_or_explicit_private_network_opt_in():
@@ -19,7 +27,7 @@ def test_public_bind_requires_auth_or_explicit_private_network_opt_in():
 
 
 def test_health_and_ready_expose_build_and_frontend_integrity():
-    client = TestClient(main.app)
+    client = _client()
 
     health = client.get("/health")
     assert health.status_code == 200
@@ -38,7 +46,7 @@ def test_health_and_ready_expose_build_and_frontend_integrity():
 
 def test_ready_fails_when_required_frontend_files_are_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "FRONTEND_DIR", tmp_path)
-    client = TestClient(main.app)
+    client = _client()
 
     response = client.get("/ready")
 
@@ -66,7 +74,7 @@ def test_frontend_manifest_checks_every_baked_asset(monkeypatch, tmp_path):
 
 
 def test_gateway_adds_security_cache_and_compression_headers():
-    client = TestClient(main.app)
+    client = _client()
 
     root = client.get("/", headers={"accept-encoding": "gzip"})
     assert root.status_code == 200
@@ -87,7 +95,7 @@ def test_gateway_adds_security_cache_and_compression_headers():
 
 def test_gateway_auth_errors_keep_security_headers(monkeypatch):
     monkeypatch.setattr(main, "_APP_AUTH_TOKEN", "test-secret")
-    client = TestClient(main.app)
+    client = _client()
 
     response = client.get("/api/market/status")
 
@@ -126,3 +134,75 @@ def test_rate_limit_bucket_map_has_a_hard_capacity(monkeypatch):
 
     assert len(main._rl_buckets) == 2
     assert "oldest" not in main._rl_buckets
+
+
+def test_proxy_headers_are_used_only_from_trusted_peers() -> None:
+    networks = parse_trusted_proxy_cidrs("10.0.0.0/8,2001:db8::/32")
+    direct_scope = {
+        "client": ("198.51.100.7", 443),
+        "headers": [(b"x-forwarded-for", b"203.0.113.9")],
+    }
+    trusted_scope = {
+        "client": ("10.0.0.5", 443),
+        "headers": [
+            (b"x-forwarded-for", b"203.0.113.9, 10.0.0.4"),
+        ],
+    }
+
+    assert (
+        client_ip_from_scope(direct_scope, enabled=True, networks=networks)
+        == "198.51.100.7"
+    )
+    assert (
+        client_ip_from_scope(trusted_scope, enabled=True, networks=networks)
+        == "203.0.113.9"
+    )
+
+
+def test_generic_trusted_proxy_does_not_accept_a_spoofed_cloudflare_header() -> None:
+    networks = parse_trusted_proxy_cidrs("10.0.0.0/8")
+    scope = {
+        "client": ("10.0.0.5", 443),
+        "headers": [
+            (b"cf-connecting-ip", b"192.0.2.77"),
+            (b"x-forwarded-for", b"203.0.113.9, 10.0.0.4"),
+        ],
+    }
+
+    assert (
+        client_ip_from_scope(scope, enabled=True, networks=networks)
+        == "203.0.113.9"
+    )
+
+
+def test_invalid_host_is_rejected() -> None:
+    response = _client().get("/health", headers={"host": "evil.example"})
+    assert response.status_code == 400
+
+
+def test_allowed_hosts_accept_explicit_domains_and_reject_wildcards() -> None:
+    assert "option.example.com" in main._configured_allowed_hosts(
+        "127.0.0.1", "option.example.com"
+    )
+    with pytest.raises(RuntimeError, match="explicit host names"):
+        main._configured_allowed_hosts("127.0.0.1", "*.example.com")
+
+
+def test_failed_authentication_has_an_independent_rate_limit(monkeypatch) -> None:
+    monkeypatch.setattr(main, "_APP_AUTH_TOKEN", "valid-secret")
+    monkeypatch.setattr(main, "_AUTH_FAIL_LIMIT", 2)
+    monkeypatch.setattr(main, "_auth_fail_last_prune", 0.0)
+    main._auth_fail_buckets.clear()
+    client = _client()
+
+    assert client.get("/api/market/status").status_code == 401
+    assert client.get("/api/market/status").status_code == 401
+    limited = client.get("/api/market/status")
+    assert limited.status_code == 429
+    assert limited.json()["error"] == "auth_rate_limited"
+
+    valid = client.get(
+        "/api/market/status",
+        headers={"authorization": "Bearer valid-secret"},
+    )
+    assert valid.status_code == 200

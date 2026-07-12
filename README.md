@@ -108,7 +108,20 @@ sessionStorage.setItem('optix.app.token', 'same-strong-random-token');
 location.reload();
 ```
 
-只有部署在可信 HTTPS/SSH/VPN 链路上时才这样使用。若反向代理与前端跨域，再精确设置 `ALLOWED_ORIGINS`；只有在可信代理已经覆盖并清洗转发头时才设置 `TRUST_PROXY_HEADERS=true`。
+只有部署在可信 HTTPS/SSH/VPN 链路上时才这样使用。反向代理部署必须把每个公开域名写入 `ALLOWED_HOSTS`，部署脚本会使用这些域名的 `Host` 请求再次检查就绪状态：
+
+```dotenv
+ALLOWED_HOSTS=option.example.com
+```
+
+若反向代理与前端跨域，再精确设置 `ALLOWED_ORIGINS`。只有在可信代理已经覆盖并清洗转发头时才设置 `TRUST_PROXY_HEADERS=true`，并同时填写代理直连来源网段；不能填写访客网段：
+
+```dotenv
+TRUST_PROXY_HEADERS=true
+TRUSTED_PROXY_CIDRS=127.0.0.1/32,10.0.0.0/24
+```
+
+从缺少 `ALLOWED_HOSTS` 的旧版 `.env` 升级时，部署脚本会先停止并要求补上这一行。仅通过本机、SSH 隧道或虚拟专用网络（VPN）访问时可保留空值；使用公开域名时必须明确列出域名，避免容器健康但网页被主机校验拒绝。
 
 ## 本地开发
 
