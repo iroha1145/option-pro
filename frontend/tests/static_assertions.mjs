@@ -91,21 +91,24 @@ assert.match(index, /font-src 'self'/, 'the content security policy must keep fo
 const linkedStyles = [...index.matchAll(/<link\s+rel="stylesheet"\s+href="([^"]+)"/g)]
   .map((match) => match[1].split('?')[0]);
 assert.deepEqual(linkedStyles, [
-  './static/css/optix-core-v3.css',
-  './static/css/optix-watchlist-v3.css',
-  './static/css/optix-nightday-v4.css',
-], 'the shell should load the core, initial-route, and night/day theme styles');
+  './static/css/optix-deck.css',
+], 'the deck shell loads a single self-contained stylesheet');
+
+// Deck shell scripts: pre-paint theme init, then data layer, then renderers.
+assert.match(index, /<script src="\.\/static\/js\/theme-init\.js[^"]*"><\/script>[\s\S]*<link rel="stylesheet"/, 'theme must initialize before first paint');
+assert.match(index, /deck-api\.js[\s\S]*deck-app\.js/, 'the data layer must load before the renderers');
+assert.doesNotMatch(index, /<script>(?!<)/, 'the shell must not carry inline scripts under CSP script-src self');
 
 // Core Optix Pro shell.
 assert.match(index, /<title>Optix Pro · 个人投资研究<\/title>/, 'the product name must stay unified');
 assert.match(index, /rel="icon" href="\.\/static\/favicon\.svg"/, 'the local favicon must be linked');
-assert.match(index, /<body class="optix-app">/, 'the v3 shell needs its root class');
-assert.match(index, /class="app-header"/, 'the shell needs its top navigation');
-assert.match(index, /class="app-header__frame"[\s\S]*class="app-header__inner"[\s\S]*class="ticker-bar"/, 'navigation and the ticker should share one market chamber');
-assert.match(index, /id="global-search"[^>]+aria-controls="global-search-results"/, 'global search needs accessible listbox wiring');
-assert.match(index, /id="workspace-clock"/, 'the shell must expose local workspace time');
-assert.match(index, /id="index-ticker-track"/, 'the shell must retain the market index strip');
-assert.match(index, /id="index-ticker-track"[^>]*><\/div>\s*<time id="index-ticker-updated"/, 'ticker freshness must sit outside the horizontal index scroller');
+assert.match(index, /class="deck-header"[\s\S]*class="tape"/, 'the deck shell pairs navigation with the index tape');
+assert.match(index, /id="search-toggle"[\s\S]*id="palette-input"/, 'global search opens the command palette');
+assert.match(index, /id="clock-bj"[\s\S]*id="market-phase"/, 'the shell must expose workspace time and market phase');
+assert.match(index, /id="index-tape"/, 'the shell must retain the market index strip');
+assert.match(index, /id="tape-updated"/, 'index freshness must remain visible next to the tape');
+assert.match(index, /id="theme-toggle"/, 'the night/day toggle must live in the header');
+assert.match(index, /id="drawer"[^>]*role="dialog"[^>]*aria-modal="true"/, 'research drawers need dialog semantics');
 assert.match(indices, /document\.getElementById\('index-ticker-updated'\)/, 'index updates need an independent timestamp target');
 assert.match(indices, /updated\.dateTime = refreshedAt\.toISOString\(\)/, 'ticker freshness needs a machine-readable timestamp');
 assert.match(indices, /<a class="ticker-item" href="#detail\/\$\{encodeURIComponent\(symbol\)\}"/, 'each market index must use a native detail link');
@@ -119,11 +122,11 @@ assert.match(coreV3, /@media \(max-width: 1180px\)[\s\S]*--ticker-items-per-view
 assert.match(coreV3, /@media \(max-width: 860px\)[\s\S]*--ticker-items-per-view:\s*2;/, 'tablets should show two complete index items');
 assert.match(coreV3, /@media \(max-width: 640px\)[\s\S]*--ticker-items-per-view:\s*1;/, 'phones should show one complete index item');
 assert.match(coreV3, /\.ticker-item:focus-visible/, 'market index links need a visible keyboard focus state');
-assert.match(index, /<main id="app"[^>]+tabindex="-1"/, 'route changes need a focusable main region');
-assert.match(index, /class="mobile-dock"/, 'mobile navigation must remain directly available');
+assert.match(index, /<main id="view"[^>]+tabindex="-1"/, 'route changes need a focusable main region');
+assert.match(index, /class="dock"/, 'mobile navigation must remain directly available');
 assert.match(index, /data-route="watchlist"[\s\S]*data-route="screener"[\s\S]*data-route="sectors"/, 'the primary navigation should keep screening near the front');
 assert.match(index, /href="#breakouts"[^>]+data-route="breakouts"[\s\S]*突破雷达/, 'desktop navigation must expose Breakout Radar');
-assert.match(index, /class="mobile-dock"[\s\S]*href="#breakouts"[^>]+data-route="breakouts"[\s\S]*>雷达</, 'mobile navigation must expose the radar route');
+assert.match(index, /class="dock"[\s\S]*href="#breakouts"[^>]+data-route="breakouts"[\s\S]*>雷达</, 'mobile navigation must expose the radar route');
 assert.match(app, /breakouts:[\s\S]*renderBreakouts[\s\S]*\.\/pages\/breakouts\.js/, 'the app router must lazy-load Breakout Radar');
 assert.match(coreV3, /@media \(max-width: 860px\)[\s\S]*\.sidebar-nav\s*\{[^}]*grid-template-columns:\s*repeat\(5, minmax\(0, 1fr\)\)/, 'tablet navigation must fit all five primary routes');
 assert.match(coreV3, /@media \(max-width: 640px\)[\s\S]*\.mobile-dock\s*\{[^}]*grid-template-columns:\s*repeat\(5, 1fr\)/, 'mobile dock must fit all five primary routes');
@@ -208,7 +211,7 @@ for (const iconName of [
 // Watchlist: honest freshness, safe snapshots, and direct responsive quote cards.
 assert.match(watchlist, /class="watchlist-page"/, 'watchlist needs its v3 page root');
 assert.match(watchlistV3, /^\.watchlist-page\s*\{/m, 'watchlist styles must start from their page root');
-assert.match(index, /optix-watchlist-v3\.css/, 'the initial watchlist route needs its v3 stylesheet');
+// v3 页面样式不再由壳加载;v3 模块作为归档保留,断言继续守护其内部约定。
 assert.match(watchlist, /WATCHLIST_REFRESH_MS = 5 \* 60 \* 1000/, 'watchlist refresh must stay aligned to five minutes');
 assert.match(watchlist, /payload\?\.as_of \|\| payload\?\.fetched_at/, 'watchlist must display backend freshness');
 assert.match(watchlist, /WATCHLIST_SNAPSHOT_KEY = 'optix\.watchlist\.snapshot\.v2'/, 'only the versioned real-data snapshot may persist');
@@ -485,4 +488,4 @@ assert.match(search, /addEventListener\('focus'.*ensureUniverse/, 'search data m
 assert.doesNotMatch(search, /let universePromise = loadSearchUniverse\(\)/, 'search data must not load during initialization');
 assert.match(optionChain, /import \{ renderIcon \} from '\.\.\/icons\.js'/, 'option alerts must use local SVG icons');
 
-console.log('frontend v3 static assertions: ok');
+console.log('frontend static assertions (deck shell + archived v3 modules): ok');
