@@ -159,6 +159,7 @@ print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 
 docker compose exec -T breakout-worker \
     python -m app.services.breakouts.worker --healthcheck |
-    python -c 'import json,sys; p=json.load(sys.stdin); assert p["healthy"] is True; assert p["status"] != "disabled"'
+    docker compose exec -T backend \
+        python -c 'import json,sys; p=json.load(sys.stdin); assert p["healthy"] is True; assert p["status"] != "disabled"'
 
 echo "Deployment passed readiness, version, and Breakout Radar configuration checks."

@@ -131,6 +131,7 @@ def test_deployment_requires_live_radar_and_range_interactions() -> None:
     assert "Range Persistence interactions are disabled" in script
     assert "payload.get(\"enabled\")" in script
     assert "app.services.breakouts.worker --healthcheck" in script
+    assert "|\n    docker compose exec -T backend \\\n        python -c" in script
 
 
 def test_worker_is_isolated_and_has_an_independent_healthcheck() -> None:
