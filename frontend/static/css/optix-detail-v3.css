@@ -591,11 +591,7 @@
   white-space: nowrap;
 }
 
-.instrument-page .market-strength-placeholder {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 18px clamp(24px, 4vw, 56px);
+.instrument-page .market-strength-panel {
   margin-top: 24px;
   padding: clamp(22px, 3vw, 34px);
   border: 1px solid var(--detail-border-strong);
@@ -607,12 +603,19 @@
     0 20px 54px color-mix(in oklch, var(--detail-ink), transparent 95%);
 }
 
-.instrument-page .market-strength-placeholder__intro {
+.instrument-page .market-strength-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.instrument-page .market-strength-panel__intro {
   max-width: 56rem;
   min-width: 0;
 }
 
-.instrument-page .market-strength-placeholder__eyebrow {
+.instrument-page .market-strength-panel__eyebrow {
   display: block;
   margin-bottom: 6px;
   color: var(--detail-accent);
@@ -622,7 +625,7 @@
   text-transform: uppercase;
 }
 
-.instrument-page .market-strength-placeholder h3 {
+.instrument-page .market-strength-panel h3 {
   margin: 0;
   color: var(--detail-ink);
   font-size: clamp(1.15rem, 2vw, 1.55rem);
@@ -630,7 +633,7 @@
   letter-spacing: -0.03em;
 }
 
-.instrument-page .market-strength-placeholder__intro p {
+.instrument-page .market-strength-panel__intro p {
   max-width: 62ch;
   margin: 9px 0 0;
   color: var(--detail-ink-muted);
@@ -638,7 +641,7 @@
   line-height: 1.6;
 }
 
-.instrument-page .market-strength-placeholder__status {
+.instrument-page .market-strength-panel__status {
   display: inline-flex;
   align-items: center;
   min-height: 30px;
@@ -653,49 +656,539 @@
   white-space: nowrap;
 }
 
-.instrument-page .market-strength-placeholder__status i {
+.instrument-page .market-strength-panel__status i {
   width: 6px;
   height: 6px;
-  border: 1px solid currentColor;
   border-radius: 50%;
-  background: transparent;
+  background: currentColor;
 }
 
-.instrument-page .market-strength-placeholder__slots {
-  grid-column: 1 / -1;
+.instrument-page .market-strength-panel.is-ready .market-strength-panel__status {
+  border-color: color-mix(in oklch, var(--detail-positive), var(--detail-border) 55%);
+  background: color-mix(in oklch, var(--detail-positive) 10%, var(--detail-surface));
+  color: var(--detail-positive);
+}
+
+.instrument-page .market-strength-panel.is-partial .market-strength-panel__status,
+.instrument-page .market-strength-panel.is-insufficient .market-strength-panel__status {
+  border-color: color-mix(in oklch, var(--detail-warning), var(--detail-border) 55%);
+  background: color-mix(in oklch, var(--detail-warning) 10%, var(--detail-surface));
+  color: var(--detail-warning);
+}
+
+.instrument-page .market-strength-panel.is-error .market-strength-panel__status {
+  border-color: color-mix(in oklch, var(--detail-negative), var(--detail-border) 55%);
+  background: color-mix(in oklch, var(--detail-negative) 9%, var(--detail-surface));
+  color: var(--detail-negative);
+}
+
+.instrument-page .market-strength-panel__sources {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 2px 0 0;
-  border-block: 1px solid var(--detail-border);
+  align-items: start;
+  gap: 14px;
+  margin-top: 22px;
 }
 
-.instrument-page .market-strength-placeholder__slots > div {
+.instrument-page .market-strength-panel__sources > section {
   min-width: 0;
-  padding: 15px clamp(16px, 2vw, 28px) 15px 0;
+  overflow: hidden;
+  padding: 17px;
+  border: 1px solid var(--detail-border);
+  border-radius: 15px;
+  background: color-mix(in oklch, var(--detail-surface-muted) 42%, var(--detail-surface));
 }
 
-.instrument-page .market-strength-placeholder__slots > div + div {
-  padding-left: clamp(16px, 2vw, 28px);
-  border-left: 1px solid var(--detail-border);
+.instrument-page .market-strength-panel__section-heading {
+  display: flex;
+  min-height: 43px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--detail-border);
 }
 
-.instrument-page .market-strength-placeholder__slots dt {
+.instrument-page .market-strength-panel__section-heading > span {
+  min-width: 0;
+}
+
+.instrument-page .market-strength-panel__section-heading small {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--detail-accent);
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.instrument-page .market-strength-panel__section-heading strong {
+  display: block;
   color: var(--detail-ink);
   font-size: 0.8125rem;
-  font-weight: 730;
+  line-height: 1.35;
 }
 
-.instrument-page .market-strength-placeholder__slots dd {
-  margin: 4px 0 0;
+.instrument-page .market-strength-panel__section-heading em {
+  flex: 0 0 auto;
   color: var(--detail-ink-muted);
+  font-size: 0.625rem;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.instrument-page .market-strength-panel__message {
+  display: flex;
+  min-height: 118px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 2px 4px;
+}
+
+.instrument-page .market-strength-panel__message > i {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  border: 2px solid color-mix(in oklch, var(--detail-accent), transparent 72%);
+  border-top-color: var(--detail-accent);
+  border-radius: 50%;
+  animation: instrument-detail-spin 0.8s linear infinite;
+}
+
+.instrument-page .market-strength-panel__message > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  margin-right: auto;
+}
+
+.instrument-page .market-strength-panel__message strong {
+  color: var(--detail-ink);
+  font-size: 0.8125rem;
+}
+
+.instrument-page .market-strength-panel__message small,
+.instrument-page .market-strength-panel__message--insufficient {
+  color: var(--detail-ink-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.instrument-page .market-strength-panel__message--error strong {
+  color: var(--detail-negative);
+}
+
+.instrument-page .market-strength-panel__message button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid var(--detail-border-strong);
+  border-radius: 10px;
+  background: var(--detail-surface);
+  color: var(--detail-accent);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.instrument-page .market-strength-panel__index-summary,
+.instrument-page .market-strength-panel__score {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 0 13px;
+}
+
+.instrument-page .market-strength-panel__index-summary > span,
+.instrument-page .market-strength-panel__score {
+  min-width: 0;
+}
+
+.instrument-page .market-strength-panel__index-summary small,
+.instrument-page .market-strength-panel__score > span {
+  display: block;
+  color: var(--detail-ink-muted);
+  font-size: 0.625rem;
+}
+
+.instrument-page .market-strength-panel__index-summary strong,
+.instrument-page .market-strength-panel__score > strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--detail-ink);
+  font-family: var(--font-data, ui-monospace, monospace);
+  font-size: 1.75rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.instrument-page .market-strength-panel__index-summary em,
+.instrument-page .market-strength-panel__score > small {
+  color: var(--detail-ink-muted);
+  font-size: 0.6875rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.instrument-page .market-strength-panel__index-summary--strong strong,
+.instrument-page .market-strength-panel__index-summary--positive strong,
+.instrument-page .market-strength-panel__overview--strong .market-strength-panel__score > strong,
+.instrument-page .market-strength-panel__overview--positive .market-strength-panel__score > strong {
+  color: var(--detail-positive);
+}
+
+.instrument-page .market-strength-panel__index-summary--risk strong,
+.instrument-page .market-strength-panel__overview--risk .market-strength-panel__score > strong {
+  color: var(--detail-negative);
+}
+
+.instrument-page .market-strength-panel__index-signals,
+.instrument-page .market-strength-panel__shape-metrics,
+.instrument-page .market-strength-panel__technical-card dl {
+  margin: 0;
+}
+
+.instrument-page .market-strength-panel__index-signals > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--detail-border);
+}
+
+.instrument-page .market-strength-panel__index-signals dt {
+  color: var(--detail-ink-muted);
+  font-size: 0.6875rem;
+}
+
+.instrument-page .market-strength-panel__index-signals dd {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  text-align: right;
+}
+
+.instrument-page .market-strength-panel__index-signals dd strong {
+  color: var(--detail-ink);
+  font-family: var(--font-data, ui-monospace, monospace);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.instrument-page .market-strength-panel__index-signals dd small {
+  color: var(--detail-ink-muted);
+  font-size: 0.625rem;
+}
+
+.instrument-page .market-strength-panel__technical-grid {
+  display: grid;
+  gap: 10px;
+  padding-top: 13px;
+}
+
+.instrument-page .market-strength-panel__technical-card {
+  padding: 12px;
+  border: 1px solid var(--detail-border);
+  border-radius: 12px;
+  background: var(--detail-surface);
+}
+
+.instrument-page .market-strength-panel__technical-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.instrument-page .market-strength-panel__technical-card > header span {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.instrument-page .market-strength-panel__technical-card > header small {
+  color: var(--detail-ink-muted);
+  font-size: 0.6875rem;
+}
+
+.instrument-page .market-strength-panel__technical-card > header strong {
+  color: var(--detail-ink);
+  font-family: var(--font-data, ui-monospace, monospace);
+  font-size: 1.35rem;
+}
+
+.instrument-page .market-strength-panel__technical-card--top > header strong {
+  color: var(--detail-negative);
+}
+
+.instrument-page .market-strength-panel__technical-card--bottom > header strong {
+  color: var(--detail-positive);
+}
+
+.instrument-page .market-strength-panel__technical-card > header em {
+  color: var(--detail-ink-muted);
+  font-size: 0.625rem;
+  font-style: normal;
+  text-align: right;
+}
+
+.instrument-page .market-strength-panel__technical-card dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 10px;
+  overflow: hidden;
+  border: 1px solid var(--detail-border);
+  border-radius: 8px;
+  background: var(--detail-border);
+}
+
+.instrument-page .market-strength-panel__technical-card dl > div {
+  min-width: 0;
+  padding: 7px;
+  background: var(--detail-surface);
+}
+
+.instrument-page .market-strength-panel__technical-card dt {
+  overflow: hidden;
+  color: var(--detail-ink-muted);
+  font-size: 0.5625rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.instrument-page .market-strength-panel__technical-card dd {
+  margin: 2px 0 0;
+  color: var(--detail-ink);
+  font-family: var(--font-data, ui-monospace, monospace);
+  font-size: 0.6875rem;
+}
+
+.instrument-page .market-strength-panel__technical-card ul,
+.instrument-page .market-strength-panel__warnings ul,
+.instrument-page .market-strength-panel__shape-details ul {
+  margin: 9px 0 0;
+  padding-left: 17px;
+  color: var(--detail-ink-muted);
+  font-size: 0.625rem;
+  line-height: 1.55;
+}
+
+.instrument-page .market-strength-panel__technical-card > p,
+.instrument-page .market-strength-panel__technical-meta {
+  margin: 9px 0 0;
+  color: var(--detail-ink-muted);
+  font-size: 0.625rem;
+  line-height: 1.5;
+}
+
+.instrument-page .market-strength-panel__overview {
+  padding-top: 2px;
+}
+
+.instrument-page .market-strength-panel__score > small {
+  margin-left: auto;
+  text-align: right;
+}
+
+.instrument-page .market-strength-panel__shape {
+  padding: 12px;
+  border: 1px solid var(--detail-border);
+  border-radius: 12px;
+  background: var(--detail-surface);
+}
+
+.instrument-page .market-strength-panel__shape-lead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.instrument-page .market-strength-panel__shape-lead small {
+  display: block;
+  color: var(--detail-ink-muted);
+  font-size: 0.625rem;
+}
+
+.instrument-page .market-strength-panel__shape-lead strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--detail-ink);
+  font-size: 0.8125rem;
+}
+
+.instrument-page .market-strength-panel__shape-lead em {
+  color: var(--detail-positive);
+  font-size: 0.625rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.instrument-page .market-strength-panel__shape.is-unavailable .market-strength-panel__shape-lead em {
+  color: var(--detail-warning);
+}
+
+.instrument-page .market-strength-panel__shape-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 10px;
+  overflow: hidden;
+  border: 1px solid var(--detail-border);
+  border-radius: 8px;
+  background: var(--detail-border);
+}
+
+.instrument-page .market-strength-panel__shape-metrics > div {
+  padding: 8px;
+  background: var(--detail-surface);
+}
+
+.instrument-page .market-strength-panel__shape-metrics dt {
+  color: var(--detail-ink-muted);
+  font-size: 0.5625rem;
+}
+
+.instrument-page .market-strength-panel__shape-metrics dd {
+  margin: 2px 0 0;
+  color: var(--detail-ink);
+  font-family: var(--font-data, ui-monospace, monospace);
   font-size: 0.75rem;
 }
 
-.instrument-page .market-strength-placeholder__scope {
-  grid-column: 1 / -1;
-  margin: -2px 0 0;
+.instrument-page .market-strength-panel__shape-details {
+  margin-top: 10px;
+}
+
+.instrument-page .market-strength-panel__shape-details summary {
+  min-height: 36px;
+  color: var(--detail-accent);
+  cursor: pointer;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.instrument-page .market-strength-panel__shape-details dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.instrument-page .market-strength-panel__shape-details dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.625rem;
+}
+
+.instrument-page .market-strength-panel__shape-details dd {
+  max-width: 62%;
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.instrument-page .market-strength-panel__shape-details p {
+  margin: 8px 0 0;
+  color: var(--detail-ink-muted);
+  font-size: 0.625rem;
+}
+
+.instrument-page .market-strength-panel__dimensions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.instrument-page .market-strength-panel__dimension {
+  min-width: 0;
+}
+
+.instrument-page .market-strength-panel__dimension > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.instrument-page .market-strength-panel__dimension small {
+  overflow: hidden;
+  color: var(--detail-ink-muted);
+  font-size: 0.625rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.instrument-page .market-strength-panel__dimension strong {
+  color: var(--detail-ink);
+  font-family: var(--font-data, ui-monospace, monospace);
+  font-size: 0.6875rem;
+}
+
+.instrument-page .market-strength-panel__dimension > i {
+  display: block;
+  height: 4px;
+  margin-top: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--detail-border);
+}
+
+.instrument-page .market-strength-panel__dimension > i > b {
+  display: block;
+  width: var(--market-strength-score);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--detail-accent);
+}
+
+.instrument-page .market-strength-panel__dimension--strong > i > b,
+.instrument-page .market-strength-panel__dimension--positive > i > b {
+  background: var(--detail-positive);
+}
+
+.instrument-page .market-strength-panel__dimension--risk > i > b {
+  background: var(--detail-negative);
+}
+
+.instrument-page .market-strength-panel__warnings {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--detail-warning);
+  background: color-mix(in oklch, var(--detail-warning) 8%, transparent);
+}
+
+.instrument-page .market-strength-panel__warnings > strong {
+  color: var(--detail-warning);
+  font-size: 0.6875rem;
+}
+
+.instrument-page .market-strength-panel__warnings ul {
+  margin-top: 4px;
+}
+
+.instrument-page .market-strength-panel__footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding-top: 13px;
+  border-top: 1px solid var(--detail-border);
   color: var(--detail-ink-muted);
   font-size: 0.6875rem;
+}
+
+.instrument-page .market-strength-panel__footer strong {
+  color: var(--detail-ink-muted);
+  font-weight: 700;
 }
 
 .instrument-page .instrument-disclosures {
@@ -1575,6 +2068,27 @@
 }
 
 @container instrument-detail (max-width: 1080px) {
+  .instrument-page .market-strength-panel__sources {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .instrument-page .market-strength-panel__risk {
+    grid-column: 1 / -1;
+  }
+
+  .instrument-page .market-strength-panel__risk .market-strength-panel__overview {
+    display: grid;
+    grid-template-columns: minmax(10rem, 0.45fr) minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+  }
+
+  .instrument-page .market-strength-panel__risk .market-strength-panel__dimensions,
+  .instrument-page .market-strength-panel__risk .market-strength-panel__warnings,
+  .instrument-page .market-strength-panel__risk .market-strength-panel__message {
+    grid-column: 1 / -1;
+  }
+
   .instrument-page .instrument-chart-heading {
     align-items: flex-start;
     flex-direction: column;
@@ -1729,44 +2243,48 @@
     border-left: 1px solid var(--detail-border);
   }
 
-  .instrument-page .market-strength-placeholder {
-    grid-template-columns: 1fr;
-    gap: 15px;
+  .instrument-page .market-strength-panel {
     margin-top: 18px;
     padding: 19px 16px;
     border-radius: 16px;
   }
 
-  .instrument-page .market-strength-placeholder__status {
-    justify-self: start;
+  .instrument-page .market-strength-panel__header,
+  .instrument-page .market-strength-panel__footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
   }
 
-  .instrument-page .market-strength-placeholder__slots,
-  .instrument-page .market-strength-placeholder__scope {
-    grid-column: 1;
-  }
-
-  .instrument-page .market-strength-placeholder__slots {
+  .instrument-page .market-strength-panel__sources {
     grid-template-columns: 1fr;
   }
 
-  .instrument-page .market-strength-placeholder__slots > div {
-    display: grid;
-    grid-template-columns: minmax(6rem, 0.75fr) minmax(0, 1fr);
-    align-items: baseline;
-    gap: 12px;
-    padding: 11px 0;
+  .instrument-page .market-strength-panel__risk {
+    grid-column: 1;
   }
 
-  .instrument-page .market-strength-placeholder__slots > div + div {
-    padding-left: 0;
-    border-top: 1px solid var(--detail-border);
-    border-left: 0;
+  .instrument-page .market-strength-panel__risk .market-strength-panel__overview {
+    display: block;
   }
 
-  .instrument-page .market-strength-placeholder__slots dd {
-    margin: 0;
-    text-align: right;
+  .instrument-page .market-strength-panel__sources > section {
+    padding: 15px;
+  }
+
+  .instrument-page .market-strength-panel__dimensions {
+    grid-template-columns: 1fr;
+  }
+
+  .instrument-page .market-strength-panel__message {
+    min-height: 96px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .instrument-page .market-strength-panel__message button {
+    width: 100%;
+    min-height: 44px;
   }
 
   .instrument-page .instrument-disclosure > summary {
@@ -1852,7 +2370,7 @@
   .instrument-page .instrument-segmented,
   .instrument-page .instrument-logo,
   .instrument-page .instrument-disclosure,
-  .instrument-page .market-strength-placeholder,
+  .instrument-page .market-strength-panel,
   .instrument-page .market-chart__tooltip {
     border-color: CanvasText;
     background: Canvas;

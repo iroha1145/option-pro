@@ -79,7 +79,7 @@ def detect_breakout(
             confirmed = (
                 opening_hold_bars >= config.confirmation_bars or strong_single
             )
-            return {
+            result = {
                 "setup_type": BreakoutSetupType.OPENING_RANGE_BREAKOUT,
                 "lifecycle_state": (
                     BreakoutLifecycleState.CONFIRMED
@@ -97,6 +97,26 @@ def detect_breakout(
                 "opening_range_distance_atr": opening_distance,
                 "warnings": warnings,
             }
+            # An opening-range break and a pre-existing daily-base break are
+            # distinct events.  Preserve the daily detection when both trigger
+            # instead of letting the early ORB return erase it.
+            if structure is not None:
+                daily_features = dict(features)
+                daily_features["opening_range_complete"] = False
+                secondary = detect_breakout(
+                    candidate,
+                    structure,
+                    daily_features,
+                    cutoff,
+                    config,
+                )
+                if (
+                    secondary.get("setup_type")
+                    is BreakoutSetupType.DAILY_BASE_BREAKOUT
+                    and secondary.get("triggered")
+                ):
+                    result["secondary_detection"] = secondary
+            return result
 
     if structure is None:
         return {

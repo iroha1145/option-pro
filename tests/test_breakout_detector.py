@@ -115,3 +115,5 @@ def test_opening_range_requires_completed_range() -> None:
     result = detect_breakout(_candidate(), _structure(), features, _cutoff())
     assert result["setup_type"] is BreakoutSetupType.OPENING_RANGE_BREAKOUT
     assert result["lifecycle_state"] is BreakoutLifecycleState.TRIGGERED
+    assert result["secondary_detection"]["setup_type"] is BreakoutSetupType.DAILY_BASE_BREAKOUT
+    assert result["secondary_detection"]["triggered"] is True

@@ -95,9 +95,11 @@ def score_breakout(
     *,
     intrinsic_strength: float | None = None,
     market_fit: float | None = None,
+    market_confidence: float | None = None,
     sector_fit: float | None = None,
     strength_included_features: list[str] | None = None,
     range_persistence_adjustment: float = 0.0,
+    range_persistence_chase_adjustment: float = 0.0,
     score_version: str = SCORE_VERSION,
 ) -> BreakoutScores:
     base_weights = {
@@ -119,11 +121,13 @@ def score_breakout(
         "relative_strength_confirmation": 0.10,
     }
     liquidity_weights = {
-        "average_dollar_volume_quality": 0.35,
-        "current_dollar_volume_quality": 0.25,
-        "dollar_volume_percentile": 0.20,
+        "average_dollar_volume_quality": 0.25,
+        "current_dollar_volume_quality": 0.20,
+        "dollar_volume_percentile": 0.15,
         "spread_quality": 0.10,
         "intraday_completeness_quality": 0.10,
+        "market_cap_quality": 0.10,
+        "asset_type_quality": 0.10,
     }
     chase_weights = {
         "distance_from_pivot_risk": 0.30,
@@ -166,6 +170,17 @@ def score_breakout(
         chase_weights,
         score_version=score_version,
     )
+    chase_adjustment = max(
+        0.0,
+        min(4.0, float(range_persistence_chase_adjustment)),
+    )
+    if chase.score is not None and chase_adjustment:
+        original_chase = chase.score
+        chase.score = round(min(100.0, original_chase + chase_adjustment), 4)
+        chase.contribution_breakdown["range_persistence_chase_adjustment"] = round(
+            chase.score - original_chase,
+            6,
+        )
     breakout_quality = weighted_score(
         {
             "base_quality_score": base.score,
@@ -179,13 +194,21 @@ def score_breakout(
         },
         score_version=score_version,
     )
-    data_confidence = max(
-        0.0,
-        min(
-            100.0,
-            (base.confidence + confirmation.confidence + liquidity.confidence) / 3.0 * 100.0,
-        ),
-    )
+    core_confidence = (
+        base.confidence + confirmation.confidence + liquidity.confidence
+    ) / 3.0
+    if market_fit is None:
+        # Market shape is an explicit production input.  Missing shape must be
+        # visible in confidence rather than silently behaving like neutral 50.
+        data_confidence = core_confidence * 85.0
+    else:
+        market_component = _finite_score(
+            (market_confidence if market_confidence is not None else 0.5) * 100.0
+        )
+        data_confidence = (
+            core_confidence * 3.0 + (market_component or 0.0) / 100.0
+        ) / 4.0 * 100.0
+    data_confidence = max(0.0, min(100.0, data_confidence))
     priority = weighted_score(
         {
             "breakout_quality_score": breakout_quality.score,

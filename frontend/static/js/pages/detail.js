@@ -9,7 +9,8 @@ import {
   getMajorIndexBadge,
   getMajorIndexDisplayName,
   isMajorMarketIndex,
-  renderMarketStrengthPlaceholder,
+  renderMarketStrengthPanel,
+  supportsUsMarketResearch,
 } from '../components/marketStrengthPlaceholder.js';
 
 const DETAIL_STYLES_ID = 'optix-detail-v3-styles';
@@ -196,7 +197,11 @@ function renderShell(ticker, backRoute, mountId) {
 
     <header id="modal-header" class="instrument-quote" data-motion-reveal data-motion-card data-motion-lens data-motion-spotlight data-motion-key="detail-quote-${esc(ticker)}"></header>
 
-    ${isMajorMarketIndex(ticker) ? renderMarketStrengthPlaceholder({ variant: 'detail', ticker }) : ''}
+    ${supportsUsMarketResearch(ticker) ? `
+      <div id="detail-market-strength">
+        ${renderMarketStrengthPanel({ variant: 'detail', ticker, loading: true, technicalLoading: true, indexLoading: true })}
+      </div>
+    ` : ''}
 
     <section class="instrument-chart-panel" data-motion-static data-motion-key="detail-chart-${esc(ticker)}" aria-labelledby="instrument-chart-title">
       <div class="instrument-chart-heading">
@@ -656,6 +661,97 @@ async function loadOptionAlertsAndChain(ticker, state) {
   });
 }
 
+function renderMarketStrengthState(state) {
+  const mount = queryInMount(state, '#detail-market-strength');
+  if (!mount) return;
+  const strengthPayload = state.marketStrengthData || {};
+  const marketRegime = strengthPayload.market_regime || {};
+  mount.innerHTML = renderMarketStrengthPanel({
+    variant: 'detail',
+    ticker: state.ticker,
+    retryable: true,
+    marketRegime,
+    marketShape: marketRegime.market_shape || strengthPayload.market_shape || null,
+    asOf: strengthPayload.as_of,
+    loading: state.marketStrengthLoading,
+    error: state.marketStrengthError,
+    marketSignals: state.marketSignalsData,
+    technicalLoading: state.marketSignalsLoading,
+    technicalError: state.marketSignalsError,
+    indexSignals: state.indexSignalsData,
+    indexLoading: state.indexSignalsLoading,
+    indexError: state.indexSignalsError,
+  });
+  mount.querySelector('[data-market-strength-retry]')?.addEventListener('click', () => {
+    loadMarketStrengthSource(state, true);
+  });
+  mount.querySelector('[data-market-signals-retry]')?.addEventListener('click', () => {
+    loadMarketSignalsSource(state, true);
+  });
+  mount.querySelector('[data-index-signals-retry]')?.addEventListener('click', () => {
+    loadIndexSignalsSource(state, true);
+  });
+}
+
+async function loadMarketStrengthSource(state, force = false) {
+  if (!supportsUsMarketResearch(state.ticker) || !isDetailActive(state)) return;
+  const requestId = ++state.marketStrengthRequestId;
+  state.marketStrengthLoading = true;
+  state.marketStrengthError = '';
+  renderMarketStrengthState(state);
+  try {
+    const payload = await api.strengthMarket({ signal: state.signal, refresh: force });
+    if (!isDetailActive(state) || requestId !== state.marketStrengthRequestId) return;
+    state.marketStrengthData = payload;
+  } catch (error) {
+    if (!isDetailActive(state) || requestId !== state.marketStrengthRequestId) return;
+    state.marketStrengthError = '市场环境数据没有响应，技术判断与价格图不受影响。';
+  } finally {
+    if (!isDetailActive(state) || requestId !== state.marketStrengthRequestId) return;
+    state.marketStrengthLoading = false;
+    renderMarketStrengthState(state);
+  }
+}
+
+async function loadMarketSignalsSource(state, force = false) {
+  if (!supportsUsMarketResearch(state.ticker) || !isDetailActive(state)) return;
+  const requestId = ++state.marketSignalsRequestId;
+  state.marketSignalsLoading = true;
+  state.marketSignalsError = '';
+  renderMarketStrengthState(state);
+  try {
+    state.marketSignalsData = await api.signalsMarket({ signal: state.signal, refresh: force });
+  } catch (error) {
+    if (!isDetailActive(state) || requestId !== state.marketSignalsRequestId) return;
+    state.marketSignalsError = '技术信号数据没有响应，市场环境分项仍可继续查看。';
+  } finally {
+    if (!isDetailActive(state) || requestId !== state.marketSignalsRequestId) return;
+    state.marketSignalsLoading = false;
+    renderMarketStrengthState(state);
+  }
+}
+
+async function loadIndexSignalsSource(state, force = false) {
+  if (!supportsUsMarketResearch(state.ticker) || !isDetailActive(state)) return;
+  const requestId = ++state.indexSignalsRequestId;
+  state.indexSignalsLoading = true;
+  state.indexSignalsError = '';
+  renderMarketStrengthState(state);
+  try {
+    state.indexSignalsData = await api.indexTechnicalSignals(state.ticker, {
+      signal: state.signal,
+      refresh: force,
+    });
+  } catch (error) {
+    if (!isDetailActive(state) || requestId !== state.indexSignalsRequestId) return;
+    state.indexSignalsError = '指数自身技术数据没有响应，其他市场判断仍可继续查看。';
+  } finally {
+    if (!isDetailActive(state) || requestId !== state.indexSignalsRequestId) return;
+    state.indexSignalsLoading = false;
+    renderMarketStrengthState(state);
+  }
+}
+
 export function mountDetail(tickerFromRoute, options = {}) {
   ensureDetailStyles();
   const ticker = String(tickerFromRoute || '').trim().toUpperCase();
@@ -683,6 +779,9 @@ export function mountDetail(tickerFromRoute, options = {}) {
     chartRequestId: 0,
     quoteRequestId: 0,
     marketRequestId: 0,
+    marketStrengthRequestId: 0,
+    marketSignalsRequestId: 0,
+    indexSignalsRequestId: 0,
     signalRequestId: 0,
     optionRequestId: 0,
     expirationRequestId: 0,
@@ -691,6 +790,15 @@ export function mountDetail(tickerFromRoute, options = {}) {
     latestStock: null,
     lastChartData: null,
     marketStatus: null,
+    marketStrengthData: null,
+    marketStrengthLoading: true,
+    marketStrengthError: '',
+    marketSignalsData: null,
+    marketSignalsLoading: true,
+    marketSignalsError: '',
+    indexSignalsData: null,
+    indexSignalsLoading: true,
+    indexSignalsError: '',
     abortController,
     signal: abortController.signal,
     logoPromise: null,
@@ -802,6 +910,11 @@ export function mountDetail(tickerFromRoute, options = {}) {
 
   loadQuote();
   loadMarketStatus();
+  void Promise.allSettled([
+    loadIndexSignalsSource(state),
+    loadMarketSignalsSource(state),
+    loadMarketStrengthSource(state),
+  ]);
   loadChart(ticker, state.range, state);
 
   state.chartTimer = setInterval(() => {
@@ -834,6 +947,9 @@ export function mountDetail(tickerFromRoute, options = {}) {
     state.chartRequestId += 1;
     state.quoteRequestId += 1;
     state.marketRequestId += 1;
+    state.marketStrengthRequestId += 1;
+    state.marketSignalsRequestId += 1;
+    state.indexSignalsRequestId += 1;
     state.signalRequestId += 1;
     state.optionRequestId += 1;
     state.chartController?.abort();

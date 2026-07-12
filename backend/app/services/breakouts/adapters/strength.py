@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Mapping, Sequence
 
+from app.services.breakouts.config import get_breakout_settings
 from app.services.breakouts.models import StrengthScoreSnapshot, normalize_ticker
 from app.services.strength import scanner
 
@@ -22,10 +23,23 @@ class ExistingStrengthAdapter:
         if include_options:
             raise ValueError("breakout intrinsic scoring excludes options")
         symbols = list(dict.fromkeys(normalize_ticker(value) for value in tickers))
+        settings = get_breakout_settings()
         payload = await scanner.score_ticker_set(
             symbols,
             as_of=as_of,
             include_options=False,
+            range_mode=settings.range_persistence_mode,
+            range_version=settings.range_persistence_version,
+            range_length=settings.range_persistence_length,
+            range_fast_length=settings.range_persistence_fast_length,
+            range_slope_days=settings.range_persistence_slope_days,
+            range_ratio_window=settings.range_persistence_ratio_window,
+            range_ratio_threshold=settings.range_persistence_ratio_threshold,
+            range_min_history_multiplier=(
+                settings.range_persistence_min_history_multiplier
+            ),
+            range_trend_weight=settings.range_persistence_trend_family_weight,
+            range_final_cap=settings.range_persistence_final_weight_cap,
         )
         results: dict[str, StrengthScoreSnapshot] = {}
         for row in payload.get("rows", []):
@@ -57,6 +71,7 @@ class ExistingStrengthAdapter:
         if include_options:
             raise ValueError("breakout intrinsic scoring excludes options")
         symbols = list(dict.fromkeys(normalize_ticker(value) for value in tickers))
+        settings = get_breakout_settings()
         frames = {
             symbol: snapshot.frame
             for symbol, snapshot in snapshots.items()
@@ -74,6 +89,15 @@ class ExistingStrengthAdapter:
             frames=frames,
             as_of=as_of,
             range_mode=range_mode,
+            range_version=settings.range_persistence_version,
+            range_length=settings.range_persistence_length,
+            range_fast_length=settings.range_persistence_fast_length,
+            range_slope_days=settings.range_persistence_slope_days,
+            range_ratio_window=settings.range_persistence_ratio_window,
+            range_ratio_threshold=settings.range_persistence_ratio_threshold,
+            range_min_history_multiplier=(
+                settings.range_persistence_min_history_multiplier
+            ),
             range_trend_weight=range_trend_weight,
             range_final_cap=range_final_cap,
             price_source={

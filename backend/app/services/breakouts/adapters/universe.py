@@ -10,6 +10,57 @@ from typing import Any
 from app.services.sectors import SECTORS
 
 
+# These are liquid reference baskets, not claims about an issuer's official
+# GICS classification.  A reference is used only when every matching theme
+# points to the same basket, or when the upstream provider supplies a sector.
+THEME_BENCHMARKS: dict[str, str] = {
+    "semiconductors": "SOXX",
+    "software": "XLK",
+    "ai_cloud": "XLK",
+    "biotech": "XBI",
+    "healthcare": "XLV",
+    "consumer_electronics": "XLK",
+    "automotive": "XLY",
+    "ev_supply": "XLY",
+    "finance": "XLF",
+    "fintech": "XLF",
+    "retail": "XLY",
+    "luxury": "XLY",
+    "media_streaming": "XLC",
+    "social_internet": "XLC",
+    "energy": "XLE",
+    "utilities": "XLU",
+    "defense_aero": "XLI",
+    "airlines": "XLI",
+    "real_estate": "XLRE",
+    "china_adr": "KWEB",
+    "telecom": "XLC",
+    "industrials": "XLI",
+}
+
+_PROVIDER_SECTOR_BENCHMARKS = {
+    "technology": "XLK",
+    "information technology": "XLK",
+    "financial": "XLF",
+    "financial services": "XLF",
+    "healthcare": "XLV",
+    "health care": "XLV",
+    "energy": "XLE",
+    "industrials": "XLI",
+    "industrial": "XLI",
+    "communication services": "XLC",
+    "communication": "XLC",
+    "consumer cyclical": "XLY",
+    "consumer discretionary": "XLY",
+    "consumer defensive": "XLP",
+    "consumer staples": "XLP",
+    "utilities": "XLU",
+    "real estate": "XLRE",
+    "basic materials": "XLB",
+    "materials": "XLB",
+}
+
+
 class ThemeCanonicalUniverseAdapter:
     """Use the repository's fixed theme map without claiming full-US coverage."""
 
@@ -48,6 +99,26 @@ class ThemeCanonicalUniverseAdapter:
         # primary-sector classifications. Multi-theme members must not be
         # assigned an arbitrary first theme for sector normalization.
         return memberships[0] if len(memberships) == 1 else None
+
+    def sector_benchmark(
+        self,
+        ticker: str,
+        provider_sector: str | None = None,
+    ) -> str | None:
+        normalized_sector = " ".join(str(provider_sector or "").lower().split())
+        if normalized_sector:
+            direct = _PROVIDER_SECTOR_BENCHMARKS.get(normalized_sector)
+            if direct is not None:
+                return direct
+            for name, benchmark in _PROVIDER_SECTOR_BENCHMARKS.items():
+                if name in normalized_sector:
+                    return benchmark
+        references = {
+            THEME_BENCHMARKS[theme]
+            for theme in self.memberships(ticker)
+            if theme in THEME_BENCHMARKS
+        }
+        return next(iter(references)) if len(references) == 1 else None
 
     async def distributions(
         self,

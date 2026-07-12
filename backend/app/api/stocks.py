@@ -478,7 +478,9 @@ async def search_stocks(q: str = Query(..., min_length=1, max_length=50)):
 async def stock_signals(ticker: str):
     """Compute RSI, MACD, EMA/SMA signals from 100d daily data."""
 
-    symbol = ticker.upper()
+    symbol = ticker.upper().strip()
+    if not _WATCHLIST_TICKER_PATTERN.fullmatch(symbol):
+        raise HTTPException(status_code=400, detail="Invalid ticker symbol")
 
     def _safe_number(value: Any) -> float | None:
         try:
@@ -604,11 +606,19 @@ async def stock_signals(ticker: str):
         except Exception as exc:
             raise RuntimeError(f"Price provider unavailable for {symbol}") from exc
 
+    async def _load():
+        return await asyncio.to_thread(_compute)
+
     try:
-        result = await asyncio.to_thread(_compute)
+        result = await _cached_endpoint(
+            f"technical-signals:{symbol}",
+            300,
+            _load,
+            stale_ttl=900,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return _sanitize({**result, "source_status": "active"})
+    return _sanitize(result)
 
 
 @router.get("/{ticker}/logo")

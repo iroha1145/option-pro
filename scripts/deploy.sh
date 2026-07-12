@@ -59,10 +59,26 @@ host_bind="${HOST_BIND:-$(env_value HOST_BIND)}"
 host_bind="${host_bind:-127.0.0.1}"
 auth_token="${APP_AUTH_TOKEN:-$(env_value APP_AUTH_TOKEN)}"
 allow_insecure="${ALLOW_INSECURE_PUBLIC_BIND:-$(env_value ALLOW_INSECURE_PUBLIC_BIND)}"
+breakout_enabled="${BREAKOUT_RADAR_ENABLED:-$(env_value BREAKOUT_RADAR_ENABLED)}"
+range_mode="${RANGE_PERSISTENCE_MODE:-$(env_value RANGE_PERSISTENCE_MODE)}"
+range_interaction_enabled="${RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED:-$(env_value RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED)}"
 
 if ! is_loopback_bind "$host_bind" && [ -z "$auth_token" ] && ! is_truthy "$allow_insecure"; then
     echo "Refusing non-loopback HOST_BIND without APP_AUTH_TOKEN." >&2
     echo "Use localhost, set a strong token, or explicitly set ALLOW_INSECURE_PUBLIC_BIND=true for a protected private network." >&2
+    exit 1
+fi
+
+if ! is_truthy "$breakout_enabled"; then
+    echo "Refusing production deployment while Breakout Radar is disabled." >&2
+    exit 1
+fi
+if [ "$range_mode" != "shadow" ] && [ "$range_mode" != "enabled" ]; then
+    echo "RANGE_PERSISTENCE_MODE must be explicitly set to shadow or enabled." >&2
+    exit 1
+fi
+if ! is_truthy "$range_interaction_enabled"; then
+    echo "Refusing production deployment while Range Persistence interactions are disabled." >&2
     exit 1
 fi
 
@@ -107,4 +123,42 @@ if not payload.get("frontend", {}).get("ready"):
 print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 '
 
-echo "Deployment passed readiness and version checks."
+expected_breakout_enabled="$breakout_enabled"
+expected_range_mode="$range_mode"
+docker compose exec -T \
+    -e "EXPECTED_BREAKOUT_ENABLED=${expected_breakout_enabled}" \
+    -e "EXPECTED_RANGE_MODE=${expected_range_mode}" \
+    backend python -c '
+import json
+import os
+import urllib.request
+
+headers = {}
+token = os.environ.get("APP_AUTH_TOKEN", "").strip()
+if token:
+    headers["Authorization"] = f"Bearer {token}"
+request = urllib.request.Request(
+    "http://127.0.0.1:8000/api/breakouts/status",
+    headers=headers,
+)
+with urllib.request.urlopen(request, timeout=5) as response:
+    payload = json.load(response)
+expected_enabled = os.environ["EXPECTED_BREAKOUT_ENABLED"].lower() in {
+    "1", "true", "yes"
+}
+if bool(payload.get("enabled")) is not expected_enabled:
+    raise SystemExit("breakout enabled state does not match deployment config")
+if payload.get("range_persistence_mode") != os.environ["EXPECTED_RANGE_MODE"]:
+    raise SystemExit("range persistence mode does not match deployment config")
+if payload.get("versions", {}).get("market_shape_version") != "market-shape-v2":
+    raise SystemExit("market-shape-v2 is not active")
+if payload.get("market_shape_adapter", {}).get("status") != "available":
+    raise SystemExit("market shape adapter is unavailable")
+print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+'
+
+docker compose exec -T breakout-worker \
+    python -m app.services.breakouts.worker --healthcheck |
+    python -c 'import json,sys; p=json.load(sys.stdin); assert p["healthy"] is True; assert p["status"] != "disabled"'
+
+echo "Deployment passed readiness, version, and Breakout Radar configuration checks."

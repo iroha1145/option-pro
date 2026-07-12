@@ -154,8 +154,11 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 | `GET /api/options/unusual` | 10 个热门标的的有限异动扫描 |
 | `GET /api/earnings/upcoming` | 预设列表财报日历 |
 | `GET /api/sectors/{id}/iv-ranking` | 板块当前 IV 对比 |
+| `GET /api/stocks/{ticker}/signals` | 单标的 RSI、MACD、均线与成交量技术状态 |
+| `GET /api/signals/market` | 大盘十五项顶部/底部技术分析 |
 | `GET /api/signals/stock/{ticker}` | 程序化顶部/底部信号 |
-| `GET /api/strength/scan` | 强势股扫描 |
+| `GET /api/strength/scan` | 强势股扫描，含价格/成交额门槛与区间持续性影子结果 |
+| `GET /api/strength/market` | 六维市场环境与六态大盘形态 |
 | `GET /api/breakouts/current` | 最近一次完整突破快照 |
 | `GET /api/breakouts/events` | 可筛选、可游标分页的突破事件 |
 | `GET /api/breakouts/events/{event_id}` | 突破结构、评分和状态变化证据 |

@@ -72,6 +72,7 @@ def test_breakout_bootstrap_environment_is_complete_and_off_by_default() -> None
         "BREAKOUT_API_SCHEMA_VERSION": "breakout-api-v1",
         "RANGE_PERSISTENCE_MODE": "shadow",
         "RANGE_PERSISTENCE_VERSION": "range-persistence-v1",
+        "RANGE_PERSISTENCE_VALIDATION_VERSION": "",
         "RANGE_PERSISTENCE_LENGTH": "35",
         "RANGE_PERSISTENCE_FAST_LENGTH": "3",
         "RANGE_PERSISTENCE_SLOPE_DAYS": "5",
@@ -99,7 +100,37 @@ def test_backend_and_worker_share_one_writable_data_volume_and_image() -> None:
     assert "optix-data:/data" in backend
     assert "optix-data:/data" in worker
     assert "optix-data:/data:ro" not in compose
+    validation_version = (
+        "RANGE_PERSISTENCE_VALIDATION_VERSION="
+        "${RANGE_PERSISTENCE_VALIDATION_VERSION:-}"
+    )
+    assert validation_version in backend
+    assert validation_version in worker
+    for key in (
+        "RANGE_PERSISTENCE_VERSION",
+        "RANGE_PERSISTENCE_LENGTH",
+        "RANGE_PERSISTENCE_FAST_LENGTH",
+        "RANGE_PERSISTENCE_SLOPE_DAYS",
+        "RANGE_PERSISTENCE_RATIO_WINDOW",
+        "RANGE_PERSISTENCE_RATIO_THRESHOLD",
+        "RANGE_PERSISTENCE_MIN_HISTORY_MULTIPLIER",
+        "RANGE_PERSISTENCE_TREND_FAMILY_WEIGHT",
+        "RANGE_PERSISTENCE_FINAL_WEIGHT_CAP",
+        "RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED",
+        "RANGE_PERSISTENCE_BREAKOUT_INTERACTION_CAP",
+    ):
+        assert f"{key}=${{{key}:-" in backend
+        assert f"{key}=${{{key}:-" in worker
     assert re.search(r"(?m)^volumes:\n  optix-data:\s*$", compose)
+
+
+def test_deployment_requires_live_radar_and_range_interactions() -> None:
+    script = (ROOT / "scripts" / "deploy.sh").read_text(encoding="utf-8")
+    assert "Refusing production deployment while Breakout Radar is disabled" in script
+    assert "RANGE_PERSISTENCE_MODE must be explicitly set" in script
+    assert "Range Persistence interactions are disabled" in script
+    assert "payload.get(\"enabled\")" in script
+    assert "app.services.breakouts.worker --healthcheck" in script
 
 
 def test_worker_is_isolated_and_has_an_independent_healthcheck() -> None:

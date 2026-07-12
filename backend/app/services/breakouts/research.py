@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import io
 import json
 import math
@@ -22,6 +23,12 @@ from statistics import fmean, median
 from typing import Any, Iterable, Mapping, Sequence
 
 from .repository import BreakoutRepository
+from .research_validation import (
+    DEFAULT_FORWARD_HORIZONS,
+    PRICE_DATA_SCHEMA_VERSION,
+    RESEARCH_VALIDATION_VERSION,
+    run_range_persistence_validation,
+)
 
 
 EVENT_FIELDS = (
@@ -93,9 +100,144 @@ _LIMITATIONS = (
     ),
 )
 
+MAX_PRICE_DATASET_BYTES = 128 * 1024 * 1024
+
 
 def _decode_json(value: str | None) -> Any:
     return json.loads(value) if value is not None else None
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"non-finite JSON number is not allowed: {value}")
+
+
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key is not allowed: {key}")
+        result[key] = value
+    return result
+
+
+def load_forward_price_dataset(path: str | Path) -> dict[str, Any]:
+    """Load a bounded JSON price file and attach its source-byte checksum."""
+
+    supplied = Path(path).expanduser()
+    if supplied.exists() and supplied.is_symlink():
+        raise ValueError("price dataset path must not be a symbolic link")
+    resolved = supplied.resolve()
+    if not resolved.is_file():
+        raise ValueError("price dataset must be an existing regular file")
+    size = resolved.stat().st_size
+    if size > MAX_PRICE_DATASET_BYTES:
+        raise ValueError(
+            f"price dataset exceeds {MAX_PRICE_DATASET_BYTES} bytes"
+        )
+    raw = resolved.read_bytes()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("price dataset must be UTF-8 JSON") from exc
+    try:
+        payload = json.loads(
+            text,
+            object_pairs_hook=_unique_json_object,
+            parse_constant=_reject_json_constant,
+        )
+    except json.JSONDecodeError as exc:
+        raise ValueError("price dataset must contain valid JSON") from exc
+    if not isinstance(payload, Mapping):
+        raise ValueError("price dataset top level must be an object")
+    dataset = dict(payload)
+    dataset["content_sha256"] = hashlib.sha256(raw).hexdigest()
+    return dataset
+
+
+def _load_completed_events_connection(connection: Any) -> list[dict[str, Any]]:
+    rows = connection.execute(
+        """
+        SELECT
+            runs.scan_run_id,
+            runs.published_at,
+            runs.session AS scan_session,
+            runs.provider,
+            events.rank,
+            events.event_id,
+            events.ticker,
+            events.session,
+            events.setup_type,
+            events.lifecycle_state,
+            events.event_at,
+            events.alert_priority_score,
+            events.event_snapshot_json
+        FROM breakout_scan_events AS events
+        INNER JOIN breakout_scan_runs AS runs
+            ON runs.scan_run_id = events.scan_run_id
+           AND runs.status = 'completed'
+           AND runs.published_at IS NOT NULL
+        ORDER BY runs.published_at, runs.scan_run_id, events.rank, events.event_id
+        """
+    ).fetchall()
+    return [
+        {
+            "scan_run_id": row["scan_run_id"],
+            "published_at": row["published_at"],
+            "scan_session": row["scan_session"],
+            "provider": row["provider"],
+            "rank": row["rank"],
+            "event_id": row["event_id"],
+            "ticker": row["ticker"],
+            "session": row["session"],
+            "setup_type": row["setup_type"],
+            "lifecycle_state": row["lifecycle_state"],
+            "event_at": row["event_at"],
+            "alert_priority_score": row["alert_priority_score"],
+            "event_snapshot": _decode_json(row["event_snapshot_json"]),
+        }
+        for row in rows
+    ]
+
+
+def _load_completed_shadows_connection(connection: Any) -> list[dict[str, Any]]:
+    rows = connection.execute(
+        """
+        SELECT
+            runs.scan_run_id,
+            runs.published_at,
+            shadows.event_id,
+            shadows.ticker,
+            shadows.production_score,
+            shadows.hypothetical_score,
+            shadows.production_rank,
+            shadows.hypothetical_rank,
+            shadows.rank_delta,
+            shadows.version,
+            shadows.shadow_json
+        FROM range_persistence_shadow AS shadows
+        INNER JOIN breakout_scan_runs AS runs
+            ON runs.scan_run_id = shadows.scan_run_id
+           AND runs.status = 'completed'
+           AND runs.published_at IS NOT NULL
+        ORDER BY runs.published_at, runs.scan_run_id, shadows.event_id
+        """
+    ).fetchall()
+    return [
+        {
+            "scan_run_id": row["scan_run_id"],
+            "published_at": row["published_at"],
+            "event_id": row["event_id"],
+            "ticker": row["ticker"],
+            "production_score": row["production_score"],
+            "hypothetical_score": row["hypothetical_score"],
+            "production_rank": row["production_rank"],
+            "hypothetical_rank": row["hypothetical_rank"],
+            "rank_delta": row["rank_delta"],
+            "version": row["version"],
+            "shadow": _decode_json(row["shadow_json"]),
+        }
+        for row in rows
+    ]
 
 
 def load_completed_events(database_path: str | Path) -> list[dict[str, Any]]:
@@ -103,48 +245,7 @@ def load_completed_events(database_path: str | Path) -> list[dict[str, Any]]:
     repository = BreakoutRepository(database_path, read_only=True)
     connection = repository.open_read_connection()
     try:
-        rows = connection.execute(
-            """
-            SELECT
-                runs.scan_run_id,
-                runs.published_at,
-                runs.session AS scan_session,
-                runs.provider,
-                events.rank,
-                events.event_id,
-                events.ticker,
-                events.session,
-                events.setup_type,
-                events.lifecycle_state,
-                events.event_at,
-                events.alert_priority_score,
-                events.event_snapshot_json
-            FROM breakout_scan_events AS events
-            INNER JOIN breakout_scan_runs AS runs
-                ON runs.scan_run_id = events.scan_run_id
-               AND runs.status = 'completed'
-               AND runs.published_at IS NOT NULL
-            ORDER BY runs.published_at, runs.scan_run_id, events.rank, events.event_id
-            """
-        ).fetchall()
-        return [
-            {
-                "scan_run_id": row["scan_run_id"],
-                "published_at": row["published_at"],
-                "scan_session": row["scan_session"],
-                "provider": row["provider"],
-                "rank": row["rank"],
-                "event_id": row["event_id"],
-                "ticker": row["ticker"],
-                "session": row["session"],
-                "setup_type": row["setup_type"],
-                "lifecycle_state": row["lifecycle_state"],
-                "event_at": row["event_at"],
-                "alert_priority_score": row["alert_priority_score"],
-                "event_snapshot": _decode_json(row["event_snapshot_json"]),
-            }
-            for row in rows
-        ]
+        return _load_completed_events_connection(connection)
     finally:
         connection.close()
 
@@ -154,44 +255,28 @@ def load_completed_shadows(database_path: str | Path) -> list[dict[str, Any]]:
     repository = BreakoutRepository(database_path, read_only=True)
     connection = repository.open_read_connection()
     try:
-        rows = connection.execute(
-            """
-            SELECT
-                runs.scan_run_id,
-                runs.published_at,
-                shadows.event_id,
-                shadows.ticker,
-                shadows.production_score,
-                shadows.hypothetical_score,
-                shadows.production_rank,
-                shadows.hypothetical_rank,
-                shadows.rank_delta,
-                shadows.version,
-                shadows.shadow_json
-            FROM range_persistence_shadow AS shadows
-            INNER JOIN breakout_scan_runs AS runs
-                ON runs.scan_run_id = shadows.scan_run_id
-               AND runs.status = 'completed'
-               AND runs.published_at IS NOT NULL
-            ORDER BY runs.published_at, runs.scan_run_id, shadows.event_id
-            """
-        ).fetchall()
-        return [
-            {
-                "scan_run_id": row["scan_run_id"],
-                "published_at": row["published_at"],
-                "event_id": row["event_id"],
-                "ticker": row["ticker"],
-                "production_score": row["production_score"],
-                "hypothetical_score": row["hypothetical_score"],
-                "production_rank": row["production_rank"],
-                "hypothetical_rank": row["hypothetical_rank"],
-                "rank_delta": row["rank_delta"],
-                "version": row["version"],
-                "shadow": _decode_json(row["shadow_json"]),
-            }
-            for row in rows
-        ]
+        return _load_completed_shadows_connection(connection)
+    finally:
+        connection.close()
+
+
+def load_completed_research_bundle(
+    database_path: str | Path,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Read events and shadows from one SQLite snapshot."""
+
+    repository = BreakoutRepository(database_path, read_only=True)
+    connection = repository.open_read_connection()
+    try:
+        connection.execute("BEGIN")
+        events = _load_completed_events_connection(connection)
+        shadows = _load_completed_shadows_connection(connection)
+        connection.execute("COMMIT")
+        return events, shadows
+    except BaseException:
+        if connection.in_transaction:
+            connection.execute("ROLLBACK")
+        raise
     finally:
         connection.close()
 
@@ -410,8 +495,14 @@ def _safe_output_path(database_path: str | Path, output_path: str | Path) -> Pat
         output = (Path.cwd() / supplied_output).resolve()
     else:
         output = supplied_output.resolve()
-    if output == database:
-        raise ValueError("export path must not be the production database")
+    protected_database_paths = {
+        database,
+        Path(f"{database}-wal"),
+        Path(f"{database}-shm"),
+        Path(f"{database}-journal"),
+    }
+    if output in protected_database_paths:
+        raise ValueError("export path must not be the production database or sidecar")
     if not output.parent.exists() or not output.parent.is_dir():
         raise ValueError("export parent directory must already exist")
     return output
@@ -496,6 +587,69 @@ def export_shadow_correlations(
     return correlations
 
 
+def export_walk_forward_validation(
+    database_path: str | Path,
+    price_dataset_path: str | Path,
+    output_path: str | Path,
+    *,
+    horizons: Sequence[int] = DEFAULT_FORWARD_HORIZONS,
+    train_dates: int = 60,
+    validation_dates: int = 20,
+    test_dates: int = 20,
+    step_dates: int | None = None,
+    embargo_dates: int = 1,
+    minimum_rows_per_split: int = 10,
+    top_k: int = 5,
+) -> dict[str, Any]:
+    """Write point-in-time labels and purged walk-forward ablations as JSON."""
+
+    path = _safe_output_path(database_path, output_path)
+    if _output_format(path) != "json":
+        raise ValueError("walk-forward validation path must end in .json")
+    price_path = Path(price_dataset_path).expanduser().resolve()
+    if path == price_path:
+        raise ValueError("validation output must not overwrite the price dataset")
+    price_dataset = load_forward_price_dataset(price_path)
+    events, shadows = load_completed_research_bundle(database_path)
+    report = run_range_persistence_validation(
+        events,
+        shadows,
+        price_dataset,
+        horizons=horizons,
+        train_dates=train_dates,
+        validation_dates=validation_dates,
+        test_dates=test_dates,
+        step_dates=step_dates,
+        embargo_dates=embargo_dates,
+        minimum_rows_per_split=minimum_rows_per_split,
+        top_k=top_k,
+    )
+    _atomic_write(
+        path,
+        json.dumps(
+            report,
+            allow_nan=False,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+    )
+    return report
+
+
+def _parse_horizons(value: str) -> tuple[int, ...]:
+    parts = [part.strip() for part in value.split(",")]
+    if not parts or any(not part for part in parts):
+        raise argparse.ArgumentTypeError("horizons must be comma-separated integers")
+    try:
+        return tuple(int(part) for part in parts)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "horizons must be comma-separated integers"
+        ) from exc
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Export completed Breakout Radar research data without writing SQLite."
@@ -511,6 +665,28 @@ def _parser() -> argparse.ArgumentParser:
         "--correlations-out", help="Pairwise shadow correlations ending in .csv or .json"
     )
     parser.add_argument("--summary-out", help="Descriptive shadow summary ending in .json")
+    parser.add_argument(
+        "--validation-prices",
+        help=(
+            f"Offline forward-price JSON using schema {PRICE_DATA_SCHEMA_VERSION}"
+        ),
+    )
+    parser.add_argument(
+        "--validation-out", help="Purged walk-forward validation ending in .json"
+    )
+    parser.add_argument(
+        "--validation-horizons",
+        type=_parse_horizons,
+        default=DEFAULT_FORWARD_HORIZONS,
+        help="Comma-separated trading-session horizons (default: 1,5,20,63)",
+    )
+    parser.add_argument("--validation-train-dates", type=int, default=60)
+    parser.add_argument("--validation-dates", type=int, default=20)
+    parser.add_argument("--validation-test-dates", type=int, default=20)
+    parser.add_argument("--validation-step-dates", type=int)
+    parser.add_argument("--validation-embargo-dates", type=int, default=1)
+    parser.add_argument("--validation-minimum-rows", type=int, default=10)
+    parser.add_argument("--validation-top-k", type=int, default=5)
     return parser
 
 
@@ -519,6 +695,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     database_path = Path(args.db).expanduser()
     if not database_path.is_absolute():
         raise ValueError("--db must be an absolute path")
+    if bool(args.validation_prices) != bool(args.validation_out):
+        raise ValueError(
+            "--validation-prices and --validation-out must be supplied together"
+        )
+
+    requested_outputs = [
+        value
+        for value in (
+            args.events_out,
+            args.shadows_out,
+            args.correlations_out,
+            args.summary_out,
+            args.validation_out,
+        )
+        if value
+    ]
+    resolved_outputs = [Path(value).expanduser().resolve() for value in requested_outputs]
+    if len(set(resolved_outputs)) != len(resolved_outputs):
+        raise ValueError("research output paths must be distinct")
 
     result: dict[str, Any] = {}
     if args.events_out:
@@ -530,6 +725,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         result["correlation_pairs"] = len(correlations["pairs"])
     if args.summary_out:
         result["summary"] = export_shadow_summary(database_path, args.summary_out)
+    if args.validation_out:
+        validation = export_walk_forward_validation(
+            database_path,
+            args.validation_prices,
+            args.validation_out,
+            horizons=args.validation_horizons,
+            train_dates=args.validation_train_dates,
+            validation_dates=args.validation_dates,
+            test_dates=args.validation_test_dates,
+            step_dates=args.validation_step_dates,
+            embargo_dates=args.validation_embargo_dates,
+            minimum_rows_per_split=args.validation_minimum_rows,
+            top_k=args.validation_top_k,
+        )
+        result["validation"] = {
+            "status": validation["status"],
+            "schema_version": RESEARCH_VALIDATION_VERSION,
+            "decision_status": validation["decision_status"],
+            "production_mode_recommendation": validation[
+                "production_mode_recommendation"
+            ],
+            "active_horizons": validation["coverage"]["active_horizons"],
+        }
     if not result:
         result["summary"] = summarize_shadows(load_completed_shadows(database_path))
     print(json.dumps(result, allow_nan=False, ensure_ascii=False, sort_keys=True))

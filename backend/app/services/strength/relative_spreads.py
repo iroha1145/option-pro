@@ -187,7 +187,7 @@ def _ratio_features(
             "name": name,
             "numerator": numerator,
             "denominator": denominator,
-            "score": 50.0,
+            "score": None,
             "label": "数据不足",
             "status": "not_enough_data",
             "constructive": False,
@@ -272,6 +272,10 @@ def compute_spread_matrix(index_data: dict[str, pd.DataFrame]) -> dict[str, Any]
     weighted_score = 0.0
     total_weight = 0.0
     warnings: list[str] = []
+    configured_weight = sum(
+        float(definition.get("weight") or 0.0)
+        for definition in SPREAD_DEFINITIONS
+    )
 
     for definition in SPREAD_DEFINITIONS:
         numerator = definition["numerator"]
@@ -293,8 +297,22 @@ def compute_spread_matrix(index_data: dict[str, pd.DataFrame]) -> dict[str, Any]
             weighted_score += float(result.get("score") or 50) * weight
             total_weight += weight
 
-    score = round(_clamp(weighted_score / total_weight if total_weight else 50), 1)
-    if score >= 72:
+    score = (
+        round(_clamp(weighted_score / total_weight), 1)
+        if total_weight > 0
+        else None
+    )
+    coverage = total_weight / configured_weight if configured_weight > 0 else 0.0
+    status = (
+        "active"
+        if coverage >= 0.60
+        else "degraded"
+        if total_weight > 0
+        else "unavailable"
+    )
+    if score is None:
+        label = "数据不足"
+    elif score >= 72:
         label = "风险偏好扩散"
     elif score >= 58:
         label = "风险偏好温和"
@@ -305,18 +323,21 @@ def compute_spread_matrix(index_data: dict[str, pd.DataFrame]) -> dict[str, Any]
 
     for key in ("iwm_spy", "rsp_spy"):
         item = spreads.get(key, {})
-        if item.get("status") == "active" and (item.get("score") or 50) < 45:
+        if item.get("status") == "active" and float(item["score"]) < 45:
             warnings.append(f"{item.get('name')}偏弱，强势未充分扩散")
     soxx = spreads.get("soxx_xlk", {})
-    if soxx.get("status") == "active" and (soxx.get("score") or 50) >= 70:
+    if soxx.get("status") == "active" and float(soxx["score"]) >= 70:
         warnings.append("SOXX/XLK走强，半导体相对科技板块领先")
     hyg = spreads.get("hyg_ief", {})
-    if hyg.get("status") == "active" and (hyg.get("score") or 50) < 42:
+    if hyg.get("status") == "active" and float(hyg["score"]) < 42:
         warnings.append("HYG/IEF偏弱，信用风险偏好不足")
 
     return {
         "score": score,
         "label": label,
+        "status": status,
+        "coverage": round(coverage, 4),
+        "active_weight": round(total_weight, 4),
         "spreads": spreads,
         "warnings": warnings[:4],
     }

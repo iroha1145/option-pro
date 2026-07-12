@@ -37,12 +37,29 @@ def _weighted(parts: dict[str, float | None], weights: dict[str, float]) -> floa
     return total / denom if denom else 0.0
 
 
+def _weighted_optional(
+    parts: dict[str, float | None],
+    weights: dict[str, float],
+) -> float | None:
+    active = {
+        name: value
+        for name, value in parts.items()
+        if value is not None and weights.get(name, 0.0) > 0
+    }
+    denominator = sum(weights[name] for name in active)
+    if denominator <= 0:
+        return None
+    return sum(float(value) * weights[name] for name, value in active.items()) / denominator
+
+
 def _quality(signals: dict, expected: int) -> int:
     valid = len(_valid_scores(signals))
     return round(max(0, min(100, valid / expected * 100)))
 
 
-def _level(score: int, top: bool = True) -> str:
+def _level(score: int | None, top: bool = True) -> str:
+    if score is None:
+        return "数据不足"
     if score < 30:
         return "顶部风险低" if top else "没有底部迹象"
     if score < 50:
@@ -150,8 +167,9 @@ def compute_market_scores(signals: dict) -> dict:
         "volatility_turning": _avg(signals, ["vix_5d_change"], "top"),
         "rates_pressure": _avg(signals, ["yield_10y", "yield_10y_20d_change"], "top"),
         "credit_risk": _avg(signals, ["credit_risk"], "top"),
-        # Placeholder per design doc; neutral until positioning data is wired.
-        "positioning": 50 if signals else None,
+        # No reliable positioning series is present.  Keep the component
+        # missing and renormalize active weights instead of inventing 50.
+        "positioning": None,
     }
 
     bottom_weights = {
@@ -170,23 +188,37 @@ def compute_market_scores(signals: dict) -> dict:
         "volatility_falling": _avg(signals, ["vix_5d_change"], "bottom"),
         "credit_stable": _avg(signals, ["credit_risk"], "bottom"),
         "rates_easing": _avg(signals, ["yield_10y_20d_change", "yield_10y"], "bottom"),
-        "sentiment_pessimism": 50 if signals else None,
+        "sentiment_pessimism": None,
     }
-
-    for part in top_parts:
-        if top_parts[part] is None:
-            top_parts[part] = 50
-    for part in bottom_parts:
-        if bottom_parts[part] is None:
-            bottom_parts[part] = 50
-    top_score = round(_weighted(top_parts, top_weights))
-    bottom_score = round(_weighted(bottom_parts, bottom_weights))
+    top_value = _weighted_optional(top_parts, top_weights)
+    bottom_value = _weighted_optional(bottom_parts, bottom_weights)
+    top_score = round(top_value) if top_value is not None else None
+    bottom_score = round(bottom_value) if bottom_value is not None else None
     top_reasons = _reasons(signals, "top")
     bottom_reasons = _reasons(signals, "bottom")
+    top_active_weight = sum(
+        weight for key, weight in top_weights.items() if top_parts.get(key) is not None
+    )
+    bottom_active_weight = sum(
+        weight for key, weight in bottom_weights.items() if bottom_parts.get(key) is not None
+    )
+    signal_quality = _quality(signals, 15)
+    model_coverage = (top_active_weight + bottom_active_weight) / 2.0
     return {
         "top_score": top_score,
         "bottom_score": bottom_score,
-        "data_quality": _quality(signals, 15),
+        "data_quality": round(signal_quality * model_coverage),
+        "signal_data_quality": signal_quality,
+        "coverage": {
+            "top_active_weight": round(top_active_weight, 3),
+            "bottom_active_weight": round(bottom_active_weight, 3),
+            "top_missing_components": [
+                key for key in top_weights if top_parts.get(key) is None
+            ],
+            "bottom_missing_components": [
+                key for key in bottom_weights if bottom_parts.get(key) is None
+            ],
+        },
         "top_breakdown": {k: round(v, 1) if v is not None else None for k, v in top_parts.items()},
         "bottom_breakdown": {k: round(v, 1) if v is not None else None for k, v in bottom_parts.items()},
         "top_label": _level(top_score, True),

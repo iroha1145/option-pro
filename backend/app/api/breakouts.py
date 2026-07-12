@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import date as CalendarDate
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -10,13 +11,19 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
-from app.services.breakouts.models import normalize_ticker
+from app.services.breakouts.health import BreakoutReadState, assess_breakout_read_state
+from app.services.breakouts.models import (
+    BreakoutLifecycleState,
+    BreakoutSetupType,
+    normalize_ticker,
+)
 from app.services.breakouts.repository import (
     BreakoutRepository,
     BreakoutRepositoryError,
     InvalidCursorError,
     SchemaVersionError,
 )
+from app.services.strength.market_shape import MARKET_SHAPE_VERSION
 
 
 router = APIRouter(prefix="/api/breakouts", tags=["breakouts"])
@@ -68,9 +75,17 @@ class BreakoutEventResponse(_ResponseModel):
     range_persistence: Optional[float] = Field(default=None, ge=0, le=100)
     range_persistence_slope_5d: Optional[float] = None
     range_persistence_ratio_10d: Optional[float] = Field(default=None, ge=0, le=100)
+    range_persistence_self_percentile: Optional[float] = Field(default=None, ge=0, le=100)
+    range_persistence_global_percentile: Optional[float] = Field(default=None, ge=0, le=100)
+    range_persistence_sector_percentile: Optional[float] = Field(default=None, ge=0, le=100)
     range_persistence_status: str
+    range_persistence_interaction: dict[str, Any]
+    configured_weights: dict[str, float]
     effective_weights: dict[str, float]
     contribution_breakdown: dict[str, float]
+    penalties: dict[str, float]
+    missing_components: list[str]
+    score_version: str
     market_shape: dict[str, Any]
     warnings: list[str]
     source_status: dict[str, Any]
@@ -140,7 +155,7 @@ def _versions(settings: BreakoutSettings, stored: Any = None) -> dict[str, str]:
         "detector_version": settings.detector_version,
         "scoring_version": settings.scoring_version,
         "range_persistence_version": settings.range_persistence_version,
-        "market_shape_version": "market-shape-adapter-v1",
+        "market_shape_version": MARKET_SHAPE_VERSION,
         "strength_score_version": "strength-intrinsic-v1",
         "universe_version": "canonical-universe-v1",
         "database_version": "breakout-db-v1",
@@ -222,7 +237,24 @@ def _public_event(
         range_persistence=_finite(features.get("range_persistence")),
         range_persistence_slope_5d=_finite(features.get("range_persistence_slope_5d")),
         range_persistence_ratio_10d=_finite(features.get("range_persistence_ratio_10d")),
+        range_persistence_self_percentile=_finite(
+            features.get("range_persistence_self_percentile")
+        ),
+        range_persistence_global_percentile=_finite(
+            features.get("range_persistence_global_percentile")
+        ),
+        range_persistence_sector_percentile=_finite(
+            features.get("range_persistence_sector_percentile")
+        ),
         range_persistence_status=str(features.get("range_persistence_status") or "unavailable"),
+        range_persistence_interaction=dict(
+            features.get("range_persistence_interaction") or {}
+        ),
+        configured_weights={
+            str(key): float(value)
+            for key, value in dict(priority.get("configured_weights") or {}).items()
+            if _finite(value) is not None
+        },
         effective_weights={
             str(key): float(value)
             for key, value in dict(priority.get("effective_weights") or {}).items()
@@ -233,10 +265,27 @@ def _public_event(
             for key, value in dict(priority.get("contribution_breakdown") or {}).items()
             if _finite(value) is not None
         },
+        penalties={
+            str(key): float(value)
+            for key, value in dict(priority.get("penalties") or {}).items()
+            if _finite(value) is not None
+        },
+        missing_components=[
+            str(item) for item in list(priority.get("missing_components") or [])
+        ],
+        score_version=str(
+            priority.get("score_version")
+            or scores.get("score_version")
+            or settings.scoring_version
+        ),
         market_shape={
             "status": quality.get("market_shape_status", "unavailable"),
             "state": quality.get("market_shape_state"),
-            "version": quality.get("market_shape_version", "market-shape-adapter-v1"),
+            "confidence": _finite(quality.get("market_shape_confidence")),
+            "transition_risk": _finite(quality.get("market_transition_risk")),
+            "eligibility": quality.get("market_eligibility", "unknown"),
+            "rules": dict(quality.get("market_shape_rules") or {}),
+            "version": quality.get("market_shape_version", MARKET_SHAPE_VERSION),
         },
         warnings=[str(item) for item in list(stored.get("warnings") or [])],
         source_status={
@@ -277,18 +326,57 @@ def _unavailable_root(
     )
 
 
+def _combine_read_status(*values: str) -> str:
+    rank = {"active": 0, "degraded": 1, "stale": 2, "unavailable": 3}
+    normalized = [value if value in rank else "degraded" for value in values]
+    return max(normalized, key=lambda value: rank[value]) if normalized else "active"
+
+
+def _read_state(
+    settings: BreakoutSettings,
+    repository: BreakoutRepository,
+    *,
+    completed_snapshot: dict[str, Any] | None,
+) -> BreakoutReadState:
+    try:
+        runtime = repository.status()
+    except (
+        FileNotFoundError,
+        sqlite3.Error,
+        BreakoutRepositoryError,
+        SchemaVersionError,
+        OSError,
+        ValueError,
+    ):
+        # A completed immutable snapshot was already read successfully.  Do not
+        # hide it merely because the secondary liveness query failed.
+        runtime = {"database": {"status": "active"}}
+    return assess_breakout_read_state(
+        settings,
+        runtime,
+        now=_now(),
+        completed_snapshot=completed_snapshot,
+    )
+
+
 def _root_from_scan(
     settings: BreakoutSettings,
     scan: dict[str, Any],
+    *,
+    read_state: BreakoutReadState | None = None,
 ) -> BreakoutRootResponse:
     provider = scan.get("provider_snapshot") or {}
     provider_status = str(provider.get("status") or "active")
-    status = (
+    provider_read_status = (
         "stale"
         if provider_status == "stale"
         else "degraded"
         if provider_status in {"degraded", "unavailable"}
         else "active"
+    )
+    status = _combine_read_status(
+        provider_read_status,
+        read_state.status if read_state is not None else "active",
     )
     as_of = scan.get("published_at") or scan.get("completed_at") or scan.get("scheduled_at")
     response_time = _event_time(as_of)
@@ -303,6 +391,9 @@ def _root_from_scan(
             "database": "active",
             "provider": provider_status,
             "provider_as_of": provider.get("as_of"),
+            "runtime": read_state.status if read_state is not None else "active",
+            "runtime_reason": read_state.reason if read_state is not None else "fresh",
+            "freshness": dict(read_state.details) if read_state is not None else {},
         },
         events=[
             _public_event(
@@ -327,7 +418,8 @@ def current() -> BreakoutRootResponse:
             warning="breakout_radar_disabled",
         )
     try:
-        scan = _repository(settings).latest_completed_scan()
+        repository = _repository(settings)
+        scan = repository.latest_completed_scan()
     except (FileNotFoundError, sqlite3.Error, BreakoutRepositoryError, SchemaVersionError, OSError):
         return _unavailable_root(
             settings,
@@ -340,15 +432,24 @@ def current() -> BreakoutRootResponse:
             status="unavailable",
             warning="no_completed_scan",
         )
-    return _root_from_scan(settings, dict(scan))
+    stored_scan = dict(scan)
+    return _root_from_scan(
+        settings,
+        stored_scan,
+        read_state=_read_state(
+            settings,
+            repository,
+            completed_snapshot=stored_scan,
+        ),
+    )
 
 
 @router.get("/events", response_model=BreakoutEventPageResponse)
 def events(
-    date: Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    date: Optional[CalendarDate] = Query(default=None),
     ticker: Optional[str] = Query(default=None, max_length=15),
-    setup_type: Optional[str] = None,
-    lifecycle_state: Optional[str] = None,
+    setup_type: Optional[BreakoutSetupType] = None,
+    lifecycle_state: Optional[BreakoutLifecycleState] = None,
     session: Optional[str] = Query(
         default=None,
         pattern="^(premarket|regular|postmarket|closed)$",
@@ -368,11 +469,14 @@ def events(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="Invalid ticker") from exc
     try:
-        page = _repository(settings).list_events(
-            date=date,
+        repository = _repository(settings)
+        page = repository.list_events(
+            date=date.isoformat() if date is not None else None,
             ticker=normalized,
-            setup_type=setup_type,
-            lifecycle_state=lifecycle_state,
+            setup_type=setup_type.value if setup_type is not None else None,
+            lifecycle_state=(
+                lifecycle_state.value if lifecycle_state is not None else None
+            ),
             session=session,
             min_priority=min_priority,
             limit=limit,
@@ -387,12 +491,25 @@ def events(
             warning="breakout_database_unavailable",
         )
         return BreakoutEventPageResponse(**root.model_dump(), next_cursor=None)
+    completed_scan = page.get("completed_scan")
+    read_state = _read_state(
+        settings,
+        repository,
+        completed_snapshot=(
+            dict(completed_scan) if isinstance(completed_scan, dict) else None
+        ),
+    )
     return BreakoutEventPageResponse(
         as_of=_now(),
         session=session,
-        status="active" if page.get("scan_run_id") else "unavailable",
+        status=read_state.status if page.get("scan_run_id") else "unavailable",
         versions=_versions(settings),
-        source_status={"database": "active"},
+        source_status={
+            "database": "active",
+            "runtime": read_state.status,
+            "runtime_reason": read_state.reason,
+            "freshness": dict(read_state.details),
+        },
         events=[
             _public_event(settings, dict(item), default_session=session)
             for item in list(page.get("events") or [])
@@ -476,25 +593,22 @@ def status() -> BreakoutStatusResponse:
             database={"status": "not_opened"},
             strength_adapter={"status": "available", "version": "strength-intrinsic-v1"},
             market_shape_adapter={
-                "status": "unavailable",
-                "version": "market-shape-adapter-v1",
-                "warning": "six-state market shape is not implemented",
+                "status": "available",
+                "version": MARKET_SHAPE_VERSION,
+                "warning": "runtime data status is reported by completed scan snapshots",
             },
         )
     try:
-        payload = dict(_repository(settings).status())
-        provider_states = {
-            str(item.get("status"))
-            for item in payload.get("provider_health", [])
-            if isinstance(item, dict)
-        }
-        overall = (
-            "stale"
-            if "stale" in provider_states
-            else "degraded"
-            if provider_states.intersection({"degraded", "unavailable"})
-            else "active"
+        repository = _repository(settings)
+        payload = dict(repository.status())
+        completed = payload.get("latest_completed_scan")
+        read_state = assess_breakout_read_state(
+            settings,
+            payload,
+            now=_now(),
+            completed_snapshot=(dict(completed) if isinstance(completed, dict) else None),
         )
+        overall = read_state.status
     except (FileNotFoundError, sqlite3.Error, BreakoutRepositoryError, SchemaVersionError, OSError):
         payload = {
             "database": {"status": "unavailable"},
@@ -504,12 +618,28 @@ def status() -> BreakoutStatusResponse:
             "worker_lock": None,
         }
         overall = "unavailable"
+        read_state = None
     database = dict(payload.get("database") or {})
     database.pop("path", None)
     database.pop("schema_checksum", None)
     worker = dict(payload.get("worker") or {}) or None
     if worker is not None:
         worker.pop("worker_id", None)
+        if read_state is not None:
+            worker["health_status"] = read_state.status
+            worker["health_reason"] = read_state.reason
+            worker["heartbeat_age_seconds"] = read_state.details.get(
+                "heartbeat_age_seconds"
+            )
+    latest_completed_scan = dict(payload.get("latest_completed_scan") or {}) or None
+    if latest_completed_scan is not None and read_state is not None:
+        latest_completed_scan["freshness_status"] = read_state.status
+        latest_completed_scan["snapshot_age_seconds"] = read_state.details.get(
+            "snapshot_age_seconds"
+        )
+        latest_completed_scan["stale_after_seconds"] = read_state.details.get(
+            "snapshot_stale_after_seconds"
+        )
     lock = dict(payload.get("worker_lock") or {}) or None
     if lock is not None:
         lock = {
@@ -528,13 +658,13 @@ def status() -> BreakoutStatusResponse:
         ),
         database=database,
         worker=worker,
-        latest_completed_scan=payload.get("latest_completed_scan"),
+        latest_completed_scan=latest_completed_scan,
         provider_health=list(payload.get("provider_health") or []),
         worker_lock=lock,
         strength_adapter={"status": "available", "version": "strength-intrinsic-v1"},
         market_shape_adapter={
-            "status": "unavailable",
-            "version": "market-shape-adapter-v1",
-            "warning": "six-state market shape is not implemented",
+            "status": "available",
+            "version": MARKET_SHAPE_VERSION,
+            "warning": "runtime data status is reported by completed scan snapshots",
         },
     )

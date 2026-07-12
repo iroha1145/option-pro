@@ -78,8 +78,10 @@ MarketShapePort
 
 - 返回 status、六态 state、confidence、transition_risk、as_of、rules、
   warnings 和 version。
-- 当前仓库没有可靠六态引擎；第一版适配器返回 unavailable，market_fit 为
-  null，不能把旧标量大盘分伪装成六态。
+- 第二版使用既有趋势、动量、宽度、成交量、风险价差和风险偏好证据生成
+  BULL_TREND、BULL_PULLBACK、RANGE_ACCUMULATION、RANGE_DISTRIBUTION、
+  BEAR_TREND、CAPITULATION_RECOVERY 六态。核心行情不足时仍返回 unavailable，
+  market_fit 为 null，不能补 50。
 
 CanonicalUniversePort
 
@@ -150,7 +152,7 @@ BreakoutRepository
 - breakout-detector-v1
 - breakout-score-v1
 - range-persistence-v1
-- market-shape-adapter-v1
+- market-shape-v2
 - strength-intrinsic-v1
 - canonical-universe-v1
 - breakout-db-v1
@@ -209,7 +211,8 @@ Dockerfile、.env.example、依赖锁、迁移版本和公共 API 模型。
 
 - TradingView America 扫描器不是官方稳定 API，也不等于规范全美股票池。
 - 第一版规范股票池来自项目固定主题池，股票池外候选缺少全局和行业百分位。
-- 当前项目没有可靠六态大盘形态，market_fit 会降级为 null。
+- 六态大盘形态采用可解释 bootstrap 规则，尚未完成跨周期样本外最优性验证；
+  核心行情不足时 market_fit 仍降级为 null。
 - 历史盘前逐时段数据不足时 premarket_rvol 为 null。
 - 市场时钟复用现有假日和提前收盘规则；临时休市需后续引入可靠日历源。
 - 所有阈值和权重是 bootstrap defaults，未经历史最优性证明。

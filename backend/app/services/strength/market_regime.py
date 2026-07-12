@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime, timezone
 from typing import Any
 
 import pandas as pd
 
 from app.services.strength.relative_spreads import compute_spread_matrix
+from app.services.strength.market_shape import build_market_shape
 
 MARKET_BENCHMARKS = (
     "SPY", "QQQ", "IWM", "RSP", "^VIX", "HYG", "IEF", "TLT", "^TNX", "GLD",
@@ -16,7 +18,7 @@ MARKET_BENCHMARKS = (
 SECTOR_ETFS = ("XLK", "XLF", "XLV", "XLE", "XLI", "XLC", "XLY", "XLP", "XLU", "XLRE", "XLB")
 
 # A regime score is only meaningful when its core trend and breadth inputs are
-# present. Optional spreads/sectors may degrade to neutral, but these may not.
+# present. Missing optional evidence remains unavailable rather than neutral.
 MINIMUM_HISTORY = {"SPY": 220, "QQQ": 200, "IWM": 50, "RSP": 50}
 
 
@@ -114,10 +116,29 @@ def _drawdown_from_high(close: pd.Series, days: int) -> float | None:
     return _safe_float(close.iloc[-1] / high - 1, 5)
 
 
-def _score_signed_pct(value: float | None, scale: float, neutral: float = 50.0) -> float:
+def _score_signed_pct(
+    value: float | None,
+    scale: float,
+    neutral: float = 50.0,
+) -> float | None:
     if value is None:
-        return neutral
+        return None
     return _clamp(neutral + (value * 100.0 * scale))
+
+
+def _weighted_available(
+    values: dict[str, float | None],
+    weights: dict[str, float],
+) -> float | None:
+    active = {
+        name: float(value)
+        for name, value in values.items()
+        if value is not None and weights.get(name, 0.0) > 0
+    }
+    denominator = sum(weights[name] for name in active)
+    if denominator <= 0:
+        return None
+    return sum(value * weights[name] for name, value in active.items()) / denominator
 
 
 def _compute_trend_score(closes: dict[str, pd.Series]) -> tuple[float, dict[str, Any]]:
@@ -146,7 +167,7 @@ def _compute_trend_score(closes: dict[str, pd.Series]) -> tuple[float, dict[str,
     return round(_clamp(score), 1), components
 
 
-def _compute_momentum_score(closes: dict[str, pd.Series]) -> tuple[float, dict[str, Any]]:
+def _compute_momentum_score(closes: dict[str, pd.Series]) -> tuple[float | None, dict[str, Any]]:
     spy = closes.get("SPY", pd.Series(dtype=float))
     qqq = closes.get("QQQ", pd.Series(dtype=float))
     iwm = closes.get("IWM", pd.Series(dtype=float))
@@ -157,12 +178,15 @@ def _compute_momentum_score(closes: dict[str, pd.Series]) -> tuple[float, dict[s
     qqq_spy_20d = _relative_return(qqq, spy, 20)
     iwm_spy_20d = _relative_return(iwm, spy, 20)
     rsp_spy_20d = _relative_return(rsp, spy, 20)
-    score = (
-        _score_signed_pct(spy_20d, 2.8) * .35 +
-        _score_signed_pct(qqq_20d, 2.5) * .30 +
-        _score_signed_pct(iwm_20d, 2.0) * .15 +
-        _score_signed_pct(qqq_spy_20d, 5.0) * .10 +
-        _score_signed_pct(rsp_spy_20d, 5.0) * .10
+    score = _weighted_available(
+        {
+            "spy": _score_signed_pct(spy_20d, 2.8),
+            "qqq": _score_signed_pct(qqq_20d, 2.5),
+            "iwm": _score_signed_pct(iwm_20d, 2.0),
+            "qqq_spy": _score_signed_pct(qqq_spy_20d, 5.0),
+            "rsp_spy": _score_signed_pct(rsp_spy_20d, 5.0),
+        },
+        {"spy": .35, "qqq": .30, "iwm": .15, "qqq_spy": .10, "rsp_spy": .10},
     )
     components = {
         "spy_20d": _safe_float((spy_20d or 0) * 100, 2) if spy_20d is not None else None,
@@ -172,16 +196,18 @@ def _compute_momentum_score(closes: dict[str, pd.Series]) -> tuple[float, dict[s
         "iwm_spy_20d": _safe_float((iwm_spy_20d or 0) * 100, 2) if iwm_spy_20d is not None else None,
         "rsp_spy_20d": _safe_float((rsp_spy_20d or 0) * 100, 2) if rsp_spy_20d is not None else None,
     }
-    return round(_clamp(score), 1), components
+    return round(_clamp(score), 1) if score is not None else None, components
 
 
-def _compute_volume_score(index_data: dict[str, pd.DataFrame], closes: dict[str, pd.Series]) -> tuple[float, dict[str, Any]]:
+def _compute_volume_score(index_data: dict[str, pd.DataFrame], closes: dict[str, pd.Series]) -> tuple[float | None, dict[str, Any]]:
     spy_ret5 = _ret(closes.get("SPY", pd.Series(dtype=float)), 5)
     qqq_ret5 = _ret(closes.get("QQQ", pd.Series(dtype=float)), 5)
     spy_rvol = _rvol(index_data.get("SPY", pd.DataFrame()))
     qqq_rvol = _rvol(index_data.get("QQQ", pd.DataFrame()))
     score = 50.0
+    evidence_count = 0
     if spy_ret5 is not None and spy_rvol is not None:
+        evidence_count += 1
         if spy_ret5 > 0 and spy_rvol > 1.1:
             score += 15
         elif spy_ret5 < 0 and spy_rvol > 1.2:
@@ -189,13 +215,14 @@ def _compute_volume_score(index_data: dict[str, pd.DataFrame], closes: dict[str,
         elif spy_ret5 > 0:
             score += 6
     if qqq_ret5 is not None and qqq_rvol is not None:
+        evidence_count += 1
         if qqq_ret5 > 0 and qqq_rvol > 1.1:
             score += 10
         elif qqq_ret5 < 0 and qqq_rvol > 1.2:
             score -= 15
         elif qqq_ret5 > 0:
             score += 4
-    return round(_clamp(score), 1), {
+    return (round(_clamp(score), 1) if evidence_count else None), {
         "spy_5d": _safe_float((spy_ret5 or 0) * 100, 2) if spy_ret5 is not None else None,
         "qqq_5d": _safe_float((qqq_ret5 or 0) * 100, 2) if qqq_ret5 is not None else None,
         "spy_rvol": spy_rvol,
@@ -203,7 +230,7 @@ def _compute_volume_score(index_data: dict[str, pd.DataFrame], closes: dict[str,
     }
 
 
-def _compute_breadth_score(closes: dict[str, pd.Series]) -> tuple[float, dict[str, Any]]:
+def _compute_breadth_score(closes: dict[str, pd.Series]) -> tuple[float | None, dict[str, Any]]:
     sector_closes = [closes.get(symbol, pd.Series(dtype=float)) for symbol in SECTOR_ETFS]
     above_50 = [close for close in sector_closes if _above_sma(close, 50)]
     above_200 = [close for close in sector_closes if _above_sma(close, 200)]
@@ -217,21 +244,28 @@ def _compute_breadth_score(closes: dict[str, pd.Series]) -> tuple[float, dict[st
     iwm = closes.get("IWM", pd.Series(dtype=float))
     rsp_spy_20d = _relative_return(rsp, spy, 20)
     iwm_spy_20d = _relative_return(iwm, spy, 20)
-    score = (
-        _clamp(above_50_pct, default=50) * .40 +
-        _clamp(above_200_pct, default=50) * .25 +
-        _score_signed_pct(rsp_spy_20d, 5.0) * .20 +
-        _score_signed_pct(iwm_spy_20d, 5.0) * .15
+    score = _weighted_available(
+        {
+            "sector_50": above_50_pct,
+            "sector_200": above_200_pct,
+            "rsp_spy": _score_signed_pct(rsp_spy_20d, 5.0),
+            "iwm_spy": _score_signed_pct(iwm_spy_20d, 5.0),
+        },
+        {"sector_50": .40, "sector_200": .25, "rsp_spy": .20, "iwm_spy": .15},
     )
-    return round(_clamp(score), 1), {
+    return (round(_clamp(score), 1) if score is not None else None), {
         "sectors_above_50dma": _safe_float(above_50_pct, 1),
         "sectors_above_200dma": _safe_float(above_200_pct, 1),
+        "sector_50dma_coverage": valid_count,
+        "sector_200dma_coverage": valid_200_count,
         "rsp_spy_20d": _safe_float((rsp_spy_20d or 0) * 100, 2) if rsp_spy_20d is not None else None,
         "iwm_spy_20d": _safe_float((iwm_spy_20d or 0) * 100, 2) if iwm_spy_20d is not None else None,
     }
 
 
-def _compute_risk_appetite_score(closes: dict[str, pd.Series]) -> tuple[float, float, dict[str, Any]]:
+def _compute_risk_appetite_score(
+    closes: dict[str, pd.Series],
+) -> tuple[float | None, float, dict[str, Any]]:
     spy = closes.get("SPY", pd.Series(dtype=float))
     qqq = closes.get("QQQ", pd.Series(dtype=float))
     vix = closes.get("^VIX", pd.Series(dtype=float))
@@ -274,7 +308,7 @@ def _compute_risk_appetite_score(closes: dict[str, pd.Series]) -> tuple[float, f
     if qqq_dd50 is not None and qqq_dd50 < -0.10:
         penalty += min(6, abs(qqq_dd50) * 50)
 
-    return round(_clamp(score), 1), round(_clamp(penalty, 0, 30, 0), 1), {
+    evidence = {
         "vix": vix_last,
         "vix_percentile": vix_percentile,
         "hyg_tlt_20d": _safe_float((credit_20d or 0) * 100, 2) if credit_20d is not None else None,
@@ -283,6 +317,16 @@ def _compute_risk_appetite_score(closes: dict[str, pd.Series]) -> tuple[float, f
         "spy_drawdown_50d": _safe_float((spy_dd50 or 0) * 100, 2) if spy_dd50 is not None else None,
         "qqq_drawdown_50d": _safe_float((qqq_dd50 or 0) * 100, 2) if qqq_dd50 is not None else None,
     }
+    required = (
+        "vix",
+        "vix_percentile",
+        "hyg_tlt_20d",
+        "yield_10y_20d_change",
+        "spy_drawdown_50d",
+        "qqq_drawdown_50d",
+    )
+    complete_score = round(_clamp(score), 1) if all(evidence[key] is not None for key in required) else None
+    return complete_score, round(_clamp(penalty, 0, 30, 0), 1), evidence
 
 
 def _rules_for_score(score: float, breadth_score: float, risk_penalty: float, risk_on_score: float) -> tuple[dict[str, float], list[str]]:
@@ -344,7 +388,14 @@ def _rules_for_score(score: float, breadth_score: float, risk_penalty: float, ri
     return {key: round(value, 3) for key, value in rules.items()}, warnings
 
 
-def compute_market_regime(index_data: dict[str, pd.DataFrame]) -> dict[str, Any]:
+def compute_market_regime(
+    index_data: dict[str, pd.DataFrame],
+    *,
+    as_of: datetime | None = None,
+) -> dict[str, Any]:
+    observed_at = as_of or datetime.now(timezone.utc)
+    if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+        raise ValueError("as_of must include a timezone")
     closes = {symbol: _close(frame) for symbol, frame in index_data.items()}
     missing = [
         {"symbol": symbol, "required": required, "available": len(closes.get(symbol, pd.Series(dtype=float)))}
@@ -354,7 +405,7 @@ def compute_market_regime(index_data: dict[str, pd.DataFrame]) -> dict[str, Any]
     if missing:
         missing_text = "、".join(f"{item['symbol']}({item['available']}/{item['required']})" for item in missing)
         warning = f"核心市场行情不足：{missing_text}，不生成市场强弱分数"
-        return {
+        payload = {
             "status": "insufficient_data",
             "score": None,
             "label": "数据不足",
@@ -394,24 +445,69 @@ def compute_market_regime(index_data: dict[str, pd.DataFrame]) -> dict[str, Any]
             "spy_above_sma200": None,
             "vix": None,
         }
+        payload["market_shape"] = build_market_shape(payload, as_of=observed_at)
+        return payload
     trend_score, trend = _compute_trend_score(closes)
     momentum_score, momentum = _compute_momentum_score(closes)
     volume_score, volume = _compute_volume_score(index_data, closes)
     breadth_score, breadth = _compute_breadth_score(closes)
     risk_appetite_score, risk_penalty, risk = _compute_risk_appetite_score(closes)
     spread_matrix = compute_spread_matrix(index_data)
-    risk_on_spread_score = float(spread_matrix.get("score") or 50.0)
-    raw_score = (
-        trend_score * .25 +
-        risk_on_spread_score * .25 +
-        breadth_score * .20 +
-        momentum_score * .10 +
-        volume_score * .10 +
-        risk_appetite_score * .10 -
-        risk_penalty * .35
+    risk_on_spread_score = _safe_float(spread_matrix.get("score"), 1)
+    partial_core = _weighted_available(
+        {
+            "trend": trend_score,
+            "risk_on": risk_on_spread_score,
+            "breadth": breadth_score,
+            "momentum": momentum_score,
+            "volume": volume_score,
+            "risk_appetite": risk_appetite_score,
+        },
+        {
+            "trend": .25,
+            "risk_on": .25,
+            "breadth": .20,
+            "momentum": .10,
+            "volume": .10,
+            "risk_appetite": .10,
+        },
     )
-    score = round(_clamp(raw_score), 1)
-    if score >= 75:
+    partial_score = (
+        round(_clamp(partial_core - risk_penalty * .35), 1)
+        if partial_core is not None
+        else None
+    )
+    missing_requirements: list[str] = []
+    if momentum_score is None:
+        missing_requirements.append("market_momentum")
+    if volume_score is None:
+        missing_requirements.append("market_volume")
+    for field in ("spy_5d", "qqq_5d", "spy_rvol", "qqq_rvol"):
+        if volume.get(field) is None:
+            missing_requirements.append(f"market_volume_{field}")
+    if breadth_score is None:
+        missing_requirements.append("market_breadth")
+    if int(breadth.get("sector_50dma_coverage") or 0) < 6:
+        missing_requirements.append("sector_breadth_50dma")
+    if int(breadth.get("sector_200dma_coverage") or 0) < 6:
+        missing_requirements.append("sector_breadth_200dma")
+    for field, label in (
+        ("vix", "vix"),
+        ("vix_percentile", "vix_percentile"),
+        ("hyg_tlt_20d", "credit_spread"),
+        ("yield_10y_20d_change", "rates_change"),
+        ("spy_drawdown_50d", "spy_drawdown"),
+        ("qqq_drawdown_50d", "qqq_drawdown"),
+    ):
+        if risk.get(field) is None:
+            missing_requirements.append(label)
+    if spread_matrix.get("status") != "active" or risk_on_spread_score is None:
+        missing_requirements.append("risk_on_spreads")
+    active = not missing_requirements and partial_score is not None
+    score = partial_score if active else None
+    if score is None:
+        label = "数据不足"
+    elif score >= 75:
         label = "强风险偏好"
     elif score >= 60:
         label = "温和偏强"
@@ -419,22 +515,42 @@ def compute_market_regime(index_data: dict[str, pd.DataFrame]) -> dict[str, Any]
         label = "中性震荡"
     else:
         label = "弱势高风险"
-    rules, warnings = _rules_for_score(score, breadth_score, risk_penalty, risk_on_spread_score)
+    if active:
+        rules, warnings = _rules_for_score(
+            score,
+            float(breadth_score),
+            risk_penalty,
+            float(risk_on_spread_score),
+        )
+    else:
+        rules = {}
+        warnings = [
+            "市场必要维度不足，未生成正式环境分数："
+            + ",".join(dict.fromkeys(missing_requirements))
+        ]
     warnings = [*warnings, *spread_matrix.get("warnings", [])]
-    return {
-        "status": "active",
+    soxx_xlk = spread_matrix.get("spreads", {}).get("soxx_xlk", {})
+    sector_flow_score = (
+        _safe_float(soxx_xlk.get("score"), 1)
+        if soxx_xlk.get("status") == "active"
+        else None
+    )
+    payload = {
+        "status": "active" if active else "degraded",
         "score": score,
+        "partial_score": partial_score,
         "label": label,
         "index_trend_score": trend_score,
         "market_momentum_score": momentum_score,
         "market_breadth_score": breadth_score,
         "market_volume_score": volume_score,
         "risk_appetite_score": risk_appetite_score,
-        "risk_on_spread_score": round(risk_on_spread_score, 1),
+        "risk_on_spread_score": risk_on_spread_score,
         "risk_on_spread_label": spread_matrix.get("label"),
         "market_risk_penalty": risk_penalty,
         "rules": rules,
         "warnings": list(dict.fromkeys(warnings))[:6],
+        "missing_requirements": list(dict.fromkeys(missing_requirements)),
         "trend": trend,
         "momentum": momentum,
         "volume": volume,
@@ -442,14 +558,20 @@ def compute_market_regime(index_data: dict[str, pd.DataFrame]) -> dict[str, Any]
         "risk": risk,
         "spread_matrix": spread_matrix.get("spreads", {}),
         "market_context": {
+            "status": "active" if active else "degraded",
             "score": score,
+            "partial_score": partial_score,
             "label": label,
-            "trend_momentum_score": round(trend_score * .58 + momentum_score * .42, 1),
+            "trend_momentum_score": (
+                round(trend_score * .58 + float(momentum_score) * .42, 1)
+                if momentum_score is not None
+                else None
+            ),
             "breadth_score": breadth_score,
-            "risk_on_spread_score": round(risk_on_spread_score, 1),
+            "risk_on_spread_score": risk_on_spread_score,
             "liquidity_credit_score": risk_appetite_score,
             "sentiment_score": risk_appetite_score,
-            "sector_flow_score": round((spread_matrix.get("spreads", {}).get("soxx_xlk", {}).get("score") or 50), 1),
+            "sector_flow_score": sector_flow_score,
             "valuation_status": "not_available",
             "valuation_risk_penalty": 0.0,
         },
@@ -459,3 +581,5 @@ def compute_market_regime(index_data: dict[str, pd.DataFrame]) -> dict[str, Any]
         "spy_above_sma200": trend.get("spy_above_sma200", False),
         "vix": risk.get("vix"),
     }
+    payload["market_shape"] = build_market_shape(payload, as_of=observed_at)
+    return payload

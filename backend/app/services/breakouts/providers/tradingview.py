@@ -111,6 +111,10 @@ class TradingViewDiscoveryProvider:
     @property
     def health(self) -> dict[str, Any]:
         now = self._monotonic()
+        stale_available = any(
+            now - fetched_at <= self.settings.provider_stale_ttl_seconds
+            for fetched_at, _snapshot in self._cache.values()
+        )
         return {
             "provider": "tradingview",
             "status": "unavailable" if self._circuit_open_until > now else (
@@ -123,7 +127,7 @@ class TradingViewDiscoveryProvider:
             "circuit_open": self._circuit_open_until > now,
             "circuit_open_remaining_seconds": max(0.0, self._circuit_open_until - now),
             "last_error_code": self._last_error_code,
-            "stale_snapshot_available": bool(self._cache),
+            "stale_snapshot_available": stale_available,
         }
 
     def _columns(self, session: MarketSession) -> tuple[str, ...]:
@@ -327,6 +331,36 @@ class TradingViewDiscoveryProvider:
             }
         )
 
+    def _latest_stale_candidate(
+        self,
+        *,
+        session: MarketSession,
+        requested_as_of: datetime,
+    ) -> tuple[float, DiscoverySnapshot] | None:
+        """Return the newest compatible snapshot across cache time buckets.
+
+        The exact cache key intentionally includes a short source-time bucket so
+        successful reads stay point-in-time.  On a refresh failure, however, a
+        still-bounded snapshot from the immediately preceding bucket remains a
+        valid stale fallback.  Never cross sessions, schemas, the requested
+        cutoff, or the configured stale TTL.
+        """
+
+        now = self._monotonic()
+        eligible = [
+            cached
+            for cached in self._cache.values()
+            if (
+                cached[1].session is session
+                and cached[1].schema_version == self.settings.provider_schema_version
+                and cached[1].as_of <= requested_as_of
+                and now - cached[0] <= self.settings.provider_stale_ttl_seconds
+            )
+        ]
+        if not eligible:
+            return None
+        return max(eligible, key=lambda item: (item[1].as_of, item[0]))
+
     def _remember(self, key: str, snapshot: DiscoverySnapshot) -> None:
         self._cache[key] = (self._monotonic(), snapshot)
         self._cache.move_to_end(key)
@@ -370,9 +404,13 @@ class TradingViewDiscoveryProvider:
             and now - cached[0] <= self.settings.provider_cache_ttl_seconds
         ):
             return cached[1]
+        stale_candidate = self._latest_stale_candidate(
+            session=session,
+            requested_as_of=as_of,
+        )
         if self._circuit_open_until > now:
             stale = self._stale(
-                cached,
+                stale_candidate,
                 warning="provider_circuit_open",
                 requested_as_of=as_of,
             )
@@ -429,7 +467,7 @@ class TradingViewDiscoveryProvider:
                     self._monotonic() + self.settings.provider_circuit_open_seconds
                 )
             stale = self._stale(
-                cached,
+                stale_candidate,
                 warning=self._last_error_code,
                 requested_as_of=as_of,
             )

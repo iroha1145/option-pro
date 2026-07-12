@@ -55,6 +55,8 @@ Provider：
 
 - sector filter、top、options coverage、候选集合不改变 intrinsic。
 - market shape 只改 market_fit 和 priority。
+- 六态金样覆盖多头趋势、多头回调、区间蓄势、区间派发、空头趋势和恐慌修复；
+  区间派发与空头趋势会提高完整 K 线确认要求，持续事件按当前形态重算 market_fit。
 - 缺失组件不补 50；活跃权重不足返回 null。
 - contribution 合计与最终分误差不超过 0.1。
 - 所有浮点有限，分数和置信度范围正确。

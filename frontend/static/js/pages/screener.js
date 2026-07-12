@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import { renderIcon } from '../icons.js';
-import { renderMarketStrengthPlaceholder } from '../components/marketStrengthPlaceholder.js';
+import { renderMarketStrengthPanel } from '../components/marketStrengthPlaceholder.js';
 
 const SCREENER_STYLES_ID = 'optix-screener-v3-styles';
 
@@ -18,6 +18,8 @@ const state = {
   profile: 'balanced',
   top: 20,
   sectorId: '',
+  minPrice: 5,
+  minAvgDollarVolume: 10_000_000,
   loading: false,
   payload: null,
   profiles: null,
@@ -25,6 +27,9 @@ const state = {
   expandedTicker: '',
   mountGeneration: 0,
   requestGeneration: 0,
+  pageController: null,
+  scanController: null,
+  routeCleanup: null,
 };
 
 const FALLBACK_OPTION_SOURCES = [
@@ -79,6 +84,21 @@ function formatMoney(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return '—';
   return `$${number.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function optionalFinite(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function formatThresholdMoney(value) {
+  const number = optionalFinite(value);
+  if (number === null) return '数据不足';
+  if (number <= 0) return '不限';
+  if (number >= 1_000_000_000) return `$${(number / 1_000_000_000).toFixed(number % 1_000_000_000 ? 1 : 0)}B`;
+  if (number >= 1_000_000) return `$${(number / 1_000_000).toFixed(number % 1_000_000 ? 1 : 0)}M`;
+  return `$${number.toLocaleString('en-US')}`;
 }
 
 function formatPercent(value, digits = 2) {
@@ -223,6 +243,18 @@ function renderControls(sectors = []) {
             <option value="30" ${state.top === 30 ? 'selected' : ''}>30 只</option>
             <option value="50" ${state.top === 50 ? 'selected' : ''}>50 只</option>
           </select>
+        </label>
+      </div>
+      <div class="screening-liquidity-grid" aria-label="价格与流动性门槛">
+        <label class="screening-control-field">
+          <span class="screening-field-label">最低股价（美元）</span>
+          <input id="strength-min-price" type="number" min="0" step="0.5" inputmode="decimal" value="${escapeHtml(state.minPrice)}" aria-describedby="strength-min-price-hint">
+          <small id="strength-min-price-hint" class="screening-control-hint">0 表示不限制股价</small>
+        </label>
+        <label class="screening-control-field">
+          <span class="screening-field-label">最低20日均成交额（百万美元）</span>
+          <input id="strength-min-liquidity" type="number" min="0" step="0.5" inputmode="decimal" value="${escapeHtml(state.minAvgDollarVolume / 1_000_000)}" aria-describedby="strength-min-liquidity-hint">
+          <small id="strength-min-liquidity-hint" class="screening-control-hint">输入 10 代表每日 1,000 万美元</small>
         </label>
       </div>
       ${renderSectorPicker(sectors)}
@@ -405,7 +437,185 @@ function renderScoreBar(value, label) {
   `;
 }
 
-function renderResultCard(row, index) {
+function rangePersistenceView(row = {}, payload = {}) {
+  const rawFeature = row.range_persistence;
+  const feature = rawFeature && typeof rawFeature === 'object' && !Array.isArray(rawFeature)
+    ? rawFeature
+    : {};
+  const shadow = row.range_persistence_shadow && typeof row.range_persistence_shadow === 'object'
+    ? row.range_persistence_shadow
+    : {};
+  const status = String(feature.status || row.range_persistence_status || '').toLowerCase();
+  const mode = String(
+    shadow.mode
+    || row.range_persistence_mode
+    || payload.range_persistence_mode
+    || payload.params?.range_persistence_mode
+    || '',
+  ).toLowerCase();
+  const rawValue = Object.keys(feature).length
+    ? (feature.range_persistence_normalized_score ?? feature.range_persistence)
+    : rawFeature;
+  const activeValue = optionalFinite(rawValue);
+  const value = status && status !== 'active' ? null : activeValue;
+  const slope = optionalFinite(feature.range_persistence_slope_5d ?? row.range_persistence_slope_5d);
+  const ratio = optionalFinite(feature.range_persistence_ratio_10d ?? row.range_persistence_ratio_10d);
+  const productionScore = optionalFinite(shadow.production_score);
+  const hypotheticalScore = optionalFinite(shadow.hypothetical_score);
+  const scoreDelta = optionalFinite(row.range_persistence_score_delta ?? shadow.score_delta);
+  const effectiveWeight = optionalFinite(shadow.effective_weight);
+  const contributionCap = optionalFinite(shadow.contribution_cap);
+  const version = String(
+    feature.version
+    || shadow.version
+    || row.range_persistence_version
+    || payload.range_persistence_version
+    || payload.params?.range_persistence_version
+    || '',
+  );
+
+  if (mode === 'disabled' || status === 'disabled') {
+    return {
+      mode: 'disabled',
+      tone: 'disabled',
+      label: '未启用',
+      summaryLabel: '未启用',
+      description: '区间持续性当前没有进入计算，也不会改变本轮候选排序。',
+      value: null,
+      slope,
+      ratio,
+      productionScore,
+      hypotheticalScore,
+      scoreDelta,
+      effectiveWeight,
+      contributionCap,
+      version,
+    };
+  }
+  if (value === null) {
+    return {
+      mode: mode || 'unknown',
+      tone: 'insufficient',
+      label: '数据不足',
+      summaryLabel: '数据不足',
+      description: mode === 'shadow'
+        ? '影子观察已开启，但本标的历史不足；不参与本轮扫描、排序或评分。'
+        : '服务端没有返回有效区间持续性，页面不会把缺失值补成 0。',
+      value: null,
+      slope,
+      ratio,
+      productionScore,
+      hypotheticalScore,
+      scoreDelta,
+      effectiveWeight,
+      contributionCap,
+      version,
+    };
+  }
+  if (mode === 'shadow') {
+    return {
+      mode,
+      tone: 'shadow',
+      label: '影子观察',
+      summaryLabel: '影子观察 · 不参与排序',
+      description: '该指标只用于影子观察和后续验证，不参与本轮扫描、排序或评分。',
+      value,
+      slope,
+      ratio,
+      productionScore,
+      hypotheticalScore,
+      scoreDelta,
+      effectiveWeight,
+      contributionCap,
+      version,
+    };
+  }
+  if (mode === 'enabled') {
+    return {
+      mode,
+      tone: 'enabled',
+      label: '已参与评分',
+      summaryLabel: '已参与评分',
+      description: '区间持续性已按服务端配置进入趋势评分，页面仅展示服务端结果。',
+      value,
+      slope,
+      ratio,
+      productionScore,
+      hypotheticalScore,
+      scoreDelta,
+      effectiveWeight,
+      contributionCap,
+      version,
+    };
+  }
+  return {
+    mode: 'computed',
+    tone: 'computed',
+    label: '已计算',
+    summaryLabel: '已计算 · 模式待确认',
+    description: '服务端返回了有效区间持续性，但没有标明是否参与本轮评分。',
+    value,
+    slope,
+    ratio,
+    productionScore,
+    hypotheticalScore,
+    scoreDelta,
+    effectiveWeight,
+    contributionCap,
+    version,
+  };
+}
+
+function formatRangePercent(value) {
+  const number = optionalFinite(value);
+  return number === null ? '—' : `${number.toFixed(0)}%`;
+}
+
+function formatRangeWeight(value) {
+  const number = optionalFinite(value);
+  if (number === null) return '—';
+  const percent = Math.abs(number) <= 1 ? number * 100 : number;
+  return `${percent.toFixed(1).replace(/\.0$/, '')}%`;
+}
+
+function formatSignedScore(value) {
+  const number = optionalFinite(value);
+  if (number === null) return '—';
+  return `${number > 0 ? '+' : ''}${number.toFixed(2).replace(/\.00$/, '')}`;
+}
+
+function renderRangePersistenceSummary(view) {
+  return `
+    <span class="screening-range-summary screening-range-summary--${view.tone}" aria-label="区间持续性：${escapeHtml(view.description)}">
+      <small>区间持续性</small>
+      <strong class="screening-data">${formatScore(view.value, 0)}</strong>
+      <em>${escapeHtml(view.summaryLabel)}</em>
+    </span>
+  `;
+}
+
+function renderRangePersistenceDetail(view) {
+  return `
+    <section class="screening-range-detail screening-range-detail--${view.tone}" aria-label="区间持续性详情">
+      <div>
+        <span><small>区间持续性</small><strong class="screening-data">${formatScore(view.value, 0)}</strong></span>
+        <em>${escapeHtml(view.label)}</em>
+      </div>
+      <p>${escapeHtml(view.description)}${view.version ? `<small>版本 ${escapeHtml(view.version)}</small>` : ''}</p>
+      <dl>
+        <div><dt>5日斜率</dt><dd class="screening-data">${formatScore(view.slope, 2)}</dd></div>
+        <div><dt>10日高位比例</dt><dd class="screening-data">${formatRangePercent(view.ratio)}</dd></div>
+        <div><dt>${view.mode === 'enabled' ? '已应用分差' : '影子分差'}</dt><dd class="screening-data">${formatSignedScore(view.scoreDelta)}</dd></div>
+        ${view.productionScore !== null ? `<div><dt>生产评分</dt><dd class="screening-data">${formatScore(view.productionScore, 1)}</dd></div>` : ''}
+        ${view.hypotheticalScore !== null ? `<div><dt>影子假设分</dt><dd class="screening-data">${formatScore(view.hypotheticalScore, 1)}</dd></div>` : ''}
+        ${view.effectiveWeight !== null ? `<div><dt>有效权重</dt><dd class="screening-data">${formatRangeWeight(view.effectiveWeight)}</dd></div>` : ''}
+        ${view.contributionCap !== null ? `<div><dt>权重上限</dt><dd class="screening-data">${formatRangeWeight(view.contributionCap)}</dd></div>` : ''}
+      </dl>
+    </section>
+  `;
+}
+
+function renderResultCard(row, index, payload = {}) {
   const ticker = String(row.ticker || '').toUpperCase();
   const expanded = state.expandedTicker === ticker;
   const explanationId = `screening-explanation-${index}`;
@@ -427,6 +637,7 @@ function renderResultCard(row, index) {
   const volumeTruth = row.volume_truth || row.vol_price_match || {};
   const optionStatus = row.option_context?.source_status || 'placeholder';
   const optionHeat = row.option_heat_score == null ? Number.NaN : Number(row.option_heat_score);
+  const rangePersistence = rangePersistenceView(row, payload);
   const detailFacts = [
     Number.isFinite(quality) ? `数据覆盖 ${quality.toFixed(0)}%` : '',
     priceAction.structure_label ? `价格结构 ${priceAction.structure_label}` : '',
@@ -462,6 +673,7 @@ function renderResultCard(row, index) {
               <small class="screening-change screening-change--${movement}"><span aria-hidden="true">${changeSymbol}</span>${formatPercent(row.change_pct)}</small>
             </span>
             <span class="screening-primary-reason">${escapeHtml(primaryReason)}</span>
+            ${renderRangePersistenceSummary(rangePersistence)}
           </span>
           <span class="screening-candidate-evaluation">
             <span class="screening-candidate-score">
@@ -509,6 +721,7 @@ function renderResultCard(row, index) {
             ${renderScoreBar(row.price_action_score ?? row.breakdown?.price_action, '结构')}
             ${renderScoreBar(row.sector_score, '板块')}
           </div>
+          ${renderRangePersistenceDetail(rangePersistence)}
           ${detailFacts.length || tags.length ? `
             <div class="screening-detail-facts">
               ${tags.slice(0, 4).map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}
@@ -537,7 +750,7 @@ function renderResults(payload = {}) {
   } else if (!rows.length) {
     body = '<div class="screening-result-state" role="status"><strong>本轮没有候选</strong><span>放宽板块范围或切换评分偏好后会自动重扫。</span></div>';
   } else {
-    body = rows.map(renderResultCard).join('');
+    body = rows.map((row, index) => renderResultCard(row, index, payload)).join('');
   }
   const hasCandidates = !state.loading && !state.error && rows.length > 0;
   return `
@@ -546,7 +759,7 @@ function renderResults(payload = {}) {
         ${renderStepHeading('03', '候选列表', '查看优先研究标的', '默认只显示最重要的判断与理由')}
         <span class="screening-result-context">
           <strong id="screening-results-title">${state.loading ? '生成中' : `${rows.length} 只候选`}</strong>
-          <small>${escapeHtml(profileLabel)} · ${escapeHtml(timeframeLabel)}${state.sectorId ? ' · 已限板块' : ''}</small>
+          <small>${escapeHtml(profileLabel)} · ${escapeHtml(timeframeLabel)}${state.sectorId ? ' · 已限板块' : ''} · 股价 ≥ ${escapeHtml(formatThresholdMoney(state.minPrice))} · 日均额 ≥ ${escapeHtml(formatThresholdMoney(state.minAvgDollarVolume))}</small>
         </span>
       </div>
       <div class="screening-results-surface" data-result-state="${hasCandidates ? 'ready' : state.loading ? 'loading' : state.error ? 'error' : 'empty'}" ${hasCandidates ? 'role="list"' : ''}>
@@ -578,13 +791,23 @@ function renderShell() {
           <small>当前方案</small>
           <strong>${escapeHtml(profileLabel)}</strong>
           <span>${escapeHtml(timeframeLabel)} · 前 ${state.top} 只</span>
+          <small class="screening-plan__filters">股价 ≥ ${escapeHtml(formatThresholdMoney(state.minPrice))} · 日均额 ≥ ${escapeHtml(formatThresholdMoney(state.minAvgDollarVolume))}</small>
         </div>
       </header>
       <div class="screening-flow">
         <div class="screening-console" data-motion-key="screener-console" data-motion-lens>
           ${renderControls(sectors)}
           ${renderMarketContext(payload)}
-          ${renderMarketStrengthPlaceholder({ variant: 'screener' })}
+          ${renderMarketStrengthPanel({
+            variant: 'screener',
+            marketRegime: payload.market_regime,
+            marketShape: payload.market_regime?.market_shape || payload.market_shape,
+            asOf: payload.as_of,
+            loading: state.loading && !state.payload,
+            updating: state.loading && Boolean(state.payload),
+            error: state.error,
+            retryable: false,
+          })}
         </div>
         ${renderResults(payload)}
       </div>
@@ -627,6 +850,30 @@ function bindEvents() {
     state.top = Number(event.target.value) || 20;
     runScan();
   });
+  document.getElementById('strength-min-price')?.addEventListener('change', (event) => {
+    const raw = String(event.target.value || '').trim();
+    const value = Number(event.target.value);
+    if (!raw || !Number.isFinite(value) || value < 0) {
+      event.target.setCustomValidity('请输入不小于 0 的股价门槛');
+      event.target.reportValidity();
+      return;
+    }
+    event.target.setCustomValidity('');
+    state.minPrice = value;
+    runScan();
+  });
+  document.getElementById('strength-min-liquidity')?.addEventListener('change', (event) => {
+    const raw = String(event.target.value || '').trim();
+    const value = Number(event.target.value);
+    if (!raw || !Number.isFinite(value) || value < 0) {
+      event.target.setCustomValidity('请输入不小于 0 的日均成交额门槛');
+      event.target.reportValidity();
+      return;
+    }
+    event.target.setCustomValidity('');
+    state.minAvgDollarVolume = value * 1_000_000;
+    runScan();
+  });
   document.getElementById('strength-run')?.addEventListener('click', () => runScan());
   document.getElementById('strength-retry')?.addEventListener('click', () => runScan());
   document.querySelectorAll('.screening-sector-button').forEach((button) => {
@@ -645,10 +892,13 @@ function bindEvents() {
   document.querySelectorAll('[data-arrow-nav]').forEach(bindArrowNavigation);
 }
 
-async function loadProfiles() {
+async function loadProfiles(mountGeneration, signal) {
   try {
-    state.profiles = await api.strengthProfiles();
+    const profiles = await api.strengthProfiles({ signal });
+    if (!isMounted(mountGeneration)) return;
+    state.profiles = profiles;
   } catch (_) {
+    if (!isMounted(mountGeneration)) return;
     state.profiles = null;
   }
 }
@@ -656,6 +906,9 @@ async function loadProfiles() {
 async function runScan(mountGeneration = state.mountGeneration) {
   if (!isMounted(mountGeneration)) return;
   const requestGeneration = ++state.requestGeneration;
+  state.scanController?.abort();
+  const scanController = new AbortController();
+  state.scanController = scanController;
   state.loading = true;
   state.error = '';
   state.expandedTicker = '';
@@ -666,7 +919,9 @@ async function runScan(mountGeneration = state.mountGeneration) {
       profile: state.profile,
       top: state.top,
       sector_id: state.sectorId,
-    });
+      min_price: state.minPrice,
+      min_avg_dollar_volume: state.minAvgDollarVolume,
+    }, { signal: scanController.signal });
     if (!isMounted(mountGeneration) || requestGeneration !== state.requestGeneration) return;
     state.payload = payload;
   } catch (error) {
@@ -676,18 +931,34 @@ async function runScan(mountGeneration = state.mountGeneration) {
   } finally {
     if (!isMounted(mountGeneration) || requestGeneration !== state.requestGeneration) return;
     state.loading = false;
+    if (state.scanController === scanController) state.scanController = null;
     renderShell();
   }
 }
 
 export function renderScreener() {
   ensureScreenerStyles();
+  state.routeCleanup?.();
   const mountGeneration = ++state.mountGeneration;
+  const pageController = new AbortController();
+  state.pageController = pageController;
+  const cleanup = () => {
+    window.removeEventListener('hashchange', cleanup);
+    if (mountGeneration !== state.mountGeneration) return;
+    state.requestGeneration += 1;
+    state.scanController?.abort();
+    pageController.abort();
+    state.scanController = null;
+    if (state.pageController === pageController) state.pageController = null;
+    if (state.routeCleanup === cleanup) state.routeCleanup = null;
+  };
+  state.routeCleanup = cleanup;
+  window.addEventListener('hashchange', cleanup, { once: true });
   state.requestGeneration += 1;
   state.loading = false;
   state.error = '';
   state.expandedTicker = '';
   renderShell();
-  if (!state.profiles) loadProfiles();
+  if (!state.profiles) loadProfiles(mountGeneration, pageController.signal);
   runScan(mountGeneration);
 }

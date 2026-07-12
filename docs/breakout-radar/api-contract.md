@@ -30,6 +30,9 @@ events 和明确状态，不创建数据库。
 - limit
 - cursor
 
+date 必须是实际存在的 ISO 日期；setup_type、lifecycle_state 和 session 只接受
+公开枚举值，非法值在进入仓储前返回 422。
+
 排序以 event_at、alert_priority_score 和 event_id 形成稳定复合键。游标包含
 scan_run_id，分页期间出现新扫描不会污染同一分页序列。
 
@@ -52,7 +55,7 @@ scan_run_id，分页期间出现新扫描不会污染同一分页序列。
 - stale 状态
 - database 状态
 - strength_adapter 状态
-- market_shape_adapter 状态
+- market_shape_adapter 实现状态；运行时数据状态以最近完整扫描为准
 - versions
 
 Provider 失败不改变 /ready；只体现在此接口和突破根响应。
@@ -62,8 +65,10 @@ Provider 失败不改变 /ready；只体现在此接口和突破根响应。
 event_id、ticker、name、exchange、asset_type、sector、session、setup_type、
 lifecycle_state、event_at、event_age_seconds、event_price、current_price、
 session_change_pct、gap_pct、rvol_time_of_day、pivot_price、support_zone、
-resistance_zone、invalidation_price、十个评分字段、三个 range_persistence
-字段、range_persistence_status、effective_weights、contribution_breakdown、
-market_shape、warnings、source_status、provenance、versions。
+resistance_zone、invalidation_price、十个评分字段、区间持续性数值、斜率、比例、
+自身/全局/行业百分位、range_persistence_status、交互证据、configured_weights、
+effective_weights、contribution_breakdown、penalties、missing_components、score_version、
+market_shape（含 state、confidence、transition_risk、eligibility 和 rules）、
+warnings、source_status、provenance、versions。
 
 数值只能是有限数或 null；分数范围为 0 至 100，置信度为 0 至 1。

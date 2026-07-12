@@ -4,6 +4,7 @@
 
 - BREAKOUT_RADAR_ENABLED=false
 - RANGE_PERSISTENCE_MODE=shadow
+- RANGE_PERSISTENCE_VALIDATION_VERSION 为空
 - Worker 独立进程，不暴露端口。
 - Backend 只读 completed SQLite 快照。
 
@@ -23,6 +24,17 @@ PYTHONPATH=. python -m app.services.breakouts.worker --healthcheck
 
 功能关闭时 --once 安全退出，健康状态为 disabled。启用真实 Provider 的一次
 扫描不是离线测试，不能与夹具测试混为一谈。
+
+区间强势持续度从 shadow 切换为 enabled 前，必须完成研究门槛，并同时设置：
+
+```text
+RANGE_PERSISTENCE_MODE=enabled
+RANGE_PERSISTENCE_VERSION=range-persistence-v1
+RANGE_PERSISTENCE_VALIDATION_VERSION=range-persistence-v1
+```
+
+验证版本为空或与特征版本不一致时，后端和 Worker 都会拒绝启动。算法版本升级
+后必须重新验证，不能沿用旧版本确认。
 
 ## 调度
 

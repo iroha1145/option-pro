@@ -41,11 +41,11 @@ def _settings(**overrides) -> BreakoutSettings:
     return BreakoutSettings(_env_file=None, **defaults)
 
 
-def _run(provider):
+def _run(provider, *, as_of=NOW):
     return asyncio.run(
         provider.scan(
             session=MarketSession.REGULAR,
-            as_of=NOW,
+            as_of=as_of,
             profile=DiscoveryProfile.REGULAR_MOVERS,
         )
     )
@@ -118,6 +118,77 @@ def test_stale_on_error_is_bounded() -> None:
     assert fresh.status is ProviderStatus.ACTIVE
     assert stale.status is ProviderStatus.STALE
     assert unavailable.status is ProviderStatus.UNAVAILABLE
+
+
+def test_stale_fallback_finds_previous_cache_time_bucket() -> None:
+    clock = Clock()
+    responses = [httpx.Response(200, json=FIXTURE), httpx.Response(503)]
+
+    async def handler(_request):
+        return responses.pop(0)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = TradingViewDiscoveryProvider(_settings(), client=client, monotonic=clock)
+    fresh = _run(provider, as_of=NOW)
+    clock.value += 2
+    requested_at = NOW.replace(second=NOW.second + 2)
+    stale = _run(provider, as_of=requested_at)
+    asyncio.run(client.aclose())
+
+    assert fresh.cache_key != provider._cache_key(
+        session=MarketSession.REGULAR,
+        profile=DiscoveryProfile.REGULAR_MOVERS,
+        as_of=requested_at,
+    )
+    assert stale.status is ProviderStatus.STALE
+    assert stale.as_of == fresh.as_of
+    assert "provider_server_error" in stale.warnings
+    assert provider.health["stale_snapshot_available"] is True
+
+
+def test_previous_cache_time_bucket_expires_at_stale_ttl() -> None:
+    clock = Clock()
+    responses = [httpx.Response(200, json=FIXTURE), httpx.Response(503)]
+
+    async def handler(_request):
+        return responses.pop(0)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = TradingViewDiscoveryProvider(_settings(), client=client, monotonic=clock)
+    fresh = _run(provider, as_of=NOW)
+    clock.value += 31
+    requested_at = NOW.replace(second=NOW.second + 2)
+    unavailable = _run(provider, as_of=requested_at)
+    asyncio.run(client.aclose())
+
+    assert fresh.cache_key != unavailable.cache_key
+    assert unavailable.status is ProviderStatus.UNAVAILABLE
+    assert provider.health["stale_snapshot_available"] is False
+
+
+def test_cross_bucket_stale_fallback_never_uses_future_snapshot() -> None:
+    clock = Clock()
+    responses = [
+        httpx.Response(200, json=FIXTURE),
+        httpx.Response(200, json=FIXTURE),
+        httpx.Response(503),
+    ]
+
+    async def handler(_request):
+        return responses.pop(0)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = TradingViewDiscoveryProvider(_settings(), client=client, monotonic=clock)
+    earlier = _run(provider, as_of=NOW.replace(second=0))
+    clock.value += 2
+    later = _run(provider, as_of=NOW.replace(second=50))
+    clock.value += 2
+    replay = _run(provider, as_of=NOW.replace(second=10))
+    asyncio.run(client.aclose())
+
+    assert later.as_of > replay.as_of
+    assert replay.status is ProviderStatus.STALE
+    assert replay.as_of == earlier.as_of
 
 
 def test_circuit_breaker_stops_transport_calls() -> None:

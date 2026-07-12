@@ -1458,8 +1458,16 @@ class BreakoutRepository:
             production_rank = shadow.get("production_rank")
             hypothetical_rank = shadow.get("hypothetical_rank")
             rank_delta = shadow.get("rank_delta")
-            if rank_delta is None and production_rank is not None and hypothetical_rank is not None:
-                rank_delta = int(production_rank) - int(hypothetical_rank)
+            version = shadow.get("version")
+            feature_version = shadow.get("feature_version")
+            if version and feature_version and str(version) != str(feature_version):
+                raise ValueError("range shadow version fields disagree")
+            if (
+                rank_delta is None
+                and production_rank is not None
+                and hypothetical_rank is not None
+            ):
+                rank_delta = int(hypothetical_rank) - int(production_rank)
             connection.execute(
                 """
                 INSERT INTO range_persistence_shadow(
@@ -1476,7 +1484,7 @@ class BreakoutRepository:
                     production_rank,
                     hypothetical_rank,
                     rank_delta,
-                    str(shadow.get("version") or "range-persistence-v1"),
+                    str(version or feature_version or "range-persistence-v1"),
                     _json_dumps(shadow),
                     now_text,
                 ),
@@ -1827,10 +1835,19 @@ class BreakoutRepository:
                 ).fetchone()
                 if scan is None:
                     connection.commit()
-                    return {"scan_run_id": None, "events": [], "next_cursor": None}
+                    return {
+                        "scan_run_id": None,
+                        "completed_scan": None,
+                        "events": [],
+                        "next_cursor": None,
+                    }
                 scan_run_id = str(scan["scan_run_id"])
             completed = connection.execute(
-                "SELECT 1 FROM breakout_scan_runs WHERE scan_run_id=? AND status='completed'",
+                """
+                SELECT scan_run_id,provider,session,scheduled_at,completed_at,published_at,
+                       candidate_count,event_count,versions_json
+                FROM breakout_scan_runs WHERE scan_run_id=? AND status='completed'
+                """,
                 (scan_run_id,),
             ).fetchone()
             if completed is None:
@@ -1893,6 +1910,7 @@ class BreakoutRepository:
             connection.commit()
             return {
                 "scan_run_id": scan_run_id,
+                "completed_scan": self._row_dict(completed),
                 "events": events,
                 "next_cursor": next_cursor,
             }

@@ -7,4 +7,7 @@ def test_theme_membership_is_not_misreported_as_authoritative_primary_sector() -
     universe = ThemeCanonicalUniverseAdapter()
     assert len(universe.memberships("NVDA")) > 1
     assert universe.primary_sector("NVDA") is None
+    assert universe.sector_benchmark("NVDA", "Technology") == "XLK"
+    assert universe.sector_benchmark("JPM") == "XLF"
+    assert universe.sector_benchmark("NVDA") is None
     assert all(not ticker.endswith(".PA") for ticker in universe._ticker_sectors)

@@ -15,6 +15,7 @@ from fastapi import HTTPException
 from app.api import market, strength as strength_api
 from app.services import scoring, signals, yahoo
 from app.services.strength import market_regime, relative_spreads, scanner, yahoo_options
+from app.services.breakouts.config import BreakoutSettings
 
 
 def _history(size: int = 260) -> pd.DataFrame:
@@ -105,6 +106,42 @@ def test_market_regime_reports_insufficient_data_instead_of_bearish_score() -> N
     assert result["missing_requirements"]
 
 
+def test_market_regime_does_not_promote_partial_risk_and_breadth_to_active() -> None:
+    history = _history(260)
+    result = market_regime.compute_market_regime(
+        {symbol: history for symbol in ("SPY", "QQQ", "IWM", "RSP")}
+    )
+    assert result["status"] == "degraded"
+    assert result["score"] is None
+    assert result["partial_score"] is not None
+    assert result["market_shape"]["status"] == "unavailable"
+    assert result["market_shape"]["state"] is None
+    assert "vix" in result["missing_requirements"]
+    assert "risk_on_spreads" in result["missing_requirements"]
+
+
+def test_empty_relative_spread_matrix_stays_unavailable() -> None:
+    result = relative_spreads.compute_spread_matrix({})
+    assert result["status"] == "unavailable"
+    assert result["score"] is None
+    assert result["label"] == "数据不足"
+    assert result["spreads"]
+    assert all(item["score"] is None for item in result["spreads"].values())
+
+
+def test_partial_market_regime_does_not_publish_neutral_risk_dimensions() -> None:
+    history = _history(260)
+    result = market_regime.compute_market_regime(
+        {symbol: history for symbol in ("SPY", "QQQ", "IWM", "RSP")}
+    )
+
+    assert result["status"] == "degraded"
+    assert result["risk_appetite_score"] is None
+    assert result["market_context"]["liquidity_credit_score"] is None
+    assert result["market_context"]["sentiment_score"] is None
+    assert result["market_context"]["sector_flow_score"] is None
+
+
 def test_market_signal_breadth_ignores_missing_sector_funds_and_marks_degraded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -151,6 +188,44 @@ def test_data_quality_excludes_metadata_dictionaries() -> None:
     }
 
     assert scoring._quality(payload, 2) == 50
+
+
+def test_market_top_bottom_scores_exclude_unwired_components_instead_of_filling_50() -> None:
+    payload = {
+        key: {"value": 1.0, "top_score": 20, "bottom_score": 10, "label": key}
+        for key in (
+            "sma20_distance",
+            "sma50_distance",
+            "sma200_distance",
+            "rsi14",
+            "return_20d",
+            "rsp_spy_5d",
+            "iwm_spy_5d",
+            "sectors_above_50dma",
+            "vix_percentile",
+            "vix",
+            "vix_5d_change",
+            "yield_10y",
+            "yield_10y_20d_change",
+            "credit_risk",
+        )
+    }
+
+    result = scoring.compute_market_scores(payload)
+
+    assert result["top_breakdown"]["positioning"] is None
+    assert result["bottom_breakdown"]["sentiment_pessimism"] is None
+    assert result["coverage"]["top_active_weight"] == 0.9
+    assert result["coverage"]["bottom_active_weight"] == 0.95
+    assert result["data_quality"] < result["signal_data_quality"]
+
+
+def test_market_top_bottom_scores_are_null_when_every_signal_is_missing() -> None:
+    result = scoring.compute_market_scores({})
+    assert result["top_score"] is None
+    assert result["bottom_score"] is None
+    assert result["top_label"] == "数据不足"
+    assert result["bottom_label"] == "数据不足"
 
 
 def test_sector_periods_map_to_20_63_and_126_day_returns() -> None:
@@ -378,7 +453,112 @@ def test_price_action_dimension_survives_feature_and_scoring_pipeline() -> None:
     )[0]
     assert scored["price_action_score"] == scored["breakdown"]["price_action"]
     assert scored["market_regime_score"] is None
-    assert "市场行情不足，市场维度按中性值处理" in scored["warnings"]
+    assert "市场行情不足，市场维度暂不计入评分" in scored["warnings"]
+    assert scored["breakdown"]["market_regime_scoring_value"] is None
+    assert "market" not in scored["breakdown"]["market_rules"]
+
+
+def test_public_strength_scan_exposes_range_persistence_shadow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    history = _history(300)
+    history.index = pd.date_range("2025-05-19", periods=len(history), freq="B")
+    history.attrs["price_source"] = {
+        "provider": "fixture",
+        "status": "active",
+        "message": "fixture",
+    }
+    monkeypatch.setattr(
+        "app.services.breakouts.config.get_breakout_settings",
+        lambda: BreakoutSettings(
+            _env_file=None,
+            RANGE_PERSISTENCE_MODE="shadow",
+        ),
+    )
+    monkeypatch.setattr(
+        scanner,
+        "_theme_universe",
+        lambda sector_id=None: (
+            ["AAA"],
+            {"AAA": {"sector_id": "software", "sector_name": "软件"}},
+        ),
+    )
+    monkeypatch.setattr(scanner, "_download_history", lambda *args, **kwargs: history)
+    monkeypatch.setattr(
+        scanner,
+        "enrich_rows_with_yahoo_options",
+        lambda rows, display_top: {"status": "skipped"},
+    )
+    monkeypatch.setattr(
+        scanner,
+        "enrich_rows_with_finnhub",
+        lambda rows: {"status": "skipped"},
+    )
+    monkeypatch.setattr(
+        scanner,
+        "enrich_rows_with_marketdata_options",
+        lambda rows: {"status": "skipped"},
+    )
+
+    payload = scanner._scan_sync(
+        universe="themes",
+        timeframe="all",
+        profile="balanced",
+        top=1,
+        sector_id=None,
+        min_price=1,
+        min_avg_dollar_volume=0,
+        include_options=False,
+    )
+
+    assert payload["range_persistence_mode"] == "shadow"
+    assert payload["results"][0]["range_persistence"]["status"] == "active"
+    assert payload["results"][0]["range_persistence_shadow"]["mode"] == "shadow"
+    assert payload["results"][0]["range_persistence_score_delta"] is not None
+
+
+def test_range_shadow_failure_does_not_remove_legacy_strength_candidate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    history = _history(300).drop(columns=["High", "Low"])
+    history.index = pd.date_range("2025-05-19", periods=len(history), freq="B")
+    monkeypatch.setattr(
+        "app.services.breakouts.config.get_breakout_settings",
+        lambda: BreakoutSettings(
+            _env_file=None,
+            RANGE_PERSISTENCE_MODE="shadow",
+        ),
+    )
+    monkeypatch.setattr(
+        scanner,
+        "_theme_universe",
+        lambda sector_id=None: (
+            ["AAA"],
+            {"AAA": {"sector_id": "software", "sector_name": "软件"}},
+        ),
+    )
+    monkeypatch.setattr(scanner, "_download_history", lambda *args, **kwargs: history)
+    monkeypatch.setattr(
+        scanner,
+        "enrich_rows_with_finnhub",
+        lambda rows: {"status": "skipped"},
+    )
+
+    payload = scanner._scan_sync(
+        universe="themes",
+        timeframe="all",
+        profile="balanced",
+        top=1,
+        sector_id=None,
+        min_price=1,
+        min_avg_dollar_volume=0,
+        include_options=False,
+    )
+
+    assert payload["count"] == 1
+    assert payload["results"][0]["ticker"] == "AAA"
+    assert payload["results"][0]["range_persistence"]["status"] == "unavailable"
+    assert payload["skipped"]["range_persistence_error"] == 1
 
 
 def test_strength_api_masks_upstream_errors_as_503(monkeypatch: pytest.MonkeyPatch) -> None:

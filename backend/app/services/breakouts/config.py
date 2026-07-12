@@ -158,6 +158,9 @@ class BreakoutSettings(BaseSettings):
     range_persistence_mode: Literal["disabled", "shadow", "enabled"] = Field(
         default="shadow", alias="RANGE_PERSISTENCE_MODE"
     )
+    range_persistence_validation_version: str = Field(
+        default="", max_length=80, alias="RANGE_PERSISTENCE_VALIDATION_VERSION"
+    )
     range_persistence_version: str = Field(
         default="range-persistence-v1", alias="RANGE_PERSISTENCE_VERSION"
     )
@@ -247,6 +250,16 @@ class BreakoutSettings(BaseSettings):
             raise ValueError("worker health stale threshold must exceed lease TTL")
         if self.opening_range_minutes % 5 != 0:
             raise ValueError("opening range minutes must be a multiple of 5")
+        if (
+            self.range_persistence_mode == "enabled"
+            and self.range_persistence_validation_version
+            != self.range_persistence_version
+        ):
+            raise ValueError(
+                "RANGE_PERSISTENCE_MODE=enabled requires "
+                "RANGE_PERSISTENCE_VALIDATION_VERSION to match "
+                "RANGE_PERSISTENCE_VERSION"
+            )
         return self
 
 

@@ -59,5 +59,6 @@ ticker 集合和 canonical universe 变化都产生新键。
 
 - 第一版 canonical universe 是项目固定主题池，不代表完整全美横截面。
 - 外部候选缺少可靠行业时 sector percentile 为 null。
-- 当前没有正式六态 market shape，market_fit 为 null。
+- 六态 market shape 已接入；旧 completed 快照中的 market_fit 仍可能为 null，
+  新扫描在核心行情不足时也保持 null。
 - 历史盘前数据缺失时 premarket_rvol 为 null。

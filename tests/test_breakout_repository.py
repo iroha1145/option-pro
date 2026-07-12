@@ -10,6 +10,7 @@ from app.services.breakouts.repository import (
     BreakoutRepository,
     ReadOnlyRepositoryError,
 )
+from app.services.breakouts.research import load_completed_shadows
 
 
 NOW = datetime(2026, 7, 13, 14, 0, tzinfo=timezone.utc)
@@ -113,6 +114,62 @@ def test_schema_pragmas_and_read_only_connection(tmp_path):
         connection.close()
     with pytest.raises(ReadOnlyRepositoryError):
         reader.initialize()
+
+
+def test_shadow_storage_uses_feature_version_and_canonical_rank_delta(tmp_path) -> None:
+    path = tmp_path / "shadow-version.db"
+    repo = BreakoutRepository(path)
+    repo.initialize()
+    event = _event("event-shadow-version", "AAPL", NOW)
+    scan = _begin(repo, NOW)
+    snapshot = _snapshot(NOW, [event])
+    snapshot["range_persistence_shadow"] = [
+        {
+            "event_id": event["event_id"],
+            "ticker": event["ticker"],
+            "production_score": 70.0,
+            "hypothetical_score": 73.0,
+            "production_rank": 10,
+            "hypothetical_rank": 7,
+            "feature_version": "range-persistence-v2",
+        }
+    ]
+
+    repo.publish_scan(scan, snapshot, now=NOW)
+
+    with sqlite3.connect(path) as connection:
+        stored = connection.execute(
+            "SELECT version,rank_delta FROM range_persistence_shadow"
+        ).fetchone()
+    assert stored == ("range-persistence-v2", -3)
+    research_rows = load_completed_shadows(path)
+    assert research_rows[0]["version"] == "range-persistence-v2"
+    assert research_rows[0]["rank_delta"] == -3
+
+
+def test_shadow_storage_rejects_conflicting_version_fields(tmp_path) -> None:
+    path = tmp_path / "shadow-version-conflict.db"
+    repo = BreakoutRepository(path)
+    repo.initialize()
+    event = _event("event-shadow-conflict", "AAPL", NOW)
+    scan = _begin(repo, NOW)
+    snapshot = _snapshot(NOW, [event])
+    snapshot["range_persistence_shadow"] = [
+        {
+            "event_id": event["event_id"],
+            "ticker": event["ticker"],
+            "version": "range-persistence-v3",
+            "feature_version": "range-persistence-v2",
+        }
+    ]
+
+    with pytest.raises(ValueError, match="version fields disagree"):
+        repo.publish_scan(scan, snapshot, now=NOW)
+
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM range_persistence_shadow"
+        ).fetchone()[0] == 0
 
 
 def test_publish_failure_rolls_back_and_old_snapshot_survives_restart(tmp_path):

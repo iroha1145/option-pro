@@ -255,7 +255,18 @@ assert.match(screener, /screening-context-details/, 'market dimensions and data 
 assert.match(screener, /id="strength-retry"/, 'failed scans need a retry action');
 assert.match(screener, /本轮没有候选/, 'empty scans need a useful empty state');
 assert.match(screener, /sourceStatusLabel/, 'data-source degradation must be visible');
-assert.match(screener, /api\.strengthScan\(\{[\s\S]*timeframe:[\s\S]*profile:[\s\S]*top:[\s\S]*sector_id:/, 'all selected scan filters must reach the API');
+assert.match(screener, /api\.strengthScan\(\{[\s\S]*timeframe:[\s\S]*profile:[\s\S]*top:[\s\S]*sector_id:[\s\S]*min_price:[\s\S]*min_avg_dollar_volume:/, 'all selected scan filters must reach the API');
+assert.match(screener, /id="strength-min-price"[^>]*type="number"[^>]*min="0"/, 'minimum price needs a non-negative production filter');
+assert.match(screener, /id="strength-min-liquidity"[^>]*type="number"[^>]*min="0"/, 'minimum average dollar volume needs a non-negative production filter');
+assert.match(screener, /state\.minAvgDollarVolume = value \* 1_000_000/, 'the liquidity control must convert displayed millions into the API dollar value');
+assert.match(screener, /function optionalFinite[\s\S]*value === null \|\| value === undefined \|\| value === ''/, 'missing range persistence values must stay missing rather than becoming zero');
+assert.match(screener, /range_persistence_normalized_score \?\? feature\.range_persistence/, 'range persistence should prefer the normalized server score');
+assert.match(screener, /row\.range_persistence_score_delta \?\? shadow\.score_delta/, 'the frontend must consume the scanner row score delta');
+assert.match(screener, /payload\.range_persistence_version[\s\S]*payload\.params\?\.range_persistence_version/, 'the frontend must preserve the root range persistence version');
+assert.match(screener, /shadow\.effective_weight[\s\S]*shadow\.contribution_cap[\s\S]*有效权重[\s\S]*权重上限/, 'expanded range evidence must expose the applied weight and service cap');
+assert.match(screener, /影子观察 · 不参与排序[\s\S]*不参与本轮扫描、排序或评分/, 'shadow range persistence must clearly state that production ranking is unchanged');
+assert.match(screener, /区间持续性当前没有进入计算[\s\S]*服务端没有返回有效区间持续性[\s\S]*已按服务端配置进入趋势评分/, 'disabled, insufficient and enabled range modes need distinct explanations');
+assert.match(screener, /renderRangePersistenceSummary\(rangePersistence\)[\s\S]*renderRangePersistenceDetail\(rangePersistence\)/, 'candidate cards need a compact range state and expanded evidence');
 assert.match(screener, /\['ArrowLeft', 'ArrowRight', 'Home', 'End'\]/, 'horizontal filters need keyboard navigation');
 assert.doesNotMatch(screener, /\$\{sector\.count\}/, 'raw sector counts must not be inserted into HTML');
 assert.match(screenerV3, /^\.screening-page\s*\{/m, 'screener styles must start from their page root');
@@ -267,6 +278,9 @@ assert.match(screenerV3, /\.screening-page \.screening-candidate--lead,[\s\S]*\.
 assert.match(screenerV3, /\.screening-page \.screening-result-state\s*\{[^}]*grid-column:\s*1 \/ -1;/, 'candidate empty and error states must span the grid');
 assert.match(screenerV3, /\.screening-page \.screening-candidate:has\(\.screening-candidate-link:focus-visible\)/, 'candidate cards need a visible whole-card focus state');
 assert.match(screenerV3, /@container screening \(max-width: 680px\)/, 'mobile candidates need their own composition');
+assert.match(screenerV3, /@container screening \(max-width: 680px\)[\s\S]*\.screening-liquidity-grid\s*\{[^}]*grid-template-columns:\s*1fr;/, 'price and liquidity filters must stack on phones');
+assert.match(screenerV3, /@container screening \(max-width: 680px\)[\s\S]*\.screening-range-detail dl\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/, 'range evidence must remain readable on phones');
+assert.match(screenerV3, /@container screening \(max-width: 680px\)[\s\S]*\.screening-results-heading\s*\{[^}]*grid-template-columns:\s*1fr;/, 'long production filter summaries must not squeeze the mobile result heading');
 
 // Breakout Radar: completed snapshots, truthful system states, and on-demand evidence.
 assert.match(breakouts, /optix-breakouts-v3\.css/, 'Breakout Radar must load its isolated v3 stylesheet');
@@ -312,29 +326,62 @@ assert.match(breakoutsV3, /\.breakout-read-warning\s*\{[^}]*grid-template-column
 assert.match(breakoutsV3, /@media \(prefers-reduced-motion: reduce\)/, 'radar motion must respect user preferences');
 assert.match(breakoutsV3, /@media \(forced-colors: active\)/, 'radar states must remain visible in forced colors');
 
-// Reserved market-strength research stays truthful until the analysis plan is connected.
+// Market-strength research uses production data and keeps each source honest.
 const marketStrengthModule = await import(pathToFileURL(path.join(frontend, 'static/js/components/marketStrengthPlaceholder.js')).href);
 for (const ticker of ['^GSPC', '^IXIC', '^DJI', '^N225', '000001.SS']) {
   assert.equal(marketStrengthModule.isMajorMarketIndex(ticker), true, `${ticker} must be recognized as a headline index`);
 }
-assert.equal(marketStrengthModule.isMajorMarketIndex('AAPL'), false, 'ordinary stocks must not receive the index-only placeholder');
+assert.equal(marketStrengthModule.isMajorMarketIndex('AAPL'), false, 'ordinary stocks must not receive index-only market research');
+for (const ticker of ['^GSPC', '^IXIC', '^DJI', '^NDX', '^RUT', '^VIX']) {
+  assert.equal(marketStrengthModule.supportsUsMarketResearch(ticker), true, `${ticker} may use the US market research panel`);
+}
+for (const ticker of ['^N225', '000001.SS', '^HSI', '^FTSE', '^GDAXI', '^STOXX50E']) {
+  assert.equal(marketStrengthModule.supportsUsMarketResearch(ticker), false, `${ticker} must not inherit US market breadth and risk context`);
+}
 assert.equal(marketStrengthModule.getMajorIndexDisplayName('^IXIC'), '纳斯达克综合指数', 'index detail titles need a safe display name');
 assert.equal(marketStrengthModule.getMajorIndexBadge('^GSPC'), 'SPX', 'index details need a compact non-company badge');
-assert.match(marketStrengthPlaceholder, /技术分析计划待接入/, 'the placeholder must state that its analysis plan is not connected');
-assert.match(marketStrengthPlaceholder, /趋势结构[\s\S]*广度动量[\s\S]*风险确认/, 'the placeholder must reserve the three agreed analysis dimensions');
-assert.match(marketStrengthPlaceholder, /不参与本轮扫描、排序或评分/, 'the screener placeholder must not imply that it affects current results');
-assert.doesNotMatch(marketStrengthPlaceholder, /aria-valuenow|data-numeric/, 'the reserved module must not invent numeric strength results');
-assert.match(screener, /renderMarketContext\(payload\)[\s\S]*renderMarketStrengthPlaceholder\(\{ variant: 'screener' \}\)/, 'the scan console must place the shared reserved module after current market context');
-assert.match(detail, /isMajorMarketIndex\(ticker\) \? renderMarketStrengthPlaceholder\(\{ variant: 'detail', ticker \}\) : ''/, 'only recognized index details should render the reserved module');
+const degradedMarketPanel = marketStrengthModule.renderMarketStrengthPanel({
+  variant: 'detail',
+  ticker: '^GSPC',
+  marketRegime: { status: 'degraded', score: null, index_trend_score: 80 },
+  marketSignals: { scores: { top_score: 10, bottom_score: 5 } },
+  indexSignals: { score: 60, signals: { rsi: { value: 50, signal: 'neutral' } } },
+});
+assert.match(degradedMarketPanel, /data-market-strength-state="partial"/, 'degraded market evidence must remain visibly partial');
+assert.match(degradedMarketPanel, /暂不生成市场强弱结论/, 'degraded market evidence must explain that no conclusion is produced');
+assert.doesNotMatch(marketStrengthPlaceholder, /技术分析计划待接入|目前仅预留|等待指标与规则/, 'the live panel must not retain placeholder copy');
+assert.match(marketStrengthPlaceholder, /index_trend_score[\s\S]*market_momentum_score[\s\S]*market_breadth_score[\s\S]*market_volume_score[\s\S]*risk_appetite_score[\s\S]*risk_on_spread_score/, 'all six market-regime dimensions must be rendered from production fields');
+for (const field of ['state_label', 'confidence', 'transition_risk', 'as_of', 'rules', 'warnings', 'version']) {
+  assert.match(marketStrengthPlaceholder, new RegExp(`shape\\.${field}`), `market shape ${field} must be visible`);
+}
+assert.match(marketStrengthPlaceholder, /仅作市场环境研究，不构成买卖信号/, 'market research needs a non-trading-signal disclaimer');
+assert.match(marketStrengthPlaceholder, /data-market-strength-state="\$\{viewState\}"/, 'the panel must expose its resolved data state');
+for (const stateName of ['loading', 'error', 'insufficient']) {
+  assert.match(marketStrengthPlaceholder, new RegExp(`market-strength-panel__message--${stateName}`), `${stateName} needs a distinct visible state`);
+}
+assert.match(marketStrengthPlaceholder, /技术见顶风险[\s\S]*scores\.top_breakdown[\s\S]*scores\.top_reasons[\s\S]*技术见底修复[\s\S]*scores\.bottom_breakdown[\s\S]*scores\.bottom_reasons/, 'market top/bottom scores need their breakdowns and evidence');
+assert.match(marketStrengthPlaceholder, /自身技术面[\s\S]*\['rsi', 'macd', 'ema20', 'sma50', 'volume'\]/, 'index detail research must expose the legacy per-index technical indicators');
+for (const role of ['趋势结构', '广度动量', '风险确认']) {
+  assert.match(marketStrengthPlaceholder, new RegExp(`<small>${role}<\\/small>`), `${role} needs a clear source role`);
+}
+assert.match(api, /signalsMarket\(options = \{\}\)[\s\S]*\/signals\/market/, 'the API client must expose full-market technical signals');
+assert.match(api, /indexTechnicalSignals\(ticker, options = \{\}\)[\s\S]*\/stocks\/\$\{enc\(ticker\)\}\/signals/, 'index details must use the caret-compatible stock signal endpoint');
+assert.match(api, /strengthMarket\(options = \{\}\)[\s\S]*\/strength\/market/, 'the API client must expose market-regime strength');
+assert.match(screener, /renderMarketContext\(payload\)[\s\S]*renderMarketStrengthPanel\(\{[\s\S]*marketRegime: payload\.market_regime/, 'the screener panel must reuse the current scan market regime');
+assert.doesNotMatch(screener, /signalsMarket|indexTechnicalSignals|strengthMarket/, 'the screener must not issue duplicate market research requests');
+assert.match(screener, /state\.scanController\?\.abort\(\)[\s\S]*api\.strengthScan\([\s\S]*signal: scanController\.signal/, 'screener scans must cancel when replaced or when leaving the route');
+assert.match(detail, /supportsUsMarketResearch\(ticker\) \? `[\s\S]*renderMarketStrengthPanel\(\{ variant: 'detail'/, 'only supported US index details should render live market research');
+assert.match(detail, /Promise\.allSettled\(\[[\s\S]*loadIndexSignalsSource\(state\)[\s\S]*loadMarketSignalsSource\(state\)[\s\S]*loadMarketStrengthSource\(state\)/, 'the three index research sources must load in parallel and fail independently');
+assert.match(detail, /state\.abortController\.abort\(\)/, 'leaving index detail must cancel all three research requests');
 assert.match(detail, /getMajorIndexDisplayName\(stock\.ticker\)/, 'known index detail headers need a readable market name');
 assert.match(detail, /indexInstrument \? '最新点位' : '最新价格'/, 'index details must describe levels as points rather than stock prices');
 assert.match(detail, /formatPrice\(price, \{ currency: !indexInstrument \}\)/, 'index headline levels must not carry a dollar sign');
 assert.match(detail, /\['52周高点', formatPrice\(stock\.year_high, \{ currency: false \}\)\][\s\S]*\['52周低点'/, 'index summaries need point-relevant range fields instead of valuation fields');
 assert.match(detail, /state && !indexInstrument \? `<img/, 'index details must not request or present a company logo');
-assert.doesNotMatch(screenerV3, /\.screening-page \.market-strength-placeholder\s*\{[^}]*backdrop-filter:/, 'the screener placeholder must stay on a crisp data surface');
-assert.doesNotMatch(detailV3, /\.instrument-page \.market-strength-placeholder\s*\{[^}]*backdrop-filter:/, 'the index placeholder must stay on a crisp data surface');
-assert.match(screenerV3, /@container screening \(max-width: 680px\)[\s\S]*\.market-strength-placeholder__slots\s*\{[^}]*grid-template-columns:\s*1fr;/, 'the screener placeholder must recompose to one column on phones');
-assert.match(detailV3, /@container instrument-detail \(max-width: 720px\)[\s\S]*\.market-strength-placeholder__slots\s*\{[^}]*grid-template-columns:\s*1fr;/, 'the index placeholder must recompose to one column on phones');
+assert.doesNotMatch(screenerV3, /\.screening-page \.market-strength-panel\s*\{[^}]*backdrop-filter:/, 'the screener panel must stay on a crisp data surface');
+assert.doesNotMatch(detailV3, /\.instrument-page \.market-strength-panel\s*\{[^}]*backdrop-filter:/, 'the index panel must stay on a crisp data surface');
+assert.match(screenerV3, /@container screening \(max-width: 680px\)[\s\S]*\.market-strength-panel__overview\s*\{[^}]*grid-template-columns:\s*1fr;/, 'the screener market overview must recompose on phones');
+assert.match(detailV3, /@container instrument-detail \(max-width: 720px\)[\s\S]*\.market-strength-panel__sources\s*\{[^}]*grid-template-columns:\s*1fr;/, 'the three index research sources must stack on phones');
 
 // Detail and chart: explicit price adjustment plus visible time and session semantics.
 assert.match(detail, /optix-detail-v3\.css/, 'detail must load its v3 stylesheet');
@@ -406,6 +453,7 @@ assert.match(earnings, /returnTarget\?\.focus\(\)/, 'closing impact research mus
 assert.match(earnings, /未来时间范围内暂无已确认财报/, 'the calendar needs a truthful empty state');
 assert.match(earningsV3, /^\.earnings-page\s*\{/m, 'earnings styles must start from their page root');
 assert.match(earningsV3, /\.earnings-week-nav button[\s\S]*min-height: 2\.75rem/, 'calendar navigation needs reliable touch targets');
+assert.match(earningsV3, /@media \(max-width: 47\.999rem\)[\s\S]*\.earnings-week-nav\s*\{[^}]*box-shadow:\s*inset 0 1px 0/, 'mobile calendar navigation must not keep the desktop outer shadow at the viewport edges');
 assert.match(earnings, /earnings-day__node/, 'the seven-day strip needs visible timeline nodes');
 assert.match(earnings, /requestAnimationFrame\(placeByPoint\)/, 'the pointer tooltip must be frame-throttled');
 assert.match(earnings, /translate3d\(\$\{Math\.max\(8, left\)\}px, \$\{Math\.max\(8, top\)\}px, 0\)/, 'the pointer tooltip must use compositor-friendly placement');

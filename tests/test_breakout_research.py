@@ -14,6 +14,9 @@ from app.services.breakouts.research import (
     export_shadow_correlations,
     export_shadow_summary,
     export_shadows,
+    export_walk_forward_validation,
+    load_forward_price_dataset,
+    load_completed_research_bundle,
     load_completed_events,
     load_completed_shadows,
     main,
@@ -34,6 +37,7 @@ def _event(event_id: str, ticker: str, at: datetime, priority: float) -> dict:
         "previous_state": "WATCHING",
         "transition_reason": "pivot_crossed",
         "event_at": at,
+        "event_price": 100.0,
         "first_seen_at": at,
         "last_seen_at": at,
         "pivot_id": f"pivot-{ticker}",
@@ -41,6 +45,10 @@ def _event(event_id: str, ticker: str, at: datetime, priority: float) -> dict:
         "scores": {
             "alert_priority_score": priority,
             "data_confidence_score": 90.0,
+        },
+        "features": {
+            "raw_as_of": at,
+            "feature_cutoff_at": at,
         },
     }
 
@@ -85,7 +93,7 @@ def _publish(
                     "hypothetical_score": hypothetical_score,
                     "production_rank": production_rank,
                     "hypothetical_rank": hypothetical_rank,
-                    "rank_delta": production_rank - hypothetical_rank,
+                    "rank_delta": hypothetical_rank - production_rank,
                     "version": "range-persistence-v1",
                     "production_unchanged": True,
                 }
@@ -137,12 +145,15 @@ def test_loaders_read_completed_publications_only_and_do_not_mutate_database(
 
     events = load_completed_events(path)
     shadows = load_completed_shadows(path)
+    bundle_events, bundle_shadows = load_completed_research_bundle(path)
 
     assert [row["scan_run_id"] for row in events] == [completed_scan]
     assert [row["ticker"] for row in events] == ["AAPL"]
     assert events[0]["event_snapshot"]["event_id"] == "event-completed"
     assert [row["scan_run_id"] for row in shadows] == [completed_scan]
     assert shadows[0]["shadow"]["production_unchanged"] is True
+    assert bundle_events == events
+    assert bundle_shadows == shadows
     assert path.read_bytes() == before
 
     reader = BreakoutRepository(path, read_only=True).open_read_connection()
@@ -241,6 +252,35 @@ def test_cli_exports_and_rejects_database_as_output(research_database, tmp_path,
     shadows_path = tmp_path / "shadows.csv"
     correlations_path = tmp_path / "correlations.csv"
     summary_path = tmp_path / "summary.json"
+    validation_path = tmp_path / "validation.json"
+    price_path = tmp_path / "prices.json"
+    price_dates = []
+    cursor = NOW.date() + timedelta(days=1)
+    while len(price_dates) < 20:
+        if cursor.weekday() < 5:
+            price_dates.append(cursor)
+        cursor += timedelta(days=1)
+    price_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "breakout-forward-prices-v1",
+                "dataset_id": "fixture-prices",
+                "source": "fixture",
+                "adjustment": "unadjusted",
+                "as_of": "2026-12-31T23:59:59Z",
+                "prices": {
+                    "AAPL": [
+                        {
+                            "date": value.isoformat(),
+                            "close": 100 + index,
+                        }
+                        for index, value in enumerate(price_dates, 1)
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
     assert (
         main(
@@ -255,6 +295,22 @@ def test_cli_exports_and_rejects_database_as_output(research_database, tmp_path,
                 str(correlations_path),
                 "--summary-out",
                 str(summary_path),
+                "--validation-prices",
+                str(price_path),
+                "--validation-out",
+                str(validation_path),
+                "--validation-train-dates",
+                "1",
+                "--validation-dates",
+                "2",
+                "--validation-test-dates",
+                "2",
+                "--validation-embargo-dates",
+                "1",
+                "--validation-minimum-rows",
+                "1",
+                "--validation-top-k",
+                "1",
             ]
         )
         == 0
@@ -264,6 +320,16 @@ def test_cli_exports_and_rejects_database_as_output(research_database, tmp_path,
     assert result["shadow_rows"] == 1
     assert result["correlation_pairs"] > 1
     assert result["summary"]["observation_count"] == 1
+    assert result["validation"]["status"] == "unavailable"
+    assert result["validation"]["decision_status"] == (
+        "insufficient_for_production_decision"
+    )
+    validation = json.loads(validation_path.read_text(encoding="utf-8"))
+    assert validation["coverage"]["labels"]["by_horizon"]["20"]["labeled"] == 1
+    assert validation["coverage"]["labels"]["by_horizon"]["63"]["labeled"] == 0
+    assert validation["coverage"]["requested_horizons"] == 4
+    assert validation["price_data"]["content_sha256"]
+    assert validation["production_mode_recommendation"] == "shadow"
     assert export_shadow_summary(path, tmp_path / "second-summary.json")[
         "observation_count"
     ] == 1
@@ -273,3 +339,24 @@ def test_cli_exports_and_rejects_database_as_output(research_database, tmp_path,
 
     with pytest.raises(ValueError, match="production database"):
         export_events(path, path)
+
+
+def test_price_dataset_loader_rejects_duplicate_keys_and_non_finite_json(tmp_path):
+    duplicate = tmp_path / "duplicate.json"
+    duplicate.write_text('{"schema_version":"x","schema_version":"y"}')
+    with pytest.raises(ValueError, match="duplicate JSON key"):
+        load_forward_price_dataset(duplicate)
+
+    non_finite = tmp_path / "non-finite.json"
+    non_finite.write_text('{"value":NaN}')
+    with pytest.raises(ValueError, match="non-finite JSON number"):
+        load_forward_price_dataset(non_finite)
+
+
+def test_validation_export_refuses_to_overwrite_price_input(research_database, tmp_path):
+    path, _ = research_database
+    price_path = tmp_path / "prices.json"
+    price_path.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="must not overwrite"):
+        export_walk_forward_validation(path, price_path, price_path)

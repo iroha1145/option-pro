@@ -239,6 +239,24 @@ def test_legacy_stock_signals_reports_provider_failure(monkeypatch):
     assert exc_info.value.status_code == 503
 
 
+def test_legacy_stock_signals_accepts_indices_but_rejects_invalid_symbols(monkeypatch):
+    called = False
+
+    class RecordingTicker:
+        def __init__(self, _symbol):
+            nonlocal called
+            called = True
+
+    monkeypatch.setattr(stocks.yf, "Ticker", RecordingTicker)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(stocks.stock_signals("../../secret"))
+
+    assert exc_info.value.status_code == 400
+    assert called is False
+    assert stocks._WATCHLIST_TICKER_PATTERN.fullmatch("^GSPC")
+
+
 def test_watchlist_reports_provider_failure_without_unbounded_stale_data(monkeypatch):
     async def failed_watchlist():
         raise RuntimeError("provider unavailable")

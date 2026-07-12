@@ -57,9 +57,17 @@ EVENT_KEYS = {
     "range_persistence",
     "range_persistence_slope_5d",
     "range_persistence_ratio_10d",
+    "range_persistence_self_percentile",
+    "range_persistence_global_percentile",
+    "range_persistence_sector_percentile",
     "range_persistence_status",
+    "range_persistence_interaction",
+    "configured_weights",
     "effective_weights",
     "contribution_breakdown",
+    "penalties",
+    "missing_components",
+    "score_version",
     "market_shape",
     "warnings",
     "source_status",
@@ -174,8 +182,32 @@ def _publish(repo: BreakoutRepository, at: datetime, events: list[dict]) -> str:
             },
             "events": events,
         },
+        now=at,
     )
     return scan_id
+
+
+def _heartbeat(
+    repo: BreakoutRepository,
+    at: datetime,
+    *,
+    status: str = "idle",
+) -> None:
+    repo.update_worker_status(
+        "api-test-worker",
+        "continuous",
+        status,
+        heartbeat_at=at,
+        now=at,
+    )
+
+
+def _read_statuses(client: TestClient) -> dict[str, dict]:
+    return {
+        "status": client.get("/api/breakouts/status").json(),
+        "current": client.get("/api/breakouts/current").json(),
+        "events": client.get("/api/breakouts/events").json(),
+    }
 
 
 def test_disabled_api_does_not_create_database(tmp_path, monkeypatch) -> None:
@@ -215,7 +247,8 @@ def test_current_reads_only_completed_scan_and_never_calls_provider(tmp_path, mo
     response = TestClient(app).get("/api/breakouts/current")
     assert response.status_code == 200
     payload = response.json()
-    assert payload["status"] == "active"
+    assert payload["status"] == "stale"
+    assert payload["source_status"]["runtime_reason"] == "completed_snapshot_stale"
     assert [item["ticker"] for item in payload["events"]] == ["AAPL"]
     assert VERSION_KEYS.issubset(payload["versions"])
     assert EVENT_KEYS.issubset(payload["events"][0])
@@ -229,6 +262,85 @@ def test_current_reads_only_completed_scan_and_never_calls_provider(tmp_path, mo
     )
     assert "must-not-leak" not in response.text
     assert "raw_provider_fields" not in response.text
+
+
+def test_read_endpoints_are_active_with_fresh_worker_and_snapshot(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "fresh-read-state.db"
+    repository = BreakoutRepository(path)
+    repository.initialize()
+    _publish(repository, NOW, [_event("event-fresh", "AAPL", NOW, 91.0)])
+    _heartbeat(repository, NOW + timedelta(seconds=30))
+    monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
+    monkeypatch.setattr(breakout_api, "_now", lambda: NOW + timedelta(seconds=60))
+
+    payloads = _read_statuses(TestClient(app))
+
+    assert {payload["status"] for payload in payloads.values()} == {"active"}
+    assert payloads["current"]["events"][0]["ticker"] == "AAPL"
+    assert payloads["events"]["events"][0]["ticker"] == "AAPL"
+
+
+def test_stale_worker_heartbeat_marks_reads_stale_without_hiding_snapshot(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    path = tmp_path / "stale-heartbeat.db"
+    repository = BreakoutRepository(path)
+    repository.initialize()
+    _publish(repository, NOW, [_event("event-retained", "AAPL", NOW, 91.0)])
+    _heartbeat(repository, NOW)
+    monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
+    monkeypatch.setattr(breakout_api, "_now", lambda: NOW + timedelta(seconds=121))
+
+    payloads = _read_statuses(TestClient(app))
+
+    assert {payload["status"] for payload in payloads.values()} == {"stale"}
+    assert payloads["status"]["worker"]["health_reason"] == "worker_heartbeat_stale"
+    assert payloads["current"]["source_status"]["runtime_reason"] == "worker_heartbeat_stale"
+    assert payloads["current"]["events"][0]["event_id"] == "event-retained"
+    assert payloads["events"]["events"][0]["event_id"] == "event-retained"
+
+
+def test_overdue_completed_snapshot_marks_reads_stale_with_fresh_heartbeat(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    path = tmp_path / "stale-snapshot.db"
+    repository = BreakoutRepository(path)
+    repository.initialize()
+    _publish(repository, NOW, [_event("event-old", "MSFT", NOW, 88.0)])
+    observed_at = NOW + timedelta(seconds=421)
+    _heartbeat(repository, observed_at)
+    monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
+    monkeypatch.setattr(breakout_api, "_now", lambda: observed_at)
+
+    payloads = _read_statuses(TestClient(app))
+
+    assert {payload["status"] for payload in payloads.values()} == {"stale"}
+    assert payloads["status"]["latest_completed_scan"]["freshness_status"] == "stale"
+    assert payloads["status"]["latest_completed_scan"]["snapshot_age_seconds"] == 421.0
+    assert payloads["current"]["source_status"]["runtime_reason"] == "completed_snapshot_stale"
+    assert payloads["events"]["events"][0]["ticker"] == "MSFT"
+
+
+def test_fresh_snapshot_with_degraded_worker_marks_reads_degraded(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    path = tmp_path / "degraded-read-state.db"
+    repository = BreakoutRepository(path)
+    repository.initialize()
+    _publish(repository, NOW, [_event("event-degraded", "NVDA", NOW, 86.0)])
+    observed_at = NOW + timedelta(seconds=30)
+    _heartbeat(repository, observed_at, status="degraded")
+    monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
+    monkeypatch.setattr(breakout_api, "_now", lambda: observed_at)
+
+    payloads = _read_statuses(TestClient(app))
+
+    assert {payload["status"] for payload in payloads.values()} == {"degraded"}
+    assert payloads["current"]["events"][0]["ticker"] == "NVDA"
+    assert payloads["events"]["events"][0]["ticker"] == "NVDA"
 
 
 def test_event_cursor_remains_bound_to_original_completed_scan(tmp_path, monkeypatch) -> None:
@@ -280,6 +392,48 @@ def test_event_cursor_remains_bound_to_original_completed_scan(tmp_path, monkeyp
     ).status_code == 400
 
 
+def test_event_cursor_uses_bound_snapshot_age_not_latest_scan_age(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "cursor-freshness.db"
+    repository = BreakoutRepository(path)
+    repository.initialize()
+    _publish(
+        repository,
+        NOW,
+        [
+            _event("event-old-a", "AAPL", NOW, 90.0),
+            _event("event-old-b", "MSFT", NOW - timedelta(seconds=1), 80.0),
+        ],
+    )
+    _heartbeat(repository, NOW)
+    observed = {"at": NOW}
+    monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
+    monkeypatch.setattr(breakout_api, "_now", lambda: observed["at"])
+    client = TestClient(app)
+    first = client.get("/api/breakouts/events?limit=1").json()
+    assert first["status"] == "active"
+
+    latest_at = NOW + timedelta(minutes=10)
+    _publish(
+        repository,
+        latest_at,
+        [_event("event-new", "NVDA", latest_at, 99.0)],
+    )
+    _heartbeat(repository, latest_at)
+    observed["at"] = latest_at
+
+    retained_page = client.get(
+        "/api/breakouts/events",
+        params={"limit": 1, "cursor": first["next_cursor"]},
+    ).json()
+    current = client.get("/api/breakouts/current").json()
+
+    assert retained_page["status"] == "stale"
+    assert retained_page["source_status"]["runtime_reason"] == "completed_snapshot_stale"
+    assert retained_page["events"][0]["ticker"] == "MSFT"
+    assert current["status"] == "active"
+    assert current["events"][0]["ticker"] == "NVDA"
+
+
 def test_status_and_detail_degrade_without_hiding_contract(tmp_path, monkeypatch) -> None:
     path = tmp_path / "status.db"
     repository = BreakoutRepository(path)
@@ -305,7 +459,7 @@ def test_status_and_detail_degrade_without_hiding_contract(tmp_path, monkeypatch
     assert status["status"] == "stale"
     assert status["database"]["status"] == "active"
     assert status["range_persistence_mode"] == "shadow"
-    assert status["market_shape_adapter"]["status"] == "unavailable"
+    assert status["market_shape_adapter"]["status"] == "available"
 
     detail = client.get("/api/breakouts/events/event-aapl")
     assert detail.status_code == 200
@@ -327,3 +481,6 @@ def test_invalid_ticker_and_cursor_are_rejected(tmp_path, monkeypatch) -> None:
     client = TestClient(app)
     assert client.get("/api/breakouts/tickers/AAPL%3BDROP").status_code == 400
     assert client.get("/api/breakouts/events?cursor=not-a-cursor").status_code == 400
+    assert client.get("/api/breakouts/events?date=2026-99-99").status_code == 422
+    assert client.get("/api/breakouts/events?setup_type=NOT_REAL").status_code == 422
+    assert client.get("/api/breakouts/events?lifecycle_state=NOT_REAL").status_code == 422

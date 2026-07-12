@@ -28,6 +28,7 @@ from app.services.strength.marketdata import (
     marketdata_is_enabled,
 )
 from app.services.strength.market_regime import MARKET_BENCHMARKS, compute_market_regime
+from app.services.strength.market_shape import MARKET_SHAPE_VERSION
 from app.services.strength.price_action import compute_price_action
 from app.services.strength.vol_price_match import compute_vol_price_match
 from app.services.strength.yahoo_options import (
@@ -47,6 +48,7 @@ UNIVERSES = ("themes",)
 BENCHMARKS = MARKET_BENCHMARKS
 SECTOR_PERIOD_DAYS = {"1mo": 20, "3mo": 63, "6mo": 126}
 STRENGTH_CACHE_TTL_SECONDS = 900
+MARKET_STRENGTH_CACHE_TTL_SECONDS = 900
 INTRINSIC_STRENGTH_VERSION = "strength-intrinsic-v1"
 _NEW_YORK = ZoneInfo("America/New_York")
 
@@ -952,6 +954,7 @@ def _intrinsic_row(
         hypothetical_score=hypothetical_score,
         effective_weight=rp_effective,
         final_weight_cap=configured_final_cap,
+        version=str(range_feature.get("version") or RANGE_PERSISTENCE_VERSION),
     )
     available_families = sum(value is not None for value in production_families.values())
     confidence = round(available_families / len(production_families), 4)
@@ -1145,7 +1148,7 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
     option_mult = float(rules.get("option_heat_weight_multiplier", 1.0) or 1.0)
     risk_mult = float(rules.get("risk_penalty_multiplier", 1.0) or 1.0)
     market_score = _safe_float(market.get("score"), 1)
-    market_score_for_scoring = market_score if market_score is not None else 50.0
+    market_score_for_scoring = market_score
     weights = {
         "short": .16 * momentum_mult,
         "mid": .24 * relative_mult,
@@ -1159,8 +1162,14 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
         "option": .07 * option_mult,
         "market": .08,
     }
-    weight_total = sum(weights.values()) or 1.0
-    effective_weights = {key: round(value / weight_total, 4) for key, value in weights.items()}
+    active_weights = dict(weights)
+    if market_score is None:
+        active_weights.pop("market", None)
+    weight_total = sum(active_weights.values()) or 1.0
+    effective_weights = {
+        key: round(value / weight_total, 4)
+        for key, value in active_weights.items()
+    }
     scored: list[dict[str, Any]] = []
 
     for row in rows:
@@ -1214,28 +1223,42 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
             breakout_quality_score = min(breakout_quality_score, 65.0)
         if vol_price.get("setup_type") == "absorption_bearish" and not row.get("breakout_confirmed"):
             breakout_quality_score = min(breakout_quality_score, 55.0)
-        raw_final = (
+        weighted_numerator = (
             short_score * weights["short"] +
             mid_score * weights["mid"] +
             long_score * weights["long"] +
             breakout_quality_score * weights["breakout"] +
             pa_score * weights["pa"] +
             sector_score * weights["sector"] +
-            option_heat_score * weights["option"] +
-            market_score_for_scoring * weights["market"]
-        ) / weight_total - risk_penalty * risk_mult
+            option_heat_score * weights["option"]
+        )
+        if market_score_for_scoring is not None:
+            weighted_numerator += market_score_for_scoring * weights["market"]
+        raw_final = weighted_numerator / weight_total - risk_penalty * risk_mult
+        baseline_weights = {
+            "short": .16,
+            "mid": .24,
+            "long": .14,
+            "breakout": .12,
+            "pa": .10,
+            "sector": .09,
+            "option": .07,
+            **({"market": .08} if market_score is not None else {}),
+        }
+        baseline_total = sum(baseline_weights.values()) or 1.0
+        baseline_numerator = (
+            short_score * baseline_weights["short"] +
+            mid_score * baseline_weights["mid"] +
+            long_score * baseline_weights["long"] +
+            base_breakout_score * baseline_weights["breakout"] +
+            pa_score * baseline_weights["pa"] +
+            sector_score * baseline_weights["sector"] +
+            option_heat_score * baseline_weights["option"]
+        )
+        if market_score is not None:
+            baseline_numerator += market_score * baseline_weights["market"]
         market_adjustment = _safe_float(
-            raw_final - (
-                short_score * .16 +
-                mid_score * .24 +
-                long_score * .14 +
-                base_breakout_score * .12 +
-                pa_score * .10 +
-                sector_score * .09 +
-                option_heat_score * .07 +
-                market_score_for_scoring * .08 -
-                risk_penalty
-            ),
+            raw_final - (baseline_numerator / baseline_total - risk_penalty),
             2,
         )
         final_score = round(_clamp(raw_final), 1)
@@ -1275,7 +1298,7 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
         elif market_score is not None and market_score < 40:
             tags.append("弱市降权")
         elif market_score is None:
-            warnings.append("市场行情不足，市场维度按中性值处理")
+            warnings.append("市场行情不足，市场维度暂不计入评分")
         tags.extend(risk_flags[:2])
         if not reasons:
             reasons.append("综合强度处于股票池前列")
@@ -1312,7 +1335,7 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
             "risk_penalty": round(risk_penalty, 1),
             "market_regime": market_score,
             "market_regime_scoring_value": market_score_for_scoring,
-            "risk_on_spread": round(market.get("risk_on_spread_score") or 50, 1),
+            "risk_on_spread": _safe_float(market.get("risk_on_spread_score"), 1),
             "volume_truth": {
                 "setup_type": vol_price.get("setup_type"),
                 "setup_label": vol_price.get("setup_label"),
@@ -1485,6 +1508,10 @@ def _scan_sync(
     min_avg_dollar_volume: float,
     include_options: bool = True,
 ) -> dict[str, Any]:
+    from app.services.breakouts.config import get_breakout_settings
+
+    breakout_settings = get_breakout_settings()
+    observed_at = datetime.now(timezone.utc)
     tickers, sector_meta = _theme_universe(sector_id)
     if universe != "themes":
         raise ValueError(f"Unsupported universe: {universe}")
@@ -1503,7 +1530,14 @@ def _scan_sync(
     spy = index_data.get("SPY", pd.DataFrame())
 
     rows: list[dict[str, Any]] = []
-    skipped = {"insufficient_history": 0, "low_price": 0, "low_liquidity": 0, "data_error": 0}
+    range_context: dict[str, dict[str, Any]] = {}
+    skipped = {
+        "insufficient_history": 0,
+        "low_price": 0,
+        "low_liquidity": 0,
+        "data_error": 0,
+        "range_persistence_error": 0,
+    }
     for ticker in tickers:
         try:
             hist = _slice_ticker(raw, ticker)
@@ -1518,10 +1552,98 @@ def _scan_sync(
                 skipped["low_liquidity"] += 1
                 continue
             rows.append(row)
+            try:
+                completed_hist, completed_cutoff = _complete_daily_frame(
+                    hist,
+                    observed_at,
+                )
+                range_feature = (
+                    {
+                        "status": "disabled",
+                        "version": breakout_settings.range_persistence_version,
+                    }
+                    if breakout_settings.range_persistence_mode == "disabled"
+                    else compute_range_persistence(
+                        completed_hist,
+                        cutoff=completed_cutoff,
+                        length=breakout_settings.range_persistence_length,
+                        fast_length=breakout_settings.range_persistence_fast_length,
+                        slope_lookback=breakout_settings.range_persistence_slope_days,
+                        ratio_window=breakout_settings.range_persistence_ratio_window,
+                        ratio_threshold=breakout_settings.range_persistence_ratio_threshold,
+                        min_history_multiplier=(
+                            breakout_settings.range_persistence_min_history_multiplier
+                        ),
+                        version=breakout_settings.range_persistence_version,
+                    )
+                )
+                range_context[ticker] = _intrinsic_row(
+                    row,
+                    completed_hist,
+                    range_feature=range_feature,
+                    range_mode=breakout_settings.range_persistence_mode,
+                    range_trend_weight=(
+                        breakout_settings.range_persistence_trend_family_weight
+                    ),
+                    range_final_cap=(
+                        breakout_settings.range_persistence_final_weight_cap
+                    ),
+                )
+            except Exception:
+                skipped["range_persistence_error"] += 1
+                range_context[ticker] = {
+                    "range_persistence": {
+                        "status": "unavailable",
+                        "version": breakout_settings.range_persistence_version,
+                        "warnings": ["range_persistence_calculation_failed"],
+                    },
+                    "range_persistence_shadow": None,
+                }
         except Exception:
             skipped["data_error"] += 1
 
     scored = _score_rows(rows, market, profile, min_avg_dollar_volume)
+    for item in scored:
+        context = range_context.get(item["ticker"])
+        if context is None:
+            item["range_persistence"] = {
+                "status": "unavailable",
+                "version": breakout_settings.range_persistence_version,
+            }
+            item["range_persistence_shadow"] = None
+            item["range_persistence_mode"] = (
+                breakout_settings.range_persistence_mode
+            )
+            continue
+        shadow = context.get("range_persistence_shadow") or {}
+        item["range_persistence"] = context.get("range_persistence")
+        item["range_persistence_shadow"] = shadow
+        item["range_persistence_mode"] = breakout_settings.range_persistence_mode
+        production = _safe_float(shadow.get("production_score"), 4)
+        hypothetical = _safe_float(shadow.get("hypothetical_score"), 4)
+        score_delta = (
+            round(hypothetical - production, 4)
+            if production is not None and hypothetical is not None
+            else None
+        )
+        item["range_persistence_score_delta"] = score_delta
+        item.setdefault("breakdown", {})["range_persistence"] = {
+            "mode": breakout_settings.range_persistence_mode,
+            "feature": context.get("range_persistence"),
+            "shadow": shadow,
+            "legacy_score_delta": score_delta,
+        }
+        if (
+            breakout_settings.range_persistence_mode == "enabled"
+            and score_delta is not None
+            and item.get("final_score") is not None
+        ):
+            selected_score = round(
+                _clamp(float(item["final_score"]) + score_delta),
+                1,
+            )
+            item["final_score"] = selected_score
+            item["strength_score"] = selected_score
     if include_options:
         yahoo_options_status = enrich_rows_with_yahoo_options(scored, display_top=top)
     else:
@@ -1555,10 +1677,14 @@ def _scan_sync(
             "sector_id": sector_id,
             "min_price": min_price,
             "min_avg_dollar_volume": min_avg_dollar_volume,
+            "range_persistence_mode": breakout_settings.range_persistence_mode,
+            "range_persistence_version": breakout_settings.range_persistence_version,
         },
         "market_regime": market,
         "market_context": market.get("market_context", {}),
         "spread_matrix": market.get("spread_matrix", {}),
+        "range_persistence_mode": breakout_settings.range_persistence_mode,
+        "range_persistence_version": breakout_settings.range_persistence_version,
         "count": len(limited),
         "universe_count": len(tickers),
         "screened_count": len(rows),
@@ -1579,6 +1705,17 @@ def _scan_sync(
                 **options_status,
                 "candidates": OPTION_DATA_SOURCE_CANDIDATES,
             },
+            "range_persistence": {
+                "status": breakout_settings.range_persistence_mode,
+                "version": breakout_settings.range_persistence_version,
+                "message": (
+                    "影子计算，不改变生产排序"
+                    if breakout_settings.range_persistence_mode == "shadow"
+                    else "已进入生产排序"
+                    if breakout_settings.range_persistence_mode == "enabled"
+                    else "已停用"
+                ),
+            },
         },
     }
 
@@ -1595,12 +1732,20 @@ async def scan_strength(
     include_options: bool = True,
 ) -> dict[str, Any]:
     settings = get_settings()
+    from app.services.breakouts.config import get_breakout_settings
+
+    breakout_settings = get_breakout_settings()
     key = (
         f"strength:{universe}:{timeframe}:{profile}:{top}:{sector_id}:{min_price}:{min_avg_dollar_volume}"
         f":fh:{int(finnhub_is_enabled(settings))}:md:{int(marketdata_is_enabled(settings))}"
         f":yo:{int(yahoo_options_is_enabled(settings) and include_options)}:{settings.yahoo_options_enrich_limit}"
         f":ydte:{settings.yahoo_option_target_dte}:ywin:{settings.yahoo_option_strike_window_pct}"
         f":opt:{int(include_options)}"
+        f":rp:{breakout_settings.range_persistence_mode}:{breakout_settings.range_persistence_version}"
+        f":rpl:{breakout_settings.range_persistence_length}:{breakout_settings.range_persistence_fast_length}"
+        f":rps:{breakout_settings.range_persistence_slope_days}:{breakout_settings.range_persistence_ratio_window}"
+        f":rpt:{breakout_settings.range_persistence_ratio_threshold}:{breakout_settings.range_persistence_min_history_multiplier}"
+        f":rpw:{breakout_settings.range_persistence_trend_family_weight}:{breakout_settings.range_persistence_final_weight_cap}"
         ":mr:v4:spread:voltruth:pa1"
     )
 
@@ -1637,6 +1782,13 @@ def _score_ticker_frames_sync(
     frames: Mapping[str, pd.DataFrame],
     as_of: datetime,
     range_mode: str,
+    range_version: str = RANGE_PERSISTENCE_VERSION,
+    range_length: int = 35,
+    range_fast_length: int = 3,
+    range_slope_days: int = 5,
+    range_ratio_window: int = 10,
+    range_ratio_threshold: float = 60.0,
+    range_min_history_multiplier: int = 5,
     range_trend_weight: float = 0.15,
     range_final_cap: float = 0.04,
     price_source: Mapping[str, Any] | None = None,
@@ -1662,14 +1814,27 @@ def _score_ticker_frames_sync(
         if row is None:
             skipped[symbol] = "insufficient_history"
             continue
-        range_feature = (
-            {"status": "disabled", "version": RANGE_PERSISTENCE_VERSION}
-            if range_mode == "disabled"
-            else compute_range_persistence(
-                hist,
-                cutoff=completed_cutoff,
-            )
-        )
+        if range_mode == "disabled":
+            range_feature = {"status": "disabled", "version": range_version}
+        else:
+            try:
+                range_feature = compute_range_persistence(
+                    hist,
+                    cutoff=completed_cutoff,
+                    length=range_length,
+                    fast_length=range_fast_length,
+                    slope_lookback=range_slope_days,
+                    ratio_window=range_ratio_window,
+                    ratio_threshold=range_ratio_threshold,
+                    min_history_multiplier=range_min_history_multiplier,
+                    version=range_version,
+                )
+            except Exception:
+                range_feature = {
+                    "status": "unavailable",
+                    "version": range_version,
+                    "warnings": ["range_persistence_calculation_failed"],
+                }
         scored = _intrinsic_row(
             row,
             hist,
@@ -1724,6 +1889,13 @@ def _score_ticker_set_sync(
     *,
     as_of: datetime,
     range_mode: str,
+    range_version: str = RANGE_PERSISTENCE_VERSION,
+    range_length: int = 35,
+    range_fast_length: int = 3,
+    range_slope_days: int = 5,
+    range_ratio_window: int = 10,
+    range_ratio_threshold: float = 60.0,
+    range_min_history_multiplier: int = 5,
     range_trend_weight: float = 0.15,
     range_final_cap: float = 0.04,
 ) -> dict[str, Any]:
@@ -1743,6 +1915,13 @@ def _score_ticker_set_sync(
         frames=frames,
         as_of=as_of,
         range_mode=range_mode,
+        range_version=range_version,
+        range_length=range_length,
+        range_fast_length=range_fast_length,
+        range_slope_days=range_slope_days,
+        range_ratio_window=range_ratio_window,
+        range_ratio_threshold=range_ratio_threshold,
+        range_min_history_multiplier=range_min_history_multiplier,
         range_trend_weight=range_trend_weight,
         range_final_cap=range_final_cap,
         price_source=source,
@@ -1756,6 +1935,15 @@ async def score_ticker_set(
     profile: str = "balanced",
     include_options: bool = False,
     range_mode: str | None = None,
+    range_version: str | None = None,
+    range_length: int | None = None,
+    range_fast_length: int | None = None,
+    range_slope_days: int | None = None,
+    range_ratio_window: int | None = None,
+    range_ratio_threshold: float | None = None,
+    range_min_history_multiplier: int | None = None,
+    range_trend_weight: float | None = None,
+    range_final_cap: float | None = None,
 ) -> dict[str, Any]:
     """Score an explicit ticker set without market, sector, option, or Top-N effects."""
 
@@ -1773,6 +1961,47 @@ async def score_ticker_set(
         range_mode = breakout_settings.range_persistence_mode
     if range_mode not in {"disabled", "shadow", "enabled"}:
         raise ValueError("invalid range persistence mode")
+    range_version = range_version or breakout_settings.range_persistence_version
+    range_length = (
+        breakout_settings.range_persistence_length
+        if range_length is None
+        else int(range_length)
+    )
+    range_fast_length = (
+        breakout_settings.range_persistence_fast_length
+        if range_fast_length is None
+        else int(range_fast_length)
+    )
+    range_slope_days = (
+        breakout_settings.range_persistence_slope_days
+        if range_slope_days is None
+        else int(range_slope_days)
+    )
+    range_ratio_window = (
+        breakout_settings.range_persistence_ratio_window
+        if range_ratio_window is None
+        else int(range_ratio_window)
+    )
+    range_ratio_threshold = (
+        breakout_settings.range_persistence_ratio_threshold
+        if range_ratio_threshold is None
+        else float(range_ratio_threshold)
+    )
+    range_min_history_multiplier = (
+        breakout_settings.range_persistence_min_history_multiplier
+        if range_min_history_multiplier is None
+        else int(range_min_history_multiplier)
+    )
+    range_trend_weight = (
+        breakout_settings.range_persistence_trend_family_weight
+        if range_trend_weight is None
+        else float(range_trend_weight)
+    )
+    range_final_cap = (
+        breakout_settings.range_persistence_final_weight_cap
+        if range_final_cap is None
+        else float(range_final_cap)
+    )
     from app.services.breakouts.models import normalize_ticker
 
     symbols = list(dict.fromkeys(normalize_ticker(value) for value in tickers))
@@ -1783,10 +2012,16 @@ async def score_ticker_set(
         [
             "strength-intrinsic",
             INTRINSIC_STRENGTH_VERSION,
-            RANGE_PERSISTENCE_VERSION,
+            range_version,
             str(range_mode),
-            str(breakout_settings.range_persistence_trend_family_weight),
-            str(breakout_settings.range_persistence_final_weight_cap),
+            str(range_length),
+            str(range_fast_length),
+            str(range_slope_days),
+            str(range_ratio_window),
+            str(range_ratio_threshold),
+            str(range_min_history_multiplier),
+            str(range_trend_weight),
+            str(range_final_cap),
             _completed_daily_key(observed_at),
             ticker_hash,
         ]
@@ -1800,8 +2035,15 @@ async def score_ticker_set(
             symbols,
             as_of=observed_at,
             range_mode=str(range_mode),
-            range_trend_weight=breakout_settings.range_persistence_trend_family_weight,
-            range_final_cap=breakout_settings.range_persistence_final_weight_cap,
+            range_version=range_version,
+            range_length=range_length,
+            range_fast_length=range_fast_length,
+            range_slope_days=range_slope_days,
+            range_ratio_window=range_ratio_window,
+            range_ratio_threshold=range_ratio_threshold,
+            range_min_history_multiplier=range_min_history_multiplier,
+            range_trend_weight=range_trend_weight,
+            range_final_cap=range_final_cap,
         )
 
     payload, was_cached, expires_at = await cache.get_or_set_with_meta(
@@ -1831,6 +2073,13 @@ async def score_ticker_frames(
     frames: Mapping[str, pd.DataFrame],
     as_of: datetime,
     range_mode: str,
+    range_version: str = RANGE_PERSISTENCE_VERSION,
+    range_length: int = 35,
+    range_fast_length: int = 3,
+    range_slope_days: int = 5,
+    range_ratio_window: int = 10,
+    range_ratio_threshold: float = 60.0,
+    range_min_history_multiplier: int = 5,
     range_trend_weight: float = 0.15,
     range_final_cap: float = 0.04,
     price_source: Mapping[str, Any] | None = None,
@@ -1848,6 +2097,13 @@ async def score_ticker_frames(
         frames=frames,
         as_of=as_of,
         range_mode=range_mode,
+        range_version=range_version,
+        range_length=range_length,
+        range_fast_length=range_fast_length,
+        range_slope_days=range_slope_days,
+        range_ratio_window=range_ratio_window,
+        range_ratio_threshold=range_ratio_threshold,
+        range_min_history_multiplier=range_min_history_multiplier,
         range_trend_weight=range_trend_weight,
         range_final_cap=range_final_cap,
         price_source=price_source,
@@ -1889,10 +2145,65 @@ async def sector_strength(period: str = "3mo") -> dict[str, Any]:
     }
 
 
-async def market_strength() -> dict[str, Any]:
-    # Only market_regime is returned — option enrichment would be wasted work.
-    payload = await scan_strength(timeframe="all", profile="balanced", top=5, include_options=False)
-    return {"as_of": payload["as_of"], "market_regime": payload["market_regime"]}
+def _market_strength_sync(as_of: datetime) -> dict[str, Any]:
+    """Load only market benchmarks; never trigger the full stock-universe scan."""
+
+    raw = _download_history(list(MARKET_BENCHMARKS), period="2y")
+    price_source = raw.attrs.get("price_source") or _history_status(
+        provider="Yahoo/yfinance",
+        status="active",
+        message="大盘形态日线输入",
+    )
+    index_data: dict[str, pd.DataFrame] = {}
+    for symbol in MARKET_BENCHMARKS:
+        bounded, _ = _complete_daily_frame(_slice_ticker(raw, symbol), as_of)
+        index_data[symbol] = bounded
+    market = compute_market_regime(index_data, as_of=as_of)
+    return {
+        "as_of": as_of.astimezone(timezone.utc).isoformat(),
+        "market_regime": market,
+        "data_sources": {
+            "prices": {
+                "provider": price_source.get("provider") or "Yahoo/yfinance",
+                "status": price_source.get("status") or "active",
+                "message": price_source.get("message") or "大盘形态日线输入",
+                "fallback_symbols": price_source.get("fallback_symbols") or [],
+                "missing_symbols": price_source.get("missing_symbols") or [],
+            }
+        },
+    }
+
+
+async def market_strength(*, as_of: datetime | None = None) -> dict[str, Any]:
+    """Return cached market regime and six-state shape without scanning stocks."""
+
+    observed_at = as_of or datetime.now(timezone.utc)
+    if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+        raise ValueError("as_of must include a timezone")
+    settings = get_settings()
+    key = (
+        f"market-strength:{MARKET_SHAPE_VERSION}:{_completed_daily_key(observed_at)}"
+        f":fh:{int(bool(settings.finnhub_candle_fallback_enabled))}"
+        f":md:{int(bool(settings.marketdata_stock_candle_fallback_enabled))}"
+        f":stooq:{int(bool(settings.stooq_price_fallback_enabled))}"
+    )
+
+    async def produce() -> dict[str, Any]:
+        import asyncio
+
+        return await asyncio.to_thread(_market_strength_sync, observed_at)
+
+    payload, was_cached, expires_at = await cache.get_or_set_with_meta(
+        key,
+        MARKET_STRENGTH_CACHE_TTL_SECONDS,
+        produce,
+    )
+    return {
+        **payload,
+        "_cached": was_cached,
+        "cache_ttl_seconds": MARKET_STRENGTH_CACHE_TTL_SECONDS,
+        "cache_expires_at": datetime.fromtimestamp(expires_at, timezone.utc).isoformat(),
+    }
 
 
 async def stock_strength(ticker: str, profile: str = "balanced") -> dict[str, Any]:

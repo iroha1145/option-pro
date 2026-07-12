@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -23,7 +23,7 @@ from app.services.breakouts.models import (
     StrengthScoreSnapshot,
 )
 from app.services.breakouts.protocols import PriceDataSnapshot
-from app.services.breakouts.service import BreakoutRadarService
+from app.services.breakouts.service import BreakoutRadarService, _safe_range_feature
 from app.services.breakouts.repository import BreakoutRepository
 from app.services.breakouts.worker import BreakoutWorker
 
@@ -139,6 +139,32 @@ class Market:
         )
 
 
+class ActiveBullMarket(Market):
+    version = "market-shape-v2"
+
+    async def snapshot(self, *, as_of):
+        return MarketShapeSnapshot(
+            status="active",
+            state="BULL_TREND",
+            confidence=0.9,
+            transition_risk=0.1,
+            as_of=as_of,
+            version=self.version,
+            rules={
+                "ordinary_breakout_fit": 88,
+                "recovery_breakout_fit": 84,
+                "preferred_setups": [
+                    "DAILY_BASE_BREAKOUT",
+                    "OPENING_RANGE_BREAKOUT",
+                ],
+                "caution_setups": ["MOMENTUM_SPIKE"],
+                "confirmation_bar_delta": 0,
+                "allow_single_bar_confirmation": True,
+                "eligibility": "normal",
+            },
+        )
+
+
 class Universe:
     version = "fixture-universe-v1"
 
@@ -147,6 +173,25 @@ class Universe:
 
     def primary_sector(self, ticker):
         return None
+
+
+class BrokenCanonicalUniverse(Universe):
+    async def tickers(self, *, as_of):
+        return ["BROKEN"]
+
+
+class BrokenCanonicalPrices(Prices):
+    async def daily(self, tickers, *, cutoff, period):
+        snapshots = await super().daily(tickers, cutoff=cutoff, period=period)
+        broken = snapshots.get("BROKEN")
+        if broken is not None:
+            snapshots["BROKEN"] = PriceDataSnapshot(
+                **{
+                    **vars(broken),
+                    "frame": broken.frame[["Close", "Volume"]],
+                }
+            )
+        return snapshots
 
 
 class LiquidityRecordingPrices(Prices):
@@ -303,6 +348,169 @@ def test_service_revalidates_candidate_without_optional_context() -> None:
     assert payload["range_persistence_shadow"][0]["rank_delta"] == 0
     assert event.features["range_persistence_global_percentile"] is None
     assert event.features["canonical_universe_member"] is False
+
+
+def test_range_feature_failure_is_unavailable_instead_of_raising() -> None:
+    result = _safe_range_feature(
+        _daily()[["Close", "Volume"]],
+        cutoff=AS_OF,
+        length=35,
+        fast_length=3,
+        slope_lookback=5,
+        ratio_window=10,
+        ratio_threshold=60,
+        min_history_multiplier=5,
+        version="range-persistence-v1",
+    )
+
+    assert result["status"] == "unavailable"
+    assert result["range_persistence"] is None
+    assert result["warnings"] == ["range_persistence_calculation_failed"]
+
+
+def test_broken_canonical_range_member_does_not_abort_breakout_snapshot() -> None:
+    candidate = BreakoutCandidate(
+        ticker="TEST",
+        price=104,
+        provider_change_pct=8,
+        provider_volume=2_000_000,
+        provider_relative_volume=3,
+        provider_market_cap=1_000_000_000,
+        provider_timestamp=AS_OF,
+        source="fixture",
+        session=MarketSession.REGULAR,
+    )
+    discovery = DiscoverySnapshot(
+        provider="fixture",
+        status=ProviderStatus.ACTIVE,
+        as_of=AS_OF,
+        session=MarketSession.REGULAR,
+        schema_version="fixture-v1",
+        candidate_count=1,
+        candidates=[candidate],
+    )
+    service = BreakoutRadarService(
+        BreakoutSettings(
+            _env_file=None,
+            RANGE_PERSISTENCE_MODE="shadow",
+            RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED=True,
+        ),
+        price_data=BrokenCanonicalPrices(),
+        strength=Strength(),
+        market_shape=Market(),
+        universe=BrokenCanonicalUniverse(),
+    )
+
+    payload = asyncio.run(service.build_snapshot(discovery))
+
+    assert [event.ticker for event in payload["events"]] == ["TEST"]
+    assert payload["events"][0].features["canonical_universe_status"] == "unavailable"
+
+
+def test_active_market_shape_populates_fit_and_only_changes_contextual_scores() -> None:
+    candidate = BreakoutCandidate(
+        ticker="TEST",
+        price=104,
+        provider_change_pct=8,
+        provider_volume=2_000_000,
+        provider_relative_volume=3,
+        provider_market_cap=1_000_000_000,
+        provider_timestamp=AS_OF,
+        source="fixture",
+        session=MarketSession.REGULAR,
+    )
+    discovery = DiscoverySnapshot(
+        provider="fixture",
+        status=ProviderStatus.ACTIVE,
+        as_of=AS_OF,
+        session=MarketSession.REGULAR,
+        schema_version="fixture-v1",
+        candidate_count=1,
+        candidates=[candidate],
+    )
+    unavailable_service = BreakoutRadarService(
+        BreakoutSettings(_env_file=None, RANGE_PERSISTENCE_MODE="disabled"),
+        price_data=Prices(),
+        strength=Strength(),
+        market_shape=Market(),
+        universe=Universe(),
+    )
+    active_service = BreakoutRadarService(
+        BreakoutSettings(_env_file=None, RANGE_PERSISTENCE_MODE="disabled"),
+        price_data=Prices(),
+        strength=Strength(),
+        market_shape=ActiveBullMarket(),
+        universe=Universe(),
+    )
+
+    missing = asyncio.run(unavailable_service.build_snapshot(discovery))["events"][0]
+    active = asyncio.run(active_service.build_snapshot(discovery))["events"][0]
+
+    assert active.scores.market_fit_score is not None
+    assert active.scores.alert_priority_score != missing.scores.alert_priority_score
+    assert active.scores.intrinsic_strength_score == missing.scores.intrinsic_strength_score
+    assert active.scores.base_quality_score == missing.scores.base_quality_score
+    assert active.features["market_shape_state"] == "BULL_TREND"
+    assert active.data_quality["market_shape_version"] == "market-shape-v2"
+
+
+def test_opening_range_and_daily_base_are_recorded_as_distinct_events(
+    monkeypatch,
+) -> None:
+    structure = BreakoutStructure(
+        ticker="TEST",
+        base_start=date(2026, 5, 1),
+        base_end=date(2026, 7, 9),
+        calculation_cutoff_at=datetime(2026, 7, 9, 16, 0, tzinfo=NY),
+        base_duration_days=40,
+        support_zone=PriceZone(low=90, high=92, touches=2),
+        resistance_zone=PriceZone(low=99, high=100, touches=3),
+        pivot_price=99.5,
+        pivot_id="parallel-pivot",
+        pivot_touch_count=3,
+        invalidation_price=89.5,
+        quality=0.9,
+        status="active",
+    )
+    monkeypatch.setattr(
+        "app.services.breakouts.service.detect_base",
+        lambda *args, **kwargs: structure,
+    )
+    candidate = BreakoutCandidate(
+        ticker="TEST",
+        price=104,
+        provider_change_pct=8,
+        provider_volume=2_000_000,
+        provider_relative_volume=3,
+        provider_market_cap=1_000_000_000,
+        provider_timestamp=AS_OF,
+        source="fixture",
+        session=MarketSession.REGULAR,
+    )
+    service = BreakoutRadarService(
+        BreakoutSettings(_env_file=None, RANGE_PERSISTENCE_MODE="shadow"),
+        price_data=Prices(),
+        strength=Strength(),
+        market_shape=ActiveBullMarket(),
+        universe=Universe(),
+    )
+
+    payload = asyncio.run(
+        service.build_snapshot(
+            _discovery(
+                at=AS_OF,
+                session=MarketSession.REGULAR,
+                candidates=[candidate],
+            )
+        )
+    )
+
+    assert {event.setup_type for event in payload["events"]} == {
+        BreakoutSetupType.OPENING_RANGE_BREAKOUT,
+        BreakoutSetupType.DAILY_BASE_BREAKOUT,
+    }
+    assert len({event.event_id for event in payload["events"]}) == 2
+    assert len({item["event_id"] for item in payload["range_persistence_shadow"]}) == 2
 
 
 class Provider:
@@ -604,6 +812,104 @@ def test_premarket_gap_continues_after_discovery_dropout_with_same_identity() ->
     assert {item["event_id"] for item in regular["transitions"]} == {
         first.event_id
     }
+
+
+def test_carryover_does_not_double_count_range_persistence_in_intrinsic_score() -> None:
+    service = BreakoutRadarService(
+        BreakoutSettings(
+            _env_file=None,
+            RANGE_PERSISTENCE_MODE="enabled",
+            RANGE_PERSISTENCE_VALIDATION_VERSION="range-persistence-v1",
+            RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED=True,
+        ),
+        price_data=Prices(),
+        strength=Strength(),
+        market_shape=Market(),
+        universe=Universe(),
+    )
+    first = _premarket_event(service)
+    prior = first.model_dump(mode="python")
+    prior["features"] = {
+        **prior["features"],
+        "range_persistence_status": "active",
+        "range_persistence_slope_5d": 8.0,
+        "range_persistence_ratio_10d": 100.0,
+        "strength_included_features": ["range_persistence"],
+        "range_persistence_mode_at_score": "enabled",
+    }
+
+    continued = asyncio.run(
+        service.build_snapshot(
+            _discovery(
+                at=AS_OF,
+                session=MarketSession.REGULAR,
+                candidates=[],
+            ),
+            carryover_events=[prior],
+        )
+    )["events"][0]
+
+    interaction = continued.features["range_persistence_interaction"]
+    assert interaction["confirmation_adjustment"] > 0
+    assert "range_persistence_adjustment" not in continued.scores.details[
+        "breakout_confirmation"
+    ].contribution_breakdown
+
+
+def test_prior_trading_day_carryover_does_not_block_new_same_ticker_event() -> None:
+    service = BreakoutRadarService(
+        BreakoutSettings(
+            _env_file=None,
+            RANGE_PERSISTENCE_MODE="shadow",
+            BREAKOUT_EVENT_TTL_SECONDS=172800,
+        ),
+        price_data=Prices(),
+        strength=Strength(),
+        market_shape=Market(),
+        universe=Universe(),
+    )
+    old_at = AS_OF.replace(hour=8, minute=0) - pd.Timedelta(days=1)
+    new_at = AS_OF.replace(hour=8, minute=0)
+
+    def candidate(at):
+        return BreakoutCandidate(
+            ticker="GAP",
+            price=100,
+            previous_regular_close=90,
+            provider_change_pct=10,
+            provider_volume=2_000_000,
+            provider_relative_volume=3,
+            provider_market_cap=1_000_000_000,
+            provider_timestamp=at,
+            source="fixture",
+            session=MarketSession.PREMARKET,
+        )
+
+    old_event = asyncio.run(
+        service.build_snapshot(
+            _discovery(
+                at=old_at,
+                session=MarketSession.PREMARKET,
+                candidates=[candidate(old_at)],
+            )
+        )
+    )["events"][0]
+    payload = asyncio.run(
+        service.build_snapshot(
+            _discovery(
+                at=new_at,
+                session=MarketSession.PREMARKET,
+                candidates=[candidate(new_at)],
+            ),
+            carryover_events=[old_event.model_dump(mode="python")],
+        )
+    )
+
+    assert {event.trading_date for event in payload["events"]} == {
+        old_at.date(),
+        new_at.date(),
+    }
+    assert len({event.event_id for event in payload["events"]}) == 2
 
 
 class FlatRegularPrices(Prices):

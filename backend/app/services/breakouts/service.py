@@ -41,7 +41,19 @@ from app.services.breakouts.models import (
     MarketShapeSnapshot,
     TemporalCutoff,
 )
+from app.services.breakouts.relative_strength import (
+    percentile_rank,
+    relative_strength_features,
+)
+from app.services.breakouts.range_interactions import (
+    range_persistence_interactions,
+)
 from app.services.breakouts.scoring import score_breakout
+from app.services.strength.market_shape import (
+    apply_confirmation_rules,
+    eligibility_for_setup,
+    market_fit_for_setup,
+)
 from app.services.technical.range_persistence import compute_range_persistence
 
 
@@ -61,6 +73,9 @@ def _quality(value: Any, *, low: float = 0.0, high: float = 1.0) -> float | None
 
 
 _RANGE_BACKGROUND_KEYS = (
+    "range_position",
+    "range_persistence_fast",
+    "range_persistence_slow",
     "range_persistence",
     "range_persistence_slope_5d",
     "range_persistence_ratio_10d",
@@ -74,6 +89,34 @@ _RANGE_BACKGROUND_KEYS = (
     "canonical_universe_status",
     "canonical_universe_member",
 )
+
+
+def _unavailable_range_feature(version: str) -> dict[str, Any]:
+    return {
+        "status": "unavailable",
+        "range_persistence": None,
+        "range_persistence_slope_5d": None,
+        "range_persistence_ratio_10d": None,
+        "range_persistence_self_percentile": None,
+        "range_persistence_global_percentile": None,
+        "range_persistence_sector_percentile": None,
+        "range_persistence_normalized_score": None,
+        "quality": 0.0,
+        "version": version,
+        "warnings": ["range_persistence_calculation_failed"],
+    }
+
+
+def _safe_range_feature(
+    frame: pd.DataFrame,
+    *,
+    version: str,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    try:
+        return compute_range_persistence(frame, version=version, **kwargs)
+    except Exception:
+        return _unavailable_range_feature(version)
 
 
 def _aware_datetime(value: Any, fallback: datetime) -> datetime:
@@ -105,6 +148,22 @@ class BreakoutRadarService:
         self.market_shape = market_shape or ExistingMarketShapeAdapter()
         self.universe = universe or ThemeCanonicalUniverseAdapter()
         self._range_distribution_cache: dict[str, dict[str, Any]] = {}
+        self._liquidity_distribution_cache: dict[str, dict[str, Any]] = {}
+
+    def _sector_benchmark(
+        self,
+        ticker: str,
+        provider_sector: str | None,
+    ) -> str | None:
+        resolver = getattr(self.universe, "sector_benchmark", None)
+        if not callable(resolver):
+            return None
+        try:
+            return resolver(ticker, provider_sector)
+        except TypeError:
+            return resolver(ticker)
+        except Exception:
+            return None
 
     def _cutoff(self, as_of: datetime, session: MarketSession) -> TemporalCutoff:
         return TemporalCutoff(
@@ -190,14 +249,18 @@ class BreakoutRadarService:
                 if upper is not None
                 else None
             ),
-            "relative_strength_confirmation": None,
+            "relative_strength_confirmation": _finite(
+                features.get("relative_strength_confirmation")
+            ),
             "average_dollar_volume_quality": _quality(
                 avg_dollar, low=1_000_000, high=50_000_000
             ),
             "current_dollar_volume_quality": _quality(
                 current_dollar, low=500_000, high=20_000_000
             ),
-            "dollar_volume_percentile": None,
+            "dollar_volume_percentile": _finite(
+                features.get("dollar_volume_percentile")
+            ),
             "spread_quality": None,
             "intraday_completeness_quality": (
                 100.0 if features.get("status") == "active" else None
@@ -222,7 +285,6 @@ class BreakoutRadarService:
                 if avg_dollar is not None
                 else None
             ),
-            "event_freshness_score": 100.0,
             "breakout_distance_atr": distance,
         }
 
@@ -422,6 +484,10 @@ class BreakoutRadarService:
         *,
         daily_snapshot: Any,
         intraday_snapshot: Any,
+        market_daily_snapshot: Any,
+        sector_daily_snapshot: Any,
+        sector_symbol: str | None,
+        liquidity_distribution: Mapping[str, Any],
         cutoff: TemporalCutoff,
         observed_at: datetime,
         observed_session: MarketSession,
@@ -486,8 +552,6 @@ class BreakoutRadarService:
                 )
             )
         features.update(self._base_features(structure))
-        if not daily.empty:
-            features.update(self._confirmation_features(features, structure, daily))
 
         if self.settings.range_persistence_mode == "disabled":
             features.update(
@@ -579,6 +643,50 @@ class BreakoutRadarService:
                 "carryover_recheck": True,
             }
         )
+        relative_features = relative_strength_features(
+            daily,
+            (
+                trim_daily_bars(market_daily_snapshot.frame, cutoff)
+                if market_daily_snapshot is not None
+                else None
+            ),
+            (
+                trim_daily_bars(sector_daily_snapshot.frame, cutoff)
+                if sector_daily_snapshot is not None
+                else None
+            ),
+            sector_symbol=sector_symbol,
+            sector_breadth_score=(
+                (liquidity_distribution.get("sector_breadth") or {}).get(
+                    sector_symbol
+                )
+                if sector_symbol
+                else None
+            ),
+        )
+        features.update(relative_features)
+        average_dollar_volume = self._average_dollar_volume(daily)
+        features.update(
+            {
+                "average_dollar_volume": average_dollar_volume,
+                "dollar_volume_percentile": percentile_rank(
+                    average_dollar_volume,
+                    liquidity_distribution.get("values") or {},
+                ),
+                "liquidity_universe_as_of": liquidity_distribution.get("as_of"),
+                "liquidity_universe_version": liquidity_distribution.get(
+                    "universe_version"
+                ),
+                "liquidity_universe_status": liquidity_distribution.get("status"),
+                "liquidity_universe_coverage": liquidity_distribution.get(
+                    "coverage_ratio"
+                ),
+                "market_cap_quality": prior_features.get("market_cap_quality"),
+                "asset_type_quality": prior_features.get("asset_type_quality"),
+            }
+        )
+        if not daily.empty:
+            features.update(self._confirmation_features(features, structure, daily))
         candidate = BreakoutCandidate(
             ticker=prior.ticker,
             exchange=prior.exchange,
@@ -598,6 +706,13 @@ class BreakoutRadarService:
             features,
             cutoff,
             self.settings,
+        )
+        market_payload = market.model_dump(mode="python")
+        detection = apply_confirmation_rules(
+            detection,
+            features,
+            market_payload,
+            base_confirmation_bars=self.settings.confirmation_bars,
         )
         state = prior.lifecycle_state
         first_seen_at = prior.first_seen_at
@@ -733,6 +848,23 @@ class BreakoutRadarService:
             detection_setup=detection.get("setup_type"),
             market_state=market.state,
         )
+        market_fit = market_fit_for_setup(market_payload, setup)
+        market_eligibility = eligibility_for_setup(market_payload, setup)
+        features.update(
+            {
+                "market_shape_state": market.state,
+                "market_shape_confidence": market.confidence,
+                "market_transition_risk": market.transition_risk,
+                "market_fit_score": market_fit,
+                "market_eligibility": market_eligibility,
+                "market_confirmation_bars_required": detection.get(
+                    "market_confirmation_bars_required"
+                ),
+                "market_single_bar_confirmation_allowed": detection.get(
+                    "market_single_bar_confirmation_allowed"
+                ),
+            }
+        )
         event_transitions: list[dict[str, Any]] = []
         for _step in range(4):
             step_observation = dict(observation)
@@ -758,27 +890,64 @@ class BreakoutRadarService:
                 }
             )
             state = result.state
-        range_adjustment = 0.0
+        range_interaction = range_persistence_interactions(
+            {
+                **features,
+                "status": features.get("range_persistence_status"),
+            },
+            detection,
+            cap=(
+                self.settings.range_persistence_breakout_interaction_cap
+                if self.settings.range_persistence_mode == "enabled"
+                and self.settings.range_persistence_breakout_interaction_enabled
+                else 0.0
+            ),
+            ratio_threshold=self.settings.range_persistence_ratio_threshold,
+        )
+        range_adjustment = float(range_interaction["confirmation_adjustment"])
+        range_chase_adjustment = float(range_interaction["chase_adjustment"])
+        features["range_persistence_interaction"] = range_interaction
+        features.setdefault("warnings", []).extend(
+            range_interaction.get("warnings") or []
+        )
+        sector_fit = (
+            _finite(relative_features.get("sector_fit_score"))
+            if relative_features.get("sector_fit_score") is not None
+            else prior.scores.sector_fit_score
+        )
+        prior_included = [
+            str(item)
+            for item in list(
+                prior_features.get("strength_included_features") or []
+            )
+        ]
         if (
-            self.settings.range_persistence_mode == "enabled"
-            and self.settings.range_persistence_breakout_interaction_enabled
+            not prior_included
+            and prior_features.get("range_persistence_mode_at_score") is None
+            and prior.scores.intrinsic_strength_score is not None
             and features.get("range_persistence_status") == "active"
         ):
-            slope = _finite(features.get("range_persistence_slope_5d"))
-            range_adjustment = max(
-                -self.settings.range_persistence_breakout_interaction_cap,
-                min(
-                    self.settings.range_persistence_breakout_interaction_cap,
-                    (slope or 0.0) * 0.25,
-                ),
-            )
+            # Events written before score provenance was stored are treated
+            # conservatively so an existing trend factor cannot be added twice.
+            prior_included = ["range_persistence"]
         scores = score_breakout(
             features,
             intrinsic_strength=prior.scores.intrinsic_strength_score,
-            market_fit=prior.scores.market_fit_score,
-            sector_fit=prior.scores.sector_fit_score,
+            market_fit=market_fit,
+            market_confidence=(
+                market.confidence
+                if market.status in {"active", "degraded"}
+                else None
+            ),
+            sector_fit=sector_fit,
+            strength_included_features=prior_included,
             range_persistence_adjustment=range_adjustment,
+            range_persistence_chase_adjustment=range_chase_adjustment,
             score_version=self.settings.scoring_version,
+        )
+        features["strength_included_features"] = prior_included
+        features["range_persistence_mode_at_score"] = (
+            self.settings.range_persistence_mode
         )
         event = BreakoutEvent(
             event_id=prior.event_id,
@@ -820,6 +989,24 @@ class BreakoutRadarService:
                 ),
                 "market_shape_status": market.status,
                 "market_shape_state": market.state,
+                "market_shape_confidence": market.confidence,
+                "market_transition_risk": market.transition_risk,
+                "market_eligibility": market_eligibility,
+                "market_shape_version": market.version,
+                "market_shape_rules": dict(market.rules),
+                "relative_strength_status": relative_features.get(
+                    "relative_strength_status"
+                ),
+                "relative_strength_market_symbol": relative_features.get(
+                    "relative_strength_market_symbol"
+                ),
+                "relative_strength_sector_symbol": relative_features.get(
+                    "relative_strength_sector_symbol"
+                ),
+                "liquidity_universe_status": liquidity_distribution.get("status"),
+                "liquidity_universe_coverage": liquidity_distribution.get(
+                    "coverage_ratio"
+                ),
             },
             versions={**prior.versions, **dict(versions)},
             features={
@@ -847,6 +1034,227 @@ class BreakoutRadarService:
             ),
         )
         return event, event_transitions
+
+    def _secondary_new_event(
+        self,
+        *,
+        primary: BreakoutEvent,
+        detection: Mapping[str, Any],
+        features: Mapping[str, Any],
+        market: MarketShapeSnapshot,
+        prior_by_ticker: Mapping[str, Sequence[Mapping[str, Any]]],
+        observed_at: datetime,
+        observed_trading_date: date,
+        source_snapshot_id: str,
+        range_feature: Mapping[str, Any],
+        strength_snapshot: Any,
+        intrinsic: float | None,
+        included: list[str],
+    ) -> tuple[BreakoutEvent, list[dict[str, Any]], dict[str, Any]]:
+        """Create the distinct daily-base event that can coexist with an ORB."""
+
+        setup = detection["setup_type"]
+        market_payload = market.model_dump(mode="python")
+        market_fit = market_fit_for_setup(market_payload, setup)
+        market_eligibility = eligibility_for_setup(market_payload, setup)
+        range_interaction = range_persistence_interactions(
+            range_feature,
+            detection,
+            cap=(
+                self.settings.range_persistence_breakout_interaction_cap
+                if self.settings.range_persistence_breakout_interaction_enabled
+                else 0.0
+            ),
+            ratio_threshold=self.settings.range_persistence_ratio_threshold,
+        )
+        range_adjustment = float(range_interaction["confirmation_adjustment"])
+        range_chase_adjustment = float(range_interaction["chase_adjustment"])
+        event_features = {
+            **dict(features),
+            "origin_setup_type": setup.value,
+            "market_shape_state": market.state,
+            "market_shape_confidence": market.confidence,
+            "market_transition_risk": market.transition_risk,
+            "market_fit_score": market_fit,
+            "market_eligibility": market_eligibility,
+            "market_confirmation_bars_required": detection.get(
+                "market_confirmation_bars_required"
+            ),
+            "market_single_bar_confirmation_allowed": detection.get(
+                "market_single_bar_confirmation_allowed"
+            ),
+            "range_persistence_interaction": range_interaction,
+            "detection": dict(detection),
+        }
+        production_scores = score_breakout(
+            event_features,
+            intrinsic_strength=intrinsic,
+            market_fit=market_fit,
+            market_confidence=(
+                market.confidence
+                if market.status in {"active", "degraded"}
+                else None
+            ),
+            sector_fit=primary.scores.sector_fit_score,
+            strength_included_features=included,
+            range_persistence_adjustment=0.0,
+            range_persistence_chase_adjustment=0.0,
+            score_version=self.settings.scoring_version,
+        )
+        hypothetical_scores = score_breakout(
+            event_features,
+            intrinsic_strength=intrinsic,
+            market_fit=market_fit,
+            market_confidence=(
+                market.confidence
+                if market.status in {"active", "degraded"}
+                else None
+            ),
+            sector_fit=primary.scores.sector_fit_score,
+            strength_included_features=included,
+            range_persistence_adjustment=range_adjustment,
+            range_persistence_chase_adjustment=range_chase_adjustment,
+            score_version=self.settings.scoring_version,
+        )
+        selected_scores = (
+            hypothetical_scores
+            if self.settings.range_persistence_mode == "enabled"
+            else production_scores
+        )
+        secondary_pivot_id = (
+            primary.structure.pivot_id
+            if primary.structure is not None
+            else f"daily-base-{primary.ticker}-{observed_trading_date.isoformat()}"
+        )
+        event_id = event_identity(
+            trading_date=observed_trading_date,
+            ticker=primary.ticker,
+            setup_type=setup,
+            pivot_id=secondary_pivot_id,
+        )
+        prior = next(
+            (
+                dict(item)
+                for item in prior_by_ticker.get(primary.ticker, [])
+                if str(item.get("event_id")) == event_id
+            ),
+            None,
+        )
+        initial_state = (
+            BreakoutLifecycleState(str(prior.get("lifecycle_state")))
+            if prior is not None
+            else BreakoutLifecycleState.DISCOVERED
+        )
+        first_seen_at = (
+            _aware_datetime(prior.get("first_seen_at"), observed_at)
+            if prior is not None
+            else observed_at
+        )
+        price = _finite(event_features.get("event_price"))
+        structure = primary.structure
+        invalidation = structure.invalidation_price if structure is not None else None
+        observation = {
+            "triggered": bool(detection.get("triggered")),
+            "confirmed": bool(detection.get("confirmed")),
+            "extended": bool(detection.get("extended")),
+            "failed": bool(
+                price is not None
+                and invalidation is not None
+                and price < invalidation
+            ),
+            "failure_reason": "complete_bar_below_invalidation",
+            "expired": bool(
+                (observed_at - first_seen_at).total_seconds()
+                > self.settings.event_ttl_seconds
+            ),
+        }
+        state = initial_state
+        event_transitions: list[dict[str, Any]] = []
+        for _step in range(4):
+            step_observation = dict(observation)
+            if state is BreakoutLifecycleState.DISCOVERED:
+                step_observation = {}
+            elif state is BreakoutLifecycleState.WATCHING:
+                step_observation["confirmed"] = False
+                step_observation["extended"] = False
+            result = transition_state(state, step_observation)
+            if not result.changed:
+                break
+            event_transitions.append(
+                {
+                    "event_id": event_id,
+                    "from_state": result.previous_state,
+                    "to_state": result.state,
+                    "reason": result.reason,
+                    "evidence_at": observed_at,
+                    "evidence": {
+                        "source_snapshot_id": source_snapshot_id,
+                        "parallel_setup": True,
+                    },
+                }
+            )
+            state = result.state
+        quality = {
+            **primary.data_quality,
+            "market_eligibility": market_eligibility,
+        }
+        event = primary.model_copy(
+            deep=True,
+            update={
+                "event_id": event_id,
+                "setup_type": setup,
+                "origin_setup_type": setup,
+                "lifecycle_state": state,
+                "first_seen_at": first_seen_at,
+                "last_seen_at": observed_at,
+                "pivot_id": secondary_pivot_id,
+                "previous_state": initial_state,
+                "transition_reason": (
+                    event_transitions[-1]["reason"]
+                    if event_transitions
+                    else detection.get("transition_reason")
+                ),
+                "scores": selected_scores,
+                "data_quality": quality,
+                "features": event_features,
+                "warnings": list(
+                    dict.fromkeys(
+                        [
+                            *primary.warnings,
+                            *list(detection.get("warnings") or []),
+                            *list(range_interaction.get("warnings") or []),
+                        ]
+                    )
+                ),
+            },
+        )
+        strength_shadow = (
+            strength_snapshot.factor_breakdown.get("range_persistence_shadow")
+            if strength_snapshot is not None
+            else None
+        )
+        shadow = {
+            "trading_date": observed_trading_date,
+            "ticker": primary.ticker,
+            "event_id": event_id,
+            "feature": dict(range_feature),
+            "production_score": intrinsic,
+            "hypothetical_score": (
+                strength_shadow.get("hypothetical_score")
+                if isinstance(strength_shadow, Mapping)
+                else None
+            ),
+            "score_version": getattr(
+                strength_snapshot, "score_version", "unavailable"
+            ),
+            "feature_version": self.settings.range_persistence_version,
+            "breakout_production_priority": production_scores.alert_priority_score,
+            "breakout_hypothetical_priority": hypothetical_scores.alert_priority_score,
+            "breakout_production_chase_risk": production_scores.chase_risk_score,
+            "breakout_hypothetical_chase_risk": hypothetical_scores.chase_risk_score,
+            "breakout_interaction": range_interaction,
+        }
+        return event, event_transitions, shadow
 
     async def build_snapshot(
         self,
@@ -894,10 +1302,23 @@ class BreakoutRadarService:
                 continue
             carryovers.append(event.model_dump(mode="python"))
         due_ids = {str(value) for value in (expired_due_event_ids or ())}
-        carryover_tickers = {
+        gap_carryover_tickers = {
             str(item.get("ticker") or "").strip().upper()
             for item in carryovers
-            if str(item.get("ticker") or "").strip()
+            if str(item.get("trading_date") or "")
+            == observed_trading_date.isoformat()
+            if str(
+                item.get("origin_setup_type")
+                or (item.get("features") or {}).get("origin_setup_type")
+                or item.get("setup_type")
+                or ""
+            )
+            in {
+                BreakoutSetupType.PREMARKET_GAP.value,
+                BreakoutSetupType.GAP_AND_GO.value,
+                BreakoutSetupType.GAP_HOLD.value,
+                BreakoutSetupType.GAP_FADE.value,
+            }
         }
         live_carryover_tickers = {
             str(item.get("ticker") or "").strip().upper()
@@ -916,7 +1337,7 @@ class BreakoutRadarService:
         stage_two = [
             candidate
             for candidate in candidates
-            if candidate.ticker not in carryover_tickers
+            if candidate.ticker not in gap_carryover_tickers
         ][: self.settings.daily_enrich_limit]
         discovery_tickers = [item.ticker for item in stage_two]
         distribution_key = "|".join(
@@ -924,11 +1345,24 @@ class BreakoutRadarService:
                 completed_daily_session(cutoff).isoformat(),
                 str(getattr(self.universe, "version", "unknown")),
                 self.settings.range_persistence_version,
+                str(self.settings.range_persistence_length),
+                str(self.settings.range_persistence_fast_length),
+                str(self.settings.range_persistence_slope_days),
+                str(self.settings.range_persistence_ratio_window),
+                str(self.settings.range_persistence_ratio_threshold),
+                str(self.settings.range_persistence_min_history_multiplier),
+            ]
+        )
+        liquidity_key = "|".join(
+            [
+                completed_daily_session(cutoff).isoformat(),
+                str(getattr(self.universe, "version", "unknown")),
+                "dollar-volume-v1",
             ]
         )
         cached_distribution = self._range_distribution_cache.get(distribution_key)
+        cached_liquidity = self._liquidity_distribution_cache.get(liquidity_key)
         if self.settings.range_persistence_mode == "disabled":
-            canonical_tickers = []
             cached_distribution = {
                 "as_of": completed_daily_session(cutoff).isoformat(),
                 "universe_version": getattr(self.universe, "version", "unknown"),
@@ -939,15 +1373,41 @@ class BreakoutRadarService:
                 "coverage_ratio": 0.0,
                 "status": "disabled",
             }
-        elif cached_distribution is not None:
-            canonical_tickers = []
-        else:
+        needs_canonical_history = (
+            cached_liquidity is None
+            or (
+                self.settings.range_persistence_mode != "disabled"
+                and cached_distribution is None
+            )
+        )
+        if needs_canonical_history:
             try:
                 canonical_tickers = list(
                     await self.universe.tickers(as_of=observed_at)
                 )
             except Exception:
                 canonical_tickers = []
+        else:
+            canonical_tickers = []
+        sector_benchmarks = {
+            benchmark
+            for benchmark in (
+                self._sector_benchmark(candidate.ticker, candidate.sector)
+                for candidate in stage_two
+            )
+            if benchmark
+        }
+        sector_benchmarks.update(
+            benchmark
+            for benchmark in (
+                self._sector_benchmark(
+                    str(item.get("ticker") or ""),
+                    str(item.get("sector") or "") or None,
+                )
+                for item in carryovers
+            )
+            if benchmark
+        )
         daily_symbols = list(
             dict.fromkeys(
                 [
@@ -955,6 +1415,7 @@ class BreakoutRadarService:
                     *sorted(live_carryover_tickers),
                     *canonical_tickers,
                     "SPY",
+                    *sorted(sector_benchmarks),
                 ]
             )
         )
@@ -1025,6 +1486,66 @@ class BreakoutRadarService:
             except Exception:
                 strength_map = {}
 
+        if cached_liquidity is None:
+            liquidity_values: dict[str, float] = {}
+            sector_breadth_observations: dict[str, list[bool]] = {}
+            for ticker in canonical_tickers:
+                snapshot = daily_map.get(ticker)
+                if snapshot is None:
+                    continue
+                canonical_daily = trim_daily_bars(snapshot.frame, cutoff)
+                value = self._average_dollar_volume(
+                    canonical_daily
+                )
+                if value is not None:
+                    liquidity_values[ticker] = value
+                benchmark = self._sector_benchmark(ticker, None)
+                if (
+                    benchmark
+                    and "Close" in canonical_daily
+                    and len(canonical_daily) >= 50
+                ):
+                    closes = pd.to_numeric(
+                        canonical_daily["Close"],
+                        errors="coerce",
+                    ).dropna()
+                    if len(closes) >= 50:
+                        sector_breadth_observations.setdefault(
+                            benchmark,
+                            [],
+                        ).append(float(closes.iloc[-1]) > float(closes.tail(50).mean()))
+            liquidity_minimum = max(30, int(len(canonical_tickers) * 0.60))
+            liquidity_coverage = len(liquidity_values) / max(
+                len(canonical_tickers), 1
+            )
+            cached_liquidity = {
+                "as_of": completed_daily_session(cutoff).isoformat(),
+                "universe_version": getattr(self.universe, "version", "unknown"),
+                "members": frozenset(canonical_tickers),
+                "values": liquidity_values,
+                "sector_breadth": {
+                    benchmark: round(
+                        sum(observations) / len(observations) * 100.0,
+                        4,
+                    )
+                    for benchmark, observations in sector_breadth_observations.items()
+                    if len(observations) >= 5
+                },
+                "coverage_ratio": liquidity_coverage,
+                "status": (
+                    "active"
+                    if len(liquidity_values) >= liquidity_minimum
+                    else "degraded"
+                    if liquidity_values
+                    else "unavailable"
+                ),
+            }
+            self._liquidity_distribution_cache[liquidity_key] = cached_liquidity
+            while len(self._liquidity_distribution_cache) > 5:
+                self._liquidity_distribution_cache.pop(
+                    next(iter(self._liquidity_distribution_cache))
+                )
+
         if cached_distribution is None:
             global_values: list[float] = []
             sector_values: dict[str, list[float]] = {}
@@ -1033,7 +1554,7 @@ class BreakoutRadarService:
                 snapshot = daily_map.get(ticker)
                 if snapshot is None:
                     continue
-                feature = compute_range_persistence(
+                feature = _safe_range_feature(
                     trim_daily_bars(snapshot.frame, cutoff),
                     cutoff=snapshot.cutoff.event_at,
                     length=self.settings.range_persistence_length,
@@ -1102,7 +1623,7 @@ class BreakoutRadarService:
                     "version": self.settings.range_persistence_version,
                 }
                 if self.settings.range_persistence_mode == "disabled"
-                else compute_range_persistence(
+                else _safe_range_feature(
                     daily,
                     cutoff=daily_snapshot.cutoff.event_at,
                     length=self.settings.range_persistence_length,
@@ -1191,42 +1712,92 @@ class BreakoutRadarService:
                     )
                 )
             features.update(self._base_features(structure))
-            features.update(
-                self._confirmation_features(
-                    features,
-                    structure,
-                    daily_snapshot.frame,
-                )
+            daily = visible_daily[candidate.ticker]
+            previous_close = (
+                _finite(daily["Close"].iloc[-1])
+                if not daily.empty and "Close" in daily
+                else None
             )
+            sector_symbol = self._sector_benchmark(
+                candidate.ticker,
+                candidate.sector,
+            )
+            market_snapshot = daily_map.get("SPY")
+            sector_snapshot = daily_map.get(sector_symbol) if sector_symbol else None
+            relative_features = relative_strength_features(
+                daily,
+                (
+                    trim_daily_bars(market_snapshot.frame, cutoff)
+                    if market_snapshot is not None
+                    else None
+                ),
+                (
+                    trim_daily_bars(sector_snapshot.frame, cutoff)
+                    if sector_snapshot is not None
+                    else None
+                ),
+                sector_symbol=sector_symbol,
+                sector_breadth_score=(
+                    (cached_liquidity.get("sector_breadth") or {}).get(
+                        sector_symbol
+                    )
+                    if sector_symbol
+                    else None
+                ),
+            )
+            average_dollar_volume = self._average_dollar_volume(daily)
             features.update(
                 {
                     "current_price": _finite(features.get("event_price"))
                     or candidate.price,
-                    "previous_regular_close": candidate.previous_regular_close,
+                    "previous_regular_close": previous_close,
                     "gap_pct": (
                         (
                             float(features["event_price"])
-                            / candidate.previous_regular_close
+                            / previous_close
                             - 1.0
                         )
                         * 100.0
                         if _finite(features.get("event_price")) is not None
-                        and candidate.previous_regular_close is not None
-                        and candidate.previous_regular_close > 0
+                        and previous_close is not None
+                        and previous_close > 0
                         else None
                     ),
                     "gap_atr": (
                         (
                             float(features["event_price"])
-                            - candidate.previous_regular_close
+                            - previous_close
                         )
                         / float(features["atr20"])
                         if _finite(features.get("event_price")) is not None
-                        and candidate.previous_regular_close is not None
+                        and previous_close is not None
                         and _finite(features.get("atr20")) is not None
                         and float(features["atr20"]) > 0
                         else None
                     ),
+                    "average_dollar_volume": average_dollar_volume,
+                    "market_cap_quality": _quality(
+                        candidate.provider_market_cap,
+                        low=200_000_000,
+                        high=10_000_000_000,
+                    ),
+                    "asset_type_quality": {
+                        "common_stock": 100.0,
+                        "adr": 95.0,
+                        "etf": 90.0,
+                    }.get(candidate.asset_type.value),
+                    "dollar_volume_percentile": percentile_rank(
+                        average_dollar_volume,
+                        cached_liquidity["values"],
+                    ),
+                    "liquidity_universe_as_of": cached_liquidity["as_of"],
+                    "liquidity_universe_version": cached_liquidity[
+                        "universe_version"
+                    ],
+                    "liquidity_universe_status": cached_liquidity["status"],
+                    "liquidity_universe_coverage": cached_liquidity[
+                        "coverage_ratio"
+                    ],
                     "event_freshness_score": max(
                         0.0,
                         min(
@@ -1244,6 +1815,13 @@ class BreakoutRadarService:
                                 / self.settings.event_ttl_seconds
                             ),
                         ),
+                    ),
+                    "range_position": range_feature.get("range_position"),
+                    "range_persistence_fast": range_feature.get(
+                        "range_persistence_fast"
+                    ),
+                    "range_persistence_slow": range_feature.get(
+                        "range_persistence_slow"
                     ),
                     "range_persistence": range_feature.get("range_persistence"),
                     "range_persistence_slope_5d": range_feature.get(
@@ -1279,6 +1857,14 @@ class BreakoutRadarService:
                     ),
                 }
             )
+            features.update(relative_features)
+            features.update(
+                self._confirmation_features(
+                    features,
+                    structure,
+                    daily,
+                )
+            )
             detection = detect_breakout(
                 candidate,
                 structure,
@@ -1286,40 +1872,105 @@ class BreakoutRadarService:
                 cutoff,
                 self.settings,
             )
-            strength_snapshot = strength_map.get(candidate.ticker)
-            included = (
-                strength_snapshot.included_features if strength_snapshot is not None else []
+            market_payload = market.model_dump(mode="python")
+            detection = apply_confirmation_rules(
+                detection,
+                features,
+                market_payload,
+                base_confirmation_bars=self.settings.confirmation_bars,
             )
-            intrinsic = strength_snapshot.score if strength_snapshot is not None else None
-            range_adjustment = 0.0
-            if (
-                self.settings.range_persistence_breakout_interaction_enabled
-                and range_feature.get("status") == "active"
-            ):
-                slope = _finite(range_feature.get("range_persistence_slope_5d"))
-                range_adjustment = max(
-                    -self.settings.range_persistence_breakout_interaction_cap,
-                    min(
-                        self.settings.range_persistence_breakout_interaction_cap,
-                        (slope or 0.0) * 0.25,
-                    ),
+            secondary_detection = detection.pop("secondary_detection", None)
+            if isinstance(secondary_detection, Mapping):
+                secondary_detection = apply_confirmation_rules(
+                    secondary_detection,
+                    features,
+                    market_payload,
+                    base_confirmation_bars=self.settings.confirmation_bars,
                 )
+            setup = detection["setup_type"]
+            market_fit = market_fit_for_setup(market_payload, setup)
+            market_eligibility = eligibility_for_setup(market_payload, setup)
+            features.update(
+                {
+                    "market_shape_state": market.state,
+                    "market_shape_confidence": market.confidence,
+                    "market_transition_risk": market.transition_risk,
+                    "market_fit_score": market_fit,
+                    "market_eligibility": market_eligibility,
+                    "market_confirmation_bars_required": detection.get(
+                        "market_confirmation_bars_required"
+                    ),
+                    "market_single_bar_confirmation_allowed": detection.get(
+                        "market_single_bar_confirmation_allowed"
+                    ),
+                }
+            )
+            strength_snapshot = strength_map.get(candidate.ticker)
+            strength_scope_valid = bool(
+                strength_snapshot is not None
+                and strength_snapshot.score_scope == "intrinsic"
+            )
+            included = (
+                strength_snapshot.included_features if strength_scope_valid else []
+            )
+            features["strength_included_features"] = list(included)
+            features["range_persistence_mode_at_score"] = (
+                self.settings.range_persistence_mode
+            )
+            intrinsic = strength_snapshot.score if strength_scope_valid else None
+            if strength_snapshot is not None and not strength_scope_valid:
+                features.setdefault("warnings", []).append(
+                    "strength_score_scope_not_intrinsic"
+                )
+            sector_fit = _finite(relative_features.get("sector_fit_score"))
+            range_interaction = range_persistence_interactions(
+                range_feature,
+                detection,
+                cap=(
+                    self.settings.range_persistence_breakout_interaction_cap
+                    if self.settings.range_persistence_breakout_interaction_enabled
+                    else 0.0
+                ),
+                ratio_threshold=self.settings.range_persistence_ratio_threshold,
+            )
+            range_adjustment = float(
+                range_interaction["confirmation_adjustment"]
+            )
+            range_chase_adjustment = float(
+                range_interaction["chase_adjustment"]
+            )
+            features["range_persistence_interaction"] = range_interaction
+            features.setdefault("warnings", []).extend(
+                range_interaction.get("warnings") or []
+            )
             production_scores = score_breakout(
                 features,
                 intrinsic_strength=intrinsic,
-                market_fit=None,
-                sector_fit=None,
+                market_fit=market_fit,
+                market_confidence=(
+                    market.confidence
+                    if market.status in {"active", "degraded"}
+                    else None
+                ),
+                sector_fit=sector_fit,
                 strength_included_features=included,
                 range_persistence_adjustment=0.0,
+                range_persistence_chase_adjustment=0.0,
                 score_version=self.settings.scoring_version,
             )
             hypothetical_scores = score_breakout(
                 features,
                 intrinsic_strength=intrinsic,
-                market_fit=None,
-                sector_fit=None,
+                market_fit=market_fit,
+                market_confidence=(
+                    market.confidence
+                    if market.status in {"active", "degraded"}
+                    else None
+                ),
+                sector_fit=sector_fit,
                 strength_included_features=included,
                 range_persistence_adjustment=range_adjustment,
+                range_persistence_chase_adjustment=range_chase_adjustment,
                 score_version=self.settings.scoring_version,
             )
             scores = (
@@ -1327,14 +1978,25 @@ class BreakoutRadarService:
                 if self.settings.range_persistence_mode == "enabled"
                 else production_scores
             )
-            setup = detection["setup_type"]
             features["origin_setup_type"] = setup.value
             features["event_high_watermark"] = _finite(features.get("high"))
-            pivot_id = (
-                structure.pivot_id
-                if structure is not None
-                else f"{setup.value.lower()}-{candidate.ticker}-{observed_at.date().isoformat()}"
-            )
+            if setup is BreakoutSetupType.OPENING_RANGE_BREAKOUT:
+                opening_high = _finite(features.get("opening_range_high"))
+                pivot_id = "-".join(
+                    [
+                        "orb",
+                        candidate.ticker,
+                        observed_trading_date.isoformat(),
+                        f"{opening_high:.6f}" if opening_high is not None else "unknown",
+                    ]
+                )
+            elif structure is not None:
+                pivot_id = structure.pivot_id
+            else:
+                pivot_id = (
+                    f"{setup.value.lower()}-{candidate.ticker}-"
+                    f"{observed_trading_date.isoformat()}"
+                )
             event_id = event_identity(
                 trading_date=observed_trading_date,
                 ticker=candidate.ticker,
@@ -1487,13 +2149,35 @@ class BreakoutRadarService:
                         else None
                     ),
                     "strength_status": (
-                        "active" if strength_snapshot is not None else "unavailable"
+                        "active" if strength_scope_valid else "unavailable"
                     ),
+                    "strength_score_scope": (
+                        strength_snapshot.score_scope
+                        if strength_snapshot is not None
+                        else None
+                    ),
+                    "relative_strength_status": relative_features.get(
+                        "relative_strength_status"
+                    ),
+                    "relative_strength_market_symbol": relative_features.get(
+                        "relative_strength_market_symbol"
+                    ),
+                    "relative_strength_sector_symbol": relative_features.get(
+                        "relative_strength_sector_symbol"
+                    ),
+                    "liquidity_universe_status": cached_liquidity["status"],
+                    "liquidity_universe_coverage": cached_liquidity[
+                        "coverage_ratio"
+                    ],
                     "provider_quality": candidate.quality,
                     "range_persistence_quality": range_feature.get("quality"),
                     "market_shape_status": market.status,
                     "market_shape_state": market.state,
+                    "market_shape_confidence": market.confidence,
+                    "market_transition_risk": market.transition_risk,
+                    "market_eligibility": market_eligibility,
                     "market_shape_version": market.version,
+                    "market_shape_rules": dict(market.rules),
                 },
                 versions=versions,
                 features={**features, "detection": detection},
@@ -1531,15 +2215,48 @@ class BreakoutRadarService:
                     "feature_version": self.settings.range_persistence_version,
                     "breakout_production_priority": production_scores.alert_priority_score,
                     "breakout_hypothetical_priority": hypothetical_scores.alert_priority_score,
+                    "breakout_production_chase_risk": production_scores.chase_risk_score,
+                    "breakout_hypothetical_chase_risk": hypothetical_scores.chase_risk_score,
+                    "breakout_interaction": range_interaction,
                 }
             )
+            if isinstance(secondary_detection, Mapping):
+                secondary_event, secondary_transitions, secondary_shadow = (
+                    self._secondary_new_event(
+                        primary=event,
+                        detection=secondary_detection,
+                        features=features,
+                        market=market,
+                        prior_by_ticker=prior_by_ticker,
+                        observed_at=observed_at,
+                        observed_trading_date=observed_trading_date,
+                        source_snapshot_id=source_snapshot_id,
+                        range_feature=range_feature,
+                        strength_snapshot=strength_snapshot,
+                        intrinsic=intrinsic,
+                        included=included,
+                    )
+                )
+                events.append(secondary_event)
+                transitions.extend(secondary_transitions)
+                shadows.append(secondary_shadow)
         for prior in carryovers:
             ticker = str(prior.get("ticker") or "").strip().upper()
             event_id = str(prior.get("event_id") or "")
+            sector_symbol = self._sector_benchmark(
+                ticker,
+                str(prior.get("sector") or "") or None,
+            )
             continued, continued_transitions = self._continue_event(
                 prior,
                 daily_snapshot=daily_map.get(ticker),
                 intraday_snapshot=intraday_map.get(ticker),
+                market_daily_snapshot=daily_map.get("SPY"),
+                sector_daily_snapshot=(
+                    daily_map.get(sector_symbol) if sector_symbol else None
+                ),
+                sector_symbol=sector_symbol,
+                liquidity_distribution=cached_liquidity,
                 cutoff=cutoff,
                 observed_at=observed_at,
                 observed_session=observed_session,

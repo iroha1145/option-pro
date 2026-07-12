@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 
+from app.services.breakouts.range_interactions import range_persistence_interactions
 from app.services.breakouts.scoring import score_breakout, weighted_score
 
 
@@ -77,15 +78,52 @@ def test_chase_risk_does_not_reduce_breakout_quality() -> None:
     assert high_scores.alert_priority_score < low_scores.alert_priority_score
 
 
+def test_range_persistence_chase_interaction_is_separate_from_confirmation() -> None:
+    interaction = range_persistence_interactions(
+        {
+            "status": "active",
+            "range_position": 92,
+            "range_persistence_fast": 70,
+            "range_persistence_slow": 75,
+            "range_persistence_slope_5d": -2,
+            "range_persistence_ratio_10d": 80,
+            "range_persistence_self_percentile": 95,
+        },
+        {"breakout_distance_atr": 2.5},
+    )
+    assert interaction["confirmation_adjustment"] < 0
+    assert interaction["chase_adjustment"] > 0
+    assert interaction["fading_near_high"] is True
+
+
+def test_range_persistence_alone_never_creates_a_trigger() -> None:
+    interaction = range_persistence_interactions(
+        {
+            "status": "active",
+            "range_persistence_slope_5d": 5,
+            "range_persistence_ratio_10d": 100,
+            "range_persistence_self_percentile": 99,
+        },
+        {"triggered": False, "breakout_distance_atr": 3},
+    )
+    assert "triggered" not in interaction
+
+
 def test_market_shape_only_changes_market_fit_and_priority() -> None:
     features = _features()
     missing = score_breakout(features, intrinsic_strength=75, market_fit=None)
-    strong = score_breakout(features, intrinsic_strength=75, market_fit=90)
+    strong = score_breakout(
+        features,
+        intrinsic_strength=75,
+        market_fit=90,
+        market_confidence=0.9,
+    )
     assert missing.base_quality_score == strong.base_quality_score
     assert missing.breakout_confirmation_score == strong.breakout_confirmation_score
     assert missing.intrinsic_strength_score == strong.intrinsic_strength_score
     assert missing.market_fit_score is None
     assert strong.alert_priority_score != missing.alert_priority_score
+    assert missing.data_confidence_score < strong.data_confidence_score
 
 
 def test_priority_contributions_and_penalty_reconcile() -> None:

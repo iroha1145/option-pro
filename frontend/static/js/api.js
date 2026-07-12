@@ -224,6 +224,26 @@ export const api = {
   // Signals — daily aggregation
   signals(ticker, options = {}) { return cached(`sig:${enc(ticker)}`, T.SIGNALS, (signal) => fetchJson(`${API_BASE}/signals/stock/${enc(ticker)}`, { signal }), options.signal); },
   topBottomSignals(ticker, options = {}) { return cached(`tb:${enc(ticker)}`, T.SIGNALS, (signal) => fetchJson(`${API_BASE}/signals/stock/${enc(ticker)}`, { signal }), options.signal); },
+  signalsMarket(options = {}) {
+    const key = 'signals-market';
+    if (options.refresh) invalidateCache(key);
+    return cached(
+      key,
+      T.SIGNALS,
+      (signal) => fetchJson(`${API_BASE}/signals/market`, { signal }),
+      options.signal,
+    );
+  },
+  indexTechnicalSignals(ticker, options = {}) {
+    const key = `index-signals:${enc(ticker)}`;
+    if (options.refresh) invalidateCache(key);
+    return cached(
+      key,
+      T.SIGNALS,
+      (signal) => fetchJson(`${API_BASE}/stocks/${enc(ticker)}/signals`, { signal }),
+      options.signal,
+    );
+  },
   signalAI(ticker, options = {}) { return fetchJson(`${API_BASE}/signals/stock/${enc(ticker)}/ai-analysis`, { method:'POST', headers:{'Content-Type':'application/json'}, signal: options.signal }); },
   analyzeTopBottomSignals(ticker, options = {}) { return fetchJson(`${API_BASE}/signals/stock/${enc(ticker)}/ai-analysis`, { method:'POST', headers:{'Content-Type':'application/json'}, signal: options.signal }); },
 
@@ -268,14 +288,30 @@ export const api = {
       fetchJson(`${API_BASE}/ai/earnings-impact/${encodeURIComponent(ticker)}`));
   },
 
-  strengthScan(params = {}) {
+  strengthScan(params = {}, options = {}) {
     const query = new URLSearchParams();
     const scanParams = { ...params };
     Object.entries(scanParams).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') query.set(key, value);
     });
     const suffix = query.toString() ? `?${query}` : '';
-    return cached(`strength:${suffix}`, T.STRENGTH, () => fetchJson(`${API_BASE}/strength/scan${suffix}`, undefined, 180 * 1000));
+    return cached(
+      `strength:${suffix}`,
+      T.STRENGTH,
+      (signal) => fetchJson(`${API_BASE}/strength/scan${suffix}`, { signal }, 180 * 1000),
+      options.signal,
+    );
+  },
+
+  strengthMarket(options = {}) {
+    const key = 'strength-market';
+    if (options.refresh) invalidateCache(key);
+    return cached(
+      key,
+      T.STRENGTH,
+      (signal) => fetchJson(`${API_BASE}/strength/market`, { signal }, 180 * 1000),
+      options.signal,
+    );
   },
 
   strengthStock(ticker, profile = 'balanced') {
@@ -288,8 +324,13 @@ export const api = {
       fetchJson(`${API_BASE}/strength/sectors?period=${encodeURIComponent(period)}`));
   },
 
-  strengthProfiles() {
-    return cached('strength-profiles', T.STATIC, () => fetchJson(`${API_BASE}/strength/profiles`));
+  strengthProfiles(options = {}) {
+    return cached(
+      'strength-profiles',
+      T.STATIC,
+      (signal) => fetchJson(`${API_BASE}/strength/profiles`, { signal }),
+      options.signal,
+    );
   },
 
   // Breakout Radar — read-only completed snapshots. The worker owns scanning.
