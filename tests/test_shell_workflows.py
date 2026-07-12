@@ -131,9 +131,7 @@ def test_real_compose_preserves_quoted_boolean_values(
         ),
         encoding="utf-8",
     )
-    compose_environment = os.environ.copy()
-    compose_environment.pop("BREAKOUT_RADAR_ENABLED", None)
-    compose_environment.pop("RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED", None)
+    compose_environment = _isolated_environment()
     rendered = subprocess.run(
         [
             docker,
