@@ -244,6 +244,11 @@ class BreakoutEvent(_StrictModel):
     event_id: str = Field(min_length=8, max_length=128)
     trading_date: date
     ticker: str
+    name: Optional[str] = Field(default=None, max_length=200)
+    exchange: Optional[str] = Field(default=None, max_length=24)
+    asset_type: AssetType = AssetType.UNKNOWN
+    sector: Optional[str] = Field(default=None, max_length=120)
+    session: MarketSession
     setup_type: BreakoutSetupType
     lifecycle_state: BreakoutLifecycleState
     event_at: AwareDatetime

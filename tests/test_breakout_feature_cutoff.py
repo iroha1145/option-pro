@@ -63,7 +63,8 @@ def test_intraday_cutoff_ignores_future_bars_and_future_append() -> None:
     original = trim_intraday_bars(frame.loc[: day.replace(hour=10, minute=30)], cutoff)
     appended = trim_intraday_bars(frame, cutoff)
     pd.testing.assert_frame_equal(original, appended)
-    assert appended.index.max() <= pd.Timestamp(cutoff.event_at)
+    assert appended.index.max() == pd.Timestamp(day.replace(hour=10, minute=25))
+    assert pd.Timestamp(day.replace(hour=10, minute=30)) not in appended.index
 
 
 def test_premarket_cutoff_never_reads_regular_session() -> None:
@@ -91,8 +92,8 @@ def test_premarket_cutoff_never_reads_regular_session() -> None:
         session=MarketSession.PREMARKET,
     )
     visible = trim_intraday_bars(frame, cutoff)
-    assert visible.index.max().hour == 9
-    assert visible.index.max().minute == 25
+    assert visible.index.max().hour == 8
+    assert visible.index.max().minute == 0
     assert visible["Close"].max() < 20
 
 
@@ -122,3 +123,26 @@ def test_feature_snapshot_is_unchanged_by_bars_after_cutoff() -> None:
     )
     second = compute_feature_snapshot(daily=_daily(), intraday=intraday, cutoff=cutoff)
     assert first == second
+
+
+def test_include_current_bar_is_an_explicit_opt_in() -> None:
+    day = datetime(2026, 7, 10, tzinfo=NY)
+    index = pd.date_range(day.replace(hour=10, minute=20), periods=4, freq="5min")
+    frame = pd.DataFrame(
+        {
+            "Open": [100, 101, 102, 103],
+            "High": [101, 102, 103, 104],
+            "Low": [99, 100, 101, 102],
+            "Close": [100.5, 101.5, 102.5, 103.5],
+            "Volume": [1000, 1000, 1000, 1000],
+        },
+        index=index,
+    )
+    complete_only = TemporalCutoff(
+        event_at=day.replace(hour=10, minute=30),
+        session=MarketSession.REGULAR,
+        include_current_bar=False,
+    )
+    partial_allowed = complete_only.model_copy(update={"include_current_bar": True})
+    assert trim_intraday_bars(frame, complete_only).index.max().minute == 25
+    assert trim_intraday_bars(frame, partial_allowed).index.max().minute == 30

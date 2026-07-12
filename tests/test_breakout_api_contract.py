@@ -1,0 +1,311 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+
+from fastapi.testclient import TestClient
+
+from app.api import breakouts as breakout_api
+from app.main import app
+from app.services.breakouts.config import BreakoutSettings
+from app.services.breakouts.providers.tradingview import TradingViewDiscoveryProvider
+from app.services.breakouts.repository import BreakoutRepository
+
+
+NOW = datetime(2026, 7, 10, 14, 30, tzinfo=timezone.utc)
+VERSION_KEYS = {
+    "api_schema",
+    "provider_schema",
+    "feature_version",
+    "detector_version",
+    "scoring_version",
+    "range_persistence_version",
+    "market_shape_version",
+    "strength_score_version",
+    "universe_version",
+}
+EVENT_KEYS = {
+    "event_id",
+    "ticker",
+    "name",
+    "exchange",
+    "asset_type",
+    "sector",
+    "session",
+    "setup_type",
+    "lifecycle_state",
+    "event_at",
+    "event_age_seconds",
+    "event_price",
+    "current_price",
+    "session_change_pct",
+    "gap_pct",
+    "rvol_time_of_day",
+    "pivot_price",
+    "support_zone",
+    "resistance_zone",
+    "invalidation_price",
+    "intrinsic_strength_score",
+    "base_quality_score",
+    "breakout_confirmation_score",
+    "liquidity_quality_score",
+    "chase_risk_score",
+    "sector_fit_score",
+    "market_fit_score",
+    "breakout_quality_score",
+    "alert_priority_score",
+    "data_confidence_score",
+    "range_persistence",
+    "range_persistence_slope_5d",
+    "range_persistence_ratio_10d",
+    "range_persistence_status",
+    "effective_weights",
+    "contribution_breakdown",
+    "market_shape",
+    "warnings",
+    "source_status",
+    "provenance",
+    "versions",
+}
+
+
+def _settings(path, *, enabled: bool = True) -> BreakoutSettings:
+    return BreakoutSettings(
+        _env_file=None,
+        BREAKOUT_RADAR_ENABLED=enabled,
+        BREAKOUT_DB_PATH=path,
+    )
+
+
+def _event(event_id: str, ticker: str, at: datetime, priority: float) -> dict:
+    return {
+        "event_id": event_id,
+        "trading_date": at.date(),
+        "ticker": ticker,
+        "name": f"{ticker} Incorporated",
+        "exchange": "NASDAQ",
+        "asset_type": "common_stock",
+        "sector": "Technology",
+        "session": "regular",
+        "setup_type": "DAILY_BASE_BREAKOUT",
+        "lifecycle_state": "TRIGGERED",
+        "previous_state": "WATCHING",
+        "transition_reason": "pivot_crossed",
+        "event_at": at,
+        "first_seen_at": at,
+        "last_seen_at": at,
+        "event_price": 105.0,
+        "pivot_id": f"pivot-{ticker}",
+        "source_snapshot_id": "fixture-snapshot",
+        "structure": {
+            "pivot_price": 100.0,
+            "support_zone": {"low": 94.0, "high": 95.0},
+            "resistance_zone": {"low": 99.5, "high": 100.0},
+            "invalidation_price": 93.5,
+        },
+        "features": {
+            "current_price": 105.2,
+            "session_change_pct": 6.1,
+            "gap_pct": 2.2,
+            "rvol_time_of_day": 2.4,
+            "range_persistence": 78.0,
+            "range_persistence_slope_5d": 1.2,
+            "range_persistence_ratio_10d": 70.0,
+            "range_persistence_status": "active",
+            "feature_cutoff_at": at,
+            "raw_provider_fields": {"secret": "must-not-leak"},
+        },
+        "scores": {
+            "intrinsic_strength_score": 82.0,
+            "base_quality_score": 75.0,
+            "breakout_confirmation_score": 80.0,
+            "liquidity_quality_score": 90.0,
+            "chase_risk_score": 30.0,
+            "sector_fit_score": None,
+            "market_fit_score": None,
+            "breakout_quality_score": 79.0,
+            "alert_priority_score": priority,
+            "data_confidence_score": 88.0,
+            "details": {
+                "alert_priority": {
+                    "effective_weights": {"breakout_quality_score": 0.5},
+                    "contribution_breakdown": {"breakout_quality_score": 39.5},
+                }
+            },
+        },
+        "data_quality": {
+            "discovery_source": "fixture",
+            "daily_price_source": "fixture-daily",
+            "intraday_price_source": "fixture-intraday",
+            "strength_status": "active",
+            "market_shape_status": "unavailable",
+        },
+        "versions": {"feature_version": "breakout-features-v1"},
+        "warnings": [],
+    }
+
+
+def _publish(repo: BreakoutRepository, at: datetime, events: list[dict]) -> str:
+    scan_id = repo.begin_scan(
+        provider="fixture",
+        session="regular",
+        scheduled_at=at,
+        config_hash="config-v1",
+        versions_hash="versions-v1",
+        versions={"api_schema": "breakout-api-v1"},
+    )
+    repo.publish_scan(
+        scan_id,
+        {
+            "provider_snapshot": {
+                "provider": "fixture",
+                "status": "active",
+                "as_of": at,
+                "session": "regular",
+                "schema_version": "fixture-v1",
+                "warnings": [],
+                "candidates": [
+                    {
+                        "ticker": "SECRET",
+                        "source": "fixture",
+                        "provider_timestamp": at,
+                        "raw_provider_fields": {"token": "must-not-leak"},
+                    }
+                ],
+            },
+            "events": events,
+        },
+    )
+    return scan_id
+
+
+def test_disabled_api_does_not_create_database(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "disabled.db"
+    monkeypatch.setattr(
+        breakout_api,
+        "get_breakout_settings",
+        lambda: _settings(path, enabled=False),
+    )
+    response = TestClient(app).get("/api/breakouts/current")
+    assert response.status_code == 200
+    assert response.json()["status"] == "disabled"
+    assert response.json()["events"] == []
+    assert not path.exists()
+
+
+def test_current_reads_only_completed_scan_and_never_calls_provider(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "api.db"
+    repository = BreakoutRepository(path)
+    repository.initialize()
+    _publish(repository, NOW, [_event("event-aapl", "AAPL", NOW, 91.0)])
+    repository.begin_scan(
+        provider="fixture",
+        session="regular",
+        scheduled_at=NOW + timedelta(minutes=5),
+        config_hash="config-v2",
+        versions_hash="versions-v2",
+    )
+    settings = _settings(path)
+    monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: settings)
+
+    async def forbidden_scan(*_args, **_kwargs):
+        raise AssertionError("GET API must not call the discovery Provider")
+
+    monkeypatch.setattr(TradingViewDiscoveryProvider, "scan", forbidden_scan)
+    response = TestClient(app).get("/api/breakouts/current")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "active"
+    assert [item["ticker"] for item in payload["events"]] == ["AAPL"]
+    assert VERSION_KEYS.issubset(payload["versions"])
+    assert EVENT_KEYS.issubset(payload["events"][0])
+    assert datetime.fromisoformat(payload["as_of"].replace("Z", "+00:00")).utcoffset() is not None
+    assert (
+        datetime.fromisoformat(
+            payload["events"][0]["event_at"].replace("Z", "+00:00")
+        ).utcoffset()
+        is not None
+    )
+    assert "must-not-leak" not in response.text
+    assert "raw_provider_fields" not in response.text
+
+
+def test_event_cursor_remains_bound_to_original_completed_scan(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "cursor.db"
+    repository = BreakoutRepository(path)
+    repository.initialize()
+    first_events = [
+        _event("event-aapl", "AAPL", NOW, 90.0),
+        _event("event-msft", "MSFT", NOW - timedelta(seconds=1), 80.0),
+        _event("event-nvda", "NVDA", NOW - timedelta(seconds=2), 70.0),
+    ]
+    _publish(repository, NOW, first_events)
+    monkeypatch.setattr(
+        breakout_api,
+        "get_breakout_settings",
+        lambda: _settings(path),
+    )
+    client = TestClient(app)
+    first_page = client.get("/api/breakouts/events?limit=2").json()
+    assert [item["ticker"] for item in first_page["events"]] == ["AAPL", "MSFT"]
+    assert first_page["next_cursor"]
+
+    _publish(
+        repository,
+        NOW + timedelta(minutes=5),
+        [_event("event-tsla", "TSLA", NOW + timedelta(minutes=5), 99.0)],
+    )
+    second_page = client.get(
+        "/api/breakouts/events",
+        params={"limit": 2, "cursor": first_page["next_cursor"]},
+    ).json()
+    assert [item["ticker"] for item in second_page["events"]] == ["NVDA"]
+    assert second_page["scan_run_id"] == first_page["scan_run_id"]
+
+
+def test_status_and_detail_degrade_without_hiding_contract(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "status.db"
+    repository = BreakoutRepository(path)
+    repository.initialize()
+    _publish(repository, NOW, [_event("event-aapl", "AAPL", NOW, 91.0)])
+    repository.record_provider_health(
+        {
+            "provider": "fixture",
+            "status": "stale",
+            "consecutive_failures": 2,
+            "stale_snapshot_available": True,
+            "last_failure_at": NOW,
+            "error_code": "timeout",
+        }
+    )
+    monkeypatch.setattr(
+        breakout_api,
+        "get_breakout_settings",
+        lambda: _settings(path),
+    )
+    client = TestClient(app)
+    status = client.get("/api/breakouts/status").json()
+    assert status["status"] == "stale"
+    assert status["database"]["status"] == "active"
+    assert status["range_persistence_mode"] == "shadow"
+    assert status["market_shape_adapter"]["status"] == "unavailable"
+
+    detail = client.get("/api/breakouts/events/event-aapl")
+    assert detail.status_code == 200
+    assert detail.json()["event"]["ticker"] == "AAPL"
+    assert detail.json()["structure"]["pivot_price"] == 100.0
+    assert isinstance(detail.json()["transitions"], list)
+
+
+def test_invalid_ticker_and_cursor_are_rejected(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "invalid.db"
+    repository = BreakoutRepository(path)
+    repository.initialize()
+    _publish(repository, NOW, [_event("event-aapl", "AAPL", NOW, 91.0)])
+    monkeypatch.setattr(
+        breakout_api,
+        "get_breakout_settings",
+        lambda: _settings(path),
+    )
+    client = TestClient(app)
+    assert client.get("/api/breakouts/tickers/AAPL%3BDROP").status_code == 400
+    assert client.get("/api/breakouts/events?cursor=not-a-cursor").status_code == 400

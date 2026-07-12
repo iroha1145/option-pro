@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.gzip import GZipMiddleware
 
-from app.api import ai, earnings, market, options, sectors, signals, stocks, strength
+from app.api import ai, breakouts, earnings, market, options, sectors, signals, stocks, strength
 
 
 _TRUTHY_VALUES = {"1", "true", "yes"}
@@ -101,10 +101,13 @@ _HEAVY_API_PREFIXES = (
     "/api/sectors/",
     "/api/signals/",
     "/api/strength/",
+    "/api/breakouts/",
 )
 _LIGHT_API_PATHS = {
     "/api/market/status",
     "/api/strength/profiles",
+    "/api/breakouts/current",
+    "/api/breakouts/status",
 }
 _HTML_CSP = (
     "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; "
@@ -308,6 +311,7 @@ app.include_router(market.router)
 app.include_router(signals.router)
 app.include_router(ai.router)
 app.include_router(strength.router)
+app.include_router(breakouts.router)
 
 # Docker-compose runs from /app/backend; local runs may be from repo root.
 # Allow override via FRONTEND_DIR env var for unusual deployments.

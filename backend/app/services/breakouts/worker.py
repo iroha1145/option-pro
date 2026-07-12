@@ -159,11 +159,16 @@ class BreakoutWorker:
         if target is None:
             raise TypeError("scan_service must be callable")
 
+        candidates = list(getattr(discovery, "candidates", ()) or ())
+        previous_events = self.repository.latest_events_for_tickers(
+            [getattr(candidate, "ticker", "") for candidate in candidates]
+        )
         available = {
             "discovery": discovery,
             "discovery_snapshot": discovery,
             "provider_snapshot": discovery,
-            "candidates": getattr(discovery, "candidates", ()),
+            "candidates": candidates,
+            "previous_events": previous_events,
             "clock_snapshot": clock_snapshot,
             "as_of": clock_snapshot.as_of,
             "session": clock_snapshot.session,
@@ -475,7 +480,13 @@ async def _async_main(args: argparse.Namespace) -> int:
         return health.exit_code
 
     repository = BreakoutRepository(settings.db_path)
-    worker = BreakoutWorker(settings, repository)
+    from app.services.breakouts.service import BreakoutRadarService
+
+    worker = BreakoutWorker(
+        settings,
+        repository,
+        scan_service=BreakoutRadarService(settings),
+    )
     loop = asyncio.get_running_loop()
     for signum in (signal.SIGTERM, signal.SIGINT):
         try:

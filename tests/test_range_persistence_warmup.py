@@ -44,3 +44,19 @@ def test_invalid_rows_reduce_quality_and_public_values_stay_finite() -> None:
     for key, value in result.items():
         if isinstance(value, float):
             assert np.isfinite(value), key
+
+
+def test_fixed_universe_distributions_produce_robust_shrunk_normalization() -> None:
+    result = compute_range_persistence(
+        _frame(220),
+        global_distribution=[35, 40, 45, 50, 55, 60, 65],
+        sector_distribution=[45, 50, 55],
+    )
+    assert result["status"] == "active"
+    assert result["range_persistence_global_percentile"] is not None
+    assert result["range_persistence_sector_percentile"] is not None
+    assert -3 <= result["range_persistence_global_robust_z"] <= 3
+    assert -3 <= result["range_persistence_sector_shrunk_z"] <= 3
+    assert 0 <= result["range_persistence_normalized_score"] <= 100
+    assert result["range_persistence_global_sample_count"] == 7
+    assert result["range_persistence_sector_sample_count"] == 3

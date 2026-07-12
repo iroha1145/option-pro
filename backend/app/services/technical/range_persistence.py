@@ -26,6 +26,10 @@ _VALUE_FIELDS = (
     "range_persistence_self_percentile",
     "range_persistence_global_percentile",
     "range_persistence_sector_percentile",
+    "range_persistence_global_robust_z",
+    "range_persistence_sector_robust_z",
+    "range_persistence_sector_shrunk_z",
+    "range_persistence_normalized_score",
     "legacy_control",
 )
 
@@ -272,6 +276,32 @@ def _percentile(value: float | None, distribution: Iterable[Any] | None) -> floa
     return _finite((below + 0.5 * tied) / len(finite) * 100.0)
 
 
+def _finite_distribution(distribution: Iterable[Any] | None) -> list[float]:
+    if distribution is None:
+        return []
+    return [
+        number
+        for raw in distribution
+        if (number := _finite(raw, ndigits=15)) is not None
+    ]
+
+
+def _robust_z(value: float | None, distribution: Iterable[Any] | None) -> float | None:
+    values = _finite_distribution(distribution)
+    if value is None or len(values) < 3:
+        return None
+    median = float(np.median(values))
+    mad = float(np.median(np.abs(np.asarray(values) - median)))
+    denominator = 1.4826 * mad + 1e-9
+    return _finite(max(-3.0, min(3.0, (value - median) / denominator)))
+
+
+def _logistic_score(z_value: float | None) -> float | None:
+    if z_value is None:
+        return None
+    return _finite(100.0 / (1.0 + math.exp(-1.2 * z_value)))
+
+
 def _ols_slope(values: pd.Series, lookback: int) -> float | None:
     tail = values.tail(lookback)
     if len(tail) != lookback or tail.isna().any():
@@ -389,6 +419,17 @@ def compute_range_persistence(
         cutoff=cutoff,
         version=version,
     )
+    global_values = _finite_distribution(global_distribution)
+    sector_values = _finite_distribution(sector_distribution)
+    global_z = _robust_z(current, global_values)
+    sector_z = _robust_z(current, sector_values)
+    shrunk_z = None
+    if sector_z is not None and global_z is not None:
+        alpha = len(sector_values) / (len(sector_values) + 20.0)
+        shrunk_z = _finite(alpha * sector_z + (1.0 - alpha) * global_z)
+    normalized_score = _logistic_score(shrunk_z if shrunk_z is not None else global_z)
+    if normalized_score is None:
+        normalized_score = self_percentile
     result = {
         "range_position": current_position,
         "range_persistence_fast": current_fast,
@@ -397,8 +438,14 @@ def compute_range_persistence(
         "range_persistence_slope_5d": _ols_slope(persistence, slope_lookback),
         "range_persistence_ratio_10d": ratio,
         "range_persistence_self_percentile": self_percentile,
-        "range_persistence_global_percentile": _percentile(current, global_distribution),
-        "range_persistence_sector_percentile": _percentile(current, sector_distribution),
+        "range_persistence_global_percentile": _percentile(current, global_values),
+        "range_persistence_sector_percentile": _percentile(current, sector_values),
+        "range_persistence_global_robust_z": global_z,
+        "range_persistence_sector_robust_z": sector_z,
+        "range_persistence_sector_shrunk_z": shrunk_z,
+        "range_persistence_normalized_score": normalized_score,
+        "range_persistence_global_sample_count": len(global_values),
+        "range_persistence_sector_sample_count": len(sector_values),
         "legacy_control": exact.get("legacy_control"),
         "status": "active",
         "sample_count": len(clean),

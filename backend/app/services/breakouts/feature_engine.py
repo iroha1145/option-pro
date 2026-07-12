@@ -105,9 +105,15 @@ def trim_intraday_bars(
     local_index = clean.index.tz_convert(NEW_YORK)
     event = cutoff.event_at.astimezone(NEW_YORK)
     event_ts = pd.Timestamp(event)
-    aligned = event_ts.floor(f"{interval_minutes}min")
-    visible_through = event_ts if cutoff.include_current_bar else aligned
-    mask = local_index <= visible_through
+    # Yahoo timestamps intraday bars by interval start.  A bar stamped 10:30
+    # contains observations through 10:35, so it is not complete at a 10:30
+    # event cutoff.  Compare bar end times unless a caller explicitly opts in
+    # to the current partial bar.
+    if cutoff.include_current_bar:
+        mask = local_index <= event_ts
+    else:
+        bar_ends = local_index + pd.Timedelta(minutes=interval_minutes)
+        mask = bar_ends <= event_ts
     minutes = local_index.hour * 60 + local_index.minute
     dates = pd.Index(local_index.date)
     close_minutes = np.array([_regular_close_minutes(day) for day in dates])
@@ -186,7 +192,9 @@ def compute_time_of_day_rvol(
     local.index = local.index.tz_convert(NEW_YORK)
     event = cutoff.event_at.astimezone(NEW_YORK)
     target_minute = event.hour * 60 + event.minute
-    if cutoff.session is not MarketSession.REGULAR:
+    if not cutoff.include_current_bar:
+        target_minute = (target_minute // 5) * 5 - 5
+    if cutoff.session is not MarketSession.REGULAR or target_minute < 9 * 60 + 30:
         return empty
     minutes = local.index.hour * 60 + local.index.minute
     regular = local[

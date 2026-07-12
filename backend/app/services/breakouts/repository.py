@@ -1160,7 +1160,8 @@ class BreakoutRepository:
             )
             existing = connection.execute(
                 """
-                SELECT event_id,last_seen_at FROM breakout_events
+                SELECT event_id,first_seen_at,last_seen_at,lifecycle_state,event_json
+                FROM breakout_events
                 WHERE trading_date=? AND ticker=? AND setup_type=? AND pivot_id=?
                 """,
                 (trading_date, ticker, setup, pivot_id),
@@ -1174,6 +1175,8 @@ class BreakoutRepository:
             event["event_at"] = event_at
             event["first_seen_at"] = _timestamp(event.get("first_seen_at") or event_at)
             event["last_seen_at"] = _timestamp(event.get("last_seen_at") or event_at)
+            if existing is not None:
+                event["first_seen_at"] = str(existing["first_seen_at"])
             event["lifecycle_state"] = str(
                 _enum_value(event.get("lifecycle_state")) or "DISCOVERED"
             )
@@ -1248,10 +1251,18 @@ class BreakoutRepository:
         now_text: str,
     ) -> None:
         values = [dict(item) for item in transitions]
+        explicit_event_ids = {
+            aliases.get(str(item.get("event_id") or ""), str(item.get("event_id") or ""))
+            for item in values
+        }
         for event in events:
             previous = _enum_value(event.get("previous_state"))
             current = _enum_value(event.get("lifecycle_state"))
-            if previous is not None and str(previous) != str(current):
+            if (
+                previous is not None
+                and str(previous) != str(current)
+                and str(event["event_id"]) not in explicit_event_ids
+            ):
                 values.append(
                     {
                         "event_id": event["event_id"],
@@ -1843,6 +1854,51 @@ class BreakoutRepository:
             connection.close()
 
     ticker_events = events_for_ticker
+
+    def latest_events_for_tickers(
+        self,
+        tickers: Sequence[str],
+        *,
+        per_ticker: int = 10,
+    ) -> dict[str, list[Mapping[str, Any]]]:
+        """Load prior published events in one bounded read transaction."""
+        symbols = sorted(
+            {
+                str(ticker).strip().upper()
+                for ticker in tickers
+                if str(ticker).strip()
+            }
+        )
+        if not symbols:
+            return {}
+        if len(symbols) > 200:
+            raise ValueError("at most 200 tickers can be loaded")
+        if per_ticker < 1 or per_ticker > 50:
+            raise ValueError("per_ticker must be between 1 and 50")
+        placeholders = ",".join("?" for _ in symbols)
+        connection = self._read_connection()
+        try:
+            self._require_schema(connection)
+            rows = connection.execute(
+                f"""
+                SELECT ticker,event_json FROM breakout_events
+                WHERE ticker IN ({placeholders}) AND EXISTS(
+                    SELECT 1 FROM breakout_scan_events se
+                    JOIN breakout_scan_runs sr ON sr.scan_run_id=se.scan_run_id
+                    WHERE se.event_id=breakout_events.event_id AND sr.status='completed'
+                )
+                ORDER BY ticker,last_seen_at DESC,event_id DESC
+                """,
+                symbols,
+            ).fetchall()
+            result: dict[str, list[Mapping[str, Any]]] = {symbol: [] for symbol in symbols}
+            for row in rows:
+                bucket = result[str(row["ticker"])]
+                if len(bucket) < per_ticker:
+                    bucket.append(_json_loads(row["event_json"], {}))
+            return result
+        finally:
+            connection.close()
 
     def status(self) -> Mapping[str, Any]:
         """Read database, worker and Provider status without creating the file."""

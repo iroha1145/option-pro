@@ -47,8 +47,10 @@ def test_rvol_compares_only_same_minute_of_session() -> None:
         min_sessions=3,
     )
     assert result["rvol_time_of_day"] == 2.0
-    assert result["observed_cumulative_volume"] == 4000.0
-    assert result["expected_cumulative_volume"] == 2000.0
+    # The 09:40 bar is stamped at its start and completes at 09:45, so a
+    # 09:40 cutoff compares cumulative volume through the 09:35 bar.
+    assert result["observed_cumulative_volume"] == 2000.0
+    assert result["expected_cumulative_volume"] == 1000.0
     assert result["comparison_sessions"] == 5
 
 
@@ -83,7 +85,7 @@ def test_zero_volume_is_missing_not_real_zero() -> None:
         min_sessions=3,
     )
     assert result["comparison_sessions"] < 10
-    assert result["expected_cumulative_volume"] == 2000.0
+    assert result["expected_cumulative_volume"] == 1000.0
 
 
 def test_premarket_does_not_use_full_day_rvol() -> None:
