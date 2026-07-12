@@ -3,6 +3,8 @@
 (function () {
   "use strict";
   const N = window.OPTIX_NET;
+  const C = window.OPTIX_CATALYSTS;
+  const Jobs = window.OPTIX_AI_JOBS;
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const view = $("#view");
@@ -499,18 +501,22 @@
 
     <section class="sect" aria-label="候选列表">
       <div class="sect-head" data-reveal style="--reveal-i:0"><span class="sect-head__no">STEP 03</span><h2>候选列表 · 查看优先研究标的</h2><span class="sect-head__rule"></span><span class="sect-head__meta">按综合评分排序 · 点击行展开理由</span></div>
-      <div class="panel panel--flush" data-reveal style="--reveal-i:1">
+      <label class="cat-screener-sort" data-cat-screener-sort hidden>当前页面展示排序
+        <select aria-label="候选展示排序"><option value="deterministic">确定性强势（默认）</option><option value="latest">最近催化剂</option><option value="impact">催化剂绝对影响</option></select>
+        <span>只调整当前列表顺序；正式 ranking_score 与分类不变。</span>
+      </label>
+      <div class="panel panel--flush" data-candidate-list data-reveal style="--reveal-i:1">
         ${rows.length ? rows.map((c, i) => {
           const score = rnd0(c.final_score);
           const verdict = verdictOf(c);
           const pi = persistInfo(c);
           const persistTxt = pi.statusTxt + (pi.prod != null ? " · " + rnd0(pi.prod) : "");
           return `
-        <details class="cand" ${i === 0 ? "open" : ""} data-cand-idx="${i}">
+        <details class="cand" ${i === 0 ? "open" : ""} data-cand-idx="${i}" data-cand-ticker="${esc(c.ticker)}" data-cand-rank="${i}">
           <summary>
             <span class="cand__no">${String(i + 1).padStart(2, "0")}</span>
             ${tik(c.ticker, c.name || c.ticker, c.sector_name || "")}
-            <span class="cand__reason">${esc((c.reasons || [])[0] || "综合评分入选")}<small>区间持续性 · ${esc(persistTxt)}</small></span>
+            <span class="cand__reason">${esc((c.reasons || [])[0] || "综合评分入选")}<small>区间持续性 · ${esc(persistTxt)}</small><span class="cat-screener-summary" data-catalyst-summary="${esc(c.ticker)}"><span class="chip chip--mute">新闻读取中</span></span></span>
             <span class="cand__quote"><b>${fmt(c.price)}</b><span class="${tone(c.change_pct)}">${isNum(c.change_pct) ? (c.change_pct > 0 ? "↑ " : c.change_pct < 0 ? "↓ " : "") + pct(c.change_pct) : "—"}</span></span>
             <span class="scorebar cand__scorecell"><span class="scorebar__track"><span class="scorebar__fill" data-w="${score == null ? 0 : score}"></span></span><b>${score == null ? "—" : score}</b><span class="mono" style="font-size:9px;color:var(--faint)">/100</span></span>
             <span class="chip ${score >= 72 ? "chip--up" : score >= 58 ? "chip--amber" : "chip--mute"}">${esc(verdict)}</span>
@@ -552,6 +558,7 @@
       </div>
     </section>`;
     postRender();
+    if (C) C.mountScreenerBatch(view, rows);
     $$(".fchip[data-k]", view).forEach(b => b.addEventListener("click", () => {
       scr[b.dataset.k === "sector" ? "sector" : b.dataset.k] = b.dataset.v;
       $$(`.fchip[data-k="${b.dataset.k}"]`, view).forEach(x => x.classList.toggle("active", x === b));
@@ -567,7 +574,7 @@
   }
 
   /* ---------- 视图:突破雷达 ---------- */
-  const brk = { state: "", min: 0 };
+  const brk = { state: "", min: 0, ticker: "" };
   const LIFE_TRACK = ["DISCOVERED", "TRIGGERED", "CONFIRMED", "HOLDING", "RETESTING"];
   const lifeIdx = st => ({ DISCOVERED: 0, WATCHING: 0, TRIGGERED: 1, CONFIRMED: 2, HOLDING: 3, EXTENDED: 3, REACCELERATING: 3, RETESTING: 4, RETEST_HELD: 4 })[st];
   const lifeChip = st => st === "FAILED" ? "chip--down" : st === "EXPIRED" ? "chip--mute" : st === "DISCOVERED" || st === "WATCHING" ? "chip--amber" : "chip--up";
@@ -578,6 +585,7 @@
     const evFilters = { limit: 12 };
     if (brk.state) evFilters.lifecycle_state = brk.state;
     if (brk.min) evFilters.min_priority = brk.min;
+    if (brk.ticker) evFilters.ticker = brk.ticker;
     const [cur, stat, evs, strength] = await Promise.all([
       settle(N.breakoutsCurrent(force)),
       settle(N.breakoutsStatus(force)),
@@ -592,8 +600,9 @@
 
     const C = St.brkCurrent, SS = St.brkStatus;
     const liveEvents = [...(C.events || [])].sort((a, b) => (b.alert_priority_score || 0) - (a.alert_priority_score || 0));
-    const lead = liveEvents[0] || null;
-    const queue = (St.brkEvents && St.brkEvents.events || []).filter(e => !lead || e.event_id !== lead.event_id);
+    const filteredEvents = St.brkEvents && St.brkEvents.events || [];
+    const lead = brk.ticker ? (filteredEvents[0] || null) : (liveEvents[0] || null);
+    const queue = filteredEvents.filter(e => !lead || e.event_id !== lead.event_id);
     const paused = C.runtime_status === "paused";
     const reg = St.strength && St.strength.market_regime || null;
     const env = N.STRENGTH_DIMS.map(([key, label]) => ({ k: label, v: reg ? rnd0(reg[key]) : null }));
@@ -619,7 +628,7 @@
     <div class="view-head" data-reveal style="--reveal-i:0">
       <div>
         <p class="view-head__kicker">03 · Breakout Radar</p>
-        <h1>突破雷达<small>全市场粗筛 → 点时复核 → 生命周期跟踪 · 快照 ${N.fmtTime(C.as_of)} · ${liveEvents.length} 条活跃事件</small></h1>
+        <h1>突破雷达<small>${brk.ticker ? `聚焦 ${esc(brk.ticker)} · ` : "全市场粗筛 → "}点时复核 → 生命周期跟踪 · 快照 ${N.fmtTime(C.as_of)} · ${brk.ticker ? filteredEvents.length + " 条匹配事件" : liveEvents.length + " 条活跃事件"}</small></h1>
       </div>
       <div class="view-head__aside" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
         ${sysChips.map(s => dataState(`${s.k} · ${s.v}`, s.warn)).join("")}
@@ -631,6 +640,7 @@
       ${[["", "全部状态"], ["WATCHING", "观察中"], ["TRIGGERED", "已触发"], ["CONFIRMED", "已确认"], ["HOLDING", "保持中"], ["RETESTING", "回踩中"], ["FAILED", "突破失败"]].map(x => `<button class="fchip ${brk.state === x[0] ? "active" : ""}" data-bf-state="${x[0]}">${x[1]}</button>`).join("")}
       <span class="filter-row__label" style="margin-left:10px">优先级</span>
       ${[["不限", 0], ["65 分以上", 65], ["80 分以上", 80]].map(x => `<button class="fchip ${brk.min === x[1] ? "active" : ""}" data-bf-min="${x[1]}">${x[0]}</button>`).join("")}
+      ${brk.ticker ? `<button class="fchip active" data-bf-ticker-clear title="清除股票聚焦">${esc(brk.ticker)} ×</button>` : ""}
       <span style="flex:1"></span>
       <button class="btn btn--sm" id="brk-refresh">刷新快照</button>
     </div>
@@ -681,6 +691,7 @@
     postRender();
     $$("[data-bf-state]", view).forEach(b => b.addEventListener("click", () => { brk.state = b.dataset.bfState; renderBreakouts(); }));
     $$("[data-bf-min]", view).forEach(b => b.addEventListener("click", () => { brk.min = parseInt(b.dataset.bfMin, 10); renderBreakouts(); }));
+    const clearTicker = $("[data-bf-ticker-clear]", view); if (clearTicker) clearTicker.addEventListener("click", () => { brk.ticker = ""; history.replaceState(null, "", "#breakouts"); renderBreakouts(); });
     $("#brk-refresh").addEventListener("click", () => renderBreakouts(true));
     const more = $("#brk-more");
     if (more && St.brkCursor) more.addEventListener("click", async () => {
@@ -963,7 +974,7 @@
           <span class="sect-head__no">${dayInfo.today ? "TODAY" : esc(dayInfo.wd.toUpperCase())}</span>
           <h2 style="font-size:15px">${dayCN(earnDay)}${dayInfo.today ? " · 今天" : " · " + esc(dayInfo.wd)} · ${events.length} 场</h2>
           <span class="sect-head__rule"></span>
-          <span class="sect-head__meta">点击行生成右侧关联分析</span>
+          <span class="sect-head__meta">选择行后按需生成，不会自动调用模型</span>
         </div>
         ${events.map(e => `
         <div class="earn-row ${e.ticker === earnSel ? "selected" : ""}" data-sel="${esc(e.ticker)}" role="button" tabindex="0">
@@ -984,7 +995,7 @@
         </div>` : ""}
       </section>
 
-      <aside class="panel panel--pad" data-reveal style="--reveal-i:3" aria-label="关联影响">
+      <aside class="panel panel--pad" id="earn-impact-panel" data-reveal style="--reveal-i:3" aria-label="关联影响">
         ${renderImpactPanel(impact, earnSel, selEvt, nextDay, nextEvt)}
       </aside>
     </div>`;
@@ -992,58 +1003,56 @@
     $$("[data-day]", view).forEach(b => b.addEventListener("click", () => { earnDay = b.dataset.day; earnSel = null; renderEarnings(); }));
     $$("[data-jump]", view).forEach(b => b.addEventListener("click", () => { earnDay = b.dataset.jump; earnSel = null; renderEarnings(); }));
     $$("[data-sel]", view).forEach(r => {
-      const pick = () => { selectImpact(r.dataset.sel, g0); };
+      const pick = () => { selectImpact(r.dataset.sel); };
       r.addEventListener("click", pick);
       r.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
     });
     $$("[data-go]", view).forEach(g => g.addEventListener("click", e => { e.stopPropagation(); openDrawer(g.dataset.go); }));
-    const retryBtn = $("[data-impact-retry]", view);
-    if (retryBtn) retryBtn.addEventListener("click", () => { delete St.impacts[earnSel]; selectImpact(earnSel, g0); });
+    bindImpactActions();
   }
-  function selectImpact(ticker, g0) {
+  function selectImpact(ticker) {
     earnSel = ticker;
-    const cached = St.impacts[ticker];
-    if (!cached) {
-      St.impacts[ticker] = "loading";
-      N.earningsImpact(ticker).then(
-        d => {
-          if (d && d.error) St.impacts[ticker] = { error: d.summary || d.error, code: d.error };
-          else St.impacts[ticker] = d || { error: "接口返回为空" };
-          if (location.hash.includes("earnings")) renderEarnings();
-        },
-        e => { St.impacts[ticker] = { error: e.message }; if (location.hash.includes("earnings")) renderEarnings(); }
-      );
-    }
+    if (!St.impacts[ticker]) St.impacts[ticker] = { status: "idle" };
     renderEarnings();
   }
   function renderImpactPanel(impact, sel, selEvt, nextDay, nextEvt) {
     if (!sel) return `
       <div class="sect-head" style="margin-bottom:12px"><span class="sect-head__no">IMPACT</span><h2 style="font-size:14.5px">关联影响</h2></div>
       <div class="empty-note" style="padding:22px 8px">
-        <p>按需生成的联动分析</p>
-        <small>左侧选中任意一场财报,由服务端 AI 给出同行竞争、上下游与指数基金的方向线索;结果服务端缓存,不会重复计费。</small>
+        <p>选择一场财报后，可按需生成关联影响分析。</p>
+        <small>选择行只会切换研究对象，不会调用模型；生成任务必须再次点击确认。</small>
         ${nextEvt ? `<button class="btn btn--sm" data-jump="${esc(nextDay.d)}">跳到 ${dayCN(nextDay.d)}</button>` : ""}
       </div>
-      <p class="mono" style="font-size:9.5px;color:var(--faint);margin:8px 0 0;line-height:1.7">关联结果只作研究线索,不构成投资建议。</p>`;
-    if (impact === "loading") return `
-      <div class="sect-head" style="margin-bottom:12px"><span class="sect-head__no">IMPACT</span><h2 style="font-size:14.5px">关联影响 · ${esc(sel)}</h2></div>
-      ${loadingView("AI 正在分析这场财报的关联影响…")}`;
-    if (impact && impact.error) return `
-      <div class="sect-head" style="margin-bottom:12px"><span class="sect-head__no">IMPACT</span><h2 style="font-size:14.5px">关联影响 · ${esc(sel)}</h2></div>
-      <div class="empty-note" style="padding:22px 8px"><p>关联分析生成失败</p><small>${esc(impact.error)}</small><button class="btn btn--sm" data-impact-retry>重试</button></div>`;
-    const impacted = Array.isArray(impact && impact.impacted) ? impact.impacted : [];
+      <p class="mono" style="font-size:9.5px;color:var(--faint);margin:8px 0 0;line-height:1.7">模型推断不代表收益概率，结果不构成投资建议。</p>`;
+    const status = Jobs ? Jobs.normalizeStatus(impact && impact.status || "idle") : (impact && impact.status || "idle");
+    const result = impact && (impact.result || impact.output || impact.analysis) || (impact && (impact.summary || impact.impacted) ? impact : null);
+    const active = status === "pending" || status === "queued" || status === "in_progress" || status === "cancel_requested";
+    const statusCN = { idle: "未生成", pending: "准备排队", queued: "排队中", in_progress: "分析中", cancel_requested: "正在取消", completed: "已完成", failed: "失败", cancelled: "已取消", insufficient_context: "信息不足", budget_blocked: "预算受限" };
+    const elapsed = Jobs && active ? Jobs.elapsed(impact) : null;
+    const statusTone = status === "completed" ? "chip--up" : status === "failed" ? "chip--down" : active ? "chip--amber" : "chip--mute";
+    const retryBlocked = status === "failed" && impact && impact.error_code === "submission_outcome_unknown";
+    const head = `<div class="sect-head" style="margin-bottom:12px"><span class="sect-head__no">IMPACT</span><h2 style="font-size:14.5px">关联影响 · ${esc(sel)}</h2><span class="sect-head__rule"></span><span class="chip ${statusTone}">${esc(statusCN[status] || status)}</span></div>`;
+    if (status === "idle" || status === "cancelled" || status === "failed" || status === "budget_blocked") return `${head}
+      <div class="empty-note" style="padding:22px 8px">
+        <p>${status === "failed" ? "关联分析任务失败" : status === "cancelled" ? "关联分析任务已取消" : status === "budget_blocked" ? "当前预算门禁阻止创建任务" : "尚未生成关联分析"}</p>
+        <small>${esc(impact && (impact.error_message || impact.message || impact.error_code || impact.error) || "生成后将通过后台任务处理，页面不会长时间等待。")}</small>
+        ${status !== "budget_blocked" && !retryBlocked ? `<button class="btn btn--amber btn--sm" id="impact-run" type="button" data-impact-run>${status === "failed" || status === "cancelled" ? "显式重试" : "生成 AI 关联分析"}</button>` : ""}
+        ${retryBlocked ? `<small>上游是否已接受请求无法确认，为避免重复计费，本次不能自动重提。</small>` : ""}
+      </div>`;
+    if (active) return `${head}<div class="empty-note" style="padding:22px 8px"><p>${status === "in_progress" ? "模型正在分析" : "任务正在排队"}</p><small>${impact && (impact.submitted_at || impact.created_at) ? "提交 " + N.fmtDateTime(impact.submitted_at || impact.created_at) : "已交给后台任务"}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · 不显示估算进度</small><button class="btn btn--sm" id="impact-cancel" type="button" data-impact-cancel>取消任务</button></div>`;
+    if (status === "insufficient_context") return `${head}<div class="empty-note" style="padding:22px 8px"><p>信息不足，未生成方向性分析</p><small>服务端没有为缺失信息补造结论，也不会显示假结果。</small></div>`;
+    const impacted = Array.isArray(result && result.impacted) ? result.impacted : Array.isArray(result && result.affected_stocks) ? result.affected_stocks : [];
     const groups = new Map();
     impacted.forEach(en => {
       const rel = N.RELATION_ORDER.includes(en && en.relation) ? en.relation : "other";
       if (!groups.has(rel)) groups.set(rel, []);
       groups.get(rel).push(en);
     });
-    const dirMeta = d => d === "positive" || d === "up" || d === "u" ? ["u", "↑ 利好"] : d === "negative" || d === "down" || d === "d" ? ["d", "↓ 利空"] : ["dim", "— 中性"];
-    return `
-      <div class="sect-head" style="margin-bottom:12px"><span class="sect-head__no">IMPACT</span><h2 style="font-size:14.5px">关联影响 · ${esc(sel)}</h2><span class="sect-head__rule"></span><a class="mono" data-go="${esc(sel)}" role="link" tabindex="0" style="font-size:10px;color:var(--amber);letter-spacing:.08em;cursor:pointer">研究页 ↗</a></div>
+    const dirMeta = d => d === "positive" || d === "bullish" || d === "up" || d === "u" ? ["u", "↑ 正向"] : d === "negative" || d === "bearish" || d === "down" || d === "d" ? ["d", "↓ 负向"] : d === "mixed" ? ["dim", "↕ 多空交织"] : ["dim", "— 中性"];
+    return `${head}
       <p style="margin:0 0 4px;font-size:13px;font-weight:600">${esc(selEvt ? selEvt.name : sel)} · 这场财报可能牵动什么</p>
-      ${impact.summary ? `<p style="margin:0 0 8px;font-family:var(--font-serif);font-size:13.5px;line-height:1.8;color:var(--ink-soft)">${esc(impact.summary)}</p>` : ""}
-      ${impact.expectation ? `<p style="margin:0 0 14px;font-size:12px;line-height:1.7;color:var(--muted)">${esc(impact.expectation)}</p>` : ""}
+      ${result && result.summary ? `<p style="margin:0 0 8px;font-family:var(--font-serif);font-size:13.5px;line-height:1.8;color:var(--ink-soft)">${esc(result.summary)}</p>` : ""}
+      ${result && result.expectation ? `<p style="margin:0 0 14px;font-size:12px;line-height:1.7;color:var(--muted)">${esc(result.expectation)}</p>` : ""}
       ${N.RELATION_ORDER.filter(rel => groups.has(rel)).map(rel => `
         <p class="mono" style="font-size:9.5px;letter-spacing:.16em;color:var(--faint);margin:14px 0 7px">${N.RELATION_CN[rel]}</p>
         ${groups.get(rel).map(it => {
@@ -1055,22 +1064,99 @@
           <span style="color:var(--muted)">${esc((it && it.reason) || "暂无具体说明")}</span>
         </div>`;
         }).join("")}`).join("") || `<p class="empty-note" style="padding:14px">暂未识别到显著关联公司。</p>`}
-      <p class="mono" style="font-size:9.5px;color:var(--faint);margin:14px 0 0;line-height:1.7">AI 生成 · 服务端缓存 · 只作研究线索,不构成投资建议。</p>`;
+      <p class="mono" style="font-size:9.5px;color:var(--faint);margin:14px 0 0;line-height:1.7">${esc(impact && impact.model || "gpt-5.6-terra")} · ${esc(impact && impact.reasoning || "max")} · ${impact && (impact.cache_hit || impact.cached) ? "复用缓存" : "已保存结果"} · ${N.fmtDateTime(impact && (impact.completed_at || impact.generated_at))} · 模型推断，不代表收益概率。</p>`;
+  }
+
+  function selectedEarningsEvent() {
+    if (!earnSel || !St.earnWeek) return null;
+    for (const day of St.earnWeek.week) {
+      const found = day.events.find(event => event.ticker === earnSel);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function updateImpactPanel() {
+    if (!location.hash.includes("earnings")) return;
+    const panel = $("#earn-impact-panel", view);
+    if (!panel) return;
+    const y = window.scrollY;
+    const hadFocus = panel.contains(document.activeElement);
+    const focusId = hadFocus && document.activeElement.id;
+    panel.innerHTML = renderImpactPanel(St.impacts[earnSel], earnSel, selectedEarningsEvent(), null, null);
+    bindImpactActions();
+    const nextFocus = focusId ? document.getElementById(focusId) : null;
+    if (nextFocus && panel.contains(nextFocus)) nextFocus.focus({ preventScroll: true });
+    else if (hadFocus) { panel.tabIndex = -1; panel.focus({ preventScroll: true }); }
+    window.scrollTo({ top: y, behavior: "instant" });
+  }
+
+  function runEarningsImpact() {
+    if (!earnSel || !Jobs) return;
+    const ticker = earnSel;
+    const event = selectedEarningsEvent();
+    const payload = {
+      ticker,
+      force: ["failed", "cancelled"].includes(Jobs.normalizeStatus(St.impacts[ticker] && St.impacts[ticker].status)),
+      name: event && event.name || "",
+      sector: event && event.sector || "",
+      earnings_date: event && event.earnings_date || "",
+      eps_estimate: event && isNum(event.eps_estimate) ? event.eps_estimate : null,
+      revenue_estimate: event && isNum(event.revenue_estimate) ? event.revenue_estimate : null,
+      market_cap: event && isNum(event.market_cap) ? event.market_cap : null,
+    };
+    Jobs.start({
+      scope: "earnings:" + ticker,
+      create: signal => N.createEarningsImpactJob(payload, { signal }),
+      poll: (jobId, signal) => N.aiJob(jobId, { signal }),
+      cancel: jobId => N.cancelAiJob(jobId),
+      onUpdate: job => { St.impacts[ticker] = job; if (earnSel === ticker) updateImpactPanel(); },
+      onComplete: job => { St.impacts[ticker] = job; if (earnSel === ticker) updateImpactPanel(); },
+      onError: error => { St.impacts[ticker] = { status: "failed", error_code: error.code || "job_request_failed", error_message: error.message }; if (earnSel === ticker) updateImpactPanel(); },
+    });
+  }
+
+  function bindImpactActions() {
+    const panel = $("#earn-impact-panel", view);
+    if (!panel) return;
+    const run = $("[data-impact-run]", panel); if (run) run.addEventListener("click", runEarningsImpact);
+    const cancel = $("[data-impact-cancel]", panel); if (cancel) cancel.addEventListener("click", async () => {
+      if (!window.confirm("确认取消这项财报关联分析？已完成的缓存结果不会被删除。")) return;
+      cancel.disabled = true;
+      await Jobs.cancel("earnings:" + earnSel);
+    });
+    $$("[data-go]", panel).forEach(element => element.addEventListener("click", () => openDrawer(element.dataset.go)));
   }
 
   /* ---------- 抽屉 ---------- */
   const drawer = $("#drawer"), backdrop = $("#drawer-backdrop");
   let lastFocusEl = null, drawerTimer = null, paletteTimer = null, drawerGen = 0;
+  const inertTargets = [$(".deck-header"), view, $(".deck-foot"), $(".dock")].filter(Boolean);
 
-  function drawerShell(inner) {
+  function setDrawerBackgroundInert(value) {
+    inertTargets.forEach(element => { element.inert = value; });
+  }
+
+  function drawerShell(inner, options) {
+    const opts = options || {};
     clearTimeout(drawerTimer);
-    lastFocusEl = document.activeElement;
-    drawer.innerHTML = `<div class="drawer__inner"><button class="drawer__close" id="drawer-close" aria-label="关闭详情">✕</button>${inner}</div>`;
+    const wasHidden = drawer.hidden;
+    const oldScroll = opts.preserveScroll ? drawer.scrollTop : 0;
+    const focusId = !wasHidden && drawer.contains(document.activeElement) ? document.activeElement.id : null;
+    if (wasHidden) lastFocusEl = document.activeElement;
+    const labelled = String(inner).includes('id="drawer-title"')
+      ? inner
+      : `<h2 class="sr-only" id="drawer-title">${esc(opts.title || "详情")}</h2>${inner}`;
+    drawer.innerHTML = `<div class="drawer__inner"><button class="drawer__close" id="drawer-close" aria-label="关闭详情">✕</button>${labelled}</div>`;
     drawer.hidden = false; backdrop.hidden = false;
     requestAnimationFrame(() => { drawer.classList.add("open"); backdrop.classList.add("open"); });
     document.body.style.overflow = "hidden";
+    setDrawerBackgroundInert(true);
     $("#drawer-close").addEventListener("click", closeDrawer);
-    $("#drawer-close").focus();
+    drawer.scrollTop = oldScroll;
+    const focusTarget = focusId ? document.getElementById(focusId) : null;
+    if (focusTarget && drawer.contains(focusTarget)) focusTarget.focus({ preventScroll: true });
+    else if (wasHidden) $("#drawer-close").focus({ preventScroll: true });
   }
 
   /* 候选证据抽屉(选股「查看完整证据」— 数据即扫描行本身) */
@@ -1175,6 +1261,11 @@
       </section>
 
       <section class="sect">
+        <div class="sect-head"><span class="sect-head__no">NEWS</span><h2>新闻催化剂</h2><span class="sect-head__rule"></span><span class="sect-head__meta">展示信息 · 不参与排序</span></div>
+        <div class="cat-inline-panel" id="cand-catalysts"></div>
+      </section>
+
+      <section class="sect">
         <div class="sect-head"><span class="sect-head__no">AUDIT</span><h2>数据覆盖与降级</h2><span class="sect-head__rule"></span></div>
         ${covRows.length ? `
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
@@ -1190,6 +1281,7 @@
       </div>`);
     animateBars(drawer);
     $("#cevd-open-research").addEventListener("click", () => openDrawer(c.ticker));
+    if (C) C.mountTickerPanel($("#cand-catalysts", drawer), c.ticker, { limit: 3, windowHours: 72, context: "screener" });
   }
 
   /* 事件证据抽屉(突破雷达 — 事件详情 + 该股历史) */
@@ -1293,6 +1385,11 @@
       </section>
 
       <section class="sect">
+        <div class="sect-head"><span class="sect-head__no">CATALYST</span><h2>新闻催化剂</h2><span class="sect-head__rule"></span><span class="sect-head__meta">最近 3 条 · 不改变突破判断</span></div>
+        <div class="cat-inline-panel" id="evd-catalysts"></div>
+      </section>
+
+      <section class="sect">
         <div class="sect-head"><span class="sect-head__no">RECENT</span><h2>该股票近期事件</h2><span class="sect-head__rule"></span></div>
         ${recent.length ? recent.map(r2 => `
         <div class="evd-row" data-evt2="${esc(r2.event_id)}" style="cursor:pointer">
@@ -1322,6 +1419,7 @@
     animateBars(drawer);
     $("#evd-open-research").addEventListener("click", () => openDrawer(L.ticker));
     $$("[data-evt2]", drawer).forEach(el => el.addEventListener("click", () => openEvidenceDrawer(el.dataset.evt2)));
+    if (C) C.mountTickerPanel($("#evd-catalysts", drawer), L.ticker, { limit: 3, windowHours: 72, asOf: L.event_at, context: "breakout" });
   }
 
   /* 指数抽屉:行情 + 大盘强弱观察 */
@@ -1571,6 +1669,11 @@
       </section>
 
       <section class="sect">
+        <div class="sect-head"><span class="sect-head__no">NEWS</span><h2>新闻催化</h2><span class="sect-head__rule"></span><span class="sect-head__meta">最近 72 小时 · 展示信息</span></div>
+        <div class="cat-inline-panel" id="stock-catalysts"></div>
+      </section>
+
+      <section class="sect">
         <div class="sect-head"><span class="sect-head__no">SIG</span><h2>技术信号 · 顶底分析</h2><span class="sect-head__rule"></span><span class="sect-head__meta">${S2 ? "覆盖 " + Math.round(((sc.coverage || {}).top_ratio || 0) * 100) + "%" : deep.ok ? "" : "深度信号读取失败"}</span></div>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
           ${g4.map(g5 => `
@@ -1620,28 +1723,71 @@
         <div class="sect-head"><span class="sect-head__no">AI</span><h2>智能异动解读</h2><span class="sect-head__rule"></span><span class="sect-head__meta">按需生成 · 调用模型</span></div>
         <div id="ai-box">
           ${alerts.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px">${alerts.slice(0, 3).map(a2 => `<span class="chip chip--amber"><i></i>${fmt(a2.strike)} ${a2.type === "call" ? "Call" : "Put"} · 量比 ${isNum(a2.vol_oi_ratio) ? a2.vol_oi_ratio.toFixed(1) : "—"}×</span>`).join("")}</div>` : ""}
-          <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.7">AI 解读会读取当前技术信号与顶底分量,由服务端调用模型生成,结果缓存;不点击不产生调用。</p>
+          <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.7">模型解读通过后台持久任务生成；选择股票和打开抽屉都不会产生调用。</p>
           <button class="btn btn--amber btn--sm" id="ai-run">生成 AI 解读</button>
         </div>
       </section>`);
     measurePaths(drawer); animateBars(drawer); countUp(drawer);
     bindDrawerRanges(ticker, "drawer-g", dg);
+    if (C) C.mountTickerPanel($("#stock-catalysts", drawer), ticker, { limit: 6, windowHours: 72, context: "stock" });
     const aiBtn = $("#ai-run", drawer);
-    if (aiBtn) aiBtn.addEventListener("click", async () => {
-      const box = $("#ai-box", drawer);
-      box.innerHTML = loadingView("模型正在解读 " + ticker + " 的信号结构…");
-      const r = await settle(N.aiStock(ticker));
-      if (dg !== drawerGen) return;
-      if (!r.ok) { box.innerHTML = inlineErr("AI 解读生成失败", r.e.message) + `<button class="btn btn--sm" id="ai-retry" style="margin-top:10px">重试</button>`; const rb = $("#ai-retry", drawer); if (rb) rb.addEventListener("click", () => aiBtn.click()); return; }
-      const a3 = r.v && (r.v.analysis && typeof r.v.analysis === "object" ? r.v.analysis : r.v) || {};
-      const text = a3.summary || a3.analysis || a3.text || (typeof r.v === "string" ? r.v : "");
-      const badges = [a3.confidence && ("把握" + esc(String(a3.confidence))), a3.direction && ("倾向" + esc(String(a3.direction)))].filter(Boolean);
-      box.innerHTML = `
-        ${badges.length ? `<div style="display:flex;gap:8px;margin-bottom:11px">${badges.map(b2 => `<span class="chip chip--amber"><i></i>${b2}</span>`).join("")}</div>` : ""}
-        <p style="margin:0;font-family:var(--font-serif);font-size:14.5px;line-height:1.9;color:var(--ink-soft)">${esc(text || "模型未返回文本内容")}</p>
-        ${a3.risk_note ? `<p style="margin:10px 0 0;font-size:12px;color:var(--down)">风险提示:${esc(a3.risk_note)}</p>` : ""}
-        <p class="mono" style="font-size:9.5px;color:var(--faint);margin:12px 0 0">服务端生成 · ${N.fmtTime(new Date().toISOString())} · 结果缓存</p>`;
-    });
+    if (aiBtn && Jobs) {
+      const scope = "signal-drawer:" + ticker;
+      let startSignalJob = null;
+      const biasCN = value => ({ bullish_continuation: "多头延续", healthy_rotation: "健康轮动", trend_pullback: "趋势回调", range_consolidation: "区间整理", tactical_top_risk: "战术顶部风险", dip_buy_setup: "回调观察", capitulation_bottom_setup: "恐慌底部观察", bearish_breakdown: "空头破位", insufficient_data: "数据不足" })[value] || value || "—";
+      const renderOptionJob = job => {
+        if (dg !== drawerGen) return;
+        const box = $("#ai-box", drawer); if (!box) return;
+        const hadFocus = box.contains(document.activeElement);
+        const focusId = hadFocus && document.activeElement.id;
+        const restoreFocus = () => {
+          const next = focusId ? document.getElementById(focusId) : null;
+          if (next && box.contains(next)) next.focus({ preventScroll: true });
+          else if (hadFocus) { box.tabIndex = -1; box.focus({ preventScroll: true }); }
+        };
+        const status = Jobs.normalizeStatus(job.status);
+        const active = Jobs.isActive(status);
+        if (active) {
+          const elapsed = Jobs.elapsed(job);
+          box.innerHTML = `<span class="chip chip--amber"><i></i>${status === "in_progress" ? "分析中" : "排队中"}</span><p style="margin:10px 0 12px;font-size:12px;color:var(--muted)">${job.submitted_at ? "提交 " + N.fmtDateTime(job.submitted_at) : "后台任务已创建"}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · 不显示估算进度</p>${job.cancellable !== false ? `<button class="btn btn--sm" id="option-ai-cancel">取消任务</button>` : ""}`;
+          const cancel = $("#option-ai-cancel", box); if (cancel) cancel.addEventListener("click", async () => { if (!window.confirm("确认取消这项异动解读任务？")) return; cancel.disabled = true; await Jobs.cancel(scope); });
+          restoreFocus();
+          return;
+        }
+        if (status === "completed") {
+          const result = job.result || {};
+          const evidence = Array.isArray(result.top_evidence) ? result.top_evidence : [];
+          const confirmations = Array.isArray(result.confirmation_signals) ? result.confirmation_signals : [];
+          const invalidations = Array.isArray(result.invalidation_signals) ? result.invalidation_signals : [];
+          const eventRisks = Array.isArray(result.event_risks) ? result.event_risks : [];
+          box.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px"><span class="chip chip--amber"><i></i>模型推断</span><span class="chip chip--mute">${esc(biasCN(result.final_bias))}</span><span class="chip chip--mute">周期 ${esc(result.horizon || "—")}</span><span class="chip chip--mute">趋势把握 ${isNum(result.trend_bias_confidence) ? Math.round(result.trend_bias_confidence) + "/100" : "—"} · 非胜率</span></div><p style="margin:0 0 8px;font-family:var(--font-serif);font-size:14.5px;line-height:1.9;color:var(--ink-soft)">${esc(result.summary || "模型未返回摘要")}</p>${result.dominant_regime ? `<p style="margin:0 0 10px;font-size:12px;line-height:1.8;color:var(--muted)">主导结构：${esc(result.dominant_regime)} · 数据质量 ${isNum(result.data_quality) ? Math.round(result.data_quality) + "/100" : "—"}</p>` : ""}${evidence.length ? `<details class="fold"><summary>查看模型证据与确认条件</summary><div class="fold__body"><p class="mono" style="font-size:9.5px;color:var(--faint)">顶部证据</p><ul style="font-size:12px;color:var(--muted)">${evidence.slice(0, 5).map(item => `<li>${esc(item)}</li>`).join("")}</ul>${confirmations.length ? `<p class="mono" style="font-size:9.5px;color:var(--faint)">确认信号</p><ul style="font-size:12px;color:var(--muted)">${confirmations.slice(0, 5).map(item => `<li>${esc(item)}</li>`).join("")}</ul>` : ""}${invalidations.length ? `<p class="mono" style="font-size:9.5px;color:var(--faint)">失效信号</p><ul style="font-size:12px;color:var(--muted)">${invalidations.slice(0, 5).map(item => `<li>${esc(item)}</li>`).join("")}</ul>` : ""}</div></details>` : ""}${eventRisks.length ? `<p style="margin:10px 0 0;font-size:12px;color:var(--down)">事件风险：${eventRisks.slice(0, 3).map(esc).join("；")}</p>` : ""}<p class="mono" style="font-size:9.5px;color:var(--faint);margin:12px 0 0">${esc(job.model || "gpt-5.6-terra")} · ${esc(job.reasoning || "max")} · ${job.cached ? "复用缓存" : "已保存结果"} · ${N.fmtDateTime(job.completed_at)} · 模型分数不是收益概率，不构成投资建议</p>`;
+          restoreFocus();
+          return;
+        }
+        if (status === "analysis_required") {
+          box.innerHTML = `<div class="empty-note" style="padding:18px 8px"><p>尚未创建异动解读任务</p><small>服务端要求重新明确提交；这不是模型分析失败。</small><button class="btn btn--sm" id="option-ai-retry">重新提交任务</button></div>`;
+          const retry = $("#option-ai-retry", box); if (retry) retry.addEventListener("click", () => startSignalJob(false));
+          restoreFocus();
+          return;
+        }
+        const retryBlocked = status === "failed" && job.error_code === "submission_outcome_unknown";
+        box.innerHTML = `${inlineErr(status === "insufficient_context" ? "信息不足，未生成方向性解读" : status === "cancelled" ? "异动解读任务已取消" : "异动解读任务失败", job.error_code || "服务端没有发布分析结果")}${retryBlocked ? `<p class="mono" style="font-size:9.5px;color:var(--down);margin:10px 0 0">远端是否已接受请求尚不确定；为避免重复计费，此处禁止重提，请先核对任务记录。</p>` : `<button class="btn btn--sm" id="option-ai-retry" style="margin-top:10px">显式重试</button>`}`;
+        const retry = $("#option-ai-retry", box); if (retry) retry.addEventListener("click", () => startSignalJob(true));
+        restoreFocus();
+      };
+      startSignalJob = force => {
+        Jobs.start({
+          scope,
+          create: signal => N.aiStock(ticker, force, { signal }),
+          poll: (jobId, signal) => N.aiJob(jobId, { signal }),
+          cancel: jobId => N.cancelAiJob(jobId),
+          onUpdate: renderOptionJob,
+          onComplete: renderOptionJob,
+          onError: error => renderOptionJob({ status: error.status === 409 ? "analysis_required" : "failed", error_code: error.code || error.message }),
+        });
+      };
+      aiBtn.addEventListener("click", () => startSignalJob(false));
+    }
   }
 
   function bindDrawerRanges(ticker, gid, dg) {
@@ -1667,17 +1813,43 @@
     }));
   }
   function closeDrawer() {
+    if (drawer.hidden) return;
     drawerGen++;
     drawer.classList.remove("open"); backdrop.classList.remove("open");
     document.body.style.overflow = "";
+    setDrawerBackgroundInert(false);
+    if (C) C.onDrawerClosed();
+    if (Jobs) Jobs.stopPrefix("signal-drawer:");
     drawerTimer = setTimeout(() => { drawer.hidden = true; backdrop.hidden = true; }, REDUCED ? 0 : 650);
-    if (lastFocusEl) lastFocusEl.focus();
+    if (lastFocusEl && lastFocusEl.isConnected) lastFocusEl.focus({ preventScroll: true });
   }
   backdrop.addEventListener("click", closeDrawer);
+  window.OPTIX_DECK = {
+    openStockDrawer: openDrawer,
+    drawer: {
+      open: drawerShell,
+      close: closeDrawer,
+      scrollTop: () => drawer.scrollTop,
+      restoreScroll: value => { if (!drawer.hidden && Number.isFinite(value)) drawer.scrollTop = value; },
+      isOpen: () => !drawer.hidden,
+    },
+  };
   document.addEventListener("keydown", e => {
+    if (e.key === "Tab" && !drawer.hidden) {
+      const focusable = $$("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])", drawer).filter(element => !element.hidden && element.getClientRects().length);
+      if (!focusable.length) { e.preventDefault(); return; }
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
     if (e.key === "Escape") {
       if (!pback.hidden) closePalette();
       else if (!drawer.hidden) closeDrawer();
+      else if ($(".deck-nav").classList.contains("open")) {
+        $(".deck-nav").classList.remove("open");
+        $("#menu-toggle").setAttribute("aria-expanded", "false");
+        $("#menu-toggle").focus({ preventScroll: true });
+      }
     }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openPalette(); }
   });
@@ -1689,7 +1861,7 @@
     clearTimeout(paletteTimer);
     pback.hidden = false; requestAnimationFrame(() => pback.classList.add("open"));
     pinput.value = "";
-    presults.innerHTML = `<p class="palette__hint">输入代码或公司名(中文/英文均可),回车打开第一个结果。</p>`;
+    presults.innerHTML = `<a class="palette-item" href="#catalysts"><span class="tik__logo" aria-hidden="true">06</span><span><span class="tik__sym">催化剂中心</span><br><span class="tik__name">新闻、股票影响、经济日历与来源健康</span></span><span class="chip chip--amber">打开 →</span></a><p class="palette__hint">输入代码或公司名(中文/英文均可),回车打开第一个结果。</p>`;
     pinput.focus();
   }
   function closePalette() {
@@ -1699,7 +1871,7 @@
   }
   async function runSearch(q) {
     const sg = ++searchGen;
-    if (!q) { presults.innerHTML = `<p class="palette__hint">输入代码或公司名(中文/英文均可)。</p>`; return; }
+    if (!q) { presults.innerHTML = `<a class="palette-item" href="#catalysts"><span class="tik__logo" aria-hidden="true">06</span><span><span class="tik__sym">催化剂中心</span><br><span class="tik__name">新闻与宏观事件</span></span><span class="chip chip--amber">打开 →</span></a><p class="palette__hint">输入代码或公司名(中文/英文均可)。</p>`; return; }
     presults.innerHTML = `<p class="palette__hint">正在搜索"${esc(q)}"…</p>`;
     const r = await settle(N.search(q));
     if (sg !== searchGen) return;
@@ -1791,22 +1963,61 @@
   }
 
   /* ---------- 路由 ---------- */
-  const routes = { watchlist: renderWatchlist, screener: () => renderScreener(), breakouts: () => renderBreakouts(), sectors: renderSectors, earnings: () => renderEarnings() };
+  function catalystRouteParams() {
+    const hash = (location.hash || "#catalysts").slice(1);
+    const query = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+    return new URLSearchParams(query);
+  }
+  function renderCatalysts() {
+    if (!C) { view.innerHTML = errorView("催化剂页面未能载入", "生产模块 deck-catalysts.js 不可用"); return; }
+    C.renderPage({ view, params: catalystRouteParams(), postRender, openStock: openDrawer });
+  }
+  const routes = { watchlist: renderWatchlist, screener: () => renderScreener(), breakouts: () => renderBreakouts(), sectors: renderSectors, earnings: () => renderEarnings(), catalysts: renderCatalysts };
+  const routeTitles = { watchlist: "自选观察", screener: "选股", breakouts: "突破雷达", sectors: "板块", earnings: "财报日历", catalysts: "催化剂中心" };
+  let activeRoute = null;
   function route() {
     const key = (location.hash || "#watchlist").slice(1).split("?")[0];
+    if (C) C.abortPageEnhancements();
     if (key.startsWith("detail/")) { /* 旧版深链:#detail/TICKER → 自选 + 研究抽屉 */
       const tkr = decodeURIComponent(key.slice(7)).trim();
+      const renderBackground = activeRoute !== "watchlist" || !St.watch;
+      activeRoute = "watchlist";
+      if (C) C.leaveRoute();
+      if (Jobs) Jobs.stopPrefix("earnings:");
       closePalette();
-      $$(".deck-nav a, .dock a").forEach(a => a.classList.toggle("active", a.dataset.route === "watchlist"));
-      if (!St.watch) renderWatchlist();
+      $$(".deck-nav a, .dock a").forEach(a => {
+        const current = a.dataset.route === "watchlist";
+        a.classList.toggle("active", current);
+        if (current) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+      });
+      document.title = `${tkr ? tkr.toUpperCase() + " · 标的研究" : routeTitles.watchlist} · Optix Pro`;
+      $(".deck-nav").classList.remove("open");
+      $("#menu-toggle").setAttribute("aria-expanded", "false");
+      if (renderBackground) renderWatchlist();
       if (tkr) openDrawer(tkr.toUpperCase());
       return;
     }
     if (key && !routes[key]) { view.focus({ preventScroll: true }); return; }
+    if (activeRoute === "catalysts" && key !== "catalysts" && C) C.leaveRoute();
+    if (activeRoute === "earnings" && key !== "earnings" && Jobs) Jobs.stopPrefix("earnings:");
     if (!drawer.hidden) closeDrawer();
     closePalette();
     const fn = routes[key] || renderWatchlist;
-    $$(".deck-nav a, .dock a").forEach(a => a.classList.toggle("active", a.dataset.route === (routes[key] ? key : "watchlist")));
+    const currentRoute = routes[key] ? key : "watchlist";
+    activeRoute = currentRoute;
+    if (currentRoute === "breakouts") {
+      const ticker = catalystRouteParams().get("ticker") || "";
+      brk.ticker = ticker.trim().toUpperCase().replace(/[^A-Z0-9.^-]/g, "").slice(0, 15);
+    }
+    $$(".deck-nav a, .dock a").forEach(a => {
+      const current = a.dataset.route === currentRoute;
+      a.classList.toggle("active", current);
+      if (current) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    });
+    document.title = `${routeTitles[currentRoute]} · Optix Pro`;
+    const menu = $("#menu-toggle");
+    menu.classList.toggle("has-current-route", currentRoute === "catalysts");
+    menu.setAttribute("aria-label", currentRoute === "catalysts" ? "打开导航，当前页面：催化剂" : "打开导航");
     $(".deck-nav").classList.remove("open");
     $("#menu-toggle").setAttribute("aria-expanded", "false");
     window.scrollTo({ top: 0, behavior: "instant" });

@@ -7,18 +7,68 @@
   const cache = new Map();     // key → { at, ttl, data }
   const inflight = new Map();  // key → Promise
 
-  /* 并发闸:上游为单实例服务,超过 3 路并发容易被网关判定过载 */
-  const MAX_CONCURRENT = 3;
-  let running = 0;
-  const waiters = [];
-  function acquire() {
-    if (running < MAX_CONCURRENT) { running++; return Promise.resolve(); }
-    return new Promise(res => waiters.push(res));
+  function appToken() {
+    let token = "";
+    try {
+      token = sessionStorage.getItem("optix.app.token") || "";
+    } catch (error) { /* 某些隐私模式禁用会话存储 */ }
+    if (token) return token;
+    try {
+      const legacy = localStorage.getItem("optix.app.token") || "";
+      if (legacy) {
+        try { sessionStorage.setItem("optix.app.token", legacy); } catch (error) { /* 仅本标签页使用 */ }
+        localStorage.removeItem("optix.app.token");
+      }
+      return legacy;
+    } catch (error) { return ""; }
   }
-  function release() {
-    const next = waiters.shift();
-    if (next) next(); else running--;
+
+  function requestHeaders(hasBody) {
+    const headers = { Accept: "application/json" };
+    if (hasBody) headers["Content-Type"] = "application/json";
+    const token = appToken();
+    if (token) headers.Authorization = "Bearer " + token;
+    return headers;
   }
+
+  /*
+   * 普通数据和任务轮询使用不同的并发闸。长任务状态查询只能占用低优先级
+   * 的 2 路通道，不会挤占行情、突破雷达或财报的 3 路读取通道。
+   */
+  function makeGate(limit) {
+    let running = 0;
+    const waiters = [];
+    return {
+      acquire(signal) {
+        if (signal && signal.aborted) return Promise.reject(new DOMException("请求已取消", "AbortError"));
+        if (running < limit) { running += 1; return Promise.resolve(); }
+        return new Promise((resolve, reject) => {
+          const waiter = { resolve, reject, aborted: false };
+          if (signal) {
+            waiter.onAbort = () => {
+              waiter.aborted = true;
+              reject(new DOMException("请求已取消", "AbortError"));
+            };
+            signal.addEventListener("abort", waiter.onAbort, { once: true });
+          }
+          waiters.push(waiter);
+        });
+      },
+      release() {
+        let next = waiters.shift();
+        while (next && next.aborted) next = waiters.shift();
+        if (!next) { running = Math.max(0, running - 1); return; }
+        if (next.onAbort) {
+          /* signal 会在 acquire 的闭包内被垃圾回收；这里只需结束排队状态。 */
+          next.aborted = false;
+        }
+        next.resolve();
+      },
+      stats() { return { running, queued: waiters.filter(w => !w.aborted).length, limit }; },
+    };
+  }
+  const normalGate = makeGate(3);
+  const jobGate = makeGate(2);
 
   /* 各端点缓存时长(毫秒);与服务端缓存节奏对齐,避免无谓请求 */
   const TTL = [
@@ -36,51 +86,100 @@
     [/^\/api\/sectors/, 600e3],
     [/^\/api\/earnings\/upcoming/, 1800e3],
     [/^\/api\/ai\/earnings-impact/, 1800e3],
+    [/^\/api\/catalysts\/status/, 60e3],
+    [/^\/api\/catalysts\/feed/, 120e3],
+    [/^\/api\/catalysts\/tickers\//, 120e3],
+    [/^\/api\/catalysts\/calendar/, 300e3],
+    [/^\/api\/catalysts\/news\//, 120e3],
     [/^\/api\/options\//, 120e3],
   ];
   const ttlFor = p => { for (const [re, t] of TTL) if (re.test(p)) return t; return 60e3; };
 
+  const abortableDelay = (ms, signal) => new Promise((resolve, reject) => {
+    if (signal && signal.aborted) { reject(new DOMException("请求已取消", "AbortError")); return; }
+    const timer = setTimeout(resolve, ms);
+    if (signal) signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(new DOMException("请求已取消", "AbortError"));
+    }, { once: true });
+  });
+
+  function responseError(resp, body) {
+    const detail = body && (body.detail || body.message || body.error);
+    const message = typeof detail === "string"
+      ? detail
+      : detail && typeof detail.message === "string"
+        ? detail.message
+        : "HTTP " + resp.status;
+    const err = new Error(message);
+    err.status = resp.status;
+    err.code = body && (body.code || (body.error && body.error.code) || (body.detail && body.detail.code)) || null;
+    err.retryable = !!(body && (body.retryable || (body.error && body.error.retryable) || (body.detail && body.detail.retryable)));
+    err.retryAfter = Number(body && (
+      body.retry_after_seconds || body.retry_after ||
+      (body.error && (body.error.retry_after_seconds || body.error.retry_after)) ||
+      (body.detail && (body.detail.retry_after_seconds || body.detail.retry_after))
+    )) || Number(resp.headers.get("Retry-After")) || null;
+    return err;
+  }
+
+  async function fetchJSON(path, options) {
+    const opts = options || {};
+    const gate = opts.lowPriority ? jobGate : normalGate;
+    await gate.acquire(opts.signal);
+    try {
+      let resp = null, body = null;
+      const attempts = opts.retry5xx === false ? 1 : 2;
+      for (let attempt = 0; attempt < attempts; attempt += 1) {
+        resp = await fetch(path, {
+          method: opts.method || "GET",
+          headers: requestHeaders(opts.body !== undefined),
+          body: opts.body,
+          signal: opts.signal,
+          credentials: "same-origin",
+          redirect: "error",
+        });
+        body = null;
+        try { body = await resp.json(); } catch (e) { /* 非 JSON 响应由统一错误处理 */ }
+        if (resp.status >= 500 && attempt + 1 < attempts) {
+          await abortableDelay(1400, opts.signal);
+          continue;
+        }
+        break;
+      }
+      if (!resp.ok) throw responseError(resp, body);
+      return body;
+    } finally {
+      gate.release();
+    }
+  }
+
   async function jget(path, opts) {
-    const force = opts && opts.force;
+    opts = opts || {};
+    const force = opts.force;
     const hit = cache.get(path);
-    if (!force && hit && Date.now() - hit.at < hit.ttl) return hit.data;
-    if (inflight.has(path)) return inflight.get(path);
-    const p = (async () => {
-      await acquire();
-      try {
-        let resp, body;
-        for (let attempt = 0; attempt < 2; attempt++) {
-          resp = await fetch(path, { headers: { Accept: "application/json" } });
-          body = null;
-          try { body = await resp.json(); } catch (e) { /* 非 JSON 响应 */ }
-          if (resp.status >= 500 && attempt === 0) { await new Promise(r => setTimeout(r, 1400)); continue; }
-          break;
-        }
-        if (!resp.ok) {
-          const detail = body && body.detail ? (typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail)) : ("HTTP " + resp.status);
-          const err = new Error(detail); err.status = resp.status; throw err;
-        }
-        cache.set(path, { at: Date.now(), ttl: ttlFor(path), data: body });
-        return body;
-      } finally { release(); }
-    })().finally(() => inflight.delete(path));
-    inflight.set(path, p);
+    if (!force && !opts.noCache && hit && Date.now() - hit.at < hit.ttl) return hit.data;
+    const canCoalesce = !opts.signal && !opts.noCache && !opts.lowPriority;
+    if (canCoalesce && inflight.has(path)) return inflight.get(path);
+    const p = fetchJSON(path, opts).then(body => {
+      if (!opts.noCache) cache.set(path, { at: Date.now(), ttl: ttlFor(path), data: body });
+      return body;
+    }).finally(() => { if (canCoalesce) inflight.delete(path); });
+    if (canCoalesce) inflight.set(path, p);
     return p;
   }
 
-  async function jpost(path, payload) {
-    const resp = await fetch(path, {
+  async function jpost(path, payload, opts) {
+    opts = opts || {};
+    return fetchJSON(path, Object.assign({}, opts, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(payload || {}),
-    });
-    let body = null;
-    try { body = await resp.json(); } catch (e) { /* ignore */ }
-    if (!resp.ok) {
-      const detail = body && body.detail ? String(body.detail) : ("HTTP " + resp.status);
-      const err = new Error(detail); err.status = resp.status; throw err;
-    }
-    return body;
+      retry5xx: opts.retry5xx === true,
+    }));
+  }
+
+  function invalidateCache(prefix) {
+    for (const key of cache.keys()) if (!prefix || key.startsWith(prefix)) cache.delete(key);
   }
 
   const enc = encodeURIComponent;
@@ -182,11 +281,34 @@
   const sectorIV = id => jget("/api/sectors/" + enc(id) + "/iv-ranking");
   const earnings = force => jget("/api/earnings/upcoming", { force });
   const earningsImpact = t => jget("/api/ai/earnings-impact/" + enc(t));
+  const catalystStatus = (force, signal) => jget("/api/catalysts/status", { force, signal });
+  const catalystFeed = (params, options) => jget("/api/catalysts/feed" + qs(params), options || {});
+  const catalystNews = (id, params, options) => jget("/api/catalysts/news/" + enc(id) + qs(params), options || {});
+  const tickerCatalysts = (t, params, options) => jget("/api/catalysts/tickers/" + enc(t) + qs(params), options || {});
+  const catalystBatch = (tickers, params, options) => jpost("/api/catalysts/tickers/batch", Object.assign({ tickers }, params || {}), options || {});
+  const catalystCalendar = (params, options) => jget("/api/catalysts/calendar" + qs(params), options || {});
+  const catalystRefresh = options => jpost("/api/catalysts/refresh", {}, options || {}).then(body => {
+    invalidateCache("/api/catalysts/");
+    return body;
+  });
+  const createCatalystAnalysis = (id, force, options) => jpost("/api/catalysts/news/" + enc(id) + "/analysis", { force: !!force }, options || {});
+  const catalystAnalysisJob = (id, options) => jget("/api/catalysts/analysis-jobs/" + enc(id), Object.assign({ noCache: true, lowPriority: true, retry5xx: false }, options || {}));
+  const cancelCatalystAnalysisJob = (id, options) => jpost("/api/catalysts/analysis-jobs/" + enc(id) + "/cancel", {}, Object.assign({ lowPriority: true }, options || {}));
+  const createEarningsImpactJob = (payload, options) => jpost("/api/ai/jobs/earnings-impact", payload || {}, options || {});
+  const createOptionAlertsJob = (payload, options) => jpost("/api/ai/jobs/option-alerts", payload || {}, options || {});
+  const aiJob = (id, options) => jget("/api/ai/jobs/" + enc(id), Object.assign({ noCache: true, lowPriority: true, retry5xx: false }, options || {}));
+  const cancelAiJob = (id, options) => jpost("/api/ai/jobs/" + enc(id) + "/cancel", { confirm: true }, Object.assign({ lowPriority: true }, options || {}));
   const unusual = () => jget("/api/options/unusual");
   const expirations = t => jget("/api/options/" + enc(t) + "/expirations");
   const chain = (t, exp) => jget("/api/options/" + enc(t) + "/chain" + qs({ expiration: exp }));
   const search = q => jget("/api/stocks/search" + qs({ q }));
-  const aiStock = t => jpost("/api/signals/stock/" + enc(t) + "/ai-analysis", {});
+  const aiStock = (t, force, options) => {
+    if (force && typeof force === "object") {
+      options = force;
+      force = false;
+    }
+    return jpost("/api/signals/stock/" + enc(t) + "/ai-analysis", { force: !!force }, options || {});
+  };
 
   /* ---------- 财报周结构(美东日历日) ---------- */
   function etToday() {
@@ -309,13 +431,17 @@
   }
 
   window.OPTIX_NET = {
-    jget, jpost, cnAmount, indexInfo, INDEX_NAMES, CHART_RANGES,
+    jget, jpost, invalidateCache, cnAmount, indexInfo, INDEX_NAMES, CHART_RANGES,
     indices, marketStatus, watchlist, stock, stockSignals, signalDeep, signalsMarket, strengthMarket,
     profiles, chart, scan, breakoutsCurrent, breakoutsStatus, breakoutsEvents, breakoutEventDetail, breakoutTicker,
     sectors, sectorIV, earnings, earningsImpact, unusual, expirations, chain, search, aiStock,
+    catalystStatus, catalystFeed, catalystNews, tickerCatalysts, catalystBatch, catalystCalendar, catalystRefresh,
+    createCatalystAnalysis, catalystAnalysisJob, cancelCatalystAnalysisJob,
+    createEarningsImpactJob, createOptionAlertsJob, aiJob, cancelAiJob,
     buildWeek, etToday,
     LIFECYCLE_CN, SETUP_CN, SESSION_CN, shapeCN, STRENGTH_DIMS, TOP_BREAKDOWN_CN, BOTTOM_BREAKDOWN_CN,
     RELATION_CN, RELATION_ORDER, PROFILE_CN, TIMEFRAME_CN, scanComponentCN, srcCN,
     fmtTime, fmtDateTime, fmtET, ago,
+    _queueStats: () => ({ normal: normalGate.stats(), jobs: jobGate.stats() }),
   };
 })();
