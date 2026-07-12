@@ -1662,9 +1662,13 @@ def _score_ticker_frames_sync(
         if row is None:
             skipped[symbol] = "insufficient_history"
             continue
-        range_feature = compute_range_persistence(
-            hist,
-            cutoff=completed_cutoff,
+        range_feature = (
+            {"status": "disabled", "version": RANGE_PERSISTENCE_VERSION}
+            if range_mode == "disabled"
+            else compute_range_persistence(
+                hist,
+                cutoff=completed_cutoff,
+            )
         )
         scored = _intrinsic_row(
             row,

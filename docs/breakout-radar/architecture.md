@@ -179,7 +179,8 @@ Dockerfile、.env.example、依赖锁、迁移版本和公共 API 模型。
 
 - 旧字段不删除，旧列表和市场接口不改路径。
 - 旧 strength 扫描保持行为；新增显式 ticker 集合入口供 Worker 使用。
-- 单股 strength 通过兼容包装避免整池扫描，并保留常用别名。
+- 公共单股 strength 保留旧整池评分、profile 和 market_regime 语义；Worker
+  只调用新增的显式 ticker 集合入口，并复用本轮日线快照。
 - 新功能默认 BREAKOUT_RADAR_ENABLED=false。
 - Range Persistence 默认 shadow，不改变正式分数、分类和排序。
 - 不修改前端文件。

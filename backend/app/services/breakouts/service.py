@@ -264,7 +264,19 @@ class BreakoutRadarService:
             ]
         )
         cached_distribution = self._range_distribution_cache.get(distribution_key)
-        if cached_distribution is not None:
+        if self.settings.range_persistence_mode == "disabled":
+            canonical_tickers = []
+            cached_distribution = {
+                "as_of": completed_daily_session(cutoff).isoformat(),
+                "universe_version": getattr(self.universe, "version", "unknown"),
+                "members": frozenset(),
+                "member_values": {},
+                "global": (),
+                "sectors": {},
+                "coverage_ratio": 0.0,
+                "status": "disabled",
+            }
+        elif cached_distribution is not None:
             canonical_tickers = []
         else:
             try:
@@ -380,28 +392,43 @@ class BreakoutRadarService:
             structure = detect_base(candidate.ticker, daily, cutoff, self.settings)
             if structure is not None:
                 structures.append(structure)
-            range_feature = compute_range_persistence(
-                daily,
-                cutoff=daily_snapshot.cutoff.event_at,
-                length=self.settings.range_persistence_length,
-                fast_length=self.settings.range_persistence_fast_length,
-                slope_lookback=self.settings.range_persistence_slope_days,
-                ratio_window=self.settings.range_persistence_ratio_window,
-                ratio_threshold=self.settings.range_persistence_ratio_threshold,
-                min_history_multiplier=self.settings.range_persistence_min_history_multiplier,
-                global_distribution=(
-                    cached_distribution["global"]
-                    if candidate.ticker in cached_distribution["members"]
-                    else None
-                ),
-                sector_distribution=(
-                    cached_distribution["sectors"].get(
-                        self.universe.primary_sector(candidate.ticker)
-                    )
-                    if candidate.ticker in cached_distribution["members"]
-                    else None
-                ),
-                version=self.settings.range_persistence_version,
+            range_feature = (
+                {
+                    "status": "disabled",
+                    "range_persistence": None,
+                    "range_persistence_slope_5d": None,
+                    "range_persistence_ratio_10d": None,
+                    "range_persistence_self_percentile": None,
+                    "range_persistence_global_percentile": None,
+                    "range_persistence_sector_percentile": None,
+                    "range_persistence_normalized_score": None,
+                    "quality": 0.0,
+                    "version": self.settings.range_persistence_version,
+                }
+                if self.settings.range_persistence_mode == "disabled"
+                else compute_range_persistence(
+                    daily,
+                    cutoff=daily_snapshot.cutoff.event_at,
+                    length=self.settings.range_persistence_length,
+                    fast_length=self.settings.range_persistence_fast_length,
+                    slope_lookback=self.settings.range_persistence_slope_days,
+                    ratio_window=self.settings.range_persistence_ratio_window,
+                    ratio_threshold=self.settings.range_persistence_ratio_threshold,
+                    min_history_multiplier=self.settings.range_persistence_min_history_multiplier,
+                    global_distribution=(
+                        cached_distribution["global"]
+                        if candidate.ticker in cached_distribution["members"]
+                        else None
+                    ),
+                    sector_distribution=(
+                        cached_distribution["sectors"].get(
+                            self.universe.primary_sector(candidate.ticker)
+                        )
+                        if candidate.ticker in cached_distribution["members"]
+                        else None
+                    ),
+                    version=self.settings.range_persistence_version,
+                )
             )
             range_feature["canonical_universe_as_of"] = cached_distribution["as_of"]
             range_feature["canonical_universe_version"] = cached_distribution[
