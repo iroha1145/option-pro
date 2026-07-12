@@ -320,9 +320,12 @@ export const api = {
     return fetchJson(`${API_BASE}/ai/earnings-correlation`);
   },
 
-  earningsImpact(ticker) {
-    return cached(`earn-impact:${ticker}`, T.STATIC, () =>
-      fetchJson(`${API_BASE}/ai/earnings-impact/${encodeURIComponent(ticker)}`));
+  earningsImpact(ticker, options = {}) {
+    // This is an explicit user action. Successful model results already have
+    // a server-side cache, while HTTP 200 soft errors must remain retryable.
+    return fetchJson(`${API_BASE}/ai/earnings-impact/${encodeURIComponent(ticker)}`, {
+      signal: options.signal,
+    });
   },
 
   strengthScan(params = {}, options = {}) {

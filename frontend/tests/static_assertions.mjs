@@ -377,6 +377,7 @@ for (const role of ['趋势结构', '广度动量', '风险确认']) {
 assert.match(api, /signalsMarket\(options = \{\}\)[\s\S]*\/signals\/market/, 'the API client must expose full-market technical signals');
 assert.match(api, /indexTechnicalSignals\(ticker, options = \{\}\)[\s\S]*\/stocks\/\$\{enc\(ticker\)\}\/signals/, 'index details must use the caret-compatible stock signal endpoint');
 assert.match(api, /strengthMarket\(options = \{\}\)[\s\S]*\/strength\/market/, 'the API client must expose market-regime strength');
+assert.match(api, /earningsImpact\(ticker, options = \{\}\)[\s\S]*return fetchJson\([\s\S]*\/ai\/earnings-impact\//, 'earnings impact soft errors must remain retryable without a browser-memory cache');
 assert.match(screener, /renderMarketContext\(payload\)[\s\S]*renderMarketStrengthPanel\(\{[\s\S]*marketRegime: payload\.market_regime/, 'the screener panel must reuse the current scan market regime');
 assert.doesNotMatch(screener, /signalsMarket|indexTechnicalSignals|strengthMarket/, 'the screener must not issue duplicate market research requests');
 assert.match(screener, /state\.scanController\?\.abort\(\)[\s\S]*api\.strengthScan\([\s\S]*signal: scanController\.signal/, 'screener scans must cancel when replaced or when leaving the route');

@@ -39,6 +39,33 @@ test('soft AI impact failures cannot be presented as a loaded result', () => {
   );
 });
 
+test('a soft AI impact failure is not kept in the browser cache', async (t) => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    const payload = calls === 1
+      ? { ticker: 'AAPL', error: 'ai_busy', summary: '暂不可用' }
+      : { ticker: 'AAPL', summary: '分析完成', impacted: [] };
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const failed = await api.earningsImpact('AAPL');
+  const retried = await api.earningsImpact('AAPL');
+
+  assert.equal(calls, 2);
+  assert.equal(failed.error, 'ai_busy');
+  assert.equal(retried.error, undefined);
+  assert.equal(retried.summary, '分析完成');
+  assert.equal(retried._client_cached, undefined);
+});
+
 test('HTTP 200 stale fallback and cooldown responses keep data but expose a visible warning state', () => {
   const retainedPayload = {
     earnings: [{ ticker: 'AAPL', earnings_date: '2026-07-20' }],
