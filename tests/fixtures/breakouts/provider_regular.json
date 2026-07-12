@@ -1,0 +1,13 @@
+{
+  "totalCount": 2,
+  "data": [
+    {
+      "s": "NASDAQ:AAPL",
+      "d": ["AAPL", "NASDAQ", "Apple Inc.", "stock", ["common"], 225.5, 4.2, 50000000, 2.1, 3400000000000, "Technology"]
+    },
+    {
+      "s": "NYSE:SMALL",
+      "d": ["SMALL", "NYSE", "Small Tech", "stock", ["common"], 8.0, 12.0, 2000000, 4.0, 50000000, "Technology"]
+    }
+  ]
+}

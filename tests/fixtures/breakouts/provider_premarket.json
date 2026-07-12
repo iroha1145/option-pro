@@ -1,0 +1,9 @@
+{
+  "totalCount": 1,
+  "data": [
+    {
+      "s": "NASDAQ:NVDA",
+      "d": ["NVDA", "NASDAQ", "NVIDIA", "stock", ["common"], 150.0, 160.0, 6.67, 1000000, 50000000, 2.5, 4000000000000, "Technology"]
+    }
+  ]
+}
