@@ -12,6 +12,21 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _isolated_environment() -> dict[str, str]:
+    """Return a host environment that cannot override the fixture dotenv."""
+    environment = os.environ.copy()
+    for raw_line in (ROOT / ".env.example").read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key = line.split("=", 1)[0].strip()
+        if key:
+            environment.pop(key, None)
+    environment.pop("APP_COMMIT", None)
+    environment.pop("APP_VERSION", None)
+    return environment
+
+
 def _fake_docker(bin_dir: Path) -> None:
     docker = bin_dir / "docker"
     docker.write_text(
@@ -53,7 +68,7 @@ def _deployment_root(tmp_path: Path, env_text: str) -> tuple[Path, dict[str, str
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _fake_docker(bin_dir)
-    environment = os.environ.copy()
+    environment = _isolated_environment()
     environment["PATH"] = f"{bin_dir}{os.pathsep}{environment['PATH']}"
     return root, environment
 
@@ -203,7 +218,7 @@ def test_setup_copies_full_template_and_writes_secrets_as_literal_data(
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _fake_docker(bin_dir)
-    environment = os.environ.copy()
+    environment = _isolated_environment()
     environment["PATH"] = f"{bin_dir}{os.pathsep}{environment['PATH']}"
     secret = "proxy-${HOME} # 'quoted' \\ tail"
     answers = f"\n{secret}\n\n\n"
@@ -243,6 +258,7 @@ def test_setup_copies_full_template_and_writes_secrets_as_literal_data(
     rendered = subprocess.run(
         [docker, "compose", "--env-file", ".env", "-f", str(probe), "config", "--format", "json"],
         cwd=root,
+        env=environment,
         check=True,
         capture_output=True,
         text=True,
