@@ -93,3 +93,36 @@ range-persistence.md 的启用门槛时始终保持 shadow。
 - 旧 strength、market、signals、stocks、options 回归
 
 失败命令必须记录原命令、退出码和原错误，并区分代码错误与环境限制。
+
+## 只读研究导出
+
+研究工具只打开状态为 `completed` 且已有 `published_at` 的扫描，并通过
+SQLite 的只读模式与 `query_only` 保护生产库。它不会初始化、迁移或更新
+数据库；导出目标也不得指向生产数据库本身。
+
+```bash
+cd backend
+python -m app.services.breakouts.research \
+  --db /data/optix.db \
+  --events-out /tmp/breakout-events.csv \
+  --shadows-out /tmp/range-persistence-shadow.json \
+  --correlations-out /tmp/range-persistence-correlations.csv \
+  --summary-out /tmp/range-persistence-summary.json
+```
+
+事件与区间强势持续度（Range Persistence）影子记录可导出为 CSV 或 JSON。
+摘要仅描述生产分与假设分、生产排序与假设排序之间的差异和相关性。它不含
+未来收益标签、交易成本、滑点或生存偏差控制，因此始终标记为
+`insufficient_for_production_decision`，不能单独用于开启生产权重。
+相关性导出采用成对可用样本，每一对字段都保存实际样本数；缺失值不填零，
+常量序列的相关系数记为 `null`。
+
+正式评估仍需按时间顺序执行滚动验证（Walk-Forward Validation），并对重叠
+标签应用清除期（Purge）和禁入期（Embargo）。禁止随机划分训练集与测试集，
+以免未来样本混入过去样本。
+
+研究工具的离线回归命令：
+
+```bash
+python3 -m pytest -q tests/test_breakout_research.py
+```
