@@ -30,6 +30,18 @@ from app.services.strength.marketdata import (
 from app.services.strength.market_regime import MARKET_BENCHMARKS, compute_market_regime
 from app.services.strength.market_shape import MARKET_SHAPE_VERSION
 from app.services.strength.price_action import compute_price_action
+from app.services.strength.scoring import (
+    FEATURE_VERSION as STRENGTH_FEATURE_VERSION,
+    NORMALIZATION_VERSION as STRENGTH_NORMALIZATION_VERSION,
+    SCORE_VERSION as STRENGTH_SCORE_VERSION,
+    absolute_return_score,
+    rsi_score,
+    score_intrinsic,
+    score_market_fit,
+    score_profile_fit,
+    score_ranking,
+    weighted_available,
+)
 from app.services.strength.vol_price_match import compute_vol_price_match
 from app.services.strength.yahoo_options import (
     enrich_rows_with_yahoo_options,
@@ -37,7 +49,6 @@ from app.services.strength.yahoo_options import (
 )
 from app.services.technical.range_persistence import (
     RANGE_PERSISTENCE_VERSION,
-    build_range_persistence_shadow,
     compute_range_persistence,
 )
 from app.services.zh_names import get_zh_name
@@ -49,7 +60,8 @@ BENCHMARKS = MARKET_BENCHMARKS
 SECTOR_PERIOD_DAYS = {"1mo": 20, "3mo": 63, "6mo": 126}
 STRENGTH_CACHE_TTL_SECONDS = 900
 MARKET_STRENGTH_CACHE_TTL_SECONDS = 900
-INTRINSIC_STRENGTH_VERSION = "strength-intrinsic-v1"
+STRENGTH_HISTORY_PERIOD = "2y"
+INTRINSIC_STRENGTH_VERSION = STRENGTH_SCORE_VERSION
 _NEW_YORK = ZoneInfo("America/New_York")
 
 _FALLBACK_MAX_WORKERS = 8
@@ -77,7 +89,12 @@ def _safe_float(value: Any, ndigits: int = 4) -> float | None:
         return None
 
 
-def _clamp(value: float | int | None, lo: float = 0.0, hi: float = 100.0, default: float = 50.0) -> float:
+def _clamp(
+    value: float | int | None,
+    lo: float = 0.0,
+    hi: float = 100.0,
+    default: float | None = None,
+) -> float | None:
     if value is None:
         return default
     try:
@@ -89,23 +106,14 @@ def _clamp(value: float | int | None, lo: float = 0.0, hi: float = 100.0, defaul
     return max(lo, min(hi, number))
 
 
-def _score_signed_pct(value: float | None, scale: float, neutral: float = 50.0) -> float:
+def _score_signed_pct(value: float | None, scale: float, neutral: float = 50.0) -> float | None:
     if value is None:
-        return neutral
+        return None
     return _clamp(neutral + (value * 100.0 * scale))
 
 
-def _score_rsi(value: float | None) -> float:
-    if value is None:
-        return 50.0
-    # Strong-but-not-exhausted RSI gets the best score.
-    if 50 <= value <= 68:
-        return _clamp(58 + (value - 50) * 1.7)
-    if 68 < value <= 78:
-        return _clamp(88 - (value - 68) * 2.2)
-    if value < 50:
-        return _clamp(42 + (value - 35) * 1.1)
-    return _clamp(50 - (value - 78) * 1.5)
+def _score_rsi(value: float | None) -> float | None:
+    return rsi_score(value)
 
 
 def _pct_rank(items: list[dict[str, Any]], key: str) -> dict[str, float]:
@@ -113,7 +121,8 @@ def _pct_rank(items: list[dict[str, Any]], key: str) -> dict[str, float]:
     if not values:
         return {}
     if len(values) == 1:
-        return {row["ticker"]: 50.0 for row in items if row.get(key) is not None}
+        # A single observation has no defensible cross-sectional percentile.
+        return {}
     denom = max(len(values) - 1, 1)
     ranks: dict[str, float] = {}
     for row in items:
@@ -127,20 +136,79 @@ def _pct_rank(items: list[dict[str, Any]], key: str) -> dict[str, float]:
     return ranks
 
 
-def _theme_universe(sector_id: str | None = None) -> tuple[list[str], dict[str, dict[str, str]]]:
-    sector_meta: dict[str, dict[str, str]] = {}
+def _theme_universe(sector_id: str | None = None) -> tuple[list[str], dict[str, dict[str, Any]]]:
+    sector_meta: dict[str, dict[str, Any]] = {}
     tickers: list[str] = []
     for sid, sector in SECTORS.items():
-        if sector_id and sid != sector_id:
-            continue
         for ticker in sector["tickers"]:
             symbol = ticker.upper().strip()
             if not symbol or "." in symbol:
                 # Keep the MVP US-focused and avoid mixed exchange suffixes.
                 continue
             tickers.append(symbol)
-            sector_meta.setdefault(symbol, {"sector_id": sid, "sector_name": sector["name"]})
-    return list(dict.fromkeys(tickers)), sector_meta
+            metadata = sector_meta.setdefault(
+                symbol,
+                {
+                    "sector_id": sid,
+                    "sector_name": sector["name"],
+                    "primary_sector_id": sid,
+                    "primary_sector_name": sector["name"],
+                    "theme_ids": [],
+                    "theme_names": [],
+                },
+            )
+            metadata["theme_ids"].append(sid)
+            metadata["theme_names"].append(sector["name"])
+    canonical = list(dict.fromkeys(tickers))
+    if not sector_id:
+        return canonical, sector_meta
+    selected = [
+        ticker
+        for ticker in canonical
+        if sector_id in set(sector_meta.get(ticker, {}).get("theme_ids") or [])
+    ]
+    return selected, {ticker: sector_meta[ticker] for ticker in selected}
+
+
+def _canonical_universe_version(
+    tickers: list[str],
+    metadata: Mapping[str, Mapping[str, Any]],
+) -> str:
+    members = []
+    for ticker in sorted(tickers):
+        item = metadata.get(ticker, {})
+        themes = ",".join(sorted(str(value) for value in item.get("theme_ids", [])))
+        members.append(
+            f"{ticker}:{item.get('primary_sector_id') or item.get('sector_id') or ''}:{themes}"
+        )
+    digest = hashlib.sha256("|".join(members).encode("utf-8")).hexdigest()[:16]
+    return f"themes-{digest}"
+
+
+def _attach_canonical_ranks(rows: list[dict[str, Any]]) -> None:
+    global_ranks = _pct_rank(rows, "intrinsic_score")
+    by_sector: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        sector = str(row.get("primary_sector_id") or row.get("sector_id") or "")
+        if sector:
+            by_sector.setdefault(sector, []).append(row)
+    sector_ranks: dict[str, float] = {}
+    for members in by_sector.values():
+        sector_ranks.update(_pct_rank(members, "intrinsic_score"))
+
+    for row in rows:
+        ticker = str(row.get("ticker") or "")
+        row["global_rank_percentile"] = global_ranks.get(ticker)
+        row["sector_rank_percentile"] = sector_ranks.get(ticker)
+        row["sector_score"] = sector_ranks.get(ticker)
+        row["cross_section_status"] = {
+            "global": (
+                "active" if ticker in global_ranks else "cross_section_unavailable"
+            ),
+            "sector": (
+                "active" if ticker in sector_ranks else "cross_section_unavailable"
+            ),
+        }
 
 
 def _period_to_days(period: str) -> int:
@@ -628,11 +696,15 @@ def _ret(close: pd.Series, days: int) -> float | None:
     return _safe_float(close.iloc[-1] / base - 1, 5)
 
 
-def _feature_row(ticker: str, hist: pd.DataFrame, spy: pd.DataFrame, sector_meta: dict[str, str]) -> dict[str, Any] | None:
+def _feature_row(ticker: str, hist: pd.DataFrame, spy: pd.DataFrame, sector_meta: Mapping[str, Any]) -> dict[str, Any] | None:
     if hist.empty or len(hist) < 63:
         return None
-    close = hist["Close"].dropna()
-    volume = hist["Volume"].fillna(0) if "Volume" in hist.columns else pd.Series([0] * len(hist), index=hist.index)
+    close = pd.to_numeric(hist["Close"], errors="coerce").replace([math.inf, -math.inf], pd.NA).dropna()
+    volume = (
+        pd.to_numeric(hist["Volume"], errors="coerce").replace([math.inf, -math.inf], pd.NA)
+        if "Volume" in hist.columns
+        else pd.Series(index=hist.index, dtype=float)
+    )
     price = _safe_float(close.iloc[-1], 2)
     if price is None or price <= 0:
         return None
@@ -643,9 +715,34 @@ def _feature_row(ticker: str, hist: pd.DataFrame, spy: pd.DataFrame, sector_meta
         return _safe_float(close.rolling(period).mean().iloc[-1], 4)
 
     sma20, sma50, sma200 = sma(20), sma(50), sma(200)
-    avg_vol20 = _safe_float(volume.tail(20).mean(), 2) or 0
-    avg_dollar_vol = price * avg_vol20
-    rel_volume = _safe_float((volume.iloc[-1] / avg_vol20), 3) if avg_vol20 > 0 else None
+    valid_volume = volume[volume >= 0].dropna()
+    avg_vol20 = (
+        _safe_float(valid_volume.tail(20).mean(), 2)
+        if len(valid_volume) >= 20
+        else None
+    )
+    liquidity = pd.concat(
+        [
+            pd.to_numeric(hist["Close"], errors="coerce").rename("Close"),
+            volume.rename("Volume"),
+        ],
+        axis=1,
+    ).replace([math.inf, -math.inf], pd.NA)
+    liquidity = liquidity[
+        (liquidity["Close"] > 0) & (liquidity["Volume"] >= 0)
+    ].dropna(subset=["Close", "Volume"])
+    dollar_volume = liquidity["Close"] * liquidity["Volume"]
+    avg_dollar_vol = (
+        _safe_float(dollar_volume.tail(20).mean(), 0)
+        if len(dollar_volume) >= 20
+        else None
+    )
+    latest_volume = _safe_float(volume.reindex(close.index).iloc[-1], 4) if not close.empty else None
+    rel_volume = (
+        _safe_float(latest_volume / avg_vol20, 3)
+        if latest_volume is not None and avg_vol20 is not None and avg_vol20 > 0
+        else None
+    )
     high_52w = _safe_float(close.tail(252).max() if len(close) >= 120 else close.max(), 4)
     high_3m = _safe_float(close.tail(63).max(), 4)
     vol_price_match = compute_vol_price_match(hist)
@@ -655,11 +752,26 @@ def _feature_row(ticker: str, hist: pd.DataFrame, spy: pd.DataFrame, sector_meta
     stock_ret_63 = _ret(close, 63)
     spy_ret_63 = _ret(spy_close, 63) if len(spy_close) else None
 
+    moving_average_states = [
+        price > average
+        for average in (sma20, sma50, sma200)
+        if average is not None and average > 0
+    ]
+    ma_alignment = (
+        sum(moving_average_states) / len(moving_average_states) * 100
+        if moving_average_states
+        else None
+    )
+
     return {
         "ticker": ticker,
         "name": get_zh_name(ticker) or ticker,
         "sector_id": sector_meta.get("sector_id"),
         "sector_name": sector_meta.get("sector_name"),
+        "primary_sector_id": sector_meta.get("primary_sector_id") or sector_meta.get("sector_id"),
+        "primary_sector_name": sector_meta.get("primary_sector_name") or sector_meta.get("sector_name"),
+        "theme_ids": list(sector_meta.get("theme_ids") or ([sector_meta.get("sector_id")] if sector_meta.get("sector_id") else [])),
+        "theme_names": list(sector_meta.get("theme_names") or ([sector_meta.get("sector_name")] if sector_meta.get("sector_name") else [])),
         "price": price,
         "change_pct": _safe_float((close.iloc[-1] / close.iloc[-2] - 1) * 100, 2) if len(close) > 1 and close.iloc[-2] else None,
         "return_5d": _ret(close, 5),
@@ -671,16 +783,24 @@ def _feature_row(ticker: str, hist: pd.DataFrame, spy: pd.DataFrame, sector_meta
         "dist_sma20": _safe_float((price / sma20 - 1), 5) if sma20 else None,
         "dist_sma50": _safe_float((price / sma50 - 1), 5) if sma50 else None,
         "dist_sma200": _safe_float((price / sma200 - 1), 5) if sma200 else None,
-        "above_sma20": bool(sma20 and price > sma20),
-        "above_sma50": bool(sma50 and price > sma50),
-        "above_sma200": bool(sma200 and price > sma200),
-        "ma_alignment": sum(bool(x) for x in (sma20 and price > sma20, sma50 and price > sma50, sma200 and price > sma200)) / 3 * 100,
+        "above_sma20": (price > sma20) if sma20 is not None else None,
+        "above_sma50": (price > sma50) if sma50 is not None else None,
+        "above_sma200": (price > sma200) if sma200 is not None else None,
+        "ma_alignment": _safe_float(ma_alignment, 2),
         "rsi14": _rsi(close),
         "macd_direction": _macd_direction(close),
         "atr_pct": _atr_pct(hist),
         "rel_volume": rel_volume,
-        "avg_volume_20d": int(avg_vol20),
-        "avg_dollar_volume_20d": _safe_float(avg_dollar_vol, 0),
+        "avg_volume_20d": int(avg_vol20) if avg_vol20 is not None else None,
+        "avg_dollar_volume_20d": avg_dollar_vol,
+        "avg_dollar_volume_20d_calculation_method": (
+            "mean_close_times_volume_20d" if avg_dollar_vol is not None else "unavailable"
+        ),
+        "calculation_method": {
+            "average_dollar_volume_20d": (
+                "mean_close_times_volume_20d" if avg_dollar_vol is not None else "unavailable"
+            )
+        },
         "ath_proximity": _safe_float(price / high_52w * 100, 2) if high_52w else None,
         "drawdown_3m": _safe_float((price / high_3m - 1) * 100, 2) if high_3m else None,
         "near_3m_high": bool(high_3m and price >= high_3m * 0.985),
@@ -751,326 +871,101 @@ def _weighted_available(
     components: dict[str, float | None],
     weights: dict[str, float],
 ) -> tuple[float | None, dict[str, float], dict[str, float], list[str]]:
-    active = {
-        name: float(weights[name])
-        for name, value in components.items()
-        if value is not None and name in weights and weights[name] > 0
-    }
-    total = sum(active.values())
-    missing = [name for name in weights if components.get(name) is None]
-    if total <= 0:
-        return None, {}, {}, missing
-    effective = {name: weight / total for name, weight in active.items()}
-    contribution = {
-        name: round(float(components[name]) * weight, 6)
-        for name, weight in effective.items()
-    }
-    return (
-        round(sum(contribution.values()), 4),
-        {name: round(weight, 6) for name, weight in effective.items()},
-        contribution,
-        missing,
+    result = weighted_available(
+        components,
+        weights,
+        min_active_weight=0.0,
+        score_version=STRENGTH_SCORE_VERSION,
     )
-
-
-def _trend_efficiency(close: pd.Series, days: int = 63) -> float | None:
-    clean = pd.to_numeric(close, errors="coerce").dropna()
-    if len(clean) < days + 1:
-        return None
-    window = clean.tail(days + 1)
-    path = float(window.diff().abs().sum())
-    if not math.isfinite(path) or path <= 0:
-        return None
-    signed = float(window.iloc[-1] - window.iloc[0]) / path
-    return round(max(0.0, min(100.0, 50.0 + signed * 50.0)), 4)
-
-
-def _moving_average_slope(close: pd.Series) -> float | None:
-    clean = pd.to_numeric(close, errors="coerce").dropna()
-    if len(clean) < 70:
-        return None
-    average = clean.rolling(50).mean().dropna()
-    if len(average) < 21 or not average.iloc[-21]:
-        return None
-    slope = float(average.iloc[-1] / average.iloc[-21] - 1.0)
-    return _absolute_score(slope, 500.0)
-
-
-def _trend_stability(close: pd.Series) -> float | None:
-    clean = pd.to_numeric(close, errors="coerce").dropna()
-    if len(clean) < 21:
-        return None
-    volatility = float(clean.pct_change().tail(20).std(ddof=0))
-    if not math.isfinite(volatility):
-        return None
-    return round(max(0.0, min(100.0, 100.0 - volatility * 2200.0)), 4)
+    return (
+        result.get("score"),
+        dict(result.get("effective_weights") or {}),
+        dict(result.get("contributions") or {}),
+        list(result.get("missing_components") or []),
+    )
 
 
 def _intrinsic_row(
     row: dict[str, Any],
-    hist: pd.DataFrame,
+    hist: pd.DataFrame | None,
     *,
     range_feature: dict[str, Any],
     range_mode: str,
     range_trend_weight: float = 0.15,
     range_final_cap: float = 0.04,
 ) -> dict[str, Any]:
-    close = hist["Close"].dropna()
-    momentum = _absolute_score(row.get("return_20d"), 300.0)
-    medium_term_momentum = _absolute_score(row.get("return_63d"), 180.0)
-    relative_strength = _absolute_score(row.get("rs_spy_63d"), 220.0)
-    price_action = row.get("price_action") if isinstance(row.get("price_action"), dict) else {}
-    price_action_score = (
-        _safe_float(price_action.get("score"), 4)
-        if price_action.get("status") == "active"
-        else None
-    )
-    range_level = (
-        _safe_float(
-            range_feature.get("range_persistence_normalized_score")
-            if range_feature.get("range_persistence_normalized_score") is not None
-            else range_feature.get("range_persistence"),
-            4,
-        )
-        if range_feature.get("status") == "active"
-        else None
-    )
-    range_slope = (
-        _absolute_score(range_feature.get("range_persistence_slope_5d"), 5.0)
-        if range_feature.get("status") == "active"
-        else None
-    )
-    range_ratio = (
-        _safe_float(range_feature.get("range_persistence_ratio_10d"), 4)
-        if range_feature.get("status") == "active"
-        else None
-    )
-    range_component, range_component_weights, range_contributions, range_missing = (
-        _weighted_available(
-            {
-                "persistence_level": range_level,
-                "slope_5d": range_slope,
-                "ratio_10d": range_ratio,
-            },
-            {"persistence_level": 0.50, "slope_5d": 0.30, "ratio_10d": 0.20},
-        )
-    )
-    trend_components = {
-        "medium_term_momentum": medium_term_momentum,
-        "trend_efficiency": _trend_efficiency(close),
-        "moving_average_slope": _moving_average_slope(close),
-        "range_persistence_component": range_component,
-        "trend_stability": _trend_stability(close),
-    }
-    configured_range_weight = max(0.0, min(0.15, float(range_trend_weight)))
-    trend_weights = {
-        "medium_term_momentum": 0.35 + (0.15 - configured_range_weight),
-        "trend_efficiency": 0.25,
-        "moving_average_slope": 0.20,
-        "range_persistence_component": configured_range_weight,
-        "trend_stability": 0.05,
-    }
-    production_components = dict(trend_components)
-    production_components["range_persistence_component"] = None
-    production_trend, production_trend_weights, _, production_missing = _weighted_available(
-        production_components,
-        trend_weights,
-    )
-    hypothetical_trend, hypothetical_trend_weights, _, hypothetical_missing = _weighted_available(
-        trend_components,
-        trend_weights,
-    )
+    """Compatibility wrapper around the one canonical intrinsic engine."""
 
-    family_weights = {
-        "momentum": 0.35,
-        "relative_strength": 0.25,
-        "trend": 0.25,
-        "price_action": 0.15,
-    }
-    production_families = {
-        "momentum": momentum,
-        "relative_strength": relative_strength,
-        "trend": production_trend,
-        "price_action": price_action_score,
-    }
-    hypothetical_families = {
-        **production_families,
-        "trend": hypothetical_trend,
-    }
-    production_score, family_effective, family_contribution, missing_families = _weighted_available(
-        production_families,
-        family_weights,
+    result = score_intrinsic(
+        row,
+        hist,
+        range_feature=range_feature,
+        range_mode=range_mode,
+        range_trend_weight=range_trend_weight,
+        range_final_cap=range_final_cap,
     )
-    unbounded_hypothetical, hypothetical_effective, _, _ = _weighted_available(
-        hypothetical_families,
-        family_weights,
-    )
-    rp_effective_unbounded = (
-        hypothetical_effective.get("trend", 0.0)
-        * hypothetical_trend_weights.get("range_persistence_component", 0.0)
-    )
-    configured_final_cap = max(0.0, min(0.04, float(range_final_cap)))
-    rp_effective = min(rp_effective_unbounded, configured_final_cap)
-    hypothetical_score = production_score
-    selected_family_effective = family_effective
-    selected_family_contribution = family_contribution
-    applied_trend_weights = dict(production_trend_weights)
-    if (
-        production_score is not None
-        and production_trend is not None
-        and range_component is not None
-        and family_effective.get("trend", 0.0) > 0
-        and rp_effective > 0
-    ):
-        trend_family_weight = family_effective["trend"]
-        applied_within_trend = min(
-            configured_range_weight,
-            rp_effective / trend_family_weight,
-        )
-        applied_trend_weights = {
-            name: round(weight * (1.0 - applied_within_trend), 6)
-            for name, weight in production_trend_weights.items()
-        }
-        applied_trend_weights["range_persistence_component"] = round(
-            applied_within_trend,
-            6,
-        )
-        adjusted_trend = production_trend + applied_within_trend * (
-            range_component - production_trend
-        )
-        selected_families = {**production_families, "trend": adjusted_trend}
-        (
-            hypothetical_score,
-            selected_family_effective,
-            selected_family_contribution,
-            _,
-        ) = _weighted_available(selected_families, family_weights)
-    elif unbounded_hypothetical is None:
-        hypothetical_score = None
-    selected = hypothetical_score if range_mode == "enabled" else production_score
-    shadow = build_range_persistence_shadow(
-        mode=range_mode if range_mode in {"disabled", "shadow", "enabled"} else "shadow",
-        production_score=production_score,
-        hypothetical_score=hypothetical_score,
-        effective_weight=rp_effective,
-        final_weight_cap=configured_final_cap,
-        version=str(range_feature.get("version") or RANGE_PERSISTENCE_VERSION),
-    )
-    available_families = sum(value is not None for value in production_families.values())
-    confidence = round(available_families / len(production_families), 4)
-    included_features = [
-        name
-        for name, value in {
-            "momentum_20d": momentum,
-            "medium_term_momentum_63d": medium_term_momentum,
-            "relative_strength_63d": relative_strength,
-            "trend_efficiency": trend_components["trend_efficiency"],
-            "moving_average_slope": trend_components["moving_average_slope"],
-            "trend_stability": trend_components["trend_stability"],
-            "price_action": price_action_score,
-        }.items()
-        if value is not None
-    ]
-    if range_mode == "enabled" and trend_components["range_persistence_component"] is not None:
-        included_features.append("range_persistence")
-    final_score = round(selected, 1) if selected is not None else None
-    if final_score is None:
+    intrinsic_score = result.get("score")
+    if intrinsic_score is None:
         classification = "数据不足"
-    elif final_score >= 78:
+    elif intrinsic_score >= 78:
         classification = "质量趋势"
-    elif final_score >= 68:
+    elif intrinsic_score >= 68:
         classification = "相对强势"
-    elif final_score >= 58:
+    elif intrinsic_score >= 58:
         classification = "观察"
     else:
         classification = "偏弱"
-    breakdown = {
-        "factor_families": production_families,
-        "hypothetical_factor_families": {
-            **production_families,
-            "trend": (
-                selected_family_contribution.get("trend", 0.0)
-                / selected_family_effective.get("trend", 1.0)
-                if selected_family_effective.get("trend", 0.0) > 0
-                else None
-            ),
-        },
-        "trend_family": {
-            "components": trend_components,
-            "range_persistence_subcomponents": {
-                "components": {
-                    "persistence_level": range_level,
-                    "slope_5d": range_slope,
-                    "ratio_10d": range_ratio,
-                },
-                "effective_weights": range_component_weights,
-                "contributions": range_contributions,
-                "missing": range_missing,
-            },
-            "production_effective_weights": production_trend_weights,
-            "hypothetical_effective_weights": hypothetical_trend_weights,
-            "applied_effective_weights": applied_trend_weights,
-            "production_missing": production_missing,
-            "hypothetical_missing": hypothetical_missing,
-        },
-        "effective_weights": (
-            selected_family_effective if range_mode == "enabled" else family_effective
-        ),
-        "contributions": (
-            selected_family_contribution if range_mode == "enabled" else family_contribution
-        ),
-        "production_effective_weights": family_effective,
-        "production_contributions": family_contribution,
-        "hypothetical_effective_weights": selected_family_effective,
-        "hypothetical_contributions": selected_family_contribution,
-        "missing_families": missing_families,
-        "range_persistence": range_feature,
-        "range_persistence_shadow": shadow,
-    }
+    factor_breakdown = dict(result.get("factor_breakdown") or {})
     return {
         **row,
-        "score": final_score,
+        "score": intrinsic_score,
+        "intrinsic_score": intrinsic_score,
+        "market_fit_score": None,
+        "profile_fit_score": None,
+        "ranking_score": None,
         "score_scope": "intrinsic",
-        "confidence": confidence,
-        "score_version": INTRINSIC_STRENGTH_VERSION,
-        "included_features": included_features,
-        "factor_breakdown": breakdown,
-        "coverage": {
-            "active_families": available_families,
-            "expected_families": len(production_families),
-            "ratio": confidence,
-        },
-        "final_score": final_score,
-        "strength_score": final_score,
+        "score_status": result.get("status"),
+        "score_version": result.get("score_version") or STRENGTH_SCORE_VERSION,
+        "feature_version": result.get("feature_version") or STRENGTH_FEATURE_VERSION,
+        "normalization_version": (
+            result.get("normalization_version") or STRENGTH_NORMALIZATION_VERSION
+        ),
+        "confidence": result.get("confidence", 0.0),
+        "coverage": dict(result.get("coverage") or {}),
+        "configured_weights": dict(result.get("configured_weights") or {}),
+        "effective_weights": dict(result.get("effective_weights") or {}),
+        "contributions": dict(result.get("contributions") or {}),
+        "missing_components": list(result.get("missing_components") or []),
+        "included_features": list(result.get("included_features") or []),
+        "factor_breakdown": factor_breakdown,
+        "final_score": intrinsic_score,
+        "strength_score": intrinsic_score,
+        "score_short": _safe_float(result.get("score_short"), 1),
+        "score_mid": _safe_float(result.get("score_mid"), 1),
+        "score_long": _safe_float(result.get("score_long"), 1),
+        "breakout_quality_score": _safe_float(
+            result.get("breakout_quality_score"), 1
+        ),
+        "price_action_score": _safe_float(result.get("price_action_score"), 1),
         "classification": classification,
         "label": classification,
-        "breakdown": breakdown,
-        "data_quality": round(confidence * 100),
-        "range_persistence": range_feature,
-        "range_persistence_shadow": shadow,
+        "breakdown": factor_breakdown,
+        "data_quality": round(float(result.get("confidence") or 0.0) * 100),
+        "range_persistence": result.get("range_persistence"),
+        "range_persistence_shadow": result.get("range_persistence_shadow"),
+        "option_heat_score": None,
+        "option_score_weight": 0.0,
+        "option_activity": None,
+        "option_risk": None,
+        "option_direction": None,
         "option_context": {
             "status": "skipped",
             "source_status": "skipped",
-            "reason": "intrinsic scoring excludes options",
+            "reason": "options do not enter intrinsic strength",
         },
         "market_regime_score": None,
         "sector_score": None,
     }
-
-
-def _sector_scores(rows: list[dict[str, Any]]) -> dict[str, float]:
-    sector_returns: dict[str, list[float]] = {}
-    for row in rows:
-        sector_id = row.get("sector_id") or "unknown"
-        value = row.get("return_63d")
-        if value is not None:
-            sector_returns.setdefault(sector_id, []).append(value)
-    medians = [
-        {"ticker": sid, "value": sorted(vals)[len(vals) // 2]}
-        for sid, vals in sector_returns.items() if vals
-    ]
-    ranks = _pct_rank(medians, "value")
-    return {sid: _clamp(score) for sid, score in ranks.items()}
 
 
 def _risk_penalty(row: dict[str, Any], min_avg_dollar_volume: float, profile: str) -> tuple[float, list[str], list[str]]:
@@ -1088,13 +983,13 @@ def _risk_penalty(row: dict[str, Any], min_avg_dollar_volume: float, profile: st
         penalty += 7
         flags.append("波动偏高")
 
-    if not row.get("above_sma200"):
+    if row.get("above_sma200") is False:
         penalty += 8
         flags.append("低于200日线")
         warnings.append("长期趋势仍未修复")
 
-    avg_dollar = row.get("avg_dollar_volume_20d") or 0
-    if avg_dollar < min_avg_dollar_volume * 1.4:
+    avg_dollar = _safe_float(row.get("avg_dollar_volume_20d"), 2)
+    if avg_dollar is not None and avg_dollar < min_avg_dollar_volume * 1.4:
         penalty += 4
         flags.append("流动性边缘")
 
@@ -1120,149 +1015,79 @@ def _risk_penalty(row: dict[str, Any], min_avg_dollar_volume: float, profile: st
     return round(penalty * tilt["risk"], 1), flags, warnings
 
 
-def _classify(row: dict[str, Any], final_score: float, risk_penalty: float) -> str:
-    if final_score >= 78 and row.get("ma_alignment", 0) >= 66:
+def _classify(row: dict[str, Any], final_score: float | None, risk_penalty: float) -> str:
+    if final_score is None:
+        return "数据不足"
+    ma_alignment = _safe_float(row.get("ma_alignment"), 2)
+    if final_score >= 78 and ma_alignment is not None and ma_alignment >= 66:
         return "质量趋势"
     if final_score >= 70 and (row.get("rel_volume") or 0) >= 1.5 and (row.get("ath_proximity") or 0) >= 88:
         return "放量突破"
     if final_score >= 64 and (row.get("rs_spy_63d") or 0) > 0:
         return "相对强势"
-    if final_score >= 58 and (row.get("rsi14") or 50) < 52:
+    rsi = _safe_float(row.get("rsi14"), 2)
+    if final_score >= 58 and rsi is not None and rsi < 52:
         return "回暖候选"
     if risk_penalty >= 16:
         return "高风险题材"
     return "观察"
 
 
-def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str, min_avg_dollar_volume: float) -> list[dict[str, Any]]:
-    percentile_keys = ["return_5d", "return_20d", "return_63d", "return_126d", "return_252d", "rs_spy_63d", "rel_volume"]
-    ranks = {key: _pct_rank(rows, key) for key in percentile_keys}
-    sector_score_by_id = _sector_scores(rows)
-    tilt = PROFILE_TILT.get(profile, PROFILE_TILT["balanced"])
-    rules = market.get("rules") if isinstance(market.get("rules"), dict) else {}
-    momentum_mult = float(rules.get("momentum_weight_multiplier", 1.0) or 1.0)
-    relative_mult = float(rules.get("relative_strength_weight_multiplier", 1.0) or 1.0)
-    long_mult = float(rules.get("long_trend_weight_multiplier", 1.0) or 1.0)
-    breakout_mult = float(rules.get("breakout_weight_multiplier", 1.0) or 1.0)
-    sector_mult = float(rules.get("sector_strength_weight_multiplier", 1.0) or 1.0)
-    option_mult = float(rules.get("option_heat_weight_multiplier", 1.0) or 1.0)
-    risk_mult = float(rules.get("risk_penalty_multiplier", 1.0) or 1.0)
-    market_score = _safe_float(market.get("score"), 1)
-    market_score_for_scoring = market_score
-    weights = {
-        "short": .16 * momentum_mult,
-        "mid": .24 * relative_mult,
-        "long": .14 * long_mult,
-        "breakout": .12 * breakout_mult,
-        # Pure price-action structure (HH/HL, candle patterns, spring/upthrust).
-        # Not tied to a market-regime multiplier: structure reads the same in
-        # any regime — the regime already scales momentum/breakout weights.
-        "pa": .10,
-        "sector": .09 * sector_mult,
-        "option": .07 * option_mult,
-        "market": .08,
-    }
-    active_weights = dict(weights)
-    if market_score is None:
-        active_weights.pop("market", None)
-    weight_total = sum(active_weights.values()) or 1.0
-    effective_weights = {
-        key: round(value / weight_total, 4)
-        for key, value in active_weights.items()
-    }
+def _score_rows(
+    rows: list[dict[str, Any]],
+    market: dict[str, Any],
+    profile: str,
+    min_avg_dollar_volume: float,
+) -> list[dict[str, Any]]:
+    """Add market/profile/ranking layers without changing intrinsic scores.
+
+    ``min_avg_dollar_volume`` remains in the public signature for compatibility,
+    but page filter thresholds are deliberately excluded from every score.
+    """
+
+    del min_avg_dollar_volume
+    market_fit = score_market_fit(market)
     scored: list[dict[str, Any]] = []
-
-    for row in rows:
-        ticker = row["ticker"]
-        ret5 = ranks["return_5d"].get(ticker, 50)
-        ret20 = ranks["return_20d"].get(ticker, 50)
-        ret63 = ranks["return_63d"].get(ticker, 50)
-        ret126 = ranks["return_126d"].get(ticker, 50)
-        ret252 = ranks["return_252d"].get(ticker, 50)
-        rs63 = ranks["rs_spy_63d"].get(ticker, 50)
-        rv_rank = ranks["rel_volume"].get(ticker, 50)
-
-        short_score = (
-            ret5 * .28 +
-            ret20 * .26 +
-            rv_rank * .18 * tilt["volume"] +
-            _score_signed_pct(row.get("dist_sma20"), 420) * .16 +
-            _score_rsi(row.get("rsi14")) * .12
-        ) / (1 + max(0, tilt["volume"] - 1) * .18)
-
-        mid_score = (
-            ret63 * .28 +
-            rs63 * .26 +
-            row.get("ma_alignment", 50) * .22 * tilt["trend"] +
-            _score_signed_pct(row.get("macd_direction"), 40) * .12 +
-            rv_rank * .12
-        ) / (1 + max(0, tilt["trend"] - 1) * .22)
-
-        long_trend = _score_signed_pct(row.get("dist_sma200"), 260)
-        long_score = (
-            ret126 * .26 +
-            ret252 * .22 +
-            long_trend * .24 * tilt["trend"] +
-            _clamp(row.get("ath_proximity")) * .18 * tilt["breakout"] +
-            row.get("ma_alignment", 50) * .10
-        ) / (1 + max(0, tilt["trend"] - 1) * .24 + max(0, tilt["breakout"] - 1) * .18)
-
-        sector_score = sector_score_by_id.get(row.get("sector_id") or "", 50)
-        option_heat_score = 50.0
-        risk_penalty, risk_flags, warnings = _risk_penalty(row, min_avg_dollar_volume, profile)
-        vol_price = row.get("vol_price_match") if isinstance(row.get("vol_price_match"), dict) else {}
-        price_action = row.get("price_action") if isinstance(row.get("price_action"), dict) else {}
-        pa_score = _clamp(price_action.get("score"), default=50.0)
-        base_breakout_score = (_clamp(row.get("ath_proximity")) + ret20) / 2
-        breakout_quality_score = _clamp(
-            base_breakout_score +
-            (_safe_float(vol_price.get("breakout_quality_adjustment"), 1) or 0.0) -
-            max(_safe_float(vol_price.get("false_breakout_risk"), 1) or 0.0, 0.0)
-        )
-        if vol_price.get("setup_type") == "vacuum" and not row.get("follow_through"):
-            breakout_quality_score = min(breakout_quality_score, 65.0)
-        if vol_price.get("setup_type") == "absorption_bearish" and not row.get("breakout_confirmed"):
-            breakout_quality_score = min(breakout_quality_score, 55.0)
-        weighted_numerator = (
-            short_score * weights["short"] +
-            mid_score * weights["mid"] +
-            long_score * weights["long"] +
-            breakout_quality_score * weights["breakout"] +
-            pa_score * weights["pa"] +
-            sector_score * weights["sector"] +
-            option_heat_score * weights["option"]
-        )
-        if market_score_for_scoring is not None:
-            weighted_numerator += market_score_for_scoring * weights["market"]
-        raw_final = weighted_numerator / weight_total - risk_penalty * risk_mult
-        baseline_weights = {
-            "short": .16,
-            "mid": .24,
-            "long": .14,
-            "breakout": .12,
-            "pa": .10,
-            "sector": .09,
-            "option": .07,
-            **({"market": .08} if market_score is not None else {}),
+    for source_row in rows:
+        row = source_row
+        if "intrinsic_score" not in row:
+            row = _intrinsic_row(
+                source_row,
+                None,
+                range_feature={"status": "disabled", "version": RANGE_PERSISTENCE_VERSION},
+                range_mode="disabled",
+            )
+        intrinsic = {
+            "score": row.get("intrinsic_score"),
+            "status": row.get("score_status"),
+            "confidence": row.get("confidence", 0.0),
         }
-        baseline_total = sum(baseline_weights.values()) or 1.0
-        baseline_numerator = (
-            short_score * baseline_weights["short"] +
-            mid_score * baseline_weights["mid"] +
-            long_score * baseline_weights["long"] +
-            base_breakout_score * baseline_weights["breakout"] +
-            pa_score * baseline_weights["pa"] +
-            sector_score * baseline_weights["sector"] +
-            option_heat_score * baseline_weights["option"]
+        profile_fit = score_profile_fit(row, profile)
+        ranking = score_ranking(intrinsic, market_fit, profile_fit)
+        ranking_score = _safe_float(ranking.get("score"), 1)
+        intrinsic_score = _safe_float(row.get("intrinsic_score"), 1)
+        risk_penalty, risk_flags, warnings = _risk_penalty(
+            row,
+            10_000_000,
+            profile,
         )
-        if market_score is not None:
-            baseline_numerator += market_score * baseline_weights["market"]
-        market_adjustment = _safe_float(
-            raw_final - (baseline_numerator / baseline_total - risk_penalty),
-            2,
+        classification = _classify(row, ranking_score, risk_penalty)
+
+        no_market = score_ranking(
+            intrinsic,
+            {
+                "score": None,
+                "status": "insufficient_data",
+                "confidence": 0.0,
+            },
+            profile_fit,
         )
-        final_score = round(_clamp(raw_final), 1)
-        classification = _classify(row, final_score, risk_penalty)
+        no_market_score = _safe_float(no_market.get("score"), 4)
+        market_adjustment = (
+            round(float(ranking.get("score")) - no_market_score, 2)
+            if ranking.get("score") is not None and no_market_score is not None
+            else None
+        )
 
         tags: list[str] = []
         reasons: list[str] = []
@@ -1275,10 +1100,11 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
         if row.get("rel_volume") is not None and row["rel_volume"] >= 1.5:
             tags.append("放量")
             reasons.append(f"成交量约为20日均量{row['rel_volume']:.1f}倍")
-        for tag in vol_price.get("tags", [])[:2]:
+        price_action = row.get("price_action") if isinstance(row.get("price_action"), dict) else {}
+        volume_truth = row.get("vol_price_match") if isinstance(row.get("vol_price_match"), dict) else {}
+        for tag in volume_truth.get("tags", [])[:2]:
             if tag not in {"未明显收缩", "量价样本不足"}:
                 tags.append(str(tag))
-        # Price-action structure tags/reasons (pure K线).
         for tag in price_action.get("tags", [])[:2]:
             if tag not in {"K线数据不足", "K线样本不足", "区间震荡"}:
                 tags.append(str(tag))
@@ -1290,9 +1116,10 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
             warnings.append("LH/LL 下降结构未破坏")
         if price_action.get("upthrust"):
             warnings.append("前高假突破（Upthrust），追高需谨慎")
-        if row.get("ma_alignment", 0) >= 66:
+        if (row.get("ma_alignment") or 0) >= 66:
             tags.append("均线多头")
             reasons.append("价格位于关键均线上方")
+        market_score = _safe_float(market_fit.get("score"), 1)
         if market_score is not None and market_score >= 64:
             tags.append("市场顺风")
         elif market_score is not None and market_score < 40:
@@ -1301,23 +1128,32 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
             warnings.append("市场行情不足，市场维度暂不计入评分")
         tags.extend(risk_flags[:2])
         if not reasons:
-            reasons.append("综合强度处于股票池前列")
-        if option_heat_score == 50:
-            warnings.append("期权热度待接入")
+            reasons.append(
+                "可用价格证据已完成评分"
+                if intrinsic_score is not None
+                else "价格证据不足，暂不生成强势结论"
+            )
 
-        quality_inputs = [
-            row.get("return_20d"), row.get("return_63d"), row.get("return_126d"),
-            row.get("rs_spy_63d"), row.get("dist_sma50"), row.get("rsi14"),
-            row.get("rel_volume"), row.get("atr_pct"), row.get("ath_proximity"),
-        ]
-        data_quality = round(sum(v is not None for v in quality_inputs) / len(quality_inputs) * 100)
-        breakdown = {
-            "relative_strength": round(rs63, 1),
-            "trend": round((row.get("ma_alignment", 50) + _score_signed_pct(row.get("dist_sma50"), 320)) / 2, 1),
-            "volume": round(rv_rank, 1),
-            "breakout": round(breakout_quality_score, 1),
-            "base_breakout": round(base_breakout_score, 1),
-            "price_action": round(pa_score, 1),
+        factor_breakdown = dict(row.get("factor_breakdown") or {})
+        legacy_breakdown = {
+            "relative_strength": (
+                factor_breakdown.get("factor_families", {}).get("mid")
+                if isinstance(factor_breakdown.get("factor_families"), dict)
+                else None
+            ),
+            "trend": (
+                factor_breakdown.get("factor_families", {}).get("trend")
+                if isinstance(factor_breakdown.get("factor_families"), dict)
+                else None
+            ),
+            "volume": None,
+            "breakout": row.get("breakout_quality_score"),
+            "base_breakout": (
+                factor_breakdown.get("family_details", {}).get("breakout", {}).get("score")
+                if isinstance(factor_breakdown.get("family_details"), dict)
+                else None
+            ),
+            "price_action": row.get("price_action_score"),
             "price_action_detail": {
                 "structure": price_action.get("structure"),
                 "structure_label": price_action.get("structure_label"),
@@ -1329,60 +1165,113 @@ def _score_rows(rows: list[dict[str, Any]], market: dict[str, Any], profile: str
                 "support_dist_pct": price_action.get("support_dist_pct"),
                 "resistance_dist_pct": price_action.get("resistance_dist_pct"),
             },
-            "technical": round((_score_rsi(row.get("rsi14")) + _score_signed_pct(row.get("macd_direction"), 40)) / 2, 1),
-            "sector": round(sector_score, 1),
-            "option_heat": round(option_heat_score, 1),
-            "risk_penalty": round(risk_penalty, 1),
+            "technical": row.get("score_short"),
+            "sector": row.get("sector_rank_percentile"),
+            "option_heat": row.get("option_heat_score"),
+            "risk_penalty": risk_penalty,
             "market_regime": market_score,
-            "market_regime_scoring_value": market_score_for_scoring,
+            "market_regime_scoring_value": market_score,
             "risk_on_spread": _safe_float(market.get("risk_on_spread_score"), 1),
             "volume_truth": {
-                "setup_type": vol_price.get("setup_type"),
-                "setup_label": vol_price.get("setup_label"),
-                "breakout_quality_adjustment": vol_price.get("breakout_quality_adjustment"),
-                "false_breakout_risk": vol_price.get("false_breakout_risk"),
+                "setup_type": volume_truth.get("setup_type"),
+                "setup_label": volume_truth.get("setup_label"),
+                "breakout_quality_adjustment": volume_truth.get("breakout_quality_adjustment"),
+                "false_breakout_risk": volume_truth.get("false_breakout_risk"),
             },
             "market_adjustment": market_adjustment,
-            "market_rules": effective_weights,
+            "market_rules": dict(ranking.get("effective_weights") or {}),
+            "intrinsic": factor_breakdown,
+            "profile_fit": profile_fit,
+            "market_fit": market_fit,
+            "ranking": ranking,
         }
+        existing_range = (
+            row.get("breakdown", {}).get("range_persistence")
+            if isinstance(row.get("breakdown"), dict)
+            else None
+        )
+        if existing_range is not None:
+            legacy_breakdown["range_persistence"] = existing_range
+
         scored.append({
             **row,
-            "score_short": round(_clamp(short_score), 1),
-            "score_mid": round(_clamp(mid_score), 1),
-            "score_long": round(_clamp(long_score), 1),
-            "sector_score": round(sector_score, 1),
-            "price_action_score": round(pa_score, 1),
-            "breakout_quality_score": round(breakout_quality_score, 1),
-            "option_heat_score": round(option_heat_score, 1),
-            "option_score_weight": effective_weights["option"],
+            "intrinsic_score": intrinsic_score,
+            "market_fit_score": market_score,
+            "profile_fit_score": _safe_float(profile_fit.get("score"), 1),
+            "ranking_score": ranking_score,
+            "score_scope": "ranking",
+            "score_status": ranking.get("status"),
+            "score_version": STRENGTH_SCORE_VERSION,
+            "feature_version": STRENGTH_FEATURE_VERSION,
+            "normalization_version": STRENGTH_NORMALIZATION_VERSION,
+            "confidence": ranking.get("confidence", 0.0),
+            "intrinsic_confidence": intrinsic.get("confidence", 0.0),
+            "coverage": {
+                "ranking": {
+                    "status": ranking.get("status"),
+                    "ratio": ranking.get("confidence", 0.0),
+                    "active_weight": ranking.get("active_weight"),
+                },
+                "intrinsic": dict(row.get("coverage") or {}),
+                "profile_fit": {
+                    "status": profile_fit.get("status"),
+                    "ratio": profile_fit.get("confidence", 0.0),
+                },
+                "market_fit": {
+                    "status": market_fit.get("status"),
+                    "ratio": market_fit.get("confidence", 0.0),
+                },
+            },
+            "configured_weights": dict(ranking.get("configured_weights") or {}),
+            "effective_weights": dict(ranking.get("effective_weights") or {}),
+            "contributions": dict(ranking.get("contributions") or {}),
+            "missing_components": list(
+                dict.fromkeys(
+                    [
+                        *list(row.get("missing_components") or []),
+                        *list(ranking.get("missing_components") or []),
+                    ]
+                )
+            ),
+            "factor_breakdown": factor_breakdown,
+            "final_score": ranking_score,
+            "strength_score": ranking_score,
             "market_regime_score": market_score,
             "risk_on_spread_score": market.get("risk_on_spread_score"),
             "risk_penalty": risk_penalty,
-            "final_score": final_score,
-            "strength_score": final_score,
             "classification": classification,
             "label": classification,
             "tags": list(dict.fromkeys(tags))[:6],
             "reasons": reasons[:4],
-            "warnings": list(dict.fromkeys(warnings))[:4],
-            "breakdown": breakdown,
-            "data_quality": data_quality,
-            "option_context": {
-                "option_heat_score": round(option_heat_score, 1),
-                "iv_rank": None,
-                "iv_label": "待接入",
-                "source_status": "placeholder",
-                "warning": "当前为中性占位，待接入真实期权流/IV历史",
+            "warnings": list(dict.fromkeys(warnings))[:5],
+            "breakdown": legacy_breakdown,
+            "data_quality": round(float(ranking.get("confidence") or 0.0) * 100),
+            "option_heat_score": row.get("option_heat_score"),
+            "option_score_weight": 0.0,
+            "option_activity": row.get("option_activity"),
+            "option_risk": row.get("option_risk"),
+            "option_direction": row.get("option_direction"),
+            "option_context": row.get("option_context") or {
+                "status": "unavailable",
+                "source_status": "unavailable",
+                "reason": "option data is not part of strength ranking",
             },
             "data_sources": {
                 "prices": "Yahoo/yfinance",
                 "technicals": "Yahoo/yfinance",
                 "fundamentals": "not_configured",
-                "options": "placeholder",
+                "options": "not_used_for_scoring",
             },
         })
 
-    scored.sort(key=lambda item: item["final_score"], reverse=True)
+    scored.sort(
+        key=lambda item: (
+            item.get("ranking_score") is not None,
+            item.get("ranking_score") if item.get("ranking_score") is not None else -1,
+            item.get("ticker") or "",
+        ),
+        reverse=True,
+    )
     return scored
 
 
@@ -1401,14 +1290,22 @@ def _sort_scored(rows: list[dict[str, Any]], timeframe: str) -> None:
         key = f"score_{timeframe}"
         rows.sort(
             key=lambda item: (
-                (item.get(key) or 0) * .88
-                + (item.get("option_heat_score") or 50) * .06
-                + (item.get("final_score") or 0) * .06
+                item.get(key) is not None,
+                (_safe_float(item.get(key), 4) or 0.0) * .94
+                + (_safe_float(item.get("ranking_score"), 4) or 0.0) * .06,
+                item.get("ticker") or "",
             ),
             reverse=True,
         )
         return
-    rows.sort(key=lambda item: item.get("final_score") or 0, reverse=True)
+    rows.sort(
+        key=lambda item: (
+            item.get("ranking_score") is not None,
+            _safe_float(item.get("ranking_score"), 4) or 0.0,
+            item.get("ticker") or "",
+        ),
+        reverse=True,
+    )
 
 
 def _sector_strength(rows: list[dict[str, Any]], period: str = "3mo") -> list[dict[str, Any]]:
@@ -1475,7 +1372,7 @@ def _combined_options_status(yahoo_status: dict[str, Any], marketdata_status: di
     elif yahoo_status.get("status") == "disabled" and marketdata_status.get("status") == "disabled":
         status = "disabled"
     else:
-        status = marketdata_status.get("status") or yahoo_status.get("status") or "placeholder"
+        status = marketdata_status.get("status") or yahoo_status.get("status") or "unavailable"
 
     messages = []
     if yahoo_status.get("message"):
@@ -1507,29 +1404,45 @@ def _scan_sync(
     min_price: float,
     min_avg_dollar_volume: float,
     include_options: bool = True,
+    raw_history: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     from app.services.breakouts.config import get_breakout_settings
 
     breakout_settings = get_breakout_settings()
     observed_at = datetime.now(timezone.utc)
-    tickers, sector_meta = _theme_universe(sector_id)
     if universe != "themes":
         raise ValueError(f"Unsupported universe: {universe}")
+    if sector_id and sector_id not in SECTORS:
+        raise ValueError(f"Unknown sector: {sector_id}")
+    # Always score the complete canonical universe. View filters are applied
+    # only after features, intrinsic scores and canonical ranks are frozen.
+    tickers, sector_meta = _theme_universe()
     if not tickers:
         raise ValueError("No tickers in selected universe")
+    universe_version = _canonical_universe_version(tickers, sector_meta)
+    universe_as_of = observed_at.isoformat()
 
     all_symbols = list(dict.fromkeys(tickers + list(BENCHMARKS)))
-    raw = _download_history(all_symbols)
+    # Keep every production strength entry on the same feature horizon.  The
+    # 252-session factors need more than a nominal one-year download once
+    # holidays and incomplete sessions are removed.
+    raw = (
+        raw_history
+        if raw_history is not None
+        else _download_history(all_symbols, period=STRENGTH_HISTORY_PERIOD)
+    )
     price_source = raw.attrs.get("price_source") or _history_status(
         provider="Yahoo/yfinance",
         status="active",
         message="日线价格、成交量与技术指标输入",
     )
-    index_data = {symbol: _slice_ticker(raw, symbol) for symbol in BENCHMARKS}
-    market = compute_market_regime(index_data)
+    index_data = {
+        symbol: _complete_daily_frame(_slice_ticker(raw, symbol), observed_at)[0]
+        for symbol in BENCHMARKS
+    }
+    market = compute_market_regime(index_data, as_of=observed_at)
     spy = index_data.get("SPY", pd.DataFrame())
 
-    rows: list[dict[str, Any]] = []
     range_context: dict[str, dict[str, Any]] = {}
     skipped = {
         "insufficient_history": 0,
@@ -1540,23 +1453,15 @@ def _scan_sync(
     }
     for ticker in tickers:
         try:
-            hist = _slice_ticker(raw, ticker)
+            hist, completed_cutoff = _complete_daily_frame(
+                _slice_ticker(raw, ticker),
+                observed_at,
+            )
             row = _feature_row(ticker, hist, spy, sector_meta.get(ticker, {}))
             if not row:
                 skipped["insufficient_history"] += 1
                 continue
-            if row["price"] < min_price:
-                skipped["low_price"] += 1
-                continue
-            if (row.get("avg_dollar_volume_20d") or 0) < min_avg_dollar_volume:
-                skipped["low_liquidity"] += 1
-                continue
-            rows.append(row)
             try:
-                completed_hist, completed_cutoff = _complete_daily_frame(
-                    hist,
-                    observed_at,
-                )
                 range_feature = (
                     {
                         "status": "disabled",
@@ -1564,7 +1469,7 @@ def _scan_sync(
                     }
                     if breakout_settings.range_persistence_mode == "disabled"
                     else compute_range_persistence(
-                        completed_hist,
+                        hist,
                         cutoff=completed_cutoff,
                         length=breakout_settings.range_persistence_length,
                         fast_length=breakout_settings.range_persistence_fast_length,
@@ -1579,7 +1484,7 @@ def _scan_sync(
                 )
                 range_context[ticker] = _intrinsic_row(
                     row,
-                    completed_hist,
+                    hist,
                     range_feature=range_feature,
                     range_mode=breakout_settings.range_persistence_mode,
                     range_trend_weight=(
@@ -1591,33 +1496,39 @@ def _scan_sync(
                 )
             except Exception:
                 skipped["range_persistence_error"] += 1
-                range_context[ticker] = {
-                    "range_persistence": {
-                        "status": "unavailable",
-                        "version": breakout_settings.range_persistence_version,
-                        "warnings": ["range_persistence_calculation_failed"],
-                    },
-                    "range_persistence_shadow": None,
+                unavailable_range = {
+                    "status": "unavailable",
+                    "version": breakout_settings.range_persistence_version,
+                    "warnings": ["range_persistence_calculation_failed"],
                 }
+                range_context[ticker] = _intrinsic_row(
+                    row,
+                    hist,
+                    range_feature=unavailable_range,
+                    range_mode=breakout_settings.range_persistence_mode,
+                    range_trend_weight=(
+                        breakout_settings.range_persistence_trend_family_weight
+                    ),
+                    range_final_cap=(
+                        breakout_settings.range_persistence_final_weight_cap
+                    ),
+                )
         except Exception:
             skipped["data_error"] += 1
 
-    scored = _score_rows(rows, market, profile, min_avg_dollar_volume)
+    intrinsic_rows = [
+        range_context[ticker]
+        for ticker in tickers
+        if ticker in range_context and "intrinsic_score" in range_context[ticker]
+    ]
+    for item in intrinsic_rows:
+        item["universe_version"] = universe_version
+        item["universe_as_of"] = universe_as_of
+        item["universe_member"] = True
+    _attach_canonical_ranks(intrinsic_rows)
+    scored = _score_rows(intrinsic_rows, market, profile, min_avg_dollar_volume)
     for item in scored:
-        context = range_context.get(item["ticker"])
-        if context is None:
-            item["range_persistence"] = {
-                "status": "unavailable",
-                "version": breakout_settings.range_persistence_version,
-            }
-            item["range_persistence_shadow"] = None
-            item["range_persistence_mode"] = (
-                breakout_settings.range_persistence_mode
-            )
-            continue
-        shadow = context.get("range_persistence_shadow") or {}
-        item["range_persistence"] = context.get("range_persistence")
-        item["range_persistence_shadow"] = shadow
+        shadow = item.get("range_persistence_shadow") or {}
         item["range_persistence_mode"] = breakout_settings.range_persistence_mode
         production = _safe_float(shadow.get("production_score"), 4)
         hypothetical = _safe_float(shadow.get("hypothetical_score"), 4)
@@ -1629,26 +1540,35 @@ def _scan_sync(
         item["range_persistence_score_delta"] = score_delta
         item.setdefault("breakdown", {})["range_persistence"] = {
             "mode": breakout_settings.range_persistence_mode,
-            "feature": context.get("range_persistence"),
+            "feature": item.get("range_persistence"),
             "shadow": shadow,
             "legacy_score_delta": score_delta,
         }
+
+    view_rows: list[dict[str, Any]] = []
+    for item in scored:
+        if sector_id and sector_id not in set(item.get("theme_ids") or []):
+            continue
+        price = _safe_float(item.get("price"), 4)
+        if price is None or price < min_price:
+            skipped["low_price"] += 1
+            continue
+        average_dollar_volume = _safe_float(
+            item.get("avg_dollar_volume_20d"),
+            2,
+        )
         if (
-            breakout_settings.range_persistence_mode == "enabled"
-            and score_delta is not None
-            and item.get("final_score") is not None
+            average_dollar_volume is None
+            or average_dollar_volume < min_avg_dollar_volume
         ):
-            selected_score = round(
-                _clamp(float(item["final_score"]) + score_delta),
-                1,
-            )
-            item["final_score"] = selected_score
-            item["strength_score"] = selected_score
+            skipped["low_liquidity"] += 1
+            continue
+        view_rows.append(item)
+
     if include_options:
-        yahoo_options_status = enrich_rows_with_yahoo_options(scored, display_top=top)
+        yahoo_options_status = enrich_rows_with_yahoo_options(view_rows, display_top=top)
     else:
-        # Single-stock lookups don't need the (very expensive) option-chain
-        # enrichment pass over up to 90 tickers; keep the neutral placeholder.
+        # Single-stock lookups don't need the expensive option-chain pass.
         yahoo_options_status = {
             "provider": "Yahoo/yfinance",
             "status": "skipped",
@@ -1656,9 +1576,11 @@ def _scan_sync(
             "enriched": 0,
             "message": "单标的查询跳过期权粗筛（性能优化）",
         }
-    _refresh_classifications(scored)
-    _sort_scored(scored, timeframe)
-    limited = scored[:top]
+    _refresh_classifications(view_rows)
+    _sort_scored(view_rows, timeframe)
+    for selected_rank, item in enumerate(view_rows, start=1):
+        item["selected_view_rank"] = selected_rank
+    limited = view_rows[:top]
     finnhub_status = enrich_rows_with_finnhub(limited)
     if include_options:
         marketdata_status = enrich_rows_with_marketdata_options(limited)
@@ -1685,9 +1607,14 @@ def _scan_sync(
         "spread_matrix": market.get("spread_matrix", {}),
         "range_persistence_mode": breakout_settings.range_persistence_mode,
         "range_persistence_version": breakout_settings.range_persistence_version,
+        "score_version": STRENGTH_SCORE_VERSION,
+        "feature_version": STRENGTH_FEATURE_VERSION,
+        "normalization_version": STRENGTH_NORMALIZATION_VERSION,
+        "universe_version": universe_version,
+        "universe_as_of": universe_as_of,
         "count": len(limited),
         "universe_count": len(tickers),
-        "screened_count": len(rows),
+        "screened_count": len(view_rows),
         "skipped": skipped,
         "results": limited,
         "rows": limited,
@@ -1746,11 +1673,44 @@ async def scan_strength(
         f":rps:{breakout_settings.range_persistence_slope_days}:{breakout_settings.range_persistence_ratio_window}"
         f":rpt:{breakout_settings.range_persistence_ratio_threshold}:{breakout_settings.range_persistence_min_history_multiplier}"
         f":rpw:{breakout_settings.range_persistence_trend_family_weight}:{breakout_settings.range_persistence_final_weight_cap}"
-        ":mr:v4:spread:voltruth:pa1"
+        f":score:{STRENGTH_SCORE_VERSION}:{STRENGTH_FEATURE_VERSION}:{STRENGTH_NORMALIZATION_VERSION}"
+        f":canonical-universe:themes:{MARKET_SHAPE_VERSION}"
     )
 
     async def produce() -> dict[str, Any]:
         import asyncio
+
+        raw_history: pd.DataFrame | None = None
+        if universe == "themes":
+            tickers, _metadata = _theme_universe()
+            all_symbols = list(dict.fromkeys([*tickers, *BENCHMARKS]))
+            symbol_hash = hashlib.sha256(
+                ",".join(all_symbols).encode("ascii")
+            ).hexdigest()[:16]
+            history_key = (
+                f"strength-history:{STRENGTH_HISTORY_PERIOD}:"
+                f"{_completed_daily_key(datetime.now(timezone.utc))}:{symbol_hash}"
+                f":fh:{int(bool(settings.finnhub_candle_fallback_enabled))}:"
+                f"{settings.finnhub_candle_fallback_limit}"
+                f":md:{int(bool(settings.marketdata_stock_candle_fallback_enabled))}:"
+                f"{settings.marketdata_stock_candle_fallback_limit}"
+                f":stooq:{int(bool(settings.stooq_price_fallback_enabled))}:"
+                f"{settings.stooq_price_fallback_limit}"
+            )
+
+            async def load_history() -> pd.DataFrame:
+                return await asyncio.to_thread(
+                    _download_history,
+                    all_symbols,
+                    period=STRENGTH_HISTORY_PERIOD,
+                )
+
+            raw_history, _, _ = await cache.get_or_set_with_meta(
+                history_key,
+                STRENGTH_CACHE_TTL_SECONDS,
+                load_history,
+            )
+
         return await asyncio.to_thread(
             _scan_sync,
             universe=universe,
@@ -1761,6 +1721,7 @@ async def scan_strength(
             min_price=min_price,
             min_avg_dollar_volume=min_avg_dollar_volume,
             include_options=include_options,
+            raw_history=raw_history,
         )
 
     payload, was_cached, expires_at = await cache.get_or_set_with_meta(
@@ -1802,7 +1763,9 @@ def _score_ticker_frames_sync(
         raise ValueError("ticker set exceeds 150 symbols")
     source = dict(price_source or {})
     spy, _ = _complete_daily_frame(frames.get("SPY", pd.DataFrame()), as_of)
-    _, theme_meta = _theme_universe()
+    theme_tickers, theme_meta = _theme_universe()
+    theme_members = set(theme_tickers)
+    universe_version = _canonical_universe_version(theme_tickers, theme_meta)
     rows: list[dict[str, Any]] = []
     skipped: dict[str, str] = {}
     for symbol in symbols:
@@ -1844,6 +1807,16 @@ def _score_ticker_frames_sync(
             range_final_cap=range_final_cap,
         )
         scored["as_of"] = as_of.astimezone(timezone.utc).isoformat()
+        scored["universe_version"] = universe_version
+        scored["universe_as_of"] = as_of.astimezone(timezone.utc).isoformat()
+        scored["universe_member"] = symbol in theme_members
+        scored["global_rank_percentile"] = None
+        scored["sector_rank_percentile"] = None
+        scored["selected_view_rank"] = None
+        scored["cross_section_status"] = {
+            "global": "cross_section_unavailable",
+            "sector": "cross_section_unavailable",
+        }
         rows.append(scored)
     rows.sort(
         key=lambda item: (
@@ -1857,6 +1830,10 @@ def _score_ticker_frames_sync(
         "as_of": as_of.astimezone(timezone.utc).isoformat(),
         "score_scope": "intrinsic",
         "score_version": INTRINSIC_STRENGTH_VERSION,
+        "feature_version": STRENGTH_FEATURE_VERSION,
+        "normalization_version": STRENGTH_NORMALIZATION_VERSION,
+        "universe_version": universe_version,
+        "universe_as_of": as_of.astimezone(timezone.utc).isoformat(),
         "range_persistence_mode": range_mode,
         "ticker_set_hash": hashlib.sha256(
             ",".join(sorted(symbols)).encode("ascii")
@@ -1903,7 +1880,7 @@ def _score_ticker_set_sync(
 
     symbols = list(dict.fromkeys(normalize_ticker(value) for value in tickers))
     all_symbols = list(dict.fromkeys([*symbols, "SPY"]))
-    raw = _download_history(all_symbols, period="2y")
+    raw = _download_history(all_symbols, period=STRENGTH_HISTORY_PERIOD)
     source = raw.attrs.get("price_source") or _history_status(
         provider="Yahoo/yfinance",
         status="active",

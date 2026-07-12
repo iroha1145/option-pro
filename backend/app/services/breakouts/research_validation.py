@@ -14,6 +14,7 @@ from collections import Counter, defaultdict
 from datetime import date, datetime
 from statistics import fmean
 from typing import Any, Iterable, Mapping, Sequence
+from zoneinfo import ZoneInfo
 
 
 RESEARCH_VALIDATION_VERSION = "breakout-research-validation-v1"
@@ -21,9 +22,9 @@ PRICE_DATA_SCHEMA_VERSION = "breakout-forward-prices-v1"
 DEFAULT_FORWARD_HORIZONS = (1, 5, 20, 63)
 
 _VALIDATION_LIMITATIONS = (
-    "Forward returns use the event price as the point-in-time entry and later "
+    "Forward returns use the triggered event price as the point-in-time entry and later "
     "completed daily closes supplied by the offline price dataset.",
-    "The event price is a signal-time mark, not a guaranteed executable fill after "
+    "The event price is a trigger-time mark, not a guaranteed executable fill after "
     "publication; execution-return claims require later intraday bars.",
     "The validator does not fetch missing prices, backfill delisted securities, "
     "or infer transaction costs, slippage, dividends, or survivorship controls.",
@@ -204,6 +205,21 @@ def merge_completed_research_observations(
             continue
         event_by_key[key] = row
 
+    def triggered_anchor(
+        event: Mapping[str, Any],
+        snapshot: Mapping[str, Any],
+    ) -> Any:
+        if "triggered_at" in event:
+            return event.get("triggered_at")
+        if "triggered_at" in snapshot:
+            return snapshot.get("triggered_at")
+        state = str(
+            event.get("lifecycle_state") or snapshot.get("lifecycle_state") or ""
+        )
+        if state in {"DISCOVERED", "WATCHING"}:
+            return None
+        return event.get("event_at") or snapshot.get("event_at")
+
     candidates: list[dict[str, Any]] = []
     missing_events = 0
     malformed_snapshots = 0
@@ -246,6 +262,13 @@ def merge_completed_research_observations(
                 .upper(),
                 "trading_date": snapshot.get("trading_date"),
                 "event_at": event.get("event_at") or snapshot.get("event_at"),
+                "first_seen_at": event.get("first_seen_at")
+                or snapshot.get("first_seen_at"),
+                "triggered_at": triggered_anchor(event, snapshot),
+                "state_changed_at": event.get("state_changed_at")
+                or snapshot.get("state_changed_at"),
+                "last_seen_at": event.get("last_seen_at")
+                or snapshot.get("last_seen_at"),
                 "feature_cutoff_at": feature_snapshot.get("feature_cutoff_at"),
                 "raw_as_of": feature_snapshot.get("raw_as_of"),
                 "event_price": snapshot.get("event_price"),
@@ -298,18 +321,26 @@ def merge_completed_research_observations(
             str(row.get("observation_id") or ""),
         )
     )
-    observations: list[dict[str, Any]] = []
-    seen_experiments: set[tuple[str, str]] = set()
+    selected_experiments: dict[tuple[str, str], dict[str, Any]] = {}
     repeated_event_rows = 0
     for row in candidates:
         event_id = str(row.get("event_id") or "")
         version = str(row.get("range_persistence_version") or "unknown")
         experiment_key = (event_id, version)
-        if experiment_key in seen_experiments:
-            repeated_event_rows += 1
+        selected = selected_experiments.get(experiment_key)
+        if selected is None:
+            selected_experiments[experiment_key] = row
             continue
-        seen_experiments.add(experiment_key)
-        observations.append(row)
+        repeated_event_rows += 1
+        if selected.get("triggered_at") in (None, "") and row.get(
+            "triggered_at"
+        ) not in (None, ""):
+            # A WATCHING snapshot is useful descriptive evidence, but it cannot
+            # anchor a post-breakout return. Prefer the first later snapshot
+            # that has an actual trigger for the same versioned experiment.
+            selected_experiments[experiment_key] = row
+
+    observations = list(selected_experiments.values())
 
     observations.sort(
         key=lambda row: (
@@ -358,7 +389,7 @@ def merge_completed_research_observations(
 def _point_in_time_audit(row: Mapping[str, Any]) -> dict[str, Any]:
     parsed: dict[str, datetime] = {}
     reasons: list[str] = []
-    for field in ("raw_as_of", "feature_cutoff_at", "event_at", "published_at"):
+    for field in ("raw_as_of", "feature_cutoff_at", "triggered_at", "published_at"):
         value = row.get(field)
         if value in (None, ""):
             reasons.append(f"missing_{field}")
@@ -375,14 +406,14 @@ def _point_in_time_audit(row: Mapping[str, Any]) -> dict[str, Any]:
         reasons.append("raw_as_of_after_feature_cutoff")
     if (
         "feature_cutoff_at" in parsed
-        and "event_at" in parsed
-        and parsed["feature_cutoff_at"] > parsed["event_at"]
+        and "triggered_at" in parsed
+        and parsed["feature_cutoff_at"] > parsed["triggered_at"]
     ):
         reasons.append("feature_cutoff_after_event")
     if (
-        "event_at" in parsed
+        "triggered_at" in parsed
         and "published_at" in parsed
-        and parsed["event_at"] > parsed["published_at"]
+        and parsed["triggered_at"] > parsed["published_at"]
     ):
         reasons.append("event_after_publication")
     return {
@@ -396,7 +427,9 @@ def _point_in_time_audit(row: Mapping[str, Any]) -> dict[str, Any]:
             if "feature_cutoff_at" in parsed
             else None
         ),
-        "event_at": parsed["event_at"].isoformat() if "event_at" in parsed else None,
+        "triggered_at": (
+            parsed["triggered_at"].isoformat() if "triggered_at" in parsed else None
+        ),
         "published_at": (
             parsed["published_at"].isoformat() if "published_at" in parsed else None
         ),
@@ -430,10 +463,30 @@ def attach_forward_return_labels(
 
     for raw_row in rows:
         row = dict(raw_row)
+        lifecycle_state = str(row.get("lifecycle_state") or "")
+        if (
+            "triggered_at" not in row
+            and lifecycle_state not in {"DISCOVERED", "WATCHING"}
+        ):
+            # Compatibility for v1 research files.  New exports always carry
+            # triggered_at explicitly, including a null for untriggered rows.
+            row["triggered_at"] = row.get("event_at")
         ticker = str(row.get("ticker") or "").strip().upper()
         point_in_time = _point_in_time_audit(row)
         try:
-            event_date = _parse_date(row.get("trading_date"), field="trading_date")
+            if point_in_time["triggered_at"] is not None:
+                event_date = _parse_aware_datetime(
+                    point_in_time["triggered_at"],
+                    field="triggered_at",
+                ).astimezone(
+                    ZoneInfo(
+                        str(price_metadata.get("timezone") or "America/New_York")
+                    )
+                ).date()
+            else:
+                event_date = _parse_date(
+                    row.get("trading_date"), field="trading_date"
+                )
             date_error = None
         except ValueError:
             event_date = None
@@ -491,11 +544,11 @@ def attach_forward_return_labels(
         row["point_in_time"] = point_in_time
         row["raw_as_of"] = point_in_time["raw_as_of"]
         row["feature_cutoff_at"] = point_in_time["feature_cutoff_at"]
-        row["event_at"] = point_in_time["event_at"]
+        row["triggered_at"] = point_in_time["triggered_at"]
         row["published_at"] = point_in_time["published_at"]
-        row["label_entry_at"] = point_in_time["event_at"]
+        row["label_entry_at"] = point_in_time["triggered_at"]
         row["label_entry_price"] = event_price
-        row["label_entry_type"] = "signal_time_event_mark"
+        row["label_entry_type"] = "triggered_event_mark"
         row["execution_return_status"] = "unavailable"
         row["labels"] = labels
         row["label_status"] = (

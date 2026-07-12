@@ -7,12 +7,13 @@
 
 研究入口只读取状态为 `completed` 且已有 `published_at` 的扫描快照。事件与影子
 记录按 `scan_run_id + event_id` 连接；同一个 `event_id +
-range_persistence_version` 在连续扫描中只保留首次完成发布的观察，避免重复计数。
+range_persistence_version` 在连续扫描中优先保留首次已触发的完成发布观察；若始终
+未触发，则只保留首次观察且不生成突破后收益标签。
 
 每条可标注观察必须通过点时一致性（Point-in-Time）检查：
 
 ```text
-raw_as_of <= feature_cutoff_at <= event_at <= published_at
+raw_as_of <= feature_cutoff_at <= triggered_at <= published_at
 ```
 
 任一时间缺失、没有时区或次序错误，所有前瞻标签都标记为 `unavailable`。缺价格、
@@ -45,6 +46,7 @@ raw_as_of <= feature_cutoff_at <= event_at <= published_at
 
 ## 前瞻标签
 
+导出记录明确包含 first_seen_at、triggered_at、state_changed_at 和 last_seen_at。
 当前默认提供 1、5、20、63 个交易时段的前瞻收益。其中 1 日保留事件标签观察，
 5、20、63 日与区间强势持续度实验期限对齐：
 
@@ -52,9 +54,9 @@ raw_as_of <= feature_cutoff_at <= event_at <= published_at
 forward_return_h = future_close_h / event_price - 1
 ```
 
-`event_price` 是事件快照中当时已知的价格；退出价只从 `trading_date` 之后的完整
-日线收盘中按顺序选择。事件当日价格即使出现在行情文件中也不会被当作未来退出
-价。周末和没有行情点的日期不计入时段数量。该入场值属于信号时点标记，不代表
+`event_price` 是触发快照中当时已知的价格；退出价只从 `triggered_at` 所在交易日
+之后的完整日线收盘中按顺序选择。触发当日价格即使出现在行情文件中也不会被当作
+未来退出价。周末和没有行情点的日期不计入时段数量。该入场值属于触发时点标记，不代表
 发布时间之后能够成交的价格；没有后续盘中 K 线时，执行收益状态保持
 `unavailable`。
 

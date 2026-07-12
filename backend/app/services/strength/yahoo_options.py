@@ -307,16 +307,27 @@ def _score_metrics(raw_metrics: list[dict[str, Any]]) -> dict[str, dict[str, Any
 
 
 def _apply_metrics(row: dict[str, Any], metrics: dict[str, Any]) -> None:
-    old_score = _safe_float(row.get("option_heat_score"), 1) or 50.0
-    new_score = _safe_float(metrics.get("option_heat_score"), 1) or old_score
-    option_weight = _safe_float(row.get("option_score_weight"), 4) or 0.06
+    new_score = _safe_float(metrics.get("option_heat_score"), 1)
+    if new_score is None:
+        return
     row["option_heat_score"] = new_score
+    row["option_activity"] = {
+        "status": "active",
+        "score": new_score,
+        "provider": PROVIDER,
+    }
+    row["option_risk"] = {
+        "status": "active" if metrics.get("atm_iv_percent") is not None else "unavailable",
+        "iv_percent": metrics.get("atm_iv_percent"),
+    }
+    row["option_direction"] = {
+        "status": "unavailable",
+        "score": None,
+        "reason": "chain snapshot does not identify buyer-initiated direction",
+    }
     row["option_context"] = metrics
     row.setdefault("data_sources", {})["options"] = PROVIDER
     row.setdefault("breakdown", {})["option_heat"] = new_score
-    if "final_score" in row:
-        row["final_score"] = round(_clamp(float(row["final_score"]) + (new_score - old_score) * option_weight), 1)
-        row["strength_score"] = row["final_score"]
     row["warnings"] = [w for w in (row.get("warnings") or []) if "期权热度" not in str(w)]
     if metrics.get("warning"):
         row.setdefault("warnings", []).append(str(metrics["warning"]))
@@ -417,6 +428,6 @@ def enrich_rows_with_yahoo_options(
         "message": (
             f"Yahoo/yfinance 已对 {enriched}/{len(option_pool)} 个宽候选池标的完成期权粗筛"
             if enriched
-            else "Yahoo/yfinance 期权粗筛未拿到可用期权链，期权热度已降级"
+            else "Yahoo/yfinance 期权粗筛未拿到可用期权链，期权活动数据不可用"
         ),
     }

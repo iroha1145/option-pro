@@ -62,6 +62,8 @@ allow_insecure="${ALLOW_INSECURE_PUBLIC_BIND:-$(env_value ALLOW_INSECURE_PUBLIC_
 breakout_enabled="${BREAKOUT_RADAR_ENABLED:-$(env_value BREAKOUT_RADAR_ENABLED)}"
 range_mode="${RANGE_PERSISTENCE_MODE:-$(env_value RANGE_PERSISTENCE_MODE)}"
 range_interaction_enabled="${RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED:-$(env_value RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED)}"
+market_shape_version="${MARKET_SHAPE_VERSION:-$(env_value MARKET_SHAPE_VERSION)}"
+market_shape_version="${market_shape_version:-market-shape-v3}"
 
 if ! is_loopback_bind "$host_bind" && [ -z "$auth_token" ] && ! is_truthy "$allow_insecure"; then
     echo "Refusing non-loopback HOST_BIND without APP_AUTH_TOKEN." >&2
@@ -128,6 +130,7 @@ expected_range_mode="$range_mode"
 docker compose exec -T \
     -e "EXPECTED_BREAKOUT_ENABLED=${expected_breakout_enabled}" \
     -e "EXPECTED_RANGE_MODE=${expected_range_mode}" \
+    -e "EXPECTED_MARKET_SHAPE_VERSION=${market_shape_version}" \
     backend python -c '
 import json
 import os
@@ -150,8 +153,9 @@ if bool(payload.get("enabled")) is not expected_enabled:
     raise SystemExit("breakout enabled state does not match deployment config")
 if payload.get("range_persistence_mode") != os.environ["EXPECTED_RANGE_MODE"]:
     raise SystemExit("range persistence mode does not match deployment config")
-if payload.get("versions", {}).get("market_shape_version") != "market-shape-v2":
-    raise SystemExit("market-shape-v2 is not active")
+expected_market_shape = os.environ["EXPECTED_MARKET_SHAPE_VERSION"]
+if payload.get("versions", {}).get("market_shape_version") != expected_market_shape:
+    raise SystemExit(f"{expected_market_shape} is not active")
 if payload.get("market_shape_adapter", {}).get("status") != "available":
     raise SystemExit("market shape adapter is unavailable")
 print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))

@@ -33,7 +33,7 @@ events 和明确状态，不创建数据库。
 date 必须是实际存在的 ISO 日期；setup_type、lifecycle_state 和 session 只接受
 公开枚举值，非法值在进入仓储前返回 422。
 
-排序以 event_at、alert_priority_score 和 event_id 形成稳定复合键。游标包含
+排序以稳定的 event_at、alert_priority_score 和 event_id 形成复合键。游标包含
 scan_run_id，分页期间出现新扫描不会污染同一分页序列。
 
 ## GET /api/breakouts/events/{event_id}
@@ -63,7 +63,8 @@ Provider 失败不改变 /ready；只体现在此接口和突破根响应。
 ## Event 最小字段
 
 event_id、ticker、name、exchange、asset_type、sector、session、setup_type、
-lifecycle_state、event_at、event_age_seconds、event_price、current_price、
+lifecycle_state、event_at、first_seen_at、triggered_at、state_changed_at、last_seen_at、
+event_age_seconds、state_age_seconds、observation_age_seconds、event_price、current_price、
 session_change_pct、gap_pct、rvol_time_of_day、pivot_price、support_zone、
 resistance_zone、invalidation_price、十个评分字段、区间持续性数值、斜率、比例、
 自身/全局/行业百分位、range_persistence_status、交互证据、configured_weights、
@@ -72,3 +73,13 @@ market_shape（含 state、confidence、transition_risk、eligibility 和 rules�
 warnings、source_status、provenance、versions。
 
 数值只能是有限数或 null；分数范围为 0 至 100，置信度为 0 至 1。
+
+三种年龄分别锚定首次触发或首次发现、最近状态变化、最近成功复核。普通续扫只会
+降低 observation_age_seconds，不会重置 event_age_seconds 或 state_age_seconds。
+
+## 大盘形态时间
+
+大盘形态的 `as_of`、`entered_at` 和交易日计数使用最后一个完整日线的实际收盘
+时刻，周末和盘前请求不会制造虚假的状态切换时间。`history_truncated=true` 表示
+状态机只重放配置窗口；若 `days_in_state_is_lower_bound=true`，`days_in_state` 表示
+“至少已持续”的天数，避免把窗口首日误写成已知的真实起点。

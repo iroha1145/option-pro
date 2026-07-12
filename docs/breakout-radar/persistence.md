@@ -1,6 +1,6 @@
 # SQLite 持久化
 
-数据库版本：breakout-db-v1  
+数据库版本：breakout-db-v2
 默认路径：/data/optix.db
 
 ## 连接规则
@@ -30,7 +30,8 @@ API 读连接：
 - breakout_provider_snapshots：有界的新鲜与 stale Provider 快照。
 - breakout_candidates：规范候选和有界调试字段。
 - breakout_structures：pivot、结构、有效期和 cutoff。
-- breakout_events：事件当前状态、分数、质量、来源和版本。
+- breakout_events：事件当前状态、分数、质量、来源、版本，以及
+  first_seen_at、triggered_at、state_changed_at、last_seen_at 四种时间。
 - breakout_transitions：显式幂等状态转换。
 - breakout_scan_events：每个 completed scan 的不可变事件快照与排名。
 - breakout_provider_health：成功、失败、熔断和 stale 状态。
@@ -62,6 +63,10 @@ transition 时间线。
 
 同一扫描重试不会重复事件或转换。前一事件进入终态后，同日新 pivot 产生新
 event_id；仍在跟踪的主事件不会被 Discovery 旁路复制。
+
+`event_at` 是兼容字段：已触发事件等于 `triggered_at`，尚未触发事件等于
+`first_seen_at`。普通续扫只更新 `last_seen_at`；只有生命周期真正变化时才更新
+`state_changed_at`。`triggered_at` 首次写入后不再被后续扫描覆盖。
 
 ## 租约
 

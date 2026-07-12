@@ -198,7 +198,7 @@ def _empty_status(status: str = "not_configured", message: str | None = None) ->
         "status": status,
         "configured": False,
         "enriched": 0,
-        "message": message or "MARKETDATA_TOKEN 未配置，期权热度保持中性占位",
+        "message": message or "MARKETDATA_TOKEN 未配置，期权活动数据不可用",
     }
 
 
@@ -241,16 +241,28 @@ def enrich_rows_with_marketdata_options(rows: list[dict[str, Any]], settings: Se
                         failed += 1
                         continue
 
-                    old_score = _safe_float(row.get("option_heat_score"), 1) or 50.0
-                    new_score = _safe_float(metrics.get("option_heat_score"), 1) or old_score
-                    option_weight = _safe_float(row.get("option_score_weight"), 4) or 0.06
+                    new_score = _safe_float(metrics.get("option_heat_score"), 1)
+                    if new_score is None:
+                        failed += 1
+                        continue
                     row["option_heat_score"] = new_score
+                    row["option_activity"] = {
+                        "status": "active",
+                        "score": new_score,
+                        "provider": "MarketData.app",
+                    }
+                    row["option_risk"] = {
+                        "status": "active" if metrics.get("iv_average") is not None else "unavailable",
+                        "iv_average": metrics.get("iv_average"),
+                    }
+                    row["option_direction"] = {
+                        "status": "unavailable",
+                        "score": None,
+                        "reason": "chain snapshot does not identify buyer-initiated direction",
+                    }
                     row["option_context"] = metrics
                     row["data_sources"]["options"] = "MarketData.app"
                     row.setdefault("breakdown", {})["option_heat"] = new_score
-                    if "final_score" in row:
-                        row["final_score"] = round(_clamp(float(row["final_score"]) + (new_score - old_score) * option_weight), 1)
-                        row["strength_score"] = row["final_score"]
                     row["warnings"] = [w for w in (row.get("warnings") or []) if "期权热度" not in str(w)]
                     if new_score >= 68:
                         row["tags"] = list(dict.fromkeys([*(row.get("tags") or []), "期权活跃"]))[:6]

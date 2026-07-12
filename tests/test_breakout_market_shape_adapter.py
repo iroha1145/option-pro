@@ -129,7 +129,7 @@ def test_insufficient_market_data_stays_unavailable_without_neutral_fit() -> Non
     assert market_fit_for_setup(shape, BreakoutSetupType.DAILY_BASE_BREAKOUT) is None
 
 
-def test_partial_market_dimensions_do_not_become_neutral_fifties() -> None:
+def test_partial_optional_market_dimensions_degrade_without_neutral_fifties() -> None:
     regime = _regime(
         score=61,
         trend=58,
@@ -139,10 +139,10 @@ def test_partial_market_dimensions_do_not_become_neutral_fifties() -> None:
     )
     regime["market_volume_score"] = None
     shape = build_market_shape(regime, as_of=NOW)
-    assert shape["status"] == "unavailable"
-    assert shape["state"] is None
-    assert shape["rules"] == {}
-    assert any("market_volume_score" in warning for warning in shape["warnings"])
+    assert shape["status"] == "degraded"
+    assert shape["state"] is not None
+    assert shape["evidence"]["volume_score"] is None
+    assert "market_volume" in shape["optional_missing"]
 
 
 def test_recovery_state_prefers_recovery_breakout_over_fresh_breakout() -> None:

@@ -15,6 +15,7 @@ from pydantic import (
     ConfigDict,
     Field,
     field_validator,
+    model_validator,
 )
 
 
@@ -266,6 +267,8 @@ class BreakoutEvent(_StrictModel):
     lifecycle_state: BreakoutLifecycleState
     event_at: AwareDatetime
     first_seen_at: AwareDatetime
+    triggered_at: Optional[AwareDatetime] = None
+    state_changed_at: AwareDatetime
     last_seen_at: AwareDatetime
     pivot_id: str = Field(min_length=1, max_length=128)
     event_price: Optional[float] = Field(default=None, gt=0)
@@ -284,6 +287,45 @@ class BreakoutEvent(_StrictModel):
     @classmethod
     def validate_ticker(cls, value: Any) -> str:
         return normalize_ticker(value)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_event_times(cls, value: Any) -> Any:
+        """Keep legacy payloads readable while enforcing stable time meanings."""
+
+        if not isinstance(value, dict):
+            return value
+        data = dict(value)
+        event_at = data.get("event_at")
+        first_seen_at = data.get("first_seen_at") or event_at
+        lifecycle_state = str(
+            getattr(data.get("lifecycle_state"), "value", data.get("lifecycle_state"))
+            or "DISCOVERED"
+        )
+        triggered_at_supplied = "triggered_at" in data
+        triggered_at = data.get("triggered_at")
+        if not triggered_at_supplied and lifecycle_state in {
+            BreakoutLifecycleState.TRIGGERED.value,
+            BreakoutLifecycleState.CONFIRMED.value,
+            BreakoutLifecycleState.HOLDING.value,
+            BreakoutLifecycleState.RETESTING.value,
+            BreakoutLifecycleState.RETEST_HELD.value,
+            BreakoutLifecycleState.REACCELERATING.value,
+            BreakoutLifecycleState.EXTENDED.value,
+            BreakoutLifecycleState.FAILED.value,
+        }:
+            # Pre-v2 event payloads only carried event_at.  The repository
+            # migration performs the authoritative backfill; this fallback
+            # keeps fixtures and imported mappings compatible.
+            triggered_at = event_at
+        if first_seen_at is not None:
+            data["first_seen_at"] = first_seen_at
+        data["triggered_at"] = triggered_at
+        data["event_at"] = triggered_at or first_seen_at or event_at
+        data["state_changed_at"] = (
+            data.get("state_changed_at") or event_at or first_seen_at
+        )
+        return data
 
 
 class StrengthScoreSnapshot(_StrictModel):
@@ -306,9 +348,21 @@ class StrengthScoreSnapshot(_StrictModel):
 class MarketShapeSnapshot(_StrictModel):
     status: str
     state: Optional[str] = None
+    raw_state: Optional[str] = None
+    previous_state: Optional[str] = None
     confidence: float = Field(ge=0, le=1)
     transition_risk: Optional[float] = Field(default=None, ge=0, le=1)
+    state_instability_score: Optional[float] = Field(default=None, ge=0, le=1)
+    entered_at: Optional[AwareDatetime] = None
+    days_in_state: int = Field(default=0, ge=0)
+    pending_state: Optional[str] = None
+    pending_days: int = Field(default=0, ge=0)
     as_of: AwareDatetime
+    input_coverage: dict[str, Any] = Field(default_factory=dict)
+    hard_missing: list[str] = Field(default_factory=list)
+    optional_missing: list[str] = Field(default_factory=list)
+    active_groups: list[str] = Field(default_factory=list)
+    degraded_reasons: list[str] = Field(default_factory=list)
     rules: dict[str, Any] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
     version: str

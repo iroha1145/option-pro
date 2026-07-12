@@ -24,6 +24,7 @@ from app.services.breakouts.repository import (
     DEFAULT_LOCK_NAME,
     BreakoutRepository,
     LeaseLostError,
+    SCHEMA_VERSION,
 )
 
 
@@ -154,7 +155,7 @@ class BreakoutWorker:
             for key, attribute in names.items()
             if attribute is not None
         }
-        result["database"] = "breakout-db-v1"
+        result["database"] = SCHEMA_VERSION
         return result
 
     async def _invoke_scan_service(

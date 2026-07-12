@@ -294,7 +294,7 @@ def compute_spread_matrix(index_data: dict[str, pd.DataFrame]) -> dict[str, Any]
         spreads[str(definition["key"])] = result
         if result.get("status") == "active":
             weight = float(definition.get("weight") or 0)
-            weighted_score += float(result.get("score") or 50) * weight
+            weighted_score += float(result["score"]) * weight
             total_weight += weight
 
     score = (

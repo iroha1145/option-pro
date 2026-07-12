@@ -106,18 +106,19 @@ def test_market_regime_reports_insufficient_data_instead_of_bearish_score() -> N
     assert result["missing_requirements"]
 
 
-def test_market_regime_does_not_promote_partial_risk_and_breadth_to_active() -> None:
+def test_market_regime_degrades_partial_risk_without_erasing_core_shape() -> None:
     history = _history(260)
     result = market_regime.compute_market_regime(
         {symbol: history for symbol in ("SPY", "QQQ", "IWM", "RSP")}
     )
     assert result["status"] == "degraded"
-    assert result["score"] is None
+    assert result["score"] is not None
     assert result["partial_score"] is not None
-    assert result["market_shape"]["status"] == "unavailable"
-    assert result["market_shape"]["state"] is None
-    assert "vix" in result["missing_requirements"]
-    assert "risk_on_spreads" in result["missing_requirements"]
+    assert result["market_shape"]["status"] == "degraded"
+    assert result["market_shape"]["state"] is not None
+    assert "volatility" in result["optional_missing"]
+    assert "credit" in result["optional_missing"]
+    assert "rates" in result["optional_missing"]
 
 
 def test_empty_relative_spread_matrix_stays_unavailable() -> None:
@@ -281,14 +282,23 @@ def test_scan_uses_server_fixed_cache_ttl(monkeypatch: pytest.MonkeyPatch) -> No
 
     monkeypatch.setattr(scanner, "cache", FakeCache())
     monkeypatch.setattr(scanner, "_scan_sync", fake_scan)
+    monkeypatch.setattr(
+        scanner,
+        "_download_history",
+        lambda _symbols, period="1y": pd.DataFrame(),
+    )
 
     first = asyncio.run(scanner.scan_strength(include_options=False))
     second = asyncio.run(scanner.scan_strength(include_options=False))
 
-    assert keys[0][0] == keys[1][0]
-    assert ":ttl:" not in keys[0][0]
-    assert keys[0][1] == scanner.STRENGTH_CACHE_TTL_SECONDS
-    assert keys[1][1] == scanner.STRENGTH_CACHE_TTL_SECONDS
+    view_keys = [item for item in keys if item[0].startswith("strength:themes:")]
+    history_keys = [item for item in keys if item[0].startswith("strength-history:")]
+    assert len(view_keys) == 2
+    assert view_keys[0][0] == view_keys[1][0]
+    assert ":ttl:" not in view_keys[0][0]
+    assert all(ttl == scanner.STRENGTH_CACHE_TTL_SECONDS for _key, ttl in view_keys)
+    assert len(history_keys) == 1
+    assert history_keys[0][1] == scanner.STRENGTH_CACHE_TTL_SECONDS
     assert scan_calls == 1
     assert first["_cached"] is False
     assert second["_cached"] is True

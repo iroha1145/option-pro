@@ -57,6 +57,12 @@ class BreakoutSettings(BaseSettings):
     provider_result_limit: int = Field(
         default=150, ge=1, le=150, alias="BREAKOUT_PROVIDER_RESULT_LIMIT"
     )
+    provider_max_concurrency: int = Field(
+        default=4,
+        ge=1,
+        le=16,
+        alias="BREAKOUT_PROVIDER_MAX_CONCURRENCY",
+    )
     provider_min_market_cap: float = Field(
         default=200_000_000,
         ge=0,

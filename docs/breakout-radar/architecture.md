@@ -1,8 +1,8 @@
 # 突破雷达架构冻结
 
-状态：冻结于 2026-07-12  
-基线：main 18420ae32c15d7572b20e901027eafaf46d08d03  
-功能分支：feat/breakout-radar-range-persistence
+状态：2026-07-12 语义修订
+基线：main 34c3c5d64e46fcded204ff06004d232b7ca0183d
+功能分支：fix/event-strength-market-semantics
 
 ## 目标和边界
 
@@ -64,24 +64,32 @@ DiscoveryProvider
 PriceDataPort
 
 - 批量返回日线和盘中 OHLCV。
-- 每份数据带 source、raw_as_of、cutoff、session、adjustment 和 completeness。
+- 每份数据带 requested_at、received_at、data_through、feature_cutoff_at、source、
+  adjustment、completeness、quality 和 warnings；raw_as_of 仅作为 data_through
+  的兼容别名。
 - 日线排除未完成交易日；盘中排除 event_at 之后和未完成 K 线。
 
 StrengthScoringPort
 
 - 接受显式 ticker 集合，关闭期权增强。
-- 返回 score、score_scope、confidence、score_version、included_features、
-  factor_breakdown、coverage 和 as_of。
+- 返回 intrinsic_score、market_fit_score、profile_fit_score、ranking_score、
+  score_scope、confidence、版本、贡献明细、coverage 和 as_of。
 - 只有 scope=intrinsic 才能填 intrinsic_strength_score。
+- 扫描与显式 ticker 集合共用 strength-v2 内在评分；页面筛选、期权和大盘形态
+  不进入 intrinsic_score。完整规范股票池先完成特征、标准化与排名，再应用视图筛选。
 
 MarketShapePort
 
-- 返回 status、六态 state、confidence、transition_risk、as_of、rules、
-  warnings 和 version。
-- 第二版使用既有趋势、动量、宽度、成交量、风险价差和风险偏好证据生成
+- 返回 raw_state、稳定 state、previous_state、entered_at、days_in_state、
+  pending_state、pending_days、confidence、transition_risk、
+  state_instability_score、输入覆盖、缺失组、rules 和版本。
+- 第三版使用既有趋势、动量、宽度、成交量、风险价差和风险偏好证据生成
   BULL_TREND、BULL_PULLBACK、RANGE_ACCUMULATION、RANGE_DISTRIBUTION、
-  BEAR_TREND、CAPITULATION_RECOVERY 六态。核心行情不足时仍返回 unavailable，
-  market_fit 为 null，不能补 50。
+  BEAR_TREND、CAPITULATION_RECOVERY 六态，并从最近完整交易日按时点顺序重放
+  滞回状态机。核心行情不足时返回 unavailable；波动率、信用或利率等可选组缺失
+  时返回 degraded，按置信度收缩 market_fit，不补 50。
+- transition_risk 表示历史状态、待确认进度、边界距离和证据分歧形成的转换压力，
+  范围为 0 至 1，但不是统计概率。
 
 CanonicalUniversePort
 
@@ -97,9 +105,12 @@ BreakoutRepository
   事件使用最多 40 条保留通道。查询只接受事件当前版本所属的 completed scan，
   并排除 as_of 之后写入的数据。
 
-## 事件身份与阶段分类
+## 事件身份、时间与阶段分类
 
 - event_id、origin_setup_type、trading_date、pivot_id 和 first_seen_at 创建后固定。
+- triggered_at 是首次进入 TRIGGERED 的时间，state_changed_at 只在生命周期实际
+  变化时更新，last_seen_at 表示最近成功复核。兼容字段 event_at 对已触发事件等于
+  triggered_at，对未触发事件等于 first_seen_at，普通续扫不会重置。
 - setup_type 是可演化的阶段分类。PREMARKET_GAP 可依次成为 GAP_HOLD、
   GAP_AND_GO 或 GAP_FADE；回踩与再加速可成为 RETEST_BREAKOUT 或
   RECOVERY_BREAKOUT，但都沿用原 event_id。
@@ -152,10 +163,10 @@ BreakoutRepository
 - breakout-detector-v1
 - breakout-score-v1
 - range-persistence-v1
-- market-shape-v2
-- strength-intrinsic-v1
+- market-shape-v3
+- strength-v2
 - canonical-universe-v1
-- breakout-db-v1
+- breakout-db-v2
 
 版本、阈值配置哈希、ticker 集合哈希、session 和 source date 都进入缓存键。
 
@@ -211,8 +222,8 @@ Dockerfile、.env.example、依赖锁、迁移版本和公共 API 模型。
 
 - TradingView America 扫描器不是官方稳定 API，也不等于规范全美股票池。
 - 第一版规范股票池来自项目固定主题池，股票池外候选缺少全局和行业百分位。
-- 六态大盘形态采用可解释 bootstrap 规则，尚未完成跨周期样本外最优性验证；
-  核心行情不足时 market_fit 仍降级为 null。
+- 六态大盘形态采用可解释的工程初始参数，尚未完成跨周期样本外最优性验证；
+  核心行情不足时 market_fit 为 null，可选风险数据不足时降级并收缩置信度。
 - 历史盘前逐时段数据不足时 premarket_rvol 为 null。
 - 市场时钟复用现有假日和提前收盘规则；临时休市需后续引入可靠日历源。
 - 所有阈值和权重是 bootstrap defaults，未经历史最优性证明。

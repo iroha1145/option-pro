@@ -21,6 +21,7 @@ from app.services.breakouts.breakout_detector import detect_breakout
 from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
 from app.services.breakouts.feature_engine import (
     completed_daily_session,
+    compute_average_dollar_volume,
     compute_atr,
     compute_feature_snapshot,
     trim_daily_bars,
@@ -130,6 +131,115 @@ def _aware_datetime(value: Any, fallback: datetime) -> datetime:
     return parsed if parsed.tzinfo is not None else fallback
 
 
+def _price_provenance(snapshot: Any) -> dict[str, Any]:
+    """Serialize one PriceDataSnapshot without changing its market-data clock."""
+
+    if snapshot is None:
+        return {}
+
+    def iso(name: str) -> str | None:
+        value = getattr(snapshot, name, None)
+        return value.isoformat() if isinstance(value, datetime) else None
+
+    data_through = iso("data_through") or iso("raw_as_of")
+    return {
+        "requested_at": iso("requested_at"),
+        "received_at": iso("received_at"),
+        "data_through": data_through,
+        "raw_as_of": data_through,
+        "feature_cutoff_at": iso("feature_cutoff_at"),
+        "source": getattr(snapshot, "source", None),
+        "adjustment": getattr(snapshot, "adjustment", None),
+        "completeness": getattr(snapshot, "completeness", None),
+        "quality": getattr(snapshot, "quality", None),
+        "warnings": list(getattr(snapshot, "warnings", ()) or ()),
+    }
+
+
+def _attach_price_provenance(
+    features: dict[str, Any],
+    *,
+    daily_snapshot: Any,
+    intraday_snapshot: Any,
+) -> None:
+    daily = _price_provenance(daily_snapshot)
+    intraday = _price_provenance(intraday_snapshot)
+    features["price_data_provenance"] = {"daily": daily, "intraday": intraday}
+    if intraday:
+        for field in (
+            "requested_at",
+            "received_at",
+            "data_through",
+            "raw_as_of",
+            "feature_cutoff_at",
+            "source",
+            "adjustment",
+            "completeness",
+        ):
+            if intraday.get(field) is not None:
+                features[field] = intraday[field]
+        features["price_data_quality"] = intraday.get("quality")
+        features["price_data_warnings"] = intraday.get("warnings") or []
+
+
+def _event_time_semantics(
+    prior: BreakoutEvent | Mapping[str, Any] | None,
+    *,
+    first_seen_at: datetime,
+    observed_at: datetime,
+    transitions: Sequence[Mapping[str, Any]],
+) -> tuple[datetime | None, datetime, datetime]:
+    """Return triggered, state-change and stable compatibility timestamps."""
+
+    def prior_value(name: str) -> Any:
+        if prior is None:
+            return None
+        if isinstance(prior, Mapping):
+            return prior.get(name)
+        return getattr(prior, name, None)
+
+    triggered_at = None
+    prior_triggered = prior_value("triggered_at")
+    if prior_triggered is not None:
+        triggered_at = _aware_datetime(prior_triggered, first_seen_at)
+    elif prior is not None:
+        prior_state = str(
+            getattr(prior_value("lifecycle_state"), "value", prior_value("lifecycle_state"))
+            or ""
+        )
+        if prior_state not in {
+            BreakoutLifecycleState.DISCOVERED.value,
+            BreakoutLifecycleState.WATCHING.value,
+            BreakoutLifecycleState.EXPIRED.value,
+        }:
+            triggered_at = _aware_datetime(prior_value("event_at"), first_seen_at)
+
+    if triggered_at is None:
+        for transition in transitions:
+            to_state = str(
+                getattr(transition.get("to_state"), "value", transition.get("to_state"))
+                or ""
+            )
+            if to_state == BreakoutLifecycleState.TRIGGERED.value:
+                triggered_at = _aware_datetime(
+                    transition.get("evidence_at"), observed_at
+                )
+                break
+
+    if transitions:
+        state_changed_at = observed_at
+    else:
+        prior_state_changed = prior_value("state_changed_at")
+        state_changed_at = (
+            _aware_datetime(prior_state_changed, first_seen_at)
+            if prior_state_changed is not None
+            else _aware_datetime(prior_value("event_at"), first_seen_at)
+            if prior is not None and prior_value("event_at") is not None
+            else first_seen_at
+        )
+    return triggered_at, state_changed_at, triggered_at or first_seen_at
+
+
 class BreakoutRadarService:
     """Revalidate discovery candidates with Option Pro's own data."""
 
@@ -191,30 +301,7 @@ class BreakoutRadarService:
         lookback: int = 20,
     ) -> float | None:
         """Return point-in-time average dollar volume from completed daily bars."""
-        if (
-            not isinstance(daily, pd.DataFrame)
-            or daily.empty
-            or "Close" not in daily.columns
-            or "Volume" not in daily.columns
-            or lookback < 1
-        ):
-            return None
-        volume = pd.to_numeric(
-            daily["Volume"].tail(lookback),
-            errors="coerce",
-        ).replace([float("inf"), float("-inf")], float("nan"))
-        if len(volume) < lookback or volume.isna().any() or (volume < 0).any():
-            return None
-        average_volume = _finite(volume.mean())
-        latest_close = _finite(daily["Close"].iloc[-1])
-        if (
-            average_volume is None
-            or average_volume <= 0
-            or latest_close is None
-            or latest_close <= 0
-        ):
-            return None
-        return _finite(latest_close * average_volume)
+        return compute_average_dollar_volume(daily, lookback=lookback)["value"]
 
     @staticmethod
     def _confirmation_features(
@@ -495,7 +582,7 @@ class BreakoutRadarService:
         source_snapshot_id: str,
         versions: Mapping[str, str],
         expired_due: bool,
-    ) -> tuple[BreakoutEvent, list[dict[str, Any]]]:
+    ) -> tuple[BreakoutEvent, list[dict[str, Any]], dict[str, Any]]:
         """Re-evaluate one already-published event with completed local bars."""
 
         prior = BreakoutEvent.model_validate(prior_value)
@@ -551,6 +638,11 @@ class BreakoutRadarService:
                     features,
                 )
             )
+        _attach_price_provenance(
+            features,
+            daily_snapshot=daily_snapshot,
+            intraday_snapshot=intraday_snapshot,
+        )
         features.update(self._base_features(structure))
 
         if self.settings.range_persistence_mode == "disabled":
@@ -665,10 +757,17 @@ class BreakoutRadarService:
             ),
         )
         features.update(relative_features)
-        average_dollar_volume = self._average_dollar_volume(daily)
+        average_dollar_volume_metric = compute_average_dollar_volume(daily)
+        average_dollar_volume = average_dollar_volume_metric["value"]
         features.update(
             {
                 "average_dollar_volume": average_dollar_volume,
+                "average_dollar_volume_calculation_method": (
+                    average_dollar_volume_metric["calculation_method"]
+                ),
+                "average_dollar_volume_sample_count": average_dollar_volume_metric[
+                    "sample_count"
+                ],
                 "dollar_volume_percentile": percentile_rank(
                     average_dollar_volume,
                     liquidity_distribution.get("values") or {},
@@ -898,8 +997,7 @@ class BreakoutRadarService:
             detection,
             cap=(
                 self.settings.range_persistence_breakout_interaction_cap
-                if self.settings.range_persistence_mode == "enabled"
-                and self.settings.range_persistence_breakout_interaction_enabled
+                if self.settings.range_persistence_breakout_interaction_enabled
                 else 0.0
             ),
             ratio_threshold=self.settings.range_persistence_ratio_threshold,
@@ -930,7 +1028,22 @@ class BreakoutRadarService:
             # Events written before score provenance was stored are treated
             # conservatively so an existing trend factor cannot be added twice.
             prior_included = ["range_persistence"]
-        scores = score_breakout(
+        production_scores = score_breakout(
+            features,
+            intrinsic_strength=prior.scores.intrinsic_strength_score,
+            market_fit=market_fit,
+            market_confidence=(
+                market.confidence
+                if market.status in {"active", "degraded"}
+                else None
+            ),
+            sector_fit=sector_fit,
+            strength_included_features=prior_included,
+            range_persistence_adjustment=0.0,
+            range_persistence_chase_adjustment=0.0,
+            score_version=self.settings.scoring_version,
+        )
+        hypothetical_scores = score_breakout(
             features,
             intrinsic_strength=prior.scores.intrinsic_strength_score,
             market_fit=market_fit,
@@ -945,9 +1058,20 @@ class BreakoutRadarService:
             range_persistence_chase_adjustment=range_chase_adjustment,
             score_version=self.settings.scoring_version,
         )
+        scores = (
+            hypothetical_scores
+            if self.settings.range_persistence_mode == "enabled"
+            else production_scores
+        )
         features["strength_included_features"] = prior_included
         features["range_persistence_mode_at_score"] = (
             self.settings.range_persistence_mode
+        )
+        triggered_at, state_changed_at, event_at = _event_time_semantics(
+            prior,
+            first_seen_at=first_seen_at,
+            observed_at=observed_at,
+            transitions=event_transitions,
         )
         event = BreakoutEvent(
             event_id=prior.event_id,
@@ -961,8 +1085,10 @@ class BreakoutRadarService:
             setup_type=setup,
             origin_setup_type=origin_setup,
             lifecycle_state=state,
-            event_at=observed_at,
+            event_at=event_at,
             first_seen_at=first_seen_at,
+            triggered_at=triggered_at,
+            state_changed_at=state_changed_at,
             last_seen_at=observed_at,
             pivot_id=prior.pivot_id,
             event_price=price,
@@ -1033,7 +1159,42 @@ class BreakoutRadarService:
                 )
             ),
         )
-        return event, event_transitions
+        range_feature = {
+            key: features.get(key)
+            for key in _RANGE_BACKGROUND_KEYS
+            if key != "range_persistence_status"
+        }
+        range_feature.update(
+            {
+                "status": features.get("range_persistence_status") or "unavailable",
+                "version": self.settings.range_persistence_version,
+            }
+        )
+        shadow = {
+            "trading_date": prior.trading_date,
+            "ticker": prior.ticker,
+            "event_id": prior.event_id,
+            "feature": range_feature,
+            "production_score": prior.scores.intrinsic_strength_score,
+            # The previous event snapshot does not retain the strength engine's
+            # counterfactual factor breakdown.  Keep that field unknown rather
+            # than fabricating a score; breakout-level counterfactuals below
+            # are still fully reproducible from this continuation scan.
+            "hypothetical_score": None,
+            "score_version": prior.versions.get(
+                "strength_score_version", "unavailable"
+            ),
+            "feature_version": self.settings.range_persistence_version,
+            "breakout_production_priority": production_scores.alert_priority_score,
+            "breakout_hypothetical_priority": hypothetical_scores.alert_priority_score,
+            "breakout_production_chase_risk": production_scores.chase_risk_score,
+            "breakout_hypothetical_chase_risk": hypothetical_scores.chase_risk_score,
+            "breakout_interaction": range_interaction,
+            "carryover": True,
+            "lifecycle_state": event.lifecycle_state,
+            "triggered_at": event.triggered_at,
+        }
+        return event, event_transitions, shadow
 
     def _secondary_new_event(
         self,
@@ -1194,6 +1355,12 @@ class BreakoutRadarService:
                 }
             )
             state = result.state
+        triggered_at, state_changed_at, event_at = _event_time_semantics(
+            prior,
+            first_seen_at=first_seen_at,
+            observed_at=observed_at,
+            transitions=event_transitions,
+        )
         quality = {
             **primary.data_quality,
             "market_eligibility": market_eligibility,
@@ -1205,7 +1372,10 @@ class BreakoutRadarService:
                 "setup_type": setup,
                 "origin_setup_type": setup,
                 "lifecycle_state": state,
+                "event_at": event_at,
                 "first_seen_at": first_seen_at,
+                "triggered_at": triggered_at,
+                "state_changed_at": state_changed_at,
                 "last_seen_at": observed_at,
                 "pivot_id": secondary_pivot_id,
                 "previous_state": initial_state,
@@ -1331,6 +1501,7 @@ class BreakoutRadarService:
                 "structures": [],
                 "transitions": [],
                 "range_persistence_shadow": [],
+                "liquidity_filter_results": [],
                 "source_status": {"discovery": getattr(discovery, "status", "unavailable")},
                 "warnings": ["carryover_truncated"] if carryover_has_more else [],
             }
@@ -1676,6 +1847,7 @@ class BreakoutRadarService:
         events = []
         transitions = []
         shadows = []
+        liquidity_filter_results: list[dict[str, Any]] = []
         versions = {
             "feature_version": self.settings.feature_version,
             "detector_version": self.settings.detector_version,
@@ -1711,6 +1883,45 @@ class BreakoutRadarService:
                         _finite(features.get("atr20")),
                     )
                 )
+            _attach_price_provenance(
+                features,
+                daily_snapshot=daily_snapshot,
+                intraday_snapshot=intraday_snapshot,
+            )
+            current_dollar_volume = _finite(
+                features.get("cumulative_dollar_volume")
+            )
+            current_dollar_minimum = (
+                self.settings.premarket_min_dollar_volume
+                if observed_session is MarketSession.PREMARKET
+                else self.settings.regular_min_dollar_volume
+            )
+            features["current_dollar_volume_hard_filter"] = {
+                "minimum": current_dollar_minimum,
+                "value": current_dollar_volume,
+                "status": (
+                    "unavailable"
+                    if current_dollar_volume is None
+                    else "passed"
+                    if current_dollar_volume >= current_dollar_minimum
+                    else "failed"
+                ),
+                "calculation_method": features.get(
+                    "cumulative_dollar_volume_calculation_method"
+                )
+                or "unavailable",
+            }
+            liquidity_filter_results.append(
+                {
+                    "ticker": candidate.ticker,
+                    **features["current_dollar_volume_hard_filter"],
+                }
+            )
+            if (
+                current_dollar_volume is None
+                or current_dollar_volume < current_dollar_minimum
+            ):
+                continue
             features.update(self._base_features(structure))
             daily = visible_daily[candidate.ticker]
             previous_close = (
@@ -1745,7 +1956,8 @@ class BreakoutRadarService:
                     else None
                 ),
             )
-            average_dollar_volume = self._average_dollar_volume(daily)
+            average_dollar_volume_metric = compute_average_dollar_volume(daily)
+            average_dollar_volume = average_dollar_volume_metric["value"]
             features.update(
                 {
                     "current_price": _finite(features.get("event_price"))
@@ -1776,6 +1988,20 @@ class BreakoutRadarService:
                         else None
                     ),
                     "average_dollar_volume": average_dollar_volume,
+                    "average_dollar_volume_calculation_method": (
+                        average_dollar_volume_metric["calculation_method"]
+                    ),
+                    "average_dollar_volume_sample_count": (
+                        average_dollar_volume_metric["sample_count"]
+                    ),
+                    "provider_candidate_liquidity": {
+                        "current_dollar_volume": features.get(
+                            "cumulative_dollar_volume"
+                        ),
+                        "calculation_method": features.get(
+                            "cumulative_dollar_volume_calculation_method"
+                        ),
+                    },
                     "market_cap_quality": _quality(
                         candidate.provider_market_cap,
                         low=200_000_000,
@@ -2113,6 +2339,12 @@ class BreakoutRadarService:
                 )
                 state = result.state
             transitions.extend(event_transitions)
+            triggered_at, state_changed_at, event_at = _event_time_semantics(
+                prior,
+                first_seen_at=first_seen_at,
+                observed_at=observed_at,
+                transitions=event_transitions,
+            )
             event = BreakoutEvent(
                 event_id=event_id,
                 trading_date=observed_trading_date,
@@ -2125,8 +2357,10 @@ class BreakoutRadarService:
                 setup_type=setup,
                 origin_setup_type=setup,
                 lifecycle_state=state,
-                event_at=observed_at,
+                event_at=event_at,
                 first_seen_at=first_seen_at,
+                triggered_at=triggered_at,
+                state_changed_at=state_changed_at,
                 last_seen_at=observed_at,
                 pivot_id=pivot_id,
                 event_price=_finite(features.get("event_price")),
@@ -2247,7 +2481,7 @@ class BreakoutRadarService:
                 ticker,
                 str(prior.get("sector") or "") or None,
             )
-            continued, continued_transitions = self._continue_event(
+            continued, continued_transitions, continued_shadow = self._continue_event(
                 prior,
                 daily_snapshot=daily_map.get(ticker),
                 intraday_snapshot=intraday_map.get(ticker),
@@ -2267,10 +2501,18 @@ class BreakoutRadarService:
             )
             events.append(continued)
             transitions.extend(continued_transitions)
+            shadows.append(continued_shadow)
 
         # A carryover owns its stable event identity.  This also keeps replayed
         # scans idempotent if the same ticker was present in discovery input.
         events = list({item.event_id: item for item in events}.values())
+        shadows = list(
+            {
+                str(item.get("event_id") or ""): item
+                for item in shadows
+                if str(item.get("event_id") or "")
+            }.values()
+        )
         transitions = list(
             {
                 (
@@ -2326,6 +2568,7 @@ class BreakoutRadarService:
             "structures": structures,
             "transitions": transitions,
             "range_persistence_shadow": shadows,
+            "liquidity_filter_results": liquidity_filter_results,
             "source_status": {
                 "discovery": str(getattr(discovery, "status", "unknown")),
                 "prices": "active" if daily_map else "unavailable",

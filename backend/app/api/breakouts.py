@@ -21,9 +21,11 @@ from app.services.breakouts.repository import (
     BreakoutRepository,
     BreakoutRepositoryError,
     InvalidCursorError,
+    SCHEMA_VERSION,
     SchemaVersionError,
 )
 from app.services.strength.market_shape import MARKET_SHAPE_VERSION
+from app.services.strength.scoring import SCORE_VERSION as STRENGTH_SCORE_VERSION
 
 
 router = APIRouter(prefix="/api/breakouts", tags=["breakouts"])
@@ -52,7 +54,13 @@ class BreakoutEventResponse(_ResponseModel):
     setup_type: str
     lifecycle_state: str
     event_at: AwareDatetime
+    first_seen_at: AwareDatetime
+    triggered_at: Optional[AwareDatetime] = None
+    state_changed_at: AwareDatetime
+    last_seen_at: AwareDatetime
     event_age_seconds: float = Field(ge=0)
+    state_age_seconds: float = Field(ge=0)
+    observation_age_seconds: float = Field(ge=0)
     event_price: Optional[float] = None
     current_price: Optional[float] = None
     session_change_pct: Optional[float] = None
@@ -156,9 +164,9 @@ def _versions(settings: BreakoutSettings, stored: Any = None) -> dict[str, str]:
         "scoring_version": settings.scoring_version,
         "range_persistence_version": settings.range_persistence_version,
         "market_shape_version": MARKET_SHAPE_VERSION,
-        "strength_score_version": "strength-intrinsic-v1",
+        "strength_score_version": STRENGTH_SCORE_VERSION,
         "universe_version": "canonical-universe-v1",
-        "database_version": "breakout-db-v1",
+        "database_version": SCHEMA_VERSION,
     }
     if isinstance(stored, dict):
         for key, value in stored.items():
@@ -198,11 +206,44 @@ def _public_event(
     details = dict(scores.get("details") or {})
     priority = dict(details.get("alert_priority") or {})
     quality = dict(stored.get("data_quality") or {})
-    event_at = _event_time(stored.get("event_at"))
+    lifecycle_state = str(stored.get("lifecycle_state") or "DISCOVERED")
+    first_seen_at = _event_time(
+        stored.get("first_seen_at") or stored.get("event_at")
+    )
+    triggered_supplied = "triggered_at" in stored
+    triggered_value = stored.get("triggered_at")
+    if not triggered_supplied and lifecycle_state in {
+        "TRIGGERED",
+        "CONFIRMED",
+        "HOLDING",
+        "RETESTING",
+        "RETEST_HELD",
+        "REACCELERATING",
+        "EXTENDED",
+        "FAILED",
+    }:
+        triggered_value = stored.get("event_at")
+    triggered_at = _event_time(triggered_value) if triggered_value is not None else None
+    event_at = triggered_at or first_seen_at
+    state_changed_at = _event_time(
+        stored.get("state_changed_at") or stored.get("event_at") or first_seen_at
+    )
+    last_seen_at = _event_time(
+        stored.get("last_seen_at") or stored.get("event_at") or event_at
+    )
     now = observed_at or _now()
     if now.tzinfo is None or now.utcoffset() is None:
         now = now.replace(tzinfo=timezone.utc)
-    age = max(0.0, (now.astimezone(timezone.utc) - event_at.astimezone(timezone.utc)).total_seconds())
+    now_utc = now.astimezone(timezone.utc)
+    age = max(0.0, (now_utc - event_at.astimezone(timezone.utc)).total_seconds())
+    state_age = max(
+        0.0,
+        (now_utc - state_changed_at.astimezone(timezone.utc)).total_seconds(),
+    )
+    observation_age = max(
+        0.0,
+        (now_utc - last_seen_at.astimezone(timezone.utc)).total_seconds(),
+    )
     return BreakoutEventResponse(
         event_id=str(stored.get("event_id") or ""),
         ticker=normalize_ticker(stored.get("ticker")),
@@ -212,9 +253,15 @@ def _public_event(
         sector=stored.get("sector"),
         session=str(stored.get("session") or features.get("session") or default_session or "closed"),
         setup_type=str(stored.get("setup_type") or "MOMENTUM_SPIKE"),
-        lifecycle_state=str(stored.get("lifecycle_state") or "DISCOVERED"),
+        lifecycle_state=lifecycle_state,
         event_at=event_at,
+        first_seen_at=first_seen_at,
+        triggered_at=triggered_at,
+        state_changed_at=state_changed_at,
+        last_seen_at=last_seen_at,
         event_age_seconds=age,
+        state_age_seconds=state_age,
+        observation_age_seconds=observation_age,
         event_price=_finite(stored.get("event_price")),
         current_price=_finite(features.get("current_price", stored.get("event_price"))),
         session_change_pct=_finite(features.get("session_change_pct")),
@@ -326,6 +373,25 @@ def _unavailable_root(
     )
 
 
+def _schema_unavailable_root(
+    settings: BreakoutSettings,
+    error: SchemaVersionError,
+) -> BreakoutRootResponse:
+    return BreakoutRootResponse(
+        as_of=_now(),
+        session=None,
+        status="unavailable",
+        versions=_versions(settings),
+        source_status={
+            "database": "schema_upgrade_required",
+            "warnings": ["breakout_database_schema_upgrade_required"],
+            "schema": error.status_payload(),
+        },
+        events=[],
+        scan_run_id=None,
+    )
+
+
 def _combine_read_status(*values: str) -> str:
     rank = {"active": 0, "degraded": 1, "stale": 2, "unavailable": 3}
     normalized = [value if value in rank else "degraded" for value in values]
@@ -420,7 +486,9 @@ def current() -> BreakoutRootResponse:
     try:
         repository = _repository(settings)
         scan = repository.latest_completed_scan()
-    except (FileNotFoundError, sqlite3.Error, BreakoutRepositoryError, SchemaVersionError, OSError):
+    except SchemaVersionError as exc:
+        return _schema_unavailable_root(settings, exc)
+    except (FileNotFoundError, sqlite3.Error, BreakoutRepositoryError, OSError):
         return _unavailable_root(
             settings,
             status="unavailable",
@@ -484,7 +552,10 @@ def events(
         )
     except InvalidCursorError as exc:
         raise HTTPException(status_code=400, detail="Invalid or expired cursor") from exc
-    except (FileNotFoundError, sqlite3.Error, BreakoutRepositoryError, SchemaVersionError, OSError):
+    except SchemaVersionError as exc:
+        root = _schema_unavailable_root(settings, exc)
+        return BreakoutEventPageResponse(**root.model_dump(), next_cursor=None)
+    except (FileNotFoundError, sqlite3.Error, BreakoutRepositoryError, OSError):
         root = _unavailable_root(
             settings,
             status="unavailable",
@@ -526,7 +597,15 @@ def event_detail(event_id: str) -> BreakoutEventDetailResponse:
         raise HTTPException(status_code=404, detail="Breakout Radar is disabled")
     try:
         event = _repository(settings).get_event(event_id)
-    except (FileNotFoundError, sqlite3.Error, BreakoutRepositoryError, SchemaVersionError, OSError):
+    except SchemaVersionError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": "Breakout database schema upgrade required",
+                "schema": exc.status_payload(),
+            },
+        ) from exc
+    except (FileNotFoundError, sqlite3.Error, BreakoutRepositoryError, OSError):
         raise HTTPException(status_code=503, detail="Breakout database is unavailable")
     if event is None:
         raise HTTPException(status_code=404, detail="Breakout event not found")
@@ -561,7 +640,16 @@ def ticker_events(ticker: str) -> BreakoutTickerResponse:
         )
     try:
         items = list(_repository(settings).events_for_ticker(symbol))
-    except (FileNotFoundError, sqlite3.Error, BreakoutRepositoryError, SchemaVersionError, OSError):
+    except SchemaVersionError:
+        return BreakoutTickerResponse(
+            as_of=_now(),
+            status="schema_upgrade_required",
+            versions=_versions(settings),
+            ticker=symbol,
+            events=[],
+            current_state=None,
+        )
+    except (FileNotFoundError, sqlite3.Error, BreakoutRepositoryError, OSError):
         return BreakoutTickerResponse(
             as_of=_now(),
             status="unavailable",
@@ -591,7 +679,7 @@ def status() -> BreakoutStatusResponse:
             range_persistence_mode=settings.range_persistence_mode,
             versions=_versions(settings),
             database={"status": "not_opened"},
-            strength_adapter={"status": "available", "version": "strength-intrinsic-v1"},
+            strength_adapter={"status": "available", "version": STRENGTH_SCORE_VERSION},
             market_shape_adapter={
                 "status": "available",
                 "version": MARKET_SHAPE_VERSION,
@@ -609,7 +697,17 @@ def status() -> BreakoutStatusResponse:
             completed_snapshot=(dict(completed) if isinstance(completed, dict) else None),
         )
         overall = read_state.status
-    except (FileNotFoundError, sqlite3.Error, BreakoutRepositoryError, SchemaVersionError, OSError):
+    except SchemaVersionError as exc:
+        payload = {
+            "database": exc.status_payload(),
+            "worker": None,
+            "latest_completed_scan": None,
+            "provider_health": [],
+            "worker_lock": None,
+        }
+        overall = "unavailable"
+        read_state = None
+    except (FileNotFoundError, sqlite3.Error, BreakoutRepositoryError, OSError):
         payload = {
             "database": {"status": "unavailable"},
             "worker": None,
@@ -661,7 +759,7 @@ def status() -> BreakoutStatusResponse:
         latest_completed_scan=latest_completed_scan,
         provider_health=list(payload.get("provider_health") or []),
         worker_lock=lock,
-        strength_adapter={"status": "available", "version": "strength-intrinsic-v1"},
+        strength_adapter={"status": "available", "version": STRENGTH_SCORE_VERSION},
         market_shape_adapter={
             "status": "available",
             "version": MARKET_SHAPE_VERSION,

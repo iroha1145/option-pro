@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -90,6 +90,73 @@ def _regular_close_minutes(day: date) -> int:
     return _early_close_minutes(day) or 16 * 60
 
 
+def regular_session_close(day: date) -> datetime:
+    """Return the actual US regular-session close for ``day`` in UTC."""
+
+    close_minutes = _regular_close_minutes(day)
+    local = datetime(
+        day.year,
+        day.month,
+        day.day,
+        close_minutes // 60,
+        close_minutes % 60,
+        tzinfo=NEW_YORK,
+    )
+    return local.astimezone(timezone.utc)
+
+
+def daily_data_through(frame: pd.DataFrame) -> datetime | None:
+    """Map the last delivered daily bar to that session's actual close."""
+
+    if not isinstance(frame, pd.DataFrame) or frame.empty:
+        return None
+    if not isinstance(frame.index, pd.DatetimeIndex):
+        raise ValueError("daily bars require a DatetimeIndex")
+    return regular_session_close(frame.index.max().date())
+
+
+def intraday_data_through(
+    frame: pd.DataFrame,
+    *,
+    interval_minutes: int = 5,
+) -> datetime | None:
+    """Return the end of the last Yahoo bar (whose timestamp is bar start)."""
+
+    if interval_minutes < 1:
+        raise ValueError("interval_minutes must be positive")
+    if not isinstance(frame, pd.DataFrame) or frame.empty:
+        return None
+    if not isinstance(frame.index, pd.DatetimeIndex) or frame.index.tz is None:
+        raise ValueError("intraday bars require a timezone-aware DatetimeIndex")
+    bar_end = frame.index.max() + pd.Timedelta(minutes=interval_minutes)
+    return bar_end.to_pydatetime().astimezone(timezone.utc)
+
+
+def _intraday_session_mask(
+    index: pd.DatetimeIndex,
+    cutoff: TemporalCutoff,
+    *,
+    interval_minutes: int,
+) -> np.ndarray:
+    local_index = index.tz_convert(NEW_YORK)
+    event_ts = pd.Timestamp(cutoff.event_at.astimezone(NEW_YORK))
+    if cutoff.include_current_bar:
+        mask = np.asarray(local_index <= event_ts)
+    else:
+        bar_ends = local_index + pd.Timedelta(minutes=interval_minutes)
+        mask = np.asarray(bar_ends <= event_ts)
+    minutes = np.asarray(local_index.hour * 60 + local_index.minute)
+    dates = pd.Index(local_index.date)
+    close_minutes = np.array([_regular_close_minutes(day) for day in dates])
+    if cutoff.session is MarketSession.PREMARKET:
+        mask &= (minutes >= 4 * 60) & (minutes < 9 * 60 + 30)
+    elif cutoff.session is MarketSession.REGULAR:
+        mask &= (minutes >= 9 * 60 + 30) & (minutes < close_minutes)
+    elif cutoff.session is MarketSession.POSTMARKET:
+        mask &= (minutes >= close_minutes) & (minutes < 20 * 60)
+    return mask
+
+
 def trim_intraday_bars(
     frame: pd.DataFrame,
     cutoff: TemporalCutoff,
@@ -102,28 +169,146 @@ def trim_intraday_bars(
         return clean
     if not isinstance(clean.index, pd.DatetimeIndex) or clean.index.tz is None:
         raise ValueError("intraday bars require a timezone-aware DatetimeIndex")
-    local_index = clean.index.tz_convert(NEW_YORK)
-    event = cutoff.event_at.astimezone(NEW_YORK)
-    event_ts = pd.Timestamp(event)
-    # Yahoo timestamps intraday bars by interval start.  A bar stamped 10:30
-    # contains observations through 10:35, so it is not complete at a 10:30
-    # event cutoff.  Compare bar end times unless a caller explicitly opts in
-    # to the current partial bar.
-    if cutoff.include_current_bar:
-        mask = local_index <= event_ts
-    else:
-        bar_ends = local_index + pd.Timedelta(minutes=interval_minutes)
-        mask = bar_ends <= event_ts
-    minutes = local_index.hour * 60 + local_index.minute
-    dates = pd.Index(local_index.date)
-    close_minutes = np.array([_regular_close_minutes(day) for day in dates])
-    if cutoff.session is MarketSession.PREMARKET:
-        mask &= (minutes >= 4 * 60) & (minutes < 9 * 60 + 30)
-    elif cutoff.session is MarketSession.REGULAR:
-        mask &= (minutes >= 9 * 60 + 30) & (minutes <= close_minutes)
-    elif cutoff.session is MarketSession.POSTMARKET:
-        mask &= (minutes > close_minutes) & (minutes < 20 * 60)
+    mask = _intraday_session_mask(
+        clean.index,
+        cutoff,
+        interval_minutes=interval_minutes,
+    )
     return clean.loc[mask]
+
+
+def trim_intraday_liquidity_bars(
+    frame: pd.DataFrame,
+    cutoff: TemporalCutoff,
+    interval_minutes: int = 5,
+) -> pd.DataFrame:
+    """Bound bars for liquidity even when High/Low are not available.
+
+    Rows are intentionally not filled or silently dropped: the cumulative
+    dollar-volume calculator must return unavailable when any required Close or
+    Volume observation is missing.
+    """
+
+    if interval_minutes < 1:
+        raise ValueError("interval_minutes must be positive")
+    if not isinstance(frame, pd.DataFrame) or frame.empty:
+        return pd.DataFrame()
+    if not isinstance(frame.index, pd.DatetimeIndex) or frame.index.tz is None:
+        raise ValueError("intraday bars require a timezone-aware DatetimeIndex")
+    lowered = {str(column).lower(): column for column in frame.columns}
+    if "close" not in lowered or "volume" not in lowered:
+        return pd.DataFrame()
+    result = pd.DataFrame(index=frame.index)
+    for name in ("open", "high", "low", "close", "volume"):
+        source = lowered.get(name)
+        if source is not None:
+            result[name.title()] = pd.to_numeric(
+                frame[source], errors="coerce"
+            ).replace([np.inf, -np.inf], np.nan)
+    result = result[~result.index.duplicated(keep="last")].sort_index()
+    mask = _intraday_session_mask(
+        result.index,
+        cutoff,
+        interval_minutes=interval_minutes,
+    )
+    return result.loc[mask]
+
+
+def compute_average_dollar_volume(
+    frame: pd.DataFrame,
+    *,
+    lookback: int = 20,
+) -> dict[str, Any]:
+    """Calculate ADV from the last 20 valid daily ``Close * Volume`` values."""
+
+    unavailable = {
+        "value": None,
+        "calculation_method": "unavailable",
+        "sample_count": 0,
+    }
+    if lookback < 1:
+        raise ValueError("lookback must be positive")
+    if (
+        not isinstance(frame, pd.DataFrame)
+        or frame.empty
+        or "Close" not in frame.columns
+        or "Volume" not in frame.columns
+    ):
+        return unavailable
+    close = pd.to_numeric(frame["Close"], errors="coerce").replace(
+        [np.inf, -np.inf], np.nan
+    )
+    volume = pd.to_numeric(frame["Volume"], errors="coerce").replace(
+        [np.inf, -np.inf], np.nan
+    )
+    valid = close.notna() & volume.notna() & (close > 0) & (volume >= 0)
+    values = (close.loc[valid] * volume.loc[valid]).tail(lookback)
+    if len(values) < lookback:
+        return {**unavailable, "sample_count": int(len(values))}
+    value = _finite(values.mean())
+    if value is None:
+        return {**unavailable, "sample_count": int(len(values))}
+    return {
+        "value": value,
+        "calculation_method": "mean_close_volume",
+        "sample_count": int(len(values)),
+    }
+
+
+def compute_cumulative_dollar_volume(frame: pd.DataFrame) -> dict[str, Any]:
+    """Sum each complete intraday bar's dollar volume without filling gaps."""
+
+    unavailable = {
+        "value": None,
+        "cumulative_volume": None,
+        "calculation_method": "unavailable",
+        "sample_count": 0,
+    }
+    if (
+        not isinstance(frame, pd.DataFrame)
+        or frame.empty
+        or "Close" not in frame.columns
+        or "Volume" not in frame.columns
+    ):
+        return unavailable
+    close = pd.to_numeric(frame["Close"], errors="coerce").replace(
+        [np.inf, -np.inf], np.nan
+    )
+    volume = pd.to_numeric(frame["Volume"], errors="coerce").replace(
+        [np.inf, -np.inf], np.nan
+    )
+    if close.isna().any() or volume.isna().any() or (close <= 0).any() or (volume < 0).any():
+        return {**unavailable, "sample_count": int(len(frame))}
+    method = "close_volume"
+    price = close.astype(float).copy()
+    if "High" in frame.columns and "Low" in frame.columns:
+        high = pd.to_numeric(frame["High"], errors="coerce").replace(
+            [np.inf, -np.inf], np.nan
+        )
+        low = pd.to_numeric(frame["Low"], errors="coerce").replace(
+            [np.inf, -np.inf], np.nan
+        )
+        typical_rows = high.notna() & low.notna() & (high >= low)
+        if typical_rows.any():
+            price.loc[typical_rows] = (
+                high.loc[typical_rows]
+                + low.loc[typical_rows]
+                + close.loc[typical_rows]
+            ) / 3.0
+        if typical_rows.all():
+            method = "typical_price_volume"
+        elif typical_rows.any():
+            method = "mixed_typical_close_volume"
+    value = _finite((price * volume).sum())
+    cumulative_volume = _finite(volume.sum())
+    if value is None or cumulative_volume is None:
+        return {**unavailable, "sample_count": int(len(frame))}
+    return {
+        "value": value,
+        "cumulative_volume": cumulative_volume,
+        "calculation_method": method,
+        "sample_count": int(len(frame)),
+    }
 
 
 def compute_atr(frame: pd.DataFrame, period: int = 20) -> float | None:
@@ -201,7 +386,7 @@ def compute_time_of_day_rvol(
         (minutes >= 9 * 60 + 30)
         & np.array(
             [
-                minute <= _regular_close_minutes(day)
+                minute < _regular_close_minutes(day)
                 for minute, day in zip(minutes, local.index.date)
             ]
         )
@@ -274,22 +459,51 @@ def compute_feature_snapshot(
 ) -> dict[str, Any]:
     if opening_range_minutes < 5 or opening_range_minutes % 5 != 0:
         raise ValueError("opening_range_minutes must be a positive multiple of 5")
+    event_local = cutoff.event_at.astimezone(NEW_YORK)
     daily_visible = trim_daily_bars(daily, cutoff)
     intraday_visible = trim_intraday_bars(intraday, cutoff)
+    liquidity_visible = trim_intraday_liquidity_bars(intraday, cutoff)
+    liquidity_session = (
+        liquidity_visible[
+            pd.Index(liquidity_visible.index.tz_convert(NEW_YORK).date)
+            == event_local.date()
+        ]
+        if not liquidity_visible.empty
+        else pd.DataFrame()
+    )
+    cumulative_dollar = compute_cumulative_dollar_volume(liquidity_session)
+    data_through = intraday_data_through(
+        liquidity_visible if not liquidity_visible.empty else intraday_visible
+    )
+    provenance = {
+        "raw_as_of": data_through.isoformat() if data_through is not None else None,
+        "data_through": data_through.isoformat() if data_through is not None else None,
+        "feature_cutoff_at": cutoff.event_at.astimezone(timezone.utc).isoformat(),
+        "calculation_cutoff_at": cutoff.event_at.isoformat(),
+    }
+    liquidity_payload = {
+        "cumulative_volume": cumulative_dollar["cumulative_volume"],
+        "cumulative_dollar_volume": cumulative_dollar["value"],
+        "cumulative_dollar_volume_calculation_method": cumulative_dollar[
+            "calculation_method"
+        ],
+        "cumulative_dollar_volume_sample_count": cumulative_dollar["sample_count"],
+    }
     if intraday_visible.empty:
         return {
             "status": "insufficient_data",
-            "calculation_cutoff_at": cutoff.event_at.isoformat(),
+            **liquidity_payload,
+            **provenance,
             "warnings": ["no_complete_intraday_bars"],
         }
-    event_local = cutoff.event_at.astimezone(NEW_YORK)
     current_session = intraday_visible[
         pd.Index(intraday_visible.index.tz_convert(NEW_YORK).date) == event_local.date()
     ]
     if current_session.empty:
         return {
             "status": "insufficient_data",
-            "calculation_cutoff_at": cutoff.event_at.isoformat(),
+            **liquidity_payload,
+            **provenance,
             "warnings": ["no_complete_current_session_bars"],
         }
     bar = current_session.iloc[-1]
@@ -297,14 +511,6 @@ def compute_feature_snapshot(
     vwap = compute_vwap(current_session)
     close = _finite(bar["Close"])
     previous_close = _finite(daily_visible["Close"].iloc[-1]) if not daily_visible.empty else None
-    cumulative_volume = _finite(
-        current_session["Volume"].where(current_session["Volume"] > 0).sum()
-    )
-    cumulative_dollar = (
-        _finite(cumulative_volume * close)
-        if cumulative_volume is not None and close is not None
-        else None
-    )
     rvol = compute_time_of_day_rvol(intraday, cutoff)
     high, low, open_ = (_finite(bar[name]) for name in ("High", "Low", "Open"))
     candle_range = high - low if high is not None and low is not None else None
@@ -359,8 +565,7 @@ def compute_feature_snapshot(
             if close is not None and previous_close
             else None
         ),
-        "cumulative_volume": cumulative_volume,
-        "cumulative_dollar_volume": cumulative_dollar,
+        **liquidity_payload,
         "distance_from_vwap_atr": (
             _finite((close - vwap) / atr20)
             if None not in (close, vwap, atr20) and atr20 > 0
@@ -370,9 +575,12 @@ def compute_feature_snapshot(
         "opening_range_low": opening_low,
         "opening_range_complete": opening_complete,
         **rvol,
-        "raw_as_of": cutoff.event_at.isoformat(),
-        "feature_cutoff_at": cutoff.event_at.isoformat(),
-        "calculation_cutoff_at": cutoff.event_at.isoformat(),
+        **provenance,
+        "warnings": (
+            ["cumulative_dollar_volume_unavailable"]
+            if cumulative_dollar["value"] is None
+            else []
+        ),
         "session": cutoff.session.value,
         "version": "breakout-features-v1",
     }

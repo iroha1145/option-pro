@@ -3,16 +3,99 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Sequence
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import yfinance as yf
 
 from app.services import yahoo
+from app.services.breakouts.feature_engine import (
+    completed_daily_session,
+    daily_data_through,
+    intraday_data_through,
+    regular_session_close,
+    trim_intraday_liquidity_bars,
+)
 from app.services.breakouts.models import normalize_ticker
 from app.services.breakouts.protocols import PriceDataSnapshot
 from app.services.strength import scanner
+
+
+NEW_YORK = ZoneInfo("America/New_York")
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _interval_minutes(interval: str) -> int:
+    text = str(interval or "").strip().lower()
+    if not text.endswith("m") or not text[:-1].isdigit():
+        raise ValueError("intraday interval must be expressed in minutes")
+    value = int(text[:-1])
+    if value < 1:
+        raise ValueError("intraday interval must be positive")
+    return value
+
+
+def _expected_intraday_through(cutoff, interval_minutes: int) -> datetime | None:
+    """Return the latest bar end that could be complete at the cutoff."""
+
+    local = cutoff.event_at.astimezone(NEW_YORK).replace(second=0, microsecond=0)
+    minute = local.hour * 60 + local.minute
+    floored = minute - minute % interval_minutes
+    day = local.date()
+    from app.api.market import _early_close_minutes
+
+    regular_close = _early_close_minutes(day) or 16 * 60
+    if cutoff.session.value == "premarket":
+        start, end = 4 * 60, 9 * 60 + 30
+    elif cutoff.session.value == "regular":
+        start, end = 9 * 60 + 30, regular_close
+    elif cutoff.session.value == "postmarket":
+        start, end = regular_close, 20 * 60
+    else:
+        return None
+    completed_end = min(floored, end)
+    if completed_end <= start:
+        return None
+    expected = datetime(
+        day.year,
+        day.month,
+        day.day,
+        completed_end // 60,
+        completed_end % 60,
+        tzinfo=NEW_YORK,
+    )
+    return expected.astimezone(timezone.utc)
+
+
+def _snapshot_state(
+    *,
+    data_through: datetime,
+    expected_through: datetime | None,
+    source_status: str = "active",
+    unit_seconds: int,
+    complete_label: str,
+    stale_label: str,
+) -> tuple[str, tuple[str, ...], float]:
+    warnings: list[str] = []
+    quality = 1.0
+    completeness = complete_label
+    if expected_through is not None and data_through < expected_through:
+        missing_units = max(
+            1.0,
+            (expected_through - data_through).total_seconds() / max(unit_seconds, 1),
+        )
+        quality = max(0.2, 1.0 / (1.0 + missing_units))
+        completeness = stale_label
+        warnings.append("data_through_before_feature_cutoff")
+    if source_status != "active":
+        quality *= 0.85
+        warnings.append("price_source_degraded")
+    return completeness, tuple(warnings), round(max(0.0, min(1.0, quality)), 6)
 
 
 class YahooPriceDataAdapter:
@@ -26,7 +109,9 @@ class YahooPriceDataAdapter:
         period: str = "2y",
     ) -> dict[str, PriceDataSnapshot]:
         symbols = list(dict.fromkeys(normalize_ticker(value) for value in tickers))
+        requested_at = _utc_now()
         raw = await asyncio.to_thread(scanner._download_history, symbols, period)
+        received_at = _utc_now()
         source_status = raw.attrs.get("price_source") or {}
         results: dict[str, PriceDataSnapshot] = {}
         for symbol in symbols:
@@ -36,16 +121,33 @@ class YahooPriceDataAdapter:
             )
             if bounded.empty:
                 continue
+            data_through = daily_data_through(bounded)
+            if data_through is None:
+                continue
+            expected_through = regular_session_close(completed_daily_session(cutoff))
+            completeness, warnings, quality = _snapshot_state(
+                data_through=data_through,
+                expected_through=expected_through,
+                source_status=str(source_status.get("status") or "active"),
+                unit_seconds=24 * 60 * 60,
+                complete_label="completed_daily_sessions",
+                stale_label="stale_daily_sessions",
+            )
             results[symbol] = PriceDataSnapshot(
                 ticker=symbol,
                 frame=bounded,
                 source=str(source_status.get("provider") or self.source),
-                raw_as_of=cutoff.event_at.astimezone(timezone.utc),
+                raw_as_of=data_through,
                 cutoff=cutoff,
                 session=cutoff.session,
                 adjustment="auto_adjusted",
-                completeness="completed_daily_sessions",
-                warnings=tuple(source_status.get("missing_symbols") or ()),
+                completeness=completeness,
+                warnings=warnings,
+                requested_at=requested_at,
+                received_at=received_at,
+                data_through=data_through,
+                feature_cutoff_at=cutoff.event_at.astimezone(timezone.utc),
+                quality=quality,
             )
         return results
 
@@ -79,25 +181,53 @@ class YahooPriceDataAdapter:
             except Exception:
                 return pd.DataFrame()
 
+        requested_at = _utc_now()
         raw = await asyncio.to_thread(download)
+        received_at = _utc_now()
+        interval_value = _interval_minutes(interval)
+        expected_through = _expected_intraday_through(cutoff, interval_value)
         results: dict[str, PriceDataSnapshot] = {}
         for symbol in symbols:
             frame = scanner._slice_ticker(raw, symbol)
             if frame.empty:
                 continue
-            from app.services.breakouts.feature_engine import trim_intraday_bars
-
-            bounded = trim_intraday_bars(frame, cutoff)
+            # Preserve every session-bounded Close/Volume row.  Technical
+            # features filter complete OHLC rows later, while liquidity must
+            # still include a bar whose optional High/Low fields are missing.
+            bounded = trim_intraday_liquidity_bars(
+                frame,
+                cutoff,
+                interval_minutes=interval_value,
+            )
             if bounded.empty:
                 continue
+            data_through = intraday_data_through(
+                bounded,
+                interval_minutes=interval_value,
+            )
+            if data_through is None:
+                continue
+            completeness, warnings, quality = _snapshot_state(
+                data_through=data_through,
+                expected_through=expected_through,
+                unit_seconds=interval_value * 60,
+                complete_label="complete_bars_through_cutoff",
+                stale_label="stale_complete_bars",
+            )
             results[symbol] = PriceDataSnapshot(
                 ticker=symbol,
                 frame=bounded,
                 source=self.source,
-                raw_as_of=cutoff.event_at.astimezone(timezone.utc),
+                raw_as_of=data_through,
                 cutoff=cutoff,
                 session=cutoff.session,
                 adjustment="unadjusted_intraday",
-                completeness="complete_bars_through_cutoff",
+                completeness=completeness,
+                warnings=warnings,
+                requested_at=requested_at,
+                received_at=received_at,
+                data_through=data_through,
+                feature_cutoff_at=cutoff.event_at.astimezone(timezone.utc),
+                quality=quality,
             )
         return results

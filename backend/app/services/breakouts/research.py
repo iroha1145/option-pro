@@ -43,6 +43,10 @@ EVENT_FIELDS = (
     "setup_type",
     "lifecycle_state",
     "event_at",
+    "first_seen_at",
+    "triggered_at",
+    "state_changed_at",
+    "last_seen_at",
     "alert_priority_score",
     "event_snapshot",
 )
@@ -169,6 +173,10 @@ def _load_completed_events_connection(connection: Any) -> list[dict[str, Any]]:
             events.setup_type,
             events.lifecycle_state,
             events.event_at,
+            json_extract(events.event_snapshot_json,'$.first_seen_at') AS first_seen_at,
+            json_extract(events.event_snapshot_json,'$.triggered_at') AS triggered_at,
+            json_extract(events.event_snapshot_json,'$.state_changed_at') AS state_changed_at,
+            json_extract(events.event_snapshot_json,'$.last_seen_at') AS last_seen_at,
             events.alert_priority_score,
             events.event_snapshot_json
         FROM breakout_scan_events AS events
@@ -192,6 +200,10 @@ def _load_completed_events_connection(connection: Any) -> list[dict[str, Any]]:
             "setup_type": row["setup_type"],
             "lifecycle_state": row["lifecycle_state"],
             "event_at": row["event_at"],
+            "first_seen_at": row["first_seen_at"],
+            "triggered_at": row["triggered_at"],
+            "state_changed_at": row["state_changed_at"],
+            "last_seen_at": row["last_seen_at"],
             "alert_priority_score": row["alert_priority_score"],
             "event_snapshot": _decode_json(row["event_snapshot_json"]),
         }

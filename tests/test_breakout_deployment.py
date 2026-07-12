@@ -40,6 +40,7 @@ def test_breakout_bootstrap_environment_is_complete_and_off_by_default() -> None
         "BREAKOUT_PROVIDER_STALE_TTL_SECONDS": "900",
         "BREAKOUT_PROVIDER_FAILURE_THRESHOLD": "3",
         "BREAKOUT_PROVIDER_MAX_RESPONSE_BYTES": "2000000",
+        "BREAKOUT_PROVIDER_MAX_CONCURRENCY": "4",
         "BREAKOUT_SCAN_INTERVAL_PREMARKET_SECONDS": "600",
         "BREAKOUT_SCAN_INTERVAL_REGULAR_SECONDS": "300",
         "BREAKOUT_SCAN_INTERVAL_CLOSED_SECONDS": "1800",
@@ -70,6 +71,11 @@ def test_breakout_bootstrap_environment_is_complete_and_off_by_default() -> None
         "BREAKOUT_FEATURE_VERSION": "breakout-features-v1",
         "BREAKOUT_DETECTOR_VERSION": "breakout-detector-v1",
         "BREAKOUT_API_SCHEMA_VERSION": "breakout-api-v1",
+        "MARKET_SHAPE_VERSION": "market-shape-v3",
+        "MARKET_SHAPE_ENTER_CONFIRM_DAYS": "2",
+        "MARKET_SHAPE_EXIT_CONFIRM_DAYS": "2",
+        "MARKET_SHAPE_MIN_DWELL_DAYS": "3",
+        "MARKET_SHAPE_HISTORY_DAYS": "20",
         "RANGE_PERSISTENCE_MODE": "shadow",
         "RANGE_PERSISTENCE_VERSION": "range-persistence-v1",
         "RANGE_PERSISTENCE_VALIDATION_VERSION": "",
@@ -107,6 +113,11 @@ def test_backend_and_worker_share_one_writable_data_volume_and_image() -> None:
     assert validation_version in backend
     assert validation_version in worker
     for key in (
+        "MARKET_SHAPE_VERSION",
+        "MARKET_SHAPE_ENTER_CONFIRM_DAYS",
+        "MARKET_SHAPE_EXIT_CONFIRM_DAYS",
+        "MARKET_SHAPE_MIN_DWELL_DAYS",
+        "MARKET_SHAPE_HISTORY_DAYS",
         "RANGE_PERSISTENCE_VERSION",
         "RANGE_PERSISTENCE_LENGTH",
         "RANGE_PERSISTENCE_FAST_LENGTH",
@@ -130,6 +141,8 @@ def test_deployment_requires_live_radar_and_range_interactions() -> None:
     assert "RANGE_PERSISTENCE_MODE must be explicitly set" in script
     assert "Range Persistence interactions are disabled" in script
     assert "payload.get(\"enabled\")" in script
+    assert "EXPECTED_MARKET_SHAPE_VERSION" in script
+    assert "market-shape-v2" not in script
     assert "app.services.breakouts.worker --healthcheck" in script
     assert "|\n    docker compose exec -T backend \\\n        python -c" in script
 

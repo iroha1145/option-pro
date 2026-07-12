@@ -21,13 +21,24 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.parse import quote
 
 
-SCHEMA_VERSION = "breakout-db-v1"
+LEGACY_SCHEMA_VERSION = "breakout-db-v1"
+SCHEMA_VERSION = "breakout-db-v2"
 DEFAULT_LOCK_NAME = "breakout-worker"
 MAX_PROVIDER_JSON_BYTES = 2_000_000
 MAX_DEBUG_JSON_BYTES = 16_384
 MAX_EVENT_JSON_BYTES = 262_144
 MAX_GENERIC_JSON_BYTES = 65_536
 _CURSOR_VERSION = 2
+_TRIGGERED_LIFECYCLE_STATES = {
+    "TRIGGERED",
+    "CONFIRMED",
+    "HOLDING",
+    "RETESTING",
+    "RETEST_HELD",
+    "REACCELERATING",
+    "EXTENDED",
+    "FAILED",
+}
 
 
 class BreakoutRepositoryError(RuntimeError):
@@ -39,7 +50,27 @@ class ReadOnlyRepositoryError(BreakoutRepositoryError):
 
 
 class SchemaVersionError(BreakoutRepositoryError):
-    """Raised when the database is not the frozen v1 schema."""
+    """Raised when a reader or writer encounters an unsupported schema."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        current_version: str | None = None,
+        required_version: str = SCHEMA_VERSION,
+    ) -> None:
+        super().__init__(message)
+        self.current_version = current_version
+        self.required_version = required_version
+
+    def status_payload(self) -> dict[str, Any]:
+        return {
+            "status": "schema_upgrade_required",
+            "schema_version": self.current_version,
+            "required_schema_version": self.required_version,
+            "migration_required": True,
+            "message": str(self),
+        }
 
 
 class LeaseLostError(BreakoutRepositoryError):
@@ -172,7 +203,7 @@ def _safe_db_path(path: str | Path) -> Path:
     return candidate
 
 
-_SCHEMA = (
+_LEGACY_SCHEMA = (
     """
     CREATE TABLE IF NOT EXISTS breakout_schema_version (
         version TEXT PRIMARY KEY,
@@ -363,6 +394,30 @@ _SCHEMA = (
     "CREATE INDEX IF NOT EXISTS idx_breakout_transitions_timeline ON breakout_transitions(event_id, evidence_at, transition_id)",
 )
 
+LEGACY_SCHEMA_CHECKSUM = hashlib.sha256(
+    "\n".join(" ".join(statement.split()) for statement in _LEGACY_SCHEMA).encode(
+        "utf-8"
+    )
+).hexdigest()
+
+
+def _v2_statement(statement: str) -> str:
+    if "CREATE TABLE IF NOT EXISTS breakout_events" not in statement:
+        return statement
+    old = """        event_at TEXT NOT NULL,
+        first_seen_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,"""
+    new = """        event_at TEXT NOT NULL,
+        first_seen_at TEXT NOT NULL,
+        triggered_at TEXT,
+        state_changed_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,"""
+    if old not in statement:
+        raise RuntimeError("legacy breakout_events schema definition changed")
+    return statement.replace(old, new)
+
+
+_SCHEMA = tuple(_v2_statement(statement) for statement in _LEGACY_SCHEMA)
 SCHEMA_CHECKSUM = hashlib.sha256(
     "\n".join(" ".join(statement.split()) for statement in _SCHEMA).encode("utf-8")
 ).hexdigest()
@@ -420,7 +475,7 @@ class BreakoutRepository:
         return connection
 
     def initialize(self) -> None:
-        """Create and verify v1.  This method is never valid on an API reader."""
+        """Create v2 or migrate a verified v1 database in one transaction."""
         connection = self._write_connection()
         try:
             effective_mode = str(
@@ -433,23 +488,34 @@ class BreakoutRepository:
             connection.execute("BEGIN IMMEDIATE")
             for statement in _SCHEMA:
                 connection.execute(statement)
-            row = connection.execute(
-                "SELECT checksum FROM breakout_schema_version WHERE version=?",
-                (SCHEMA_VERSION,),
-            ).fetchone()
-            if row is None:
+            rows = connection.execute(
+                "SELECT version,checksum FROM breakout_schema_version ORDER BY version"
+            ).fetchall()
+            if not rows:
                 connection.execute(
                     "INSERT INTO breakout_schema_version(version, checksum, applied_at) VALUES(?,?,?)",
                     (SCHEMA_VERSION, SCHEMA_CHECKSUM, _timestamp(self._now())),
                 )
-            elif row["checksum"] != SCHEMA_CHECKSUM:
-                raise SchemaVersionError("breakout-db-v1 schema checksum mismatch")
-            other = connection.execute(
-                "SELECT version FROM breakout_schema_version WHERE version<>? LIMIT 1",
-                (SCHEMA_VERSION,),
-            ).fetchone()
-            if other is not None:
-                raise SchemaVersionError(f"unsupported breakout schema version: {other['version']}")
+            elif len(rows) == 1 and rows[0]["version"] == SCHEMA_VERSION:
+                if rows[0]["checksum"] != SCHEMA_CHECKSUM:
+                    raise SchemaVersionError(
+                        f"{SCHEMA_VERSION} schema checksum mismatch",
+                        current_version=SCHEMA_VERSION,
+                    )
+            elif len(rows) == 1 and rows[0]["version"] == LEGACY_SCHEMA_VERSION:
+                if rows[0]["checksum"] != LEGACY_SCHEMA_CHECKSUM:
+                    raise SchemaVersionError(
+                        f"{LEGACY_SCHEMA_VERSION} schema checksum mismatch",
+                        current_version=LEGACY_SCHEMA_VERSION,
+                    )
+                self._migrate_v1_to_v2(connection)
+            else:
+                versions = ",".join(str(row["version"]) for row in rows)
+                raise SchemaVersionError(
+                    f"unsupported breakout schema versions: {versions}",
+                    current_version=versions or None,
+                )
+            self._require_schema(connection)
             connection.commit()
         except Exception:
             if connection.in_transaction:
@@ -458,16 +524,210 @@ class BreakoutRepository:
         finally:
             connection.close()
 
+    @staticmethod
+    def _event_table_columns(connection: sqlite3.Connection) -> set[str]:
+        return {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(breakout_events)")
+        }
+
+    def _migrate_v1_to_v2(self, connection: sqlite3.Connection) -> None:
+        """Backfill stable event clocks without dropping any event history."""
+
+        columns = self._event_table_columns(connection)
+        if "triggered_at" not in columns:
+            connection.execute(
+                "ALTER TABLE breakout_events ADD COLUMN triggered_at TEXT"
+            )
+        if "state_changed_at" not in columns:
+            connection.execute(
+                """ALTER TABLE breakout_events
+                   ADD COLUMN state_changed_at TEXT NOT NULL DEFAULT ''"""
+            )
+
+        event_rows = connection.execute(
+            """
+            SELECT event_id,event_at,first_seen_at,last_seen_at,lifecycle_state,event_json
+            FROM breakout_events ORDER BY event_id
+            """
+        ).fetchall()
+        for row in event_rows:
+            event_id = str(row["event_id"])
+            latest_transition = connection.execute(
+                """
+                SELECT evidence_at FROM breakout_transitions
+                WHERE event_id=? ORDER BY evidence_at DESC,transition_id DESC LIMIT 1
+                """,
+                (event_id,),
+            ).fetchone()
+            trigger_transition = connection.execute(
+                """
+                SELECT evidence_at FROM breakout_transitions
+                WHERE event_id=? AND to_state='TRIGGERED'
+                ORDER BY evidence_at,transition_id LIMIT 1
+                """,
+                (event_id,),
+            ).fetchone()
+            first_seen_at = _timestamp(row["first_seen_at"] or row["event_at"])
+            last_seen_at = _timestamp(row["last_seen_at"] or row["event_at"])
+            lifecycle_state = str(row["lifecycle_state"])
+            was_triggered = (
+                lifecycle_state in _TRIGGERED_LIFECYCLE_STATES
+                or (lifecycle_state == "EXPIRED" and trigger_transition is not None)
+            )
+            triggered_at = _timestamp(row["event_at"]) if was_triggered else None
+            state_changed_at = _timestamp(
+                latest_transition["evidence_at"]
+                if latest_transition is not None
+                else row["event_at"] or first_seen_at
+            )
+            event_at = triggered_at or first_seen_at
+            body = _json_loads(row["event_json"], {})
+            body.update(
+                {
+                    "event_at": event_at,
+                    "first_seen_at": first_seen_at,
+                    "triggered_at": triggered_at,
+                    "state_changed_at": state_changed_at,
+                    "last_seen_at": last_seen_at,
+                }
+            )
+            connection.execute(
+                """
+                UPDATE breakout_events
+                SET event_at=?,first_seen_at=?,triggered_at=?,state_changed_at=?,
+                    last_seen_at=?,event_json=?
+                WHERE event_id=?
+                """,
+                (
+                    event_at,
+                    first_seen_at,
+                    triggered_at,
+                    state_changed_at,
+                    last_seen_at,
+                    _json_dumps(body, max_bytes=MAX_EVENT_JSON_BYTES),
+                    event_id,
+                ),
+            )
+
+        snapshot_rows = connection.execute(
+            """
+            SELECT snapshots.scan_run_id,snapshots.event_id,snapshots.event_at,
+                   snapshots.event_snapshot_json,runs.published_at
+            FROM breakout_scan_events AS snapshots
+            JOIN breakout_scan_runs AS runs
+              ON runs.scan_run_id=snapshots.scan_run_id
+            ORDER BY runs.published_at,snapshots.scan_run_id,snapshots.event_id
+            """
+        ).fetchall()
+        for row in snapshot_rows:
+            body = _json_loads(row["event_snapshot_json"], {})
+            old_event_at = _timestamp(body.get("event_at") or row["event_at"])
+            first_seen_at = _timestamp(body.get("first_seen_at") or old_event_at)
+            last_seen_at = _timestamp(body.get("last_seen_at") or old_event_at)
+            lifecycle_state = str(body.get("lifecycle_state") or "DISCOVERED")
+            published_at = row["published_at"]
+            trigger_transition = connection.execute(
+                """
+                SELECT evidence_at FROM breakout_transitions
+                WHERE event_id=? AND to_state='TRIGGERED'
+                  AND (? IS NULL OR evidence_at<=?)
+                ORDER BY evidence_at,transition_id LIMIT 1
+                """,
+                (row["event_id"], published_at, published_at),
+            ).fetchone()
+            latest_transition = connection.execute(
+                """
+                SELECT evidence_at FROM breakout_transitions
+                WHERE event_id=? AND (? IS NULL OR evidence_at<=?)
+                ORDER BY evidence_at DESC,transition_id DESC LIMIT 1
+                """,
+                (row["event_id"], published_at, published_at),
+            ).fetchone()
+            was_triggered = (
+                lifecycle_state in _TRIGGERED_LIFECYCLE_STATES
+                or (lifecycle_state == "EXPIRED" and trigger_transition is not None)
+            )
+            triggered_at = old_event_at if was_triggered else None
+            state_changed_at = _timestamp(
+                latest_transition["evidence_at"]
+                if latest_transition is not None
+                else old_event_at or first_seen_at
+            )
+            event_at = triggered_at or first_seen_at
+            body.update(
+                {
+                    "event_at": event_at,
+                    "first_seen_at": first_seen_at,
+                    "triggered_at": triggered_at,
+                    "state_changed_at": state_changed_at,
+                    "last_seen_at": last_seen_at,
+                }
+            )
+            connection.execute(
+                """
+                UPDATE breakout_scan_events
+                SET event_at=?,event_snapshot_json=?
+                WHERE scan_run_id=? AND event_id=?
+                """,
+                (
+                    event_at,
+                    _json_dumps(body, max_bytes=MAX_EVENT_JSON_BYTES),
+                    row["scan_run_id"],
+                    row["event_id"],
+                ),
+            )
+
+        connection.execute(
+            "DELETE FROM breakout_schema_version WHERE version=?",
+            (LEGACY_SCHEMA_VERSION,),
+        )
+        connection.execute(
+            """
+            INSERT INTO breakout_schema_version(version,checksum,applied_at)
+            VALUES(?,?,?)
+            ON CONFLICT(version) DO UPDATE SET
+                checksum=excluded.checksum,applied_at=excluded.applied_at
+            """,
+            (SCHEMA_VERSION, SCHEMA_CHECKSUM, _timestamp(self._now())),
+        )
+
     def _require_schema(self, connection: sqlite3.Connection) -> None:
         try:
-            row = connection.execute(
-                "SELECT checksum FROM breakout_schema_version WHERE version=?",
-                (SCHEMA_VERSION,),
-            ).fetchone()
+            rows = connection.execute(
+                "SELECT version,checksum FROM breakout_schema_version ORDER BY version"
+            ).fetchall()
         except sqlite3.Error as exc:
-            raise SchemaVersionError("breakout database is missing schema v1") from exc
-        if row is None or row["checksum"] != SCHEMA_CHECKSUM:
-            raise SchemaVersionError("breakout database is not compatible with schema v1")
+            raise SchemaVersionError(
+                f"breakout database is missing schema {SCHEMA_VERSION}",
+                current_version=None,
+            ) from exc
+        if len(rows) != 1:
+            versions = ",".join(str(row["version"]) for row in rows)
+            raise SchemaVersionError(
+                f"breakout database requires {SCHEMA_VERSION}; found {versions or 'none'}",
+                current_version=versions or None,
+            )
+        row = rows[0]
+        version = str(row["version"])
+        if version != SCHEMA_VERSION:
+            raise SchemaVersionError(
+                f"breakout database schema {version} requires migration to {SCHEMA_VERSION}",
+                current_version=version,
+            )
+        if row["checksum"] != SCHEMA_CHECKSUM:
+            raise SchemaVersionError(
+                f"breakout database {SCHEMA_VERSION} checksum mismatch",
+                current_version=version,
+            )
+        columns = self._event_table_columns(connection)
+        required = {"triggered_at", "state_changed_at"}
+        if not required.issubset(columns):
+            missing = ",".join(sorted(required - columns))
+            raise SchemaVersionError(
+                f"breakout database {SCHEMA_VERSION} is missing columns: {missing}",
+                current_version=version,
+            )
 
     def begin_scan(
         self,
@@ -964,6 +1224,7 @@ class BreakoutRepository:
                 str(scan_id),
                 snapshot_id,
                 events,
+                transitions,
                 now_text,
             )
             self._insert_transitions(
@@ -1162,22 +1423,36 @@ class BreakoutRepository:
         scan_id: str,
         snapshot_id: str,
         events: Sequence[Mapping[str, Any]],
+        transitions: Sequence[Mapping[str, Any]],
         now_text: str,
     ) -> tuple[list[dict[str, Any]], dict[str, str]]:
         records: list[dict[str, Any]] = []
         aliases: dict[str, str] = {}
+        trigger_hints: dict[str, str] = {}
+        for transition in transitions:
+            if str(_enum_value(transition.get("to_state")) or "") != "TRIGGERED":
+                continue
+            transition_event_id = str(transition.get("event_id") or "")
+            evidence = transition.get("evidence_at") or transition.get("event_at")
+            if not transition_event_id or evidence is None:
+                continue
+            evidence_at = _timestamp(evidence)
+            current = trigger_hints.get(transition_event_id)
+            if current is None or evidence_at < current:
+                trigger_hints[transition_event_id] = evidence_at
         for incoming in events:
             event = dict(incoming)
-            event_at_value = event.get("event_at")
-            if event_at_value is None:
-                raise ValueError("event_at is required")
-            event_at = _timestamp(event_at_value)
+            triggered_at_supplied = "triggered_at" in event
+            incoming_event_at = event.get("event_at") or event.get("first_seen_at")
+            if incoming_event_at is None:
+                raise ValueError("event_at or first_seen_at is required")
+            incoming_event_at = _timestamp(incoming_event_at)
             ticker = str(event.get("ticker") or "").strip().upper()
             setup = str(_enum_value(event.get("setup_type")) or "")
             pivot_id = str(event.get("pivot_id") or "")
             if not ticker or not setup or not pivot_id:
                 raise ValueError("event ticker, setup_type and pivot_id are required")
-            trading_date = str(event.get("trading_date") or event_at[:10])
+            trading_date = str(event.get("trading_date") or incoming_event_at[:10])
             incoming_id = str(
                 event.get("event_id")
                 or "event_"
@@ -1192,7 +1467,8 @@ class BreakoutRepository:
             )
             existing = connection.execute(
                 """
-                SELECT event_id,first_seen_at,last_seen_at,lifecycle_state,event_json
+                SELECT event_id,event_at,first_seen_at,triggered_at,state_changed_at,
+                       last_seen_at,lifecycle_state,event_json
                 FROM breakout_events
                 WHERE event_id=?
                 """,
@@ -1201,7 +1477,8 @@ class BreakoutRepository:
             if existing is None:
                 existing = connection.execute(
                     """
-                    SELECT event_id,first_seen_at,last_seen_at,lifecycle_state,event_json
+                    SELECT event_id,event_at,first_seen_at,triggered_at,state_changed_at,
+                           last_seen_at,lifecycle_state,event_json
                     FROM breakout_events
                     WHERE trading_date=? AND ticker=? AND setup_type=? AND pivot_id=?
                     """,
@@ -1213,20 +1490,115 @@ class BreakoutRepository:
             event["ticker"] = ticker
             event["setup_type"] = setup
             event["trading_date"] = trading_date
-            event["event_at"] = event_at
-            event["first_seen_at"] = _timestamp(event.get("first_seen_at") or event_at)
-            event["last_seen_at"] = _timestamp(event.get("last_seen_at") or event_at)
-            if existing is not None:
-                event["first_seen_at"] = str(existing["first_seen_at"])
             event["lifecycle_state"] = str(
                 _enum_value(event.get("lifecycle_state")) or "DISCOVERED"
             )
+            incoming_first_seen_at = _timestamp(
+                event.get("first_seen_at") or incoming_event_at
+            )
+            incoming_last_seen_at = _timestamp(
+                event.get("last_seen_at") or incoming_event_at
+            )
+            incoming_triggered_at = (
+                _timestamp(event["triggered_at"])
+                if event.get("triggered_at") is not None
+                else None
+            )
+            incoming_state_changed_at = (
+                _timestamp(event["state_changed_at"])
+                if event.get("state_changed_at") is not None
+                else None
+            )
+            incoming_trigger_hint = trigger_hints.get(incoming_id)
+            previous_state = str(_enum_value(event.get("previous_state")) or "")
+            safe_transition_anchor = (
+                incoming_trigger_hint
+                or (
+                    incoming_state_changed_at
+                    if previous_state in {"DISCOVERED", "WATCHING"}
+                    and event["lifecycle_state"] in _TRIGGERED_LIFECYCLE_STATES
+                    else None
+                )
+            )
+            if existing is None:
+                first_seen_at = incoming_first_seen_at
+                triggered_at = incoming_triggered_at
+                if (
+                    triggered_at is None
+                    and event["lifecycle_state"] in _TRIGGERED_LIFECYCLE_STATES
+                ):
+                    if triggered_at_supplied:
+                        triggered_at = safe_transition_anchor
+                        if triggered_at is None:
+                            raise ValueError(
+                                "triggered_at cannot be null for a triggered "
+                                "lifecycle state without first-trigger evidence"
+                            )
+                    else:
+                        triggered_at = safe_transition_anchor or incoming_event_at
+                state_changed_at = (
+                    incoming_state_changed_at or incoming_event_at or first_seen_at
+                )
+            else:
+                first_seen_at = str(existing["first_seen_at"])
+                stored_trigger = connection.execute(
+                    """
+                    SELECT evidence_at FROM breakout_transitions
+                    WHERE event_id=? AND to_state='TRIGGERED'
+                    ORDER BY evidence_at,transition_id LIMIT 1
+                    """,
+                    (event_id,),
+                ).fetchone()
+                existing_body = _json_loads(existing["event_json"], {})
+                existing_body_triggered = existing_body.get("triggered_at")
+                triggered_at = (
+                    str(existing["triggered_at"])
+                    if existing["triggered_at"] is not None
+                    else _timestamp(stored_trigger["evidence_at"])
+                    if stored_trigger is not None
+                    else _timestamp(existing_body_triggered)
+                    if existing_body_triggered is not None
+                    else str(existing["event_at"])
+                    if str(existing["lifecycle_state"])
+                    in _TRIGGERED_LIFECYCLE_STATES
+                    else incoming_triggered_at
+                )
+                state_changed_at = str(
+                    existing["state_changed_at"] or existing["event_at"]
+                )
+                if (
+                    triggered_at is None
+                    and event["lifecycle_state"] in _TRIGGERED_LIFECYCLE_STATES
+                ):
+                    if triggered_at_supplied:
+                        triggered_at = safe_transition_anchor
+                        if triggered_at is None:
+                            raise ValueError(
+                                "triggered_at cannot be null for a triggered "
+                                "lifecycle state without first-trigger evidence"
+                            )
+                    elif str(existing["lifecycle_state"]) in {
+                        "DISCOVERED",
+                        "WATCHING",
+                    }:
+                        triggered_at = (
+                            incoming_triggered_at
+                            or safe_transition_anchor
+                            or incoming_last_seen_at
+                        )
+                if event["lifecycle_state"] != str(existing["lifecycle_state"]):
+                    state_changed_at = (
+                        incoming_state_changed_at or incoming_last_seen_at
+                    )
+            event_at = triggered_at or first_seen_at
+            event["event_at"] = event_at
+            event["first_seen_at"] = first_seen_at
+            event["triggered_at"] = triggered_at
+            event["state_changed_at"] = state_changed_at
+            event["last_seen_at"] = incoming_last_seen_at
             event["source_snapshot_id"] = str(
                 event.get("source_snapshot_id") or snapshot_id
             )
-            priority = self._score(event, "alert_priority_score")
-            confidence = self._score(event, "data_confidence_score")
-            event_json = _json_dumps(event, max_bytes=MAX_EVENT_JSON_BYTES)
             if (
                 existing is not None
                 and str(existing["lifecycle_state"]) in {"FAILED", "EXPIRED"}
@@ -1237,15 +1609,22 @@ class BreakoutRepository:
                 # revive an old terminal row through an upsert race.
                 records.append(_json_loads(existing["event_json"], {}))
                 continue
+            if existing is not None and incoming_last_seen_at < existing["last_seen_at"]:
+                records.append(_json_loads(existing["event_json"], {}))
+                continue
+            priority = self._score(event, "alert_priority_score")
+            confidence = self._score(event, "data_confidence_score")
+            event_json = _json_dumps(event, max_bytes=MAX_EVENT_JSON_BYTES)
             if existing is None:
                 connection.execute(
                     """
                     INSERT INTO breakout_events(
                         event_id,trading_date,ticker,setup_type,pivot_id,lifecycle_state,
-                        event_at,first_seen_at,last_seen_at,source_snapshot_id,
+                        event_at,first_seen_at,triggered_at,state_changed_at,last_seen_at,
+                        source_snapshot_id,
                         alert_priority_score,data_confidence_score,current_scan_run_id,
                         event_json,created_at,updated_at
-                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         event_id,
@@ -1256,6 +1635,8 @@ class BreakoutRepository:
                         event["lifecycle_state"],
                         event_at,
                         event["first_seen_at"],
+                        event["triggered_at"],
+                        event["state_changed_at"],
                         event["last_seen_at"],
                         event["source_snapshot_id"],
                         priority,
@@ -1266,12 +1647,13 @@ class BreakoutRepository:
                         now_text,
                     ),
                 )
-            elif event["last_seen_at"] >= existing["last_seen_at"]:
+            else:
                 connection.execute(
                     """
                     UPDATE breakout_events
                     SET trading_date=?,setup_type=?,pivot_id=?,lifecycle_state=?,
-                        event_at=?,first_seen_at=?,last_seen_at=?,
+                        event_at=?,first_seen_at=?,triggered_at=?,state_changed_at=?,
+                        last_seen_at=?,
                         source_snapshot_id=?,alert_priority_score=?,data_confidence_score=?,
                         current_scan_run_id=?,event_json=?,updated_at=?
                     WHERE event_id=?
@@ -1283,6 +1665,8 @@ class BreakoutRepository:
                         event["lifecycle_state"],
                         event_at,
                         event["first_seen_at"],
+                        event["triggered_at"],
+                        event["state_changed_at"],
                         event["last_seen_at"],
                         event["source_snapshot_id"],
                         priority,
@@ -1332,7 +1716,8 @@ class BreakoutRepository:
                         "from_state": previous,
                         "to_state": current,
                         "reason": event.get("transition_reason") or "",
-                        "evidence_at": event.get("event_at"),
+                        "evidence_at": event.get("state_changed_at")
+                        or event.get("last_seen_at"),
                     }
                 )
         for transition in values:
@@ -2367,6 +2752,8 @@ __all__ = [
     "CarryoverBatch",
     "DEFAULT_LOCK_NAME",
     "InvalidCursorError",
+    "LEGACY_SCHEMA_CHECKSUM",
+    "LEGACY_SCHEMA_VERSION",
     "LeaseInfo",
     "LeaseLostError",
     "ReadOnlyRepositoryError",

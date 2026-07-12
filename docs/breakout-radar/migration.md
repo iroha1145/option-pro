@@ -3,7 +3,7 @@
 ## 发布顺序
 
 1. 部署包含新代码但保持 BREAKOUT_RADAR_ENABLED=false。
-2. Worker 初始化 breakout-db-v1；Backend 仍不迁移和写库。
+2. Worker 初始化 breakout-db-v2；Backend 仍不迁移和写库。
 3. 验证 /ready、旧接口和突破 status=disabled。
 4. 启动 Worker 的离线 --once 与单实例测试。
 5. 在受控环境启用 Provider，保持 RANGE_PERSISTENCE_MODE=shadow。
@@ -31,7 +31,11 @@
 - Worker 是唯一迁移执行者。
 - breakout_schema_version 记录版本、校验和和应用时间。
 - 每次迁移在独立事务中执行，可重复检查但不可静默重写已应用版本。
-- API 面对旧版本或缺库时返回 unavailable，不自动建库。
+- v1 升级到 v2 时原地增加 triggered_at 和 state_changed_at；事件身份、转换和
+  已完成扫描均保留。已触发旧事件用旧 event_at 回填触发时间，WATCHING 与
+  DISCOVERED 保持未触发。
+- API 面对旧版本或缺库时返回 unavailable，不自动建库；旧版本会明确返回
+  schema_upgrade_required、当前版本和所需版本。
 - 降级回旧应用时保留 /data；旧应用不会读取新表。
 
 ## 缓存和版本

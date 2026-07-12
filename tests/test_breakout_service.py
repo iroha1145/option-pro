@@ -25,6 +25,13 @@ from app.services.breakouts.models import (
 from app.services.breakouts.protocols import PriceDataSnapshot
 from app.services.breakouts.service import BreakoutRadarService, _safe_range_feature
 from app.services.breakouts.repository import BreakoutRepository
+from app.services.breakouts.research import (
+    load_completed_events,
+    load_completed_shadows,
+)
+from app.services.breakouts.research_validation import (
+    merge_completed_research_observations,
+)
 from app.services.breakouts.worker import BreakoutWorker
 
 
@@ -47,13 +54,25 @@ def _daily() -> pd.DataFrame:
     )
 
 
-def _intraday() -> pd.DataFrame:
+def _intraday(as_of: datetime = AS_OF) -> pd.DataFrame:
+    local_as_of = as_of.astimezone(NY)
+    session_start = (
+        local_as_of.replace(hour=4, minute=0, second=0, microsecond=0)
+        if (local_as_of.hour, local_as_of.minute) < (9, 30)
+        else local_as_of.replace(hour=9, minute=30, second=0, microsecond=0)
+    )
     index = pd.date_range(
-        AS_OF.replace(hour=9, minute=30),
-        AS_OF,
+        session_start,
+        local_as_of,
         freq="5min",
     )
-    close = np.linspace(100, 104, len(index))
+    if (local_as_of.hour, local_as_of.minute) < (9, 30):
+        close = 99.0 + np.arange(len(index)) * 0.02
+    else:
+        # Price is a function of the bar timestamp, not of how many bars the
+        # caller happened to request.  Consecutive scans therefore retain the
+        # same opening-range pivot.
+        close = 100.0 + np.arange(len(index)) / 3.0
     return pd.DataFrame(
         {
             "Open": close - 0.1,
@@ -74,7 +93,7 @@ class Prices:
                 ticker=ticker,
                 frame=frame,
                 source="fixture",
-                raw_as_of=AS_OF.astimezone(timezone.utc),
+                raw_as_of=cutoff.event_at.astimezone(timezone.utc),
                 cutoff=cutoff,
                 session=cutoff.session,
                 adjustment="adjusted",
@@ -84,13 +103,13 @@ class Prices:
         }
 
     async def intraday(self, tickers, *, cutoff, interval):
-        frame = _intraday()
+        frame = _intraday(cutoff.event_at)
         return {
             ticker: PriceDataSnapshot(
                 ticker=ticker,
                 frame=frame,
                 source="fixture",
-                raw_as_of=AS_OF.astimezone(timezone.utc),
+                raw_as_of=cutoff.event_at.astimezone(timezone.utc),
                 cutoff=cutoff,
                 session=cutoff.session,
                 adjustment="unadjusted",
@@ -598,6 +617,16 @@ def test_real_worker_service_repository_chain_publishes_and_preserves_first_seen
     assert detail is not None
     assert detail["transitions"]
     assert all(item.get("evidence_at") for item in detail["transitions"])
+    completed_shadows = load_completed_shadows(settings.db_path)
+    assert len(completed_shadows) == 2
+    assert completed_shadows[-1]["event_id"] == latest_event["event_id"]
+    assert completed_shadows[-1]["shadow"]["carryover"] is True
+    research = merge_completed_research_observations(
+        load_completed_events(settings.db_path),
+        completed_shadows,
+    )
+    assert research["coverage"]["matched_shadow_rows"] == 2
+    assert research["observations"][0]["triggered_at"] is not None
 
 
 class NoIntradayPrices(Prices):
@@ -634,7 +663,7 @@ class NoIntradayPrices(Prices):
         return {}
 
 
-def test_provider_price_cannot_trigger_without_a_complete_intraday_bar() -> None:
+def test_new_event_is_not_published_without_intraday_liquidity_evidence() -> None:
     candidate = BreakoutCandidate(
         ticker="TEST",
         exchange="NASDAQ",
@@ -664,11 +693,72 @@ def test_provider_price_cannot_trigger_without_a_complete_intraday_bar() -> None
         market_shape=Market(),
         universe=Universe(),
     )
-    event = asyncio.run(service.build_snapshot(discovery))["events"][0]
-    assert event.structure is not None
-    assert event.lifecycle_state.name == "WATCHING"
-    assert event.features["detection"]["triggered"] is False
-    assert event.scores.breakout_confirmation_score is None
+    payload = asyncio.run(service.build_snapshot(discovery))
+    assert payload["events"] == []
+    assert payload["range_persistence_shadow"] == []
+    assert payload["liquidity_filter_results"] == [
+        {
+            "ticker": "TEST",
+            "minimum": service.settings.regular_min_dollar_volume,
+            "value": None,
+            "status": "unavailable",
+            "calculation_method": "unavailable",
+        }
+    ]
+
+
+class MissingIntradayVolumePrices(Prices):
+    async def intraday(self, tickers, *, cutoff, interval):
+        snapshots = await super().intraday(
+            tickers,
+            cutoff=cutoff,
+            interval=interval,
+        )
+        return {
+            ticker: PriceDataSnapshot(
+                **{
+                    **vars(snapshot),
+                    "frame": snapshot.frame.drop(columns="Volume"),
+                }
+            )
+            for ticker, snapshot in snapshots.items()
+        }
+
+
+def test_new_event_is_not_published_when_intraday_volume_is_missing() -> None:
+    candidate = BreakoutCandidate(
+        ticker="TEST",
+        price=104,
+        provider_change_pct=8,
+        provider_volume=2_000_000,
+        provider_relative_volume=3,
+        provider_market_cap=1_000_000_000,
+        provider_timestamp=AS_OF,
+        source="fixture",
+        session=MarketSession.REGULAR,
+    )
+    discovery = DiscoverySnapshot(
+        provider="fixture",
+        status=ProviderStatus.ACTIVE,
+        as_of=AS_OF,
+        session=MarketSession.REGULAR,
+        schema_version="fixture-v1",
+        candidate_count=1,
+        candidates=[candidate],
+    )
+    service = BreakoutRadarService(
+        BreakoutSettings(_env_file=None),
+        price_data=MissingIntradayVolumePrices(),
+        strength=Strength(),
+        market_shape=Market(),
+        universe=Universe(),
+    )
+
+    payload = asyncio.run(service.build_snapshot(discovery))
+
+    assert payload["events"] == []
+    assert payload["liquidity_filter_results"][0]["status"] == "unavailable"
+    assert payload["liquidity_filter_results"][0]["value"] is None
 
 
 class FailingStrength:
@@ -812,6 +902,45 @@ def test_premarket_gap_continues_after_discovery_dropout_with_same_identity() ->
     assert {item["event_id"] for item in regular["transitions"]} == {
         first.event_id
     }
+    assert len(regular["range_persistence_shadow"]) == 1
+    carryover_shadow = regular["range_persistence_shadow"][0]
+    assert carryover_shadow["event_id"] == first.event_id
+    assert carryover_shadow["carryover"] is True
+    assert carryover_shadow["triggered_at"] == continued.triggered_at
+    assert carryover_shadow["breakout_production_priority"] is not None
+    assert carryover_shadow["breakout_hypothetical_priority"] is not None
+    merged = merge_completed_research_observations(
+        [
+            {
+                "scan_run_id": "carryover-scan",
+                "published_at": continued.last_seen_at.isoformat(),
+                "event_id": continued.event_id,
+                "ticker": continued.ticker,
+                "lifecycle_state": continued.lifecycle_state.value,
+                "event_at": continued.event_at.isoformat(),
+                "first_seen_at": continued.first_seen_at.isoformat(),
+                "triggered_at": continued.triggered_at.isoformat(),
+                "state_changed_at": continued.state_changed_at.isoformat(),
+                "last_seen_at": continued.last_seen_at.isoformat(),
+                "event_snapshot": continued.model_dump(mode="json"),
+            }
+        ],
+        [
+            {
+                "scan_run_id": "carryover-scan",
+                "event_id": continued.event_id,
+                "ticker": continued.ticker,
+                "production_score": carryover_shadow["production_score"],
+                "hypothetical_score": carryover_shadow["hypothetical_score"],
+                "version": carryover_shadow["feature_version"],
+                "shadow": carryover_shadow,
+            }
+        ],
+    )
+    assert merged["coverage"]["matched_shadow_rows"] == 1
+    assert merged["observations"][0]["triggered_at"] == (
+        continued.triggered_at.isoformat()
+    )
 
 
 def test_carryover_does_not_double_count_range_persistence_in_intrinsic_score() -> None:

@@ -97,10 +97,13 @@ class TradingViewDiscoveryProvider:
         )
         self._owns_client = client is None
         self._cache: OrderedDict[str, tuple[float, DiscoverySnapshot]] = OrderedDict()
+        self._cache_safety: dict[str, str] = {}
+        self._inflight: dict[str, asyncio.Future[DiscoverySnapshot]] = {}
+        self._inflight_loop: asyncio.AbstractEventLoop | None = None
+        self._request_semaphore: asyncio.Semaphore | None = None
+        self._semaphore_loop: asyncio.AbstractEventLoop | None = None
         self._consecutive_failures = 0
         self._circuit_open_until = 0.0
-        self._half_open_lock: asyncio.Lock | None = None
-        self._lock_loop: asyncio.AbstractEventLoop | None = None
         self._last_error_code: str | None = None
         self._last_success_at: datetime | None = None
 
@@ -191,6 +194,24 @@ class TradingViewDiscoveryProvider:
         encoded = json.dumps(source, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(encoded).hexdigest()
 
+    def _safety_boundary(
+        self,
+        *,
+        session: MarketSession,
+        profile: DiscoveryProfile,
+    ) -> str:
+        """Fingerprint fields that must never share stale or inflight work."""
+
+        source = {
+            "provider": "tradingview",
+            "session": session.value,
+            "profile": profile.value,
+            "schema": self.settings.provider_schema_version,
+            "payload": self._payload(session),
+        }
+        encoded = json.dumps(source, sort_keys=True, separators=(",", ":")).encode()
+        return hashlib.sha256(encoded).hexdigest()
+
     async def _read_response(self, response: httpx.Response) -> bytes:
         if response.status_code == 429:
             raw = response.headers.get("retry-after", "0")
@@ -222,6 +243,15 @@ class TradingViewDiscoveryProvider:
         return b"".join(chunks)
 
     async def _fetch(self, session: MarketSession) -> bytes:
+        running_loop = asyncio.get_running_loop()
+        if (
+            self._request_semaphore is None
+            or self._semaphore_loop is not running_loop
+        ):
+            self._request_semaphore = asyncio.Semaphore(
+                self.settings.provider_max_concurrency
+            )
+            self._semaphore_loop = running_loop
         try:
             async def request() -> bytes:
                 async with self._client.stream(
@@ -231,10 +261,11 @@ class TradingViewDiscoveryProvider:
                 ) as response:
                     return await self._read_response(response)
 
-            return await asyncio.wait_for(
-                request(),
-                timeout=self.settings.provider_timeout_seconds,
-            )
+            async with self._request_semaphore:
+                return await asyncio.wait_for(
+                    request(),
+                    timeout=self.settings.provider_timeout_seconds,
+                )
         except (asyncio.TimeoutError, httpx.TimeoutException) as exc:
             raise ProviderTimeout("provider_timeout") from exc
         except httpx.RequestError as exc:
@@ -336,6 +367,7 @@ class TradingViewDiscoveryProvider:
         *,
         session: MarketSession,
         requested_as_of: datetime,
+        safety_boundary: str,
     ) -> tuple[float, DiscoverySnapshot] | None:
         """Return the newest compatible snapshot across cache time buckets.
 
@@ -349,8 +381,10 @@ class TradingViewDiscoveryProvider:
         now = self._monotonic()
         eligible = [
             cached
-            for cached in self._cache.values()
+            for key, cached in self._cache.items()
             if (
+                self._cache_safety.get(key) == safety_boundary
+                and
                 cached[1].session is session
                 and cached[1].schema_version == self.settings.provider_schema_version
                 and cached[1].as_of <= requested_as_of
@@ -361,11 +395,135 @@ class TradingViewDiscoveryProvider:
             return None
         return max(eligible, key=lambda item: (item[1].as_of, item[0]))
 
-    def _remember(self, key: str, snapshot: DiscoverySnapshot) -> None:
+    def _remember(
+        self,
+        key: str,
+        snapshot: DiscoverySnapshot,
+        *,
+        safety_boundary: str,
+    ) -> None:
+        existing = self._cache.get(key)
+        if existing is not None and existing[1].as_of > snapshot.as_of:
+            return
         self._cache[key] = (self._monotonic(), snapshot)
+        self._cache_safety[key] = safety_boundary
         self._cache.move_to_end(key)
         while len(self._cache) > 8:
-            self._cache.popitem(last=False)
+            expired_key, _ = self._cache.popitem(last=False)
+            self._cache_safety.pop(expired_key, None)
+
+    def _fresh_cached(
+        self,
+        key: str,
+        *,
+        requested_as_of: datetime,
+    ) -> DiscoverySnapshot | None:
+        cached = self._cache.get(key)
+        if (
+            cached is not None
+            and cached[1].as_of <= requested_as_of
+            and self._monotonic() - cached[0]
+            <= self.settings.provider_cache_ttl_seconds
+        ):
+            return cached[1]
+        return None
+
+    async def _scan_uncached(
+        self,
+        *,
+        key: str,
+        safety_boundary: str,
+        session: MarketSession,
+        as_of: datetime,
+    ) -> DiscoverySnapshot:
+        """Leader-only Provider work; followers await its shielded Future."""
+
+        cached = self._fresh_cached(key, requested_as_of=as_of)
+        if cached is not None:
+            return cached
+        stale_candidate = self._latest_stale_candidate(
+            session=session,
+            requested_as_of=as_of,
+            safety_boundary=safety_boundary,
+        )
+        now = self._monotonic()
+        if self._circuit_open_until > now:
+            stale = self._stale(
+                stale_candidate,
+                warning="provider_circuit_open",
+                requested_as_of=as_of,
+            )
+            if stale is not None:
+                return stale
+            return DiscoverySnapshot(
+                provider="tradingview",
+                status=ProviderStatus.UNAVAILABLE,
+                as_of=as_of,
+                session=session,
+                schema_version=self.settings.provider_schema_version,
+                candidate_count=0,
+                warnings=["provider_circuit_open"],
+                candidates=[],
+                cache_key=key,
+            )
+
+        last_error: ProviderError | None = None
+        for attempt in range(self.settings.provider_retry_attempts):
+            try:
+                body = await self._fetch(session)
+                snapshot, cacheable = self._parse(
+                    body,
+                    session=session,
+                    as_of=as_of,
+                    cache_key=key,
+                )
+                self._consecutive_failures = 0
+                self._circuit_open_until = 0.0
+                self._last_error_code = None
+                self._last_success_at = _utc_now()
+                if cacheable:
+                    self._remember(
+                        key,
+                        snapshot,
+                        safety_boundary=safety_boundary,
+                    )
+                return snapshot
+            except ProviderError as exc:
+                last_error = exc
+                if not exc.retryable or attempt + 1 >= self.settings.provider_retry_attempts:
+                    break
+                delay = exc.retry_after if isinstance(exc, ProviderRateLimited) else min(
+                    0.25 * (2**attempt),
+                    self.settings.provider_retry_after_cap_seconds,
+                )
+                await self._sleep(delay)
+
+        self._consecutive_failures += 1
+        self._last_error_code = (
+            last_error.code if last_error else "provider_unknown_error"
+        )
+        if self._consecutive_failures >= self.settings.provider_failure_threshold:
+            self._circuit_open_until = (
+                self._monotonic() + self.settings.provider_circuit_open_seconds
+            )
+        stale = self._stale(
+            stale_candidate,
+            warning=self._last_error_code,
+            requested_as_of=as_of,
+        )
+        if stale is not None:
+            return stale
+        return DiscoverySnapshot(
+            provider="tradingview",
+            status=ProviderStatus.UNAVAILABLE,
+            as_of=as_of,
+            session=session,
+            schema_version=self.settings.provider_schema_version,
+            candidate_count=0,
+            warnings=[self._last_error_code],
+            candidates=[],
+            cache_key=key,
+        )
 
     async def scan(
         self,
@@ -396,91 +554,44 @@ class TradingViewDiscoveryProvider:
             raise ValueError("discovery profile does not match market session")
 
         key = self._cache_key(session=session, profile=profile, as_of=as_of)
-        now = self._monotonic()
-        cached = self._cache.get(key)
-        if (
-            cached
-            and cached[1].as_of <= as_of
-            and now - cached[0] <= self.settings.provider_cache_ttl_seconds
-        ):
-            return cached[1]
-        stale_candidate = self._latest_stale_candidate(
+        cached = self._fresh_cached(key, requested_as_of=as_of)
+        if cached is not None:
+            return cached
+
+        safety_boundary = self._safety_boundary(
             session=session,
-            requested_as_of=as_of,
+            profile=profile,
         )
-        if self._circuit_open_until > now:
-            stale = self._stale(
-                stale_candidate,
-                warning="provider_circuit_open",
-                requested_as_of=as_of,
-            )
-            if stale is not None:
-                return stale
-            return DiscoverySnapshot(
-                provider="tradingview",
-                status=ProviderStatus.UNAVAILABLE,
-                as_of=as_of,
-                session=session,
-                schema_version=self.settings.provider_schema_version,
-                candidate_count=0,
-                warnings=["provider_circuit_open"],
-                candidates=[],
-                cache_key=key,
-            )
-
         running_loop = asyncio.get_running_loop()
-        if self._half_open_lock is None or self._lock_loop is not running_loop:
-            self._half_open_lock = asyncio.Lock()
-            self._lock_loop = running_loop
-        async with self._half_open_lock:
-            last_error: ProviderError | None = None
-            for attempt in range(self.settings.provider_retry_attempts):
-                try:
-                    body = await self._fetch(session)
-                    snapshot, cacheable = self._parse(
-                        body,
-                        session=session,
-                        as_of=as_of,
-                        cache_key=key,
-                    )
-                    self._consecutive_failures = 0
-                    self._circuit_open_until = 0.0
-                    self._last_error_code = None
-                    self._last_success_at = _utc_now()
-                    if cacheable:
-                        self._remember(key, snapshot)
-                    return snapshot
-                except ProviderError as exc:
-                    last_error = exc
-                    if not exc.retryable or attempt + 1 >= self.settings.provider_retry_attempts:
-                        break
-                    delay = exc.retry_after if isinstance(exc, ProviderRateLimited) else min(
-                        0.25 * (2**attempt),
-                        self.settings.provider_retry_after_cap_seconds,
-                    )
-                    await self._sleep(delay)
-
-            self._consecutive_failures += 1
-            self._last_error_code = last_error.code if last_error else "provider_unknown_error"
-            if self._consecutive_failures >= self.settings.provider_failure_threshold:
-                self._circuit_open_until = (
-                    self._monotonic() + self.settings.provider_circuit_open_seconds
+        if self._inflight_loop is not running_loop:
+            self._inflight = {}
+            self._inflight_loop = running_loop
+        inflight_key = "|".join(
+            [
+                key,
+                safety_boundary,
+                as_of.astimezone(timezone.utc).isoformat(timespec="microseconds"),
+            ]
+        )
+        task = self._inflight.get(inflight_key)
+        if task is None or task.done():
+            task = running_loop.create_task(
+                self._scan_uncached(
+                    key=key,
+                    safety_boundary=safety_boundary,
+                    session=session,
+                    as_of=as_of,
                 )
-            stale = self._stale(
-                stale_candidate,
-                warning=self._last_error_code,
-                requested_as_of=as_of,
             )
-            if stale is not None:
-                return stale
-            return DiscoverySnapshot(
-                provider="tradingview",
-                status=ProviderStatus.UNAVAILABLE,
-                as_of=as_of,
-                session=session,
-                schema_version=self.settings.provider_schema_version,
-                candidate_count=0,
-                warnings=[self._last_error_code],
-                candidates=[],
-                cache_key=key,
-            )
+            self._inflight[inflight_key] = task
+
+            def cleanup(done: asyncio.Future[DiscoverySnapshot]) -> None:
+                if self._inflight.get(inflight_key) is done:
+                    self._inflight.pop(inflight_key, None)
+                if not done.cancelled():
+                    done.exception()
+
+            task.add_done_callback(cleanup)
+        # A follower timeout/cancellation must not cancel the leader or the
+        # request shared by the remaining followers.
+        return await asyncio.shield(task)

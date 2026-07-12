@@ -169,20 +169,13 @@ def filter_and_deduplicate(
             and candidate.provider_market_cap < settings.provider_min_market_cap
         ):
             continue
-        price = candidate.price
-        volume = candidate.provider_volume or 0.0
-        dollar_volume = price * volume
         if session is MarketSession.PREMARKET:
             if (candidate.provider_change_pct or 0) < settings.premarket_min_change_pct:
-                continue
-            if dollar_volume < settings.premarket_min_dollar_volume:
                 continue
         else:
             if (candidate.provider_change_pct or 0) < settings.regular_min_change_pct:
                 continue
             if (candidate.provider_relative_volume or 0) < settings.regular_min_relative_volume:
-                continue
-            if dollar_volume < settings.regular_min_dollar_volume:
                 continue
         previous = kept.get(candidate.ticker)
         if previous is None or (candidate.provider_change_pct or 0) > (
