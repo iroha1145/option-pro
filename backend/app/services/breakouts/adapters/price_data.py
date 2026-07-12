@@ -47,7 +47,7 @@ def _expected_intraday_through(cutoff, interval_minutes: int) -> datetime | None
     minute = local.hour * 60 + local.minute
     floored = minute - minute % interval_minutes
     day = local.date()
-    from app.api.market import _early_close_minutes
+    from app.services.market_calendar import early_close_minutes as _early_close_minutes
 
     regular_close = _early_close_minutes(day) or 16 * 60
     if cutoff.session.value == "premarket":

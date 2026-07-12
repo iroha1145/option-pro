@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import math
-from datetime import date, datetime
-from typing import Any, Mapping, Sequence
+import time
+from datetime import date, datetime, timedelta
+from typing import Any, Callable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -19,6 +20,7 @@ from app.services.breakouts.adapters import (
 from app.services.breakouts.base_detector import detect_base
 from app.services.breakouts.breakout_detector import detect_breakout
 from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
+from app.services.breakouts.errors import BreakoutStageError
 from app.services.breakouts.feature_engine import (
     completed_daily_session,
     compute_average_dollar_volume,
@@ -118,6 +120,29 @@ def _safe_range_feature(
         return compute_range_persistence(frame, version=version, **kwargs)
     except Exception:
         return _unavailable_range_feature(version)
+
+
+def _scan_range_feature(
+    frame: pd.DataFrame,
+    *,
+    version: str,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Validate the persistence stage contract while retaining safe data gaps."""
+
+    try:
+        feature = _safe_range_feature(frame, version=version, **kwargs)
+        if not isinstance(feature, Mapping):
+            raise TypeError("range persistence result must be mapping-compatible")
+        return dict(feature)
+    except BreakoutStageError:
+        raise
+    except Exception as exc:
+        raise BreakoutStageError(
+            "persistence",
+            "persistence_result_invalid",
+            "range persistence stage returned an invalid result",
+        ) from exc
 
 
 def _aware_datetime(value: Any, fallback: datetime) -> datetime:
@@ -251,6 +276,7 @@ class BreakoutRadarService:
         strength: Any = None,
         market_shape: Any = None,
         universe: Any = None,
+        cache_clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.settings = settings or get_breakout_settings()
         self.price_data = price_data or YahooPriceDataAdapter()
@@ -259,6 +285,63 @@ class BreakoutRadarService:
         self.universe = universe or ThemeCanonicalUniverseAdapter()
         self._range_distribution_cache: dict[str, dict[str, Any]] = {}
         self._liquidity_distribution_cache: dict[str, dict[str, Any]] = {}
+        self._cache_clock = cache_clock
+
+    def _distribution_cache_get(
+        self,
+        cache: dict[str, dict[str, Any]],
+        key: str,
+    ) -> dict[str, Any] | None:
+        record = cache.get(key)
+        if record is None:
+            return None
+        expires_monotonic = record.get("expires_monotonic")
+        if expires_monotonic is not None and self._cache_clock() >= float(
+            expires_monotonic
+        ):
+            cache.pop(key, None)
+            return None
+        value = record.get("value")
+        return dict(value) if isinstance(value, Mapping) else None
+
+    def _distribution_cache_store(
+        self,
+        cache: dict[str, dict[str, Any]],
+        key: str,
+        value: Mapping[str, Any],
+        *,
+        observed_at: datetime,
+        completed_session: date,
+    ) -> None:
+        status = str(value.get("status") or "unavailable")
+        ttl_seconds: float | None
+        if status in {"active", "disabled"}:
+            ttl_seconds = None
+        elif status == "degraded":
+            ttl_seconds = 300.0
+        else:
+            ttl_seconds = 45.0
+        expires_at = (
+            (observed_at + timedelta(seconds=ttl_seconds)).isoformat()
+            if ttl_seconds is not None
+            else None
+        )
+        cache[key] = {
+            "value": dict(value),
+            "created_at": observed_at.isoformat(),
+            "expires_at": expires_at,
+            "expires_monotonic": (
+                self._cache_clock() + ttl_seconds
+                if ttl_seconds is not None
+                else None
+            ),
+            "status": status,
+            "coverage_ratio": value.get("coverage_ratio"),
+            "universe_version": value.get("universe_version"),
+            "completed_session": completed_session.isoformat(),
+        }
+        while len(cache) > 5:
+            cache.pop(next(iter(cache)))
 
     def _sector_benchmark(
         self,
@@ -565,6 +648,78 @@ class BreakoutRadarService:
             snapshots.update(dict(result))
         return snapshots
 
+    def _unreviewed_carryover(
+        self,
+        prior_value: Mapping[str, Any],
+        *,
+        observed_at: datetime,
+        reason: str,
+        versions: Mapping[str, str],
+    ) -> tuple[BreakoutEvent, list[dict[str, Any]], dict[str, Any]]:
+        """Publish an unchanged event when this scan cannot safely re-evaluate it."""
+
+        prior = BreakoutEvent.model_validate(prior_value)
+        feature_warnings = list((prior.features or {}).get("warnings") or [])
+        feature_warnings.append(reason)
+        features = {
+            **dict(prior.features or {}),
+            "status": "insufficient_data",
+            "carryover_recheck": False,
+            "last_attempted_at": observed_at,
+            "warnings": list(dict.fromkeys(feature_warnings)),
+        }
+        event = prior.model_copy(
+            update={
+                "data_quality": {
+                    **dict(prior.data_quality or {}),
+                    "carryover": True,
+                    "carryover_recheck_status": "insufficient_data",
+                    "carryover_warning": reason,
+                    "last_attempted_at": observed_at,
+                },
+                "versions": {**dict(prior.versions or {}), **dict(versions)},
+                "features": features,
+                "warnings": list(
+                    dict.fromkeys([*prior.warnings, "carryover_recheck_deferred", reason])
+                ),
+            }
+        )
+        range_feature = {
+            key: features.get(key)
+            for key in _RANGE_BACKGROUND_KEYS
+            if key != "range_persistence_status"
+        }
+        range_feature.update(
+            {
+                "status": features.get("range_persistence_status") or "unavailable",
+                "version": self.settings.range_persistence_version,
+                "warning": reason,
+            }
+        )
+        shadow = {
+            "trading_date": prior.trading_date,
+            "ticker": prior.ticker,
+            "event_id": prior.event_id,
+            "feature": range_feature,
+            "production_score": prior.scores.intrinsic_strength_score,
+            "hypothetical_score": None,
+            "score_version": prior.versions.get(
+                "strength_score_version", "unavailable"
+            ),
+            "feature_version": self.settings.range_persistence_version,
+            "breakout_production_priority": prior.scores.alert_priority_score,
+            "breakout_hypothetical_priority": None,
+            "breakout_production_chase_risk": prior.scores.chase_risk_score,
+            "breakout_hypothetical_chase_risk": None,
+            "breakout_interaction": None,
+            "carryover": True,
+            "carryover_recheck_status": "insufficient_data",
+            "warning": reason,
+            "lifecycle_state": prior.lifecycle_state,
+            "triggered_at": prior.triggered_at,
+        }
+        return event, [], shadow
+
     def _continue_event(
         self,
         prior_value: Mapping[str, Any],
@@ -598,50 +753,103 @@ class BreakoutRadarService:
                 str(prior_features.get("origin_setup_type") or prior.setup_type.value)
             )
         )
-        daily = (
-            trim_daily_bars(daily_snapshot.frame, cutoff)
-            if daily_snapshot is not None
-            else pd.DataFrame()
-        )
+        daily_frame: pd.DataFrame | None = None
+        intraday_frame: pd.DataFrame | None = None
+        if not expired_due:
+            if daily_snapshot is None:
+                return self._unreviewed_carryover(
+                    prior_value,
+                    observed_at=observed_at,
+                    reason="daily_snapshot_unavailable",
+                    versions=versions,
+                )
+            try:
+                daily_frame = daily_snapshot.frame
+                if not isinstance(daily_frame, pd.DataFrame) or daily_frame.empty:
+                    raise ValueError("daily snapshot frame is empty or invalid")
+                daily = trim_daily_bars(daily_frame, cutoff)
+                if daily.empty:
+                    raise ValueError("daily snapshot has no completed rows")
+            except (AttributeError, KeyError, TypeError, ValueError, IndexError):
+                return self._unreviewed_carryover(
+                    prior_value,
+                    observed_at=observed_at,
+                    reason="daily_snapshot_invalid",
+                    versions=versions,
+                )
+            if intraday_snapshot is None:
+                return self._unreviewed_carryover(
+                    prior_value,
+                    observed_at=observed_at,
+                    reason="intraday_snapshot_unavailable",
+                    versions=versions,
+                )
+            try:
+                intraday_frame = intraday_snapshot.frame
+                if not isinstance(intraday_frame, pd.DataFrame) or intraday_frame.empty:
+                    raise ValueError("intraday snapshot frame is empty or invalid")
+            except (AttributeError, KeyError, TypeError, ValueError, IndexError):
+                return self._unreviewed_carryover(
+                    prior_value,
+                    observed_at=observed_at,
+                    reason="intraday_snapshot_invalid",
+                    versions=versions,
+                )
+        else:
+            daily = pd.DataFrame()
         if expired_due:
             features: dict[str, Any] = {
                 "status": "ttl_expired",
                 "event_price": None,
                 "warnings": ["carryover_ttl_expired"],
             }
-        elif intraday_snapshot is None:
-            features = {
-                "status": "insufficient_data",
-                "event_price": None,
-                "atr20": compute_atr(daily) if not daily.empty else None,
-                "warnings": ["intraday_snapshot_unavailable"],
-            }
         else:
-            features = compute_feature_snapshot(
-                daily=daily_snapshot.frame,
-                intraday=intraday_snapshot.frame,
-                cutoff=cutoff,
-                opening_range_minutes=self.settings.opening_range_minutes,
-            )
-            features.update(
-                self._structure_intraday_features(
-                    structure,
-                    intraday_snapshot.frame,
-                    cutoff,
-                    _finite(features.get("atr20")),
+            try:
+                features = compute_feature_snapshot(
+                    daily=daily_frame,
+                    intraday=intraday_frame,
+                    cutoff=cutoff,
+                    opening_range_minutes=self.settings.opening_range_minutes,
                 )
-            )
-            features.update(
-                self._opening_range_confirmation_features(
-                    intraday_snapshot.frame,
-                    cutoff,
-                    features,
+                if features.get("status") != "active":
+                    feature_warnings = list(features.get("warnings") or [])
+                    reason = (
+                        str(feature_warnings[0])
+                        if feature_warnings
+                        else f"intraday_feature_status_{features.get('status') or 'unknown'}"
+                    )
+                    return self._unreviewed_carryover(
+                        prior_value,
+                        observed_at=observed_at,
+                        reason=reason,
+                        versions=versions,
+                    )
+                features.update(
+                    self._structure_intraday_features(
+                        structure,
+                        intraday_frame,
+                        cutoff,
+                        _finite(features.get("atr20")),
+                    )
                 )
-            )
+                features.update(
+                    self._opening_range_confirmation_features(
+                        intraday_frame,
+                        cutoff,
+                        features,
+                    )
+                )
+            except (AttributeError, KeyError, TypeError, ValueError, IndexError):
+                return self._unreviewed_carryover(
+                    prior_value,
+                    observed_at=observed_at,
+                    reason="intraday_snapshot_invalid",
+                    versions=versions,
+                )
         _attach_price_provenance(
             features,
-            daily_snapshot=daily_snapshot,
-            intraday_snapshot=intraday_snapshot,
+            daily_snapshot=None if expired_due else daily_snapshot,
+            intraday_snapshot=None if expired_due else intraday_snapshot,
         )
         features.update(self._base_features(structure))
 
@@ -676,7 +884,7 @@ class BreakoutRadarService:
         )
         bar_evidence = (
             self._continuation_bar_evidence(
-                intraday_snapshot.frame,
+                intraday_frame,
                 cutoff,
                 event_started_at=prior.first_seen_at,
                 prior_last_seen_at=prior.last_seen_at,
@@ -684,7 +892,7 @@ class BreakoutRadarService:
                 invalidation_price=invalidation,
                 atr=atr,
             )
-            if intraday_snapshot is not None and not expired_due
+            if intraday_frame is not None and not expired_due
             else {
                 "session_high": None,
                 "new_high_since_prior": None,
@@ -735,18 +943,29 @@ class BreakoutRadarService:
                 "carryover_recheck": True,
             }
         )
-        relative_features = relative_strength_features(
-            daily,
-            (
+        optional_warnings: list[str] = []
+        try:
+            market_daily = (
                 trim_daily_bars(market_daily_snapshot.frame, cutoff)
                 if market_daily_snapshot is not None
                 else None
-            ),
-            (
+            )
+        except (AttributeError, KeyError, TypeError, ValueError, IndexError):
+            market_daily = None
+            optional_warnings.append("market_daily_snapshot_invalid")
+        try:
+            sector_daily = (
                 trim_daily_bars(sector_daily_snapshot.frame, cutoff)
                 if sector_daily_snapshot is not None
                 else None
-            ),
+            )
+        except (AttributeError, KeyError, TypeError, ValueError, IndexError):
+            sector_daily = None
+            optional_warnings.append("sector_daily_snapshot_invalid")
+        relative_features = relative_strength_features(
+            daily,
+            market_daily,
+            sector_daily,
             sector_symbol=sector_symbol,
             sector_breadth_score=(
                 (liquidity_distribution.get("sector_breadth") or {}).get(
@@ -757,6 +976,7 @@ class BreakoutRadarService:
             ),
         )
         features.update(relative_features)
+        features.setdefault("warnings", []).extend(optional_warnings)
         average_dollar_volume_metric = compute_average_dollar_volume(daily)
         average_dollar_volume = average_dollar_volume_metric["value"]
         features.update(
@@ -1531,8 +1751,14 @@ class BreakoutRadarService:
                 "dollar-volume-v1",
             ]
         )
-        cached_distribution = self._range_distribution_cache.get(distribution_key)
-        cached_liquidity = self._liquidity_distribution_cache.get(liquidity_key)
+        cached_distribution = self._distribution_cache_get(
+            self._range_distribution_cache,
+            distribution_key,
+        )
+        cached_liquidity = self._distribution_cache_get(
+            self._liquidity_distribution_cache,
+            liquidity_key,
+        )
         if self.settings.range_persistence_mode == "disabled":
             cached_distribution = {
                 "as_of": completed_daily_session(cutoff).isoformat(),
@@ -1597,9 +1823,23 @@ class BreakoutRadarService:
             market_task,
             return_exceptions=True,
         )
-        daily_map = {} if isinstance(daily_result, Exception) else dict(daily_result)
-        market = (
-            MarketShapeSnapshot(
+        if isinstance(daily_result, BreakoutStageError):
+            raise daily_result
+        if isinstance(daily_result, Exception):
+            daily_map = {}
+        else:
+            try:
+                daily_map = dict(daily_result)
+            except Exception as exc:
+                raise BreakoutStageError(
+                    "price_data",
+                    "price_data_result_invalid",
+                    "daily price stage returned an invalid result",
+                ) from exc
+        if isinstance(market_result, BreakoutStageError):
+            raise market_result
+        if isinstance(market_result, Exception):
+            market = MarketShapeSnapshot(
                 status="unavailable",
                 state=None,
                 confidence=0.0,
@@ -1607,9 +1847,19 @@ class BreakoutRadarService:
                 warnings=["market_shape_adapter_failed"],
                 version=getattr(self.market_shape, "version", "unknown"),
             )
-            if isinstance(market_result, Exception)
-            else market_result
-        )
+        else:
+            try:
+                market = (
+                    market_result
+                    if isinstance(market_result, MarketShapeSnapshot)
+                    else MarketShapeSnapshot.model_validate(market_result)
+                )
+            except Exception as exc:
+                raise BreakoutStageError(
+                    "market_shape",
+                    "market_shape_result_invalid",
+                    "market-shape stage returned an invalid result",
+                ) from exc
         eligible_stage_two: list[BreakoutCandidate] = []
         visible_daily: dict[str, pd.DataFrame] = {}
         for candidate in stage_two:
@@ -1654,8 +1904,19 @@ class BreakoutRadarService:
                         as_of=observed_at,
                         include_options=False,
                     )
+            except BreakoutStageError:
+                raise
             except Exception:
                 strength_map = {}
+            else:
+                try:
+                    strength_map = dict(strength_map)
+                except Exception as exc:
+                    raise BreakoutStageError(
+                        "strength",
+                        "strength_result_invalid",
+                        "strength stage returned an invalid result",
+                    ) from exc
 
         if cached_liquidity is None:
             liquidity_values: dict[str, float] = {}
@@ -1711,11 +1972,13 @@ class BreakoutRadarService:
                     else "unavailable"
                 ),
             }
-            self._liquidity_distribution_cache[liquidity_key] = cached_liquidity
-            while len(self._liquidity_distribution_cache) > 5:
-                self._liquidity_distribution_cache.pop(
-                    next(iter(self._liquidity_distribution_cache))
-                )
+            self._distribution_cache_store(
+                self._liquidity_distribution_cache,
+                liquidity_key,
+                cached_liquidity,
+                observed_at=observed_at,
+                completed_session=completed_daily_session(cutoff),
+            )
 
         if cached_distribution is None:
             global_values: list[float] = []
@@ -1725,7 +1988,7 @@ class BreakoutRadarService:
                 snapshot = daily_map.get(ticker)
                 if snapshot is None:
                     continue
-                feature = _safe_range_feature(
+                feature = _scan_range_feature(
                     trim_daily_bars(snapshot.frame, cutoff),
                     cutoff=snapshot.cutoff.event_at,
                     length=self.settings.range_persistence_length,
@@ -1768,9 +2031,13 @@ class BreakoutRadarService:
                     else "unavailable"
                 ),
             }
-            self._range_distribution_cache[distribution_key] = cached_distribution
-            while len(self._range_distribution_cache) > 5:
-                self._range_distribution_cache.pop(next(iter(self._range_distribution_cache)))
+            self._distribution_cache_store(
+                self._range_distribution_cache,
+                distribution_key,
+                cached_distribution,
+                observed_at=observed_at,
+                completed_session=completed_daily_session(cutoff),
+            )
 
         prepared: list[tuple[BreakoutCandidate, Any, Any, dict[str, Any]]] = []
         structures = []
@@ -1794,7 +2061,7 @@ class BreakoutRadarService:
                     "version": self.settings.range_persistence_version,
                 }
                 if self.settings.range_persistence_mode == "disabled"
-                else _safe_range_feature(
+                else _scan_range_feature(
                     daily,
                     cutoff=daily_snapshot.cutoff.event_at,
                     length=self.settings.range_persistence_length,
@@ -1847,6 +2114,7 @@ class BreakoutRadarService:
         events = []
         transitions = []
         shadows = []
+        per_event_errors: list[dict[str, str]] = []
         liquidity_filter_results: list[dict[str, Any]] = []
         versions = {
             "feature_version": self.settings.feature_version,
@@ -2481,24 +2749,42 @@ class BreakoutRadarService:
                 ticker,
                 str(prior.get("sector") or "") or None,
             )
-            continued, continued_transitions, continued_shadow = self._continue_event(
-                prior,
-                daily_snapshot=daily_map.get(ticker),
-                intraday_snapshot=intraday_map.get(ticker),
-                market_daily_snapshot=daily_map.get("SPY"),
-                sector_daily_snapshot=(
-                    daily_map.get(sector_symbol) if sector_symbol else None
-                ),
-                sector_symbol=sector_symbol,
-                liquidity_distribution=cached_liquidity,
-                cutoff=cutoff,
-                observed_at=observed_at,
-                observed_session=observed_session,
-                market=market,
-                source_snapshot_id=source_snapshot_id,
-                versions=versions,
-                expired_due=event_id in due_ids,
-            )
+            try:
+                continued, continued_transitions, continued_shadow = self._continue_event(
+                    prior,
+                    daily_snapshot=daily_map.get(ticker),
+                    intraday_snapshot=intraday_map.get(ticker),
+                    market_daily_snapshot=daily_map.get("SPY"),
+                    sector_daily_snapshot=(
+                        daily_map.get(sector_symbol) if sector_symbol else None
+                    ),
+                    sector_symbol=sector_symbol,
+                    liquidity_distribution=cached_liquidity,
+                    cutoff=cutoff,
+                    observed_at=observed_at,
+                    observed_session=observed_session,
+                    market=market,
+                    source_snapshot_id=source_snapshot_id,
+                    versions=versions,
+                    expired_due=event_id in due_ids,
+                )
+            except (AttributeError, KeyError, TypeError, ValueError, IndexError) as exc:
+                per_event_errors.append(
+                    {
+                        "event_id": event_id,
+                        "ticker": ticker,
+                        "error_code": "carryover_processing_error",
+                        "error_type": type(exc).__name__,
+                    }
+                )
+                continued, continued_transitions, continued_shadow = (
+                    self._unreviewed_carryover(
+                        prior,
+                        observed_at=observed_at,
+                        reason="carryover_processing_error",
+                        versions=versions,
+                    )
+                )
             events.append(continued)
             transitions.extend(continued_transitions)
             shadows.append(continued_shadow)
@@ -2569,13 +2855,16 @@ class BreakoutRadarService:
             "transitions": transitions,
             "range_persistence_shadow": shadows,
             "liquidity_filter_results": liquidity_filter_results,
+            "per_event_errors": per_event_errors,
             "source_status": {
                 "discovery": str(getattr(discovery, "status", "unknown")),
                 "prices": "active" if daily_map else "unavailable",
                 "strength": "active" if strength_map else "unavailable",
                 "market_shape": market.status,
                 "carryover": (
-                    "truncated"
+                    "degraded"
+                    if per_event_errors
+                    else "truncated"
                     if carryover_has_more
                     else "active"
                     if carryovers

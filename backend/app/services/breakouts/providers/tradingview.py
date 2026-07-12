@@ -31,6 +31,7 @@ from app.services.breakouts.providers.base import (
     ProviderSchemaError,
     ProviderServerError,
     ProviderTimeout,
+    ProviderTransportError,
 )
 
 
@@ -217,11 +218,9 @@ class TradingViewDiscoveryProvider:
             raw = response.headers.get("retry-after", "0")
             try:
                 retry_after = float(raw)
-            except ValueError:
+            except (TypeError, ValueError):
                 retry_after = 0.0
-            raise ProviderRateLimited(
-                min(retry_after, self.settings.provider_retry_after_cap_seconds)
-            )
+            raise ProviderRateLimited(retry_after)
         if 500 <= response.status_code <= 599:
             raise ProviderServerError(f"provider_status_{response.status_code}")
         if response.status_code >= 400:
@@ -269,7 +268,7 @@ class TradingViewDiscoveryProvider:
         except (asyncio.TimeoutError, httpx.TimeoutException) as exc:
             raise ProviderTimeout("provider_timeout") from exc
         except httpx.RequestError as exc:
-            raise ProviderTimeout("provider_transport_error") from exc
+            raise ProviderTransportError("provider_transport_error") from exc
 
     def _parse(
         self,
@@ -492,8 +491,14 @@ class TradingViewDiscoveryProvider:
                 last_error = exc
                 if not exc.retryable or attempt + 1 >= self.settings.provider_retry_attempts:
                     break
-                delay = exc.retry_after if isinstance(exc, ProviderRateLimited) else min(
-                    0.25 * (2**attempt),
+                exponential_backoff = 0.25 * (2**attempt)
+                requested_delay = (
+                    max(exc.retry_after, exponential_backoff)
+                    if isinstance(exc, ProviderRateLimited)
+                    else exponential_backoff
+                )
+                delay = min(
+                    requested_delay,
                     self.settings.provider_retry_after_cap_seconds,
                 )
                 await self._sleep(delay)

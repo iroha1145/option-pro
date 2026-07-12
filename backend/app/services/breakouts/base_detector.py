@@ -122,8 +122,20 @@ def _candidate(
     touch_quality = _clamp(len(resistance_cluster) / 4.0)
     tightness = _clamp(1.0 - width_atr / 12.0)
     duration = _clamp((len(window) - settings.base_min_days) / 40.0 + 0.4)
-    atr_quality = _clamp(((atr_contraction or 0.0) + 0.2) / 0.6)
-    volume_quality = _clamp(((volume_contraction or 0.0) + 0.2) / 0.6)
+    atr_quality = _clamp(
+        (((atr_contraction if atr_contraction is not None else 0.0) + 0.2) / 0.6)
+    )
+    volume_quality = _clamp(
+        (
+            (
+                volume_contraction
+                if volume_contraction is not None
+                else 0.0
+            )
+            + 0.2
+        )
+        / 0.6
+    )
     support_quality = _clamp(len(support_cluster) / 3.0) if support_cluster else 0.35
     higher_low = (
         _clamp(0.5 + (lows[-1][1] - lows[-2][1]) / atr * 0.2)
@@ -232,7 +244,11 @@ def detect_base(
         key=lambda item: (
             item.quality,
             item.pivot_touch_count,
-            -float(item.metrics.get("resistance_dispersion_atr") or 999),
+            -float(
+                item.metrics["resistance_dispersion_atr"]
+                if item.metrics.get("resistance_dispersion_atr") is not None
+                else 999
+            ),
             item.base_duration_days,
             -item.base_start.toordinal(),
         ),

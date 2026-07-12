@@ -419,6 +419,12 @@ def test_restart_abandons_legacy_running_scan_without_touching_completed(tmp_pat
 
 def test_slow_scan_renews_lease_and_prevents_takeover(tmp_path):
     settings = Settings(tmp_path / "slow.db")
+    real_started_at = datetime.now(timezone.utc)
+
+    def advancing_market_time() -> datetime:
+        return NOW + (datetime.now(timezone.utc) - real_started_at)
+
+    market_clock = MarketClock(now=advancing_market_time)
 
     class SlowProvider(Provider):
         async def scan(self, *, session, as_of, profile):
@@ -437,7 +443,7 @@ def test_slow_scan_renews_lease_and_prevents_takeover(tmp_path):
         repository,
         provider=SlowProvider(),
         scan_service=ScanService(),
-        clock=MarketClock(now=lambda: datetime.now(timezone.utc)),
+        clock=market_clock,
         owner_id="slow-worker",
         lease_ttl_seconds=0.15,
     )
@@ -449,7 +455,7 @@ def test_slow_scan_renews_lease_and_prevents_takeover(tmp_path):
             "breakout-worker",
             "contender",
             1.0,
-            datetime.now(timezone.utc),
+            market_clock.now(),
         )
         return takeover, await running
 

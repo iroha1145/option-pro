@@ -22,12 +22,15 @@ from urllib.parse import quote
 
 
 LEGACY_SCHEMA_VERSION = "breakout-db-v1"
-SCHEMA_VERSION = "breakout-db-v2"
+V2_SCHEMA_VERSION = "breakout-db-v2"
+SCHEMA_VERSION = "breakout-db-v3"
 DEFAULT_LOCK_NAME = "breakout-worker"
 MAX_PROVIDER_JSON_BYTES = 2_000_000
 MAX_DEBUG_JSON_BYTES = 16_384
-MAX_EVENT_JSON_BYTES = 262_144
+MAX_EVENT_JSON_BYTES = 524_288
+MAX_STRUCTURE_JSON_BYTES = 262_144
 MAX_GENERIC_JSON_BYTES = 65_536
+MAX_MIGRATION_PREVIEW_CHARS = 4_096
 _CURSOR_VERSION = 2
 _TRIGGERED_LIFECYCLE_STATES = {
     "TRIGGERED",
@@ -159,9 +162,9 @@ def _json_default(value: Any) -> Any:
     raise TypeError(f"cannot encode {type(value).__name__} as JSON")
 
 
-def _json_dumps(value: Any, *, max_bytes: int = MAX_GENERIC_JSON_BYTES) -> str:
+def _json_encode(value: Any) -> str:
     try:
-        encoded = json.dumps(
+        return json.dumps(
             value,
             allow_nan=False,
             default=_json_default,
@@ -171,6 +174,10 @@ def _json_dumps(value: Any, *, max_bytes: int = MAX_GENERIC_JSON_BYTES) -> str:
         )
     except (TypeError, ValueError) as exc:
         raise ValueError("JSON fields must contain finite, serializable values") from exc
+
+
+def _json_dumps(value: Any, *, max_bytes: int = MAX_GENERIC_JSON_BYTES) -> str:
+    encoded = _json_encode(value)
     size = len(encoded.encode("utf-8"))
     if size > max_bytes:
         raise ValueError(f"JSON field exceeds {max_bytes} bytes")
@@ -185,6 +192,25 @@ def _json_loads(value: str | None, fallback: Any = None) -> Any:
 
 def _digest(value: Any) -> str:
     payload = _json_dumps(value, max_bytes=MAX_PROVIDER_JSON_BYTES)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _database_snapshot_id(
+    scan_run_id: str,
+    provider: str,
+    provider_cache_key: str,
+    as_of: datetime | str,
+) -> str:
+    """Return the scan-scoped identity for one persisted provider snapshot."""
+
+    payload = "".join(
+        (
+            str(scan_run_id),
+            str(provider),
+            str(provider_cache_key),
+            _timestamp(as_of),
+        )
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -417,7 +443,65 @@ def _v2_statement(statement: str) -> str:
     return statement.replace(old, new)
 
 
-_SCHEMA = tuple(_v2_statement(statement) for statement in _LEGACY_SCHEMA)
+_V2_SCHEMA = tuple(_v2_statement(statement) for statement in _LEGACY_SCHEMA)
+V2_SCHEMA_CHECKSUM = hashlib.sha256(
+    "\n".join(" ".join(statement.split()) for statement in _V2_SCHEMA).encode(
+        "utf-8"
+    )
+).hexdigest()
+
+
+def _v3_statement(statement: str) -> str:
+    if "CREATE TABLE IF NOT EXISTS breakout_provider_snapshots" in statement:
+        old = """        snapshot_id TEXT PRIMARY KEY,
+        scan_run_id TEXT NOT NULL UNIQUE"""
+        new = """        snapshot_id TEXT PRIMARY KEY,
+        provider_cache_key TEXT NOT NULL,
+        scan_run_id TEXT NOT NULL UNIQUE"""
+        if old not in statement:
+            raise RuntimeError("v2 provider snapshot schema definition changed")
+        return statement.replace(old, new)
+    if "CREATE TABLE IF NOT EXISTS breakout_events" in statement:
+        old = "event_json TEXT NOT NULL CHECK(length(event_json) <= 262144 AND json_valid(event_json))"
+        new = (
+            "event_json TEXT NOT NULL "
+            "CHECK(length(CAST(event_json AS BLOB)) <= 524288 AND json_valid(event_json))"
+        )
+        if old not in statement:
+            raise RuntimeError("v2 breakout_events JSON constraint changed")
+        return statement.replace(old, new)
+    if "CREATE TABLE IF NOT EXISTS breakout_scan_events" in statement:
+        old = "CHECK(length(event_snapshot_json) <= 262144 AND json_valid(event_snapshot_json))"
+        new = (
+            "CHECK(length(CAST(event_snapshot_json AS BLOB)) <= 524288 "
+            "AND json_valid(event_snapshot_json))"
+        )
+        if old not in statement:
+            raise RuntimeError("v2 breakout_scan_events JSON constraint changed")
+        return statement.replace(old, new)
+    return statement
+
+
+_QUARANTINE_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS breakout_migration_quarantine (
+        id INTEGER PRIMARY KEY,
+        source_schema TEXT NOT NULL,
+        table_name TEXT NOT NULL,
+        record_key TEXT NOT NULL,
+        error_code TEXT NOT NULL,
+        raw_sha256 TEXT NOT NULL,
+        raw_preview TEXT NOT NULL CHECK(length(raw_preview) <= 4096),
+        recovered_json TEXT NOT NULL
+            CHECK(length(CAST(recovered_json AS BLOB)) <= 524288 AND json_valid(recovered_json)),
+        created_at TEXT NOT NULL
+    ) STRICT
+    """
+
+_SCHEMA = tuple(_v3_statement(statement) for statement in _V2_SCHEMA) + (
+    _QUARANTINE_SCHEMA,
+    "CREATE INDEX IF NOT EXISTS idx_breakout_scan_events_event ON breakout_scan_events(event_id, scan_run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_breakout_scans_retention ON breakout_scan_runs(status, updated_at, scan_run_id)",
+)
 SCHEMA_CHECKSUM = hashlib.sha256(
     "\n".join(" ".join(statement.split()) for statement in _SCHEMA).encode("utf-8")
 ).hexdigest()
@@ -475,7 +559,14 @@ class BreakoutRepository:
         return connection
 
     def initialize(self) -> None:
-        """Create v2 or migrate a verified v1 database in one transaction."""
+        """Create v3 or migrate a verified v1/v2 database atomically.
+
+        Operators must back up an existing database before upgrading it.  Table
+        rebuilds run with foreign-key enforcement temporarily disabled because
+        SQLite cannot replace a referenced parent table in place; integrity is
+        checked before the transaction is allowed to commit.
+        """
+
         connection = self._write_connection()
         try:
             effective_mode = str(
@@ -485,6 +576,7 @@ class BreakoutRepository:
                 raise BreakoutRepositoryError(
                     f"SQLite WAL mode is required, got {effective_mode}"
                 )
+            connection.execute("PRAGMA foreign_keys=OFF")
             connection.execute("BEGIN IMMEDIATE")
             for statement in _SCHEMA:
                 connection.execute(statement)
@@ -502,13 +594,24 @@ class BreakoutRepository:
                         f"{SCHEMA_VERSION} schema checksum mismatch",
                         current_version=SCHEMA_VERSION,
                     )
-            elif len(rows) == 1 and rows[0]["version"] == LEGACY_SCHEMA_VERSION:
-                if rows[0]["checksum"] != LEGACY_SCHEMA_CHECKSUM:
+            elif len(rows) == 1 and rows[0]["version"] in {
+                LEGACY_SCHEMA_VERSION,
+                V2_SCHEMA_VERSION,
+            }:
+                source_version = str(rows[0]["version"])
+                expected_checksum = (
+                    LEGACY_SCHEMA_CHECKSUM
+                    if source_version == LEGACY_SCHEMA_VERSION
+                    else V2_SCHEMA_CHECKSUM
+                )
+                if rows[0]["checksum"] != expected_checksum:
                     raise SchemaVersionError(
-                        f"{LEGACY_SCHEMA_VERSION} schema checksum mismatch",
-                        current_version=LEGACY_SCHEMA_VERSION,
+                        f"{source_version} schema checksum mismatch",
+                        current_version=source_version,
                     )
-                self._migrate_v1_to_v2(connection)
+                self._migrate_to_v3(connection, source_version=source_version)
+                for statement in _SCHEMA:
+                    connection.execute(statement)
             else:
                 versions = ",".join(str(row["version"]) for row in rows)
                 raise SchemaVersionError(
@@ -516,12 +619,23 @@ class BreakoutRepository:
                     current_version=versions or None,
                 )
             self._require_schema(connection)
+            violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+            if violations:
+                preview = "; ".join(
+                    f"{row[0]}:{row[1]}->{row[2]}" for row in violations[:10]
+                )
+                raise BreakoutRepositoryError(
+                    f"breakout migration foreign_key_check failed: {preview}"
+                )
             connection.commit()
         except Exception:
             if connection.in_transaction:
                 connection.rollback()
             raise
         finally:
+            if connection.in_transaction:
+                connection.rollback()
+            connection.execute("PRAGMA foreign_keys=ON")
             connection.close()
 
     @staticmethod
@@ -531,27 +645,345 @@ class BreakoutRepository:
             for row in connection.execute("PRAGMA table_info(breakout_events)")
         }
 
-    def _migrate_v1_to_v2(self, connection: sqlite3.Connection) -> None:
-        """Backfill stable event clocks without dropping any event history."""
+    def _migration_hook(self, phase: str, connection: sqlite3.Connection) -> None:
+        """Fault-injection seam for transactional migration tests."""
 
-        columns = self._event_table_columns(connection)
-        if "triggered_at" not in columns:
-            connection.execute(
-                "ALTER TABLE breakout_events ADD COLUMN triggered_at TEXT"
+    @staticmethod
+    def _migration_table_columns(
+        connection: sqlite3.Connection, table_name: str
+    ) -> set[str]:
+        return {
+            str(row["name"])
+            for row in connection.execute(f"PRAGMA table_info({table_name})")
+        }
+
+    @staticmethod
+    def _create_rebuild_table(
+        connection: sqlite3.Connection, table_name: str, temporary_name: str
+    ) -> None:
+        marker = f"CREATE TABLE IF NOT EXISTS {table_name}"
+        for statement in _SCHEMA:
+            if marker in statement:
+                connection.execute(f"DROP TABLE IF EXISTS {temporary_name}")
+                connection.execute(
+                    statement.replace(
+                        marker, f"CREATE TABLE {temporary_name}", 1
+                    )
+                )
+                return
+        raise RuntimeError(f"v3 schema lacks table definition for {table_name}")
+
+    @staticmethod
+    def _migration_insert(
+        connection: sqlite3.Connection,
+        sql: str,
+        params: Sequence[Any],
+        *,
+        table_name: str,
+        record_key: str,
+    ) -> None:
+        try:
+            connection.execute(sql, params)
+        except sqlite3.Error as exc:
+            raise BreakoutRepositoryError(
+                f"failed migrating {table_name} record {record_key}: {exc}"
+            ) from exc
+
+    @staticmethod
+    def _migration_timestamp(*values: Any) -> str:
+        for value in values:
+            if value in (None, ""):
+                continue
+            try:
+                return _timestamp(value)
+            except (TypeError, ValueError):
+                continue
+        return "1970-01-01T00:00:00.000000Z"
+
+    @staticmethod
+    def _migration_mapping(raw: str) -> dict[str, Any] | None:
+        try:
+            parsed = json.loads(raw)
+            if not isinstance(parsed, Mapping):
+                return None
+            _json_encode(parsed)
+        except (TypeError, ValueError, RecursionError):
+            return None
+        return dict(parsed)
+
+    @staticmethod
+    def _remove_compactable_migration_fields(body: dict[str, Any]) -> list[str]:
+        removable = (
+            "raw_provider_fields",
+            "raw_provider_fields_json",
+            "debug",
+            "debug_data",
+            "oversized_evidence_details",
+            "evidence_details",
+            "raw_payload",
+            "provider_payload",
+        )
+        removed: list[str] = []
+
+        def visit(value: Any, target: str, path: str) -> None:
+            if isinstance(value, dict):
+                for key in sorted(tuple(value)):
+                    key_path = f"{path}.{key}" if path else str(key)
+                    if key == target:
+                        value.pop(key, None)
+                        removed.append(key_path)
+                    else:
+                        visit(value[key], target, key_path)
+            elif isinstance(value, list):
+                for index, item in enumerate(value):
+                    visit(item, target, f"{path}[{index}]")
+
+        for target in removable:
+            visit(body, target, "")
+        return removed
+
+    def _quarantine_migration_value(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        source_schema: str,
+        table_name: str,
+        record_key: str,
+        error_code: str,
+        raw: str,
+        recovered_json: str,
+    ) -> None:
+        raw_text = str(raw)
+        connection.execute(
+            """
+            INSERT INTO breakout_migration_quarantine(
+                source_schema,table_name,record_key,error_code,raw_sha256,
+                raw_preview,recovered_json,created_at
+            ) VALUES(?,?,?,?,?,?,?,?)
+            """,
+            (
+                source_schema,
+                table_name,
+                record_key,
+                error_code,
+                hashlib.sha256(
+                    raw_text.encode("utf-8", errors="replace")
+                ).hexdigest(),
+                raw_text[:MAX_MIGRATION_PREVIEW_CHARS],
+                recovered_json,
+                _timestamp(self._now()),
+            ),
+        )
+
+    def _migration_json(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        source_schema: str,
+        table_name: str,
+        record_key: str,
+        raw: str,
+        parsed: dict[str, Any] | None,
+        enrichment: Mapping[str, Any],
+        minimal: Mapping[str, Any],
+        invalid_code: str,
+        oversized_code: str,
+    ) -> str:
+        if parsed is None:
+            recovered = dict(minimal)
+            recovered["migration_warning"] = invalid_code
+            recovered["migration_warnings"] = [invalid_code]
+            encoded = _json_dumps(recovered, max_bytes=MAX_EVENT_JSON_BYTES)
+            self._quarantine_migration_value(
+                connection,
+                source_schema=source_schema,
+                table_name=table_name,
+                record_key=record_key,
+                error_code=invalid_code,
+                raw=raw,
+                recovered_json=encoded,
             )
-        if "state_changed_at" not in columns:
-            connection.execute(
-                """ALTER TABLE breakout_events
-                   ADD COLUMN state_changed_at TEXT NOT NULL DEFAULT ''"""
+            return encoded
+
+        body = dict(parsed)
+        body.update(enrichment)
+        encoded = _json_encode(body)
+        if len(encoded.encode("utf-8")) <= MAX_EVENT_JSON_BYTES:
+            return encoded
+
+        try:
+            removed = self._remove_compactable_migration_fields(body)
+        except RecursionError:
+            removed = []
+        if removed:
+            body["migration_compacted_fields"] = removed[:256]
+            body["migration_compacted_field_count"] = len(removed)
+            encoded = _json_encode(body)
+            if len(encoded.encode("utf-8")) <= MAX_EVENT_JSON_BYTES:
+                return encoded
+
+        recovered = dict(minimal)
+        recovered["migration_warning"] = oversized_code
+        recovered["migration_warnings"] = [oversized_code]
+        if removed:
+            recovered["migration_compacted_fields"] = removed[:256]
+            recovered["migration_compacted_field_count"] = len(removed)
+        encoded = _json_dumps(recovered, max_bytes=MAX_EVENT_JSON_BYTES)
+        self._quarantine_migration_value(
+            connection,
+            source_schema=source_schema,
+            table_name=table_name,
+            record_key=record_key,
+            error_code=oversized_code,
+            raw=raw,
+            recovered_json=encoded,
+        )
+        return encoded
+
+    def _migrate_to_v3(
+        self, connection: sqlite3.Connection, *, source_version: str
+    ) -> None:
+        """Rebuild bounded JSON tables while preserving every event identity."""
+
+        provider_columns = self._migration_table_columns(
+            connection, "breakout_provider_snapshots"
+        )
+        self._migration_hook("rows_loaded", connection)
+
+        provider_table = "breakout_provider_snapshots_v3_new"
+        event_table = "breakout_events_v3_new"
+        snapshot_table = "breakout_scan_events_v3_new"
+        self._create_rebuild_table(
+            connection, "breakout_provider_snapshots", provider_table
+        )
+        self._create_rebuild_table(connection, "breakout_events", event_table)
+        self._create_rebuild_table(
+            connection, "breakout_scan_events", snapshot_table
+        )
+
+        provider_ids: dict[str, tuple[str, str, str]] = {}
+        for row in connection.execute(
+            "SELECT * FROM breakout_provider_snapshots ORDER BY scan_run_id"
+        ):
+            old_snapshot_id = str(row["snapshot_id"])
+            payload = self._migration_mapping(str(row["payload_json"])) or {}
+            provider_cache_key = str(
+                (
+                    row["provider_cache_key"]
+                    if "provider_cache_key" in provider_columns
+                    else None
+                )
+                or payload.get("cache_key")
+                or payload.get("snapshot_id")
+                or old_snapshot_id
+            )
+            as_of = self._migration_timestamp(row["as_of"])
+            new_snapshot_id = _database_snapshot_id(
+                str(row["scan_run_id"]),
+                str(row["provider"]),
+                provider_cache_key,
+                as_of,
+            )
+            provider_ids[str(row["scan_run_id"])] = (
+                old_snapshot_id,
+                new_snapshot_id,
+                provider_cache_key,
+            )
+            self._migration_insert(
+                connection,
+                f"""
+                INSERT INTO {provider_table}(
+                    snapshot_id,provider_cache_key,scan_run_id,provider,status,as_of,
+                    session,schema_version,candidate_count,is_stale,warnings_json,
+                    payload_json,created_at,expires_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    new_snapshot_id,
+                    provider_cache_key,
+                    row["scan_run_id"],
+                    row["provider"],
+                    row["status"],
+                    as_of,
+                    row["session"],
+                    row["schema_version"],
+                    row["candidate_count"],
+                    row["is_stale"],
+                    row["warnings_json"],
+                    row["payload_json"],
+                    row["created_at"],
+                    row["expires_at"],
+                ),
+                table_name="breakout_provider_snapshots",
+                record_key=str(row["scan_run_id"]),
             )
 
-        event_rows = connection.execute(
-            """
-            SELECT event_id,event_at,first_seen_at,last_seen_at,lifecycle_state,event_json
-            FROM breakout_events ORDER BY event_id
-            """
-        ).fetchall()
-        for row in event_rows:
+        for row in connection.execute(
+            "SELECT * FROM breakout_transitions ORDER BY transition_id"
+        ):
+            scan_run_id = str(row["scan_run_id"])
+            provider_identity = provider_ids.get(scan_run_id)
+            if provider_identity is None:
+                continue
+            _old_snapshot_id, new_snapshot_id, provider_cache_key = provider_identity
+            raw = str(row["transition_json"])
+            parsed = self._migration_mapping(raw)
+            minimal = {
+                "transition_id": str(row["transition_id"]),
+                "event_id": str(row["event_id"]),
+                "from_state": str(row["from_state"] or "") or None,
+                "to_state": str(row["to_state"]),
+                "reason": str(row["reason"]),
+                "evidence_at": self._migration_timestamp(row["evidence_at"]),
+            }
+            body = dict(parsed or minimal)
+            evidence = (
+                dict(body.get("evidence") or {})
+                if isinstance(body.get("evidence"), Mapping)
+                else {}
+            )
+            evidence["provider_cache_key"] = provider_cache_key
+            evidence["source_snapshot_id"] = new_snapshot_id
+            body.update(minimal)
+            body["evidence"] = evidence
+            encoded = _json_encode(body)
+            error_code: str | None = None
+            if parsed is None:
+                error_code = "invalid_transition_json_shape"
+            elif len(encoded.encode("utf-8")) > MAX_GENERIC_JSON_BYTES:
+                try:
+                    removed = self._remove_compactable_migration_fields(body)
+                except RecursionError:
+                    removed = []
+                if removed:
+                    body["migration_compacted_fields"] = removed[:256]
+                    body["migration_compacted_field_count"] = len(removed)
+                    encoded = _json_encode(body)
+                if len(encoded.encode("utf-8")) > MAX_GENERIC_JSON_BYTES:
+                    error_code = "oversized_transition_json"
+            if error_code is not None:
+                body = dict(minimal)
+                body["evidence"] = evidence
+                body["migration_warning"] = error_code
+                encoded = _json_dumps(body, max_bytes=MAX_GENERIC_JSON_BYTES)
+                self._quarantine_migration_value(
+                    connection,
+                    source_schema=source_version,
+                    table_name="breakout_transitions",
+                    record_key=str(row["transition_id"]),
+                    error_code=error_code,
+                    raw=raw,
+                    recovered_json=encoded,
+                )
+            connection.execute(
+                "UPDATE breakout_transitions SET transition_json=? WHERE transition_id=?",
+                (encoded, row["transition_id"]),
+            )
+
+        event_meta: dict[str, dict[str, Any]] = {}
+        for row in connection.execute(
+            "SELECT * FROM breakout_events ORDER BY event_id"
+        ):
             event_id = str(row["event_id"])
             latest_transition = connection.execute(
                 """
@@ -568,64 +1000,159 @@ class BreakoutRepository:
                 """,
                 (event_id,),
             ).fetchone()
-            first_seen_at = _timestamp(row["first_seen_at"] or row["event_at"])
-            last_seen_at = _timestamp(row["last_seen_at"] or row["event_at"])
             lifecycle_state = str(row["lifecycle_state"])
-            was_triggered = (
-                lifecycle_state in _TRIGGERED_LIFECYCLE_STATES
-                or (lifecycle_state == "EXPIRED" and trigger_transition is not None)
+            first_seen_at = self._migration_timestamp(
+                row["first_seen_at"], row["event_at"]
             )
-            triggered_at = _timestamp(row["event_at"]) if was_triggered else None
-            state_changed_at = _timestamp(
-                latest_transition["evidence_at"]
-                if latest_transition is not None
-                else row["event_at"] or first_seen_at
+            last_seen_at = self._migration_timestamp(
+                row["last_seen_at"], row["event_at"], first_seen_at
             )
+            if source_version == LEGACY_SCHEMA_VERSION:
+                was_triggered = (
+                    lifecycle_state in _TRIGGERED_LIFECYCLE_STATES
+                    or (
+                        lifecycle_state == "EXPIRED"
+                        and trigger_transition is not None
+                    )
+                )
+                triggered_at = (
+                    self._migration_timestamp(row["event_at"])
+                    if was_triggered
+                    else None
+                )
+                state_changed_at = self._migration_timestamp(
+                    latest_transition["evidence_at"]
+                    if latest_transition is not None
+                    else None,
+                    row["event_at"],
+                    first_seen_at,
+                )
+            else:
+                triggered_at = (
+                    self._migration_timestamp(row["triggered_at"])
+                    if row["triggered_at"] not in (None, "")
+                    else None
+                )
+                if (
+                    triggered_at is None
+                    and lifecycle_state in _TRIGGERED_LIFECYCLE_STATES
+                ):
+                    triggered_at = self._migration_timestamp(row["event_at"])
+                state_changed_at = self._migration_timestamp(
+                    row["state_changed_at"], row["event_at"], first_seen_at
+                )
             event_at = triggered_at or first_seen_at
-            body = _json_loads(row["event_json"], {})
-            body.update(
-                {
-                    "event_at": event_at,
-                    "first_seen_at": first_seen_at,
-                    "triggered_at": triggered_at,
-                    "state_changed_at": state_changed_at,
-                    "last_seen_at": last_seen_at,
-                }
+            current_scan_run_id = str(row["current_scan_run_id"])
+            provider_identity = provider_ids.get(
+                current_scan_run_id,
+                (str(row["source_snapshot_id"]), str(row["source_snapshot_id"]), ""),
             )
-            connection.execute(
-                """
-                UPDATE breakout_events
-                SET event_at=?,first_seen_at=?,triggered_at=?,state_changed_at=?,
-                    last_seen_at=?,event_json=?
-                WHERE event_id=?
+            source_snapshot_id = provider_identity[1]
+            enrichment = {
+                "event_id": event_id,
+                "trading_date": str(row["trading_date"]),
+                "ticker": str(row["ticker"]),
+                "setup_type": str(row["setup_type"]),
+                "pivot_id": str(row["pivot_id"]),
+                "lifecycle_state": lifecycle_state,
+                "event_at": event_at,
+                "first_seen_at": first_seen_at,
+                "triggered_at": triggered_at,
+                "state_changed_at": state_changed_at,
+                "last_seen_at": last_seen_at,
+                "source_snapshot_id": source_snapshot_id,
+            }
+            scores = {
+                "alert_priority_score": row["alert_priority_score"],
+                "data_confidence_score": row["data_confidence_score"],
+            }
+            minimal = dict(enrichment)
+            minimal["scores"] = {
+                key: value for key, value in scores.items() if value is not None
+            }
+            raw = str(row["event_json"])
+            parsed = self._migration_mapping(raw)
+            event_json = self._migration_json(
+                connection,
+                source_schema=source_version,
+                table_name="breakout_events",
+                record_key=event_id,
+                raw=raw,
+                parsed=parsed,
+                enrichment=enrichment,
+                minimal=minimal,
+                invalid_code="invalid_event_json",
+                oversized_code="oversized_event_json",
+            )
+            self._migration_insert(
+                connection,
+                f"""
+                INSERT INTO {event_table}(
+                    event_id,trading_date,ticker,setup_type,pivot_id,lifecycle_state,
+                    event_at,first_seen_at,triggered_at,state_changed_at,last_seen_at,
+                    source_snapshot_id,alert_priority_score,data_confidence_score,
+                    current_scan_run_id,event_json,created_at,updated_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
+                    event_id,
+                    row["trading_date"],
+                    row["ticker"],
+                    row["setup_type"],
+                    row["pivot_id"],
+                    lifecycle_state,
                     event_at,
                     first_seen_at,
                     triggered_at,
                     state_changed_at,
                     last_seen_at,
-                    _json_dumps(body, max_bytes=MAX_EVENT_JSON_BYTES),
-                    event_id,
+                    source_snapshot_id,
+                    row["alert_priority_score"],
+                    row["data_confidence_score"],
+                    current_scan_run_id,
+                    event_json,
+                    row["created_at"],
+                    row["updated_at"],
                 ),
+                table_name="breakout_events",
+                record_key=event_id,
             )
-
+            event_meta[event_id] = {
+                **enrichment,
+                "scores": minimal["scores"],
+            }
         snapshot_rows = connection.execute(
             """
-            SELECT snapshots.scan_run_id,snapshots.event_id,snapshots.event_at,
-                   snapshots.event_snapshot_json,runs.published_at
+            SELECT snapshots.*,runs.published_at
             FROM breakout_scan_events AS snapshots
-            JOIN breakout_scan_runs AS runs
-              ON runs.scan_run_id=snapshots.scan_run_id
+            JOIN breakout_scan_runs AS runs USING(scan_run_id)
             ORDER BY runs.published_at,snapshots.scan_run_id,snapshots.event_id
             """
-        ).fetchall()
+        )
         for row in snapshot_rows:
-            body = _json_loads(row["event_snapshot_json"], {})
-            old_event_at = _timestamp(body.get("event_at") or row["event_at"])
-            first_seen_at = _timestamp(body.get("first_seen_at") or old_event_at)
-            last_seen_at = _timestamp(body.get("last_seen_at") or old_event_at)
-            lifecycle_state = str(body.get("lifecycle_state") or "DISCOVERED")
+            event_id = str(row["event_id"])
+            raw = str(row["event_snapshot_json"])
+            parsed = self._migration_mapping(raw)
+            current_event = event_meta.get(event_id, {})
+            lifecycle_state = str(
+                (parsed or {}).get("lifecycle_state")
+                or row["lifecycle_state"]
+                or current_event.get("lifecycle_state")
+                or "DISCOVERED"
+            )
+            old_event_at = self._migration_timestamp(
+                (parsed or {}).get("event_at"), row["event_at"]
+            )
+            first_seen_at = self._migration_timestamp(
+                (parsed or {}).get("first_seen_at"),
+                current_event.get("first_seen_at"),
+                old_event_at,
+            )
+            last_seen_at = self._migration_timestamp(
+                (parsed or {}).get("last_seen_at"),
+                old_event_at,
+                current_event.get("last_seen_at"),
+            )
             published_at = row["published_at"]
             trigger_transition = connection.execute(
                 """
@@ -634,7 +1161,7 @@ class BreakoutRepository:
                   AND (? IS NULL OR evidence_at<=?)
                 ORDER BY evidence_at,transition_id LIMIT 1
                 """,
-                (row["event_id"], published_at, published_at),
+                (event_id, published_at, published_at),
             ).fetchone()
             latest_transition = connection.execute(
                 """
@@ -642,55 +1169,143 @@ class BreakoutRepository:
                 WHERE event_id=? AND (? IS NULL OR evidence_at<=?)
                 ORDER BY evidence_at DESC,transition_id DESC LIMIT 1
                 """,
-                (row["event_id"], published_at, published_at),
+                (event_id, published_at, published_at),
             ).fetchone()
-            was_triggered = (
-                lifecycle_state in _TRIGGERED_LIFECYCLE_STATES
-                or (lifecycle_state == "EXPIRED" and trigger_transition is not None)
-            )
-            triggered_at = old_event_at if was_triggered else None
-            state_changed_at = _timestamp(
-                latest_transition["evidence_at"]
-                if latest_transition is not None
-                else old_event_at or first_seen_at
-            )
+            if source_version == LEGACY_SCHEMA_VERSION:
+                was_triggered = (
+                    lifecycle_state in _TRIGGERED_LIFECYCLE_STATES
+                    or (
+                        lifecycle_state == "EXPIRED"
+                        and trigger_transition is not None
+                    )
+                )
+                triggered_at = old_event_at if was_triggered else None
+                state_changed_at = self._migration_timestamp(
+                    latest_transition["evidence_at"]
+                    if latest_transition is not None
+                    else None,
+                    old_event_at,
+                    first_seen_at,
+                )
+            else:
+                parsed_triggered = (parsed or {}).get("triggered_at")
+                triggered_at = (
+                    self._migration_timestamp(parsed_triggered)
+                    if parsed_triggered not in (None, "")
+                    else current_event.get("triggered_at")
+                )
+                if (
+                    triggered_at is None
+                    and lifecycle_state in _TRIGGERED_LIFECYCLE_STATES
+                ):
+                    triggered_at = old_event_at
+                state_changed_at = self._migration_timestamp(
+                    (parsed or {}).get("state_changed_at"),
+                    current_event.get("state_changed_at"),
+                    old_event_at,
+                )
             event_at = triggered_at or first_seen_at
-            body.update(
-                {
-                    "event_at": event_at,
-                    "first_seen_at": first_seen_at,
-                    "triggered_at": triggered_at,
-                    "state_changed_at": state_changed_at,
-                    "last_seen_at": last_seen_at,
-                }
-            )
-            connection.execute(
-                """
-                UPDATE breakout_scan_events
-                SET event_at=?,event_snapshot_json=?
-                WHERE scan_run_id=? AND event_id=?
-                """,
+            scan_run_id = str(row["scan_run_id"])
+            provider_identity = provider_ids.get(
+                scan_run_id,
                 (
-                    event_at,
-                    _json_dumps(body, max_bytes=MAX_EVENT_JSON_BYTES),
-                    row["scan_run_id"],
-                    row["event_id"],
+                    str(current_event.get("source_snapshot_id") or ""),
+                    str(current_event.get("source_snapshot_id") or ""),
+                    "",
                 ),
             )
+            source_snapshot_id = provider_identity[1]
+            enrichment = {
+                "event_id": event_id,
+                "trading_date": str(
+                    current_event.get("trading_date") or event_at[:10]
+                ),
+                "ticker": str(row["ticker"]),
+                "session": str(row["session"]),
+                "setup_type": str(row["setup_type"]),
+                "pivot_id": str(current_event.get("pivot_id") or ""),
+                "lifecycle_state": lifecycle_state,
+                "event_at": event_at,
+                "first_seen_at": first_seen_at,
+                "triggered_at": triggered_at,
+                "state_changed_at": state_changed_at,
+                "last_seen_at": last_seen_at,
+                "source_snapshot_id": source_snapshot_id,
+            }
+            minimal = dict(enrichment)
+            scores = dict(current_event.get("scores") or {})
+            if row["alert_priority_score"] is not None:
+                scores["alert_priority_score"] = row["alert_priority_score"]
+            if scores:
+                minimal["scores"] = scores
+            snapshot_json = self._migration_json(
+                connection,
+                source_schema=source_version,
+                table_name="breakout_scan_events",
+                record_key=f"{scan_run_id}:{event_id}",
+                raw=raw,
+                parsed=parsed,
+                enrichment=enrichment,
+                minimal=minimal,
+                invalid_code="invalid_event_snapshot_json",
+                oversized_code="oversized_event_snapshot_json",
+            )
+            self._migration_insert(
+                connection,
+                f"""
+                INSERT INTO {snapshot_table}(
+                    scan_run_id,event_id,rank,ticker,session,setup_type,lifecycle_state,
+                    event_at,alert_priority_score,sort_priority,event_snapshot_json,created_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    scan_run_id,
+                    event_id,
+                    row["rank"],
+                    row["ticker"],
+                    row["session"],
+                    row["setup_type"],
+                    lifecycle_state,
+                    event_at,
+                    row["alert_priority_score"],
+                    row["sort_priority"],
+                    snapshot_json,
+                    row["created_at"],
+                ),
+                table_name="breakout_scan_events",
+                record_key=f"{scan_run_id}:{event_id}",
+            )
 
+        self._migration_hook("tables_copied", connection)
+        connection.execute("DROP TABLE breakout_scan_events")
+        connection.execute("DROP TABLE breakout_events")
+        connection.execute("DROP TABLE breakout_provider_snapshots")
         connection.execute(
-            "DELETE FROM breakout_schema_version WHERE version=?",
-            (LEGACY_SCHEMA_VERSION,),
+            f"ALTER TABLE {provider_table} RENAME TO breakout_provider_snapshots"
         )
+        connection.execute(f"ALTER TABLE {event_table} RENAME TO breakout_events")
+        connection.execute(
+            f"ALTER TABLE {snapshot_table} RENAME TO breakout_scan_events"
+        )
+        for scan_run_id, (_old_id, new_id, _cache_key) in provider_ids.items():
+            connection.execute(
+                """
+                UPDATE breakout_scan_runs SET source_snapshot_id=?
+                WHERE scan_run_id=?
+                """,
+                (new_id, scan_run_id),
+            )
+        self._migration_hook("tables_rebuilt", connection)
+
+        connection.execute("DELETE FROM breakout_schema_version")
         connection.execute(
             """
             INSERT INTO breakout_schema_version(version,checksum,applied_at)
             VALUES(?,?,?)
-            ON CONFLICT(version) DO UPDATE SET
-                checksum=excluded.checksum,applied_at=excluded.applied_at
             """,
             (SCHEMA_VERSION, SCHEMA_CHECKSUM, _timestamp(self._now())),
         )
+        self._migration_hook("version_recorded", connection)
 
     def _require_schema(self, connection: sqlite3.Connection) -> None:
         try:
@@ -728,6 +1343,43 @@ class BreakoutRepository:
                 f"breakout database {SCHEMA_VERSION} is missing columns: {missing}",
                 current_version=version,
             )
+        provider_columns = self._migration_table_columns(
+            connection, "breakout_provider_snapshots"
+        )
+        if "provider_cache_key" not in provider_columns:
+            raise SchemaVersionError(
+                f"breakout database {SCHEMA_VERSION} is missing provider_cache_key",
+                current_version=version,
+            )
+        quarantine = connection.execute(
+            """
+            SELECT 1 FROM sqlite_master
+            WHERE type='table' AND name='breakout_migration_quarantine'
+            """
+        ).fetchone()
+        if quarantine is None:
+            raise SchemaVersionError(
+                f"breakout database {SCHEMA_VERSION} is missing migration quarantine",
+                current_version=version,
+            )
+        for table_name, json_column in (
+            ("breakout_events", "event_json"),
+            ("breakout_scan_events", "event_snapshot_json"),
+        ):
+            definition = connection.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+                (table_name,),
+            ).fetchone()
+            sql = str(definition["sql"] if definition is not None else "")
+            if (
+                json_column not in sql
+                or str(MAX_EVENT_JSON_BYTES) not in sql
+                or "CAST" not in sql.upper()
+            ):
+                raise SchemaVersionError(
+                    f"breakout database {SCHEMA_VERSION} has stale {json_column} bounds",
+                    current_version=version,
+                )
 
     def begin_scan(
         self,
@@ -1191,24 +1843,32 @@ class BreakoutRepository:
                 )
             ]
 
-            snapshot_id = str(
-                provider_snapshot.get("snapshot_id")
-                or provider_snapshot.get("cache_key")
+            provider = str(provider_snapshot.get("provider") or run["provider"])
+            provider_as_of = provider_snapshot.get("as_of") or run["scheduled_at"]
+            provider_cache_key = str(
+                provider_snapshot.get("cache_key")
+                or provider_snapshot.get("snapshot_id")
                 or payload.get("source_snapshot_id")
-                or "snapshot_"
+                or "provider_"
                 + _digest(
                     {
-                        "scan_id": scan_id,
-                        "provider": provider_snapshot.get("provider", run["provider"]),
-                        "as_of": provider_snapshot.get("as_of", run["scheduled_at"]),
+                        "provider": provider,
+                        "as_of": provider_as_of,
                     }
                 )[:24]
+            )
+            snapshot_id = _database_snapshot_id(
+                str(scan_id),
+                provider,
+                provider_cache_key,
+                provider_as_of,
             )
             self._insert_provider_snapshot(
                 connection,
                 str(scan_id),
                 run,
                 snapshot_id,
+                provider_cache_key,
                 provider_snapshot,
                 candidates,
                 now_text,
@@ -1230,6 +1890,8 @@ class BreakoutRepository:
             self._insert_transitions(
                 connection,
                 str(scan_id),
+                snapshot_id,
+                provider_cache_key,
                 transitions,
                 event_records,
                 id_aliases,
@@ -1297,6 +1959,7 @@ class BreakoutRepository:
         scan_id: str,
         run: sqlite3.Row,
         snapshot_id: str,
+        provider_cache_key: str,
         provider_snapshot: Mapping[str, Any],
         candidates: Sequence[Any],
         now_text: str,
@@ -1318,12 +1981,13 @@ class BreakoutRepository:
         connection.execute(
             """
             INSERT INTO breakout_provider_snapshots(
-                snapshot_id,scan_run_id,provider,status,as_of,session,schema_version,
+                snapshot_id,provider_cache_key,scan_run_id,provider,status,as_of,session,schema_version,
                 candidate_count,is_stale,warnings_json,payload_json,created_at,expires_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 snapshot_id,
+                provider_cache_key,
                 scan_id,
                 provider,
                 status,
@@ -1400,7 +2064,7 @@ class BreakoutRepository:
                     pivot_id,
                     str(structure.get("ticker") or "").upper(),
                     _timestamp(cutoff),
-                    _json_dumps(structure, max_bytes=MAX_EVENT_JSON_BYTES),
+                    _json_dumps(structure, max_bytes=MAX_STRUCTURE_JSON_BYTES),
                     now_text,
                 ),
             )
@@ -1596,9 +2260,7 @@ class BreakoutRepository:
             event["triggered_at"] = triggered_at
             event["state_changed_at"] = state_changed_at
             event["last_seen_at"] = incoming_last_seen_at
-            event["source_snapshot_id"] = str(
-                event.get("source_snapshot_id") or snapshot_id
-            )
+            event["source_snapshot_id"] = str(snapshot_id)
             if (
                 existing is not None
                 and str(existing["lifecycle_state"]) in {"FAILED", "EXPIRED"}
@@ -1684,6 +2346,8 @@ class BreakoutRepository:
         self,
         connection: sqlite3.Connection,
         scan_id: str,
+        snapshot_id: str,
+        provider_cache_key: str,
         transitions: Sequence[Mapping[str, Any]],
         events: Sequence[Mapping[str, Any]],
         aliases: Mapping[str, str],
@@ -1762,6 +2426,14 @@ class BreakoutRepository:
                     "evidence_at": evidence_at,
                 }
             )
+            evidence_body = (
+                dict(body.get("evidence") or {})
+                if isinstance(body.get("evidence"), Mapping)
+                else {}
+            )
+            evidence_body["provider_cache_key"] = str(provider_cache_key)
+            evidence_body["source_snapshot_id"] = str(snapshot_id)
+            body["evidence"] = evidence_body
             connection.execute(
                 """
                 INSERT INTO breakout_transitions(
@@ -2686,15 +3358,54 @@ class BreakoutRepository:
                 str(row["scan_run_id"])
                 for row in connection.execute(
                     """
-                    SELECT scan_run_id FROM breakout_scan_runs
-                    WHERE status<>'running' AND updated_at<?
-                      AND scan_run_id<>COALESCE(
+                    SELECT run.scan_run_id FROM breakout_scan_runs AS run
+                    WHERE run.status<>'running' AND run.updated_at<?
+                      AND run.scan_run_id<>COALESCE(
                         (SELECT scan_run_id FROM breakout_scan_runs
                          WHERE status='completed'
                          ORDER BY published_at DESC,scan_run_id DESC LIMIT 1),
                         ''
                       )
-                    ORDER BY updated_at LIMIT ?
+                      AND (
+                        EXISTS(
+                          SELECT 1 FROM breakout_provider_snapshots provider
+                          WHERE provider.scan_run_id=run.scan_run_id
+                        )
+                        OR EXISTS(
+                          SELECT 1 FROM breakout_candidates candidate
+                          WHERE candidate.scan_run_id=run.scan_run_id
+                        )
+                        OR EXISTS(
+                          SELECT 1 FROM breakout_structures structure
+                          WHERE structure.scan_run_id=run.scan_run_id
+                        )
+                        OR EXISTS(
+                          SELECT 1 FROM breakout_scan_events old_event
+                          WHERE old_event.scan_run_id=run.scan_run_id
+                            AND EXISTS(
+                              SELECT 1
+                              FROM breakout_scan_events newer_event
+                              JOIN breakout_scan_runs newer_run
+                                ON newer_run.scan_run_id=newer_event.scan_run_id
+                               AND newer_run.status='completed'
+                              WHERE newer_event.event_id=old_event.event_id
+                                AND (
+                                  COALESCE(newer_run.published_at,newer_run.completed_at,
+                                           newer_run.updated_at,'')
+                                    > COALESCE(run.published_at,run.completed_at,
+                                               run.updated_at,'')
+                                  OR (
+                                    COALESCE(newer_run.published_at,newer_run.completed_at,
+                                             newer_run.updated_at,'')
+                                      = COALESCE(run.published_at,run.completed_at,
+                                                 run.updated_at,'')
+                                    AND newer_run.scan_run_id>run.scan_run_id
+                                  )
+                                )
+                            )
+                        )
+                      )
+                    ORDER BY run.updated_at,run.scan_run_id LIMIT ?
                     """,
                     (scan_cutoff, batch_size),
                 ).fetchall()
@@ -2706,12 +3417,29 @@ class BreakoutRepository:
                     DELETE FROM breakout_scan_events AS old
                     WHERE old.scan_run_id IN ({placeholders})
                       AND EXISTS(
-                        SELECT 1 FROM breakout_scan_events newer
-                        JOIN breakout_scan_runs run
-                          ON run.scan_run_id=newer.scan_run_id
-                         AND run.status='completed'
-                        WHERE newer.event_id=old.event_id
-                          AND newer.scan_run_id<>old.scan_run_id
+                        SELECT 1 FROM breakout_scan_runs old_run
+                        WHERE old_run.scan_run_id=old.scan_run_id
+                          AND EXISTS(
+                            SELECT 1
+                            FROM breakout_scan_events newer
+                            JOIN breakout_scan_runs newer_run
+                              ON newer_run.scan_run_id=newer.scan_run_id
+                             AND newer_run.status='completed'
+                            WHERE newer.event_id=old.event_id
+                              AND (
+                                COALESCE(newer_run.published_at,newer_run.completed_at,
+                                         newer_run.updated_at,'')
+                                  > COALESCE(old_run.published_at,old_run.completed_at,
+                                             old_run.updated_at,'')
+                                OR (
+                                  COALESCE(newer_run.published_at,newer_run.completed_at,
+                                           newer_run.updated_at,'')
+                                    = COALESCE(old_run.published_at,old_run.completed_at,
+                                               old_run.updated_at,'')
+                                  AND newer_run.scan_run_id>old_run.scan_run_id
+                                )
+                              )
+                          )
                       )
                     """,
                     old_ids,
@@ -2760,4 +3488,6 @@ __all__ = [
     "SCHEMA_CHECKSUM",
     "SCHEMA_VERSION",
     "SchemaVersionError",
+    "V2_SCHEMA_CHECKSUM",
+    "V2_SCHEMA_VERSION",
 ]

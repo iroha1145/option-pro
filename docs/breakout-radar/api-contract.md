@@ -8,7 +8,9 @@
 - GET 不调用 Provider、行情、Strength 或 Market Shape。
 - 所有时间带时区；根响应包含 as_of、market_timezone、session、status、
   versions、source_status 和 events。
-- status 取 active、degraded、stale、unavailable 或 disabled。
+- status 取 active、degraded、stale、paused、unavailable 或 disabled。
+- 根响应和状态响应可增加 `runtime_status`、`runtime_reason`、`market_session`、
+  `next_session_at`、`failure_domain`；旧字段保持不变。
 - 原始 Provider JSON 永不返回。
 - limit 有上限，游标绑定 scan_run_id 和稳定排序键。
 
@@ -16,6 +18,9 @@
 
 返回最近一次完整快照。没有数据库、没有 completed scan 或功能关闭时返回空
 events 和明确状态，不创建数据库。
+
+市场关闭时返回 `status=paused`。已有 completed 快照时继续返回其事件和明确的
+快照时间；尚无快照时返回空 events，但不会伪装成 Provider 故障。
 
 ## GET /api/breakouts/events
 
@@ -42,7 +47,8 @@ scan_run_id，分页期间出现新扫描不会污染同一分页序列。
 
 ## GET /api/breakouts/tickers/{ticker}
 
-返回该 ticker 最近事件和当前状态。ticker 统一校验后才进入仓储查询。
+返回该 ticker 最近事件和当前状态。ticker 统一校验后才进入仓储查询。数据库健康
+但没有事件时为 `status=empty`；数据库读取故障时为 `status=unavailable`。
 
 ## GET /api/breakouts/status
 

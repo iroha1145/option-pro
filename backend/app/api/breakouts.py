@@ -110,6 +110,11 @@ class BreakoutRootResponse(_ResponseModel):
     source_status: dict[str, Any]
     events: list[BreakoutEventResponse]
     scan_run_id: Optional[str] = None
+    runtime_status: Optional[str] = None
+    runtime_reason: Optional[str] = None
+    market_session: Optional[str] = None
+    next_session_at: Optional[AwareDatetime] = None
+    failure_domain: Optional[str] = None
 
 
 class BreakoutEventPageResponse(BreakoutRootResponse):
@@ -149,6 +154,11 @@ class BreakoutStatusResponse(_ResponseModel):
     worker_lock: Optional[dict[str, Any]] = None
     strength_adapter: dict[str, Any]
     market_shape_adapter: dict[str, Any]
+    runtime_status: Optional[str] = None
+    runtime_reason: Optional[str] = None
+    market_session: Optional[str] = None
+    next_session_at: Optional[AwareDatetime] = None
+    failure_domain: Optional[str] = None
 
 
 def _now() -> datetime:
@@ -361,15 +371,26 @@ def _unavailable_root(
     *,
     status: str,
     warning: str,
+    read_state: BreakoutReadState | None = None,
+    database_status: str | None = None,
 ) -> BreakoutRootResponse:
+    details = dict(read_state.details) if read_state is not None else {}
     return BreakoutRootResponse(
         as_of=_now(),
         session=None,
         status=status,
         versions=_versions(settings),
-        source_status={"database": status, "warnings": [warning]},
+        source_status={
+            "database": database_status or status,
+            "warnings": [warning],
+        },
         events=[],
         scan_run_id=None,
+        runtime_status=read_state.status if read_state is not None else status,
+        runtime_reason=read_state.reason if read_state is not None else warning,
+        market_session=details.get("market_session"),
+        next_session_at=details.get("next_session_at"),
+        failure_domain=details.get("failure_domain"),
     )
 
 
@@ -393,6 +414,8 @@ def _schema_unavailable_root(
 
 
 def _combine_read_status(*values: str) -> str:
+    if "paused" in values:
+        return "paused"
     rank = {"active": 0, "degraded": 1, "stale": 2, "unavailable": 3}
     normalized = [value if value in rank else "degraded" for value in values]
     return max(normalized, key=lambda value: rank[value]) if normalized else "active"
@@ -471,6 +494,23 @@ def _root_from_scan(
             for item in list(scan.get("events") or [])
         ],
         scan_run_id=str(scan.get("scan_run_id") or "") or None,
+        runtime_status=read_state.status if read_state is not None else "active",
+        runtime_reason=read_state.reason if read_state is not None else "fresh",
+        market_session=(
+            read_state.details.get("market_session")
+            if read_state is not None
+            else scan_session
+        ),
+        next_session_at=(
+            read_state.details.get("next_session_at")
+            if read_state is not None
+            else None
+        ),
+        failure_domain=(
+            read_state.details.get("failure_domain")
+            if read_state is not None
+            else None
+        ),
     )
 
 
@@ -482,6 +522,7 @@ def current() -> BreakoutRootResponse:
             settings,
             status="disabled",
             warning="breakout_radar_disabled",
+            database_status="not_opened",
         )
     try:
         repository = _repository(settings)
@@ -495,10 +536,24 @@ def current() -> BreakoutRootResponse:
             warning="breakout_database_unavailable",
         )
     if scan is None:
+        read_state = _read_state(
+            settings,
+            repository,
+            completed_snapshot=None,
+        )
+        if read_state.status == "paused":
+            return _unavailable_root(
+                settings,
+                status="paused",
+                warning="market_closed",
+                read_state=read_state,
+                database_status="active",
+            )
         return _unavailable_root(
             settings,
             status="unavailable",
             warning="no_completed_scan",
+            database_status="active",
         )
     stored_scan = dict(scan)
     return _root_from_scan(
@@ -528,7 +583,12 @@ def events(
 ) -> BreakoutEventPageResponse:
     settings = get_breakout_settings()
     if not settings.enabled:
-        root = _unavailable_root(settings, status="disabled", warning="breakout_radar_disabled")
+        root = _unavailable_root(
+            settings,
+            status="disabled",
+            warning="breakout_radar_disabled",
+            database_status="not_opened",
+        )
         return BreakoutEventPageResponse(**root.model_dump(), next_cursor=None)
     normalized = None
     if ticker is not None:
@@ -570,10 +630,15 @@ def events(
             dict(completed_scan) if isinstance(completed_scan, dict) else None
         ),
     )
+    page_status = (
+        read_state.status
+        if page.get("scan_run_id") or read_state.status == "paused"
+        else "unavailable"
+    )
     return BreakoutEventPageResponse(
         as_of=_now(),
         session=session,
-        status=read_state.status if page.get("scan_run_id") else "unavailable",
+        status=page_status,
         versions=_versions(settings),
         source_status={
             "database": "active",
@@ -587,6 +652,11 @@ def events(
         ],
         scan_run_id=page.get("scan_run_id"),
         next_cursor=page.get("next_cursor"),
+        runtime_status=read_state.status,
+        runtime_reason=read_state.reason,
+        market_session=read_state.details.get("market_session"),
+        next_session_at=read_state.details.get("next_session_at"),
+        failure_domain=read_state.details.get("failure_domain"),
     )
 
 
@@ -660,7 +730,7 @@ def ticker_events(ticker: str) -> BreakoutTickerResponse:
         )
     return BreakoutTickerResponse(
         as_of=_now(),
-        status="active" if items else "unavailable",
+        status="active" if items else "empty",
         versions=_versions(settings),
         ticker=symbol,
         events=[_public_event(settings, dict(item)) for item in items],
@@ -765,4 +835,21 @@ def status() -> BreakoutStatusResponse:
             "version": MARKET_SHAPE_VERSION,
             "warning": "runtime data status is reported by completed scan snapshots",
         },
+        runtime_status=read_state.status if read_state is not None else overall,
+        runtime_reason=read_state.reason if read_state is not None else None,
+        market_session=(
+            read_state.details.get("market_session")
+            if read_state is not None
+            else None
+        ),
+        next_session_at=(
+            read_state.details.get("next_session_at")
+            if read_state is not None
+            else None
+        ),
+        failure_domain=(
+            read_state.details.get("failure_domain")
+            if read_state is not None
+            else None
+        ),
     )

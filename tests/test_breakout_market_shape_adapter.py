@@ -202,6 +202,14 @@ def test_adapter_returns_real_shape_from_strength_service(monkeypatch) -> None:
         ),
         as_of=NOW,
     )
+    shape.update(
+        {
+            "pending_phase": "enter",
+            "exit_pending_days": 1,
+            "enter_pending_days": 2,
+            "exit_confirmed": True,
+        }
+    )
 
     async def fake_market_strength(*, as_of):
         assert as_of == NOW
@@ -215,3 +223,7 @@ def test_adapter_returns_real_shape_from_strength_service(monkeypatch) -> None:
     assert snapshot.status == "active"
     assert snapshot.state == "BULL_TREND"
     assert snapshot.rules["eligibility"] == "normal"
+    assert snapshot.pending_phase == "enter"
+    assert snapshot.exit_pending_days == 1
+    assert snapshot.enter_pending_days == 2
+    assert snapshot.exit_confirmed is True

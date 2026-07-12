@@ -3,6 +3,7 @@
 ## 默认状态
 
 - BREAKOUT_RADAR_ENABLED=false
+- DEPLOY_REQUIRE_BREAKOUT=false
 - RANGE_PERSISTENCE_MODE=shadow
 - RANGE_PERSISTENCE_VALIDATION_VERSION 为空
 - Worker 独立进程，不暴露端口。
@@ -25,6 +26,10 @@ PYTHONPATH=. python -m app.services.breakouts.worker --healthcheck
 功能关闭时 --once 安全退出，健康状态为 disabled。启用真实 Provider 的一次
 扫描不是离线测试，不能与夹具测试混为一谈。
 
+`DEPLOY_REQUIRE_BREAKOUT=false` 时，安全默认的关闭状态可以正常部署；设为
+`true` 才要求雷达开启并通过 Worker、数据库和版本检查。无论哪种模式，
+`RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED=false` 都是合法配置。
+
 区间强势持续度从 shadow 切换为 enabled 前，必须完成研究门槛，并同时设置：
 
 ```text
@@ -43,8 +48,9 @@ RANGE_PERSISTENCE_VALIDATION_VERSION=range-persistence-v1
 - postmarket/closed：默认 1800 秒。
 - 使用 monotonic 绝对截止点和有界 jitter，扫描耗时不累加到下一个周期。
 - Provider 故障执行有界退避；数据库或租约失败才影响 Worker 健康。
-- postmarket/closed 当前没有可用的 Discovery Provider，会记录降级和 failed
-  扫描，但不会用空 completed 覆盖正常时段的最后结果。
+- postmarket/closed 进入中性暂停：不调用 Discovery Provider，不登记 failed
+  scan，不修改 Provider 成功、失败或熔断计数。Worker 继续写心跳和下一交易时段；
+  API 以 `paused + market_closed` 返回，并保留正常时段的最后 completed 快照。
 
 ## 候选增强门槛
 
@@ -89,6 +95,13 @@ Provider 失败：
 - `stale`快照仍可按陈旧状态发布；Provider 正常响应但候选数为零，才是有效的
   completed 空快照。运维检查时不能把这三种情况合并为“没有信号”。
 
+本地处理失败：
+
+- 根据 `failure_domain` 区分 price_data、strength、market_shape、persistence、
+  database、local_processing 和 configuration。
+- 这些错误不得增加 Provider 的失败计数。只有 Provider 传输、限速、响应格式或
+  上游可用性错误才能改变 Provider 健康。
+
 数据库 busy：
 
 - 等待短 busy_timeout；API 返回突破降级。
@@ -108,6 +121,12 @@ WAL 增长：
 
 - 保留文件作诊断。
 - 恢复最近备份或重新建立新库；旧接口仍应可用。
+
+数据库升级：
+
+- v1/v2 升级 v3 前停止旧 Worker，并先制作可恢复备份。
+- 升级后核对 schema 为 `breakout-db-v3`、`foreign_key_check` 为空，并检查
+  `breakout_migration_quarantine`。隔离记录表示数据已重建，仍需保留备份追溯。
 
 ## Docker
 

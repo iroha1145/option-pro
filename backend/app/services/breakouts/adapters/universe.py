@@ -38,26 +38,45 @@ THEME_BENCHMARKS: dict[str, str] = {
     "industrials": "XLI",
 }
 
-_PROVIDER_SECTOR_BENCHMARKS = {
+_PROVIDER_SECTOR_BENCHMARKS: dict[str, str | None] = {
     "technology": "XLK",
     "information technology": "XLK",
+    "electronic technology": "XLK",
+    "technology services": "XLK",
     "financial": "XLF",
     "financial services": "XLF",
+    "finance": "XLF",
     "healthcare": "XLV",
     "health care": "XLV",
+    "health technology": "XLV",
+    "health services": "XLV",
     "energy": "XLE",
+    "energy minerals": "XLE",
     "industrials": "XLI",
     "industrial": "XLI",
+    "producer manufacturing": "XLI",
+    "industrial services": "XLI",
+    "transportation": "XLI",
+    "commercial services": "XLI",
+    "distribution services": "XLI",
     "communication services": "XLC",
     "communication": "XLC",
+    "communications": "XLC",
     "consumer cyclical": "XLY",
     "consumer discretionary": "XLY",
+    "consumer durables": "XLY",
+    "consumer services": "XLY",
+    "retail trade": "XLY",
     "consumer defensive": "XLP",
     "consumer staples": "XLP",
+    "consumer non-durables": "XLP",
     "utilities": "XLU",
     "real estate": "XLRE",
     "basic materials": "XLB",
     "materials": "XLB",
+    "non-energy minerals": "XLB",
+    "process industries": "XLB",
+    "miscellaneous": None,
 }
 
 
@@ -107,12 +126,10 @@ class ThemeCanonicalUniverseAdapter:
     ) -> str | None:
         normalized_sector = " ".join(str(provider_sector or "").lower().split())
         if normalized_sector:
-            direct = _PROVIDER_SECTOR_BENCHMARKS.get(normalized_sector)
-            if direct is not None:
-                return direct
-            for name, benchmark in _PROVIDER_SECTOR_BENCHMARKS.items():
-                if name in normalized_sector:
-                    return benchmark
+            # Provider classifications are exact, reviewable mappings. An
+            # unknown value remains missing instead of guessing from a
+            # substring such as "technology" inside "health technology".
+            return _PROVIDER_SECTOR_BENCHMARKS.get(normalized_sector)
         references = {
             THEME_BENCHMARKS[theme]
             for theme in self.memberships(ticker)

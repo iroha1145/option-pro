@@ -83,6 +83,11 @@ def _worker_runtime(
             "heartbeat_age_seconds": None,
         }
     worker_state = str(worker.get("status") or "unknown")
+    stored_details = (
+        dict(worker.get("details") or {})
+        if isinstance(worker.get("details"), Mapping)
+        else {}
+    )
     try:
         heartbeat = _parse(str(worker["heartbeat_at"]))
     except (TypeError, ValueError):
@@ -108,6 +113,13 @@ def _worker_runtime(
         "worker_status": worker_state,
         "heartbeat_age_seconds": age,
         "heartbeat_stale_after_seconds": stale_after,
+        "runtime_reason": stored_details.get("runtime_reason"),
+        "market_session": stored_details.get("market_session"),
+        "next_session_at": stored_details.get("next_session_at"),
+        "failure_domain": stored_details.get("failure_domain"),
+        "provider_health_unchanged": stored_details.get(
+            "provider_health_unchanged"
+        ),
     }
 
 
@@ -117,6 +129,23 @@ def _provider_states(status: Mapping[str, Any]) -> set[str]:
         for item in (status.get("provider_health") or [])
         if isinstance(item, Mapping)
     }
+
+
+def _degraded_reason(
+    worker: Mapping[str, Any],
+    providers: set[str],
+) -> str:
+    worker_state = str(worker.get("worker_status") or "unknown")
+    failure_domain = str(worker.get("failure_domain") or "").strip()
+    if (
+        worker_state == "provider_error"
+        or failure_domain == "provider"
+        or providers.intersection({"degraded", "stale", "unavailable"})
+    ):
+        return "provider_degraded"
+    if worker_state == "degraded":
+        return f"{failure_domain}_degraded" if failure_domain else "worker_degraded"
+    return "runtime_degraded"
 
 
 def _snapshot_stale_after(settings: object, session: str) -> float:
@@ -191,6 +220,12 @@ def assess_breakout_read_state(
             snapshot_issue = "completed_snapshot_time_invalid"
 
     worker_issue = worker.get("issue")
+    if (
+        worker.get("worker_status") == "paused"
+        and worker.get("runtime_reason") == "market_closed"
+        and worker_issue is None
+    ):
+        return BreakoutReadState("paused", "market_closed", details)
     if snapshot_issue in {"completed_snapshot_stale", "completed_snapshot_time_invalid"}:
         return BreakoutReadState("stale", snapshot_issue, details)
     if worker_issue == "worker_heartbeat_stale":
@@ -205,7 +240,11 @@ def assess_breakout_read_state(
     if worker_state in {"degraded", "provider_error"} or providers.intersection(
         {"degraded", "unavailable"}
     ):
-        return BreakoutReadState("degraded", "provider_degraded", details)
+        return BreakoutReadState(
+            "degraded",
+            _degraded_reason(worker, providers),
+            details,
+        )
     return BreakoutReadState("active", "fresh", details)
 
 
@@ -277,6 +316,25 @@ def check_breakout_health(
         )
     age = float(worker.get("heartbeat_age_seconds") or 0.0)
     worker_state = str(worker.get("worker_status") or "unknown")
+    if (
+        worker_state == "paused"
+        and worker.get("runtime_reason") == "market_closed"
+        and worker_issue is None
+    ):
+        return BreakoutHealth(
+            status="paused",
+            healthy=True,
+            enabled=True,
+            reason="market_closed",
+            details={
+                "database": "active",
+                "worker_status": worker_state,
+                "heartbeat_age_seconds": age,
+                "market_session": worker.get("market_session"),
+                "next_session_at": worker.get("next_session_at"),
+                "provider_states": sorted(_provider_states(status)),
+            },
+        )
     if worker_issue == "worker_heartbeat_stale":
         return BreakoutHealth(
             status="unhealthy",
@@ -298,16 +356,21 @@ def check_breakout_health(
     degraded = worker_state in {"degraded", "provider_error"} or bool(
         provider_states.intersection({"degraded", "stale", "unavailable"})
     )
+    reason = _degraded_reason(worker, provider_states) if degraded else "healthy"
     return BreakoutHealth(
         status="degraded" if degraded else "active",
         healthy=True,
         enabled=True,
-        reason="provider_degraded" if degraded else "healthy",
+        reason=reason,
         details={
             "database": "active",
             "worker_status": worker_state,
             "heartbeat_age_seconds": age,
             "provider_states": sorted(provider_states),
+            "failure_domain": worker.get("failure_domain"),
+            "provider_health_unchanged": worker.get(
+                "provider_health_unchanged"
+            ),
         },
     )
 

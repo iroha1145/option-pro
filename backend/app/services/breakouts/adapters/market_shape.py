@@ -56,6 +56,14 @@ class ExistingMarketShapeAdapter:
                 else None
             ),
             pending_days=max(0, int(shape.get("pending_days") or 0)),
+            pending_phase=(
+                str(shape["pending_phase"])
+                if shape.get("pending_phase") is not None
+                else None
+            ),
+            exit_pending_days=max(0, int(shape.get("exit_pending_days") or 0)),
+            enter_pending_days=max(0, int(shape.get("enter_pending_days") or 0)),
+            exit_confirmed=bool(shape.get("exit_confirmed", False)),
             as_of=shape.get("as_of") or as_of,
             input_coverage=dict(shape.get("input_coverage") or {}),
             hard_missing=[str(item) for item in list(shape.get("hard_missing") or [])],

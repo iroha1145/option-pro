@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
+import pytest
 
+import app.services.breakouts.service as breakout_service_module
 from app.services.breakouts.config import BreakoutSettings
 from app.services.breakouts.clock import MarketClock
+from app.services.breakouts.errors import BreakoutStageError
 from app.services.breakouts.models import (
     AssetType,
     BreakoutCandidate,
@@ -211,6 +215,30 @@ class BrokenCanonicalPrices(Prices):
                 }
             )
         return snapshots
+
+
+class RecoveringCanonicalUniverse(Universe):
+    version = "recovering-universe-v1"
+
+    def __init__(self, members: list[str]) -> None:
+        self.members = members
+        self.calls = 0
+        self.fail_first = True
+
+    async def tickers(self, *, as_of):
+        self.calls += 1
+        if self.fail_first:
+            self.fail_first = False
+            raise RuntimeError("temporary universe failure")
+        return list(self.members)
+
+
+class MutableClock:
+    def __init__(self) -> None:
+        self.value = 0.0
+
+    def __call__(self) -> float:
+        return self.value
 
 
 class LiquidityRecordingPrices(Prices):
@@ -424,6 +452,54 @@ def test_broken_canonical_range_member_does_not_abort_breakout_snapshot() -> Non
 
     assert [event.ticker for event in payload["events"]] == ["TEST"]
     assert payload["events"][0].features["canonical_universe_status"] == "unavailable"
+
+
+def test_unavailable_distribution_cache_expires_and_recovers() -> None:
+    candidate = BreakoutCandidate(
+        ticker="TEST",
+        price=104,
+        provider_change_pct=8,
+        provider_volume=2_000_000,
+        provider_relative_volume=3,
+        provider_market_cap=1_000_000_000,
+        provider_timestamp=AS_OF,
+        source="fixture",
+        session=MarketSession.REGULAR,
+    )
+    discovery = DiscoverySnapshot(
+        provider="fixture",
+        status=ProviderStatus.ACTIVE,
+        as_of=AS_OF,
+        session=MarketSession.REGULAR,
+        schema_version="fixture-v1",
+        candidate_count=1,
+        candidates=[candidate],
+    )
+    clock = MutableClock()
+    universe = RecoveringCanonicalUniverse(["TEST"])
+    service = BreakoutRadarService(
+        BreakoutSettings(_env_file=None, RANGE_PERSISTENCE_MODE="shadow"),
+        price_data=Prices(),
+        strength=Strength(),
+        market_shape=Market(),
+        universe=universe,
+        cache_clock=clock,
+    )
+
+    first = asyncio.run(service.build_snapshot(discovery))
+    assert first["events"][0].features["canonical_universe_status"] == "unavailable"
+    assert universe.calls == 1
+    records = list(service._range_distribution_cache.values())
+    assert records[0]["status"] == "unavailable"
+    assert records[0]["expires_at"] is not None
+
+    asyncio.run(service.build_snapshot(discovery))
+    assert universe.calls == 1
+
+    clock.value = 46.0
+    recovered = asyncio.run(service.build_snapshot(discovery))
+    assert universe.calls == 2
+    assert recovered["events"][0].features["canonical_universe_status"] == "degraded"
 
 
 def test_active_market_shape_populates_fit_and_only_changes_contextual_scores() -> None:
@@ -775,6 +851,21 @@ class FailingMarket:
         raise RuntimeError("market unavailable")
 
 
+class InvalidDailyPrices(Prices):
+    async def daily(self, tickers, *, cutoff, period):
+        return object()
+
+
+class InvalidStrength(Strength):
+    async def score_ticker_set(self, *args, **kwargs):
+        return object()
+
+
+class InvalidMarket(Market):
+    async def snapshot(self, *, as_of):
+        return object()
+
+
 def test_optional_adapter_failures_degrade_instead_of_aborting_scan() -> None:
     candidate = BreakoutCandidate(
         ticker="TEST",
@@ -808,6 +899,57 @@ def test_optional_adapter_failures_degrade_instead_of_aborting_scan() -> None:
     assert payload["events"][0].scores.intrinsic_strength_score is None
     assert payload["source_status"]["strength"] == "unavailable"
     assert payload["source_status"]["market_shape"] == "unavailable"
+
+
+@pytest.mark.parametrize(
+    "failure_domain",
+    ["price_data", "strength", "market_shape", "persistence"],
+)
+def test_fatal_stage_contract_errors_are_tagged(
+    failure_domain: str,
+    monkeypatch,
+) -> None:
+    candidate = BreakoutCandidate(
+        ticker="TEST",
+        price=104,
+        provider_change_pct=8,
+        provider_volume=2_000_000,
+        provider_relative_volume=3,
+        provider_market_cap=1_000_000_000,
+        provider_timestamp=AS_OF,
+        source="fixture",
+        session=MarketSession.REGULAR,
+    )
+    discovery = DiscoverySnapshot(
+        provider="fixture",
+        status=ProviderStatus.ACTIVE,
+        as_of=AS_OF,
+        session=MarketSession.REGULAR,
+        schema_version="fixture-v1",
+        candidate_count=1,
+        candidates=[candidate],
+    )
+    prices = InvalidDailyPrices() if failure_domain == "price_data" else Prices()
+    strength = InvalidStrength() if failure_domain == "strength" else Strength()
+    market = InvalidMarket() if failure_domain == "market_shape" else Market()
+    if failure_domain == "persistence":
+        monkeypatch.setattr(
+            breakout_service_module,
+            "_safe_range_feature",
+            lambda *_args, **_kwargs: object(),
+        )
+    service = BreakoutRadarService(
+        BreakoutSettings(_env_file=None),
+        price_data=prices,
+        strength=strength,
+        market_shape=market,
+        universe=Universe(),
+    )
+
+    with pytest.raises(BreakoutStageError) as caught:
+        asyncio.run(service.build_snapshot(discovery))
+
+    assert caught.value.failure_domain == failure_domain
 
 
 def _discovery(
@@ -1498,6 +1640,192 @@ def test_expired_due_carryover_becomes_terminal_without_market_data() -> None:
     assert payload["events"][0].event_id == first.event_id
     assert payload["events"][0].lifecycle_state is BreakoutLifecycleState.EXPIRED
     assert payload["transitions"][-1]["reason"] == "event_ttl_expired"
+
+
+class MissingCarryoverPrices(Prices):
+    def __init__(self, *, daily: set[str] = set(), intraday: set[str] = set()):
+        self._missing_daily = {item.upper() for item in daily}
+        self._missing_intraday = {item.upper() for item in intraday}
+
+    async def daily(self, tickers, *, cutoff, period):
+        snapshots = await super().daily(tickers, cutoff=cutoff, period=period)
+        return {
+            ticker: snapshot
+            for ticker, snapshot in snapshots.items()
+            if ticker.upper() not in self._missing_daily
+        }
+
+    async def intraday(self, tickers, *, cutoff, interval):
+        snapshots = await super().intraday(tickers, cutoff=cutoff, interval=interval)
+        return {
+            ticker: snapshot
+            for ticker, snapshot in snapshots.items()
+            if ticker.upper() not in self._missing_intraday
+        }
+
+
+class IncompleteCarryoverPrices(Prices):
+    def __init__(self, *, offset_minutes: int):
+        self._offset_minutes = offset_minutes
+
+    async def intraday(self, tickers, *, cutoff, interval):
+        snapshots = await super().intraday(
+            tickers,
+            cutoff=cutoff,
+            interval=interval,
+        )
+        result = {}
+        for ticker, snapshot in snapshots.items():
+            frame = snapshot.frame.tail(1).copy()
+            frame.index = pd.DatetimeIndex(
+                [
+                    pd.Timestamp(cutoff.event_at)
+                    + pd.Timedelta(minutes=self._offset_minutes)
+                ]
+            )
+            result[ticker] = replace(snapshot, frame=frame)
+        return result
+
+
+def _assert_unreviewed_carryover(reason: str, prices: Prices) -> None:
+    settings = BreakoutSettings(
+        _env_file=None,
+        RANGE_PERSISTENCE_MODE="shadow",
+    )
+    seed = BreakoutRadarService(
+        settings,
+        price_data=Prices(),
+        strength=Strength(),
+        market_shape=Market(),
+        universe=Universe(),
+    )
+    first = _premarket_event(seed, ticker="MISS")
+    continuation = BreakoutRadarService(
+        settings,
+        price_data=prices,
+        strength=Strength(),
+        market_shape=Market(),
+        universe=Universe(),
+    )
+    payload = asyncio.run(
+        continuation.build_snapshot(
+            _discovery(
+                at=AS_OF,
+                session=MarketSession.REGULAR,
+                candidates=[],
+            ),
+            carryover_events=[first.model_dump(mode="python")],
+        )
+    )
+
+    assert len(payload["events"]) == 1
+    continued = payload["events"][0]
+    assert continued.event_id == first.event_id
+    assert continued.first_seen_at == first.first_seen_at
+    assert continued.triggered_at == first.triggered_at
+    assert continued.state_changed_at == first.state_changed_at
+    assert continued.last_seen_at == first.last_seen_at
+    assert continued.lifecycle_state is first.lifecycle_state
+    assert continued.source_snapshot_id == first.source_snapshot_id
+    assert continued.features["carryover_recheck"] is False
+    assert continued.features["last_attempted_at"] == AS_OF
+    assert reason in continued.warnings
+    assert payload["transitions"] == []
+
+
+def test_carryover_missing_daily_with_intraday_is_deferred() -> None:
+    _assert_unreviewed_carryover(
+        "daily_snapshot_unavailable",
+        MissingCarryoverPrices(daily={"MISS"}),
+    )
+
+
+def test_carryover_missing_intraday_with_daily_is_deferred() -> None:
+    _assert_unreviewed_carryover(
+        "intraday_snapshot_unavailable",
+        MissingCarryoverPrices(intraday={"MISS"}),
+    )
+
+
+def test_carryover_missing_daily_and_intraday_is_deferred() -> None:
+    _assert_unreviewed_carryover(
+        "daily_snapshot_unavailable",
+        MissingCarryoverPrices(daily={"MISS"}, intraday={"MISS"}),
+    )
+
+
+def test_carryover_current_incomplete_intraday_bar_is_deferred() -> None:
+    _assert_unreviewed_carryover(
+        "no_complete_intraday_bars",
+        IncompleteCarryoverPrices(offset_minutes=0),
+    )
+
+
+def test_carryover_future_intraday_bar_is_deferred() -> None:
+    _assert_unreviewed_carryover(
+        "no_complete_intraday_bars",
+        IncompleteCarryoverPrices(offset_minutes=5),
+    )
+
+
+class OneCarryoverFailsService(BreakoutRadarService):
+    def _continue_event(self, prior_value, **kwargs):
+        if str(prior_value.get("ticker") or "").upper() == "BAD":
+            raise ValueError("malformed carryover fixture")
+        return super()._continue_event(prior_value, **kwargs)
+
+
+def test_one_carryover_failure_does_not_abort_other_events() -> None:
+    settings = BreakoutSettings(
+        _env_file=None,
+        RANGE_PERSISTENCE_MODE="shadow",
+    )
+    seed = BreakoutRadarService(
+        settings,
+        price_data=Prices(),
+        strength=Strength(),
+        market_shape=Market(),
+        universe=Universe(),
+    )
+    bad = _premarket_event(seed, ticker="BAD")
+    good = _premarket_event(seed, ticker="GOOD")
+    service = OneCarryoverFailsService(
+        settings,
+        price_data=Prices(),
+        strength=Strength(),
+        market_shape=Market(),
+        universe=Universe(),
+    )
+
+    payload = asyncio.run(
+        service.build_snapshot(
+            _discovery(
+                at=AS_OF,
+                session=MarketSession.REGULAR,
+                candidates=[],
+            ),
+            carryover_events=[
+                bad.model_dump(mode="python"),
+                good.model_dump(mode="python"),
+            ],
+        )
+    )
+
+    assert {event.event_id for event in payload["events"]} == {
+        bad.event_id,
+        good.event_id,
+    }
+    assert payload["per_event_errors"] == [
+        {
+            "event_id": bad.event_id,
+            "ticker": "BAD",
+            "error_code": "carryover_processing_error",
+            "error_type": "ValueError",
+        }
+    ]
+    deferred = next(event for event in payload["events"] if event.ticker == "BAD")
+    assert deferred.lifecycle_state is bad.lifecycle_state
+    assert deferred.last_seen_at == bad.last_seen_at
 
 
 def test_future_or_terminal_carryover_is_not_reactivated() -> None:

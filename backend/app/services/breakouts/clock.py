@@ -7,12 +7,12 @@ from dataclasses import dataclass
 from datetime import date, datetime, time as datetime_time, timezone
 from typing import Callable
 
-from app.api.market import (
+from app.services.market_calendar import (
     ET,
-    _early_close_minutes,
-    _is_trading_day,
-    _market_holidays,
-    _next_trading_day,
+    early_close_minutes as _early_close_minutes,
+    is_trading_day as _is_trading_day,
+    market_holidays as _market_holidays,
+    next_trading_day as _next_trading_day,
 )
 from app.services.breakouts.models import DiscoveryProfile, MarketSession
 
@@ -127,6 +127,24 @@ class MarketClock:
             next_transition=next_transition,
             holiday=_market_holidays(today.year).get(today),
             early_close=early_minutes is not None,
+        )
+
+    @staticmethod
+    def next_supported_session_at(snapshot: MarketClockSnapshot) -> str:
+        """Return the next premarket/regular discovery time in UTC."""
+
+        local = snapshot.market_time
+        today = local.date()
+        minutes = local.hour * 60 + local.minute
+        if _is_trading_day(today) and minutes < 4 * 60:
+            discovery_day = today
+        else:
+            discovery_day = _next_trading_day(today)
+        return (
+            _at_minutes(discovery_day, 4 * 60)
+            .astimezone(timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
         )
 
     @staticmethod

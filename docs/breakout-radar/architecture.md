@@ -166,7 +166,7 @@ BreakoutRepository
 - market-shape-v3
 - strength-v2
 - canonical-universe-v1
-- breakout-db-v2
+- breakout-db-v3
 
 版本、阈值配置哈希、ticker 集合哈希、session 和 source date 都进入缓存键。
 
@@ -184,14 +184,17 @@ BreakoutRepository
 
 ## 降级顺序
 
-1. Provider 失败：有界重试、合格旧快照、熔断；`unavailable` 或
+1. 休市：Worker 不调用 Provider、不创建 failed scan，也不改变 Provider 健康；
+   API 保留最近 completed 快照并以 `paused` 展示。
+2. Provider 失败：有界重试、合格旧快照、熔断；`unavailable` 或
    `degraded + 空候选` 不发布，保留上一 completed scan。只有无告警的 active
    空结果才作为真实空扫描发布。
-2. 个股行情缺失：该股票组件为 null，降低覆盖与置信度。
-3. Strength 缺失：intrinsic 为 null，priority 重归一。
-4. Market shape 缺失：market_fit 为 null，不补 50。
-5. SQLite 忙或不存在：突破接口 degraded/unavailable，旧接口不受影响。
-6. Range Persistence 缺失：不产生贡献；shadow 记录缺失原因。
+3. 个股行情缺失：该股票组件为 null，降低覆盖与置信度；单只持续事件失败与其余
+   事件隔离，只有未知系统级异常才中止整轮。
+4. Strength 缺失：intrinsic 为 null，priority 重归一。
+5. Market shape 缺失：market_fit 为 null，不补 50。
+6. SQLite 忙或不存在：突破接口 degraded/unavailable，旧接口不受影响。
+7. Range Persistence 缺失：不产生贡献；shadow 记录缺失原因。
 
 ## 文件所有权和波次
 

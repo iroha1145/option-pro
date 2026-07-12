@@ -51,7 +51,7 @@ def _clean_frame(frame: pd.DataFrame, *, require_volume: bool = False) -> pd.Dat
 
 
 def _previous_trading_day(observed: date) -> date:
-    from app.api.market import _is_trading_day
+    from app.services.market_calendar import is_trading_day as _is_trading_day
 
     candidate = observed - timedelta(days=1)
     while not _is_trading_day(candidate):
@@ -62,7 +62,10 @@ def _previous_trading_day(observed: date) -> date:
 def completed_daily_session(cutoff: TemporalCutoff) -> date:
     if cutoff.completed_daily_session is not None:
         return cutoff.completed_daily_session
-    from app.api.market import _early_close_minutes, _is_trading_day
+    from app.services.market_calendar import (
+        early_close_minutes as _early_close_minutes,
+        is_trading_day as _is_trading_day,
+    )
 
     local = cutoff.event_at.astimezone(NEW_YORK)
     observed = local.date()
@@ -85,7 +88,7 @@ def trim_daily_bars(frame: pd.DataFrame, cutoff: TemporalCutoff) -> pd.DataFrame
 
 
 def _regular_close_minutes(day: date) -> int:
-    from app.api.market import _early_close_minutes
+    from app.services.market_calendar import early_close_minutes as _early_close_minutes
 
     return _early_close_minutes(day) or 16 * 60
 
@@ -414,7 +417,7 @@ def compute_time_of_day_rvol(
 
     observed = cumulative_for(current_day)
     history: list[float] = []
-    from app.api.market import _is_trading_day
+    from app.services.market_calendar import is_trading_day as _is_trading_day
 
     for day in sorted(
         {

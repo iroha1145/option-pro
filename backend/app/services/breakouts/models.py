@@ -357,6 +357,10 @@ class MarketShapeSnapshot(_StrictModel):
     days_in_state: int = Field(default=0, ge=0)
     pending_state: Optional[str] = None
     pending_days: int = Field(default=0, ge=0)
+    pending_phase: Optional[str] = None
+    exit_pending_days: int = Field(default=0, ge=0)
+    enter_pending_days: int = Field(default=0, ge=0)
+    exit_confirmed: bool = False
     as_of: AwareDatetime
     input_coverage: dict[str, Any] = Field(default_factory=dict)
     hard_missing: list[str] = Field(default_factory=list)

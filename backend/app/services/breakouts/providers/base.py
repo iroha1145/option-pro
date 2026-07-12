@@ -28,6 +28,12 @@ class ProviderTimeout(ProviderRetryableError):
     code = "provider_timeout"
 
 
+class ProviderTransportError(ProviderRetryableError):
+    """The remote endpoint could not be reached at the transport layer."""
+
+    code = "provider_transport_error"
+
+
 class ProviderPayloadTooLarge(ProviderError):
     code = "provider_payload_too_large"
 

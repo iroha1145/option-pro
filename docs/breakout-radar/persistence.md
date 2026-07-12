@@ -1,6 +1,6 @@
 # SQLite 持久化
 
-数据库版本：breakout-db-v2
+数据库版本：breakout-db-v3
 默认路径：/data/optix.db
 
 ## 连接规则
@@ -28,6 +28,8 @@ API 读连接：
 - breakout_schema_version：版本、校验和、应用时间。
 - breakout_scan_runs：扫描身份、幂等键、session、状态、时间、计数、错误和版本。
 - breakout_provider_snapshots：有界的新鲜与 stale Provider 快照。
+- breakout_migration_quarantine：保存迁移期间损坏或超限事件 JSON 的哈希、
+  有界预览、错误码和重建结果，避免一条坏记录阻塞整库升级。
 - breakout_candidates：规范候选和有界调试字段。
 - breakout_structures：pivot、结构、有效期和 cutoff。
 - breakout_events：事件当前状态、分数、质量、来源、版本，以及
@@ -55,7 +57,7 @@ transition 时间线。
 任一步失败全部回滚。API 永远不读取 running、failed 或 abandoned。Worker
 重启会标记遗留 running 为 abandoned；已有 completed 不受影响。
 
-## 幂等键
+## 幂等键和快照身份
 
 - scan：provider、session、scheduled_at、配置和版本哈希。
 - event：trading_date、ticker、setup_type、pivot_id。
@@ -63,6 +65,10 @@ transition 时间线。
 
 同一扫描重试不会重复事件或转换。前一事件进入终态后，同日新 pivot 产生新
 event_id；仍在跟踪的主事件不会被 Discovery 旁路复制。
+
+Provider 的 `cache_key` 只表示可复用的上游数据，不是数据库主键。数据库
+`snapshot_id` 同时包含 `scan_run_id`、Provider、`provider_cache_key` 和数据时点；
+同一缓存桶的两轮扫描可以复用上游结果，但会得到不同的数据库快照标识。
 
 `event_at` 是兼容字段：已触发事件等于 `triggered_at`，尚未触发事件等于
 `first_seen_at`。普通续扫只更新 `last_seen_at`；只有生命周期真正变化时才更新
@@ -78,8 +84,15 @@ event_id；仍在跟踪的主事件不会被 Discovery 旁路复制。
 
 - Provider 响应最多 2 MB。
 - 单候选调试字段最多 16 KB。
-- JSON 使用 allow_nan=false 并设长度约束。
+- JSON 使用 allow_nan=false 并设长度约束；事件及扫描事件快照上限为 512 KiB。
+- v1/v2 升级时，超限事件先按固定顺序移除可重建的调试字段；损坏或仍超限的
+  记录由结构化列重建最小事件，并写入 quarantine。
 - 原始调试字段默认 24 小时清理。
 - 规范扫描默认保留 30 日。
+- 普通保留清理永远保留每个事件最新的一条 completed 引用；多批次清理后，
+  事件详情、个股历史和 carryover 仍可读取。
 - 事件、转换和研究影子数据保留供重放。
 - 被动 WAL checkpoint，不在活跃读期间强制 truncate。
+
+v1/v2 到 v3 的升级在单一事务中完成，提交前执行 `foreign_key_check`。任何步骤
+失败都会完整回滚，不会留下半套表结构。升级前仍必须制作可恢复备份。

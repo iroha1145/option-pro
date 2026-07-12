@@ -11,6 +11,7 @@ import os
 import random
 import signal
 import socket
+import sqlite3
 import time
 import uuid
 from datetime import datetime, timezone
@@ -19,13 +20,19 @@ from typing import Any, Awaitable, Callable, Mapping
 
 from app.services.breakouts.clock import MarketClock, MarketClockSnapshot
 from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
+from app.services.breakouts.errors import FAILURE_DOMAINS, BreakoutStageError
 from app.services.breakouts.health import check_breakout_health
+from app.services.breakouts.models import MarketSession
+from app.services.breakouts.providers.base import ProviderError
 from app.services.breakouts.repository import (
     DEFAULT_LOCK_NAME,
     BreakoutRepository,
+    BreakoutRepositoryError,
     LeaseLostError,
     SCHEMA_VERSION,
+    SchemaVersionError,
 )
+from pydantic import ValidationError
 
 
 def _utc_now() -> datetime:
@@ -71,6 +78,21 @@ class _ProviderDegradedEmptySnapshotError(_ProviderUnavailableSnapshotError):
     def __init__(self, discovery: Any) -> None:
         super().__init__(discovery)
         self.args = ("degraded discovery snapshot contained no usable candidates",)
+
+
+def _failure_domain(exc: Exception) -> str:
+    explicit = str(getattr(exc, "failure_domain", "") or "")
+    if explicit in FAILURE_DOMAINS:
+        return explicit
+    if isinstance(exc, (ProviderError, _ProviderUnavailableSnapshotError)):
+        return "provider"
+    if str(getattr(exc, "code", "") or "").startswith("provider_"):
+        return "provider"
+    if isinstance(exc, (sqlite3.Error, BreakoutRepositoryError, SchemaVersionError)):
+        return "database"
+    if isinstance(exc, ValidationError):
+        return "configuration"
+    return "local_processing"
 
 
 async def _maybe_await(value: Any) -> Any:
@@ -119,6 +141,8 @@ class BreakoutWorker:
         self._mode = "continuous"
         self._last_completed_scan_id: str | None = None
         self._last_completed_at: datetime | None = None
+        self._wait_status = "idle"
+        self._wait_details: Mapping[str, Any] | None = None
 
     def request_stop(self) -> None:
         self._stop_requested = True
@@ -178,19 +202,23 @@ class BreakoutWorker:
             raise TypeError("scan_service must be callable")
 
         candidates = list(getattr(discovery, "candidates", ()) or ())
+        carryover_limit = min(
+            200,
+            max(1, int(getattr(self.settings, "provider_result_limit", 150))),
+        )
+        expired_due_limit = min(
+            carryover_limit,
+            40,
+            max(1, int(getattr(self.settings, "intraday_enrich_limit", 40))),
+            max(1, int(getattr(self.settings, "expired_due_limit", 40))),
+        )
         carryover_batch = self.repository.load_carryover_events(
             as_of=clock_snapshot.as_of,
             event_ttl_seconds=float(
                 getattr(self.settings, "event_ttl_seconds", 86_400)
             ),
-            limit=min(
-                200,
-                max(1, int(getattr(self.settings, "provider_result_limit", 150))),
-            ),
-            expired_due_limit=min(
-                40,
-                max(1, int(getattr(self.settings, "intraday_enrich_limit", 40))),
-            ),
+            limit=carryover_limit,
+            expired_due_limit=expired_due_limit,
         )
         carryover_events = list(carryover_batch.events)
         previous_events: dict[str, list[Mapping[str, Any]]] = {}
@@ -331,21 +359,47 @@ class BreakoutWorker:
         clock_snapshot: MarketClockSnapshot | None = None,
     ) -> Mapping[str, Any]:
         market = clock_snapshot or self.clock.snapshot()
+        if market.session in {MarketSession.CLOSED, MarketSession.POSTMARKET}:
+            next_session_at = self.clock.next_supported_session_at(market)
+            details = {
+                "runtime_reason": "market_closed",
+                "market_session": market.session.value,
+                "next_session_at": next_session_at,
+            }
+            self._wait_status = "paused"
+            self._wait_details = details
+            self._status("paused", details=details)
+            return {
+                "status": "paused",
+                "reason": "market_closed",
+                "session": market.session.value,
+                "scan_run_id": None,
+                "next_session_at": next_session_at,
+            }
         provider_name = str(getattr(self.settings, "discovery_provider", "tradingview"))
         profile = self.clock.profile_for(market.session)
         versions = self._versions()
-        scan_id = self.repository.begin_scan(
-            provider=provider_name,
-            profile=profile,
-            session=market.session,
-            scheduled_at=market.as_of,
-            config_hash=self._settings_hash(),
-            versions_hash=_stable_hash(versions),
-            versions=versions,
-        )
-        self._status("running", current_scan_id=scan_id)
-        provider = self._provider_instance()
+        scan_id: str | None = None
+        provider: Any = None
         try:
+            try:
+                scan_id = self.repository.begin_scan(
+                    provider=provider_name,
+                    profile=profile,
+                    session=market.session,
+                    scheduled_at=market.as_of,
+                    config_hash=self._settings_hash(),
+                    versions_hash=_stable_hash(versions),
+                    versions=versions,
+                )
+                self._status("running", current_scan_id=scan_id)
+            except Exception as exc:
+                raise BreakoutStageError(
+                    "database",
+                    "scan_initialization_failed",
+                    "failed to initialize breakout scan state",
+                ) from exc
+            provider = self._provider_instance()
             async def discover_and_enrich() -> tuple[Any, Any]:
                 discovery_value = await provider.scan(
                     session=market.session,
@@ -399,6 +453,8 @@ class BreakoutWorker:
             )
             self._last_completed_scan_id = scan_id
             self._last_completed_at = self.clock.now()
+            self._wait_status = "idle"
+            self._wait_details = None
             event_count = len(publication.get("events") or ())
             maintenance: Mapping[str, int] | None = None
             try:
@@ -427,7 +483,13 @@ class BreakoutWorker:
                 "session": market.session.value,
             }
         except LeaseLostError:
-            self.repository.fail_scan(scan_id, "lease_lost", "LeaseLostError", now=self.clock.now())
+            if scan_id is not None:
+                self.repository.fail_scan(
+                    scan_id,
+                    "lease_lost",
+                    "LeaseLostError",
+                    now=self.clock.now(),
+                )
             try:
                 self._status("lease_lost", error_code="lease_lost")
             except Exception:
@@ -435,17 +497,33 @@ class BreakoutWorker:
             raise
         except Exception as exc:
             error_code = str(getattr(exc, "code", "scan_failed"))[:120]
-            self.repository.fail_scan(scan_id, error_code, type(exc).__name__, now=self.clock.now())
-            health = self._provider_health(provider, error_code=error_code)
+            failure_domain = _failure_domain(exc)
+            provider_health_unchanged = failure_domain != "provider"
+            try:
+                if scan_id is not None:
+                    self.repository.fail_scan(
+                        scan_id,
+                        error_code,
+                        type(exc).__name__,
+                        now=self.clock.now(),
+                    )
+            except Exception:
+                pass
             details = {
                 "error_type": type(exc).__name__,
                 "session": market.session.value,
+                "failure_domain": failure_domain,
+                "provider_health_unchanged": provider_health_unchanged,
             }
             provider_warning = getattr(exc, "provider_warning", None)
             if provider_warning:
                 details["provider_warning"] = str(provider_warning)[:120]
+            self._wait_status = "degraded"
+            self._wait_details = details
             try:
-                self.repository.record_provider_health(health, now=self.clock.now())
+                if not provider_health_unchanged and provider is not None:
+                    health = self._provider_health(provider, error_code=error_code)
+                    self.repository.record_provider_health(health, now=self.clock.now())
                 self._status(
                     "degraded",
                     error_code=error_code,
@@ -457,6 +535,8 @@ class BreakoutWorker:
                 "status": "degraded",
                 "scan_run_id": scan_id,
                 "error_code": error_code,
+                "failure_domain": failure_domain,
+                "provider_health_unchanged": provider_health_unchanged,
             }
 
     async def run_once(self) -> Mapping[str, Any]:
@@ -512,7 +592,7 @@ class BreakoutWorker:
             ):
                 self._status("lease_lost", error_code="lease_lost")
                 raise LeaseLostError("worker lease expired while waiting")
-            self._status("idle")
+            self._status(self._wait_status, details=self._wait_details)
 
     async def run_forever(self) -> None:
         """Run on monotonic absolute deadlines until SIGTERM requests a stop."""
@@ -553,9 +633,18 @@ class BreakoutWorker:
                     consecutive_degraded = 0
                 interval = float(self.clock.interval_seconds(market, self.settings))
                 if consecutive_degraded:
-                    interval = min(
-                        interval * (2 ** min(consecutive_degraded, 3)),
-                        float(getattr(self.settings, "scan_interval_closed_seconds")),
+                    degraded_base = max(
+                        interval,
+                        float(
+                            getattr(
+                                self.settings,
+                                "scan_interval_closed_seconds",
+                                interval,
+                            )
+                        ),
+                    )
+                    interval = degraded_base * (
+                        2 ** min(max(consecutive_degraded - 1, 0), 3)
                     )
                 jitter_bound = min(30.0, max(0.0, interval * 0.05))
                 jitter = min(jitter_bound, max(0.0, float(self._jitter(jitter_bound))))

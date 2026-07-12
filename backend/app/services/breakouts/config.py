@@ -34,7 +34,7 @@ class BreakoutSettings(BaseSettings):
         default=2, ge=1, le=3, alias="BREAKOUT_PROVIDER_RETRY_ATTEMPTS"
     )
     provider_retry_after_cap_seconds: float = Field(
-        default=2.0, ge=0, le=10, alias="BREAKOUT_PROVIDER_RETRY_AFTER_CAP_SECONDS"
+        default=2.0, ge=0.1, le=10, alias="BREAKOUT_PROVIDER_RETRY_AFTER_CAP_SECONDS"
     )
     provider_cache_ttl_seconds: int = Field(
         default=60, ge=1, le=900, alias="BREAKOUT_PROVIDER_CACHE_TTL_SECONDS"
@@ -75,6 +75,9 @@ class BreakoutSettings(BaseSettings):
     )
     intraday_enrich_limit: int = Field(
         default=30, ge=1, le=40, alias="BREAKOUT_INTRADAY_ENRICH_LIMIT"
+    )
+    expired_due_limit: int = Field(
+        default=40, ge=1, le=40, alias="BREAKOUT_EXPIRED_DUE_LIMIT"
     )
     scan_interval_premarket_seconds: int = Field(
         default=600, ge=60, le=3600, alias="BREAKOUT_SCAN_INTERVAL_PREMARKET_SECONDS"

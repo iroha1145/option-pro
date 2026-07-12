@@ -97,7 +97,9 @@ def test_offline_provider_to_worker_to_sqlite_to_api_chain(tmp_path, monkeypatch
 
     monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: settings)
     monkeypatch.setattr(breakout_api, "_now", lambda: AS_OF.astimezone(timezone.utc))
-    payload = TestClient(app).get("/api/breakouts/current").json()
+    payload = TestClient(app, base_url="http://localhost").get(
+        "/api/breakouts/current"
+    ).json()
     assert payload["status"] == "active"
     assert payload["events"][0]["ticker"] == "AAPL"
     assert payload["events"][0]["provenance"]["source_snapshot_id"]
