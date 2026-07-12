@@ -30,6 +30,7 @@ def enabled_settings(path) -> CatalystSettings:
         MACROLENS_ALLOW_LOCAL_HTTP=True,
         MACROLENS_READ_KEY_ID="read-key",
         MACROLENS_READ_SECRET=READ_SECRET,
+        MACROLENS_SCHEMA_SHA256="",
         MACROLENS_CACHE_DB_PATH=path,
     )
 

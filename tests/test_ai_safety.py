@@ -63,31 +63,31 @@ def test_terra_defaults_and_runtime_bounds(monkeypatch):
     assert settings.openai_execution_mode == "background"
 
     with pytest.raises(ValidationError):
-        Settings(_env_file=None, openai_reasoning="minimal")
+        Settings(_env_file=None, OPENAI_REASONING="minimal")
     with pytest.raises(ValidationError):
-        Settings(_env_file=None, openai_max_retries=1)
+        Settings(_env_file=None, OPENAI_MAX_RETRIES=1)
     with pytest.raises(ValidationError, match="worker_sync"):
         Settings(
             _env_file=None,
-            openai_require_zdr=True,
-            openai_execution_mode="background",
+            OPENAI_REQUIRE_ZDR=True,
+            OPENAI_EXECUTION_MODE="background",
         )
 
 
 def test_custom_openai_base_url_requires_explicit_opt_in():
     with pytest.raises(ValidationError, match="ALLOW_CUSTOM_OPENAI_BASE_URL"):
-        Settings(_env_file=None, openai_base_url="https://proxy.example/v1")
+        Settings(_env_file=None, OPENAI_BASE_URL="https://proxy.example/v1")
     settings = Settings(
         _env_file=None,
-        openai_base_url="https://proxy.example/v1/",
-        allow_custom_openai_base_url=True,
+        OPENAI_BASE_URL="https://proxy.example/v1/",
+        ALLOW_CUSTOM_OPENAI_BASE_URL=True,
     )
     assert settings.openai_base_url == "https://proxy.example/v1"
     with pytest.raises(ValidationError, match="must use HTTPS"):
         Settings(
             _env_file=None,
-            openai_base_url="http://proxy.example/v1",
-            allow_custom_openai_base_url=True,
+            OPENAI_BASE_URL="http://proxy.example/v1",
+            ALLOW_CUSTOM_OPENAI_BASE_URL=True,
         )
 
 
