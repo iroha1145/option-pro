@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -199,6 +199,29 @@ class BreakoutSettings(BaseSettings):
         extra="ignore",
         populate_by_name=True,
     )
+
+    def __init__(self, **values: Any) -> None:
+        """Keep explicit field-name overrides ahead of environment aliases.
+
+        During settings-source merging, an environment alias and an explicit
+        field-name key can remain distinct.  A value supplied as
+        ``provider_retry_attempts=1`` may then be ignored in favour of
+        ``BREAKOUT_PROVIDER_RETRY_ATTEMPTS`` from the environment.  Normalize
+        explicit field names to their declared aliases before BaseSettings
+        merges sources so all supported dependency versions behave alike.
+        """
+
+        normalized = dict(values)
+        for field_name, field in type(self).model_fields.items():
+            alias = field.alias
+            if field_name not in normalized or not isinstance(alias, str):
+                continue
+            if alias in normalized:
+                raise TypeError(
+                    f"conflicting explicit settings: {field_name!r} and {alias!r}"
+                )
+            normalized[alias] = normalized.pop(field_name)
+        super().__init__(**normalized)
 
     @field_validator("db_path")
     @classmethod

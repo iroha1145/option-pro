@@ -51,6 +51,26 @@ def _run(provider):
     )
 
 
+def test_explicit_settings_override_environment_alias(monkeypatch) -> None:
+    monkeypatch.setenv("BREAKOUT_PROVIDER_RETRY_ATTEMPTS", "2")
+    monkeypatch.setenv("BREAKOUT_PROVIDER_CACHE_TTL_SECONDS", "60")
+    monkeypatch.setenv("BREAKOUT_PROVIDER_MAX_RESPONSE_BYTES", "2000000")
+    monkeypatch.setenv("BREAKOUT_PROVIDER_FAILURE_THRESHOLD", "3")
+
+    settings = BreakoutSettings(
+        _env_file=None,
+        provider_retry_attempts=1,
+        provider_cache_ttl_seconds=1,
+        provider_max_response_bytes=1024,
+        provider_failure_threshold=2,
+    )
+
+    assert settings.provider_retry_attempts == 1
+    assert settings.provider_cache_ttl_seconds == 1
+    assert settings.provider_max_response_bytes == 1024
+    assert settings.provider_failure_threshold == 2
+
+
 def test_429_and_5xx_are_bounded_and_return_unavailable() -> None:
     for status in (429, 503):
         calls = 0
