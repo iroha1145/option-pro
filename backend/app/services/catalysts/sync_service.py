@@ -326,6 +326,25 @@ class CatalystSyncService:
         except CatalystError as error:
             if error.code == "worker_lock_lost":
                 raise
+            if error.code == "projection_payload_conflict":
+                if run_id:
+                    self._abort_run(run_id, error)
+                else:
+                    self._record_error("feed", error)
+                self.repository.require_feed_resync(
+                    resync_from=(
+                        self._clock()
+                        - timedelta(days=self.settings.latest_window_days)
+                    ),
+                    error_code=error.code,
+                    now=self._clock(),
+                )
+                if resync:
+                    return False
+                # Start the bounded generation immediately.  A boundary at
+                # the remote retention edge must not sit idle until the next
+                # worker interval and expire before its first request.
+                return await self._sync_latest_attempt(resync=True)
             if error.code == "updated_after_too_old" and not resync:
                 # The wrapper persists recovery mode and starts the bounded
                 # generation. Do not let a partial incremental staging run

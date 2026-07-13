@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timezone
 
 from app.services.catalysts.errors import CatalystError
+from app.services.catalysts.errors import CatalystRepositoryError
 from app.services.catalysts.client import MacroLensClient
 import httpx
 import pytest
@@ -159,6 +160,60 @@ def test_resync_midpage_failure_keeps_old_stale_snapshot_readable(tmp_path) -> N
     assert repository.get_news(101, as_of=_time(28))["change_sequence"] == 1
     with repository.open_read_connection() as connection:
         assert connection.execute("SELECT count(*) FROM catalyst_staging_items").fetchone()[0] == 0
+
+
+def test_projection_conflict_keeps_its_error_code_while_latching_resync(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    repository.initialize(now=utc(9))
+    old = _seed(repository)
+    client = RecordingLatestClient(
+        [
+            page(
+                token="snapshot-conflict",
+                items=[],
+                cursor=None,
+                has_more=False,
+            ).model_copy(update={"next_updated_after": _time(19)}),
+            page(
+                token="snapshot-conflict-resync",
+                items=[],
+                cursor=None,
+                has_more=False,
+            ).model_copy(update={"next_updated_after": _time(19)}),
+        ]
+    )
+    service = _service(repository, client, _time(19))
+    assert service.acquire()
+
+    def conflict(*args, **kwargs):
+        raise CatalystRepositoryError(
+            "projection_payload_conflict",
+            "fixture immutable projection conflict",
+        )
+
+    monkeypatch.setattr(repository, "publish_latest", conflict)
+    assert not asyncio.run(service.sync_latest())
+    assert client.calls == 2
+    assert client.requests[1]["updated_after"] == _time(12)
+
+    state = repository.sync_state("feed")
+    assert state["resync_required"] == 1
+    assert state["last_error_code"] == "projection_payload_conflict"
+    assert state["current_snapshot_id"] == old["current_snapshot_id"]
+    status = repository.status_snapshot(
+        stale_ttl_seconds=60,
+        feed_interval_seconds=10,
+        action_enabled=False,
+        model="gpt-5.6-terra",
+        reasoning="max",
+        schema_version="macrolens-option-pro-v2",
+        now=_time(19),
+    )
+    assert "projection_payload_conflict" in status["warnings"]
+    assert "updated_after_too_old" not in status["warnings"]
 
 
 def test_resync_snapshot_change_never_publishes_partial_generation(tmp_path) -> None:
