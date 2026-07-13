@@ -129,7 +129,7 @@ def test_point_in_time_job_projection_hides_future_lifecycle_events(tmp_path) ->
         101,
         content_hash="content-hash-101",
         change_sequence=2,
-        contract_schema_version="macrolens-option-pro-v1",
+        contract_schema_version="macrolens-option-pro-v2",
         force=False,
         model="gpt-5.6-terra",
         reasoning="max",
@@ -141,7 +141,7 @@ def test_point_in_time_job_projection_hides_future_lifecycle_events(tmp_path) ->
             101,
             content_hash="content-hash-101",
             change_sequence=2,
-            contract_schema_version="macrolens-option-pro-v1",
+            contract_schema_version="macrolens-option-pro-v2",
             model="gpt-5.6-terra",
             reasoning="max",
             as_of=utc(10, 7),
@@ -373,7 +373,7 @@ def test_source_health_persists_attempt_counters_and_null_disabled_semantics(tmp
         action_enabled=False,
         model="gpt-5.6-terra",
         reasoning="max",
-        schema_version="macrolens-option-pro-v1",
+        schema_version="macrolens-option-pro-v2",
         now=utc(9),
     )
     sources = {item["status"]: item for item in payload["sources"]}
@@ -405,7 +405,7 @@ def test_status_uses_remote_runtime_and_degrades_on_model_or_reasoning_drift(tmp
         action_enabled=True,
         model="gpt-5.6-terra",
         reasoning="max",
-        schema_version="macrolens-option-pro-v1",
+        schema_version="macrolens-option-pro-v2",
         now=utc(10, 5),
     )
     assert status["status"] == "degraded"
@@ -425,7 +425,7 @@ def test_analysis_proxy_idempotency_is_bound_to_news_revision_and_contract(tmp_p
         101,
         content_hash="hash-revision-one",
         change_sequence=1,
-        contract_schema_version="macrolens-option-pro-v1",
+        contract_schema_version="macrolens-option-pro-v2",
         force=False,
         model="gpt-5.6-terra",
         reasoning="max",
@@ -435,7 +435,7 @@ def test_analysis_proxy_idempotency_is_bound_to_news_revision_and_contract(tmp_p
         101,
         content_hash="hash-revision-one",
         change_sequence=1,
-        contract_schema_version="macrolens-option-pro-v1",
+        contract_schema_version="macrolens-option-pro-v2",
         force=False,
         model="gpt-5.6-terra",
         reasoning="max",
@@ -445,7 +445,7 @@ def test_analysis_proxy_idempotency_is_bound_to_news_revision_and_contract(tmp_p
         101,
         content_hash="hash-revision-two",
         change_sequence=2,
-        contract_schema_version="macrolens-option-pro-v1",
+        contract_schema_version="macrolens-option-pro-v2",
         force=False,
         model="gpt-5.6-terra",
         reasoning="max",
@@ -458,8 +458,8 @@ def test_analysis_proxy_idempotency_is_bound_to_news_revision_and_contract(tmp_p
             "SELECT content_hash,change_sequence,contract_schema_version FROM catalyst_analysis_jobs ORDER BY created_at"
         ).fetchall()
     assert [tuple(row) for row in rows] == [
-        ("hash-revision-one", 1, "macrolens-option-pro-v1"),
-        ("hash-revision-two", 2, "macrolens-option-pro-v1"),
+        ("hash-revision-one", 1, "macrolens-option-pro-v2"),
+        ("hash-revision-two", 2, "macrolens-option-pro-v2"),
     ]
 
 
@@ -483,7 +483,7 @@ def test_remote_and_source_health_cannot_be_reported_as_active(tmp_path) -> None
         action_enabled=True,
         model="gpt-5.6-terra",
         reasoning="max",
-        schema_version="macrolens-option-pro-v1",
+        schema_version="macrolens-option-pro-v2",
         now=utc(10, 5),
     )
     assert degraded["status"] == "degraded"
@@ -506,7 +506,7 @@ def test_remote_and_source_health_cannot_be_reported_as_active(tmp_path) -> None
         action_enabled=True,
         model="gpt-5.6-terra",
         reasoning="max",
-        schema_version="macrolens-option-pro-v1",
+        schema_version="macrolens-option-pro-v2",
         now=utc(10, 7),
     )
     assert unavailable["status"] == "stale"

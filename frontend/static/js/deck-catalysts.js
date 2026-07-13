@@ -505,6 +505,7 @@
         : unknownSubmission ? "提交结果待核对"
         : budgetMissing ? "分析预算未配置"
           : actionMissing ? "分析功能未启用"
+            : snapshotUnavailable ? "热点快照暂不可用"
             : cooldown ? "分析冷却中"
               : retryable ? "重试同一不可变快照"
                 : hasNew ? `基于 ${Math.round(preparedCount)} 个新热点重新分析`

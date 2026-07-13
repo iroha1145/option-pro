@@ -31,6 +31,7 @@ from .focus_models import FocusContextDraft, FocusContextResponse
 
 DATABASE_VERSION = "catalyst-cache-v4"
 SQLITE_USER_VERSION = 4
+FOCUS_PRODUCER_WORKER_PREFIX = "focus-context-producer:"
 _V1_DATABASE_VERSION = "catalyst-cache-v1"
 _V1_SCHEMA_CHECKSUM = "72f57f049e66986e7f0dd19e71eff0f772c88b13d5be1d99cbb6d0fe9423c951"
 _V2_DATABASE_VERSION = "catalyst-cache-v2"
@@ -749,14 +750,41 @@ class CatalystRepository:
         draft: FocusContextDraft,
         *,
         now: datetime | None = None,
+        lock_name: str | None = None,
+        owner_id: str | None = None,
+        fencing_token: int | None = None,
     ) -> FocusContextResponse:
         """Publish one immutable focus revision in a single transaction."""
 
         observed = now or _now()
+        lease_values = (lock_name, owner_id, fencing_token)
+        if any(value is not None for value in lease_values) and not all(
+            value is not None for value in lease_values
+        ):
+            raise ValueError("focus publication lease fields must be supplied together")
         material = draft.model_dump(mode="json")
         content_hash = hashlib.sha256(_json(material).encode("utf-8")).hexdigest()
         with self._write() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            if lock_name is not None:
+                lease = connection.execute(
+                    """
+                    SELECT owner_id,fencing_token,lease_until
+                    FROM catalyst_worker_lock WHERE lock_name=?
+                    """,
+                    (lock_name,),
+                ).fetchone()
+                if (
+                    lease is None
+                    or lease["owner_id"] != owner_id
+                    or int(lease["fencing_token"]) != int(fencing_token or 0)
+                    or (_as_utc(lease["lease_until"]) or observed) <= observed
+                ):
+                    connection.rollback()
+                    raise CatalystRepositoryError(
+                        "focus_producer_lease_lost",
+                        "Focus producer lease was lost before publication",
+                    )
             current = connection.execute(
                 """
                 SELECT revision,as_of,data_through,content_hash,raw_json
@@ -2305,7 +2333,13 @@ class CatalystRepository:
             remote_health_status = states.get("health", {}).get("remote_status")
             source_statuses = {str(source.get("status") or "") for source in sources}
             worker = connection.execute(
-                "SELECT worker_id,status,heartbeat_at,details_json FROM catalyst_worker_status ORDER BY heartbeat_at DESC LIMIT 1"
+                """
+                SELECT worker_id,status,heartbeat_at,details_json
+                FROM catalyst_worker_status
+                WHERE worker_id NOT LIKE ?
+                ORDER BY heartbeat_at DESC LIMIT 1
+                """,
+                (f"{FOCUS_PRODUCER_WORKER_PREFIX}%",),
             ).fetchone()
             runtime = connection.execute(
                 "SELECT * FROM catalyst_remote_runtime WHERE singleton=1"
@@ -3676,7 +3710,12 @@ class CatalystRepository:
         schema = self.check_schema()
         with self._read() as connection:
             worker = connection.execute(
-                "SELECT status,heartbeat_at FROM catalyst_worker_status ORDER BY heartbeat_at DESC LIMIT 1"
+                """
+                SELECT status,heartbeat_at FROM catalyst_worker_status
+                WHERE worker_id NOT LIKE ?
+                ORDER BY heartbeat_at DESC LIMIT 1
+                """,
+                (f"{FOCUS_PRODUCER_WORKER_PREFIX}%",),
             ).fetchone()
             lock = connection.execute(
                 "SELECT lease_until FROM catalyst_worker_lock WHERE lock_name='catalyst-sync-worker'"
@@ -3698,6 +3737,57 @@ class CatalystRepository:
             "heartbeat_at": _iso(heartbeat_at),
             "heartbeat_age_seconds": heartbeat_age,
             "lock_live": lock_ok,
+            "schema_version": schema["schema_version"],
+            "schema_checksum": schema["schema_checksum"],
+        }
+
+    def focus_producer_health(
+        self,
+        *,
+        heartbeat_ttl_seconds: int,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Return health for the focus producer without affecting sync health."""
+
+        observed = now or _now()
+        schema = self.check_schema()
+        with self._read() as connection:
+            worker = connection.execute(
+                """
+                SELECT status,heartbeat_at,details_json
+                FROM catalyst_worker_status
+                WHERE worker_id LIKE ?
+                ORDER BY heartbeat_at DESC LIMIT 1
+                """,
+                (f"{FOCUS_PRODUCER_WORKER_PREFIX}%",),
+            ).fetchone()
+            lock = connection.execute(
+                """
+                SELECT lease_until FROM catalyst_worker_lock
+                WHERE lock_name='focus-context-producer'
+                """
+            ).fetchone()
+        heartbeat_at = _as_utc(worker["heartbeat_at"]) if worker else None
+        lease_until = _as_utc(lock["lease_until"]) if lock else None
+        heartbeat_age = (
+            max(0.0, (observed - heartbeat_at).total_seconds())
+            if heartbeat_at is not None
+            else None
+        )
+        heartbeat_ok = (
+            heartbeat_age is not None
+            and heartbeat_age <= heartbeat_ttl_seconds
+        )
+        lock_ok = lease_until is not None and lease_until > observed
+        return {
+            "healthy": bool(
+                schema["quick_check"] == "ok" and heartbeat_ok and lock_ok
+            ),
+            "status": worker["status"] if worker else "not_started",
+            "heartbeat_at": _iso(heartbeat_at),
+            "heartbeat_age_seconds": heartbeat_age,
+            "lock_live": lock_ok,
+            "details": _loads(worker["details_json"], {}) if worker else {},
             "schema_version": schema["schema_version"],
             "schema_checksum": schema["schema_checksum"],
         }

@@ -16,7 +16,7 @@ from .repository import CatalystRepository, _as_utc
 FOCUS_CONTRACT_PATH = (
     Path(__file__).resolve().parents[4]
     / "contracts"
-    / "option-pro-macrolens-focus-v1.json"
+    / "option-pro-macrolens-focus-v2.json"
 )
 
 
@@ -35,9 +35,9 @@ def _market_session(as_of: datetime) -> str:
     close = early_close_minutes(observed.date()) or 16 * 60
     if minute < 9 * 60 + 30:
         return "premarket"
-    if minute <= close:
+    if minute < close:
         return "regular"
-    if minute <= 20 * 60:
+    if minute < 20 * 60:
         return "after_hours"
     return "closed"
 

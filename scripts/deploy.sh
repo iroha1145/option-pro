@@ -129,6 +129,10 @@ macrolens_action_secret="${MACROLENS_ACTION_SECRET:-$(env_value MACROLENS_ACTION
 macrolens_schema_sha256="${MACROLENS_SCHEMA_SHA256:-$(env_value MACROLENS_SCHEMA_SHA256)}"
 deploy_require_catalyst="${DEPLOY_REQUIRE_CATALYST:-$(env_value DEPLOY_REQUIRE_CATALYST)}"
 deploy_require_catalyst="${deploy_require_catalyst:-false}"
+focus_producer_enabled="${FOCUS_PRODUCER_ENABLED:-$(env_value FOCUS_PRODUCER_ENABLED)}"
+focus_producer_enabled="${focus_producer_enabled:-true}"
+deploy_require_focus="${DEPLOY_REQUIRE_FOCUS_PRODUCER:-$(env_value DEPLOY_REQUIRE_FOCUS_PRODUCER)}"
+deploy_require_focus="${deploy_require_focus:-false}"
 
 if ! is_loopback_bind "$host_bind" && [ -z "$auth_token" ] && ! is_truthy "$allow_insecure"; then
     echo "Refusing non-loopback HOST_BIND without APP_AUTH_TOKEN." >&2
@@ -200,7 +204,7 @@ if is_truthy "$deploy_require_catalyst"; then
         echo "DEPLOY_REQUIRE_CATALYST=true requires APP_AUTH_TOKEN for analysis actions." >&2
         exit 1
     fi
-    contract_path="${ROOT_DIR}/contracts/macrolens-option-pro-v1.json"
+    contract_path="${ROOT_DIR}/contracts/macrolens-option-pro-v2.json"
     if ! reviewed_contract_sha256="$(file_sha256 "$contract_path")"; then
         echo "The reviewed MacroLens integration contract is missing or unreadable." >&2
         exit 1
@@ -209,6 +213,10 @@ if is_truthy "$deploy_require_catalyst"; then
         echo "MACROLENS_SCHEMA_SHA256 does not match the reviewed integration contract." >&2
         exit 1
     fi
+fi
+if is_truthy "$deploy_require_focus" && ! is_truthy "$focus_producer_enabled"; then
+    echo "DEPLOY_REQUIRE_FOCUS_PRODUCER=true requires FOCUS_PRODUCER_ENABLED=true." >&2
+    exit 1
 fi
 
 if git rev-parse --verify HEAD >/dev/null 2>&1; then
@@ -232,7 +240,7 @@ docker compose build --pull backend
 # one deployment unit instead of exposing a mixed checkout/image version.
 if ! docker compose up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180; then
     docker compose ps >&2 || true
-    docker compose logs --tail=200 backend >&2 || true
+    docker compose logs --tail=200 backend ai-worker catalyst-sync-worker focus-context-producer breakout-worker >&2 || true
     exit 1
 fi
 
@@ -409,7 +417,7 @@ for attempt in range(attempts):
         time.sleep(2)
 
 assert payload is not None
-assert payload["schema_version"] == "macrolens-option-pro-v1"
+assert payload["schema_version"] == "macrolens-option-pro-v2"
 assert payload["expected_model"] == "gpt-5.6-terra"
 assert payload["expected_reasoning"] == "max"
 if required:
@@ -424,4 +432,28 @@ elif not enabled:
     assert payload["enabled"] is False
 '
 
-echo "Deployment passed readiness, version, AI, Catalyst, and configured Breakout Radar checks."
+focus_worker_health="$(
+    docker compose exec -T focus-context-producer \
+        python -m app.services.catalysts.focus_worker --healthcheck
+)"
+docker compose exec -T \
+    -e "FOCUS_WORKER_HEALTH=${focus_worker_health}" \
+    -e "EXPECTED_FOCUS_ENABLED=${focus_producer_enabled}" \
+    -e "DEPLOY_REQUIRE_FOCUS=${deploy_require_focus}" \
+    backend python -c '
+import json, os
+p = json.loads(os.environ["FOCUS_WORKER_HEALTH"])
+enabled = os.environ["EXPECTED_FOCUS_ENABLED"].lower() in {"1", "true", "yes"}
+required = os.environ["DEPLOY_REQUIRE_FOCUS"].lower() in {"1", "true", "yes"}
+assert p["ready_dependency"] is False
+if required:
+    assert enabled is True
+    assert p["enabled"] is True
+    assert p["healthy"] is True
+    assert p["contract"]["valid"] is True
+elif not enabled:
+    assert p["status"] == "disabled"
+    assert p["healthy"] is True
+'
+
+echo "Deployment passed readiness, version, AI, Catalyst, focus producer, and configured Breakout Radar checks."

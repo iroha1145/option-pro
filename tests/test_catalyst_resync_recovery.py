@@ -150,7 +150,7 @@ def test_resync_midpage_failure_keeps_old_stale_snapshot_readable(tmp_path) -> N
         action_enabled=False,
         model="gpt-5.6-terra",
         reasoning="max",
-        schema_version="macrolens-option-pro-v1",
+        schema_version="macrolens-option-pro-v2",
         now=_time(28),
     )
     assert status["status"] == "stale"

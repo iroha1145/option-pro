@@ -1,7 +1,9 @@
 # Catalyst Integration v1 契约
 
 路径前缀：/api/integrations/option-pro/v1  
-契约文件：contracts/macrolens-option-pro-v1.json  
+当前契约文件：contracts/macrolens-option-pro-v2.json
+
+保留的旧版契约：contracts/macrolens-option-pro-v1.json
 所有模型 extra=forbid、allow_inf_nan=false，时间带时区并统一为 UTC。
 
 ## 端点

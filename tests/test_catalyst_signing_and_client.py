@@ -39,14 +39,14 @@ ACTION_SECRET = "action-secret-0123456789abcdef-01"
 
 
 def test_pinned_contract_copy_has_the_reviewed_byte_digest() -> None:
-    path = Path(__file__).resolve().parents[1] / "contracts" / "macrolens-option-pro-v1.json"
+    path = Path(__file__).resolve().parents[1] / "contracts" / "macrolens-option-pro-v2.json"
     raw = path.read_bytes()
     assert hashlib.sha256(raw).hexdigest() == PINNED_CONTRACT_SHA256
-    assert json.loads(raw)["schema_version"] == "macrolens-option-pro-v1"
+    assert json.loads(raw)["schema_version"] == "macrolens-option-pro-v2"
 
 
 def test_remote_models_match_the_pinned_contract_schemas() -> None:
-    path = Path(__file__).resolve().parents[1] / "contracts" / "macrolens-option-pro-v1.json"
+    path = Path(__file__).resolve().parents[1] / "contracts" / "macrolens-option-pro-v2.json"
     models = json.loads(path.read_bytes())["models"]
     assert NewsImpactAnalysis.model_json_schema() == models["NewsImpactAnalysis"]
     assert CatalystBatchRequest.model_json_schema() == models["CatalystBatchRequest"]
@@ -163,7 +163,7 @@ def test_client_signs_actual_empty_body_and_validates_pinned_envelope() -> None:
         return httpx.Response(
             200,
             json={
-                "schema_version": "macrolens-option-pro-v1",
+                "schema_version": "macrolens-option-pro-v2",
                 "schema_sha256": SCHEMA_SHA,
                 "request_id": "request-1234",
                 "status": "ok",
@@ -211,7 +211,7 @@ def test_analysis_create_pins_the_exact_cached_news_revision() -> None:
         return httpx.Response(
             202,
             json={
-                "schema_version": "macrolens-option-pro-v1",
+                "schema_version": "macrolens-option-pro-v2",
                 "schema_sha256": SCHEMA_SHA,
                 "request_id": "request-1234",
                 "job_id": "remote-job-1234",
@@ -269,7 +269,7 @@ def test_market_focus_retry_is_action_signed_and_sends_only_remote_parent() -> N
         return httpx.Response(
             202,
             json={
-                "schema_version": "macrolens-option-pro-v1",
+                "schema_version": "macrolens-option-pro-v2",
                 "schema_sha256": SCHEMA_SHA,
                 "request_id": "request-focus-retry",
                 "cycle": {
@@ -382,7 +382,7 @@ def test_client_rejects_schema_digest_mismatch_without_exposing_body() -> None:
         return httpx.Response(
             200,
             json={
-                "schema_version": "macrolens-option-pro-v1",
+                "schema_version": "macrolens-option-pro-v2",
                 "schema_sha256": "b" * 64,
                 "request_id": "request-1234",
                 "snapshot_token": "snapshot-1234",
@@ -426,7 +426,7 @@ def test_each_transport_retry_uses_a_fresh_nonce() -> None:
         return httpx.Response(
             200,
             json={
-                "schema_version": "macrolens-option-pro-v1",
+                "schema_version": "macrolens-option-pro-v2",
                 "schema_sha256": SCHEMA_SHA,
                 "request_id": "request-1234",
                 "status": "ok",

@@ -114,7 +114,7 @@ class CatalystSettings(BaseSettings):
     )
 
     schema_version: str = Field(
-        default="macrolens-option-pro-v1", alias="MACROLENS_SCHEMA_VERSION"
+        default="macrolens-option-pro-v2", alias="MACROLENS_SCHEMA_VERSION"
     )
     schema_sha256: str = Field(default="", alias="MACROLENS_SCHEMA_SHA256", max_length=64)
     model: str = Field(default="gpt-5.6-terra", alias="OPENAI_MODEL", max_length=120)

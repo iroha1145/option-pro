@@ -1494,6 +1494,9 @@ def _scan_sync(
                         breakout_settings.range_persistence_final_weight_cap
                     ),
                 )
+            range_context[ticker]["daily_data_through"] = (
+                completed_cutoff.astimezone(timezone.utc).isoformat()
+            )
         except Exception:
             skipped["data_error"] += 1
 
@@ -1551,6 +1554,7 @@ def _scan_sync(
             "universe_member": True,
             "universe_version": universe_version,
             "universe_as_of": universe_as_of,
+            "daily_data_through": item.get("daily_data_through"),
         }
         for item in focus_ranked
         if item.get("ticker")
@@ -1671,6 +1675,8 @@ async def scan_strength(
     min_price: float = 5.0,
     min_avg_dollar_volume: float = 10_000_000,
     include_options: bool = True,
+    _include_focus_rows: bool = False,
+    _publish_focus: bool = False,
 ) -> dict[str, Any]:
     settings = get_settings()
     from app.services.breakouts.config import get_breakout_settings
@@ -1749,28 +1755,33 @@ async def scan_strength(
         STRENGTH_CACHE_TTL_SECONDS,
         produce,
     )
-    try:
-        from app.services.catalysts.focus_publisher import (
-            publish_focus_from_strength_payload,
-        )
+    if _publish_focus:
+        try:
+            from app.services.catalysts.focus_publisher import (
+                publish_focus_from_strength_payload,
+            )
 
-        await asyncio.to_thread(publish_focus_from_strength_payload, payload)
-    except Exception as error:
-        # Focus context is a display-only sidecar. A local cache/schema issue
-        # must never change the existing strength response or its scores.
-        global _focus_publish_warning_deadline
-        observed = monotonic()
-        if observed >= _focus_publish_warning_deadline:
-            _focus_publish_warning_deadline = (
-                observed + _FOCUS_PUBLISH_WARNING_INTERVAL_SECONDS
-            )
-            _LOGGER.warning(
-                "focus_context_publish_failed error_type=%s",
-                type(error).__name__,
-            )
+            await asyncio.to_thread(publish_focus_from_strength_payload, payload)
+        except Exception as error:
+            # Focus context is a display-only sidecar. A local cache/schema
+            # issue must never change the existing strength response/scores.
+            global _focus_publish_warning_deadline
+            observed = monotonic()
+            if observed >= _focus_publish_warning_deadline:
+                _focus_publish_warning_deadline = (
+                    observed + _FOCUS_PUBLISH_WARNING_INTERVAL_SECONDS
+                )
+                _LOGGER.warning(
+                    "focus_context_publish_failed error_type=%s",
+                    type(error).__name__,
+                )
     public_payload = {
         key: value for key, value in payload.items() if key != "_focus_rows"
     }
+    if _include_focus_rows:
+        # Server-side focus production needs the view-independent canonical
+        # rows. The HTTP route never enables this private return field.
+        public_payload["_focus_rows"] = list(payload.get("_focus_rows") or [])
     return {
         **public_payload,
         "_cached": was_cached,

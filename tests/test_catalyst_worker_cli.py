@@ -41,7 +41,7 @@ def contract_fixture(path) -> str:
             {
                 "contract": "fixture",
                 "models": {},
-                "schema_version": "macrolens-option-pro-v1",
+                "schema_version": "macrolens-option-pro-v2",
             },
             indent=2,
             sort_keys=True,
@@ -59,7 +59,7 @@ def test_disabled_health_is_healthy_without_database_or_remote(tmp_path) -> None
         "healthy": True,
         "status": "disabled",
         "enabled": False,
-        "schema_version": "macrolens-option-pro-v1",
+        "schema_version": "macrolens-option-pro-v2",
         "contract": {"status": "not_checked", "valid": None},
         "database": {"status": "not_checked"},
         "remote_checked": False,

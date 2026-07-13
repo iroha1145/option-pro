@@ -301,7 +301,7 @@ class _FrozenDateTime(datetime):
 
 
 def test_focus_contract_is_exact_model_schema_and_pinned_digest() -> None:
-    path = Path(__file__).resolve().parents[1] / "contracts" / "option-pro-macrolens-focus-v1.json"
+    path = Path(__file__).resolve().parents[1] / "contracts" / "option-pro-macrolens-focus-v2.json"
     raw = path.read_bytes()
     assert hashlib.sha256(raw).hexdigest() == FOCUS_SCHEMA_SHA256
     assert json.loads(raw) == FocusContextResponse.model_json_schema()

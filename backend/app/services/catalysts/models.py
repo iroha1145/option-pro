@@ -16,7 +16,7 @@ from pydantic import (
 )
 
 
-SCHEMA_VERSION = "macrolens-option-pro-v1"
+SCHEMA_VERSION = "macrolens-option-pro-v2"
 TICKER_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.^/_-]{0,19}$")
 ContractTicker = Annotated[
     str,
@@ -123,6 +123,17 @@ class AffectedCommodityImpact(StrictModel):
     reason: str = Field(min_length=1, max_length=2000)
 
 
+class PublicTickerValidation(StrictModel):
+    ticker: ContractTicker
+    validation_status: Literal[
+        "canonical", "valid_external", "ambiguous", "invalid", "unverified"
+    ]
+    validated_at: Optional[AwareDatetime] = None
+    focus_revision: Optional[int] = Field(default=None, ge=1)
+    universe_version: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    association_method: Literal["llm_inference"] = "llm_inference"
+
+
 class NewsImpactAnalysis(StrictModel):
     title_zh: str = Field(min_length=1, max_length=500)
     headline_summary: str = Field(min_length=1, max_length=2000)
@@ -165,6 +176,10 @@ class RemoteAnalysis(NewsImpactAnalysis):
     schema_version: str = Field(min_length=1, max_length=100)
     analyzed_at: AwareDatetime
     available_at: AwareDatetime
+    stock_validations: list[PublicTickerValidation] = Field(
+        default_factory=list,
+        max_length=50,
+    )
 
 
 class ContractEnvelope(StrictModel):
@@ -291,6 +306,15 @@ class ComponentHealth(StrictModel):
     raw_count: Optional[int] = Field(default=None, ge=0)
     inserted_count: Optional[int] = Field(default=None, ge=0)
     duplicates_count: Optional[int] = Field(default=None, ge=0)
+    source_fetch_status: Optional[
+        Literal["ok", "degraded", "unavailable", "not_configured", "disabled"]
+    ] = None
+    news_persistence_status: Optional[
+        Literal["ok", "degraded", "unavailable", "not_configured", "disabled"]
+    ] = None
+    event_projection_status: Optional[
+        Literal["ok", "degraded", "unavailable", "not_configured", "disabled"]
+    ] = None
     detail: Optional[str] = Field(default=None, max_length=500)
 
 
@@ -441,6 +465,10 @@ class PublicFocusTickerAssessment(StrictModel):
     summary: str = Field(min_length=1, max_length=1000)
     risks: list[str] = Field(default_factory=list, max_length=8)
     insufficient_evidence: bool
+    supporting_weight: float = Field(default=0.0, ge=0)
+    conflicting_weight: float = Field(default=0.0, ge=0)
+    conflict_ratio: float = Field(default=0.0, ge=0, le=1)
+    effective_reliability: float = Field(default=0.0, ge=0, le=1)
     weighted_catalyst_context: Optional[float] = Field(
         default=None, ge=-100, le=100
     )
@@ -453,6 +481,8 @@ class PublicFocusTickerAssessment(StrictModel):
             raise ValueError(
                 "weighted_catalyst_context must be null when evidence is insufficient"
             )
+        if set(self.supporting_event_ids) & set(self.conflicting_event_ids):
+            raise ValueError("supporting and conflicting evidence must be disjoint")
         return self
 
 

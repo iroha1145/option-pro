@@ -8,9 +8,9 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 from .models import TICKER_PATTERN
 
 
-FOCUS_SCHEMA_VERSION = "option-pro-macrolens-focus-v1"
-# Updated together with contracts/option-pro-macrolens-focus-v1.json.
-FOCUS_SCHEMA_SHA256 = "43e3e90b8436cc4dff54262222ec3bf4655c2357273cd01ba2f5a3305a889a19"
+FOCUS_SCHEMA_VERSION = "option-pro-macrolens-focus-v2"
+# Updated together with contracts/option-pro-macrolens-focus-v2.json.
+FOCUS_SCHEMA_SHA256 = "fbc646433375bc5657ec1dcaf0f980c14191390dabe8468129fdf71f78d5cade"
 FocusTicker = Annotated[
     str,
     Field(min_length=1, max_length=20, pattern=TICKER_PATTERN.pattern),
@@ -27,12 +27,24 @@ class FocusSymbol(FocusModel):
     data_status: Literal["active", "stale"] = "active"
     universe_reasons: list[str] = Field(min_length=1, max_length=12)
     dollar_volume_rank: Optional[int] = Field(default=None, ge=1)
+    dollar_volume: Optional[float] = Field(default=None, ge=0)
+    dollar_volume_basis: Literal[
+        "intraday_completed_bars",
+        "previous_complete_session",
+        "adv20_completed_sessions",
+        "unavailable",
+    ] = "unavailable"
     session_change_pct: Optional[float] = None
     rvol_time_of_day: Optional[float] = Field(default=None, ge=0)
     breakout_state: Optional[str] = Field(default=None, max_length=60)
     sector_id: Optional[str] = Field(default=None, max_length=120)
     as_of: AwareDatetime
+    data_through: Optional[AwareDatetime] = None
     data_quality: Optional[float] = Field(default=None, ge=0, le=1)
+    source_status: Literal[
+        "active", "degraded", "fallback", "unavailable", "stale"
+    ] = "unavailable"
+    data_source: Optional[str] = Field(default=None, max_length=80)
 
     @field_validator("ticker", mode="before")
     @classmethod

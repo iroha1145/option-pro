@@ -19,9 +19,9 @@ from .sync_service import CatalystSyncService
 
 
 logger = logging.getLogger("optix.catalysts.worker")
-CONTRACT_PATH = Path(__file__).resolve().parents[4] / "contracts" / "macrolens-option-pro-v1.json"
+CONTRACT_PATH = Path(__file__).resolve().parents[4] / "contracts" / "macrolens-option-pro-v2.json"
 # Updated only when the reviewed, byte-identical contract changes in both repos.
-PINNED_CONTRACT_SHA256 = "d7fabb936066f4340265551d28d8cd98a384ca3faee5b483a3646e8cd6d4e9f5"
+PINNED_CONTRACT_SHA256 = "29d65fc52d1d9c4a8cb3c665cb0dbaf2cf6ee6d3d91f2e16b16b0a480a65209b"
 
 
 def _contract_health(

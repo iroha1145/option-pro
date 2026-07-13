@@ -50,12 +50,20 @@ def _value(row: Mapping[str, Any], *names: str) -> Any:
 
 
 def _dollar_volume(row: Mapping[str, Any], market_session: str) -> float | None:
-    if market_session == "regular":
+    explicit_basis = str(row.get("_dollar_volume_basis") or "")
+    if explicit_basis == "intraday_completed_bars":
         intraday = _finite(
             _value(row, "cumulative_dollar_volume", "current_dollar_volume")
         )
         if intraday is not None:
             return intraday
+    if market_session in {"regular", "after_hours"}:
+        intraday = _finite(
+            _value(row, "cumulative_dollar_volume", "current_dollar_volume")
+        )
+        if intraday is not None:
+            return intraday
+    if market_session == "regular":
         # A daily-only canonical scan cannot honestly manufacture an intraday
         # cumulative value. Fall back to the last complete session/ADV20 so the
         # pool remains useful while preserving a deterministic dollar-volume
@@ -78,6 +86,33 @@ def _dollar_volume(row: Mapping[str, Any], market_session: str) -> float | None:
             "average_dollar_volume",
         )
     )
+
+
+def _dollar_volume_basis(row: Mapping[str, Any], market_session: str) -> str:
+    explicit = str(row.get("_dollar_volume_basis") or "")
+    allowed = {
+        "intraday_completed_bars",
+        "previous_complete_session",
+        "adv20_completed_sessions",
+        "unavailable",
+    }
+    if explicit in allowed:
+        return explicit
+    if market_session in {"regular", "after_hours"} and _finite(
+        _value(row, "cumulative_dollar_volume", "current_dollar_volume")
+    ) is not None:
+        return "intraday_completed_bars"
+    if _finite(
+        _value(
+            row,
+            "previous_session_dollar_volume",
+            "last_complete_session_dollar_volume",
+        )
+    ) is not None:
+        return "previous_complete_session"
+    if _finite(_value(row, "avg_dollar_volume_20d", "average_dollar_volume")) is not None:
+        return "adv20_completed_sessions"
+    return "unavailable"
 
 
 def _normalized_quality(value: Any) -> float | None:
@@ -104,6 +139,14 @@ def _as_utc(value: Any, fallback: datetime) -> datetime:
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         return fallback
     return parsed.astimezone(timezone.utc)
+
+
+def _optional_utc(value: Any) -> datetime | None:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    sentinel = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    parsed = _as_utc(value, sentinel)
+    return None if parsed == sentinel else parsed
 
 
 def build_focus_context(
@@ -181,6 +224,13 @@ def build_focus_context(
             "as_of": prior.as_of if prior else as_of,
             "sector_id": prior.sector_id if prior else None,
             "validation_status": prior.validation_status if prior else "unverified",
+            "_dollar_volume": prior.dollar_volume if prior else None,
+            "_dollar_volume_basis": (
+                prior.dollar_volume_basis if prior else "unavailable"
+            ),
+            "_data_through": prior.data_through if prior else None,
+            "_source_status": prior.source_status if prior else "unavailable",
+            "_data_source": prior.data_source if prior else None,
         }
 
     canonical = {
@@ -196,13 +246,22 @@ def build_focus_context(
 
     ranked = sorted(
         (
-            (ticker, value)
+            (ticker, value, _dollar_volume_basis(row, market_session))
             for ticker, row in rows.items()
             if (value := _dollar_volume(row, market_session)) is not None
         ),
-        key=lambda item: (-item[1], item[0]),
+        key=lambda item: (
+            0
+            if market_session in {"regular", "after_hours"}
+            and item[2] == "intraday_completed_bars"
+            else 1,
+            -item[1],
+            item[0],
+        ),
     )
-    dollar_ranks = {ticker: index for index, (ticker, _) in enumerate(ranked, 1)}
+    dollar_ranks = {
+        ticker: index for index, (ticker, _value, _basis) in enumerate(ranked, 1)
+    }
     reasons: dict[str, set[str]] = {ticker: set() for ticker in rows}
     for ticker, rank in dollar_ranks.items():
         if rank <= settings.dollar_volume_count:
@@ -324,6 +383,16 @@ def build_focus_context(
                     reasons[ticker], key=lambda value: (reason_order.get(value, 99), value)
                 ),
                 dollar_volume_rank=dollar_ranks.get(ticker),
+                dollar_volume=(
+                    prior.dollar_volume
+                    if stale and prior is not None
+                    else _finite(
+                        row.get("_dollar_volume")
+                        if row.get("_dollar_volume") is not None
+                        else _dollar_volume(row, market_session)
+                    )
+                ),
+                dollar_volume_basis=_dollar_volume_basis(row, market_session),
                 session_change_pct=(
                     None if stale else _finite(_value(row, "session_change_pct", "change_pct"))
                 ),
@@ -341,7 +410,20 @@ def build_focus_context(
                     else None
                 ),
                 as_of=_as_utc(_value(row, "as_of", "universe_as_of"), as_of),
+                data_through=_optional_utc(
+                    row.get("_data_through") or _value(row, "data_through")
+                ),
                 data_quality=None if stale else _normalized_quality(_value(row, "data_quality")),
+                source_status=(
+                    "stale"
+                    if stale
+                    else str(row.get("_source_status") or "unavailable")
+                ),
+                data_source=(
+                    str(row.get("_data_source"))[:80]
+                    if row.get("_data_source")
+                    else None
+                ),
             )
         )
 

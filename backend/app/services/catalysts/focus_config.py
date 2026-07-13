@@ -56,7 +56,7 @@ class FocusContextSettings(BaseSettings):
     strength_count: int = Field(default=10, ge=0, le=100, alias="FOCUS_STRENGTH_COUNT")
     max_symbols: int = Field(default=40, ge=1, le=200, alias="FOCUS_MAX_SYMBOLS")
     enter_dollar_volume_rank: int = Field(
-        default=15, ge=1, le=200, alias="FOCUS_ENTER_DOLLAR_VOLUME_RANK"
+        default=20, ge=1, le=200, alias="FOCUS_ENTER_DOLLAR_VOLUME_RANK"
     )
     retain_dollar_volume_rank: int = Field(
         default=30, ge=1, le=500, alias="FOCUS_RETAIN_DOLLAR_VOLUME_RANK"
@@ -66,6 +66,39 @@ class FocusContextSettings(BaseSettings):
     )
     refresh_seconds: int = Field(
         default=1800, ge=60, le=86400, alias="FOCUS_CONTEXT_REFRESH_SECONDS"
+    )
+    producer_enabled: bool = Field(
+        default=True, alias="FOCUS_PRODUCER_ENABLED"
+    )
+    producer_interval_seconds: int = Field(
+        default=1800,
+        ge=1800,
+        le=1800,
+        alias="FOCUS_PRODUCER_INTERVAL_SECONDS",
+    )
+    producer_candidate_limit: int = Field(
+        default=40,
+        ge=40,
+        le=60,
+        alias="FOCUS_PRODUCER_CANDIDATE_LIMIT",
+    )
+    producer_heartbeat_seconds: int = Field(
+        default=30,
+        ge=5,
+        le=300,
+        alias="FOCUS_PRODUCER_HEARTBEAT_SECONDS",
+    )
+    producer_health_stale_seconds: int = Field(
+        default=120,
+        ge=30,
+        le=900,
+        alias="FOCUS_PRODUCER_HEALTH_STALE_SECONDS",
+    )
+    producer_lease_seconds: int = Field(
+        default=90,
+        ge=30,
+        le=900,
+        alias="FOCUS_PRODUCER_LEASE_SECONDS",
     )
     priority_watchlist: str = Field(default="", alias="FOCUS_PRIORITY_WATCHLIST")
     major_index_constituents: str = Field(
@@ -132,6 +165,14 @@ class FocusContextSettings(BaseSettings):
             raise ValueError("FOCUS_DOLLAR_VOLUME_COUNT must cover the enter rank")
         if self.nonce_ttl_seconds < self.clock_skew_seconds:
             raise ValueError("MACROLENS_FOCUS_NONCE_TTL_SECONDS must cover the clock skew")
+        if self.producer_lease_seconds <= self.producer_heartbeat_seconds * 2:
+            raise ValueError(
+                "FOCUS_PRODUCER_LEASE_SECONDS must exceed two heartbeat intervals"
+            )
+        if self.producer_health_stale_seconds <= self.producer_heartbeat_seconds:
+            raise ValueError(
+                "FOCUS_PRODUCER_HEALTH_STALE_SECONDS must exceed the heartbeat interval"
+            )
         return self
 
     @property

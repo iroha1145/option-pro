@@ -145,7 +145,7 @@ class MacroLensClient:
     def _load_contract_sha(self) -> str:
         if self.settings.schema_sha256:
             return self.settings.schema_sha256
-        contract = Path(__file__).resolve().parents[4] / "contracts" / "macrolens-option-pro-v1.json"
+        contract = Path(__file__).resolve().parents[4] / "contracts" / "macrolens-option-pro-v2.json"
         if not contract.is_file():
             return ""
         return hashlib.sha256(contract.read_bytes()).hexdigest()
@@ -154,7 +154,7 @@ class MacroLensClient:
         schema_version = getattr(value, "schema_version", None)
         schema_sha256 = getattr(value, "schema_sha256", None)
         if schema_version != self.settings.schema_version or schema_version != SCHEMA_VERSION:
-            raise CatalystSchemaError("MacroLens schema_version does not match the pinned v1 contract")
+            raise CatalystSchemaError("MacroLens schema_version does not match the pinned v2 contract")
         if self._expected_schema_sha and schema_sha256 != self._expected_schema_sha:
             raise CatalystSchemaError("MacroLens schema_sha256 does not match the pinned contract")
 

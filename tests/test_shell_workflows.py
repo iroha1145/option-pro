@@ -70,8 +70,8 @@ def _deployment_root(tmp_path: Path, env_text: str) -> tuple[Path, dict[str, str
     contracts = root / "contracts"
     contracts.mkdir()
     shutil.copy2(
-        ROOT / "contracts" / "macrolens-option-pro-v1.json",
-        contracts / "macrolens-option-pro-v1.json",
+        ROOT / "contracts" / "macrolens-option-pro-v2.json",
+        contracts / "macrolens-option-pro-v2.json",
     )
     (root / ".env").write_text(env_text, encoding="utf-8")
     bin_dir = tmp_path / "bin"
