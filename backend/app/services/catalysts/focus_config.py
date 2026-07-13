@@ -68,7 +68,7 @@ class FocusContextSettings(BaseSettings):
         default=1800, ge=60, le=86400, alias="FOCUS_CONTEXT_REFRESH_SECONDS"
     )
     producer_enabled: bool = Field(
-        default=True, alias="FOCUS_PRODUCER_ENABLED"
+        default=False, alias="FOCUS_PRODUCER_ENABLED"
     )
     producer_interval_seconds: int = Field(
         default=1800,
@@ -99,6 +99,46 @@ class FocusContextSettings(BaseSettings):
         ge=30,
         le=900,
         alias="FOCUS_PRODUCER_LEASE_SECONDS",
+    )
+    daily_strength_degraded_ttl_seconds: int = Field(
+        default=300,
+        ge=60,
+        le=1800,
+        alias="FOCUS_DAILY_STRENGTH_DEGRADED_TTL_SECONDS",
+    )
+    daily_strength_settlement_delay_seconds: int = Field(
+        default=1800,
+        ge=300,
+        le=7200,
+        alias="FOCUS_DAILY_STRENGTH_SETTLEMENT_DELAY_SECONDS",
+    )
+    daily_strength_min_coverage: float = Field(
+        default=0.9,
+        ge=0.5,
+        le=1.0,
+        alias="FOCUS_DAILY_STRENGTH_MIN_COVERAGE",
+    )
+    daily_strength_retention_days: int = Field(
+        default=30,
+        ge=1,
+        le=365,
+        alias="FOCUS_DAILY_STRENGTH_RETENTION_DAYS",
+    )
+    snapshot_retention_days: int = Field(
+        default=90,
+        ge=1,
+        le=730,
+        alias="FOCUS_SNAPSHOT_RETENTION_DAYS",
+    )
+    snapshot_full_resolution_days: int = Field(
+        default=30,
+        ge=1,
+        le=730,
+        alias="FOCUS_SNAPSHOT_FULL_RESOLUTION_DAYS",
+    )
+    snapshot_daily_rollup_enabled: bool = Field(
+        default=True,
+        alias="FOCUS_SNAPSHOT_DAILY_ROLLUP_ENABLED",
     )
     priority_watchlist: str = Field(default="", alias="FOCUS_PRIORITY_WATCHLIST")
     major_index_constituents: str = Field(
@@ -172,6 +212,11 @@ class FocusContextSettings(BaseSettings):
         if self.producer_health_stale_seconds <= self.producer_heartbeat_seconds:
             raise ValueError(
                 "FOCUS_PRODUCER_HEALTH_STALE_SECONDS must exceed the heartbeat interval"
+            )
+        if self.snapshot_full_resolution_days > self.snapshot_retention_days:
+            raise ValueError(
+                "FOCUS_SNAPSHOT_FULL_RESOLUTION_DAYS must not exceed "
+                "FOCUS_SNAPSHOT_RETENTION_DAYS"
             )
         return self
 

@@ -13,6 +13,7 @@ from app.services.breakouts.config import BreakoutSettings
 from app.services.breakouts.models import (
     AssetType,
     BreakoutCandidate,
+    DiscoveryProfile,
     MarketSession,
     normalize_ticker,
 )
@@ -68,6 +69,7 @@ def normalize_provider_row(
     session: MarketSession,
     as_of: datetime,
     source: str = "tradingview",
+    profile: DiscoveryProfile | None = None,
 ) -> tuple[BreakoutCandidate | None, list[str]]:
     warnings: list[str] = []
     if len(row) != len(columns):
@@ -90,9 +92,21 @@ def normalize_provider_row(
         previous_close = None
     relative_volume = finite_number(data.get("relative_volume_10d_calc"))
     market_cap = finite_number(data.get("market_cap_basic"))
-    if price is None or price <= 0 or change is None or volume is None:
+    is_dollar_volume_profile = (
+        profile is DiscoveryProfile.REGULAR_DOLLAR_VOLUME_LEADERS
+    )
+    if (
+        price is None
+        or price <= 0
+        or volume is None
+        or (change is None and not is_dollar_volume_profile)
+    ):
         return None, ["provider_non_numeric_required_field"]
-    if relative_volume is None and session is MarketSession.REGULAR:
+    if (
+        relative_volume is None
+        and session is MarketSession.REGULAR
+        and not is_dollar_volume_profile
+    ):
         warnings.append("provider_relative_volume_missing")
     asset_type = asset_type_from_provider(data.get("type"), data.get("typespecs"))
     raw = {
@@ -152,12 +166,19 @@ def filter_and_deduplicate(
     *,
     settings: BreakoutSettings,
     session: MarketSession,
+    profile: DiscoveryProfile | None = None,
 ) -> tuple[list[BreakoutCandidate], list[str]]:
     warnings: list[str] = []
     kept: dict[str, BreakoutCandidate] = {}
     allowed_assets = {AssetType.COMMON_STOCK, AssetType.ADR}
     if settings.allow_etf:
         allowed_assets.add(AssetType.ETF)
+
+    def order_value(candidate: BreakoutCandidate) -> float:
+        if profile is DiscoveryProfile.REGULAR_DOLLAR_VOLUME_LEADERS:
+            return (candidate.price or 0.0) * (candidate.provider_volume or 0.0)
+        return candidate.provider_change_pct or 0.0
+
     for candidate in candidates:
         if candidate.asset_type not in allowed_assets:
             warnings.append(f"{candidate.ticker}:asset_type_excluded")
@@ -165,12 +186,16 @@ def filter_and_deduplicate(
         if candidate.price is None or candidate.price < settings.min_price:
             continue
         if (
-            candidate.provider_market_cap is not None
+            profile is not DiscoveryProfile.REGULAR_DOLLAR_VOLUME_LEADERS
+            and candidate.provider_market_cap is not None
             and candidate.provider_market_cap < settings.provider_min_market_cap
         ):
             continue
         if session is MarketSession.PREMARKET:
             if (candidate.provider_change_pct or 0) < settings.premarket_min_change_pct:
+                continue
+        elif profile is DiscoveryProfile.REGULAR_DOLLAR_VOLUME_LEADERS:
+            if order_value(candidate) < settings.regular_min_dollar_volume:
                 continue
         else:
             if (candidate.provider_change_pct or 0) < settings.regular_min_change_pct:
@@ -178,16 +203,23 @@ def filter_and_deduplicate(
             if (candidate.provider_relative_volume or 0) < settings.regular_min_relative_volume:
                 continue
         previous = kept.get(candidate.ticker)
-        if previous is None or (candidate.provider_change_pct or 0) > (
-            previous.provider_change_pct or 0
-        ):
+        if previous is None or order_value(candidate) > order_value(previous):
             kept[candidate.ticker] = candidate
-    ordered = sorted(
-        kept.values(),
-        key=lambda item: (
-            item.provider_change_pct or float("-inf"),
-            item.ticker,
-        ),
-        reverse=True,
-    )[: settings.provider_result_limit]
+    if profile is DiscoveryProfile.REGULAR_DOLLAR_VOLUME_LEADERS:
+        ordered = sorted(
+            kept.values(),
+            key=lambda item: (
+                -((item.price or 0.0) * (item.provider_volume or 0.0)),
+                item.ticker,
+            ),
+        )[:100]
+    else:
+        ordered = sorted(
+            kept.values(),
+            key=lambda item: (
+                item.provider_change_pct or float("-inf"),
+                item.ticker,
+            ),
+            reverse=True,
+        )[: settings.provider_result_limit]
     return ordered, warnings

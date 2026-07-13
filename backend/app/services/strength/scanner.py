@@ -6,7 +6,7 @@ import logging
 import math
 from bisect import bisect_left, bisect_right
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from time import monotonic
 from typing import Any, Callable, Mapping
 from zoneinfo import ZoneInfo
@@ -851,6 +851,38 @@ def _complete_daily_frame(
     return bounded, cutoff
 
 
+def _actual_daily_data_through(hist: pd.DataFrame) -> datetime | None:
+    """Return the regular-session close represented by the last real daily bar."""
+
+    if hist.empty or not isinstance(hist.index, pd.DatetimeIndex):
+        return None
+    from app.services.market_calendar import early_close_minutes, is_trading_day
+
+    session_days: list[date] = []
+    for raw in hist.index:
+        timestamp = pd.Timestamp(raw)
+        if pd.isna(timestamp):
+            continue
+        if timestamp.tzinfo is not None:
+            session_day = timestamp.tz_convert(_NEW_YORK).date()
+        else:
+            session_day = timestamp.date()
+        if is_trading_day(session_day):
+            session_days.append(session_day)
+    if not session_days:
+        return None
+    session_day = max(session_days)
+    close_minutes = early_close_minutes(session_day) or 16 * 60
+    return datetime(
+        session_day.year,
+        session_day.month,
+        session_day.day,
+        close_minutes // 60,
+        close_minutes % 60,
+        tzinfo=_NEW_YORK,
+    ).astimezone(timezone.utc)
+
+
 def _completed_daily_key(as_of: datetime) -> str:
     if as_of.tzinfo is None or as_of.utcoffset() is None:
         raise ValueError("as_of must include a timezone")
@@ -1494,8 +1526,11 @@ def _scan_sync(
                         breakout_settings.range_persistence_final_weight_cap
                     ),
                 )
+            actual_data_through = _actual_daily_data_through(hist)
             range_context[ticker]["daily_data_through"] = (
-                completed_cutoff.astimezone(timezone.utc).isoformat()
+                actual_data_through.isoformat()
+                if actual_data_through is not None
+                else None
             )
         except Exception:
             skipped["data_error"] += 1

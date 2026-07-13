@@ -96,6 +96,14 @@ test('expired-watermark recovery keeps the stale snapshot visible', () => {
   assert.match(catalysts, /完整分页校验成功后才会原子切换水位/);
 });
 
+test('focus fallback is visible as a degraded source instead of a healthy snapshot', () => {
+  assert.match(catalysts, /fallback: "兜底源"/);
+  assert.match(catalysts, /\["degraded", "fallback", "failed", "stale", "unavailable"\]/);
+  assert.match(catalysts, /displayStatus = \["active", "empty"\]\.includes\(status\) && degraded \? "degraded" : status/);
+  assert.match(catalysts, /<span>兜底源<\/span>/);
+  assert.match(catalysts, /warnings\[0\][\s\S]*模型推断，不代表收益概率/);
+});
+
 test('filters, time semantics, uncertainty labels, and context isolation stay visible', () => {
   assert.match(catalysts, /page\.draft = readDraftFromForm\(\)/);
   assert.match(catalysts, /page\.applied = Object\.assign\(\{\}, page\.draft\)/);

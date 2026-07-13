@@ -166,6 +166,9 @@ def test_sector_top_and_option_views_do_not_change_intrinsic_or_canonical_ranks(
         sector["_focus_rows"]
     ) == stable_focus(full["_focus_rows"])
     assert {row["ticker"] for row in full["_focus_rows"]} == {"AAA", "BBB", "CCC"}
+    assert {
+        row["daily_data_through"] for row in full["_focus_rows"]
+    } == {"2026-07-10T20:00:00+00:00"}
     assert all(
         not {
             "intrinsic_score",

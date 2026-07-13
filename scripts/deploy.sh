@@ -130,7 +130,7 @@ macrolens_schema_sha256="${MACROLENS_SCHEMA_SHA256:-$(env_value MACROLENS_SCHEMA
 deploy_require_catalyst="${DEPLOY_REQUIRE_CATALYST:-$(env_value DEPLOY_REQUIRE_CATALYST)}"
 deploy_require_catalyst="${deploy_require_catalyst:-false}"
 focus_producer_enabled="${FOCUS_PRODUCER_ENABLED:-$(env_value FOCUS_PRODUCER_ENABLED)}"
-focus_producer_enabled="${focus_producer_enabled:-true}"
+focus_producer_enabled="${focus_producer_enabled:-false}"
 deploy_require_focus="${DEPLOY_REQUIRE_FOCUS_PRODUCER:-$(env_value DEPLOY_REQUIRE_FOCUS_PRODUCER)}"
 deploy_require_focus="${deploy_require_focus:-false}"
 
@@ -450,8 +450,11 @@ if required:
     assert enabled is True
     assert p["enabled"] is True
     assert p["healthy"] is True
-    assert p["status"] == "ok"
+    assert p["status"] in {"ok", "degraded"}
     assert p["contract"]["valid"] is True
+    assert p["database"]["heartbeat_fresh"] is True
+    assert p["database"]["latest_snapshot"] is not None
+    assert p["database"]["snapshot_fresh"] is True
 elif not enabled:
     assert p["status"] == "disabled"
     assert p["healthy"] is True

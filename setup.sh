@@ -149,6 +149,7 @@ else
     set_env_value ALLOW_CUSTOM_OPENAI_BASE_URL "$allow_custom_base"
     set_env_value OPENAI_MODEL "$model"
     set_env_value OPENAI_REASONING "$reasoning"
+    set_env_value FOCUS_PRODUCER_ENABLED false
 
     echo -e "${GREEN}✓${NC} .env 已生成（已加入 .gitignore，不会泄露）"
     echo -e "  默认仅监听 127.0.0.1；远程使用请优先通过 SSH 隧道或 VPN。"

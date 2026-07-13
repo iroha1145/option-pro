@@ -7,9 +7,10 @@ import os
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Sequence
+from zoneinfo import ZoneInfo
 
 from .errors import CatalystRepositoryError, InvalidCursorError
 from .models import (
@@ -29,8 +30,8 @@ from .models import (
 from .focus_models import FocusContextDraft, FocusContextResponse
 
 
-DATABASE_VERSION = "catalyst-cache-v4"
-SQLITE_USER_VERSION = 4
+DATABASE_VERSION = "catalyst-cache-v6"
+SQLITE_USER_VERSION = 6
 FOCUS_PRODUCER_WORKER_PREFIX = "focus-context-producer:"
 _V1_DATABASE_VERSION = "catalyst-cache-v1"
 _V1_SCHEMA_CHECKSUM = "72f57f049e66986e7f0dd19e71eff0f772c88b13d5be1d99cbb6d0fe9423c951"
@@ -38,6 +39,10 @@ _V2_DATABASE_VERSION = "catalyst-cache-v2"
 _V2_SCHEMA_CHECKSUM = "f69577b5cc0957010d01627c7c25b4cf894a6920156c43ad2c7a3114bf067f35"
 _V3_DATABASE_VERSION = "catalyst-cache-v3"
 _V3_SCHEMA_CHECKSUM = "eff9b3d6070fadee9aff5717799d13126bc8d3aed7a1f381cdaeba781dac3c43"
+_V4_DATABASE_VERSION = "catalyst-cache-v4"
+_V4_SCHEMA_CHECKSUM = "ea1566f2aedabe63057b7f70ffaf20ac2e24a999852f0f8acab068404e405e21"
+_V5_DATABASE_VERSION = "catalyst-cache-v5"
+_V5_SCHEMA_CHECKSUM = "3dfe7078bdf2daf4564bab33e1be3b3f6e8777f5400dd2960ed14b4e77707781"
 
 
 _MARKET_FOCUS_SCHEMA_SQL = """
@@ -96,6 +101,56 @@ CREATE TABLE IF NOT EXISTS catalyst_market_focus_jobs (
 
 CREATE INDEX IF NOT EXISTS idx_catalyst_market_focus_jobs_due
     ON catalyst_market_focus_jobs(status,next_attempt_at,updated_at);
+
+CREATE TABLE IF NOT EXISTS focus_reference_generation (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    generation INTEGER NOT NULL DEFAULT 0 CHECK (generation >= 0)
+);
+
+INSERT OR IGNORE INTO focus_reference_generation(singleton,generation)
+VALUES(1,0);
+
+CREATE TRIGGER IF NOT EXISTS trg_focus_cycle_reference_insert
+AFTER INSERT ON catalyst_market_focus_cycles
+BEGIN
+    UPDATE focus_reference_generation
+    SET generation=generation+1 WHERE singleton=1;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_focus_cycle_reference_update
+AFTER UPDATE OF raw_json ON catalyst_market_focus_cycles
+BEGIN
+    UPDATE focus_reference_generation
+    SET generation=generation+1 WHERE singleton=1;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_focus_cycle_reference_delete
+AFTER DELETE ON catalyst_market_focus_cycles
+BEGIN
+    UPDATE focus_reference_generation
+    SET generation=generation+1 WHERE singleton=1;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_focus_job_reference_insert
+AFTER INSERT ON catalyst_market_focus_jobs
+BEGIN
+    UPDATE focus_reference_generation
+    SET generation=generation+1 WHERE singleton=1;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_focus_job_reference_update
+AFTER UPDATE OF result_json ON catalyst_market_focus_jobs
+BEGIN
+    UPDATE focus_reference_generation
+    SET generation=generation+1 WHERE singleton=1;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_focus_job_reference_delete
+AFTER DELETE ON catalyst_market_focus_jobs
+BEGIN
+    UPDATE focus_reference_generation
+    SET generation=generation+1 WHERE singleton=1;
+END;
 """.strip()
 
 
@@ -368,6 +423,27 @@ CREATE TABLE IF NOT EXISTS focus_context_symbols (
 CREATE INDEX IF NOT EXISTS idx_focus_context_symbols_ticker
     ON focus_context_symbols(ticker,revision DESC);
 
+CREATE TABLE IF NOT EXISTS focus_daily_strength_snapshots (
+    trading_day TEXT NOT NULL,
+    cache_version TEXT NOT NULL,
+    universe_version TEXT NOT NULL,
+    strength_feature_version TEXT NOT NULL,
+    strength_score_version TEXT NOT NULL,
+    normalization_version TEXT NOT NULL,
+    range_persistence_version TEXT NOT NULL,
+    payload_hash TEXT NOT NULL CHECK (length(payload_hash)=64),
+    coverage REAL NOT NULL CHECK (coverage BETWEEN 0 AND 1),
+    status TEXT NOT NULL CHECK (status IN ('active','degraded')),
+    data_through TEXT,
+    payload_json TEXT NOT NULL,
+    cached_at TEXT NOT NULL,
+    expires_at TEXT,
+    PRIMARY KEY (trading_day,cache_version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_focus_daily_strength_retention
+    ON focus_daily_strength_snapshots(cached_at,trading_day);
+
 CREATE TABLE IF NOT EXISTS macrolens_focus_nonces (
     key_id TEXT NOT NULL,
     nonce TEXT NOT NULL,
@@ -397,6 +473,7 @@ CREATE TABLE IF NOT EXISTS catalyst_worker_lock (
 
 SCHEMA_CHECKSUM = hashlib.sha256(_SCHEMA_SQL.encode("utf-8")).hexdigest()
 _STREAMS = ("health", "feed", "calendar", "job", "market_focus")
+_FOCUS_MARKET_TIMEZONE = ZoneInfo("America/New_York")
 
 
 def _now() -> datetime:
@@ -502,6 +579,22 @@ class CatalystRepository:
                 and row["schema_checksum"] == _V3_SCHEMA_CHECKSUM
             ):
                 self._migrate_v3_to_v4(connection)
+                row = connection.execute(
+                    "SELECT schema_version,schema_checksum FROM catalyst_schema_metadata WHERE singleton=1"
+                ).fetchone()
+            if row is not None and (
+                row["schema_version"] == _V4_DATABASE_VERSION
+                and row["schema_checksum"] == _V4_SCHEMA_CHECKSUM
+            ):
+                self._migrate_v4_to_v5(connection)
+                row = connection.execute(
+                    "SELECT schema_version,schema_checksum FROM catalyst_schema_metadata WHERE singleton=1"
+                ).fetchone()
+            if row is not None and (
+                row["schema_version"] == _V5_DATABASE_VERSION
+                and row["schema_checksum"] == _V5_SCHEMA_CHECKSUM
+            ):
+                self._migrate_v5_to_v6(connection)
                 row = connection.execute(
                     "SELECT schema_version,schema_checksum FROM catalyst_schema_metadata WHERE singleton=1"
                 ).fetchone()
@@ -620,6 +713,67 @@ class CatalystRepository:
         self._execute_script_atomic(connection, _MARKET_FOCUS_SCHEMA_SQL)
         connection.execute(
             "UPDATE catalyst_schema_metadata SET schema_version=?,schema_checksum=? WHERE singleton=1",
+            (_V4_DATABASE_VERSION, _V4_SCHEMA_CHECKSUM),
+        )
+
+    def _migrate_v4_to_v5(self, connection: sqlite3.Connection) -> None:
+        """Add the bounded daily strength cache used only by focus production."""
+
+        self._execute_script_atomic(
+            connection,
+            """
+            CREATE TABLE IF NOT EXISTS focus_daily_strength_snapshots (
+                trading_day TEXT NOT NULL,
+                cache_version TEXT NOT NULL,
+                universe_version TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('active','degraded')),
+                data_through TEXT,
+                payload_json TEXT NOT NULL,
+                cached_at TEXT NOT NULL,
+                expires_at TEXT,
+                PRIMARY KEY (trading_day,cache_version)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_focus_daily_strength_retention
+                ON focus_daily_strength_snapshots(cached_at,trading_day);
+            """.strip(),
+        )
+        connection.execute(
+            "UPDATE catalyst_schema_metadata SET schema_version=?,schema_checksum=? WHERE singleton=1",
+            (_V5_DATABASE_VERSION, _V5_SCHEMA_CHECKSUM),
+        )
+
+    def _migrate_v5_to_v6(self, connection: sqlite3.Connection) -> None:
+        """Invalidate derived cache rows that lack independently audited fields."""
+
+        connection.execute("DROP TABLE focus_daily_strength_snapshots")
+        self._execute_script_atomic(
+            connection,
+            """
+            CREATE TABLE focus_daily_strength_snapshots (
+                trading_day TEXT NOT NULL,
+                cache_version TEXT NOT NULL,
+                universe_version TEXT NOT NULL,
+                strength_feature_version TEXT NOT NULL,
+                strength_score_version TEXT NOT NULL,
+                normalization_version TEXT NOT NULL,
+                range_persistence_version TEXT NOT NULL,
+                payload_hash TEXT NOT NULL CHECK (length(payload_hash)=64),
+                coverage REAL NOT NULL CHECK (coverage BETWEEN 0 AND 1),
+                status TEXT NOT NULL CHECK (status IN ('active','degraded')),
+                data_through TEXT,
+                payload_json TEXT NOT NULL,
+                cached_at TEXT NOT NULL,
+                expires_at TEXT,
+                PRIMARY KEY (trading_day,cache_version)
+            );
+
+            CREATE INDEX idx_focus_daily_strength_retention
+                ON focus_daily_strength_snapshots(cached_at,trading_day);
+            """.strip(),
+        )
+        connection.execute(
+            "UPDATE catalyst_schema_metadata SET schema_version=?,schema_checksum=? WHERE singleton=1",
             (DATABASE_VERSION, SCHEMA_CHECKSUM),
         )
 
@@ -686,7 +840,7 @@ class CatalystRepository:
         connection.execute("DROP TABLE catalyst_market_focus_jobs_v3")
         connection.execute(
             "UPDATE catalyst_schema_metadata SET schema_version=?,schema_checksum=? WHERE singleton=1",
-            (DATABASE_VERSION, SCHEMA_CHECKSUM),
+            (_V4_DATABASE_VERSION, _V4_SCHEMA_CHECKSUM),
         )
 
     def check_schema(self) -> dict[str, Any]:
@@ -727,6 +881,38 @@ class CatalystRepository:
         ):
             raise CatalystRepositoryError("worker_lock_lost", "Catalyst worker fencing token is stale")
 
+    @staticmethod
+    def _assert_focus_producer_fence(
+        connection: sqlite3.Connection,
+        *,
+        lock_name: str | None,
+        owner_id: str | None,
+        fencing_token: int | None,
+        now: datetime,
+    ) -> None:
+        identity = (lock_name, owner_id, fencing_token)
+        if all(value is None for value in identity):
+            return
+        if any(value is None for value in identity):
+            raise ValueError("focus producer fencing identity is incomplete")
+        row = connection.execute(
+            """
+            SELECT owner_id,fencing_token,lease_until
+            FROM catalyst_worker_lock WHERE lock_name=?
+            """,
+            (lock_name,),
+        ).fetchone()
+        if (
+            row is None
+            or row["owner_id"] != owner_id
+            or int(row["fencing_token"]) != int(fencing_token or 0)
+            or (_as_utc(row["lease_until"]) or now) <= now
+        ):
+            raise CatalystRepositoryError(
+                "focus_producer_lease_lost",
+                "Focus producer lease was lost before the cache write",
+            )
+
     def sync_state(self, stream: str) -> dict[str, Any]:
         if stream not in _STREAMS:
             raise ValueError("unknown catalyst stream")
@@ -744,6 +930,470 @@ class CatalystRepository:
             if row is None:
                 return None
             return FocusContextResponse.model_validate_json(row["raw_json"])
+
+    def daily_strength_snapshot(
+        self,
+        *,
+        trading_day: date | str,
+        cache_version: str,
+        strength_feature_version: str,
+        strength_score_version: str,
+        normalization_version: str,
+        range_persistence_version: str,
+        now: datetime | None = None,
+    ) -> dict[str, Any] | None:
+        """Read one unexpired trading-day cache entry without mutating it."""
+
+        day = trading_day.isoformat() if isinstance(trading_day, date) else str(trading_day)
+        if not day or not cache_version:
+            raise ValueError("daily strength cache identity is required")
+        observed = now or _now()
+        with self._read() as connection:
+            row = connection.execute(
+                """
+                SELECT trading_day,cache_version,universe_version,
+                       strength_feature_version,strength_score_version,
+                       normalization_version,range_persistence_version,
+                       payload_hash,coverage,status,data_through,payload_json,
+                       cached_at,expires_at
+                FROM focus_daily_strength_snapshots
+                WHERE trading_day=? AND cache_version=?
+                """,
+                (day, cache_version),
+            ).fetchone()
+        if row is None:
+            return None
+        expected_versions = (
+            strength_feature_version,
+            strength_score_version,
+            normalization_version,
+            range_persistence_version,
+        )
+        stored_versions = tuple(
+            str(row[column])
+            for column in (
+                "strength_feature_version",
+                "strength_score_version",
+                "normalization_version",
+                "range_persistence_version",
+            )
+        )
+        if stored_versions != expected_versions:
+            return None
+        expires_at = _as_utc(row["expires_at"])
+        if expires_at is not None and expires_at <= observed:
+            return None
+        try:
+            payload = _loads(row["payload_json"], {})
+            encoded = _json(payload)
+            coverage = float(row["coverage"])
+            payload_coverage = float(payload["coverage"])
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return None
+        if (
+            hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+            != row["payload_hash"]
+            or not 0 <= coverage <= 1
+            or abs(payload_coverage - coverage) > 1e-9
+            or str(payload.get("universe_version") or "")
+            != str(row["universe_version"])
+        ):
+            return None
+        return {
+            "trading_day": row["trading_day"],
+            "cache_version": row["cache_version"],
+            "universe_version": row["universe_version"],
+            "status": row["status"],
+            "data_through": row["data_through"],
+            "strength_feature_version": row["strength_feature_version"],
+            "strength_score_version": row["strength_score_version"],
+            "normalization_version": row["normalization_version"],
+            "range_persistence_version": row["range_persistence_version"],
+            "payload_hash": row["payload_hash"],
+            "coverage": coverage,
+            "payload": payload,
+            "cached_at": row["cached_at"],
+            "expires_at": row["expires_at"],
+        }
+
+    def cache_daily_strength_snapshot(
+        self,
+        *,
+        trading_day: date | str,
+        cache_version: str,
+        universe_version: str,
+        strength_feature_version: str,
+        strength_score_version: str,
+        normalization_version: str,
+        range_persistence_version: str,
+        coverage: float,
+        status: str,
+        payload: dict[str, Any],
+        data_through: datetime | str | None,
+        degraded_ttl_seconds: int,
+        now: datetime | None = None,
+        lock_name: str | None = None,
+        owner_id: str | None = None,
+        fencing_token: int | None = None,
+    ) -> None:
+        """Persist active/degraded daily inputs; unavailable results are rejected."""
+
+        if status not in {"active", "degraded"}:
+            raise ValueError("only active or degraded daily strength snapshots are cacheable")
+        if degraded_ttl_seconds <= 0:
+            raise ValueError("degraded daily strength TTL must be positive")
+        day = trading_day.isoformat() if isinstance(trading_day, date) else str(trading_day)
+        audit_versions = (
+            strength_feature_version,
+            strength_score_version,
+            normalization_version,
+            range_persistence_version,
+        )
+        if (
+            not day
+            or not cache_version
+            or not universe_version
+            or any(not str(value).strip() for value in audit_versions)
+        ):
+            raise ValueError("daily strength cache identity is required")
+        if str(payload.get("universe_version") or "") != universe_version:
+            raise ValueError("daily strength payload universe version is invalid")
+        try:
+            normalized_coverage = float(coverage)
+            payload_coverage = float(payload["coverage"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("daily strength coverage is required") from exc
+        if (
+            not 0 <= normalized_coverage <= 1
+            or abs(payload_coverage - normalized_coverage) > 1e-9
+        ):
+            raise ValueError("daily strength coverage is invalid")
+        payload_json = _json(payload)
+        payload_hash = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
+        observed = now or _now()
+        expires_at = (
+            observed + timedelta(seconds=degraded_ttl_seconds)
+            if status == "degraded"
+            else None
+        )
+        with self._write() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._assert_focus_producer_fence(
+                connection,
+                lock_name=lock_name,
+                owner_id=owner_id,
+                fencing_token=fencing_token,
+                now=observed,
+            )
+            connection.execute(
+                """
+                INSERT INTO focus_daily_strength_snapshots(
+                    trading_day,cache_version,universe_version,
+                    strength_feature_version,strength_score_version,
+                    normalization_version,range_persistence_version,
+                    payload_hash,coverage,status,data_through,payload_json,
+                    cached_at,expires_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(trading_day,cache_version) DO UPDATE SET
+                    universe_version=excluded.universe_version,
+                    strength_feature_version=excluded.strength_feature_version,
+                    strength_score_version=excluded.strength_score_version,
+                    normalization_version=excluded.normalization_version,
+                    range_persistence_version=excluded.range_persistence_version,
+                    payload_hash=excluded.payload_hash,
+                    coverage=excluded.coverage,
+                    status=excluded.status,
+                    data_through=excluded.data_through,
+                    payload_json=excluded.payload_json,
+                    cached_at=excluded.cached_at,
+                    expires_at=excluded.expires_at
+                """,
+                (
+                    day,
+                    cache_version,
+                    universe_version[:200],
+                    strength_feature_version[:200],
+                    strength_score_version[:200],
+                    normalization_version[:200],
+                    range_persistence_version[:200],
+                    payload_hash,
+                    normalized_coverage,
+                    status,
+                    _iso(data_through),
+                    payload_json,
+                    _iso(observed),
+                    _iso(expires_at),
+                ),
+            )
+            connection.commit()
+
+    def prune_focus_retention(
+        self,
+        *,
+        snapshot_days: int,
+        snapshot_full_resolution_days: int = 30,
+        snapshot_daily_rollup_enabled: bool = True,
+        daily_strength_days: int,
+        batch_size: int = 500,
+        now: datetime | None = None,
+    ) -> dict[str, int]:
+        """Compact focus history without removing a live or referenced input.
+
+        Existing snapshots are the daily representatives; no synthetic payload is
+        manufactured.  One invocation removes at most ``batch_size`` rows in
+        total. Snapshot and daily-cache deletes use separate short writer
+        transactions so the producer never holds the database write lock while
+        scanning the complete snapshot history.
+        """
+
+        if (
+            snapshot_days <= 0
+            or snapshot_full_resolution_days <= 0
+            or daily_strength_days <= 0
+        ):
+            raise ValueError("focus retention windows must be positive")
+        if snapshot_full_resolution_days > snapshot_days:
+            raise ValueError("full-resolution retention must not exceed snapshot retention")
+        if batch_size <= 0 or batch_size > 5000:
+            raise ValueError("focus retention batch size must be between 1 and 5000")
+        observed = now or _now()
+        full_cutoff = observed - timedelta(days=snapshot_full_resolution_days)
+        retention_cutoff = observed - timedelta(days=snapshot_days)
+
+        def referenced_revisions(raw_values: Iterable[str | None]) -> set[int]:
+            revisions: set[int] = set()
+            for raw in raw_values:
+                try:
+                    value = _loads(raw, {})
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
+                stack: list[Any] = [value]
+                visited = 0
+                while stack and visited < 10_000:
+                    current = stack.pop()
+                    visited += 1
+                    if isinstance(current, dict):
+                        revision = current.get("focus_revision")
+                        if isinstance(revision, int) and not isinstance(revision, bool) and revision > 0:
+                            revisions.add(revision)
+                        stack.extend(current.values())
+                    elif isinstance(current, list):
+                        stack.extend(current)
+            return revisions
+
+        # Plan with a read-only connection. This can scan the retained history
+        # without blocking publication or market-focus task updates.
+        with self._read() as connection:
+            # Pin the generation and reference scan to the same WAL snapshot.
+            # The writer can then reject this plan with one indexed lookup if
+            # any cycle/job reference changed before deletion starts.
+            connection.execute("BEGIN")
+            generation_row = connection.execute(
+                "SELECT generation FROM focus_reference_generation WHERE singleton=1"
+            ).fetchone()
+            reference_generation = (
+                int(generation_row["generation"])
+                if generation_row is not None
+                else 0
+            )
+            snapshot_rows = connection.execute(
+                """
+                SELECT revision,as_of,created_at
+                FROM focus_context_snapshots ORDER BY revision
+                """
+            ).fetchall()
+            latest_revision = (
+                max(int(row["revision"]) for row in snapshot_rows)
+                if snapshot_rows
+                else None
+            )
+            reference_values = [
+                row[0]
+                for row in connection.execute(
+                    "SELECT raw_json FROM catalyst_market_focus_cycles"
+                ).fetchall()
+            ]
+            reference_values.extend(
+                row[0]
+                for row in connection.execute(
+                    "SELECT result_json FROM catalyst_market_focus_jobs "
+                    "WHERE result_json IS NOT NULL"
+                ).fetchall()
+            )
+            available_revisions = {int(row["revision"]) for row in snapshot_rows}
+            protected = referenced_revisions(reference_values) & available_revisions
+            if latest_revision is not None:
+                protected.add(latest_revision)
+            connection.commit()
+
+        keep: set[int] = set(protected)
+        middle_by_day: dict[date, tuple[datetime, int]] = {}
+        middle_day_by_revision: dict[int, date] = {}
+        for row in snapshot_rows:
+            revision = int(row["revision"])
+            created_at = _as_utc(row["created_at"])
+            as_of = _as_utc(row["as_of"])
+            if created_at is None:
+                keep.add(revision)
+                continue
+            if created_at >= full_cutoff:
+                keep.add(revision)
+                continue
+            if created_at < retention_cutoff:
+                continue
+            if not snapshot_daily_rollup_enabled:
+                keep.add(revision)
+                continue
+            representative_time = as_of or created_at
+            trading_day = representative_time.astimezone(
+                _FOCUS_MARKET_TIMEZONE
+            ).date()
+            middle_day_by_revision[revision] = trading_day
+            current = middle_by_day.get(trading_day)
+            candidate = (representative_time, revision)
+            if current is None or candidate > current:
+                middle_by_day[trading_day] = candidate
+        keep.update(item[1] for item in middle_by_day.values())
+
+        snapshot_candidates = [
+            int(row["revision"])
+            for row in snapshot_rows
+            if int(row["revision"]) not in keep
+        ][:batch_size]
+        snapshots = 0
+        daily = 0
+        batches = 0
+        rollup_dates: set[date] = set()
+        remaining = batch_size
+
+        if snapshot_candidates:
+            with self._write() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                current_generation_row = connection.execute(
+                    "SELECT generation FROM focus_reference_generation WHERE singleton=1"
+                ).fetchone()
+                current_generation = (
+                    int(current_generation_row["generation"])
+                    if current_generation_row is not None
+                    else -1
+                )
+                if current_generation != reference_generation:
+                    # A cycle/job may now refer to one of the planned rows.
+                    # Defer snapshot deletion to the next bounded invocation;
+                    # never rescan every JSON document while holding this lock.
+                    connection.commit()
+                else:
+                    connection.execute(
+                        "CREATE TEMP TABLE focus_retention_candidates("
+                        "revision INTEGER PRIMARY KEY) WITHOUT ROWID"
+                    )
+                    connection.executemany(
+                        "INSERT INTO focus_retention_candidates(revision) VALUES(?)",
+                        ((revision,) for revision in snapshot_candidates),
+                    )
+                    # Snapshot publication is also serialized by this writer
+                    # lock, so only the latest row needs one bounded recheck.
+                    current_latest = connection.execute(
+                        "SELECT revision FROM focus_context_snapshots "
+                        "ORDER BY revision DESC LIMIT 1"
+                    ).fetchone()
+                    if current_latest is not None:
+                        protected.add(int(current_latest["revision"]))
+                        connection.execute(
+                            "DELETE FROM focus_retention_candidates WHERE revision=?",
+                            (int(current_latest["revision"]),),
+                        )
+                    delete_targets = [
+                        int(row["revision"])
+                        for row in connection.execute(
+                            """
+                            SELECT snapshot.revision
+                            FROM focus_context_snapshots AS snapshot
+                            JOIN focus_retention_candidates AS candidate
+                              ON candidate.revision=snapshot.revision
+                            ORDER BY snapshot.revision
+                            LIMIT ?
+                            """,
+                            (remaining,),
+                        ).fetchall()
+                    ]
+                    cursor = connection.execute(
+                        """
+                        DELETE FROM focus_context_snapshots
+                        WHERE revision IN (
+                            SELECT snapshot.revision
+                            FROM focus_context_snapshots AS snapshot
+                            JOIN focus_retention_candidates AS candidate
+                              ON candidate.revision=snapshot.revision
+                            ORDER BY snapshot.revision
+                            LIMIT ?
+                        )
+                        """,
+                        (remaining,),
+                    )
+                    connection.commit()
+                    snapshots = max(0, cursor.rowcount)
+                    if snapshots:
+                        batches += 1
+                        remaining = max(0, remaining - snapshots)
+                        rollup_dates.update(
+                            middle_day_by_revision[revision]
+                            for revision in delete_targets
+                            if revision in middle_day_by_revision
+                        )
+
+        if remaining:
+            with self._write() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                cursor = connection.execute(
+                    """
+                    DELETE FROM focus_daily_strength_snapshots
+                    WHERE rowid IN (
+                        SELECT rowid
+                        FROM focus_daily_strength_snapshots
+                        WHERE cached_at<?
+                        ORDER BY cached_at,trading_day,cache_version
+                        LIMIT ?
+                    )
+                    """,
+                    (
+                        _iso(observed - timedelta(days=daily_strength_days)),
+                        remaining,
+                    ),
+                )
+                connection.commit()
+                daily = max(0, cursor.rowcount)
+                if daily:
+                    batches += 1
+
+        with self._read() as connection:
+            violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+            if violations:
+                raise CatalystRepositoryError(
+                    "focus_retention_foreign_key_violation",
+                    "Focus retention failed the foreign-key check",
+                )
+            retained = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM focus_context_snapshots"
+                ).fetchone()[0]
+            )
+            page_size = int(connection.execute("PRAGMA page_size").fetchone()[0])
+            page_count = int(connection.execute("PRAGMA page_count").fetchone()[0])
+            free_pages = int(connection.execute("PRAGMA freelist_count").fetchone()[0])
+        return {
+            "deleted": snapshots,
+            "retained": retained,
+            "rollup_created": len(rollup_dates),
+            "protected": len(protected),
+            "database_bytes": page_count * page_size,
+            "live_bytes": max(0, page_count - free_pages) * page_size,
+            "foreign_key_violations": 0,
+            "batches": batches,
+            # Preserve the established internal names for existing logs.
+            "focus_snapshots": snapshots,
+            "daily_strength_snapshots": daily,
+        }
 
     def publish_focus_context(
         self,
@@ -807,8 +1457,11 @@ class CatalystRepository:
                         or draft_data_through < current_data_through
                     )
                 ):
-                    connection.commit()
-                    return FocusContextResponse.model_validate_json(current["raw_json"])
+                    connection.rollback()
+                    raise CatalystRepositoryError(
+                        "focus_snapshot_time_regression",
+                        "Focus snapshot publication would move its market-data time backwards",
+                    )
             if current is not None and current["content_hash"] == content_hash:
                 connection.commit()
                 return FocusContextResponse.model_validate_json(current["raw_json"])
@@ -3745,6 +4398,7 @@ class CatalystRepository:
         self,
         *,
         heartbeat_ttl_seconds: int,
+        snapshot_ttl_seconds: int | None = None,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         """Return health for the focus producer without affecting sync health."""
@@ -3767,6 +4421,22 @@ class CatalystRepository:
                 WHERE lock_name='focus-context-producer'
                 """
             ).fetchone()
+            snapshot = connection.execute(
+                """
+                SELECT revision,as_of,data_through,market_session,created_at
+                FROM focus_context_snapshots ORDER BY revision DESC LIMIT 1
+                """
+            ).fetchone()
+            daily = connection.execute(
+                """
+                SELECT trading_day,cache_version,universe_version,status,data_through,
+                       strength_feature_version,strength_score_version,
+                       normalization_version,range_persistence_version,
+                       payload_hash,coverage,cached_at,expires_at
+                FROM focus_daily_strength_snapshots
+                ORDER BY cached_at DESC LIMIT 1
+                """
+            ).fetchone()
         heartbeat_at = _as_utc(worker["heartbeat_at"]) if worker else None
         lease_until = _as_utc(lock["lease_until"]) if lock else None
         heartbeat_age = (
@@ -3779,15 +4449,40 @@ class CatalystRepository:
             and heartbeat_age <= heartbeat_ttl_seconds
         )
         lock_ok = lease_until is not None and lease_until > observed
+        snapshot_created_at = _as_utc(snapshot["created_at"]) if snapshot else None
+        snapshot_age = (
+            max(0.0, (observed - snapshot_created_at).total_seconds())
+            if snapshot_created_at is not None
+            else None
+        )
+        snapshot_ttl = (
+            snapshot_ttl_seconds
+            if snapshot_ttl_seconds is not None
+            else heartbeat_ttl_seconds
+        )
+        if snapshot_ttl <= 0:
+            raise ValueError("focus snapshot TTL must be positive")
+        snapshot_fresh = (
+            snapshot_age is not None and snapshot_age <= snapshot_ttl
+        )
         return {
             "healthy": bool(
-                schema["quick_check"] == "ok" and heartbeat_ok and lock_ok
+                schema["quick_check"] == "ok"
+                and heartbeat_ok
+                and lock_ok
+                and snapshot_fresh
             ),
             "status": worker["status"] if worker else "not_started",
             "heartbeat_at": _iso(heartbeat_at),
             "heartbeat_age_seconds": heartbeat_age,
+            "heartbeat_fresh": heartbeat_ok,
             "lock_live": lock_ok,
+            "snapshot_age_seconds": snapshot_age,
+            "snapshot_fresh": snapshot_fresh,
+            "snapshot_ttl_seconds": snapshot_ttl,
             "details": _loads(worker["details_json"], {}) if worker else {},
+            "latest_snapshot": dict(snapshot) if snapshot is not None else None,
+            "daily_strength_cache": dict(daily) if daily is not None else None,
             "schema_version": schema["schema_version"],
             "schema_checksum": schema["schema_checksum"],
         }

@@ -30,7 +30,7 @@ def test_unexpected_leader_failure_is_cleaned_and_next_call_can_retry(monkeypatc
             client=client,
         )
 
-        async def fetch(_session):
+        async def fetch(_session, _profile):
             nonlocal calls
             calls += 1
             if calls == 1:

@@ -36,6 +36,7 @@ from app.services.breakouts.providers.base import (
 
 
 TRADINGVIEW_SCAN_URL = "https://scanner.tradingview.com/america/scan"
+FOCUS_COARSE_CANDIDATE_LIMIT = 100
 REGULAR_COLUMNS = (
     "name",
     "exchange",
@@ -137,7 +138,16 @@ class TradingViewDiscoveryProvider:
     def _columns(self, session: MarketSession) -> tuple[str, ...]:
         return PREMARKET_COLUMNS if session is MarketSession.PREMARKET else REGULAR_COLUMNS
 
-    def _payload(self, session: MarketSession) -> dict[str, Any]:
+    def _payload(
+        self,
+        session: MarketSession,
+        profile: DiscoveryProfile | None = None,
+    ) -> dict[str, Any]:
+        profile = profile or (
+            DiscoveryProfile.PREMARKET_GAPPERS
+            if session is MarketSession.PREMARKET
+            else DiscoveryProfile.REGULAR_MOVERS
+        )
         columns = list(self._columns(session))
         if session is MarketSession.PREMARKET:
             filters = [
@@ -150,6 +160,16 @@ class TradingViewDiscoveryProvider:
                 {"left": "premarket_volume", "operation": "greater", "right": 0},
             ]
             sort = {"sortBy": "premarket_change", "sortOrder": "desc"}
+        elif profile is DiscoveryProfile.REGULAR_DOLLAR_VOLUME_LEADERS:
+            filters = [
+                {"left": "close", "operation": "egreater", "right": self.settings.min_price},
+                {
+                    "left": "Value.Traded",
+                    "operation": "egreater",
+                    "right": self.settings.regular_min_dollar_volume,
+                },
+            ]
+            sort = {"sortBy": "Value.Traded", "sortOrder": "desc"}
         else:
             filters = [
                 {"left": "close", "operation": "egreater", "right": self.settings.min_price},
@@ -172,7 +192,12 @@ class TradingViewDiscoveryProvider:
             "symbols": {"query": {"types": []}, "tickers": []},
             "columns": columns,
             "sort": sort,
-            "range": [0, self.settings.provider_result_limit],
+            "range": [
+                0,
+                FOCUS_COARSE_CANDIDATE_LIMIT
+                if profile is DiscoveryProfile.REGULAR_DOLLAR_VOLUME_LEADERS
+                else self.settings.provider_result_limit,
+            ],
         }
 
     def _cache_key(
@@ -190,7 +215,7 @@ class TradingViewDiscoveryProvider:
             "source_time_bucket": int(as_of.timestamp())
             // max(1, min(self.settings.provider_cache_ttl_seconds, 60)),
             "schema": self.settings.provider_schema_version,
-            "payload": self._payload(session),
+            "payload": self._payload(session, profile),
         }
         encoded = json.dumps(source, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(encoded).hexdigest()
@@ -208,7 +233,7 @@ class TradingViewDiscoveryProvider:
             "session": session.value,
             "profile": profile.value,
             "schema": self.settings.provider_schema_version,
-            "payload": self._payload(session),
+            "payload": self._payload(session, profile),
         }
         encoded = json.dumps(source, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(encoded).hexdigest()
@@ -241,7 +266,11 @@ class TradingViewDiscoveryProvider:
             chunks.append(chunk)
         return b"".join(chunks)
 
-    async def _fetch(self, session: MarketSession) -> bytes:
+    async def _fetch(
+        self,
+        session: MarketSession,
+        profile: DiscoveryProfile,
+    ) -> bytes:
         running_loop = asyncio.get_running_loop()
         if (
             self._request_semaphore is None
@@ -256,7 +285,7 @@ class TradingViewDiscoveryProvider:
                 async with self._client.stream(
                     "POST",
                     TRADINGVIEW_SCAN_URL,
-                    json=self._payload(session),
+                    json=self._payload(session, profile),
                 ) as response:
                     return await self._read_response(response)
 
@@ -275,6 +304,7 @@ class TradingViewDiscoveryProvider:
         body: bytes,
         *,
         session: MarketSession,
+        profile: DiscoveryProfile,
         as_of: datetime,
         cache_key: str,
     ) -> tuple[DiscoverySnapshot, bool]:
@@ -300,7 +330,12 @@ class TradingViewDiscoveryProvider:
             columns = returned
 
         candidates = []
-        for item in payload.get("data", [])[: self.settings.provider_result_limit]:
+        result_limit = (
+            FOCUS_COARSE_CANDIDATE_LIMIT
+            if profile is DiscoveryProfile.REGULAR_DOLLAR_VOLUME_LEADERS
+            else self.settings.provider_result_limit
+        )
+        for item in payload.get("data", [])[:result_limit]:
             if not isinstance(item, dict) or not isinstance(item.get("d"), list):
                 warnings.append("provider_invalid_row")
                 cacheable = False
@@ -311,6 +346,7 @@ class TradingViewDiscoveryProvider:
                 columns=columns,
                 session=session,
                 as_of=as_of,
+                profile=profile,
             )
             if row_warnings:
                 warnings.extend(row_warnings)
@@ -320,6 +356,7 @@ class TradingViewDiscoveryProvider:
             candidates,
             settings=self.settings,
             session=session,
+            profile=profile,
         )
         warnings.extend(filter_warnings)
         unique_warnings = list(dict.fromkeys(warnings))[:64]
@@ -433,6 +470,7 @@ class TradingViewDiscoveryProvider:
         key: str,
         safety_boundary: str,
         session: MarketSession,
+        profile: DiscoveryProfile,
         as_of: datetime,
     ) -> DiscoverySnapshot:
         """Leader-only Provider work; followers await its shielded Future."""
@@ -469,10 +507,11 @@ class TradingViewDiscoveryProvider:
         last_error: ProviderError | None = None
         for attempt in range(self.settings.provider_retry_attempts):
             try:
-                body = await self._fetch(session)
+                body = await self._fetch(session, profile)
                 snapshot, cacheable = self._parse(
                     body,
                     session=session,
+                    profile=profile,
                     as_of=as_of,
                     cache_key=key,
                 )
@@ -550,12 +589,15 @@ class TradingViewDiscoveryProvider:
                 warnings=["session_not_supported"],
                 candidates=[],
             )
-        expected_profile = (
-            DiscoveryProfile.PREMARKET_GAPPERS
+        allowed_profiles = (
+            {DiscoveryProfile.PREMARKET_GAPPERS}
             if session is MarketSession.PREMARKET
-            else DiscoveryProfile.REGULAR_MOVERS
+            else {
+                DiscoveryProfile.REGULAR_MOVERS,
+                DiscoveryProfile.REGULAR_DOLLAR_VOLUME_LEADERS,
+            }
         )
-        if profile is not expected_profile:
+        if profile not in allowed_profiles:
             raise ValueError("discovery profile does not match market session")
 
         key = self._cache_key(session=session, profile=profile, as_of=as_of)
@@ -585,6 +627,7 @@ class TradingViewDiscoveryProvider:
                     key=key,
                     safety_boundary=safety_boundary,
                     session=session,
+                    profile=profile,
                     as_of=as_of,
                 )
             )

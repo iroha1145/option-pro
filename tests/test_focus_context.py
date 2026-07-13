@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.integrations import router
+from app.services.catalysts.errors import CatalystRepositoryError
 from app.services.catalysts.focus_config import (
     FocusContextSettings,
     get_focus_context_settings,
@@ -203,17 +204,19 @@ def test_focus_publish_rejects_out_of_order_and_data_regressing_candidates(tmp_p
         draft(NOW + timedelta(minutes=20), NOW + timedelta(minutes=20)),
         now=NOW + timedelta(minutes=21),
     )
-    late_older = repository.publish_focus_context(
-        draft(NOW + timedelta(minutes=10), NOW + timedelta(minutes=10)),
-        now=NOW + timedelta(minutes=22),
-    )
-    assert late_older == newer
+    with pytest.raises(CatalystRepositoryError) as late_older:
+        repository.publish_focus_context(
+            draft(NOW + timedelta(minutes=10), NOW + timedelta(minutes=10)),
+            now=NOW + timedelta(minutes=22),
+        )
+    assert late_older.value.code == "focus_snapshot_time_regression"
 
-    newer_with_old_data = repository.publish_focus_context(
-        draft(NOW + timedelta(minutes=30), NOW + timedelta(minutes=15)),
-        now=NOW + timedelta(minutes=31),
-    )
-    assert newer_with_old_data == newer
+    with pytest.raises(CatalystRepositoryError) as newer_with_old_data:
+        repository.publish_focus_context(
+            draft(NOW + timedelta(minutes=30), NOW + timedelta(minutes=15)),
+            now=NOW + timedelta(minutes=31),
+        )
+    assert newer_with_old_data.value.code == "focus_snapshot_time_regression"
     assert repository.current_focus_context() == newer
 
 
