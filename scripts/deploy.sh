@@ -131,6 +131,8 @@ deploy_require_catalyst="${DEPLOY_REQUIRE_CATALYST:-$(env_value DEPLOY_REQUIRE_C
 deploy_require_catalyst="${deploy_require_catalyst:-false}"
 focus_producer_enabled="${FOCUS_PRODUCER_ENABLED:-$(env_value FOCUS_PRODUCER_ENABLED)}"
 focus_producer_enabled="${focus_producer_enabled:-false}"
+focus_producer_snapshot_grace_seconds="${FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS:-$(env_value FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS)}"
+focus_producer_snapshot_grace_seconds="${focus_producer_snapshot_grace_seconds:-120}"
 deploy_require_focus="${DEPLOY_REQUIRE_FOCUS_PRODUCER:-$(env_value DEPLOY_REQUIRE_FOCUS_PRODUCER)}"
 deploy_require_focus="${deploy_require_focus:-false}"
 
@@ -216,6 +218,16 @@ if is_truthy "$deploy_require_catalyst"; then
 fi
 if is_truthy "$deploy_require_focus" && ! is_truthy "$focus_producer_enabled"; then
     echo "DEPLOY_REQUIRE_FOCUS_PRODUCER=true requires FOCUS_PRODUCER_ENABLED=true." >&2
+    exit 1
+fi
+case "$focus_producer_snapshot_grace_seconds" in
+    ''|*[!0-9]*)
+        echo "FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS must be an integer from 30 to 900." >&2
+        exit 1
+        ;;
+esac
+if [ "$focus_producer_snapshot_grace_seconds" -lt 30 ] || [ "$focus_producer_snapshot_grace_seconds" -gt 900 ]; then
+    echo "FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS must be from 30 to 900." >&2
     exit 1
 fi
 

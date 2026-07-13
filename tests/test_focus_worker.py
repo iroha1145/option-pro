@@ -1489,6 +1489,209 @@ def test_focus_health_requires_a_present_and_fresh_snapshot(tmp_path) -> None:
     assert stale["snapshot_age_seconds"] == 1801
 
 
+def test_focus_health_allows_running_refresh_inside_snapshot_grace(tmp_path) -> None:
+    path = tmp_path / "focus.db"
+    settings = _settings(
+        path,
+        FOCUS_CONTEXT_REFRESH_SECONDS=1800,
+        FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS=120,
+    )
+    repository = CatalystRepository(path)
+    repository.initialize(now=SUMMER_NOW)
+    owner = f"{FOCUS_PRODUCER_WORKER_PREFIX}grace"
+    token = repository.acquire_worker_lock(
+        LOCK_NAME, owner, lease_seconds=4000, now=SUMMER_NOW
+    )
+    assert token is not None
+    draft = build_focus_context(
+        settings=settings,
+        strength_rows=[
+            {
+                "ticker": "AAPL",
+                "avg_dollar_volume_20d": 1_000_000,
+                "universe_member": True,
+            }
+        ],
+        canonical_symbols=["AAPL"],
+        as_of=SUMMER_NOW,
+        data_through=SUMMER_NOW,
+        market_session="regular",
+        universe_version="grace-v1",
+    )
+    repository.publish_focus_context(draft, now=SUMMER_NOW)
+
+    inside = SUMMER_NOW + timedelta(seconds=1810)
+    repository.heartbeat(
+        owner,
+        "running",
+        {"stage": "preparing", "refresh_started_at": inside.isoformat()},
+        now=inside,
+    )
+    grace = health_payload(settings, repository=repository, now=inside)
+    assert grace["healthy"] is True
+    assert grace["status"] == "degraded"
+    assert grace["production_status"] == "degraded"
+    assert grace["database"]["warnings"] == ["focus_refresh_in_progress"]
+
+    expired = SUMMER_NOW + timedelta(seconds=1921)
+    repository.heartbeat(
+        owner,
+        "running",
+        {"stage": "preparing", "refresh_started_at": inside.isoformat()},
+        now=expired,
+    )
+    unhealthy = health_payload(settings, repository=repository, now=expired)
+    assert unhealthy["healthy"] is False
+    assert unhealthy["status"] == "unhealthy"
+    assert unhealthy["database"]["snapshot_fresh"] is False
+
+
+def test_focus_health_rejects_idle_worker_inside_snapshot_grace(tmp_path) -> None:
+    path = tmp_path / "focus.db"
+    settings = _settings(
+        path,
+        FOCUS_CONTEXT_REFRESH_SECONDS=1800,
+        FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS=120,
+    )
+    repository = CatalystRepository(path)
+    repository.initialize(now=SUMMER_NOW)
+    owner = f"{FOCUS_PRODUCER_WORKER_PREFIX}idle-grace"
+    token = repository.acquire_worker_lock(
+        LOCK_NAME, owner, lease_seconds=4000, now=SUMMER_NOW
+    )
+    assert token is not None
+    draft = build_focus_context(
+        settings=settings,
+        strength_rows=[
+            {
+                "ticker": "AAPL",
+                "avg_dollar_volume_20d": 1_000_000,
+                "universe_member": True,
+            }
+        ],
+        canonical_symbols=["AAPL"],
+        as_of=SUMMER_NOW,
+        data_through=SUMMER_NOW,
+        market_session="regular",
+        universe_version="idle-grace-v1",
+    )
+    repository.publish_focus_context(draft, now=SUMMER_NOW)
+
+    inside = SUMMER_NOW + timedelta(seconds=1810)
+    repository.heartbeat(owner, "idle", {"stage": "waiting"}, now=inside)
+    result = health_payload(settings, repository=repository, now=inside)
+
+    assert result["healthy"] is False
+    assert result["status"] == "unhealthy"
+    assert result["database"]["snapshot_fresh"] is True
+    assert result["database"]["snapshot_within_refresh"] is False
+    assert result["database"]["refresh_in_progress"] is False
+
+
+def test_focus_health_allows_only_bounded_first_start_grace(tmp_path) -> None:
+    path = tmp_path / "focus.db"
+    settings = _settings(
+        path,
+        FOCUS_CONTEXT_REFRESH_SECONDS=1800,
+        FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS=120,
+    )
+    repository = CatalystRepository(path)
+    repository.initialize(now=SUMMER_NOW)
+    owner = f"{FOCUS_PRODUCER_WORKER_PREFIX}startup-grace"
+    token = repository.acquire_worker_lock(
+        LOCK_NAME, owner, lease_seconds=4000, now=SUMMER_NOW
+    )
+    assert token is not None
+    producer = FocusContextProducer(
+        settings=settings,
+        repository=repository,
+        clock=MarketClock(now=lambda: SUMMER_NOW),
+        owner_id=owner,
+    )
+    producer._heartbeat(
+        "running",
+        {"stage": "starting", "refresh_started_at": SUMMER_NOW.isoformat()},
+    )
+    producer._heartbeat("running", {"stage": "preparing"})
+
+    inside = health_payload(
+        settings,
+        repository=repository,
+        now=SUMMER_NOW + timedelta(seconds=119),
+    )
+    assert inside["healthy"] is True
+    assert inside["status"] == "degraded"
+    assert inside["database"]["startup_in_progress"] is True
+    assert inside["database"]["details"]["refresh_started_at"] == (
+        SUMMER_NOW.isoformat()
+    )
+
+    expired_at = SUMMER_NOW + timedelta(seconds=121)
+    assert repository.renew_worker_lock(
+        LOCK_NAME,
+        owner,
+        token,
+        lease_seconds=4000,
+        now=expired_at,
+    )
+    repository.heartbeat(
+        owner,
+        "running",
+        {"stage": "preparing", "refresh_started_at": SUMMER_NOW.isoformat()},
+        now=expired_at,
+    )
+    expired = health_payload(settings, repository=repository, now=expired_at)
+    assert expired["healthy"] is False
+    assert expired["status"] == "unhealthy"
+    assert expired["database"]["startup_in_progress"] is False
+
+
+def test_focus_health_never_combines_old_heartbeat_with_new_owner_lock(
+    tmp_path,
+) -> None:
+    path = tmp_path / "focus.db"
+    settings = _settings(
+        path,
+        FOCUS_CONTEXT_REFRESH_SECONDS=1800,
+        FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS=120,
+    )
+    repository = CatalystRepository(path)
+    repository.initialize(now=SUMMER_NOW)
+    old_owner = f"{FOCUS_PRODUCER_WORKER_PREFIX}old-owner"
+    old_token = repository.acquire_worker_lock(
+        LOCK_NAME, old_owner, lease_seconds=90, now=SUMMER_NOW
+    )
+    assert old_token is not None
+    repository.heartbeat(
+        old_owner,
+        "running",
+        {"stage": "starting", "refresh_started_at": SUMMER_NOW.isoformat()},
+        now=SUMMER_NOW,
+    )
+
+    takeover_at = SUMMER_NOW + timedelta(seconds=91)
+    new_owner = f"{FOCUS_PRODUCER_WORKER_PREFIX}new-owner"
+    new_token = repository.acquire_worker_lock(
+        LOCK_NAME, new_owner, lease_seconds=90, now=takeover_at
+    )
+    assert new_token is not None
+    result = health_payload(settings, repository=repository, now=takeover_at)
+
+    assert result["healthy"] is False
+    assert result["status"] == "unhealthy"
+    assert result["database"]["heartbeat_fresh"] is False
+    assert result["database"]["startup_in_progress"] is False
+
+
+def test_enabled_focus_producer_rejects_refresh_schedule_drift(tmp_path) -> None:
+    with pytest.raises(ValueError, match="must match"):
+        _settings(
+            tmp_path / "focus.db",
+            FOCUS_CONTEXT_REFRESH_SECONDS=60,
+            FOCUS_PRODUCER_INTERVAL_SECONDS=1800,
+        )
+
+
 def test_default_strength_loader_never_requests_options_or_implicit_publication(
     monkeypatch,
     tmp_path,
@@ -1572,6 +1775,7 @@ def test_compose_has_isolated_focus_producer_without_openai_or_readiness_couplin
         "FOCUS_PRODUCER_HEARTBEAT_SECONDS=30",
         "FOCUS_PRODUCER_HEALTH_STALE_SECONDS=120",
         "FOCUS_PRODUCER_LEASE_SECONDS=90",
+        "FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS=120",
         "FOCUS_DAILY_STRENGTH_SETTLEMENT_DELAY_SECONDS=1800",
         "FOCUS_DAILY_STRENGTH_MIN_COVERAGE=0.9",
         "FOCUS_SNAPSHOT_FULL_RESOLUTION_DAYS=30",
@@ -1583,7 +1787,18 @@ def test_compose_has_isolated_focus_producer_without_openai_or_readiness_couplin
     monkeypatch.delenv("FOCUS_PRODUCER_ENABLED", raising=False)
     assert FocusContextSettings(_env_file=None).producer_enabled is False
     deploy = (ROOT / "scripts" / "deploy.sh").read_text(encoding="utf-8")
+    setup = (ROOT / "setup.sh").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "set_env_value FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS 120" in setup
     assert 'focus_producer_enabled="${focus_producer_enabled:-false}"' in deploy
+    assert (
+        'focus_producer_snapshot_grace_seconds="${focus_producer_snapshot_grace_seconds:-120}"'
+        in deploy
+    )
+    assert '"$focus_producer_snapshot_grace_seconds" -lt 30' in deploy
+    assert '"$focus_producer_snapshot_grace_seconds" -gt 900' in deploy
     assert 'p["status"] in {"ok", "degraded"}' in deploy
     assert 'p["database"]["latest_snapshot"] is not None' in deploy
     assert 'p["database"]["snapshot_fresh"] is True' in deploy
+    assert "FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS=120" in readme
+    assert "默认 120 秒，可设置为 30 至 900 秒" in readme
