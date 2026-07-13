@@ -141,7 +141,29 @@
   const bindRetry = fn => { const b = $("[data-retry]", view); if (b) b.addEventListener("click", fn); };
   const settle = p => p.then(v => ({ ok: true, v }), e => ({ ok: false, e }));
 
-  const dataState = (label, warn) => `<span class="data-state ${warn ? "is-warn" : ""}"><i></i>${label}</span>`;
+  const dataState = (label, warn, tip) => tip
+    ? `<span class="data-state ${warn ? "is-warn" : ""} has-tip" tabindex="0"><i></i>${label}<span class="data-tip" role="tooltip">${tip}</span></span>`
+    : `<span class="data-state ${warn ? "is-warn" : ""}"><i></i>${label}</span>`;
+
+  // 数据源明细弹层:失败名单如实列出;正常时只报总数,不铺全量代码
+  function srcTip({ attempted, succeeded, failedTickers, failed, stale, asOf, label }) {
+    const bad = Array.isArray(failedTickers) ? failedTickers : [];
+    const okCount = succeeded != null ? succeeded : Math.max((attempted || 0) - bad.length, 0);
+    const rows = [];
+    if (bad.length) {
+      rows.push(`<b class="data-tip__bad">本轮拉取失败 ${bad.length} 只</b>`);
+      rows.push(`<span class="data-tip__codes">${bad.map(t => `<i>${esc(t)}</i>`).join("")}</span>`);
+      rows.push(`<small>其余 ${okCount} 只正常 · 失败标的暂缺行情,下轮刷新自动重试</small>`);
+    } else if (failed > 0) {
+      rows.push(`<b class="data-tip__bad">本轮拉取失败 ${failed} 只</b>`);
+      rows.push(`<small>本次快照未附失败名单,下轮刷新后可见</small>`);
+    } else {
+      rows.push(`<b class="data-tip__ok">${attempted != null ? okCount + "/" + attempted + " " : ""}全部拉取成功</b>`);
+      rows.push(`<small>${label || "数据源"}正常${asOf ? " · 更新 " + N.fmtTime(asOf) : ""}</small>`);
+    }
+    if (stale) rows.push(`<small class="data-tip__warn">当前为过期快照:上游暂时不可用,展示最近一次成功数据</small>`);
+    return rows.join("");
+  }
 
   /* ---------- 视图:自选 ---------- */
   let focusTicker = null, focusRange = "1d", focusAdj = "raw", watchGroup = null, watchFilter = "all";
@@ -207,7 +229,7 @@
         <h1>自选观察<small>${flat.length} 只标的 · ${up} 涨 ${flat.length - up} 跌 · 平均 <span class="num ${tone(avg)}">${pct(avg)}</span> · 延迟行情,仅供研究</small></h1>
       </div>
       <div class="view-head__aside">
-        ${dataState(`YAHOO ${N.srcCN(St.watch.sourceStatus)} · ${St.watch.succeeded}/${St.watch.attempted} · ${N.fmtTime(St.watch.asOf)}`, St.watch.sourceStatus !== "active" || St.watch.stale)}
+        ${dataState(`YAHOO ${N.srcCN(St.watch.sourceStatus)} · ${St.watch.succeeded}/${St.watch.attempted} · ${N.fmtTime(St.watch.asOf)}`, St.watch.sourceStatus !== "active" || St.watch.stale, srcTip({ attempted: St.watch.attempted, succeeded: St.watch.succeeded, failedTickers: St.watch.failedTickers, failed: St.watch.failed, stale: St.watch.stale, asOf: St.watch.asOf, label: "Yahoo 行情源" }))}
       </div>
     </div>
 
@@ -803,7 +825,7 @@
         <p class="view-head__kicker">04 · Sectors</p>
         <h1>板块<small>${upCount} 个板块上涨${list[0] && list[0].perf != null ? "," + esc(list[0].name) + "暂时领先" : ""} · 先看资金方向,再查内部波动</small></h1>
       </div>
-      <div class="view-head__aside">${dataState(`行情快照 ${N.fmtTime(St.watch.asOf)} · ${St.watch.flat.length} 只成分`, St.watch.stale)}</div>
+      <div class="view-head__aside">${dataState(`行情快照 ${N.fmtTime(St.watch.asOf)} · ${St.watch.flat.length} 只成分`, St.watch.stale, srcTip({ attempted: St.watch.attempted, succeeded: St.watch.succeeded, failedTickers: St.watch.failedTickers, failed: St.watch.failed, stale: St.watch.stale, asOf: St.watch.asOf, label: "Yahoo 行情源" }))}</div>
     </div>
 
     <div class="sector-grid">
@@ -935,7 +957,7 @@
         <p class="view-head__kicker">05 · Earnings</p>
         <h1>财报日历<small>未来七日 ${total} 场,覆盖 ${sectorsCovered.size} 个行业 · 预设美股列表 · 日期以美东为准</small></h1>
       </div>
-      <div class="view-head__aside">${dataState(`日历 ${St.earnMeta ? N.fmtTime(St.earnMeta.as_of) : "—"} · ${St.earnMeta ? St.earnMeta.succeeded + "/" + St.earnMeta.attempted : ""} 源正常`, St.earnMeta && St.earnMeta.source_status !== "active")}</div>
+      <div class="view-head__aside">${dataState(`日历 ${St.earnMeta ? N.fmtTime(St.earnMeta.as_of) : "—"} · ${St.earnMeta ? St.earnMeta.succeeded + "/" + St.earnMeta.attempted : ""} 源正常`, St.earnMeta && St.earnMeta.source_status !== "active", St.earnMeta ? srcTip({ attempted: St.earnMeta.attempted, succeeded: St.earnMeta.succeeded, failedTickers: St.earnMeta.failed_symbols, stale: false, asOf: St.earnMeta.as_of, label: "财报日历源" }) : "")}</div>
     </div>
 
     <section class="panel panel--pad" data-reveal style="--reveal-i:1" aria-label="选择日期">

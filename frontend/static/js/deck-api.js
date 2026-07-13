@@ -154,7 +154,11 @@
     const seen = new Map();
     groups.forEach(g => g.stocks.forEach(s => { if (!seen.has(s.ticker)) seen.set(s.ticker, s); }));
     const flat = Array.from(seen.values()); // 跨主题去重:同一标的可属多个分组
-    return { groups, flat, asOf: d.as_of, stale: !!d._stale, sourceStatus: d.source_status, attempted: d.attempted, succeeded: d.succeeded };
+    return {
+      groups, flat, asOf: d.as_of, stale: !!d._stale, sourceStatus: d.source_status,
+      attempted: d.attempted, succeeded: d.succeeded, failed: d.failed,
+      failedTickers: Array.isArray(d.failed_tickers) ? d.failed_tickers : [],
+    };
   }
 
   const stock = t => jget("/api/stocks/" + enc(t));

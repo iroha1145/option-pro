@@ -543,6 +543,7 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
         "attempted": len(all_tickers),
         "succeeded": len(price_map),
         "failed": len(all_tickers) - len(price_map),
+        "failed_tickers": sorted(t for t in all_tickers if t not in price_map),
         "data_limited": success_ratio < 1.0,
         "source_status": "active" if success_ratio == 1.0 else "degraded",
     })
