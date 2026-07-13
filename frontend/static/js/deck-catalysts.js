@@ -45,7 +45,8 @@
     disabled: "未启用", empty: "没有匹配", not_requested: "未请求", pending: "待处理", queued: "排队中",
     in_progress: "分析中", cancel_requested: "正在取消", completed: "已完成", failed: "失败", cancelled: "已取消",
     insufficient_context: "信息不足", budget_blocked: "预算受限", not_configured: "未配置",
-    submission_outcome_unknown: "提交结果待确认", worker_interrupted: "任务中断",
+    prepared: "准备完成", leased: "分析占用中", consumed: "已消费", resync_required: "需要重新同步",
+    incomplete_output: "输出不完整", submission_outcome_unknown: "提交结果待确认", worker_interrupted: "任务中断",
   };
   const className = value => String(value || "").toLowerCase();
   const classLabel = value => CLASS_CN[className(value)] || String(value || "—");
@@ -180,9 +181,13 @@
     statusRequest: 0,
     feedRequest: 0,
     calendarRequest: 0,
+    focusRequest: 0,
     status: null,
     feed: null,
     calendar: null,
+    focusStatus: null,
+    hotspots: null,
+    marketCycle: null,
     openStock: null,
     postRender: null,
   };
@@ -247,9 +252,22 @@
           </div>
         </section>
 
-        <section class="cat-summary" id="cat-summary" data-reveal style="--reveal-i:2" aria-label="催化剂摘要"></section>
+        <section class="cat-focus-cycle panel panel--pad" id="cat-focus-cycle" data-reveal style="--reveal-i:2" aria-labelledby="cat-focus-title">
+          <header class="cat-focus-cycle__head">
+            <div>
+              <span class="mono">MARKET FOCUS · DISPLAY ONLY</span>
+              <h2 id="cat-focus-title">市场与焦点股综合分析</h2>
+              <p>事件组先通过确定性热点门控，再按需进入一次有界综合分析；结果不改变正式评分。</p>
+            </div>
+            <button class="btn btn--amber" type="button" id="cat-focus-run" disabled>读取准备状态</button>
+          </header>
+          <div class="cat-focus-cycle__meta" id="cat-focus-meta" aria-live="polite"></div>
+          <div class="cat-focus-cycle__body" id="cat-focus-body">${stateBlock("loading", "正在读取热点准备区", "普通页面刷新不会创建模型任务。")}</div>
+        </section>
 
-        <section class="cat-workspace sect" data-reveal style="--reveal-i:3">
+        <section class="cat-summary" id="cat-summary" data-reveal style="--reveal-i:3" aria-label="催化剂摘要"></section>
+
+        <section class="cat-workspace sect" data-reveal style="--reveal-i:4">
           <div class="cat-tabs" role="tablist" aria-label="催化剂数据视图">
             ${[["feed", "新闻流"], ["stocks", "股票影响"], ["calendar", "经济日历"], ["sources", "数据源"]].map(([key, label]) => `
               <button type="button" role="tab" id="cat-tab-${key}" aria-controls="cat-panel" aria-selected="${page.tab === key}" tabindex="${page.tab === key ? "0" : "-1"}" data-cat-tab="${key}">${label}</button>`).join("")}
@@ -367,19 +385,22 @@
         if (page.active) { button.disabled = false; button.textContent = "请求后台同步"; }
       }
     });
+    $("#cat-focus-run", page.view).addEventListener("click", () => startMarketFocusCycle());
   }
 
   function renderHeader() {
     const raw = metaStatus(page.status) || {};
     const status = stateOf(raw, "unavailable");
+    const feedStream = raw.streams && (raw.streams.feed || raw.streams.latest) || {};
+    const resyncRequired = !!(raw.resync_required || feedStream.resync_required);
     const sources = sourceItems(raw, page.feed);
     const active = sources.filter(source => ["active", "ok", "healthy"].includes(className(source.status || source.state))).length;
     const degraded = sources.filter(source => ["degraded", "failed", "stale", "unavailable"].includes(className(source.status || source.state))).length;
     const actualModel = raw.model || null;
     const model = actualModel || raw.expected_model || "gpt-5.6-terra";
     const reasoning = actualModel ? (raw.reasoning || "max") : (raw.expected_reasoning || "max");
-    $("#cat-head-state", page.view).innerHTML = `<span class="data-state ${["active", "empty"].includes(status) ? "" : status === "unavailable" ? "is-down" : "is-warn"}"><i></i>${esc(statusLabel(status))} · 本地缓存</span>`;
-    $("#cat-connection", page.view).textContent = statusLabel(status);
+    $("#cat-head-state", page.view).innerHTML = `<span class="data-state ${["active", "empty"].includes(status) && !resyncRequired ? "" : status === "unavailable" ? "is-down" : "is-warn"}"><i></i>${esc(resyncRequired ? "有界重新同步中" : statusLabel(status))} · 本地缓存</span>`;
+    $("#cat-connection", page.view).textContent = resyncRequired ? "旧快照 · 重新同步中" : statusLabel(status);
     $("#cat-times", page.view).innerHTML = `数据截止 ${timeHtml(raw.data_through || raw.as_of)} · 最近同步 ${timeHtml(raw.last_sync_at)}`;
     $("#cat-model", page.view).textContent = actualModel
       ? `${model} · ${reasoning}`
@@ -387,8 +408,125 @@
     $("#cat-facts", page.view).innerHTML = `
       <span><small>活跃来源</small><b>${sources.length ? active : "—"}</b></span>
       <span><small>降级来源</small><b>${sources.length ? degraded : "—"}</b></span>
-      <span><small>远程状态</small><b>${esc(statusLabel(raw.remote_status || raw.remote_state || status))}</b></span>
+      <span><small>远程状态</small><b>${esc(resyncRequired ? `Resync · 第 ${feedStream.resync_generation ?? raw.resync_generation ?? "—"} 代` : statusLabel(raw.remote_status || raw.remote_state || status))}</b></span>
       <span><small>Schema</small><b>${esc(raw.schema_version || "—")}</b></span>`;
+  }
+
+  function hotspotItems(payload) {
+    return list(payload, ["items", "hotspots", "event_groups", "results"]);
+  }
+
+  function cyclePayload(payload) {
+    const raw = payload && (payload.cycle || payload.item || payload.job) || payload || {};
+    return Object.assign({}, raw, {
+      cycle_id: raw.cycle_id || raw.job_id || raw.id || null,
+      job_id: raw.job_id || raw.cycle_id || raw.id || null,
+      status: Jobs.normalizeStatus(raw.status || raw.state || "pending"),
+    });
+  }
+
+  function compactValues(values, limit) {
+    return list({ values: Array.isArray(values) ? values : [] }, ["values"])
+      .slice(0, limit || 6)
+      .map(value => typeof value === "object" ? (value.name || value.title || value.ticker || value.id) : value)
+      .filter(Boolean);
+  }
+
+  function hotspotCard(item) {
+    const sources = compactValues(item.source_names || item.sources, 4);
+    const tickers = compactValues(item.validated_tickers || item.tickers, 6).map(upperTicker).filter(Boolean);
+    const reasons = compactValues(item.hot_reasons || item.reasons || item.gate_reasons, 4);
+    const hotScore = finite(item.hot_score) ? item.hot_score : null;
+    const confirmation = item.component_scores && finite(item.component_scores.market_confirmation)
+      ? item.component_scores.market_confirmation
+      : null;
+    return `<article class="cat-hotspot">
+      <header><span class="chip ${hotScore != null && hotScore >= 75 ? "chip--down" : "chip--amber"}">热点 ${score(hotScore)}</span><span class="chip chip--mute">${esc(statusLabel(item.status || "prepared"))}</span></header>
+      <h3>${esc(item.representative_title || item.title || "未命名事件组")}</h3>
+      <p class="cat-hotspot__meta">${esc(item.event_type || "other")} · 独立来源 ${finite(item.source_count) ? Math.round(item.source_count) : sources.length || "—"} · 市场确认 ${confirmation == null ? "缺失并重算权重" : score(confirmation)}</p>
+      <p class="cat-hotspot__meta">首次 ${timeHtml(item.first_published_at || item.available_at)} · 最近 ${timeHtml(item.last_published_at || item.available_at)}</p>
+      ${reasons.length ? `<p>${esc(reasons.join(" · "))}</p>` : ""}
+      <footer>${sources.map(value => `<span>${esc(value)}</span>`).join("")}${tickers.map(value => `<b>${esc(value)}</b>`).join("")}</footer>
+    </article>`;
+  }
+
+  function cycleResultHtml(cycle) {
+    const result = cycle && (cycle.result || cycle.analysis || cycle.structured_output);
+    if (!result || typeof result !== "object") return "";
+    const events = list(result, ["dominant_events", "events"]);
+    const sectors = compactValues(result.affected_sectors, 8);
+    const assessments = list(result, ["focus_ticker_assessments", "ticker_assessments"]);
+    const assessmentHtml = item => {
+      const supporting = compactValues(item.supporting_event_ids, 8);
+      const conflicting = compactValues(item.conflicting_event_ids, 8);
+      const risks = compactValues(item.risks, 6);
+      return `<article><b>${esc(upperTicker(item.ticker) || "—")}</b><span class="mono">加权催化剂语境 ${signedScore(item.weighted_catalyst_context)} · 仅展示</span><p>${esc(item.summary || "证据不足，未形成方向摘要。")}</p>${supporting.length ? `<small>支持证据 ${esc(supporting.join(" · "))}</small>` : ""}${conflicting.length ? `<small>冲突证据 ${esc(conflicting.join(" · "))}</small>` : ""}${risks.length ? `<small>风险 ${esc(risks.join(" · "))}</small>` : ""}${item.confidence != null ? `<small>模型置信度 ${pct(item.confidence)} · 非胜率</small>` : ""}</article>`;
+    };
+    return `<div class="cat-cycle-result">
+      <div class="cat-cycle-result__lead">
+        <span class="chip chip--amber">模型推断 · ${esc(cycle.model || "gpt-5.6-terra")} · ${esc(cycle.reasoning || cycle.reasoning_effort || "max")}</span>
+        <p>${esc(result.market_summary || (result.no_new_material_catalyst ? "本周期没有新的重要催化剂。" : "综合分析已完成。"))}</p>
+        <small>模型时间 ${timeHtml(result.as_of || cycle.completed_at || cycle.updated_at)} · 快照时间 ${timeHtml(cycle.snapshot_as_of)}</small>
+      </div>
+      ${events.length ? `<section><h3>主要热点</h3><ul>${events.slice(0, 8).map(event => `<li>${esc(typeof event === "object" ? (event.summary || event.title || event.event_group_id || "事件") : event)}</li>`).join("")}</ul></section>` : ""}
+      ${sectors.length ? `<section><h3>受影响行业</h3><p>${sectors.map(value => `<span class="chip chip--mute">${esc(value)}</span>`).join(" ")}</p></section>` : ""}
+      ${assessments.length ? `<section><h3>焦点股票摘要</h3><div class="cat-cycle-tickers">${assessments.slice(0, 20).map(assessmentHtml).join("")}</div></section>` : ""}
+      ${list(result, ["market_uncertainties"]).length ? `<section><h3>不确定性</h3><ul>${list(result, ["market_uncertainties"]).map(value => `<li>${esc(value)}</li>`).join("")}</ul></section>` : ""}
+      <p class="cat-disclaimer">综合分析只使用有界事件组摘要，不包含完整文章，也不进入正式股票排名、突破评分或市场形态。</p>
+    </div>`;
+  }
+
+  function renderFocusPanel() {
+    const raw = page.focusStatus || {};
+    const cycle = cyclePayload(page.marketCycle || {});
+    const events = hotspotItems(page.hotspots);
+    const preparedRevision = Number(raw.prepared_revision || 0);
+    const consumedRevision = Number(raw.last_consumed_revision || 0);
+    const preparedCount = finite(raw.prepared_hot_count) ? raw.prepared_hot_count : events.filter(item => className(item.status) === "prepared").length;
+    const active = !!((cycle.cycle_id || raw.active_cycle_id) && Jobs.isActive(cycle.status));
+    const capability = className(raw.capability || "disabled");
+    const budgetMissing = capability === "budget_configuration_required";
+    const snapshotUnavailable = ["stale", "unavailable", "disabled"].includes(className(raw.status));
+    const actionMissing = raw.action_enabled === false || capability === "action_disabled" || capability === "disabled";
+    const hasNew = preparedRevision > consumedRevision && preparedCount > 0;
+    const cooldown = raw.cooldown_until && new Date(raw.cooldown_until).getTime() > Date.now();
+    const unknownSubmission = className(cycle.error_code) === "submission_outcome_unknown";
+    const retryable = !!(
+      cycle.cycle_id
+      && !unknownSubmission
+      && ["failed", "cancelled", "incomplete_output"].includes(className(cycle.status))
+    );
+    const canRetry = retryable && !active && !budgetMissing && !actionMissing && !snapshotUnavailable && !cooldown;
+    const canRun = !unknownSubmission && (canRetry || (!!raw.manual_enabled && hasNew && !active && !budgetMissing && !actionMissing && !snapshotUnavailable && !cooldown));
+    const button = $("#cat-focus-run", page.view);
+    if (button) {
+      button.disabled = !canRun;
+      button.textContent = active ? "正在分析"
+        : unknownSubmission ? "提交结果待核对"
+        : budgetMissing ? "分析预算未配置"
+          : actionMissing ? "分析功能未启用"
+            : cooldown ? "分析冷却中"
+              : retryable ? "重试同一不可变快照"
+                : hasNew ? `基于 ${Math.round(preparedCount)} 个新热点重新分析`
+                : "暂无新热点";
+    }
+    $("#cat-focus-meta", page.view).innerHTML = [
+      ["准备热点", finite(preparedCount) ? Math.round(preparedCount) : "—"],
+      ["准备版本", raw.prepared_revision ?? "—"],
+      ["已消费版本", raw.last_consumed_revision ?? "—"],
+      ["上次固定分析", raw.last_cycle_at ? N.fmtDateTime(raw.last_cycle_at) : "—"],
+      ["下次固定分析", raw.next_scheduled_at ? N.fmtDateTime(raw.next_scheduled_at) : "—"],
+      ["数据截止", raw.data_through ? N.fmtDateTime(raw.data_through) : "—"],
+    ].map(([label, value]) => `<span><small>${esc(label)}</small><b>${esc(value)}</b></span>`).join("");
+
+    let state = "";
+    if (active) state = stateBlock(cycle.status, statusLabel(cycle.status), "新热点仍会进入下一准备版本，不会混入当前不可变快照。 ");
+    else if (unknownSubmission) state = stateBlock("degraded", "提交结果待核对", "无法确认远端是否已经受理。为避免重复计费，本周期禁止重试，需等待服务端核对结果。 ");
+    else if (budgetMissing) state = stateBlock("disabled", "分析预算尚未配置", "每日任务和每日输出 Token 两项预算齐全后，自动周期才允许启用。 ");
+    else if (cycle.status === "failed" || cycle.status === "incomplete_output") state = stateBlock("failed", statusLabel(cycle.status), cycle.error_code ? `安全错误码：${cycle.error_code}；准备版本尚未消费。` : "准备版本尚未消费，可在冷却结束后显式重试。 ");
+    else if (!hasNew && !cycleResultHtml(cycle)) state = stateBlock("empty", "暂无新热点", "普通新闻仍会保存；没有合格热点时不会创建手动综合分析。 ");
+    const cards = events.length ? `<div class="cat-hotspot-list">${events.slice(0, 8).map(hotspotCard).join("")}</div>` : "";
+    $("#cat-focus-body", page.view).innerHTML = `${state}${cycleResultHtml(cycle)}${cards}` || stateBlock("empty", "暂无热点准备记录", "确定性门控不会用中性分填充缺失证据。 ");
   }
 
   function summaryValue(summary, keys) {
@@ -411,7 +549,14 @@
 
   function renderReadState() {
     const status = stateOf(page.feed, page.status ? stateOf(metaStatus(page.status), "unavailable") : "unavailable");
-    const warnings = list(metaStatus(page.status), ["warnings"]);
+    const raw = metaStatus(page.status) || {};
+    const feedStream = raw.streams && (raw.streams.feed || raw.streams.latest) || {};
+    const resyncRequired = !!(raw.resync_required || feedStream.resync_required);
+    const warnings = list(raw, ["warnings"]);
+    if (resyncRequired) {
+      $("#cat-read-state", page.view).innerHTML = stateBlock("stale", "正在有界重新同步", "旧快照继续可读；完整分页校验成功后才会原子切换水位。 ");
+      return;
+    }
     if (status === "active" || status === "empty") {
       $("#cat-read-state", page.view).innerHTML = warnings.length ? stateBlock("degraded", "部分能力受限", warnings[0]) : "";
       return;
@@ -617,8 +762,97 @@
     if (page.tab === "calendar") renderPanel();
   }
 
+  function watchMarketFocusCycle(initial) {
+    const cycle = cyclePayload(initial);
+    if (!cycle.cycle_id || !Jobs.isActive(cycle.status)) return;
+    Jobs.watch(cycle, {
+      scope: "catalyst-page:market-focus",
+      poll: (id, signal) => N.catalystMarketCycle(id, { signal }).then(cyclePayload),
+      onUpdate: next => { if (page.active) { page.marketCycle = next; renderFocusPanel(); } },
+      onComplete: next => {
+        if (!page.active) return;
+        page.marketCycle = next;
+        renderFocusPanel();
+        loadMarketFocus(true, false);
+      },
+      onError: error => {
+        if (!page.active) return;
+        page.marketCycle = Object.assign({}, cycle, { status: "failed", error_code: error.code || "market_focus_poll_failed" });
+        renderFocusPanel();
+      },
+    });
+  }
+
+  function startMarketFocusCycle() {
+    const raw = page.focusStatus || {};
+    const cycle = cyclePayload(page.marketCycle || {});
+    if (className(cycle.error_code) === "submission_outcome_unknown") return;
+    const retryCycleId = cycle.cycle_id
+      && ["failed", "cancelled", "incomplete_output"].includes(className(cycle.status))
+      ? cycle.cycle_id
+      : null;
+    const revision = Number(raw.prepared_revision || 0);
+    const preparedCount = finite(raw.prepared_hot_count)
+      ? raw.prepared_hot_count
+      : hotspotItems(page.hotspots).filter(item => className(item.status) === "prepared").length;
+    if (!retryCycleId && (!raw.manual_enabled || revision <= Number(raw.last_consumed_revision || 0) || preparedCount <= 0)) return;
+    Jobs.start({
+      scope: "catalyst-page:market-focus",
+      create: signal => N.createCatalystMarketCycle(
+        retryCycleId
+          ? { retry_cycle_id: retryCycleId }
+          : { expected_prepared_revision: revision },
+        { signal },
+      ).then(cyclePayload),
+      poll: (id, signal) => N.catalystMarketCycle(id, { signal }).then(cyclePayload),
+      onUpdate: cycle => { if (page.active) { page.marketCycle = cycle; renderFocusPanel(); } },
+      onComplete: cycle => {
+        if (!page.active) return;
+        page.marketCycle = cycle;
+        renderFocusPanel();
+        loadMarketFocus(true, false);
+      },
+      onError: error => {
+        if (!page.active) return;
+        page.marketCycle = { status: "failed", error_code: error.code || "market_focus_create_failed" };
+        renderFocusPanel();
+      },
+    });
+  }
+
+  async function loadMarketFocus(force, shouldWatch = true) {
+    const request = ++page.focusRequest;
+    const options = { force, signal: page.controller.signal };
+    const safe = (promise, fallback) => promise.catch(error => {
+      if (error.name === "AbortError") throw error;
+      return Object.assign({}, fallback, { error_code: error.code || "market_focus_unavailable" });
+    });
+    try {
+      const [status, hotspots, latest] = await Promise.all([
+        safe(N.catalystHotspotStatus(force, page.controller.signal), { capability: "disabled", manual_enabled: false }),
+        safe(N.catalystHotspots({ limit: 8, include_consumed: true }, options), { items: [] }),
+        safe(N.catalystMarketCycleLatest(options), null),
+      ]);
+      if (!page.active || request !== page.focusRequest) return;
+      page.focusStatus = status;
+      page.hotspots = hotspots;
+      page.marketCycle = latest ? cyclePayload(latest) : null;
+      renderFocusPanel();
+      if (shouldWatch && page.marketCycle) watchMarketFocusCycle(page.marketCycle);
+    } catch (error) {
+      if (error.name === "AbortError" || !page.active || request !== page.focusRequest) return;
+      if (!page.focusStatus) page.focusStatus = { capability: "disabled", manual_enabled: false };
+      renderFocusPanel();
+    }
+  }
+
   async function loadAll(force) {
-    await Promise.all([loadStatus(force), loadFeed(force), page.tab === "calendar" ? loadCalendar(force) : Promise.resolve()]);
+    await Promise.all([
+      loadStatus(force),
+      loadFeed(force),
+      loadMarketFocus(force),
+      page.tab === "calendar" ? loadCalendar(force) : Promise.resolve(),
+    ]);
   }
 
   function scheduleRefresh() {
@@ -642,6 +876,9 @@
     page.status = null;
     page.feed = null;
     page.calendar = null;
+    page.focusStatus = null;
+    page.hotspots = null;
+    page.marketCycle = null;
     page.openStock = options.openStock;
     page.postRender = options.postRender;
     page.tab = ["feed", "stocks", "calendar", "sources"].includes(page.params.get("tab")) ? page.params.get("tab") : "feed";

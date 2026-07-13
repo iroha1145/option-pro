@@ -90,6 +90,9 @@
     [/^\/api\/catalysts\/feed/, 120e3],
     [/^\/api\/catalysts\/tickers\//, 120e3],
     [/^\/api\/catalysts\/calendar/, 300e3],
+    [/^\/api\/catalysts\/hotspots\/status/, 60e3],
+    [/^\/api\/catalysts\/hotspots/, 120e3],
+    [/^\/api\/catalysts\/market-focus-cycles\/latest/, 120e3],
     [/^\/api\/catalysts\/news\//, 120e3],
     [/^\/api\/options\//, 120e3],
   ];
@@ -287,6 +290,24 @@
   const tickerCatalysts = (t, params, options) => jget("/api/catalysts/tickers/" + enc(t) + qs(params), options || {});
   const catalystBatch = (tickers, params, options) => jpost("/api/catalysts/tickers/batch", Object.assign({ tickers }, params || {}), options || {});
   const catalystCalendar = (params, options) => jget("/api/catalysts/calendar" + qs(params), options || {});
+  const catalystHotspotStatus = (force, signal) => jget("/api/catalysts/hotspots/status", { force, signal });
+  const catalystHotspots = (params, options) => jget("/api/catalysts/hotspots" + qs(params), options || {});
+  const catalystMarketCycleLatest = options => jget("/api/catalysts/market-focus-cycles/latest", options || {});
+  const catalystMarketCycle = (id, options) => jget(
+    "/api/catalysts/market-focus-cycles/" + enc(id),
+    Object.assign({ noCache: true, lowPriority: true, retry5xx: false }, options || {}),
+  );
+  const createCatalystMarketCycle = (request, options) => {
+    const input = request || {};
+    const payload = input.retry_cycle_id
+      ? { trigger: "manual", retry_cycle_id: input.retry_cycle_id }
+      : { trigger: "manual", expected_prepared_revision: input.expected_prepared_revision };
+    return jpost(
+      "/api/catalysts/market-focus-cycles",
+      payload,
+      Object.assign({ lowPriority: true }, options || {}),
+    );
+  };
   const catalystRefresh = options => jpost("/api/catalysts/refresh", {}, options || {}).then(body => {
     invalidateCache("/api/catalysts/");
     return body;
@@ -435,7 +456,9 @@
     indices, marketStatus, watchlist, stock, stockSignals, signalDeep, signalsMarket, strengthMarket,
     profiles, chart, scan, breakoutsCurrent, breakoutsStatus, breakoutsEvents, breakoutEventDetail, breakoutTicker,
     sectors, sectorIV, earnings, earningsImpact, unusual, expirations, chain, search, aiStock,
-    catalystStatus, catalystFeed, catalystNews, tickerCatalysts, catalystBatch, catalystCalendar, catalystRefresh,
+    catalystStatus, catalystFeed, catalystNews, tickerCatalysts, catalystBatch, catalystCalendar,
+    catalystHotspotStatus, catalystHotspots, catalystMarketCycleLatest, catalystMarketCycle,
+    createCatalystMarketCycle, catalystRefresh,
     createCatalystAnalysis, catalystAnalysisJob, cancelCatalystAnalysisJob,
     createEarningsImpactJob, createOptionAlertsJob, aiJob, cancelAiJob,
     buildWeek, etToday,

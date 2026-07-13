@@ -6,7 +6,7 @@
   const POLL_SECONDS = [2, 3, 5, 8, 10];
   const TERMINAL = new Set([
     "completed", "failed", "cancelled", "insufficient_context", "budget_blocked",
-    "submission_outcome_unknown", "worker_interrupted",
+    "incomplete_output", "submission_outcome_unknown", "worker_interrupted",
   ]);
   const ACTIVE = new Set(["pending", "queued", "in_progress", "processing", "running", "cancel_requested"]);
   const tasks = new Map();

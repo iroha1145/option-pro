@@ -33,6 +33,8 @@ test('Catalyst data remains same-origin, abortable, cached by endpoint family, a
   for (const endpoint of [
     '/api/catalysts/status', '/api/catalysts/feed', '/api/catalysts/news/',
     '/api/catalysts/tickers/', '/api/catalysts/calendar', '/api/catalysts/analysis-jobs/',
+    '/api/catalysts/hotspots/status', '/api/catalysts/hotspots',
+    '/api/catalysts/market-focus-cycles',
     '/api/ai/jobs/earnings-impact', '/api/ai/jobs/',
   ]) assert.match(api, new RegExp(endpoint.replaceAll('/', '\\/')));
   assert.match(api, /const normalGate = makeGate\(3\)/);
@@ -59,6 +61,35 @@ test('paid analysis is explicit and earnings no longer uses the synchronous GET 
   assert.match(app, /选择行只会切换研究对象，不会调用模型/);
   assert.doesNotMatch(catalysts, /progress_percent|data-progress|aria-valuenow|进度\s*\d+%/i);
   assert.match(catalysts, /不显示估算进度/);
+});
+
+test('market-focus cycles are explicit, revision-bound, and never triggered by page refresh', () => {
+  assert.match(api, /createCatalystMarketCycle/);
+  assert.match(api, /expected_prepared_revision/);
+  assert.match(api, /retry_cycle_id/);
+  assert.match(catalysts, /cat-focus-run/);
+  assert.match(catalysts, /addEventListener\("click", \(\) => startMarketFocusCycle\(\)\)/);
+  assert.match(catalysts, /重试同一不可变快照/);
+  assert.match(catalysts, /submission_outcome_unknown/);
+  assert.match(catalysts, /提交结果待核对/);
+  assert.match(catalysts, /为避免重复计费/);
+  assert.equal((catalysts.match(/N\.createCatalystMarketCycle\(/g) || []).length, 1);
+  assert.match(catalysts, /preparedRevision > consumedRevision/);
+  assert.match(catalysts, /新热点仍会进入下一准备版本，不会混入当前不可变快照/);
+  assert.match(catalysts, /准备版本尚未消费/);
+  assert.match(catalysts, /分析预算未配置/);
+  assert.match(catalysts, /普通页面刷新不会创建模型任务/);
+  assert.match(catalysts, /不进入正式股票排名、突破评分或市场形态/);
+  assert.match(catalysts, /signedScore\(item\.weighted_catalyst_context\)/);
+  assert.doesNotMatch(catalysts, /weighted_catalyst_context\s*\?\?/);
+  assert.doesNotMatch(catalysts, /胜率\s*[:：]?\s*\d|收益概率\s*[:：]?\s*\d/);
+});
+
+test('expired-watermark recovery keeps the stale snapshot visible', () => {
+  assert.match(catalysts, /raw\.resync_required \|\| feedStream\.resync_required/);
+  assert.match(catalysts, /旧快照 · 重新同步中/);
+  assert.match(catalysts, /旧快照继续可读/);
+  assert.match(catalysts, /完整分页校验成功后才会原子切换水位/);
 });
 
 test('filters, time semantics, uncertainty labels, and context isolation stay visible', () => {
