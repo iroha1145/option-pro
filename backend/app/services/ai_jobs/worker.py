@@ -269,8 +269,8 @@ async def process_job(
                 job["job_type"],
                 payload,
             )
-            response_id = str(getattr(response, "id", "") or "") or None
-            if not response_id:
+            submitted_response_id = str(getattr(response, "id", "") or "") or None
+            if not submitted_response_id:
                 repository.fail(
                     job["job_id"],
                     owner,
@@ -280,8 +280,12 @@ async def process_job(
             repository.link_background_response(
                 job["job_id"],
                 owner,
-                response_id,
+                submitted_response_id,
             )
+            # Treat the upstream identity as recoverable only after it is
+            # durably linked. A failed link otherwise makes an untracked paid
+            # response look retryable and can submit the same job twice.
+            response_id = submitted_response_id
             job["openai_response_id"] = response_id
         else:
             response = await runtime.run_worker_sync(

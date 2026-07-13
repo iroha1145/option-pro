@@ -23,6 +23,10 @@ test('production shell exposes Catalyst Desk without crowding the five-item mobi
   assert.match(index, /href="#catalysts"\s+data-route="catalysts"[\s\S]*06[\s\S]*催化剂/);
   assert.match(index, /optix-catalysts\.css/);
   assert.match(index, /deck-api\.js[\s\S]*deck-ai-jobs\.js[\s\S]*deck-catalysts\.js[\s\S]*deck-app\.js/);
+  const deckScriptVersions = [...index.matchAll(/static\/js\/deck-(?:api|ai-jobs|catalysts|app)\.js\?v=([^"&]+)/g)]
+    .map((match) => match[1]);
+  assert.equal(deckScriptVersions.length, 4);
+  assert.equal(new Set(deckScriptVersions).size, 1);
   const dock = index.match(/<nav class="dock"[\s\S]*?<\/nav>/)?.[0] || '';
   assert.equal((dock.match(/<a /g) || []).length, 5);
   assert.doesNotMatch(dock, /catalysts/);

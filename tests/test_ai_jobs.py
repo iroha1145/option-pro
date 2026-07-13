@@ -306,6 +306,51 @@ def test_direct_background_completion_links_response_before_publish(
     assert repository.public(completed, cached=True)["cached"] is True
 
 
+def test_background_link_failure_is_not_retryable_as_a_known_submission(
+    monkeypatch,
+    tmp_path,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    settings = _settings(tmp_path / "ai-jobs.db")
+    owner = "worker-link-failure"
+    submit_calls = 0
+
+    async def fake_submit(*_args, **_kwargs):
+        nonlocal submit_calls
+        submit_calls += 1
+        return SimpleNamespace(status="queued", id="resp_not_persisted")
+
+    def reject_link(*_args, **_kwargs):
+        raise RuntimeError("ai_job_response_link_rejected")
+
+    monkeypatch.setattr(runtime, "submit_background", fake_submit)
+    monkeypatch.setattr(repository, "link_background_response", reject_link)
+    claimed = repository.claim_due(owner, 60)
+    asyncio.run(process_job(repository, settings, claimed, owner))
+
+    failed = repository.get_job(row["job_id"])
+    assert failed["status"] == "failed"
+    assert failed["openai_response_id"] is None
+    assert failed["error_code"] == "submission_outcome_unknown"
+    blocked, created = repository.create_job(
+        job_type="earnings_impact",
+        payload={"ticker": "AAPL", "name": "Apple"},
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="earnings-impact-v2",
+        schema_version=runtime.schema_identity("earnings_impact")[0],
+        schema_sha256=runtime.schema_identity("earnings_impact")[1],
+        max_queued=200,
+        force_retry=True,
+    )
+    assert created is False
+    assert submit_calls == 1
+    assert blocked["status"] == "failed"
+    assert blocked["error_code"] == "submission_outcome_unknown"
+
+
 def test_pending_job_fails_safely_when_frozen_runtime_configuration_changed(
     monkeypatch,
     tmp_path,
