@@ -14,7 +14,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       PYTHONPATH: backend
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -32,12 +32,20 @@ jobs:
             backend/requirements.txt
             backend/requirements-ci.txt
 
+      - name: Set up Node.js 22.17.1
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.17.1"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Prepare build metadata and environment
         shell: bash
         run: |
           cp .env.example .env
           echo "APP_COMMIT=${GITHUB_SHA}" >> "$GITHUB_ENV"
           echo "APP_VERSION=${GITHUB_SHA:0:12}" >> "$GITHUB_ENV"
+          echo "FOCUS_PRODUCER_ENABLED=false" >> "$GITHUB_ENV"
 
       - name: Verify dependency locks match their source files
         shell: bash
@@ -75,6 +83,13 @@ jobs:
       - name: Run frontend production assertions
         run: node frontend/tests/static_assertions.mjs
 
+      - name: Install locked browser-test dependencies
+        shell: bash
+        run: |
+          npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
+          cd frontend
+          npx playwright install --with-deps chromium
+
       - name: Check shell script syntax
         run: bash -n setup.sh scripts/deploy.sh scripts/lock-dependencies.sh
 
@@ -86,6 +101,23 @@ jobs:
 
       - name: Start production containers and wait for readiness
         run: docker compose up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180
+
+      - name: Capture Catalyst Desk visual evidence
+        env:
+          OPTIX_VISUAL_BASE_URL: http://127.0.0.1:2000
+        run: npm --prefix frontend run test:visual
+
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: catalyst-desk-visual-evidence-${{ github.sha }}
+          path: |
+            frontend/test-results/visual-evidence/*.png
+            frontend/test-results/report/**
+            frontend/test-results/playwright/**
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Smoke-test version, frontend, APIs, headers, and compression
         shell: bash
@@ -103,6 +135,10 @@ jobs:
           grep -qi '^cache-control:.*max-age=300' /tmp/optix-static.headers
           curl --fail --silent --show-error http://127.0.0.1:2000/api/breakouts/status |
             python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["enabled"] is False; assert p["range_persistence_mode"] == "shadow"'
+          curl --fail --silent --show-error http://127.0.0.1:2000/api/ai/status |
+            python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "not_configured"; assert p["model"] == "gpt-5.6-terra"; assert p["reasoning"] == "max"; assert p["execution_mode"] == "background"; assert p["sdk_capability_supported"] is True; assert all(p["methods"].get(x) is True for x in ("create","retrieve","cancel"))'
+          curl --fail --silent --show-error http://127.0.0.1:2000/api/catalysts/status |
+            python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["enabled"] is False; assert p["schema_version"] == "macrolens-option-pro-v2"; assert p["expected_model"] == "gpt-5.6-terra"; assert p["expected_reasoning"] == "max"'
           smoke_api_route() {
             local name="$1"
             local url="$2"
@@ -158,6 +194,14 @@ jobs:
           smoke_api_route earnings-upcoming http://127.0.0.1:2000/api/earnings/upcoming
           docker compose exec -T breakout-worker python -m app.services.breakouts.worker --healthcheck |
             python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["healthy"] is True'
+          docker compose exec -T ai-worker python -m app.services.ai_jobs.worker --healthcheck |
+            python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["healthy"] is True; assert p["configured"] is False; assert p["sdk_capability_supported"] is True; assert p["model"] == "gpt-5.6-terra"; assert p["reasoning"] == "max"; assert all(p["methods"].get(x) is True for x in ("create","retrieve","cancel"))'
+          docker compose exec -T catalyst-sync-worker python -m app.services.catalysts.worker --healthcheck |
+            python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["healthy"] is True; assert p["enabled"] is False; assert p["schema_version"] == "macrolens-option-pro-v2"; assert p["remote_checked"] is False'
+          docker compose exec -T focus-context-producer python -m app.services.catalysts.focus_worker --healthcheck |
+            python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["healthy"] is True; assert p["enabled"] is False; assert p["ready_dependency"] is False'
+          docker compose run --rm --no-deps catalyst-sync-worker python -m app.services.catalysts.worker --once |
+            python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["enabled"] is False; assert p["processed"] == []'
           docker compose run --rm --no-deps breakout-worker python -m app.services.breakouts.worker --once |
             python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["scan_run_id"] is None'
 
@@ -173,14 +217,31 @@ jobs:
               /ci-tests/fixtures/breakouts/provider_regular.json |
             python -c 'import json, sys; p=json.load(sys.stdin); assert p["closed"]["status"] == "paused"; assert p["closed"]["scan_run_id"] is None; assert p["active"]["status"] == "completed"; assert p["active"]["event_count"] == 0'
 
+      - name: Exercise the enabled focus producer with offline market fixtures
+        shell: bash
+        run: |
+          docker compose run --rm --no-deps \
+            --env FOCUS_PRODUCER_ENABLED=true \
+            --env PYTHONPATH=/app/backend \
+            --volume "${GITHUB_WORKSPACE}/tests:/ci-tests:ro" \
+            focus-context-producer \
+            python /ci-tests/container_focus_producer_smoke.py |
+            python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "completed"; assert p["revision"] == 1; assert p["basis"] == "intraday_completed_bars"; assert p["health"] == "ok"'
+
       - name: Verify non-root read-only runtime and shared SQLite WAL volume
         shell: bash
         run: |
           docker compose exec -T backend python -c 'import os; assert os.geteuid() != 0'
+          docker compose exec -T ai-worker python -c 'import os; assert os.geteuid() != 0'
+          docker compose exec -T catalyst-sync-worker python -c 'import os; assert os.geteuid() != 0'
+          docker compose exec -T focus-context-producer python -c 'import os; assert os.geteuid() != 0'
           docker compose exec -T breakout-worker python -c 'import os; assert os.geteuid() != 0'
           docker compose exec -T backend test -r /licenses/THIRD_PARTY_NOTICES.md
           docker compose exec -T breakout-worker test -r /licenses/BreakoutAnalysis-LICENSE
           if docker compose exec -T backend touch /home/app/.rootfs-write-probe; then exit 1; fi
+          if docker compose exec -T ai-worker touch /home/app/.rootfs-write-probe; then exit 1; fi
+          if docker compose exec -T catalyst-sync-worker touch /home/app/.rootfs-write-probe; then exit 1; fi
+          if docker compose exec -T focus-context-producer touch /home/app/.rootfs-write-probe; then exit 1; fi
           if docker compose exec -T breakout-worker touch /home/app/.rootfs-write-probe; then exit 1; fi
           docker compose exec -T breakout-worker python -c 'import sqlite3,time; from pathlib import Path; from app.services.breakouts.repository import BreakoutRepository; p=Path("/data/optix.db"); BreakoutRepository(p).initialize(); c=sqlite3.connect(p); assert c.execute("PRAGMA journal_mode").fetchone()[0].lower()=="wal"; c.execute("CREATE TABLE IF NOT EXISTS deployment_wal_probe(value TEXT NOT NULL)"); c.commit(); c.execute("BEGIN IMMEDIATE"); c.execute("INSERT INTO deployment_wal_probe(value) VALUES (?)",("shared",)); Path("/data/.wal-probe-ready").write_text("ready",encoding="utf-8"); time.sleep(15); c.commit(); c.close()' &
           probe_pid=$!
@@ -195,7 +256,7 @@ jobs:
 
       - name: Show container logs after failure
         if: failure()
-        run: docker compose logs --tail=200 backend breakout-worker
+        run: docker compose logs --tail=200 backend ai-worker catalyst-sync-worker focus-context-producer breakout-worker
 
       - name: Clean up containers
         if: always()

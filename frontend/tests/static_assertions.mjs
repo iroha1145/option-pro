@@ -92,11 +92,16 @@ const linkedStyles = [...index.matchAll(/<link\s+rel="stylesheet"\s+href="([^"]+
   .map((match) => match[1].split('?')[0]);
 assert.deepEqual(linkedStyles, [
   './static/css/optix-deck.css',
-], 'the deck shell loads a single self-contained stylesheet');
+  './static/css/optix-catalysts.css',
+], 'the deck shell loads only its local production stylesheets');
 
 // Deck shell scripts: pre-paint theme init, then data layer, then renderers.
 assert.match(index, /<script src="\.\/static\/js\/theme-init\.js[^"]*"><\/script>[\s\S]*<link rel="stylesheet"/, 'theme must initialize before first paint');
-assert.match(index, /deck-api\.js[\s\S]*deck-app\.js/, 'the data layer must load before the renderers');
+assert.match(index, /deck-api\.js[\s\S]*deck-ai-jobs\.js[\s\S]*deck-catalysts\.js[\s\S]*deck-app\.js/, 'the data layer and feature modules must load before the shell renderer');
+const deckScriptVersions = [...index.matchAll(/static\/js\/deck-(?:api|ai-jobs|catalysts|app)\.js\?v=([^"&]+)/g)]
+  .map((match) => match[1]);
+assert.equal(deckScriptVersions.length, 4, 'all four deck scripts must carry a cache version');
+assert.equal(new Set(deckScriptVersions).size, 1, 'dependent deck scripts must share one cache version');
 assert.doesNotMatch(index, /<script>(?!<)/, 'the shell must not carry inline scripts under CSP script-src self');
 
 // Core Optix Pro shell.

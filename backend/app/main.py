@@ -21,7 +21,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.api import ai, breakouts, earnings, market, options, sectors, signals, stocks, strength
+from app.api import ai, breakouts, catalysts, earnings, integrations, market, options, sectors, signals, stocks, strength
 from app.services.request_security import (
     TRUSTED_PROXY_NETWORKS as _TRUSTED_PROXY_NETWORKS,
     TRUST_PROXY_HEADERS as _TRUST_PROXY_HEADERS,
@@ -134,6 +134,7 @@ _HEAVY_API_PREFIXES = (
     "/api/breakouts/",
 )
 _LIGHT_API_PATHS = {
+    "/api/ai/status",
     "/api/market/status",
     "/api/strength/profiles",
     "/api/breakouts/current",
@@ -144,6 +145,7 @@ _HTML_CSP = (
     "script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
     "img-src 'self' data:; connect-src 'self'; form-action 'self'"
 )
+_SERVICE_AUTH_PATHS = {"/api/integrations/macrolens/v1/focus-context"}
 
 
 def _scope_header(scope, name: bytes) -> str:
@@ -179,7 +181,21 @@ def _scope_token(scope) -> str:
     return _scope_header(scope, b"x-app-token").strip()
 
 
-def _is_heavy_api_path(path: str) -> bool:
+def _is_heavy_api_path(path: str, method: str = "GET") -> bool:
+    normalized_method = method.upper()
+    if normalized_method == "GET" and (
+        path.startswith("/api/ai/jobs/")
+        or path.startswith("/api/catalysts/")
+        or path == "/api/catalysts/status"
+        or path == "/api/catalysts/feed"
+        or path == "/api/catalysts/calendar"
+    ):
+        return False
+    if normalized_method in {"POST", "PUT", "PATCH", "DELETE"} and (
+        path.startswith("/api/ai/")
+        or path.startswith("/api/catalysts/")
+    ):
+        return True
     if path in _LIGHT_API_PATHS:
         return False
     if path.startswith("/api/stocks/search") or path.endswith("/logo"):
@@ -327,7 +343,11 @@ class _GatewayMiddleware:
 
         if method != "OPTIONS" and path.startswith("/api/"):
             # ── Optional bearer-token auth ──
-            if _APP_AUTH_TOKEN:
+            request_state = scope.setdefault("state", {})
+            request_state["app_auth_configured"] = bool(_APP_AUTH_TOKEN)
+            request_state["app_authenticated"] = False
+            service_authenticated = method == "GET" and path in _SERVICE_AUTH_PATHS
+            if _APP_AUTH_TOKEN and not service_authenticated:
                 token = _scope_token(scope)
                 try:
                     valid = bool(token) and hmac.compare_digest(token, _APP_AUTH_TOKEN)
@@ -350,9 +370,10 @@ class _GatewayMiddleware:
                         {"error": "unauthorized", "message": "Missing or invalid API token"},
                         extra_headers=_cors_headers(scope),
                     )
+                request_state["app_authenticated"] = True
 
             # ── Per-IP rate limit ──
-            is_heavy = _is_heavy_api_path(path)
+            is_heavy = _is_heavy_api_path(path, method)
             limit = _RL_HEAVY_LIMIT if is_heavy else _RL_LIGHT_LIMIT
             key = f"{_scope_client_ip(scope)}:{'h' if is_heavy else 'l'}"
             now = _time.time()
@@ -385,6 +406,8 @@ app.include_router(sectors.router)
 app.include_router(market.router)
 app.include_router(signals.router)
 app.include_router(ai.router)
+app.include_router(catalysts.router)
+app.include_router(integrations.router)
 app.include_router(strength.router)
 app.include_router(breakouts.router)
 

@@ -67,6 +67,12 @@ def _deployment_root(tmp_path: Path, env_text: str) -> tuple[Path, dict[str, str
     scripts = root / "scripts"
     scripts.mkdir(parents=True)
     shutil.copy2(ROOT / "scripts" / "deploy.sh", scripts / "deploy.sh")
+    contracts = root / "contracts"
+    contracts.mkdir()
+    shutil.copy2(
+        ROOT / "contracts" / "macrolens-option-pro-v2.json",
+        contracts / "macrolens-option-pro-v2.json",
+    )
     (root / ".env").write_text(env_text, encoding="utf-8")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -184,6 +190,69 @@ def test_required_breakout_gate_rejects_disabled_but_allows_interaction_off(
     (root / ".env").write_text(required_enabled, encoding="utf-8")
     accepted = _run_deploy(root, environment)
     assert accepted.returncode == 0, accepted.stderr
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "https://localhost",
+        "https://LOCALHOST.",
+        "https://news.localhost",
+        "https://127.0.0.1:8443",
+        "https://127.255.255.254",
+        "https://[::1]:8443",
+        "https://[0:0:0:0:0:0:0:1]",
+        "https://[::ffff:127.0.0.1]",
+    ],
+)
+def test_required_catalyst_gate_rejects_loopback_remote_urls(
+    tmp_path: Path, base_url: str
+) -> None:
+    template = (ROOT / ".env.example").read_text(encoding="utf-8")
+    required = (
+        template.replace("MACROLENS_ENABLED=false", "MACROLENS_ENABLED=true")
+        .replace("MACROLENS_BASE_URL=", f"MACROLENS_BASE_URL={base_url}", 1)
+        .replace("MACROLENS_READ_KEY_ID=", "MACROLENS_READ_KEY_ID=read-key", 1)
+        .replace("MACROLENS_READ_SECRET=", "MACROLENS_READ_SECRET=read-secret", 1)
+        .replace("MACROLENS_ACTION_KEY_ID=", "MACROLENS_ACTION_KEY_ID=action-key", 1)
+        .replace("MACROLENS_ACTION_SECRET=", "MACROLENS_ACTION_SECRET=action-secret", 1)
+        .replace("DEPLOY_REQUIRE_CATALYST=false", "DEPLOY_REQUIRE_CATALYST=true")
+        .replace("APP_AUTH_TOKEN=", "APP_AUTH_TOKEN=app-token", 1)
+    )
+    root, environment = _deployment_root(tmp_path, required)
+    result = _run_deploy(root, environment)
+    assert result.returncode != 0
+    assert "requires a non-loopback MACROLENS_BASE_URL" in result.stderr
+
+
+def test_required_catalyst_gate_uses_the_committed_contract_digest(
+    tmp_path: Path,
+) -> None:
+    template = (ROOT / ".env.example").read_text(encoding="utf-8")
+    required = (
+        template.replace("MACROLENS_ENABLED=false", "MACROLENS_ENABLED=true")
+        .replace("MACROLENS_BASE_URL=", "MACROLENS_BASE_URL=https://macro.example", 1)
+        .replace("MACROLENS_READ_KEY_ID=", "MACROLENS_READ_KEY_ID=read-key", 1)
+        .replace("MACROLENS_READ_SECRET=", "MACROLENS_READ_SECRET=read-secret", 1)
+        .replace("MACROLENS_ACTION_KEY_ID=", "MACROLENS_ACTION_KEY_ID=action-key", 1)
+        .replace("MACROLENS_ACTION_SECRET=", "MACROLENS_ACTION_SECRET=action-secret", 1)
+        .replace("DEPLOY_REQUIRE_CATALYST=false", "DEPLOY_REQUIRE_CATALYST=true")
+        .replace("APP_AUTH_TOKEN=", "APP_AUTH_TOKEN=app-token", 1)
+    )
+    root, environment = _deployment_root(tmp_path, required)
+    accepted = _run_deploy(root, environment)
+    assert accepted.returncode == 0, accepted.stderr
+
+    mismatched = "\n".join(
+        "MACROLENS_SCHEMA_SHA256=" + "0" * 64
+        if line.startswith("MACROLENS_SCHEMA_SHA256=")
+        else line
+        for line in required.splitlines()
+    )
+    (root / ".env").write_text(mismatched + "\n", encoding="utf-8")
+    rejected = _run_deploy(root, environment)
+    assert rejected.returncode != 0
+    assert "does not match the reviewed integration contract" in rejected.stderr
 
 
 def test_legacy_env_and_incomplete_trusted_proxy_config_fail_before_build(

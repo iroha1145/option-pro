@@ -65,22 +65,24 @@ git pull --ff-only
 OPENAI_API_KEY=
 OPENAI_BASE_URL=
 ALLOW_CUSTOM_OPENAI_BASE_URL=false
-OPENAI_MODEL=gpt-5.4-mini-2026-03-17
-OPENAI_REASONING=low
+OPENAI_MODEL=gpt-5.6-terra
+OPENAI_REASONING=max
 ```
 
 如果使用 OpenAI-compatible 代理，`OPENAI_BASE_URL` 才填写代理地址，同时必须显式设置 `ALLOW_CUSTOM_OPENAI_BASE_URL=true`，并且只能使用该代理签发的专属 key。自定义公网地址必须是 HTTPS（本机回环地址除外）。不要把 OpenAI 官方 key 交给第三方代理。兼容服务还需要支持 Responses API；财报联网分析需要支持 `web_search_preview` 工具。
 
 从旧版升级且 `.env` 中已有非空 `OPENAI_BASE_URL` 时，部署前必须完成上述 key 确认并补上 `ALLOW_CUSTOM_OPENAI_BASE_URL=true`，否则应用会拒绝启动 AI 配置。
 
-AI 请求默认总超时 45 秒、不自动重试、最多输出 4096 tokens，整个进程最多同时访问模型 2 次。联网检索会与最终 JSON 共用输出预算，因此过低的上限可能截断结构化结果。可通过以下变量调整：
+Option Pro 的 AI 任务默认最多输出 32768 Token，不自动重试，允许范围为 256—128000，整个进程最多同时访问模型 2 次。联网检索会与最终 JSON 共用输出预算，因此过低的上限可能截断结构化结果。可通过以下变量调整：
 
 ```dotenv
-OPENAI_TIMEOUT_SECONDS=45
+OPENAI_TIMEOUT_SECONDS=900
 OPENAI_MAX_RETRIES=0
-OPENAI_MAX_OUTPUT_TOKENS=4096
+OPTION_PRO_AI_MAX_OUTPUT_TOKENS=32768
 OPENAI_MAX_CONCURRENCY=2
 ```
+
+旧变量 `OPENAI_MAX_OUTPUT_TOKENS` 只用于兼容已有部署；新配置应使用 `OPTION_PRO_AI_MAX_OUTPUT_TOKENS`。两个变量同时存在时，专用变量优先。
 
 ## 安全的远程访问
 

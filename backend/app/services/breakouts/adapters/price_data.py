@@ -159,8 +159,8 @@ class YahooPriceDataAdapter:
         interval: str = "5m",
     ) -> dict[str, PriceDataSnapshot]:
         symbols = list(dict.fromkeys(normalize_ticker(value) for value in tickers))
-        if len(symbols) > 40:
-            raise ValueError("intraday ticker set exceeds 40 symbols")
+        if len(symbols) > 60:
+            raise ValueError("intraday ticker set exceeds 60 symbols")
 
         def download() -> pd.DataFrame:
             kwargs = {

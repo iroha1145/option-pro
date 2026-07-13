@@ -6,7 +6,7 @@ from typing import Literal
 from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
-from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
+from pydantic import AliasChoices, AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,34 +28,92 @@ class Settings(BaseSettings):
         default=False,
         alias="ALLOW_CUSTOM_OPENAI_BASE_URL",
     )
+    openai_custom_capabilities_confirmed: bool = Field(
+        default=False,
+        alias="OPENAI_CUSTOM_CAPABILITIES_CONFIRMED",
+    )
     openai_model: str = Field(
-        default="gpt-5.4-mini-2026-03-17",
+        default="gpt-5.6-terra",
         min_length=1,
         max_length=120,
         alias="OPENAI_MODEL",
     )
-    openai_reasoning: Literal["minimal", "low", "medium", "high", "xhigh"] = Field(
-        default="low",
+    openai_reasoning: Literal["none", "low", "medium", "high", "xhigh", "max"] = Field(
+        default="max",
         alias="OPENAI_REASONING",
     )
     openai_timeout_seconds: float = Field(
-        default=45.0,
+        default=900.0,
         ge=5.0,
-        le=55.0,
+        le=1800.0,
         alias="OPENAI_TIMEOUT_SECONDS",
     )
-    openai_max_retries: int = Field(default=0, ge=0, le=2, alias="OPENAI_MAX_RETRIES")
+    openai_max_retries: int = Field(default=0, ge=0, le=0, alias="OPENAI_MAX_RETRIES")
     openai_max_output_tokens: int = Field(
-        default=4096,
+        default=32768,
         ge=256,
-        le=4096,
-        alias="OPENAI_MAX_OUTPUT_TOKENS",
+        le=128000,
+        validation_alias=AliasChoices(
+            "OPTION_PRO_AI_MAX_OUTPUT_TOKENS",
+            "OPENAI_MAX_OUTPUT_TOKENS",
+        ),
     )
     openai_max_concurrency: int = Field(
         default=2,
         ge=1,
         le=4,
         alias="OPENAI_MAX_CONCURRENCY",
+    )
+    openai_execution_mode: Literal["background", "worker_sync"] = Field(
+        default="background",
+        alias="OPENAI_EXECUTION_MODE",
+    )
+    openai_require_zdr: bool = Field(default=False, alias="OPENAI_REQUIRE_ZDR")
+    openai_background_poll_timeout_seconds: float = Field(
+        default=1800.0,
+        ge=60.0,
+        le=86400.0,
+        alias="OPENAI_BACKGROUND_POLL_TIMEOUT_SECONDS",
+    )
+    openai_background_initial_poll_seconds: float = Field(
+        default=2.0,
+        ge=1.0,
+        le=30.0,
+        alias="OPENAI_BACKGROUND_INITIAL_POLL_SECONDS",
+    )
+    openai_background_max_poll_seconds: float = Field(
+        default=15.0,
+        ge=1.0,
+        le=300.0,
+        alias="OPENAI_BACKGROUND_MAX_POLL_SECONDS",
+    )
+    openai_control_timeout_seconds: float = Field(
+        default=30.0,
+        ge=3.0,
+        le=60.0,
+        alias="OPENAI_CONTROL_TIMEOUT_SECONDS",
+    )
+    openai_job_db_path: Path = Field(
+        default=Path("/data/ai-jobs.db"),
+        alias="OPENAI_JOB_DB_PATH",
+    )
+    openai_job_lease_seconds: int = Field(
+        default=60,
+        ge=30,
+        le=600,
+        alias="OPENAI_JOB_LEASE_SECONDS",
+    )
+    openai_job_max_age_seconds: int = Field(
+        default=86400,
+        ge=1800,
+        le=604800,
+        alias="OPENAI_JOB_MAX_AGE_SECONDS",
+    )
+    openai_job_max_queued: int = Field(
+        default=200,
+        ge=1,
+        le=10000,
+        alias="OPENAI_JOB_MAX_QUEUED",
     )
 
     massive_api_key: str = Field(default="", alias="MASSIVE_API_KEY")
@@ -110,6 +168,14 @@ class Settings(BaseSettings):
                 raise ValueError("OPENAI_BASE_URL must not contain credentials")
         return value
 
+    @field_validator("openai_model")
+    @classmethod
+    def validate_openai_model(cls, value: str) -> str:
+        value = value.strip()
+        if not value or any(char.isspace() or ord(char) < 32 for char in value):
+            raise ValueError("OPENAI_MODEL must be a bounded model identifier without whitespace")
+        return value
+
     @model_validator(mode="after")
     def require_custom_base_url_opt_in(self) -> "Settings":
         if not self.openai_base_url:
@@ -122,6 +188,21 @@ class Settings(BaseSettings):
         local_hosts = {"localhost", "127.0.0.1", "::1"}
         if parsed.scheme != "https" and parsed.hostname not in local_hosts:
             raise ValueError("custom OPENAI_BASE_URL must use HTTPS unless it is localhost")
+        return self
+
+    @model_validator(mode="after")
+    def validate_openai_runtime(self) -> "Settings":
+        if (
+            self.openai_background_max_poll_seconds
+            < self.openai_background_initial_poll_seconds
+        ):
+            raise ValueError(
+                "OPENAI_BACKGROUND_MAX_POLL_SECONDS must be at least the initial interval"
+            )
+        if self.openai_require_zdr and self.openai_execution_mode == "background":
+            raise ValueError(
+                "OPENAI_REQUIRE_ZDR=true requires OPENAI_EXECUTION_MODE=worker_sync"
+            )
         return self
 
 
