@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 
 import pytest
 
 from app.services.catalysts import repository as repository_module
 from app.services.catalysts.repository import CatalystRepository
+from catalyst_support import catalyst_item, utc
 
 
 _V1_SCHEMA = """
@@ -114,6 +116,167 @@ def _seed_v5(path) -> None:
             ),
         )
         connection.execute("PRAGMA user_version=5")
+
+
+def _seed_v6(path) -> tuple[str, int]:
+    canonical = catalyst_item(sequence=1, updated_at=utc(10, 6), analysis=True)
+    missing = catalyst_item(
+        sequence=2,
+        updated_at=utc(10, 7),
+        analysis=True,
+        news_id=102,
+        ticker="MISS",
+    )
+    assert missing.analysis is not None
+    missing = missing.model_copy(
+        update={
+            "source_tickers": [],
+            "analysis": missing.analysis.model_copy(
+                update={"analysis_id": 9002, "stock_validations": []}
+            ),
+        }
+    )
+    v6_schema = repository_module._SCHEMA_SQL.removesuffix(
+        "\n\n" + repository_module._TRUSTED_PROJECTION_SCHEMA_SQL
+    )
+    assert hashlib.sha256(v6_schema.encode("utf-8")).hexdigest() == (
+        repository_module._V6_SCHEMA_CHECKSUM
+    )
+    snapshot = "v6-seed-snapshot"
+    with sqlite3.connect(path) as connection:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.executescript(v6_schema)
+        connection.execute(
+            "INSERT INTO catalyst_schema_metadata VALUES(1,?,?,?)",
+            (
+                repository_module._V6_DATABASE_VERSION,
+                repository_module._V6_SCHEMA_CHECKSUM,
+                repository_module._iso(utc(9)),
+            ),
+        )
+        connection.execute(
+            """INSERT INTO catalyst_sync_state(
+                   stream,last_success_at,data_through,watermark_sequence,
+                   updated_after,remote_status,snapshot_generation,current_snapshot_id
+               ) VALUES('feed',?,?,?,?,?,?,?)""",
+            (
+                repository_module._iso(utc(10, 7)),
+                repository_module._iso(utc(10, 7)),
+                2,
+                repository_module._iso(utc(10, 7)),
+                "active",
+                1,
+                snapshot,
+            ),
+        )
+        for item in (canonical, missing):
+            _insert_v6_item_revision(
+                connection,
+                item,
+                cached_at=repository_module._iso(utc(10, 7)),
+            )
+        connection.execute("PRAGMA user_version=6")
+    return snapshot, 2
+
+
+def _insert_v6_item_revision(
+    connection: sqlite3.Connection,
+    item,
+    *,
+    cached_at: str,
+) -> None:
+    connection.execute(
+        """INSERT INTO catalyst_item_revisions(
+               news_id,change_sequence,content_hash,source,title,summary,url,
+               published_at,fetched_at,updated_at,cached_at,source_tickers_json,
+               analysis_status,is_stale,raw_json
+           ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            item.news_id,
+            item.change_sequence,
+            item.content_hash,
+            item.source,
+            item.title,
+            item.summary,
+            item.url,
+            repository_module._iso(item.published_at),
+            repository_module._iso(item.fetched_at),
+            repository_module._iso(item.updated_at),
+            cached_at,
+            repository_module._json(item.source_tickers),
+            item.analysis_status.value,
+            int(item.is_stale),
+            repository_module._json(item.model_dump(mode="json")),
+        ),
+    )
+    for ticker in item.source_tickers:
+        connection.execute(
+            "INSERT INTO catalyst_item_tickers VALUES(?,?,?)",
+            (item.news_id, item.change_sequence, ticker),
+        )
+    analysis = item.analysis
+    if analysis is None or item.analyzed_at is None or item.available_at is None:
+        return
+    revision_id = f"{analysis.analysis_id}:{analysis.revision}"
+    connection.execute(
+        """INSERT INTO catalyst_analysis_revisions(
+               analysis_revision_id,news_id,content_hash,item_change_sequence,
+               analyzed_at,available_at,model,reasoning,prompt_version,
+               analysis_schema_version,classification,confidence,
+               overall_sentiment,market_relevance,insufficient_context,cached_at,
+               raw_json
+           ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            revision_id,
+            item.news_id,
+            item.content_hash,
+            item.change_sequence,
+            repository_module._iso(item.analyzed_at),
+            repository_module._iso(item.available_at),
+            analysis.model,
+            analysis.reasoning,
+            analysis.prompt_version,
+            analysis.schema_version,
+            analysis.classification.value,
+            analysis.confidence,
+            analysis.overall_sentiment,
+            analysis.market_relevance,
+            int(analysis.insufficient_context),
+            cached_at,
+            repository_module._json(analysis.model_dump(mode="json")),
+        ),
+    )
+    for impact in analysis.affected_stocks:
+        connection.execute(
+            """INSERT INTO catalyst_stock_impacts(
+                   analysis_revision_id,news_id,item_change_sequence,ticker,company,
+                   impact_score,confidence,horizon,mechanism,reason,content_hash,
+                   published_at,fetched_at,analyzed_at,available_at,model,reasoning,
+                   prompt_version,analysis_schema_version
+               ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                revision_id,
+                item.news_id,
+                item.change_sequence,
+                impact.ticker,
+                impact.company,
+                impact.impact_score,
+                impact.confidence,
+                impact.horizon.value,
+                impact.mechanism.value,
+                impact.reason,
+                item.content_hash,
+                repository_module._iso(item.published_at),
+                repository_module._iso(item.fetched_at),
+                repository_module._iso(item.analyzed_at),
+                repository_module._iso(item.available_at),
+                analysis.model,
+                analysis.reasoning,
+                analysis.prompt_version,
+                analysis.schema_version,
+            ),
+        )
 
 
 def test_v1_migration_reaches_current_schema_and_preserves_state(tmp_path) -> None:
@@ -339,7 +502,10 @@ def test_v5_cache_migrates_to_v6_by_invalidating_only_derived_rows(tmp_path) -> 
             "cached_at",
             "expires_at",
         } == columns
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert (
+            connection.execute("PRAGMA user_version").fetchone()[0]
+            == repository_module.SQLITE_USER_VERSION
+        )
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
 
 
@@ -391,4 +557,114 @@ def test_v5_to_v6_migration_failure_rolls_back_drop_and_metadata(
         assert connection.execute(
             "SELECT 1 FROM sqlite_master "
             "WHERE type='table' AND name='migration_partial_v6'"
+        ).fetchone() is None
+
+
+def test_v6_cache_migrates_to_v7_trusted_projections_idempotently(tmp_path) -> None:
+    path = tmp_path / "catalysts.db"
+    snapshot, watermark = _seed_v6(path)
+    repository = CatalystRepository(path)
+
+    repository.initialize(now=utc(11))
+    repository.initialize(now=utc(11, 1))
+
+    assert repository.check_schema()["schema_version"] == "catalyst-cache-v7"
+    state = repository.sync_state("feed")
+    assert state["current_snapshot_id"] == snapshot
+    assert state["watermark_sequence"] == watermark
+    with repository.open_read_connection() as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
+        assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        assert connection.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+        assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert connection.execute(
+            "SELECT count(*) FROM catalyst_item_revisions"
+        ).fetchone()[0] == 2
+        assert connection.execute(
+            "SELECT count(*) FROM catalyst_analysis_projections"
+        ).fetchone()[0] == 2
+        assert connection.execute(
+            "SELECT count(*) FROM catalyst_stock_impact_projections"
+        ).fetchone()[0] == 1
+        stats = connection.execute(
+            """
+            SELECT scanned_item_revisions,analysis_projections,trusted_stock_impacts,
+                   missing_validations,malformed_item_revisions
+            FROM catalyst_projection_migration_stats
+            WHERE schema_version='catalyst-cache-v7'
+            """
+        ).fetchone()
+        assert tuple(stats) == (2, 2, 1, 1, 0)
+
+
+def test_v7_reads_remain_available_when_v6_raw_items_are_malformed(tmp_path) -> None:
+    path = tmp_path / "catalysts.db"
+    snapshot, watermark = _seed_v6(path)
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "UPDATE catalyst_item_revisions SET raw_json='{' WHERE news_id=101"
+        )
+        connection.execute(
+            "UPDATE catalyst_item_revisions SET raw_json='[]' WHERE news_id=102"
+        )
+
+    repository = CatalystRepository(path)
+    repository.initialize(now=utc(11))
+
+    state = repository.sync_state("feed")
+    assert state["current_snapshot_id"] == snapshot
+    assert state["watermark_sequence"] == watermark
+    feed = repository.list_feed(as_of=utc(11), window_hours=72)
+    assert {item["news_id"] for item in feed["items"]} == {101, 102}
+    assert all(item["analysis"] is None for item in feed["items"])
+    assert repository.get_news(101, as_of=utc(11))["analysis"] is None
+    assert repository.get_news(102, as_of=utc(11))["analysis"] is None
+    with repository.open_read_connection() as connection:
+        stats = connection.execute(
+            """SELECT scanned_item_revisions,malformed_item_revisions
+               FROM catalyst_projection_migration_stats
+               WHERE schema_version='catalyst-cache-v7'"""
+        ).fetchone()
+        assert tuple(stats) == (2, 2)
+
+
+def test_v6_to_v7_migration_failure_rolls_back_tables_metadata_and_watermark(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    path = tmp_path / "catalysts.db"
+    snapshot, watermark = _seed_v6(path)
+    repository = CatalystRepository(path)
+    original = repository._insert_analysis_projection
+    calls = 0
+
+    def fail_after_first(connection, item, *, cached_at):
+        nonlocal calls
+        result = original(connection, item, cached_at=cached_at)
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("injected v7 projection migration failure")
+        return result
+
+    monkeypatch.setattr(repository, "_insert_analysis_projection", fail_after_first)
+    with pytest.raises(RuntimeError, match="injected v7"):
+        repository.initialize(now=utc(11))
+
+    with sqlite3.connect(path) as connection:
+        metadata = connection.execute(
+            "SELECT schema_version,schema_checksum FROM catalyst_schema_metadata"
+        ).fetchone()
+        assert metadata == (
+            repository_module._V6_DATABASE_VERSION,
+            repository_module._V6_SCHEMA_CHECKSUM,
+        )
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert connection.execute(
+            "SELECT current_snapshot_id,watermark_sequence FROM catalyst_sync_state "
+            "WHERE stream='feed'"
+        ).fetchone() == (snapshot, watermark)
+        assert connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' "
+            "AND name='catalyst_analysis_projections'"
         ).fetchone() is None

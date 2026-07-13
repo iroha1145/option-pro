@@ -30,8 +30,8 @@ from .models import (
 from .focus_models import FocusContextDraft, FocusContextResponse
 
 
-DATABASE_VERSION = "catalyst-cache-v6"
-SQLITE_USER_VERSION = 6
+DATABASE_VERSION = "catalyst-cache-v7"
+SQLITE_USER_VERSION = 7
 FOCUS_PRODUCER_WORKER_PREFIX = "focus-context-producer:"
 _V1_DATABASE_VERSION = "catalyst-cache-v1"
 _V1_SCHEMA_CHECKSUM = "72f57f049e66986e7f0dd19e71eff0f772c88b13d5be1d99cbb6d0fe9423c951"
@@ -43,6 +43,88 @@ _V4_DATABASE_VERSION = "catalyst-cache-v4"
 _V4_SCHEMA_CHECKSUM = "ea1566f2aedabe63057b7f70ffaf20ac2e24a999852f0f8acab068404e405e21"
 _V5_DATABASE_VERSION = "catalyst-cache-v5"
 _V5_SCHEMA_CHECKSUM = "3dfe7078bdf2daf4564bab33e1be3b3f6e8777f5400dd2960ed14b4e77707781"
+_V6_DATABASE_VERSION = "catalyst-cache-v6"
+_V6_SCHEMA_CHECKSUM = "e2dc21b37da7b93f89e22c3221a51b1e6be7ca90d5148586b3307d2fe2b9da2e"
+
+
+_TRUSTED_PROJECTION_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS catalyst_analysis_projections (
+    projection_id TEXT PRIMARY KEY CHECK (length(projection_id)=64),
+    remote_analysis_revision_id TEXT NOT NULL,
+    news_id INTEGER NOT NULL,
+    content_hash TEXT NOT NULL,
+    item_change_sequence INTEGER NOT NULL CHECK (item_change_sequence >= 1),
+    projection_payload_hash TEXT NOT NULL CHECK (length(projection_payload_hash)=64),
+    analyzed_at TEXT NOT NULL,
+    available_at TEXT NOT NULL,
+    model TEXT NOT NULL,
+    reasoning TEXT NOT NULL,
+    prompt_version TEXT NOT NULL,
+    analysis_schema_version TEXT NOT NULL,
+    classification TEXT NOT NULL,
+    confidence INTEGER NOT NULL CHECK (confidence BETWEEN 0 AND 100),
+    overall_sentiment INTEGER NOT NULL CHECK (overall_sentiment BETWEEN -100 AND 100),
+    market_relevance INTEGER NOT NULL CHECK (market_relevance BETWEEN 0 AND 100),
+    insufficient_context INTEGER NOT NULL CHECK (insufficient_context IN (0,1)),
+    cached_at TEXT NOT NULL,
+    raw_json TEXT NOT NULL,
+    UNIQUE(remote_analysis_revision_id,item_change_sequence),
+    FOREIGN KEY (news_id,item_change_sequence)
+        REFERENCES catalyst_item_revisions(news_id,change_sequence) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalyst_analysis_projections_visible
+    ON catalyst_analysis_projections(
+        news_id,content_hash,item_change_sequence,available_at DESC,cached_at DESC
+    );
+
+CREATE TABLE IF NOT EXISTS catalyst_stock_impact_projections (
+    projection_id TEXT NOT NULL
+        REFERENCES catalyst_analysis_projections(projection_id) ON DELETE CASCADE,
+    remote_analysis_revision_id TEXT NOT NULL,
+    news_id INTEGER NOT NULL,
+    item_change_sequence INTEGER NOT NULL CHECK (item_change_sequence >= 1),
+    ticker TEXT NOT NULL,
+    company TEXT NOT NULL,
+    impact_score INTEGER NOT NULL CHECK (impact_score BETWEEN -100 AND 100),
+    confidence INTEGER NOT NULL CHECK (confidence BETWEEN 0 AND 100),
+    horizon TEXT NOT NULL,
+    mechanism TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    validation_status TEXT NOT NULL
+        CHECK (validation_status IN ('canonical','valid_external')),
+    validated_at TEXT,
+    focus_revision INTEGER CHECK (focus_revision IS NULL OR focus_revision >= 1),
+    universe_version TEXT,
+    content_hash TEXT NOT NULL,
+    published_at TEXT,
+    fetched_at TEXT NOT NULL,
+    analyzed_at TEXT NOT NULL,
+    available_at TEXT NOT NULL,
+    model TEXT NOT NULL,
+    reasoning TEXT NOT NULL,
+    prompt_version TEXT NOT NULL,
+    analysis_schema_version TEXT NOT NULL,
+    PRIMARY KEY (projection_id,ticker)
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalyst_trusted_impacts_ticker
+    ON catalyst_stock_impact_projections(ticker,projection_id);
+CREATE INDEX IF NOT EXISTS idx_catalyst_trusted_impacts_projection
+    ON catalyst_stock_impact_projections(projection_id,impact_score,horizon,mechanism);
+
+CREATE TABLE IF NOT EXISTS catalyst_projection_migration_stats (
+    schema_version TEXT PRIMARY KEY,
+    source_schema_version TEXT NOT NULL,
+    scanned_item_revisions INTEGER NOT NULL CHECK (scanned_item_revisions >= 0),
+    analysis_projections INTEGER NOT NULL CHECK (analysis_projections >= 0),
+    trusted_stock_impacts INTEGER NOT NULL CHECK (trusted_stock_impacts >= 0),
+    missing_validations INTEGER NOT NULL CHECK (missing_validations >= 0),
+    untrusted_stock_impacts INTEGER NOT NULL CHECK (untrusted_stock_impacts >= 0),
+    malformed_item_revisions INTEGER NOT NULL CHECK (malformed_item_revisions >= 0),
+    completed_at TEXT NOT NULL
+);
+""".strip()
 
 
 _MARKET_FOCUS_SCHEMA_SQL = """
@@ -468,7 +550,7 @@ CREATE TABLE IF NOT EXISTS catalyst_worker_lock (
     lease_until TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
-""".strip() + "\n\n" + _MARKET_FOCUS_SCHEMA_SQL
+""".strip() + "\n\n" + _MARKET_FOCUS_SCHEMA_SQL + "\n\n" + _TRUSTED_PROJECTION_SCHEMA_SQL
 
 
 SCHEMA_CHECKSUM = hashlib.sha256(_SCHEMA_SQL.encode("utf-8")).hexdigest()
@@ -501,7 +583,13 @@ def _json(value: Any) -> str:
 def _loads(value: str | None, default: Any = None) -> Any:
     if value is None:
         return default
-    return json.loads(value)
+    try:
+        decoded = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return default
+    if default is not None and not isinstance(decoded, type(default)):
+        return default
+    return decoded
 
 
 class CatalystRepository:
@@ -595,6 +683,14 @@ class CatalystRepository:
                 and row["schema_checksum"] == _V5_SCHEMA_CHECKSUM
             ):
                 self._migrate_v5_to_v6(connection)
+                row = connection.execute(
+                    "SELECT schema_version,schema_checksum FROM catalyst_schema_metadata WHERE singleton=1"
+                ).fetchone()
+            if row is not None and (
+                row["schema_version"] == _V6_DATABASE_VERSION
+                and row["schema_checksum"] == _V6_SCHEMA_CHECKSUM
+            ):
+                self._migrate_v6_to_v7(connection, completed_at=installed_at or "")
                 row = connection.execute(
                     "SELECT schema_version,schema_checksum FROM catalyst_schema_metadata WHERE singleton=1"
                 ).fetchone()
@@ -772,6 +868,88 @@ class CatalystRepository:
                 ON focus_daily_strength_snapshots(cached_at,trading_day);
             """.strip(),
         )
+        connection.execute(
+            "UPDATE catalyst_schema_metadata SET schema_version=?,schema_checksum=? WHERE singleton=1",
+            (_V6_DATABASE_VERSION, _V6_SCHEMA_CHECKSUM),
+        )
+
+    def _migrate_v6_to_v7(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        completed_at: str,
+    ) -> None:
+        """Build trusted projections from immutable v6 item revisions."""
+
+        # Older chained migrations may come from the minimal v1 fixture. Build
+        # every additive table before reading the immutable item history.
+        self._execute_script_atomic(connection, _SCHEMA_SQL)
+        counters = {
+            "scanned": 0,
+            "analyses": 0,
+            "trusted": 0,
+            "missing": 0,
+            "untrusted": 0,
+            "malformed": 0,
+        }
+        rows = connection.execute(
+            "SELECT raw_json,cached_at FROM catalyst_item_revisions "
+            "ORDER BY news_id,change_sequence"
+        )
+        for row in rows:
+            counters["scanned"] += 1
+            try:
+                item = CatalystItem.model_validate_json(row["raw_json"])
+            except Exception:
+                counters["malformed"] += 1
+                continue
+            if item.analysis is None:
+                continue
+            result = self._insert_analysis_projection(
+                connection,
+                item,
+                cached_at=row["cached_at"],
+            )
+            counters["analyses"] += int(result["inserted"])
+            counters["trusted"] += result["trusted"]
+            counters["missing"] += result["missing"]
+            counters["untrusted"] += result["untrusted"]
+
+        connection.execute(
+            """
+            INSERT INTO catalyst_projection_migration_stats(
+                schema_version,source_schema_version,scanned_item_revisions,
+                analysis_projections,trusted_stock_impacts,missing_validations,
+                untrusted_stock_impacts,malformed_item_revisions,completed_at
+            ) VALUES(?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(schema_version) DO UPDATE SET
+                source_schema_version=excluded.source_schema_version,
+                scanned_item_revisions=excluded.scanned_item_revisions,
+                analysis_projections=excluded.analysis_projections,
+                trusted_stock_impacts=excluded.trusted_stock_impacts,
+                missing_validations=excluded.missing_validations,
+                untrusted_stock_impacts=excluded.untrusted_stock_impacts,
+                malformed_item_revisions=excluded.malformed_item_revisions,
+                completed_at=excluded.completed_at
+            """,
+            (
+                DATABASE_VERSION,
+                _V6_DATABASE_VERSION,
+                counters["scanned"],
+                counters["analyses"],
+                counters["trusted"],
+                counters["missing"],
+                counters["untrusted"],
+                counters["malformed"],
+                completed_at,
+            ),
+        )
+        if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+            raise CatalystRepositoryError("cache_integrity_failed", "Catalyst cache quick check failed")
+        if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            raise CatalystRepositoryError("cache_integrity_failed", "Catalyst cache integrity check failed")
+        if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+            raise CatalystRepositoryError("cache_integrity_failed", "Catalyst cache foreign key check failed")
         connection.execute(
             "UPDATE catalyst_schema_metadata SET schema_version=?,schema_checksum=? WHERE singleton=1",
             (DATABASE_VERSION, SCHEMA_CHECKSUM),
@@ -1599,21 +1777,27 @@ class CatalystRepository:
         self,
         *,
         resync_from: datetime | None,
+        error_code: str = "updated_after_too_old",
         now: datetime | None = None,
     ) -> None:
         """Latch recovery mode without discarding the last readable snapshot."""
 
+        if error_code not in {
+            "updated_after_too_old",
+            "projection_payload_conflict",
+        }:
+            raise ValueError("unsupported feed resync error code")
         timestamp = _iso(now or _now())
         with self._write() as connection:
             connection.execute("BEGIN IMMEDIATE")
             connection.execute(
                 """
                 UPDATE catalyst_sync_state
-                SET resync_required=1,last_attempt_at=?,last_error_code='updated_after_too_old',
+                SET resync_required=1,last_attempt_at=?,last_error_code=?,
                     remote_status='stale',resync_from=?
                 WHERE stream='feed'
                 """,
-                (timestamp, _iso(resync_from)),
+                (timestamp, error_code, _iso(resync_from)),
             )
             connection.commit()
 
@@ -1682,72 +1866,154 @@ class CatalystRepository:
                 """,
                 (item.news_id, item.change_sequence, ticker),
             )
-        if item.analysis is None or item.analyzed_at is None or item.available_at is None:
-            return
-        analysis_payload = item.analysis.model_dump(mode="json")
-        revision_id = f"{item.analysis.analysis_id}:{item.analysis.revision}"
+        if item.analysis is not None:
+            self._insert_analysis_projection(connection, item, cached_at=cached_at)
+
+    @staticmethod
+    def _analysis_projection_id(remote_revision_id: str, change_sequence: int) -> str:
+        return hashlib.sha256(
+            f"{remote_revision_id}:{change_sequence}".encode("utf-8")
+        ).hexdigest()
+
+    def _insert_analysis_projection(
+        self,
+        connection: sqlite3.Connection,
+        item: CatalystItem,
+        *,
+        cached_at: str,
+    ) -> dict[str, int | bool]:
+        analysis = item.analysis
+        if analysis is None:
+            return {"inserted": False, "trusted": 0, "missing": 0, "untrusted": 0}
+        analysis_payload = analysis.model_dump(mode="json")
+        remote_revision_id = f"{analysis.analysis_id}:{analysis.revision}"
+        projection_id = self._analysis_projection_id(
+            remote_revision_id, item.change_sequence
+        )
+        payload_material = {
+            "news_id": item.news_id,
+            "content_hash": item.content_hash,
+            "item_change_sequence": item.change_sequence,
+            "analysis": analysis_payload,
+        }
+        payload_hash = hashlib.sha256(
+            _json(payload_material).encode("utf-8")
+        ).hexdigest()
+        existing = connection.execute(
+            """
+            SELECT projection_payload_hash,remote_analysis_revision_id,
+                   item_change_sequence
+            FROM catalyst_analysis_projections WHERE projection_id=?
+            """,
+            (projection_id,),
+        ).fetchone()
+        if existing is not None:
+            if (
+                existing["projection_payload_hash"] != payload_hash
+                or existing["remote_analysis_revision_id"] != remote_revision_id
+                or int(existing["item_change_sequence"]) != item.change_sequence
+            ):
+                raise CatalystRepositoryError(
+                    "projection_payload_conflict",
+                    "Catalyst analysis projection payload changed for an immutable item revision",
+                )
+            return {"inserted": False, "trusted": 0, "missing": 0, "untrusted": 0}
+
+        analyzed_at = item.analyzed_at or analysis.analyzed_at
+        available_at = item.available_at or analysis.available_at
         connection.execute(
             """
-            INSERT INTO catalyst_analysis_revisions(
-                analysis_revision_id,news_id,content_hash,item_change_sequence,
-                analyzed_at,available_at,model,reasoning,
-                prompt_version,analysis_schema_version,classification,confidence,
-                overall_sentiment,market_relevance,insufficient_context,cached_at,raw_json
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            ON CONFLICT(analysis_revision_id) DO NOTHING
+            INSERT INTO catalyst_analysis_projections(
+                projection_id,remote_analysis_revision_id,news_id,content_hash,
+                item_change_sequence,projection_payload_hash,analyzed_at,available_at,
+                model,reasoning,prompt_version,analysis_schema_version,classification,
+                confidence,overall_sentiment,market_relevance,insufficient_context,
+                cached_at,raw_json
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
-                revision_id,
+                projection_id,
+                remote_revision_id,
                 item.news_id,
                 item.content_hash,
                 item.change_sequence,
-                _iso(item.analyzed_at),
-                _iso(item.available_at),
-                item.analysis.model,
-                item.analysis.reasoning,
-                item.analysis.prompt_version,
-                item.analysis.schema_version,
-                item.analysis.classification.value,
-                item.analysis.confidence,
-                item.analysis.overall_sentiment,
-                item.analysis.market_relevance,
-                int(item.analysis.insufficient_context),
+                payload_hash,
+                _iso(analyzed_at),
+                _iso(available_at),
+                analysis.model,
+                analysis.reasoning,
+                analysis.prompt_version,
+                analysis.schema_version,
+                analysis.classification.value,
+                analysis.confidence,
+                analysis.overall_sentiment,
+                analysis.market_relevance,
+                int(analysis.insufficient_context),
                 cached_at,
                 _json(analysis_payload),
             ),
         )
-        for impact in item.analysis.affected_stocks:
+
+        validations: dict[str, list[Any]] = {}
+        for validation in analysis.stock_validations:
+            validations.setdefault(validation.ticker, []).append(validation)
+        trusted = missing = untrusted = 0
+        for impact in analysis.affected_stocks:
+            records = validations.get(impact.ticker, [])
+            if not records:
+                missing += 1
+                continue
+            if len(records) != 1 or records[0].validation_status not in {
+                "canonical",
+                "valid_external",
+            }:
+                untrusted += 1
+                continue
+            validation = records[0]
             connection.execute(
                 """
-                INSERT INTO catalyst_stock_impacts(
-                    analysis_revision_id,news_id,item_change_sequence,ticker,company,impact_score,confidence,
-                    horizon,mechanism,reason,content_hash,published_at,fetched_at,analyzed_at,
-                    available_at,model,reasoning,prompt_version,analysis_schema_version
-                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(analysis_revision_id,ticker) DO NOTHING
+                INSERT INTO catalyst_stock_impact_projections(
+                    projection_id,remote_analysis_revision_id,news_id,item_change_sequence,
+                    ticker,company,impact_score,confidence,horizon,mechanism,reason,
+                    validation_status,validated_at,focus_revision,universe_version,
+                    content_hash,published_at,fetched_at,analyzed_at,available_at,
+                    model,reasoning,prompt_version,analysis_schema_version
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
-                    revision_id,
+                    projection_id,
+                    remote_revision_id,
                     item.news_id,
                     item.change_sequence,
                     impact.ticker,
                     impact.company,
                     impact.impact_score,
                     impact.confidence,
-                    impact.horizon,
-                    impact.mechanism,
+                    impact.horizon.value,
+                    impact.mechanism.value,
                     impact.reason,
+                    validation.validation_status,
+                    _iso(validation.validated_at),
+                    validation.focus_revision,
+                    validation.universe_version,
                     item.content_hash,
                     _iso(item.published_at),
                     _iso(item.fetched_at),
-                    _iso(item.analyzed_at),
-                    _iso(item.available_at),
-                    item.analysis.model,
-                    item.analysis.reasoning,
-                    item.analysis.prompt_version,
-                    item.analysis.schema_version,
+                    _iso(analyzed_at),
+                    _iso(available_at),
+                    analysis.model,
+                    analysis.reasoning,
+                    analysis.prompt_version,
+                    analysis.schema_version,
                 ),
             )
+            trusted += 1
+        return {
+            "inserted": True,
+            "trusted": trusted,
+            "missing": missing,
+            "untrusted": untrusted,
+        }
 
     def publish_latest(
         self,
@@ -2211,10 +2477,10 @@ class CatalystRepository:
     ) -> sqlite3.Row | None:
         return connection.execute(
             """
-            SELECT * FROM catalyst_analysis_revisions
+            SELECT * FROM catalyst_analysis_projections
             WHERE news_id=? AND content_hash=? AND item_change_sequence=?
                 AND available_at<=? AND cached_at<=?
-            ORDER BY available_at DESC,cached_at DESC,analysis_revision_id DESC
+            ORDER BY available_at DESC,cached_at DESC,projection_id DESC
             LIMIT 1
             """,
             (news_id, content_hash, change_sequence, as_of, read_cutoff),
@@ -2222,9 +2488,9 @@ class CatalystRepository:
 
     @staticmethod
     def _visible_impacts(
-        connection: sqlite3.Connection, analysis_revision_id: str | None
+        connection: sqlite3.Connection, projection_id: str | None
     ) -> list[dict[str, Any]]:
-        if not analysis_revision_id:
+        if not projection_id:
             return []
         return [
             {
@@ -2235,10 +2501,14 @@ class CatalystRepository:
                 "horizon": row["horizon"],
                 "mechanism": row["mechanism"],
                 "reason": row["reason"],
+                "validation_status": row["validation_status"],
+                "validated_at": row["validated_at"],
+                "focus_revision": row["focus_revision"],
+                "universe_version": row["universe_version"],
             }
             for row in connection.execute(
-                "SELECT * FROM catalyst_stock_impacts WHERE analysis_revision_id=? ORDER BY abs(impact_score) DESC,ticker",
-                (analysis_revision_id,),
+                "SELECT * FROM catalyst_stock_impact_projections WHERE projection_id=? ORDER BY abs(impact_score) DESC,ticker",
+                (projection_id,),
             ).fetchall()
         ]
 
@@ -2271,8 +2541,7 @@ class CatalystRepository:
             analysis = _loads(analysis_row["raw_json"], {})
             analyzed_at = analysis_row["analyzed_at"]
             available_at = analysis_row["available_at"]
-            impacts = self._visible_impacts(connection, analysis_row["analysis_revision_id"])
-            analysis["affected_stocks"] = impacts
+            impacts = self._visible_impacts(connection, analysis_row["projection_id"])
             analysis_status = (
                 "insufficient_context" if analysis_row["insufficient_context"] else "completed"
             )
@@ -2290,6 +2559,7 @@ class CatalystRepository:
             "source_tickers": _loads(row["source_tickers_json"], []),
             "analysis_status": analysis_status,
             "analysis": analysis,
+            "trusted_stock_impacts": impacts,
             "analyzed_at": analyzed_at,
             "available_at": available_at,
             "classification": analysis.get("classification") if analysis else None,
@@ -2332,9 +2602,9 @@ class CatalystRepository:
             analysis_candidates AS (
                 SELECT *,ROW_NUMBER() OVER(
                     PARTITION BY news_id,content_hash,item_change_sequence
-                    ORDER BY available_at DESC,cached_at DESC,analysis_revision_id DESC
+                    ORDER BY available_at DESC,cached_at DESC,projection_id DESC
                 ) AS analysis_row_number
-                FROM catalyst_analysis_revisions AS ar
+                FROM catalyst_analysis_projections AS ar
                 WHERE available_at<=? AND cached_at<=?
                     AND EXISTS (
                         SELECT 1 FROM visible_items AS vi
@@ -2348,7 +2618,7 @@ class CatalystRepository:
             )
             SELECT
                 vi.*,
-                va.analysis_revision_id AS visible_analysis_revision_id,
+                va.projection_id AS visible_projection_id,
                 va.analyzed_at AS visible_analyzed_at,
                 va.available_at AS visible_available_at,
                 va.insufficient_context AS visible_insufficient_context,
@@ -2366,8 +2636,8 @@ class CatalystRepository:
                         AND it.ticker=?
                 )
                 OR EXISTS (
-                    SELECT 1 FROM catalyst_stock_impacts AS si
-                    WHERE si.analysis_revision_id=va.analysis_revision_id
+                    SELECT 1 FROM catalyst_stock_impact_projections AS si
+                    WHERE si.projection_id=va.projection_id
                         AND si.ticker=?
                 )
             """,
@@ -2388,9 +2658,9 @@ class CatalystRepository:
         ).fetchall()
         analysis_ids = sorted(
             {
-                row["visible_analysis_revision_id"]
+                row["visible_projection_id"]
                 for row in rows
-                if row["visible_analysis_revision_id"]
+                if row["visible_projection_id"]
             }
         )
         impact_map: dict[str, list[dict[str, Any]]] = {}
@@ -2399,14 +2669,14 @@ class CatalystRepository:
             placeholders = ",".join("?" for _ in chunk)
             impact_rows = connection.execute(
                 f"""
-                SELECT * FROM catalyst_stock_impacts
-                WHERE analysis_revision_id IN ({placeholders})
-                ORDER BY analysis_revision_id,abs(impact_score) DESC,ticker
+                SELECT * FROM catalyst_stock_impact_projections
+                WHERE projection_id IN ({placeholders})
+                ORDER BY projection_id,abs(impact_score) DESC,ticker
                 """,
                 chunk,
             ).fetchall()
             for impact in impact_rows:
-                impact_map.setdefault(impact["analysis_revision_id"], []).append(
+                impact_map.setdefault(impact["projection_id"], []).append(
                     {
                         "ticker": impact["ticker"],
                         "company": impact["company"],
@@ -2415,16 +2685,19 @@ class CatalystRepository:
                         "horizon": impact["horizon"],
                         "mechanism": impact["mechanism"],
                         "reason": impact["reason"],
+                        "validation_status": impact["validation_status"],
+                        "validated_at": impact["validated_at"],
+                        "focus_revision": impact["focus_revision"],
+                        "universe_version": impact["universe_version"],
                     }
                 )
         hydrated: list[dict[str, Any]] = []
         for row in rows:
             raw = _loads(row["raw_json"], {})
-            revision_id = row["visible_analysis_revision_id"]
-            if revision_id:
+            projection_id = row["visible_projection_id"]
+            if projection_id:
                 analysis = _loads(row["visible_analysis_json"], {})
-                impacts = impact_map.get(revision_id, [])
-                analysis["affected_stocks"] = impacts
+                impacts = impact_map.get(projection_id, [])
                 analysis_status = (
                     "insufficient_context"
                     if row["visible_insufficient_context"]
@@ -2451,6 +2724,7 @@ class CatalystRepository:
                     "source_tickers": _loads(row["source_tickers_json"], []),
                     "analysis_status": analysis_status,
                     "analysis": analysis,
+                    "trusted_stock_impacts": impacts,
                     "analyzed_at": row["visible_analyzed_at"],
                     "available_at": row["visible_available_at"],
                     "classification": analysis.get("classification") if analysis else None,
@@ -2540,7 +2814,7 @@ class CatalystRepository:
                 if event_time is None or event_time < cutoff:
                     continue
                 analysis = item.get("analysis")
-                impacts = (analysis or {}).get("affected_stocks") or []
+                impacts = item.get("trusted_stock_impacts") or []
                 if normalized_ticker:
                     related = normalized_ticker in item["source_tickers"] or any(
                         impact.get("ticker") == normalized_ticker for impact in impacts
@@ -2565,14 +2839,19 @@ class CatalystRepository:
                     continue
                 if min_confidence == 0 and not include_unanalyzed and analysis is None:
                     continue
-                if min_abs_impact is not None and (
-                    item["impact_score"] is None or abs(item["impact_score"]) < min_abs_impact
-                ):
-                    continue
-                if horizon and not any(impact.get("horizon") == horizon for impact in impacts):
-                    continue
-                if mechanism and not any(impact.get("mechanism") == mechanism for impact in impacts):
-                    continue
+                scoped_impacts = (
+                    [impact for impact in impacts if impact.get("ticker") == normalized_ticker]
+                    if normalized_ticker
+                    else impacts
+                )
+                if any(value is not None for value in (min_abs_impact, horizon, mechanism)):
+                    if not any(
+                        (min_abs_impact is None or abs(int(impact.get("impact_score") or 0)) >= min_abs_impact)
+                        and (horizon is None or impact.get("horizon") == horizon)
+                        and (mechanism is None or impact.get("mechanism") == mechanism)
+                        for impact in scoped_impacts
+                    ):
+                        continue
                 if multi_source_only and len(content_sources.get(item["content_hash"], set())) < 2:
                     continue
                 filtered.append(item)
@@ -2604,7 +2883,7 @@ class CatalystRepository:
             stock_groups: dict[str, dict[str, Any]] = {}
             seen_impacts: set[tuple[str, str]] = set()
             for item in summary_items:
-                for impact in (item.get("analysis") or {}).get("affected_stocks") or []:
+                for impact in item.get("trusted_stock_impacts") or []:
                     ticker_key = impact.get("ticker")
                     dedupe_key = (item["content_hash"], str(ticker_key))
                     if not ticker_key or dedupe_key in seen_impacts:
@@ -2848,7 +3127,7 @@ class CatalystRepository:
                     continue
                 if not include_neutral and item["classification"] == "neutral":
                     continue
-                impacts = (item.get("analysis") or {}).get("affected_stocks") or []
+                impacts = item.get("trusted_stock_impacts") or []
                 related = requested.intersection(item["source_tickers"])
                 related.update(
                     impact["ticker"]
@@ -4399,6 +4678,8 @@ class CatalystRepository:
         *,
         heartbeat_ttl_seconds: int,
         snapshot_ttl_seconds: int | None = None,
+        snapshot_refresh_seconds: int | None = None,
+        startup_grace_seconds: int | None = None,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         """Return health for the focus producer without affecting sync health."""
@@ -4406,21 +4687,29 @@ class CatalystRepository:
         observed = now or _now()
         schema = self.check_schema()
         with self._read() as connection:
-            worker = connection.execute(
-                """
-                SELECT status,heartbeat_at,details_json
-                FROM catalyst_worker_status
-                WHERE worker_id LIKE ?
-                ORDER BY heartbeat_at DESC LIMIT 1
-                """,
-                (f"{FOCUS_PRODUCER_WORKER_PREFIX}%",),
-            ).fetchone()
             lock = connection.execute(
                 """
-                SELECT lease_until FROM catalyst_worker_lock
+                SELECT owner_id,lease_until FROM catalyst_worker_lock
                 WHERE lock_name='focus-context-producer'
                 """
             ).fetchone()
+            if lock is not None:
+                worker = connection.execute(
+                    """SELECT status,heartbeat_at,details_json
+                       FROM catalyst_worker_status WHERE worker_id=?""",
+                    (lock["owner_id"],),
+                ).fetchone()
+            else:
+                # A one-shot producer releases its lease before callers read
+                # health.  Keep its last bounded details available for
+                # diagnostics, while lock_ok below still prevents those
+                # details from making the component healthy.
+                worker = connection.execute(
+                    """SELECT status,heartbeat_at,details_json
+                       FROM catalyst_worker_status WHERE worker_id LIKE ?
+                       ORDER BY heartbeat_at DESC LIMIT 1""",
+                    (f"{FOCUS_PRODUCER_WORKER_PREFIX}%",),
+                ).fetchone()
             snapshot = connection.execute(
                 """
                 SELECT revision,as_of,data_through,market_session,created_at
@@ -4462,25 +4751,73 @@ class CatalystRepository:
         )
         if snapshot_ttl <= 0:
             raise ValueError("focus snapshot TTL must be positive")
+        refresh_seconds = (
+            snapshot_refresh_seconds
+            if snapshot_refresh_seconds is not None
+            else snapshot_ttl
+        )
+        if refresh_seconds <= 0 or refresh_seconds > snapshot_ttl:
+            raise ValueError("focus snapshot refresh interval is invalid")
         snapshot_fresh = (
             snapshot_age is not None and snapshot_age <= snapshot_ttl
         )
+        snapshot_within_refresh = bool(
+            snapshot_age is not None and snapshot_age <= refresh_seconds
+        )
+        worker_status = worker["status"] if worker else "not_started"
+        refresh_in_progress = bool(
+            snapshot_age is not None
+            and refresh_seconds < snapshot_age <= snapshot_ttl
+            and heartbeat_ok
+            and worker_status == "running"
+        )
+        details = _loads(worker["details_json"], {}) if worker else {}
+        refresh_started_at = _as_utc(details.get("refresh_started_at"))
+        startup_age = (
+            max(0.0, (observed - refresh_started_at).total_seconds())
+            if refresh_started_at is not None
+            else None
+        )
+        startup_grace = startup_grace_seconds or 0
+        startup_in_progress = bool(
+            snapshot is None
+            and startup_grace > 0
+            and startup_age is not None
+            and startup_age <= startup_grace
+            and heartbeat_ok
+            and worker_status == "running"
+        )
+        healthy = bool(
+            schema["quick_check"] == "ok"
+            and heartbeat_ok
+            and lock_ok
+            and (
+                snapshot_within_refresh
+                or refresh_in_progress
+                or startup_in_progress
+            )
+        )
+        warnings: list[str] = []
+        if refresh_in_progress:
+            warnings.append("focus_refresh_in_progress")
+        if startup_in_progress:
+            warnings.append("focus_startup_in_progress")
         return {
-            "healthy": bool(
-                schema["quick_check"] == "ok"
-                and heartbeat_ok
-                and lock_ok
-                and snapshot_fresh
-            ),
-            "status": worker["status"] if worker else "not_started",
+            "healthy": healthy,
+            "status": "degraded" if healthy and warnings else worker_status,
             "heartbeat_at": _iso(heartbeat_at),
             "heartbeat_age_seconds": heartbeat_age,
             "heartbeat_fresh": heartbeat_ok,
             "lock_live": lock_ok,
             "snapshot_age_seconds": snapshot_age,
             "snapshot_fresh": snapshot_fresh,
+            "snapshot_within_refresh": snapshot_within_refresh,
             "snapshot_ttl_seconds": snapshot_ttl,
-            "details": _loads(worker["details_json"], {}) if worker else {},
+            "snapshot_refresh_seconds": refresh_seconds,
+            "refresh_in_progress": refresh_in_progress,
+            "startup_in_progress": startup_in_progress,
+            "warnings": warnings,
+            "details": details,
             "latest_snapshot": dict(snapshot) if snapshot is not None else None,
             "daily_strength_cache": dict(daily) if daily is not None else None,
             "schema_version": schema["schema_version"],
