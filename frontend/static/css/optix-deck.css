@@ -667,9 +667,12 @@ svg { display: block; }
     backdrop-filter: blur(18px);
     border-bottom: 1px solid var(--line);
     padding: 10px clamp(16px, 4vw, 24px) 16px;
-    transform: translateY(-110%); transition: transform var(--t-med) var(--ease-swift);
+    /* 位移必须越过 57px 的定位偏移,否则底边会留在视口顶部形成一条遮挡带 */
+    transform: translateY(calc(-100% - 64px));
+    visibility: hidden;
+    transition: transform var(--t-med) var(--ease-swift), visibility 0s var(--t-med);
   }
-  .deck-nav.open { transform: none; }
+  .deck-nav.open { transform: none; visibility: visible; transition: transform var(--t-med) var(--ease-swift), visibility 0s; }
   .deck-nav a { padding: 12px 6px; font-size: 16px; }
   .deck-nav a::after { display: none; }
   .deck-menu-toggle { display: flex; flex-direction: column; gap: 5px; padding: 10px 6px; }
