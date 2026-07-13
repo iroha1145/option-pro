@@ -41,7 +41,7 @@
   const HORIZON_CN = { intraday: "日内", days: "数日", weeks: "数周", uncertain: "不确定" };
   const MECHANISM_CN = { direct_company: "公司直接影响", supplier_customer: "供应链传导", sector_readthrough: "行业映射", macro_rate: "宏观利率", commodity_input: "大宗商品成本", regulatory: "监管", competitive: "竞争格局", other: "其他" };
   const STATUS_CN = {
-    ok: "正常", active: "正常", degraded: "部分降级", stale: "过期快照", unavailable: "暂不可用",
+    ok: "正常", active: "正常", degraded: "部分降级", fallback: "兜底源", stale: "过期快照", unavailable: "暂不可用",
     disabled: "未启用", empty: "没有匹配", not_requested: "未请求", pending: "待处理", queued: "排队中",
     in_progress: "分析中", cancel_requested: "正在取消", completed: "已完成", failed: "失败", cancelled: "已取消",
     insufficient_context: "信息不足", budget_blocked: "预算受限", not_configured: "未配置",
@@ -248,7 +248,7 @@
           <div class="cat-command__facts" id="cat-facts"></div>
           <div class="cat-command__model">
             <span class="chip chip--amber"><i></i><span id="cat-model">GPT-5.6 Terra · max</span></span>
-            <p>模型推断，不代表收益概率；影响分不是预期收益，置信度不是胜率。</p>
+            <p id="cat-model-note">模型推断，不代表收益概率；影响分不是预期收益，置信度不是胜率。</p>
           </div>
         </section>
 
@@ -395,19 +395,24 @@
     const resyncRequired = !!(raw.resync_required || feedStream.resync_required);
     const sources = sourceItems(raw, page.feed);
     const active = sources.filter(source => ["active", "ok", "healthy"].includes(className(source.status || source.state))).length;
-    const degraded = sources.filter(source => ["degraded", "failed", "stale", "unavailable"].includes(className(source.status || source.state))).length;
+    const fallback = sources.filter(source => className(source.status || source.state) === "fallback").length;
+    const degraded = sources.filter(source => ["degraded", "fallback", "failed", "stale", "unavailable"].includes(className(source.status || source.state))).length;
+    const displayStatus = ["active", "empty"].includes(status) && degraded ? "degraded" : status;
+    const warnings = list(raw, ["warnings"]).filter(value => typeof value === "string" && value.trim());
     const actualModel = raw.model || null;
     const model = actualModel || raw.expected_model || "gpt-5.6-terra";
     const reasoning = actualModel ? (raw.reasoning || "max") : (raw.expected_reasoning || "max");
-    $("#cat-head-state", page.view).innerHTML = `<span class="data-state ${["active", "empty"].includes(status) && !resyncRequired ? "" : status === "unavailable" ? "is-down" : "is-warn"}"><i></i>${esc(resyncRequired ? "有界重新同步中" : statusLabel(status))} · 本地缓存</span>`;
-    $("#cat-connection", page.view).textContent = resyncRequired ? "旧快照 · 重新同步中" : statusLabel(status);
+    $("#cat-head-state", page.view).innerHTML = `<span class="data-state ${["active", "empty"].includes(displayStatus) && !resyncRequired ? "" : displayStatus === "unavailable" ? "is-down" : "is-warn"}"><i></i>${esc(resyncRequired ? "有界重新同步中" : statusLabel(displayStatus))} · 本地缓存</span>`;
+    $("#cat-connection", page.view).textContent = resyncRequired ? "旧快照 · 重新同步中" : statusLabel(displayStatus);
     $("#cat-times", page.view).innerHTML = `数据截止 ${timeHtml(raw.data_through || raw.as_of)} · 最近同步 ${timeHtml(raw.last_sync_at)}`;
     $("#cat-model", page.view).textContent = actualModel
       ? `${model} · ${reasoning}`
       : `目标配置 ${model} · ${reasoning} · 尚无运行记录`;
+    $("#cat-model-note", page.view).textContent = warnings[0]
+      || "模型推断，不代表收益概率；影响分不是预期收益，置信度不是胜率。";
     $("#cat-facts", page.view).innerHTML = `
       <span><small>活跃来源</small><b>${sources.length ? active : "—"}</b></span>
-      <span><small>降级来源</small><b>${sources.length ? degraded : "—"}</b></span>
+      <span><small>降级来源</small><b>${sources.length ? (fallback ? `<span>兜底源</span> · ${fallback}` : degraded) : "—"}</b></span>
       <span><small>远程状态</small><b>${esc(resyncRequired ? `Resync · 第 ${feedStream.resync_generation ?? raw.resync_generation ?? "—"} 代` : statusLabel(raw.remote_status || raw.remote_state || status))}</b></span>
       <span><small>Schema</small><b>${esc(raw.schema_version || "—")}</b></span>`;
   }

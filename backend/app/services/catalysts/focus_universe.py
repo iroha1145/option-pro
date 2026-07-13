@@ -161,6 +161,7 @@ def build_focus_context(
     data_through: datetime | None,
     market_session: str,
     universe_version: str,
+    dollar_volume_scope: str = "market",
 ) -> FocusContextDraft:
     """Build a display-only focus universe from already-produced local data.
 
@@ -173,6 +174,13 @@ def build_focus_context(
         raise ValueError("as_of must include a timezone")
     if market_session not in {"premarket", "regular", "after_hours", "closed", "unknown"}:
         market_session = "unknown"
+    if dollar_volume_scope not in {"market", "candidate"}:
+        raise ValueError("dollar_volume_scope must be market or candidate")
+    dollar_reason = (
+        f"market_dollar_volume_top{settings.dollar_volume_count}"
+        if dollar_volume_scope == "market"
+        else f"candidate_dollar_volume_top{settings.dollar_volume_count}"
+    )
 
     rows: dict[str, dict[str, Any]] = {}
     previous_records: dict[str, FocusSymbol] = {}
@@ -265,9 +273,12 @@ def build_focus_context(
     reasons: dict[str, set[str]] = {ticker: set() for ticker in rows}
     for ticker, rank in dollar_ranks.items():
         if rank <= settings.dollar_volume_count:
-            reasons[ticker].add(f"dollar_volume_top{settings.dollar_volume_count}")
+            reasons[ticker].add(dollar_reason)
     for ticker in strength_order[: settings.strength_count]:
         reasons[ticker].add(f"strength_top{settings.strength_count}")
+    for ticker, row in rows.items():
+        if bool(row.get("_focus_regular_mover")):
+            reasons[ticker].add("regular_mover")
     for ticker in active_breakouts:
         reasons[ticker].add("active_breakout")
     for ticker in settings.priority_symbols:
@@ -289,7 +300,12 @@ def build_focus_context(
     for ticker, ticker_reasons in reasons.items():
         rank = dollar_ranks.get(ticker)
         non_dollar_reason = any(
-            not reason.startswith("dollar_volume_") for reason in ticker_reasons
+            not (
+                reason.startswith("dollar_volume_")
+                or reason.startswith("market_dollar_volume_")
+                or reason.startswith("candidate_dollar_volume_")
+            )
+            for reason in ticker_reasons
         )
         if non_dollar_reason or (
             rank is not None
@@ -354,10 +370,11 @@ def build_focus_context(
     reason_order = {
         "priority_watchlist": 0,
         "active_breakout": 1,
-        f"dollar_volume_top{settings.dollar_volume_count}": 2,
+        dollar_reason: 2,
         "dollar_volume_retained": 3,
-        f"strength_top{settings.strength_count}": 4,
-        "major_index_constituent": 5,
+        "regular_mover": 4,
+        f"strength_top{settings.strength_count}": 5,
+        "major_index_constituent": 6,
         "stale_retained": 98,
     }
     symbols: list[FocusSymbol] = []

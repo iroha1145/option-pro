@@ -27,13 +27,19 @@ def _settings(**overrides) -> BreakoutSettings:
     return BreakoutSettings(_env_file=None, **overrides)
 
 
-async def _scan(payload, *, session=MarketSession.REGULAR, settings=None):
+async def _scan(
+    payload,
+    *,
+    session=MarketSession.REGULAR,
+    settings=None,
+    profile=None,
+):
     async def handler(_request):
         return httpx.Response(200, json=payload)
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     provider = TradingViewDiscoveryProvider(settings or _settings(), client=client)
-    profile = (
+    profile = profile or (
         DiscoveryProfile.PREMARKET_GAPPERS
         if session is MarketSession.PREMARKET
         else DiscoveryProfile.REGULAR_MOVERS
@@ -53,6 +59,118 @@ def test_regular_response_is_normalized_and_filtered() -> None:
     assert snapshot.candidate_count == 1
     assert snapshot.candidates[0].ticker == "AAPL"
     assert snapshot.candidates[0].price == 225.5
+
+
+def test_regular_dollar_volume_profile_has_no_change_or_rvol_threshold() -> None:
+    import asyncio
+
+    values = {
+        "name": "FLAT",
+        "exchange": "NASDAQ",
+        "description": "Flat Corp",
+        "type": "stock",
+        "typespecs": ["common"],
+        "close": 100.0,
+        "change": None,
+        "volume": 2_000_000,
+        "relative_volume_10d_calc": None,
+        # The volume-leader profile must not inherit the movers market-cap gate.
+        "market_cap_basic": 1,
+        "sector": "Technology",
+    }
+    second = {**values, "name": "FAST", "close": 20.0, "volume": 5_000_000}
+    payload = {
+        "columns": list(REGULAR_COLUMNS),
+        "data": [
+            {
+                "s": "NASDAQ:FAST",
+                "d": [second[column] for column in REGULAR_COLUMNS],
+            },
+            {
+                "s": "NASDAQ:FLAT",
+                "d": [values[column] for column in REGULAR_COLUMNS],
+            },
+        ],
+    }
+    snapshot = asyncio.run(
+        _scan(
+            payload,
+            profile=DiscoveryProfile.REGULAR_DOLLAR_VOLUME_LEADERS,
+        )
+    )
+
+    assert [item.ticker for item in snapshot.candidates] == ["FLAT", "FAST"]
+    assert snapshot.candidate_count == 2
+
+
+def test_regular_dollar_volume_profile_enforces_only_its_liquidity_boundary() -> None:
+    import asyncio
+
+    base = {
+        "exchange": "NASDAQ",
+        "description": "Fixture Corp",
+        "type": "stock",
+        "typespecs": ["common"],
+        "close": 10.0,
+        "change": -50.0,
+        "relative_volume_10d_calc": 0.01,
+        "market_cap_basic": 1,
+        "sector": "Technology",
+    }
+    rows = [
+        {**base, "name": "ENOUGH", "volume": 600_000},
+        {**base, "name": "TOOSMALL", "volume": 499_999},
+    ]
+    payload = {
+        "columns": list(REGULAR_COLUMNS),
+        "data": [
+            {
+                "s": f"NASDAQ:{row['name']}",
+                "d": [row[column] for column in REGULAR_COLUMNS],
+            }
+            for row in rows
+        ],
+    }
+    snapshot = asyncio.run(
+        _scan(
+            payload,
+            profile=DiscoveryProfile.REGULAR_DOLLAR_VOLUME_LEADERS,
+        )
+    )
+
+    assert [item.ticker for item in snapshot.candidates] == ["ENOUGH"]
+
+
+def test_regular_dollar_volume_payload_keeps_movers_payload_unchanged() -> None:
+    import asyncio
+
+    provider = TradingViewDiscoveryProvider(_settings())
+    try:
+        movers = provider._payload(
+            MarketSession.REGULAR,
+            DiscoveryProfile.REGULAR_MOVERS,
+        )
+        leaders = provider._payload(
+            MarketSession.REGULAR,
+            DiscoveryProfile.REGULAR_DOLLAR_VOLUME_LEADERS,
+        )
+
+        assert {item["left"] for item in movers["filter"]} == {
+            "close",
+            "change",
+            "relative_volume_10d_calc",
+        }
+        assert {item["left"] for item in leaders["filter"]} == {
+            "close",
+            "Value.Traded",
+        }
+        assert next(
+            item for item in leaders["filter"] if item["left"] == "Value.Traded"
+        )["right"] == 5_000_000
+        assert leaders["sort"] == {"sortBy": "Value.Traded", "sortOrder": "desc"}
+        assert leaders["range"] == [0, 100]
+    finally:
+        asyncio.run(provider.aclose())
 
 
 def test_premarket_response_uses_real_premarket_fields() -> None:

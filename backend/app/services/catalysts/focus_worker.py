@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import logging
 import math
@@ -30,6 +31,7 @@ from app.services.breakouts.models import (
 from app.services.breakouts.providers.tradingview import TradingViewDiscoveryProvider
 from app.services.market_calendar import ET, early_close_minutes, is_trading_day
 
+from .errors import CatalystRepositoryError
 from .focus_config import FocusContextSettings, get_focus_context_settings
 from .focus_models import FocusContextDraft, FocusContextResponse, FocusSymbol
 from .focus_publisher import _breakout_rows, _market_session, verify_focus_contract
@@ -61,6 +63,240 @@ IntradayLoader = Callable[
 BreakoutLoader = Callable[[], Sequence[Mapping[str, Any]]]
 
 
+def _latest_completed_trading_day(
+    observed: datetime,
+    *,
+    settlement_delay_seconds: int = 1800,
+) -> date:
+    """Return the last session whose daily provider bar has had time to settle."""
+
+    if settlement_delay_seconds < 0:
+        raise ValueError("daily strength settlement delay must not be negative")
+    local = observed.astimezone(ET)
+    candidate = local.date()
+    close_minutes = early_close_minutes(candidate) or 16 * 60
+    close_at = datetime.combine(
+        candidate,
+        time(hour=close_minutes // 60, minute=close_minutes % 60),
+        tzinfo=ET,
+    )
+    if (
+        not is_trading_day(candidate)
+        or local < close_at + timedelta(seconds=settlement_delay_seconds)
+    ):
+        candidate -= timedelta(days=1)
+    for _ in range(14):
+        if is_trading_day(candidate):
+            return candidate
+        candidate -= timedelta(days=1)
+    raise RuntimeError("focus_completed_trading_day_unavailable")
+
+
+def _daily_strength_cache_identity() -> dict[str, str]:
+    from app.services.breakouts.config import get_breakout_settings
+    from app.services.strength.scanner import (
+        STRENGTH_FEATURE_VERSION,
+        STRENGTH_NORMALIZATION_VERSION,
+        STRENGTH_SCORE_VERSION,
+        _canonical_universe_version,
+        _theme_universe,
+    )
+
+    tickers, metadata = _theme_universe()
+    breakout = get_breakout_settings()
+    material = {
+        "cache": "focus-daily-strength-v1",
+        "universe": _canonical_universe_version(tickers, metadata),
+        "score": STRENGTH_SCORE_VERSION,
+        "feature": STRENGTH_FEATURE_VERSION,
+        "normalization": STRENGTH_NORMALIZATION_VERSION,
+        "range_mode": breakout.range_persistence_mode,
+        "range_version": breakout.range_persistence_version,
+        "range_length": breakout.range_persistence_length,
+        "range_fast_length": breakout.range_persistence_fast_length,
+        "range_slope_days": breakout.range_persistence_slope_days,
+        "range_ratio_window": breakout.range_persistence_ratio_window,
+        "range_ratio_threshold": breakout.range_persistence_ratio_threshold,
+        "range_min_history_multiplier": (
+            breakout.range_persistence_min_history_multiplier
+        ),
+        "range_trend_family_weight": (
+            breakout.range_persistence_trend_family_weight
+        ),
+        "range_final_weight_cap": breakout.range_persistence_final_weight_cap,
+    }
+    encoded = json.dumps(material, sort_keys=True, separators=(",", ":")).encode()
+    return {
+        "cache_version": (
+            f"focus-daily-strength-v1:{hashlib.sha256(encoded).hexdigest()}"
+        ),
+        "strength_feature_version": STRENGTH_FEATURE_VERSION,
+        "strength_score_version": STRENGTH_SCORE_VERSION,
+        "normalization_version": STRENGTH_NORMALIZATION_VERSION,
+        "range_persistence_version": breakout.range_persistence_version,
+    }
+
+
+def _daily_strength_cache_version() -> str:
+    return _daily_strength_cache_identity()["cache_version"]
+
+
+def _daily_strength_status(payload: Mapping[str, Any]) -> str:
+    explicit = str(payload.get("status") or "").lower()
+    rows = [item for item in payload.get("_focus_rows") or () if isinstance(item, Mapping)]
+    sources = payload.get("data_sources")
+    prices = sources.get("prices") if isinstance(sources, Mapping) else None
+    price_status = str(prices.get("status") or "") if isinstance(prices, Mapping) else ""
+    if explicit == "unavailable" or price_status == "unavailable" or not rows:
+        return "unavailable"
+    if explicit in {"degraded", "stale"} or price_status in {
+        "degraded",
+        "fallback",
+        "stale",
+    }:
+        return "degraded"
+    return "active"
+
+
+def _optional_utc(value: Any) -> datetime | None:
+    try:
+        return _as_utc(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _daily_strength_payload(
+    payload: Mapping[str, Any],
+    *,
+    completed_session_date: date | None = None,
+) -> dict[str, Any]:
+    allowed_row_fields = {
+        "ticker",
+        "sector_id",
+        "primary_sector_id",
+        "session_change_pct",
+        "avg_dollar_volume_20d",
+        "data_quality",
+        "universe_member",
+        "universe_version",
+        "universe_as_of",
+        "daily_data_through",
+    }
+    rows = [
+        {key: value for key, value in dict(item).items() if key in allowed_row_fields}
+        for item in payload.get("_focus_rows") or ()
+        if isinstance(item, Mapping)
+    ]
+    sources = payload.get("data_sources")
+    prices = sources.get("prices") if isinstance(sources, Mapping) else None
+    valid_tickers = {
+        ticker
+        for row in rows
+        if (ticker := _ticker(row.get("ticker"))) is not None
+    }
+    missing_tickers = {
+        ticker
+        for raw in (
+            prices.get("missing_symbols")
+            if isinstance(prices, Mapping)
+            else ()
+        )
+        or ()
+        if (ticker := _ticker(raw)) is not None
+    }
+    expected_symbol_count = 0
+    for raw_count in (
+        payload.get("universe_count"),
+        payload.get("requested_count"),
+    ):
+        count = _finite(raw_count)
+        if count is not None and count > 0:
+            expected_symbol_count = max(expected_symbol_count, int(count))
+    expected_symbol_count = max(
+        expected_symbol_count,
+        len(valid_tickers) + len(missing_tickers - valid_tickers),
+    )
+    available_symbol_count = len(valid_tickers)
+    availability_coverage = (
+        available_symbol_count / expected_symbol_count
+        if expected_symbol_count
+        else 0.0
+    )
+    explicit_coverage = (
+        _finite(prices.get("coverage")) if isinstance(prices, Mapping) else None
+    )
+    if explicit_coverage is not None and explicit_coverage > 1:
+        explicit_coverage /= 100.0
+    if explicit_coverage is None or not 0 <= explicit_coverage <= 1:
+        explicit_coverage = availability_coverage
+    else:
+        # A provider percentage cannot override missing rows visible in the
+        # requested universe.
+        explicit_coverage = min(explicit_coverage, availability_coverage)
+    completed_session_symbol_count = available_symbol_count
+    completed_session_coverage = availability_coverage
+    if completed_session_date is not None:
+        completed_tickers = {
+            ticker
+            for row in rows
+            if (ticker := _ticker(row.get("ticker"))) is not None
+            and (data_through := _optional_utc(row.get("daily_data_through")))
+            is not None
+            and data_through.astimezone(ET).date() == completed_session_date
+        }
+        completed_session_symbol_count = len(completed_tickers)
+        completed_session_coverage = (
+            completed_session_symbol_count / expected_symbol_count
+            if expected_symbol_count
+            else 0.0
+        )
+    effective_coverage = min(explicit_coverage, completed_session_coverage)
+    canonical_symbols = sorted(
+        {
+            str(row.get("ticker") or "").strip().upper()
+            for row in rows
+            if row.get("universe_member") and _ticker(row.get("ticker")) is not None
+        }
+    )
+    return {
+        "as_of": payload.get("as_of"),
+        "universe_as_of": payload.get("universe_as_of"),
+        "universe_version": payload.get("universe_version") or "unknown",
+        "score_version": payload.get("score_version"),
+        "feature_version": payload.get("feature_version"),
+        "normalization_version": payload.get("normalization_version"),
+        "range_persistence_version": payload.get("range_persistence_version"),
+        "canonical_symbols": canonical_symbols,
+        "expected_symbol_count": expected_symbol_count,
+        "available_symbol_count": available_symbol_count,
+        "missing_symbol_count": max(
+            len(missing_tickers),
+            expected_symbol_count - available_symbol_count,
+        ),
+        "completed_session_date": (
+            completed_session_date.isoformat()
+            if completed_session_date is not None
+            else None
+        ),
+        "completed_session_symbol_count": completed_session_symbol_count,
+        "availability_coverage": round(availability_coverage, 6),
+        "completed_session_coverage": round(completed_session_coverage, 6),
+        "coverage": round(effective_coverage, 6),
+        "data_sources": {"prices": dict(prices)} if isinstance(prices, Mapping) else {},
+        "_focus_rows": rows,
+    }
+
+
+def _daily_strength_data_through(payload: Mapping[str, Any]) -> datetime | None:
+    values = [
+        value
+        for item in payload.get("_focus_rows") or ()
+        if isinstance(item, Mapping)
+        and (value := _optional_utc(item.get("daily_data_through"))) is not None
+    ]
+    return min(values) if values else None
+
+
 def _finite(value: Any) -> float | None:
     try:
         number = float(value)
@@ -82,6 +318,98 @@ def _fallback_quality(value: Any) -> float | None:
     if quality < 0 or quality > 1:
         return None
     return round(min(0.6, quality * 0.7), 4)
+
+
+def _published_coverage(
+    symbols: Sequence[FocusSymbol],
+    *,
+    market_volume_rank_scope: str,
+) -> dict[str, Any]:
+    """Summarize only the symbols in the immutable published snapshot."""
+
+    if market_volume_rank_scope not in {"market", "candidate"}:
+        market_volume_rank_scope = "candidate"
+    symbol_count = len(symbols)
+    data_through_values = [
+        value
+        for symbol in symbols
+        if (value := _as_utc(symbol.data_through)) is not None
+    ]
+
+    def health_bucket(symbol: FocusSymbol) -> str:
+        if symbol.data_status == "stale" or symbol.source_status == "stale":
+            return "stale"
+        if symbol.source_status == "fallback":
+            return "fallback"
+        if symbol.source_status in {"active", "degraded"}:
+            return "active"
+        return "unavailable"
+
+    health_counts = Counter(health_bucket(symbol) for symbol in symbols)
+    basis_counts = Counter(symbol.dollar_volume_basis for symbol in symbols)
+    status_counts = Counter(symbol.source_status for symbol in symbols)
+    intraday_exact_count = sum(
+        symbol.dollar_volume_basis == "intraday_completed_bars" for symbol in symbols
+    )
+    rvol_available_count = sum(
+        symbol.rvol_time_of_day is not None for symbol in symbols
+    )
+    session_change_available_count = sum(
+        symbol.session_change_pct is not None for symbol in symbols
+    )
+    selected_min = min(data_through_values) if data_through_values else None
+    selected_max = max(data_through_values) if data_through_values else None
+    return {
+        "published_symbol_count": symbol_count,
+        "dollar_volume_basis": dict(sorted(basis_counts.items())),
+        "source_status": dict(sorted(status_counts.items())),
+        "symbol_sources": [
+            {
+                "ticker": symbol.ticker,
+                "dollar_volume_basis": symbol.dollar_volume_basis,
+                "dollar_volume": symbol.dollar_volume,
+                "data_through": (
+                    symbol.data_through.isoformat()
+                    if symbol.data_through is not None
+                    else None
+                ),
+                "source_status": symbol.source_status,
+                "data_source": symbol.data_source or "unavailable",
+            }
+            for symbol in symbols
+        ],
+        "data_through": selected_min.isoformat() if selected_min else None,
+        "selected_data_through_min": (
+            selected_min.isoformat() if selected_min else None
+        ),
+        "selected_data_through_max": (
+            selected_max.isoformat() if selected_max else None
+        ),
+        "data_through_symbol_count": len(data_through_values),
+        "data_through_missing_count": symbol_count - len(data_through_values),
+        "data_through_coverage": (
+            round(len(data_through_values) / symbol_count, 4)
+            if symbol_count
+            else 0.0
+        ),
+        "active_symbol_count": health_counts["active"],
+        "stale_symbol_count": health_counts["stale"],
+        "fallback_symbol_count": health_counts["fallback"],
+        "unavailable_symbol_count": health_counts["unavailable"],
+        "intraday_exact_count": intraday_exact_count,
+        "intraday_exact_ratio": (
+            round(intraday_exact_count / symbol_count, 4) if symbol_count else 0.0
+        ),
+        "rvol_available_count": rvol_available_count,
+        "rvol_available_ratio": (
+            round(rvol_available_count / symbol_count, 4) if symbol_count else 0.0
+        ),
+        "rvol_unavailable_count": symbol_count - rvol_available_count,
+        "session_change_unavailable_count": (
+            symbol_count - session_change_available_count
+        ),
+        "market_volume_rank_scope": market_volume_rank_scope,
+    }
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -172,6 +500,7 @@ def _intraday_session_change_pct(
     frame: pd.DataFrame,
     *,
     as_of: datetime,
+    session: MarketSession,
 ) -> float | None:
     if (
         not isinstance(frame, pd.DataFrame)
@@ -185,14 +514,34 @@ def _intraday_session_change_pct(
     local.index = local.index.tz_convert(ET)
     close = pd.to_numeric(local["Close"], errors="coerce")
     current_day = as_of.astimezone(ET).date()
-    current = close[pd.Index(local.index.date) == current_day].dropna()
-    earlier_days = sorted({item for item in local.index.date if item < current_day})
-    if current.empty or not earlier_days:
+    cutoff = as_of.astimezone(ET)
+    current_mask = (
+        (pd.Index(local.index.date) == current_day)
+        & (local.index <= cutoff)
+    )
+    current = close[current_mask].dropna()
+    if current.empty:
         return None
-    previous = close[pd.Index(local.index.date) == earlier_days[-1]].dropna()
-    if previous.empty or float(previous.iloc[-1]) <= 0:
+
+    baseline_day = current_day if session is MarketSession.POSTMARKET else None
+    if baseline_day is None:
+        earlier_days = sorted({item for item in local.index.date if item < current_day})
+        if not earlier_days:
+            return None
+        baseline_day = earlier_days[-1]
+    close_minutes = early_close_minutes(baseline_day) or 16 * 60
+    minute_of_day = local.index.hour * 60 + local.index.minute
+    regular_mask = (
+        (pd.Index(local.index.date) == baseline_day)
+        & (minute_of_day >= 9 * 60 + 30)
+        & (minute_of_day < close_minutes)
+    )
+    regular_close = close[regular_mask].dropna()
+    if regular_close.empty or float(regular_close.iloc[-1]) <= 0:
         return None
-    return _finite((float(current.iloc[-1]) / float(previous.iloc[-1]) - 1.0) * 100.0)
+    return _finite(
+        (float(current.iloc[-1]) / float(regular_close.iloc[-1]) - 1.0) * 100.0
+    )
 
 
 def _active_breakout_ticker(row: Mapping[str, Any]) -> str | None:
@@ -207,7 +556,6 @@ def _active_breakout_ticker(row: Mapping[str, Any]) -> str | None:
 
 def _strength_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    universe_as_of = payload.get("universe_as_of") or payload.get("as_of")
     for rank, raw in enumerate(payload.get("_focus_rows") or (), start=1):
         if not isinstance(raw, Mapping):
             continue
@@ -229,21 +577,29 @@ def _strength_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
             "fallback" if row["_dollar_volume_basis"] != "unavailable" else "unavailable"
         )
         row["_data_source"] = "canonical_strength_daily"
-        row["_fallback_data_through"] = (
-            row.get("daily_data_through")
-            or row.get("universe_as_of")
-            or universe_as_of
-        )
+        row["_fallback_data_through"] = row.get("daily_data_through")
         row["_data_through"] = row["_fallback_data_through"]
         rows.append(row)
     return rows
 
 
-def _discovery_rows(payload: Any) -> tuple[list[dict[str, Any]], list[str]]:
+def _discovery_rows(
+    payload: Any,
+) -> tuple[list[dict[str, Any]], list[str], dict[str, Any]]:
     body = _mapping(payload)
     warnings = [str(item)[:200] for item in body.get("warnings") or ()]
     status = str(getattr(body.get("status"), "value", body.get("status") or "unknown"))
     as_of = body.get("as_of")
+    payload_volume_leaders = {
+        ticker
+        for raw in body.get("_focus_volume_leader_tickers") or ()
+        if (ticker := _ticker(raw)) is not None
+    }
+    payload_regular_movers = {
+        ticker
+        for raw in body.get("_focus_regular_mover_tickers") or ()
+        if (ticker := _ticker(raw)) is not None
+    }
     rows: list[dict[str, Any]] = []
     for raw in body.get("candidates") or ():
         item = _mapping(raw)
@@ -264,10 +620,19 @@ def _discovery_rows(payload: Any) -> tuple[list[dict[str, Any]], list[str]]:
                 "_source_status": status,
                 "_data_source": str(item.get("source") or body.get("provider") or "unknown")[:80],
                 "_data_through": as_of,
+                "_focus_volume_leader": bool(
+                    item.get("_focus_volume_leader")
+                    or ticker in payload_volume_leaders
+                ),
+                "_focus_regular_mover": bool(
+                    item.get("_focus_regular_mover")
+                    or ticker in payload_regular_movers
+                ),
             }
         )
     rows.sort(
         key=lambda item: (
+            0 if item.get("_focus_volume_leader") else 1,
             -(
                 value
                 if (value := _finite(item.get("_coarse_dollar_volume"))) is not None
@@ -276,7 +641,40 @@ def _discovery_rows(payload: Any) -> tuple[list[dict[str, Any]], list[str]]:
             item["ticker"],
         )
     )
-    return rows, warnings
+    profile = str(body.get("_focus_discovery_profile") or "unknown")
+    leader_status = str(body.get("_focus_volume_leader_status") or status)
+    volume_leader_tickers = [
+        ticker
+        for raw in body.get("_focus_volume_leader_tickers") or ()
+        if (ticker := _ticker(raw)) is not None
+    ]
+    if not volume_leader_tickers:
+        volume_leader_tickers = [
+            str(row["ticker"]) for row in rows if row.get("_focus_volume_leader")
+        ]
+    capability_supported = bool(
+        body.get("_focus_dollar_volume_leaders_supported")
+        and DiscoveryProfile.REGULAR_DOLLAR_VOLUME_LEADERS.value in profile
+        and leader_status == "active"
+    )
+    return rows, warnings, {
+        "provider": str(body.get("provider") or "unknown")[:80],
+        "status": status,
+        "profile": profile,
+        "capability_supported": capability_supported,
+        "coarse_candidate_count": len(rows),
+        "volume_leader_candidate_count": len(volume_leader_tickers),
+        "volume_leader_tickers": volume_leader_tickers,
+        "regular_mover_tickers": [
+            ticker
+            for raw in body.get("_focus_regular_mover_tickers") or ()
+            if (ticker := _ticker(raw)) is not None
+        ],
+        "as_of": (
+            value.isoformat() if (value := _as_utc(as_of)) is not None else None
+        ),
+        "cache_key": str(body.get("cache_key") or "")[:128] or None,
+    }
 
 
 def _merge_candidate_rows(
@@ -394,16 +792,88 @@ async def _default_discovery_loader(snapshot: MarketClockSnapshot) -> Any:
         }
     provider = TradingViewDiscoveryProvider()
     try:
-        profile = (
-            DiscoveryProfile.PREMARKET_GAPPERS
-            if snapshot.session is MarketSession.PREMARKET
-            else DiscoveryProfile.REGULAR_MOVERS
+        if snapshot.session is MarketSession.PREMARKET:
+            profile = DiscoveryProfile.PREMARKET_GAPPERS
+            result = await provider.scan(
+                session=snapshot.session,
+                as_of=snapshot.as_of,
+                profile=profile,
+            )
+            body = result.model_dump(mode="python")
+            body["_focus_discovery_profile"] = profile.value
+            body["_focus_dollar_volume_leaders_supported"] = False
+            return body
+
+        leaders, movers = await asyncio.gather(
+            provider.scan(
+                session=snapshot.session,
+                as_of=snapshot.as_of,
+                profile=DiscoveryProfile.REGULAR_DOLLAR_VOLUME_LEADERS,
+            ),
+            provider.scan(
+                session=snapshot.session,
+                as_of=snapshot.as_of,
+                profile=DiscoveryProfile.REGULAR_MOVERS,
+            ),
         )
-        return await provider.scan(
-            session=snapshot.session,
-            as_of=snapshot.as_of,
-            profile=profile,
+        leader_body = leaders.model_dump(mode="python")
+        mover_body = movers.model_dump(mode="python")
+        merged: dict[str, dict[str, Any]] = {}
+        leader_tickers: list[str] = []
+        mover_tickers: list[str] = []
+        for source, marker, target in (
+            (leader_body, "_focus_volume_leader", leader_tickers),
+            (mover_body, "_focus_regular_mover", mover_tickers),
+        ):
+            for raw in source.get("candidates") or ():
+                item = _mapping(raw)
+                ticker = _ticker(item.get("ticker"))
+                if ticker is None:
+                    continue
+                if ticker not in target:
+                    target.append(ticker)
+                current = merged.setdefault(ticker, item)
+                for key, value in item.items():
+                    if current.get(key) is None and value is not None:
+                        current[key] = value
+                current[marker] = True
+        leader_status = str(
+            getattr(leaders.status, "value", leaders.status)
         )
+        mover_status = str(getattr(movers.status, "value", movers.status))
+        if leader_status == mover_status == "active":
+            status = "active"
+        elif merged and {leader_status, mover_status} & {
+            "active",
+            "degraded",
+            "stale",
+        }:
+            status = "degraded"
+        else:
+            status = "unavailable"
+        cache_material = "|".join(
+            str(value or "")
+            for value in (leaders.cache_key, movers.cache_key)
+        ).encode()
+        return {
+            "provider": "tradingview",
+            "status": status,
+            "as_of": snapshot.as_of,
+            "warnings": list(
+                dict.fromkeys([*leaders.warnings, *movers.warnings])
+            )[:64],
+            "candidates": list(merged.values()),
+            "cache_key": hashlib.sha256(cache_material).hexdigest(),
+            "_focus_discovery_profile": (
+                f"{DiscoveryProfile.REGULAR_DOLLAR_VOLUME_LEADERS.value}+"
+                f"{DiscoveryProfile.REGULAR_MOVERS.value}"
+            ),
+            "_focus_dollar_volume_leaders_supported": leader_status == "active",
+            "_focus_volume_leader_status": leader_status,
+            "_focus_regular_mover_status": mover_status,
+            "_focus_volume_leader_tickers": leader_tickers,
+            "_focus_regular_mover_tickers": mover_tickers,
+        }
     finally:
         await provider.aclose()
 
@@ -488,28 +958,188 @@ class FocusContextProducer:
         self.owner_id = owner_id or (
             f"{FOCUS_PRODUCER_WORKER_PREFIX}{uuid.uuid4().hex}"
         )
+        self._heartbeat_details: dict[str, Any] = {}
 
     def _heartbeat(self, status: str, details: Mapping[str, Any]) -> None:
+        body = dict(details)
+        if "revision" in body:
+            self._heartbeat_details = body
+        else:
+            self._heartbeat_details.update(body)
         self.repository.heartbeat(
             self.owner_id,
             status,
-            dict(details),
+            self._heartbeat_details,
             now=self.clock.now(),
         )
 
-    async def _prepare(self) -> tuple[FocusContextDraft, dict[str, Any]]:
+    async def _load_strength_payload(
+        self,
+        observed: datetime,
+        fencing_token: int,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        trading_day = _latest_completed_trading_day(
+            observed,
+            settlement_delay_seconds=(
+                self.settings.daily_strength_settlement_delay_seconds
+            ),
+        )
+        cache_identity = _daily_strength_cache_identity()
+        cache_version = cache_identity["cache_version"]
+        cached = self.repository.daily_strength_snapshot(
+            trading_day=trading_day,
+            cache_version=cache_version,
+            strength_feature_version=cache_identity["strength_feature_version"],
+            strength_score_version=cache_identity["strength_score_version"],
+            normalization_version=cache_identity["normalization_version"],
+            range_persistence_version=cache_identity["range_persistence_version"],
+            now=observed,
+        )
+        cached_coverage = (
+            float(cached["coverage"])
+            if cached is not None
+            else None
+        )
+        if (
+            cached is not None
+            and cached_coverage is not None
+            and cached_coverage >= self.settings.daily_strength_min_coverage
+        ):
+            payload = dict(cached["payload"])
+            return payload, {
+                "source": "persistent_cache",
+                "status": cached["status"],
+                "trading_day": cached["trading_day"],
+                "cache_version": cache_version,
+                "cached_at": cached["cached_at"],
+                "expires_at": cached["expires_at"],
+                "payload_hash": cached["payload_hash"],
+                "coverage": cached["coverage"],
+                "minimum_coverage": self.settings.daily_strength_min_coverage,
+                "expected_symbol_count": payload.get("expected_symbol_count"),
+                "available_symbol_count": payload.get("available_symbol_count"),
+                "completed_session_symbol_count": payload.get(
+                    "completed_session_symbol_count"
+                ),
+                "audit_versions": {
+                    key: cached[key]
+                    for key in (
+                        "strength_feature_version",
+                        "strength_score_version",
+                        "normalization_version",
+                        "range_persistence_version",
+                    )
+                },
+            }
+
+        loaded = dict(await self.strength_loader())
+        status = _daily_strength_status(loaded)
+        if status == "unavailable":
+            raise RuntimeError("focus_strength_rows_unavailable")
+        payload = _daily_strength_payload(
+            loaded,
+            completed_session_date=trading_day,
+        )
+        if float(payload["coverage"]) < self.settings.daily_strength_min_coverage:
+            # Partial or lagging provider data remains usable as an explicitly
+            # degraded short-lived input, but never becomes an all-day cache.
+            status = "degraded"
+        cached_at = self.clock.now()
+        self.repository.cache_daily_strength_snapshot(
+            trading_day=trading_day,
+            cache_version=cache_version,
+            universe_version=str(payload.get("universe_version") or "unknown"),
+            strength_feature_version=cache_identity["strength_feature_version"],
+            strength_score_version=cache_identity["strength_score_version"],
+            normalization_version=cache_identity["normalization_version"],
+            range_persistence_version=cache_identity["range_persistence_version"],
+            coverage=float(payload["coverage"]),
+            status=status,
+            payload=payload,
+            data_through=_daily_strength_data_through(payload),
+            degraded_ttl_seconds=(
+                self.settings.daily_strength_degraded_ttl_seconds
+            ),
+            now=cached_at,
+            lock_name=LOCK_NAME,
+            owner_id=self.owner_id,
+            fencing_token=fencing_token,
+        )
+        return payload, {
+            "source": "fresh_scan",
+            "status": status,
+            "trading_day": trading_day.isoformat(),
+            "cache_version": cache_version,
+            "cached_at": cached_at.isoformat(),
+            "expires_at": (
+                (
+                    cached_at
+                    + timedelta(
+                        seconds=self.settings.daily_strength_degraded_ttl_seconds
+                    )
+                ).isoformat()
+                if status == "degraded"
+                else None
+            ),
+            "payload_hash": hashlib.sha256(
+                json.dumps(
+                    payload,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest(),
+            "coverage": payload["coverage"],
+            "minimum_coverage": self.settings.daily_strength_min_coverage,
+            "expected_symbol_count": payload["expected_symbol_count"],
+            "available_symbol_count": payload["available_symbol_count"],
+            "completed_session_symbol_count": payload[
+                "completed_session_symbol_count"
+            ],
+            "audit_versions": {
+                key: cache_identity[key]
+                for key in (
+                    "strength_feature_version",
+                    "strength_score_version",
+                    "normalization_version",
+                    "range_persistence_version",
+                )
+            },
+        }
+
+    async def _prepare(
+        self,
+        fencing_token: int,
+    ) -> tuple[FocusContextDraft, dict[str, Any]]:
         observed = self.clock.now()
         market = self.clock.snapshot(observed)
         current = self.repository.current_focus_context()
-        strength_payload = dict(await self.strength_loader())
+        strength_payload, strength_cache = await self._load_strength_payload(
+            observed,
+            fencing_token,
+        )
         strength_rows = _strength_rows(strength_payload)
         if not strength_rows:
             raise RuntimeError("focus_strength_rows_unavailable")
 
         warnings: list[str] = []
+        discovery_details: dict[str, Any] = {
+            "provider": "unavailable",
+            "status": "unavailable",
+            "profile": "unknown",
+            "capability_supported": False,
+            "coarse_candidate_count": 0,
+            "as_of": None,
+            "cache_key": None,
+        }
         try:
             discovery_payload = await self.discovery_loader(market)
-            discovery_rows, discovery_warnings = _discovery_rows(discovery_payload)
+            (
+                discovery_rows,
+                discovery_warnings,
+                discovery_details,
+            ) = _discovery_rows(discovery_payload)
             warnings.extend(discovery_warnings)
         except Exception:
             discovery_rows = []
@@ -530,6 +1160,7 @@ class FocusContextProducer:
         warnings.extend(pool_warnings)
         row_by_ticker = {str(row["ticker"]): row for row in rows}
         exact_count = 0
+        exact_tickers: set[str] = set()
         intraday_failed = 0
         non_typical_dollar_volume = 0
         rvol_missing = 0
@@ -569,12 +1200,26 @@ class FocusContextProducer:
                     non_typical_dollar_volume += 1
                     continue
                 exact_count += 1
+                exact_tickers.add(ticker)
                 row["cumulative_dollar_volume"] = dollar_volume
                 row["rvol_time_of_day"] = _finite(feature.get("rvol_time_of_day"))
-                row["session_change_pct"] = _first_available(
-                    _finite(feature.get("session_change_pct")),
-                    _intraday_session_change_pct(frame, as_of=observed),
-                    _finite(row.get("session_change_pct")),
+                regular_change = _intraday_session_change_pct(
+                    frame,
+                    as_of=observed,
+                    session=market.session,
+                )
+                row["session_change_pct"] = (
+                    _first_available(
+                        regular_change,
+                        _finite(row.get("session_change_pct")),
+                    )
+                    if market.session
+                    in {MarketSession.PREMARKET, MarketSession.POSTMARKET}
+                    else _first_available(
+                        _finite(feature.get("session_change_pct")),
+                        regular_change,
+                        _finite(row.get("session_change_pct")),
+                    )
                 )
                 row["_dollar_volume_basis"] = "intraday_completed_bars"
                 row["_data_through"] = (
@@ -641,9 +1286,6 @@ class FocusContextProducer:
             row["_data_through"] = (
                 row.get("_fallback_data_through")
                 or row.get("daily_data_through")
-                or row.get("universe_as_of")
-                or strength_payload.get("universe_as_of")
-                or strength_payload.get("as_of")
             )
             row["data_quality"] = (
                 _fallback_quality(row.get("data_quality"))
@@ -652,17 +1294,30 @@ class FocusContextProducer:
             )
             row["rvol_time_of_day"] = None
 
-        data_through_values = [
-            value
-            for row in rows
-            if (value := _as_utc(row.get("_data_through"))) is not None
-        ]
-        data_through = min(data_through_values) if data_through_values else None
         canonical = [
             str(row["ticker"])
             for row in strength_rows
             if bool(row.get("universe_member"))
         ]
+        volume_leader_tickers = list(
+            dict.fromkeys(discovery_details.get("volume_leader_tickers") or ())
+        )
+        volume_leader_set = set(volume_leader_tickers)
+        required_market_leaders = [
+            ticker
+            for ticker in enrichment_tickers
+            if ticker in volume_leader_set
+        ]
+        expected_leader_window_count = min(
+            self.settings.producer_candidate_limit,
+            len(volume_leader_tickers),
+        )
+        market_dollar_volume_scope = bool(
+            discovery_details["capability_supported"]
+            and len(volume_leader_tickers) >= self.settings.dollar_volume_count
+            and len(required_market_leaders) == expected_leader_window_count
+            and all(ticker in exact_tickers for ticker in required_market_leaders)
+        )
         draft = build_focus_context(
             settings=self.settings,
             strength_rows=rows,
@@ -673,61 +1328,65 @@ class FocusContextProducer:
             ),
             previous_context=current.symbols if current else (),
             as_of=observed,
-            data_through=data_through,
+            data_through=None,
             market_session=_market_session_name(market),
             universe_version=str(
                 strength_payload.get("universe_version") or "unknown"
             )[:200],
+            dollar_volume_scope=(
+                "market" if market_dollar_volume_scope else "candidate"
+            ),
         )
+        final_data_through_values = [
+            value
+            for symbol in draft.symbols
+            if (value := _as_utc(symbol.data_through)) is not None
+        ]
+        data_through = (
+            min(final_data_through_values) if final_data_through_values else None
+        )
+        draft = draft.model_copy(update={"data_through": data_through})
+        if not market_dollar_volume_scope:
+            warnings.append("focus_market_dollar_volume_capability_insufficient")
+            if (
+                len(required_market_leaders) != expected_leader_window_count
+                or any(
+                    ticker not in exact_tickers
+                    for ticker in required_market_leaders
+                )
+            ):
+                warnings.append("focus_market_leader_exact_coverage_incomplete")
         draft = draft.model_copy(
             update={
                 "warnings": list(dict.fromkeys([*draft.warnings, *warnings]))[:50]
             }
         )
-        basis_counts = Counter(
-            str(row.get("_dollar_volume_basis") or "unavailable") for row in rows
+        coverage = _published_coverage(
+            draft.symbols,
+            market_volume_rank_scope=(
+                "market" if market_dollar_volume_scope else "candidate"
+            ),
         )
-        status_counts = Counter(
-            str(row.get("_source_status") or "unavailable") for row in rows
-        )
-        symbol_sources = [
-            {
-                "ticker": str(row["ticker"]),
-                "dollar_volume_basis": str(
-                    row.get("_dollar_volume_basis") or "unavailable"
-                ),
-                "dollar_volume": (
-                    _finite(row.get("cumulative_dollar_volume"))
-                    if row.get("_dollar_volume_basis")
-                    == "intraday_completed_bars"
-                    else _finite(row.get("avg_dollar_volume_20d"))
-                ),
-                "data_through": (
-                    value.isoformat()
-                    if (value := _as_utc(row.get("_data_through"))) is not None
-                    else None
-                ),
-                "source_status": str(
-                    row.get("_source_status") or "unavailable"
-                ),
-                "data_source": str(row.get("_data_source") or "unavailable")[:80],
-            }
-            for row in rows
-        ]
         details = {
             "market_session": draft.market_session,
             "candidate_count": len(rows),
+            "candidate_semantics": (
+                f"market_dollar_volume_top{self.settings.dollar_volume_count}"
+                if market_dollar_volume_scope
+                else f"candidate_dollar_volume_top{self.settings.dollar_volume_count}"
+            ),
+            "discovery_provider": discovery_details,
+            "daily_strength_cache": strength_cache,
             "intraday_candidate_count": len(enrichment_tickers),
-            "published_symbol_count": len(draft.symbols),
             "intraday_enriched_count": exact_count,
+            "required_market_leader_count": len(required_market_leaders),
+            "expected_market_leader_window_count": expected_leader_window_count,
+            "required_market_leader_exact_count": sum(
+                ticker in exact_tickers for ticker in required_market_leaders
+            ),
             "intraday_failed_count": intraday_failed,
             "non_typical_dollar_volume_count": non_typical_dollar_volume,
-            "rvol_unavailable_count": rvol_missing,
-            "session_change_unavailable_count": session_change_missing,
-            "dollar_volume_basis": dict(sorted(basis_counts.items())),
-            "source_status": dict(sorted(status_counts.items())),
-            "symbol_sources": symbol_sources,
-            "data_through": data_through.isoformat() if data_through else None,
+            **coverage,
             "warnings": draft.warnings,
         }
         return draft, details
@@ -736,7 +1395,7 @@ class FocusContextProducer:
         self,
         fencing_token: int,
     ) -> tuple[FocusContextDraft, dict[str, Any]]:
-        task = asyncio.create_task(self._prepare())
+        task = asyncio.create_task(self._prepare(fencing_token))
         while True:
             done, _ = await asyncio.wait(
                 {task},
@@ -781,16 +1440,41 @@ class FocusContextProducer:
                 owner_id=self.owner_id,
                 fencing_token=token,
             )
+            try:
+                retention = self.repository.prune_focus_retention(
+                    snapshot_days=self.settings.snapshot_retention_days,
+                    snapshot_full_resolution_days=(
+                        self.settings.snapshot_full_resolution_days
+                    ),
+                    snapshot_daily_rollup_enabled=(
+                        self.settings.snapshot_daily_rollup_enabled
+                    ),
+                    daily_strength_days=(
+                        self.settings.daily_strength_retention_days
+                    ),
+                    now=self.clock.now(),
+                )
+            except Exception as error:
+                logger.warning(
+                    "focus_retention_failed error_type=%s",
+                    type(error).__name__,
+                )
+                retention = {"status": "degraded", "error_code": "retention_failed"}
             result = {
                 "status": "completed",
                 "enabled": True,
                 "revision": response.revision,
+                "retention": retention,
                 **details,
             }
             self._heartbeat("idle", result)
             return result
         except Exception as error:
-            error_code = type(error).__name__
+            error_code = (
+                error.code
+                if isinstance(error, CatalystRepositoryError)
+                else type(error).__name__
+            )
             stale_revision = None
             current = self.repository.current_focus_context()
             if current is not None and self.repository.renew_worker_lock(
@@ -803,7 +1487,11 @@ class FocusContextProducer:
                 stale = _stale_draft(
                     current,
                     observed=self.clock.now(),
-                    warning="focus_producer_failed",
+                    warning=(
+                        error_code
+                        if isinstance(error, CatalystRepositoryError)
+                        else "focus_producer_failed"
+                    ),
                 )
                 if stale is not None:
                     stale_revision = self.repository.publish_focus_context(
@@ -813,11 +1501,26 @@ class FocusContextProducer:
                         owner_id=self.owner_id,
                         fencing_token=token,
                     ).revision
+                published_symbols = stale.symbols if stale is not None else current.symbols
+                coverage = _published_coverage(
+                    published_symbols,
+                    market_volume_rank_scope=str(
+                        self._heartbeat_details.get(
+                            "market_volume_rank_scope",
+                            "candidate",
+                        )
+                    ),
+                )
                 result = {
                     "status": "degraded",
                     "enabled": True,
+                    "revision": stale_revision or current.revision,
                     "error_code": error_code,
                     "stale_revision": stale_revision,
+                    **coverage,
+                    "warnings": (
+                        stale.warnings if stale is not None else current.warnings
+                    ),
                 }
                 self._heartbeat("degraded", result)
                 return result
@@ -920,6 +1623,7 @@ def health_payload(
     try:
         database = local_repository.focus_producer_health(
             heartbeat_ttl_seconds=settings.producer_health_stale_seconds,
+            snapshot_ttl_seconds=settings.refresh_seconds,
             now=now,
         )
     except Exception as error:

@@ -12,6 +12,7 @@ const SCENARIOS = [
   { name: "390x844-light-stale-menu-closed", width: 390, height: 844, theme: "light", state: "stale", mobile: true },
   { name: "1280x800-dark-empty", width: 1280, height: 800, theme: "dark", state: "empty" },
   { name: "1280x800-dark-degraded", width: 1280, height: 800, theme: "dark", state: "degraded" },
+  { name: "1280x800-dark-focus-fallback", width: 1280, height: 800, theme: "dark", state: "focus_fallback" },
   { name: "1280x800-dark-unavailable", width: 1280, height: 800, theme: "dark", state: "unavailable" },
   { name: "1280x800-light-disabled", width: 1280, height: 800, theme: "light", state: "disabled" },
   { name: "1280x800-dark-prepared", width: 1280, height: 800, theme: "dark", state: "prepared" },
@@ -108,6 +109,7 @@ function cycleFor(state) {
 
 function jsonFor(pathname, state) {
   const publicState = ["active", "empty", "degraded", "stale", "unavailable", "disabled"].includes(state) ? state : "active";
+  const focusFallback = state === "focus_fallback";
   if (pathname === "/api/market/indices") {
     return {
       indices: [
@@ -133,8 +135,12 @@ function jsonFor(pathname, state) {
       model: "gpt-5.6-terra",
       reasoning: "max",
       analysis_trigger_enabled: false,
-      warnings: publicState === "degraded" ? ["一个来源暂时不可用，已有本地快照继续展示。"] : [],
-      sources: [
+      warnings: focusFallback
+        ? ["焦点行情使用最近一次可靠日线快照，未把缺失盘中数据补成中性值。"]
+        : publicState === "degraded" ? ["一个来源暂时不可用，已有本地快照继续展示。"] : [],
+      sources: focusFallback ? [
+        { name: "Focus Context", status: "fallback", last_success_at: NOW, consecutive_failures: 1 },
+      ] : [
         { name: "Finnhub", status: publicState === "degraded" ? "degraded" : "active", last_success_at: NOW, consecutive_failures: publicState === "degraded" ? 1 : 0 },
         { name: "Massive", status: "active", last_success_at: NOW, consecutive_failures: 0 },
       ],
@@ -219,6 +225,12 @@ for (const scenario of SCENARIOS) {
     if (scenario.state === "prepared") {
       await expect(page.locator("#cat-focus-run")).toBeEnabled();
       await expect(page.locator("#cat-focus-run")).toContainText("重新分析");
+    }
+    if (scenario.state === "focus_fallback") {
+      await expect(page.getByText("兜底源", { exact: true })).toBeVisible();
+      await expect(page.locator("#cat-model-note")).toContainText(
+        "焦点行情使用最近一次可靠日线快照",
+      );
     }
 
     if (scenario.mobile) {

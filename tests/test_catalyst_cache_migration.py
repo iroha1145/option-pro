@@ -65,6 +65,57 @@ def _seed_v1(path) -> None:
         connection.execute("PRAGMA user_version=1")
 
 
+def _seed_v5(path) -> None:
+    repository = CatalystRepository(path)
+    repository.initialize()
+    with sqlite3.connect(path) as connection:
+        connection.execute("DROP TABLE focus_daily_strength_snapshots")
+        connection.executescript(
+            """
+            CREATE TABLE focus_daily_strength_snapshots (
+                trading_day TEXT NOT NULL,
+                cache_version TEXT NOT NULL,
+                universe_version TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('active','degraded')),
+                data_through TEXT,
+                payload_json TEXT NOT NULL,
+                cached_at TEXT NOT NULL,
+                expires_at TEXT,
+                PRIMARY KEY (trading_day,cache_version)
+            );
+            CREATE INDEX idx_focus_daily_strength_retention
+                ON focus_daily_strength_snapshots(cached_at,trading_day);
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO focus_daily_strength_snapshots(
+                trading_day,cache_version,universe_version,status,data_through,
+                payload_json,cached_at,expires_at
+            ) VALUES(?,?,?,?,?,?,?,?)
+            """,
+            (
+                "2026-07-10",
+                "legacy-v5-cache",
+                "themes-v5",
+                "active",
+                "2026-07-10T20:00:00Z",
+                '{"_focus_rows":[{"ticker":"AAPL"}]}',
+                "2026-07-10T20:05:00Z",
+                None,
+            ),
+        )
+        connection.execute(
+            "UPDATE catalyst_schema_metadata "
+            "SET schema_version=?,schema_checksum=? WHERE singleton=1",
+            (
+                repository_module._V5_DATABASE_VERSION,
+                repository_module._V5_SCHEMA_CHECKSUM,
+            ),
+        )
+        connection.execute("PRAGMA user_version=5")
+
+
 def test_v1_migration_reaches_current_schema_and_preserves_state(tmp_path) -> None:
     path = tmp_path / "catalysts.db"
     _seed_v1(path)
@@ -194,4 +245,150 @@ def test_v3_focus_jobs_migrate_to_snapshot_batch_identity(tmp_path) -> None:
             """
         ).fetchone()
         assert tuple(row) == ("batch:7:0", 0, 1, 7, "pending")
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert (
+            connection.execute("PRAGMA user_version").fetchone()[0]
+            == repository_module.SQLITE_USER_VERSION
+        )
+        assert connection.execute(
+            "SELECT 1 FROM sqlite_master "
+            "WHERE type='table' AND name='focus_daily_strength_snapshots'"
+        ).fetchone()
+
+
+def test_v4_cache_migrates_through_v6_daily_strength_table(tmp_path) -> None:
+    path = tmp_path / "catalysts.db"
+    repository = CatalystRepository(path)
+    repository.initialize()
+    with sqlite3.connect(path) as connection:
+        connection.execute("DROP TABLE focus_daily_strength_snapshots")
+        connection.execute(
+            "UPDATE catalyst_schema_metadata SET schema_version=?,schema_checksum=?",
+            (
+                repository_module._V4_DATABASE_VERSION,
+                repository_module._V4_SCHEMA_CHECKSUM,
+            ),
+        )
+        connection.execute("PRAGMA user_version=4")
+
+    repository.initialize()
+
+    with repository.open_read_connection() as connection:
+        assert connection.execute(
+            "SELECT 1 FROM sqlite_master "
+            "WHERE type='table' AND name='focus_daily_strength_snapshots'"
+        ).fetchone()
+        assert (
+            connection.execute("PRAGMA user_version").fetchone()[0]
+            == repository_module.SQLITE_USER_VERSION
+        )
+        columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(focus_daily_strength_snapshots)"
+            ).fetchall()
+        }
+        assert {
+            "strength_feature_version",
+            "strength_score_version",
+            "normalization_version",
+            "range_persistence_version",
+            "payload_hash",
+            "coverage",
+        }.issubset(columns)
+
+
+def test_v5_cache_migrates_to_v6_by_invalidating_only_derived_rows(tmp_path) -> None:
+    path = tmp_path / "catalysts.db"
+    _seed_v5(path)
+    repository = CatalystRepository(path)
+
+    repository.initialize()
+    repository.initialize()
+
+    with repository.open_read_connection() as connection:
+        metadata = connection.execute(
+            "SELECT schema_version,schema_checksum "
+            "FROM catalyst_schema_metadata WHERE singleton=1"
+        ).fetchone()
+        assert tuple(metadata) == (
+            repository_module.DATABASE_VERSION,
+            repository_module.SCHEMA_CHECKSUM,
+        )
+        assert connection.execute(
+            "SELECT COUNT(*) FROM focus_daily_strength_snapshots"
+        ).fetchone()[0] == 0
+        columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(focus_daily_strength_snapshots)"
+            ).fetchall()
+        }
+        assert {
+            "trading_day",
+            "cache_version",
+            "universe_version",
+            "strength_feature_version",
+            "strength_score_version",
+            "normalization_version",
+            "range_persistence_version",
+            "payload_hash",
+            "coverage",
+            "status",
+            "data_through",
+            "payload_json",
+            "cached_at",
+            "expires_at",
+        } == columns
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_v5_to_v6_migration_failure_rolls_back_drop_and_metadata(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    path = tmp_path / "catalysts.db"
+    _seed_v5(path)
+    repository = CatalystRepository(path)
+    execute_atomic = repository._execute_script_atomic
+
+    def fail_during_v6(connection: sqlite3.Connection, script: str) -> None:
+        if (
+            "CREATE TABLE focus_daily_strength_snapshots" in script
+            and "payload_hash" in script
+        ):
+            connection.execute(
+                "CREATE TABLE migration_partial_v6(id INTEGER PRIMARY KEY)"
+            )
+            raise RuntimeError("injected v6 migration failure")
+        execute_atomic(connection, script)
+
+    monkeypatch.setattr(repository, "_execute_script_atomic", fail_during_v6)
+
+    with pytest.raises(RuntimeError, match="injected v6 migration failure"):
+        repository.initialize()
+
+    with sqlite3.connect(path) as connection:
+        metadata = connection.execute(
+            "SELECT schema_version,schema_checksum "
+            "FROM catalyst_schema_metadata WHERE singleton=1"
+        ).fetchone()
+        assert metadata == (
+            repository_module._V5_DATABASE_VERSION,
+            repository_module._V5_SCHEMA_CHECKSUM,
+        )
+        assert connection.execute(
+            "SELECT cache_version FROM focus_daily_strength_snapshots"
+        ).fetchone()[0] == "legacy-v5-cache"
+        columns = {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA table_info(focus_daily_strength_snapshots)"
+            )
+        }
+        assert "payload_hash" not in columns
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert connection.execute(
+            "SELECT 1 FROM sqlite_master "
+            "WHERE type='table' AND name='migration_partial_v6'"
+        ).fetchone() is None

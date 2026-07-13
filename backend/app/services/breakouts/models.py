@@ -48,6 +48,7 @@ class MarketSession(str, Enum):
 
 class DiscoveryProfile(str, Enum):
     REGULAR_MOVERS = "regular_movers"
+    REGULAR_DOLLAR_VOLUME_LEADERS = "regular_dollar_volume_leaders"
     PREMARKET_GAPPERS = "premarket_gappers"
 
 

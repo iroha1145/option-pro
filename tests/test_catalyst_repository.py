@@ -14,9 +14,17 @@ from app.services.catalysts.repository import (
     SCHEMA_CHECKSUM,
     CatalystRepository,
 )
-from app.services.catalysts.errors import InvalidCursorError
+from app.services.catalysts.errors import CatalystRepositoryError, InvalidCursorError
 from app.services.catalysts.shadow import compute_shadow, empty_shadow
 from catalyst_support import catalyst_item, utc
+
+
+DAILY_CACHE_AUDIT = {
+    "strength_feature_version": "strength-feature-v1",
+    "strength_score_version": "strength-score-v1",
+    "normalization_version": "strength-normalization-v1",
+    "range_persistence_version": "range-persistence-v1",
+}
 
 
 class CountingRepository(CatalystRepository):
@@ -88,6 +96,7 @@ def test_cache_schema_uses_wal_checksum_and_query_only_readers(tmp_path) -> None
         "catalyst_refresh_outbox",
         "catalyst_worker_status",
         "catalyst_worker_lock",
+        "focus_daily_strength_snapshots",
     }.issubset(tables)
     reader = CatalystRepository(path, read_only=True)
     connection = reader.open_read_connection()
@@ -646,3 +655,435 @@ def test_latest_revision_cannot_resurrect_an_older_window_or_source_match(tmp_pa
         as_of=utc(12), window_hours=72, source="Fixture Wire", limit=20
     )
     assert 202 not in {item["news_id"] for item in old_source["items"]}
+
+
+def test_daily_strength_cache_uses_trading_day_version_and_short_degraded_ttl(
+    tmp_path,
+) -> None:
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    observed = utc(10)
+    repository.initialize(now=observed)
+    payload = {
+        "universe_version": "themes-v1",
+        "coverage": 1.0,
+        "_focus_rows": [
+            {"ticker": "AAPL", "daily_data_through": observed.isoformat()}
+        ],
+    }
+    repository.cache_daily_strength_snapshot(
+        trading_day="2026-07-10",
+        cache_version="focus-cache-v1",
+        universe_version="themes-v1",
+        **DAILY_CACHE_AUDIT,
+        coverage=1.0,
+        status="active",
+        payload=payload,
+        data_through=observed,
+        degraded_ttl_seconds=300,
+        now=observed,
+    )
+    cached = repository.daily_strength_snapshot(
+        trading_day="2026-07-10",
+        cache_version="focus-cache-v1",
+        **DAILY_CACHE_AUDIT,
+        now=observed + timedelta(hours=12),
+    )
+    assert cached is not None
+    assert cached["status"] == "active"
+    assert cached["payload"] == payload
+
+    assert repository.daily_strength_snapshot(
+        trading_day="2026-07-10",
+        cache_version="focus-cache-v1",
+        **{
+            **DAILY_CACHE_AUDIT,
+            "strength_score_version": "strength-score-v-next",
+        },
+        now=observed + timedelta(hours=12),
+    ) is None
+    with repository.open_write_connection() as connection:
+        connection.execute(
+            "UPDATE focus_daily_strength_snapshots "
+            "SET payload_json=? WHERE trading_day=? AND cache_version=?",
+            (
+                json.dumps({**payload, "coverage": 0.75}),
+                "2026-07-10",
+                "focus-cache-v1",
+            ),
+        )
+        connection.commit()
+    assert repository.daily_strength_snapshot(
+        trading_day="2026-07-10",
+        cache_version="focus-cache-v1",
+        **DAILY_CACHE_AUDIT,
+        now=observed + timedelta(hours=12),
+    ) is None
+
+    repository.cache_daily_strength_snapshot(
+        trading_day="2026-07-10",
+        cache_version="focus-cache-degraded-v1",
+        universe_version="themes-v1",
+        **DAILY_CACHE_AUDIT,
+        coverage=1.0,
+        status="degraded",
+        payload=payload,
+        data_through=observed,
+        degraded_ttl_seconds=300,
+        now=observed,
+    )
+    assert repository.daily_strength_snapshot(
+        trading_day="2026-07-10",
+        cache_version="focus-cache-degraded-v1",
+        **DAILY_CACHE_AUDIT,
+        now=observed + timedelta(seconds=299),
+    ) is not None
+    assert repository.daily_strength_snapshot(
+        trading_day="2026-07-10",
+        cache_version="focus-cache-degraded-v1",
+        **DAILY_CACHE_AUDIT,
+        now=observed + timedelta(seconds=300),
+    ) is None
+
+    with pytest.raises(ValueError, match="active or degraded"):
+        repository.cache_daily_strength_snapshot(
+            trading_day="2026-07-10",
+            cache_version="focus-cache-unavailable-v1",
+            universe_version="themes-v1",
+            **DAILY_CACHE_AUDIT,
+            coverage=1.0,
+            status="unavailable",
+            payload=payload,
+            data_through=observed,
+            degraded_ttl_seconds=300,
+            now=observed,
+        )
+
+
+def test_daily_strength_cache_write_rejects_an_old_focus_fencing_token(
+    tmp_path,
+) -> None:
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    observed = utc(10)
+    later = observed + timedelta(seconds=31)
+    repository.initialize(now=observed)
+    old_token = repository.acquire_worker_lock(
+        "focus-context-producer",
+        "focus-old",
+        lease_seconds=30,
+        now=observed,
+    )
+    assert old_token is not None
+    new_token = repository.acquire_worker_lock(
+        "focus-context-producer",
+        "focus-new",
+        lease_seconds=30,
+        now=later,
+    )
+    assert new_token is not None and new_token > old_token
+    repository.cache_daily_strength_snapshot(
+        trading_day="2026-07-10",
+        cache_version="focus-cache-v1",
+        universe_version="new-universe",
+        **DAILY_CACHE_AUDIT,
+        coverage=1.0,
+        status="active",
+        payload={
+            "universe_version": "new-universe",
+            "coverage": 1.0,
+            "_focus_rows": [],
+        },
+        data_through=later,
+        degraded_ttl_seconds=300,
+        now=later,
+        lock_name="focus-context-producer",
+        owner_id="focus-new",
+        fencing_token=new_token,
+    )
+
+    with pytest.raises(CatalystRepositoryError, match="lease was lost"):
+        repository.cache_daily_strength_snapshot(
+            trading_day="2026-07-10",
+            cache_version="focus-cache-v1",
+            universe_version="old-universe",
+            **DAILY_CACHE_AUDIT,
+            coverage=1.0,
+            status="active",
+            payload={
+                "universe_version": "old-universe",
+                "coverage": 1.0,
+                "_focus_rows": [],
+            },
+            data_through=observed,
+            degraded_ttl_seconds=300,
+            now=later,
+            lock_name="focus-context-producer",
+            owner_id="focus-old",
+            fencing_token=old_token,
+        )
+
+    cached = repository.daily_strength_snapshot(
+        trading_day="2026-07-10",
+        cache_version="focus-cache-v1",
+        **DAILY_CACHE_AUDIT,
+        now=later,
+    )
+    assert cached is not None
+    assert cached["universe_version"] == "new-universe"
+    assert cached["payload"]["universe_version"] == "new-universe"
+
+
+def test_focus_retention_rolls_up_history_and_protects_cycle_inputs(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    observed = utc(10)
+    old = observed - timedelta(days=100)
+    middle_morning = observed - timedelta(days=60, hours=6)
+    middle_close = observed - timedelta(days=60)
+    recent = observed - timedelta(days=10)
+    repository.initialize(now=old)
+    with repository.open_write_connection() as connection:
+        snapshots = (
+            (1, old),  # protected by a completed cycle
+            (2, old + timedelta(minutes=1)),  # protected by a task result
+            (3, old + timedelta(minutes=2)),  # expired ordinary snapshot
+            (4, middle_morning),  # compacted in favor of revision 5
+            (5, middle_close),  # daily representative
+            (6, recent),  # full-resolution window
+            (7, observed),  # latest is always retained
+        )
+        for revision, timestamp in snapshots:
+            connection.execute(
+                """
+                INSERT INTO focus_context_snapshots(
+                    revision,as_of,data_through,market_session,universe_version,
+                    content_hash,raw_json,created_at
+                ) VALUES(?,?,?,?,?,?,?,?)
+                """,
+                (
+                    revision,
+                    timestamp.isoformat(),
+                    timestamp.isoformat(),
+                    "closed",
+                    "retention-v1",
+                    f"hash-{revision}",
+                    "{}",
+                    timestamp.isoformat(),
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO focus_context_symbols(
+                    revision,ticker,dollar_volume_rank,reasons_json,raw_json
+                ) VALUES(?,?,?,?,?)
+                """,
+                (revision, f"T{revision}", revision, "[]", "{}"),
+            )
+        connection.execute(
+            """
+            INSERT INTO catalyst_market_focus_cycles(
+                remote_cycle_id,public_cycle_id,snapshot_id,prepared_revision,
+                status,raw_json,cached_at
+            ) VALUES(?,?,?,?,?,?,?)
+            """,
+            (
+                "mfc_remote_retention",
+                "mfc_public_retention",
+                None,
+                1,
+                "completed",
+                json.dumps({"focus_revision": 1}),
+                observed.isoformat(),
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO catalyst_market_focus_jobs(
+                local_cycle_id,request_key,expected_prepared_revision,
+                last_consumed_revision_at_request,execution_number,status,
+                result_json,created_at,updated_at
+            ) VALUES(?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                "mfc_job_retention",
+                "batch:retention:1",
+                1,
+                0,
+                1,
+                "completed",
+                json.dumps({"focus_revision": 2}),
+                observed.isoformat(),
+                observed.isoformat(),
+            ),
+        )
+        connection.commit()
+    repository.cache_daily_strength_snapshot(
+        trading_day="2026-01-01",
+        cache_version="retention-v1",
+        universe_version="themes-v1",
+        **DAILY_CACHE_AUDIT,
+        coverage=1.0,
+        status="active",
+        payload={
+            "universe_version": "themes-v1",
+            "coverage": 1.0,
+            "_focus_rows": [{"ticker": "AAPL"}],
+        },
+        data_through=old,
+        degraded_ttl_seconds=300,
+        now=old,
+    )
+
+    statements: list[str] = []
+    open_write_connection = repository.open_write_connection
+
+    def traced_write_connection():
+        connection = open_write_connection()
+        connection.set_trace_callback(statements.append)
+        return connection
+
+    monkeypatch.setattr(repository, "open_write_connection", traced_write_connection)
+    runs = [
+        repository.prune_focus_retention(
+            snapshot_days=90,
+            snapshot_full_resolution_days=30,
+            snapshot_daily_rollup_enabled=True,
+            daily_strength_days=30,
+            batch_size=1,
+            now=observed,
+        )
+        for _ in range(3)
+    ]
+
+    assert [counts["deleted"] for counts in runs] == [1, 1, 0]
+    assert [counts["daily_strength_snapshots"] for counts in runs] == [0, 0, 1]
+    assert sum(counts["focus_snapshots"] for counts in runs) == 2
+    assert sum(counts["rollup_created"] for counts in runs) == 1
+    assert all(counts["retained"] >= 5 for counts in runs)
+    assert all(counts["protected"] == 3 for counts in runs)
+    assert all(counts["foreign_key_violations"] == 0 for counts in runs)
+    assert all(counts["batches"] == 1 for counts in runs)
+    assert all(counts["database_bytes"] >= counts["live_bytes"] > 0 for counts in runs)
+    assert sum("BEGIN IMMEDIATE" in statement for statement in statements) == 3
+    assert any(
+        "DELETE FROM focus_context_snapshots" in statement
+        and "LIMIT 1" in statement
+        for statement in statements
+    )
+    assert any(
+        "DELETE FROM focus_daily_strength_snapshots" in statement
+        and "LIMIT 1" in statement
+        for statement in statements
+    )
+    assert not any("json_tree" in statement.lower() for statement in statements)
+    assert not any(
+        "foreign_key_check" in statement.lower() for statement in statements
+    )
+    assert any(
+        "focus_reference_generation" in statement for statement in statements
+    )
+    with repository.open_read_connection() as connection:
+        assert [
+            row[0]
+            for row in connection.execute(
+                "SELECT revision FROM focus_context_snapshots ORDER BY revision"
+            )
+        ] == [1, 2, 5, 6, 7]
+        assert [
+            row[0]
+            for row in connection.execute(
+                "SELECT revision FROM focus_context_symbols ORDER BY revision"
+            )
+        ] == [1, 2, 5, 6, 7]
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_focus_retention_defers_when_reference_generation_changes(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    observed = utc(10)
+    old = observed - timedelta(days=100)
+    repository.initialize(now=old)
+    with repository.open_write_connection() as connection:
+        for revision, timestamp in (
+            (1, old),
+            (2, old + timedelta(minutes=1)),
+            (3, observed),
+        ):
+            connection.execute(
+                """
+                INSERT INTO focus_context_snapshots(
+                    revision,as_of,data_through,market_session,universe_version,
+                    content_hash,raw_json,created_at
+                ) VALUES(?,?,?,?,?,?,?,?)
+                """,
+                (
+                    revision,
+                    timestamp.isoformat(),
+                    timestamp.isoformat(),
+                    "closed",
+                    "retention-v1",
+                    f"hash-{revision}",
+                    "{}",
+                    timestamp.isoformat(),
+                ),
+            )
+        connection.commit()
+
+    open_write_connection = repository.open_write_connection
+    injected = False
+
+    def inject_reference_before_writer_lock():
+        nonlocal injected
+        if not injected:
+            injected = True
+            with open_write_connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO catalyst_market_focus_cycles(
+                        remote_cycle_id,public_cycle_id,snapshot_id,
+                        prepared_revision,status,raw_json,cached_at
+                    ) VALUES(?,?,?,?,?,?,?)
+                    """,
+                    (
+                        "mfc_remote_race",
+                        "mfc_public_race",
+                        None,
+                        1,
+                        "completed",
+                        json.dumps({"focus_revision": 1}),
+                        observed.isoformat(),
+                    ),
+                )
+                connection.commit()
+        return open_write_connection()
+
+    monkeypatch.setattr(
+        repository,
+        "open_write_connection",
+        inject_reference_before_writer_lock,
+    )
+    counts = repository.prune_focus_retention(
+        snapshot_days=90,
+        snapshot_full_resolution_days=30,
+        daily_strength_days=30,
+        batch_size=2,
+        now=observed,
+    )
+
+    assert counts["focus_snapshots"] == 0
+    assert counts["deleted"] == 0
+    with repository.open_read_connection() as connection:
+        assert [
+            row[0]
+            for row in connection.execute(
+                "SELECT revision FROM focus_context_snapshots ORDER BY revision"
+            )
+        ] == [1, 2, 3]
+        assert connection.execute(
+            "SELECT generation FROM focus_reference_generation WHERE singleton=1"
+        ).fetchone()[0] >= 1
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
