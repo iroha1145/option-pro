@@ -300,7 +300,7 @@ class QueueHealth(StrictModel):
     queued: int = Field(ge=0)
     in_progress: int = Field(ge=0)
     oldest_job_at: Optional[AwareDatetime] = None
-    budget_status: Literal["ok", "budget_unbounded", "budget_blocked"]
+    budget_status: Literal["ok", "budget_configuration_required", "budget_blocked"]
 
 
 class HealthResponse(ContractEnvelope):
@@ -351,6 +351,7 @@ class CatalystBatchRequest(StrictModel):
     limit: int = Field(default=20, ge=1, le=100)
     min_confidence: int = Field(default=0, ge=0, le=100)
     include_neutral: bool = False
+    include_unanalyzed: bool = True
 
     @field_validator("tickers", mode="before")
     @classmethod
@@ -367,6 +368,206 @@ class CatalystBatchRequest(StrictModel):
         if not output:
             raise ValueError("at least one ticker is required")
         return output
+
+
+class HotspotStatusResponse(ContractEnvelope):
+    prepared_revision: int = Field(ge=0)
+    last_consumed_revision: int = Field(ge=0)
+    prepared_hot_count: int = Field(ge=0)
+    prepared_since: Optional[AwareDatetime] = None
+    last_cycle_at: Optional[AwareDatetime] = None
+    next_scheduled_at: Optional[AwareDatetime] = None
+    active_cycle_id: Optional[str] = Field(
+        default=None, pattern=r"^mfc_[a-f0-9]{32}$"
+    )
+    cooldown_until: Optional[AwareDatetime] = None
+    manual_enabled: bool
+    capability: Literal[
+        "enabled",
+        "disabled",
+        "budget_configuration_required",
+    ]
+    model: str = Field(min_length=1, max_length=200)
+    reasoning: Literal["none", "low", "medium", "high", "xhigh", "max"]
+    data_through: Optional[AwareDatetime] = None
+
+
+class HotspotPreparationItem(StrictModel):
+    prepared_revision: int = Field(ge=1)
+    event_group_id: str = Field(min_length=1, max_length=100)
+    event_group_version: int = Field(ge=1)
+    gate_version: str = Field(min_length=1, max_length=100)
+    hot_score: float = Field(ge=0, le=100)
+    # Missing evidence is represented as null and excluded from MacroLens'
+    # deterministic weight re-normalisation.  In particular,
+    # market_confirmation is legitimately null when the focus snapshot is not
+    # current; coercing it to a neutral score would change the gate semantics.
+    component_scores: dict[str, Optional[float]]
+    active_weights: dict[str, float]
+    reasons: list[AnalysisListItem] = Field(default_factory=list, max_length=30)
+    event_snapshot_json: str = Field(min_length=2, max_length=100_000)
+    status: Literal["PREPARED", "LEASED", "CONSUMED"]
+    prepared_at: AwareDatetime
+    leased_cycle_id: Optional[str] = Field(
+        default=None, pattern=r"^mfc_[a-f0-9]{32}$"
+    )
+    consumed_cycle_id: Optional[str] = Field(
+        default=None, pattern=r"^mfc_[a-f0-9]{32}$"
+    )
+    consumed_at: Optional[AwareDatetime] = None
+    created_at: AwareDatetime
+    representative_title: str = Field(min_length=1, max_length=2000)
+    event_type: str = Field(min_length=1, max_length=100)
+    available_at: AwareDatetime
+    first_published_at: Optional[AwareDatetime] = None
+    last_published_at: Optional[AwareDatetime] = None
+    source_count: int = Field(ge=1)
+    source_names: list[AnalysisListItem] = Field(default_factory=list, max_length=100)
+    validated_tickers: list[ContractTicker] = Field(default_factory=list, max_length=100)
+
+
+class HotspotListResponse(ContractEnvelope):
+    as_of: AwareDatetime
+    items: list[HotspotPreparationItem] = Field(default_factory=list, max_length=100)
+
+
+class PublicFocusTickerAssessment(StrictModel):
+    ticker: Annotated[str, Field(pattern=TICKER_PATTERN.pattern)]
+    catalyst_bias: Optional[int] = Field(default=None, ge=-100, le=100)
+    confidence: int = Field(ge=0, le=100)
+    horizon: Literal["intraday", "days", "weeks", "uncertain"]
+    supporting_event_ids: list[str] = Field(default_factory=list, max_length=8)
+    conflicting_event_ids: list[str] = Field(default_factory=list, max_length=8)
+    summary: str = Field(min_length=1, max_length=1000)
+    risks: list[str] = Field(default_factory=list, max_length=8)
+    insufficient_evidence: bool
+    weighted_catalyst_context: Optional[float] = Field(
+        default=None, ge=-100, le=100
+    )
+
+    @model_validator(mode="after")
+    def validate_evidence_semantics(self) -> "PublicFocusTickerAssessment":
+        if self.insufficient_evidence != (self.catalyst_bias is None):
+            raise ValueError("catalyst_bias must be null exactly when evidence is insufficient")
+        if self.insufficient_evidence and self.weighted_catalyst_context is not None:
+            raise ValueError(
+                "weighted_catalyst_context must be null when evidence is insufficient"
+            )
+        return self
+
+
+class DominantEvent(StrictModel):
+    event_group_id: str = Field(min_length=1, max_length=100)
+    summary: str = Field(min_length=1, max_length=1000)
+    affected_sectors: list[str] = Field(default_factory=list, max_length=10)
+
+
+class MarketFocusCyclePublicAnalysis(StrictModel):
+    cycle_id: str = Field(min_length=1, max_length=100)
+    as_of: AwareDatetime
+    market_summary: str = Field(min_length=1, max_length=3000)
+    dominant_events: list[DominantEvent] = Field(default_factory=list, max_length=8)
+    market_uncertainties: list[str] = Field(default_factory=list, max_length=20)
+    affected_sectors: list[str] = Field(default_factory=list, max_length=20)
+    focus_ticker_assessments: list[PublicFocusTickerAssessment] = Field(
+        default_factory=list, max_length=20
+    )
+    no_new_material_catalyst: bool
+    insufficient_context: bool
+    display_only: Literal[True] = True
+
+
+class MarketFocusCyclePublic(StrictModel):
+    cycle_id: str = Field(pattern=r"^mfc_[a-f0-9]{32}$")
+    scheduled_slot: Optional[str] = Field(default=None, max_length=100)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+    retry_of_cycle_id: Optional[str] = Field(
+        default=None, pattern=r"^mfc_[a-f0-9]{32}$"
+    )
+    execution_number: int = Field(ge=1)
+    trigger_type: Literal[
+        "manual",
+        "scheduled_0800",
+        "scheduled_1200",
+        "scheduled_1600",
+        "scheduled_2000",
+    ]
+    status: Literal[
+        "pending",
+        "queued",
+        "in_progress",
+        "completed",
+        "failed",
+        "cancelled",
+        "budget_blocked",
+        "incomplete_output",
+        "insufficient_context",
+    ]
+    no_new_hot_events: bool
+    prepared_revision: int = Field(ge=0)
+    last_consumed_revision_at_start: int = Field(ge=0)
+    consumes_through_revision: Optional[int] = Field(default=None, ge=1)
+    focus_revision: Optional[int] = Field(default=None, ge=1)
+    snapshot_as_of: AwareDatetime
+    input_schema_version: str = Field(min_length=1, max_length=100)
+    input_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    event_group_count: int = Field(ge=0)
+    focus_symbol_count: int = Field(ge=0)
+    provider: str = Field(min_length=1, max_length=100)
+    model: str = Field(min_length=1, max_length=200)
+    reasoning_effort: Literal["none", "low", "medium", "high", "xhigh", "max"]
+    execution_mode: Literal["background", "worker_sync"]
+    max_output_tokens: int = Field(ge=256, le=128_000)
+    prompt_version: str = Field(min_length=1, max_length=100)
+    output_schema_version: str = Field(min_length=1, max_length=100)
+    result: Optional[MarketFocusCyclePublicAnalysis] = None
+    error_code: Optional[str] = Field(default=None, max_length=100)
+    attempt_count: int = Field(ge=0)
+    retrieve_error_count: int = Field(ge=0)
+    cancel_attempt_count: int = Field(ge=0)
+    next_attempt_at: Optional[AwareDatetime] = None
+    cancel_requested_at: Optional[AwareDatetime] = None
+    latency_ms: Optional[int] = Field(default=None, ge=0)
+    usage_input_tokens: int = Field(ge=0)
+    usage_cached_input_tokens: int = Field(ge=0)
+    usage_cache_write_tokens: int = Field(ge=0)
+    usage_reasoning_tokens: int = Field(ge=0)
+    usage_output_tokens: int = Field(ge=0)
+    usage_total_tokens: int = Field(ge=0)
+    created_at: AwareDatetime
+    started_at: Optional[AwareDatetime] = None
+    completed_at: Optional[AwareDatetime] = None
+    updated_at: AwareDatetime
+
+
+class MarketFocusCycleResponse(ContractEnvelope):
+    cycle: Optional[MarketFocusCyclePublic] = None
+
+
+class MarketFocusCycleCreateRequest(StrictModel):
+    trigger: Literal[
+        "manual",
+        "scheduled_0800",
+        "scheduled_1200",
+        "scheduled_1600",
+        "scheduled_2000",
+    ] = "manual"
+    expected_prepared_revision: Optional[int] = Field(default=None, ge=0)
+    retry_cycle_id: Optional[str] = Field(
+        default=None, pattern=r"^mfc_[a-f0-9]{32}$"
+    )
+
+
+# Compatibility names retained for the existing repository, worker and tests.
+# The concrete classes above deliberately use the public contract names so
+# nested JSON Schema titles and $defs remain byte-for-byte comparable.
+HotspotPreparationStatus = HotspotStatusResponse
+HotspotPreparationResponse = HotspotListResponse
+FocusTickerAssessment = PublicFocusTickerAssessment
+MarketFocusCycleAnalysis = MarketFocusCyclePublicAnalysis
+RemoteMarketFocusCycle = MarketFocusCyclePublic
+MarketFocusCycleEnvelope = MarketFocusCycleResponse
+CreateMarketFocusCycleRequest = MarketFocusCycleCreateRequest
 
 
 class RemoteErrorBody(ContractEnvelope):

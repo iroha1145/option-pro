@@ -9,7 +9,12 @@ from typing import Any, Callable, Optional
 from .client import MacroLensClient
 from .config import CatalystSettings
 from .errors import CatalystError, CatalystRepositoryError
-from .models import ACTIVE_JOB_STATUSES, JobStatus, RemoteJobResponse
+from .models import (
+    ACTIVE_JOB_STATUSES,
+    JobStatus,
+    RemoteJobResponse,
+    RemoteMarketFocusCycle,
+)
 from .repository import CatalystRepository, _as_utc
 
 
@@ -171,17 +176,52 @@ class CatalystSyncService:
         if not self.ensure_lock():
             return False
         state = self.repository.sync_state("feed")
+        if bool(state.get("resync_required")):
+            return await self._sync_latest_attempt(resync=True)
+        try:
+            return await self._sync_latest_attempt(resync=False)
+        except CatalystError as error:
+            if error.code != "updated_after_too_old":
+                self._record_error("feed", error)
+                return False
+            # Latch recovery before making another remote request. Every later
+            # attempt now uses the bounded window and never re-sends the
+            # expired incremental watermark.
+            self.repository.require_feed_resync(
+                resync_from=error.resync_from,
+                now=self._clock(),
+            )
+            return await self._sync_latest_attempt(resync=True)
+
+    async def _sync_latest_attempt(self, *, resync: bool) -> bool:
+        state = self.repository.sync_state("feed")
         updated_after = _as_utc(state.get("updated_after"))
-        request_updated_after = (
-            updated_after - timedelta(minutes=5) if updated_after is not None else None
-        )
+        if resync:
+            request_updated_after = _as_utc(state.get("resync_from"))
+            if request_updated_after is None:
+                error = CatalystError(
+                    "resync_boundary_missing",
+                    "MacroLens did not provide a bounded resync boundary",
+                    retryable=True,
+                    counts_for_circuit=False,
+                )
+                self._record_error("feed", error)
+                return False
+        else:
+            request_updated_after = (
+                updated_after - timedelta(minutes=5) if updated_after is not None else None
+            )
         old_watermark = state.get("watermark_sequence")
         cursor: Optional[str] = None
         snapshot_token: Optional[str] = None
         run_id: Optional[str] = None
-        max_sequence = int(old_watermark) if old_watermark is not None else None
+        max_sequence = (
+            None
+            if resync
+            else int(old_watermark) if old_watermark is not None else None
+        )
         final_data_through = None
-        final_updated_after = updated_after
+        final_updated_after = None if resync else updated_after
         seen_cursors: set[str] = set()
         pages = 0
         try:
@@ -193,14 +233,23 @@ class CatalystSyncService:
                     limit=self.settings.latest_page_limit,
                 )
                 pages += 1
-                if pages > 10_000:
+                page_limit = self.settings.resync_max_pages if resync else 10_000
+                if pages > page_limit:
                     raise CatalystError(
                         "pagination_limit", "MacroLens pagination exceeded its safety limit", False
                     )
                 if snapshot_token is None:
                     snapshot_token = page.snapshot_token
                     run_id = self.repository.begin_sync_run(
-                        "feed", snapshot_token=snapshot_token, now=self._clock()
+                        "feed",
+                        snapshot_token=snapshot_token,
+                        sync_mode="resync" if resync else "incremental",
+                        resync_generation=(
+                            int(state.get("resync_generation") or 0) + 1
+                            if resync
+                            else None
+                        ),
+                        now=self._clock(),
                     )
                 elif snapshot_token != page.snapshot_token:
                     raise CatalystError(
@@ -217,12 +266,41 @@ class CatalystSyncService:
                         else max(max_sequence, item.change_sequence)
                     )
                 final_data_through = page.data_through
-                final_updated_after = page.next_updated_after or final_updated_after
+                page_updated_after = _as_utc(page.next_updated_after)
+                if (
+                    page_updated_after is not None
+                    and final_updated_after is not None
+                    and page_updated_after < final_updated_after
+                ):
+                    raise CatalystError(
+                        "watermark_regression",
+                        "MacroLens next_updated_after moved backwards during pagination",
+                        False,
+                    )
+                if page_updated_after is not None:
+                    final_updated_after = page_updated_after
                 if not page.has_more:
                     if page.next_cursor is not None:
                         raise CatalystError(
                             "invalid_pagination",
                             "MacroLens returned next_cursor with has_more=false",
+                            False,
+                        )
+                    if resync and page_updated_after is None:
+                        raise CatalystError(
+                            "resync_watermark_missing",
+                            "MacroLens did not return an authoritative resync watermark",
+                            False,
+                        )
+                    if (
+                        resync
+                        and request_updated_after is not None
+                        and page_updated_after is not None
+                        and page_updated_after < request_updated_after
+                    ):
+                        raise CatalystError(
+                            "watermark_regression",
+                            "MacroLens resync watermark moved behind its requested boundary",
                             False,
                         )
                     break
@@ -248,6 +326,29 @@ class CatalystSyncService:
         except CatalystError as error:
             if error.code == "worker_lock_lost":
                 raise
+            if error.code == "updated_after_too_old" and not resync:
+                # The wrapper persists recovery mode and starts the bounded
+                # generation. Do not let a partial incremental staging run
+                # publish before the recovery generation is complete.
+                if run_id:
+                    self.repository.abort_sync_run(
+                        run_id,
+                        error.code,
+                        now=self._clock(),
+                    )
+                raise
+            if error.code == "updated_after_too_old" and resync:
+                if run_id:
+                    self.repository.abort_sync_run(
+                        run_id,
+                        error.code,
+                        now=self._clock(),
+                    )
+                self.repository.require_feed_resync(
+                    resync_from=error.resync_from,
+                    now=self._clock(),
+                )
+                return False
             if not self.ensure_lock():
                 raise CatalystRepositoryError(
                     "worker_lock_lost", "Catalyst worker lock was lost during feed sync"
@@ -316,6 +417,67 @@ class CatalystSyncService:
                     else None
                 ),
                 now=observed,
+            )
+            return False
+
+    async def sync_market_focus(self) -> bool:
+        """Pull one coherent focus snapshot and publish it locally once."""
+
+        if not self.ensure_lock():
+            return False
+        try:
+            before = await self.client.hotspot_status()
+            self.renew()
+            hotspots = await self.client.hotspots(
+                limit=self.settings.hotspot_sync_limit,
+                as_of=self._clock(),
+            )
+            self.renew()
+            latest = await self.client.latest_market_focus_cycle()
+            self.renew()
+            after = await self.client.hotspot_status()
+            coherent_fields = (
+                "prepared_revision",
+                "last_consumed_revision",
+                "active_cycle_id",
+            )
+            if any(getattr(before, field) != getattr(after, field) for field in coherent_fields):
+                raise CatalystError(
+                    "market_focus_snapshot_changed",
+                    "MacroLens market focus state changed during synchronization",
+                    retryable=True,
+                    counts_for_circuit=False,
+                )
+            self.repository.publish_market_focus_snapshot(
+                after,
+                hotspots.items,
+                latest.cycle,
+                worker_id=self.worker_id,
+                fencing_token=self._fencing_token,
+                now=self._clock(),
+            )
+            return True
+        except CatalystError as error:
+            if error.code == "worker_lock_lost":
+                raise
+            if not self.ensure_lock():
+                raise CatalystRepositoryError(
+                    "worker_lock_lost",
+                    "Catalyst worker lock was lost during market focus sync",
+                )
+            self._record_error("market_focus", error)
+            return False
+        except CatalystRepositoryError as error:
+            if error.code == "worker_lock_lost":
+                raise
+            self._record_error(
+                "market_focus",
+                CatalystError(
+                    "market_focus_snapshot_invalid",
+                    "MacroLens market focus snapshot could not be published",
+                    retryable=True,
+                    counts_for_circuit=False,
+                ),
             )
             return False
 
@@ -394,6 +556,147 @@ class CatalystSyncService:
         else:
             self.repository.mark_stream_success("job", now=self._clock())
         return processed
+
+    async def process_market_focus_jobs(self) -> int:
+        if not self.ensure_lock():
+            return 0
+        processed = 0
+        jobs = self.repository.due_market_focus_jobs(
+            self.worker_id,
+            lease_seconds=max(self.settings.job_interval_seconds * 4, 30),
+            now=self._clock(),
+        )
+        for job in jobs:
+            processed += 1
+            local_cycle_id = str(job["local_cycle_id"])
+            try:
+                self.renew()
+                if job.get("cancel_requested_at") and job.get("remote_cycle_id"):
+                    envelope = await self.client.cancel_market_focus_cycle(
+                        str(job["remote_cycle_id"])
+                    )
+                elif not job.get("remote_cycle_id"):
+                    if not self.repository.begin_market_focus_submission(
+                        local_cycle_id,
+                        self.worker_id,
+                        now=self._clock(),
+                    ):
+                        continue
+                    envelope = await self.client.create_market_focus_cycle(
+                        expected_prepared_revision=(
+                            None
+                            if job.get("retry_remote_cycle_id")
+                            else int(job["expected_prepared_revision"])
+                        ),
+                        retry_cycle_id=(
+                            str(job["retry_remote_cycle_id"])
+                            if job.get("retry_remote_cycle_id")
+                            else None
+                        ),
+                    )
+                else:
+                    envelope = await self.client.get_market_focus_cycle(
+                        str(job["remote_cycle_id"])
+                    )
+                remote = envelope.cycle
+                if remote is None:
+                    raise CatalystError(
+                        "remote_cycle_missing",
+                        "MacroLens returned no market focus cycle",
+                        retryable=False,
+                    )
+                self._validate_remote_market_focus_cycle(job, remote)
+                self.renew()
+                next_attempt = None
+                if remote.status in {"pending", "queued", "in_progress"}:
+                    next_attempt = self._clock() + timedelta(
+                        seconds=self.settings.job_interval_seconds
+                    )
+                self.repository.apply_remote_market_focus_cycle(
+                    local_cycle_id,
+                    remote,
+                    worker_id=self.worker_id,
+                    next_attempt_at=next_attempt,
+                    now=self._clock(),
+                )
+            except CatalystError as error:
+                if error.code == "worker_lock_lost":
+                    raise
+                if not self.ensure_lock():
+                    raise CatalystRepositoryError(
+                        "worker_lock_lost",
+                        "Catalyst worker lock was lost during market focus job sync",
+                    )
+                self.repository.fail_market_focus_job(
+                    local_cycle_id,
+                    error.code,
+                    retry_after_seconds=self._backoff(1, error.retry_after_seconds),
+                    terminal=not error.retryable,
+                    now=self._clock(),
+                )
+        return processed
+
+    @staticmethod
+    def _validate_remote_market_focus_cycle(
+        job: dict[str, Any],
+        remote: RemoteMarketFocusCycle,
+    ) -> None:
+        if job.get("remote_cycle_id") and remote.cycle_id != job["remote_cycle_id"]:
+            raise CatalystError(
+                "remote_cycle_identity_mismatch",
+                "MacroLens returned a different market focus cycle",
+                retryable=False,
+            )
+        if remote.prepared_revision != int(job["expected_prepared_revision"]):
+            raise CatalystError(
+                "remote_cycle_revision_mismatch",
+                "MacroLens returned a cycle for a different prepared revision",
+                retryable=False,
+            )
+        retry_parent = job.get("retry_remote_cycle_id")
+        if retry_parent and remote.retry_of_cycle_id != retry_parent:
+            raise CatalystError(
+                "remote_cycle_retry_parent_mismatch",
+                "MacroLens returned a retry for a different immutable cycle snapshot",
+                retryable=False,
+            )
+        if not retry_parent and remote.retry_of_cycle_id is not None:
+            raise CatalystError(
+                "remote_cycle_retry_parent_unexpected",
+                "MacroLens returned a retry cycle for a new-cycle request",
+                retryable=False,
+            )
+        if remote.execution_number != int(job.get("execution_number") or 1):
+            raise CatalystError(
+                "remote_cycle_execution_mismatch",
+                "MacroLens returned a different market focus execution number",
+                retryable=False,
+            )
+        if remote.model != job["model"] or remote.reasoning_effort != job["reasoning"]:
+            raise CatalystError(
+                "remote_cycle_runtime_mismatch",
+                "MacroLens returned a different market focus runtime",
+                retryable=False,
+            )
+        if remote.result is not None and remote.result.cycle_id != remote.cycle_id:
+            raise CatalystError(
+                "remote_cycle_result_mismatch",
+                "MacroLens returned a result for a different market focus cycle",
+                retryable=False,
+            )
+        if remote.status in {"completed", "insufficient_context"}:
+            if remote.result is None:
+                raise CatalystError(
+                    "remote_cycle_result_missing",
+                    "MacroLens completed a market focus cycle without a result",
+                    retryable=False,
+                )
+        elif remote.result is not None:
+            raise CatalystError(
+                "remote_cycle_result_mismatch",
+                "MacroLens returned a result before a publishable terminal state",
+                retryable=False,
+            )
 
     def _validate_remote_job(
         self,
@@ -576,9 +879,16 @@ class CatalystSyncService:
                     processed.append("calendar")
                 else:
                     refresh_error = refresh_error or "calendar_failed"
+            if self._stream_due(
+                "market_focus", self.settings.market_focus_interval_seconds
+            ):
+                if await self.sync_market_focus():
+                    processed.append("market_focus")
             jobs = 0
+            market_focus_jobs = 0
             if self._stream_due("job", self.settings.job_interval_seconds):
                 jobs = await self.process_jobs()
+                market_focus_jobs = await self.process_market_focus_jobs()
                 processed.append("job")
             if refresh and refresh_deferred:
                 self.repository.defer_refresh(
@@ -591,10 +901,20 @@ class CatalystSyncService:
             self.repository.heartbeat(
                 self.worker_id,
                 "idle",
-                {"processed": processed, "jobs": jobs, "fencing_token": self._fencing_token},
+                {
+                    "processed": processed,
+                    "jobs": jobs,
+                    "market_focus_jobs": market_focus_jobs,
+                    "fencing_token": self._fencing_token,
+                },
                 now=self._clock(),
             )
-            return {"status": "idle", "processed": processed, "jobs": jobs}
+            return {
+                "status": "idle",
+                "processed": processed,
+                "jobs": jobs,
+                "market_focus_jobs": market_focus_jobs,
+            }
         except CatalystRepositoryError:
             self.repository.heartbeat(
                 self.worker_id,

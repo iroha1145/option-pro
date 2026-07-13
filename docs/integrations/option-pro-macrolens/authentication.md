@@ -47,6 +47,10 @@ OPTION_PRO_ALLOW_LOCAL_HTTP=false
 
 Option Pro 使用 MACROLENS_READ_KEY_ID、MACROLENS_READ_SECRET、MACROLENS_ACTION_KEY_ID 和 MACROLENS_ACTION_SECRET。
 
+反向焦点读取使用另一组独立凭据：`MACROLENS_FOCUS_KEY_ID`、`MACROLENS_FOCUS_SECRET` 与 `MACROLENS_FOCUS_PREVIOUS_SECRET`。允许来源、可信代理、时钟偏差和 Nonce 有效期分别由 `MACROLENS_FOCUS_ALLOWED_CIDRS`、`MACROLENS_FOCUS_TRUSTED_PROXY_CIDRS`、`MACROLENS_FOCUS_CLOCK_SKEW_SECONDS` 和 `MACROLENS_FOCUS_NONCE_TTL_SECONDS` 控制。Nonce 有效期不得短于时钟偏差；previous Secret 必须与当前值不同。
+
+`GET /api/integrations/macrolens/v1/focus-context` 只对精确 GET 方法豁免浏览器 `APP_AUTH_TOKEN`，随后仍须通过独立 HMAC、HTTPS、CIDR、防重放、TrustedHost 和全局限流。相同路径的 POST 不豁免。响应契约为 `contracts/option-pro-macrolens-focus-v1.json`，并携带固定 `schema_sha256`；任何正式强势、突破、市场或期权评分均不在响应中。
+
 读写密钥编号只允许字母、数字、点、下划线、冒号和连字符，且两者不得相同。每个 HMAC Secret 至少 32 字节；当前值与 previous 值不得相同。
 
 ## 生产代理边界

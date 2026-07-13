@@ -11,6 +11,8 @@ MacroLens 负责新闻抓取、去重、原始新闻保存、经济日历、GPT-
 
 Option Pro 负责远程签名客户端、本地持久缓存、独立同步进程、同源 Catalyst API、Night Desk 展示，以及突破雷达、选股、个股研究和财报页面的上下文接入。
 
+焦点上下文采用反向拉取：Option Pro 只在既有强势扫描完成后，从本地结果和已发布突破快照生成不可变焦点快照；MacroLens 通过独立签名的只读 GET 拉取。该 GET 不启动扫描、不下载行情，也不产生模型任务。
+
 浏览器只访问 Option Pro 同源路径。它不得获得 MacroLens 地址、服务密钥或 OpenAI Response ID。
 
 ## 固定边界
@@ -30,6 +32,10 @@ Option Pro 负责远程签名客户端、本地持久缓存、独立同步进程
 → 追加式分析版本和股票投影 → HTTPS Integration API
 → Option Pro Catalyst Sync Worker → /data/catalyst-cache.db 原子发布
 → 同源 Catalyst API → Night Desk。
+
+既有本地强势/突破快照 → 焦点池迟滞与版本发布 → `GET /api/integrations/macrolens/v1/focus-context` → MacroLens 定时拉取。
+
+远端增量水位超过七日后，Option Pro 锁存 `resync_required`，继续读取旧 stale 快照。重同步只使用 MacroLens 返回的 `resync_from` 边界，在独立代次暂存完整分页；Schema、分页和快照 token 全部通过后才在一个事务内切换水位、`resync_generation` 与 `last_resync_at`。失败时保留旧发布代次并遵守退避和熔断。
 
 ## 进程
 

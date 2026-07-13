@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 
@@ -17,6 +18,7 @@ class CatalystError(Exception):
     retryable: bool = False
     retry_after_seconds: Optional[int] = None
     counts_for_circuit: bool = True
+    resync_from: Optional[datetime] = None
 
     def __str__(self) -> str:
         return f"{self.code}: {self.message}"

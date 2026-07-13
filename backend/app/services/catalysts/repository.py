@@ -17,16 +17,85 @@ from .models import (
     CalendarEvent,
     CatalystItem,
     ComponentHealth,
+    HotspotPreparationItem,
+    HotspotPreparationStatus,
     JobStatus,
+    RemoteMarketFocusCycle,
     RemoteJobResponse,
     TERMINAL_JOB_STATUSES,
     TICKER_PATTERN,
     utc_iso,
 )
+from .focus_models import FocusContextDraft, FocusContextResponse
 
 
-DATABASE_VERSION = "catalyst-cache-v1"
-SQLITE_USER_VERSION = 1
+DATABASE_VERSION = "catalyst-cache-v4"
+SQLITE_USER_VERSION = 4
+_V1_DATABASE_VERSION = "catalyst-cache-v1"
+_V1_SCHEMA_CHECKSUM = "72f57f049e66986e7f0dd19e71eff0f772c88b13d5be1d99cbb6d0fe9423c951"
+_V2_DATABASE_VERSION = "catalyst-cache-v2"
+_V2_SCHEMA_CHECKSUM = "f69577b5cc0957010d01627c7c25b4cf894a6920156c43ad2c7a3114bf067f35"
+_V3_DATABASE_VERSION = "catalyst-cache-v3"
+_V3_SCHEMA_CHECKSUM = "eff9b3d6070fadee9aff5717799d13126bc8d3aed7a1f381cdaeba781dac3c43"
+
+
+_MARKET_FOCUS_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS catalyst_hotspot_preparation_sets (
+    snapshot_id TEXT NOT NULL,
+    prepared_revision INTEGER NOT NULL CHECK (prepared_revision >= 0),
+    status_json TEXT NOT NULL,
+    item_json TEXT,
+    cached_at TEXT NOT NULL,
+    PRIMARY KEY (snapshot_id,prepared_revision),
+    CHECK (
+        (prepared_revision=0 AND item_json IS NULL)
+        OR (prepared_revision>0 AND item_json IS NOT NULL)
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalyst_hotspots_revision
+    ON catalyst_hotspot_preparation_sets(prepared_revision DESC,cached_at DESC);
+
+CREATE TABLE IF NOT EXISTS catalyst_market_focus_cycles (
+    remote_cycle_id TEXT PRIMARY KEY,
+    public_cycle_id TEXT NOT NULL UNIQUE,
+    snapshot_id TEXT,
+    prepared_revision INTEGER NOT NULL CHECK (prepared_revision >= 0),
+    status TEXT NOT NULL,
+    raw_json TEXT NOT NULL,
+    cached_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalyst_market_focus_cycles_latest
+    ON catalyst_market_focus_cycles(cached_at DESC);
+
+CREATE TABLE IF NOT EXISTS catalyst_market_focus_jobs (
+    local_cycle_id TEXT PRIMARY KEY,
+    request_key TEXT NOT NULL UNIQUE,
+    expected_prepared_revision INTEGER NOT NULL CHECK (expected_prepared_revision >= 0),
+    last_consumed_revision_at_request INTEGER NOT NULL
+        CHECK (last_consumed_revision_at_request >= 0),
+    retry_of_local_cycle_id TEXT,
+    retry_remote_cycle_id TEXT,
+    execution_number INTEGER NOT NULL DEFAULT 1 CHECK (execution_number >= 1),
+    remote_cycle_id TEXT UNIQUE,
+    status TEXT NOT NULL,
+    model TEXT,
+    reasoning TEXT,
+    error_code TEXT,
+    retry_after_seconds INTEGER CHECK (retry_after_seconds IS NULL OR retry_after_seconds >= 0),
+    next_attempt_at TEXT,
+    cancel_requested_at TEXT,
+    result_json TEXT,
+    lease_owner TEXT,
+    lease_until TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalyst_market_focus_jobs_due
+    ON catalyst_market_focus_jobs(status,next_attempt_at,updated_at);
+""".strip()
 
 
 _SCHEMA_SQL = """
@@ -48,7 +117,10 @@ CREATE TABLE IF NOT EXISTS catalyst_sync_runs (
     through_sequence INTEGER,
     data_through TEXT,
     item_count INTEGER NOT NULL DEFAULT 0 CHECK (item_count >= 0),
-    error_code TEXT
+    error_code TEXT,
+    sync_mode TEXT NOT NULL DEFAULT 'incremental'
+        CHECK (sync_mode IN ('incremental','resync')),
+    resync_generation INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS catalyst_sync_state (
@@ -64,7 +136,11 @@ CREATE TABLE IF NOT EXISTS catalyst_sync_state (
     last_error_code TEXT,
     remote_status TEXT,
     snapshot_generation INTEGER NOT NULL DEFAULT 0 CHECK (snapshot_generation >= 0),
-    current_snapshot_id TEXT
+    current_snapshot_id TEXT,
+    resync_required INTEGER NOT NULL DEFAULT 0 CHECK (resync_required IN (0,1)),
+    resync_generation INTEGER NOT NULL DEFAULT 0 CHECK (resync_generation >= 0),
+    last_resync_at TEXT,
+    resync_from TEXT
 );
 
 CREATE TABLE IF NOT EXISTS catalyst_staging_items (
@@ -268,6 +344,39 @@ CREATE TABLE IF NOT EXISTS catalyst_refresh_outbox (
 CREATE INDEX IF NOT EXISTS idx_catalyst_refresh_pending
     ON catalyst_refresh_outbox(status, requested_at);
 
+CREATE TABLE IF NOT EXISTS focus_context_snapshots (
+    revision INTEGER PRIMARY KEY CHECK (revision >= 1),
+    as_of TEXT NOT NULL,
+    data_through TEXT,
+    market_session TEXT NOT NULL,
+    universe_version TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    raw_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS focus_context_symbols (
+    revision INTEGER NOT NULL REFERENCES focus_context_snapshots(revision) ON DELETE CASCADE,
+    ticker TEXT NOT NULL,
+    dollar_volume_rank INTEGER,
+    reasons_json TEXT NOT NULL,
+    raw_json TEXT NOT NULL,
+    PRIMARY KEY (revision,ticker)
+);
+
+CREATE INDEX IF NOT EXISTS idx_focus_context_symbols_ticker
+    ON focus_context_symbols(ticker,revision DESC);
+
+CREATE TABLE IF NOT EXISTS macrolens_focus_nonces (
+    key_id TEXT NOT NULL,
+    nonce TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    PRIMARY KEY (key_id,nonce)
+);
+
+CREATE INDEX IF NOT EXISTS idx_macrolens_focus_nonces_expiry
+    ON macrolens_focus_nonces(expires_at);
+
 CREATE TABLE IF NOT EXISTS catalyst_worker_status (
     worker_id TEXT PRIMARY KEY,
     status TEXT NOT NULL,
@@ -282,11 +391,11 @@ CREATE TABLE IF NOT EXISTS catalyst_worker_lock (
     lease_until TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
-""".strip()
+""".strip() + "\n\n" + _MARKET_FOCUS_SCHEMA_SQL
 
 
 SCHEMA_CHECKSUM = hashlib.sha256(_SCHEMA_SQL.encode("utf-8")).hexdigest()
-_STREAMS = ("health", "feed", "calendar", "job")
+_STREAMS = ("health", "feed", "calendar", "job", "market_focus")
 
 
 def _now() -> datetime:
@@ -367,7 +476,44 @@ class CatalystRepository:
             raise CatalystRepositoryError("read_only_repository", "Catalyst repository is read only")
         installed_at = _iso(now or _now())
         with self._write() as connection:
-            connection.executescript(_SCHEMA_SQL)
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT schema_version,schema_checksum FROM catalyst_schema_metadata WHERE singleton=1"
+            ).fetchone() if self._table_exists(connection, "catalyst_schema_metadata") else None
+            if row is not None and (
+                row["schema_version"] == _V1_DATABASE_VERSION
+                and row["schema_checksum"] == _V1_SCHEMA_CHECKSUM
+            ):
+                self._migrate_v1_to_v2(connection)
+                row = connection.execute(
+                    "SELECT schema_version,schema_checksum FROM catalyst_schema_metadata WHERE singleton=1"
+                ).fetchone()
+            if row is not None and (
+                row["schema_version"] == _V2_DATABASE_VERSION
+                and row["schema_checksum"] == _V2_SCHEMA_CHECKSUM
+            ):
+                self._migrate_v2_to_current(connection)
+                row = connection.execute(
+                    "SELECT schema_version,schema_checksum FROM catalyst_schema_metadata WHERE singleton=1"
+                ).fetchone()
+            if row is not None and (
+                row["schema_version"] == _V3_DATABASE_VERSION
+                and row["schema_checksum"] == _V3_SCHEMA_CHECKSUM
+            ):
+                self._migrate_v3_to_v4(connection)
+                row = connection.execute(
+                    "SELECT schema_version,schema_checksum FROM catalyst_schema_metadata WHERE singleton=1"
+                ).fetchone()
+            if row is not None and (
+                row["schema_version"] != DATABASE_VERSION
+                or row["schema_checksum"] != SCHEMA_CHECKSUM
+            ):
+                connection.rollback()
+                raise CatalystRepositoryError(
+                    "cache_schema_mismatch",
+                    "Catalyst cache schema checksum does not match this build",
+                )
+            self._execute_script_atomic(connection, _SCHEMA_SQL)
             row = connection.execute(
                 "SELECT schema_version,schema_checksum FROM catalyst_schema_metadata WHERE singleton=1"
             ).fetchone()
@@ -387,6 +533,160 @@ class CatalystRepository:
                 )
             connection.execute(f"PRAGMA user_version={SQLITE_USER_VERSION}")
             connection.commit()
+
+    @staticmethod
+    def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
+        return connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone() is not None
+
+    @staticmethod
+    def _column_names(connection: sqlite3.Connection, table: str) -> set[str]:
+        return {
+            str(row["name"])
+            for row in connection.execute(f'PRAGMA table_info("{table}")').fetchall()
+        }
+
+    @staticmethod
+    def _execute_script_atomic(connection: sqlite3.Connection, script: str) -> None:
+        """Execute a schema script without sqlite3.executescript's implicit commit.
+
+        ``initialize`` owns the surrounding ``BEGIN IMMEDIATE`` transaction.  The
+        stdlib ``executescript`` helper commits that transaction before running
+        the script, which would make a chained v1 -> v2 -> v3 migration only
+        partially rollback-safe.  ``complete_statement`` keeps statement
+        splitting delegated to SQLite while every statement remains inside the
+        caller's transaction.
+        """
+
+        statement = ""
+        for line in script.splitlines(keepends=True):
+            statement += line
+            if not sqlite3.complete_statement(statement):
+                continue
+            sql = statement.strip()
+            if sql:
+                connection.execute(sql)
+            statement = ""
+        if statement.strip():
+            raise CatalystRepositoryError(
+                "cache_schema_invalid",
+                "Catalyst cache schema contains an incomplete SQL statement",
+            )
+
+    def _migrate_v1_to_v2(self, connection: sqlite3.Connection) -> None:
+        """Perform the additive cache migration without touching published rows."""
+
+        state_columns = self._column_names(connection, "catalyst_sync_state")
+        if "resync_required" not in state_columns:
+            connection.execute(
+                "ALTER TABLE catalyst_sync_state ADD COLUMN resync_required "
+                "INTEGER NOT NULL DEFAULT 0 CHECK (resync_required IN (0,1))"
+            )
+        if "resync_generation" not in state_columns:
+            connection.execute(
+                "ALTER TABLE catalyst_sync_state ADD COLUMN resync_generation "
+                "INTEGER NOT NULL DEFAULT 0 CHECK (resync_generation >= 0)"
+            )
+        if "last_resync_at" not in state_columns:
+            connection.execute(
+                "ALTER TABLE catalyst_sync_state ADD COLUMN last_resync_at TEXT"
+            )
+        if "resync_from" not in state_columns:
+            connection.execute(
+                "ALTER TABLE catalyst_sync_state ADD COLUMN resync_from TEXT"
+            )
+
+        run_columns = self._column_names(connection, "catalyst_sync_runs")
+        if "sync_mode" not in run_columns:
+            connection.execute(
+                "ALTER TABLE catalyst_sync_runs ADD COLUMN sync_mode TEXT "
+                "NOT NULL DEFAULT 'incremental' "
+                "CHECK (sync_mode IN ('incremental','resync'))"
+            )
+        if "resync_generation" not in run_columns:
+            connection.execute(
+                "ALTER TABLE catalyst_sync_runs ADD COLUMN resync_generation INTEGER"
+            )
+        connection.execute(
+            "UPDATE catalyst_schema_metadata SET schema_version=?,schema_checksum=? WHERE singleton=1",
+            (_V2_DATABASE_VERSION, _V2_SCHEMA_CHECKSUM),
+        )
+
+    def _migrate_v2_to_current(self, connection: sqlite3.Connection) -> None:
+        """Add the market-focus cache without altering published news rows."""
+
+        self._execute_script_atomic(connection, _MARKET_FOCUS_SCHEMA_SQL)
+        connection.execute(
+            "UPDATE catalyst_schema_metadata SET schema_version=?,schema_checksum=? WHERE singleton=1",
+            (DATABASE_VERSION, SCHEMA_CHECKSUM),
+        )
+
+    def _migrate_v3_to_v4(self, connection: sqlite3.Connection) -> None:
+        """Replace revision-only focus-job identity with snapshot-batch identity."""
+
+        connection.execute("DROP INDEX IF EXISTS idx_catalyst_market_focus_jobs_due")
+        connection.execute(
+            "ALTER TABLE catalyst_market_focus_jobs RENAME TO catalyst_market_focus_jobs_v3"
+        )
+        self._execute_script_atomic(
+            connection,
+            """
+            CREATE TABLE catalyst_market_focus_jobs (
+                local_cycle_id TEXT PRIMARY KEY,
+                request_key TEXT NOT NULL UNIQUE,
+                expected_prepared_revision INTEGER NOT NULL
+                    CHECK (expected_prepared_revision >= 0),
+                last_consumed_revision_at_request INTEGER NOT NULL
+                    CHECK (last_consumed_revision_at_request >= 0),
+                retry_of_local_cycle_id TEXT,
+                retry_remote_cycle_id TEXT,
+                execution_number INTEGER NOT NULL DEFAULT 1
+                    CHECK (execution_number >= 1),
+                remote_cycle_id TEXT UNIQUE,
+                status TEXT NOT NULL,
+                model TEXT,
+                reasoning TEXT,
+                error_code TEXT,
+                retry_after_seconds INTEGER
+                    CHECK (retry_after_seconds IS NULL OR retry_after_seconds >= 0),
+                next_attempt_at TEXT,
+                cancel_requested_at TEXT,
+                result_json TEXT,
+                lease_owner TEXT,
+                lease_until TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX idx_catalyst_market_focus_jobs_due
+                ON catalyst_market_focus_jobs(status,next_attempt_at,updated_at);
+            """.strip(),
+        )
+        connection.execute(
+            """
+            INSERT INTO catalyst_market_focus_jobs(
+                local_cycle_id,request_key,expected_prepared_revision,
+                last_consumed_revision_at_request,retry_of_local_cycle_id,
+                retry_remote_cycle_id,execution_number,remote_cycle_id,status,
+                model,reasoning,error_code,retry_after_seconds,next_attempt_at,
+                cancel_requested_at,result_json,lease_owner,lease_until,
+                created_at,updated_at
+            )
+            SELECT local_cycle_id,
+                   'batch:' || expected_prepared_revision || ':0',
+                   expected_prepared_revision,0,NULL,NULL,1,remote_cycle_id,status,
+                   model,reasoning,error_code,retry_after_seconds,next_attempt_at,
+                   cancel_requested_at,result_json,lease_owner,lease_until,
+                   created_at,updated_at
+            FROM catalyst_market_focus_jobs_v3
+            """
+        )
+        connection.execute("DROP TABLE catalyst_market_focus_jobs_v3")
+        connection.execute(
+            "UPDATE catalyst_schema_metadata SET schema_version=?,schema_checksum=? WHERE singleton=1",
+            (DATABASE_VERSION, SCHEMA_CHECKSUM),
+        )
 
     def check_schema(self) -> dict[str, Any]:
         with self._read() as connection:
@@ -435,25 +735,177 @@ class CatalystRepository:
             ).fetchone()
             return dict(row) if row else {"stream": stream}
 
+    def current_focus_context(self) -> FocusContextResponse | None:
+        with self._read() as connection:
+            row = connection.execute(
+                "SELECT raw_json FROM focus_context_snapshots ORDER BY revision DESC LIMIT 1"
+            ).fetchone()
+            if row is None:
+                return None
+            return FocusContextResponse.model_validate_json(row["raw_json"])
+
+    def publish_focus_context(
+        self,
+        draft: FocusContextDraft,
+        *,
+        now: datetime | None = None,
+    ) -> FocusContextResponse:
+        """Publish one immutable focus revision in a single transaction."""
+
+        observed = now or _now()
+        material = draft.model_dump(mode="json")
+        content_hash = hashlib.sha256(_json(material).encode("utf-8")).hexdigest()
+        with self._write() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = connection.execute(
+                """
+                SELECT revision,as_of,data_through,content_hash,raw_json
+                FROM focus_context_snapshots ORDER BY revision DESC LIMIT 1
+                """
+            ).fetchone()
+            if current is not None:
+                current_as_of = _as_utc(current["as_of"])
+                current_data_through = _as_utc(current["data_through"])
+                draft_as_of = _as_utc(draft.as_of)
+                draft_data_through = _as_utc(draft.data_through)
+                if (
+                    current_as_of is not None
+                    and draft_as_of is not None
+                    and draft_as_of < current_as_of
+                ) or (
+                    current_data_through is not None
+                    and (
+                        draft_data_through is None
+                        or draft_data_through < current_data_through
+                    )
+                ):
+                    connection.commit()
+                    return FocusContextResponse.model_validate_json(current["raw_json"])
+            if current is not None and current["content_hash"] == content_hash:
+                connection.commit()
+                return FocusContextResponse.model_validate_json(current["raw_json"])
+            revision = int(current["revision"] or 0) + 1 if current is not None else 1
+            response = FocusContextResponse(revision=revision, **material)
+            raw = _json(response.model_dump(mode="json"))
+            connection.execute(
+                """
+                INSERT INTO focus_context_snapshots(
+                    revision,as_of,data_through,market_session,universe_version,
+                    content_hash,raw_json,created_at
+                ) VALUES(?,?,?,?,?,?,?,?)
+                """,
+                (
+                    revision,
+                    _iso(draft.as_of),
+                    _iso(draft.data_through),
+                    draft.market_session,
+                    draft.universe_version,
+                    content_hash,
+                    raw,
+                    _iso(observed),
+                ),
+            )
+            for symbol in response.symbols:
+                symbol_raw = symbol.model_dump(mode="json")
+                connection.execute(
+                    """
+                    INSERT INTO focus_context_symbols(
+                        revision,ticker,dollar_volume_rank,reasons_json,raw_json
+                    ) VALUES(?,?,?,?,?)
+                    """,
+                    (
+                        revision,
+                        symbol.ticker,
+                        symbol.dollar_volume_rank,
+                        _json(symbol.universe_reasons),
+                        _json(symbol_raw),
+                    ),
+                )
+            connection.commit()
+            return response
+
+    def consume_focus_nonce(
+        self,
+        *,
+        key_id: str,
+        nonce: str,
+        expires_at: datetime,
+        now: datetime | None = None,
+    ) -> None:
+        observed = now or _now()
+        with self._write() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                "DELETE FROM macrolens_focus_nonces WHERE expires_at<=?",
+                (_iso(observed),),
+            )
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO macrolens_focus_nonces(key_id,nonce,expires_at)
+                    VALUES(?,?,?)
+                    """,
+                    (key_id, nonce, _iso(expires_at)),
+                )
+            except sqlite3.IntegrityError as exc:
+                connection.rollback()
+                raise CatalystRepositoryError(
+                    "focus_replay", "MacroLens focus request nonce was already used"
+                ) from exc
+            connection.commit()
+
     def begin_sync_run(
         self,
         stream: str,
         *,
         snapshot_token: str | None = None,
+        sync_mode: str = "incremental",
+        resync_generation: int | None = None,
         now: datetime | None = None,
     ) -> str:
         if stream not in _STREAMS:
             raise ValueError("unknown catalyst stream")
+        if sync_mode not in {"incremental", "resync"}:
+            raise ValueError("unknown catalyst sync mode")
+        if stream != "feed" and sync_mode != "incremental":
+            raise ValueError("only the feed stream supports resync")
         run_id = uuid.uuid4().hex
         timestamp = _iso(now or _now())
         with self._write() as connection:
             connection.execute("BEGIN IMMEDIATE")
             state = connection.execute(
-                "SELECT watermark_sequence FROM catalyst_sync_state WHERE stream=?", (stream,)
+                "SELECT watermark_sequence,resync_required,resync_generation "
+                "FROM catalyst_sync_state WHERE stream=?",
+                (stream,),
             ).fetchone()
+            if sync_mode == "resync":
+                if state is None or not state["resync_required"]:
+                    raise CatalystRepositoryError(
+                        "resync_not_required", "Feed resync has not been requested"
+                    )
+                expected_generation = int(state["resync_generation"] or 0) + 1
+                if resync_generation is None:
+                    resync_generation = expected_generation
+                if resync_generation != expected_generation:
+                    raise CatalystRepositoryError(
+                        "resync_generation_mismatch", "Feed resync generation is stale"
+                    )
             connection.execute(
-                "INSERT INTO catalyst_sync_runs(run_id,stream,status,started_at,snapshot_token,from_sequence) VALUES(?,?,\"running\",?,?,?)",
-                (run_id, stream, timestamp, snapshot_token, state[0] if state else None),
+                """
+                INSERT INTO catalyst_sync_runs(
+                    run_id,stream,status,started_at,snapshot_token,from_sequence,
+                    sync_mode,resync_generation
+                ) VALUES(?,?,"running",?,?,?,?,?)
+                """,
+                (
+                    run_id,
+                    stream,
+                    timestamp,
+                    snapshot_token,
+                    state["watermark_sequence"] if state else None,
+                    sync_mode,
+                    resync_generation,
+                ),
             )
             connection.execute(
                 "UPDATE catalyst_sync_state SET last_attempt_at=? WHERE stream=?",
@@ -461,6 +913,28 @@ class CatalystRepository:
             )
             connection.commit()
         return run_id
+
+    def require_feed_resync(
+        self,
+        *,
+        resync_from: datetime | None,
+        now: datetime | None = None,
+    ) -> None:
+        """Latch recovery mode without discarding the last readable snapshot."""
+
+        timestamp = _iso(now or _now())
+        with self._write() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                UPDATE catalyst_sync_state
+                SET resync_required=1,last_attempt_at=?,last_error_code='updated_after_too_old',
+                    remote_status='stale',resync_from=?
+                WHERE stream='feed'
+                """,
+                (timestamp, _iso(resync_from)),
+            )
+            connection.commit()
 
     def stage_latest_page(self, run_id: str, items: Sequence[CatalystItem]) -> None:
         with self._write() as connection:
@@ -618,7 +1092,10 @@ class CatalystRepository:
                 now=observed,
             )
             run = connection.execute(
-                "SELECT status,stream,snapshot_token,from_sequence FROM catalyst_sync_runs WHERE run_id=?",
+                """
+                SELECT status,stream,snapshot_token,from_sequence,sync_mode,resync_generation
+                FROM catalyst_sync_runs WHERE run_id=?
+                """,
                 (run_id,),
             ).fetchone()
             if run is None or run["status"] != "running" or run["stream"] != "feed":
@@ -633,7 +1110,13 @@ class CatalystRepository:
                 "SELECT watermark_sequence,snapshot_generation FROM catalyst_sync_state WHERE stream='feed'"
             ).fetchone()
             old_watermark = current["watermark_sequence"] if current else None
-            if old_watermark is not None and watermark_sequence is not None and watermark_sequence < old_watermark:
+            is_resync = run["sync_mode"] == "resync"
+            if (
+                not is_resync
+                and old_watermark is not None
+                and watermark_sequence is not None
+                and watermark_sequence < old_watermark
+            ):
                 raise CatalystRepositoryError("watermark_regression", "Remote change_sequence moved backwards")
             for row in staged:
                 self._insert_item_revision(
@@ -658,7 +1141,11 @@ class CatalystRepository:
                 SET last_success_at=?,data_through=?,watermark_sequence=?,updated_after=?,
                     consecutive_failures=0,next_attempt_at=NULL,circuit_open_until=NULL,
                     last_error_code=NULL,remote_status='active',
-                    snapshot_generation=snapshot_generation+1,current_snapshot_id=?
+                    snapshot_generation=snapshot_generation+1,current_snapshot_id=?,
+                    resync_required=CASE WHEN ? THEN 0 ELSE resync_required END,
+                    resync_generation=CASE WHEN ? THEN ? ELSE resync_generation END,
+                    last_resync_at=CASE WHEN ? THEN ? ELSE last_resync_at END,
+                    resync_from=CASE WHEN ? THEN NULL ELSE resync_from END
                 WHERE stream='feed'
                 """,
                 (
@@ -667,6 +1154,12 @@ class CatalystRepository:
                     watermark_sequence if watermark_sequence is not None else old_watermark,
                     _iso(next_updated_after),
                     snapshot_id,
+                    int(is_resync),
+                    int(is_resync),
+                    run["resync_generation"],
+                    int(is_resync),
+                    cached_at,
+                    int(is_resync),
                 ),
             )
             connection.execute("DELETE FROM catalyst_staging_items WHERE run_id=?", (run_id,))
@@ -1302,13 +1795,17 @@ class CatalystRepository:
         source: str | None = None,
         classification: str | None = None,
         analysis_status: str | None = None,
-        min_confidence: int | None = None,
+        min_confidence: int | None = 0,
+        include_unanalyzed: bool = True,
         min_abs_impact: int | None = None,
         include_neutral: bool = True,
         horizon: str | None = None,
         mechanism: str | None = None,
         multi_source_only: bool = False,
     ) -> dict[str, Any]:
+        min_confidence = 0 if min_confidence is None else min_confidence
+        if not 0 <= min_confidence <= 100:
+            raise ValueError("min_confidence must be between 0 and 100")
         decoded_cursor = self._decode_cursor(cursor) if cursor else None
         if decoded_cursor is not None:
             frozen_as_of = _as_utc(decoded_cursor["as_of"])
@@ -1323,6 +1820,7 @@ class CatalystRepository:
             "classification": classification,
             "analysis_status": analysis_status,
             "min_confidence": min_confidence,
+            "include_unanalyzed": include_unanalyzed,
             "min_abs_impact": min_abs_impact,
             "include_neutral": include_neutral,
             "horizon": horizon,
@@ -1380,9 +1878,11 @@ class CatalystRepository:
                     continue
                 if analysis_status and item["analysis_status"] != analysis_status:
                     continue
-                if min_confidence is not None and (
+                if min_confidence > 0 and (
                     item["confidence"] is None or item["confidence"] < min_confidence
                 ):
+                    continue
+                if min_confidence == 0 and not include_unanalyzed and analysis is None:
                     continue
                 if min_abs_impact is not None and (
                     item["impact_score"] is None or abs(item["impact_score"]) < min_abs_impact
@@ -1606,7 +2106,8 @@ class CatalystRepository:
         window_hours: int = 72,
         limit: int = 20,
         cursor: str | None = None,
-        min_confidence: int | None = None,
+        min_confidence: int | None = 0,
+        include_unanalyzed: bool = True,
         include_neutral: bool = False,
     ) -> dict[str, Any]:
         result = self.list_feed(
@@ -1616,6 +2117,7 @@ class CatalystRepository:
             cursor=cursor,
             ticker=ticker,
             min_confidence=min_confidence,
+            include_unanalyzed=include_unanalyzed,
             include_neutral=include_neutral,
         )
         result["ticker"] = ticker.strip().upper()
@@ -1629,11 +2131,15 @@ class CatalystRepository:
         as_of: datetime,
         window_hours: int,
         limit: int,
-        min_confidence: int | None,
+        min_confidence: int | None = 0,
+        include_unanalyzed: bool = True,
         include_neutral: bool,
     ) -> dict[str, Any]:
         if not 1 <= len(tickers) <= 50:
             raise ValueError("batch must contain between 1 and 50 tickers")
+        min_confidence = 0 if min_confidence is None else min_confidence
+        if not 0 <= min_confidence <= 100:
+            raise ValueError("min_confidence must be between 0 and 100")
         normalized: list[str] = []
         for raw_ticker in tickers:
             ticker = raw_ticker.strip().upper()
@@ -1653,9 +2159,11 @@ class CatalystRepository:
                 window_start=window_start,
             )
             for item in items:
-                if min_confidence is not None and (
+                if min_confidence > 0 and (
                     item["confidence"] is None or item["confidence"] < min_confidence
                 ):
+                    continue
+                if min_confidence == 0 and not include_unanalyzed and item.get("analysis") is None:
                     continue
                 if not include_neutral and item["classification"] == "neutral":
                     continue
@@ -1765,7 +2273,12 @@ class CatalystRepository:
             age_seconds = (
                 max(0.0, (observed - last_success).total_seconds()) if last_success else None
             )
-            if last_success is None:
+            if feed.get("resync_required") and feed.get("current_snapshot_id"):
+                # An expired remote watermark does not invalidate the last
+                # atomically published snapshot. Keep it readable regardless
+                # of its age until a replacement generation is complete.
+                public_status = "stale"
+            elif last_success is None:
                 public_status = "unavailable"
             elif age_seconds is not None and age_seconds > stale_ttl_seconds:
                 public_status = "unavailable"
@@ -1865,6 +2378,9 @@ class CatalystRepository:
                 "expected_reasoning": reasoning,
                 "schema_version": schema_version,
                 "snapshot_id": feed.get("current_snapshot_id"),
+                "resync_required": bool(feed.get("resync_required")),
+                "resync_generation": int(feed.get("resync_generation") or 0),
+                "last_resync_at": feed.get("last_resync_at"),
                 "sources": sources,
                 "worker": (
                     {
@@ -1887,6 +2403,9 @@ class CatalystRepository:
                             "circuit_open_until",
                             "last_error_code",
                             "remote_status",
+                            "resync_required",
+                            "resync_generation",
+                            "last_resync_at",
                         }
                     }
                     for stream, state in states.items()
@@ -2366,6 +2885,694 @@ class CatalystRepository:
                     _iso(next_attempt),
                     _iso(observed),
                     local_job_id,
+                ),
+            )
+            connection.commit()
+
+    @staticmethod
+    def _public_market_focus_cycle(
+        row: sqlite3.Row | dict[str, Any],
+    ) -> dict[str, Any]:
+        data = dict(row)
+        raw = _loads(data.get("raw_json") or data.get("result_json"), {})
+        public_id = data.get("public_cycle_id") or data.get("local_cycle_id")
+        if raw:
+            raw["cycle_id"] = public_id
+            # Remote identifiers stay inside the worker cache.  The same-origin
+            # API exposes the local parent id when this row represents a retry.
+            raw.pop("retry_of_cycle_id", None)
+            if data.get("retry_of_local_cycle_id"):
+                raw["retry_of_cycle_id"] = data["retry_of_local_cycle_id"]
+            if isinstance(raw.get("result"), dict):
+                raw["result"] = {**raw["result"], "cycle_id": public_id}
+            return raw
+        return {
+            "cycle_id": public_id,
+            "status": data["status"],
+            "prepared_revision": data.get("expected_prepared_revision", 0),
+            "retry_of_cycle_id": data.get("retry_of_local_cycle_id"),
+            "execution_number": data.get("execution_number", 1),
+            "model": data.get("model"),
+            "reasoning_effort": data.get("reasoning"),
+            "error_code": data.get("error_code"),
+            "next_attempt_at": data.get("next_attempt_at"),
+            "cancel_requested_at": data.get("cancel_requested_at"),
+            "created_at": data.get("created_at"),
+            "updated_at": data.get("updated_at"),
+            "result": None,
+        }
+
+    def publish_market_focus_snapshot(
+        self,
+        status: HotspotPreparationStatus,
+        items: Sequence[HotspotPreparationItem],
+        cycle: RemoteMarketFocusCycle | None,
+        *,
+        worker_id: str | None = None,
+        fencing_token: int | None = None,
+        now: datetime | None = None,
+    ) -> None:
+        """Atomically replace the visible remote focus snapshot.
+
+        Remote I/O and validation finish before this transaction begins.  A
+        failed pull therefore leaves the prior snapshot readable and stale.
+        """
+
+        observed = now or _now()
+        timestamp = _iso(observed)
+        snapshot_id = f"mfs_{uuid.uuid4().hex}"
+        status_json = _json(status.model_dump(mode="json"))
+        with self._write() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._assert_worker_fence(
+                connection,
+                worker_id=worker_id,
+                fencing_token=fencing_token,
+                now=observed,
+            )
+            connection.execute(
+                """
+                INSERT INTO catalyst_hotspot_preparation_sets(
+                    snapshot_id,prepared_revision,status_json,item_json,cached_at
+                ) VALUES(?,0,?,NULL,?)
+                """,
+                (snapshot_id, status_json, timestamp),
+            )
+            seen_revisions: set[int] = set()
+            for item in items:
+                if item.prepared_revision in seen_revisions:
+                    connection.rollback()
+                    raise CatalystRepositoryError(
+                        "duplicate_prepared_revision",
+                        "MacroLens returned a duplicate hotspot revision",
+                    )
+                if item.prepared_revision > status.prepared_revision:
+                    connection.rollback()
+                    raise CatalystRepositoryError(
+                        "prepared_revision_mismatch",
+                        "MacroLens returned a hotspot beyond the published revision",
+                    )
+                seen_revisions.add(item.prepared_revision)
+                connection.execute(
+                    """
+                    INSERT INTO catalyst_hotspot_preparation_sets(
+                        snapshot_id,prepared_revision,status_json,item_json,cached_at
+                    ) VALUES(?,?,?,?,?)
+                    """,
+                    (
+                        snapshot_id,
+                        item.prepared_revision,
+                        status_json,
+                        _json(item.model_dump(mode="json")),
+                        timestamp,
+                    ),
+                )
+            if cycle is not None:
+                existing = connection.execute(
+                    "SELECT public_cycle_id FROM catalyst_market_focus_cycles WHERE remote_cycle_id=?",
+                    (cycle.cycle_id,),
+                ).fetchone()
+                job = connection.execute(
+                    "SELECT local_cycle_id FROM catalyst_market_focus_jobs WHERE remote_cycle_id=?",
+                    (cycle.cycle_id,),
+                ).fetchone()
+                public_cycle_id = (
+                    str(existing["public_cycle_id"])
+                    if existing is not None
+                    else str(job["local_cycle_id"])
+                    if job is not None
+                    else f"mfc_{uuid.uuid4().hex}"
+                )
+                connection.execute(
+                    """
+                    INSERT INTO catalyst_market_focus_cycles(
+                        remote_cycle_id,public_cycle_id,snapshot_id,prepared_revision,
+                        status,raw_json,cached_at
+                    ) VALUES(?,?,?,?,?,?,?)
+                    ON CONFLICT(remote_cycle_id) DO UPDATE SET
+                        snapshot_id=excluded.snapshot_id,
+                        prepared_revision=excluded.prepared_revision,
+                        status=excluded.status,
+                        raw_json=excluded.raw_json,
+                        cached_at=excluded.cached_at
+                    """,
+                    (
+                        cycle.cycle_id,
+                        public_cycle_id,
+                        snapshot_id,
+                        cycle.prepared_revision,
+                        cycle.status,
+                        _json(cycle.model_dump(mode="json")),
+                        timestamp,
+                    ),
+                )
+            connection.execute(
+                """
+                UPDATE catalyst_sync_state SET
+                    last_attempt_at=?,last_success_at=?,data_through=?,
+                    consecutive_failures=0,next_attempt_at=NULL,circuit_open_until=NULL,
+                    last_error_code=NULL,remote_status='ok',current_snapshot_id=?
+                WHERE stream='market_focus'
+                """,
+                (timestamp, timestamp, _iso(status.data_through), snapshot_id),
+            )
+            connection.execute(
+                "DELETE FROM catalyst_hotspot_preparation_sets WHERE snapshot_id<>?",
+                (snapshot_id,),
+            )
+            connection.commit()
+
+    def market_focus_snapshot(
+        self,
+        *,
+        stale_ttl_seconds: int,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        observed = now or _now()
+        with self._read() as connection:
+            state = connection.execute(
+                "SELECT * FROM catalyst_sync_state WHERE stream='market_focus'"
+            ).fetchone()
+            snapshot_id = state["current_snapshot_id"] if state else None
+            if not snapshot_id:
+                return {
+                    "status": "unavailable",
+                    "as_of": _iso(observed),
+                    "hotspot_status": None,
+                    "items": [],
+                    "cycle": None,
+                    "warnings": ["market_focus_snapshot_unavailable"],
+                }
+            status_row = connection.execute(
+                """
+                SELECT status_json,cached_at FROM catalyst_hotspot_preparation_sets
+                WHERE snapshot_id=? AND prepared_revision=0
+                """,
+                (snapshot_id,),
+            ).fetchone()
+            if status_row is None:
+                raise CatalystRepositoryError(
+                    "cache_snapshot_incomplete", "Market focus snapshot is incomplete"
+                )
+            item_rows = connection.execute(
+                """
+                SELECT item_json FROM catalyst_hotspot_preparation_sets
+                WHERE snapshot_id=? AND prepared_revision>0
+                ORDER BY prepared_revision DESC
+                """,
+                (snapshot_id,),
+            ).fetchall()
+            cycle_row = connection.execute(
+                """
+                SELECT * FROM catalyst_market_focus_cycles
+                WHERE snapshot_id=? ORDER BY cached_at DESC LIMIT 1
+                """,
+                (snapshot_id,),
+            ).fetchone()
+            job_row = connection.execute(
+                """
+                SELECT * FROM catalyst_market_focus_jobs
+                ORDER BY updated_at DESC LIMIT 1
+                """
+            ).fetchone()
+            last_success = _as_utc(state["last_success_at"])
+            stale = last_success is None or (
+                observed - last_success
+            ).total_seconds() > stale_ttl_seconds
+            failures = int(state["consecutive_failures"] or 0)
+            public_status = "stale" if stale else "degraded" if failures else "active"
+            warnings = []
+            if stale:
+                warnings.append("market_focus_snapshot_stale")
+            if state["last_error_code"]:
+                warnings.append(str(state["last_error_code"]))
+            hotspot_status = _loads(status_row["status_json"], {})
+            remote_to_public = {
+                str(row["remote_cycle_id"]): str(row["public_cycle_id"])
+                for row in connection.execute(
+                    "SELECT remote_cycle_id,public_cycle_id FROM catalyst_market_focus_cycles"
+                ).fetchall()
+            }
+            active_id = hotspot_status.get("active_cycle_id")
+            hotspot_status["active_cycle_id"] = remote_to_public.get(active_id)
+            items = []
+            for row in item_rows:
+                item = _loads(row["item_json"], {})
+                for field in ("leased_cycle_id", "consumed_cycle_id"):
+                    item[field] = remote_to_public.get(item.get(field))
+                items.append(item)
+            visible_cycle = cycle_row
+            if job_row is not None and (
+                cycle_row is None or job_row["updated_at"] >= cycle_row["cached_at"]
+            ):
+                visible_cycle = job_row
+            return {
+                "status": public_status,
+                "as_of": _iso(observed),
+                "last_sync_at": state["last_success_at"],
+                "data_through": state["data_through"],
+                "hotspot_status": hotspot_status,
+                "items": items,
+                "cycle": (
+                    self._public_market_focus_cycle(visible_cycle)
+                    if visible_cycle
+                    else None
+                ),
+                "warnings": warnings,
+            }
+
+    def enqueue_market_focus_cycle(
+        self,
+        expected_prepared_revision: int,
+        *,
+        last_consumed_revision: int,
+        model: str,
+        reasoning: str,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        timestamp = _iso(now or _now())
+        request_key = (
+            f"batch:{expected_prepared_revision}:{last_consumed_revision}"
+        )
+        with self._write() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                """
+                SELECT * FROM catalyst_market_focus_jobs
+                WHERE request_key=?
+                """,
+                (request_key,),
+            ).fetchone()
+            if existing is not None:
+                connection.commit()
+                return self._public_market_focus_cycle(existing)
+            local_cycle_id = f"mfc_{uuid.uuid4().hex}"
+            connection.execute(
+                """
+                INSERT INTO catalyst_market_focus_jobs(
+                    local_cycle_id,request_key,expected_prepared_revision,
+                    last_consumed_revision_at_request,execution_number,
+                    status,model,reasoning,created_at,updated_at
+                ) VALUES(?,?,?,?,1,'pending',?,?,?,?)
+                """,
+                (
+                    local_cycle_id,
+                    request_key,
+                    expected_prepared_revision,
+                    last_consumed_revision,
+                    model,
+                    reasoning,
+                    timestamp,
+                    timestamp,
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM catalyst_market_focus_jobs WHERE local_cycle_id=?",
+                (local_cycle_id,),
+            ).fetchone()
+            connection.commit()
+            return self._public_market_focus_cycle(row)
+
+    def market_focus_job_for_batch(
+        self,
+        expected_prepared_revision: int,
+        last_consumed_revision: int,
+    ) -> dict[str, Any] | None:
+        request_key = (
+            f"batch:{expected_prepared_revision}:{last_consumed_revision}"
+        )
+        with self._read() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM catalyst_market_focus_jobs
+                WHERE request_key=?
+                """,
+                (request_key,),
+            ).fetchone()
+            return self._public_market_focus_cycle(row) if row else None
+
+    def enqueue_market_focus_retry(
+        self,
+        retry_of_local_cycle_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Queue one append-only retry of a remote immutable cycle snapshot."""
+
+        timestamp = _iso(now or _now())
+        request_key = f"retry:{retry_of_local_cycle_id}"
+        with self._write() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                "SELECT * FROM catalyst_market_focus_jobs WHERE request_key=?",
+                (request_key,),
+            ).fetchone()
+            if existing is not None:
+                connection.commit()
+                return self._public_market_focus_cycle(existing)
+
+            parent_job = connection.execute(
+                "SELECT * FROM catalyst_market_focus_jobs WHERE local_cycle_id=?",
+                (retry_of_local_cycle_id,),
+            ).fetchone()
+            parent_cycle = None
+            if parent_job is None:
+                parent_cycle = connection.execute(
+                    "SELECT * FROM catalyst_market_focus_cycles WHERE public_cycle_id=?",
+                    (retry_of_local_cycle_id,),
+                ).fetchone()
+            if parent_job is None and parent_cycle is None:
+                connection.rollback()
+                raise CatalystRepositoryError(
+                    "market_focus_cycle_not_found",
+                    "The market focus retry parent was not found",
+                )
+
+            parent = dict(parent_job or parent_cycle)
+            raw = _loads(parent.get("result_json") or parent.get("raw_json"), {})
+            parent_status = str(raw.get("status") or parent.get("status") or "")
+            if str(raw.get("error_code") or parent.get("error_code") or "") == (
+                "submission_outcome_unknown"
+            ):
+                connection.rollback()
+                raise CatalystRepositoryError(
+                    "market_focus_retry_outcome_unknown",
+                    "The remote submission outcome must be reconciled before retrying",
+                )
+            if parent_status not in {"failed", "cancelled", "incomplete_output"}:
+                connection.rollback()
+                raise CatalystRepositoryError(
+                    "market_focus_cycle_not_retryable",
+                    "The market focus cycle is not in a retryable terminal state",
+                )
+            remote_parent_id = parent.get("remote_cycle_id")
+            if not remote_parent_id:
+                connection.rollback()
+                raise CatalystRepositoryError(
+                    "market_focus_retry_snapshot_unavailable",
+                    "The immutable remote cycle snapshot is unavailable",
+                )
+
+            expected_revision = int(
+                raw.get("prepared_revision")
+                if raw.get("prepared_revision") is not None
+                else parent.get("expected_prepared_revision")
+                or parent.get("prepared_revision")
+                or 0
+            )
+            consumed_revision = int(
+                parent.get("last_consumed_revision_at_request")
+                or raw.get("last_consumed_revision_at_start")
+                or 0
+            )
+            execution_number = int(
+                raw.get("execution_number")
+                or parent.get("execution_number")
+                or 1
+            ) + 1
+            model = str(raw.get("model") or parent.get("model") or "")
+            reasoning = str(
+                raw.get("reasoning_effort") or parent.get("reasoning") or ""
+            )
+            local_cycle_id = f"mfc_{uuid.uuid4().hex}"
+            connection.execute(
+                """
+                INSERT INTO catalyst_market_focus_jobs(
+                    local_cycle_id,request_key,expected_prepared_revision,
+                    last_consumed_revision_at_request,retry_of_local_cycle_id,
+                    retry_remote_cycle_id,execution_number,status,model,reasoning,
+                    created_at,updated_at
+                ) VALUES(?,?,?,?,?,?,?,'pending',?,?,?,?)
+                """,
+                (
+                    local_cycle_id,
+                    request_key,
+                    expected_revision,
+                    consumed_revision,
+                    retry_of_local_cycle_id,
+                    str(remote_parent_id),
+                    execution_number,
+                    model,
+                    reasoning,
+                    timestamp,
+                    timestamp,
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM catalyst_market_focus_jobs WHERE local_cycle_id=?",
+                (local_cycle_id,),
+            ).fetchone()
+            connection.commit()
+            return self._public_market_focus_cycle(row)
+
+    def get_market_focus_cycle(self, public_cycle_id: str) -> dict[str, Any] | None:
+        with self._read() as connection:
+            job = connection.execute(
+                "SELECT * FROM catalyst_market_focus_jobs WHERE local_cycle_id=?",
+                (public_cycle_id,),
+            ).fetchone()
+            if job is not None:
+                return self._public_market_focus_cycle(job)
+            cycle = connection.execute(
+                "SELECT * FROM catalyst_market_focus_cycles WHERE public_cycle_id=?",
+                (public_cycle_id,),
+            ).fetchone()
+            return self._public_market_focus_cycle(cycle) if cycle else None
+
+    def request_market_focus_cancel(
+        self,
+        local_cycle_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any] | None:
+        timestamp = _iso(now or _now())
+        with self._write() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM catalyst_market_focus_jobs WHERE local_cycle_id=?",
+                (local_cycle_id,),
+            ).fetchone()
+            if row is None:
+                connection.commit()
+                return None
+            if row["status"] not in {"pending", "queued", "in_progress"}:
+                connection.commit()
+                return self._public_market_focus_cycle(row)
+            if row["remote_cycle_id"] is None:
+                connection.execute(
+                    """
+                    UPDATE catalyst_market_focus_jobs SET
+                        status='cancelled',cancel_requested_at=?,next_attempt_at=NULL,
+                        lease_owner=NULL,lease_until=NULL,updated_at=?
+                    WHERE local_cycle_id=?
+                    """,
+                    (timestamp, timestamp, local_cycle_id),
+                )
+            else:
+                connection.execute(
+                    """
+                    UPDATE catalyst_market_focus_jobs SET
+                        cancel_requested_at=COALESCE(cancel_requested_at,?),
+                        next_attempt_at=?,updated_at=?
+                    WHERE local_cycle_id=?
+                    """,
+                    (timestamp, timestamp, timestamp, local_cycle_id),
+                )
+            updated = connection.execute(
+                "SELECT * FROM catalyst_market_focus_jobs WHERE local_cycle_id=?",
+                (local_cycle_id,),
+            ).fetchone()
+            connection.commit()
+            return self._public_market_focus_cycle(updated)
+
+    def due_market_focus_jobs(
+        self,
+        worker_id: str,
+        *,
+        limit: int = 5,
+        lease_seconds: int = 30,
+        now: datetime | None = None,
+    ) -> list[dict[str, Any]]:
+        observed = now or _now()
+        timestamp = _iso(observed)
+        lease_until = _iso(observed + timedelta(seconds=lease_seconds))
+        with self._write() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            rows = connection.execute(
+                """
+                SELECT * FROM catalyst_market_focus_jobs
+                WHERE status IN ('pending','queued','in_progress')
+                  AND (next_attempt_at IS NULL OR next_attempt_at<=?)
+                  AND (lease_until IS NULL OR lease_until<=? OR lease_owner=?)
+                ORDER BY CASE WHEN cancel_requested_at IS NOT NULL THEN 0 ELSE 1 END,
+                         created_at
+                LIMIT ?
+                """,
+                (timestamp, timestamp, worker_id, limit),
+            ).fetchall()
+            claimed: list[dict[str, Any]] = []
+            for row in rows:
+                changed = connection.execute(
+                    """
+                    UPDATE catalyst_market_focus_jobs SET lease_owner=?,lease_until=?
+                    WHERE local_cycle_id=?
+                      AND (lease_until IS NULL OR lease_until<=? OR lease_owner=?)
+                    """,
+                    (worker_id, lease_until, row["local_cycle_id"], timestamp, worker_id),
+                ).rowcount
+                if changed:
+                    claimed.append(dict(row))
+            connection.commit()
+            return claimed
+
+    def begin_market_focus_submission(
+        self,
+        local_cycle_id: str,
+        worker_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> bool:
+        observed = now or _now()
+        timestamp = _iso(observed)
+        with self._write() as connection:
+            changed = connection.execute(
+                """
+                UPDATE catalyst_market_focus_jobs SET status='in_progress',updated_at=?
+                WHERE local_cycle_id=? AND lease_owner=?
+                  AND (
+                    (status='pending' AND cancel_requested_at IS NULL)
+                    OR status='in_progress'
+                  )
+                  AND remote_cycle_id IS NULL
+                  AND lease_until>?
+                """,
+                (timestamp, local_cycle_id, worker_id, timestamp),
+            ).rowcount
+            connection.commit()
+            return changed == 1
+
+    def apply_remote_market_focus_cycle(
+        self,
+        local_cycle_id: str,
+        remote: RemoteMarketFocusCycle,
+        *,
+        worker_id: str,
+        next_attempt_at: datetime | None = None,
+        now: datetime | None = None,
+    ) -> None:
+        observed = now or _now()
+        timestamp = _iso(observed)
+        with self._write() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = connection.execute(
+                "SELECT * FROM catalyst_market_focus_jobs WHERE local_cycle_id=?",
+                (local_cycle_id,),
+            ).fetchone()
+            if current is None or current["lease_owner"] != worker_id:
+                connection.rollback()
+                raise CatalystRepositoryError(
+                    "market_focus_job_lease_lost", "Market focus job lease was lost"
+                )
+            owner = connection.execute(
+                """
+                SELECT local_cycle_id FROM catalyst_market_focus_jobs
+                WHERE remote_cycle_id=? AND local_cycle_id<>?
+                """,
+                (remote.cycle_id, local_cycle_id),
+            ).fetchone()
+            if owner is not None:
+                connection.rollback()
+                raise CatalystRepositoryError(
+                    "remote_cycle_collision", "Remote cycle is bound to another local request"
+                )
+            active = remote.status in {"pending", "queued", "in_progress"}
+            cancelling = bool(current["cancel_requested_at"]) and active
+            stored_status = "in_progress" if cancelling else remote.status
+            retry_at = timestamp if cancelling else _iso(next_attempt_at)
+            raw = remote.model_dump(mode="json")
+            connection.execute(
+                """
+                UPDATE catalyst_market_focus_jobs SET
+                    remote_cycle_id=?,status=?,model=?,reasoning=?,error_code=?,
+                    next_attempt_at=?,result_json=?,updated_at=?,
+                    lease_owner=NULL,lease_until=NULL
+                WHERE local_cycle_id=?
+                """,
+                (
+                    remote.cycle_id,
+                    stored_status,
+                    remote.model,
+                    remote.reasoning_effort,
+                    remote.error_code,
+                    retry_at,
+                    _json(raw),
+                    timestamp,
+                    local_cycle_id,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO catalyst_market_focus_cycles(
+                    remote_cycle_id,public_cycle_id,snapshot_id,prepared_revision,
+                    status,raw_json,cached_at
+                ) VALUES(?,?,NULL,?,?,?,?)
+                ON CONFLICT(remote_cycle_id) DO UPDATE SET
+                    public_cycle_id=excluded.public_cycle_id,
+                    prepared_revision=excluded.prepared_revision,
+                    status=excluded.status,raw_json=excluded.raw_json,cached_at=excluded.cached_at
+                """,
+                (
+                    remote.cycle_id,
+                    local_cycle_id,
+                    remote.prepared_revision,
+                    remote.status,
+                    _json(raw),
+                    timestamp,
+                ),
+            )
+            connection.commit()
+
+    def fail_market_focus_job(
+        self,
+        local_cycle_id: str,
+        error_code: str,
+        *,
+        retry_after_seconds: int | None = None,
+        terminal: bool,
+        now: datetime | None = None,
+    ) -> None:
+        observed = now or _now()
+        terminal_status = (
+            "budget_blocked"
+            if error_code in {
+                "budget_configuration_required",
+                "daily_job_limit_reached",
+                "daily_output_token_limit_reached",
+            }
+            else "failed"
+        )
+        next_attempt = (
+            observed + timedelta(seconds=retry_after_seconds or 1)
+            if not terminal
+            else None
+        )
+        with self._write() as connection:
+            connection.execute(
+                """
+                UPDATE catalyst_market_focus_jobs SET
+                    status=CASE WHEN ? THEN ? ELSE status END,
+                    error_code=?,retry_after_seconds=?,next_attempt_at=?,updated_at=?,
+                    lease_owner=NULL,lease_until=NULL
+                WHERE local_cycle_id=?
+                """,
+                (
+                    int(terminal),
+                    terminal_status,
+                    error_code[:100],
+                    retry_after_seconds,
+                    _iso(next_attempt),
+                    _iso(observed),
+                    local_cycle_id,
                 ),
             )
             connection.commit()

@@ -634,7 +634,7 @@ def test_manual_refresh_waits_as_one_order_without_force_retry_storm(tmp_path) -
     repository = CatalystRepository(tmp_path / "catalysts.db")
     repository.initialize(now=utc(9))
     clock = [utc(10)]
-    for stream in ("health", "feed", "calendar", "job"):
+    for stream in ("health", "feed", "calendar", "job", "market_focus"):
         repository.mark_stream_success(stream, now=clock[0])
     repository.record_stream_failure(
         "health", "rate_limited", retry_after_seconds=120, now=clock[0]
@@ -656,6 +656,11 @@ def test_manual_refresh_waits_as_one_order_without_force_retry_storm(tmp_path) -
     service.sync_health = lambda: counted("health")  # type: ignore[method-assign]
     service.sync_latest = lambda: counted("feed")  # type: ignore[method-assign]
     service.sync_calendar = lambda: counted("calendar")  # type: ignore[method-assign]
+
+    async def focus_ok() -> bool:
+        return True
+
+    service.sync_market_focus = focus_ok  # type: ignore[method-assign]
 
     assert service.acquire()
     for _ in range(3):

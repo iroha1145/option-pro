@@ -82,6 +82,18 @@ class CatalystSettings(BaseSettings):
     job_interval_seconds: int = Field(
         default=5, ge=2, le=300, alias="MACROLENS_JOB_INTERVAL_SECONDS"
     )
+    market_focus_interval_seconds: int = Field(
+        default=60,
+        ge=10,
+        le=3600,
+        alias="MACROLENS_MARKET_FOCUS_INTERVAL_SECONDS",
+    )
+    hotspot_sync_limit: int = Field(
+        default=100,
+        ge=1,
+        le=100,
+        alias="MACROLENS_HOTSPOT_SYNC_LIMIT",
+    )
     worker_lease_seconds: int = Field(
         default=45, ge=10, le=600, alias="MACROLENS_WORKER_LEASE_SECONDS"
     )
@@ -90,6 +102,9 @@ class CatalystSettings(BaseSettings):
     )
     latest_window_days: int = Field(
         default=7, ge=1, le=7, alias="MACROLENS_LATEST_WINDOW_DAYS"
+    )
+    resync_max_pages: int = Field(
+        default=500, ge=1, le=5000, alias="MACROLENS_RESYNC_MAX_PAGES"
     )
     calendar_lookback_days: int = Field(
         default=2, ge=0, le=30, alias="MACROLENS_CALENDAR_LOOKBACK_DAYS"

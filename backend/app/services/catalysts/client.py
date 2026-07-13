@@ -8,7 +8,7 @@ import ssl
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional, TypeVar, Union
 
@@ -24,7 +24,11 @@ from .models import (
     ContractEnvelope,
     FeedResponse,
     HealthResponse,
+    HotspotPreparationResponse,
+    HotspotPreparationStatus,
     LatestResponse,
+    MarketFocusCycleCreateRequest,
+    MarketFocusCycleResponse,
     RemoteJobResponse,
     SCHEMA_VERSION,
     TickerResponse,
@@ -232,6 +236,7 @@ class MacroLensClient:
         safe_code = ""
         safe_retryable: Optional[bool] = None
         safe_retry_after: Optional[int] = None
+        safe_resync_from: Optional[datetime] = None
         try:
             parsed = json.loads(body)
             if isinstance(parsed, dict):
@@ -243,6 +248,36 @@ class MacroLensClient:
                 candidate_retry = parsed.get("retry_after_seconds")
                 if isinstance(candidate_retry, int) and 0 <= candidate_retry <= 86_400:
                     safe_retry_after = candidate_retry
+                if safe_code == "updated_after_too_old":
+                    try:
+                        server_time = datetime.fromisoformat(
+                            str(parsed.get("server_time") or "").replace("Z", "+00:00")
+                        )
+                        if server_time.tzinfo is None or server_time.utcoffset() is None:
+                            raise ValueError
+                        server_time = server_time.astimezone(timezone.utc)
+                        window_days = parsed.get("latest_window_days")
+                        if not isinstance(window_days, int) or not 1 <= window_days <= 7:
+                            raise ValueError
+                        raw_boundary = parsed.get("resync_from")
+                        if raw_boundary is None:
+                            raise ValueError
+                        safe_resync_from = datetime.fromisoformat(
+                            str(raw_boundary).replace("Z", "+00:00")
+                        )
+                        if (
+                            safe_resync_from.tzinfo is None
+                            or safe_resync_from.utcoffset() is None
+                        ):
+                            raise ValueError
+                        safe_resync_from = safe_resync_from.astimezone(timezone.utc)
+                        boundary_age = server_time - safe_resync_from
+                        if not timedelta(0) <= boundary_age <= timedelta(
+                            days=window_days, seconds=5
+                        ):
+                            raise ValueError
+                    except (TypeError, ValueError, OverflowError):
+                        safe_resync_from = None
         except (UnicodeDecodeError, json.JSONDecodeError):
             pass
         if response.status_code in {401, 403}:
@@ -270,6 +305,7 @@ class MacroLensClient:
             message=f"MacroLens rejected the request with status {response.status_code}",
             retryable=False if safe_retryable is None else safe_retryable,
             retry_after_seconds=safe_retry_after or retry_after,
+            resync_from=safe_resync_from,
         )
 
     async def _request(
@@ -461,6 +497,87 @@ class MacroLensClient:
             method="POST",
             endpoint=f"/analysis-jobs/{remote_job_id}/cancel",
             family="job",
+            scope="action",
+            payload={},
+        )
+
+    async def hotspot_status(self) -> HotspotPreparationStatus:
+        return await self._request(
+            HotspotPreparationStatus,
+            method="GET",
+            endpoint="/hotspots/status",
+            family="market_focus",
+        )
+
+    async def hotspots(
+        self,
+        *,
+        limit: int,
+        as_of: Optional[datetime] = None,
+    ) -> HotspotPreparationResponse:
+        params: dict[str, Any] = {"limit": limit}
+        if as_of is not None:
+            params["as_of"] = as_of.isoformat()
+        return await self._request(
+            HotspotPreparationResponse,
+            method="GET",
+            endpoint="/hotspots",
+            family="market_focus",
+            params=params,
+        )
+
+    async def latest_market_focus_cycle(self) -> MarketFocusCycleResponse:
+        return await self._request(
+            MarketFocusCycleResponse,
+            method="GET",
+            endpoint="/market-focus-cycles/latest",
+            family="market_focus",
+        )
+
+    async def create_market_focus_cycle(
+        self,
+        *,
+        expected_prepared_revision: int | None = None,
+        retry_cycle_id: str | None = None,
+    ) -> MarketFocusCycleResponse:
+        if (expected_prepared_revision is None) == (retry_cycle_id is None):
+            raise ValueError(
+                "exactly one of expected_prepared_revision or retry_cycle_id is required"
+            )
+        request = MarketFocusCycleCreateRequest(
+            trigger="manual",
+            expected_prepared_revision=expected_prepared_revision,
+            retry_cycle_id=retry_cycle_id,
+        )
+        return await self._request(
+            MarketFocusCycleResponse,
+            method="POST",
+            endpoint="/market-focus-cycles",
+            family="market_focus_job",
+            scope="action",
+            payload=request.model_dump(mode="json", exclude_none=True),
+        )
+
+    async def get_market_focus_cycle(
+        self,
+        remote_cycle_id: str,
+    ) -> MarketFocusCycleResponse:
+        return await self._request(
+            MarketFocusCycleResponse,
+            method="GET",
+            endpoint=f"/market-focus-cycles/{remote_cycle_id}",
+            family="market_focus_job",
+        )
+
+    async def cancel_market_focus_cycle(
+        self,
+        remote_cycle_id: str,
+    ) -> MarketFocusCycleResponse:
+        return await self._request(
+            MarketFocusCycleResponse,
+            method="POST",
+            endpoint=f"/market-focus-cycles/{remote_cycle_id}/cancel",
+            family="market_focus_job",
             scope="action",
             payload={},
         )

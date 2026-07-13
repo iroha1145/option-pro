@@ -267,3 +267,155 @@ class CatalystService:
                 counts_for_circuit=False,
             )
         return self._repository(writer=True).request_job_cancel(local_job_id)
+
+    def _market_focus_snapshot(self, *, now: datetime | None = None) -> dict[str, Any]:
+        if not self.available_by_config:
+            return {
+                "status": "disabled",
+                "as_of": (now or _utc_now()).isoformat().replace("+00:00", "Z"),
+                "hotspot_status": None,
+                "items": [],
+                "cycle": None,
+                "warnings": ["capability_disabled"],
+            }
+        try:
+            return self._repository().market_focus_snapshot(
+                stale_ttl_seconds=self.settings.stale_ttl_seconds,
+                now=now,
+            )
+        except CatalystRepositoryError as error:
+            return {
+                "status": "unavailable",
+                "as_of": (now or _utc_now()).isoformat().replace("+00:00", "Z"),
+                "hotspot_status": None,
+                "items": [],
+                "cycle": None,
+                "warnings": [error.code],
+            }
+
+    def hotspot_status(self, *, now: datetime | None = None) -> dict[str, Any]:
+        snapshot = self._market_focus_snapshot(now=now)
+        payload = dict(snapshot.get("hotspot_status") or {})
+        payload.update(
+            {
+                "status": snapshot["status"],
+                "as_of": snapshot["as_of"],
+                "last_sync_at": snapshot.get("last_sync_at"),
+                "action_enabled": self.settings.action_enabled,
+                "warnings": snapshot.get("warnings", []),
+            }
+        )
+        return payload
+
+    def hotspots(
+        self,
+        *,
+        limit: int,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        snapshot = self._market_focus_snapshot(now=now)
+        return {
+            "status": snapshot["status"],
+            "as_of": snapshot["as_of"],
+            "data_through": snapshot.get("data_through"),
+            "items": snapshot.get("items", [])[:limit],
+            "warnings": snapshot.get("warnings", []),
+        }
+
+    def latest_market_focus_cycle(
+        self, *, now: datetime | None = None
+    ) -> dict[str, Any]:
+        snapshot = self._market_focus_snapshot(now=now)
+        return {
+            "status": snapshot["status"],
+            "as_of": snapshot["as_of"],
+            "data_through": snapshot.get("data_through"),
+            "cycle": snapshot.get("cycle"),
+            "warnings": snapshot.get("warnings", []),
+        }
+
+    def request_market_focus_cycle(
+        self,
+        *,
+        expected_prepared_revision: int | None,
+        retry_cycle_id: str | None = None,
+    ) -> dict[str, Any]:
+        if not self.settings.action_enabled:
+            raise CatalystError(
+                "capability_disabled",
+                "Market focus analysis actions are not enabled",
+                retryable=False,
+                counts_for_circuit=False,
+            )
+        repository = self._repository(writer=True)
+        if retry_cycle_id is not None:
+            if expected_prepared_revision is not None:
+                raise CatalystError(
+                    "invalid_market_focus_request",
+                    "A retry cannot also request a new prepared revision",
+                    retryable=False,
+                    counts_for_circuit=False,
+                )
+            return repository.enqueue_market_focus_retry(retry_cycle_id)
+        if expected_prepared_revision is None:
+            raise CatalystError(
+                "invalid_market_focus_request",
+                "A prepared revision is required for a new market focus cycle",
+                retryable=False,
+                counts_for_circuit=False,
+            )
+        status = self.hotspot_status()
+        last_consumed_revision = int(status.get("last_consumed_revision") or 0)
+        existing = repository.market_focus_job_for_batch(
+            expected_prepared_revision,
+            last_consumed_revision,
+        )
+        if existing is not None:
+            return existing
+        if status.get("status") in {"disabled", "unavailable", "stale"}:
+            raise CatalystError(
+                "capability_degraded",
+                "Market focus snapshot is not current",
+                retryable=True,
+                counts_for_circuit=False,
+            )
+        if int(status.get("prepared_revision") or -1) != expected_prepared_revision:
+            raise CatalystError(
+                "prepared_revision_changed",
+                "The prepared hotspot revision changed before the request was queued",
+                retryable=False,
+                counts_for_circuit=False,
+            )
+        if not status.get("manual_enabled"):
+            code = str(status.get("capability") or "no_new_hot_events")
+            if code == "enabled":
+                code = "no_new_hot_events"
+            raise CatalystError(
+                code,
+                "Market focus analysis is not available for this revision",
+                retryable=False,
+                counts_for_circuit=False,
+            )
+        return repository.enqueue_market_focus_cycle(
+            expected_prepared_revision,
+            last_consumed_revision=last_consumed_revision,
+            model=str(status["model"]),
+            reasoning=str(status["reasoning"]),
+        )
+
+    def market_focus_cycle(self, local_cycle_id: str) -> dict[str, Any] | None:
+        return self._repository().get_market_focus_cycle(local_cycle_id)
+
+    def cancel_market_focus_cycle(
+        self, local_cycle_id: str
+    ) -> dict[str, Any] | None:
+        if not self.settings.action_enabled:
+            raise CatalystError(
+                "capability_disabled",
+                "Market focus analysis actions are not enabled",
+                retryable=False,
+                counts_for_circuit=False,
+            )
+        return self._repository(writer=True).request_market_focus_cancel(
+            local_cycle_id
+        )

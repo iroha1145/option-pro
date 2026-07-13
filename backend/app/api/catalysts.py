@@ -6,7 +6,14 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from app.services.catalysts.config import CatalystSettings, get_catalyst_settings
 from app.services.catalysts.errors import CatalystError, InvalidCursorError
@@ -27,8 +34,9 @@ class BatchRequest(_RequestModel):
     as_of: Optional[AwareDatetime] = None
     window_hours: int = Field(default=72, ge=1, le=24 * 365)
     limit: int = Field(default=20, ge=1, le=100)
-    min_confidence: Optional[int] = Field(default=None, ge=0, le=100)
+    min_confidence: int = Field(default=0, ge=0, le=100)
     include_neutral: bool = False
+    include_unanalyzed: bool = True
 
     @field_validator("tickers")
     @classmethod
@@ -47,6 +55,22 @@ class BatchRequest(_RequestModel):
 
 class AnalysisRequest(_RequestModel):
     force: bool = False
+
+
+class MarketFocusCycleRequest(_RequestModel):
+    trigger: Literal["manual"] = "manual"
+    expected_prepared_revision: Optional[int] = Field(default=None, ge=0)
+    retry_cycle_id: Optional[str] = Field(
+        default=None, pattern=r"^mfc_[0-9a-f]{32}$"
+    )
+
+    @model_validator(mode="after")
+    def validate_creation_mode(self) -> "MarketFocusCycleRequest":
+        if (self.expected_prepared_revision is None) == (self.retry_cycle_id is None):
+            raise ValueError(
+                "exactly one of expected_prepared_revision or retry_cycle_id is required"
+            )
+        return self
 
 
 def _service(
@@ -70,6 +94,15 @@ def _raise_safe(error: CatalystError) -> None:
     status_code = {
         "invalid_cursor": 400,
         "news_not_found": 404,
+        "market_focus_cycle_not_found": 404,
+        "prepared_revision_changed": 409,
+        "no_new_hot_events": 409,
+        "market_focus_cycle_not_retryable": 409,
+        "market_focus_retry_snapshot_unavailable": 409,
+        "market_focus_retry_outcome_unknown": 409,
+        "invalid_market_focus_request": 422,
+        "daily_job_limit_reached": 429,
+        "daily_output_token_limit_reached": 429,
         "cache_unavailable": 503,
         "capability_disabled": 503,
     }.get(error.code, 503)
@@ -105,7 +138,8 @@ def catalyst_feed(
     source: Optional[str] = Query(default=None, max_length=500),
     classification: Optional[Literal["bullish", "bearish", "neutral"]] = Query(default=None),
     analysis_status: Optional[str] = Query(default=None, max_length=40),
-    min_confidence: Optional[int] = Query(default=None, ge=0, le=100),
+    min_confidence: int = Query(default=0, ge=0, le=100),
+    include_unanalyzed: bool = Query(default=True),
     min_abs_impact: Optional[int] = Query(default=None, ge=0, le=100),
     include_neutral: bool = Query(default=True),
     horizon: Optional[Literal["intraday", "days", "weeks", "uncertain"]] = Query(default=None),
@@ -133,6 +167,7 @@ def catalyst_feed(
             classification=classification,
             analysis_status=analysis_status,
             min_confidence=min_confidence,
+            include_unanalyzed=include_unanalyzed,
             min_abs_impact=min_abs_impact,
             include_neutral=include_neutral,
             horizon=horizon,
@@ -166,7 +201,8 @@ def ticker_catalysts(
     window_hours: int = Query(default=72, ge=1, le=24 * 365),
     limit: int = Query(default=20, ge=1, le=100),
     cursor: Optional[str] = Query(default=None, max_length=4096),
-    min_confidence: Optional[int] = Query(default=None, ge=0, le=100),
+    min_confidence: int = Query(default=0, ge=0, le=100),
+    include_unanalyzed: bool = Query(default=True),
     include_neutral: bool = Query(default=False),
     service: CatalystService = Depends(_service),
 ) -> dict:
@@ -178,6 +214,7 @@ def ticker_catalysts(
             limit=limit,
             cursor=cursor,
             min_confidence=min_confidence,
+            include_unanalyzed=include_unanalyzed,
             include_neutral=include_neutral,
         )
     except CatalystError as error:
@@ -196,6 +233,7 @@ def ticker_catalyst_batch(
             window_hours=request.window_hours,
             limit=request.limit,
             min_confidence=request.min_confidence,
+            include_unanalyzed=request.include_unanalyzed,
             include_neutral=request.include_neutral,
         )
     except CatalystError as error:
@@ -230,6 +268,82 @@ def catalyst_calendar(
         )
     except CatalystError as error:
         _raise_safe(error)
+
+
+@router.get("/hotspots/status")
+def catalyst_hotspot_status(
+    service: CatalystService = Depends(_service),
+) -> dict:
+    return service.hotspot_status()
+
+
+@router.get("/hotspots")
+def catalyst_hotspots(
+    limit: int = Query(default=20, ge=1, le=100),
+    service: CatalystService = Depends(_service),
+) -> dict:
+    return service.hotspots(limit=limit)
+
+
+@router.get("/market-focus-cycles/latest")
+def latest_market_focus_cycle(
+    service: CatalystService = Depends(_service),
+) -> dict:
+    return service.latest_market_focus_cycle()
+
+
+@router.post(
+    "/market-focus-cycles",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_expensive_action)],
+)
+def request_market_focus_cycle(
+    request: MarketFocusCycleRequest,
+    service: CatalystService = Depends(_service),
+) -> dict:
+    try:
+        return service.request_market_focus_cycle(
+            expected_prepared_revision=request.expected_prepared_revision,
+            retry_cycle_id=request.retry_cycle_id,
+        )
+    except CatalystError as error:
+        _raise_safe(error)
+
+
+@router.get("/market-focus-cycles/{cycle_id}")
+def market_focus_cycle(
+    cycle_id: Annotated[
+        str, Path(pattern=r"^mfc_[0-9a-f]{32}$")
+    ],
+    service: CatalystService = Depends(_service),
+) -> dict:
+    try:
+        cycle = service.market_focus_cycle(cycle_id)
+    except CatalystError as error:
+        _raise_safe(error)
+    if cycle is None:
+        raise HTTPException(status_code=404, detail="market focus cycle not found")
+    return cycle
+
+
+@router.post(
+    "/market-focus-cycles/{cycle_id}/cancel",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_expensive_action)],
+)
+def cancel_market_focus_cycle(
+    cycle_id: Annotated[
+        str, Path(pattern=r"^mfc_[0-9a-f]{32}$")
+    ],
+    service: CatalystService = Depends(_service),
+) -> dict:
+    try:
+        cycle = service.cancel_market_focus_cycle(cycle_id)
+    except CatalystError as error:
+        _raise_safe(error)
+    if cycle is None:
+        raise HTTPException(status_code=404, detail="market focus cycle not found")
+    return cycle
 
 
 @router.post(
