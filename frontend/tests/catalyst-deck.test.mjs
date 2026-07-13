@@ -230,6 +230,14 @@ test('Catalyst confidence uses the contract 0..100 scale and ticker projections 
     JSON.parse(JSON.stringify(desk.impactsOf({ ticker_impacts: own, analysis: { affected_stocks: all } }))),
     own,
   );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(desk.impactsOf({ trusted_stock_impacts: own, analysis: { affected_stocks: all } }))),
+    own,
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(desk.impactsOf({ analysis: { affected_stocks: all } }))),
+    [],
+  );
   assert.equal(desk.impactDirection({ impact_score: -30 }), 'bearish');
   assert.equal(desk.impactDirection({ impact_score: 0 }), 'neutral');
   assert.equal(desk.sentimentOf({ analysis: { overall_sentiment: 0 } }), 0);
@@ -260,6 +268,12 @@ test('Catalyst confidence uses the contract 0..100 scale and ticker projections 
   assert.match(catalysts, /新闻整体/);
   assert.match(catalysts, /规则中性 · 信息不足 · 未调用模型/);
   assert.match(catalysts, /目标配置/);
+  assert.match(catalysts, /模型识别股票[\s\S]*验证后才计入影响榜/);
+  assert.match(catalysts, /代码有歧义/);
+  assert.match(catalysts, /尚未验证/);
+  assert.match(catalysts, /const duplicates = new Set\(\)/);
+  assert.match(catalysts, /duplicates\.add\(ticker\)/);
+  assert.match(catalysts, /validation_status: "unverified"/);
 });
 
 test('pagination discards an old-filter page after a new applied request starts', () => {

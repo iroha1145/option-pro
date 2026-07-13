@@ -102,8 +102,30 @@
   }
   function impactsOf(item) {
     if (item && Array.isArray(item.ticker_impacts)) return item.ticker_impacts;
+    return list(item || {}, ["trusted_stock_impacts"]);
+  }
+  function rawImpactsOf(item) {
     const analysis = analysisOf(item);
-    return list(analysis || item || {}, ["affected_stocks", "stock_impacts", "impacts"]);
+    return list(analysis || {}, ["affected_stocks"]);
+  }
+  function validationMapOf(item) {
+    const analysis = analysisOf(item);
+    const map = new Map();
+    const duplicates = new Set();
+    for (const row of list(analysis || {}, ["stock_validations"])) {
+      const ticker = upperTicker(row && row.ticker);
+      if (!ticker) continue;
+      if (map.has(ticker)) duplicates.add(ticker);
+      else map.set(ticker, row);
+    }
+    // Old cached payloads may predate backend duplicate validation.  A
+    // contradictory pair must fail closed instead of inheriting whichever
+    // record happened to appear first.
+    for (const ticker of duplicates) map.set(ticker, { validation_status: "unverified" });
+    return map;
+  }
+  function validationLabel(status) {
+    return ({ canonical: "正式代码", valid_external: "外部代码有效", ambiguous: "代码有歧义", invalid: "无效代码", unverified: "尚未验证" })[className(status)] || "尚未验证";
   }
   function impactValue(item) {
     if (!item || typeof item !== "object") return null;
@@ -932,7 +954,8 @@
         </div>
       </div>`;
     }
-    const impacts = impactsOf(displayItem);
+    const impacts = rawImpactsOf(displayItem);
+    const validations = validationMapOf(displayItem);
     const retryableTerminal = !!(statusPayload && statusPayload.job_id && (status === "failed" || status === "cancelled"));
     const jobNotice = isActive
       ? `<div class="cat-analysis-state" style="margin-bottom:14px"><span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span><p>${statusPayload && (statusPayload.submitted_at || statusPayload.created_at) ? "提交 " + N.fmtDateTime(statusPayload.submitted_at || statusPayload.created_at) : "新的分析版本正在后台处理"} · ${esc(model)} · ${esc(reasoning)} · 现有已完成版本继续显示 · 不显示估算进度</p>${canTrigger ? `<div class="cat-analysis-actions"><button class="btn btn--sm" id="cat-analysis-cancel" type="button" data-cat-cancel-job>取消新任务</button></div>` : ""}</div>`
@@ -952,7 +975,7 @@
       ${analysis.causal_summary ? `<section><h4>因果摘要</h4><p>${esc(analysis.causal_summary)}</p></section>` : ""}
       ${list(analysis, ["key_factors"]).length ? `<section><h4>关键因素</h4><ul>${list(analysis, ["key_factors"]).map(factor => `<li>${esc(factor)}</li>`).join("")}</ul></section>` : ""}
       ${list(analysis, ["uncertainty_notes"]).length ? `<section><h4>不确定性</h4><ul>${list(analysis, ["uncertainty_notes"]).map(note => `<li>${esc(note)}</li>`).join("")}</ul></section>` : ""}
-      ${!ruleOnly && impacts.length ? `<section><h4>股票影响 · 模型影响分不是预期收益</h4><div class="cat-impact-list">${impacts.map(impact => `<div><b class="mono">${esc(upperTicker(impact.ticker || impact.symbol) || "—")}</b><span class="mono ${(impactValue(impact) || 0) > 0 ? "u" : (impactValue(impact) || 0) < 0 ? "d" : "dim"}">${signedScore(impactValue(impact))}</span><span>${esc(horizonLabel(impact.horizon || impact.impact_horizon || ""))}</span><span>${esc(mechanismLabel(impact.mechanism || impact.impact_mechanism || ""))}</span>${impactReasonHtml(impact.reason || impact.rationale)}</div>`).join("")}</div></section>` : ""}
+      ${!ruleOnly && impacts.length ? `<section><h4>模型识别股票 · 模型影响分不是预期收益 · 验证后才计入影响榜</h4><div class="cat-impact-list">${impacts.map(impact => { const ticker = upperTicker(impact.ticker || impact.symbol); const validation = validations.get(ticker) || {}; const trusted = ["canonical", "valid_external"].includes(className(validation.validation_status)); return `<div><b class="mono">${esc(ticker || "—")}</b><span class="mono ${(impactValue(impact) || 0) > 0 ? "u" : (impactValue(impact) || 0) < 0 ? "d" : "dim"}">${signedScore(impactValue(impact))}</span><span>${esc(horizonLabel(impact.horizon || impact.impact_horizon || ""))}</span><span>${esc(mechanismLabel(impact.mechanism || impact.impact_mechanism || ""))}</span><span class="chip ${trusted ? "chip--up" : "chip--mute"}">${esc(validationLabel(validation.validation_status))}</span>${impactReasonHtml(impact.reason || impact.rationale)}</div>`; }).join("")}</div></section>` : ""}
       <p class="mono cat-disclaimer">${esc(model)} · ${esc(reasoning)} · ${ruleOnly ? "确定性规则结果 · 未调用外部模型" : "结构化模型结果 · 不展示隐藏推理"} · 不构成投资建议。</p>
     </div>`;
   }
