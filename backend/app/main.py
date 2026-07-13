@@ -21,7 +21,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.api import ai, breakouts, catalysts, earnings, market, options, sectors, signals, stocks, strength
+from app.api import ai, breakouts, catalysts, earnings, integrations, market, options, sectors, signals, stocks, strength
 from app.services.request_security import (
     TRUSTED_PROXY_NETWORKS as _TRUSTED_PROXY_NETWORKS,
     TRUST_PROXY_HEADERS as _TRUST_PROXY_HEADERS,
@@ -145,6 +145,7 @@ _HTML_CSP = (
     "script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
     "img-src 'self' data:; connect-src 'self'; form-action 'self'"
 )
+_SERVICE_AUTH_PATHS = {"/api/integrations/macrolens/v1/focus-context"}
 
 
 def _scope_header(scope, name: bytes) -> str:
@@ -345,7 +346,8 @@ class _GatewayMiddleware:
             request_state = scope.setdefault("state", {})
             request_state["app_auth_configured"] = bool(_APP_AUTH_TOKEN)
             request_state["app_authenticated"] = False
-            if _APP_AUTH_TOKEN:
+            service_authenticated = method == "GET" and path in _SERVICE_AUTH_PATHS
+            if _APP_AUTH_TOKEN and not service_authenticated:
                 token = _scope_token(scope)
                 try:
                     valid = bool(token) and hmac.compare_digest(token, _APP_AUTH_TOKEN)
@@ -405,6 +407,7 @@ app.include_router(market.router)
 app.include_router(signals.router)
 app.include_router(ai.router)
 app.include_router(catalysts.router)
+app.include_router(integrations.router)
 app.include_router(strength.router)
 app.include_router(breakouts.router)
 

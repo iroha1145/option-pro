@@ -156,6 +156,27 @@ def test_sector_top_and_option_views_do_not_change_intrinsic_or_canonical_ranks(
     assert {period for _symbols, period in requested} == {"2y"}
     assert all(row["score_scope"] == "ranking" for row in full["rows"])
     assert all(row["selected_view_rank"] >= 1 for row in full["rows"])
+    def stable_focus(rows):
+        return [
+            {key: value for key, value in row.items() if key != "universe_as_of"}
+            for row in rows
+        ]
+
+    assert stable_focus(top_one["_focus_rows"]) == stable_focus(
+        sector["_focus_rows"]
+    ) == stable_focus(full["_focus_rows"])
+    assert {row["ticker"] for row in full["_focus_rows"]} == {"AAA", "BBB", "CCC"}
+    assert all(
+        not {
+            "intrinsic_score",
+            "ranking_score",
+            "market_fit_score",
+            "profile_fit_score",
+            "option_score",
+        }
+        & set(row)
+        for row in full["_focus_rows"]
+    )
 
 
 def test_market_and_profile_layers_are_separate_from_intrinsic(monkeypatch) -> None:
@@ -168,6 +189,28 @@ def test_market_and_profile_layers_are_separate_from_intrinsic(monkeypatch) -> N
         assert other["score_version"] == row["score_version"] == "strength-v2"
         assert row["final_score"] == row["ranking_score"]
         assert row["strength_score"] == row["ranking_score"]
+
+
+def test_focus_input_uses_one_canonical_rank_across_profiles_and_timeframes(
+    monkeypatch,
+) -> None:
+    _install_scan_fixtures(monkeypatch)
+    variants = [
+        _scan(profile="balanced", timeframe="all"),
+        _scan(profile="aggressive", timeframe="all"),
+        _scan(profile="conservative", timeframe="short"),
+        _scan(profile="balanced", timeframe="long"),
+    ]
+
+    def stable_focus(payload):
+        return [
+            {key: value for key, value in row.items() if key != "universe_as_of"}
+            for row in payload["_focus_rows"]
+        ]
+
+    expected = stable_focus(variants[0])
+    assert expected
+    assert all(stable_focus(payload) == expected for payload in variants[1:])
 
 
 def test_shadow_range_weight_configuration_cannot_change_production_intrinsic() -> None:
@@ -271,3 +314,32 @@ def test_view_variants_share_the_same_two_year_history_download(monkeypatch) -> 
     assert all(history is panel for _top, history in scan_calls)
     assert len(requested) == 1
     assert requested[0][1] == "2y"
+
+
+def test_public_strength_response_strips_private_focus_input(monkeypatch) -> None:
+    async def fake_get_or_set(_key, _ttl, producer):
+        return await producer(), False, datetime.now(timezone.utc).timestamp() + 60
+
+    def fake_scan_sync(**_kwargs):
+        return {
+            "as_of": "2026-07-13T12:00:00+00:00",
+            "rows": [{"ticker": "AAA"}],
+            "results": [{"ticker": "AAA"}],
+            "_focus_rows": [{"ticker": "AAA", "universe_member": True}],
+        }
+
+    monkeypatch.setattr(scanner.cache, "get_or_set_with_meta", fake_get_or_set)
+    monkeypatch.setattr(
+        scanner,
+        "_theme_universe",
+        lambda sector_id=None: (
+            ["AAA"],
+            {"AAA": {"sector_id": "software", "sector_name": "软件"}},
+        ),
+    )
+    monkeypatch.setattr(scanner, "_download_history", lambda *_args, **_kwargs: _panel())
+    monkeypatch.setattr(scanner, "_scan_sync", fake_scan_sync)
+
+    result = asyncio.run(scanner.scan_strength(top=1, include_options=False))
+
+    assert "_focus_rows" not in result

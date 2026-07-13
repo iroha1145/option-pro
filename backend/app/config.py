@@ -6,7 +6,7 @@ from typing import Literal
 from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
-from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
+from pydantic import AliasChoices, AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,10 +50,13 @@ class Settings(BaseSettings):
     )
     openai_max_retries: int = Field(default=0, ge=0, le=0, alias="OPENAI_MAX_RETRIES")
     openai_max_output_tokens: int = Field(
-        default=16384,
+        default=32768,
         ge=256,
-        le=32768,
-        alias="OPENAI_MAX_OUTPUT_TOKENS",
+        le=128000,
+        validation_alias=AliasChoices(
+            "OPTION_PRO_AI_MAX_OUTPUT_TOKENS",
+            "OPENAI_MAX_OUTPUT_TOKENS",
+        ),
     )
     openai_max_concurrency: int = Field(
         default=2,

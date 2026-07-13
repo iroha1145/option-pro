@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import hashlib
+import logging
 import math
 from bisect import bisect_left, bisect_right
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
@@ -65,6 +66,9 @@ _NEW_YORK = ZoneInfo("America/New_York")
 _FALLBACK_MAX_WORKERS = 8
 _FALLBACK_TOTAL_BUDGET_SECONDS = 20.0
 _FALLBACK_FAILURE_LIMIT = 8
+_LOGGER = logging.getLogger(__name__)
+_FOCUS_PUBLISH_WARNING_INTERVAL_SECONDS = 300.0
+_focus_publish_warning_deadline = 0.0
 
 PROFILE_TILT = {
     "conservative": {"trend": 1.12, "risk": 1.22, "volume": .88, "breakout": .90},
@@ -1522,6 +1526,36 @@ def _scan_sync(
             "legacy_score_delta": score_delta,
         }
 
+    # Freeze a complete, view-independent input for the Catalyst focus sidecar.
+    # The shared strength_top set uses the canonical intrinsic rank, never the
+    # requesting user's profile or timeframe. Only minimum market-reaction
+    # fields are copied; formal scores and factor contributions never enter the
+    # focus snapshot or its contract.
+    focus_ranked = sorted(
+        intrinsic_rows,
+        key=lambda item: (
+            item.get("intrinsic_score") is not None,
+            _safe_float(item.get("intrinsic_score"), 4) or 0.0,
+            item.get("ticker") or "",
+        ),
+        reverse=True,
+    )
+    focus_rows = [
+        {
+            "ticker": item.get("ticker"),
+            "sector_id": item.get("sector_id"),
+            "primary_sector_id": item.get("primary_sector_id"),
+            "session_change_pct": item.get("change_pct"),
+            "avg_dollar_volume_20d": item.get("avg_dollar_volume_20d"),
+            "data_quality": item.get("data_quality"),
+            "universe_member": True,
+            "universe_version": universe_version,
+            "universe_as_of": universe_as_of,
+        }
+        for item in focus_ranked
+        if item.get("ticker")
+    ]
+
     view_rows: list[dict[str, Any]] = []
     for item in scored:
         if sector_id and sector_id not in set(item.get("theme_ids") or []):
@@ -1595,6 +1629,9 @@ def _scan_sync(
         "skipped": skipped,
         "results": limited,
         "rows": limited,
+        # Private cache field consumed and removed by ``scan_strength`` before
+        # returning the public API response.
+        "_focus_rows": focus_rows,
         "sectors": _sector_strength(scored),
         "data_sources": {
             "prices": {
@@ -1712,8 +1749,30 @@ async def scan_strength(
         STRENGTH_CACHE_TTL_SECONDS,
         produce,
     )
+    try:
+        from app.services.catalysts.focus_publisher import (
+            publish_focus_from_strength_payload,
+        )
+
+        await asyncio.to_thread(publish_focus_from_strength_payload, payload)
+    except Exception as error:
+        # Focus context is a display-only sidecar. A local cache/schema issue
+        # must never change the existing strength response or its scores.
+        global _focus_publish_warning_deadline
+        observed = monotonic()
+        if observed >= _focus_publish_warning_deadline:
+            _focus_publish_warning_deadline = (
+                observed + _FOCUS_PUBLISH_WARNING_INTERVAL_SECONDS
+            )
+            _LOGGER.warning(
+                "focus_context_publish_failed error_type=%s",
+                type(error).__name__,
+            )
+    public_payload = {
+        key: value for key, value in payload.items() if key != "_focus_rows"
+    }
     return {
-        **payload,
+        **public_payload,
         "_cached": was_cached,
         "cache_ttl_seconds": STRENGTH_CACHE_TTL_SECONDS,
         "cache_expires_at": datetime.fromtimestamp(expires_at, timezone.utc).isoformat(),

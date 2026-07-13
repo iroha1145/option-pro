@@ -10,13 +10,13 @@ OPENAI_SYNC_TIMEOUT_SECONDS=900
 OPENAI_BACKGROUND_POLL_TIMEOUT_SECONDS=1800  
 OPENAI_BACKGROUND_INITIAL_POLL_SECONDS=2  
 OPENAI_BACKGROUND_MAX_POLL_SECONDS=15  
-OPENAI_MAX_OUTPUT_TOKENS=16384  
+OPTION_PRO_AI_MAX_OUTPUT_TOKENS=32768
 OPENAI_MAX_CONCURRENCY=2  
 OPENAI_MAX_RETRIES=0
 
 自定义 OPENAI_BASE_URL 默认拒绝；只有显式启用 OPENAI_ALLOW_CUSTOM_BASE_URL 且使用 HTTPS 时才允许。回环地址的 HTTP 还需单独启用 OPENAI_ALLOW_LOCAL_HTTP，避免把密钥误发到未授权端点。
 
-Option Pro 使用相同模型、推理、执行模式、输出上限和并发设置。reasoning 只接受 none、low、medium、high、xhigh、max；非法值直接报错，不静默修改。
+Option Pro 的任务输出上限由 `OPTION_PRO_AI_MAX_OUTPUT_TOKENS` 单独控制，默认 32768，允许范围为 256—128000。旧变量 `OPENAI_MAX_OUTPUT_TOKENS` 只保留升级兼容；两个变量同时存在时，专用变量优先。reasoning 只接受 none、low、medium、high、xhigh、max；非法值直接报错，不静默修改。
 
 Terra 队列的提供方和模型只从进程环境读取。网页设置接口会显示该值，但拒绝把 `default_llm_provider` 或 `default_llm_model` 写入数据库；启动迁移会删除旧数据库覆盖。Web 与 Worker 容器必须传入相同的 `DEFAULT_LLM_PROVIDER`、`DEFAULT_LLM_MODEL`、`OPENAI_REASONING` 和执行参数，避免新闻、日历与健康状态分裂。非 OpenAI 提供方不会进入 OpenAI 队列，第三方通用密钥也不会交给 OpenAI 客户端。
 

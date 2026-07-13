@@ -62,6 +62,19 @@ is_truthy() {
     esac
 }
 
+file_sha256() {
+    python3 - "$1" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.is_file():
+    raise SystemExit(1)
+print(hashlib.sha256(path.read_bytes()).hexdigest())
+PY
+}
+
 is_loopback_bind() {
     case "$1" in
         localhost|127.*|::1|'[::1]') return 0 ;;
@@ -187,7 +200,12 @@ if is_truthy "$deploy_require_catalyst"; then
         echo "DEPLOY_REQUIRE_CATALYST=true requires APP_AUTH_TOKEN for analysis actions." >&2
         exit 1
     fi
-    if [ "$macrolens_schema_sha256" != "42ea8debed54d79ad40de928ee0ce242c4428160886ff64cb626e3630956ca90" ]; then
+    contract_path="${ROOT_DIR}/contracts/macrolens-option-pro-v1.json"
+    if ! reviewed_contract_sha256="$(file_sha256 "$contract_path")"; then
+        echo "The reviewed MacroLens integration contract is missing or unreadable." >&2
+        exit 1
+    fi
+    if [ "$macrolens_schema_sha256" != "$reviewed_contract_sha256" ]; then
         echo "MACROLENS_SCHEMA_SHA256 does not match the reviewed integration contract." >&2
         exit 1
     fi
