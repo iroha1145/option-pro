@@ -541,11 +541,11 @@
           <div class="cand__body">
             <div>
               <h4 style="color:var(--up)">入选依据</h4>
-              <ul>${(c.reasons && c.reasons.length ? c.reasons : ["接口未返回入选说明"]).map(r => `<li><span style="color:var(--up)">＋</span>${esc(r)}</li>`).join("")}</ul>
+              <ul>${(c.reasons && c.reasons.length ? c.reasons : ["本轮扫描未给出入选说明"]).map(r => `<li><span style="color:var(--up)">＋</span>${esc(r)}</li>`).join("")}</ul>
             </div>
             <div>
               <h4 style="color:var(--down)">需要留意</h4>
-              <ul>${(c.warnings && c.warnings.length ? c.warnings : ["接口未返回风险提示"]).map(r => `<li><span style="color:var(--down)">－</span><span style="color:var(--muted)">${esc(r)}</span></li>`).join("")}</ul>
+              <ul>${(c.warnings && c.warnings.length ? c.warnings : ["本轮扫描未触发风险规则"]).map(r => `<li><span style="color:var(--down)">－</span><span style="color:var(--muted)">${esc(r)}</span></li>`).join("")}</ul>
             </div>
             <div>
               <h4 style="color:var(--faint)">周期维度</h4>
@@ -1189,10 +1189,10 @@
       <section class="sect">
         <div class="sect-head"><span class="sect-head__no">WHY</span><h2>入选依据与风险</h2><span class="sect-head__rule"></span></div>
         <ul style="margin:0 0 12px;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px">
-          ${(c.reasons && c.reasons.length ? c.reasons : ["接口未返回入选说明"]).map(r2 => `<li style="font-size:12.5px;color:var(--ink-soft);display:flex;gap:8px"><span style="color:var(--up)">＋</span>${esc(r2)}</li>`).join("")}
+          ${(c.reasons && c.reasons.length ? c.reasons : ["本轮扫描未给出入选说明"]).map(r2 => `<li style="font-size:12.5px;color:var(--ink-soft);display:flex;gap:8px"><span style="color:var(--up)">＋</span>${esc(r2)}</li>`).join("")}
         </ul>
         <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px">
-          ${(c.warnings && c.warnings.length ? c.warnings : ["接口未返回风险提示"]).map(r2 => `<li style="font-size:12.5px;color:var(--muted);display:flex;gap:8px"><span style="color:var(--down)">－</span>${esc(r2)}</li>`).join("")}
+          ${(c.warnings && c.warnings.length ? c.warnings : ["本轮扫描未触发风险规则"]).map(r2 => `<li style="font-size:12.5px;color:var(--muted);display:flex;gap:8px"><span style="color:var(--down)">－</span>${esc(r2)}</li>`).join("")}
         </ul>
       </section>
 
