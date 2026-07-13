@@ -71,7 +71,7 @@ Option Pro 使用 MACROLENS_READ_KEY_ID、MACROLENS_READ_SECRET、MACROLENS_ACTI
 6. 以 key_id + nonce 原子写入持久 nonce 表。
 7. 校验请求模型。
 
-时间超过 300 秒、nonce 在 600 秒内重复、正文摘要错误或签名错误返回 401；scope 或网段错误返回 403。认证失败使用独立限速桶。日志不得记录 Secret、完整签名、认证头或完整查询串。
+时间超过 300 秒、正文摘要错误或签名错误返回 401；nonce 在 600 秒内重复返回 409；scope 或网段错误返回 403。认证失败使用独立限速桶。日志不得记录 Secret、完整签名、认证头或完整查询串。
 
 ## 轮换
 
