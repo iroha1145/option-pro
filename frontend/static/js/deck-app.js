@@ -169,17 +169,23 @@
 
   /* ---------- 视图:自选 ---------- */
   let focusTicker = null, focusRange = "1d", focusAdj = "raw", watchGroup = null, watchFilter = "all";
-  async function renderWatchlist() {
+  let watchFetchedAt = 0;
+  // quiet=true 为后台静默拉取:跳过加载页、失败不打断当前内容、不重播入场动画
+  async function renderWatchlist(quiet) {
     const g0 = ++gen;
-    view.innerHTML = loadingView("正在读取自选行情…");
+    if (!quiet) view.innerHTML = loadingView("正在读取自选行情…");
     const [watch, earn, flow] = await Promise.all([
-      settle(N.watchlist()),
+      settle(N.watchlist(!!quiet)),
       settle(N.earnings().then(d => N.buildWeek(d.earnings || []))),
       settle(N.unusual()),
     ]);
     if (g0 !== gen) return;
-    if (!watch.ok) { view.innerHTML = errorView("自选行情读取失败", watch.e.message); bindRetry(renderWatchlist); return; }
+    if (!watch.ok) {
+      if (quiet) return; // 静默轮询失败:保留现有内容,等下一轮
+      view.innerHTML = errorView("自选行情读取失败", watch.e.message); bindRetry(renderWatchlist); return;
+    }
     St.watch = watch.v;
+    watchFetchedAt = Date.now();
     if (earn.ok) St.earnWeek = earn.v;
     if (flow.ok) St.unusual = flow.v;
 
@@ -275,7 +281,7 @@
             <span style="display:flex;align-items:center;gap:9px"><span class="chip chip--down"><i></i>承压</span><b class="mono" style="font-size:13px">${esc(lag.ticker)}</b><span style="font-size:11.5px;color:var(--muted)">${esc(lag.name)}</span></span>
             <b class="num d" style="font-size:13px">${pct(lag.chg)}</b>
           </button>
-          <div class="pulse-live"><i></i>快照 ${N.fmtTime(St.watch.asOf)} · 缓存 60 秒 · 延迟行情</div>
+          <div class="pulse-live"><i></i>快照 ${N.fmtTime(St.watch.asOf)} · 每 75 秒自动拉取 · 延迟行情</div>
         </section>
 
         <section class="panel panel--pad" data-reveal style="--reveal-i:3" aria-label="下一事件">
@@ -345,6 +351,7 @@
       </div>
     </section>`;
     postRender();
+    if (quiet) $$("[data-reveal]", view).forEach(el => el.classList.add("in")); // 静默更新:直接落定终态,不重播动画
     $$(".rangebtn[data-range]", view).forEach(b => b.addEventListener("click", async () => {
       focusRange = b.dataset.range;
       $$(".rangebtn[data-range]", view).forEach(x => { x.classList.toggle("active", x === b); x.setAttribute("aria-selected", x === b); });
@@ -2121,5 +2128,16 @@
   syncThemeColor(); tape(); clock();
   setInterval(clock, 1000);
   setInterval(tape, 60e3);
+
+  /* 自选页静默自动拉取:每 75 秒;标签页隐藏或不在自选路由时跳过 */
+  const onWatchRoute = () => (location.hash.slice(1) || "watchlist").split("/")[0] === "watchlist";
+  setInterval(() => {
+    if (document.visibilityState !== "visible" || !onWatchRoute()) return;
+    renderWatchlist(true);
+  }, 75e3);
+  document.addEventListener("visibilitychange", () => {
+    // 切回标签页时,若数据已旧于一分钟则立即补一轮,避免看到过期行情
+    if (document.visibilityState === "visible" && onWatchRoute() && St.watch && Date.now() - watchFetchedAt > 60e3) renderWatchlist(true);
+  });
   route();
 })();
