@@ -450,6 +450,7 @@ if required:
     assert enabled is True
     assert p["enabled"] is True
     assert p["healthy"] is True
+    assert p["status"] == "ok"
     assert p["contract"]["valid"] is True
 elif not enabled:
     assert p["status"] == "disabled"
