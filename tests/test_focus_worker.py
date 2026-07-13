@@ -40,6 +40,8 @@ SUMMER_NOW = datetime(2026, 7, 13, 14, 0, tzinfo=timezone.utc)
 def _settings(path: Path, **overrides) -> FocusContextSettings:
     values = {
         "MACROLENS_CACHE_DB_PATH": path,
+        # Keep unit tests isolated from CI/deployment environment overrides.
+        "FOCUS_PRODUCER_ENABLED": True,
         "FOCUS_PRODUCER_CANDIDATE_LIMIT": 40,
     }
     values.update(overrides)
