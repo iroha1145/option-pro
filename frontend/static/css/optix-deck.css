@@ -276,9 +276,45 @@ svg { display: block; }
 
 /* 数据状态徽标(状态诚实) */
 .data-state { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); letter-spacing: 0.04em; }
-.data-state i { width: 6px; height: 6px; border-radius: 50%; background: var(--up); }
-.data-state.is-warn i { background: var(--amber); }
-.data-state.is-down i { background: var(--down); }
+.data-state > i { width: 6px; height: 6px; border-radius: 50%; background: var(--up); }
+.data-state.is-warn > i { background: var(--amber); }
+.data-state.is-down > i { background: var(--down); }
+
+/* 数据源明细弹层:悬停 / 键盘聚焦 / 触屏点按状态牌时展开,如实列出失败标的 */
+.data-state.has-tip { position: relative; cursor: help; }
+.data-state.has-tip:hover, .data-state.has-tip:focus-visible { color: var(--ink); border-color: var(--line-strong); }
+.data-state.has-tip:focus-visible { outline: 1.5px solid var(--amber-line); outline-offset: 2px; }
+.data-tip {
+  position: absolute; top: calc(100% + 10px); right: -4px; z-index: 58;
+  display: flex; flex-direction: column; gap: 8px;
+  min-width: 232px; max-width: min(330px, 84vw); width: max-content;
+  padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 12px;
+  background: var(--surface-raise); box-shadow: var(--shadow-pop);
+  font-family: var(--font-ui); font-size: 12px; font-weight: 400;
+  letter-spacing: 0.01em; text-align: left; white-space: normal; color: var(--muted);
+  opacity: 0; visibility: hidden; transform: translateY(5px);
+  transition: opacity 0.18s var(--ease-out), transform 0.18s var(--ease-out), visibility 0s linear 0.18s;
+  pointer-events: none;
+}
+.data-state.has-tip:hover .data-tip,
+.data-state.has-tip:focus .data-tip,
+.data-state.has-tip:focus-within .data-tip { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+.data-tip::before {
+  content: ""; position: absolute; top: -5px; right: 20px; width: 9px; height: 9px;
+  background: var(--surface-raise); border-left: 1px solid var(--line-strong); border-top: 1px solid var(--line-strong);
+  transform: rotate(45deg);
+}
+.data-tip b { font-size: 12px; font-weight: 600; letter-spacing: 0.02em; }
+.data-tip__ok { color: var(--up); }
+.data-tip__bad { color: var(--down); }
+.data-tip small { font-size: 11px; line-height: 1.6; color: var(--muted); }
+.data-tip small.data-tip__warn { color: var(--amber); }
+.data-tip__codes { display: flex; flex-wrap: wrap; gap: 5px; max-height: 128px; overflow-y: auto; }
+.data-tip__codes i {
+  font-style: normal; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.03em;
+  padding: 3px 7px; border: 1px solid var(--down-line); border-radius: 6px;
+  color: var(--down); background: var(--down-soft);
+}
 
 /* 区块标题 */
 .sect { margin-top: clamp(40px, 7vh, 68px); }
@@ -649,9 +685,12 @@ svg { display: block; }
     backdrop-filter: blur(18px);
     border-bottom: 1px solid var(--line);
     padding: 10px clamp(16px, 4vw, 24px) 16px;
-    transform: translateY(-110%); transition: transform var(--t-med) var(--ease-swift);
+    /* 位移必须越过 57px 的定位偏移,否则底边会留在视口顶部形成一条遮挡带 */
+    transform: translateY(calc(-100% - 64px));
+    visibility: hidden;
+    transition: transform var(--t-med) var(--ease-swift), visibility 0s var(--t-med);
   }
-  .deck-nav.open { transform: none; }
+  .deck-nav.open { transform: none; visibility: visible; transition: transform var(--t-med) var(--ease-swift), visibility 0s; }
   .deck-nav a { padding: 12px 6px; font-size: 16px; }
   .deck-nav a::after { display: none; }
   .deck-menu-toggle { display: flex; flex-direction: column; gap: 5px; padding: 10px 6px; }
