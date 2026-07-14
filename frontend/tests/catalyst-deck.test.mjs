@@ -242,6 +242,11 @@ test('Catalyst confidence uses the contract 0..100 scale and ticker projections 
   assert.equal(desk.impactDirection({ impact_score: 0 }), 'neutral');
   assert.equal(desk.sentimentOf({ analysis: { overall_sentiment: 0 } }), 0);
   assert.equal(desk.isRuleOnlyAnalysis({ analysis_status: 'insufficient_context', analysis: { insufficient_context: true, model: 'low-context-neutral-v2' } }), true);
+  assert.equal(desk.isRuleOnlyAnalysis({ analysis_status: 'insufficient_context', analysis: { insufficient_context: true, model: 'gpt-5.6-terra' } }), false);
+  assert.equal(desk.isRuleOnlyAnalysis(
+    { analysis_status: 'insufficient_context', analysis: { insufficient_context: true, model: 'low-context-neutral-v2' } },
+    { status: 'insufficient_context', model: 'gpt-5.6-terra' },
+  ), true);
   assert.equal(desk.isRuleOnlyAnalysis({ analysis_status: 'completed', analysis: { model: 'gpt-5.6-terra' } }), false);
   assert.equal(desk.analysisRetryForce({ analysis_status: 'completed' }, { status: 'failed' }), true);
   assert.equal(desk.analysisRetryForce({ analysis_status: 'failed' }, { status: 'cancelled' }), true);
@@ -272,6 +277,26 @@ test('Catalyst confidence uses the contract 0..100 scale and ticker projections 
   });
   assert.match(lowContextHtml, /信息不足 · 未调用模型/);
   assert.doesNotMatch(lowContextHtml, /新闻整体|股票影响|置信度/);
+  const paidInsufficientHtml = desk.compactNews({
+    news_id: 102,
+    source: 'Fixture Wire',
+    title: 'Paid model needs more context',
+    published_at: '2026-07-11T10:00:00Z',
+    analysis_status: 'insufficient_context',
+    ticker_impacts: [{ ticker: 'AMD', impact_score: 15, direction: 'bullish' }],
+    analysis: {
+      model: 'gpt-5.6-terra',
+      insufficient_context: true,
+      classification: 'bullish',
+      confidence: 25,
+      overall_sentiment: 15,
+      causal_summary: '模型完成分析，但认为上下文不足。',
+    },
+  });
+  assert.doesNotMatch(paidInsufficientHtml, /未调用模型/);
+  assert.match(paidInsufficientHtml, /股票影响 · 正向/);
+  assert.match(paidInsufficientHtml, /新闻整体 · 正向/);
+  assert.match(paidInsufficientHtml, /置信度 25% · 非胜率/);
   assert.match(catalysts, /finite\(analysis\.overall_sentiment\)/);
   assert.match(catalysts, /新闻整体/);
   assert.match(catalysts, /规则中性 · 信息不足 · 未调用模型/);

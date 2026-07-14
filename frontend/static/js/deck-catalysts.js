@@ -88,11 +88,12 @@
     const analysis = analysisOf(item);
     const status = className(job && job.status || analysisStatus(item));
     const model = String(
-      job && job.model || analysis && analysis.model || item && item.model || ""
+      analysis && analysis.model || job && job.model || item && item.model || ""
     ).toLowerCase();
+    if (model.startsWith("low-context-")) return true;
+    if (model) return false;
     return status === "insufficient_context"
-      || !!(analysis && analysis.insufficient_context)
-      || model.startsWith("low-context-");
+      || !!(analysis && analysis.insufficient_context);
   }
   function analysisRetryForce(item, job) {
     const status = Jobs.normalizeStatus(job && job.status || analysisStatus(item));
