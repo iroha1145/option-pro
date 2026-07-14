@@ -106,6 +106,149 @@ def test_incremental_worker_publishes_only_after_all_snapshot_pages(tmp_path) ->
     assert repository.get_news(102, as_of=utc(10, 8))["analysis"] is None
 
 
+def test_incremental_overlap_page_keeps_watermark_monotonic_until_final_as_of(
+    tmp_path,
+) -> None:
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    repository.initialize(now=utc(9))
+    initial = LatestClient(
+        [
+            page(
+                token="snapshot-old",
+                items=[catalyst_item(sequence=1, updated_at=utc(10, 8), analysis=False)],
+                cursor=None,
+                has_more=False,
+            )
+        ]
+    )
+    first = CatalystSyncService(
+        settings(repository.path),
+        repository,
+        initial,  # type: ignore[arg-type]
+        worker_id="worker-old",
+        clock=lambda: utc(10, 8),
+    )
+    assert first.acquire()
+    assert asyncio.run(first.sync_latest())
+    first.release()
+
+    overlap_watermark = utc(10, 8) - timedelta(seconds=43)
+    client = LatestClient(
+        [
+            page(
+                token="snapshot-overlap",
+                items=[
+                    catalyst_item(
+                        sequence=2,
+                        updated_at=overlap_watermark,
+                        analysis=True,
+                        news_id=102,
+                    )
+                ],
+                cursor="cursor-final",
+                has_more=True,
+            ).model_copy(update={"next_updated_after": overlap_watermark}),
+            page(
+                token="snapshot-overlap",
+                items=[],
+                cursor=None,
+                has_more=False,
+            ).model_copy(update={"next_updated_after": utc(10, 9)}),
+        ]
+    )
+    second = CatalystSyncService(
+        settings(repository.path),
+        repository,
+        client,  # type: ignore[arg-type]
+        worker_id="worker-overlap",
+        clock=lambda: utc(10, 9),
+        rng=random.Random(1),
+    )
+    assert second.acquire()
+
+    assert asyncio.run(second.sync_latest())
+    state = repository.sync_state("feed")
+    assert state["updated_after"] == "2026-07-11T10:09:00Z"
+    assert state["watermark_sequence"] == 2
+    assert state["last_error_code"] is None
+    assert repository.get_news(102, as_of=utc(10, 9))["analysis"] is not None
+
+
+def test_incremental_final_page_regression_keeps_previous_snapshot(tmp_path) -> None:
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    repository.initialize(now=utc(9))
+    initial = LatestClient(
+        [
+            page(
+                token="snapshot-old",
+                items=[catalyst_item(sequence=1, updated_at=utc(10, 8), analysis=False)],
+                cursor=None,
+                has_more=False,
+            )
+        ]
+    )
+    first = CatalystSyncService(
+        settings(repository.path),
+        repository,
+        initial,  # type: ignore[arg-type]
+        worker_id="worker-old",
+        clock=lambda: utc(10, 8),
+    )
+    assert first.acquire()
+    assert asyncio.run(first.sync_latest())
+    first_state = repository.sync_state("feed")
+    first.release()
+
+    regressing = LatestClient(
+        [
+            page(
+                token="snapshot-regressing",
+                items=[
+                    catalyst_item(
+                        sequence=2,
+                        updated_at=utc(10, 9),
+                        analysis=True,
+                        news_id=102,
+                    )
+                ],
+                cursor="cursor-final",
+                has_more=True,
+            ).model_copy(update={"next_updated_after": utc(10, 9)}),
+            page(
+                token="snapshot-regressing",
+                items=[],
+                cursor=None,
+                has_more=False,
+            ).model_copy(
+                update={"next_updated_after": utc(10, 8) + timedelta(seconds=30)}
+            ),
+        ]
+    )
+    second = CatalystSyncService(
+        settings(repository.path),
+        repository,
+        regressing,  # type: ignore[arg-type]
+        worker_id="worker-regressing",
+        clock=lambda: utc(10, 9),
+        rng=random.Random(1),
+    )
+    assert second.acquire()
+
+    assert not asyncio.run(second.sync_latest())
+    state = repository.sync_state("feed")
+    assert state["last_error_code"] == "watermark_regression"
+    assert state["resync_required"] == 0
+    assert state["updated_after"] == first_state["updated_after"]
+    assert state["watermark_sequence"] == first_state["watermark_sequence"]
+    assert state["current_snapshot_id"] == first_state["current_snapshot_id"]
+    assert repository.get_news(102, as_of=utc(10, 9)) is None
+    with repository.open_read_connection() as connection:
+        staged = connection.execute(
+            "SELECT count(*) FROM catalyst_staging_items"
+        ).fetchone()[0]
+        assert staged == 0
+
+
 def test_failed_second_page_keeps_previous_watermark_and_snapshot(tmp_path) -> None:
     repository = CatalystRepository(tmp_path / "catalysts.db")
     repository.initialize(now=utc(9))
