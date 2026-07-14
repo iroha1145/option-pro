@@ -46,6 +46,29 @@ if [ "${1:-}" = "version" ]; then
     printf '2.24.0\\n'
     exit 0
 fi
+if [ "${1:-}" = "exec" ] && [[ " $* " == *" focus-context-producer "*" --healthcheck "* ]]; then
+    sequence_file=".fake-focus-health-sequence"
+    count_file=".fake-focus-health-count"
+    if [ -f "$sequence_file" ]; then
+        count=0
+        if [ -f "$count_file" ]; then
+            count="$(cat "$count_file")"
+        fi
+        count=$((count + 1))
+        printf '%s\\n' "$count" > "$count_file"
+        payload="$(sed -n "${count}p" "$sequence_file")"
+        if [ -z "$payload" ]; then
+            payload="$(tail -n 1 "$sequence_file")"
+        fi
+        if [ "${FAKE_FOCUS_HEALTH_HANG:-false}" = "true" ]; then
+            exec /bin/sleep 60
+        fi
+        printf '%s\\n' "$payload"
+    else
+        printf '{"healthy":true,"status":"disabled","enabled":false,"ready_dependency":false}\\n'
+    fi
+    exit 0
+fi
 if [ "${1:-}" = "exec" ] && [[ " $* " == *" breakout-worker "*" --healthcheck "* ]]; then
     enabled="$(awk -F= '$1 == "BREAKOUT_RADAR_ENABLED" {print $2}' .env | tail -n 1)"
     enabled="${enabled%\\\"}"; enabled="${enabled#\\\"}"
@@ -92,6 +115,60 @@ def _run_deploy(root: Path, environment: dict[str, str]) -> subprocess.Completed
         text=True,
         timeout=15,
     )
+
+
+def _required_focus_environment(grace_seconds: int = 30) -> str:
+    return (
+        (ROOT / ".env.example")
+        .read_text(encoding="utf-8")
+        .replace("FOCUS_PRODUCER_ENABLED=false", "FOCUS_PRODUCER_ENABLED=true")
+        .replace(
+            "FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS=120",
+            f"FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS={grace_seconds}",
+        )
+        .replace(
+            "DEPLOY_REQUIRE_FOCUS_PRODUCER=false",
+            "DEPLOY_REQUIRE_FOCUS_PRODUCER=true",
+        )
+    )
+
+
+def _focus_health_payload(*, state: str) -> str:
+    startup = state == "startup"
+    ready = state == "ready"
+    healthy = startup or ready
+    return json.dumps(
+        {
+            "healthy": healthy,
+            "status": "degraded" if startup else "ok" if ready else "unhealthy",
+            "enabled": True,
+            "ready_dependency": False,
+            "contract": {"valid": True},
+            "database": {
+                "heartbeat_fresh": healthy,
+                "lock_live": healthy,
+                "startup_in_progress": startup,
+                "latest_snapshot": {"revision": 1} if ready else None,
+                "snapshot_fresh": ready,
+            },
+        },
+        separators=(",", ":"),
+    )
+
+
+def _install_recording_sleep(root: Path, environment: dict[str, str]) -> Path:
+    bin_dir = Path(environment["PATH"].split(os.pathsep, 1)[0])
+    sleep_log = root / ".fake-sleep-log"
+    fake_sleep = bin_dir / "sleep"
+    fake_sleep.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -Eeuo pipefail\n"
+        "printf '%s\\n' \"$*\" >> \"${FAKE_SLEEP_LOG:?}\"\n",
+        encoding="utf-8",
+    )
+    fake_sleep.chmod(0o755)
+    environment["FAKE_SLEEP_LOG"] = str(sleep_log)
+    return sleep_log
 
 
 def test_default_and_quoted_safe_breakout_config_pass_deployment_gate(tmp_path: Path) -> None:
@@ -190,6 +267,90 @@ def test_required_breakout_gate_rejects_disabled_but_allows_interaction_off(
     (root / ".env").write_text(required_enabled, encoding="utf-8")
     accepted = _run_deploy(root, environment)
     assert accepted.returncode == 0, accepted.stderr
+
+
+def test_required_focus_gate_waits_for_first_fresh_snapshot(tmp_path: Path) -> None:
+    root, environment = _deployment_root(
+        tmp_path, _required_focus_environment(grace_seconds=30)
+    )
+    sleep_log = _install_recording_sleep(root, environment)
+    (root / ".fake-focus-health-sequence").write_text(
+        "\n".join(
+            [
+                _focus_health_payload(state="startup"),
+                _focus_health_payload(state="ready"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode == 0, result.stderr
+    health_count = (root / ".fake-focus-health-count").read_text(encoding="utf-8")
+    assert health_count.strip() == "2"
+    assert sleep_log.read_text(encoding="utf-8").splitlines() == ["2"]
+
+
+def test_required_focus_gate_times_out_at_the_configured_grace(tmp_path: Path) -> None:
+    root, environment = _deployment_root(
+        tmp_path, _required_focus_environment(grace_seconds=31)
+    )
+    sleep_log = _install_recording_sleep(root, environment)
+    (root / ".fake-focus-health-sequence").write_text(
+        _focus_health_payload(state="startup") + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "did not publish a fresh snapshot within 31s" in result.stderr
+    health_count = (root / ".fake-focus-health-count").read_text(encoding="utf-8")
+    assert health_count.strip() == "16"
+    assert sleep_log.read_text(encoding="utf-8").splitlines() == ["2"] * 15 + ["1"]
+
+
+def test_required_focus_gate_rejects_non_startup_state_without_waiting(
+    tmp_path: Path,
+) -> None:
+    root, environment = _deployment_root(
+        tmp_path, _required_focus_environment(grace_seconds=30)
+    )
+    sleep_log = _install_recording_sleep(root, environment)
+    (root / ".fake-focus-health-sequence").write_text(
+        _focus_health_payload(state="unhealthy") + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "reported a non-startup state" in result.stderr
+    health_count = (root / ".fake-focus-health-count").read_text(encoding="utf-8")
+    assert health_count.strip() == "1"
+    assert not sleep_log.exists()
+
+
+def test_required_focus_gate_times_out_a_hung_healthcheck(tmp_path: Path) -> None:
+    root, environment = _deployment_root(
+        tmp_path, _required_focus_environment(grace_seconds=30)
+    )
+    sleep_log = _install_recording_sleep(root, environment)
+    environment["FAKE_FOCUS_HEALTH_HANG"] = "true"
+    (root / ".fake-focus-health-sequence").write_text(
+        _focus_health_payload(state="startup") + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "healthcheck failed before the first fresh snapshot" in result.stderr
+    health_count = (root / ".fake-focus-health-count").read_text(encoding="utf-8")
+    assert health_count.strip() == "1"
+    assert not sleep_log.exists()
 
 
 @pytest.mark.parametrize(
