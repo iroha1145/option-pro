@@ -7,7 +7,6 @@ import sqlite3
 from datetime import timedelta
 
 import pytest
-from pydantic import ValidationError
 
 from app.services.catalysts.models import (
     AffectedStockImpact,
@@ -325,7 +324,9 @@ def test_trusted_ticker_projection_preserves_validation_lifecycle_by_item_revisi
         ).fetchone()[0] == 1
 
 
-def test_remote_analysis_rejects_duplicate_ticker_validations() -> None:
+def test_duplicate_ticker_validations_parse_but_fail_closed_in_projection(
+    tmp_path,
+) -> None:
     item = validated_item(sequence=10, minute=6, status="canonical")
     assert item.analysis is not None
     payload = item.analysis.model_dump(mode="json")
@@ -336,8 +337,33 @@ def test_remote_analysis_rejects_duplicate_ticker_validations() -> None:
         }
     )
 
-    with pytest.raises(ValidationError, match="duplicate ticker"):
-        RemoteAnalysis.model_validate(payload)
+    analysis = RemoteAnalysis.model_validate(payload)
+    assert len(analysis.stock_validations) == 2
+
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    repository.initialize(now=utc(9))
+    publish_custom_item(
+        repository,
+        item.model_copy(update={"analysis": analysis}),
+        now_minute=6,
+    )
+
+    detail = repository.get_news(101, as_of=utc(10, 7))
+    assert detail is not None
+    assert detail["analysis"]["affected_stocks"][0]["ticker"] == "XYZ"
+    assert len(detail["analysis"]["stock_validations"]) == 2
+    assert detail["trusted_stock_impacts"] == []
+    assert repository.ticker_feed("XYZ", as_of=utc(10, 7), window_hours=72)[
+        "items"
+    ] == []
+
+    with repository.open_read_connection() as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM catalyst_analysis_projections"
+        ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT count(*) FROM catalyst_stock_impact_projections"
+        ).fetchone()[0] == 0
 
 
 def test_same_item_projection_payload_conflict_keeps_published_snapshot(tmp_path) -> None:

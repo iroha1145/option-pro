@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 
 import pytest
@@ -596,6 +597,66 @@ def test_v6_cache_migrates_to_v7_trusted_projections_idempotently(tmp_path) -> N
             """
         ).fetchone()
         assert tuple(stats) == (2, 2, 1, 1, 0)
+
+
+def test_v6_duplicate_ticker_validations_migrate_as_untrusted(
+    tmp_path,
+) -> None:
+    path = tmp_path / "catalysts.db"
+    _seed_v6(path)
+    with sqlite3.connect(path) as connection:
+        raw_json = connection.execute(
+            """SELECT raw_json FROM catalyst_item_revisions
+               WHERE news_id=101 AND change_sequence=1"""
+        ).fetchone()[0]
+        payload = json.loads(raw_json)
+        validations = payload["analysis"]["stock_validations"]
+        validations.append(
+            {
+                **validations[0],
+                "validation_status": "unverified",
+            }
+        )
+        ticker = payload["analysis"]["affected_stocks"][0]["ticker"]
+        connection.execute(
+            """UPDATE catalyst_item_revisions SET raw_json=?
+               WHERE news_id=101 AND change_sequence=1""",
+            (repository_module._json(payload),),
+        )
+
+    repository = CatalystRepository(path)
+    repository.initialize(now=utc(11))
+
+    detail = repository.get_news(101, as_of=utc(11))
+    assert detail is not None
+    assert detail["analysis_status"] == "completed"
+    assert detail["analysis"]["affected_stocks"][0]["ticker"] == ticker
+    assert [
+        validation["validation_status"]
+        for validation in detail["analysis"]["stock_validations"]
+    ] == ["canonical", "unverified"]
+    assert detail["trusted_stock_impacts"] == []
+    feed = repository.list_feed(as_of=utc(11), window_hours=72)
+    assert any(item["news_id"] == 101 for item in feed["items"])
+    assert feed["stock_impacts"] == []
+
+    with repository.open_read_connection() as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM catalyst_analysis_projections"
+        ).fetchone()[0] == 2
+        assert connection.execute(
+            "SELECT count(*) FROM catalyst_stock_impact_projections"
+        ).fetchone()[0] == 0
+        stats = connection.execute(
+            """
+            SELECT scanned_item_revisions,analysis_projections,
+                   trusted_stock_impacts,missing_validations,
+                   untrusted_stock_impacts,malformed_item_revisions
+            FROM catalyst_projection_migration_stats
+            WHERE schema_version='catalyst-cache-v7'
+            """
+        ).fetchone()
+        assert tuple(stats) == (2, 2, 0, 1, 1, 0)
 
 
 def test_v7_reads_remain_available_when_v6_raw_items_are_malformed(tmp_path) -> None:

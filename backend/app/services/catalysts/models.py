@@ -181,16 +181,6 @@ class RemoteAnalysis(NewsImpactAnalysis):
         max_length=50,
     )
 
-    @field_validator("stock_validations")
-    @classmethod
-    def reject_duplicate_stock_validations(
-        cls, values: list[PublicTickerValidation]
-    ) -> list[PublicTickerValidation]:
-        tickers = [value.ticker for value in values]
-        if len(tickers) != len(set(tickers)):
-            raise ValueError("stock_validations contains a duplicate ticker")
-        return values
-
 
 class ContractEnvelope(StrictModel):
     schema_version: Literal[SCHEMA_VERSION] = SCHEMA_VERSION
