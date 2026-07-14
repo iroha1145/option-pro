@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -44,6 +45,16 @@ fi
 shift
 if [ "${1:-}" = "version" ]; then
     printf '2.24.0\\n'
+    exit 0
+fi
+if [ "${1:-}" = "build" ]; then
+    printf '%s\\n' "$*" >> .fake-build-log
+    touch .fake-backend-image-built
+    printf '%s\\n' 'build' >> .fake-deploy-order-log
+    exit 0
+fi
+if [ "${1:-}" = "up" ]; then
+    printf '%s\\n' 'up' >> .fake-deploy-order-log
     exit 0
 fi
 if [ "${1:-}" = "exec" ] && [[ " $* " == *" focus-context-producer "*" --healthcheck "* ]]; then
@@ -89,6 +100,63 @@ fi
 if [ "${1:-}" = "exec" ] && [[ " $* " == *" backend python -c "* ]] && [[ " $* " == *"deployment_access_probe"* ]]; then
     printf '%s\n' "$*" > .fake-deployment-access-probe-log
     exit "${FAKE_DEPLOYMENT_ACCESS_PROBE_EXIT:-0}"
+fi
+if { [ "${1:-}" = "exec" ] || [ "${1:-}" = "run" ]; } && \
+   { [[ " $* " == *" backend python - seed"* ]] || \
+     [[ " $* " == *" backend python - validate"* ]] || \
+     [[ " $* " == *" backend python - wait"* ]]; }; then
+    container_mode="$1"
+    shift
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            -T|--rm|--no-deps)
+                shift
+                ;;
+            -e)
+                export "$2"
+                shift 2
+                ;;
+            backend)
+                shift
+                break
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    if [ "${1:-}" != "python" ] || [ "${2:-}" != "-" ] || [ "$#" -lt 3 ]; then
+        exit 2
+    fi
+    shift 2
+    watchlist_action="${1:-}"
+    case "$watchlist_action" in
+        seed|validate|wait)
+            ;;
+        *)
+            exit 2
+            ;;
+    esac
+    if [ -n "${WATCHLIST_SNAPSHOT_ACTION:-}" ] && [ "$WATCHLIST_SNAPSHOT_ACTION" != "$watchlist_action" ]; then
+        exit 2
+    fi
+    if [ "$container_mode" = "exec" ] && [ "$watchlist_action" = "seed" ] && [ "${FAKE_WATCHLIST_EXEC_UNAVAILABLE:-false}" = "true" ]; then
+        printf '%s\n' "exec:${watchlist_action}:unavailable" >> .fake-watchlist-container-log
+        printf '%s\n' "exec:${watchlist_action}:unavailable" >> .fake-deploy-order-log
+        exit 1
+    fi
+    if [ "$container_mode" = "run" ] && [ ! -f .fake-backend-image-built ]; then
+        printf '%s\n' "run:${watchlist_action}:before-build" >> .fake-watchlist-container-log
+        printf '%s\n' "run:${watchlist_action}:before-build" >> .fake-deploy-order-log
+        exit 1
+    fi
+    if [ -n "${FAKE_WATCHLIST_SNAPSHOT_PATH:-}" ]; then
+        export WATCHLIST_SNAPSHOT_PATH="$FAKE_WATCHLIST_SNAPSHOT_PATH"
+    fi
+    printf '%s\n' "${container_mode}:${watchlist_action}" >> .fake-watchlist-container-log
+    printf '%s\n' "${container_mode}:${watchlist_action}" >> .fake-deploy-order-log
+    PYTHONPATH="${FAKE_CATALYST_PYTHONPATH:?}" python3 - "$@"
+    exit $?
 fi
 if [ "${1:-}" = "exec" ] && [[ " $* " == *" backend python -c "* ]] && [[ " $* " == *"deployment_status_ready"* ]]; then
     shift
@@ -140,6 +208,10 @@ def _deployment_root(tmp_path: Path, env_text: str) -> tuple[Path, dict[str, str
     scripts = root / "scripts"
     scripts.mkdir(parents=True)
     shutil.copy2(ROOT / "scripts" / "deploy.sh", scripts / "deploy.sh")
+    shutil.copy2(
+        ROOT / "scripts" / "watchlist_snapshot.py",
+        scripts / "watchlist_snapshot.py",
+    )
     contracts = root / "contracts"
     contracts.mkdir()
     shutil.copy2(
@@ -160,6 +232,7 @@ def _deployment_root(tmp_path: Path, env_text: str) -> tuple[Path, dict[str, str
 import io
 import os
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -248,10 +321,70 @@ def _next_status() -> str:
     return _active_payload(states[min(count - 1, len(states) - 1)])
 
 
+def _next_watchlist() -> str:
+    sequence_path = os.environ.get("FAKE_WATCHLIST_SEQUENCE", "")
+    states = ["fresh"]
+    if sequence_path:
+        states = [
+            line.strip()
+            for line in Path(sequence_path).read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        if not states:
+            raise RuntimeError("fake watchlist sequence is empty")
+    count_path = Path(
+        os.environ.get(
+            "FAKE_WATCHLIST_COUNT_FILE",
+            str(Path(sequence_path).with_suffix(".count"))
+            if sequence_path
+            else ".fake-watchlist-count",
+        )
+    )
+    count = int(count_path.read_text(encoding="utf-8")) if count_path.exists() else 0
+    count += 1
+    count_path.write_text(str(count), encoding="utf-8")
+    state = states[min(count - 1, len(states) - 1)]
+    if state == "error":
+        raise urllib.error.URLError("watchlist unavailable")
+    if state == "invalid":
+        return __import__("json").dumps(
+            {"groups": [], "attempted": 1, "succeeded": 0, "_stale": False}
+        )
+    if state not in {"fresh", "stale"}:
+        raise RuntimeError(f"unknown fake watchlist state: {state}")
+    return __import__("json").dumps(
+        {
+            "groups": [
+                {
+                    "id": "tech",
+                    "name": "科技",
+                    "stocks": [
+                        {
+                            "ticker": "AAPL",
+                            "name": "苹果",
+                            "price": 200.0,
+                            "change_percent": 1.0,
+                            "spark": [198.0, 200.0],
+                        }
+                    ],
+                }
+            ],
+            "attempted": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "_stale": state == "stale",
+            "as_of": datetime.now(timezone.utc).isoformat(),
+        },
+        separators=(",", ":"),
+    )
+
+
 def _urlopen(request, *args, **kwargs):
     url = getattr(request, "full_url", str(request))
     if url == "http://127.0.0.1:8000/api/catalysts/status":
         return io.StringIO(_next_status())
+    if url == "http://127.0.0.1:8000/api/stocks/watchlist":
+        return io.StringIO(_next_watchlist())
     return _real_urlopen(request, *args, **kwargs)
 
 
@@ -841,6 +974,270 @@ def test_required_catalyst_runtime_gate_requires_fresh_active_snapshot() -> None
     assert "CATALYST_DEPLOY_NOT_BEFORE_EPOCH" in script
     assert "deployment_status_ready" in script
     assert "required_after_epoch=required_after_epoch" in script
+
+
+def _warm_watchlist_environment(tmp_path: Path) -> tuple[str, Path]:
+    snapshot = tmp_path / "watchlist-snapshot-v1.json"
+    configured = (ROOT / ".env.example").read_text(encoding="utf-8").replace(
+        "DEPLOY_WARM_WATCHLIST=false",
+        "DEPLOY_WARM_WATCHLIST=true",
+        1,
+    )
+    return configured, snapshot
+
+
+def test_optional_watchlist_warmup_is_bounded_and_validates_real_quotes() -> None:
+    script = (ROOT / "scripts" / "deploy.sh").read_text(encoding="utf-8")
+    helper = (ROOT / "scripts" / "watchlist_snapshot.py").read_text(
+        encoding="utf-8"
+    )
+    example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    assert "DEPLOY_WARM_WATCHLIST=false" in example
+    assert "WATCHLIST_SNAPSHOT_PATH=/data/watchlist-snapshot-v1.json" in example
+    assert 'configuration_boolean DEPLOY_WARM_WATCHLIST false' in script
+    assert 'if is_truthy "$deploy_warm_watchlist"' in script
+    assert 'snapshot_script="${SCRIPT_DIR}/watchlist_snapshot.py"' in script
+    assert "backend python - seed" in script
+    assert "backend python - validate" in script
+    assert "backend python - wait --timeout 120" in script
+    assert "docker compose run --rm --no-deps -T" in script
+    assert "backend_image_built=false" in script
+    assert "build_backend_image()" in script
+    assert 'if [ "$backend_image_built" = "true" ]' in script
+    assert "inside the shared /data volume" in script
+    assert 'WATCHLIST_URL = "http://127.0.0.1:8000/api/stocks/watchlist"' in helper
+    assert "fetch_watchlist(timeout=120)" in helper
+    assert "succeeded <= 0" in helper
+    assert '"watchlist_seed_snapshot": True' in helper
+    assert "deadline = time.monotonic() + timeout_seconds" in helper
+    assert "attempts = max(1, timeout_seconds // 5 + 1)" in helper
+    assert "the bounded snapshot remains active" in helper
+
+
+def test_watchlist_warm_deploy_seeds_before_build_then_waits_for_fresh_data(
+    tmp_path: Path,
+) -> None:
+    configured, snapshot = _warm_watchlist_environment(tmp_path)
+    root, environment = _deployment_root(tmp_path, configured)
+    sequence = tmp_path / "watchlist-sequence"
+    sequence.write_text("fresh\nstale\nfresh\n", encoding="utf-8")
+    count = tmp_path / "watchlist-count"
+    environment["FAKE_WATCHLIST_SEQUENCE"] = str(sequence)
+    environment["FAKE_WATCHLIST_COUNT_FILE"] = str(count)
+    environment["FAKE_WATCHLIST_SNAPSHOT_PATH"] = str(snapshot)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode == 0, result.stderr
+    assert snapshot.is_file()
+    saved = json.loads(snapshot.read_text(encoding="utf-8"))
+    assert saved["version"] == 1
+    assert saved["payload"]["succeeded"] == 1
+    assert count.read_text(encoding="utf-8") == "3"
+    assert '"watchlist_warm":true' in result.stdout
+    assert (root / ".fake-build-log").read_text(encoding="utf-8").splitlines() == [
+        "build --pull backend"
+    ]
+    assert (root / ".fake-deploy-order-log").read_text(
+        encoding="utf-8"
+    ).splitlines() == [
+        "exec:seed",
+        "build",
+        "up",
+        "exec:wait",
+    ]
+
+
+def test_watchlist_warm_deploy_uses_shared_snapshot_when_old_backend_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    configured, snapshot = _warm_watchlist_environment(tmp_path)
+    root, environment = _deployment_root(tmp_path, configured)
+    snapshot.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "saved_at": time.time(),
+                "payload": {
+                    "groups": [
+                        {
+                            "id": "tech",
+                            "name": "科技",
+                            "stocks": [
+                                {
+                                    "ticker": "AAPL",
+                                    "name": "苹果",
+                                    "price": 200.0,
+                                    "change_percent": 1.0,
+                                    "spark": [198.0, 200.0],
+                                }
+                            ],
+                        }
+                    ],
+                    "attempted": 1,
+                    "succeeded": 1,
+                    "failed": 0,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    sequence = tmp_path / "watchlist-sequence"
+    sequence.write_text("fresh\n", encoding="utf-8")
+    count = tmp_path / "watchlist-count"
+    environment["FAKE_WATCHLIST_SEQUENCE"] = str(sequence)
+    environment["FAKE_WATCHLIST_COUNT_FILE"] = str(count)
+    environment["FAKE_WATCHLIST_SNAPSHOT_PATH"] = str(snapshot)
+    environment["FAKE_WATCHLIST_EXEC_UNAVAILABLE"] = "true"
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode == 0, result.stderr
+    assert snapshot.is_file()
+    assert count.read_text(encoding="utf-8") == "1"
+    assert (root / ".fake-build-log").read_text(encoding="utf-8").splitlines() == [
+        "build --pull backend"
+    ]
+    assert (root / ".fake-watchlist-container-log").read_text(
+        encoding="utf-8"
+    ).splitlines() == [
+        "exec:seed:unavailable",
+        "run:validate",
+        "exec:wait",
+    ]
+    assert (root / ".fake-deploy-order-log").read_text(
+        encoding="utf-8"
+    ).splitlines() == [
+        "exec:seed:unavailable",
+        "build",
+        "run:validate",
+        "up",
+        "exec:wait",
+    ]
+    assert '"source": "existing"' in result.stdout
+    assert '"watchlist_warm":true' in result.stdout
+
+
+def test_watchlist_warm_deploy_stops_before_traffic_switch_without_a_safe_snapshot(
+    tmp_path: Path,
+) -> None:
+    configured, snapshot = _warm_watchlist_environment(tmp_path)
+    root, environment = _deployment_root(tmp_path, configured)
+    sequence = tmp_path / "watchlist-sequence"
+    sequence.write_text("error\n", encoding="utf-8")
+    environment["FAKE_WATCHLIST_SEQUENCE"] = str(sequence)
+    environment["FAKE_WATCHLIST_SNAPSHOT_PATH"] = str(snapshot)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert not snapshot.exists()
+    assert "traffic has not switched" in result.stderr
+    assert (root / ".fake-build-log").read_text(encoding="utf-8").splitlines() == [
+        "build --pull backend"
+    ]
+    assert (root / ".fake-deploy-order-log").read_text(
+        encoding="utf-8"
+    ).splitlines() == [
+        "exec:seed",
+        "build",
+        "run:validate",
+    ]
+
+
+def test_watchlist_warm_deploy_requires_a_shared_volume_snapshot_path(
+    tmp_path: Path,
+) -> None:
+    configured, _snapshot = _warm_watchlist_environment(tmp_path)
+    configured = configured.replace(
+        "WATCHLIST_SNAPSHOT_PATH=/data/watchlist-snapshot-v1.json",
+        "WATCHLIST_SNAPSHOT_PATH=/tmp/watchlist-snapshot-v1.json",
+        1,
+    )
+    root, environment = _deployment_root(tmp_path, configured)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "inside the shared /data volume" in result.stderr
+    assert not (root / ".fake-build-log").exists()
+
+
+def test_watchlist_warm_deploy_rejects_boolean_snapshot_before_traffic_switch(
+    tmp_path: Path,
+) -> None:
+    configured, snapshot = _warm_watchlist_environment(tmp_path)
+    root, environment = _deployment_root(tmp_path, configured)
+    snapshot.write_text(
+        json.dumps(
+            {
+                "version": True,
+                "saved_at": time.time(),
+                "payload": {
+                    "groups": [
+                        {
+                            "id": "tech",
+                            "name": "科技",
+                            "stocks": [
+                                {
+                                    "ticker": "AAPL",
+                                    "name": "苹果",
+                                    "price": 200.0,
+                                    "change_percent": 1.0,
+                                    "spark": [198.0, 200.0],
+                                }
+                            ],
+                        }
+                    ],
+                    "attempted": 1,
+                    "succeeded": 1,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    sequence = tmp_path / "watchlist-sequence"
+    sequence.write_text("error\n", encoding="utf-8")
+    environment["FAKE_WATCHLIST_SEQUENCE"] = str(sequence)
+    environment["FAKE_WATCHLIST_SNAPSHOT_PATH"] = str(snapshot)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "traffic has not switched" in result.stderr
+    assert (root / ".fake-build-log").read_text(encoding="utf-8").splitlines() == [
+        "build --pull backend"
+    ]
+    assert (root / ".fake-deploy-order-log").read_text(
+        encoding="utf-8"
+    ).splitlines() == [
+        "exec:seed",
+        "build",
+        "run:validate",
+    ]
+
+
+def test_watchlist_post_switch_refresh_failure_keeps_the_seeded_snapshot(
+    tmp_path: Path,
+) -> None:
+    configured, snapshot = _warm_watchlist_environment(tmp_path)
+    root, environment = _deployment_root(tmp_path, configured)
+    sequence = tmp_path / "watchlist-sequence"
+    sequence.write_text("fresh\nerror\n", encoding="utf-8")
+    count = tmp_path / "watchlist-count"
+    environment["FAKE_WATCHLIST_SEQUENCE"] = str(sequence)
+    environment["FAKE_WATCHLIST_COUNT_FILE"] = str(count)
+    environment["FAKE_WATCHLIST_SNAPSHOT_PATH"] = str(snapshot)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode == 0, result.stderr
+    assert snapshot.is_file()
+    assert count.read_text(encoding="utf-8") == "26"
+    assert "bounded snapshot remains active" in result.stderr
+    assert (root / ".fake-build-log").read_text(encoding="utf-8").splitlines() == [
+        "build --pull backend"
+    ]
 
 
 def test_catalyst_runtime_gate_waits_for_current_health_and_feed(

@@ -140,6 +140,7 @@
       <p>${esc(note)}</p>
       <small>原版后端无此接口 · 留空不伪造</small>
     </div>`;
+  const inlinePending = (label, detail) => `<div class="empty-note is-pending" role="status" style="padding:20px"><p>${esc(label)}</p><small>${esc(detail || "数据正在后台补齐")}</small></div>`;
   const inlineErr = (label, detail) => `<div class="empty-note" style="padding:20px"><p>${esc(label)}</p><small>${esc(detail || "接口暂不可用")}</small></div>`;
   const bindRetry = fn => { const b = $("[data-retry]", view); if (b) b.addEventListener("click", fn); };
   const settle = p => p.then(v => ({ ok: true, v }), e => ({ ok: false, e }));
@@ -170,43 +171,253 @@
 
   /* ---------- 视图:自选 ---------- */
   let focusTicker = null, focusRange = "1d", focusAdj = "raw", watchGroup = null, watchFilter = "all";
-  let watchFetchedAt = 0;
-  // quiet=true 为后台静默拉取:跳过加载页、失败不打断当前内容、不重播入场动画
-  async function renderWatchlist(quiet) {
-    const g0 = ++gen;
-    if (!quiet) view.innerHTML = loadingView("正在读取自选行情…");
-    const [watch, earn, flow] = await Promise.all([
-      settle(N.watchlist(!!quiet)),
+  let watchFetchedAt = 0, watchContextFetchedAt = 0, watchRenderedRevision = 0;
+  let watchStateRevision = 0, watchInteractionPending = 0, watchRenderPending = 0;
+  let watchDeferredRender = false, watchDeferredRenderQueued = false;
+  let watchRefreshPromise = null, watchContextPromise = null, watchContextDeferredPromise = null;
+  let watchContextResults = null;
+  const WATCH_CHECK_MS = 75e3;
+  const WATCH_CONTEXT_CHECK_MS = 5 * 60e3;
+  const WATCH_FOCUS_MAX_STALE_MS = 15 * 60e3;
+  const WATCH_FOCUS_RETRY_MS = 30e3;
+  const watchFocusCache = {
+    quotes: new Map(),
+    charts: new Map(),
+    signals: new Map(),
+  };
+  const watchFocusLoads = new Map();
+  const watchFocusRetryAfter = new Map();
+  const watchFocusFailures = new Map();
+  const watchFocusHit = (store, key, maxAge) => {
+    const entry = store.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.at < maxAge) return entry.result;
+    if (maxAge >= WATCH_FOCUS_MAX_STALE_MS) store.delete(key);
+    return null;
+  };
+  const rememberWatchFocus = (store, key, result) => {
+    // 请求失败不进入浏览器缓存；已有成功快照仍可在有界陈旧期内兜底。
+    if (result && result.ok) store.set(key, { at: Date.now(), result });
+    return result;
+  };
+
+  const WATCH_FOCUS_ATTRS = [
+    "data-range", "data-card", "data-go", "data-focus-jump", "data-wf", "data-wg", "data-open",
+  ];
+  function captureWatchFocus() {
+    const active = document.activeElement;
+    if (!active || !view.contains(active)) return null;
+    for (const attr of WATCH_FOCUS_ATTRS) {
+      if (active.hasAttribute(attr)) return { attr, value: active.getAttribute(attr) };
+    }
+    return active.id ? { id: active.id } : null;
+  }
+  function restoreWatchFocus(bookmark) {
+    if (!bookmark) return;
+    let target = null;
+    if (bookmark.id) target = document.getElementById(bookmark.id);
+    else if (bookmark.attr) {
+      target = $$(`[${bookmark.attr}]`, view).find(element => element.getAttribute(bookmark.attr) === bookmark.value) || null;
+    }
+    if (target) target.focus({ preventScroll: true });
+  }
+
+  function requestDeferredWatchRender() {
+    watchDeferredRender = true;
+  }
+  function flushDeferredWatchRender() {
+    if (!watchDeferredRender || watchRenderPending > 0 || watchDeferredRenderQueued) return;
+    if (document.visibilityState !== "visible" || activeRoute !== "watchlist" || !onWatchRoute()) return;
+    watchDeferredRenderQueued = true;
+    queueMicrotask(() => {
+      watchDeferredRenderQueued = false;
+      if (!watchDeferredRender || watchRenderPending > 0) return;
+      if (document.visibilityState !== "visible" || activeRoute !== "watchlist" || !onWatchRoute()) return;
+      watchDeferredRender = false;
+      renderWatchlist({ quiet: true, useState: true, cacheOnlyFocus: true, preserveFocus: true });
+    });
+  }
+  function finishWatchInteraction() {
+    watchInteractionPending = Math.max(0, watchInteractionPending - 1);
+    flushDeferredWatchRender();
+  }
+
+  function cachedWatchContext() {
+    const pending = label => ({ ok: false, pending: true, e: new Error(`${label}正在后台补齐`) });
+    return {
+      earn: St.earnWeek
+        ? { ok: true, v: St.earnWeek }
+        : (watchContextResults && watchContextResults.earn) || pending("财报快照"),
+      flow: St.unusual
+        ? { ok: true, v: St.unusual }
+        : (watchContextResults && watchContextResults.flow) || pending("期权异动快照"),
+    };
+  }
+
+  function refreshWatchState() {
+    if (watchRefreshPromise) return watchRefreshPromise;
+    watchRefreshPromise = N.watchlist().then(payload => {
+      St.watch = payload;
+      watchFetchedAt = Date.now();
+      watchStateRevision += 1;
+      return payload;
+    }).finally(() => { watchRefreshPromise = null; });
+    return watchRefreshPromise;
+  }
+
+  function refreshWatchContext() {
+    if (watchContextPromise) return watchContextPromise;
+    watchContextPromise = Promise.all([
       settle(N.earnings().then(d => N.buildWeek(d.earnings || []))),
       settle(N.unusual()),
-    ]);
+    ]).then(([earn, flow]) => {
+      watchContextResults = { earn, flow };
+      if (earn.ok) St.earnWeek = earn.v;
+      if (flow.ok) St.unusual = flow.v;
+      watchContextFetchedAt = Date.now();
+      return { earn, flow };
+    }).finally(() => { watchContextPromise = null; });
+    return watchContextPromise;
+  }
+
+  function refreshWatchContextDeferred() {
+    if (watchContextDeferredPromise) return watchContextDeferredPromise;
+    watchContextDeferredPromise = refreshWatchContext().finally(() => {
+      requestDeferredWatchRender();
+      watchContextDeferredPromise = null;
+      flushDeferredWatchRender();
+    });
+    return watchContextDeferredPromise;
+  }
+
+  const chartCacheKey = (ticker, range, adjustment) => `${ticker}:${range}:${adjustment}`;
+  const missingFocusResult = label => ({ ok: false, pending: true, e: new Error(`${label}正在后台补齐`) });
+
+  async function loadWatchFocus(ticker, { cacheOnly = false, background = false, retryFailed = false } = {}) {
+    const requestedRange = focusRange;
+    const requestedAdj = focusAdj;
+    const chartKey = chartCacheKey(ticker, requestedRange, requestedAdj);
+    const loadKey = `${ticker}:${requestedRange}:${requestedAdj}`;
+    const quoteFresh = watchFocusHit(watchFocusCache.quotes, ticker, 120e3);
+    const chartFresh = watchFocusHit(watchFocusCache.charts, chartKey, 300e3);
+    const signalFresh = watchFocusHit(watchFocusCache.signals, ticker, 300e3);
+    const currentLoad = watchFocusLoads.get(loadKey);
+    if (cacheOnly) {
+      const failures = watchFocusFailures.get(loadKey);
+      const quoteHit = quoteFresh || watchFocusHit(watchFocusCache.quotes, ticker, WATCH_FOCUS_MAX_STALE_MS);
+      const chartHit = chartFresh || watchFocusHit(watchFocusCache.charts, chartKey, WATCH_FOCUS_MAX_STALE_MS);
+      const signalHit = signalFresh || watchFocusHit(watchFocusCache.signals, ticker, WATCH_FOCUS_MAX_STALE_MS);
+      if (!quoteFresh || !chartFresh || !signalFresh) {
+        const retryReady = retryFailed || (watchFocusRetryAfter.get(loadKey) || 0) <= Date.now();
+        if (!currentLoad && retryReady) {
+          void loadWatchFocus(ticker, { background: true }).catch(() => { /* 分项请求已由 settle 转为可展示状态 */ });
+        }
+      }
+      return {
+        fq: quoteHit || (failures && !failures.fq.ok ? failures.fq : null) || missingFocusResult("焦点行情"),
+        fchart: chartHit || (failures && !failures.fchart.ok ? failures.fchart : null) || missingFocusResult("K线"),
+        fsig: signalHit || (failures && !failures.fsig.ok ? failures.fsig : null) || missingFocusResult("技术信号"),
+      };
+    }
+    if (currentLoad) return currentLoad;
+    const tracksInteraction = !background;
+    const task = (async () => {
+      if (tracksInteraction) watchInteractionPending += 1;
+      watchFocusFailures.delete(loadKey);
+      try {
+        const [fq, fchart, fsig] = await Promise.all([
+          quoteFresh ? Promise.resolve(quoteFresh) : settle(N.stock(ticker)),
+          chartFresh ? Promise.resolve(chartFresh) : settle(N.chart(ticker, requestedRange, requestedAdj)),
+          signalFresh ? Promise.resolve(signalFresh) : settle(N.stockSignals(ticker)),
+        ]);
+        rememberWatchFocus(watchFocusCache.quotes, ticker, fq);
+        rememberWatchFocus(watchFocusCache.charts, chartKey, fchart);
+        rememberWatchFocus(watchFocusCache.signals, ticker, fsig);
+        if (fq.ok && fchart.ok && fsig.ok) {
+          watchFocusRetryAfter.delete(loadKey);
+          watchFocusFailures.delete(loadKey);
+        } else {
+          watchFocusRetryAfter.set(loadKey, Date.now() + WATCH_FOCUS_RETRY_MS);
+          watchFocusFailures.set(loadKey, { fq, fchart, fsig });
+        }
+        return { fq, fchart, fsig };
+      } finally {
+        watchFocusLoads.delete(loadKey);
+        if (background) {
+          requestDeferredWatchRender();
+          flushDeferredWatchRender();
+        } else {
+          finishWatchInteraction();
+        }
+      }
+    })();
+    watchFocusLoads.set(loadKey, task);
+    return task;
+  }
+
+  function watchRenderOptions(value) {
+    if (!value || typeof value !== "object") return {};
+    if (!("quiet" in value || "useState" in value || "cacheOnlyFocus" in value || "retryFailedFocus" in value || "preserveFocus" in value)) return {};
+    return value;
+  }
+
+  // 已有行情时只做本地重绘；真实更新由独立后台刷新负责。
+  function renderWatchlist(input) {
+    watchRenderPending += 1;
+    return renderWatchlistFrame(input).finally(() => {
+      watchRenderPending = Math.max(0, watchRenderPending - 1);
+      flushDeferredWatchRender();
+    });
+  }
+
+  async function renderWatchlistFrame(input) {
+    const options = watchRenderOptions(input);
+    const quiet = !!options.quiet;
+    const useState = !!options.useState && !!St.watch;
+    let contextRefreshNeeded = false;
+    const focusBookmark = options.preserveFocus ? captureWatchFocus() : null;
+    const g0 = ++gen;
+    if (!quiet && !useState) view.innerHTML = loadingView("正在读取自选行情…");
+    let watch, earn, flow;
+    if (useState) {
+      watch = { ok: true, v: St.watch };
+      ({ earn, flow } = cachedWatchContext());
+    } else {
+      contextRefreshNeeded = !St.earnWeek || !St.unusual || Date.now() - watchContextFetchedAt >= WATCH_CONTEXT_CHECK_MS;
+      watch = await settle(refreshWatchState());
+      ({ earn, flow } = cachedWatchContext());
+    }
     if (g0 !== gen) return;
     if (!watch.ok) {
       if (quiet) return; // 静默轮询失败:保留现有内容,等下一轮
       view.innerHTML = errorView("自选行情读取失败", watch.e.message); bindRetry(renderWatchlist); return;
     }
-    St.watch = watch.v;
-    watchFetchedAt = Date.now();
-    if (earn.ok) St.earnWeek = earn.v;
-    if (flow.ok) St.unusual = flow.v;
 
-    const groups = St.watch.groups;
+    // 此次绘制始终使用同一对象，避免后台刷新在等待焦点接口时拼出混合快照。
+    const watchSnapshot = watch.v;
+    const watchSnapshotRevision = watchStateRevision;
+    const earningsSnapshot = earn.ok ? earn.v : null;
+    const unusualSnapshot = flow.ok ? flow.v : null;
+    const groups = watchSnapshot.groups;
     if (!groups.length) { view.innerHTML = errorView("自选列表为空", "接口未返回任何分组"); bindRetry(renderWatchlist); return; }
     if (!watchGroup || !groups.some(g => g.id === watchGroup)) watchGroup = groups[0].id;
     const grp = groups.find(g => g.id === watchGroup);
-    const flat = St.watch.flat;
+    const flat = watchSnapshot.flat;
     if (!focusTicker || !flat.some(s => s.ticker === focusTicker)) {
       focusTicker = flat.some(s => s.ticker === "NVDA") ? "NVDA" : (grp.stocks[0] || flat[0]).ticker;
     }
     const f = flat.find(s => s.ticker === focusTicker) || flat[0];
 
     /* 焦点扩展数据(单标的,独立失败) */
-    const [fq, fchart, fsig] = await Promise.all([
-      settle(N.stock(f.ticker)),
-      settle(N.chart(f.ticker, focusRange, focusAdj)),
-      settle(N.stockSignals(f.ticker)),
-    ]);
-    if (g0 !== gen) return;
+    const { fq, fchart, fsig } = await loadWatchFocus(f.ticker, {
+      cacheOnly: !!options.cacheOnlyFocus || !useState,
+      retryFailed: !!options.retryFailedFocus,
+    });
+    if (g0 !== gen) {
+      // 焦点请求完成时若已切走，旧页面仍是上一个焦点；返回自选时必须用新缓存重绘。
+      requestDeferredWatchRender();
+      return;
+    }
 
     const up = flat.filter(s => s.chg > 0).length;
     const avg = flat.reduce((a, s) => a + (s.chg || 0), 0) / (flat.length || 1);
@@ -217,8 +428,8 @@
 
     /* 下一事件:未来七日最先出现的 3 场财报 */
     const nextEvents = [];
-    if (St.earnWeek) {
-      for (const d of St.earnWeek.week) {
+    if (earningsSnapshot) {
+      for (const d of earningsSnapshot.week) {
         for (const e of d.events) {
           nextEvents.push({ ticker: e.ticker, delta: "T+" + (e.days_until != null ? e.days_until : "?"), date: d.d.replace(".", " 月 ") + " 日", tone: nextEvents.length === 0 ? "amber" : "" });
           if (nextEvents.length >= 3) break;
@@ -227,7 +438,7 @@
       }
     }
 
-    const flowRows = (St.unusual && St.unusual.results || []).slice(0, 6);
+    const flowRows = (unusualSnapshot && unusualSnapshot.results || []).slice(0, 6);
     const q = fq.ok ? fq.v : null;
     const sig = fsig.ok ? fsig.v : null;
 
@@ -238,7 +449,7 @@
         <h1>自选观察<small>${flat.length} 只标的 · ${up} 涨 ${flat.length - up} 跌 · 平均 <span class="num ${tone(avg)}">${pct(avg)}</span> · 延迟行情,仅供研究</small></h1>
       </div>
       <div class="view-head__aside">
-        ${dataState(`YAHOO ${N.srcCN(St.watch.sourceStatus)} · ${St.watch.succeeded}/${St.watch.attempted} · ${N.fmtTime(St.watch.asOf)}`, St.watch.sourceStatus !== "active" || St.watch.stale, srcTip({ attempted: St.watch.attempted, succeeded: St.watch.succeeded, failedTickers: St.watch.failedTickers, failed: St.watch.failed, stale: St.watch.stale, asOf: St.watch.asOf, label: "Yahoo 行情源" }))}
+        ${dataState(`YAHOO ${N.srcCN(watchSnapshot.sourceStatus)} · ${watchSnapshot.succeeded}/${watchSnapshot.attempted} · ${N.fmtTime(watchSnapshot.asOf)}`, watchSnapshot.sourceStatus !== "active" || watchSnapshot.stale, srcTip({ attempted: watchSnapshot.attempted, succeeded: watchSnapshot.succeeded, failedTickers: watchSnapshot.failedTickers, failed: watchSnapshot.failed, stale: watchSnapshot.stale, asOf: watchSnapshot.asOf, label: "Yahoo 行情源" }))}
       </div>
     </div>
 
@@ -258,12 +469,12 @@
         <div class="focus-ranges" role="tablist" aria-label="图表周期">
           ${N.CHART_RANGES.map(r => `<button class="rangebtn ${r.key === focusRange ? "active" : ""}" data-range="${r.key}" role="tab" aria-selected="${r.key === focusRange}">${r.label}</button>`).join("")}
         </div>
-        <div class="focus-chart" id="focus-chart">${fchart.ok ? candleChart(fchart.v.bars) : inlineErr("K线读取失败", fchart.e && fchart.e.message)}</div>
+        <div class="focus-chart" id="focus-chart">${fchart.ok ? candleChart(fchart.v.bars) : fchart.pending ? inlinePending("K线后台读取中", fchart.e && fchart.e.message) : inlineErr("K线读取失败", fchart.e && fchart.e.message)}</div>
         <dl class="focus-stats">
           <div><dt>成交量</dt><dd>${q ? N.cnAmount(q.volume) : "—"}</dd></div>
           <div><dt>市值</dt><dd>${q && isNum(q.market_cap) ? N.cnAmount(q.market_cap) + " 美元" : "—"}</dd></div>
           <div><dt>技术评分</dt><dd>${sig && isNum(sig.score) ? sig.score + " / 100" : "—"}</dd></div>
-          <div><dt>信号摘要</dt><dd style="font-family:var(--font-ui);font-size:12.5px;color:var(--ink-soft)">${sig ? "整体" + sigCN(sig.overall) + (sig.signals && sig.signals.rsi ? " · RSI " + fmt(sig.signals.rsi.value) : "") : "—"}</dd></div>
+          <div><dt>信号摘要</dt><dd style="font-family:var(--font-ui);font-size:12.5px;color:var(--ink-soft)">${sig ? "整体" + sigCN(sig.overall) + (sig.signals && sig.signals.rsi ? " · RSI " + fmt(sig.signals.rsi.value) : "") : fsig.pending ? "后台补齐中" : "读取失败"}</dd></div>
         </dl>
       </section>
 
@@ -282,7 +493,7 @@
             <span style="display:flex;align-items:center;gap:9px"><span class="chip chip--down"><i></i>承压</span><b class="mono" style="font-size:13px">${esc(lag.ticker)}</b><span style="font-size:11.5px;color:var(--muted)">${esc(lag.name)}</span></span>
             <b class="num d" style="font-size:13px">${pct(lag.chg)}</b>
           </button>
-          <div class="pulse-live"><i></i>快照 ${N.fmtTime(St.watch.asOf)} · 每 75 秒自动拉取 · 延迟行情</div>
+          <div class="pulse-live"><i></i>快照 ${N.fmtTime(watchSnapshot.asOf)} · 每 75 秒检查 · 五分钟行情快照</div>
         </section>
 
         <section class="panel panel--pad" data-reveal style="--reveal-i:3" aria-label="下一事件">
@@ -292,7 +503,7 @@
             <span class="chip ${e.tone === "amber" ? "chip--amber" : "chip--mute"}">${esc(e.delta)}</span>
             <b class="mono" style="font-size:12.5px">${esc(e.ticker)}</b>
             <span class="evt-mini__d">${esc(e.date)}</span>
-          </div>`).join("") : `<div class="empty-note" style="padding:14px"><p>未来七日暂无财报</p><small>${earn.ok ? "预设美股列表内没有安排" : "财报接口读取失败"}</small></div>`}
+          </div>`).join("") : earn.pending ? inlinePending("财报后台读取中", "未来七日事件正在补齐") : `<div class="empty-note" style="padding:14px"><p>${earn.ok ? "未来七日暂无财报" : "财报接口读取失败"}</p><small>${earn.ok ? "预设美股列表内没有安排" : esc(earn.e && earn.e.message)}</small></div>`}
         </section>
       </div>
     </div>
@@ -325,7 +536,7 @@
     <section class="sect" aria-label="期权异动">
       <div class="sect-head" data-reveal style="--reveal-i:0">
         <span class="sect-head__no">FLOW</span><h2>期权异动脉冲</h2>
-        <span class="sect-head__rule"></span><span class="sect-head__meta">${flow.ok ? `${St.unusual.attempted} 个热门标的 · 快照 ${N.fmtTime(St.unusual.as_of)}` : "接口读取失败"}</span>
+        <span class="sect-head__rule"></span><span class="sect-head__meta">${flow.ok ? `${unusualSnapshot.attempted} 个热门标的 · 快照 ${N.fmtTime(unusualSnapshot.as_of)}` : flow.pending ? "后台读取中" : "接口读取失败"}</span>
       </div>
       <div class="pulse-grid pulse-grid--flow">
         <div class="panel panel--flush" data-reveal style="--reveal-i:1">
@@ -339,8 +550,8 @@
               <span class="flow-item__prem">${isNum(x.premium) ? "$" + N.cnAmount(x.premium) : "—"}</span>
             </div>`).join("")}
           </div>
-          <div class="panel__foot"><span class="mono" style="font-size:10px;color:var(--faint)">接口不含成交主动方向,无法判断买卖方(官方口径),故不作方向标注</span><span class="mono" style="font-size:10px;color:var(--faint)">共 ${St.unusual.results.length} 条</span></div>`
-          : `<div style="padding:8px 14px 14px">${flow.ok ? inlineErr("暂无期权异动", "当前快照没有满足条件的合约") : inlineErr("期权异动读取失败", flow.e && flow.e.message)}</div>`}
+          <div class="panel__foot"><span class="mono" style="font-size:10px;color:var(--faint)">接口不含成交主动方向,无法判断买卖方(官方口径),故不作方向标注</span><span class="mono" style="font-size:10px;color:var(--faint)">共 ${unusualSnapshot.results.length} 条</span></div>`
+          : `<div style="padding:8px 14px 14px">${flow.ok ? inlineErr("暂无期权异动", "当前快照没有满足条件的合约") : flow.pending ? inlinePending("期权异动后台读取中", flow.e && flow.e.message) : inlineErr("期权异动读取失败", flow.e && flow.e.message)}</div>`}
         </div>
         <div class="panel ai-note" data-reveal style="--reveal-i:2">
           <div class="ai-note__rule" aria-hidden="true"></div>
@@ -351,27 +562,48 @@
         </div>
       </div>
     </section>`;
+    watchRenderedRevision = watchSnapshotRevision;
     postRender();
     if (quiet) $$("[data-reveal]", view).forEach(el => el.classList.add("in")); // 静默更新:直接落定终态,不重播动画
     $$(".rangebtn[data-range]", view).forEach(b => b.addEventListener("click", async () => {
-      focusRange = b.dataset.range;
+      const requestedRange = b.dataset.range;
+      focusRange = requestedRange;
       $$(".rangebtn[data-range]", view).forEach(x => { x.classList.toggle("active", x === b); x.setAttribute("aria-selected", x === b); });
       const box = $("#focus-chart");
       box.innerHTML = loadingView("读取 " + b.textContent + " K线…");
-      const r = await settle(N.chart(f.ticker, focusRange, focusAdj));
-      if (g0 !== gen) return;
-      box.innerHTML = r.ok ? candleChart(r.v.bars) : inlineErr("K线读取失败", r.e.message);
+      const { fchart: r } = await loadWatchFocus(f.ticker);
+      if (!onWatchRoute()) {
+        requestDeferredWatchRender();
+        return;
+      }
+      if (focusTicker !== f.ticker || focusRange !== requestedRange) return;
+      const liveBox = $("#focus-chart");
+      if (!liveBox) return;
+      liveBox.innerHTML = r.ok ? candleChart(r.v.bars) : inlineErr("K线读取失败", r.e.message);
       animateCandles();
     }));
     $$("[data-card]", view).forEach(c => {
-      const pick = () => { focusTicker = c.dataset.card; renderWatchlist(); };
+      const pick = () => { focusTicker = c.dataset.card; renderWatchlist({ quiet: true, useState: true, cacheOnlyFocus: true, retryFailedFocus: true, preserveFocus: true }); };
       c.addEventListener("click", pick);
       c.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
     });
     $$("[data-go]", view).forEach(g => g.addEventListener("click", e => { e.stopPropagation(); openDrawer(g.dataset.go); }));
-    $$("[data-focus-jump]", view).forEach(b => b.addEventListener("click", () => { focusTicker = b.dataset.focusJump; renderWatchlist(); }));
-    $$("[data-wf]", view).forEach(b => b.addEventListener("click", () => { watchFilter = b.dataset.wf; renderWatchlist(); }));
-    $$("[data-wg]", view).forEach(b => b.addEventListener("click", () => { watchGroup = b.dataset.wg; renderWatchlist(); }));
+    $$("[data-focus-jump]", view).forEach(b => b.addEventListener("click", () => {
+      focusTicker = b.dataset.focusJump;
+      renderWatchlist({ quiet: true, useState: true, cacheOnlyFocus: true, retryFailedFocus: true, preserveFocus: true });
+    }));
+    $$("[data-wf]", view).forEach(b => b.addEventListener("click", () => {
+      watchFilter = b.dataset.wf;
+      renderWatchlist({ quiet: true, useState: true, cacheOnlyFocus: true, preserveFocus: true });
+    }));
+    $$("[data-wg]", view).forEach(b => b.addEventListener("click", () => {
+      watchGroup = b.dataset.wg;
+      renderWatchlist({ quiet: true, useState: true, cacheOnlyFocus: true, preserveFocus: true });
+    }));
+    restoreWatchFocus(focusBookmark);
+    if (contextRefreshNeeded) {
+      void refreshWatchContextDeferred().catch(() => { /* 失败状态由 settle 结果在重绘时展示 */ });
+    }
   }
 
   /* ---------- 视图:选股 ---------- */
@@ -801,11 +1033,11 @@
   async function renderSectors() {
     const g0 = ++gen;
     view.innerHTML = loadingView("正在读取板块行情…");
-    const [secR, watch] = await Promise.all([settle(N.sectors()), settle(N.watchlist())]);
+    const [secR, watch] = await Promise.all([settle(N.sectors()), settle(refreshWatchState())]);
     if (g0 !== gen) return;
     if (!secR.ok) { view.innerHTML = errorView("板块接口读取失败", secR.e.message); bindRetry(renderSectors); return; }
     if (!watch.ok) { view.innerHTML = errorView("行情接口读取失败", watch.e.message); bindRetry(renderSectors); return; }
-    St.sectors = secR.v.sectors || []; St.watch = watch.v;
+    St.sectors = secR.v.sectors || [];
 
     const byId = {}; St.watch.groups.forEach(g => { byId[g.id] = g; });
     const list = St.sectors.map(s => {
@@ -2007,12 +2239,28 @@
   const routes = { watchlist: renderWatchlist, screener: () => renderScreener(), breakouts: () => renderBreakouts(), sectors: renderSectors, earnings: () => renderEarnings(), catalysts: renderCatalysts };
   const routeTitles = { watchlist: "自选观察", screener: "选股", breakouts: "突破雷达", sectors: "板块", earnings: "财报日历", catalysts: "催化剂中心" };
   let activeRoute = null;
+  let watchViewCache = null;
+  function stashWatchlistView() {
+    if (activeRoute !== "watchlist" || !St.watch || !view.firstChild) return;
+    const fragment = document.createDocumentFragment();
+    while (view.firstChild) fragment.appendChild(view.firstChild);
+    watchViewCache = fragment;
+  }
+  function restoreWatchlistView() {
+    if (!watchViewCache || !watchViewCache.firstChild) return false;
+    view.replaceChildren(watchViewCache);
+    watchViewCache = null;
+    return true;
+  }
   function route() {
     const key = (location.hash || "#watchlist").slice(1).split("?")[0];
+    // 所有有效页面切换共享同一代际；催化剂模块使用独立状态，也必须让旧自选请求失效。
+    gen += 1;
     if (C) C.abortPageEnhancements();
     if (key.startsWith("detail/")) { /* 旧版深链:#detail/TICKER → 自选 + 研究抽屉 */
       const tkr = decodeURIComponent(key.slice(7)).trim();
       const renderBackground = activeRoute !== "watchlist" || !St.watch;
+      const restored = restoreWatchlistView();
       activeRoute = "watchlist";
       if (C) C.leaveRoute();
       if (Jobs) Jobs.stopPrefix("earnings:");
@@ -2025,7 +2273,13 @@
       document.title = `${tkr ? tkr.toUpperCase() + " · 标的研究" : routeTitles.watchlist} · Optix Pro`;
       $(".deck-nav").classList.remove("open");
       $("#menu-toggle").setAttribute("aria-expanded", "false");
-      if (renderBackground) renderWatchlist();
+      if (restored && St.watch && (watchDeferredRender || watchStateRevision !== watchRenderedRevision)) {
+        watchDeferredRender = false;
+        renderWatchlist({ quiet: true, useState: true, cacheOnlyFocus: true });
+      } else if (renderBackground && !restored) {
+        if (St.watch) renderWatchlist({ quiet: true, useState: true, cacheOnlyFocus: true });
+        else renderWatchlist();
+      }
       if (tkr) openDrawer(tkr.toUpperCase());
       return;
     }
@@ -2036,6 +2290,7 @@
     closePalette();
     const fn = routes[key] || renderWatchlist;
     const currentRoute = routes[key] ? key : "watchlist";
+    if (activeRoute === "watchlist" && currentRoute !== "watchlist") stashWatchlistView();
     activeRoute = currentRoute;
     if (currentRoute === "breakouts") {
       const ticker = catalystRouteParams().get("ticker") || "";
@@ -2053,7 +2308,18 @@
     $(".deck-nav").classList.remove("open");
     $("#menu-toggle").setAttribute("aria-expanded", "false");
     window.scrollTo({ top: 0, behavior: "instant" });
-    fn();
+    const restored = currentRoute === "watchlist" && restoreWatchlistView();
+    if (restored) {
+      if (St.watch && (watchDeferredRender || watchStateRevision !== watchRenderedRevision)) {
+        watchDeferredRender = false;
+        renderWatchlist({ quiet: true, useState: true, cacheOnlyFocus: true, preserveFocus: true });
+      }
+      if (Date.now() - watchFetchedAt >= 60e3) refreshWatchlistBackground();
+    } else if (currentRoute === "watchlist" && St.watch) {
+      renderWatchlist({ quiet: true, useState: true, cacheOnlyFocus: true });
+    } else {
+      fn();
+    }
     view.focus({ preventScroll: true });
   }
   window.addEventListener("hashchange", route);
@@ -2132,15 +2398,33 @@
   setInterval(clock, 1000);
   setInterval(tape, 60e3);
 
-  /* 自选页静默自动拉取:每 75 秒;标签页隐藏或不在自选路由时跳过 */
+  /* 自选行情在后台保持热缓存；切页只恢复最近快照，不让用户承担冷拉等待。 */
   const onWatchRoute = () => (location.hash.slice(1) || "watchlist").split("/")[0] === "watchlist";
+  async function refreshWatchlistBackground() {
+    const contextDue = !St.earnWeek || !St.unusual || Date.now() - watchContextFetchedAt >= WATCH_CONTEXT_CHECK_MS;
+    const watchTask = refreshWatchState();
+    if (contextDue) {
+      void refreshWatchContextDeferred().catch(() => { /* 辅助失败不阻塞主行情更新 */ });
+    }
+    try {
+      await watchTask;
+    } catch (error) {
+      return; // 保留最近一次成功快照，下一轮继续检查。
+    }
+    if (document.visibilityState === "visible" && activeRoute === "watchlist" && onWatchRoute()) {
+      requestDeferredWatchRender();
+      flushDeferredWatchRender();
+    }
+  }
   setInterval(() => {
-    if (document.visibilityState !== "visible" || !onWatchRoute()) return;
-    renderWatchlist(true);
-  }, 75e3);
+    if (document.visibilityState !== "visible") return;
+    refreshWatchlistBackground();
+  }, WATCH_CHECK_MS);
   document.addEventListener("visibilitychange", () => {
-    // 切回标签页时,若数据已旧于一分钟则立即补一轮,避免看到过期行情
-    if (document.visibilityState === "visible" && onWatchRoute() && St.watch && Date.now() - watchFetchedAt > 60e3) renderWatchlist(true);
+    if (document.visibilityState === "visible" && Date.now() - watchFetchedAt > 60e3) {
+      refreshWatchlistBackground();
+    }
   });
   route();
+  if (!onWatchRoute()) refreshWatchlistBackground();
 })();

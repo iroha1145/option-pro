@@ -133,9 +133,12 @@ ALLOWED_HOSTS=option.example.com
 
 ```dotenv
 PUBLIC_READ_API_ENABLED=true
+DEPLOY_WARM_WATCHLIST=true
 ```
 
 该开关必须与非空的 `APP_AUTH_TOKEN` 同时配置，只放行后端明确列出的行情、强势、突破、板块、财报、期权和 Catalyst 本地缓存读取接口，以及有 50 个代码上限的 Catalyst 批量查询。匿名 Catalyst 响应只保留页面展示字段；模型任务、任务详情、重试、取消、刷新和其他写入操作仍要求 `APP_AUTH_TOKEN`，长期令牌不会写入网页。公开读取仍受原有按来源地址限流约束。
+
+`DEPLOY_WARM_WATCHLIST=true` 会在切换容器前，把当前服务最后一份有效自选行情原子保存到共享数据卷；`WATCHLIST_SNAPSHOT_PATH` 必须位于 `/data`。若既读不到当前行情，也没有 24 小时内的有效快照，部署会在流量切换前停止。新容器先用这份快照即时显示页面，并在后台更新；切换后脚本最多等待两分钟确认新行情。行情源暂时不可用时，部署会明确告警并继续保留有时限的旧快照，不会把已经运行的新容器误报成已回滚。
 
 若反向代理与前端跨域，再精确设置 `ALLOWED_ORIGINS`。只有在可信代理已经覆盖并清洗转发头时才设置 `TRUST_PROXY_HEADERS=true`，并同时填写代理直连来源网段；不能填写访客网段：
 

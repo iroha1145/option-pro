@@ -277,6 +277,9 @@ host_bind="${host_bind:-127.0.0.1}"
 auth_token="${APP_AUTH_TOKEN:-$(env_value APP_AUTH_TOKEN)}"
 auth_token="$(printf '%s' "$auth_token" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 public_read_enabled="$(configuration_boolean PUBLIC_READ_API_ENABLED false)"
+deploy_warm_watchlist="$(configuration_boolean DEPLOY_WARM_WATCHLIST false)"
+watchlist_snapshot_path="${WATCHLIST_SNAPSHOT_PATH:-$(env_value WATCHLIST_SNAPSHOT_PATH)}"
+watchlist_snapshot_path="${watchlist_snapshot_path:-/data/watchlist-snapshot-v1.json}"
 allow_insecure="$(configuration_boolean ALLOW_INSECURE_PUBLIC_BIND false)"
 trust_proxy_headers="$(configuration_boolean TRUST_PROXY_HEADERS false)"
 trusted_proxy_cidrs="${TRUSTED_PROXY_CIDRS:-$(env_value TRUSTED_PROXY_CIDRS)}"
@@ -415,6 +418,22 @@ if [ "$focus_producer_snapshot_grace_seconds" -lt 30 ] || [ "$focus_producer_sna
     echo "FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS must be from 30 to 900." >&2
     exit 1
 fi
+if is_truthy "$deploy_warm_watchlist"; then
+    case "$watchlist_snapshot_path" in
+        /data/*)
+            case "$watchlist_snapshot_path" in
+                *'/../'*|*/..|*'/./'*|*/.|*'//'* )
+                    echo "WATCHLIST_SNAPSHOT_PATH must be a normalized path inside /data." >&2
+                    exit 1
+                    ;;
+            esac
+            ;;
+        *)
+            echo "DEPLOY_WARM_WATCHLIST=true requires WATCHLIST_SNAPSHOT_PATH inside the shared /data volume." >&2
+            exit 1
+            ;;
+    esac
+fi
 
 if git rev-parse --verify HEAD >/dev/null 2>&1; then
     if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
@@ -428,9 +447,46 @@ else
 fi
 APP_VERSION="${APP_VERSION:-${APP_COMMIT:0:12}}"
 export APP_COMMIT APP_VERSION
+backend_image_built=false
 
-echo "Building Optix Pro ${APP_VERSION} (${APP_COMMIT})"
-docker compose build --pull backend
+build_backend_image() {
+    if [ "$backend_image_built" = "true" ]; then
+        return 0
+    fi
+    echo "Building Optix Pro ${APP_VERSION} (${APP_COMMIT})"
+    docker compose build --pull backend
+    backend_image_built=true
+}
+
+if is_truthy "$deploy_warm_watchlist"; then
+    snapshot_script="${SCRIPT_DIR}/watchlist_snapshot.py"
+    if [ ! -f "$snapshot_script" ]; then
+        echo "Watchlist snapshot helper is missing." >&2
+        exit 1
+    fi
+    # Prefer the currently serving process so its warm in-memory response can
+    # seed the shared volume. A one-off container uses the replacement image,
+    # so build that image before validating the shared snapshot. This does not
+    # switch traffic; any currently serving container remains untouched until
+    # the later compose up step.
+    if ! docker compose exec -T \
+        -e "WATCHLIST_SNAPSHOT_PATH=${watchlist_snapshot_path}" \
+        -e "WATCHLIST_SNAPSHOT_ACTION=seed" \
+        backend python - seed < "$snapshot_script"
+    then
+        echo "Current backend could not seed the watchlist snapshot; building the replacement image before checking the shared volume." >&2
+        build_backend_image
+        if ! docker compose run --rm --no-deps -T \
+            -e "WATCHLIST_SNAPSHOT_PATH=${watchlist_snapshot_path}" \
+            -e "WATCHLIST_SNAPSHOT_ACTION=validate" \
+            backend python - validate < "$snapshot_script"
+        then
+            echo "Watchlist snapshot validation failed; traffic has not switched." >&2
+            exit 1
+        fi
+    fi
+fi
+build_backend_image
 
 # The old container keeps serving during the build. With frontend files baked
 # into the same versioned image, the recreate switches backend and frontend as
@@ -474,6 +530,12 @@ for configured_host in os.environ.get("ALLOWED_HOSTS", "").split(","):
 print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 '
 
+if is_truthy "$deploy_warm_watchlist"; then
+    docker compose exec -T \
+        -e "WATCHLIST_SNAPSHOT_PATH=${watchlist_snapshot_path}" \
+        -e "WATCHLIST_SNAPSHOT_ACTION=wait" \
+        backend python - wait --timeout 120 < "$snapshot_script"
+fi
 expected_auth_configured=false
 if [ -n "$auth_token" ]; then
     expected_auth_configured=true

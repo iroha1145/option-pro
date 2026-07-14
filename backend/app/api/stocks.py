@@ -5,8 +5,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import ipaddress
+import json
+import logging
 import math
+import os
+from pathlib import Path
 import re
+import tempfile
 import time
 from typing import Annotated, Any, Optional
 from urllib.parse import urljoin, urlparse
@@ -18,6 +23,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 
 router = APIRouter(prefix="/api/stocks", tags=["stocks"])
+logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -41,8 +47,11 @@ _endpoint_cache: dict[str, _EndpointCacheEntry] = {}
 # cold key would otherwise all kick off their own yfinance fetch.
 _endpoint_locks: dict[str, asyncio.Lock] = {}
 _endpoint_lock_users: dict[str, int] = {}
+_endpoint_refresh_tasks: dict[str, asyncio.Task[None]] = {}
+_endpoint_refresh_retry_after: dict[str, float] = {}
 _ENDPOINT_PURGE_THRESHOLD = 2048
 _ENDPOINT_MAX_ENTRIES = 2048
+_ENDPOINT_REFRESH_FAILURE_COOLDOWN_SECONDS = 60
 
 def _lock_for(key: str) -> asyncio.Lock:
     lock = _endpoint_locks.get(key)
@@ -137,6 +146,170 @@ async def _cached_endpoint(key: str, ttl: int, loader, *, stale_ttl: int | None 
             return _cache_result(entry, stale=False)
     finally:
         _release_lock(key, lock)
+
+
+def _run_endpoint_success_callback(key: str, callback, value: Any, fetched_at: float) -> None:
+    if callback is None:
+        return
+    try:
+        callback(value, fetched_at)
+    except Exception as exc:
+        # Persistence is a recovery aid. A disk error must never turn a valid
+        # market-data refresh into a failed API response.
+        logger.warning("Endpoint success callback failed for %s: %s", key, exc)
+
+
+async def _load_and_store_endpoint(
+    key: str,
+    ttl: int,
+    max_age: int,
+    loader,
+    on_success=None,
+) -> _EndpointCacheEntry:
+    """Load one entry under its key lock and atomically publish the result."""
+    lock = _lock_for(key)
+    try:
+        async with lock:
+            now = time.time()
+            hit = _usable_hit(key, now)
+            if hit is not None and hit.expires_at > now:
+                return hit
+
+            value = await loader()
+            fetched_at = time.time()
+            _maybe_purge_endpoint_cache(fetched_at)
+            entry = _EndpointCacheEntry(
+                expires_at=fetched_at + ttl,
+                stale_until=fetched_at + max(ttl, max_age),
+                fetched_at=fetched_at,
+                value=value,
+            )
+            _endpoint_cache[key] = entry
+            _endpoint_refresh_retry_after.pop(key, None)
+            _run_endpoint_success_callback(key, on_success, value, fetched_at)
+            return entry
+    finally:
+        _release_lock(key, lock)
+
+
+async def _refresh_endpoint_in_background(
+    key: str,
+    ttl: int,
+    max_age: int,
+    loader,
+    on_success=None,
+) -> None:
+    """Refresh one stale entry without making the requesting client wait."""
+    await _load_and_store_endpoint(
+        key,
+        ttl,
+        max_age,
+        loader,
+        on_success,
+    )
+
+
+def _finish_endpoint_refresh(key: str, task: asyncio.Task[None]) -> None:
+    if _endpoint_refresh_tasks.get(key) is not task:
+        if not task.cancelled():
+            task.exception()
+        return
+    _endpoint_refresh_tasks.pop(key, None)
+    if task.cancelled():
+        return
+    error = task.exception()
+    if error is not None:
+        _endpoint_refresh_retry_after[key] = (
+            time.time() + _ENDPOINT_REFRESH_FAILURE_COOLDOWN_SECONDS
+        )
+        logger.warning("Background endpoint refresh failed for %s: %s", key, error)
+    else:
+        _endpoint_refresh_retry_after.pop(key, None)
+
+
+def _schedule_endpoint_refresh(
+    key: str,
+    ttl: int,
+    max_age: int,
+    loader,
+    on_success=None,
+) -> bool:
+    current = _endpoint_refresh_tasks.get(key)
+    if current is not None:
+        if not current.done():
+            return True
+        # A request may arrive after the task completed but before its queued
+        # done callback ran. Process the result now so a fast failure cannot
+        # slip through the cooldown and start another provider request.
+        _finish_endpoint_refresh(key, current)
+    now = time.time()
+    retry_after = _endpoint_refresh_retry_after.get(key)
+    if retry_after is not None:
+        if retry_after > now:
+            return False
+        _endpoint_refresh_retry_after.pop(key, None)
+    task = asyncio.create_task(
+        _refresh_endpoint_in_background(
+            key,
+            ttl,
+            max_age,
+            loader,
+            on_success,
+        ),
+        name=f"endpoint-refresh:{key}",
+    )
+    _endpoint_refresh_tasks[key] = task
+    task.add_done_callback(
+        lambda completed, refresh_key=key: _finish_endpoint_refresh(
+            refresh_key,
+            completed,
+        )
+    )
+    return True
+
+
+async def _stale_while_revalidate_endpoint(
+    key: str,
+    ttl: int,
+    max_age: int,
+    loader,
+    on_success=None,
+):
+    """Return bounded stale data immediately while a single refresh runs."""
+    max_age = max(ttl, max(0, max_age))
+    now = time.time()
+    hit = _usable_hit(key, now)
+    if hit is not None and hit.expires_at > now:
+        return _cache_result(hit, stale=False)
+    if hit is not None:
+        refreshing = _schedule_endpoint_refresh(
+            key,
+            ttl,
+            max_age,
+            loader,
+            on_success,
+        )
+        result = _cache_result(hit, stale=True)
+        if isinstance(result, dict):
+            result["stale_reason"] = (
+                "background_refresh_pending"
+                if refreshing
+                else "upstream_refresh_failed"
+            )
+            result["stale_age_seconds"] = round(max(now - hit.fetched_at, 0.0), 1)
+        return result
+
+    # A cold request has no safe snapshot to serve, so it must wait for one
+    # initial fill. Completion time starts both the fresh and bounded-stale
+    # windows; concurrent cold requests share the same key lock.
+    entry = await _load_and_store_endpoint(
+        key,
+        ttl,
+        max_age,
+        loader,
+        on_success,
+    )
+    return _cache_result(entry, stale=False)
 
 
 from app.services.utils import sanitize as _sanitize
@@ -376,9 +549,265 @@ KNOWN_TICKERS = {
 
 _WATCHLIST_MAX_TICKERS = 100
 _WATCHLIST_QUERY_MAX_LENGTH = 4096
+_WATCHLIST_FRESH_TTL_SECONDS = 5 * 60
+_WATCHLIST_MAX_SNAPSHOT_AGE_SECONDS = 24 * 60 * 60
+_WATCHLIST_TARGETED_STALE_TTL_SECONDS = 15 * 60
+_WATCHLIST_SNAPSHOT_VERSION = 1
+_WATCHLIST_SNAPSHOT_MAX_BYTES = 2 * 1024 * 1024
+_WATCHLIST_SNAPSHOT_PATH = Path(
+    os.environ.get("WATCHLIST_SNAPSHOT_PATH", "").strip()
+    or "/data/watchlist-snapshot-v1.json"
+)
+_WATCHLIST_SNAPSHOT_TRANSPORT_FIELDS = frozenset(
+    {
+        "_stale",
+        "as_of",
+        "source_status",
+        "stale_age_seconds",
+        "stale_reason",
+    }
+)
+_watchlist_snapshot_load_attempted = False
 _WATCHLIST_TICKER_PATTERN = re.compile(
     r"^(?:\^[A-Z0-9][A-Z0-9.^_=-]{0,30}|[A-Z0-9][A-Z0-9.^_=-]{0,31})$"
 )
+
+
+def _is_finite_json_tree(value: Any, *, depth: int = 0) -> bool:
+    if depth > 64:
+        return False
+    if value is None or isinstance(value, (bool, str, int)):
+        return True
+    if isinstance(value, float):
+        return math.isfinite(value)
+    if isinstance(value, list):
+        return all(_is_finite_json_tree(item, depth=depth + 1) for item in value)
+    if isinstance(value, dict):
+        return all(
+            isinstance(key, str)
+            and _is_finite_json_tree(item, depth=depth + 1)
+            for key, item in value.items()
+        )
+    return False
+
+
+def _is_finite_number(value: Any, *, positive: bool = False) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        number = float(value)
+    except (OverflowError, TypeError, ValueError):
+        return False
+    return math.isfinite(number) and (not positive or number > 0)
+
+
+def _clean_watchlist_snapshot_payload(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    groups = value.get("groups")
+    succeeded = value.get("succeeded")
+    if not isinstance(groups, list) or not groups:
+        return None
+    if (
+        isinstance(succeeded, bool)
+        or not isinstance(succeeded, int)
+        or succeeded <= 0
+    ):
+        return None
+    cleaned = {
+        key: item
+        for key, item in value.items()
+        if key not in _WATCHLIST_SNAPSHOT_TRANSPORT_FIELDS
+    }
+    if not _is_finite_json_tree(cleaned):
+        return None
+
+    group_ids: set[str] = set()
+    tickers: set[str] = set()
+    for group in groups:
+        if not isinstance(group, dict):
+            return None
+        group_id = group.get("id")
+        group_name = group.get("name")
+        stocks = group.get("stocks")
+        if (
+            not isinstance(group_id, str)
+            or not group_id.strip()
+            or group_id in group_ids
+            or not isinstance(group_name, str)
+            or not group_name.strip()
+            or not isinstance(stocks, list)
+            or not stocks
+        ):
+            return None
+        group_ids.add(group_id)
+        group_tickers: set[str] = set()
+        for stock in stocks:
+            if not isinstance(stock, dict):
+                return None
+            ticker = stock.get("ticker")
+            name = stock.get("name")
+            spark = stock.get("spark")
+            if (
+                not isinstance(ticker, str)
+                or not _WATCHLIST_TICKER_PATTERN.fullmatch(ticker)
+                or ticker in group_tickers
+                or not isinstance(name, str)
+                or not name.strip()
+                or not _is_finite_number(stock.get("price"), positive=True)
+                or not _is_finite_number(stock.get("change_percent"))
+                or not isinstance(spark, list)
+                or not spark
+                or len(spark) > 7
+                or not all(_is_finite_number(point, positive=True) for point in spark)
+            ):
+                return None
+            group_tickers.add(ticker)
+            tickers.add(ticker)
+    if len(tickers) != succeeded:
+        return None
+    return cleaned
+
+
+def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def _reject_non_finite_json(value: str) -> None:
+    raise ValueError(f"non-finite JSON value: {value}")
+
+
+def _read_watchlist_snapshot(
+    path: Path,
+    *,
+    now: float,
+) -> _EndpointCacheEntry | None:
+    """Read a bounded restart snapshot, failing closed on any anomaly."""
+    try:
+        if path.is_symlink():
+            return None
+        if not path.is_file():
+            return None
+        with path.open("rb") as handle:
+            raw = handle.read(_WATCHLIST_SNAPSHOT_MAX_BYTES + 1)
+        if not raw or len(raw) > _WATCHLIST_SNAPSHOT_MAX_BYTES:
+            return None
+        document = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_json_keys,
+            parse_constant=_reject_non_finite_json,
+        )
+        if not isinstance(document, dict):
+            return None
+        version = document.get("version")
+        if (
+            isinstance(version, bool)
+            or not isinstance(version, int)
+            or version != _WATCHLIST_SNAPSHOT_VERSION
+        ):
+            return None
+        saved_at = document.get("saved_at")
+        if (
+            isinstance(saved_at, bool)
+            or not isinstance(saved_at, (int, float))
+            or not math.isfinite(float(saved_at))
+        ):
+            return None
+        saved_at = float(saved_at)
+        if (
+            saved_at <= 0
+            or saved_at > now
+            or saved_at + _WATCHLIST_MAX_SNAPSHOT_AGE_SECONDS <= now
+        ):
+            return None
+        payload = _clean_watchlist_snapshot_payload(document.get("payload"))
+        if payload is None:
+            return None
+        return _EndpointCacheEntry(
+            # A restart snapshot is deliberately stale even when recently
+            # saved, so the first request schedules a live refresh.
+            expires_at=now,
+            stale_until=saved_at + _WATCHLIST_MAX_SNAPSHOT_AGE_SECONDS,
+            fetched_at=saved_at,
+            value=payload,
+        )
+    except (
+        OSError,
+        RecursionError,
+        UnicodeError,
+        ValueError,
+        TypeError,
+        json.JSONDecodeError,
+    ):
+        return None
+
+
+def _write_watchlist_snapshot(
+    path: Path,
+    *,
+    payload: Any,
+    saved_at: float,
+) -> None:
+    cleaned = _clean_watchlist_snapshot_payload(payload)
+    if cleaned is None:
+        raise ValueError("watchlist snapshot payload is incomplete")
+    if not math.isfinite(saved_at) or saved_at <= 0:
+        raise ValueError("watchlist snapshot saved_at is invalid")
+    encoded = json.dumps(
+        {
+            "version": _WATCHLIST_SNAPSHOT_VERSION,
+            "saved_at": saved_at,
+            "payload": cleaned,
+        },
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    if len(encoded) > _WATCHLIST_SNAPSHOT_MAX_BYTES:
+        raise ValueError("watchlist snapshot exceeds the size limit")
+
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=path.parent,
+    )
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_name, path)
+    except BaseException:
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _persist_watchlist_snapshot(payload: Any, saved_at: float) -> None:
+    _write_watchlist_snapshot(
+        _WATCHLIST_SNAPSHOT_PATH,
+        payload=payload,
+        saved_at=saved_at,
+    )
+
+
+def _load_watchlist_snapshot_once(now: float) -> None:
+    global _watchlist_snapshot_load_attempted
+    if _watchlist_snapshot_load_attempted:
+        return
+    _watchlist_snapshot_load_attempted = True
+    if "watchlist" in _endpoint_cache:
+        return
+    entry = _read_watchlist_snapshot(_WATCHLIST_SNAPSHOT_PATH, now=now)
+    if entry is not None:
+        _endpoint_cache["watchlist"] = entry
 
 
 def _parse_watchlist_tickers(raw: str | None) -> list[str] | None:
@@ -449,7 +878,21 @@ async def watchlist(
         else lambda: _build_watchlist(requested_tickers)
     )
     try:
-        return await _cached_endpoint(cache_key, 300, loader, stale_ttl=900)
+        if requested_tickers is None:
+            _load_watchlist_snapshot_once(time.time())
+            return await _stale_while_revalidate_endpoint(
+                cache_key,
+                _WATCHLIST_FRESH_TTL_SECONDS,
+                _WATCHLIST_MAX_SNAPSHOT_AGE_SECONDS,
+                loader,
+                _persist_watchlist_snapshot,
+            )
+        return await _cached_endpoint(
+            cache_key,
+            _WATCHLIST_FRESH_TTL_SECONDS,
+            loader,
+            stale_ttl=_WATCHLIST_TARGETED_STALE_TTL_SECONDS,
+        )
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Yahoo watchlist data is currently unavailable") from exc
 
