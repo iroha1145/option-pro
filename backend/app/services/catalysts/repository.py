@@ -3031,10 +3031,13 @@ class CatalystRepository:
     ) -> dict[str, Any] | None:
         cutoff = _iso(as_of)
         with self._read() as connection:
+            # ``content_hash`` identifies the immutable news input. The remote
+            # integration sequence can advance when analysis metadata is
+            # published even though the underlying news content did not change.
             row = connection.execute(
                 """
                 SELECT * FROM catalyst_analysis_jobs
-                WHERE news_id=? AND content_hash=? AND change_sequence=?
+                WHERE news_id=? AND content_hash=?
                     AND contract_schema_version=? AND model=? AND reasoning=?
                     AND created_at<=? AND updated_at<=?
                     AND (submitted_at IS NULL OR submitted_at<=?)
@@ -3045,7 +3048,6 @@ class CatalystRepository:
                 (
                     news_id,
                     content_hash,
-                    change_sequence,
                     contract_schema_version,
                     model,
                     reasoning,
@@ -3494,17 +3496,19 @@ class CatalystRepository:
         timestamp = _iso(now or _now())
         with self._write() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            # Reuse by immutable content identity. ``change_sequence`` also
+            # covers analysis-only publications and therefore is not a safe
+            # idempotency key for a paid request.
             existing = connection.execute(
                 """
                 SELECT * FROM catalyst_analysis_jobs
-                WHERE news_id=? AND content_hash=? AND change_sequence=?
+                WHERE news_id=? AND content_hash=?
                     AND model=? AND reasoning=? AND contract_schema_version=?
                 ORDER BY created_at DESC LIMIT 1
                 """,
                 (
                     news_id,
                     content_hash,
-                    change_sequence,
                     model,
                     reasoning,
                     contract_schema_version,

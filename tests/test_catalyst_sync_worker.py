@@ -688,6 +688,162 @@ def test_completed_result_metadata_must_match_its_remote_job(tmp_path) -> None:
     assert failed["result"] is None
 
 
+def test_paid_model_insufficient_context_result_is_preserved(tmp_path) -> None:
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    repository.initialize(now=utc(9))
+    local = repository.enqueue_analysis(
+        101,
+        content_hash="content-hash-101",
+        change_sequence=1,
+        contract_schema_version="macrolens-option-pro-v2",
+        force=False,
+        model="gpt-5.6-terra",
+        reasoning="max",
+        now=utc(10, 7),
+    )
+    analysis = catalyst_item(
+        sequence=1, updated_at=utc(10, 7), analysis=True
+    ).analysis.model_copy(
+        update={
+            "overall_sentiment": 15,
+            "confidence": 25,
+            "market_relevance": 20,
+            "insufficient_context": True,
+        }
+    )
+
+    class PaidInsufficientContextClient(JobClient):
+        async def create_analysis_job(
+            self,
+            _news_id: int,
+            *,
+            expected_content_hash: str,
+            expected_change_sequence: int,
+            force: bool,
+        ):
+            return self.response(
+                "insufficient_context",
+                result=analysis,
+            ).model_copy(update={"completed_at": utc(10, 8)})
+
+    service = CatalystSyncService(
+        settings(repository.path),
+        repository,
+        PaidInsufficientContextClient(),  # type: ignore[arg-type]
+        worker_id="worker-paid-insufficient-context",
+        clock=lambda: utc(10, 8),
+    )
+    assert service.acquire()
+    assert asyncio.run(service.process_jobs()) == 1
+
+    stored = repository.get_analysis_job(local["job_id"])
+    assert stored["status"] == "insufficient_context"
+    assert stored["model"] == "gpt-5.6-terra"
+    assert stored["reasoning"] == "max"
+    assert stored["result"]["insufficient_context"] is True
+    assert stored["result"]["affected_stocks"][0]["ticker"] == "NVDA"
+    assert stored["result"]["stock_validations"][0]["validation_status"] == "canonical"
+
+
+def test_completed_result_cannot_claim_insufficient_context(tmp_path) -> None:
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    repository.initialize(now=utc(9))
+    local = repository.enqueue_analysis(
+        101,
+        content_hash="content-hash-101",
+        change_sequence=1,
+        contract_schema_version="macrolens-option-pro-v2",
+        force=False,
+        model="gpt-5.6-terra",
+        reasoning="max",
+        now=utc(10, 7),
+    )
+    analysis = catalyst_item(
+        sequence=1, updated_at=utc(10, 7), analysis=True
+    ).analysis.model_copy(update={"insufficient_context": True})
+
+    class InvalidCompletedClient(JobClient):
+        async def create_analysis_job(
+            self,
+            _news_id: int,
+            *,
+            expected_content_hash: str,
+            expected_change_sequence: int,
+            force: bool,
+        ):
+            return self.response("completed", result=analysis)
+
+    service = CatalystSyncService(
+        settings(repository.path),
+        repository,
+        InvalidCompletedClient(),  # type: ignore[arg-type]
+        worker_id="worker-invalid-completed-context",
+        clock=lambda: utc(10, 8),
+    )
+    assert service.acquire()
+    assert asyncio.run(service.process_jobs()) == 1
+
+    failed = repository.get_analysis_job(local["job_id"])
+    assert failed["status"] == "failed"
+    assert failed["error_code"] == "remote_job_result_mismatch"
+    assert failed["result"] is None
+
+
+def test_low_context_model_still_requires_neutral_empty_result(tmp_path) -> None:
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    repository.initialize(now=utc(9))
+    local = repository.enqueue_analysis(
+        101,
+        content_hash="content-hash-101",
+        change_sequence=1,
+        contract_schema_version="macrolens-option-pro-v2",
+        force=False,
+        model="gpt-5.6-terra",
+        reasoning="max",
+        now=utc(10, 7),
+    )
+    invalid_low_context = catalyst_item(
+        sequence=1, updated_at=utc(10, 7), analysis=True
+    ).analysis.model_copy(
+        update={
+            "insufficient_context": True,
+            "model": "low-context-neutral-v2",
+            "reasoning": "none",
+        }
+    )
+
+    class InvalidLowContextClient(JobClient):
+        async def create_analysis_job(
+            self,
+            _news_id: int,
+            *,
+            expected_content_hash: str,
+            expected_change_sequence: int,
+            force: bool,
+        ):
+            return self.response(
+                "insufficient_context",
+                model="low-context-neutral-v2",
+                reasoning="none",
+                result=invalid_low_context,
+            )
+
+    service = CatalystSyncService(
+        settings(repository.path),
+        repository,
+        InvalidLowContextClient(),  # type: ignore[arg-type]
+        worker_id="worker-invalid-low-context",
+        clock=lambda: utc(10, 8),
+    )
+    assert service.acquire()
+    assert asyncio.run(service.process_jobs()) == 1
+
+    failed = repository.get_analysis_job(local["job_id"])
+    assert failed["status"] == "failed"
+    assert failed["error_code"] == "remote_job_runtime_mismatch"
+    assert failed["result"] is None
+
+
 def test_remote_poll_with_wrong_job_id_is_rejected(tmp_path) -> None:
     repository = CatalystRepository(tmp_path / "catalysts.db")
     repository.initialize(now=utc(9))

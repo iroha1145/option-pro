@@ -738,7 +738,9 @@ def test_status_uses_remote_runtime_and_degrades_on_model_or_reasoning_drift(tmp
     assert "remote_reasoning_mismatch" in status["warnings"]
 
 
-def test_analysis_proxy_idempotency_is_bound_to_news_revision_and_contract(tmp_path) -> None:
+def test_analysis_proxy_idempotency_survives_sequence_only_updates_and_binds_content_version(
+    tmp_path,
+) -> None:
     repository = CatalystRepository(tmp_path / "catalysts.db")
     repository.initialize(now=utc(9))
     first = repository.enqueue_analysis(
@@ -761,9 +763,9 @@ def test_analysis_proxy_idempotency_is_bound_to_news_revision_and_contract(tmp_p
         reasoning="max",
         now=utc(10, 1),
     )
-    revised = repository.enqueue_analysis(
+    sequence_advanced = repository.enqueue_analysis(
         101,
-        content_hash="hash-revision-two",
+        content_hash="hash-revision-one",
         change_sequence=2,
         contract_schema_version="macrolens-option-pro-v2",
         force=False,
@@ -771,7 +773,28 @@ def test_analysis_proxy_idempotency_is_bound_to_news_revision_and_contract(tmp_p
         reasoning="max",
         now=utc(10, 2),
     )
+    visible_after_sequence_advance = repository.latest_job_for_news(
+        101,
+        content_hash="hash-revision-one",
+        change_sequence=2,
+        contract_schema_version="macrolens-option-pro-v2",
+        model="gpt-5.6-terra",
+        reasoning="max",
+        as_of=utc(10, 3),
+    )
+    revised = repository.enqueue_analysis(
+        101,
+        content_hash="hash-revision-two",
+        change_sequence=3,
+        contract_schema_version="macrolens-option-pro-v2",
+        force=False,
+        model="gpt-5.6-terra",
+        reasoning="max",
+        now=utc(10, 3),
+    )
     assert duplicate["job_id"] == first["job_id"]
+    assert sequence_advanced["job_id"] == first["job_id"]
+    assert visible_after_sequence_advance["job_id"] == first["job_id"]
     assert revised["job_id"] != first["job_id"]
     with repository.open_read_connection() as connection:
         rows = connection.execute(
@@ -779,7 +802,7 @@ def test_analysis_proxy_idempotency_is_bound_to_news_revision_and_contract(tmp_p
         ).fetchall()
     assert [tuple(row) for row in rows] == [
         ("hash-revision-one", 1, "macrolens-option-pro-v2"),
-        ("hash-revision-two", 2, "macrolens-option-pro-v2"),
+        ("hash-revision-two", 3, "macrolens-option-pro-v2"),
     ]
 
 
