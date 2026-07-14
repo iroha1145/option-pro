@@ -31,6 +31,8 @@
     return headers;
   }
 
+  const hasAppToken = () => !!appToken();
+
   /*
    * 普通数据和任务轮询使用不同的并发闸。长任务状态查询只能占用低优先级
    * 的 2 路通道，不会挤占行情、突破雷达或财报的 3 路读取通道。
@@ -456,7 +458,7 @@
   }
 
   window.OPTIX_NET = {
-    jget, jpost, invalidateCache, cnAmount, indexInfo, INDEX_NAMES, CHART_RANGES,
+    jget, jpost, invalidateCache, hasAppToken, cnAmount, indexInfo, INDEX_NAMES, CHART_RANGES,
     indices, marketStatus, watchlist, stock, stockSignals, signalDeep, signalsMarket, strengthMarket,
     profiles, chart, scan, breakoutsCurrent, breakoutsStatus, breakoutsEvents, breakoutEventDetail, breakoutTicker,
     sectors, sectorIV, earnings, earningsImpact, unusual, expirations, chain, search, aiStock,

@@ -35,6 +35,11 @@ if ! grep -q '^ALLOWED_HOSTS=' .env && [ -z "${ALLOWED_HOSTS+x}" ]; then
     echo "Add ALLOWED_HOSTS= for local-only access, or list every public reverse-proxy domain before deploying." >&2
     exit 1
 fi
+if ! grep -q '^PUBLIC_READ_API_ENABLED=' .env && [ -z "${PUBLIC_READ_API_ENABLED+x}" ]; then
+    echo "This .env predates the PUBLIC_READ_API_ENABLED security setting." >&2
+    echo "Add PUBLIC_READ_API_ENABLED=false, or explicitly enable the reviewed public read allowlist." >&2
+    exit 1
+fi
 
 env_value() {
     local key="$1"
@@ -270,6 +275,8 @@ PY
 host_bind="${HOST_BIND:-$(env_value HOST_BIND)}"
 host_bind="${host_bind:-127.0.0.1}"
 auth_token="${APP_AUTH_TOKEN:-$(env_value APP_AUTH_TOKEN)}"
+auth_token="$(printf '%s' "$auth_token" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+public_read_enabled="$(configuration_boolean PUBLIC_READ_API_ENABLED false)"
 allow_insecure="$(configuration_boolean ALLOW_INSECURE_PUBLIC_BIND false)"
 trust_proxy_headers="$(configuration_boolean TRUST_PROXY_HEADERS false)"
 trusted_proxy_cidrs="${TRUSTED_PROXY_CIDRS:-$(env_value TRUSTED_PROXY_CIDRS)}"
@@ -299,6 +306,11 @@ deploy_require_focus="$(configuration_boolean DEPLOY_REQUIRE_FOCUS_PRODUCER fals
 if ! is_loopback_bind "$host_bind" && [ -z "$auth_token" ] && ! is_truthy "$allow_insecure"; then
     echo "Refusing non-loopback HOST_BIND without APP_AUTH_TOKEN." >&2
     echo "Use localhost, set a strong token, or explicitly set ALLOW_INSECURE_PUBLIC_BIND=true for a protected private network." >&2
+    exit 1
+fi
+if is_truthy "$public_read_enabled" && [ -z "$auth_token" ]; then
+    echo "PUBLIC_READ_API_ENABLED=true requires APP_AUTH_TOKEN." >&2
+    echo "Public read access may bypass the token only for reviewed display routes; paid and mutating routes must remain protected." >&2
     exit 1
 fi
 if is_truthy "$trust_proxy_headers" && [ -z "$trusted_proxy_cidrs" ]; then
@@ -460,6 +472,87 @@ for configured_host in os.environ.get("ALLOWED_HOSTS", "").split(","):
     finally:
         connection.close()
 print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+'
+
+expected_auth_configured=false
+if [ -n "$auth_token" ]; then
+    expected_auth_configured=true
+fi
+docker compose exec -T \
+    -e "EXPECTED_PUBLIC_READ_ENABLED=${public_read_enabled}" \
+    -e "EXPECTED_AUTH_CONFIGURED=${expected_auth_configured}" \
+    backend python -c '
+import http.client
+import json
+import os
+
+
+def deployment_access_probe(method, path, body=None):
+    headers = {}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    connection = http.client.HTTPConnection("127.0.0.1", 8000, timeout=5)
+    try:
+        connection.request(method, path, body=body, headers=headers)
+        response = connection.getresponse()
+        response_body = response.read(4096).decode("utf-8", errors="replace")
+        return response.status, response_body
+    finally:
+        connection.close()
+
+
+public_read_enabled = os.environ["EXPECTED_PUBLIC_READ_ENABLED"] == "true"
+auth_configured = os.environ["EXPECTED_AUTH_CONFIGURED"] == "true"
+public_expected = 200 if public_read_enabled or not auth_configured else 401
+checked = []
+for path in (
+    "/api/market/status",
+    "/api/breakouts/status",
+    "/api/catalysts/status",
+):
+    status, body = deployment_access_probe("GET", path)
+    if status != public_expected:
+        raise SystemExit(
+            f"anonymous public-read probe failed for {path}: "
+            f"expected HTTP {public_expected}, got HTTP {status}: {body[:240]}"
+        )
+    checked.append({"method": "GET", "path": path, "status": status})
+
+# A deployment without APP_AUTH_TOKEN is permitted only for loopback-only local
+# use. Do not send mutating probes in that mode because there is deliberately no
+# authentication barrier to stop the handlers from running.
+if auth_configured:
+    private_probes = (
+        ("POST", "/api/ai/jobs/earnings-impact", b"{}"),
+        ("GET", "/api/ai/jobs/deployment_probe_missing_job", None),
+        ("GET", "/api/catalysts/refresh", None),
+    )
+    for method, path, body in private_probes:
+        status, response_body = deployment_access_probe(method, path, body)
+        if status != 401:
+            raise SystemExit(
+                f"anonymous protected-route probe failed for {method} {path}: "
+                f"expected HTTP 401, got HTTP {status}: {response_body[:240]}"
+            )
+        checked.append({"method": method, "path": path, "status": status})
+
+    # The safe GET probe above proves that the refresh path is still behind the
+    # gateway before exercising its real method. The empty body cannot request a
+    # paid model operation; a correct gateway rejects it before the handler.
+    status, response_body = deployment_access_probe(
+        "POST", "/api/catalysts/refresh", b"{}"
+    )
+    if status != 401:
+        raise SystemExit(
+            "anonymous protected-route probe failed for POST "
+            f"/api/catalysts/refresh: expected HTTP 401, got HTTP {status}: "
+            f"{response_body[:240]}"
+        )
+    checked.append(
+        {"method": "POST", "path": "/api/catalysts/refresh", "status": status}
+    )
+
+print(json.dumps({"anonymous_access_checks": checked}, separators=(",", ":")))
 '
 
 ai_worker_health="$(

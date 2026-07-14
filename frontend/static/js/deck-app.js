@@ -9,6 +9,7 @@
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const view = $("#view");
   const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const privateActionsAvailable = () => !!(N && N.hasAppToken && N.hasAppToken());
 
   /* ---------- 格式化(全部空值安全) ---------- */
   const isNum = v => typeof v === "number" && isFinite(v);
@@ -1048,8 +1049,8 @@
     if (!sel) return `
       <div class="sect-head" style="margin-bottom:12px"><span class="sect-head__no">IMPACT</span><h2 style="font-size:14.5px">关联影响</h2></div>
       <div class="empty-note" style="padding:22px 8px">
-        <p>选择一场财报后，可按需生成关联影响分析。</p>
-        <small>选择行只会切换研究对象，不会调用模型；生成任务必须再次点击确认。</small>
+        <p>${privateActionsAvailable() ? "选择一场财报后，可按需生成关联影响分析。" : "公开页面提供财报与行情查看。"}</p>
+        <small>${privateActionsAvailable() ? "选择行只会切换研究对象，不会调用模型；生成任务必须再次点击确认。" : "模型分析需要管理授权，浏览页面不会产生模型调用。"}</small>
         ${nextEvt ? `<button class="btn btn--sm" data-jump="${esc(nextDay.d)}">跳到 ${dayCN(nextDay.d)}</button>` : ""}
       </div>
       <p class="mono" style="font-size:9.5px;color:var(--faint);margin:8px 0 0;line-height:1.7">模型推断不代表收益概率，结果不构成投资建议。</p>`;
@@ -1065,10 +1066,11 @@
       <div class="empty-note" style="padding:22px 8px">
         <p>${status === "failed" ? "关联分析任务失败" : status === "cancelled" ? "关联分析任务已取消" : status === "budget_blocked" ? "当前预算门禁阻止创建任务" : "尚未生成关联分析"}</p>
         <small>${esc(impact && (impact.error_message || impact.message || impact.error_code || impact.error) || "生成后将通过后台任务处理，页面不会长时间等待。")}</small>
-        ${status !== "budget_blocked" && !retryBlocked ? `<button class="btn btn--amber btn--sm" id="impact-run" type="button" data-impact-run>${status === "failed" || status === "cancelled" ? "显式重试" : "生成 AI 关联分析"}</button>` : ""}
+        ${privateActionsAvailable() && status !== "budget_blocked" && !retryBlocked ? `<button class="btn btn--amber btn--sm" id="impact-run" type="button" data-impact-run>${status === "failed" || status === "cancelled" ? "显式重试" : "生成 AI 关联分析"}</button>` : ""}
+        ${!privateActionsAvailable() ? `<small data-private-action-note>公开页面仅供查看；模型分析需要管理授权。</small>` : ""}
         ${retryBlocked ? `<small>上游是否已接受请求无法确认，为避免重复计费，本次不能自动重提。</small>` : ""}
       </div>`;
-    if (active) return `${head}<div class="empty-note" style="padding:22px 8px"><p>${status === "in_progress" ? "模型正在分析" : "任务正在排队"}</p><small>${impact && (impact.submitted_at || impact.created_at) ? "提交 " + N.fmtDateTime(impact.submitted_at || impact.created_at) : "已交给后台任务"}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · 不显示估算进度</small><button class="btn btn--sm" id="impact-cancel" type="button" data-impact-cancel>取消任务</button></div>`;
+    if (active) return `${head}<div class="empty-note" style="padding:22px 8px"><p>${status === "in_progress" ? "模型正在分析" : "任务正在排队"}</p><small>${impact && (impact.submitted_at || impact.created_at) ? "提交 " + N.fmtDateTime(impact.submitted_at || impact.created_at) : "已交给后台任务"}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · 不显示估算进度</small>${privateActionsAvailable() ? `<button class="btn btn--sm" id="impact-cancel" type="button" data-impact-cancel>取消任务</button>` : ""}</div>`;
     if (status === "insufficient_context") return `${head}<div class="empty-note" style="padding:22px 8px"><p>信息不足，未生成方向性分析</p><small>服务端没有为缺失信息补造结论，也不会显示假结果。</small></div>`;
     const impacted = Array.isArray(result && result.impacted) ? result.impacted : Array.isArray(result && result.affected_stocks) ? result.affected_stocks : [];
     const groups = new Map();
@@ -1121,7 +1123,7 @@
   }
 
   function runEarningsImpact() {
-    if (!earnSel || !Jobs) return;
+    if (!earnSel || !Jobs || !privateActionsAvailable()) return;
     const ticker = earnSel;
     const event = selectedEarningsEvent();
     const payload = {
@@ -1749,11 +1751,11 @@
       </section>
 
       <section class="sect">
-        <div class="sect-head"><span class="sect-head__no">AI</span><h2>智能异动解读</h2><span class="sect-head__rule"></span><span class="sect-head__meta">按需生成 · 调用模型</span></div>
+        <div class="sect-head"><span class="sect-head__no">AI</span><h2>智能异动解读</h2><span class="sect-head__rule"></span><span class="sect-head__meta">${privateActionsAvailable() ? "按需生成 · 调用模型" : "公开页面 · 仅供查看"}</span></div>
         <div id="ai-box">
           ${alerts.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px">${alerts.slice(0, 3).map(a2 => `<span class="chip chip--amber"><i></i>${fmt(a2.strike)} ${a2.type === "call" ? "Call" : "Put"} · 量比 ${isNum(a2.vol_oi_ratio) ? a2.vol_oi_ratio.toFixed(1) : "—"}×</span>`).join("")}</div>` : ""}
-          <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.7">模型解读通过后台持久任务生成；选择股票和打开抽屉都不会产生调用。</p>
-          <button class="btn btn--amber btn--sm" id="ai-run">生成 AI 解读</button>
+          <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.7">${privateActionsAvailable() ? "模型解读通过后台持久任务生成；选择股票和打开抽屉都不会产生调用。" : "模型分析需要管理授权；行情、技术信号与期权数据仍可正常查看。"}</p>
+          ${privateActionsAvailable() ? `<button class="btn btn--amber btn--sm" id="ai-run">生成 AI 解读</button>` : `<span class="mono" data-private-action-note>公开页面不会创建付费任务</span>`}
         </div>
       </section>`);
     measurePaths(drawer); animateBars(drawer); countUp(drawer);
@@ -1805,6 +1807,7 @@
         restoreFocus();
       };
       startSignalJob = force => {
+        if (!privateActionsAvailable()) return;
         Jobs.start({
           scope,
           create: signal => N.aiStock(ticker, force, { signal }),

@@ -86,6 +86,10 @@ if [ "${1:-}" = "exec" ] && [[ " $* " == *" catalyst-sync-worker "*" --healthche
     esac
     exit 0
 fi
+if [ "${1:-}" = "exec" ] && [[ " $* " == *" backend python -c "* ]] && [[ " $* " == *"deployment_access_probe"* ]]; then
+    printf '%s\n' "$*" > .fake-deployment-access-probe-log
+    exit "${FAKE_DEPLOYMENT_ACCESS_PROBE_EXIT:-0}"
+fi
 if [ "${1:-}" = "exec" ] && [[ " $* " == *" backend python -c "* ]] && [[ " $* " == *"deployment_status_ready"* ]]; then
     shift
     while [ "$#" -gt 0 ]; do
@@ -358,6 +362,101 @@ def test_default_and_quoted_safe_breakout_config_pass_deployment_gate(tmp_path: 
     (root / ".env").write_text(quoted, encoding="utf-8")
     result = _run_deploy(root, environment)
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("configured_value", ["treu", "on", "off", "enabled"])
+def test_unknown_public_read_boolean_fails_closed(
+    tmp_path: Path,
+    configured_value: str,
+) -> None:
+    template = (ROOT / ".env.example").read_text(encoding="utf-8")
+    invalid = template.replace(
+        "PUBLIC_READ_API_ENABLED=false",
+        f"PUBLIC_READ_API_ENABLED={configured_value}",
+        1,
+    )
+    root, environment = _deployment_root(tmp_path, invalid)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert (
+        "PUBLIC_READ_API_ENABLED must be a recognized boolean value" in result.stderr
+    )
+
+
+@pytest.mark.parametrize("app_auth_token", ["", '"   "'])
+def test_public_read_requires_an_app_token(
+    tmp_path: Path,
+    app_auth_token: str,
+) -> None:
+    template = (ROOT / ".env.example").read_text(encoding="utf-8")
+    public_without_token = (
+        template.replace(
+            "PUBLIC_READ_API_ENABLED=false",
+            "PUBLIC_READ_API_ENABLED=true",
+            1,
+        ).replace("APP_AUTH_TOKEN=", f"APP_AUTH_TOKEN={app_auth_token}", 1)
+    )
+    root, environment = _deployment_root(tmp_path, public_without_token)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "PUBLIC_READ_API_ENABLED=true requires APP_AUTH_TOKEN" in result.stderr
+    assert not (root / ".fake-deployment-access-probe-log").exists()
+
+
+@pytest.mark.parametrize(
+    ("public_value", "expected_public"),
+    [("true", "true"), ('"YES"', "true"), ("false", "false")],
+)
+def test_deployment_runs_anonymous_access_probes_for_public_and_private_routes(
+    tmp_path: Path,
+    public_value: str,
+    expected_public: str,
+) -> None:
+    template = (ROOT / ".env.example").read_text(encoding="utf-8")
+    configured = template.replace(
+        "PUBLIC_READ_API_ENABLED=false",
+        f"PUBLIC_READ_API_ENABLED={public_value}",
+        1,
+    ).replace("APP_AUTH_TOKEN=", "APP_AUTH_TOKEN=deployment-token", 1)
+    root, environment = _deployment_root(tmp_path, configured)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode == 0, result.stderr
+    probe = (root / ".fake-deployment-access-probe-log").read_text(encoding="utf-8")
+    assert f"EXPECTED_PUBLIC_READ_ENABLED={expected_public}" in probe
+    assert "EXPECTED_AUTH_CONFIGURED=true" in probe
+    for path in (
+        "/api/market/status",
+        "/api/breakouts/status",
+        "/api/catalysts/status",
+        "/api/ai/jobs/earnings-impact",
+        "/api/ai/jobs/deployment_probe_missing_job",
+        "/api/catalysts/refresh",
+    ):
+        assert path in probe
+    assert '("POST", "/api/ai/jobs/earnings-impact", b"{}")' in probe
+    assert '"POST", "/api/catalysts/refresh", b"{}"' in probe
+
+
+def test_deployment_fails_when_anonymous_access_probe_fails(tmp_path: Path) -> None:
+    template = (ROOT / ".env.example").read_text(encoding="utf-8")
+    configured = template.replace(
+        "PUBLIC_READ_API_ENABLED=false",
+        "PUBLIC_READ_API_ENABLED=true",
+        1,
+    ).replace("APP_AUTH_TOKEN=", "APP_AUTH_TOKEN=deployment-token", 1)
+    root, environment = _deployment_root(tmp_path, configured)
+    environment["FAKE_DEPLOYMENT_ACCESS_PROBE_EXIT"] = "9"
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert (root / ".fake-deployment-access-probe-log").exists()
 
 
 @pytest.mark.parametrize(
@@ -793,6 +892,16 @@ def test_legacy_env_and_incomplete_trusted_proxy_config_fail_before_build(
     result = _run_deploy(root, environment)
     assert result.returncode != 0
     assert "predates the ALLOWED_HOSTS security setting" in result.stderr
+
+    legacy_public_read = "\n".join(
+        line
+        for line in template.splitlines()
+        if not line.startswith("PUBLIC_READ_API_ENABLED=")
+    )
+    (root / ".env").write_text(legacy_public_read, encoding="utf-8")
+    result = _run_deploy(root, environment)
+    assert result.returncode != 0
+    assert "predates the PUBLIC_READ_API_ENABLED security setting" in result.stderr
 
     incomplete_proxy = template.replace(
         "TRUST_PROXY_HEADERS=false", "TRUST_PROXY_HEADERS=true"

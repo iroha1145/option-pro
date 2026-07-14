@@ -5,6 +5,7 @@ import hmac
 import ipaddress
 import json as _json_mod
 import os as _os
+import re as _re
 import time as _time
 from collections import deque as _deque
 from pathlib import Path
@@ -32,6 +33,10 @@ from app.services.request_security import (
 
 _TRUTHY_VALUES = {"1", "true", "yes"}
 _APP_AUTH_TOKEN = _os.environ.get("APP_AUTH_TOKEN", "").strip()
+_PUBLIC_READ_API_ENABLED = (
+    _os.environ.get("PUBLIC_READ_API_ENABLED", "").strip().lower()
+    in _TRUTHY_VALUES
+)
 _APP_VERSION = _os.environ.get("APP_VERSION", "").strip() or "dev"
 _APP_COMMIT = _os.environ.get("APP_COMMIT", "").strip() or "unknown"
 _HOST_BIND = _os.environ.get("HOST_BIND", "127.0.0.1").strip() or "127.0.0.1"
@@ -88,7 +93,79 @@ def _validate_public_bind(host_bind: str, auth_token: str, allow_insecure: bool)
     )
 
 
+def _validate_public_read_auth(public_read_enabled: bool, auth_token: str) -> None:
+    if public_read_enabled and not auth_token:
+        raise RuntimeError(
+            "PUBLIC_READ_API_ENABLED=true requires APP_AUTH_TOKEN so routes "
+            "outside the reviewed public read allowlist remain protected."
+        )
+
+
 _validate_public_bind(_HOST_BIND, _APP_AUTH_TOKEN, _ALLOW_INSECURE_PUBLIC_BIND)
+_validate_public_read_auth(_PUBLIC_READ_API_ENABLED, _APP_AUTH_TOKEN)
+
+
+_PUBLIC_READ_GET_EXACT = frozenset(
+    {
+        "/api/market/indices",
+        "/api/market/status",
+        "/api/stocks/watchlist",
+        "/api/stocks/search",
+        "/api/signals/market",
+        "/api/strength/scan",
+        "/api/strength/market",
+        "/api/strength/profiles",
+        "/api/breakouts/current",
+        "/api/breakouts/events",
+        "/api/breakouts/status",
+        "/api/sectors",
+        "/api/earnings/upcoming",
+        "/api/options/unusual",
+        "/api/catalysts/status",
+        "/api/catalysts/feed",
+        "/api/catalysts/calendar",
+        "/api/catalysts/hotspots/status",
+        "/api/catalysts/hotspots",
+        "/api/catalysts/market-focus-cycles/latest",
+    }
+)
+_PUBLIC_STOCK_SYMBOL = (
+    r"(?:\^[A-Z0-9][A-Z0-9._-]{0,30}|"
+    r"[A-Z0-9][A-Z0-9._-]{0,31})"
+)
+_PUBLIC_TICKER = r"[A-Z0-9][A-Z0-9.-]{0,19}"
+_PUBLIC_READ_GET_PATTERNS = tuple(
+    _re.compile(pattern)
+    for pattern in (
+        rf"/api/stocks/{_PUBLIC_STOCK_SYMBOL}(?:/(?:signals|chart))?",
+        rf"/api/signals/stock/{_PUBLIC_STOCK_SYMBOL}",
+        r"/api/breakouts/events/[^/]{1,128}",
+        r"/api/breakouts/tickers/[A-Z][A-Z0-9.-]{0,14}",
+        r"/api/sectors/[A-Za-z0-9_-]{1,80}/iv-ranking",
+        r"/api/options/[A-Z0-9][A-Z0-9.-]{0,11}/(?:expirations|chain)",
+        r"/api/catalysts/news/[1-9][0-9]*",
+        rf"/api/catalysts/tickers/{_PUBLIC_TICKER}",
+        r"/api/catalysts/market-focus-cycles/mfc_[0-9a-f]{32}",
+    )
+)
+_PUBLIC_READ_POST_EXACT = frozenset({"/api/catalysts/tickers/batch"})
+
+
+def _is_public_read_api(method: str, path: str) -> bool:
+    """Allow only bounded, non-mutating data reads for the public web UI."""
+
+    normalized = path or "/"
+    verb = method.upper()
+    if verb == "GET":
+        if normalized in _PUBLIC_READ_GET_EXACT:
+            return True
+        return any(
+            pattern.fullmatch(normalized)
+            for pattern in _PUBLIC_READ_GET_PATTERNS
+        )
+    # This endpoint is a bounded local-cache query (maximum 50 tickers), even
+    # though a JSON body makes POST the practical transport.
+    return verb == "POST" and normalized in _PUBLIC_READ_POST_EXACT
 
 
 app = FastAPI(
@@ -181,6 +258,23 @@ def _scope_token(scope) -> str:
     return _scope_header(scope, b"x-app-token").strip()
 
 
+def _raw_path_has_unsafe_escape(scope) -> bool:
+    """Reject encoded path separators and second-pass percent decoding.
+
+    ASGI servers expose a decoded ``scope['path']``. Without checking the raw
+    bytes, ``AAPL%2Fchart`` is indistinguishable from the real two-segment
+    route when the public-read allowlist runs.
+    """
+
+    raw_path = scope.get("raw_path", b"")
+    if isinstance(raw_path, str):
+        raw_path = raw_path.encode("latin-1", errors="ignore")
+    lowered = bytes(raw_path).lower()
+    return b"\\" in lowered or any(
+        marker in lowered for marker in (b"%2f", b"%5c", b"%25")
+    )
+
+
 def _is_heavy_api_path(path: str, method: str = "GET") -> bool:
     normalized_method = method.upper()
     if normalized_method == "GET" and (
@@ -198,7 +292,7 @@ def _is_heavy_api_path(path: str, method: str = "GET") -> bool:
         return True
     if path in _LIGHT_API_PATHS:
         return False
-    if path.startswith("/api/stocks/search") or path.endswith("/logo"):
+    if path.endswith("/logo"):
         return False
     return (
         path == "/api/market/indices"
@@ -346,14 +440,27 @@ class _GatewayMiddleware:
             request_state = scope.setdefault("state", {})
             request_state["app_auth_configured"] = bool(_APP_AUTH_TOKEN)
             request_state["app_authenticated"] = False
-            service_authenticated = method == "GET" and path in _SERVICE_AUTH_PATHS
+            unsafe_raw_path = _raw_path_has_unsafe_escape(scope)
+            service_authenticated = (
+                not unsafe_raw_path
+                and method == "GET"
+                and path in _SERVICE_AUTH_PATHS
+            )
+            public_read_authenticated = bool(
+                _PUBLIC_READ_API_ENABLED
+                and not unsafe_raw_path
+                and _is_public_read_api(method, path)
+            )
+            request_state["public_read_authenticated"] = public_read_authenticated
             if _APP_AUTH_TOKEN and not service_authenticated:
                 token = _scope_token(scope)
                 try:
                     valid = bool(token) and hmac.compare_digest(token, _APP_AUTH_TOKEN)
                 except Exception:
                     valid = False
-                if not valid:
+                if valid:
+                    request_state["app_authenticated"] = True
+                elif not public_read_authenticated:
                     if _auth_failure_limited(_scope_client_ip(scope), _time.time()):
                         return await _send_json(
                             send_with_response_headers,
@@ -370,7 +477,6 @@ class _GatewayMiddleware:
                         {"error": "unauthorized", "message": "Missing or invalid API token"},
                         extra_headers=_cors_headers(scope),
                     )
-                request_state["app_authenticated"] = True
 
             # ── Per-IP rate limit ──
             is_heavy = _is_heavy_api_path(path, method)

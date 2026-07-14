@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date, datetime, timedelta, timezone
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
+from fastapi.routing import APIRoute
 from pydantic import (
     AwareDatetime,
     BaseModel,
@@ -22,7 +24,249 @@ from app.services.catalysts.service import CatalystService
 from app.services.ai_jobs.security import require_expensive_action
 
 
-router = APIRouter(prefix="/api/catalysts", tags=["catalysts"])
+_MAX_CATALYST_BODY_BYTES = 32 * 1024
+_BODY_METHODS = frozenset({"POST", "PUT", "PATCH"})
+
+
+class _BoundedCatalystBodyRoute(APIRoute):
+    """Reject oversized Catalyst writes before JSON/model parsing."""
+
+    def get_route_handler(self):
+        original_handler = super().get_route_handler()
+
+        async def bounded_handler(request: Request):
+            if request.method.upper() not in _BODY_METHODS:
+                return await original_handler(request)
+
+            content_length = request.headers.get("content-length")
+            if content_length:
+                try:
+                    length = int(content_length)
+                    if length < 0:
+                        raise ValueError
+                    if length > _MAX_CATALYST_BODY_BYTES:
+                        raise HTTPException(
+                            status_code=413,
+                            detail="Catalyst request body exceeds 32 KiB",
+                        )
+                except ValueError as exc:
+                    raise HTTPException(
+                        status_code=400, detail="Invalid Content-Length"
+                    ) from exc
+
+            chunks: list[bytes] = []
+            total = 0
+            async for chunk in request.stream():
+                total += len(chunk)
+                if total > _MAX_CATALYST_BODY_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="Catalyst request body exceeds 32 KiB",
+                    )
+                chunks.append(chunk)
+            # Starlette reuses this bounded body when FastAPI later parses JSON.
+            request._body = b"".join(chunks)
+            return await original_handler(request)
+
+        return bounded_handler
+
+
+router = APIRouter(
+    prefix="/api/catalysts",
+    tags=["catalysts"],
+    route_class=_BoundedCatalystBodyRoute,
+)
+
+
+_HOTSPOT_STATUS_PUBLIC_FIELDS = frozenset(
+    {
+        "prepared_revision",
+        "last_consumed_revision",
+        "prepared_hot_count",
+        "prepared_since",
+        "last_cycle_at",
+        "next_scheduled_at",
+        "model",
+        "reasoning",
+        "data_through",
+        "status",
+        "as_of",
+        "last_sync_at",
+        "warnings",
+    }
+)
+_CATALYST_STATUS_PUBLIC_FIELDS = frozenset(
+    {
+        "enabled",
+        "status",
+        "as_of",
+        "data_through",
+        "last_sync_at",
+        "remote_status",
+        "model",
+        "reasoning",
+        "expected_model",
+        "expected_reasoning",
+        "schema_version",
+        "resync_required",
+        "resync_generation",
+        "last_resync_at",
+        "sources",
+        "streams",
+        "warnings",
+    }
+)
+_CATALYST_STREAM_PUBLIC_FIELDS = frozenset(
+    {
+        "last_success_at",
+        "data_through",
+        "consecutive_failures",
+        "last_error_code",
+        "remote_status",
+        "resync_required",
+        "resync_generation",
+        "last_resync_at",
+    }
+)
+_CATALYST_SOURCE_PUBLIC_FIELDS = frozenset(
+    {
+        "source",
+        "status",
+        "last_success_at",
+        "data_through",
+        "consecutive_failures",
+        "raw_count",
+        "inserted_count",
+        "duplicates_count",
+        "source_fetch_status",
+        "news_persistence_status",
+        "event_projection_status",
+    }
+)
+_HOTSPOT_ITEM_PUBLIC_FIELDS = frozenset(
+    {
+        "prepared_revision",
+        "event_group_id",
+        "event_group_version",
+        "gate_version",
+        "hot_score",
+        "component_scores",
+        "reasons",
+        "status",
+        "prepared_at",
+        "representative_title",
+        "event_type",
+        "available_at",
+        "first_published_at",
+        "last_published_at",
+        "source_count",
+        "source_names",
+        "validated_tickers",
+    }
+)
+_MARKET_FOCUS_CYCLE_PUBLIC_FIELDS = frozenset(
+    {
+        "cycle_id",
+        "status",
+        "no_new_hot_events",
+        "prepared_revision",
+        "focus_revision",
+        "snapshot_as_of",
+        "event_group_count",
+        "focus_symbol_count",
+        "model",
+        "reasoning_effort",
+        "result",
+        "error_code",
+        "created_at",
+        "completed_at",
+        "updated_at",
+    }
+)
+_MARKET_FOCUS_ENVELOPE_PUBLIC_FIELDS = frozenset(
+    {"status", "as_of", "data_through", "warnings"}
+)
+
+
+def _anonymous_public_read(request: Request) -> bool:
+    """Only crop requests admitted by the public-read gateway without a token."""
+
+    return bool(
+        getattr(request.state, "public_read_authenticated", False)
+    ) and not bool(
+        getattr(request.state, "app_authenticated", False),
+    )
+
+
+def _select_fields(
+    payload: Mapping[str, Any], fields: frozenset[str]
+) -> dict[str, Any]:
+    return {key: payload[key] for key in fields if key in payload}
+
+
+def _public_hotspot_status(payload: Mapping[str, Any]) -> dict[str, Any]:
+    projected = _select_fields(payload, _HOTSPOT_STATUS_PUBLIC_FIELDS)
+    # Anonymous display requests never gain action capability from remote state.
+    projected.update(
+        {
+            "manual_enabled": False,
+            "action_enabled": False,
+            "capability": "disabled",
+        }
+    )
+    return projected
+
+
+def _public_catalyst_status(payload: Mapping[str, Any]) -> dict[str, Any]:
+    projected = _select_fields(payload, _CATALYST_STATUS_PUBLIC_FIELDS)
+    raw_sources = payload.get("sources")
+    projected["sources"] = (
+        [
+            _select_fields(source, _CATALYST_SOURCE_PUBLIC_FIELDS)
+            for source in raw_sources
+            if isinstance(source, Mapping)
+        ]
+        if isinstance(raw_sources, list)
+        else []
+    )
+    raw_streams = payload.get("streams")
+    projected["streams"] = {}
+    if isinstance(raw_streams, Mapping):
+        projected["streams"] = {
+            str(stream): _select_fields(state, _CATALYST_STREAM_PUBLIC_FIELDS)
+            for stream, state in raw_streams.items()
+            if isinstance(state, Mapping)
+        }
+    projected["analysis_trigger_enabled"] = False
+    return projected
+
+
+def _public_hotspots(payload: Mapping[str, Any]) -> dict[str, Any]:
+    projected = _select_fields(payload, _MARKET_FOCUS_ENVELOPE_PUBLIC_FIELDS)
+    items = payload.get("items")
+    projected["items"] = (
+        [
+            _select_fields(item, _HOTSPOT_ITEM_PUBLIC_FIELDS)
+            for item in items
+            if isinstance(item, Mapping)
+        ]
+        if isinstance(items, list)
+        else []
+    )
+    return projected
+
+
+def _public_market_focus_cycle(payload: Mapping[str, Any]) -> dict[str, Any]:
+    return _select_fields(payload, _MARKET_FOCUS_CYCLE_PUBLIC_FIELDS)
+
+
+def _public_market_focus_envelope(payload: Mapping[str, Any]) -> dict[str, Any]:
+    projected = _select_fields(payload, _MARKET_FOCUS_ENVELOPE_PUBLIC_FIELDS)
+    cycle = payload.get("cycle")
+    projected["cycle"] = (
+        _public_market_focus_cycle(cycle) if isinstance(cycle, Mapping) else None
+    )
+    return projected
 
 
 class _RequestModel(BaseModel):
@@ -124,8 +368,16 @@ def _raise_safe(error: CatalystError) -> None:
 
 
 @router.get("/status")
-def catalyst_status(service: CatalystService = Depends(_service)) -> dict:
-    return service.status()
+def catalyst_status(
+    request: Request,
+    service: CatalystService = Depends(_service),
+) -> dict:
+    payload = service.status()
+    return (
+        _public_catalyst_status(payload)
+        if _anonymous_public_read(request)
+        else payload
+    )
 
 
 @router.get("/feed")
@@ -180,6 +432,7 @@ def catalyst_feed(
 
 @router.get("/news/{news_id}")
 def catalyst_news(
+    request: Request,
     news_id: int = Path(ge=1),
     as_of: Optional[AwareDatetime] = Query(default=None),
     service: CatalystService = Depends(_service),
@@ -191,6 +444,10 @@ def catalyst_news(
         _raise_safe(error)
     if detail is None:
         raise HTTPException(status_code=404, detail="catalyst news item not found")
+    if _anonymous_public_read(request):
+        detail = dict(detail)
+        detail["analysis_job"] = None
+        detail["analysis_trigger_enabled"] = False
     return detail
 
 
@@ -272,24 +529,38 @@ def catalyst_calendar(
 
 @router.get("/hotspots/status")
 def catalyst_hotspot_status(
+    request: Request,
     service: CatalystService = Depends(_service),
 ) -> dict:
-    return service.hotspot_status()
+    payload = service.hotspot_status()
+    return (
+        _public_hotspot_status(payload)
+        if _anonymous_public_read(request)
+        else payload
+    )
 
 
 @router.get("/hotspots")
 def catalyst_hotspots(
+    request: Request,
     limit: int = Query(default=20, ge=1, le=100),
     service: CatalystService = Depends(_service),
 ) -> dict:
-    return service.hotspots(limit=limit)
+    payload = service.hotspots(limit=limit)
+    return _public_hotspots(payload) if _anonymous_public_read(request) else payload
 
 
 @router.get("/market-focus-cycles/latest")
 def latest_market_focus_cycle(
+    request: Request,
     service: CatalystService = Depends(_service),
 ) -> dict:
-    return service.latest_market_focus_cycle()
+    payload = service.latest_market_focus_cycle()
+    return (
+        _public_market_focus_envelope(payload)
+        if _anonymous_public_read(request)
+        else payload
+    )
 
 
 @router.post(
@@ -312,6 +583,7 @@ def request_market_focus_cycle(
 
 @router.get("/market-focus-cycles/{cycle_id}")
 def market_focus_cycle(
+    request: Request,
     cycle_id: Annotated[
         str, Path(pattern=r"^mfc_[0-9a-f]{32}$")
     ],
@@ -323,7 +595,11 @@ def market_focus_cycle(
         _raise_safe(error)
     if cycle is None:
         raise HTTPException(status_code=404, detail="market focus cycle not found")
-    return cycle
+    return (
+        _public_market_focus_cycle(cycle)
+        if _anonymous_public_read(request)
+        else cycle
+    )
 
 
 @router.post(

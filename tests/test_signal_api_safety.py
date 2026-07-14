@@ -25,6 +25,22 @@ def test_signal_api_rejects_invalid_ticker_before_provider_call(monkeypatch):
     assert called is False
 
 
+def test_signal_api_accepts_index_symbol_and_preserves_leading_caret(monkeypatch):
+    captured = []
+
+    def provider(symbol: str):
+        captured.append(symbol)
+        return {}
+
+    monkeypatch.setattr(signals, "compute_stock_signals", provider)
+    monkeypatch.setattr(signals, "compute_stock_scores", lambda _signals: {})
+
+    payload = asyncio.run(signals.stock_signals("^gspc"))
+
+    assert captured == ["^GSPC"]
+    assert payload["ticker"] == "^GSPC"
+
+
 def test_signal_api_does_not_expose_or_log_internal_provider_errors(monkeypatch, caplog):
     secret = "secret upstream URL, API key, and full response body"
     monkeypatch.setattr(

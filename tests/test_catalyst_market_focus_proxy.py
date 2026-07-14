@@ -449,6 +449,176 @@ def test_same_origin_routes_are_local_only_and_revision_idempotent(tmp_path) -> 
     assert cancelled.json()["status"] == "cancelled"
 
 
+def test_anonymous_focus_routes_expose_display_projection_only(tmp_path) -> None:
+    path = tmp_path / "catalysts.db"
+    repository = CatalystRepository(path)
+    repository.initialize(now=utc(9))
+    analysis = {
+        "cycle_id": "mfc_" + "a" * 32,
+        "as_of": utc(10),
+        "market_summary": "A bounded market-focus summary.",
+        "dominant_events": [],
+        "market_uncertainties": ["Fixture uncertainty"],
+        "affected_sectors": ["Technology"],
+        "focus_ticker_assessments": [],
+        "no_new_material_catalyst": False,
+        "insufficient_context": False,
+        "display_only": True,
+    }
+    repository.publish_market_focus_snapshot(
+        hotspot_status(),
+        [hotspot_item()],
+        remote_cycle(status="completed", result=analysis),
+        now=utc(10),
+    )
+
+    anonymous = client_for(configured(path), public_read=True)
+    authenticated = client_for(
+        configured(path), public_read=True, app_authenticated=True
+    )
+
+    anonymous_status = anonymous.get("/api/catalysts/hotspots/status").json()
+    anonymous_hotspots = anonymous.get("/api/catalysts/hotspots?limit=1").json()
+    anonymous_latest = anonymous.get(
+        "/api/catalysts/market-focus-cycles/latest"
+    ).json()
+    authenticated_status = authenticated.get(
+        "/api/catalysts/hotspots/status"
+    ).json()
+    authenticated_hotspots = authenticated.get(
+        "/api/catalysts/hotspots?limit=1"
+    ).json()
+    authenticated_latest = authenticated.get(
+        "/api/catalysts/market-focus-cycles/latest"
+    ).json()
+
+    assert anonymous_status["manual_enabled"] is False
+    assert anonymous_status["action_enabled"] is False
+    assert anonymous_status["capability"] == "disabled"
+    assert "active_cycle_id" not in anonymous_status
+    assert "cooldown_until" not in anonymous_status
+    assert "schema_sha256" not in anonymous_status
+    assert authenticated_status["manual_enabled"] is True
+    assert authenticated_status["action_enabled"] is True
+    assert "active_cycle_id" in authenticated_status
+
+    anonymous_item = anonymous_hotspots["items"][0]
+    assert anonymous_item["representative_title"] == "A bounded fixture event"
+    assert anonymous_item["validated_tickers"] == ["NVDA"]
+    assert "event_snapshot_json" not in anonymous_item
+    assert "active_weights" not in anonymous_item
+    assert "leased_cycle_id" not in anonymous_item
+    assert "consumed_cycle_id" not in anonymous_item
+    assert "consumed_at" not in anonymous_item
+    assert "created_at" not in anonymous_item
+    assert "event_snapshot_json" in authenticated_hotspots["items"][0]
+    assert "active_weights" in authenticated_hotspots["items"][0]
+    assert set(anonymous_hotspots) == {
+        "status",
+        "as_of",
+        "data_through",
+        "warnings",
+        "items",
+    }
+
+    anonymous_cycle = anonymous_latest["cycle"]
+    authenticated_cycle = authenticated_latest["cycle"]
+    assert set(anonymous_latest) == {
+        "status",
+        "as_of",
+        "data_through",
+        "warnings",
+        "cycle",
+    }
+    assert set(anonymous_cycle) == {
+        "cycle_id",
+        "status",
+        "no_new_hot_events",
+        "prepared_revision",
+        "focus_revision",
+        "snapshot_as_of",
+        "event_group_count",
+        "focus_symbol_count",
+        "model",
+        "reasoning_effort",
+        "result",
+        "error_code",
+        "created_at",
+        "completed_at",
+        "updated_at",
+    }
+    assert anonymous_cycle["result"]["market_summary"] == analysis["market_summary"]
+    for hidden_field in (
+        "scheduled_slot",
+        "idempotency_key",
+        "retry_of_cycle_id",
+        "execution_number",
+        "trigger_type",
+        "last_consumed_revision_at_start",
+        "consumes_through_revision",
+        "provider",
+        "execution_mode",
+        "input_schema_version",
+        "input_hash",
+        "max_output_tokens",
+        "prompt_version",
+        "output_schema_version",
+        "attempt_count",
+        "retrieve_error_count",
+        "cancel_attempt_count",
+        "next_attempt_at",
+        "cancel_requested_at",
+        "latency_ms",
+        "usage_input_tokens",
+        "usage_cached_input_tokens",
+        "usage_cache_write_tokens",
+        "usage_reasoning_tokens",
+        "usage_output_tokens",
+        "usage_total_tokens",
+        "started_at",
+    ):
+        assert hidden_field not in anonymous_cycle
+    for full_field in (
+        "scheduled_slot",
+        "idempotency_key",
+        "execution_number",
+        "trigger_type",
+        "last_consumed_revision_at_start",
+        "consumes_through_revision",
+        "provider",
+        "execution_mode",
+        "input_schema_version",
+        "input_hash",
+        "max_output_tokens",
+        "prompt_version",
+        "output_schema_version",
+        "attempt_count",
+        "retrieve_error_count",
+        "cancel_attempt_count",
+        "next_attempt_at",
+        "cancel_requested_at",
+        "latency_ms",
+        "usage_input_tokens",
+        "usage_cached_input_tokens",
+        "usage_cache_write_tokens",
+        "usage_reasoning_tokens",
+        "usage_output_tokens",
+        "usage_total_tokens",
+        "started_at",
+    ):
+        assert full_field in authenticated_cycle
+
+    cycle_id = authenticated_cycle["cycle_id"]
+    anonymous_detail = anonymous.get(
+        f"/api/catalysts/market-focus-cycles/{cycle_id}"
+    ).json()
+    authenticated_detail = authenticated.get(
+        f"/api/catalysts/market-focus-cycles/{cycle_id}"
+    ).json()
+    assert anonymous_detail == anonymous_cycle
+    assert authenticated_detail == authenticated_cycle
+
+
 def test_confidence_filter_consistently_controls_unanalyzed_items(tmp_path) -> None:
     repository = CatalystRepository(tmp_path / "catalysts.db")
     repository.initialize(now=utc(9))

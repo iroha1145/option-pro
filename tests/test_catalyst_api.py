@@ -5,8 +5,9 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.catalysts import router
+from app.api.catalysts import _MAX_CATALYST_BODY_BYTES, router
 from app.services.catalysts.config import CatalystSettings, get_catalyst_settings
+from app.services.catalysts.models import ComponentHealth
 from app.services.catalysts.repository import CatalystRepository
 from app.services.ai_jobs.security import require_expensive_action
 from catalyst_support import catalyst_item, utc
@@ -41,12 +42,25 @@ def configured(path, *, enabled: bool = True, action: bool = True) -> CatalystSe
     return CatalystSettings(_env_file=None, **values)
 
 
-def client_for(settings: CatalystSettings, *, authorize_actions: bool = True) -> TestClient:
+def client_for(
+    settings: CatalystSettings,
+    *,
+    authorize_actions: bool = True,
+    public_read: bool = False,
+    app_authenticated: bool = False,
+) -> TestClient:
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[get_catalyst_settings] = lambda: settings
     if authorize_actions:
         app.dependency_overrides[require_expensive_action] = lambda: None
+    if public_read:
+        async def mark_public_read(request, call_next):
+            request.state.public_read_authenticated = True
+            request.state.app_authenticated = app_authenticated
+            return await call_next(request)
+
+        app.middleware("http")(mark_public_read)
     return TestClient(app, base_url="http://localhost")
 
 
@@ -122,6 +136,132 @@ def test_all_get_routes_read_local_cache_without_remote_side_effect(tmp_path) ->
     assert batch.status_code == 200
     assert batch.json()["results"]["NVDA"]["items"]
     assert batch.json()["results"]["AMD"]["status"] == "empty"
+
+
+def test_anonymous_news_detail_hides_job_but_authenticated_detail_keeps_it(
+    tmp_path,
+) -> None:
+    path = tmp_path / "catalysts.db"
+    repository = seed(path)
+    queued = repository.enqueue_analysis(
+        101,
+        content_hash="content-hash-101",
+        change_sequence=2,
+        contract_schema_version="macrolens-option-pro-v2",
+        force=False,
+        model="gpt-5.6-terra",
+        reasoning="max",
+        now=utc(10, 7),
+    )
+
+    anonymous = client_for(configured(path), public_read=True)
+    authenticated = client_for(
+        configured(path), public_read=True, app_authenticated=True
+    )
+    anonymous_payload = anonymous.get("/api/catalysts/news/101").json()
+    authenticated_payload = authenticated.get("/api/catalysts/news/101").json()
+
+    assert anonymous_payload["item"]["news_id"] == 101
+    assert anonymous_payload["analysis_job"] is None
+    assert anonymous_payload["analysis_trigger_enabled"] is False
+    assert authenticated_payload["analysis_job"]["job_id"] == queued["job_id"]
+    assert authenticated_payload["analysis_trigger_enabled"] is True
+
+
+def test_anonymous_status_disables_actions_and_crops_internal_state(tmp_path) -> None:
+    path = tmp_path / "catalysts.db"
+    repository = seed(path)
+    repository.publish_health(
+        status="ok",
+        data_through=utc(10, 8),
+        sources={
+            "wire": ComponentHealth(
+                status="degraded",
+                last_attempt_at=utc(10, 7),
+                last_success_at=utc(10, 6),
+                data_through=utc(10, 6),
+                consecutive_failures=2,
+                next_attempt_at=utc(10, 9),
+                raw_count=20,
+                inserted_count=18,
+                duplicates_count=2,
+                detail="upstream http://internal.example failed",
+            )
+        },
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        analysis_trigger_enabled=True,
+        observed_at=utc(10, 8),
+    )
+    anonymous = client_for(configured(path), public_read=True)
+    authenticated = client_for(
+        configured(path), public_read=True, app_authenticated=True
+    )
+
+    anonymous_payload = anonymous.get("/api/catalysts/status").json()
+    authenticated_payload = authenticated.get("/api/catalysts/status").json()
+
+    assert anonymous_payload["status"] == authenticated_payload["status"]
+    assert anonymous_payload["analysis_trigger_enabled"] is False
+    assert anonymous_payload["model"] == "gpt-5.6-terra"
+    assert anonymous_payload["sources"] == [
+        {
+            "source": "wire",
+            "status": "degraded",
+            "last_success_at": "2026-07-11T10:06:00Z",
+            "data_through": "2026-07-11T10:06:00Z",
+            "consecutive_failures": 2,
+            "raw_count": 20,
+            "inserted_count": 18,
+            "duplicates_count": 2,
+            "source_fetch_status": None,
+            "news_persistence_status": None,
+            "event_projection_status": None,
+        }
+    ]
+    assert "detail" not in anonymous_payload["sources"][0]
+    assert "last_attempt_at" not in anonymous_payload["sources"][0]
+    assert "next_attempt_at" not in anonymous_payload["sources"][0]
+    assert "streams" in anonymous_payload
+    assert "snapshot_id" not in anonymous_payload
+    assert "worker" not in anonymous_payload
+    assert "execution_mode" not in anonymous_payload
+    assert authenticated_payload["analysis_trigger_enabled"] is True
+    assert "snapshot_id" in authenticated_payload
+    assert authenticated_payload["execution_mode"] == "background"
+    assert authenticated_payload["sources"][0]["detail"].startswith("upstream")
+    assert "last_attempt_at" in authenticated_payload["sources"][0]
+
+
+def test_catalyst_routes_reject_oversized_content_length_before_json_parsing(
+    tmp_path,
+) -> None:
+    client = client_for(configured(tmp_path / "catalysts.db"))
+    response = client.post(
+        "/api/catalysts/tickers/batch",
+        content=b"x" * (_MAX_CATALYST_BODY_BYTES + 1),
+        headers={"content-type": "application/json"},
+    )
+    assert response.status_code == 413
+    assert response.json()["detail"] == "Catalyst request body exceeds 32 KiB"
+
+
+def test_catalyst_routes_reject_oversized_chunked_body_before_json_parsing(
+    tmp_path,
+) -> None:
+    client = client_for(configured(tmp_path / "catalysts.db"))
+
+    def chunks():
+        yield b"x" * (_MAX_CATALYST_BODY_BYTES // 2)
+        yield b"x" * (_MAX_CATALYST_BODY_BYTES // 2 + 1)
+
+    response = client.post(
+        "/api/catalysts/tickers/batch",
+        content=chunks(),
+        headers={"content-type": "application/json"},
+    )
+    assert response.status_code == 413
 
 
 def test_post_only_enqueues_refresh_and_opaque_analysis_job(tmp_path) -> None:

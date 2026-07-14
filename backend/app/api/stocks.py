@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 import yfinance as yf
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 
 router = APIRouter(prefix="/api/stocks", tags=["stocks"])
@@ -422,11 +422,22 @@ def _watchlist_cache_key(tickers: list[str] | None) -> str:
 
 @router.get("/watchlist")
 async def watchlist(
+    request: Request,
     tickers: Annotated[
         Optional[str],
         Query(max_length=_WATCHLIST_QUERY_MAX_LENGTH),
     ] = None,
 ):
+    request_state = getattr(request, "state", None)
+    if (
+        tickers is not None
+        and getattr(request_state, "public_read_authenticated", False)
+        and not getattr(request_state, "app_authenticated", False)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Custom watchlist queries require app authentication",
+        )
     requested_tickers = _parse_watchlist_tickers(tickers)
     cache_key = _watchlist_cache_key(requested_tickers)
     # Keep the zero-argument loader for the original endpoint. Besides

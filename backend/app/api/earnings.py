@@ -8,7 +8,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import yfinance as yf
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.services.cache import cache
 
@@ -163,13 +163,23 @@ def _next_future_date(candidates: list[date], today: date) -> date | None:
 
 
 @router.get("/upcoming")
-async def upcoming_earnings(refresh: bool = False):
+async def upcoming_earnings(refresh: bool = False, request: Request = None):
     """Fetch real upcoming earnings dates from Yahoo Finance.
 
     Uses the locked cache helper so concurrent cold-cache requests share ONE
     fetch instead of each firing ~67 tickers worth of yfinance calls
     (thundering herd).
     """
+    request_state = getattr(request, "state", None)
+    if (
+        refresh
+        and getattr(request_state, "public_read_authenticated", False)
+        and not getattr(request_state, "app_authenticated", False)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Earnings refresh requires app authentication",
+        )
     today = _market_today()
     key = f"earnings:upcoming:{today.isoformat()}"
     if not refresh:
