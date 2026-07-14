@@ -1042,6 +1042,18 @@ def _active_intraday_symbol(symbol: FocusSymbol) -> bool:
     )
 
 
+def _producer_heartbeat_status(details: Mapping[str, Any]) -> str:
+    status = str(details.get("status") or "").lower()
+    if (
+        status in {"degraded", "unavailable", "failed"}
+        or details.get("error_code")
+        or details.get("stale_symbol_count")
+        or details.get("fallback_symbol_count")
+    ):
+        return "degraded"
+    return "idle"
+
+
 def _admit_cross_session_intraday_symbol(
     draft: FocusContextDraft,
     *,
@@ -1807,13 +1819,7 @@ class FocusContextProducer:
                 "retention": retention,
                 **details,
             }
-            heartbeat_status = (
-                "degraded"
-                if result.get("stale_symbol_count")
-                or result.get("fallback_symbol_count")
-                else "idle"
-            )
-            self._heartbeat(heartbeat_status, result)
+            self._heartbeat(_producer_heartbeat_status(result), result)
             return result
         except Exception as error:
             error_code = (
@@ -1874,12 +1880,14 @@ class FocusContextProducer:
                 }
                 self._heartbeat("degraded", result)
                 return result
-            return {
+            result = {
                 "status": "unavailable",
                 "enabled": True,
                 "error_code": error_code,
                 "stale_revision": None,
             }
+            self._heartbeat(_producer_heartbeat_status(result), result)
+            return result
         finally:
             if owned_lease:
                 self.repository.release_worker_lock(
@@ -1912,14 +1920,8 @@ class FocusContextProducer:
                 now=self.clock.now(),
             ):
                 return False
-            heartbeat_status = (
-                "degraded"
-                if self._heartbeat_details.get("stale_symbol_count")
-                or self._heartbeat_details.get("fallback_symbol_count")
-                else "idle"
-            )
             self._heartbeat(
-                heartbeat_status,
+                _producer_heartbeat_status(self._heartbeat_details),
                 {"next_run_at": target.isoformat(), "stage": "waiting"},
             )
         return False

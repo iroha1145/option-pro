@@ -30,6 +30,7 @@ from app.services.catalysts.focus_worker import (
     _intraday_session_change_pct,
     _latest_completed_trading_day,
     _merge_candidate_rows,
+    _producer_heartbeat_status,
     fixed_refresh_times,
     health_payload,
     next_refresh_at,
@@ -1265,6 +1266,7 @@ def test_cross_session_without_fresh_intraday_does_not_refresh_snapshot_age(
     old_as_of = datetime(2026, 7, 14, 0, 0, tzinfo=timezone.utc)
     old_data_through = datetime(2026, 7, 13, 22, 20, tzinfo=timezone.utc)
     premarket_now = datetime(2026, 7, 14, 12, 30, tzinfo=timezone.utc)
+    clock_now = [premarket_now]
     repository.initialize(now=old_as_of)
     initial = build_focus_context(
         settings=settings,
@@ -1295,7 +1297,7 @@ def test_cross_session_without_fresh_intraday_does_not_refresh_snapshot_age(
     producer = FocusContextProducer(
         settings=settings,
         repository=repository,
-        clock=MarketClock(now=lambda: premarket_now),
+        clock=MarketClock(now=lambda: clock_now[0]),
         strength_loader=lambda: asyncio.sleep(
             0,
             result=_strength_payload(
@@ -1320,7 +1322,14 @@ def test_cross_session_without_fresh_intraday_does_not_refresh_snapshot_age(
         owner_id=f"{FOCUS_PRODUCER_WORKER_PREFIX}cross-session-empty",
     )
 
-    result = asyncio.run(producer.run_once())
+    token = repository.acquire_worker_lock(
+        LOCK_NAME,
+        producer.owner_id,
+        lease_seconds=settings.producer_lease_seconds,
+        now=premarket_now,
+    )
+    assert token is not None
+    result = asyncio.run(producer.run_once(fencing_token=token))
 
     assert result["status"] == "degraded"
     assert result["error_code"] == "focus_recovery_requires_intraday"
@@ -1340,6 +1349,31 @@ def test_cross_session_without_fresh_intraday_does_not_refresh_snapshot_age(
     health = health_payload(settings, repository=repository, now=premarket_now)
     assert health["healthy"] is False
     assert health["database"]["snapshot_fresh"] is False
+
+    async def advance_clock(seconds: float) -> None:
+        clock_now[0] += timedelta(seconds=seconds)
+
+    async def wait_for_heartbeat() -> bool:
+        return await producer._wait_until(
+            premarket_now + timedelta(seconds=60),
+            stop=asyncio.Event(),
+            fencing_token=token,
+        )
+
+    producer.sleeper = advance_clock
+    waited = asyncio.run(wait_for_heartbeat())
+    assert waited is True
+    health_after_wait = health_payload(
+        settings,
+        repository=repository,
+        now=clock_now[0],
+    )
+    assert health_after_wait["database"]["status"] == "degraded"
+    assert health_after_wait["database"]["details"]["error_code"] == (
+        "focus_recovery_requires_intraday"
+    )
+    assert health_after_wait["database"]["details"]["stage"] == "waiting"
+    repository.release_worker_lock(LOCK_NAME, producer.owner_id, token)
 
 
 def test_forced_cross_session_candidate_keeps_prior_trusted_validation(
@@ -1955,26 +1989,63 @@ def test_unavailable_daily_strength_result_is_not_cached(tmp_path) -> None:
     path = tmp_path / "focus.db"
     repository = CatalystRepository(path)
     repository.initialize(now=SUMMER_NOW)
+    settings = _settings(path)
+    clock_now = [SUMMER_NOW]
     unavailable = {
         **_strength_payload(),
         "status": "unavailable",
     }
     producer = FocusContextProducer(
-        settings=_settings(path),
+        settings=settings,
         repository=repository,
-        clock=MarketClock(now=lambda: SUMMER_NOW),
+        clock=MarketClock(now=lambda: clock_now[0]),
         strength_loader=lambda: asyncio.sleep(0, result=unavailable),
         breakout_loader=lambda: [],
         owner_id=f"{FOCUS_PRODUCER_WORKER_PREFIX}unavailable-cache",
     )
 
-    result = asyncio.run(producer.run_once())
+    token = repository.acquire_worker_lock(
+        LOCK_NAME,
+        producer.owner_id,
+        lease_seconds=settings.producer_lease_seconds,
+        now=SUMMER_NOW,
+    )
+    assert token is not None
+    result = asyncio.run(producer.run_once(fencing_token=token))
 
     assert result["status"] == "unavailable"
+    assert result["error_code"] == "RuntimeError"
     with repository.open_read_connection() as connection:
         assert connection.execute(
             "SELECT COUNT(*) FROM focus_daily_strength_snapshots"
         ).fetchone()[0] == 0
+
+    async def advance_clock(seconds: float) -> None:
+        clock_now[0] += timedelta(seconds=seconds)
+
+    async def wait_for_heartbeat() -> bool:
+        return await producer._wait_until(
+            SUMMER_NOW + timedelta(seconds=60),
+            stop=asyncio.Event(),
+            fencing_token=token,
+        )
+
+    producer.sleeper = advance_clock
+    assert asyncio.run(wait_for_heartbeat()) is True
+    health_after_wait = health_payload(
+        settings,
+        repository=repository,
+        now=clock_now[0],
+    )
+    assert health_after_wait["database"]["status"] == "degraded"
+    assert health_after_wait["database"]["details"]["status"] == "unavailable"
+    assert health_after_wait["database"]["details"]["error_code"] == "RuntimeError"
+    assert health_after_wait["database"]["details"]["stage"] == "waiting"
+    repository.release_worker_lock(LOCK_NAME, producer.owner_id, token)
+
+
+def test_clean_completed_heartbeat_is_idle() -> None:
+    assert _producer_heartbeat_status({"status": "completed"}) == "idle"
 
 
 def test_focus_health_and_fencing_are_independent_from_sync_worker(tmp_path) -> None:
