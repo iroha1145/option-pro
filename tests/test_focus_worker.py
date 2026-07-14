@@ -1790,7 +1790,10 @@ def test_compose_has_isolated_focus_producer_without_openai_or_readiness_couplin
     setup = (ROOT / "setup.sh").read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "set_env_value FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS 120" in setup
-    assert 'focus_producer_enabled="${focus_producer_enabled:-false}"' in deploy
+    assert (
+        'focus_producer_enabled="$(configuration_boolean '
+        'FOCUS_PRODUCER_ENABLED false)"'
+    ) in deploy
     assert (
         'focus_producer_snapshot_grace_seconds="${focus_producer_snapshot_grace_seconds:-120}"'
         in deploy

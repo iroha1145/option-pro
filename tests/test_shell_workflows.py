@@ -69,6 +69,52 @@ if [ "${1:-}" = "exec" ] && [[ " $* " == *" focus-context-producer "*" --healthc
     fi
     exit 0
 fi
+if [ "${1:-}" = "exec" ] && [[ " $* " == *" catalyst-sync-worker "*" --request-refresh "* ]]; then
+    printf '%s\\n' 'requested' >> .fake-catalyst-refresh-log
+    printf '{"status":"refresh_requested","streams":["health","feed"],"remote_checked":false}\\n'
+    exit 0
+fi
+if [ "${1:-}" = "exec" ] && [[ " $* " == *" catalyst-sync-worker "*" --healthcheck "* ]]; then
+    enabled="$(awk -F= '$1 == "MACROLENS_ENABLED" {print $2}' .env | tail -n 1)"
+    case "$enabled" in
+        1|true|TRUE|yes|YES)
+            printf '{"healthy":true,"status":"ok","enabled":true,"contract":{"valid":true}}\\n'
+            ;;
+        *)
+            printf '{"healthy":true,"status":"disabled","enabled":false,"contract":{"valid":null}}\\n'
+            ;;
+    esac
+    exit 0
+fi
+if [ "${1:-}" = "exec" ] && [[ " $* " == *" backend python -c "* ]] && [[ " $* " == *"deployment_status_ready"* ]]; then
+    shift
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            -T)
+                shift
+                ;;
+            -e)
+                export "$2"
+                shift 2
+                ;;
+            backend)
+                shift
+                break
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    if [ "${1:-}" != "python" ] || [ "${2:-}" != "-c" ] || [ "$#" -ne 3 ]; then
+        exit 2
+    fi
+    if [ -z "${FAKE_CATALYST_PYTHONPATH:-}" ]; then
+        exit 0
+    fi
+    PYTHONPATH="${FAKE_CATALYST_PYTHONPATH:?}" python3 -c "$3"
+    exit $?
+fi
 if [ "${1:-}" = "exec" ] && [[ " $* " == *" breakout-worker "*" --healthcheck "* ]]; then
     enabled="$(awk -F= '$1 == "BREAKOUT_RADAR_ENABLED" {print $2}' .env | tail -n 1)"
     enabled="${enabled%\\\"}"; enabled="${enabled#\\\"}"
@@ -102,6 +148,119 @@ def _deployment_root(tmp_path: Path, env_text: str) -> tuple[Path, dict[str, str
     _fake_docker(bin_dir)
     environment = _isolated_environment()
     environment["PATH"] = f"{bin_dir}{os.pathsep}{environment['PATH']}"
+    fake_python = tmp_path / "fake-python"
+    fake_python.mkdir()
+    (fake_python / "sitecustomize.py").write_text(
+        """from __future__ import annotations
+
+import io
+import os
+import time
+import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+_real_urlopen = urllib.request.urlopen
+
+
+def _timestamp(offset_seconds: float) -> str:
+    cutoff = float(os.environ.get("CATALYST_DEPLOY_NOT_BEFORE_EPOCH", "0"))
+    value = datetime.fromtimestamp(cutoff + offset_seconds, tz=timezone.utc)
+    return value.isoformat().replace("+00:00", "Z")
+
+
+def _active_payload(state: str) -> str:
+    health_at = _timestamp(1 if state in {"health_only", "ready"} else -1)
+    feed_at = _timestamp(1 if state == "ready" else -1)
+    return __import__("json").dumps(
+        {
+            "enabled": True,
+            "status": "active",
+            "remote_status": "ok",
+            "last_sync_at": feed_at,
+            "snapshot_id": "snapshot-current",
+            "resync_required": False,
+            "analysis_trigger_enabled": True,
+            "model": "gpt-5.6-terra",
+            "reasoning": "max",
+            "execution_mode": "background",
+            "expected_model": "gpt-5.6-terra",
+            "expected_reasoning": "max",
+            "schema_version": "macrolens-option-pro-v2",
+            "streams": {
+                "health": {"last_success_at": health_at},
+                "feed": {"last_success_at": feed_at},
+            },
+        },
+        separators=(",", ":"),
+    )
+
+
+def _disabled_payload() -> str:
+    return __import__("json").dumps(
+        {
+            "enabled": False,
+            "status": "disabled",
+            "remote_status": None,
+            "last_sync_at": None,
+            "snapshot_id": None,
+            "resync_required": False,
+            "analysis_trigger_enabled": False,
+            "model": None,
+            "reasoning": None,
+            "execution_mode": None,
+            "expected_model": "gpt-5.6-terra",
+            "expected_reasoning": "max",
+            "schema_version": "macrolens-option-pro-v2",
+            "streams": {},
+        },
+        separators=(",", ":"),
+    )
+
+
+def _next_status() -> str:
+    sequence_path = os.environ.get("FAKE_CATALYST_STATUS_SEQUENCE", "")
+    if not sequence_path:
+        enabled = os.environ.get("EXPECTED_CATALYST_ENABLED", "false") == "true"
+        return _active_payload("ready") if enabled else _disabled_payload()
+
+    states = [
+        line.strip()
+        for line in Path(sequence_path).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    if not states:
+        raise RuntimeError("fake Catalyst status sequence is empty")
+    count_path = Path(
+        os.environ.get(
+            "FAKE_CATALYST_STATUS_COUNT_FILE",
+            str(Path(sequence_path).with_suffix(".count")),
+        )
+    )
+    count = int(count_path.read_text(encoding="utf-8")) if count_path.exists() else 0
+    count += 1
+    count_path.write_text(str(count), encoding="utf-8")
+    return _active_payload(states[min(count - 1, len(states) - 1)])
+
+
+def _urlopen(request, *args, **kwargs):
+    url = getattr(request, "full_url", str(request))
+    if url == "http://127.0.0.1:8000/api/catalysts/status":
+        return io.StringIO(_next_status())
+    return _real_urlopen(request, *args, **kwargs)
+
+
+urllib.request.urlopen = _urlopen
+if os.environ.get("FAKE_CATALYST_NO_SLEEP") == "true":
+    time.sleep = lambda _seconds: None
+""",
+        encoding="utf-8",
+    )
+    environment["FAKE_CATALYST_PYTHONPATH"] = os.pathsep.join(
+        (str(fake_python), str(ROOT / "backend"))
+    )
+    environment["FAKE_CATALYST_NO_SLEEP"] = "true"
     return root, environment
 
 
@@ -402,12 +561,73 @@ def test_required_catalyst_read_gate_does_not_require_action_config(
     root, environment = _deployment_root(tmp_path, required)
     accepted = _run_deploy(root, environment)
     assert accepted.returncode == 0, accepted.stderr
+    refresh_log = root / ".fake-catalyst-refresh-log"
+    assert refresh_log.read_text(encoding="utf-8").splitlines() == ["requested"]
+
+
+@pytest.mark.parametrize(
+    "configured_value",
+    ["True", "YES", "on", "true # required for production"],
+)
+def test_catalyst_read_gate_accepts_compose_boolean_forms_without_silent_disable(
+    tmp_path: Path,
+    configured_value: str,
+) -> None:
+    template = (ROOT / ".env.example").read_text(encoding="utf-8")
+    required_but_disabled = template.replace(
+        "DEPLOY_REQUIRE_CATALYST=false",
+        f"DEPLOY_REQUIRE_CATALYST={configured_value}",
+        1,
+    )
+    root, environment = _deployment_root(tmp_path, required_but_disabled)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "requires MACROLENS_ENABLED=true" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "DEPLOY_REQUIRE_CATALYST",
+        "DEPLOY_REQUIRE_CATALYST_ACTIONS",
+        "MACROLENS_ENABLED",
+    ],
+)
+def test_unknown_catalyst_boolean_fails_closed(
+    tmp_path: Path,
+    key: str,
+) -> None:
+    template = (ROOT / ".env.example").read_text(encoding="utf-8")
+    invalid = template.replace(f"{key}=false", f"{key}=treu", 1)
+    root, environment = _deployment_root(tmp_path, invalid)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert f"{key} must be a recognized boolean value" in result.stderr
 
 
 def test_required_catalyst_actions_gate_requires_read_gate(tmp_path: Path) -> None:
     actions_only = (ROOT / ".env.example").read_text(encoding="utf-8").replace(
         "DEPLOY_REQUIRE_CATALYST_ACTIONS=false",
         "DEPLOY_REQUIRE_CATALYST_ACTIONS=true",
+        1,
+    )
+    root, environment = _deployment_root(tmp_path, actions_only)
+    rejected = _run_deploy(root, environment)
+    assert rejected.returncode != 0
+    assert (
+        "DEPLOY_REQUIRE_CATALYST_ACTIONS=true requires "
+        "DEPLOY_REQUIRE_CATALYST=true"
+    ) in rejected.stderr
+
+
+def test_required_catalyst_actions_gate_is_case_insensitive(tmp_path: Path) -> None:
+    actions_only = (ROOT / ".env.example").read_text(encoding="utf-8").replace(
+        "DEPLOY_REQUIRE_CATALYST_ACTIONS=false",
+        "DEPLOY_REQUIRE_CATALYST_ACTIONS=True # explicit action rollout",
         1,
     )
     root, environment = _deployment_root(tmp_path, actions_only)
@@ -499,11 +719,48 @@ def test_required_catalyst_gate_uses_the_committed_contract_digest(
 
 def test_required_catalyst_runtime_gate_requires_fresh_active_snapshot() -> None:
     script = (ROOT / "scripts" / "deploy.sh").read_text(encoding="utf-8")
-    assert 'payload.get("status") == "active"' in script
-    assert 'payload.get("remote_status") in {"ok", "active"}' in script
-    assert 'payload.get("last_sync_at") is not None' in script
-    assert 'payload.get("snapshot_id") is not None' in script
-    assert 'payload.get("resync_required") is False' in script
+    assert "--request-refresh" in script
+    assert "CATALYST_DEPLOY_NOT_BEFORE_EPOCH" in script
+    assert "deployment_status_ready" in script
+    assert "required_after_epoch=required_after_epoch" in script
+
+
+def test_catalyst_runtime_gate_waits_for_current_health_and_feed(
+    tmp_path: Path,
+) -> None:
+    root, environment = _deployment_root(
+        tmp_path,
+        _required_catalyst_read_environment(),
+    )
+    sequence = root / ".fake-catalyst-status-sequence"
+    sequence.write_text("old\nhealth_only\nready\n", encoding="utf-8")
+    count_file = root / ".fake-catalyst-status-count"
+    environment["FAKE_CATALYST_STATUS_SEQUENCE"] = str(sequence)
+    environment["FAKE_CATALYST_STATUS_COUNT_FILE"] = str(count_file)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode == 0, result.stderr
+    assert count_file.read_text(encoding="utf-8") == "3"
+
+
+def test_catalyst_runtime_gate_fails_after_sixty_stale_statuses(
+    tmp_path: Path,
+) -> None:
+    root, environment = _deployment_root(
+        tmp_path,
+        _required_catalyst_read_environment(),
+    )
+    sequence = root / ".fake-catalyst-status-sequence"
+    sequence.write_text("old\n", encoding="utf-8")
+    count_file = root / ".fake-catalyst-status-count"
+    environment["FAKE_CATALYST_STATUS_SEQUENCE"] = str(sequence)
+    environment["FAKE_CATALYST_STATUS_COUNT_FILE"] = str(count_file)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert count_file.read_text(encoding="utf-8") == "60"
 
 
 def test_legacy_env_and_incomplete_trusted_proxy_config_fail_before_build(

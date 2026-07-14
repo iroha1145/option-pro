@@ -40,7 +40,7 @@ DEPLOY_REQUIRE_CATALYST=false
 DEPLOY_REQUIRE_CATALYST_ACTIONS=false
 ```
 
-`DEPLOY_REQUIRE_CATALYST` 是只读发布门禁。启用后，部署脚本要求 `MACROLENS_ENABLED=true`、`CATALYST_MODE=display`、远程 HTTPS 与证书校验、读密钥，以及与仓库一致的契约摘要；不要求 action 密钥或 `APP_AUTH_TOKEN`。
+`DEPLOY_REQUIRE_CATALYST` 是只读发布门禁。启用后，部署脚本要求 `MACROLENS_ENABLED=true`、`CATALYST_MODE=display`、远程 HTTPS 与证书校验、读密钥，以及与仓库一致的契约摘要；不要求 action 密钥或 `APP_AUTH_TOKEN`。容器就绪后，门禁会写入一次本地 Health 与 Feed 刷新请求，并且只接受刷新请求时间之后由当前 Worker 发布的两项成功结果；旧容器留下的 active 快照不能替代本轮联调。
 
 `DEPLOY_REQUIRE_CATALYST_ACTIONS` 是动作发布门禁，默认关闭。它只能在只读门禁开启时使用，并额外要求 action 密钥、`APP_AUTH_TOKEN`，以及部署后的 `analysis_trigger_enabled=true`。两个开关由宿主机上的部署脚本读取；部署后的临时验收命令由脚本单独传值，因此 `docker-compose.yml` 不新增业务配置项。
 
