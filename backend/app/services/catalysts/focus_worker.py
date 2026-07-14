@@ -930,6 +930,204 @@ def _stale_draft(
     )
 
 
+def _cross_session_transition(
+    current: FocusContextResponse | None,
+    *,
+    observed: datetime,
+    market_session: str,
+) -> bool:
+    """Return whether a producer run crossed an ET day or market-session edge."""
+
+    if current is None:
+        return False
+    return bool(
+        current.as_of.astimezone(ET).date() != observed.astimezone(ET).date()
+        or current.market_session != market_session
+    )
+
+
+def _failed_transition_recovery(current: FocusContextResponse | None) -> bool:
+    """Recognize an all-stale snapshot left by a rejected session transition."""
+
+    return bool(
+        current is not None
+        and current.symbols
+        and all(symbol.data_status == "stale" for symbol in current.symbols)
+        and "focus_snapshot_time_regression" in current.warnings
+    )
+
+
+def _stale_retained_symbol(symbol: FocusSymbol) -> FocusSymbol:
+    """Keep the last real observation without presenting old session metrics as live."""
+
+    reasons = [
+        reason
+        for reason in symbol.universe_reasons
+        if not (
+            reason == "regular_mover"
+            or reason == "dollar_volume_retained"
+            or reason.startswith("market_dollar_volume_")
+            or reason.startswith("candidate_dollar_volume_")
+            or reason.startswith("dollar_volume_")
+        )
+    ]
+    if "stale_retained" not in reasons:
+        reasons = [*reasons[:11], "stale_retained"]
+    return symbol.model_copy(
+        update={
+            "data_status": "stale",
+            "universe_reasons": reasons,
+            "dollar_volume_rank": None,
+            "session_change_pct": None,
+            "rvol_time_of_day": None,
+            "data_quality": None,
+            "source_status": "stale",
+        }
+    )
+
+
+def _reconcile_cross_session_symbols(
+    draft: FocusContextDraft,
+    *,
+    current: FocusContextResponse | None,
+) -> tuple[FocusContextDraft, int]:
+    """Retain newer per-symbol truth while the global repository guard stays strict."""
+
+    if current is None:
+        return draft, 0
+    previous = {symbol.ticker: symbol for symbol in current.symbols}
+    retained_count = 0
+    symbols: list[FocusSymbol] = []
+    for symbol in draft.symbols:
+        prior = previous.get(symbol.ticker)
+        if prior is None:
+            symbols.append(symbol)
+            continue
+        prior_data_through = _as_utc(prior.data_through)
+        candidate_data_through = _as_utc(symbol.data_through)
+        if candidate_data_through is None or (
+            prior_data_through is not None
+            and candidate_data_through <= prior_data_through
+        ):
+            symbols.append(_stale_retained_symbol(prior))
+            retained_count += 1
+        else:
+            symbols.append(symbol)
+
+    values = [
+        value
+        for symbol in symbols
+        if (value := _as_utc(symbol.data_through)) is not None
+    ]
+    warnings = list(draft.warnings)
+    if retained_count:
+        warnings.append("focus_cross_session_stale_retained")
+    return (
+        draft.model_copy(
+            update={
+                "symbols": symbols,
+                "data_through": min(values) if values else None,
+                "warnings": list(dict.fromkeys(warnings))[:50],
+            }
+        ),
+        retained_count,
+    )
+
+
+def _active_intraday_symbol(symbol: FocusSymbol) -> bool:
+    return bool(
+        symbol.data_status == "active"
+        and symbol.dollar_volume_basis == "intraday_completed_bars"
+        and _as_utc(symbol.data_through) is not None
+    )
+
+
+def _admit_cross_session_intraday_symbol(
+    draft: FocusContextDraft,
+    *,
+    candidate: FocusSymbol | None,
+    current: FocusContextResponse | None,
+    max_symbols: int,
+) -> tuple[FocusContextDraft, int]:
+    """Keep one genuinely advancing intraday symbol when the old pool is full."""
+
+    if any(_active_intraday_symbol(symbol) for symbol in draft.symbols):
+        return draft, 0
+    if candidate is None or not _active_intraday_symbol(candidate):
+        return draft, 0
+    previous = (
+        {symbol.ticker: symbol for symbol in current.symbols}
+        if current is not None
+        else {}
+    )
+    prior = previous.get(candidate.ticker)
+    if (
+        prior is not None
+        and candidate.validation_status == "unverified"
+        and prior.validation_status in {"canonical", "valid_external"}
+    ):
+        candidate = candidate.model_copy(
+            update={"validation_status": prior.validation_status}
+        )
+    candidate_data_through = _as_utc(candidate.data_through)
+    prior_data_through = _as_utc(prior.data_through) if prior is not None else None
+    if (
+        candidate_data_through is None
+        or (
+            prior_data_through is not None
+            and candidate_data_through <= prior_data_through
+        )
+    ):
+        return draft, 0
+
+    symbols = list(draft.symbols)
+    existing_index = next(
+        (
+            index
+            for index, symbol in enumerate(symbols)
+            if symbol.ticker == candidate.ticker
+        ),
+        None,
+    )
+    if existing_index is not None:
+        symbols[existing_index] = candidate
+    elif len(symbols) < max_symbols:
+        symbols.append(candidate)
+    else:
+        replace_index = next(
+            (
+                index
+                for index in range(len(symbols) - 1, -1, -1)
+                if symbols[index].data_status == "stale"
+            ),
+            None,
+        )
+        if replace_index is None:
+            replace_index = next(
+                (
+                    index
+                    for index in range(len(symbols) - 1, -1, -1)
+                    if not _active_intraday_symbol(symbols[index])
+                ),
+                None,
+            )
+        if replace_index is None:
+            return draft, 0
+        symbols[replace_index] = candidate
+
+    warnings = list(draft.warnings)
+    warnings.append("focus_cross_session_fresh_admitted")
+    return (
+        draft.model_copy(
+            update={
+                "symbols": symbols,
+                "warnings": list(dict.fromkeys(warnings))[:50],
+            }
+        ),
+        1,
+    )
+
+
 class FocusContextProducer:
     def __init__(
         self,
@@ -1200,6 +1398,12 @@ class FocusContextProducer:
                     intraday_failed += 1
                     non_typical_dollar_volume += 1
                     continue
+                data_through = _optional_utc(
+                    getattr(snapshot, "data_through", None)
+                ) or _optional_utc(feature.get("data_through"))
+                if data_through is None:
+                    intraday_failed += 1
+                    continue
                 exact_count += 1
                 exact_tickers.add(ticker)
                 row["cumulative_dollar_volume"] = dollar_volume
@@ -1223,10 +1427,7 @@ class FocusContextProducer:
                     )
                 )
                 row["_dollar_volume_basis"] = "intraday_completed_bars"
-                row["_data_through"] = (
-                    getattr(snapshot, "data_through", None)
-                    or feature.get("data_through")
-                )
+                row["_data_through"] = data_through
                 row["_data_source"] = str(
                     getattr(snapshot, "source", None) or "Yahoo/yfinance"
                 )[:80]
@@ -1295,6 +1496,55 @@ class FocusContextProducer:
             )
             row["rvol_time_of_day"] = None
 
+        market_session = _market_session_name(market)
+        cross_session_transition = _cross_session_transition(
+            current,
+            observed=observed,
+            market_session=market_session,
+        )
+        failed_transition_recovery = _failed_transition_recovery(current)
+        reconcile_session = (
+            cross_session_transition or failed_transition_recovery
+        )
+        excluded_new_tickers: set[str] = set()
+        build_rows = rows
+        build_breakout_rows = breakout_rows
+        build_settings = self.settings
+        if reconcile_session and current is not None:
+            previous_tickers = {symbol.ticker for symbol in current.symbols}
+            admitted_tickers = previous_tickers | exact_tickers
+            excluded_new_tickers = {
+                str(row["ticker"])
+                for row in rows
+                if str(row["ticker"]) not in previous_tickers
+                and str(row["ticker"]) not in exact_tickers
+            }
+            build_rows = [
+                row for row in rows if str(row["ticker"]) in admitted_tickers
+            ]
+            build_breakout_rows = [
+                row
+                for row in breakout_rows
+                if (ticker := _active_breakout_ticker(row)) is None
+                or ticker in admitted_tickers
+            ]
+            build_settings = self.settings.model_copy(
+                update={
+                    "priority_watchlist": ",".join(
+                        ticker
+                        for ticker in self.settings.priority_symbols
+                        if ticker in admitted_tickers
+                    ),
+                    "major_index_constituents": ",".join(
+                        ticker
+                        for ticker in self.settings.index_constituent_symbols
+                        if ticker in admitted_tickers
+                    ),
+                }
+            )
+            if excluded_new_tickers:
+                warnings.append("focus_cross_session_fallback_excluded")
+
         canonical = [
             str(row["ticker"])
             for row in strength_rows
@@ -1320,9 +1570,9 @@ class FocusContextProducer:
             and all(ticker in exact_tickers for ticker in required_market_leaders)
         )
         draft = build_focus_context(
-            settings=self.settings,
-            strength_rows=rows,
-            breakout_rows=breakout_rows,
+            settings=build_settings,
+            strength_rows=build_rows,
+            breakout_rows=build_breakout_rows,
             canonical_symbols=canonical,
             previous_symbols=(
                 [symbol.ticker for symbol in current.symbols] if current else ()
@@ -1330,7 +1580,7 @@ class FocusContextProducer:
             previous_context=current.symbols if current else (),
             as_of=observed,
             data_through=None,
-            market_session=_market_session_name(market),
+            market_session=market_session,
             universe_version=str(
                 strength_payload.get("universe_version") or "unknown"
             )[:200],
@@ -1338,6 +1588,84 @@ class FocusContextProducer:
                 "market" if market_dollar_volume_scope else "candidate"
             ),
         )
+        retained_count = 0
+        fresh_admitted_count = 0
+        if reconcile_session:
+            draft, retained_count = _reconcile_cross_session_symbols(
+                draft,
+                current=current,
+            )
+            if exact_tickers and not any(
+                _active_intraday_symbol(symbol) for symbol in draft.symbols
+            ):
+                candidate_settings = build_settings.model_copy(
+                    update={
+                        "max_symbols": min(
+                            200,
+                            max(build_settings.max_symbols, len(build_rows)),
+                        ),
+                    }
+                )
+                candidate_draft = build_focus_context(
+                    settings=candidate_settings,
+                    strength_rows=build_rows,
+                    breakout_rows=build_breakout_rows,
+                    canonical_symbols=canonical,
+                    as_of=observed,
+                    data_through=None,
+                    market_session=market_session,
+                    universe_version=str(
+                        strength_payload.get("universe_version") or "unknown"
+                    )[:200],
+                    dollar_volume_scope=(
+                        "market" if market_dollar_volume_scope else "candidate"
+                    ),
+                )
+                current_by_ticker = (
+                    {symbol.ticker: symbol for symbol in current.symbols}
+                    if current is not None
+                    else {}
+                )
+                fresh_candidate = None
+                for symbol in candidate_draft.symbols:
+                    if symbol.ticker not in exact_tickers:
+                        continue
+                    candidate_data_through = _as_utc(symbol.data_through)
+                    if (
+                        not _active_intraday_symbol(symbol)
+                        or candidate_data_through is None
+                    ):
+                        continue
+                    prior = current_by_ticker.get(symbol.ticker)
+                    prior_data_through = (
+                        _as_utc(prior.data_through) if prior is not None else None
+                    )
+                    if (
+                        prior_data_through is None
+                        or candidate_data_through > prior_data_through
+                    ):
+                        fresh_candidate = symbol
+                        break
+                draft, fresh_admitted_count = _admit_cross_session_intraday_symbol(
+                    draft,
+                    candidate=fresh_candidate,
+                    current=current,
+                    max_symbols=self.settings.max_symbols,
+                )
+            retained_count = sum(
+                symbol.data_status == "stale"
+                and "stale_retained" in symbol.universe_reasons
+                for symbol in draft.symbols
+            )
+        if (
+            reconcile_session
+            and market_session in {"premarket", "regular", "after_hours"}
+            and not any(_active_intraday_symbol(symbol) for symbol in draft.symbols)
+        ):
+            raise CatalystRepositoryError(
+                "focus_recovery_requires_intraday",
+                "A failed focus transition requires a fresh intraday symbol before recovery",
+            )
         final_data_through_values = [
             value
             for symbol in draft.symbols
@@ -1387,6 +1715,11 @@ class FocusContextProducer:
             ),
             "intraday_failed_count": intraday_failed,
             "non_typical_dollar_volume_count": non_typical_dollar_volume,
+            "cross_session_transition": cross_session_transition,
+            "failed_transition_recovery": failed_transition_recovery,
+            "cross_session_retained_count": retained_count,
+            "cross_session_excluded_count": len(excluded_new_tickers),
+            "cross_session_fresh_admitted_count": fresh_admitted_count,
             **coverage,
             "warnings": draft.warnings,
         }
@@ -1474,7 +1807,13 @@ class FocusContextProducer:
                 "retention": retention,
                 **details,
             }
-            self._heartbeat("idle", result)
+            heartbeat_status = (
+                "degraded"
+                if result.get("stale_symbol_count")
+                or result.get("fallback_symbol_count")
+                else "idle"
+            )
+            self._heartbeat(heartbeat_status, result)
             return result
         except Exception as error:
             error_code = (
@@ -1491,14 +1830,18 @@ class FocusContextProducer:
                 lease_seconds=self.settings.producer_lease_seconds,
                 now=self.clock.now(),
             ):
-                stale = _stale_draft(
-                    current,
-                    observed=self.clock.now(),
-                    warning=(
-                        error_code
-                        if isinstance(error, CatalystRepositoryError)
-                        else "focus_producer_failed"
-                    ),
+                stale = (
+                    None
+                    if error_code == "focus_recovery_requires_intraday"
+                    else _stale_draft(
+                        current,
+                        observed=self.clock.now(),
+                        warning=(
+                            error_code
+                            if isinstance(error, CatalystRepositoryError)
+                            else "focus_producer_failed"
+                        ),
+                    )
                 )
                 if stale is not None:
                     stale_revision = self.repository.publish_focus_context(
@@ -1569,8 +1912,14 @@ class FocusContextProducer:
                 now=self.clock.now(),
             ):
                 return False
+            heartbeat_status = (
+                "degraded"
+                if self._heartbeat_details.get("stale_symbol_count")
+                or self._heartbeat_details.get("fallback_symbol_count")
+                else "idle"
+            )
             self._heartbeat(
-                "idle",
+                heartbeat_status,
                 {"next_run_at": target.isoformat(), "stage": "waiting"},
             )
         return False

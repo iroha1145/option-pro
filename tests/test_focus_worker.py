@@ -22,6 +22,7 @@ from app.services.catalysts.focus_worker import (
     FOCUS_PRODUCER_WORKER_PREFIX,
     LOCK_NAME,
     FocusContextProducer,
+    _admit_cross_session_intraday_symbol,
     _async_main,
     _daily_strength_cache_identity,
     _default_discovery_loader,
@@ -90,7 +91,12 @@ def _strength_payload(
     }
 
 
-def _intraday_frame(*, price: float, current_volume: float) -> pd.DataFrame:
+def _intraday_frame(
+    *,
+    price: float,
+    current_volume: float,
+    end_minute: int = 10 * 60,
+) -> pd.DataFrame:
     historical_days = [
         date(2026, 7, 6),
         date(2026, 7, 7),
@@ -101,7 +107,7 @@ def _intraday_frame(*, price: float, current_volume: float) -> pd.DataFrame:
     index: list[datetime] = []
     volumes: list[float] = []
     for day in [*historical_days, date(2026, 7, 13)]:
-        for minute in range(9 * 60 + 30, 10 * 60, 5):
+        for minute in range(9 * 60 + 30, end_minute, 5):
             index.append(
                 datetime.combine(
                     day,
@@ -122,12 +128,18 @@ def _intraday_frame(*, price: float, current_volume: float) -> pd.DataFrame:
     )
 
 
-def _snapshot(ticker: str, frame: pd.DataFrame, *, quality: float = 1.0):
+def _snapshot(
+    ticker: str,
+    frame: pd.DataFrame,
+    *,
+    quality: float = 1.0,
+    data_through: datetime = SUMMER_NOW,
+):
     return SimpleNamespace(
         ticker=ticker,
         frame=frame,
         source="Yahoo/yfinance",
-        data_through=SUMMER_NOW,
+        data_through=data_through,
         warnings=(),
         quality=quality,
     )
@@ -1007,6 +1019,105 @@ def test_coarse_intraday_candidates_are_not_displaced_by_forced_symbols(tmp_path
     assert "focus_forced_symbols_using_fallback" in warnings
 
 
+def test_forced_cross_session_candidate_keeps_market_rank_scope(tmp_path) -> None:
+    path = tmp_path / "focus.db"
+    repository = CatalystRepository(path)
+    old_as_of = SUMMER_NOW - timedelta(days=1)
+    old_data_through = datetime(2026, 7, 10, 20, 0, tzinfo=timezone.utc)
+    settings = _settings(
+        path,
+        FOCUS_MAX_SYMBOLS=1,
+        FOCUS_STRENGTH_COUNT=0,
+        FOCUS_PRIORITY_WATCHLIST="OLD",
+    )
+    repository.initialize(now=old_as_of)
+    initial = build_focus_context(
+        settings=settings,
+        strength_rows=[
+            {
+                "ticker": "OLD",
+                "cumulative_dollar_volume": 1_000_000,
+                "_dollar_volume_basis": "intraday_completed_bars",
+                "_data_through": old_data_through,
+                "_source_status": "active",
+                "_data_source": "Yahoo/yfinance",
+            }
+        ],
+        as_of=old_as_of,
+        data_through=old_data_through,
+        market_session="closed",
+        universe_version="market-scope-old-v1",
+    )
+    repository.publish_focus_context(initial, now=old_as_of)
+    leaders = [f"L{index:02d}" for index in range(1, 41)]
+
+    async def discovery_loader(_snapshot) -> dict:
+        return {
+            "provider": "tradingview",
+            "status": "active",
+            "as_of": SUMMER_NOW,
+            "warnings": [],
+            "candidates": [
+                {
+                    "ticker": ticker,
+                    "price": 100.0,
+                    "provider_volume": float(100_000 - index),
+                    "provider_change_pct": None,
+                    "source": "tradingview",
+                    "_focus_volume_leader": True,
+                }
+                for index, ticker in enumerate(leaders, start=1)
+            ],
+            "_focus_discovery_profile": (
+                "regular_dollar_volume_leaders+regular_movers"
+            ),
+            "_focus_dollar_volume_leaders_supported": True,
+            "_focus_volume_leader_status": "active",
+            "_focus_regular_mover_status": "active",
+            "_focus_volume_leader_tickers": leaders,
+            "_focus_regular_mover_tickers": [],
+        }
+
+    async def intraday_loader(tickers, _cutoff) -> dict:
+        return {
+            ticker: _snapshot(
+                ticker,
+                _intraday_frame(
+                    price=100.0,
+                    current_volume=float(1_000 - index),
+                ),
+            )
+            for index, ticker in enumerate(tickers, start=1)
+        }
+
+    producer = FocusContextProducer(
+        settings=settings,
+        repository=repository,
+        clock=MarketClock(now=lambda: SUMMER_NOW),
+        strength_loader=lambda: asyncio.sleep(0, result=_strength_payload()),
+        discovery_loader=discovery_loader,
+        intraday_loader=intraday_loader,
+        breakout_loader=lambda: [],
+        owner_id=f"{FOCUS_PRODUCER_WORKER_PREFIX}market-scope-recovery",
+    )
+
+    result = asyncio.run(producer.run_once())
+
+    assert result["status"] == "completed"
+    assert result["market_volume_rank_scope"] == "market"
+    assert result["cross_session_fresh_admitted_count"] == 1
+    current = repository.current_focus_context()
+    assert current is not None
+    assert len(current.symbols) == 1
+    forced = current.symbols[0]
+    assert forced.ticker in leaders
+    assert "market_dollar_volume_top20" in forced.universe_reasons
+    assert all(
+        not reason.startswith("candidate_dollar_volume_")
+        for reason in forced.universe_reasons
+    )
+
+
 def test_twenty_first_volume_leader_failure_downgrades_market_scope_and_keeps_mover(
     tmp_path,
 ) -> None:
@@ -1117,6 +1228,9 @@ def test_missing_intraday_uses_named_adv20_fallback_with_lower_quality(tmp_path)
     result = asyncio.run(producer.run_once())
 
     assert result["status"] == "completed"
+    assert result["cross_session_transition"] is False
+    assert result["cross_session_retained_count"] == 0
+    assert result["cross_session_excluded_count"] == 0
     assert result["dollar_volume_basis"] == {"adv20_completed_sessions": 2}
     assert "focus_intraday_unavailable_adv20_fallback" in result["warnings"]
     current = repository.current_focus_context()
@@ -1140,6 +1254,507 @@ def test_missing_intraday_uses_named_adv20_fallback_with_lower_quality(tmp_path)
     )
     assert details["symbol_sources"][0]["source_status"] == "fallback"
     assert details["symbol_sources"][0]["data_source"] == "canonical_strength_daily"
+
+
+def test_cross_session_without_fresh_intraday_does_not_refresh_snapshot_age(
+    tmp_path,
+) -> None:
+    path = tmp_path / "focus.db"
+    repository = CatalystRepository(path)
+    settings = _settings(path)
+    old_as_of = datetime(2026, 7, 14, 0, 0, tzinfo=timezone.utc)
+    old_data_through = datetime(2026, 7, 13, 22, 20, tzinfo=timezone.utc)
+    premarket_now = datetime(2026, 7, 14, 12, 30, tzinfo=timezone.utc)
+    repository.initialize(now=old_as_of)
+    initial = build_focus_context(
+        settings=settings,
+        strength_rows=[
+            {
+                "ticker": "AAPL",
+                "cumulative_dollar_volume": 1_000_000,
+                "_dollar_volume_basis": "intraday_completed_bars",
+                "_data_through": old_data_through,
+                "_source_status": "active",
+                "_data_source": "Yahoo/yfinance",
+                "data_quality": 1.0,
+                "universe_member": True,
+            }
+        ],
+        canonical_symbols=["AAPL"],
+        as_of=old_as_of,
+        data_through=old_data_through,
+        market_session="closed",
+        universe_version="themes-old-v1",
+    )
+    repository.publish_focus_context(initial, now=old_as_of)
+    with repository.open_read_connection() as connection:
+        created_before = connection.execute(
+            "SELECT created_at FROM focus_context_snapshots WHERE revision=1"
+        ).fetchone()[0]
+
+    producer = FocusContextProducer(
+        settings=settings,
+        repository=repository,
+        clock=MarketClock(now=lambda: premarket_now),
+        strength_loader=lambda: asyncio.sleep(
+            0,
+            result=_strength_payload(
+                as_of=premarket_now,
+                daily_data_through=datetime(
+                    2026, 7, 13, 20, 0, tzinfo=timezone.utc
+                ),
+            ),
+        ),
+        discovery_loader=lambda _snapshot: asyncio.sleep(
+            0,
+            result={
+                "provider": "tradingview",
+                "status": "active",
+                "as_of": premarket_now,
+                "warnings": [],
+                "candidates": [],
+            },
+        ),
+        intraday_loader=lambda _tickers, _cutoff: asyncio.sleep(0, result={}),
+        breakout_loader=lambda: [],
+        owner_id=f"{FOCUS_PRODUCER_WORKER_PREFIX}cross-session-empty",
+    )
+
+    result = asyncio.run(producer.run_once())
+
+    assert result["status"] == "degraded"
+    assert result["error_code"] == "focus_recovery_requires_intraday"
+    assert result["stale_revision"] is None
+    current = repository.current_focus_context()
+    assert current is not None
+    assert current.revision == 1
+    assert current.as_of == old_as_of
+    assert current.data_through == old_data_through
+    with repository.open_read_connection() as connection:
+        rows = connection.execute(
+            "SELECT revision,created_at FROM focus_context_snapshots ORDER BY revision"
+        ).fetchall()
+    assert [(row["revision"], row["created_at"]) for row in rows] == [
+        (1, created_before)
+    ]
+    health = health_payload(settings, repository=repository, now=premarket_now)
+    assert health["healthy"] is False
+    assert health["database"]["snapshot_fresh"] is False
+
+
+def test_forced_cross_session_candidate_keeps_prior_trusted_validation(
+    tmp_path,
+) -> None:
+    path = tmp_path / "focus.db"
+    repository = CatalystRepository(path)
+    settings = _settings(path, FOCUS_MAX_SYMBOLS=1)
+    old_as_of = datetime(2026, 7, 14, 0, 0, tzinfo=timezone.utc)
+    old_data_through = datetime(2026, 7, 13, 22, 20, tzinfo=timezone.utc)
+    later = datetime(2026, 7, 14, 12, 30, tzinfo=timezone.utc)
+    repository.initialize(now=old_as_of)
+    previous = build_focus_context(
+        settings=settings,
+        strength_rows=[
+            {
+                "ticker": "EXT",
+                "cumulative_dollar_volume": 1_000_000,
+                "_dollar_volume_basis": "intraday_completed_bars",
+                "_data_through": old_data_through,
+                "_source_status": "active",
+                "_data_source": "Yahoo/yfinance",
+                "validation_status": "valid_external",
+            }
+        ],
+        as_of=old_as_of,
+        data_through=old_data_through,
+        market_session="closed",
+        universe_version="trusted-external-v1",
+    )
+    current = repository.publish_focus_context(previous, now=old_as_of)
+    assert current.symbols[0].validation_status == "valid_external"
+    candidate = current.symbols[0].model_copy(
+        update={
+            "validation_status": "unverified",
+            "data_through": later,
+            "data_status": "active",
+            "source_status": "active",
+        }
+    )
+    bounded = build_focus_context(
+        settings=settings,
+        strength_rows=[
+            {
+                "ticker": "AAPL",
+                "avg_dollar_volume_20d": 50_000_000,
+                "_dollar_volume_basis": "adv20_completed_sessions",
+                "_data_through": old_data_through,
+                "_source_status": "fallback",
+                "universe_member": True,
+            }
+        ],
+        canonical_symbols=["AAPL"],
+        as_of=later,
+        data_through=old_data_through,
+        market_session="premarket",
+        universe_version="bounded-v1",
+        dollar_volume_scope="candidate",
+    )
+
+    admitted, admitted_count = _admit_cross_session_intraday_symbol(
+        bounded,
+        candidate=candidate,
+        current=current,
+        max_symbols=1,
+    )
+
+    assert admitted_count == 1
+    assert [symbol.ticker for symbol in admitted.symbols] == ["EXT"]
+    assert admitted.symbols[0].validation_status == "valid_external"
+
+
+def test_cross_session_recovery_retains_old_truth_and_excludes_new_fallbacks(
+    tmp_path,
+) -> None:
+    path = tmp_path / "focus.db"
+    repository = CatalystRepository(path)
+    old_as_of = datetime(2026, 7, 14, 0, 0, tzinfo=timezone.utc)
+    old_data_through = datetime(2026, 7, 13, 22, 20, tzinfo=timezone.utc)
+    premarket_now = datetime(2026, 7, 14, 12, 30, tzinfo=timezone.utc)
+    daily_fallback = datetime(2026, 7, 13, 20, 0, tzinfo=timezone.utc)
+    settings = _settings(
+        path,
+        FOCUS_PRIORITY_WATCHLIST="NEWFALLBACK",
+        FOCUS_MAX_SYMBOLS=2,
+    )
+    repository.initialize(now=old_as_of)
+    initial = build_focus_context(
+        settings=_settings(path),
+        strength_rows=[
+            {
+                "ticker": "AAPL",
+                "cumulative_dollar_volume": 1_000_000,
+                "_dollar_volume_basis": "intraday_completed_bars",
+                "_data_through": old_data_through,
+                "_source_status": "active",
+                "_data_source": "Yahoo/yfinance",
+                "session_change_pct": 3.5,
+                "rvol_time_of_day": 2.0,
+                "data_quality": 1.0,
+                "universe_member": True,
+            },
+            {
+                "ticker": "MSFT",
+                "cumulative_dollar_volume": 900_000,
+                "_dollar_volume_basis": "intraday_completed_bars",
+                "_data_through": old_data_through,
+                "_source_status": "active",
+                "_data_source": "Yahoo/yfinance",
+                "session_change_pct": 2.5,
+                "rvol_time_of_day": 1.8,
+                "data_quality": 1.0,
+                "universe_member": True,
+            },
+        ],
+        canonical_symbols=["AAPL", "MSFT"],
+        as_of=old_as_of,
+        data_through=old_data_through,
+        market_session="closed",
+        universe_version="themes-old-v1",
+    )
+    repository.publish_focus_context(initial, now=old_as_of)
+
+    universe_as_of = old_as_of
+    strength_payload = {
+        "as_of": premarket_now.isoformat(),
+        "universe_as_of": universe_as_of.isoformat(),
+        "universe_version": "themes-new-v1",
+        "universe_count": 4,
+        "_focus_rows": [
+            {
+                "ticker": ticker,
+                "avg_dollar_volume_20d": dollar_volume,
+                "data_quality": 0.9,
+                "universe_member": True,
+                "universe_as_of": universe_as_of.isoformat(),
+                "daily_data_through": daily_fallback.isoformat(),
+            }
+            for ticker, dollar_volume in (
+                ("AAPL", 50_000_000),
+                ("MSFT", 49_000_000),
+                ("NEWFALLBACK", 45_000_000),
+                ("NEWEXACT", 40_000_000),
+            )
+        ],
+    }
+
+    def premarket_frame() -> pd.DataFrame:
+        index: list[datetime] = []
+        volumes: list[float] = []
+        for day in (
+            date(2026, 7, 7),
+            date(2026, 7, 8),
+            date(2026, 7, 9),
+            date(2026, 7, 10),
+            date(2026, 7, 13),
+            date(2026, 7, 14),
+        ):
+            for minute in range(8 * 60, 8 * 60 + 30, 5):
+                index.append(
+                    datetime.combine(
+                        day,
+                        time(hour=minute // 60, minute=minute % 60),
+                        tzinfo=ET,
+                    )
+                )
+                volumes.append(200.0 if day == date(2026, 7, 14) else 100.0)
+        return pd.DataFrame(
+            {
+                "Open": 100.0,
+                "High": 101.0,
+                "Low": 99.0,
+                "Close": 100.0,
+                "Volume": volumes,
+            },
+            index=pd.DatetimeIndex(index),
+        )
+
+    async def intraday_loader(_tickers, _cutoff) -> dict:
+        return {
+            "NEWEXACT": _snapshot(
+                "NEWEXACT",
+                premarket_frame(),
+                data_through="not-a-timestamp",
+            )
+        }
+
+    clock_now = [premarket_now]
+    producer = FocusContextProducer(
+        settings=settings,
+        repository=repository,
+        clock=MarketClock(now=lambda: clock_now[0]),
+        strength_loader=lambda: asyncio.sleep(0, result=strength_payload),
+        discovery_loader=lambda _snapshot: asyncio.sleep(
+            0,
+            result={
+                "provider": "tradingview",
+                "status": "active",
+                "as_of": premarket_now,
+                "warnings": [],
+                "candidates": [],
+            },
+        ),
+        intraday_loader=intraday_loader,
+        breakout_loader=lambda: [
+            {"ticker": "NEWFALLBACK", "lifecycle_state": "CONFIRMED"}
+        ],
+        owner_id=f"{FOCUS_PRODUCER_WORKER_PREFIX}cross-session",
+    )
+    token = repository.acquire_worker_lock(
+        LOCK_NAME,
+        producer.owner_id,
+        lease_seconds=settings.producer_lease_seconds,
+        now=premarket_now,
+    )
+    assert token is not None
+
+    result = asyncio.run(producer.run_once(fencing_token=token))
+
+    assert result["status"] == "completed"
+    assert result["cross_session_transition"] is True
+    assert result["failed_transition_recovery"] is False
+    assert result["cross_session_retained_count"] == 1
+    assert result["cross_session_excluded_count"] == 1
+    assert result["cross_session_fresh_admitted_count"] == 1
+    assert result["stale_symbol_count"] == 1
+    assert result["fallback_symbol_count"] == 0
+    assert "focus_snapshot_time_regression" not in result["warnings"]
+    assert "focus_cross_session_stale_retained" in result["warnings"]
+    assert "focus_cross_session_fallback_excluded" in result["warnings"]
+    assert "focus_cross_session_fresh_admitted" in result["warnings"]
+
+    current = repository.current_focus_context()
+    assert current is not None
+    assert current.revision == 2
+    assert current.market_session == "premarket"
+    assert current.data_through == old_data_through
+    symbols = {symbol.ticker: symbol for symbol in current.symbols}
+    assert set(symbols) == {"AAPL", "NEWEXACT"}
+    assert "NEWFALLBACK" not in symbols
+    retained = symbols["AAPL"]
+    assert retained.data_through == old_data_through
+    assert retained.data_status == "stale"
+    assert retained.source_status == "stale"
+    assert retained.dollar_volume == pytest.approx(1_000_000.0)
+    assert retained.dollar_volume_rank is None
+    assert retained.session_change_pct is None
+    assert retained.rvol_time_of_day is None
+    assert retained.data_quality is None
+    assert "stale_retained" in retained.universe_reasons
+    exact = symbols["NEWEXACT"]
+    assert exact.data_status == "active"
+    assert exact.source_status == "active"
+    assert exact.dollar_volume_basis == "intraday_completed_bars"
+    assert exact.data_through == premarket_now
+    assert exact.dollar_volume_rank == 3
+    assert "candidate_dollar_volume_top20" in exact.universe_reasons
+
+    async def advance_clock(seconds: float) -> None:
+        clock_now[0] += timedelta(seconds=seconds)
+
+    async def wait_until_next_heartbeat() -> bool:
+        return await producer._wait_until(
+            premarket_now + timedelta(seconds=60),
+            stop=asyncio.Event(),
+            fencing_token=token,
+        )
+
+    producer.sleeper = advance_clock
+    assert asyncio.run(wait_until_next_heartbeat()) is True
+    health = health_payload(settings, repository=repository, now=clock_now[0])
+    assert health["healthy"] is True
+    assert health["status"] == "degraded"
+    assert health["production_status"] == "degraded"
+    assert health["database"]["details"]["cross_session_retained_count"] == 1
+    assert health["database"]["details"]["cross_session_excluded_count"] == 1
+    repository.release_worker_lock(LOCK_NAME, producer.owner_id, token)
+
+
+def test_failed_same_session_transition_requires_fresh_intraday_before_recovery(
+    tmp_path,
+) -> None:
+    path = tmp_path / "focus.db"
+    repository = CatalystRepository(path)
+    repository.initialize(now=SUMMER_NOW)
+    settings = _settings(path)
+    active = build_focus_context(
+        settings=settings,
+        strength_rows=[
+            {
+                "ticker": "AAPL",
+                "cumulative_dollar_volume": 1_000_000,
+                "_dollar_volume_basis": "intraday_completed_bars",
+                "_data_through": SUMMER_NOW,
+                "_source_status": "active",
+                "_data_source": "Yahoo/yfinance",
+                "universe_member": True,
+            }
+        ],
+        canonical_symbols=["AAPL"],
+        as_of=SUMMER_NOW,
+        data_through=SUMMER_NOW,
+        market_session="regular",
+        universe_version="themes-test-v1",
+    )
+    stale = active.model_copy(
+        update={
+            "symbols": [
+                symbol.model_copy(
+                    update={
+                        "data_status": "stale",
+                        "source_status": "stale",
+                        "dollar_volume_rank": None,
+                        "session_change_pct": None,
+                        "rvol_time_of_day": None,
+                        "data_quality": None,
+                    }
+                )
+                for symbol in active.symbols
+            ],
+            "warnings": ["focus_snapshot_stale", "focus_snapshot_time_regression"],
+        }
+    )
+    repository.publish_focus_context(stale, now=SUMMER_NOW)
+    later = SUMMER_NOW + timedelta(minutes=30)
+
+    blocked = FocusContextProducer(
+        settings=settings,
+        repository=repository,
+        clock=MarketClock(now=lambda: later),
+        strength_loader=lambda: asyncio.sleep(0, result=_strength_payload()),
+        discovery_loader=lambda snapshot: asyncio.sleep(
+            0, result={**_discovery(snapshot), "as_of": later}
+        ),
+        intraday_loader=lambda _tickers, _cutoff: asyncio.sleep(0, result={}),
+        breakout_loader=lambda: [],
+        owner_id=f"{FOCUS_PRODUCER_WORKER_PREFIX}same-session-blocked",
+    )
+    blocked_token = repository.acquire_worker_lock(
+        LOCK_NAME,
+        blocked.owner_id,
+        lease_seconds=settings.producer_lease_seconds,
+        now=later,
+    )
+    assert blocked_token is not None
+
+    blocked_result = asyncio.run(blocked.run_once(fencing_token=blocked_token))
+
+    assert blocked_result["status"] == "degraded"
+    assert blocked_result["error_code"] == "focus_recovery_requires_intraday"
+    assert blocked_result["stale_revision"] is None
+    assert repository.current_focus_context().revision == 1
+    with repository.open_read_connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM focus_context_snapshots"
+        ).fetchone()[0] == 1
+    repository.release_worker_lock(
+        LOCK_NAME,
+        blocked.owner_id,
+        blocked_token,
+    )
+
+    async def exact_intraday(tickers, _cutoff) -> dict:
+        return {
+            ticker: _snapshot(
+                ticker,
+                _intraday_frame(
+                    price=100.0,
+                    current_volume=200.0,
+                    end_minute=10 * 60 + 30,
+                ),
+                data_through=later,
+            )
+            for ticker in tickers
+        }
+
+    recovered = FocusContextProducer(
+        settings=settings,
+        repository=repository,
+        clock=MarketClock(now=lambda: later),
+        strength_loader=lambda: asyncio.sleep(0, result=_strength_payload()),
+        discovery_loader=lambda snapshot: asyncio.sleep(
+            0, result={**_discovery(snapshot), "as_of": later}
+        ),
+        intraday_loader=exact_intraday,
+        breakout_loader=lambda: [],
+        owner_id=f"{FOCUS_PRODUCER_WORKER_PREFIX}same-session-recovered",
+    )
+    recovered_token = repository.acquire_worker_lock(
+        LOCK_NAME,
+        recovered.owner_id,
+        lease_seconds=settings.producer_lease_seconds,
+        now=later,
+    )
+    assert recovered_token is not None
+
+    recovered_result = asyncio.run(
+        recovered.run_once(fencing_token=recovered_token)
+    )
+
+    assert recovered_result["status"] == "completed"
+    assert recovered_result["cross_session_transition"] is False
+    assert recovered_result["failed_transition_recovery"] is True
+    assert recovered_result["cross_session_retained_count"] == 0
+    assert recovered_result["intraday_exact_count"] == 2
+    current = repository.current_focus_context()
+    assert current is not None
+    assert current.revision == 2
+    assert current.data_through == later
+    assert all(symbol.data_status == "active" for symbol in current.symbols)
+    repository.release_worker_lock(
+        LOCK_NAME,
+        recovered.owner_id,
+        recovered_token,
+    )
 
 
 def test_non_typical_intraday_dollar_volume_is_rejected_to_named_fallback(tmp_path) -> None:
