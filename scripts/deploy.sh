@@ -128,8 +128,8 @@ normalize_boolean() {
     )"
     case "$normalized" in
         '') printf '%s\n' "$default_value" ;;
-        1|true|yes|on) printf 'true\n' ;;
-        0|false|no|off) printf 'false\n' ;;
+        1|true|yes) printf 'true\n' ;;
+        0|false|no) printf 'false\n' ;;
         *)
             echo "${key} must be a recognized boolean value." >&2
             return 1

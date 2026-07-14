@@ -567,7 +567,7 @@ def test_required_catalyst_read_gate_does_not_require_action_config(
 
 @pytest.mark.parametrize(
     "configured_value",
-    ["True", "YES", "on", "true # required for production"],
+    ["True", "YES", "1", "true # required for production"],
 )
 def test_catalyst_read_gate_accepts_compose_boolean_forms_without_silent_disable(
     tmp_path: Path,
@@ -607,6 +607,25 @@ def test_unknown_catalyst_boolean_fails_closed(
 
     assert result.returncode != 0
     assert f"{key} must be a recognized boolean value" in result.stderr
+
+
+@pytest.mark.parametrize("configured_value", ["on", "off"])
+def test_runtime_unsupported_boolean_forms_fail_closed(
+    tmp_path: Path,
+    configured_value: str,
+) -> None:
+    template = (ROOT / ".env.example").read_text(encoding="utf-8")
+    invalid = template.replace(
+        "TRUST_PROXY_HEADERS=false",
+        f"TRUST_PROXY_HEADERS={configured_value}",
+        1,
+    )
+    root, environment = _deployment_root(tmp_path, invalid)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "TRUST_PROXY_HEADERS must be a recognized boolean value" in result.stderr
 
 
 def test_required_catalyst_actions_gate_requires_read_gate(tmp_path: Path) -> None:
