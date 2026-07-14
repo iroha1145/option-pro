@@ -148,9 +148,33 @@ def test_post_only_enqueues_refresh_and_opaque_analysis_job(tmp_path) -> None:
     assert job.json()["status"] == "pending"
     assert historical_news.json()["analysis_job"] is None
     assert current_news.json()["analysis_job"]["job_id"] == local_job_id
+
+    run_id = repository.begin_sync_run(
+        "feed", snapshot_token="snapshot-api-analysis-update", now=utc(10, 8)
+    )
+    repository.stage_latest_page(
+        run_id, [catalyst_item(sequence=3, updated_at=utc(10, 8), analysis=True)]
+    )
+    repository.publish_latest(
+        run_id,
+        snapshot_token="snapshot-api-analysis-update",
+        data_through=utc(10, 8),
+        next_updated_after=utc(10, 8),
+        watermark_sequence=3,
+        now=utc(10, 8),
+    )
+
+    after_analysis_update = client.get("/api/catalysts/news/101")
+    duplicate = client.post("/api/catalysts/news/101/analysis", json={"force": False})
+    assert after_analysis_update.json()["item"]["change_sequence"] == 3
+    assert after_analysis_update.json()["analysis_job"]["job_id"] == local_job_id
+    assert duplicate.json()["job_id"] == local_job_id
     with repository.open_read_connection() as connection:
         assert connection.execute(
             "SELECT count(*) FROM catalyst_refresh_outbox WHERE status='pending'"
+        ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT count(*) FROM catalyst_analysis_jobs"
         ).fetchone()[0] == 1
 
 

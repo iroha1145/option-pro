@@ -768,29 +768,42 @@ class CatalystSyncService:
 
         if remote.status == JobStatus.INSUFFICIENT_CONTEXT:
             result = remote.result
-            classification = (
-                result.classification.value
-                if result is not None and hasattr(result.classification, "value")
-                else str(result.classification) if result is not None else ""
-            )
-            if (
-                remote.model != self.LOW_CONTEXT_MODEL
-                or remote.reasoning != "none"
-                or result is None
-                or not result.insufficient_context
-                or classification != "neutral"
-                or result.overall_sentiment != 0
-                or result.confidence != 0
-                or result.market_relevance != 0
-                or bool(result.affected_stocks)
-                or bool(result.affected_sectors)
-                or bool(result.affected_commodities)
-            ):
-                raise CatalystError(
-                    "remote_job_runtime_mismatch",
-                    "MacroLens returned an invalid low-context terminal result",
-                    retryable=False,
+            if remote.model == self.LOW_CONTEXT_MODEL:
+                classification = (
+                    result.classification.value
+                    if result is not None and hasattr(result.classification, "value")
+                    else str(result.classification) if result is not None else ""
                 )
+                if (
+                    remote.reasoning != "none"
+                    or result is None
+                    or not result.insufficient_context
+                    or classification != "neutral"
+                    or result.overall_sentiment != 0
+                    or result.confidence != 0
+                    or result.market_relevance != 0
+                    or bool(result.affected_stocks)
+                    or bool(result.affected_sectors)
+                    or bool(result.affected_commodities)
+                ):
+                    raise CatalystError(
+                        "remote_job_runtime_mismatch",
+                        "MacroLens returned an invalid low-context terminal result",
+                        retryable=False,
+                    )
+            else:
+                if remote.model != job["model"] or remote.reasoning != job["reasoning"]:
+                    raise CatalystError(
+                        "remote_job_runtime_mismatch",
+                        "MacroLens returned a different model or reasoning configuration",
+                        retryable=False,
+                    )
+                if result is None or not result.insufficient_context:
+                    raise CatalystError(
+                        "remote_job_result_mismatch",
+                        "MacroLens returned an invalid insufficient-context analysis result",
+                        retryable=False,
+                    )
         else:
             if remote.model != job["model"] or remote.reasoning != job["reasoning"]:
                 raise CatalystError(
