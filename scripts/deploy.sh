@@ -203,6 +203,8 @@ macrolens_action_secret="${MACROLENS_ACTION_SECRET:-$(env_value MACROLENS_ACTION
 macrolens_schema_sha256="${MACROLENS_SCHEMA_SHA256:-$(env_value MACROLENS_SCHEMA_SHA256)}"
 deploy_require_catalyst="${DEPLOY_REQUIRE_CATALYST:-$(env_value DEPLOY_REQUIRE_CATALYST)}"
 deploy_require_catalyst="${deploy_require_catalyst:-false}"
+deploy_require_catalyst_actions="${DEPLOY_REQUIRE_CATALYST_ACTIONS:-$(env_value DEPLOY_REQUIRE_CATALYST_ACTIONS)}"
+deploy_require_catalyst_actions="${deploy_require_catalyst_actions:-false}"
 focus_producer_enabled="${FOCUS_PRODUCER_ENABLED:-$(env_value FOCUS_PRODUCER_ENABLED)}"
 focus_producer_enabled="${focus_producer_enabled:-false}"
 focus_producer_snapshot_grace_seconds="${FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS:-$(env_value FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS)}"
@@ -244,6 +246,17 @@ if [ "$catalyst_mode" != "disabled" ] && [ "$catalyst_mode" != "display" ] && [ 
     echo "CATALYST_MODE must be disabled, display, shadow, or enabled." >&2
     exit 1
 fi
+if is_truthy "$deploy_require_catalyst" && \
+    ! grep -q '^DEPLOY_REQUIRE_CATALYST_ACTIONS=' .env && \
+    [ -z "${DEPLOY_REQUIRE_CATALYST_ACTIONS+x}" ]; then
+    echo "This .env predates the explicit Catalyst action deployment gate." >&2
+    echo "Add DEPLOY_REQUIRE_CATALYST_ACTIONS=false for read-only rollout or true for action rollout." >&2
+    exit 1
+fi
+if is_truthy "$deploy_require_catalyst_actions" && ! is_truthy "$deploy_require_catalyst"; then
+    echo "DEPLOY_REQUIRE_CATALYST_ACTIONS=true requires DEPLOY_REQUIRE_CATALYST=true." >&2
+    exit 1
+fi
 if is_truthy "$deploy_require_catalyst"; then
     if ! is_truthy "$macrolens_enabled"; then
         echo "DEPLOY_REQUIRE_CATALYST=true requires MACROLENS_ENABLED=true." >&2
@@ -272,14 +285,6 @@ if is_truthy "$deploy_require_catalyst"; then
         echo "DEPLOY_REQUIRE_CATALYST=true requires MacroLens read credentials." >&2
         exit 1
     fi
-    if [ -z "$macrolens_action_key_id" ] || [ -z "$macrolens_action_secret" ]; then
-        echo "DEPLOY_REQUIRE_CATALYST=true requires MacroLens action credentials." >&2
-        exit 1
-    fi
-    if [ -z "$auth_token" ]; then
-        echo "DEPLOY_REQUIRE_CATALYST=true requires APP_AUTH_TOKEN for analysis actions." >&2
-        exit 1
-    fi
     contract_path="${ROOT_DIR}/contracts/macrolens-option-pro-v2.json"
     if ! reviewed_contract_sha256="$(file_sha256 "$contract_path")"; then
         echo "The reviewed MacroLens integration contract is missing or unreadable." >&2
@@ -287,6 +292,16 @@ if is_truthy "$deploy_require_catalyst"; then
     fi
     if [ "$macrolens_schema_sha256" != "$reviewed_contract_sha256" ]; then
         echo "MACROLENS_SCHEMA_SHA256 does not match the reviewed integration contract." >&2
+        exit 1
+    fi
+fi
+if is_truthy "$deploy_require_catalyst_actions"; then
+    if [ -z "$macrolens_action_key_id" ] || [ -z "$macrolens_action_secret" ]; then
+        echo "DEPLOY_REQUIRE_CATALYST_ACTIONS=true requires MacroLens action credentials." >&2
+        exit 1
+    fi
+    if [ -z "$auth_token" ]; then
+        echo "DEPLOY_REQUIRE_CATALYST_ACTIONS=true requires APP_AUTH_TOKEN for analysis actions." >&2
         exit 1
     fi
 fi
@@ -462,6 +477,7 @@ catalyst_worker_health="$(
 docker compose exec -T \
     -e "CATALYST_WORKER_HEALTH=${catalyst_worker_health}" \
     -e "DEPLOY_REQUIRE_CATALYST=${deploy_require_catalyst}" \
+    -e "DEPLOY_REQUIRE_CATALYST_ACTIONS=${deploy_require_catalyst_actions}" \
     -e "EXPECTED_CATALYST_ENABLED=${macrolens_enabled}" \
     backend python -c '
 import json
@@ -470,10 +486,14 @@ import time
 import urllib.request
 
 worker = json.loads(os.environ["CATALYST_WORKER_HEALTH"])
-required = os.environ["DEPLOY_REQUIRE_CATALYST"].lower() in {"1", "true", "yes"}
+read_required = os.environ["DEPLOY_REQUIRE_CATALYST"].lower() in {"1", "true", "yes"}
+actions_required = os.environ["DEPLOY_REQUIRE_CATALYST_ACTIONS"].lower() in {
+    "1", "true", "yes"
+}
 enabled = os.environ["EXPECTED_CATALYST_ENABLED"].lower() in {"1", "true", "yes"}
+assert not actions_required or read_required
 assert worker["healthy"] is True
-if required:
+if read_required:
     assert enabled is True
     assert worker["enabled"] is True
     assert worker["contract"]["valid"] is True
@@ -485,7 +505,7 @@ token = os.environ.get("APP_AUTH_TOKEN", "").strip()
 if token:
     headers["Authorization"] = f"Bearer {token}"
 payload = None
-attempts = 30 if required else 1
+attempts = 30 if read_required else 1
 for attempt in range(attempts):
     request = urllib.request.Request(
         "http://127.0.0.1:8000/api/catalysts/status",
@@ -493,11 +513,16 @@ for attempt in range(attempts):
     )
     with urllib.request.urlopen(request, timeout=5) as response:
         payload = json.load(response)
-    if not required or (
+    read_ready = (
         payload.get("enabled") is True
-        and payload.get("status") not in {"disabled", "unavailable"}
-        and payload.get("analysis_trigger_enabled") is True
-    ):
+        and payload.get("status") == "active"
+        and payload.get("remote_status") in {"ok", "active"}
+        and payload.get("last_sync_at") is not None
+        and payload.get("snapshot_id") is not None
+        and payload.get("resync_required") is False
+    )
+    actions_ready = payload.get("analysis_trigger_enabled") is True
+    if not read_required or (read_ready and (not actions_required or actions_ready)):
         break
     if attempt + 1 < attempts:
         time.sleep(2)
@@ -506,14 +531,19 @@ assert payload is not None
 assert payload["schema_version"] == "macrolens-option-pro-v2"
 assert payload["expected_model"] == "gpt-5.6-terra"
 assert payload["expected_reasoning"] == "max"
-if required:
+if read_required:
     assert payload["enabled"] is True
-    assert payload["status"] not in {"disabled", "unavailable"}
+    assert payload["status"] == "active"
+    assert payload["remote_status"] in {"ok", "active"}
+    assert payload["last_sync_at"] is not None
+    assert payload["snapshot_id"] is not None
+    assert payload["resync_required"] is False
+if actions_required:
     assert payload["analysis_trigger_enabled"] is True
     assert payload["model"] == "gpt-5.6-terra"
     assert payload["reasoning"] == "max"
     assert payload["execution_mode"] in {"background", "worker_sync"}
-elif not enabled:
+if not enabled:
     assert payload["status"] == "disabled"
     assert payload["enabled"] is False
 '

@@ -12,7 +12,7 @@ from typing import Any, Optional, Sequence
 
 from .client import MacroLensClient
 from .config import CatalystSettings, get_catalyst_settings
-from .errors import CatalystError
+from .errors import CatalystError, CatalystRepositoryError
 from .models import SCHEMA_VERSION
 from .repository import CatalystRepository
 from .sync_service import CatalystSyncService
@@ -108,6 +108,11 @@ def _parser() -> argparse.ArgumentParser:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--once", action="store_true", help="run one local sync cycle")
     mode.add_argument("--healthcheck", action="store_true", help="check local worker health")
+    mode.add_argument(
+        "--migrate",
+        action="store_true",
+        help="initialize or migrate the local Catalyst cache without contacting MacroLens",
+    )
     return parser
 
 
@@ -118,6 +123,29 @@ def _install_stop_handlers(stop: asyncio.Event) -> None:
             loop.add_signal_handler(signum, stop.set)
         except (NotImplementedError, RuntimeError):
             pass
+
+
+def _migration_database_status(repository: CatalystRepository) -> dict[str, Any]:
+    database = repository.check_schema()
+    with repository.open_read_connection() as connection:
+        quick_rows = [str(row[0]) for row in connection.execute("PRAGMA quick_check")]
+        integrity_rows = [
+            str(row[0]) for row in connection.execute("PRAGMA integrity_check")
+        ]
+        foreign_key_rows = connection.execute("PRAGMA foreign_key_check").fetchall()
+    if quick_rows != ["ok"] or integrity_rows != ["ok"] or foreign_key_rows:
+        raise CatalystRepositoryError(
+            "cache_integrity_failed",
+            "Catalyst cache integrity checks failed after migration",
+        )
+    database.update(
+        {
+            "quick_check": "ok",
+            "integrity_check": "ok",
+            "foreign_key_check": "ok",
+        }
+    )
+    return database
 
 
 async def _wait_disabled(stop: asyncio.Event) -> None:
@@ -149,6 +177,47 @@ async def _async_main(args: argparse.Namespace) -> int:
         payload = health_payload(settings)
         print(json.dumps(payload, allow_nan=False, separators=(",", ":")))
         return 0 if payload["healthy"] else 1
+
+    if getattr(args, "migrate", False):
+        repository = CatalystRepository(settings.cache_db_path)
+        try:
+            repository.initialize()
+            database = _migration_database_status(repository)
+        except CatalystError as error:
+            print(
+                json.dumps(
+                    {
+                        "status": "migration_failed",
+                        "error_code": error.code,
+                    },
+                    separators=(",", ":"),
+                )
+            )
+            return 1
+        except (OSError, ValueError, sqlite3.Error):
+            print(
+                json.dumps(
+                    {
+                        "status": "migration_failed",
+                        "error_code": "cache_migration_failed",
+                    },
+                    separators=(",", ":"),
+                )
+            )
+            return 1
+        print(
+            json.dumps(
+                {
+                    "status": "migrated",
+                    "enabled": settings.enabled,
+                    "database": database,
+                    "remote_checked": False,
+                },
+                allow_nan=False,
+                separators=(",", ":"),
+            )
+        )
+        return 0
 
     if not settings.enabled or settings.catalyst_mode == "disabled":
         if args.once:

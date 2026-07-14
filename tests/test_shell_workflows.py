@@ -133,6 +133,20 @@ def _required_focus_environment(grace_seconds: int = 30) -> str:
     )
 
 
+def _required_catalyst_read_environment(
+    base_url: str = "https://macro.example",
+) -> str:
+    return (
+        (ROOT / ".env.example")
+        .read_text(encoding="utf-8")
+        .replace("MACROLENS_ENABLED=false", "MACROLENS_ENABLED=true")
+        .replace("MACROLENS_BASE_URL=", f"MACROLENS_BASE_URL={base_url}", 1)
+        .replace("MACROLENS_READ_KEY_ID=", "MACROLENS_READ_KEY_ID=read-key", 1)
+        .replace("MACROLENS_READ_SECRET=", "MACROLENS_READ_SECRET=read-secret", 1)
+        .replace("DEPLOY_REQUIRE_CATALYST=false", "DEPLOY_REQUIRE_CATALYST=true", 1)
+    )
+
+
 def _focus_health_payload(*, state: str) -> str:
     startup = state == "startup"
     ready = state == "ready"
@@ -369,37 +383,104 @@ def test_required_focus_gate_times_out_a_hung_healthcheck(tmp_path: Path) -> Non
 def test_required_catalyst_gate_rejects_loopback_remote_urls(
     tmp_path: Path, base_url: str
 ) -> None:
-    template = (ROOT / ".env.example").read_text(encoding="utf-8")
-    required = (
-        template.replace("MACROLENS_ENABLED=false", "MACROLENS_ENABLED=true")
-        .replace("MACROLENS_BASE_URL=", f"MACROLENS_BASE_URL={base_url}", 1)
-        .replace("MACROLENS_READ_KEY_ID=", "MACROLENS_READ_KEY_ID=read-key", 1)
-        .replace("MACROLENS_READ_SECRET=", "MACROLENS_READ_SECRET=read-secret", 1)
-        .replace("MACROLENS_ACTION_KEY_ID=", "MACROLENS_ACTION_KEY_ID=action-key", 1)
-        .replace("MACROLENS_ACTION_SECRET=", "MACROLENS_ACTION_SECRET=action-secret", 1)
-        .replace("DEPLOY_REQUIRE_CATALYST=false", "DEPLOY_REQUIRE_CATALYST=true")
-        .replace("APP_AUTH_TOKEN=", "APP_AUTH_TOKEN=app-token", 1)
-    )
+    required = _required_catalyst_read_environment(base_url)
     root, environment = _deployment_root(tmp_path, required)
     result = _run_deploy(root, environment)
     assert result.returncode != 0
     assert "requires a non-loopback MACROLENS_BASE_URL" in result.stderr
 
 
+def test_required_catalyst_read_gate_does_not_require_action_config(
+    tmp_path: Path,
+) -> None:
+    required = _required_catalyst_read_environment()
+    assert "MACROLENS_ACTION_KEY_ID=\n" in required
+    assert "MACROLENS_ACTION_SECRET=\n" in required
+    assert "APP_AUTH_TOKEN=\n" in required
+    assert "DEPLOY_REQUIRE_CATALYST_ACTIONS=false" in required
+
+    root, environment = _deployment_root(tmp_path, required)
+    accepted = _run_deploy(root, environment)
+    assert accepted.returncode == 0, accepted.stderr
+
+
+def test_required_catalyst_actions_gate_requires_read_gate(tmp_path: Path) -> None:
+    actions_only = (ROOT / ".env.example").read_text(encoding="utf-8").replace(
+        "DEPLOY_REQUIRE_CATALYST_ACTIONS=false",
+        "DEPLOY_REQUIRE_CATALYST_ACTIONS=true",
+        1,
+    )
+    root, environment = _deployment_root(tmp_path, actions_only)
+    rejected = _run_deploy(root, environment)
+    assert rejected.returncode != 0
+    assert (
+        "DEPLOY_REQUIRE_CATALYST_ACTIONS=true requires "
+        "DEPLOY_REQUIRE_CATALYST=true"
+    ) in rejected.stderr
+
+
+def test_required_catalyst_read_gate_requires_explicit_action_decision(
+    tmp_path: Path,
+) -> None:
+    legacy = "\n".join(
+        line
+        for line in _required_catalyst_read_environment().splitlines()
+        if not line.startswith("DEPLOY_REQUIRE_CATALYST_ACTIONS=")
+    )
+    root, environment = _deployment_root(tmp_path, legacy + "\n")
+    rejected = _run_deploy(root, environment)
+    assert rejected.returncode != 0
+    assert "predates the explicit Catalyst action deployment gate" in rejected.stderr
+
+
+@pytest.mark.parametrize(
+    ("action_key_id", "action_secret", "app_auth_token", "expected_error"),
+    [
+        ("", "action-secret", "app-token", "requires MacroLens action credentials"),
+        ("action-key", "", "app-token", "requires MacroLens action credentials"),
+        ("action-key", "action-secret", "", "requires APP_AUTH_TOKEN"),
+        ("action-key", "action-secret", "app-token", None),
+    ],
+)
+def test_required_catalyst_actions_gate_validates_action_config(
+    tmp_path: Path,
+    action_key_id: str,
+    action_secret: str,
+    app_auth_token: str,
+    expected_error: str | None,
+) -> None:
+    required = (
+        _required_catalyst_read_environment()
+        .replace(
+            "DEPLOY_REQUIRE_CATALYST_ACTIONS=false",
+            "DEPLOY_REQUIRE_CATALYST_ACTIONS=true",
+            1,
+        )
+        .replace(
+            "MACROLENS_ACTION_KEY_ID=",
+            f"MACROLENS_ACTION_KEY_ID={action_key_id}",
+            1,
+        )
+        .replace(
+            "MACROLENS_ACTION_SECRET=",
+            f"MACROLENS_ACTION_SECRET={action_secret}",
+            1,
+        )
+        .replace("APP_AUTH_TOKEN=", f"APP_AUTH_TOKEN={app_auth_token}", 1)
+    )
+    root, environment = _deployment_root(tmp_path, required)
+    result = _run_deploy(root, environment)
+    if expected_error is None:
+        assert result.returncode == 0, result.stderr
+    else:
+        assert result.returncode != 0
+        assert expected_error in result.stderr
+
+
 def test_required_catalyst_gate_uses_the_committed_contract_digest(
     tmp_path: Path,
 ) -> None:
-    template = (ROOT / ".env.example").read_text(encoding="utf-8")
-    required = (
-        template.replace("MACROLENS_ENABLED=false", "MACROLENS_ENABLED=true")
-        .replace("MACROLENS_BASE_URL=", "MACROLENS_BASE_URL=https://macro.example", 1)
-        .replace("MACROLENS_READ_KEY_ID=", "MACROLENS_READ_KEY_ID=read-key", 1)
-        .replace("MACROLENS_READ_SECRET=", "MACROLENS_READ_SECRET=read-secret", 1)
-        .replace("MACROLENS_ACTION_KEY_ID=", "MACROLENS_ACTION_KEY_ID=action-key", 1)
-        .replace("MACROLENS_ACTION_SECRET=", "MACROLENS_ACTION_SECRET=action-secret", 1)
-        .replace("DEPLOY_REQUIRE_CATALYST=false", "DEPLOY_REQUIRE_CATALYST=true")
-        .replace("APP_AUTH_TOKEN=", "APP_AUTH_TOKEN=app-token", 1)
-    )
+    required = _required_catalyst_read_environment()
     root, environment = _deployment_root(tmp_path, required)
     accepted = _run_deploy(root, environment)
     assert accepted.returncode == 0, accepted.stderr
@@ -414,6 +495,15 @@ def test_required_catalyst_gate_uses_the_committed_contract_digest(
     rejected = _run_deploy(root, environment)
     assert rejected.returncode != 0
     assert "does not match the reviewed integration contract" in rejected.stderr
+
+
+def test_required_catalyst_runtime_gate_requires_fresh_active_snapshot() -> None:
+    script = (ROOT / "scripts" / "deploy.sh").read_text(encoding="utf-8")
+    assert 'payload.get("status") == "active"' in script
+    assert 'payload.get("remote_status") in {"ok", "active"}' in script
+    assert 'payload.get("last_sync_at") is not None' in script
+    assert 'payload.get("snapshot_id") is not None' in script
+    assert 'payload.get("resync_required") is False' in script
 
 
 def test_legacy_env_and_incomplete_trusted_proxy_config_fail_before_build(
@@ -468,6 +558,8 @@ def test_setup_copies_full_template_and_writes_secrets_as_literal_data(
     assert "OPENAI_API_KEY='" in generated
     assert "BREAKOUT_RADAR_ENABLED=false" in generated
     assert "DEPLOY_REQUIRE_BREAKOUT=false" in generated
+    assert "DEPLOY_REQUIRE_CATALYST=false" in generated
+    assert "DEPLOY_REQUIRE_CATALYST_ACTIONS=false" in generated
     assert "RANGE_PERSISTENCE_MODE=shadow" in generated
     assert "RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED=false" in generated
     assert secret not in result.stdout

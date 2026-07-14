@@ -28,6 +28,15 @@
 
 v6→v7 在 `BEGIN IMMEDIATE` 内读取现有 `catalyst_item_revisions.raw_json`，重建可信投影并执行 `quick_check`、`integrity_check` 和 `foreign_key_check`，最后才切换 Schema 元数据。迁移统计保存在 `catalyst_projection_migration_stats`。坏 JSON 只计数并保留原始新闻；迁移不访问 MacroLens 或模型，不推进 Feed 水位，失败会完整回滚。相同远端分析版本和序列若出现不同负载，将返回 `projection_payload_conflict`，保留旧快照并进入有界重新同步。
 
+生产备份和副本演练通过后，使用新版镜像显式执行：
+
+```bash
+docker compose run --rm --no-deps catalyst-sync-worker \
+  python -m app.services.catalysts.worker --migrate
+```
+
+`--migrate` 不受 `MACROLENS_ENABLED` 或 `FOCUS_PRODUCER_ENABLED` 开关影响，不连接远端，不移动 Feed 水位。输出只包含 Schema 状态与检查结果，失败时以非零状态退出。在该命令成功前，不得开启 Catalyst Sync Worker 或 Focus Producer。
+
 Focus Producer 的有效快照期限为 `FOCUS_CONTEXT_REFRESH_SECONDS + FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS`。默认宽限为 120 秒；宽限期内若 Worker 仍在运行且心跳新鲜，健康状态保持可用并标记 `focus_refresh_in_progress`。
 
 Option Pro 自有 AI Job 使用独立 /data/ai-jobs.db。
