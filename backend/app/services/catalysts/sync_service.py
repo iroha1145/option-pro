@@ -267,18 +267,27 @@ class CatalystSyncService:
                     )
                 final_data_through = page.data_through
                 page_updated_after = _as_utc(page.next_updated_after)
-                if (
-                    page_updated_after is not None
-                    and final_updated_after is not None
-                    and page_updated_after < final_updated_after
-                ):
-                    raise CatalystError(
-                        "watermark_regression",
-                        "MacroLens next_updated_after moved backwards during pagination",
-                        False,
-                    )
                 if page_updated_after is not None:
-                    final_updated_after = page_updated_after
+                    if page.has_more:
+                        # Overlap pages expose a page-local timestamp that may
+                        # precede the already-published watermark. Only the
+                        # final page carries the authoritative snapshot time.
+                        final_updated_after = (
+                            page_updated_after
+                            if final_updated_after is None
+                            else max(final_updated_after, page_updated_after)
+                        )
+                    else:
+                        if (
+                            final_updated_after is not None
+                            and page_updated_after < final_updated_after
+                        ):
+                            raise CatalystError(
+                                "watermark_regression",
+                                "MacroLens final next_updated_after moved backwards",
+                                False,
+                            )
+                        final_updated_after = page_updated_after
                 if not page.has_more:
                     if page.next_cursor is not None:
                         raise CatalystError(
