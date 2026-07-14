@@ -336,7 +336,7 @@ def test_watchlist_reports_provider_failure_without_unbounded_stale_data(monkeyp
     stocks._endpoint_locks.pop("watchlist", None)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(stocks.watchlist())
+        asyncio.run(stocks.watchlist(None))
     assert exc_info.value.status_code == 503
 
 
@@ -396,9 +396,9 @@ def test_targeted_watchlist_uses_normalized_tickers_and_isolated_cache_keys(monk
     monkeypatch.setattr(stocks, "_build_watchlist", targeted_builder)
     monkeypatch.setattr(stocks, "_cached_endpoint", uncached)
 
-    first = asyncio.run(stocks.watchlist(" msft,AAPL,msft "))
-    second = asyncio.run(stocks.watchlist("AAPL,MSFT"))
-    third = asyncio.run(stocks.watchlist("AAPL,NVDA"))
+    first = asyncio.run(stocks.watchlist(None, " msft,AAPL,msft "))
+    second = asyncio.run(stocks.watchlist(None, "AAPL,MSFT"))
+    third = asyncio.run(stocks.watchlist(None, "AAPL,NVDA"))
 
     assert first["attempted"] == 2
     assert second["attempted"] == 2

@@ -53,6 +53,12 @@ test('Catalyst data remains same-origin, abortable, cached by endpoint family, a
 });
 
 test('paid analysis is explicit and earnings no longer uses the synchronous GET trigger', () => {
+  assert.match(api, /const hasAppToken = \(\) => !!appToken\(\)/);
+  assert.match(api, /jget, jpost, invalidateCache, hasAppToken/);
+  assert.match(catalysts, /privateActionsAvailable\(\)[\s\S]*后台同步需管理授权/);
+  assert.match(catalysts, /const canTrigger = privateActionsAvailable\(\)/);
+  assert.match(app, /privateActionsAvailable\(\)[\s\S]*公开页面仅供查看；模型分析需要管理授权/);
+  assert.match(app, /公开页面不会创建付费任务/);
   assert.match(catalysts, /data-cat-analyze/);
   assert.match(catalysts, /createCatalystAnalysis/);
   assert.match(app, /data-impact-run/);

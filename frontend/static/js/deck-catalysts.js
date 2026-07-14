@@ -7,6 +7,7 @@
   const Jobs = window.OPTIX_AI_JOBS;
   const $ = (selector, root) => (root || document).querySelector(selector);
   const $$ = (selector, root) => Array.from((root || document).querySelectorAll(selector));
+  const privateActionsAvailable = () => !!(N && N.hasAppToken && N.hasAppToken());
   const esc = value => String(value == null ? "" : value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
   const finite = value => typeof value === "number" && Number.isFinite(value);
   const list = (payload, keys) => {
@@ -328,7 +329,9 @@
             <div class="cat-filter-actions">
               <span class="mono" id="cat-filter-note">编辑中的条件不会被自动刷新覆盖</span>
               <button class="btn btn--ghost btn--sm" type="button" id="cat-clear">清除</button>
-              <button class="btn btn--sm" type="button" id="cat-refresh">请求后台同步</button>
+              ${privateActionsAvailable()
+                ? `<button class="btn btn--sm" type="button" id="cat-refresh">请求后台同步</button>`
+                : `<span class="mono" data-private-action-note>后台同步需管理授权</span>`}
               <button class="btn btn--amber btn--sm" type="submit">应用筛选</button>
             </div>
           </form>
@@ -412,7 +415,8 @@
       writeDraftToForm();
       $("#cat-filter-note", page.view).textContent = "筛选草稿已清除；点“应用筛选”后生效";
     });
-    $("#cat-refresh", page.view).addEventListener("click", async buttonEvent => {
+    const refreshButton = $("#cat-refresh", page.view);
+    if (refreshButton) refreshButton.addEventListener("click", async buttonEvent => {
       const button = buttonEvent.currentTarget;
       button.disabled = true; button.textContent = "已提交刷新";
       try {
@@ -540,8 +544,8 @@
       && !unknownSubmission
       && ["failed", "cancelled", "incomplete_output"].includes(className(cycle.status))
     );
-    const canRetry = retryable && !active && !budgetMissing && !actionMissing && !snapshotUnavailable && !cooldown;
-    const canRun = !unknownSubmission && (canRetry || (!!raw.manual_enabled && hasNew && !active && !budgetMissing && !actionMissing && !snapshotUnavailable && !cooldown));
+    const canRetry = privateActionsAvailable() && retryable && !active && !budgetMissing && !actionMissing && !snapshotUnavailable && !cooldown;
+    const canRun = privateActionsAvailable() && !unknownSubmission && (canRetry || (!!raw.manual_enabled && hasNew && !active && !budgetMissing && !actionMissing && !snapshotUnavailable && !cooldown));
     const button = $("#cat-focus-run", page.view);
     if (button) {
       button.disabled = !canRun;
@@ -829,6 +833,7 @@
   }
 
   function startMarketFocusCycle() {
+    if (!privateActionsAvailable()) return;
     const raw = page.focusStatus || {};
     const cycle = cyclePayload(page.marketCycle || {});
     if (className(cycle.error_code) === "submission_outcome_unknown") return;
@@ -952,9 +957,9 @@
     const displayItem = persistedAnalysis || !analysis ? item : Object.assign({}, item, { analysis });
     const status = statusPayload ? Jobs.normalizeStatus(statusPayload.status) : analysisStatus(item);
     const ruleOnly = isRuleOnlyAnalysis(displayItem, statusPayload);
-    const canTrigger = item.analysis_trigger_enabled != null
+    const canTrigger = privateActionsAvailable() && (item.analysis_trigger_enabled != null
       ? !!item.analysis_trigger_enabled
-      : !!((metaStatus(page.status) || {}).analysis_trigger_enabled);
+      : !!((metaStatus(page.status) || {}).analysis_trigger_enabled));
     const isActive = ["pending", "queued", "in_progress", "cancel_requested"].includes(status) && statusPayload && statusPayload.job_id;
     const model = statusPayload && statusPayload.model || (analysis && analysis.model) || item.model || "gpt-5.6-terra";
     const reasoning = statusPayload && statusPayload.reasoning || (analysis && analysis.reasoning) || item.reasoning || "max";

@@ -15,7 +15,7 @@ const SCENARIOS = [
   { name: "1280x800-dark-focus-fallback", width: 1280, height: 800, theme: "dark", state: "focus_fallback" },
   { name: "1280x800-dark-unavailable", width: 1280, height: 800, theme: "dark", state: "unavailable" },
   { name: "1280x800-light-disabled", width: 1280, height: 800, theme: "light", state: "disabled" },
-  { name: "1280x800-dark-prepared", width: 1280, height: 800, theme: "dark", state: "prepared" },
+  { name: "1280x800-dark-prepared", width: 1280, height: 800, theme: "dark", state: "prepared", authenticated: true },
   { name: "1280x800-dark-queued", width: 1280, height: 800, theme: "dark", state: "queued" },
   { name: "1280x800-dark-in-progress", width: 1280, height: 800, theme: "dark", state: "in_progress" },
   { name: "1280x800-dark-completed", width: 1280, height: 800, theme: "dark", state: "completed" },
@@ -211,6 +211,9 @@ for (const scenario of SCENARIOS) {
     page.on("pageerror", error => errors.push(error.message));
     await page.setViewportSize({ width: scenario.width, height: scenario.height });
     await page.addInitScript(theme => localStorage.setItem("optix.theme", theme), scenario.theme);
+    if (scenario.authenticated) {
+      await page.addInitScript(() => sessionStorage.setItem("optix.app.token", "visual-admin-session"));
+    }
     await installApiFixtures(page, scenario.state);
     await page.goto("/#catalysts", { waitUntil: "networkidle" });
     await assertStableViewport(page, errors);
@@ -231,6 +234,10 @@ for (const scenario of SCENARIOS) {
     if (scenario.state === "prepared") {
       await expect(page.locator("#cat-focus-run")).toBeEnabled();
       await expect(page.locator("#cat-focus-run")).toContainText("重新分析");
+    }
+    if (scenario.state === "active" && !scenario.authenticated) {
+      await expect(page.locator("#cat-refresh")).toHaveCount(0);
+      await expect(page.locator("#cat-focus-run")).toBeDisabled();
     }
     if (scenario.state === "focus_fallback") {
       await expect(page.getByText("兜底源", { exact: true })).toBeVisible();

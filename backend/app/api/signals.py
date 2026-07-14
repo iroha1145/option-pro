@@ -21,7 +21,9 @@ from app.services.signals import compute_market_signals, compute_stock_signals
 
 router = APIRouter(prefix="/api/signals", tags=["signals"])
 logger = logging.getLogger(__name__)
-_TICKER_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.^_-]{0,11}$")
+_TICKER_PATTERN = re.compile(
+    r"^(?:\^[A-Z0-9][A-Z0-9._-]{0,10}|[A-Z0-9][A-Z0-9._-]{0,11})$"
+)
 
 
 class SignalAnalysisJobCreateRequest(StrictModel):
