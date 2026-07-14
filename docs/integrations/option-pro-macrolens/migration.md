@@ -22,9 +22,13 @@
 
 ## Option Pro
 
-独立 `/data/catalyst-cache.db` 本轮从 v4 升级到 v6；不得改写 `/data/optix.db` 或 `breakout-db-v3`。
+独立 `/data/catalyst-cache.db` 当前升级到 v7；不得改写 `/data/optix.db` 或 `breakout-db-v3`。
 
-缓存继续包含同步 Run、水位、Staging、原始新闻、追加分析、股票影响、日历版本、来源健康、本地任务、刷新 Outbox、Worker 状态和单实例锁。v5 新增按完成交易日与算法版本隔离的 `focus_daily_strength_snapshots`；v6 为该派生缓存补齐负载摘要、覆盖率、各算法版本、数据截至时间和租约隔离字段。v5 缓存只含可重算的派生特征，升级时会在同一事务内安全失效并按 v6 结构重建，不触碰新闻、分析或正式评分数据。失去租约的旧进程不能覆盖新缓存。焦点快照增加 30/90 天分层保留，清理采用短事务分批执行，并保护周期或任务仍在引用的版本。
+缓存继续包含同步 Run、水位、Staging、原始新闻、追加分析、股票影响、日历版本、来源健康、本地任务、刷新 Outbox、Worker 状态和单实例锁。v5 新增按完成交易日与算法版本隔离的 `focus_daily_strength_snapshots`；v6 为该派生缓存补齐负载摘要、覆盖率、各算法版本、数据截至时间和租约隔离字段。v7 新增 `catalyst_analysis_projections` 与 `catalyst_stock_impact_projections`：同一远端分析版本按新闻 `change_sequence` 形成独立投影，股票聚合只接受 `canonical` 和 `valid_external`，缺失验证一律失败关闭。原始分析和 `stock_validations` 继续完整保留在分析投影中。
+
+v6→v7 在 `BEGIN IMMEDIATE` 内读取现有 `catalyst_item_revisions.raw_json`，重建可信投影并执行 `quick_check`、`integrity_check` 和 `foreign_key_check`，最后才切换 Schema 元数据。迁移统计保存在 `catalyst_projection_migration_stats`。坏 JSON 只计数并保留原始新闻；迁移不访问 MacroLens 或模型，不推进 Feed 水位，失败会完整回滚。相同远端分析版本和序列若出现不同负载，将返回 `projection_payload_conflict`，保留旧快照并进入有界重新同步。
+
+Focus Producer 的有效快照期限为 `FOCUS_CONTEXT_REFRESH_SECONDS + FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS`。默认宽限为 120 秒；宽限期内若 Worker 仍在运行且心跳新鲜，健康状态保持可用并标记 `focus_refresh_in_progress`。
 
 Option Pro 自有 AI Job 使用独立 /data/ai-jobs.db。
 

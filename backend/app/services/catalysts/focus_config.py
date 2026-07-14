@@ -67,6 +67,12 @@ class FocusContextSettings(BaseSettings):
     refresh_seconds: int = Field(
         default=1800, ge=60, le=86400, alias="FOCUS_CONTEXT_REFRESH_SECONDS"
     )
+    producer_snapshot_grace_seconds: int = Field(
+        default=120,
+        ge=30,
+        le=900,
+        alias="FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS",
+    )
     producer_enabled: bool = Field(
         default=False, alias="FOCUS_PRODUCER_ENABLED"
     )
@@ -212,6 +218,14 @@ class FocusContextSettings(BaseSettings):
         if self.producer_health_stale_seconds <= self.producer_heartbeat_seconds:
             raise ValueError(
                 "FOCUS_PRODUCER_HEALTH_STALE_SECONDS must exceed the heartbeat interval"
+            )
+        if (
+            self.producer_enabled
+            and self.refresh_seconds != self.producer_interval_seconds
+        ):
+            raise ValueError(
+                "FOCUS_CONTEXT_REFRESH_SECONDS must match "
+                "FOCUS_PRODUCER_INTERVAL_SECONDS when the producer is enabled"
             )
         if self.snapshot_full_resolution_days > self.snapshot_retention_days:
             raise ValueError(

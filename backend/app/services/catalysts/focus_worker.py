@@ -36,6 +36,7 @@ from .focus_config import FocusContextSettings, get_focus_context_settings
 from .focus_models import FocusContextDraft, FocusContextResponse, FocusSymbol
 from .focus_publisher import _breakout_rows, _market_session, verify_focus_contract
 from .focus_universe import build_focus_context
+from .models import utc_iso
 from .repository import (
     FOCUS_PRODUCER_WORKER_PREFIX,
     CatalystRepository,
@@ -1430,7 +1431,13 @@ class FocusContextProducer:
             )
         if token is None:
             return {"status": "locked", "enabled": True}
-        self._heartbeat("running", {"stage": "starting"})
+        self._heartbeat(
+            "running",
+            {
+                "stage": "starting",
+                "refresh_started_at": utc_iso(self.clock.now()),
+            },
+        )
         try:
             draft, details = await self._prepare_with_lease(token)
             response = self.repository.publish_focus_context(
@@ -1623,7 +1630,12 @@ def health_payload(
     try:
         database = local_repository.focus_producer_health(
             heartbeat_ttl_seconds=settings.producer_health_stale_seconds,
-            snapshot_ttl_seconds=settings.refresh_seconds,
+            snapshot_ttl_seconds=(
+                settings.refresh_seconds
+                + settings.producer_snapshot_grace_seconds
+            ),
+            snapshot_refresh_seconds=settings.refresh_seconds,
+            startup_grace_seconds=settings.producer_snapshot_grace_seconds,
             now=now,
         )
     except Exception as error:

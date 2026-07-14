@@ -8,7 +8,13 @@ from datetime import timedelta
 
 import pytest
 
-from app.services.catalysts.models import CalendarEvent, ComponentHealth
+from app.services.catalysts.models import (
+    AffectedStockImpact,
+    CalendarEvent,
+    ComponentHealth,
+    PublicTickerValidation,
+    RemoteAnalysis,
+)
 from app.services.catalysts.repository import (
     DATABASE_VERSION,
     SCHEMA_CHECKSUM,
@@ -69,6 +75,44 @@ def publish_item(
     )
 
 
+def validated_item(*, sequence: int, minute: int, status: str):
+    item = catalyst_item(
+        sequence=sequence,
+        updated_at=utc(10, minute),
+        analysis=True,
+        ticker="XYZ",
+    )
+    assert item.analysis is not None
+    analysis = item.analysis.model_copy(
+        update={
+            "stock_validations": [
+                PublicTickerValidation(
+                    ticker="XYZ",
+                    validation_status=status,
+                    validated_at=utc(10, minute),
+                    focus_revision=sequence,
+                    universe_version=f"fixture-{sequence}",
+                )
+            ]
+        }
+    )
+    return item.model_copy(update={"source_tickers": [], "analysis": analysis})
+
+
+def publish_custom_item(repository: CatalystRepository, item, *, now_minute: int) -> str:
+    token = f"trusted-{item.change_sequence}-{now_minute}"
+    run_id = repository.begin_sync_run("feed", snapshot_token=token, now=utc(10, now_minute))
+    repository.stage_latest_page(run_id, [item])
+    return repository.publish_latest(
+        run_id,
+        snapshot_token=token,
+        data_through=item.updated_at,
+        next_updated_after=item.updated_at,
+        watermark_sequence=item.change_sequence,
+        now=utc(10, now_minute),
+    )
+
+
 def test_cache_schema_uses_wal_checksum_and_query_only_readers(tmp_path) -> None:
     path = tmp_path / "catalyst-cache.db"
     repository = CatalystRepository(path)
@@ -90,6 +134,9 @@ def test_cache_schema_uses_wal_checksum_and_query_only_readers(tmp_path) -> None
         "catalyst_item_revisions",
         "catalyst_analysis_revisions",
         "catalyst_stock_impacts",
+        "catalyst_analysis_projections",
+        "catalyst_stock_impact_projections",
+        "catalyst_projection_migration_stats",
         "catalyst_calendar_event_revisions",
         "catalyst_source_health",
         "catalyst_analysis_jobs",
@@ -229,6 +276,270 @@ def test_analysis_is_bound_to_the_exact_news_revision(tmp_path) -> None:
     assert current["content_hash"] == "content-hash-101-revision-2"
     assert current["analysis"] is None
     assert current["analysis_status"] == "not_requested"
+
+
+def test_trusted_ticker_projection_preserves_validation_lifecycle_by_item_revision(
+    tmp_path,
+) -> None:
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    repository.initialize(now=utc(9))
+
+    publish_custom_item(
+        repository,
+        validated_item(sequence=10, minute=6, status="unverified"),
+        now_minute=6,
+    )
+    first_detail = repository.get_news(101, as_of=utc(10, 6))
+    assert first_detail["analysis"]["affected_stocks"][0]["ticker"] == "XYZ"
+    assert first_detail["analysis"]["stock_validations"][0]["validation_status"] == "unverified"
+    assert first_detail["trusted_stock_impacts"] == []
+    assert repository.ticker_feed("XYZ", as_of=utc(10, 6), window_hours=72)["items"] == []
+
+    publish_custom_item(
+        repository,
+        validated_item(sequence=11, minute=7, status="canonical"),
+        now_minute=7,
+    )
+    assert repository.ticker_feed("XYZ", as_of=utc(10, 7), window_hours=72)["items"]
+    assert repository.ticker_feed("XYZ", as_of=utc(10, 6), window_hours=72)["items"] == []
+
+    publish_custom_item(
+        repository,
+        validated_item(sequence=12, minute=8, status="unverified"),
+        now_minute=8,
+    )
+    assert repository.ticker_feed("XYZ", as_of=utc(10, 8), window_hours=72)["items"] == []
+    historical = repository.ticker_feed("XYZ", as_of=utc(10, 7), window_hours=72)
+    assert historical["items"][0]["change_sequence"] == 11
+    current = repository.get_news(101, as_of=utc(10, 8))
+    assert current["analysis"]["affected_stocks"][0]["ticker"] == "XYZ"
+    assert current["trusted_stock_impacts"] == []
+
+    with repository.open_read_connection() as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM catalyst_analysis_projections"
+        ).fetchone()[0] == 3
+        assert connection.execute(
+            "SELECT count(*) FROM catalyst_stock_impact_projections"
+        ).fetchone()[0] == 1
+
+
+def test_duplicate_ticker_validations_parse_but_fail_closed_in_projection(
+    tmp_path,
+) -> None:
+    item = validated_item(sequence=10, minute=6, status="canonical")
+    assert item.analysis is not None
+    payload = item.analysis.model_dump(mode="json")
+    payload["stock_validations"].append(
+        {
+            **payload["stock_validations"][0],
+            "validation_status": "unverified",
+        }
+    )
+
+    analysis = RemoteAnalysis.model_validate(payload)
+    assert len(analysis.stock_validations) == 2
+
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    repository.initialize(now=utc(9))
+    publish_custom_item(
+        repository,
+        item.model_copy(update={"analysis": analysis}),
+        now_minute=6,
+    )
+
+    detail = repository.get_news(101, as_of=utc(10, 7))
+    assert detail is not None
+    assert detail["analysis"]["affected_stocks"][0]["ticker"] == "XYZ"
+    assert len(detail["analysis"]["stock_validations"]) == 2
+    assert detail["trusted_stock_impacts"] == []
+    assert repository.ticker_feed("XYZ", as_of=utc(10, 7), window_hours=72)[
+        "items"
+    ] == []
+
+    with repository.open_read_connection() as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM catalyst_analysis_projections"
+        ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT count(*) FROM catalyst_stock_impact_projections"
+        ).fetchone()[0] == 0
+
+
+def test_same_item_projection_payload_conflict_keeps_published_snapshot(tmp_path) -> None:
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    repository.initialize(now=utc(9))
+    first_item = validated_item(sequence=10, minute=6, status="canonical")
+    snapshot = publish_custom_item(repository, first_item, now_minute=6)
+    conflicting = validated_item(sequence=10, minute=6, status="unverified")
+    run_id = repository.begin_sync_run(
+        "feed", snapshot_token="projection-conflict", now=utc(10, 7)
+    )
+    repository.stage_latest_page(run_id, [conflicting])
+
+    with pytest.raises(CatalystRepositoryError) as captured:
+        repository.publish_latest(
+            run_id,
+            snapshot_token="projection-conflict",
+            data_through=conflicting.updated_at,
+            next_updated_after=conflicting.updated_at,
+            watermark_sequence=10,
+            now=utc(10, 7),
+        )
+
+    assert captured.value.code == "projection_payload_conflict"
+    state = repository.sync_state("feed")
+    assert state["current_snapshot_id"] == snapshot
+    assert state["watermark_sequence"] == 10
+    current = repository.get_news(101, as_of=utc(10, 7))
+    assert current["trusted_stock_impacts"][0]["ticker"] == "XYZ"
+
+
+def test_same_item_projection_payload_replay_is_idempotent(tmp_path) -> None:
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    repository.initialize(now=utc(9))
+    item = validated_item(sequence=10, minute=6, status="canonical")
+    publish_custom_item(repository, item, now_minute=6)
+
+    with repository.open_read_connection() as connection:
+        before = tuple(
+            connection.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+            for table in (
+                "catalyst_item_revisions",
+                "catalyst_analysis_projections",
+                "catalyst_stock_impact_projections",
+            )
+        )
+
+    publish_custom_item(repository, item, now_minute=7)
+
+    with repository.open_read_connection() as connection:
+        after = tuple(
+            connection.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+            for table in (
+                "catalyst_item_revisions",
+                "catalyst_analysis_projections",
+                "catalyst_stock_impact_projections",
+            )
+        )
+    assert after == before == (1, 1, 1)
+    current = repository.get_news(101, as_of=utc(10, 7))
+    assert current["trusted_stock_impacts"][0]["ticker"] == "XYZ"
+
+
+def test_filters_aggregates_and_batch_ignore_untrusted_model_tickers(tmp_path) -> None:
+    repository = CatalystRepository(tmp_path / "catalysts.db")
+    repository.initialize(now=utc(9))
+    item = validated_item(sequence=10, minute=6, status="canonical")
+    assert item.analysis is not None
+    untrusted = AffectedStockImpact(
+        ticker="ABC",
+        company="Ambiguous Corp",
+        impact_score=90,
+        confidence=99,
+        horizon="weeks",
+        mechanism="regulatory",
+        reason="模型识别结果尚未通过代码验证。",
+    )
+    analysis = item.analysis.model_copy(
+        update={
+            "affected_stocks": [*item.analysis.affected_stocks, untrusted],
+            "stock_validations": [
+                *item.analysis.stock_validations,
+                PublicTickerValidation(
+                    ticker="ABC",
+                    validation_status="unverified",
+                    validated_at=utc(10, 6),
+                    focus_revision=10,
+                    universe_version="fixture-10",
+                ),
+            ],
+        }
+    )
+    publish_custom_item(
+        repository,
+        item.model_copy(update={"analysis": analysis}),
+        now_minute=6,
+    )
+
+    detail = repository.get_news(101, as_of=utc(10, 7))
+    assert {row["ticker"] for row in detail["analysis"]["affected_stocks"]} == {
+        "ABC",
+        "XYZ",
+    }
+    assert [row["ticker"] for row in detail["trusted_stock_impacts"]] == ["XYZ"]
+    assert repository.list_feed(
+        as_of=utc(10, 7), window_hours=72, min_abs_impact=60
+    )["items"] == []
+    assert repository.list_feed(
+        as_of=utc(10, 7), window_hours=72, min_abs_impact=50
+    )["items"]
+    assert repository.list_feed(
+        as_of=utc(10, 7), window_hours=72, horizon="weeks"
+    )["items"] == []
+    assert repository.list_feed(
+        as_of=utc(10, 7), window_hours=72, horizon="days"
+    )["items"]
+    assert repository.list_feed(
+        as_of=utc(10, 7), window_hours=72, mechanism="regulatory"
+    )["items"] == []
+    trusted_feed = repository.list_feed(
+        as_of=utc(10, 7), window_hours=72, mechanism="direct_company"
+    )
+    assert trusted_feed["items"]
+    assert [row["ticker"] for row in trusted_feed["stock_impacts"]] == ["XYZ"]
+    batch = repository.batch_tickers(
+        ["ABC", "XYZ"],
+        as_of=utc(10, 7),
+        window_hours=72,
+        limit=10,
+        include_neutral=True,
+    )
+    assert batch["results"]["ABC"]["items"] == []
+    assert batch["results"]["XYZ"]["items"]
+
+
+@pytest.mark.parametrize(
+    ("status", "trusted"),
+    [
+        ("canonical", True),
+        ("valid_external", True),
+        ("ambiguous", False),
+        ("unverified", False),
+        ("invalid", False),
+    ],
+)
+def test_only_approved_validation_states_enter_trusted_projection(
+    tmp_path,
+    status,
+    trusted,
+) -> None:
+    repository = CatalystRepository(tmp_path / f"{status}.db")
+    repository.initialize(now=utc(9))
+    publish_custom_item(
+        repository,
+        validated_item(sequence=10, minute=6, status=status),
+        now_minute=6,
+    )
+    detail = repository.get_news(101, as_of=utc(10, 7))
+    assert bool(detail["trusted_stock_impacts"]) is trusted
+
+
+def test_missing_validation_fails_closed_but_keeps_raw_model_impact(tmp_path) -> None:
+    repository = CatalystRepository(tmp_path / "missing.db")
+    repository.initialize(now=utc(9))
+    item = validated_item(sequence=10, minute=6, status="canonical")
+    assert item.analysis is not None
+    item = item.model_copy(
+        update={
+            "analysis": item.analysis.model_copy(update={"stock_validations": []})
+        }
+    )
+    publish_custom_item(repository, item, now_minute=6)
+    detail = repository.get_news(101, as_of=utc(10, 7))
+    assert detail["analysis"]["affected_stocks"][0]["ticker"] == "XYZ"
+    assert detail["trusted_stock_impacts"] == []
+    assert repository.ticker_feed("XYZ", as_of=utc(10, 7), window_hours=72)["items"] == []
 
 
 def test_cursor_rejects_wrong_types_in_snapshot_fields() -> None:

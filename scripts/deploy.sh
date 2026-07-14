@@ -62,6 +62,80 @@ is_truthy() {
     esac
 }
 
+focus_snapshot_state() {
+    FOCUS_WORKER_HEALTH="$1" python3 -c '
+import json
+import os
+
+try:
+    payload = json.loads(os.environ["FOCUS_WORKER_HEALTH"])
+except (KeyError, TypeError, ValueError):
+    raise SystemExit(1)
+if not isinstance(payload, dict):
+    raise SystemExit(1)
+database = payload.get("database")
+contract = payload.get("contract")
+if not isinstance(database, dict) or not isinstance(contract, dict):
+    raise SystemExit(1)
+common_health = (
+    payload.get("healthy") is True
+    and payload.get("enabled") is True
+    and payload.get("ready_dependency") is False
+    and payload.get("status") in {"ok", "degraded"}
+    and contract.get("valid") is True
+    and database.get("heartbeat_fresh") is True
+    and database.get("lock_live") is True
+)
+if (
+    common_health
+    and database.get("latest_snapshot") is not None
+    and database.get("snapshot_fresh") is True
+):
+    raise SystemExit(0)
+if (
+    common_health
+    and payload.get("status") == "degraded"
+    and database.get("startup_in_progress") is True
+    and database.get("latest_snapshot") is None
+    and database.get("snapshot_fresh") is False
+):
+    raise SystemExit(75)
+raise SystemExit(1)
+'
+}
+
+focus_worker_healthcheck() {
+    python3 - "$1" <<'PY'
+import subprocess
+import sys
+
+try:
+    completed = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "focus-context-producer",
+            "python",
+            "-m",
+            "app.services.catalysts.focus_worker",
+            "--healthcheck",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=max(1, int(sys.argv[1])),
+    )
+except (OSError, subprocess.TimeoutExpired):
+    raise SystemExit(124)
+if completed.returncode != 0:
+    sys.stderr.write(completed.stderr)
+    raise SystemExit(completed.returncode)
+sys.stdout.write(completed.stdout)
+PY
+}
+
 file_sha256() {
     python3 - "$1" <<'PY'
 import hashlib
@@ -131,6 +205,8 @@ deploy_require_catalyst="${DEPLOY_REQUIRE_CATALYST:-$(env_value DEPLOY_REQUIRE_C
 deploy_require_catalyst="${deploy_require_catalyst:-false}"
 focus_producer_enabled="${FOCUS_PRODUCER_ENABLED:-$(env_value FOCUS_PRODUCER_ENABLED)}"
 focus_producer_enabled="${focus_producer_enabled:-false}"
+focus_producer_snapshot_grace_seconds="${FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS:-$(env_value FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS)}"
+focus_producer_snapshot_grace_seconds="${focus_producer_snapshot_grace_seconds:-120}"
 deploy_require_focus="${DEPLOY_REQUIRE_FOCUS_PRODUCER:-$(env_value DEPLOY_REQUIRE_FOCUS_PRODUCER)}"
 deploy_require_focus="${deploy_require_focus:-false}"
 
@@ -216,6 +292,16 @@ if is_truthy "$deploy_require_catalyst"; then
 fi
 if is_truthy "$deploy_require_focus" && ! is_truthy "$focus_producer_enabled"; then
     echo "DEPLOY_REQUIRE_FOCUS_PRODUCER=true requires FOCUS_PRODUCER_ENABLED=true." >&2
+    exit 1
+fi
+case "$focus_producer_snapshot_grace_seconds" in
+    ''|*[!0-9]*)
+        echo "FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS must be an integer from 30 to 900." >&2
+        exit 1
+        ;;
+esac
+if [ "$focus_producer_snapshot_grace_seconds" -lt 30 ] || [ "$focus_producer_snapshot_grace_seconds" -gt 900 ]; then
+    echo "FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS must be from 30 to 900." >&2
     exit 1
 fi
 
@@ -432,10 +518,71 @@ elif not enabled:
     assert payload["enabled"] is False
 '
 
-focus_worker_health="$(
-    docker compose exec -T focus-context-producer \
-        python -m app.services.catalysts.focus_worker --healthcheck
-)"
+focus_worker_health=""
+if is_truthy "$deploy_require_focus"; then
+    focus_poll_seconds=2
+    focus_healthcheck_timeout_seconds=5
+    focus_waited_seconds=0
+    focus_wait_deadline=$((SECONDS + focus_producer_snapshot_grace_seconds))
+    focus_snapshot_ready=false
+    while true; do
+        focus_logical_remaining=$((
+            focus_producer_snapshot_grace_seconds - focus_waited_seconds
+        ))
+        focus_wall_remaining=$((focus_wait_deadline - SECONDS))
+        if [ "$focus_logical_remaining" -le 0 ] || [ "$focus_wall_remaining" -le 0 ]; then
+            break
+        fi
+        focus_probe_timeout="$focus_healthcheck_timeout_seconds"
+        if [ "$focus_logical_remaining" -lt "$focus_probe_timeout" ]; then
+            focus_probe_timeout="$focus_logical_remaining"
+        fi
+        if [ "$focus_wall_remaining" -lt "$focus_probe_timeout" ]; then
+            focus_probe_timeout="$focus_wall_remaining"
+        fi
+        if ! focus_worker_health="$(
+            focus_worker_healthcheck "$focus_probe_timeout"
+        )"; then
+            echo "Required Focus Producer healthcheck failed before the first fresh snapshot." >&2
+            exit 1
+        fi
+        if focus_snapshot_state "$focus_worker_health"; then
+            focus_snapshot_ready=true
+            break
+        else
+            focus_snapshot_status=$?
+        fi
+        if [ "$focus_snapshot_status" -ne 75 ]; then
+            echo "Required Focus Producer reported a non-startup state before the first fresh snapshot." >&2
+            exit 1
+        fi
+        focus_logical_remaining=$((
+            focus_producer_snapshot_grace_seconds - focus_waited_seconds
+        ))
+        focus_wall_remaining=$((focus_wait_deadline - SECONDS))
+        if [ "$focus_logical_remaining" -le 0 ] || [ "$focus_wall_remaining" -le 0 ]; then
+            break
+        fi
+        focus_sleep_seconds="$focus_poll_seconds"
+        if [ "$focus_logical_remaining" -lt "$focus_sleep_seconds" ]; then
+            focus_sleep_seconds="$focus_logical_remaining"
+        fi
+        if [ "$focus_wall_remaining" -lt "$focus_sleep_seconds" ]; then
+            focus_sleep_seconds="$focus_wall_remaining"
+        fi
+        sleep "$focus_sleep_seconds"
+        focus_waited_seconds=$((focus_waited_seconds + focus_sleep_seconds))
+    done
+    if ! is_truthy "$focus_snapshot_ready"; then
+        echo "Required Focus Producer did not publish a fresh snapshot within ${focus_producer_snapshot_grace_seconds}s." >&2
+        exit 1
+    fi
+else
+    focus_worker_health="$(
+        docker compose exec -T focus-context-producer \
+            python -m app.services.catalysts.focus_worker --healthcheck
+    )"
+fi
 docker compose exec -T \
     -e "FOCUS_WORKER_HEALTH=${focus_worker_health}" \
     -e "EXPECTED_FOCUS_ENABLED=${focus_producer_enabled}" \

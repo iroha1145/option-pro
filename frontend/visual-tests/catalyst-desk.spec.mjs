@@ -34,6 +34,9 @@ function newsItem(state) {
     fetched_at: "2026-07-13T13:42:00Z",
     analysis_status: state === "failed" ? "failed" : "completed",
     analysis_trigger_enabled: false,
+    trusted_stock_impacts: state === "failed" ? [] : [
+      { ticker: "NVDA", impact_score: 42, confidence: 76, horizon: "days", mechanism: "direct_company", validation_status: "canonical", reason: "订单能见度改善，但估值与交付节奏仍是主要风险。" },
+    ],
     analysis: state === "failed" ? null : {
       model: "gpt-5.6-terra",
       reasoning: "max",
@@ -43,6 +46,9 @@ function newsItem(state) {
       overall_sentiment: 31,
       affected_stocks: [
         { ticker: "NVDA", impact_score: 42, mechanism: "direct_company", reason: "订单能见度改善，但估值与交付节奏仍是主要风险。" },
+      ],
+      stock_validations: [
+        { ticker: "NVDA", validation_status: "canonical", validated_at: "2026-07-13T13:44:00Z", focus_revision: 9, universe_version: "visual-v1", association_method: "llm_inference" },
       ],
     },
   };

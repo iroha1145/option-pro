@@ -7,6 +7,7 @@ from app.services.catalysts.models import (
     AnalysisStatus,
     CatalystItem,
     Classification,
+    PublicTickerValidation,
     RemoteAnalysis,
 )
 
@@ -60,6 +61,15 @@ def catalyst_item(
             schema_version="news-impact-schema-v2",
             analyzed_at=analyzed_at,
             available_at=available_at,
+            stock_validations=[
+                PublicTickerValidation(
+                    ticker=ticker,
+                    validation_status="canonical",
+                    validated_at=available_at,
+                    focus_revision=1,
+                    universe_version="fixture-v1",
+                )
+            ],
         )
     return CatalystItem(
         news_id=news_id,
