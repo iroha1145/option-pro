@@ -137,7 +137,7 @@
 .cat-news__meta { display: flex; gap: 11px; align-items: center; flex-wrap: wrap; color: var(--faint); font-size: 9.5px; }
 .cat-news__meta > span:first-child { color: var(--amber); letter-spacing: .08em; }
 .cat-news h3 { max-width: 920px; margin: 8px 0 4px; font-size: clamp(16px, 2vw, 20px); line-height: 1.45; overflow-wrap: anywhere; }
-.cat-news__summary { max-width: 930px; margin: 0; color: var(--muted); line-height: 1.75; font-size: 13px; overflow-wrap: anywhere; }
+.cat-news__summary { display: -webkit-box; max-width: 930px; margin: 0; overflow: hidden; color: var(--muted); line-height: 1.75; font-size: 13px; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
 .cat-news__signals { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 11px; }
 .cat-news__tickers { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 7px; margin-top: 11px; }
 .cat-news__tickers > span { display: grid; grid-template-columns: auto auto 1fr; gap: 8px; align-items: baseline; min-width: 0; padding: 7px 9px; border: 1px solid var(--line-soft); border-radius: 8px; }

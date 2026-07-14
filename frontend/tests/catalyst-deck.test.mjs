@@ -246,6 +246,14 @@ test('Catalyst confidence uses the contract 0..100 scale and ticker projections 
   assert.equal(desk.analysisRetryForce({ analysis_status: 'completed' }, { status: 'failed' }), true);
   assert.equal(desk.analysisRetryForce({ analysis_status: 'failed' }, { status: 'cancelled' }), true);
   assert.equal(desk.analysisRetryForce({ analysis_status: 'failed' }, { status: 'completed' }), false);
+  assert.equal(
+    desk.plainText('<p class="lead">US CPI &amp; rates</p><p>Second paragraph.</p>'),
+    'US CPI & rates Second paragraph.',
+  );
+  assert.equal(
+    desk.plainText('<p>Fed&#8217;s move &#x2014; stocks &lt;script&gt;ignored&lt;/script&gt;</p>'),
+    'Fed’s move — stocks ignored',
+  );
   const lowContextHtml = desk.compactNews({
     news_id: 101,
     source: 'Fixture Wire',
@@ -307,6 +315,12 @@ test('long stock-impact reasons are accessible without crowding the drawer', () 
   assert.match(catalysts, /<details class="cat-impact-reason">/);
   assert.match(catalysts, /查看完整影响理由/);
   assert.match(catalystCss, /\.cat-impact-reason summary:focus-visible/);
+});
+
+test('feed summaries remove source markup and stay visually bounded', () => {
+  assert.match(catalysts, /const plainText = value/);
+  assert.match(catalysts, /return plainText\(item && \(item\.summary \|\| item\.description\)/);
+  assert.match(catalystCss, /\.cat-news__summary[^}]*-webkit-line-clamp:\s*3/);
 });
 
 test('frontend sources never contain service secrets or a project API key', () => {
