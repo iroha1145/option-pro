@@ -33,6 +33,23 @@
   const signedScore = value => finite(value) ? (value > 0 ? "+" : "") + score(value) : "—";
   const fmtCount = value => finite(value) ? Math.round(value).toLocaleString("zh-CN") : "—";
   const upperTicker = value => String(value || "").trim().toUpperCase().replace(/[^A-Z0-9.^-]/g, "").slice(0, 16);
+  const NAMED_ENTITIES = Object.freeze({ nbsp: " ", amp: "&", quot: '"', apos: "'", lt: "<", gt: ">" });
+  const numericEntity = (match, raw) => {
+    const codePoint = raw[0].toLowerCase() === "x"
+      ? Number.parseInt(raw.slice(1), 16)
+      : Number.parseInt(raw, 10);
+    if (!Number.isInteger(codePoint) || codePoint <= 0 || codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff)) return match;
+    if ((codePoint < 0x20 && ![0x09, 0x0a, 0x0d].includes(codePoint)) || (codePoint >= 0x7f && codePoint <= 0x9f)) return " ";
+    return String.fromCodePoint(codePoint);
+  };
+  const plainText = value => String(value == null ? "" : value)
+    .replace(/&(nbsp|amp|quot|apos|lt|gt);/gi, (_match, name) => NAMED_ENTITIES[name.toLowerCase()])
+    .replace(/&#(x[0-9a-f]+|[0-9]+);/gi, numericEntity)
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<\s*\/?\s*(?:p|div|br|li|ul|ol|h[1-6]|section|article|blockquote|table|tr|td|th)\b[^>]*>/gi, " ")
+    .replace(/<\s*\/?\s*[a-z][^>]*>/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
   const CLASS_CN = {
     bullish: "正向", positive: "正向", bearish: "负向", negative: "负向",
@@ -141,7 +158,7 @@
   function itemTitle(item) { return item && (item.title_zh || item.title || item.headline) || "未命名新闻"; }
   function itemSummary(item) {
     const analysis = analysisOf(item);
-    return item && (item.summary || item.description) || (analysis && (analysis.headline_summary || analysis.title_zh)) || "";
+    return plainText(item && (item.summary || item.description) || (analysis && (analysis.headline_summary || analysis.title_zh)) || "");
   }
   function feedItems(payload) { return list(payload, ["items", "news", "results", "feed"]); }
   function newsItemFromPayload(payload) {
@@ -1217,6 +1234,6 @@
     renderPage, leaveRoute, openNews, mountTickerPanel, mountScreenerBatch, abortPageEnhancements, onDrawerClosed,
     labels: { statusLabel, classLabel },
     formatConfidence: pct,
-    impactsOf, impactDirection, sentimentOf, isRuleOnlyAnalysis, analysisRetryForce, compactNews,
+    impactsOf, impactDirection, sentimentOf, isRuleOnlyAnalysis, analysisRetryForce, compactNews, plainText,
   };
 })();
