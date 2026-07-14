@@ -1525,8 +1525,8 @@ class FocusContextProducer:
             build_breakout_rows = [
                 row
                 for row in breakout_rows
-                if (ticker := _active_breakout_ticker(row)) is None
-                or ticker in admitted_tickers
+                if (ticker := _ticker(row.get("ticker"))) is not None
+                and ticker in admitted_tickers
             ]
             build_settings = self.settings.model_copy(
                 update={

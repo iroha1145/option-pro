@@ -1545,7 +1545,15 @@ def test_cross_session_recovery_retains_old_truth_and_excludes_new_fallbacks(
         ),
         intraday_loader=intraday_loader,
         breakout_loader=lambda: [
-            {"ticker": "NEWFALLBACK", "lifecycle_state": "CONFIRMED"}
+            {"ticker": "NEWFALLBACK", "lifecycle_state": "CONFIRMED"},
+            {
+                "ticker": "NEWWATCH",
+                "lifecycle_state": "WATCHING",
+                "features": {
+                    "avg_dollar_volume_20d": 999_000_000,
+                    "data_through": daily_fallback.isoformat(),
+                },
+            },
         ],
         owner_id=f"{FOCUS_PRODUCER_WORKER_PREFIX}cross-session",
     )
@@ -1580,6 +1588,7 @@ def test_cross_session_recovery_retains_old_truth_and_excludes_new_fallbacks(
     symbols = {symbol.ticker: symbol for symbol in current.symbols}
     assert set(symbols) == {"AAPL", "NEWEXACT"}
     assert "NEWFALLBACK" not in symbols
+    assert "NEWWATCH" not in symbols
     retained = symbols["AAPL"]
     assert retained.data_through == old_data_through
     assert retained.data_status == "stale"
