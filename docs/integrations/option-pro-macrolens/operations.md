@@ -61,9 +61,9 @@ MacroLens Integration Health 与分析 Worker 容器共用同一心跳阈值：�
 
 1. 两个仓库的主分支持续集成全部通过，契约文件逐字节一致，并分别创建不可变标签和 GitHub Release。
 2. 先备份并部署 MacroLens，再备份并部署 Option Pro；生产只能使用精确标签或提交。
-3. 先以付费能力全部关闭的状态启动，再配置三组相互独立的 HMAC 凭据和 HTTPS 白名单。
+3. 先以付费能力全部关闭的状态启动。只读阶段设置 `DEPLOY_REQUIRE_CATALYST=true`、`DEPLOY_REQUIRE_CATALYST_ACTIONS=false`，只验收 HTTPS、读凭据、契约与同步状态；再配置三组相互独立的 HMAC 凭据和 HTTPS 白名单。
 4. 完成正确签名、错误签名、权限、重放、过期时间、错误正文摘要、来源地址、HTTP、重定向和契约不一致测试。
-5. 只读同步稳定至少一个周期后，才按用户批准的每日任务数与输出 Token 预算分阶段开放手动能力。自动逐条新闻分析始终保持关闭。
+5. 只读同步稳定至少一个周期后，才配置 action 凭据与 `APP_AUTH_TOKEN`，设置 `DEPLOY_REQUIRE_CATALYST_ACTIONS=true`，并确认 `analysis_trigger_enabled=true`。随后按用户批准的每日任务数与输出 Token 预算分阶段开放手动能力。自动逐条新闻分析始终保持关闭。
 6. 每次发布证据写入 Release Notes：最终提交、标签、持续集成链接、备份位置、镜像摘要、数据库检查、接口与页面验收、关闭能力和已知限制。仓库文件本身不代表生产已经部署。
 
 ## 测试

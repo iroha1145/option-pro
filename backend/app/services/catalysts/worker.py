@@ -5,14 +5,16 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import signal
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
 from .client import MacroLensClient
 from .config import CatalystSettings, get_catalyst_settings
-from .errors import CatalystError
+from .errors import CatalystError, CatalystRepositoryError
 from .models import SCHEMA_VERSION
 from .repository import CatalystRepository
 from .sync_service import CatalystSyncService
@@ -108,6 +110,16 @@ def _parser() -> argparse.ArgumentParser:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--once", action="store_true", help="run one local sync cycle")
     mode.add_argument("--healthcheck", action="store_true", help="check local worker health")
+    mode.add_argument(
+        "--migrate",
+        action="store_true",
+        help="initialize or migrate the local Catalyst cache without contacting MacroLens",
+    )
+    mode.add_argument(
+        "--request-refresh",
+        action="store_true",
+        help="request a local health and feed refresh without contacting MacroLens",
+    )
     return parser
 
 
@@ -118,6 +130,89 @@ def _install_stop_handlers(stop: asyncio.Event) -> None:
             loop.add_signal_handler(signum, stop.set)
         except (NotImplementedError, RuntimeError):
             pass
+
+
+def _migration_database_status(repository: CatalystRepository) -> dict[str, Any]:
+    database = repository.check_schema()
+    with repository.open_read_connection() as connection:
+        quick_rows = [str(row[0]) for row in connection.execute("PRAGMA quick_check")]
+        integrity_rows = [
+            str(row[0]) for row in connection.execute("PRAGMA integrity_check")
+        ]
+        foreign_key_rows = connection.execute("PRAGMA foreign_key_check").fetchall()
+    if quick_rows != ["ok"] or integrity_rows != ["ok"] or foreign_key_rows:
+        raise CatalystRepositoryError(
+            "cache_integrity_failed",
+            "Catalyst cache integrity checks failed after migration",
+        )
+    database.update(
+        {
+            "quick_check": "ok",
+            "integrity_check": "ok",
+            "foreign_key_check": "ok",
+        }
+    )
+    return database
+
+
+def deployment_status_ready(
+    payload: dict[str, Any],
+    *,
+    required_after_epoch: float,
+    actions_required: bool,
+) -> bool:
+    """Accept only a remote health and feed success from this deployment.
+
+    The local cache survives container replacement.  A status may therefore
+    look active for a short time even when the replacement container has not
+    authenticated to MacroLens yet.  The deployment gate supplies a cutoff
+    captured immediately before it requests a refresh; both remote health and
+    feed must publish success at or after that cutoff.
+    """
+
+    try:
+        cutoff = float(required_after_epoch)
+    except (TypeError, ValueError):
+        return False
+    if not math.isfinite(cutoff) or cutoff <= 0:
+        return False
+
+    streams = payload.get("streams")
+    if not isinstance(streams, dict):
+        return False
+
+    def succeeded_after(stream: str) -> bool:
+        state = streams.get(stream)
+        if not isinstance(state, dict):
+            return False
+        value = state.get("last_success_at")
+        if not isinstance(value, str) or not value:
+            return False
+        try:
+            observed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        if observed.tzinfo is None or observed.utcoffset() is None:
+            return False
+        return observed.timestamp() >= cutoff
+
+    read_ready = (
+        payload.get("enabled") is True
+        and payload.get("status") == "active"
+        and payload.get("remote_status") in {"ok", "active"}
+        and payload.get("last_sync_at") is not None
+        and payload.get("snapshot_id") is not None
+        and payload.get("resync_required") is False
+        and succeeded_after("health")
+        and succeeded_after("feed")
+    )
+    return bool(
+        read_ready
+        and (
+            not actions_required
+            or payload.get("analysis_trigger_enabled") is True
+        )
+    )
 
 
 async def _wait_disabled(stop: asyncio.Event) -> None:
@@ -149,6 +244,86 @@ async def _async_main(args: argparse.Namespace) -> int:
         payload = health_payload(settings)
         print(json.dumps(payload, allow_nan=False, separators=(",", ":")))
         return 0 if payload["healthy"] else 1
+
+    if getattr(args, "migrate", False):
+        repository = CatalystRepository(settings.cache_db_path)
+        try:
+            repository.initialize()
+            database = _migration_database_status(repository)
+        except CatalystError as error:
+            print(
+                json.dumps(
+                    {
+                        "status": "migration_failed",
+                        "error_code": error.code,
+                    },
+                    separators=(",", ":"),
+                )
+            )
+            return 1
+        except (OSError, ValueError, sqlite3.Error):
+            print(
+                json.dumps(
+                    {
+                        "status": "migration_failed",
+                        "error_code": "cache_migration_failed",
+                    },
+                    separators=(",", ":"),
+                )
+            )
+            return 1
+        print(
+            json.dumps(
+                {
+                    "status": "migrated",
+                    "enabled": settings.enabled,
+                    "database": database,
+                    "remote_checked": False,
+                },
+                allow_nan=False,
+                separators=(",", ":"),
+            )
+        )
+        return 0
+
+    if getattr(args, "request_refresh", False):
+        repository = CatalystRepository(settings.cache_db_path)
+        try:
+            repository.check_schema()
+            repository.enqueue_refresh(("health", "feed"))
+        except CatalystError as error:
+            print(
+                json.dumps(
+                    {
+                        "status": "refresh_request_failed",
+                        "error_code": error.code,
+                    },
+                    separators=(",", ":"),
+                )
+            )
+            return 1
+        except (OSError, ValueError, sqlite3.Error):
+            print(
+                json.dumps(
+                    {
+                        "status": "refresh_request_failed",
+                        "error_code": "cache_refresh_failed",
+                    },
+                    separators=(",", ":"),
+                )
+            )
+            return 1
+        print(
+            json.dumps(
+                {
+                    "status": "refresh_requested",
+                    "streams": ["health", "feed"],
+                    "remote_checked": False,
+                },
+                separators=(",", ":"),
+            )
+        )
+        return 0
 
     if not settings.enabled or settings.catalyst_mode == "disabled":
         if args.once:
@@ -190,4 +365,4 @@ if __name__ == "__main__":
     raise SystemExit(main())
 
 
-__all__ = ["health_payload", "main"]
+__all__ = ["deployment_status_ready", "health_payload", "main"]

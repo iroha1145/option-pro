@@ -23,25 +23,33 @@ MacroLens 使用 https://<macrolens-domain>，Option Pro 使用 https://<option-
 
 ## Option Pro 远程配置
 
-MACROLENS_ENABLED=false  
-MACROLENS_BASE_URL=https://macrolens.example.com  
-MACROLENS_VERIFY_TLS=true  
-MACROLENS_CA_BUNDLE=  
-MACROLENS_CONNECT_TIMEOUT_SECONDS=3  
-MACROLENS_READ_TIMEOUT_SECONDS=12  
-MACROLENS_TOTAL_TIMEOUT_SECONDS=20  
-MACROLENS_MAX_RESPONSE_BYTES=5000000  
-MACROLENS_FAILURE_THRESHOLD=3  
-MACROLENS_CIRCUIT_OPEN_SECONDS=300  
-MACROLENS_STALE_TTL_SECONDS=86400  
+```dotenv
+MACROLENS_ENABLED=false
+MACROLENS_BASE_URL=https://macrolens.example.com
+MACROLENS_VERIFY_TLS=true
+MACROLENS_CA_BUNDLE=
+MACROLENS_CONNECT_TIMEOUT_SECONDS=3
+MACROLENS_READ_TIMEOUT_SECONDS=12
+MACROLENS_TOTAL_TIMEOUT_SECONDS=20
+MACROLENS_MAX_RESPONSE_BYTES=5000000
+MACROLENS_FAILURE_THRESHOLD=3
+MACROLENS_CIRCUIT_OPEN_SECONDS=300
+MACROLENS_STALE_TTL_SECONDS=86400
 MACROLENS_CACHE_DB_PATH=/data/catalyst-cache.db
+DEPLOY_REQUIRE_CATALYST=false
+DEPLOY_REQUIRE_CATALYST_ACTIONS=false
+```
+
+`DEPLOY_REQUIRE_CATALYST` 是只读发布门禁。启用后，部署脚本要求 `MACROLENS_ENABLED=true`、`CATALYST_MODE=display`、远程 HTTPS 与证书校验、读密钥，以及与仓库一致的契约摘要；不要求 action 密钥或 `APP_AUTH_TOKEN`。容器就绪后，门禁会写入一次本地 Health 与 Feed 刷新请求，并且只接受刷新请求时间之后由当前 Worker 发布的两项成功结果；旧容器留下的 active 快照不能替代本轮联调。
+
+`DEPLOY_REQUIRE_CATALYST_ACTIONS` 是动作发布门禁，默认关闭。它只能在只读门禁开启时使用，并额外要求 action 密钥、`APP_AUTH_TOKEN`，以及部署后的 `analysis_trigger_enabled=true`。两个开关由宿主机上的部署脚本读取；部署后的临时验收命令由脚本单独传值，因此 `docker-compose.yml` 不新增业务配置项。
 
 ## 部署次序
 
-1. 两边先部署代码和数据库迁移，但保持 MACROLENS_ENABLED=false。
+1. 两边先部署代码和数据库迁移，但保持 `MACROLENS_ENABLED=false`，两个部署门禁均为 false。Option Pro 必须在备份后用新版镜像显式运行 `python -m app.services.catalysts.worker --migrate`；关闭状态的长驻 Worker 不会隐式执行迁移。
 2. MacroLens 配置 HTTPS、允许网段、读密钥和 action 密钥。
-3. Option Pro 只开启读能力，验证 Health、Feed、Calendar、缓存和重启恢复。
-4. 再启用 action 能力，验证幂等创建、查询和取消任务。
+3. Option Pro 只开启读能力，设置 `DEPLOY_REQUIRE_CATALYST=true`、`DEPLOY_REQUIRE_CATALYST_ACTIONS=false`，验证 Health、Feed、Calendar、缓存和重启恢复。
+4. 再配置 action 密钥与 `APP_AUTH_TOKEN`，设置 `DEPLOY_REQUIRE_CATALYST_ACTIONS=true`，验证 `analysis_trigger_enabled=true`、幂等创建、查询和取消任务。
 5. 最后开放界面按钮，CATALYST_MODE 仍为 display。
 
 MacroLens 服务器尚未提供。本阶段只交付代码、容器配置、模拟契约和本地故障测试，不将“预留完成”描述为真实跨服务器联调完成。

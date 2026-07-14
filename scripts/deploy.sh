@@ -55,11 +55,101 @@ env_value() {
     ' .env
 }
 
-is_truthy() {
-    case "$1" in
-        1|true|TRUE|yes|YES) return 0 ;;
-        *) return 1 ;;
+compose_env_boolean_value() {
+    python3 - "$1" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+
+key = sys.argv[1]
+pattern = re.compile(rf"^{re.escape(key)}\s*=(.*)$")
+value = ""
+
+
+def parse_value(raw: str) -> str:
+    raw = raw.strip()
+    if not raw:
+        return ""
+    if raw[0] not in {"'", '"'}:
+        comment = re.search(r"\s+#", raw)
+        if comment:
+            raw = raw[: comment.start()]
+        return raw.strip()
+
+    quote = raw[0]
+    decoded = []
+    escaped = False
+    for index, character in enumerate(raw[1:], start=1):
+        if quote == '"' and character == "\\" and not escaped:
+            escaped = True
+            continue
+        if character == quote and not escaped:
+            remainder = raw[index + 1 :].strip()
+            if remainder and not remainder.startswith("#"):
+                return raw
+            return "".join(decoded)
+        decoded.append(character)
+        escaped = False
+    return raw
+
+
+for original in Path(".env").read_text(encoding="utf-8").splitlines():
+    line = original.lstrip()
+    if line.startswith("export "):
+        line = line[7:].lstrip()
+    match = pattern.match(line)
+    if match:
+        value = parse_value(match.group(1))
+
+print(value)
+PY
+}
+
+boolean_source_value() {
+    local key="$1"
+    local environment_value=""
+    if environment_value="$(printenv "$key")" && [ -n "$environment_value" ]; then
+        printf '%s\n' "$environment_value"
+        return 0
+    fi
+    compose_env_boolean_value "$key"
+}
+
+normalize_boolean() {
+    local key="$1"
+    local raw="$2"
+    local default_value="$3"
+    local normalized=""
+    normalized="$(
+        printf '%s\n' "$raw" \
+            | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+            | tr '[:upper:]' '[:lower:]'
+    )"
+    case "$normalized" in
+        '') printf '%s\n' "$default_value" ;;
+        1|true|yes) printf 'true\n' ;;
+        0|false|no) printf 'false\n' ;;
+        *)
+            echo "${key} must be a recognized boolean value." >&2
+            return 1
+            ;;
     esac
+}
+
+configuration_boolean() {
+    local key="$1"
+    local default_value="$2"
+    local raw=""
+    if ! raw="$(boolean_source_value "$key")"; then
+        echo "Unable to read ${key} from .env." >&2
+        return 1
+    fi
+    normalize_boolean "$key" "$raw" "$default_value"
+}
+
+is_truthy() {
+    [ "$1" = "true" ]
 }
 
 focus_snapshot_state() {
@@ -180,35 +270,31 @@ PY
 host_bind="${HOST_BIND:-$(env_value HOST_BIND)}"
 host_bind="${host_bind:-127.0.0.1}"
 auth_token="${APP_AUTH_TOKEN:-$(env_value APP_AUTH_TOKEN)}"
-allow_insecure="${ALLOW_INSECURE_PUBLIC_BIND:-$(env_value ALLOW_INSECURE_PUBLIC_BIND)}"
-trust_proxy_headers="${TRUST_PROXY_HEADERS:-$(env_value TRUST_PROXY_HEADERS)}"
+allow_insecure="$(configuration_boolean ALLOW_INSECURE_PUBLIC_BIND false)"
+trust_proxy_headers="$(configuration_boolean TRUST_PROXY_HEADERS false)"
 trusted_proxy_cidrs="${TRUSTED_PROXY_CIDRS:-$(env_value TRUSTED_PROXY_CIDRS)}"
 allowed_hosts="${ALLOWED_HOSTS:-$(env_value ALLOWED_HOSTS)}"
-breakout_enabled="${BREAKOUT_RADAR_ENABLED:-$(env_value BREAKOUT_RADAR_ENABLED)}"
-deploy_require_breakout="${DEPLOY_REQUIRE_BREAKOUT:-$(env_value DEPLOY_REQUIRE_BREAKOUT)}"
-deploy_require_breakout="${deploy_require_breakout:-false}"
+breakout_enabled="$(configuration_boolean BREAKOUT_RADAR_ENABLED false)"
+deploy_require_breakout="$(configuration_boolean DEPLOY_REQUIRE_BREAKOUT false)"
 openai_api_key="${OPENAI_API_KEY:-$(env_value OPENAI_API_KEY)}"
-deploy_require_ai="${DEPLOY_REQUIRE_AI:-$(env_value DEPLOY_REQUIRE_AI)}"
-deploy_require_ai="${deploy_require_ai:-false}"
+deploy_require_ai="$(configuration_boolean DEPLOY_REQUIRE_AI false)"
 range_mode="${RANGE_PERSISTENCE_MODE:-$(env_value RANGE_PERSISTENCE_MODE)}"
 catalyst_mode="${CATALYST_MODE:-$(env_value CATALYST_MODE)}"
 catalyst_mode="${catalyst_mode:-display}"
-macrolens_enabled="${MACROLENS_ENABLED:-$(env_value MACROLENS_ENABLED)}"
+macrolens_enabled="$(configuration_boolean MACROLENS_ENABLED false)"
 macrolens_base_url="${MACROLENS_BASE_URL:-$(env_value MACROLENS_BASE_URL)}"
-macrolens_verify_tls="${MACROLENS_VERIFY_TLS:-$(env_value MACROLENS_VERIFY_TLS)}"
+macrolens_verify_tls="$(configuration_boolean MACROLENS_VERIFY_TLS true)"
 macrolens_read_key_id="${MACROLENS_READ_KEY_ID:-$(env_value MACROLENS_READ_KEY_ID)}"
 macrolens_read_secret="${MACROLENS_READ_SECRET:-$(env_value MACROLENS_READ_SECRET)}"
 macrolens_action_key_id="${MACROLENS_ACTION_KEY_ID:-$(env_value MACROLENS_ACTION_KEY_ID)}"
 macrolens_action_secret="${MACROLENS_ACTION_SECRET:-$(env_value MACROLENS_ACTION_SECRET)}"
 macrolens_schema_sha256="${MACROLENS_SCHEMA_SHA256:-$(env_value MACROLENS_SCHEMA_SHA256)}"
-deploy_require_catalyst="${DEPLOY_REQUIRE_CATALYST:-$(env_value DEPLOY_REQUIRE_CATALYST)}"
-deploy_require_catalyst="${deploy_require_catalyst:-false}"
-focus_producer_enabled="${FOCUS_PRODUCER_ENABLED:-$(env_value FOCUS_PRODUCER_ENABLED)}"
-focus_producer_enabled="${focus_producer_enabled:-false}"
+deploy_require_catalyst="$(configuration_boolean DEPLOY_REQUIRE_CATALYST false)"
+deploy_require_catalyst_actions="$(configuration_boolean DEPLOY_REQUIRE_CATALYST_ACTIONS false)"
+focus_producer_enabled="$(configuration_boolean FOCUS_PRODUCER_ENABLED false)"
 focus_producer_snapshot_grace_seconds="${FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS:-$(env_value FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS)}"
 focus_producer_snapshot_grace_seconds="${focus_producer_snapshot_grace_seconds:-120}"
-deploy_require_focus="${DEPLOY_REQUIRE_FOCUS_PRODUCER:-$(env_value DEPLOY_REQUIRE_FOCUS_PRODUCER)}"
-deploy_require_focus="${deploy_require_focus:-false}"
+deploy_require_focus="$(configuration_boolean DEPLOY_REQUIRE_FOCUS_PRODUCER false)"
 
 if ! is_loopback_bind "$host_bind" && [ -z "$auth_token" ] && ! is_truthy "$allow_insecure"; then
     echo "Refusing non-loopback HOST_BIND without APP_AUTH_TOKEN." >&2
@@ -244,6 +330,17 @@ if [ "$catalyst_mode" != "disabled" ] && [ "$catalyst_mode" != "display" ] && [ 
     echo "CATALYST_MODE must be disabled, display, shadow, or enabled." >&2
     exit 1
 fi
+if is_truthy "$deploy_require_catalyst" && \
+    ! grep -Eq '^[[:space:]]*(export[[:space:]]+)?DEPLOY_REQUIRE_CATALYST_ACTIONS[[:space:]]*=' .env && \
+    [ -z "${DEPLOY_REQUIRE_CATALYST_ACTIONS+x}" ]; then
+    echo "This .env predates the explicit Catalyst action deployment gate." >&2
+    echo "Add DEPLOY_REQUIRE_CATALYST_ACTIONS=false for read-only rollout or true for action rollout." >&2
+    exit 1
+fi
+if is_truthy "$deploy_require_catalyst_actions" && ! is_truthy "$deploy_require_catalyst"; then
+    echo "DEPLOY_REQUIRE_CATALYST_ACTIONS=true requires DEPLOY_REQUIRE_CATALYST=true." >&2
+    exit 1
+fi
 if is_truthy "$deploy_require_catalyst"; then
     if ! is_truthy "$macrolens_enabled"; then
         echo "DEPLOY_REQUIRE_CATALYST=true requires MACROLENS_ENABLED=true." >&2
@@ -272,14 +369,6 @@ if is_truthy "$deploy_require_catalyst"; then
         echo "DEPLOY_REQUIRE_CATALYST=true requires MacroLens read credentials." >&2
         exit 1
     fi
-    if [ -z "$macrolens_action_key_id" ] || [ -z "$macrolens_action_secret" ]; then
-        echo "DEPLOY_REQUIRE_CATALYST=true requires MacroLens action credentials." >&2
-        exit 1
-    fi
-    if [ -z "$auth_token" ]; then
-        echo "DEPLOY_REQUIRE_CATALYST=true requires APP_AUTH_TOKEN for analysis actions." >&2
-        exit 1
-    fi
     contract_path="${ROOT_DIR}/contracts/macrolens-option-pro-v2.json"
     if ! reviewed_contract_sha256="$(file_sha256 "$contract_path")"; then
         echo "The reviewed MacroLens integration contract is missing or unreadable." >&2
@@ -287,6 +376,16 @@ if is_truthy "$deploy_require_catalyst"; then
     fi
     if [ "$macrolens_schema_sha256" != "$reviewed_contract_sha256" ]; then
         echo "MACROLENS_SCHEMA_SHA256 does not match the reviewed integration contract." >&2
+        exit 1
+    fi
+fi
+if is_truthy "$deploy_require_catalyst_actions"; then
+    if [ -z "$macrolens_action_key_id" ] || [ -z "$macrolens_action_secret" ]; then
+        echo "DEPLOY_REQUIRE_CATALYST_ACTIONS=true requires MacroLens action credentials." >&2
+        exit 1
+    fi
+    if [ -z "$auth_token" ]; then
+        echo "DEPLOY_REQUIRE_CATALYST_ACTIONS=true requires APP_AUTH_TOKEN for analysis actions." >&2
         exit 1
     fi
 fi
@@ -455,6 +554,15 @@ elif not enabled:
     assert p["status"] == "disabled"
 '
 
+catalyst_deploy_not_before_epoch="0"
+if is_truthy "$deploy_require_catalyst"; then
+    catalyst_deploy_not_before_epoch="$(
+        python3 -c 'import time; print(f"{time.time_ns() / 1_000_000_000:.9f}")'
+    )"
+    docker compose exec -T catalyst-sync-worker \
+        python -m app.services.catalysts.worker --request-refresh
+fi
+
 catalyst_worker_health="$(
     docker compose exec -T catalyst-sync-worker \
         python -m app.services.catalysts.worker --healthcheck
@@ -462,18 +570,25 @@ catalyst_worker_health="$(
 docker compose exec -T \
     -e "CATALYST_WORKER_HEALTH=${catalyst_worker_health}" \
     -e "DEPLOY_REQUIRE_CATALYST=${deploy_require_catalyst}" \
+    -e "DEPLOY_REQUIRE_CATALYST_ACTIONS=${deploy_require_catalyst_actions}" \
     -e "EXPECTED_CATALYST_ENABLED=${macrolens_enabled}" \
+    -e "CATALYST_DEPLOY_NOT_BEFORE_EPOCH=${catalyst_deploy_not_before_epoch}" \
     backend python -c '
 import json
 import os
 import time
 import urllib.request
+from app.services.catalysts.worker import deployment_status_ready
 
 worker = json.loads(os.environ["CATALYST_WORKER_HEALTH"])
-required = os.environ["DEPLOY_REQUIRE_CATALYST"].lower() in {"1", "true", "yes"}
+read_required = os.environ["DEPLOY_REQUIRE_CATALYST"].lower() in {"1", "true", "yes"}
+actions_required = os.environ["DEPLOY_REQUIRE_CATALYST_ACTIONS"].lower() in {
+    "1", "true", "yes"
+}
 enabled = os.environ["EXPECTED_CATALYST_ENABLED"].lower() in {"1", "true", "yes"}
+assert not actions_required or read_required
 assert worker["healthy"] is True
-if required:
+if read_required:
     assert enabled is True
     assert worker["enabled"] is True
     assert worker["contract"]["valid"] is True
@@ -485,7 +600,8 @@ token = os.environ.get("APP_AUTH_TOKEN", "").strip()
 if token:
     headers["Authorization"] = f"Bearer {token}"
 payload = None
-attempts = 30 if required else 1
+required_after_epoch = float(os.environ["CATALYST_DEPLOY_NOT_BEFORE_EPOCH"])
+attempts = 60 if read_required else 1
 for attempt in range(attempts):
     request = urllib.request.Request(
         "http://127.0.0.1:8000/api/catalysts/status",
@@ -493,10 +609,10 @@ for attempt in range(attempts):
     )
     with urllib.request.urlopen(request, timeout=5) as response:
         payload = json.load(response)
-    if not required or (
-        payload.get("enabled") is True
-        and payload.get("status") not in {"disabled", "unavailable"}
-        and payload.get("analysis_trigger_enabled") is True
+    if not read_required or deployment_status_ready(
+        payload,
+        required_after_epoch=required_after_epoch,
+        actions_required=actions_required,
     ):
         break
     if attempt + 1 < attempts:
@@ -506,14 +622,24 @@ assert payload is not None
 assert payload["schema_version"] == "macrolens-option-pro-v2"
 assert payload["expected_model"] == "gpt-5.6-terra"
 assert payload["expected_reasoning"] == "max"
-if required:
+if read_required:
+    assert deployment_status_ready(
+        payload,
+        required_after_epoch=required_after_epoch,
+        actions_required=actions_required,
+    )
     assert payload["enabled"] is True
-    assert payload["status"] not in {"disabled", "unavailable"}
+    assert payload["status"] == "active"
+    assert payload["remote_status"] in {"ok", "active"}
+    assert payload["last_sync_at"] is not None
+    assert payload["snapshot_id"] is not None
+    assert payload["resync_required"] is False
+if actions_required:
     assert payload["analysis_trigger_enabled"] is True
     assert payload["model"] == "gpt-5.6-terra"
     assert payload["reasoning"] == "max"
     assert payload["execution_mode"] in {"background", "worker_sync"}
-elif not enabled:
+if not enabled:
     assert payload["status"] == "disabled"
     assert payload["enabled"] is False
 '
