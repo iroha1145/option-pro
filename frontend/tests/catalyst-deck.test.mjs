@@ -248,6 +248,9 @@ test('Catalyst confidence uses the contract 0..100 scale and ticker projections 
     { status: 'insufficient_context', model: 'gpt-5.6-terra' },
   ), true);
   assert.equal(desk.isRuleOnlyAnalysis({ analysis_status: 'completed', analysis: { model: 'gpt-5.6-terra' } }), false);
+  assert.equal(desk.analysisOriginLabel({ analysis: { insufficient_context: true, model: 'low-context-neutral-v2' } }), '规则结果 · 未调用模型');
+  assert.equal(desk.analysisOriginLabel({ analysis: { insufficient_context: true, model: 'gpt-5.6-terra' } }), '模型推断 · 信息不足');
+  assert.equal(desk.analysisOriginLabel({ analysis: { insufficient_context: false, model: 'gpt-5.6-terra' } }), '模型推断');
   assert.equal(desk.analysisRetryForce({ analysis_status: 'completed' }, { status: 'failed' }), true);
   assert.equal(desk.analysisRetryForce({ analysis_status: 'failed' }, { status: 'cancelled' }), true);
   assert.equal(desk.analysisRetryForce({ analysis_status: 'failed' }, { status: 'completed' }), false);

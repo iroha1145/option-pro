@@ -65,6 +65,7 @@
     prepared: "准备完成", leased: "分析占用中", consumed: "已消费", resync_required: "需要重新同步",
     incomplete_output: "输出不完整", submission_outcome_unknown: "提交结果待确认", worker_interrupted: "任务中断",
   };
+  const LOW_CONTEXT_RULE_MODEL = "low-context-neutral-v2";
   const className = value => String(value || "").toLowerCase();
   const classLabel = value => CLASS_CN[className(value)] || String(value || "—");
   const horizonLabel = value => HORIZON_CN[className(value)] || String(value || "—");
@@ -84,16 +85,14 @@
   function analysisStatus(item) {
     return className(item && (item.analysis_status || item.status) || (analysisOf(item) ? "completed" : "pending"));
   }
-  function isRuleOnlyAnalysis(item, job) {
+  function isRuleOnlyAnalysis(item) {
     const analysis = analysisOf(item);
-    const status = className(job && job.status || analysisStatus(item));
-    const model = String(
-      analysis && analysis.model || job && job.model || item && item.model || ""
-    ).toLowerCase();
-    if (model.startsWith("low-context-")) return true;
-    if (model) return false;
-    return status === "insufficient_context"
-      || !!(analysis && analysis.insufficient_context);
+    return className(analysis && analysis.model) === LOW_CONTEXT_RULE_MODEL;
+  }
+  function analysisOriginLabel(item) {
+    const analysis = analysisOf(item);
+    if (isRuleOnlyAnalysis(item)) return "规则结果 · 未调用模型";
+    return `模型推断${analysis && analysis.insufficient_context ? " · 信息不足" : ""}`;
   }
   function analysisRetryForce(item, job) {
     const status = Jobs.normalizeStatus(job && job.status || analysisStatus(item));
@@ -982,7 +981,7 @@
         : "";
     return `${jobNotice}<div class="cat-analysis-result">
       <div class="cat-news__signals">
-        <span class="chip ${ruleOnly ? "chip--mute" : "chip--amber"}"><i></i>${ruleOnly ? "规则结果 · 未调用模型" : "模型推断"}</span>
+        <span class="chip ${ruleOnly ? "chip--mute" : "chip--amber"}"><i></i>${esc(analysisOriginLabel(displayItem))}</span>
         ${!ruleOnly && classificationOf(displayItem) ? `<span class="chip ${chipTone(classificationOf(displayItem))}">新闻整体 · ${esc(classLabel(classificationOf(displayItem)))}</span>` : ""}
         ${!ruleOnly && confidenceOf(displayItem) != null ? `<span class="chip chip--mute">模型置信度 ${pct(confidenceOf(displayItem))} · 非胜率</span>` : ""}
         ${!ruleOnly && marketRelevanceOf(displayItem) != null ? `<span class="chip chip--mute">市场相关度 ${pct(marketRelevanceOf(displayItem))}</span>` : ""}
@@ -1235,6 +1234,6 @@
     renderPage, leaveRoute, openNews, mountTickerPanel, mountScreenerBatch, abortPageEnhancements, onDrawerClosed,
     labels: { statusLabel, classLabel },
     formatConfidence: pct,
-    impactsOf, impactDirection, sentimentOf, isRuleOnlyAnalysis, analysisRetryForce, compactNews, plainText,
+    impactsOf, impactDirection, sentimentOf, isRuleOnlyAnalysis, analysisOriginLabel, analysisRetryForce, compactNews, plainText,
   };
 })();
