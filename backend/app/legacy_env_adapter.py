@@ -8,17 +8,23 @@ from typing import Any
 from app.personal_config import PersonalConfig
 
 
-LEGACY_RELEASE_DEADLINE = "the first release after Personal Edition activation"
+LEGACY_RELEASE_DEADLINE = "Personal Edition 2.0"
 SECRET_KEYS = {
     "OPENAI_API_KEY",
-    "MACROLENS_URL",
-    "MACROLENS_BASE_URL",
+    "FINNHUB_API_KEY",
     "INTERNAL_API_TOKEN",
     "APP_PASSWORD_HASH",
-    "FINNHUB_API_KEY",
     "DATA_DIR",
-    "HOST_BIND",
-    "PORT",
+}
+DEPRECATED_ACCESS_KEYS = {
+    "PUBLIC_READ_API_ENABLED",
+    "APP_AUTH_TOKEN",
+    "MACROLENS_ACTION_KEY_ID",
+    "MACROLENS_ACTION_SECRET",
+    "DEPLOY_REQUIRE_AI",
+    "DEPLOY_REQUIRE_CATALYST",
+    "DEPLOY_REQUIRE_CATALYST_ACTIONS",
+    "DEPLOY_REQUIRE_FOCUS_PRODUCER",
 }
 
 
@@ -26,7 +32,9 @@ SECRET_KEYS = {
 class LegacyMigration:
     config: PersonalConfig
     secrets: dict[str, str]
-    unmapped: dict[str, str]
+    deprecated_keys: tuple[str, ...]
+    unmapped_keys: tuple[str, ...]
+    requires_owner_password: bool
 
 
 def _boolean(value: str, *, default: bool) -> bool:
@@ -37,7 +45,7 @@ def _boolean(value: str, *, default: bool) -> bool:
         return True
     if normalized in {"0", "false", "no", "off"}:
         return False
-    raise ValueError(f"invalid legacy boolean: {value!r}")
+    raise ValueError("invalid legacy boolean value")
 
 
 def _integer(values: Mapping[str, str], key: str, default: int) -> int:
@@ -45,29 +53,62 @@ def _integer(values: Mapping[str, str], key: str, default: int) -> int:
     return int(raw) if raw else default
 
 
-def migrate_legacy_environment(values: Mapping[str, str]) -> LegacyMigration:
-    defaults = PersonalConfig()
+def _access_mode(values: Mapping[str, str]) -> str:
+    explicit = str(values.get("ACCESS_MODE", "")).strip().lower()
+    if explicit:
+        if explicit not in {"private_network", "password"}:
+            raise ValueError("ACCESS_MODE must be private_network or password")
+        return explicit
+    if str(values.get("APP_PASSWORD_HASH", "")).strip():
+        return "password"
+    if str(values.get("APP_AUTH_TOKEN", "")).strip():
+        return "password"
+    return "private_network"
+
+
+def _catalyst_mode(values: Mapping[str, str], defaults: PersonalConfig) -> str:
+    if _boolean(
+        str(values.get("HOT_CYCLE_SCHEDULE_ENABLED", "")),
+        default=False,
+    ):
+        return "scheduled"
+    manual = _boolean(
+        str(values.get("HOT_CYCLE_MANUAL_ENABLED", "")),
+        default=False,
+    ) or _boolean(
+        str(values.get("NEWS_LLM_MANUAL_ENABLED", "")),
+        default=False,
+    )
+    if manual:
+        return "manual"
     old_mode = str(values.get("CATALYST_MODE", "")).strip().lower()
     if old_mode in {"disabled", "off"}:
-        catalyst_mode = "off"
-    elif old_mode in {"display", "read"}:
-        catalyst_mode = "read"
-    elif old_mode in {"manual", "scheduled"}:
-        catalyst_mode = old_mode
-    else:
-        enabled = _boolean(
-            str(values.get("MACROLENS_ENABLED", "")),
-            default=defaults.catalyst_sync_enabled,
-        )
-        catalyst_mode = "read" if enabled else "off"
+        return "off"
+    if old_mode in {"display", "read"}:
+        return "read"
+    if old_mode in {"manual", "scheduled"}:
+        return old_mode
+    enabled = _boolean(
+        str(values.get("MACROLENS_ENABLED", "")),
+        default=defaults.catalyst_sync_enabled,
+    )
+    return "read" if enabled else "off"
 
+
+def migrate_legacy_environment(values: Mapping[str, str]) -> LegacyMigration:
+    defaults = PersonalConfig()
+    access_mode = _access_mode(values)
     payload: dict[str, Any] = {
+        "access": {
+            "mode": access_mode,
+            "allowed_private_cidrs": defaults.access.allowed_private_cidrs,
+        },
         "features": {
             "breakout_enabled": _boolean(
                 str(values.get("BREAKOUT_RADAR_ENABLED", "")),
                 default=defaults.features.breakout_enabled,
             ),
-            "catalyst_mode": catalyst_mode,
+            "catalyst_mode": _catalyst_mode(values, defaults),
         },
         "ai": {
             "model": str(values.get("OPENAI_MODEL", "")).strip()
@@ -126,13 +167,17 @@ def migrate_legacy_environment(values: Mapping[str, str]) -> LegacyMigration:
     }
     config = PersonalConfig.model_validate(payload)
     secrets = {
-        ("MACROLENS_URL" if key == "MACROLENS_BASE_URL" else key): value
+        key: str(value)
         for key, value in values.items()
         if key in SECRET_KEYS and str(value).strip()
     }
-    mapped = SECRET_KEYS | {
+    mapped = SECRET_KEYS | DEPRECATED_ACCESS_KEYS | {
+        "ACCESS_MODE",
         "CATALYST_MODE",
         "MACROLENS_ENABLED",
+        "NEWS_LLM_MANUAL_ENABLED",
+        "HOT_CYCLE_MANUAL_ENABLED",
+        "HOT_CYCLE_SCHEDULE_ENABLED",
         "BREAKOUT_RADAR_ENABLED",
         "OPENAI_MODEL",
         "OPENAI_REASONING",
@@ -148,15 +193,33 @@ def migrate_legacy_environment(values: Mapping[str, str]) -> LegacyMigration:
         "RETENTION_DAYS",
         "BACKUP_KEEP",
     }
-    unmapped = {
-        key: value
-        for key, value in values.items()
-        if key and key not in mapped and str(value).strip()
-    }
+    deprecated_keys = tuple(
+        sorted(
+            key
+            for key in DEPRECATED_ACCESS_KEYS
+            if str(values.get(key, "")).strip()
+        )
+    )
+    unmapped_keys = tuple(
+        sorted(
+            key
+            for key, value in values.items()
+            if key and key not in mapped and str(value).strip()
+        )
+    )
     warnings.warn(
-        "Legacy .env behavior settings are deprecated and will be removed after "
+        "Legacy .env behavior settings are deprecated and will be removed in "
         f"{LEGACY_RELEASE_DEADLINE}.",
         DeprecationWarning,
         stacklevel=2,
     )
-    return LegacyMigration(config=config, secrets=secrets, unmapped=unmapped)
+    return LegacyMigration(
+        config=config,
+        secrets=secrets,
+        deprecated_keys=deprecated_keys,
+        unmapped_keys=unmapped_keys,
+        requires_owner_password=bool(
+            str(values.get("APP_AUTH_TOKEN", "")).strip()
+            and not str(values.get("APP_PASSWORD_HASH", "")).strip()
+        ),
+    )

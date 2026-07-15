@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 
 from dotenv import dotenv_values
 
 from app.legacy_env_adapter import migrate_legacy_environment
 from app.personal_config import PersonalConfig
+from app.tools.personal_secrets import atomic_write
 
 
 def _toml_string(value: str) -> str:
@@ -17,7 +17,14 @@ def _toml_string(value: str) -> str:
 
 def _toml(config: PersonalConfig) -> str:
     times = ", ".join(_toml_string(value) for value in config.catalyst.scheduled_times_et)
-    return f'''[features]
+    private_cidrs = ", ".join(
+        _toml_string(value) for value in config.access.allowed_private_cidrs
+    )
+    return f'''[access]
+mode = {_toml_string(config.access.mode)}
+allowed_private_cidrs = [{private_cidrs}]
+
+[features]
 breakout_enabled = {str(config.features.breakout_enabled).lower()}
 catalyst_mode = {_toml_string(config.features.catalyst_mode)}
 
@@ -45,10 +52,6 @@ backup_keep = {config.storage.backup_keep}
 '''
 
 
-def _secrets(values: dict[str, str]) -> str:
-    return "".join(f"{key}={value}\n" for key, value in sorted(values.items()))
-
-
 def migrate(source: Path, output_directory: Path) -> tuple[Path, Path, Path]:
     if not source.is_file():
         raise FileNotFoundError(f"legacy environment file not found: {source}")
@@ -63,10 +66,18 @@ def migrate(source: Path, output_directory: Path) -> tuple[Path, Path, Path]:
     secrets_path = output_directory / "secrets.env"
     report_path = output_directory / "unmapped-env.json"
     config_path.write_text(_toml(result.config), encoding="utf-8")
-    secrets_path.write_text(_secrets(result.secrets), encoding="utf-8")
-    os.chmod(secrets_path, 0o600)
+    atomic_write(result.secrets, secrets_path)
     report_path.write_text(
-        json.dumps(result.unmapped, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        json.dumps(
+            {
+                "deprecated_keys": list(result.deprecated_keys),
+                "unmapped_keys": list(result.unmapped_keys),
+                "requires_owner_password": result.requires_owner_password,
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        ) + "\n",
         encoding="utf-8",
     )
     return config_path, secrets_path, report_path

@@ -4,6 +4,8 @@
 .env.*
 !.env.example
 .env.bak.*
+secrets.env
+secrets.env.bak.*
 .DS_Store
 ._*
 **/._*

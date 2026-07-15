@@ -26,4 +26,6 @@ output/
 frontend/test-results/
 config/migrated/
 config/secrets.env
+secrets.env
+secrets.env.bak.*
 config/unmapped-env.json

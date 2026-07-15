@@ -563,22 +563,33 @@ def test_large_valid_signal_result_is_persisted_separately_from_request_limit(
     assert completed["result"]["asset"] == "AAPL"
 
 
-def test_paid_job_creation_is_disabled_without_app_auth(monkeypatch, tmp_path):
+class _LocalPeerAddress:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            scope["client"] = ("127.0.0.1", 50000)
+        await self.app(scope, receive, send)
+
+
+def test_private_owner_can_create_paid_job_without_browser_token(monkeypatch, tmp_path):
     monkeypatch.delenv("APP_AUTH_TOKEN", raising=False)
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     monkeypatch.setattr(ai, "_job_repository", lambda: repository)
+    monkeypatch.setattr(ai, "_require_runtime_capability", lambda: None)
     app = FastAPI()
     app.include_router(ai.router)
-    client = TestClient(app, base_url="http://localhost")
+    client = TestClient(_LocalPeerAddress(app), base_url="http://localhost")
 
     response = client.post(
         "/api/ai/jobs/earnings-impact",
         json={"ticker": "AAPL"},
+        headers={"Origin": "http://localhost", "X-Optix-Action": "1"},
     )
 
-    assert response.status_code == 503
-    assert response.json()["detail"]["code"] == "capability_disabled"
-    assert repository.health()["pending"] == 0
+    assert response.status_code == 202
+    assert repository.health()["pending"] == 1
 
 
 def test_pending_cancel_is_idempotent(tmp_path):

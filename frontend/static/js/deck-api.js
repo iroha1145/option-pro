@@ -7,31 +7,14 @@
   const cache = new Map();     // key → { at, ttl, data }
   const inflight = new Map();  // key → Promise
 
-  function appToken() {
-    let token = "";
-    try {
-      token = sessionStorage.getItem("optix.app.token") || "";
-    } catch (error) { /* 某些隐私模式禁用会话存储 */ }
-    if (token) return token;
-    try {
-      const legacy = localStorage.getItem("optix.app.token") || "";
-      if (legacy) {
-        try { sessionStorage.setItem("optix.app.token", legacy); } catch (error) { /* 仅本标签页使用 */ }
-        localStorage.removeItem("optix.app.token");
-      }
-      return legacy;
-    } catch (error) { return ""; }
-  }
-
   function requestHeaders(hasBody) {
     const headers = { Accept: "application/json" };
-    if (hasBody) headers["Content-Type"] = "application/json";
-    const token = appToken();
-    if (token) headers.Authorization = "Bearer " + token;
+    if (hasBody) {
+      headers["Content-Type"] = "application/json";
+      headers["X-Optix-Action"] = "1";
+    }
     return headers;
   }
-
-  const hasAppToken = () => !!appToken();
 
   /*
    * 普通数据和任务轮询使用不同的并发闸。长任务状态查询只能占用低优先级
@@ -243,6 +226,8 @@
   }
 
   const marketStatus = () => jget("/api/market/status");
+  const accessStatus = () => jget("/api/access/status", { force: true, noCache: true });
+  const logoutOwner = () => jpost("/api/access/logout", {}, { retry5xx: false });
 
   async function watchlist(force) {
     const d = await jget("/api/stocks/watchlist", { force });
@@ -466,7 +451,7 @@
   }
 
   window.OPTIX_NET = {
-    jget, jpost, invalidateCache, hasAppToken, cnAmount, indexInfo, INDEX_NAMES, CHART_RANGES,
+    jget, jpost, invalidateCache, accessStatus, logoutOwner, cnAmount, indexInfo, INDEX_NAMES, CHART_RANGES,
     indices, marketStatus, watchlist, stock, stockSignals, signalDeep, signalsMarket, strengthMarket,
     profiles, chart, scan, breakoutsCurrent, breakoutsStatus, breakoutsEvents, breakoutEventDetail, breakoutTicker,
     sectors, sectorIV, earnings, earningsImpact, unusual, expirations, chain, search, aiStock,

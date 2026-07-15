@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -14,10 +15,62 @@ except ModuleNotFoundError:  # Python 3.10 compatibility for legacy deploy check
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PERSONAL_CONFIG_PATH = REPOSITORY_ROOT / "config" / "personal.toml"
+_PRIVATE_NETWORK_ENVELOPES = tuple(
+    ipaddress.ip_network(value)
+    for value in (
+        "127.0.0.0/8",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "100.64.0.0/10",
+        "::1/128",
+        "fc00::/7",
+    )
+)
 
 
 class StrictConfigModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class AccessConfig(StrictConfigModel):
+    mode: Literal["private_network", "password"] = "private_network"
+    allowed_private_cidrs: list[str] = Field(
+        default_factory=lambda: [
+            "127.0.0.0/8",
+            "::1/128",
+            "10.0.0.0/8",
+            "172.16.0.0/12",
+            "192.168.0.0/16",
+            "100.64.0.0/10",
+        ],
+        min_length=1,
+        max_length=32,
+    )
+
+    @field_validator("allowed_private_cidrs")
+    @classmethod
+    def validate_private_cidrs(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for value in values:
+            try:
+                network = ipaddress.ip_network(value.strip(), strict=False)
+            except ValueError as exc:
+                raise ValueError("private access networks must use CIDR notation") from exc
+            allowed = any(
+                network.version == envelope.version
+                and network.subnet_of(envelope)
+                for envelope in _PRIVATE_NETWORK_ENVELOPES
+            )
+            if not allowed:
+                raise ValueError(
+                    "private access networks must use loopback, RFC1918, "
+                    "Tailscale, or IPv6 unique-local ranges"
+                )
+            item = str(network)
+            if item not in normalized:
+                normalized.append(item)
+        return normalized
 
 
 class FeatureConfig(StrictConfigModel):
@@ -31,6 +84,7 @@ class AIConfig(StrictConfigModel):
     max_concurrency: Literal[1] = 1
     daily_max_jobs: int = Field(default=4, ge=1, le=100)
     execution_mode: Literal["background"] = "background"
+
 
 class CatalystConfig(StrictConfigModel):
     sync_seconds: int = Field(default=120, ge=30, le=86_400)
@@ -71,6 +125,7 @@ class StorageConfig(StrictConfigModel):
 
 
 class PersonalConfig(StrictConfigModel):
+    access: AccessConfig = Field(default_factory=AccessConfig)
     features: FeatureConfig = Field(default_factory=FeatureConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
     catalyst: CatalystConfig = Field(default_factory=CatalystConfig)

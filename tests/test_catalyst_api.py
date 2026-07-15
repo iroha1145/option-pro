@@ -17,6 +17,16 @@ READ_SECRET = "read-secret-0123456789abcdef-0001"
 ACTION_SECRET = "action-secret-0123456789abcdef-01"
 
 
+class _PeerAddress:
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http":
+            scope["client"] = ("127.0.0.1", 50000)
+        await self.app(scope, receive, send)
+
+
 def configured(path, *, enabled: bool = True, action: bool = True) -> CatalystSettings:
     values = {
         "MACROLENS_ENABLED": enabled,
@@ -61,7 +71,7 @@ def client_for(
             return await call_next(request)
 
         app.middleware("http")(mark_public_read)
-    return TestClient(app, base_url="http://localhost")
+    return TestClient(_PeerAddress(app), base_url="http://localhost")
 
 
 def seed(path) -> CatalystRepository:
@@ -437,7 +447,7 @@ def test_action_capability_missing_keeps_reads_but_rejects_analysis(tmp_path) ->
     assert analysis.json()["detail"]["code"] == "capability_disabled"
 
 
-def test_expensive_catalyst_posts_fail_closed_without_app_auth_token(monkeypatch, tmp_path) -> None:
+def test_catalyst_state_changes_fail_closed_without_same_origin_json(monkeypatch, tmp_path) -> None:
     monkeypatch.delenv("APP_AUTH_TOKEN", raising=False)
     path = tmp_path / "catalysts.db"
     repository = seed(path)
@@ -455,17 +465,16 @@ def test_expensive_catalyst_posts_fail_closed_without_app_auth_token(monkeypatch
     refresh = client.post("/api/catalysts/refresh")
     analysis = client.post("/api/catalysts/news/101/analysis", json={})
     cancel = client.post(f"/api/catalysts/analysis-jobs/{queued['job_id']}/cancel")
-    assert refresh.status_code == 503
-    assert analysis.status_code == 503
-    assert cancel.status_code == 503
-    assert refresh.json()["detail"]["code"] == "capability_disabled"
+    assert refresh.status_code == 415
+    assert analysis.status_code == 403
+    assert cancel.status_code == 415
     with repository.open_read_connection() as connection:
         assert connection.execute("SELECT count(*) FROM catalyst_refresh_outbox").fetchone()[0] == 0
         assert connection.execute("SELECT status FROM catalyst_analysis_jobs").fetchone()[0] == "pending"
 
 
-def test_expensive_catalyst_posts_require_authenticated_gateway_state(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("APP_AUTH_TOKEN", "configured-test-token")
+def test_private_owner_can_run_catalyst_actions_without_browser_token(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("APP_AUTH_TOKEN", raising=False)
     path = tmp_path / "catalysts.db"
     repository = seed(path)
     queued = repository.enqueue_analysis(
@@ -479,9 +488,16 @@ def test_expensive_catalyst_posts_require_authenticated_gateway_state(monkeypatc
     )
     client = client_for(configured(path), authorize_actions=False)
 
-    refresh = client.post("/api/catalysts/refresh")
-    analysis = client.post("/api/catalysts/news/101/analysis", json={})
-    cancel = client.post(f"/api/catalysts/analysis-jobs/{queued['job_id']}/cancel")
-    assert refresh.status_code == 401
-    assert analysis.status_code == 401
-    assert cancel.status_code == 401
+    headers = {"Origin": "http://localhost", "X-Optix-Action": "1"}
+    refresh = client.post("/api/catalysts/refresh", json={}, headers=headers)
+    analysis = client.post(
+        "/api/catalysts/news/101/analysis", json={}, headers=headers
+    )
+    cancel = client.post(
+        f"/api/catalysts/analysis-jobs/{queued['job_id']}/cancel",
+        json={},
+        headers=headers,
+    )
+    assert refresh.status_code == 202
+    assert analysis.status_code == 202
+    assert cancel.status_code == 202

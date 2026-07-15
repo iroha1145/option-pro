@@ -104,6 +104,12 @@ assert.doesNotMatch(
   'active files must not revive a retired frontend path',
 );
 assert.doesNotMatch(productionBundle, /sk-proj-[A-Za-z0-9_-]+|OPENAI_API_KEY|MACROLENS_(?:READ|ACTION)_SECRET/, 'frontend files must not contain service secrets');
+assert.doesNotMatch(
+  productionBundle,
+  /optix\.app\.token|hasAppToken|privateActionsAvailable|Authorization\s*=|Bearer\s+|sessionStorage[^\n]*token|localStorage[^\n]*token/i,
+  'the frontend must not keep or transmit a browser authentication token',
+);
+assert.match(api, /headers\["X-Optix-Action"\] = "1"/, 'JSON actions need the same-origin custom header');
 assert.doesNotMatch(productionBundle, /gpt-5\.6-luna/i, 'the frontend model label must remain on GPT-5.6 Terra');
 assert.match(productionBundle, /gpt-5\.6-terra/, 'the current GPT-5.6 Terra model label must remain visible');
 

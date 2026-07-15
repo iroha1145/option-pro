@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.legacy_env_adapter import migrate_legacy_environment
-from app.personal_config import AIConfig, load_personal_config
+from app.personal_config import AIConfig, AccessConfig, load_personal_config
 from app.tools.migrate_personal_config import migrate
 
 
@@ -20,6 +20,7 @@ def test_repository_personal_config_freezes_paid_runtime() -> None:
     assert config.ai.max_concurrency == 1
     assert config.ai.daily_max_jobs == 4
     assert config.ai.execution_mode == "background"
+    assert config.access.mode == "private_network"
 
 
 @pytest.mark.parametrize(
@@ -37,6 +38,15 @@ def test_paid_runtime_rejects_personal_edition_drift(field: str, value: object) 
 
     with pytest.raises(ValidationError):
         AIConfig.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "network",
+    ["0.0.0.0/0", "203.0.113.0/24", "8.8.8.0/24", "2001:db8::/32"],
+)
+def test_private_access_networks_reject_public_or_ambiguous_ranges(network: str) -> None:
+    with pytest.raises(ValidationError):
+        AccessConfig(allowed_private_cidrs=[network])
 
 
 def test_legacy_environment_is_reduced_to_typed_config_and_small_runtime_env() -> None:
@@ -59,7 +69,9 @@ def test_legacy_environment_is_reduced_to_typed_config_and_small_runtime_env() -
     assert migration.config.features.catalyst_mode == "scheduled"
     assert migration.config.catalyst.sync_seconds == 240
     assert migration.secrets == {"OPENAI_API_KEY": "secret-value"}
-    assert migration.unmapped == {"UNMAPPED_SWITCH": "legacy"}
+    assert migration.unmapped_keys == ("UNMAPPED_SWITCH",)
+    assert migration.deprecated_keys == ()
+    assert migration.requires_owner_password is False
 
 
 def test_migration_command_writes_private_secrets_and_review_report(
@@ -68,6 +80,7 @@ def test_migration_command_writes_private_secrets_and_review_report(
     source = tmp_path / ".env"
     source.write_text(
         "OPENAI_API_KEY=secret-value\n"
+        "APP_AUTH_TOKEN=old-browser-secret\n"
         "OPENAI_MODEL=gpt-5.6-terra\n"
         "OPENAI_REASONING=low\n"
         "UNMAPPED_SWITCH=legacy\n",
@@ -85,5 +98,10 @@ def test_migration_command_writes_private_secrets_and_review_report(
     )
     assert stat.S_IMODE(secrets_path.stat().st_mode) == 0o600
     assert json.loads(report_path.read_text(encoding="utf-8")) == {
-        "UNMAPPED_SWITCH": "legacy"
+        "deprecated_keys": ["APP_AUTH_TOKEN"],
+        "requires_owner_password": True,
+        "unmapped_keys": ["UNMAPPED_SWITCH"],
     }
+    assert "old-browser-secret" not in config_path.read_text(encoding="utf-8")
+    assert "old-browser-secret" not in secrets_path.read_text(encoding="utf-8")
+    assert "old-browser-secret" not in report_path.read_text(encoding="utf-8")

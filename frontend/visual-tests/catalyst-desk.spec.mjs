@@ -218,9 +218,6 @@ for (const scenario of SCENARIOS) {
     page.on("pageerror", error => errors.push(error.message));
     await page.setViewportSize({ width: scenario.width, height: scenario.height });
     await page.addInitScript(theme => localStorage.setItem("optix.theme", theme), scenario.theme);
-    if (scenario.authenticated) {
-      await page.addInitScript(() => sessionStorage.setItem("optix.app.token", "visual-admin-session"));
-    }
     await installApiFixtures(page, scenario.state);
     await page.goto("/#catalysts", { waitUntil: "networkidle" });
     await assertStableViewport(page, errors);
@@ -242,20 +239,15 @@ for (const scenario of SCENARIOS) {
       await expect(page.locator("#cat-focus-run")).toBeEnabled();
       await expect(page.locator("#cat-focus-run")).toContainText("重新分析");
     }
-    if (!scenario.authenticated) {
-      await expect(page.locator("#cat-refresh")).toHaveCount(0);
-      await expect(page.locator("#cat-focus-run")).toHaveCount(0);
-      await expect(page.locator("[data-private-focus-note]")).toHaveText("管理会话未解锁");
-    }
+    await expect(page.locator("#cat-refresh")).toHaveCount(1);
+    await expect(page.locator("#cat-focus-run")).toHaveCount(1);
     if (scenario.state === "analysis_unrequested") {
       await page.locator("[data-catalyst-news]").first().click();
-      await expect(page.locator("#cat-analysis-body")).toContainText("管理会话未解锁");
-      await expect(page.locator("#cat-analysis-body")).toContainText("当前标签页没有管理令牌");
+      await expect(page.locator("#cat-analysis-body")).toContainText("分析功能未启用");
       await expect(page.locator("#cat-analysis-body [data-cat-analyze]")).toHaveCount(0);
     }
     if (scenario.state === "failed") {
       await expect(page.locator("#cat-focus-body")).toContainText("invalid_structured_output");
-      await expect(page.locator("#cat-focus-body")).toContainText("管理会话未解锁");
     }
     if (scenario.state === "focus_fallback") {
       await expect(page.getByText("兜底源", { exact: true })).toBeVisible();

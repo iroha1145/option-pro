@@ -7,7 +7,6 @@
   const Jobs = window.OPTIX_AI_JOBS;
   const $ = (selector, root) => (root || document).querySelector(selector);
   const $$ = (selector, root) => Array.from((root || document).querySelectorAll(selector));
-  const privateActionsAvailable = () => !!(N && N.hasAppToken && N.hasAppToken());
   const esc = value => String(value == null ? "" : value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
   const finite = value => typeof value === "number" && Number.isFinite(value);
   const list = (payload, keys) => {
@@ -99,19 +98,15 @@
     const status = Jobs.normalizeStatus(job && job.status || analysisStatus(item));
     return status === "failed" || status === "cancelled";
   }
-  function analysisActionDecision(triggerEnabled, privateAccess) {
-    const authMissing = !privateAccess;
-    const actionMissing = !!privateAccess && !triggerEnabled;
+  function analysisActionDecision(triggerEnabled) {
+    const actionMissing = !triggerEnabled;
     return {
-      authMissing,
       actionMissing,
-      canTrigger: !authMissing && !actionMissing,
-      title: authMissing ? "管理会话未解锁" : actionMissing ? "分析功能未启用" : "尚未生成模型分析",
-      detail: authMissing
-        ? "当前标签页没有管理令牌；原始新闻与已有分析仍可查看，付费分析操作不会显示。"
-        : actionMissing
-          ? "当前管理会话中，单篇新闻分析已关闭；原始新闻仍可阅读。"
-          : "原始新闻仍可阅读；未分析状态不会补成中性方向。",
+      canTrigger: !actionMissing,
+      title: actionMissing ? "分析功能未启用" : "尚未生成模型分析",
+      detail: actionMissing
+        ? "单篇新闻分析已关闭；原始新闻仍可阅读。"
+        : "原始新闻仍可阅读；未分析状态不会补成中性方向。",
     };
   }
   function classificationOf(item) {
@@ -296,7 +291,6 @@
   }
 
   function pageShell() {
-    const privateAccess = privateActionsAvailable();
     page.view.innerHTML = `
       <div class="cat-desk">
         <div class="view-head" data-reveal style="--reveal-i:0">
@@ -327,9 +321,7 @@
               <h2 id="cat-focus-title">市场与焦点股综合分析</h2>
               <p>事件组先通过确定性热点门控，再按需进入一次有界综合分析；结果不改变正式评分。</p>
             </div>
-            ${privateAccess
-              ? `<button class="btn btn--amber" type="button" id="cat-focus-run" disabled>读取准备状态</button>`
-              : `<span class="mono" data-private-focus-note>管理会话未解锁</span>`}
+            <button class="btn btn--amber" type="button" id="cat-focus-run" disabled>读取准备状态</button>
           </header>
           <div class="cat-focus-cycle__meta" id="cat-focus-meta" aria-live="polite"></div>
           <div class="cat-focus-cycle__body" id="cat-focus-body">${stateBlock("loading", "正在读取热点准备区", "普通页面刷新不会创建模型任务。")}</div>
@@ -359,9 +351,7 @@
             <div class="cat-filter-actions">
               <span class="mono" id="cat-filter-note">编辑中的条件不会被自动刷新覆盖</span>
               <button class="btn btn--ghost btn--sm" type="button" id="cat-clear">清除</button>
-              ${privateAccess
-                ? `<button class="btn btn--sm" type="button" id="cat-refresh">请求后台同步</button>`
-                : `<span class="mono" data-private-action-note>后台同步需管理授权</span>`}
+              <button class="btn btn--sm" type="button" id="cat-refresh">请求后台同步</button>
               <button class="btn btn--amber btn--sm" type="submit">应用筛选</button>
             </div>
           </form>
@@ -504,7 +494,7 @@
     });
   }
 
-  function focusCycleDecision(rawStatus, cycleState, preparedCountValue, privateAccess) {
+  function focusCycleDecision(rawStatus, cycleState, preparedCountValue) {
     const raw = rawStatus || {};
     const cycle = cycleState || {};
     const preparedRevision = Number(raw.prepared_revision || 0);
@@ -515,7 +505,6 @@
     const preparedCount = finite(preparedCountValue) ? preparedCountValue : 0;
     const active = !!((cycle.cycle_id || raw.active_cycle_id) && Jobs.isActive(cycle.status));
     const capability = className(raw.capability || "disabled");
-    const authMissing = !privateAccess;
     const budgetMissing = capability === "budget_configuration_required";
     const actionMissing = raw.action_enabled === false || capability === "action_disabled" || capability === "disabled";
     const snapshotUnavailable = ["stale", "unavailable", "disabled"].includes(className(raw.status));
@@ -530,7 +519,7 @@
       && !unknownSubmission
       && ["failed", "cancelled", "incomplete_output"].includes(className(cycle.status))
     );
-    const commonAllowed = !authMissing && !active && !budgetMissing && !actionMissing && !snapshotUnavailable && !cooldown;
+    const commonAllowed = !active && !budgetMissing && !actionMissing && !snapshotUnavailable && !cooldown;
     const canRetry = commonAllowed && retryable;
     const canCreate = commonAllowed
       && !retryable
@@ -540,8 +529,7 @@
       && (!unknownSubmission || newPreparationAfterUnknown);
     const canRun = canRetry || canCreate;
     const buttonText = active ? "正在分析"
-      : authMissing ? "需要管理令牌"
-        : budgetMissing ? "分析预算未配置"
+      : budgetMissing ? "分析预算未配置"
         : actionMissing ? "分析功能未启用"
           : snapshotUnavailable ? "热点快照暂不可用"
             : unknownSubmission && !newPreparationAfterUnknown ? "提交结果待核对"
@@ -554,11 +542,11 @@
                       : "暂无新热点";
     return {
       preparedRevision, consumedRevision, cyclePreparedRevision, cycleHasPreparedRevision, preparedCount,
-      active, capability, authMissing, budgetMissing, actionMissing, snapshotUnavailable,
+      active, capability, budgetMissing, actionMissing, snapshotUnavailable,
       hasNew, cooldown, unknownSubmission, newPreparationAfterUnknown,
       retryable, canRetry, canCreate, canRun, buttonText,
       showHistoricalUnknown: unknownSubmission && (
-        newPreparationAfterUnknown || authMissing || actionMissing || budgetMissing || snapshotUnavailable
+        newPreparationAfterUnknown || actionMissing || budgetMissing || snapshotUnavailable
       ),
     };
   }
@@ -582,9 +570,7 @@
     const nextStep = decision.canCreate
       ? "当前的新准备版本可另行创建全新周期。"
       : decision.newPreparationAfterUnknown
-        ? decision.authMissing
-          ? "新的准备版本不属于该历史周期，解锁管理会话后可另建周期。"
-          : "新的准备版本不属于该历史周期，需待分析功能可用后另建周期。"
+        ? "新的准备版本不属于该历史周期，需待分析功能可用后另建周期。"
         : "需等待服务端完成核对。";
     return stateBlock(
       "degraded",
@@ -649,7 +635,7 @@
     const cycle = cyclePayload(page.marketCycle || {});
     const events = hotspotItems(page.hotspots);
     const preparedCount = finite(raw.prepared_hot_count) ? raw.prepared_hot_count : events.filter(item => className(item.status) === "prepared").length;
-    const decision = focusCycleDecision(raw, cycle, preparedCount, privateActionsAvailable());
+    const decision = focusCycleDecision(raw, cycle, preparedCount);
     const button = $("#cat-focus-run", page.view);
     if (button) {
       button.disabled = !decision.canRun;
@@ -671,17 +657,13 @@
     if (decision.active) state = stateBlock(cycle.status, statusLabel(cycle.status), "新热点仍会进入下一准备版本，不会混入当前不可变快照。 ");
     else if (unknownNeedsReview) state = stateBlock("degraded", "提交结果待核对", "无法确认远端是否已经受理。为避免重复计费，本周期禁止重试，需等待服务端核对结果。 ");
     else if (terminalFailure) state = stateBlock("failed", statusLabel(cycle.status), cycle.error_code ? `安全错误码：${cycle.error_code}；准备版本尚未消费。` : "准备版本尚未消费，可在冷却结束后显式重试。 ");
-    else if (decision.authMissing) state = stateBlock("disabled", "管理会话未解锁", "当前标签页没有管理令牌；历史结果仍可查看，付费分析操作不会显示。 ");
     else if (decision.budgetMissing) state = stateBlock("disabled", "分析预算尚未配置", "每日任务和每日输出 Token 两项预算齐全后，自动周期才允许启用。 ");
     else if (decision.actionMissing) state = stateBlock("disabled", "分析功能未启用", "当前只显示历史结果和热点准备状态，不会创建新的模型任务。 ");
     else if (decision.snapshotUnavailable) state = stateBlock("unavailable", "热点快照暂不可用", "当前快照恢复后才能创建新的综合分析周期。 ");
     else if (!decision.hasNew && !cycleResultHtml(cycle)) state = stateBlock("empty", "暂无新热点", "普通新闻仍会保存；没有合格热点时不会创建手动综合分析。 ");
-    const accessNotice = decision.authMissing && (terminalFailure || unknownNeedsReview)
-      ? stateBlock("disabled", "管理会话未解锁", "当前标签页没有管理令牌；只读任务状态仍会显示，付费分析操作不会显示。 ")
-      : "";
     const history = focusUnknownHistoryHtml(cycle, decision);
     const cards = events.length ? `<div class="cat-hotspot-list">${events.slice(0, 8).map(hotspotCard).join("")}</div>` : "";
-    $("#cat-focus-body", page.view).innerHTML = `${state}${accessNotice}${history}${cycleResultHtml(cycle)}${cards}` || stateBlock("empty", "暂无热点准备记录", "确定性门控不会用中性分填充缺失证据。 ");
+    $("#cat-focus-body", page.view).innerHTML = `${state}${history}${cycleResultHtml(cycle)}${cards}` || stateBlock("empty", "暂无热点准备记录", "确定性门控不会用中性分填充缺失证据。 ");
   }
 
   function summaryValue(summary, keys) {
@@ -939,13 +921,12 @@
   }
 
   function startMarketFocusCycle() {
-    if (!privateActionsAvailable()) return;
     const raw = page.focusStatus || {};
     const cycle = cyclePayload(page.marketCycle || {});
     const preparedCount = finite(raw.prepared_hot_count)
       ? raw.prepared_hot_count
       : hotspotItems(page.hotspots).filter(item => className(item.status) === "prepared").length;
-    const decision = focusCycleDecision(raw, cycle, preparedCount, true);
+    const decision = focusCycleDecision(raw, cycle, preparedCount);
     const request = focusCycleRequest(decision, cycle);
     if (!request) return;
     Jobs.start({
@@ -1060,14 +1041,14 @@
     const triggerEnabled = item.analysis_trigger_enabled != null
       ? !!item.analysis_trigger_enabled
       : !!((metaStatus(page.status) || {}).analysis_trigger_enabled);
-    const access = analysisActionDecision(triggerEnabled, privateActionsAvailable());
+    const access = analysisActionDecision(triggerEnabled);
     const canTrigger = access.canTrigger;
     const isActive = ["pending", "queued", "in_progress", "cancel_requested"].includes(status) && statusPayload && statusPayload.job_id;
     const model = statusPayload && statusPayload.model || (analysis && analysis.model) || item.model || "gpt-5.6-terra";
     const reasoning = statusPayload && statusPayload.reasoning || (analysis && analysis.reasoning) || item.reasoning || "max";
     if (!analysis) {
       const elapsed = statusPayload && Jobs.elapsed(statusPayload);
-      const accessNotice = (isActive || status === "failed") && (access.authMissing || access.actionMissing)
+      const accessNotice = (isActive || status === "failed") && access.actionMissing
         ? stateBlock("disabled", access.title, access.detail)
         : "";
       return `<div class="cat-analysis-state">
@@ -1085,7 +1066,7 @@
     const impacts = rawImpactsOf(displayItem);
     const validations = validationMapOf(displayItem);
     const retryableTerminal = !!(statusPayload && statusPayload.job_id && (status === "failed" || status === "cancelled"));
-    const accessNotice = access.authMissing || access.actionMissing
+    const accessNotice = access.actionMissing
       ? stateBlock("disabled", access.title, access.detail)
       : "";
     const jobNotice = isActive

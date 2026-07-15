@@ -321,14 +321,13 @@ def test_focus_settings_fail_closed_for_rotation_and_nonce_window(tmp_path) -> N
         )
 
 
-def test_gateway_exempts_only_exact_focus_get_from_browser_token(tmp_path, monkeypatch) -> None:
+def test_gateway_keeps_only_exact_focus_get_as_service_compatibility(tmp_path, monkeypatch) -> None:
     asyncio.set_event_loop(asyncio.new_event_loop())
     from app import main
 
     path = tmp_path / "focus.db"
     _seed_focus(path)
     settings = focus_settings(path)
-    monkeypatch.setattr(main, "_APP_AUTH_TOKEN", "browser-only-token")
     monkeypatch.setattr("app.services.catalysts.focus_auth.datetime", _FrozenDateTime)
     main.app.dependency_overrides[get_focus_context_settings] = lambda: settings
     try:
@@ -341,6 +340,6 @@ def test_gateway_exempts_only_exact_focus_get_from_browser_token(tmp_path, monke
         post_response = client.post(
             "/api/integrations/macrolens/v1/focus-context"
         )
-        assert post_response.status_code == 401
+        assert post_response.status_code == 405
     finally:
         main.app.dependency_overrides.pop(get_focus_context_settings, None)

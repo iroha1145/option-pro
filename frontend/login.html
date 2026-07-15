@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Optix Pro Owner 登录" />
+  <meta name="referrer" content="no-referrer" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; form-action 'self'" />
+  <title>Owner 登录 · Optix Pro</title>
+  <link rel="icon" href="./static/favicon.svg" type="image/svg+xml" />
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#0b0e14; color:#eef2f7; }
+    * { box-sizing:border-box; }
+    body { min-height:100vh; margin:0; display:grid; place-items:center; padding:24px; background:radial-gradient(circle at 20% 10%,#1b2638 0,transparent 42%),#0b0e14; }
+    main { width:min(420px,100%); padding:34px; border:1px solid #2a3445; border-radius:18px; background:rgba(17,22,31,.96); box-shadow:0 24px 80px rgba(0,0,0,.38); }
+    .mark { color:#f0ad4e; font:600 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.16em; }
+    h1 { margin:12px 0 8px; font-size:28px; }
+    p { margin:0 0 24px; color:#aab4c3; line-height:1.7; }
+    label { display:block; margin-bottom:8px; font-weight:650; }
+    input { width:100%; min-height:48px; padding:0 14px; border:1px solid #3a465b; border-radius:10px; color:#fff; background:#0e131c; font:inherit; }
+    input:focus { outline:2px solid #f0ad4e; outline-offset:2px; }
+    button { width:100%; min-height:48px; margin-top:16px; border:0; border-radius:10px; background:#f0ad4e; color:#171109; font:700 15px/1 inherit; cursor:pointer; }
+    button:disabled { cursor:wait; opacity:.62; }
+    #login-message { min-height:24px; margin:14px 0 0; color:#ffb4a8; font-size:14px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="mark">OPTIX PRO · PERSONAL EDITION</div>
+    <h1>Owner 登录</h1>
+    <p>登录后即可查看研究页面，并使用刷新、分析、重试和取消等日常操作。</p>
+    <form id="owner-login-form">
+      <label for="owner-password">Owner 密码</label>
+      <input id="owner-password" name="password" type="password" autocomplete="current-password" minlength="1" maxlength="1024" required autofocus />
+      <button id="owner-login-submit" type="submit">进入研究台</button>
+      <div id="login-message" role="status" aria-live="polite"></div>
+    </form>
+  </main>
+  <script src="./static/js/login.js?v=20260716a"></script>
+</body>
+</html>

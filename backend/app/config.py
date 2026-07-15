@@ -15,11 +15,13 @@ from app.personal_config import get_personal_config
 # Resolve the repository-level .env independently of the process working
 # directory. This keeps `uvicorn app.main:app` reliable when run from backend/.
 _ROOT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+_ROOT_SECRETS_FILE = Path(__file__).resolve().parents[2] / "secrets.env"
 _PERSONAL_CONFIG = get_personal_config()
 # Several existing middleware settings are read directly from os.environ.
 # Load the same root file once (without overriding exported variables) so local
 # uvicorn runs and BaseSettings observe one consistent configuration source.
 load_dotenv(dotenv_path=_ROOT_ENV_FILE, override=False)
+load_dotenv(dotenv_path=_ROOT_SECRETS_FILE, override=False)
 
 
 class Settings(BaseSettings):

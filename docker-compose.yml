@@ -11,8 +11,9 @@ services:
     env_file:
       - path: .env
         required: false
+      - path: secrets.env
+        required: false
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
       - ALLOW_CUSTOM_OPENAI_BASE_URL=${ALLOW_CUSTOM_OPENAI_BASE_URL:-false}
       - OPENAI_CUSTOM_CAPABILITIES_CONFIRMED=${OPENAI_CUSTOM_CAPABILITIES_CONFIRMED:-false}
@@ -65,8 +66,6 @@ services:
       - FOCUS_PRIORITY_WATCHLIST=${FOCUS_PRIORITY_WATCHLIST:-}
       - FOCUS_MAJOR_INDEX_CONSTITUENTS=${FOCUS_MAJOR_INDEX_CONSTITUENTS:-}
       - FOCUS_MAJOR_MARKET_SYMBOLS=${FOCUS_MAJOR_MARKET_SYMBOLS:-SPY,QQQ,DIA,IWM}
-      - APP_AUTH_TOKEN=${APP_AUTH_TOKEN:-}
-      - PUBLIC_READ_API_ENABLED=${PUBLIC_READ_API_ENABLED:-false}
       - WATCHLIST_SNAPSHOT_PATH=${WATCHLIST_SNAPSHOT_PATH:-/data/watchlist-snapshot-v1.json}
       - TRUST_PROXY_HEADERS=${TRUST_PROXY_HEADERS:-false}
       - TRUSTED_PROXY_CIDRS=${TRUSTED_PROXY_CIDRS:-}
@@ -118,10 +117,12 @@ services:
   ai-worker:
     init: true
     image: "option-pro:${APP_COMMIT:-local}"
+    env_file:
+      - path: secrets.env
+        required: false
     environment:
       - APP_VERSION=${APP_VERSION:-dev}
       - APP_COMMIT=${APP_COMMIT:-unknown}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
       - ALLOW_CUSTOM_OPENAI_BASE_URL=${ALLOW_CUSTOM_OPENAI_BASE_URL:-false}
       - OPENAI_CUSTOM_CAPABILITIES_CONFIRMED=${OPENAI_CUSTOM_CAPABILITIES_CONFIRMED:-false}
