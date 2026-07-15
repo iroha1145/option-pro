@@ -542,6 +542,20 @@ class WorkerStateRepository:
             rows = connection.execute(query, parameters).fetchall()
         return [self._action_item(row) for row in rows]
 
+    def action_request(self, request_id: str) -> dict[str, Any] | None:
+        """Return one manual action without exposing worker fencing fields."""
+
+        if not re.fullmatch(r"act_[0-9a-f]{32}", request_id):
+            raise ValueError("worker action request id is invalid")
+        if not self.path.is_file():
+            return None
+        with self._connect(read_only=True) as connection:
+            row = connection.execute(
+                "SELECT * FROM worker_action_requests WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+        return self._action_item(row) if row is not None else None
+
     def record_task(
         self,
         owner_id: str,

@@ -31,7 +31,22 @@ from app.access import (
     require_same_origin_action,
 )
 from app.deployment_boundary import normalize_allowed_hosts
-from app.api import access, ai, breakouts, catalysts, earnings, integrations, market, options, sectors, settings, signals, stocks, strength
+from app.api import (
+    access,
+    ai,
+    breakouts,
+    catalysts,
+    earnings,
+    integrations,
+    market,
+    options,
+    sectors,
+    settings,
+    signals,
+    stocks,
+    strength,
+    worker_actions,
+)
 from app.services.request_security import (
     TRUSTED_PROXY_NETWORKS as _TRUSTED_PROXY_NETWORKS,
     TRUST_PROXY_HEADERS as _TRUST_PROXY_HEADERS,
@@ -349,6 +364,7 @@ app.include_router(catalysts.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(integrations.router)
 app.include_router(strength.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(breakouts.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(worker_actions.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(access.router)
 app.include_router(settings.router)
 
