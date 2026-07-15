@@ -56,7 +56,10 @@ test('paid analysis is explicit and earnings no longer uses the synchronous GET 
   assert.match(api, /const hasAppToken = \(\) => !!appToken\(\)/);
   assert.match(api, /jget, jpost, invalidateCache, hasAppToken/);
   assert.match(catalysts, /privateActionsAvailable\(\)[\s\S]*后台同步需管理授权/);
-  assert.match(catalysts, /const canTrigger = privateActionsAvailable\(\)/);
+  assert.match(catalysts, /data-private-focus-note>管理会话未解锁/);
+  assert.match(catalysts, /当前标签页没有管理令牌；历史结果仍可查看，付费分析操作不会显示/);
+  assert.match(catalysts, /当前标签页没有管理令牌；原始新闻与已有分析仍可查看，付费分析操作不会显示/);
+  assert.match(catalysts, /const access = analysisActionDecision\(triggerEnabled, privateActionsAvailable\(\)\)[\s\S]*const canTrigger = access\.canTrigger/);
   assert.match(app, /privateActionsAvailable\(\)[\s\S]*公开页面仅供查看；模型分析需要管理授权/);
   assert.match(app, /公开页面不会创建付费任务/);
   assert.match(catalysts, /data-cat-analyze/);
@@ -116,6 +119,23 @@ test('an old unknown market-focus cycle stays immutable while a newer prepared r
   });
   vm.runInContext(catalysts, context, { filename: 'deck-catalysts.js' });
   const desk = context.window.OPTIX_CATALYSTS;
+  const anonymousAnalysis = desk.analysisActionDecision(false, false);
+  assert.equal(anonymousAnalysis.authMissing, true);
+  assert.equal(anonymousAnalysis.actionMissing, false);
+  assert.equal(anonymousAnalysis.canTrigger, false);
+  assert.equal(anonymousAnalysis.title, '管理会话未解锁');
+  assert.match(anonymousAnalysis.detail, /当前标签页没有管理令牌/);
+
+  const authenticatedDisabledAnalysis = desk.analysisActionDecision(false, true);
+  assert.equal(authenticatedDisabledAnalysis.authMissing, false);
+  assert.equal(authenticatedDisabledAnalysis.actionMissing, true);
+  assert.equal(authenticatedDisabledAnalysis.canTrigger, false);
+  assert.equal(authenticatedDisabledAnalysis.title, '分析功能未启用');
+
+  const authenticatedEnabledAnalysis = desk.analysisActionDecision(true, true);
+  assert.equal(authenticatedEnabledAnalysis.canTrigger, true);
+  assert.equal(authenticatedEnabledAnalysis.title, '尚未生成模型分析');
+
   const oldCycle = {
     cycle_id: 'mfc_old_unknown',
     status: 'failed',
@@ -141,6 +161,33 @@ test('an old unknown market-focus cycle stays immutable while a newer prepared r
   assert.match(historyHtml, /历史记录 · 提交结果待核对 · DATE:2026-07-14T14:45:33\.549482Z/);
   assert.match(historyHtml, /准备版本 31669/);
   assert.match(historyHtml, /仍禁止重试同一周期/);
+
+  const anonymous = desk.focusCycleDecision({
+    status: 'active',
+    capability: 'disabled',
+    action_enabled: false,
+    manual_enabled: false,
+    prepared_revision: 54331,
+    last_consumed_revision: 0,
+  }, {}, 1055, false);
+  assert.equal(anonymous.authMissing, true);
+  assert.equal(anonymous.actionMissing, true);
+  assert.equal(anonymous.canRun, false);
+  assert.equal(anonymous.buttonText, '需要管理令牌');
+
+  const anonymousUnknown = desk.focusCycleDecision({
+    status: 'active',
+    capability: 'disabled',
+    action_enabled: false,
+    manual_enabled: false,
+    prepared_revision: 54331,
+    last_consumed_revision: 0,
+  }, oldCycle, 1055, false);
+  assert.equal(anonymousUnknown.newPreparationAfterUnknown, true);
+  assert.match(
+    desk.focusUnknownHistoryHtml(oldCycle, anonymousUnknown),
+    /解锁管理会话后可另建周期/,
+  );
 
   const enabled = desk.focusCycleDecision({
     status: 'active',
