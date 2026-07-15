@@ -1455,7 +1455,18 @@ async def stock_signals(ticker: str):
         try:
             tk = yf.Ticker(symbol)
             hist = tk.history(period="100d")
-            if hist.empty or len(hist) < 50:
+            if hist.empty or "Close" not in hist.columns or "Volume" not in hist.columns:
+                raise RuntimeError(f"Insufficient price history for {symbol}")
+
+            def valid_close(value: Any) -> bool:
+                number = _safe_number(value)
+                return number is not None and number > 0
+
+            # Yahoo can publish the new session's daily row before it has a
+            # close. Keep the last completed bar as the indicator endpoint;
+            # otherwise every rolling calculation ends in NaN before the open.
+            hist = hist.loc[hist["Close"].map(valid_close)].copy()
+            if len(hist) < 50:
                 raise RuntimeError(f"Insufficient price history for {symbol}")
 
             close = hist["Close"]
