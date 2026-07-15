@@ -1,99 +1,40 @@
-# Personal Edition current inventory
+# 个人版现行清单
 
-Baseline date: 2026-07-15. Source revisions: option-pro `d04ef67703316c52279fb020e10278eb7e3e82f5`; MacroLens `a5e896d3d248cf658075a91baf9120c94f1d70c4`.
+更新时间：2026-07-16。
 
-## Resident processes
+## 常驻服务
 
-| Host | Process | Responsibility | Persistent writer |
-|---|---|---|---|
-| Option Pro | backend | FastAPI and Night Desk | user requests and job creation |
-| Option Pro | ai-worker | Responses jobs | `ai-jobs.db` |
-| Option Pro | catalyst-sync-worker | remote health, news, calendar and action proxy | `catalyst-cache.db` |
-| Option Pro | focus-context-producer | focus universe and snapshots | `catalyst-cache.db` |
-| Option Pro | breakout-worker | discovery, lifecycle and snapshots | `optix.db` |
-| MacroLens | backend | API, scheduler, news sources and calendar | `macrolens.db` |
-| MacroLens | analysis-worker | news, calendar and market-focus model jobs | `macrolens.db` |
-| MacroLens | frontend | React administration interface | none |
-
-MacroLens also has a one-shot data initializer. The two repositories therefore run eight long-lived business processes before the personal refactor.
-
-## Configuration inventory
-
-- Option Pro `.env.example`: 189 declarations.
-- MacroLens `.env.example`: 140 declarations.
-- Option Pro Compose: 161 distinct variables and 272 explicit mappings.
-- MacroLens Compose: 95 distinct variables.
-- Option Pro has five `DEPLOY_REQUIRE_*` gates and about 28 behavior switches.
-- Configuration is split across four Option Pro settings objects, the MacroLens settings object, database settings, direct environment reads, Compose defaults and deployment scripts.
-
-Secrets, machine addresses and behavior are currently mixed. The Personal Edition boundary moves behavior into `config/personal.toml`; `.env` retains only secrets and host-specific addresses.
-
-## Databases and writers
-
-| Database | Current writers | Required preservation |
+| 服务 | 职责 | 主要写入 |
 |---|---|---|
-| `optix.db` | backend, breakout worker, focus producer | transactions, WAL, point-in-time scoring |
-| `catalyst-cache.db` | catalyst sync and focus producer | last readable snapshot on sync failure |
-| `ai-jobs.db` | backend and AI worker | idempotency, response identity, token usage |
-| `macrolens.db` | backend scheduler and analysis worker | raw news, calendar and legacy analysis history |
+| `backend` | 网页、接口、只读查询和任务创建 | 用户请求与任务入队 |
+| `worker` | 突破、新闻同步、焦点、模型任务、维护 | 四个本地数据库 |
 
-The first release does not merge databases. Backups, `quick_check`, `integrity_check` and `foreign_key_check` remain mandatory.
+正式容器编排文件只包含这两个服务和一个 `optix-data` 数据卷。两者使用同一版本镜像，根文件系统只读，以非根用户运行。
 
-## Feature flag dependency map
+## 五类后台任务
 
-```text
-MACROLENS_ENABLED
-  -> CATALYST_MODE=display
-  -> read credentials
-  -> catalyst-sync-worker
-  -> optional action credentials
-  -> NEWS_LLM_MANUAL_ENABLED / HOT_CYCLE_* in MacroLens
+| 任务 | 作用 | 关闭时的表现 |
+|---|---|---|
+| `breakout` | 突破候选发现与生命周期 | 记录为禁用，不请求数据源 |
+| `catalyst_sync` | 从 MacroLens 拉取原始新闻和日历 | 记录为禁用或等待配置 |
+| `focus` | 建立本地焦点快照 | 与 Catalyst 同步一起关闭 |
+| `ai_jobs` | 处理已经入队的模型任务 | 没有密钥或任务时保持空闲 |
+| `maintenance` | 备份、清理和完整性维护 | 只操作本地数据 |
 
-FOCUS_PRODUCER_ENABLED
-  -> focus-context-producer
-  -> reverse HMAC endpoint
-  -> MacroLens Focus Pull
+## 配置清单
 
-BREAKOUT_RADAR_ENABLED
-  -> breakout-worker
+`.env.example` 不超过 20 个声明，仅保留：
 
-DEPLOY_REQUIRE_*
-  -> deploy-only health gates for each independent process
-```
+- OpenAI 与行情服务密钥；
+- MacroLens HTTPS 地址、内部不记名令牌（Bearer Token）和可选证书；
+- 本机监听、主机名、来源地址、代理网段与访问令牌。
 
-The replacement is `catalyst_mode = off | read | manual | scheduled` plus one `breakout_enabled` boolean.
+模型、推理等级、功能模式、任务频率、定时时刻、并发数、每日上限和数据保留期均由 `config/personal.toml` 管理。
 
-## Cross-service directions and authentication states
+## 运行约束
 
-```text
-Option Pro -- HMAC read/action --> MacroLens
-Option Pro <-- HMAC focus pull -- MacroLens
-```
-
-The current protocol carries read and action key identifiers, previous secrets, nonces, clock skew, body hashes and three credential directions. The target is one HTTPS read-only direction from Option Pro to MacroLens with one bearer token.
-
-## Model runtimes
-
-- Option Pro has one Responses runtime for earnings, options and signal jobs.
-- MacroLens has a second Responses runtime for news, calendar and market focus, plus retired Anthropic, Grok and Ollama provider code.
-- Both currently default to GPT-5.6 Terra. The personal runtime must be GPT-5.6 Terra, reasoning `max`, background execution, concurrency one and four paid jobs per UTC day.
-- Structured outputs, bounded untrusted input, idempotency, submission-unknown protection, response retrieval/cancellation and token usage must remain.
-
-## Frontend entry points and dead code
-
-Production `frontend/index.html` loads only `deck-api.js`, `deck-ai-jobs.js`, `deck-catalysts.js`, `deck-app.js`, `optix-deck.css` and `optix-catalysts.css`. PR 1 removed the old `app.js`, `pages/`, component tree, `styles.css` and v3 styles after replacing readiness checks and static tests. No production, container, documentation or test reference remains.
-
-MacroLens's React/Vite/Tailwind frontend is a removal candidate; operational state moves to Night Desk and `/internal/v1/health`.
-
-## Correctness constraints
-
-The refactor must preserve strict schemas, untrusted-news boundaries, input limits, task idempotency, daily paid limits, token usage, `available_at`, `as_of`, completed-bar filtering, no-future replay, SQLite transactions and backups, old-snapshot readability, and the rule that news never changes the formal stock score by default.
-
-## Main migration risks
-
-1. A model submission can succeed before its response identifier is saved; such jobs must never be submitted again automatically.
-2. Removing task leases before the single-process lock is active can create duplicate writers.
-3. Changing prompt or language without changing task identity can reuse cached English results.
-4. Deleting remote projections before importing recent visible analysis can blank Night Desk.
-5. Removing old frontend files before health and static assertions change will make an otherwise healthy image fail readiness.
-6. Raw English source text must remain available for traceability while every user-facing derived field is simplified Chinese.
+- 统一工作进程必须独占进程锁；部署时先停旧写入者，再启动新进程。
+- `/ready` 只判断网页与静态资源，不依赖外部新闻或行情服务。
+- 工作进程健康检查只读本地锁、心跳和任务清单。
+- 自动逐条新闻分析保持关闭；只读模式不创建付费任务。
+- 原始英文新闻只用于追溯，用户可见标题、摘要与分析均为简体中文。

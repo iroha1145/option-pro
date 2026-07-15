@@ -1,54 +1,49 @@
-# Personal Edition architecture
-
-## Current
+# 个人版运行结构
 
 ```text
-Browser -> Option Pro backend
-             |-> ai-worker -> OpenAI
-             |-> catalyst-sync-worker <-> MacroLens backend/scheduler
-             |-> focus-context-producer -> MacroLens Focus Pull
-             `-> breakout-worker
+浏览器 -> backend -> 本地 SQLite
+                    -> 创建用户明确发起的任务
 
-MacroLens backend -> analysis-worker -> OpenAI
-MacroLens frontend -> MacroLens backend
+          worker -> 突破扫描
+                 -> Catalyst 原始新闻与日历同步
+                 -> 本地焦点快照
+                 -> OpenAI Responses 后台任务
+                 -> 备份、清理与健康记录
+
+          worker -- HTTPS + Bearer Token --> MacroLens 只读接口
 ```
 
-## Personal Edition runtime
+Option Pro 常驻两个容器。`backend` 不运行长循环和付费任务；`worker` 持有唯一进程锁，在同一进程中隔离九类任务。某类任务失败时只记录自身状态并退避，不拖垮其他任务。
 
-```text
-Night Desk -> optix-web -> local SQLite
-                  |
-                  `-> optix-worker
-                        |-> Breakout Radar
-                        |-> Focus Context
-                        |-> MacroLens raw-feed sync
-                        |-> local ticker/event/hotspot logic
-                        |-> GPT-5.6 Terra Responses jobs
-                        `-> retention, backup and health
+MacroLens 只提供原始新闻、来源标的和日历。它不能回调 Option Pro，也不能创建 Option Pro 的模型任务。新闻归并、焦点快照、简体中文标题、摘要与分析结果都由 Option Pro 本地保存。
 
-optix-worker -- HTTPS + bearer token --> macrolens
-                                           |-> raw news sources
-                                           |-> calendar
-                                           `-> retention
-```
+## 配置归属
 
-There are three long-lived business processes. MacroLens cannot call Option Pro. Only Option Pro stores model results and derived news intelligence.
+`config/personal.toml` 管理功能、频率、模型、推理等级、预算和数据保留期。`.env` 只保存密钥、HTTPS 地址和机器网络边界。
 
-## Runtime rules
+MacroLens 连接只使用：
 
-- `optix-web` serves the API and static Night Desk, reads databases and creates user-requested jobs. It does not run long loops or paid jobs.
-- `optix-worker` owns one process lock and supervises isolated tasks. Every task records status, catches its own exception, backs off independently and observes graceful shutdown.
-- `macrolens` runs one Uvicorn worker with one in-process scheduler. It fetches and deduplicates raw news, records source-native tickers and calendar data, and exposes four internal read-only endpoints.
-- Model execution is OpenAI Responses API background mode only: `gpt-5.6-terra`, reasoning `max`, concurrency one, four paid submissions per UTC day.
-- Raw news remains untrusted and in its source language. It is used only as internal evidence. Night Desk receives only Simplified Chinese titles, summaries and analysis that pass the `zh-CN` contract; pending items use Simplified Chinese waiting copy instead of exposing the raw source text.
-- The local intelligence database keeps point-in-time news revisions, event groups, hotspot revisions and immutable focus snapshots. Model results are accepted only when their news revision or focus snapshot identity still matches.
-- Scheduled mode uses durable Eastern Time slots at 08:00, 12:00 and 16:00. Read mode is the repository default and never creates paid jobs.
-- Ticker attribution is restricted to the local canonical universe. Source tickers are hints, and model output cannot add a ticker outside the exact allowlist supplied with the job.
+- `MACROLENS_BASE_URL`
+- `MACROLENS_INTERNAL_TOKEN`
+- 可选的 `MACROLENS_CA_BUNDLE`
 
-## Configuration ownership
+连接只允许 HTTPS。旧式签名密钥、请求随机数、前一把密钥和反向拉取入口不再属于现行结构。
 
-`config/personal.toml` owns behavior. `machine.env` owns host-specific addresses and paths. `secrets.env` owns the five canonical server-only secrets. Exported process values have highest priority; otherwise loading order is `.env`, `machine.env`, then `secrets.env`. Domain modules receive typed configuration instead of interpreting unrelated environment switches.
+`config/personal.toml` 管理功能行为；`machine.env` 管理机器地址与数据路径；`secrets.env` 只保存五项正式服务端密钥。进程已经导出的值优先级最高，否则按 `.env`、`machine.env`、`secrets.env` 的顺序加载。各业务模块接收同一个类型化配置对象，不再自行解释零散环境开关。
 
-The MacroLens connection uses canonical `MACROLENS_URL` and `INTERNAL_API_TOKEN` values. Legacy names are accepted only by the one-release migration adapter; no signing key identifier, nonce or previous secret remains in the Personal Edition route.
+MacroLens 连接只使用正式名称 `MACROLENS_URL` 和 `INTERNAL_API_TOKEN`。旧名称只由一个迁移版本的适配器识别；个人版运行链不再保留签名 Key ID、Nonce 或前一把密钥。
 
-The application, `scripts/deploy.sh` and `./personal.sh doctor` call the same Python deployment validator. Direct private-network access never trusts forwarded headers. Any reverse-proxy or public-domain route uses password mode, explicit host names and narrowly scoped proxy source ranges.
+应用、`scripts/deploy.sh` 与 `./personal.sh doctor` 共用同一个 Python 部署校验器。直接私网模式绝不信任转发头；任何反向代理或公开域名都必须使用密码模式、明确主机名和收窄的代理来源网段。
+
+## 数据边界
+
+- `/data/optix.db`：突破与强势数据。
+- `/data/catalyst-cache.db`：原始新闻修订、本地派生结果和焦点快照。
+- `/data/ai-jobs.db`：模型任务、响应身份和用量。
+- `/data/optix-worker.db`：统一工作进程锁、心跳和九类任务状态。
+
+数据库仍分开保存，避免一次迁移同时改变数据结构和运行结构。统一工作进程负责日常备份与保留期清理。
+
+## 模型与语言
+
+模型固定为 GPT-5.6 Terra，推理等级为 `max`，后台执行，并发数为一。原始新闻可以保留来源语言，但页面标题、摘要、等待提示和分析内容必须通过简体中文契约。模型结果只有在新闻修订与焦点快照身份仍匹配时才会被采用。

@@ -153,9 +153,7 @@ class PersonalCatalystService:
         )
         self._intelligence_injected = intelligence is not None
         if intelligence is None:
-            # Imported lazily so the legacy fallback remains usable during the
-            # one-release migration and in installations that have not enabled
-            # the new internal Bearer-token contract.
+            # Keep web-process imports side-effect free until a local read is made.
             from .local_intelligence import LocalCatalystIntelligence
 
             intelligence = LocalCatalystIntelligence(

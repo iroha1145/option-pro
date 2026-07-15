@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -18,6 +19,7 @@ from app.services.catalysts.etl_client import NewsChangesPage
 from app.services.catalysts.etl_repository import CatalystEtlRepository
 from app.services.catalysts.personal_service import PersonalCatalystService
 from app.services.catalysts.config import CatalystSettings
+from app.worker.tasks import CatalystSyncTask, FocusTask
 
 
 NOW = datetime(2026, 7, 15, 4, 0, tzinfo=timezone.utc)
@@ -496,59 +498,69 @@ def test_focus_result_must_match_cycle_time_and_input_hash() -> None:
     assert hidden["error_code"] == "legacy_output_hidden"
 
 
-def test_api_factory_uses_personal_read_view_and_keeps_legacy_fallback(
-    monkeypatch,
-) -> None:
+def test_api_factory_always_uses_personal_service(monkeypatch) -> None:
     settings = type(
         "SettingsStub",
         (),
         {
             "catalyst_mode": "display",
-            "read_key_id": "",
-            "read_secret": "",
         },
     )()
     personal = object()
-    legacy = object()
     monkeypatch.setattr(catalyst_api, "PersonalCatalystService", lambda value: personal)
-    monkeypatch.setattr(catalyst_api, "CatalystService", lambda value: legacy)
 
     monkeypatch.delenv("MACROLENS_INTERNAL_TOKEN", raising=False)
     assert catalyst_api._service(settings) is personal
     monkeypatch.setenv("MACROLENS_INTERNAL_TOKEN", "configured-token")
     assert catalyst_api._service(settings) is personal
-
-    settings.read_key_id = "legacy-read-key"
-    settings.read_secret = "legacy-read-secret"
-    monkeypatch.delenv("MACROLENS_INTERNAL_TOKEN", raising=False)
-    assert catalyst_api._service(settings) is legacy
-
     settings.catalyst_mode = "disabled"
-    assert catalyst_api._service(settings) is legacy
+    assert catalyst_api._service(settings) is personal
 
 
-def test_new_bearer_settings_do_not_require_legacy_hmac(tmp_path, monkeypatch) -> None:
-    monkeypatch.delenv("MACROLENS_ENABLED", raising=False)
-    monkeypatch.delenv("CATALYST_MODE", raising=False)
+def test_local_api_settings_keep_fixed_model_and_drop_remote_hmac_credentials(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OPENAI_MODEL", "environment-model")
+    monkeypatch.setenv("OPENAI_REASONING", "high")
     settings = CatalystSettings(
         _env_file=None,
-        MACROLENS_BASE_URL="https://macrolens.example",
-        MACROLENS_INTERNAL_TOKEN="owner-token",
         MACROLENS_CACHE_DB_PATH=tmp_path / "missing.db",
+        MACROLENS_READ_KEY_ID="ignored-old-key",
+        MACROLENS_READ_SECRET="ignored-old-secret",
     )
 
-    assert settings.internal_token.get_secret_value() == "owner-token"
-    assert settings.read_key_id == ""
-    assert catalyst_api._internal_token_configured(settings) is True
+    assert settings.cache_db_path == tmp_path / "missing.db"
+    assert settings.model == "gpt-5.6-terra"
+    assert settings.reasoning == "max"
+    assert not hasattr(settings, "read_key_id")
+    assert not hasattr(settings, "read_secret")
+    with pytest.raises(ValueError):
+        CatalystSettings(_env_file=None, model="other-model")
 
-    with pytest.raises(ValueError, match="must use HTTPS"):
-        CatalystSettings(
-            _env_file=None,
-            MACROLENS_BASE_URL="http://localhost:9876",
-            MACROLENS_ALLOW_LOCAL_HTTP=True,
-            MACROLENS_INTERNAL_TOKEN="owner-token",
-            MACROLENS_CACHE_DB_PATH=tmp_path / "missing.db",
-        )
+
+def test_unified_worker_degrades_safely_when_owner_token_is_missing(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("MACROLENS_INTERNAL_TOKEN", raising=False)
+    personal = PersonalConfig(features=FeatureConfig(catalyst_mode="read"))
+
+    sync_result = asyncio.run(
+        CatalystSyncTask("test", personal_config=personal)()
+    )
+    focus_result = asyncio.run(
+        FocusTask("test", enabled=True, personal_config=personal)()
+    )
+
+    assert sync_result.status == "degraded"
+    assert sync_result.error_code == "personal_etl_token_missing"
+    assert sync_result.details == {
+        "processed": [],
+        "reason": "internal_token_missing",
+    }
+    assert focus_result.status == "degraded"
+    assert focus_result.error_code == "personal_etl_token_missing"
+    assert focus_result.details == {"result": "internal_token_missing"}
 
 
 def test_unconfigured_default_read_view_is_safe_and_does_not_create_cache(

@@ -1,28 +1,45 @@
-# Personal Edition migration
+# 个人版迁移说明
 
-## Stages
+## 发布顺序
 
-1. Add typed TOML configuration, the legacy environment converter and Night Desk-only packaging. Keep the old Compose file runnable for one release.
-2. Run `optix-worker` against offline fixtures and private databases. Compare its outputs with the old independent workers; never let both write the same production database.
-3. Stop old Option Pro workers, start the unified worker and retain the previous release tag and Compose file for rollback.
-4. Enable MacroLens ETL-only endpoints. Option Pro audits compatible legacy analysis in its local database and imports only a result whose current content identity, model, prompt schema and Simplified Chinese output all match. Every new analysis is then created locally.
-5. Observe one full United States trading week before deleting the legacy runtime and the compatibility adapter.
+1. 记录当前提交、镜像摘要和数据库结构版本。
+2. 使用轻量数据库（SQLite）备份接口保存全部业务数据库，并核对快速检查、完整性检查和外键检查。
+3. 构建新镜像。构建期间旧后端仍可提供页面。
+4. 停止同一容器编排项目中的旧工作容器，等待已经提交的模型任务到达安全边界，并确认所有旧进程已经退出。
+5. 启动 `backend` 与统一的 `worker`，不得让新旧写入者同时连接同一数据卷。
+6. 核对后端提交、前端完整性、统一工作进程锁和九类任务清单。
+7. 观察一个完整的美国交易周，再清理旧运行代码与兼容入口。
 
-## Database handling
+`scripts/deploy.sh`负责第 3 至第 6 步。它不会运行一次性任务，不会请求新闻刷新，也不会创建模型任务。
 
-- Back up every SQLite database before each stage with the SQLite backup API.
-- Record schema versions, table counts, SHA-256 checksums, `quick_check`, `integrity_check` and `foreign_key_check`.
-- Roll back code and containers, not database files. Additive migrations must leave old rows readable.
-- Preserve response identifiers and `submission_outcome_unknown`; never replay an uncertain paid submission.
-- Keep legacy Catalyst tables intact during the first release. The importer reads them without changing or deleting old rows and records every accepted or rejected candidate in the local audit table.
-- Importing a legacy result does not consume the new daily submission allowance. Superseded news revisions, English output and obsolete prompt schemas remain hidden.
+## 数据保存
 
-## Configuration conversion
+发布前备份：
 
-Run:
+- `/data/optix.db`
+- `/data/catalyst-cache.db`
+- `/data/ai-jobs.db`
+- `/data/optix-worker.db`（首次统一运行后存在）
+
+备份清单应记录创建时间、源路径、结构版本和摘要（SHA-256）。备份文件必须放在 `optix-data` 之外，以防数据卷或磁盘故障。
+
+旧 Catalyst 表、旧分析投影和旧任务记录在迁移后至少保留 90 天。保留期内只允许兼容读取、审计和导出：
+
+- 不删除旧行；
+- 不把旧英文结果重新显示到页面；
+- 不把导入旧结果计入新每日付费额度；
+- 不重新提交状态不确定的模型任务；
+- 不用旧备份覆盖已经出现新任务记录的数据库。
+
+保留期结束后，只有在导出、审计抽查和恢复演练均完成时，才可另行安排数据清理。
+
+## 环境文件迁移
+
+正式运行统一读取仓库根目录的`.env`。旧环境文件可先转换：
 
 ```bash
-python -m app.tools.migrate_personal_config .env --output-directory config/migrated
+PYTHONPATH=backend python -m app.tools.migrate_personal_config \
+  .env --output-directory config/migrated
 ```
 
 The command writes four files:
@@ -50,6 +67,10 @@ Every HTTP reverse proxy, public domain, Cloudflare Tunnel or public load balanc
 
 The compatibility adapter is removed after the first Personal Edition production release.
 
-## Rollback
+MacroLens 只保留 HTTPS 地址与一个内部不记名令牌（Bearer Token）。本机 HTTP、旧式签名密钥和反向焦点读取配置不得带入新环境文件。
 
-Each pull request has a release tag. To roll back, stop the new process, check out the preceding tag, restore its Compose definition and start it against the same forward-compatible databases. Do not restore an older database over newer task history.
+## 回滚
+
+回滚时先停止统一工作进程，再切换到上一份经过验证的发布标签与镜像。继续使用当前数据卷，优先依靠向前兼容读取；只有数据库损坏或完整性检查失败时，才从已核验的备份恢复。
+
+停止服务时不要使用`--volumes`或`-v`。强制终止可能把正在保存响应身份的付费任务留在不确定状态，因此应保留 2100 秒停止宽限期。

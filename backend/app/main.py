@@ -37,7 +37,6 @@ from app.api import (
     breakouts,
     catalysts,
     earnings,
-    integrations,
     market,
     options,
     runtime_settings,
@@ -117,7 +116,6 @@ _HTML_CSP = (
     "script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
     "img-src 'self' data:; connect-src 'self'; form-action 'self'"
 )
-_LEGACY_SERVICE_PATHS = {"/api/integrations/macrolens/v1/focus-context"}
 _PUBLIC_ACCESS_PATHS = {
     "/health",
     "/ready",
@@ -153,18 +151,6 @@ def _scope_is_https(scope) -> bool:
         scope,
         enabled=_TRUST_PROXY_HEADERS,
         networks=_TRUSTED_PROXY_NETWORKS,
-    )
-
-
-def _raw_path_has_unsafe_escape(scope) -> bool:
-    """Keep the one-release service compatibility path exact."""
-
-    raw_path = scope.get("raw_path", b"")
-    if isinstance(raw_path, str):
-        raw_path = raw_path.encode("latin-1", errors="ignore")
-    lowered = bytes(raw_path).lower()
-    return b"\\" in lowered or any(
-        marker in lowered for marker in (b"%2f", b"%5c", b"%25")
     )
 
 
@@ -281,12 +267,6 @@ class _GatewayMiddleware:
                     headers["Cache-Control"] = "private, no-store"
             await send(message)
 
-        unsafe_raw_path = _raw_path_has_unsafe_escape(scope)
-        legacy_service_request = bool(
-            not unsafe_raw_path
-            and method == "GET"
-            and path in _LEGACY_SERVICE_PATHS
-        )
         publicly_available = bool(
             path in _PUBLIC_ACCESS_PATHS
             or (
@@ -301,7 +281,6 @@ class _GatewayMiddleware:
         if (
             method != "OPTIONS"
             and not publicly_available
-            and not legacy_service_request
             and not owner_access
         ):
             if self.access_runtime.mode == "password" and is_html:
@@ -361,8 +340,6 @@ app.include_router(market.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(signals.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(ai.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(catalysts.router, dependencies=_OWNER_DEPENDENCIES)
-# This one read-only route is the time-boxed service compatibility adapter.
-app.include_router(integrations.router)
 app.include_router(strength.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(breakouts.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(worker_actions.router, dependencies=_OWNER_DEPENDENCIES)

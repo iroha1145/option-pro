@@ -1,17 +1,17 @@
-# Personal Edition removal plan
+# 个人版删除计划
 
-Every deletion requires repository search, import checks, route checks, frontend references, container entries, documentation and tests to reach zero or point to the replacement.
+每项删除都要检查生产导入、路由、网页引用、容器条目、文档与测试。现行替代关系如下：
 
-| Component | Replacement | Removal gate |
+| 已退出范围 | 现行替代 | 验收条件 |
 |---|---|---|
-| old Option Pro pages, components and v3 styles | Night Desk deck files | production HTML, readiness and tests reference only deck files |
-| `ai-worker`, catalyst sync, focus producer, breakout worker containers | `optix-worker` | fixture parity, isolation, process lock, graceful stop and health tests pass |
-| MacroLens analysis worker and model providers | Option Pro local Responses runtime | recent visible analyses imported; no new legacy writes |
-| MacroLens frontend | Night Desk Catalyst page and internal health | operational status is visible without the old UI |
-| HMAC, nonces, key identifiers and previous secrets | HTTPS bearer token | four ETL endpoints pass token, outage and paging tests |
-| reverse Focus Pull | Option Pro local focus ownership | MacroLens contains no Option Pro client import or route |
-| remote analysis/action proxy tables | local analysis revisions and job history | old rows exported and read-only for 30-90 days |
-| `DEPLOY_REQUIRE_*` and per-worker checks | aggregate worker health | deploy checks one web and one worker readiness surface |
-| legacy environment adapter | typed TOML only | one production release has completed and unmapped reports are empty |
+| 四个独立工作容器 | 单一`worker`服务 | 进程锁、隔离退避、停止宽限和五类任务健康检查通过 |
+| 双编排文件 | 正式`docker-compose.yml` | 服务清单只有`backend`与`worker` |
+| 逐工作进程部署门禁 | 后端就绪与统一工作进程清单 | 检查过程不创建任务、不刷新新闻 |
+| 多方向签名、随机数和轮换密钥 | HTTPS 与单一内部不记名令牌（Bearer Token） | 只读端点的令牌、证书、分页和故障测试通过 |
+| 反向焦点拉取 | Option Pro 本地焦点任务 | MacroLens 不再调用 Option Pro |
+| 远端分析动作代理 | 本地分析修订与任务历史 | 新分析只在 Option Pro 创建 |
+| 旧前端页面与样式 | Night Desk 现行资源 | 生产页面、完整性检查和测试均无旧引用 |
 
-The deletion ledger is recorded in `deleted-components.md` as files are removed, including the prior purpose, replacement, reference evidence and rollback tag.
+旧数据库表不随运行代码一起删除。旧 Catalyst 数据、分析投影和任务记录至少保留 90 天，只供读取、审计和导出。数据清理由后续独立变更完成，并须附带备份、抽查与恢复演练证据。
+
+删除记录写入`deleted-components.md`，包括替代路径、引用扫描和回滚标签。

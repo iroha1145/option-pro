@@ -9,50 +9,55 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_personal_compose_has_only_web_worker_and_one_persistent_volume() -> None:
-    compose = yaml.safe_load(
-        (ROOT / "docker-compose.personal.yml").read_text(encoding="utf-8")
-    )
+def _compose() -> dict[str, object]:
+    return yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+
+
+def _environment_keys() -> list[str]:
+    keys: list[str] = []
+    for raw_line in (ROOT / ".env.example").read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, separator, _value = line.partition("=")
+        assert separator, raw_line
+        keys.append(key)
+    return keys
+
+
+def test_formal_compose_has_only_backend_worker_and_one_volume() -> None:
+    compose = _compose()
 
     assert set(compose["services"]) == {"backend", "worker"}
     assert set(compose["volumes"]) == {"optix-data"}
+    assert not (ROOT / "docker-compose.personal.yml").exists()
+
     for service in compose["services"].values():
+        assert service["image"] == "option-pro:${APP_COMMIT:-local}"
         assert "optix-data:/data" in service["volumes"]
         assert service["read_only"] is True
         assert service["restart"] == "unless-stopped"
         assert service["env_file"] == [
             {
-                "path": "${PERSONAL_MACHINE_FILE:-machine.env}",
-                "required": False,
-            },
-            {
                 "path": "${PERSONAL_SECRETS_FILE:-config/migrated/secrets.env}",
                 "required": False,
             }
         ]
-        assert "OPENAI_MODEL" not in service["environment"]
-        assert "OPENAI_REASONING" not in service["environment"]
-        assert "OPENAI_MAX_CONCURRENCY" not in service["environment"]
-        assert "OPENAI_DAILY_MAX_JOBS" not in service["environment"]
-
-    personal_config = tomllib.loads(
-        (ROOT / "config" / "personal.toml").read_text(encoding="utf-8")
-    )
-    assert personal_config["ai"] == {
-        "model": "gpt-5.6-terra",
-        "reasoning": "max",
-        "max_concurrency": 1,
-        "daily_max_jobs": 4,
-        "daily_budget_usd": 2.0,
-        "execution_mode": "background",
-    }
+        assert service["environment"]["DATA_DIR"] == "/data"
+        assert "OPTIX_WORKER_DB_PATH" not in service["environment"]
+        assert "OPTIX_WORKER_LOCK_PATH" not in service["environment"]
+        assert "OPTION_PRO_RUNTIME_SETTINGS_PATH" not in service["environment"]
+        for legacy_setting in (
+            "OPENAI_MODEL",
+            "OPENAI_REASONING",
+            "OPENAI_MAX_CONCURRENCY",
+            "OPENAI_DAILY_MAX_JOBS",
+        ):
+            assert legacy_setting not in service["environment"]
 
 
-def test_personal_worker_command_and_healthcheck_match_unified_cli() -> None:
-    compose = yaml.safe_load(
-        (ROOT / "docker-compose.personal.yml").read_text(encoding="utf-8")
-    )
-    worker = compose["services"]["worker"]
+def test_unified_worker_command_healthcheck_and_shutdown_window() -> None:
+    worker = _compose()["services"]["worker"]
 
     assert worker["command"] == ["python", "-m", "app.worker"]
     assert worker["healthcheck"]["test"] == [
@@ -62,28 +67,55 @@ def test_personal_worker_command_and_healthcheck_match_unified_cli() -> None:
         "app.worker",
         "--healthcheck",
     ]
-    assert worker["environment"]["OPTIX_WORKER_DB_PATH"] == (
-        "${OPTIX_WORKER_DB_PATH:-/data/optix-worker.db}"
-    )
-    assert worker["environment"]["OPTIX_WORKER_LOCK_PATH"] == (
-        "${OPTIX_WORKER_LOCK_PATH:-/data/optix-worker.lock}"
-    )
     assert worker["stop_grace_period"] == "2100s"
+    assert "ports" not in worker
 
 
-def test_personal_backend_binds_to_loopback_by_default() -> None:
-    compose = yaml.safe_load(
-        (ROOT / "docker-compose.personal.yml").read_text(encoding="utf-8")
-    )
-    assert compose["services"]["backend"]["ports"] == [
+def test_backend_is_loopback_only_by_default() -> None:
+    backend = _compose()["services"]["backend"]
+    assert backend["ports"] == [
         "${HOST_BIND:-127.0.0.1}:${PORT:-2000}:8000"
     ]
 
 
-def test_personal_container_catalyst_smoke_uses_the_image_import_path() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
-        encoding="utf-8"
-    )
+def test_environment_template_contains_only_secret_and_machine_edges() -> None:
+    keys = _environment_keys()
 
-    assert "container_personal_catalyst_smoke.py" in workflow
-    assert "--env PYTHONPATH=/app/backend" in workflow
+    assert len(keys) <= 20
+    assert len(keys) == len(set(keys))
+    assert {
+        "OPENAI_API_KEY",
+        "INTERNAL_API_TOKEN",
+        "APP_PASSWORD_HASH",
+        "FINNHUB_API_KEY",
+        "DATA_DIR",
+        "HOST_BIND",
+        "PORT",
+        "MACROLENS_URL",
+    }.issubset(keys)
+    assert not any(key.startswith("DEPLOY_" + "REQUIRE") for key in keys)
+    assert not any(key.startswith("FOCUS_PRODUCER") for key in keys)
+    assert "OPENAI_MODEL" not in keys
+    assert "OPENAI_REASONING" not in keys
+    assert "MACROLENS_ALLOW_" + "LOCAL_HTTP" not in keys
+    assert "APP_AUTH_TOKEN" not in keys
+    assert "PUBLIC_READ_API_ENABLED" not in keys
+    assert "MACROLENS_INTERNAL_TOKEN" not in keys
+    assert "MACROLENS_BASE_URL" not in keys
+
+    config = tomllib.loads(
+        (ROOT / "config" / "personal.toml").read_text(encoding="utf-8")
+    )
+    assert config["ai"]["model"] == "gpt-5.6-terra"
+    assert config["ai"]["reasoning"] == "max"
+    assert config["ai"]["daily_budget_usd"] == 2.0
+    assert config["features"]["catalyst_mode"] == "manual"
+
+
+def test_runtime_services_keep_the_container_security_baseline() -> None:
+    for service in _compose()["services"].values():
+        assert service["read_only"] is True
+        assert service["security_opt"] == ["no-new-privileges:true"]
+        assert service["cap_drop"] == ["ALL"]
+        assert service["pids_limit"] == 256
+        assert "/tmp:rw,noexec,nosuid,size=134217728,mode=1777" in service["tmpfs"]

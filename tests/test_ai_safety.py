@@ -10,7 +10,6 @@ from pydantic import ValidationError
 from app.api.ai import AlertsRequest, _MAX_AI_BODY_BYTES, router
 from app.config import Settings
 from app.runtime_environment import ROOT_ENV_FILE, RUNTIME_ENV_FILES
-from app.services import ai_analysis
 from app.services.ai_jobs import runtime
 
 
@@ -132,7 +131,7 @@ def test_legacy_paid_route_validates_body_but_never_runs_model(monkeypatch):
         calls += 1
         raise AssertionError("legacy model function must not run")
 
-    monkeypatch.setattr(ai_analysis, "analyze_option_alerts", forbidden)
+    monkeypatch.setattr(runtime, "submit_background", forbidden)
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app, base_url="http://localhost")
@@ -197,6 +196,6 @@ def test_untrusted_prompt_data_cannot_close_boundary():
     assert "\\u003c/untrusted_option_alert_data\\u003e" in request.input_text
 
 
-def test_compatibility_functions_refuse_untracked_model_calls():
-    with pytest.raises(RuntimeError, match="ai_job_required"):
-        ai_analysis.analyze_single_earnings_impact({"ticker": "AAPL"})
+def test_legacy_direct_model_module_is_removed():
+    module = Path(__file__).resolve().parents[1] / "backend/app/services/ai_analysis.py"
+    assert not module.exists()
