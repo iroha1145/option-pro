@@ -10,6 +10,7 @@ from app.services.ai_jobs.models import result_model_for, validate_result
 
 _CLIENT: Any | None = None
 _CLIENT_SIGNATURE: tuple[str, str, float, int] | None = None
+_OFFICIAL_OPENAI_BASE_URL = "https://api.openai.com/v1"
 
 
 @dataclass(frozen=True)
@@ -137,9 +138,10 @@ def _client(settings: Any) -> Any:
     key = settings.openai_api_key.get_secret_value().strip()
     if not key:
         raise RuntimeError("ai_not_configured")
+    base_url = settings.openai_base_url or _OFFICIAL_OPENAI_BASE_URL
     signature = (
         key,
-        settings.openai_base_url,
+        base_url,
         float(settings.openai_timeout_seconds),
         int(settings.openai_max_retries),
     )
@@ -151,11 +153,10 @@ def _client(settings: Any) -> Any:
         raise RuntimeError("ai_sdk_unavailable") from exc
     kwargs: dict[str, Any] = {
         "api_key": key,
+        "base_url": base_url,
         "timeout": settings.openai_timeout_seconds,
         "max_retries": 0,
     }
-    if settings.openai_base_url:
-        kwargs["base_url"] = settings.openai_base_url
     _CLIENT = AsyncOpenAI(**kwargs)
     _CLIENT_SIGNATURE = signature
     return _CLIENT

@@ -102,6 +102,12 @@ def test_custom_openai_base_url_requires_explicit_opt_in():
             OPENAI_BASE_URL="http://proxy.example/v1",
             ALLOW_CUSTOM_OPENAI_BASE_URL=True,
         )
+    with pytest.raises(ValidationError, match="must be empty or start with"):
+        Settings(
+            _env_file=None,
+            OPENAI_BASE_URL="proxy.example/v1",
+            ALLOW_CUSTOM_OPENAI_BASE_URL=True,
+        )
 
 
 def test_alert_request_rejects_unbounded_or_unexpected_input():

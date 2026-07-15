@@ -4716,7 +4716,7 @@ class CatalystRepository:
                 ).fetchone()
             snapshot = connection.execute(
                 """
-                SELECT revision,as_of,data_through,market_session,created_at
+                SELECT revision,as_of,data_through,market_session,created_at,raw_json
                 FROM focus_context_snapshots ORDER BY revision DESC LIMIT 1
                 """
             ).fetchone()
@@ -4776,6 +4776,23 @@ class CatalystRepository:
             and worker_status == "running"
         )
         details = _loads(worker["details_json"], {}) if worker else {}
+        snapshot_payload = _loads(snapshot["raw_json"], {}) if snapshot else {}
+        snapshot_warnings = set(snapshot_payload.get("warnings") or ())
+        snapshot_symbols = snapshot_payload.get("symbols") or ()
+        closed_session_retained_stale = bool(
+            snapshot is not None
+            and snapshot["market_session"] == "closed"
+            and "focus_closed_session_snapshot_retained" in snapshot_warnings
+            and "focus_snapshot_stale" in snapshot_warnings
+            and snapshot_symbols
+            and all(
+                symbol.get("data_status") == "stale"
+                and symbol.get("source_status") == "stale"
+                for symbol in snapshot_symbols
+                if isinstance(symbol, dict)
+            )
+            and all(isinstance(symbol, dict) for symbol in snapshot_symbols)
+        )
         refresh_started_at = _as_utc(details.get("refresh_started_at"))
         startup_age = (
             max(0.0, (observed - refresh_started_at).total_seconds())
@@ -4806,6 +4823,9 @@ class CatalystRepository:
             warnings.append("focus_refresh_in_progress")
         if startup_in_progress:
             warnings.append("focus_startup_in_progress")
+        latest_snapshot = dict(snapshot) if snapshot is not None else None
+        if latest_snapshot is not None:
+            latest_snapshot.pop("raw_json", None)
         return {
             "healthy": healthy,
             "status": "degraded" if healthy and warnings else worker_status,
@@ -4820,10 +4840,12 @@ class CatalystRepository:
             "snapshot_refresh_seconds": refresh_seconds,
             "refresh_in_progress": refresh_in_progress,
             "startup_in_progress": startup_in_progress,
+            "closed_session_retained_stale": closed_session_retained_stale,
             "warnings": warnings,
             "details": details,
-            "latest_snapshot": dict(snapshot) if snapshot is not None else None,
+            "latest_snapshot": latest_snapshot,
             "daily_strength_cache": dict(daily) if daily is not None else None,
             "schema_version": schema["schema_version"],
             "schema_checksum": schema["schema_checksum"],
+            "schema_healthy": schema["quick_check"] == "ok",
         }

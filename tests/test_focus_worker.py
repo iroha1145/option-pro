@@ -1973,6 +1973,7 @@ def test_regressing_fallback_is_rejected_and_published_as_stale(tmp_path) -> Non
     assert all(item.data_status == "stale" for item in current.symbols)
     assert all(item.source_status == "stale" for item in current.symbols)
     assert "focus_snapshot_time_regression" in current.warnings
+    assert "focus_closed_session_snapshot_retained" not in current.warnings
 
     health = health_payload(settings, repository=repository, now=later)
     assert health["healthy"] is True
@@ -1983,6 +1984,329 @@ def test_regressing_fallback_is_rejected_and_published_as_stale(tmp_path) -> Non
         active.symbols
     )
     repository.release_worker_lock(LOCK_NAME, fallback.owner_id, token)
+
+
+def test_closed_session_regression_republishes_an_all_stale_snapshot(tmp_path) -> None:
+    path = tmp_path / "focus.db"
+    repository = CatalystRepository(path)
+    current_as_of = datetime(2026, 7, 12, 23, 0, tzinfo=timezone.utc)
+    current_data_through = datetime(
+        2026, 7, 10, 22, 45, tzinfo=timezone.utc
+    )
+    candidate_data_through = datetime(
+        2026, 7, 10, 20, 0, tzinfo=timezone.utc
+    )
+    later = current_as_of + timedelta(minutes=30)
+    clock_now = [later]
+    repository.initialize(now=current_as_of)
+    settings = _settings(path)
+    initial = build_focus_context(
+        settings=settings,
+        strength_rows=[
+            {
+                "ticker": ticker,
+                "avg_dollar_volume_20d": dollar_volume,
+                "universe_member": True,
+                "_dollar_volume_basis": "intraday_completed_bars",
+                "_data_through": current_data_through,
+                "_source_status": "active",
+                "_data_source": "test",
+            }
+            for ticker, dollar_volume in (
+                ("AAPL", 50_000_000),
+                ("MSFT", 40_000_000),
+            )
+        ],
+        canonical_symbols=["AAPL", "MSFT"],
+        as_of=current_as_of,
+        data_through=current_data_through,
+        market_session="closed",
+        universe_version="themes-test-v1",
+    )
+    initial = initial.model_copy(
+        update={
+            "symbols": [
+                symbol.model_copy(
+                    update={
+                        "data_status": "stale",
+                        "source_status": "stale",
+                        "session_change_pct": None,
+                        "rvol_time_of_day": None,
+                        "data_quality": None,
+                        "universe_reasons": [
+                            *symbol.universe_reasons,
+                            "stale_retained",
+                        ],
+                    }
+                )
+                for symbol in initial.symbols
+            ],
+            "warnings": ["focus_snapshot_stale"],
+        }
+    )
+    seeded = repository.publish_focus_context(initial, now=current_as_of)
+    assert all(symbol.data_status == "stale" for symbol in seeded.symbols)
+
+    async def unexpected_intraday(_tickers, _cutoff):
+        raise AssertionError("closed sessions must not request intraday data")
+
+    producer = FocusContextProducer(
+        settings=settings,
+        repository=repository,
+        clock=MarketClock(now=lambda: clock_now[0]),
+        strength_loader=lambda: asyncio.sleep(
+            0,
+            result=_strength_payload(
+                as_of=later,
+                daily_data_through=candidate_data_through,
+            ),
+        ),
+        discovery_loader=lambda _snapshot: asyncio.sleep(
+            0,
+            result={
+                "provider": "tradingview",
+                "status": "skipped",
+                "as_of": later,
+                "warnings": ["discovery_session_not_supported"],
+                "candidates": [],
+            },
+        ),
+        intraday_loader=unexpected_intraday,
+        breakout_loader=lambda: [],
+        owner_id=f"{FOCUS_PRODUCER_WORKER_PREFIX}closed-retention",
+    )
+    result = asyncio.run(producer.run_once())
+
+    current = repository.current_focus_context()
+    assert result["status"] == "degraded"
+    assert result["revision"] == 2
+    assert result["closed_session_snapshot_retained"] is True
+    assert "error_code" not in result
+    assert current is not None
+    assert current.revision == 2
+    assert current.as_of == later
+    assert current.data_through == current_data_through
+    assert current.symbols == seeded.symbols
+    assert all(symbol.data_status == "stale" for symbol in current.symbols)
+    assert all(symbol.source_status == "stale" for symbol in current.symbols)
+    assert "focus_closed_session_snapshot_retained" in current.warnings
+    assert "focus_snapshot_time_regression" not in current.warnings
+    with repository.open_read_connection() as connection:
+        retained_rows = connection.execute(
+            "SELECT revision,as_of,created_at FROM focus_context_snapshots "
+            "ORDER BY revision"
+        ).fetchall()
+    assert len(retained_rows) == 2
+    retained_as_of = retained_rows[-1]["as_of"]
+    retained_created_at = retained_rows[-1]["created_at"]
+
+    for _ in range(2):
+        clock_now[0] += timedelta(minutes=30)
+        repeated = asyncio.run(producer.run_once())
+        assert repeated["status"] == "degraded"
+        assert repeated["revision"] == 2
+        assert repeated["closed_session_snapshot_retained"] is True
+        assert repeated["closed_session_snapshot_reused"] is True
+
+    unchanged = repository.current_focus_context()
+    assert unchanged is not None
+    assert unchanged.revision == 2
+    assert unchanged.as_of == later
+    assert unchanged.data_through == current_data_through
+    with repository.open_read_connection() as connection:
+        retained_rows = connection.execute(
+            "SELECT revision,as_of,created_at FROM focus_context_snapshots "
+            "ORDER BY revision"
+        ).fetchall()
+    assert len(retained_rows) == 2
+    assert retained_rows[-1]["as_of"] == retained_as_of
+    assert retained_rows[-1]["created_at"] == retained_created_at
+
+
+def _retained_closed_context(
+    settings: FocusContextSettings,
+    *,
+    as_of: datetime,
+    data_through: datetime,
+):
+    draft = build_focus_context(
+        settings=settings,
+        strength_rows=[
+            {
+                "ticker": "AAPL",
+                "avg_dollar_volume_20d": 50_000_000,
+                "universe_member": True,
+                "_dollar_volume_basis": "intraday_completed_bars",
+                "_data_through": data_through,
+                "_source_status": "active",
+                "_data_source": "test",
+            }
+        ],
+        canonical_symbols=["AAPL"],
+        as_of=as_of,
+        data_through=data_through,
+        market_session="closed",
+        universe_version="themes-retained-v1",
+    )
+    return draft.model_copy(
+        update={
+            "symbols": [
+                symbol.model_copy(
+                    update={
+                        "data_status": "stale",
+                        "source_status": "stale",
+                        "session_change_pct": None,
+                        "rvol_time_of_day": None,
+                        "data_quality": None,
+                        "universe_reasons": [
+                            *symbol.universe_reasons,
+                            "stale_retained",
+                        ],
+                    }
+                )
+                for symbol in draft.symbols
+            ],
+            "warnings": [
+                "focus_closed_session_snapshot_retained",
+                "focus_snapshot_stale",
+            ],
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "observed",
+    [
+        datetime(2026, 7, 11, 18, 0, tzinfo=timezone.utc),
+        datetime(2026, 7, 3, 18, 0, tzinfo=timezone.utc),
+    ],
+    ids=["weekend", "independence-day-observed"],
+)
+def test_closed_heartbeat_does_not_renew_weekend_or_holiday_snapshot(
+    tmp_path,
+    observed,
+) -> None:
+    path = tmp_path / "focus.db"
+    settings = _settings(path)
+    repository = CatalystRepository(path)
+    snapshot_created_at = observed - timedelta(hours=2)
+    data_through = snapshot_created_at - timedelta(hours=1)
+    repository.initialize(now=snapshot_created_at)
+    repository.publish_focus_context(
+        _retained_closed_context(
+            settings,
+            as_of=snapshot_created_at,
+            data_through=data_through,
+        ),
+        now=snapshot_created_at,
+    )
+    with repository.open_read_connection() as connection:
+        before = connection.execute(
+            "SELECT revision,as_of,created_at FROM focus_context_snapshots"
+        ).fetchall()
+
+    owner = f"{FOCUS_PRODUCER_WORKER_PREFIX}closed-heartbeat"
+    token = repository.acquire_worker_lock(
+        LOCK_NAME,
+        owner,
+        lease_seconds=4000,
+        now=observed,
+    )
+    assert token is not None
+    repository.heartbeat(
+        owner,
+        "degraded",
+        {
+            "closed_session_snapshot_retained": True,
+            "closed_session_snapshot_reused": True,
+            "revision": 1,
+        },
+        now=observed,
+    )
+
+    health = health_payload(settings, repository=repository, now=observed)
+    assert health["healthy"] is True
+    assert health["status"] == "degraded"
+    assert health["current_market_session"] == "closed"
+    assert health["database"]["snapshot_fresh"] is False
+    assert health["database"]["closed_session_heartbeat_only"] is True
+    assert "focus_closed_session_heartbeat_only" in health["database"]["warnings"]
+    with repository.open_read_connection() as connection:
+        after = connection.execute(
+            "SELECT revision,as_of,created_at FROM focus_context_snapshots"
+        ).fetchall()
+    assert [tuple(row) for row in after] == [tuple(row) for row in before]
+    repository.release_worker_lock(LOCK_NAME, owner, token)
+
+
+def test_active_session_requires_advancing_data_after_closed_retention(tmp_path) -> None:
+    path = tmp_path / "focus.db"
+    settings = _settings(path)
+    repository = CatalystRepository(path)
+    closed_as_of = datetime(2026, 7, 12, 23, 30, tzinfo=timezone.utc)
+    current_data_through = datetime(
+        2026, 7, 10, 22, 45, tzinfo=timezone.utc
+    )
+    active_now = datetime(2026, 7, 13, 14, 30, tzinfo=timezone.utc)
+    repository.initialize(now=closed_as_of)
+    seeded = repository.publish_focus_context(
+        _retained_closed_context(
+            settings,
+            as_of=closed_as_of,
+            data_through=current_data_through,
+        ),
+        now=closed_as_of,
+    )
+
+    producer = FocusContextProducer(
+        settings=settings,
+        repository=repository,
+        clock=MarketClock(now=lambda: active_now),
+        strength_loader=lambda: asyncio.sleep(
+            0,
+            result=_strength_payload(
+                as_of=active_now,
+                daily_data_through=datetime(
+                    2026, 7, 10, 20, 0, tzinfo=timezone.utc
+                ),
+            ),
+        ),
+        discovery_loader=lambda _snapshot: asyncio.sleep(
+            0,
+            result={
+                "provider": "tradingview",
+                "status": "active",
+                "as_of": active_now,
+                "warnings": [],
+                "candidates": [],
+            },
+        ),
+        intraday_loader=lambda _tickers, _cutoff: asyncio.sleep(0, result={}),
+        breakout_loader=lambda: [],
+        owner_id=f"{FOCUS_PRODUCER_WORKER_PREFIX}active-after-retained",
+    )
+    token = repository.acquire_worker_lock(
+        LOCK_NAME,
+        producer.owner_id,
+        lease_seconds=settings.producer_lease_seconds,
+        now=active_now,
+    )
+    assert token is not None
+    result = asyncio.run(producer.run_once(fencing_token=token))
+
+    current = repository.current_focus_context()
+    assert result["status"] == "degraded"
+    assert result["error_code"] == "focus_recovery_requires_intraday"
+    assert result["stale_revision"] is None
+    assert current is not None
+    assert current.revision == seeded.revision
+    assert current.as_of == seeded.as_of
+    assert current.data_through == seeded.data_through
+    health = health_payload(settings, repository=repository, now=active_now)
+    assert health["healthy"] is False
+    assert health["current_market_session"] == "regular"
+    assert health["database"]["closed_session_heartbeat_only"] is False
+    repository.release_worker_lock(LOCK_NAME, producer.owner_id, token)
 
 
 def test_unavailable_daily_strength_result_is_not_cached(tmp_path) -> None:
