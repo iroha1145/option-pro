@@ -80,6 +80,20 @@ EVENT_KEYS = {
 }
 
 
+class _LocalPeerAddress:
+    def __init__(self, application) -> None:
+        self.application = application
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http":
+            scope["client"] = ("127.0.0.1", 50000)
+        await self.application(scope, receive, send)
+
+
+def _client() -> TestClient:
+    return TestClient(_LocalPeerAddress(app), base_url="http://localhost")
+
+
 def _settings(path, *, enabled: bool = True) -> BreakoutSettings:
     return BreakoutSettings(
         _env_file=None,
@@ -223,7 +237,7 @@ def test_disabled_api_does_not_create_database(tmp_path, monkeypatch) -> None:
         "get_breakout_settings",
         lambda: _settings(path, enabled=False),
     )
-    response = TestClient(app, base_url="http://localhost").get("/api/breakouts/current")
+    response = _client().get("/api/breakouts/current")
     assert response.status_code == 200
     assert response.json()["status"] == "disabled"
     assert response.json()["events"] == []
@@ -238,7 +252,7 @@ def test_current_without_completed_scan_keeps_database_source_active(
     BreakoutRepository(path).initialize()
     monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
 
-    payload = TestClient(app, base_url="http://localhost").get(
+    payload = _client().get(
         "/api/breakouts/current"
     ).json()
 
@@ -267,7 +281,7 @@ def test_current_reads_only_completed_scan_and_never_calls_provider(tmp_path, mo
         raise AssertionError("GET API must not call the discovery Provider")
 
     monkeypatch.setattr(TradingViewDiscoveryProvider, "scan", forbidden_scan)
-    response = TestClient(app, base_url="http://localhost").get("/api/breakouts/current")
+    response = _client().get("/api/breakouts/current")
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "stale"
@@ -296,7 +310,7 @@ def test_read_endpoints_are_active_with_fresh_worker_and_snapshot(tmp_path, monk
     monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
     monkeypatch.setattr(breakout_api, "_now", lambda: NOW + timedelta(seconds=60))
 
-    payloads = _read_statuses(TestClient(app, base_url="http://localhost"))
+    payloads = _read_statuses(_client())
 
     assert {payload["status"] for payload in payloads.values()} == {"active"}
     assert payloads["current"]["events"][0]["ticker"] == "AAPL"
@@ -315,7 +329,7 @@ def test_stale_worker_heartbeat_marks_reads_stale_without_hiding_snapshot(
     monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
     monkeypatch.setattr(breakout_api, "_now", lambda: NOW + timedelta(seconds=121))
 
-    payloads = _read_statuses(TestClient(app, base_url="http://localhost"))
+    payloads = _read_statuses(_client())
 
     assert {payload["status"] for payload in payloads.values()} == {"stale"}
     assert payloads["status"]["worker"]["health_reason"] == "worker_heartbeat_stale"
@@ -337,7 +351,7 @@ def test_overdue_completed_snapshot_marks_reads_stale_with_fresh_heartbeat(
     monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
     monkeypatch.setattr(breakout_api, "_now", lambda: observed_at)
 
-    payloads = _read_statuses(TestClient(app, base_url="http://localhost"))
+    payloads = _read_statuses(_client())
 
     assert {payload["status"] for payload in payloads.values()} == {"stale"}
     assert payloads["status"]["latest_completed_scan"]["freshness_status"] == "stale"
@@ -359,7 +373,7 @@ def test_fresh_snapshot_with_degraded_worker_marks_reads_degraded(
     monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
     monkeypatch.setattr(breakout_api, "_now", lambda: observed_at)
 
-    payloads = _read_statuses(TestClient(app, base_url="http://localhost"))
+    payloads = _read_statuses(_client())
 
     assert {payload["status"] for payload in payloads.values()} == {"degraded"}
     assert payloads["current"]["events"][0]["ticker"] == "NVDA"
@@ -386,7 +400,7 @@ def test_market_closed_api_is_paused_and_preserves_latest_completed_snapshot(
     )
     monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
     monkeypatch.setattr(breakout_api, "_now", lambda: NOW)
-    client = TestClient(app, base_url="http://localhost")
+    client = _client()
 
     empty_current = client.get("/api/breakouts/current").json()
     empty_events = client.get("/api/breakouts/events").json()
@@ -429,7 +443,7 @@ def test_ticker_history_distinguishes_healthy_empty_from_database_failure(
     path = tmp_path / "ticker-empty.db"
     BreakoutRepository(path).initialize()
     monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
-    client = TestClient(app, base_url="http://localhost")
+    client = _client()
 
     empty = client.get("/api/breakouts/tickers/AAPL").json()
     assert empty["status"] == "empty"
@@ -457,7 +471,7 @@ def test_event_cursor_remains_bound_to_original_completed_scan(tmp_path, monkeyp
         "get_breakout_settings",
         lambda: _settings(path),
     )
-    client = TestClient(app, base_url="http://localhost")
+    client = _client()
     first_page = client.get("/api/breakouts/events?limit=2").json()
     assert [item["ticker"] for item in first_page["events"]] == ["AAPL", "MSFT"]
     assert first_page["next_cursor"]
@@ -507,7 +521,7 @@ def test_event_cursor_uses_bound_snapshot_age_not_latest_scan_age(tmp_path, monk
     observed = {"at": NOW}
     monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
     monkeypatch.setattr(breakout_api, "_now", lambda: observed["at"])
-    client = TestClient(app, base_url="http://localhost")
+    client = _client()
     first = client.get("/api/breakouts/events?limit=1").json()
     assert first["status"] == "active"
 
@@ -553,7 +567,7 @@ def test_status_and_detail_degrade_without_hiding_contract(tmp_path, monkeypatch
         "get_breakout_settings",
         lambda: _settings(path),
     )
-    client = TestClient(app, base_url="http://localhost")
+    client = _client()
     status = client.get("/api/breakouts/status").json()
     assert status["status"] == "stale"
     assert status["database"]["status"] == "active"
@@ -614,7 +628,7 @@ def test_local_worker_degradation_is_not_reported_as_a_provider_failure(
 
     monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: settings)
     monkeypatch.setattr(breakout_api, "_now", lambda: NOW)
-    payload = TestClient(app, base_url="http://localhost").get(
+    payload = _client().get(
         "/api/breakouts/status"
     ).json()
     assert payload["status"] == "degraded"
@@ -633,7 +647,7 @@ def test_invalid_ticker_and_cursor_are_rejected(tmp_path, monkeypatch) -> None:
         "get_breakout_settings",
         lambda: _settings(path),
     )
-    client = TestClient(app, base_url="http://localhost")
+    client = _client()
     assert client.get("/api/breakouts/tickers/AAPL%3BDROP").status_code == 400
     assert client.get("/api/breakouts/events?cursor=not-a-cursor").status_code == 400
     assert client.get("/api/breakouts/events?date=2026-99-99").status_code == 422
