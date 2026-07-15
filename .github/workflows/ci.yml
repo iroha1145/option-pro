@@ -126,7 +126,7 @@ jobs:
         shell: bash
         run: |
           docker compose config -q
-          test "$(docker compose config --services | tr '\n' ' ')" = "backend worker "
+          test "$(docker compose config --services | sort | tr '\n' ' ')" = "backend worker "
           docker compose config --format json |
             python -c 'import json,sys; p=json.load(sys.stdin); s=p["services"]; assert set(s)=={"backend","worker"}; assert s["backend"]["image"]==s["worker"]["image"]; assert all(x.get("read_only") is True for x in s.values()); assert all(any(v.get("target")=="/data" for v in x.get("volumes",[])) for x in s.values()); assert set(p.get("volumes",{}))=={"optix-data"}'
 
