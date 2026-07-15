@@ -9,22 +9,25 @@ const SCENARIOS = [
   { name: "1440x900-dark-active", width: 1440, height: 900, theme: "dark", state: "active" },
   { name: "1280x800-light-active", width: 1280, height: 800, theme: "light", state: "active" },
   { name: "1024x768-dark-active", width: 1024, height: 768, theme: "dark", state: "active" },
-  { name: "390x844-light-stale-menu-closed", width: 390, height: 844, theme: "light", state: "stale", mobile: true },
+  { name: "390x844-light-stale-menu-closed", width: 390, height: 844, theme: "light", state: "stale", mobile: true, authenticated: true },
   { name: "1280x800-dark-empty", width: 1280, height: 800, theme: "dark", state: "empty" },
   { name: "1280x800-dark-degraded", width: 1280, height: 800, theme: "dark", state: "degraded" },
   { name: "1280x800-dark-focus-fallback", width: 1280, height: 800, theme: "dark", state: "focus_fallback" },
-  { name: "1280x800-dark-unavailable", width: 1280, height: 800, theme: "dark", state: "unavailable" },
-  { name: "1280x800-light-disabled", width: 1280, height: 800, theme: "light", state: "disabled" },
+  { name: "1280x800-dark-unavailable", width: 1280, height: 800, theme: "dark", state: "unavailable", authenticated: true },
+  { name: "1280x800-light-disabled", width: 1280, height: 800, theme: "light", state: "disabled", authenticated: true },
+  { name: "1280x800-light-anonymous-analysis", width: 1280, height: 800, theme: "light", state: "analysis_unrequested" },
   { name: "1280x800-dark-prepared", width: 1280, height: 800, theme: "dark", state: "prepared", authenticated: true },
   { name: "1280x800-dark-queued", width: 1280, height: 800, theme: "dark", state: "queued" },
   { name: "1280x800-dark-in-progress", width: 1280, height: 800, theme: "dark", state: "in_progress" },
   { name: "1280x800-dark-completed", width: 1280, height: 800, theme: "dark", state: "completed" },
   { name: "1280x800-dark-failed", width: 1280, height: 800, theme: "dark", state: "failed" },
   { name: "1280x800-dark-incomplete-output", width: 1280, height: 800, theme: "dark", state: "incomplete_output" },
-  { name: "1280x800-light-budget-blocked", width: 1280, height: 800, theme: "light", state: "budget_blocked" },
+  { name: "1280x800-light-budget-blocked", width: 1280, height: 800, theme: "light", state: "budget_blocked", authenticated: true },
 ];
 
 function newsItem(state) {
+  const unrequested = state === "analysis_unrequested";
+  const failed = state === "failed";
   return {
     news_id: "visual-news-1",
     source: "Reuters",
@@ -32,12 +35,12 @@ function newsItem(state) {
     summary: "这是一条用于发布验收的有界本地记录，用来检查长标题换行、状态标签和信息层级。",
     published_at: "2026-07-13T13:40:00Z",
     fetched_at: "2026-07-13T13:42:00Z",
-    analysis_status: state === "failed" ? "failed" : "completed",
+    analysis_status: failed ? "failed" : unrequested ? "not_requested" : "completed",
     analysis_trigger_enabled: false,
-    trusted_stock_impacts: state === "failed" ? [] : [
+    trusted_stock_impacts: failed || unrequested ? [] : [
       { ticker: "NVDA", impact_score: 42, confidence: 76, horizon: "days", mechanism: "direct_company", validation_status: "canonical", reason: "订单能见度改善，但估值与交付节奏仍是主要风险。" },
     ],
-    analysis: state === "failed" ? null : {
+    analysis: failed || unrequested ? null : {
       model: "gpt-5.6-terra",
       reasoning: "max",
       classification: "bullish",
@@ -159,6 +162,9 @@ function jsonFor(pathname, state) {
       summary: { news_6h: ["empty", "unavailable", "disabled"].includes(publicState) ? 0 : 11, analyzed_24h: 7, bullish: 3, bearish: 2, pending: 1, high_impact_calendar: 2 },
     };
   }
+  if (pathname.startsWith("/api/catalysts/news/")) {
+    return newsItem(state);
+  }
   if (pathname === "/api/catalysts/hotspots/status") {
     const noHotspots = ["empty", "unavailable", "disabled"].includes(publicState);
     const disabled = publicState === "disabled";
@@ -235,9 +241,16 @@ for (const scenario of SCENARIOS) {
       await expect(page.locator("#cat-focus-run")).toBeEnabled();
       await expect(page.locator("#cat-focus-run")).toContainText("重新分析");
     }
-    if (scenario.state === "active" && !scenario.authenticated) {
+    if (!scenario.authenticated) {
       await expect(page.locator("#cat-refresh")).toHaveCount(0);
-      await expect(page.locator("#cat-focus-run")).toBeDisabled();
+      await expect(page.locator("#cat-focus-run")).toHaveCount(0);
+      await expect(page.locator("[data-private-focus-note]")).toHaveText("管理会话未解锁");
+    }
+    if (scenario.state === "analysis_unrequested") {
+      await page.locator("[data-catalyst-news]").first().click();
+      await expect(page.locator("#cat-analysis-body")).toContainText("管理会话未解锁");
+      await expect(page.locator("#cat-analysis-body")).toContainText("当前标签页没有管理令牌");
+      await expect(page.locator("#cat-analysis-body [data-cat-analyze]")).toHaveCount(0);
     }
     if (scenario.state === "focus_fallback") {
       await expect(page.getByText("兜底源", { exact: true })).toBeVisible();

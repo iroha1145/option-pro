@@ -99,6 +99,21 @@
     const status = Jobs.normalizeStatus(job && job.status || analysisStatus(item));
     return status === "failed" || status === "cancelled";
   }
+  function analysisActionDecision(triggerEnabled, privateAccess) {
+    const authMissing = !privateAccess;
+    const actionMissing = !!privateAccess && !triggerEnabled;
+    return {
+      authMissing,
+      actionMissing,
+      canTrigger: !authMissing && !actionMissing,
+      title: authMissing ? "管理会话未解锁" : actionMissing ? "分析功能未启用" : "尚未生成模型分析",
+      detail: authMissing
+        ? "当前标签页没有管理令牌；原始新闻与已有分析仍可查看，付费分析操作不会显示。"
+        : actionMissing
+          ? "当前管理会话中，单篇新闻分析已关闭；原始新闻仍可阅读。"
+          : "原始新闻仍可阅读；未分析状态不会补成中性方向。",
+    };
+  }
   function classificationOf(item) {
     const analysis = analysisOf(item);
     return item && (item.classification || (analysis && analysis.classification)) || null;
@@ -269,6 +284,7 @@
   }
 
   function pageShell() {
+    const privateAccess = privateActionsAvailable();
     page.view.innerHTML = `
       <div class="cat-desk">
         <div class="view-head" data-reveal style="--reveal-i:0">
@@ -299,7 +315,9 @@
               <h2 id="cat-focus-title">市场与焦点股综合分析</h2>
               <p>事件组先通过确定性热点门控，再按需进入一次有界综合分析；结果不改变正式评分。</p>
             </div>
-            <button class="btn btn--amber" type="button" id="cat-focus-run" disabled>读取准备状态</button>
+            ${privateAccess
+              ? `<button class="btn btn--amber" type="button" id="cat-focus-run" disabled>读取准备状态</button>`
+              : `<span class="mono" data-private-focus-note>管理会话未解锁</span>`}
           </header>
           <div class="cat-focus-cycle__meta" id="cat-focus-meta" aria-live="polite"></div>
           <div class="cat-focus-cycle__body" id="cat-focus-body">${stateBlock("loading", "正在读取热点准备区", "普通页面刷新不会创建模型任务。")}</div>
@@ -329,7 +347,7 @@
             <div class="cat-filter-actions">
               <span class="mono" id="cat-filter-note">编辑中的条件不会被自动刷新覆盖</span>
               <button class="btn btn--ghost btn--sm" type="button" id="cat-clear">清除</button>
-              ${privateActionsAvailable()
+              ${privateAccess
                 ? `<button class="btn btn--sm" type="button" id="cat-refresh">请求后台同步</button>`
                 : `<span class="mono" data-private-action-note>后台同步需管理授权</span>`}
               <button class="btn btn--amber btn--sm" type="submit">应用筛选</button>
@@ -428,7 +446,8 @@
         if (page.active) { button.disabled = false; button.textContent = "请求后台同步"; }
       }
     });
-    $("#cat-focus-run", page.view).addEventListener("click", () => startMarketFocusCycle());
+    const focusButton = $("#cat-focus-run", page.view);
+    if (focusButton) focusButton.addEventListener("click", () => startMarketFocusCycle());
   }
 
   function renderHeader() {
@@ -484,6 +503,7 @@
     const preparedCount = finite(preparedCountValue) ? preparedCountValue : 0;
     const active = !!((cycle.cycle_id || raw.active_cycle_id) && Jobs.isActive(cycle.status));
     const capability = className(raw.capability || "disabled");
+    const authMissing = !privateAccess;
     const budgetMissing = capability === "budget_configuration_required";
     const actionMissing = raw.action_enabled === false || capability === "action_disabled" || capability === "disabled";
     const snapshotUnavailable = ["stale", "unavailable", "disabled"].includes(className(raw.status));
@@ -498,7 +518,7 @@
       && !unknownSubmission
       && ["failed", "cancelled", "incomplete_output"].includes(className(cycle.status))
     );
-    const commonAllowed = !!privateAccess && !active && !budgetMissing && !actionMissing && !snapshotUnavailable && !cooldown;
+    const commonAllowed = !authMissing && !active && !budgetMissing && !actionMissing && !snapshotUnavailable && !cooldown;
     const canRetry = commonAllowed && retryable;
     const canCreate = commonAllowed
       && !retryable
@@ -508,7 +528,8 @@
       && (!unknownSubmission || newPreparationAfterUnknown);
     const canRun = canRetry || canCreate;
     const buttonText = active ? "正在分析"
-      : budgetMissing ? "分析预算未配置"
+      : authMissing ? "需要管理令牌"
+        : budgetMissing ? "分析预算未配置"
         : actionMissing ? "分析功能未启用"
           : snapshotUnavailable ? "热点快照暂不可用"
             : unknownSubmission && !newPreparationAfterUnknown ? "提交结果待核对"
@@ -521,11 +542,11 @@
                       : "暂无新热点";
     return {
       preparedRevision, consumedRevision, cyclePreparedRevision, cycleHasPreparedRevision, preparedCount,
-      active, capability, budgetMissing, actionMissing, snapshotUnavailable,
+      active, capability, authMissing, budgetMissing, actionMissing, snapshotUnavailable,
       hasNew, cooldown, unknownSubmission, newPreparationAfterUnknown,
       retryable, canRetry, canCreate, canRun, buttonText,
       showHistoricalUnknown: unknownSubmission && (
-        newPreparationAfterUnknown || actionMissing || budgetMissing || snapshotUnavailable
+        newPreparationAfterUnknown || authMissing || actionMissing || budgetMissing || snapshotUnavailable
       ),
     };
   }
@@ -631,6 +652,7 @@
 
     let state = "";
     if (decision.active) state = stateBlock(cycle.status, statusLabel(cycle.status), "新热点仍会进入下一准备版本，不会混入当前不可变快照。 ");
+    else if (decision.authMissing) state = stateBlock("disabled", "管理会话未解锁", "当前标签页没有管理令牌；历史结果仍可查看，付费分析操作不会显示。 ");
     else if (decision.budgetMissing) state = stateBlock("disabled", "分析预算尚未配置", "每日任务和每日输出 Token 两项预算齐全后，自动周期才允许启用。 ");
     else if (decision.actionMissing) state = stateBlock("disabled", "分析功能未启用", "当前只显示历史结果和热点准备状态，不会创建新的模型任务。 ");
     else if (decision.snapshotUnavailable) state = stateBlock("unavailable", "热点快照暂不可用", "当前快照恢复后才能创建新的综合分析周期。 ");
@@ -1015,19 +1037,25 @@
     const displayItem = persistedAnalysis || !analysis ? item : Object.assign({}, item, { analysis });
     const status = statusPayload ? Jobs.normalizeStatus(statusPayload.status) : analysisStatus(item);
     const ruleOnly = isRuleOnlyAnalysis(displayItem, statusPayload);
-    const canTrigger = privateActionsAvailable() && (item.analysis_trigger_enabled != null
+    const triggerEnabled = item.analysis_trigger_enabled != null
       ? !!item.analysis_trigger_enabled
-      : !!((metaStatus(page.status) || {}).analysis_trigger_enabled));
+      : !!((metaStatus(page.status) || {}).analysis_trigger_enabled);
+    const access = analysisActionDecision(triggerEnabled, privateActionsAvailable());
+    const canTrigger = access.canTrigger;
     const isActive = ["pending", "queued", "in_progress", "cancel_requested"].includes(status) && statusPayload && statusPayload.job_id;
     const model = statusPayload && statusPayload.model || (analysis && analysis.model) || item.model || "gpt-5.6-terra";
     const reasoning = statusPayload && statusPayload.reasoning || (analysis && analysis.reasoning) || item.reasoning || "max";
     if (!analysis) {
       const elapsed = statusPayload && Jobs.elapsed(statusPayload);
+      const accessNotice = (isActive || status === "failed") && (access.authMissing || access.actionMissing)
+        ? stateBlock("disabled", access.title, access.detail)
+        : "";
       return `<div class="cat-analysis-state">
         <span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span>
-        <h3>${isActive ? status === "in_progress" ? "模型正在分析" : "分析任务已排队" : status === "failed" ? "分析任务失败" : "尚未生成模型分析"}</h3>
-        <p>${isActive ? `${statusPayload.submitted_at || statusPayload.created_at ? "提交 " + N.fmtDateTime(statusPayload.submitted_at || statusPayload.created_at) : ""}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · ${esc(model)} · ${esc(reasoning)}；不显示估算进度。` : "原始新闻仍可阅读；未分析状态不会补成中性方向。"}</p>
+        <h3>${isActive ? status === "in_progress" ? "模型正在分析" : "分析任务已排队" : status === "failed" ? "分析任务失败" : esc(access.title)}</h3>
+        <p>${isActive ? `${statusPayload.submitted_at || statusPayload.created_at ? "提交 " + N.fmtDateTime(statusPayload.submitted_at || statusPayload.created_at) : ""}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · ${esc(model)} · ${esc(reasoning)}；不显示估算进度。` : status === "failed" ? "原始新闻仍可阅读；失败状态不会补成中性方向。" : esc(access.detail)}</p>
         ${statusPayload && statusPayload.error_code ? `<p class="d">安全错误码：${esc(statusPayload.error_code)}${statusPayload.retry_after_seconds || statusPayload.retry_after ? ` · ${Math.ceil(statusPayload.retry_after_seconds || statusPayload.retry_after)} 秒后可重试` : ""}</p>` : ""}
+        ${accessNotice}
         <div class="cat-analysis-actions">
           ${canTrigger && !isActive ? `<button class="btn btn--amber btn--sm" id="cat-analysis-run" type="button" data-cat-analyze="${esc(itemId(item))}" ${status === "budget_blocked" ? "disabled" : ""}>${status === "failed" || status === "cancelled" ? "显式重试分析" : "请求分析"}</button>` : ""}
           ${canTrigger && isActive ? `<button class="btn btn--sm" id="cat-analysis-cancel" type="button" data-cat-cancel-job>取消任务</button>` : ""}
@@ -1037,12 +1065,15 @@
     const impacts = rawImpactsOf(displayItem);
     const validations = validationMapOf(displayItem);
     const retryableTerminal = !!(statusPayload && statusPayload.job_id && (status === "failed" || status === "cancelled"));
+    const accessNotice = access.authMissing || access.actionMissing
+      ? stateBlock("disabled", access.title, access.detail)
+      : "";
     const jobNotice = isActive
       ? `<div class="cat-analysis-state" style="margin-bottom:14px"><span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span><p>${statusPayload && (statusPayload.submitted_at || statusPayload.created_at) ? "提交 " + N.fmtDateTime(statusPayload.submitted_at || statusPayload.created_at) : "新的分析版本正在后台处理"} · ${esc(model)} · ${esc(reasoning)} · 现有已完成版本继续显示 · 不显示估算进度</p>${canTrigger ? `<div class="cat-analysis-actions"><button class="btn btn--sm" id="cat-analysis-cancel" type="button" data-cat-cancel-job>取消新任务</button></div>` : ""}</div>`
       : retryableTerminal
         ? `<div class="cat-analysis-state" style="margin-bottom:14px"><span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span><p>新版本任务未完成；现有已完成版本继续显示。</p>${statusPayload.error_code ? `<p class="d">安全错误码：${esc(statusPayload.error_code)}</p>` : ""}${canTrigger ? `<div class="cat-analysis-actions"><button class="btn btn--amber btn--sm" id="cat-analysis-run" type="button" data-cat-analyze="${esc(itemId(item))}">显式重试分析</button></div>` : ""}</div>`
         : "";
-    return `${jobNotice}<div class="cat-analysis-result">
+    return `${accessNotice}${jobNotice}<div class="cat-analysis-result">
       <div class="cat-news__signals">
         <span class="chip ${ruleOnly ? "chip--mute" : "chip--amber"}"><i></i>${esc(analysisOriginLabel(displayItem))}</span>
         ${!ruleOnly && classificationOf(displayItem) ? `<span class="chip ${chipTone(classificationOf(displayItem))}">新闻整体 · ${esc(classLabel(classificationOf(displayItem)))}</span>` : ""}
@@ -1298,6 +1329,6 @@
     labels: { statusLabel, classLabel },
     formatConfidence: pct,
     impactsOf, impactDirection, sentimentOf, isRuleOnlyAnalysis, analysisOriginLabel, analysisRetryForce, compactNews, plainText,
-    focusCycleDecision, focusCycleRequest, focusUnknownHistoryHtml,
+    analysisActionDecision, focusCycleDecision, focusCycleRequest, focusUnknownHistoryHtml,
   };
 })();
