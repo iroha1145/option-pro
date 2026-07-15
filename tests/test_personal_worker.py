@@ -238,13 +238,20 @@ def test_worker_once_records_five_tasks_and_isolates_failure(tmp_path: Path) -> 
 def test_each_task_has_independent_backoff(tmp_path: Path) -> None:
     async def scenario() -> tuple[int, int]:
         counts = {"healthy": 0, "failing": 0}
+        observed_independent_progress = asyncio.Event()
+
+        def record_progress() -> None:
+            if counts["healthy"] >= 4 and counts["failing"] >= 2:
+                observed_independent_progress.set()
 
         async def healthy() -> TaskResult:
             counts["healthy"] += 1
+            record_progress()
             return TaskResult(next_delay_seconds=0.01)
 
         async def failing() -> TaskResult:
             counts["failing"] += 1
+            record_progress()
             raise RuntimeError("offline failure")
 
         supervisor = WorkerSupervisor(
@@ -265,16 +272,18 @@ def test_each_task_has_independent_backoff(tmp_path: Path) -> None:
             process_lock=ProcessFileLock(tmp_path / "backoff.lock"),
         )
         running = asyncio.create_task(supervisor.run_forever())
-        await asyncio.sleep(0.14)
-        supervisor.request_stop()
-        await asyncio.wait_for(running, timeout=2)
+        try:
+            await asyncio.wait_for(observed_independent_progress.wait(), timeout=2)
+        finally:
+            supervisor.request_stop()
+            await asyncio.wait_for(running, timeout=2)
         return counts["healthy"], counts["failing"]
 
     healthy_count, failing_count = asyncio.run(scenario())
     # SQLite status writes share the runner with both loops, so absolute loop
     # counts vary with disk speed. The healthy task must still outpace the
     # independently backed-off task by a clear margin.
-    assert healthy_count >= 3
+    assert healthy_count >= 4
     assert healthy_count > failing_count
     assert 2 <= failing_count <= 3
 
