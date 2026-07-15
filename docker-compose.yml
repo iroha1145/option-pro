@@ -16,6 +16,10 @@ x-optix-runtime: &optix-runtime
   environment:
     DATA_DIR: /data
     MACROLENS_URL: "${MACROLENS_URL:-}"
+    HOST_BIND: "${HOST_BIND:-127.0.0.1}"
+    ALLOWED_HOSTS: "${ALLOWED_HOSTS:-localhost,127.0.0.1}"
+    TRUST_PROXY_HEADERS: "${TRUST_PROXY_HEADERS:-false}"
+    TRUSTED_PROXY_CIDRS: "${TRUSTED_PROXY_CIDRS:-}"
     APP_VERSION: "${APP_VERSION:-dev}"
     APP_COMMIT: "${APP_COMMIT:-unknown}"
   volumes:

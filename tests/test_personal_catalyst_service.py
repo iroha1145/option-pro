@@ -588,7 +588,6 @@ def test_api_read_mode_rejects_explicit_analysis_without_creating_a_job() -> Non
     app = FastAPI()
     app.include_router(catalyst_api.router)
     app.dependency_overrides[catalyst_api._service] = lambda: service
-    app.dependency_overrides[catalyst_api.require_expensive_action] = lambda: None
     client = TestClient(app)
 
     read = client.get("/api/catalysts/feed")

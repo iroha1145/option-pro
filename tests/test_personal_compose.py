@@ -13,9 +13,9 @@ def _compose() -> dict[str, object]:
     return yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
 
 
-def _environment_keys() -> list[str]:
+def _environment_keys(path: str = ".env.example") -> list[str]:
     keys: list[str] = []
-    for raw_line in (ROOT / ".env.example").read_text(encoding="utf-8").splitlines():
+    for raw_line in (ROOT / path).read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
@@ -39,7 +39,7 @@ def test_formal_compose_has_only_backend_worker_and_one_volume() -> None:
         assert service["restart"] == "unless-stopped"
         assert service["env_file"] == [
             {
-                "path": "${PERSONAL_SECRETS_FILE:-config/migrated/secrets.env}",
+                "path": "secrets.env",
                 "required": False,
             }
         ]
@@ -78,30 +78,36 @@ def test_backend_is_loopback_only_by_default() -> None:
     ]
 
 
-def test_environment_template_contains_only_secret_and_machine_edges() -> None:
-    keys = _environment_keys()
+def test_environment_templates_separate_secrets_from_machine_edges() -> None:
+    deployment_keys = _environment_keys()
+    secret_keys = _environment_keys("secrets.env.example")
 
-    assert len(keys) <= 20
-    assert len(keys) == len(set(keys))
-    assert {
+    assert deployment_keys == [
+        "HOST_BIND",
+        "PORT",
+        "MACROLENS_URL",
+        "ALLOWED_HOSTS",
+        "TRUST_PROXY_HEADERS",
+        "TRUSTED_PROXY_CIDRS",
+    ]
+    assert set(secret_keys) == {
         "OPENAI_API_KEY",
         "INTERNAL_API_TOKEN",
         "APP_PASSWORD_HASH",
         "FINNHUB_API_KEY",
         "DATA_DIR",
-        "HOST_BIND",
-        "PORT",
-        "MACROLENS_URL",
-    }.issubset(keys)
-    assert not any(key.startswith("DEPLOY_" + "REQUIRE") for key in keys)
-    assert not any(key.startswith("FOCUS_PRODUCER") for key in keys)
-    assert "OPENAI_MODEL" not in keys
-    assert "OPENAI_REASONING" not in keys
-    assert "MACROLENS_ALLOW_" + "LOCAL_HTTP" not in keys
-    assert "APP_AUTH_TOKEN" not in keys
-    assert "PUBLIC_READ_API_ENABLED" not in keys
-    assert "MACROLENS_INTERNAL_TOKEN" not in keys
-    assert "MACROLENS_BASE_URL" not in keys
+    }
+    all_keys = deployment_keys + secret_keys
+    assert len(all_keys) == len(set(all_keys))
+    assert not any(key.startswith("DEPLOY_" + "REQUIRE") for key in all_keys)
+    assert not any(key.startswith("FOCUS_PRODUCER") for key in all_keys)
+    assert "OPENAI_MODEL" not in all_keys
+    assert "OPENAI_REASONING" not in all_keys
+    assert "MACROLENS_ALLOW_" + "LOCAL_HTTP" not in all_keys
+    assert "APP_AUTH_TOKEN" not in all_keys
+    assert "PUBLIC_READ_API_ENABLED" not in all_keys
+    assert "MACROLENS_INTERNAL_TOKEN" not in all_keys
+    assert "MACROLENS_BASE_URL" not in all_keys
 
     config = tomllib.loads(
         (ROOT / "config" / "personal.toml").read_text(encoding="utf-8")
