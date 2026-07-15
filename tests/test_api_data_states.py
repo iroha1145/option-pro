@@ -869,6 +869,11 @@ def test_targeted_watchlist_downloads_only_requested_tickers(monkeypatch):
         )
 
     monkeypatch.setattr(stocks.yf, "download", fake_download)
+    monkeypatch.setattr(
+        stocks,
+        "_fetch_watchlist_provider_previous_closes",
+        lambda tickers, *, session: {"ES=F": 5_525.0},
+    )
 
     payload = asyncio.run(stocks._build_watchlist(["AAPL", "MSFT", "ES=F"]))
     returned = [
@@ -1115,3 +1120,290 @@ def test_watchlist_does_not_compare_foreign_exchange_or_premarket_dates(monkeypa
     assert payload["data_through"] == "2026-07-14T23:55:00+00:00"
     assert payload["latest_quote_at"] == "2026-07-15T09:30:00+00:00"
     assert payload["source_status"] == "active"
+
+
+def test_watchlist_uses_exchange_local_date_for_tokyo_quotes(monkeypatch):
+    columns = pd.MultiIndex.from_tuples([
+        ("7203.T", "Close"),
+        ("^N225", "Close"),
+    ])
+
+    def fake_download(*, interval, **_kwargs):
+        if interval == "5m":
+            return pd.DataFrame(
+                [[3_050.0, 42_250.0]],
+                index=pd.DatetimeIndex(["2026-07-15 00:05"], tz="UTC"),
+                columns=columns,
+            )
+        return pd.DataFrame(
+            [[3_000.0, 42_000.0], [3_040.0, 42_200.0]],
+            index=pd.to_datetime(["2026-07-14", "2026-07-15"]),
+            columns=columns,
+        )
+
+    monkeypatch.setattr(stocks.yf, "download", fake_download)
+    monkeypatch.setattr(
+        stocks,
+        "_fetch_watchlist_provider_previous_closes",
+        lambda tickers, *, session: {"^N225": 42_100.0},
+    )
+
+    payload = asyncio.run(stocks._build_watchlist(["7203.T", "^N225"]))
+    by_ticker = {
+        item["ticker"]: item
+        for group in payload["groups"]
+        for item in group["stocks"]
+    }
+
+    assert set(by_ticker) == {"7203.T", "^N225"}
+    assert by_ticker["7203.T"]["price"] == 3_050.0
+    assert by_ticker["7203.T"]["change"] == 50.0
+    assert by_ticker["7203.T"]["quote_as_of"] == "2026-07-15T00:05:00+00:00"
+    assert by_ticker["7203.T"]["quote_session"] == "exchange_session"
+    assert by_ticker["7203.T"]["previous_close_source"] == "daily_close"
+    assert by_ticker["^N225"]["change"] == 150.0
+    assert by_ticker["^N225"]["previous_close_source"] == "provider_metadata"
+    assert payload["succeeded"] == 2
+    assert payload["source_status"] == "active"
+
+
+def test_watchlist_treats_sunday_futures_quote_as_monday_daily_session(monkeypatch):
+    def fake_download(*, interval, **_kwargs):
+        if interval == "5m":
+            return pd.DataFrame(
+                {"Close": [5_550.0]},
+                index=pd.DatetimeIndex(
+                    ["2026-07-12 18:00"],
+                    tz="America/Chicago",
+                ),
+            )
+        return pd.DataFrame(
+            {"Close": [5_500.0, 5_540.0]},
+            index=pd.to_datetime(["2026-07-10", "2026-07-13"]),
+        )
+
+    monkeypatch.setattr(stocks.yf, "download", fake_download)
+    monkeypatch.setattr(
+        stocks,
+        "_fetch_watchlist_provider_previous_closes",
+        lambda tickers, *, session: {"ES=F": 5_525.0},
+    )
+
+    payload = asyncio.run(stocks._build_watchlist(["ES=F"]))
+    item = payload["groups"][0]["stocks"][0]
+
+    assert item["price"] == 5_550.0
+    assert item["change"] == 25.0
+    assert item["spark"] == [5_500.0, 5_550.0]
+    assert item["quote_session"] == "exchange_session"
+    assert item["previous_close_source"] == "provider_metadata"
+    assert payload["source_status"] == "active"
+
+
+def test_watchlist_rejects_previous_day_futures_close_before_new_session(monkeypatch):
+    columns = pd.MultiIndex.from_tuples([
+        ("AAPL", "Close"),
+        ("ES=F", "Close"),
+    ])
+
+    def fake_download(*, interval, **_kwargs):
+        if interval == "5m":
+            return pd.DataFrame(
+                [
+                    [float("nan"), 5_530.0],
+                    [193.0, float("nan")],
+                ],
+                index=pd.DatetimeIndex(
+                    ["2026-07-14 21:00", "2026-07-15 19:55"],
+                    tz="UTC",
+                ),
+                columns=columns,
+            )
+        return pd.DataFrame(
+            [[190.0, 5_500.0], [192.0, 5_525.0]],
+            index=pd.to_datetime(["2026-07-14", "2026-07-15"]),
+            columns=columns,
+        )
+
+    monkeypatch.setattr(stocks.yf, "download", fake_download)
+    monkeypatch.setattr(
+        stocks,
+        "_fetch_watchlist_provider_previous_closes",
+        lambda tickers, *, session: {"ES=F": 5_525.0},
+    )
+
+    payload = asyncio.run(stocks._build_watchlist(["AAPL", "ES=F"]))
+    returned = [
+        item["ticker"]
+        for group in payload["groups"]
+        for item in group["stocks"]
+    ]
+
+    assert returned == ["AAPL"]
+    assert payload["source_status"] == "degraded"
+    assert payload["failed_tickers"] == ["ES=F"]
+
+
+def test_watchlist_provider_previous_close_metadata_priority_and_validation(monkeypatch):
+    metadata_by_ticker = {
+        "^PRIMARY": {"previousClose": 101.5, "chartPreviousClose": 99.0},
+        "^FALLBACK": {"previousClose": "bad", "chartPreviousClose": 88.25},
+        "^INVALID": {"previousClose": float("nan"), "chartPreviousClose": 0},
+    }
+
+    class FakeInstrument:
+        def __init__(self, ticker):
+            self.ticker = ticker
+            self.history_metadata = {}
+
+        def history(self, **_kwargs):
+            if self.ticker == "^ERROR":
+                raise RuntimeError("provider error")
+            self.history_metadata = metadata_by_ticker[self.ticker]
+
+    monkeypatch.setattr(
+        stocks.yf,
+        "Ticker",
+        lambda ticker, session=None: FakeInstrument(ticker),
+    )
+
+    assert stocks._fetch_watchlist_provider_previous_close(
+        "^PRIMARY",
+        session=object(),
+    ) == 101.5
+    assert stocks._fetch_watchlist_provider_previous_close(
+        "^FALLBACK",
+        session=object(),
+    ) == 88.25
+    assert stocks._fetch_watchlist_provider_previous_close(
+        "^INVALID",
+        session=object(),
+    ) is None
+    assert stocks._fetch_watchlist_provider_previous_close(
+        "^ERROR",
+        session=object(),
+    ) is None
+
+
+def test_watchlist_provider_previous_close_batch_has_total_deadline(monkeypatch):
+    symbols = [f"^DEADLINE{i}" for i in range(8)]
+    gate = stocks.threading.Event()
+
+    def blocked_fetch(ticker, *, session):
+        gate.wait(timeout=1)
+        return 100.0
+
+    with stocks._watchlist_provider_close_lock:
+        for ticker in symbols:
+            stocks._watchlist_provider_close_cache.pop(ticker, None)
+            stocks._watchlist_provider_close_inflight.pop(ticker, None)
+
+    monkeypatch.setattr(
+        stocks,
+        "_fetch_watchlist_provider_previous_close",
+        blocked_fetch,
+    )
+    monkeypatch.setattr(
+        stocks,
+        "_WATCHLIST_PROVIDER_CLOSE_BATCH_TIMEOUT_SECONDS",
+        0.05,
+    )
+
+    started = time.monotonic()
+    result = stocks._fetch_watchlist_provider_previous_closes(symbols, session=object())
+    elapsed = time.monotonic() - started
+
+    with stocks._watchlist_provider_close_lock:
+        futures = list(stocks._watchlist_provider_close_inflight.values())
+    gate.set()
+    for future in futures:
+        future.result(timeout=1)
+
+    assert result == {}
+    assert elapsed < 0.5
+    assert len(futures) <= stocks._WATCHLIST_PROVIDER_CLOSE_WORKERS
+
+
+def test_watchlist_provider_previous_close_frees_slots_before_delayed_callback(monkeypatch):
+    symbols = [f"^CALLBACK{i}" for i in range(5)]
+    release_fetches = stocks.threading.Event()
+    original_cache_result = stocks._cache_watchlist_provider_previous_close
+
+    def fetch_after_release(ticker, *, session):
+        release_fetches.wait(timeout=1)
+        return 100.0
+
+    def delay_worker_callback(ticker, future):
+        if stocks.threading.current_thread().name.startswith(
+            "watchlist-previous-close"
+        ):
+            time.sleep(0.1)
+        original_cache_result(ticker, future)
+
+    with stocks._watchlist_provider_close_lock:
+        for ticker in symbols:
+            stocks._watchlist_provider_close_cache.pop(ticker, None)
+            stocks._watchlist_provider_close_inflight.pop(ticker, None)
+
+    monkeypatch.setattr(
+        stocks,
+        "_fetch_watchlist_provider_previous_close",
+        fetch_after_release,
+    )
+    monkeypatch.setattr(
+        stocks,
+        "_cache_watchlist_provider_previous_close",
+        delay_worker_callback,
+    )
+    timer = stocks.threading.Timer(0.05, release_fetches.set)
+    timer.start()
+    try:
+        result = stocks._fetch_watchlist_provider_previous_closes(
+            symbols,
+            session=object(),
+        )
+    finally:
+        release_fetches.set()
+        timer.join(timeout=1)
+
+    assert result == {ticker: 100.0 for ticker in symbols}
+
+
+def test_watchlist_omits_index_when_provider_previous_close_is_unavailable(monkeypatch):
+    columns = pd.MultiIndex.from_tuples([
+        ("AAPL", "Close"),
+        ("^N225", "Close"),
+    ])
+
+    def fake_download(*, interval, **_kwargs):
+        if interval == "5m":
+            return pd.DataFrame(
+                [[193.0, 42_250.0]],
+                index=pd.DatetimeIndex(["2026-07-15 20:05"], tz="UTC"),
+                columns=columns,
+            )
+        return pd.DataFrame(
+            [[190.0, 42_000.0], [192.0, 42_200.0]],
+            index=pd.to_datetime(["2026-07-14", "2026-07-15"]),
+            columns=columns,
+        )
+
+    monkeypatch.setattr(stocks.yf, "download", fake_download)
+    monkeypatch.setattr(
+        stocks,
+        "_fetch_watchlist_provider_previous_closes",
+        lambda tickers, *, session: {},
+    )
+
+    payload = asyncio.run(stocks._build_watchlist(["AAPL", "^N225"]))
+    returned = [
+        item["ticker"]
+        for group in payload["groups"]
+        for item in group["stocks"]
+    ]
+
+    assert returned == ["AAPL"]
+    assert payload["attempted"] == 2
+    assert payload["succeeded"] == 1
+    assert payload["source_status"] == "degraded"
+    assert payload["failed_tickers"] == ["^N225"]
