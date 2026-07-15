@@ -183,6 +183,16 @@ class WorkerSupervisor:
             last_started_at=started,
             details={},
         )
+        token = self._token
+        if token is None:
+            raise WorkerLeaseLost("unified worker lease is unavailable")
+        manual_actions = await asyncio.to_thread(
+            self.repository.claim_actions,
+            self.owner_id,
+            token,
+            task.name,
+        )
+        manual_request_ids = [item["request_id"] for item in manual_actions]
         try:
             operation = _maybe_await(task.runner())
             if task.timeout_seconds is None:
@@ -200,6 +210,17 @@ class WorkerSupervisor:
             completed = utc_now()
             error_code = _public_error_code(error)
             details = {"error_type": type(error).__name__}
+            if manual_request_ids:
+                await asyncio.to_thread(
+                    self.repository.finish_actions,
+                    self.owner_id,
+                    token,
+                    manual_request_ids,
+                    succeeded=False,
+                    error_code=error_code,
+                    details={"task_status": "degraded"},
+                    now=completed,
+                )
             await self._record(
                 task,
                 status="degraded",
@@ -264,22 +285,51 @@ class WorkerSupervisor:
                 error_code="task_result_invalid",
                 next_delay_seconds=delay,
             )
+            degraded = True
         payload = {
             "status": result.status,
             "error_code": result.error_code,
             "next_delay_seconds": delay,
         }
+        if manual_request_ids:
+            await asyncio.to_thread(
+                self.repository.finish_actions,
+                self.owner_id,
+                token,
+                manual_request_ids,
+                succeeded=not degraded,
+                error_code=result.error_code or "task_degraded",
+                details={"task_status": result.status},
+                now=completed,
+            )
         self._results[task.name] = payload
         return payload
 
-    async def _wait_for_next(self, delay: float) -> bool:
+    async def _wait_for_next(self, task: TaskSpec, delay: float) -> bool:
+        """Wake scheduled loops promptly when the API queues a manual action."""
+
         if self.stop.is_set():
             return False
-        try:
-            await asyncio.wait_for(self.stop.wait(), timeout=max(0.0, delay))
-            return False
-        except asyncio.TimeoutError:
-            return not self.stop.is_set()
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + max(0.0, delay)
+        while not self.stop.is_set():
+            if await asyncio.to_thread(
+                self.repository.has_pending_actions,
+                task.name,
+            ):
+                return True
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                return True
+            try:
+                await asyncio.wait_for(
+                    self.stop.wait(),
+                    timeout=min(0.5, remaining),
+                )
+                return False
+            except asyncio.TimeoutError:
+                continue
+        return False
 
     async def _task_loop(self, task: TaskSpec) -> None:
         if not task.enabled:
@@ -293,7 +343,7 @@ class WorkerSupervisor:
         delay = 0.0
         try:
             while not self.stop.is_set():
-                if delay > 0 and not await self._wait_for_next(delay):
+                if delay > 0 and not await self._wait_for_next(task, delay):
                     return
                 if self.stop.is_set():
                     return

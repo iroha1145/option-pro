@@ -6,6 +6,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,115 @@ from app.worker.tasks import MaintenanceTask, build_default_tasks
 
 
 TASK_NAMES = {"breakout", "focus", "catalyst_sync", "ai_jobs", "maintenance"}
+NOW = datetime(2026, 7, 16, 0, 0, tzinfo=timezone.utc)
+
+
+def test_manual_actions_are_idempotent_fenced_and_cooled_down(tmp_path: Path) -> None:
+    repository = WorkerStateRepository(tmp_path / "actions.db")
+    repository.initialize(now=NOW)
+    token = repository.acquire("worker", lease_seconds=120, now=NOW)
+    assert token is not None
+
+    queued = repository.request_action(
+        "news_refresh",
+        "catalyst_sync",
+        "news-refresh:2026-07-16T00:00",
+        cooldown_seconds=30,
+        now=NOW,
+    )
+    duplicate = repository.request_action(
+        "news_refresh",
+        "catalyst_sync",
+        "news-refresh:second-click",
+        cooldown_seconds=30,
+        now=NOW + timedelta(seconds=1),
+    )
+    assert queued["status"] == "queued"
+    assert duplicate["request_id"] == queued["request_id"]
+    assert duplicate["reason"] == "already_running"
+
+    claimed = repository.claim_actions(
+        "worker",
+        token,
+        "catalyst_sync",
+        now=NOW + timedelta(seconds=2),
+    )
+    assert [item["request_id"] for item in claimed] == [queued["request_id"]]
+    assert claimed[0]["status"] == "running"
+    assert repository.finish_actions(
+        "worker",
+        token,
+        [queued["request_id"]],
+        succeeded=True,
+        details={"task_status": "idle"},
+        now=NOW + timedelta(seconds=3),
+    ) == 1
+
+    cooling = repository.request_action(
+        "news_refresh",
+        "catalyst_sync",
+        "news-refresh:during-cooldown",
+        cooldown_seconds=30,
+        now=NOW + timedelta(seconds=20),
+    )
+    assert cooling["request_id"] == queued["request_id"]
+    assert cooling["reason"] == "cooldown"
+    next_request = repository.request_action(
+        "news_refresh",
+        "catalyst_sync",
+        "news-refresh:after-cooldown",
+        cooldown_seconds=30,
+        now=NOW + timedelta(seconds=34),
+    )
+    assert next_request["request_id"] != queued["request_id"]
+    assert next_request["status"] == "queued"
+
+
+def test_manual_action_wakes_long_interval_worker_and_completes(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        first_run = asyncio.Event()
+        manual_run = asyncio.Event()
+        calls = 0
+
+        async def task_runner() -> TaskResult:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                first_run.set()
+            else:
+                manual_run.set()
+            return TaskResult(status="idle")
+
+        repository = WorkerStateRepository(tmp_path / "wake.db")
+        supervisor = WorkerSupervisor(
+            repository,
+            (TaskSpec("catalyst_sync", task_runner, 3600),),
+            owner_id="wake-worker",
+            lease_seconds=5,
+            process_lock=ProcessFileLock(tmp_path / "wake.lock"),
+        )
+        running = asyncio.create_task(supervisor.run_forever())
+        await asyncio.wait_for(first_run.wait(), timeout=2)
+        queued = repository.request_action(
+            "calendar_refresh",
+            "catalyst_sync",
+            "calendar-refresh:wake-test",
+            cooldown_seconds=30,
+        )
+        await asyncio.wait_for(manual_run.wait(), timeout=2)
+        for _ in range(50):
+            action = repository.action_requests(action_type="calendar_refresh")[0]
+            if action["status"] == "completed":
+                break
+            await asyncio.sleep(0.02)
+        else:
+            raise AssertionError("manual action did not reach a terminal state")
+        assert action["request_id"] == queued["request_id"]
+        assert action["details"] == {"task_status": "idle"}
+        supervisor.request_stop()
+        await asyncio.wait_for(running, timeout=2)
+
+    asyncio.run(scenario())
 
 
 def test_process_file_lock_excludes_two_descriptors_and_processes(tmp_path: Path) -> None:
