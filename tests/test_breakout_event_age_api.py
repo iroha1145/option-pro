@@ -13,7 +13,7 @@ def _settings(path) -> BreakoutSettings:
     return BreakoutSettings(
         _env_file=None,
         BREAKOUT_RADAR_ENABLED=True,
-        BREAKOUT_DB_PATH=path,
+        db_path=path,
     )
 
 

@@ -21,7 +21,7 @@ range_persistence_mode = "shadow"
 docker compose exec -T worker python -m app.worker --healthcheck
 ```
 
-健康结果中的`breakout`条目记录运行、暂停、禁用或降级状态。部署检查只读取该记录，不启动扫描。
+健康结果中的`breakout`条目记录定时扫描的运行、暂停、禁用或降级状态；`breakout_refresh`单独记录 Owner 手动扫描。统一健康清单共九项，部署检查只读取记录，不启动扫描。
 
 ## 调度
 
@@ -49,6 +49,10 @@ docker compose exec -T worker python -m app.worker --healthcheck
 
 ## 容器边界
 
-`backend`与`worker`使用同一镜像和`optix-data`数据卷，根文件系统只读，以非根用户运行。`worker`不暴露端口；密钥通过统一`.env`进入运行环境，日志不得输出密钥、请求头、新闻正文或原始模型响应。
+`backend`与`worker`使用同一镜像和`optix-data`数据卷，根文件系统只读，以非根用户运行。`worker`不暴露端口。`.env`只保存机器网络边界，密钥与统一`DATA_DIR`保存在`secrets.env`。突破数据库路径由`DATA_DIR`派生，不再单独配置。日志不得输出密钥、请求头、新闻正文或原始模型响应。
 
 真实数据源扫描不是部署健康检查。持续集成使用关闭突破任务的容器配置；算法路径通过本地夹具和模拟传输验证。
+
+## 手动扫描
+
+Owner 在页面发起的突破或强度刷新会写入持久化工作请求，由`worker`执行并记录结果。重复点击会受冷却、幂等与工作进程状态约束，不会把真实扫描偽装成部署健康检查。

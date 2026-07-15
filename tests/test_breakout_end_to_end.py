@@ -89,7 +89,7 @@ def test_offline_provider_to_worker_to_sqlite_to_api_chain(tmp_path, monkeypatch
     settings = BreakoutSettings(
         _env_file=None,
         BREAKOUT_RADAR_ENABLED=True,
-        BREAKOUT_DB_PATH=tmp_path / "breakouts.db",
+        db_path=tmp_path / "breakouts.db",
     )
     provider = TradingViewDiscoveryProvider(settings, client=client)
     worker = BreakoutWorker(

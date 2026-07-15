@@ -4,12 +4,14 @@ import asyncio
 import math
 import time
 from datetime import datetime
+from pathlib import Path
 from threading import Lock
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 import pytest
+import httpx
 from fastapi import HTTPException
 
 from app.api import market, strength as strength_api
@@ -502,6 +504,18 @@ def test_marketdata_option_heat_reweights_missing_iv_and_preserves_real_iv() -> 
     assert observed["missing_components"] == []
 
 
+def test_marketdata_error_status_never_returns_upstream_body() -> None:
+    sentinel = "upstream-secret-response-sentinel"
+    request = httpx.Request("GET", "https://example.invalid/options")
+    response = httpx.Response(500, text=sentinel, request=request)
+    error = httpx.HTTPStatusError("provider failure", request=request, response=response)
+
+    message = marketdata._request_error_message(error)
+
+    assert message == "HTTP 500"
+    assert sentinel not in message
+
+
 def test_expiry_clock_uses_new_york_1600_and_fractional_dte() -> None:
     ny = ZoneInfo("America/New_York")
     now = datetime(2026, 7, 10, 10, 0, tzinfo=ny)
@@ -745,26 +759,37 @@ def test_range_shadow_failure_does_not_remove_legacy_strength_candidate(
     assert payload["skipped"]["range_persistence_error"] == 1
 
 
-def test_strength_api_masks_upstream_errors_as_503(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_strength_api_returns_typed_unavailable_without_running_provider_scan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     async def fail(**_kwargs):
-        raise RuntimeError("secret provider detail")
+        raise AssertionError("the read endpoint must not run a provider scan")
 
-    monkeypatch.setattr(strength_api, "scan_strength", fail)
+    monkeypatch.setattr(scanner, "scan_strength", fail)
+    monkeypatch.setattr(
+        strength_api,
+        "_STRENGTH_SNAPSHOT_PATH",
+        tmp_path / "missing-strength-snapshot.json",
+    )
     with pytest.raises(HTTPException) as captured:
         asyncio.run(
             strength_api.scan(
                 universe="themes",
                 timeframe="all",
                 profile="balanced",
-                top=30,
+                top=20,
                 sector_id=None,
                 min_price=5.0,
                 min_avg_dollar_volume=10_000_000,
             )
         )
     assert captured.value.status_code == 503
-    assert captured.value.detail == "Strength data is currently unavailable"
-    assert "secret" not in captured.value.detail
+    assert captured.value.detail == {
+        "code": "strength_snapshot_unavailable",
+        "status": "unavailable",
+        "message": "强势雷达后台快照暂不可用",
+    }
 
 
 def test_us_calendar_skips_observed_holiday_for_next_open() -> None:

@@ -93,7 +93,6 @@ class FakeIntelligence:
             "status": "ok",
             "as_of": (now or NOW).isoformat().replace("+00:00", "Z"),
             "analysis_trigger_enabled": True,
-            "action_enabled": True,
         }
 
     def feed(self, **kwargs):
@@ -129,8 +128,6 @@ class FakeIntelligence:
             "status": "ok",
             "prepared_revision": 3,
             "manual_enabled": True,
-            "action_enabled": True,
-            "capability": "enabled",
         }
 
     def hotspots(self, *, limit, now=None):
@@ -149,11 +146,10 @@ class FakeIntelligence:
         return {"status": "ok", "cycle": None}
 
     def request_market_focus_cycle(
-        self, *, expected_prepared_revision, retry_cycle_id=None
+        self, *, expected_prepared_revision, retry_cycle_id=None, force=False
     ):
-        self.actions.append(
-            ("focus", expected_prepared_revision, retry_cycle_id)
-        )
+        action = ("focus", expected_prepared_revision, retry_cycle_id)
+        self.actions.append((*action, True) if force else action)
         return {"cycle_id": "mfc_" + "a" * 32, "status": "pending"}
 
     def market_focus_cycle(self, cycle_id):
@@ -387,7 +383,7 @@ def test_historical_news_never_exposes_future_job_state_or_result(
     assert "analysis_error_code" not in detail["item"]
 
 
-def test_read_mode_gets_do_not_create_jobs_and_all_actions_are_disabled() -> None:
+def test_read_mode_keeps_refresh_and_cancel_available_but_blocks_new_analysis() -> None:
     engine = FakeIntelligence()
     service = _service("read", engine=engine)
 
@@ -398,21 +394,97 @@ def test_read_mode_gets_do_not_create_jobs_and_all_actions_are_disabled() -> Non
     service.latest_market_focus_cycle(now=NOW)
     assert engine.actions == []
 
-    actions = (
-        lambda: service.request_refresh(),
+    service.request_refresh()
+    service.cancel_market_focus_cycle("mfc_" + "a" * 32)
+    assert service.cancel_analysis_job("aij_" + "b" * 32) is None
+
+    create_actions = (
         lambda: service.request_analysis(101, force=False),
         lambda: service.request_market_focus_cycle(expected_prepared_revision=3),
-        lambda: service.cancel_market_focus_cycle("mfc_" + "a" * 32),
-        lambda: service.cancel_analysis_job("aij_" + "b" * 32),
     )
-    for action in actions:
-        with pytest.raises(CatalystError, match="capability_disabled"):
+    for action in create_actions:
+        with pytest.raises(CatalystError, match="read_only_mode"):
             action()
-    assert engine.actions == []
+    assert engine.actions == [
+        ("refresh",),
+        ("cancel_focus", "mfc_" + "a" * 32),
+    ]
+
+
+def test_refresh_uses_personal_cooldown_when_runtime_settings_are_unavailable() -> None:
+    engine = FakeIntelligence()
+    engine.manual_refresh_cooldown_seconds = 999
+    service = _service("read", engine=engine)
+    service._effective_runtime = lambda: None
+
+    result = service.request_refresh()
+
+    assert result["status"] == "queued"
+    assert engine.manual_refresh_cooldown_seconds == 30
+    assert engine.actions == [("refresh",)]
+
+
+def test_removed_legacy_false_switches_do_not_gate_owner_actions() -> None:
+    engine = FakeIntelligence()
+    engine.manual_refresh_cooldown_seconds = 999
+    service = _service("manual", engine=engine)
+    runtime = service._effective_runtime()
+    assert runtime is not None
+    service._effective_runtime = lambda: SimpleNamespace(
+        ai=runtime.ai,
+        catalyst=SimpleNamespace(
+            manual_force_reanalysis=False,
+            manual_refresh_enabled=False,
+            manual_refresh_cooldown_seconds=17,
+        ),
+    )
+
+    service.request_refresh()
+    service.request_market_focus_cycle(
+        expected_prepared_revision=3,
+        force=True,
+    )
+
+    assert engine.manual_refresh_cooldown_seconds == 17
+    assert engine.actions == [
+        ("refresh",),
+        ("focus", 3, None, True),
+    ]
+
+
+def test_off_mode_is_the_only_feature_mode_that_rejects_refresh() -> None:
+    service = _service("off")
+
+    with pytest.raises(CatalystError) as captured:
+        service.request_refresh()
+
+    assert captured.value.code == "catalyst_disabled"
+
+
+def test_manual_analysis_switch_reports_a_runtime_reason_not_a_permission() -> None:
+    service = _service("manual")
+    runtime = service._effective_runtime()
+    assert runtime is not None
+    disabled = runtime.model_copy(
+        update={
+            "ai": runtime.ai.model_copy(
+                update={"manual_analysis_enabled": False}
+            )
+        }
+    )
+    service._effective_runtime = lambda: disabled
+
+    availability = service.analysis_availability(now=NOW)
+
+    assert availability["enabled"] is False
+    assert availability["reason"] == "manual_analysis_disabled"
+    with pytest.raises(CatalystError) as captured:
+        service.request_analysis(101, force=False)
+    assert captured.value.code == "manual_analysis_disabled"
 
 
 @pytest.mark.parametrize("mode", ["manual", "scheduled"])
-def test_action_modes_only_delegate_explicit_calls(mode: str) -> None:
+def test_interactive_modes_only_delegate_explicit_calls(mode: str) -> None:
     engine = FakeIntelligence()
     service = _service(mode, engine=engine)
 
@@ -476,6 +548,33 @@ def test_analysis_job_endpoint_is_limited_to_news_jobs() -> None:
     assert service.analysis_job(news_id) is None
 
 
+def test_read_mode_can_cancel_a_news_job_created_before_the_mode_changed() -> None:
+    job_id = "aij_" + "c" * 32
+    schema_version, schema_hash = ai_runtime.schema_identity("news_impact")
+    repository = FakeAIRepository(
+        {
+            job_id: {
+                "job_id": job_id,
+                "job_type": "news_impact",
+                "status": "pending",
+                "model": "gpt-5.6-terra",
+                "reasoning": "max",
+                "execution_mode": "background",
+                "prompt_version": "news-impact-zh-cn-v2",
+                "schema_version": schema_version,
+                "schema_sha256": schema_hash,
+                "result": None,
+            }
+        }
+    )
+    service = _service("read", repository=repository)
+
+    cancelled = service.cancel_analysis_job(job_id)
+
+    assert cancelled is not None
+    assert cancelled["status"] == "cancelled"
+
+
 def test_focus_result_must_match_cycle_time_and_input_hash() -> None:
     expected_hash = "a" * 64
     cycle = {
@@ -509,9 +608,9 @@ def test_api_factory_always_uses_personal_service(monkeypatch) -> None:
     personal = object()
     monkeypatch.setattr(catalyst_api, "PersonalCatalystService", lambda value: personal)
 
-    monkeypatch.delenv("MACROLENS_INTERNAL_TOKEN", raising=False)
+    monkeypatch.delenv("INTERNAL_API_TOKEN", raising=False)
     assert catalyst_api._service(settings) is personal
-    monkeypatch.setenv("MACROLENS_INTERNAL_TOKEN", "configured-token")
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "configured-token")
     assert catalyst_api._service(settings) is personal
     settings.catalyst_mode = "disabled"
     assert catalyst_api._service(settings) is personal
@@ -525,7 +624,7 @@ def test_local_api_settings_keep_fixed_model_and_drop_remote_hmac_credentials(
     monkeypatch.setenv("OPENAI_REASONING", "high")
     settings = CatalystSettings(
         _env_file=None,
-        MACROLENS_CACHE_DB_PATH=tmp_path / "missing.db",
+        cache_db_path=tmp_path / "missing.db",
         MACROLENS_READ_KEY_ID="ignored-old-key",
         MACROLENS_READ_SECRET="ignored-old-secret",
     )
@@ -542,7 +641,7 @@ def test_local_api_settings_keep_fixed_model_and_drop_remote_hmac_credentials(
 def test_unified_worker_degrades_safely_when_owner_token_is_missing(
     monkeypatch,
 ) -> None:
-    monkeypatch.delenv("MACROLENS_INTERNAL_TOKEN", raising=False)
+    monkeypatch.delenv("INTERNAL_API_TOKEN", raising=False)
     personal = PersonalConfig(features=FeatureConfig(catalyst_mode="read"))
 
     sync_result = asyncio.run(
@@ -572,7 +671,7 @@ def test_unconfigured_default_read_view_is_safe_and_does_not_create_cache(
     cache_path = tmp_path / "missing.db"
     settings = CatalystSettings(
         _env_file=None,
-        MACROLENS_CACHE_DB_PATH=cache_path,
+        cache_db_path=cache_path,
     )
 
     service = catalyst_api._service(settings)
@@ -595,8 +694,8 @@ def test_api_read_mode_rejects_explicit_analysis_without_creating_a_job() -> Non
 
     assert read.status_code == 200
     assert read.json()["items"][0]["title_zh"] == "芯片企业发布最新业绩"
-    assert create.status_code == 503
-    assert create.json()["detail"]["code"] == "capability_disabled"
+    assert create.status_code == 409
+    assert create.json()["detail"]["code"] == "read_only_mode"
     assert engine.actions == []
 
 

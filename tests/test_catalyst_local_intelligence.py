@@ -292,8 +292,51 @@ def test_read_mode_never_creates_paid_jobs_and_never_exposes_raw_english(tmp_pat
     assert "Secret raw English summary" not in public_json
     assert feed["items"][0]["title"] == TITLE_WAITING
     assert feed["items"][0]["summary"] == SUMMARY_WAITING
-    with pytest.raises(CatalystError):
+    hotspot_status = intelligence.hotspot_status(now=now)
+    assert hotspot_status["manual_enabled"] is False
+    assert "action_enabled" not in hotspot_status
+    assert "capability" not in hotspot_status
+    with pytest.raises(CatalystError) as captured:
         intelligence.request_analysis(10, force=False)
+    assert captured.value.code == "read_only_mode"
+
+
+def test_jobs_can_be_cancelled_after_switching_to_read_mode(tmp_path):
+    etl, ai, intelligence = _stack(tmp_path, mode="manual")
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [_news_change(1, 12, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    prepared_revision = intelligence.reconcile()["prepared_revision"]
+    news_job = intelligence.request_analysis(12, force=False)
+    focus_cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared_revision
+    )
+
+    intelligence.mode = "read"
+    cancelled_news = intelligence.cancel_analysis_job(news_job["job_id"])
+    cancelled_focus = intelligence.cancel_market_focus_cycle(
+        focus_cycle["cycle_id"]
+    )
+
+    assert cancelled_news is not None
+    assert cancelled_news["status"] == "cancelled"
+    assert cancelled_focus is not None
+    assert cancelled_focus["status"] == "cancelled"
+    with sqlite3.connect(ai.path) as connection:
+        statuses = dict(
+            connection.execute("SELECT job_type,status FROM ai_jobs").fetchall()
+        )
+        sources = {
+            row[0]
+            for row in connection.execute(
+                "SELECT submission_source FROM ai_job_sources"
+            ).fetchall()
+        }
+    assert statuses == {"market_focus": "cancelled", "news_impact": "cancelled"}
+    assert sources == {"manual"}
 
 
 def test_manual_job_payload_contains_only_locally_validated_allowed_tickers(tmp_path):
@@ -769,6 +812,10 @@ def test_scheduled_mode_uses_eastern_slots_once_and_queues_focus(tmp_path, monke
                 "SELECT job_type,COUNT(*) FROM ai_jobs GROUP BY job_type"
             ).fetchall()
         ) == {"market_focus": 1, "news_impact": 1}
+        assert connection.execute(
+            """SELECT COUNT(*) FROM ai_job_sources
+               WHERE submission_source='scheduled'"""
+        ).fetchone()[0] == 2
 
     outside = datetime(2026, 7, 15, 15, 30, tzinfo=timezone.utc)  # 11:30 ET
     assert LocalCatalystIntelligence._scheduled_slot(

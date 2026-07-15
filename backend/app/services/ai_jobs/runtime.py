@@ -18,6 +18,29 @@ OFFICIAL_OPENAI_BASE_URL = "https://api.openai.com/v1"
 OFFICIAL_OPENAI_MODEL = "gpt-5.6-terra"
 OFFICIAL_REASONING_EFFORT = "max"
 OFFICIAL_EXECUTION_MODE = "background"
+OFFICIAL_CONTEXT_WINDOW_TOKENS = 1_050_000
+OFFICIAL_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000
+_MAX_UNTRUSTED_JSON_BYTES = 60_000
+_INPUT_ACCOUNTING_OVERHEAD_TOKENS = 4_096
+_INPUT_BOUND_ROUNDING_TOKENS = 4_096
+_TOKEN_PRICE_DENOMINATOR = 1_000_000
+# Verified 2026-07-16 against the official model and pricing pages. Recheck
+# these constants whenever OpenAI changes the model alias or published rates:
+# https://developers.openai.com/api/docs/models/gpt-5.6-terra
+# https://developers.openai.com/api/docs/pricing
+_SHORT_UNCACHED_INPUT_MICROUSD_PER_MILLION = 2_500_000
+_SHORT_CACHED_INPUT_MICROUSD_PER_MILLION = 250_000
+_SHORT_CACHE_WRITE_MICROUSD_PER_MILLION = (
+    _SHORT_UNCACHED_INPUT_MICROUSD_PER_MILLION * 5 // 4
+)
+_SHORT_OUTPUT_MICROUSD_PER_MILLION = 15_000_000
+_LONG_UNCACHED_INPUT_MICROUSD_PER_MILLION = 5_000_000
+_LONG_CACHED_INPUT_MICROUSD_PER_MILLION = 500_000
+_LONG_CACHE_WRITE_MICROUSD_PER_MILLION = (
+    _LONG_UNCACHED_INPUT_MICROUSD_PER_MILLION * 5 // 4
+)
+_LONG_OUTPUT_MICROUSD_PER_MILLION = 22_500_000
+_WEB_SEARCH_CALL_MICROUSD = 10_000
 AI_TASK_MAX_OUTPUT_TOKENS: dict[str, int] = {
     "earnings_impact": 32_768,
     "option_alerts": 32_768,
@@ -51,7 +74,7 @@ def _bounded_untrusted_json(payload: dict[str, Any]) -> str:
         allow_nan=False,
     )
     raw = raw.replace("<", "\\u003c").replace(">", "\\u003e")
-    if len(raw.encode("utf-8")) > 60_000:
+    if len(raw.encode("utf-8")) > _MAX_UNTRUSTED_JSON_BYTES:
         raise ValueError("ai_input_too_large")
     return raw
 
@@ -72,11 +95,14 @@ def build_runtime_request(job_type: str, payload: dict[str, Any]) -> RuntimeRequ
     common = _shared_instructions()
     if job_type == "earnings_impact":
         instructions = common + (
-            "分析美股财报的公开联动关系。可用网页搜索核验公司关系和财报背景，不能编造事实。"
+            "只分析输入提供的美股财报资料和公司联动关系，不浏览网页，也不补充外部事实。"
             "列出4至8家受影响的上市公司，不得包含输入公司本身。"
             "direction表示输入公司业绩超预期时的可能传导方向，不代表收益概率。"
         )
-        use_web_search = True
+        # Hosted search has a per-call fee, and its documented context-size
+        # control has no numeric returned-token ceiling. Keeping it disabled is
+        # the only useful hard bound under the default two-dollar daily cap.
+        use_web_search = False
         schema_name = "earnings_impact_zh_cn_v3"
         boundary = "untrusted_earnings_data"
     elif job_type == "option_alerts":
@@ -139,6 +165,10 @@ def schema_identity(job_type: str) -> tuple[str, str]:
         "instructions": request.instructions,
         "schema": request.schema,
         "schema_name": request.schema_name,
+        "max_input_tokens": max_input_tokens_for(job_type),
+        "max_output_tokens": max_output_tokens_for(job_type),
+        "max_tool_calls": max_tool_calls_for(job_type),
+        "use_web_search": request.use_web_search,
     }
     raw = json.dumps(
         identity,
@@ -231,6 +261,140 @@ def max_output_tokens_for(job_type: str) -> int:
         raise ValueError("unsupported_job_type") from exc
 
 
+def _semantic_input_upper_bound(
+    request: RuntimeRequest,
+    *,
+    payload_bytes: int,
+) -> int:
+    """Bound provider input tokens by UTF-8 bytes plus framing headroom.
+
+    A tokenizer cannot emit more text tokens than the number of UTF-8 bytes it
+    consumes. The bound includes the instructions, structured-output schema,
+    schema name, boundary tags, the largest accepted payload, and a fixed
+    allowance for Responses API framing.
+    """
+
+    empty_payload_bytes = len(b"{}")
+    schema_bytes = len(
+        json.dumps(
+            request.schema,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+    raw_bound = (
+        len(request.instructions.encode("utf-8"))
+        + len(request.input_text.encode("utf-8"))
+        - empty_payload_bytes
+        + int(payload_bytes)
+        + len(request.schema_name.encode("utf-8"))
+        + schema_bytes
+        + _INPUT_ACCOUNTING_OVERHEAD_TOKENS
+    )
+    rounding = _INPUT_BOUND_ROUNDING_TOKENS
+    return ((raw_bound + rounding - 1) // rounding) * rounding
+
+
+def max_input_tokens_for(job_type: str) -> int:
+    request = build_runtime_request(job_type, {})
+    if request.use_web_search:
+        # Search result content has no published numeric cap. The model context
+        # window is therefore the only provable upper bound if search is ever
+        # re-enabled. The resulting reservation intentionally exceeds the
+        # default daily budget rather than allowing an unbounded paid request.
+        return OFFICIAL_CONTEXT_WINDOW_TOKENS - max_output_tokens_for(job_type)
+    return _semantic_input_upper_bound(
+        request,
+        payload_bytes=_MAX_UNTRUSTED_JSON_BYTES,
+    )
+
+
+def max_tool_calls_for(job_type: str) -> int:
+    return 1 if build_runtime_request(job_type, {}).use_web_search else 0
+
+
+def _ceil_token_cost_microusd(tokens: int, rate: int) -> int:
+    numerator = max(0, int(tokens)) * int(rate)
+    return (
+        numerator + _TOKEN_PRICE_DENOMINATOR - 1
+    ) // _TOKEN_PRICE_DENOMINATOR
+
+
+def budget_reservation_microusd(job_type: str) -> int:
+    """Return the maximum billable cost allowed for one provider request."""
+
+    input_tokens = max_input_tokens_for(job_type)
+    output_tokens = max_output_tokens_for(job_type)
+    if input_tokens > OFFICIAL_LONG_CONTEXT_THRESHOLD_TOKENS:
+        input_rate = _LONG_CACHE_WRITE_MICROUSD_PER_MILLION
+        output_rate = _LONG_OUTPUT_MICROUSD_PER_MILLION
+    else:
+        input_rate = _SHORT_CACHE_WRITE_MICROUSD_PER_MILLION
+        output_rate = _SHORT_OUTPUT_MICROUSD_PER_MILLION
+    return (
+        _ceil_token_cost_microusd(input_tokens, input_rate)
+        + _ceil_token_cost_microusd(output_tokens, output_rate)
+        + max_tool_calls_for(job_type) * _WEB_SEARCH_CALL_MICROUSD
+    )
+
+
+def minimum_budget_reservation_microusd() -> int:
+    return min(
+        budget_reservation_microusd(job_type)
+        for job_type in AI_TASK_MAX_OUTPUT_TOKENS
+    )
+
+
+def settled_usage_cost_microusd(
+    job_type: str,
+    usage: dict[str, int | None],
+    *,
+    fallback_microusd: int,
+) -> int:
+    """Estimate completed cost without treating unknown cache writes as cheap.
+
+    Responses usage reports cache reads but not whether other input tokens wrote
+    to the cache. Uncached input is therefore charged at the more expensive
+    cache-write rate. Missing or malformed token usage keeps the full request
+    reservation instead of guessing downwards.
+    """
+
+    input_tokens = usage.get("input_tokens")
+    output_tokens = usage.get("output_tokens")
+    if (
+        type(input_tokens) is not int
+        or input_tokens < 0
+        or type(output_tokens) is not int
+        or output_tokens < 0
+    ):
+        return max(0, int(fallback_microusd))
+    cached_tokens = usage.get("cached_input_tokens")
+    if (
+        type(cached_tokens) is not int
+        or cached_tokens < 0
+        or cached_tokens > input_tokens
+    ):
+        cached_tokens = 0
+    uncached_tokens = input_tokens - cached_tokens
+    if input_tokens > OFFICIAL_LONG_CONTEXT_THRESHOLD_TOKENS:
+        cached_rate = _LONG_CACHED_INPUT_MICROUSD_PER_MILLION
+        uncached_rate = _LONG_CACHE_WRITE_MICROUSD_PER_MILLION
+        output_rate = _LONG_OUTPUT_MICROUSD_PER_MILLION
+    else:
+        cached_rate = _SHORT_CACHED_INPUT_MICROUSD_PER_MILLION
+        uncached_rate = _SHORT_CACHE_WRITE_MICROUSD_PER_MILLION
+        output_rate = _SHORT_OUTPUT_MICROUSD_PER_MILLION
+    estimated = (
+        _ceil_token_cost_microusd(cached_tokens, cached_rate)
+        + _ceil_token_cost_microusd(uncached_tokens, uncached_rate)
+        + _ceil_token_cost_microusd(output_tokens, output_rate)
+        + max_tool_calls_for(job_type) * _WEB_SEARCH_CALL_MICROUSD
+    )
+    reserved = max(0, int(fallback_microusd))
+    return min(estimated, reserved) if reserved else estimated
+
+
 def _assert_strict_schema(schema: dict[str, Any]) -> None:
     stack: list[dict[str, Any]] = [schema]
     while stack:
@@ -278,7 +442,13 @@ def _create_params(
         "store": True,
     }
     if request.use_web_search:
-        params["tools"] = [{"type": "web_search"}]
+        params["tools"] = [
+            {
+                "type": "web_search",
+                "search_context_size": "low",
+            }
+        ]
+        params["max_tool_calls"] = 1
     return params
 
 

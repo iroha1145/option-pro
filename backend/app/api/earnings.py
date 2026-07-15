@@ -8,7 +8,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import yfinance as yf
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 
 from app.services.cache import cache
 
@@ -163,31 +163,31 @@ def _next_future_date(candidates: list[date], today: date) -> date | None:
 
 
 @router.get("/upcoming")
-async def upcoming_earnings(refresh: bool = False, request: Request = None):
+async def upcoming_earnings():
     """Fetch real upcoming earnings dates from Yahoo Finance.
 
     Uses the locked cache helper so concurrent cold-cache requests share ONE
     fetch instead of each firing ~67 tickers worth of yfinance calls
     (thundering herd).
     """
-    request_state = getattr(request, "state", None)
-    if (
-        refresh
-        and getattr(request_state, "public_read_authenticated", False)
-        and not getattr(request_state, "app_authenticated", False)
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="Earnings refresh requires app authentication",
-        )
     today = _market_today()
     key = f"earnings:upcoming:{today.isoformat()}"
-    if not refresh:
-        return await cache.get_or_set(
-            key,
-            3600,
-            lambda: _build_upcoming_earnings(today),
-        )
+    return await cache.get_or_set(
+        key,
+        3600,
+        lambda: _build_upcoming_earnings(today),
+    )
+
+
+@router.post("/upcoming/refresh")
+async def refresh_upcoming_earnings():
+    """Explicitly refresh the cached earnings snapshot.
+
+    State-changing provider work uses POST; ordinary GET requests remain
+    cache-only and never start a refresh.
+    """
+    today = _market_today()
+    key = f"earnings:upcoming:{today.isoformat()}"
 
     now = time.monotonic()
     for expired_key in [

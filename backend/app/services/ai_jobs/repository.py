@@ -13,7 +13,12 @@ from app.services.ai_jobs.models import AIJobPublic, validate_result
 
 
 _SCHEMA_VERSION = "ai-jobs-v3"
-_DEFAULT_JOB_BUDGET_RESERVATION_MICROUSD = 500_000
+_SOURCE_SCHEMA_VERSION = "ai-job-sources-v1"
+_IDENTITY_MIGRATION_VERSION = "ai-job-identities-v2"
+_IDENTITY_MIGRATION_CHECKSUM = hashlib.sha256(
+    b"restore-source-aware-hashes-and-seal-unsubmitted-duplicates-v2"
+).hexdigest()
+_DUPLICATE_MIGRATION_ERROR = "duplicate_request_migrated"
 _MAX_REQUEST_JSON_BYTES = 64 * 1024
 _MAX_RESULT_JSON_BYTES = 1024 * 1024
 _TERMINAL = {
@@ -95,6 +100,17 @@ _AI_JOBS_INDEX_STATEMENTS = (
 )
 _SCHEMA_SQL = _SCHEMA_REGISTRY_SQL + _AI_JOBS_TABLE_SQL + _AI_JOBS_INDEX_SQL
 _SCHEMA_CHECKSUM = hashlib.sha256(_SCHEMA_SQL.encode("utf-8")).hexdigest()
+_AI_JOB_SOURCES_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS ai_job_sources (
+    job_id TEXT PRIMARY KEY,
+    submission_source TEXT NOT NULL
+        CHECK(submission_source IN ('manual','scheduled')),
+    created_at TEXT NOT NULL
+);
+"""
+_SOURCE_SCHEMA_CHECKSUM = hashlib.sha256(
+    _AI_JOB_SOURCES_TABLE_SQL.encode("utf-8")
+).hexdigest()
 
 
 def _utcnow() -> datetime:
@@ -109,6 +125,33 @@ def _parse_time(value: str | None) -> datetime | None:
     if not value:
         return None
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _task_budget_reservation_microusd(job_type: str) -> int:
+    from app.services.ai_jobs.runtime import budget_reservation_microusd
+
+    return budget_reservation_microusd(job_type)
+
+
+def _minimum_task_budget_reservation_microusd() -> int:
+    from app.services.ai_jobs.runtime import minimum_budget_reservation_microusd
+
+    return minimum_budget_reservation_microusd()
+
+
+def _settled_budget_charge_microusd(
+    job_type: str,
+    usage: dict[str, int | None],
+    *,
+    fallback_microusd: int,
+) -> int:
+    from app.services.ai_jobs.runtime import settled_usage_cost_microusd
+
+    return settled_usage_cost_microusd(
+        job_type,
+        usage,
+        fallback_microusd=fallback_microusd,
+    )
 
 
 class AIJobRepository:
@@ -162,12 +205,90 @@ class AIJobRepository:
                                CHECK(budget_charge_microusd >= 0)"""
                         )
                     self._ensure_indexes(connection)
+            connection.execute(_AI_JOB_SOURCES_TABLE_SQL)
+            source_schema = connection.execute(
+                "SELECT checksum FROM ai_job_schema WHERE version=?",
+                (_SOURCE_SCHEMA_VERSION,),
+            ).fetchone()
+            if (
+                source_schema is not None
+                and source_schema["checksum"] != _SOURCE_SCHEMA_CHECKSUM
+            ):
+                raise RuntimeError("ai_job_source_schema_checksum_mismatch")
             connection.execute(
-                """UPDATE ai_jobs SET budget_charge_microusd=?
-                   WHERE submission_started_at IS NOT NULL
-                     AND budget_charge_microusd=0""",
-                (_DEFAULT_JOB_BUDGET_RESERVATION_MICROUSD,),
+                """INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at)
+                   VALUES(?,?,?)""",
+                (_SOURCE_SCHEMA_VERSION, _SOURCE_SCHEMA_CHECKSUM, _iso()),
             )
+            identity_migration = connection.execute(
+                "SELECT checksum FROM ai_job_schema WHERE version=?",
+                (_IDENTITY_MIGRATION_VERSION,),
+            ).fetchone()
+            if (
+                identity_migration is not None
+                and identity_migration["checksum"]
+                != _IDENTITY_MIGRATION_CHECKSUM
+            ):
+                raise RuntimeError("ai_job_identity_migration_checksum_mismatch")
+            if identity_migration is None:
+                self._migrate_cross_source_identities(connection)
+                connection.execute(
+                    """INSERT INTO ai_job_schema(version,checksum,applied_at)
+                       VALUES(?,?,?)""",
+                    (
+                        _IDENTITY_MIGRATION_VERSION,
+                        _IDENTITY_MIGRATION_CHECKSUM,
+                        _iso(),
+                    ),
+                )
+            # Rows from before source-aware identities cannot be classified.
+            # Keep those conservative: only the manual switch may release them.
+            connection.execute(
+                """INSERT OR IGNORE INTO ai_job_sources(
+                       job_id,submission_source,created_at
+                   )
+                   SELECT job_id,'manual',created_at FROM ai_jobs"""
+            )
+            missing_charges = connection.execute(
+                """SELECT job_id,job_type,error_code,
+                          budget_charge_microusd,
+                          usage_input_tokens,usage_cached_input_tokens,
+                          usage_output_tokens,usage_reasoning_tokens,
+                          usage_total_tokens
+                   FROM ai_jobs
+                   WHERE submission_started_at IS NOT NULL
+                     AND budget_charge_microusd=0"""
+            ).fetchall()
+            for missing in missing_charges:
+                reservation = _task_budget_reservation_microusd(
+                    str(missing["job_type"])
+                )
+                usage = {
+                    "input_tokens": missing["usage_input_tokens"],
+                    "cached_input_tokens": missing["usage_cached_input_tokens"],
+                    "output_tokens": missing["usage_output_tokens"],
+                    "reasoning_tokens": missing["usage_reasoning_tokens"],
+                    "total_tokens": missing["usage_total_tokens"],
+                }
+                has_terminal_usage = (
+                    missing["usage_input_tokens"] is not None
+                    and missing["usage_output_tokens"] is not None
+                    and missing["error_code"] != "submission_outcome_unknown"
+                )
+                charge = (
+                    _settled_budget_charge_microusd(
+                        str(missing["job_type"]),
+                        usage,
+                        fallback_microusd=reservation,
+                    )
+                    if has_terminal_usage
+                    else reservation
+                )
+                connection.execute(
+                    """UPDATE ai_jobs SET budget_charge_microusd=?
+                       WHERE job_id=? AND budget_charge_microusd=0""",
+                    (charge, missing["job_id"]),
+                )
             row = connection.execute(
                 "SELECT checksum FROM ai_job_schema WHERE version=?",
                 (_SCHEMA_VERSION,),
@@ -306,6 +427,240 @@ class AIJobRepository:
         )
         return hashlib.sha256(envelope.encode("utf-8")).hexdigest()
 
+    @classmethod
+    def _identity_hashes_for_row(
+        cls,
+        row: dict[str, Any],
+    ) -> tuple[str, str, str, str, str]:
+        job_type = str(row["job_type"])
+        payload_json = str(row["payload_json"])
+        model = str(row["model"])
+        reasoning = str(row["reasoning"])
+        execution_mode = str(row["execution_mode"])
+        prompt_version = str(row["prompt_version"])
+        schema_version = str(row["schema_version"])
+        schema_sha256 = str(row["schema_sha256"])
+        current = cls._request_hash(
+            job_type,
+            payload_json,
+            model,
+            reasoning,
+            execution_mode,
+            prompt_version,
+            schema_version,
+            schema_sha256,
+        )
+        manual = cls._request_hash_source_legacy(
+            job_type,
+            payload_json,
+            "manual",
+            model,
+            reasoning,
+            execution_mode,
+            prompt_version,
+            schema_version,
+            schema_sha256,
+        )
+        scheduled = cls._request_hash_source_legacy(
+            job_type,
+            payload_json,
+            "scheduled",
+            model,
+            reasoning,
+            execution_mode,
+            prompt_version,
+            schema_version,
+            schema_sha256,
+        )
+        execution_legacy = cls._request_hash_execution_legacy(
+            job_type,
+            payload_json,
+            model,
+            reasoning,
+            execution_mode,
+            prompt_version,
+            schema_version,
+        )
+        legacy = cls._request_hash_legacy(
+            job_type,
+            payload_json,
+            model,
+            reasoning,
+            prompt_version,
+            schema_version,
+        )
+        return current, manual, scheduled, execution_legacy, legacy
+
+    @classmethod
+    def _migrate_cross_source_identities(
+        cls,
+        connection: sqlite3.Connection,
+    ) -> None:
+        """Restore exact old sources and seal only unpaid duplicate queue rows."""
+
+        rows = [
+            dict(row)
+            for row in connection.execute(
+                """SELECT j.*,s.submission_source
+                   FROM ai_jobs AS j
+                   LEFT JOIN ai_job_sources AS s ON s.job_id=j.job_id"""
+            ).fetchall()
+        ]
+        groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+        for row in rows:
+            current, manual, scheduled, execution_legacy, legacy = (
+                cls._identity_hashes_for_row(row)
+            )
+            stored_hash = str(row["request_hash"])
+            existing_source = row.get("submission_source")
+            source = (
+                "scheduled"
+                if stored_hash == scheduled
+                else "manual"
+                if stored_hash == manual
+                else existing_source
+                if existing_source in {"manual", "scheduled"}
+                else "manual"
+            )
+            connection.execute(
+                """INSERT INTO ai_job_sources(
+                       job_id,submission_source,created_at
+                   ) VALUES(?,?,?)
+                   ON CONFLICT(job_id) DO UPDATE SET
+                       submission_source=excluded.submission_source""",
+                (row["job_id"], source, row["created_at"]),
+            )
+            if stored_hash not in {
+                current,
+                manual,
+                scheduled,
+                execution_legacy,
+                legacy,
+            }:
+                continue
+            key = (
+                str(row["job_type"]),
+                current,
+                str(row["model"]),
+                str(row["reasoning"]),
+                str(row["execution_mode"]),
+                str(row["prompt_version"]),
+                str(row["schema_version"]),
+                str(row["schema_sha256"]),
+            )
+            groups.setdefault(key, []).append(row)
+
+        now = _iso()
+        active_statuses = {"pending", "queued", "in_progress"}
+        for identity_rows in groups.values():
+            if len(identity_rows) < 2:
+                continue
+            max_execution = max(int(row["execution_number"]) for row in identity_rows)
+            group_has_paid_or_settled_work = any(
+                row.get("submission_started_at") is not None
+                or row.get("openai_response_id") is not None
+                or row.get("error_code") == "submission_outcome_unknown"
+                or row["status"] in {"completed", "insufficient_context"}
+                for row in identity_rows
+            )
+            by_execution: dict[int, list[dict[str, Any]]] = {}
+            for row in identity_rows:
+                by_execution.setdefault(int(row["execution_number"]), []).append(row)
+            for execution_number, execution_rows in by_execution.items():
+                unpaid_active = [
+                    row
+                    for row in execution_rows
+                    if row["status"] in active_statuses
+                    and row.get("submission_started_at") is None
+                    and row.get("openai_response_id") is None
+                ]
+                if not unpaid_active:
+                    continue
+                keep_job_id: str | None = None
+                if (
+                    not group_has_paid_or_settled_work
+                    and execution_number == max_execution
+                ):
+                    keep_job_id = str(
+                        min(
+                            unpaid_active,
+                            key=lambda row: (str(row["created_at"]), str(row["job_id"])),
+                        )["job_id"]
+                    )
+                for duplicate in unpaid_active:
+                    if str(duplicate["job_id"]) == keep_job_id:
+                        continue
+                    connection.execute(
+                        """UPDATE ai_jobs
+                           SET status='cancelled',
+                               error_code=?,completed_at=COALESCE(completed_at,?),
+                               next_attempt_at=NULL,lease_owner=NULL,
+                               lease_expires_at=NULL,updated_at=?
+                           WHERE job_id=?
+                             AND status IN ('pending','queued','in_progress')
+                             AND submission_started_at IS NULL
+                             AND openai_response_id IS NULL""",
+                        (
+                            _DUPLICATE_MIGRATION_ERROR,
+                            now,
+                            now,
+                            duplicate["job_id"],
+                        ),
+                    )
+
+    @staticmethod
+    def _select_identity_row(
+        rows: list[dict[str, Any]],
+        *,
+        current_hash: str,
+    ) -> dict[str, Any]:
+        usable = [
+            row
+            for row in rows
+            if row.get("error_code") != _DUPLICATE_MIGRATION_ERROR
+        ]
+        if not usable:
+            usable = rows
+        max_execution = max(int(row["execution_number"]) for row in usable)
+        latest = [
+            row for row in usable if int(row["execution_number"]) == max_execution
+        ]
+        active = {"pending", "queued", "in_progress"}
+        buckets = (
+            [row for row in latest if row.get("error_code") == "submission_outcome_unknown"],
+            [
+                row
+                for row in latest
+                if row["status"] in active
+                and (
+                    row.get("submission_started_at") is not None
+                    or row.get("openai_response_id") is not None
+                )
+            ],
+            [row for row in latest if row["status"] == "completed"],
+            [row for row in latest if row["status"] in active],
+            [row for row in latest if row["status"] == "insufficient_context"],
+            latest,
+        )
+        selected = next(bucket for bucket in buckets if bucket)
+        if all(row["status"] in active for row in selected):
+            return min(
+                selected,
+                key=lambda row: (
+                    str(row["created_at"]),
+                    0 if row["request_hash"] == current_hash else 1,
+                    str(row["job_id"]),
+                ),
+            )
+        return max(
+            selected,
+            key=lambda row: (
+                str(row.get("completed_at") or row.get("updated_at") or row["created_at"]),
+                1 if row["request_hash"] == current_hash else 0,
+                str(row["job_id"]),
+            ),
+        )
+
     def create_job(
         self,
         *,
@@ -318,11 +673,14 @@ class AIJobRepository:
         schema_version: str,
         schema_sha256: str,
         max_queued: int,
+        submission_source: str = "manual",
         priority: int = 50,
         force_retry: bool = False,
     ) -> tuple[dict[str, Any], bool]:
         if execution_mode != "background":
             raise ValueError("background_execution_required")
+        if submission_source not in {"manual", "scheduled"}:
+            raise ValueError("invalid_submission_source")
         self.initialize()
         payload_json = self._canonical_payload(payload)
         request_hash = self._request_hash(
@@ -334,6 +692,20 @@ class AIJobRepository:
             prompt_version,
             schema_version,
             schema_sha256,
+        )
+        source_legacy_hashes = tuple(
+            self._request_hash_source_legacy(
+                job_type,
+                payload_json,
+                source,
+                model,
+                reasoning,
+                execution_mode,
+                prompt_version,
+                schema_version,
+                schema_sha256,
+            )
+            for source in ("manual", "scheduled")
         )
         execution_legacy_hash = self._request_hash_execution_legacy(
             job_type,
@@ -355,21 +727,23 @@ class AIJobRepository:
         now = _iso()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            existing = connection.execute(
+            matches = [
+                dict(row)
+                for row in connection.execute(
                 """
-                SELECT * FROM ai_jobs
-                WHERE job_type=? AND request_hash IN (?,?,?) AND model=?
-                  AND reasoning=? AND execution_mode=?
-                  AND prompt_version=? AND schema_version=?
-                  AND schema_sha256=?
-                ORDER BY execution_number DESC,
-                    CASE WHEN request_hash=? THEN 0 ELSE 1 END,
-                    created_at DESC
-                LIMIT 1
+                SELECT j.*,s.submission_source FROM ai_jobs AS j
+                JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                WHERE j.job_type=?
+                  AND j.request_hash IN (?,?,?,?,?)
+                  AND j.model=?
+                  AND j.reasoning=? AND j.execution_mode=?
+                  AND j.prompt_version=? AND j.schema_version=?
+                  AND j.schema_sha256=?
                 """,
                 (
                     job_type,
                     request_hash,
+                    *source_legacy_hashes,
                     execution_legacy_hash,
                     legacy_request_hash,
                     model,
@@ -378,28 +752,117 @@ class AIJobRepository:
                     prompt_version,
                     schema_version,
                     schema_sha256,
-                    request_hash,
                 ),
-            ).fetchone()
-            if existing:
-                if existing["request_hash"] != request_hash:
-                    connection.execute(
-                        "UPDATE ai_jobs SET request_hash=?,updated_at=? WHERE job_id=?",
-                        (request_hash, now, existing["job_id"]),
-                    )
-                    existing = connection.execute(
-                        "SELECT * FROM ai_jobs WHERE job_id=?",
-                        (existing["job_id"],),
-                    ).fetchone()
-                retryable_terminal = (
-                    force_retry
-                    and existing["status"]
-                    in {"failed", "cancelled", "budget_blocked"}
-                    and existing["error_code"] != "submission_outcome_unknown"
+            ).fetchall()
+            ]
+            if matches:
+                global_max_execution = max(
+                    int(row["execution_number"]) for row in matches
                 )
-                if not retryable_terminal:
+                existing = self._select_identity_row(
+                    matches,
+                    current_hash=request_hash,
+                )
+                if existing["request_hash"] != request_hash:
+                    try:
+                        connection.execute(
+                            """UPDATE ai_jobs SET request_hash=?,updated_at=?
+                               WHERE job_id=?""",
+                            (request_hash, now, existing["job_id"]),
+                        )
+                    except sqlite3.IntegrityError:
+                        # Another preserved row already owns the canonical hash
+                        # for this execution. Selection still considers both.
+                        pass
+                    else:
+                        refreshed = connection.execute(
+                            """SELECT j.*,s.submission_source FROM ai_jobs AS j
+                               JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                               WHERE j.job_id=?""",
+                            (existing["job_id"],),
+                        ).fetchone()
+                        if refreshed is not None:
+                            existing = dict(refreshed)
+                meaningful_matches = [
+                    row
+                    for row in matches
+                    if row.get("error_code") != _DUPLICATE_MIGRATION_ERROR
+                ]
+                meaningful_latest: list[dict[str, Any]] = []
+                if meaningful_matches:
+                    meaningful_max_execution = max(
+                        int(row["execution_number"])
+                        for row in meaningful_matches
+                    )
+                    meaningful_latest = [
+                        row
+                        for row in meaningful_matches
+                        if int(row["execution_number"])
+                        == meaningful_max_execution
+                    ]
+                unknown_exists = any(
+                    row.get("error_code") == "submission_outcome_unknown"
+                    for row in matches
+                )
+                settled_result_exists = any(
+                    row["status"] in {"completed", "insufficient_context"}
+                    for row in matches
+                )
+                unresolved_submission_exists = any(
+                    row["status"] in {"pending", "queued", "in_progress"}
+                    and (
+                        row.get("submission_started_at") is not None
+                        or row.get("openai_response_id") is not None
+                    )
+                    for row in matches
+                )
+                retryable_latest = bool(meaningful_latest) and all(
+                    row["status"] in {"failed", "cancelled", "budget_blocked"}
+                    and row.get("error_code")
+                    not in {"submission_outcome_unknown", _DUPLICATE_MIGRATION_ERROR}
+                    for row in meaningful_latest
+                )
+                if (
+                    force_retry
+                    and not unknown_exists
+                    and not settled_result_exists
+                    and not unresolved_submission_exists
+                    and retryable_latest
+                ):
+                    active = int(
+                        connection.execute(
+                            """SELECT COUNT(*) FROM ai_jobs
+                               WHERE status IN ('pending','queued','in_progress')"""
+                        ).fetchone()[0]
+                    )
+                    if active >= max_queued:
+                        connection.rollback()
+                        raise RuntimeError("ai_job_queue_full")
+                    retry_parent = self._select_identity_row(
+                        meaningful_latest,
+                        current_hash=request_hash,
+                    )
+                    row = self._insert_job(
+                        connection,
+                        job_type=job_type,
+                        request_hash=request_hash,
+                        payload_json=payload_json,
+                        model=model,
+                        reasoning=reasoning,
+                        execution_mode=execution_mode,
+                        prompt_version=prompt_version,
+                        schema_version=schema_version,
+                        schema_sha256=schema_sha256,
+                        submission_source=submission_source,
+                        priority=priority,
+                        now=now,
+                        retry_of_job_id=str(retry_parent["job_id"]),
+                        execution_number=global_max_execution + 1,
+                    )
                     connection.commit()
-                    return dict(existing), False
+                    return row, True
+                connection.commit()
+                return dict(existing), False
             active = connection.execute(
                 """
                 SELECT COUNT(*) AS count FROM ai_jobs
@@ -409,10 +872,6 @@ class AIJobRepository:
             if active >= max_queued:
                 connection.rollback()
                 raise RuntimeError("ai_job_queue_full")
-            retry_of_job_id = str(existing["job_id"]) if existing else None
-            execution_number = (
-                int(existing["execution_number"]) + 1 if existing else 1
-            )
             row = self._insert_job(
                 connection,
                 job_type=job_type,
@@ -424,13 +883,43 @@ class AIJobRepository:
                 prompt_version=prompt_version,
                 schema_version=schema_version,
                 schema_sha256=schema_sha256,
+                submission_source=submission_source,
                 priority=priority,
                 now=now,
-                retry_of_job_id=retry_of_job_id,
-                execution_number=execution_number,
+                retry_of_job_id=None,
+                execution_number=1,
             )
             connection.commit()
             return row, True
+
+    @staticmethod
+    def _request_hash_source_legacy(
+        job_type: str,
+        payload_json: str,
+        submission_source: str,
+        model: str,
+        reasoning: str,
+        execution_mode: str,
+        prompt_version: str,
+        schema_version: str,
+        schema_sha256: str,
+    ) -> str:
+        """Return the former source-aware identity for lazy compatibility."""
+
+        envelope = "\n".join(
+            [
+                job_type,
+                payload_json,
+                submission_source,
+                model,
+                reasoning,
+                execution_mode,
+                prompt_version,
+                schema_version,
+                schema_sha256,
+            ]
+        )
+        return hashlib.sha256(envelope.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _insert_job(
@@ -445,6 +934,7 @@ class AIJobRepository:
         prompt_version: str,
         schema_version: str,
         schema_sha256: str,
+        submission_source: str,
         priority: int,
         now: str,
         retry_of_job_id: str | None,
@@ -480,8 +970,16 @@ class AIJobRepository:
                 now,
             ),
         )
+        connection.execute(
+            """INSERT INTO ai_job_sources(
+                   job_id,submission_source,created_at
+               ) VALUES(?,?,?)""",
+            (job_id, submission_source, now),
+        )
         row = connection.execute(
-            "SELECT * FROM ai_jobs WHERE job_id=?",
+            """SELECT j.*,s.submission_source FROM ai_jobs AS j
+               JOIN ai_job_sources AS s ON s.job_id=j.job_id
+               WHERE j.job_id=?""",
             (job_id,),
         ).fetchone()
         if row is None:
@@ -536,7 +1034,9 @@ class AIJobRepository:
         self.initialize()
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT * FROM ai_jobs WHERE job_id=?",
+                """SELECT j.*,s.submission_source FROM ai_jobs AS j
+                   JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                   WHERE j.job_id=?""",
                 (job_id,),
             ).fetchone()
             return dict(row) if row else None
@@ -546,11 +1046,12 @@ class AIJobRepository:
         with self._connect() as connection:
             row = connection.execute(
                 """
-                SELECT * FROM ai_jobs
-                WHERE job_type=? AND status='completed'
-                  AND upper(json_extract(payload_json, '$.ticker'))=?
-                  AND json_extract(result_json, '$.output_language')='zh-CN'
-                ORDER BY completed_at DESC, created_at DESC
+                SELECT j.*,s.submission_source FROM ai_jobs AS j
+                JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                WHERE j.job_type=? AND j.status='completed'
+                  AND upper(json_extract(j.payload_json, '$.ticker'))=?
+                  AND json_extract(j.result_json, '$.output_language')='zh-CN'
+                ORDER BY j.completed_at DESC, j.created_at DESC
                 LIMIT 1
                 """,
                 (job_type, ticker.upper()),
@@ -594,7 +1095,9 @@ class AIJobRepository:
                 connection.rollback()
                 return None
             claimed = connection.execute(
-                "SELECT * FROM ai_jobs WHERE job_id=?",
+                """SELECT j.*,s.submission_source FROM ai_jobs AS j
+                   JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                   WHERE j.job_id=?""",
                 (row["job_id"],),
             ).fetchone()
             connection.commit()
@@ -607,7 +1110,6 @@ class AIJobRepository:
         *,
         daily_limit: int = 4,
         daily_budget_usd: float = 2.0,
-        reservation_usd: float = 0.5,
         cooldown_seconds: int = 0,
     ) -> str:
         """Atomically enforce concurrency, daily count, and dollar budget."""
@@ -623,11 +1125,10 @@ class AIJobRepository:
         )
         paid_limit = min(4, max(1, int(daily_limit)))
         budget_limit_microusd = max(1, round(float(daily_budget_usd) * 1_000_000))
-        reservation_microusd = max(1, round(float(reservation_usd) * 1_000_000))
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
-                "SELECT status,lease_owner FROM ai_jobs WHERE job_id=?",
+                "SELECT job_type,status,lease_owner FROM ai_jobs WHERE job_id=?",
                 (job_id,),
             ).fetchone()
             if (
@@ -637,6 +1138,9 @@ class AIJobRepository:
             ):
                 connection.rollback()
                 raise RuntimeError("ai_job_not_submittable")
+            reservation_microusd = _task_budget_reservation_microusd(
+                str(row["job_type"])
+            )
             in_flight = int(
                 connection.execute(
                     """
@@ -852,13 +1356,27 @@ class AIJobRepository:
         now = _iso()
         result_json = self._canonical_result(result)
         with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = connection.execute(
+                """SELECT job_type,budget_charge_microusd FROM ai_jobs
+                   WHERE job_id=? AND lease_owner=?""",
+                (job_id, owner),
+            ).fetchone()
+            if current is None:
+                connection.rollback()
+                raise RuntimeError("ai_job_completion_rejected")
+            budget_charge_microusd = _settled_budget_charge_microusd(
+                str(current["job_type"]),
+                usage,
+                fallback_microusd=int(current["budget_charge_microusd"] or 0),
+            )
             updated = connection.execute(
                 """
                 UPDATE ai_jobs
                 SET status='completed', result_json=?, completed_at=?,
                     usage_input_tokens=?, usage_cached_input_tokens=?,
                     usage_output_tokens=?, usage_reasoning_tokens=?,
-                    usage_total_tokens=?, error_code=NULL,
+                    usage_total_tokens=?, budget_charge_microusd=?, error_code=NULL,
                     next_attempt_at=NULL, lease_owner=NULL, lease_expires_at=NULL,
                     updated_at=?
                 WHERE job_id=? AND lease_owner=?
@@ -871,6 +1389,7 @@ class AIJobRepository:
                     usage.get("output_tokens"),
                     usage.get("reasoning_tokens"),
                     usage.get("total_tokens"),
+                    budget_charge_microusd,
                     now,
                     job_id,
                     owner,
@@ -912,38 +1431,130 @@ class AIJobRepository:
             if updated != 1:
                 raise RuntimeError("ai_job_lease_lost")
 
-    def fail(self, job_id: str, owner: str, error_code: str) -> None:
+    def fail(
+        self,
+        job_id: str,
+        owner: str,
+        error_code: str,
+        *,
+        usage: dict[str, int | None] | None = None,
+    ) -> None:
         now = _iso()
         safe_code = error_code[:120]
         with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = connection.execute(
+                """SELECT job_type,budget_charge_microusd FROM ai_jobs
+                   WHERE job_id=? AND lease_owner=?""",
+                (job_id, owner),
+            ).fetchone()
+            if current is None:
+                connection.rollback()
+                raise RuntimeError("ai_job_lease_lost")
+            usage_values = usage or {}
+            budget_charge_microusd = int(
+                current["budget_charge_microusd"] or 0
+            )
+            if usage is not None:
+                budget_charge_microusd = _settled_budget_charge_microusd(
+                    str(current["job_type"]),
+                    usage_values,
+                    fallback_microusd=budget_charge_microusd,
+                )
             updated = connection.execute(
                 """
                 UPDATE ai_jobs
                 SET status='failed', error_code=?, completed_at=?,
+                    usage_input_tokens=COALESCE(?,usage_input_tokens),
+                    usage_cached_input_tokens=COALESCE(?,usage_cached_input_tokens),
+                    usage_output_tokens=COALESCE(?,usage_output_tokens),
+                    usage_reasoning_tokens=COALESCE(?,usage_reasoning_tokens),
+                    usage_total_tokens=COALESCE(?,usage_total_tokens),
+                    budget_charge_microusd=?,
                     next_attempt_at=NULL, lease_owner=NULL, lease_expires_at=NULL,
                     updated_at=?
                 WHERE job_id=? AND lease_owner=?
                 """,
-                (safe_code, now, now, job_id, owner),
+                (
+                    safe_code,
+                    now,
+                    usage_values.get("input_tokens"),
+                    usage_values.get("cached_input_tokens"),
+                    usage_values.get("output_tokens"),
+                    usage_values.get("reasoning_tokens"),
+                    usage_values.get("total_tokens"),
+                    budget_charge_microusd,
+                    now,
+                    job_id,
+                    owner,
+                ),
             ).rowcount
             connection.commit()
             if updated != 1:
                 raise RuntimeError("ai_job_lease_lost")
 
-    def mark_cancelled(self, job_id: str, owner: str | None = None) -> None:
+    def mark_cancelled(
+        self,
+        job_id: str,
+        owner: str | None = None,
+        *,
+        usage: dict[str, int | None] | None = None,
+    ) -> None:
         now = _iso()
-        sql = """
-            UPDATE ai_jobs
-            SET status='cancelled', completed_at=?, next_attempt_at=NULL,
-                lease_owner=NULL, lease_expires_at=NULL, updated_at=?
-            WHERE job_id=? AND status IN ('pending','queued','in_progress')
-        """
-        params: list[Any] = [now, now, job_id]
-        if owner is not None:
-            sql += " AND lease_owner=?"
-            params.append(owner)
         with self._connect() as connection:
-            connection.execute(sql, tuple(params))
+            connection.execute("BEGIN IMMEDIATE")
+            select_sql = """SELECT job_type,budget_charge_microusd FROM ai_jobs
+                            WHERE job_id=?
+                              AND status IN ('pending','queued','in_progress')"""
+            select_params: list[Any] = [job_id]
+            if owner is not None:
+                select_sql += " AND lease_owner=?"
+                select_params.append(owner)
+            current = connection.execute(
+                select_sql,
+                tuple(select_params),
+            ).fetchone()
+            if current is None:
+                connection.commit()
+                return
+            usage_values = usage or {}
+            budget_charge_microusd = int(
+                current["budget_charge_microusd"] or 0
+            )
+            if usage is not None:
+                budget_charge_microusd = _settled_budget_charge_microusd(
+                    str(current["job_type"]),
+                    usage_values,
+                    fallback_microusd=budget_charge_microusd,
+                )
+            update_sql = """
+                UPDATE ai_jobs
+                SET status='cancelled', completed_at=?,
+                    usage_input_tokens=COALESCE(?,usage_input_tokens),
+                    usage_cached_input_tokens=COALESCE(?,usage_cached_input_tokens),
+                    usage_output_tokens=COALESCE(?,usage_output_tokens),
+                    usage_reasoning_tokens=COALESCE(?,usage_reasoning_tokens),
+                    usage_total_tokens=COALESCE(?,usage_total_tokens),
+                    budget_charge_microusd=?,
+                    next_attempt_at=NULL,lease_owner=NULL,lease_expires_at=NULL,
+                    updated_at=?
+                WHERE job_id=? AND status IN ('pending','queued','in_progress')
+            """
+            update_params: list[Any] = [
+                now,
+                usage_values.get("input_tokens"),
+                usage_values.get("cached_input_tokens"),
+                usage_values.get("output_tokens"),
+                usage_values.get("reasoning_tokens"),
+                usage_values.get("total_tokens"),
+                budget_charge_microusd,
+                now,
+                job_id,
+            ]
+            if owner is not None:
+                update_sql += " AND lease_owner=?"
+                update_params.append(owner)
+            connection.execute(update_sql, tuple(update_params))
             connection.commit()
 
     def request_cancel(self, job_id: str) -> dict[str, Any] | None:
@@ -952,7 +1563,9 @@ class AIJobRepository:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
-                "SELECT * FROM ai_jobs WHERE job_id=?",
+                """SELECT j.*,s.submission_source FROM ai_jobs AS j
+                   JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                   WHERE j.job_id=?""",
                 (job_id,),
             ).fetchone()
             if not row:
@@ -981,7 +1594,9 @@ class AIJobRepository:
                     (now, now, now, job_id),
                 )
             updated = connection.execute(
-                "SELECT * FROM ai_jobs WHERE job_id=?",
+                """SELECT j.*,s.submission_source FROM ai_jobs AS j
+                   JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                   WHERE j.job_id=?""",
                 (job_id,),
             ).fetchone()
             connection.commit()
@@ -1058,7 +1673,13 @@ class AIJobRepository:
                 "total_tokens": row.get("usage_total_tokens"),
             },
         )
-        return public.model_dump(mode="json")
+        payload = public.model_dump(mode="json")
+        payload["submission_source"] = (
+            row.get("submission_source")
+            if row.get("submission_source") in {"manual", "scheduled"}
+            else "manual"
+        )
+        return payload
 
     def budget_snapshot(
         self,
@@ -1087,9 +1708,12 @@ class AIJobRepository:
             ).fetchone()
             active = connection.execute(
                 """
-                SELECT * FROM ai_jobs
-                WHERE status IN ('pending','queued','in_progress')
-                ORDER BY created_at LIMIT 1
+                SELECT j.*,s.submission_source FROM ai_jobs AS j
+                JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                WHERE j.status IN ('pending','queued','in_progress')
+                   OR (j.submission_started_at IS NOT NULL
+                       AND j.error_code='submission_outcome_unknown')
+                ORDER BY j.created_at LIMIT 1
                 """
             ).fetchone()
             latest_paid = connection.execute(
@@ -1117,7 +1741,7 @@ class AIJobRepository:
         active_public = self.public(dict(active)) if active is not None else None
         jobs_available = submitted_jobs < daily_limit
         dollars_available = (
-            charged_microusd + _DEFAULT_JOB_BUDGET_RESERVATION_MICROUSD
+            charged_microusd + _minimum_task_budget_reservation_microusd()
             <= budget_limit_microusd
         )
         return {

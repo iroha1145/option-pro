@@ -17,6 +17,7 @@ load_runtime_environment()
 from app.services import yahoo  # noqa: F401
 
 from fastapi import Depends, FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import MutableHeaders
@@ -85,6 +86,28 @@ app = FastAPI(
     version=_APP_VERSION,
 )
 app.state.access_runtime = _ACCESS_RUNTIME
+
+
+@app.exception_handler(RequestValidationError)
+async def _redacted_request_validation_error(
+    _request: StarletteRequest,
+    _exc: RequestValidationError,
+) -> JSONResponse:
+    """Keep submitted values out of every validation response."""
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": [
+                {
+                    "type": "request_validation_failed",
+                    "loc": ["request"],
+                    "msg": "Invalid request",
+                }
+            ]
+        },
+        headers={"Cache-Control": "no-store"},
+    )
 
 # Rate limiter state. deque + per-IP buckets, pruned lazily so the dict can't
 # grow without bound when many distinct IPs hit the API.

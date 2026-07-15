@@ -9,7 +9,10 @@ import pytest
 from pydantic import SecretStr, ValidationError
 
 from app.services.ai_jobs import runtime
-from app.services.ai_jobs.models import validate_result
+from app.services.ai_jobs.models import (
+    validate_result,
+    validate_simplified_chinese_text,
+)
 from app.services.ai_jobs.repository import AIJobRepository
 from app.services.ai_jobs.worker import process_job
 
@@ -234,6 +237,119 @@ def test_news_title_rejects_english_prose_and_traditional_chinese(title):
         )
 
 
+@pytest.mark.parametrize(
+    "traditional_text",
+    [
+        "市場更新",
+        "消息彙整",
+        "公司發佈財報後，營收較預期成長。",
+        "聯準會維持利率不變，市場關注後續聲明。",
+        "供應鏈壓力緩解，晶片庫存回歸正常。",
+        "臺灣半導體產業受惠於人工智慧需求。",
+        "投資人關注監管機構對併購交易的調查。",
+        "主要特徵已经出现。",
+        "公司著手改善供货。",
+        "投资者需要瞭解风险。",
+        "天气持续乾旱。",
+    ],
+)
+def test_common_traditional_and_variant_prose_is_rejected(traditional_text):
+    with pytest.raises(ValueError, match="traditional_chinese_not_allowed"):
+        validate_simplified_chinese_text(traditional_text)
+
+
+@pytest.mark.parametrize(
+    "simplified_text",
+    [
+        "市场更新",
+        "消息汇总",
+        "公司发布财报后，收入高于市场预期。",
+        "供应链压力缓解，芯片库存逐步恢复正常。",
+        "调查显示后续利率变化仍是主要风险。",
+        "这是一家著名企业。",
+        "行业瞭望认为需求仍会增长。",
+        "乾照光电发布业绩。",
+        "英伟达（NVIDIA）发布Blackwell芯片",
+        "NVIDIA、AMD与TSM关注Blackwell供货",
+    ],
+)
+def test_simplified_prose_and_necessary_foreign_names_are_allowed(simplified_text):
+    assert validate_simplified_chinese_text(simplified_text) == simplified_text
+
+
+def test_wholly_english_sentence_is_rejected():
+    with pytest.raises(ValueError, match="simplified_chinese_text_required"):
+        validate_simplified_chinese_text(
+            "Markets rally after companies report stronger earnings"
+        )
+
+
+def _replace_nested_value(document: dict, path: tuple[str | int, ...], value: str):
+    target = document
+    for segment in path[:-1]:
+        target = target[segment]
+    target[path[-1]] = value
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("title_zh",),
+        ("summary_zh",),
+        ("headline_summary",),
+        ("affected_stocks", 0, "reason"),
+        ("affected_sectors", 0),
+        ("affected_commodities", 0, "name"),
+        ("affected_commodities", 0, "reason"),
+        ("causal_summary",),
+        ("key_factors", 0),
+        ("uncertainty_notes", 0),
+    ],
+)
+def test_every_news_natural_language_field_uses_the_simplified_gate(path):
+    result = _news_result()
+    result["affected_commodities"] = [
+        {
+            "name": "原油",
+            "impact_score": 10,
+            "reason": "供应变化可能影响短期价格。",
+        }
+    ]
+    _replace_nested_value(result, path, "市場消息彙整")
+    with pytest.raises(ValidationError, match="traditional_chinese_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            _news_payload(),
+        )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("title_zh",),
+        ("summary_zh",),
+        ("headline_summary",),
+        ("market_summary",),
+        ("dominant_events", 0, "summary"),
+        ("dominant_events", 0, "affected_sectors", 0),
+        ("market_uncertainties", 0),
+        ("affected_sectors", 0),
+        ("focus_ticker_assessments", 0, "summary"),
+        ("focus_ticker_assessments", 0, "risks", 0),
+    ],
+)
+def test_every_market_focus_natural_language_field_uses_the_simplified_gate(path):
+    result = _market_focus_result()
+    _replace_nested_value(result, path, "市場消息彙整")
+    with pytest.raises(ValidationError, match="traditional_chinese_not_allowed"):
+        validate_result(
+            "market_focus",
+            json.dumps(result, ensure_ascii=False),
+            _market_focus_payload(),
+        )
+
+
 def test_chinese_text_allows_tickers_and_necessary_foreign_proper_names():
     result = _news_result()
     result["title_zh"] = "英伟达（NVIDIA）发布Blackwell芯片"
@@ -385,6 +501,17 @@ def test_runtime_uses_fixed_model_reasoning_background_and_per_task_limits(tmp_p
     assert runtime.max_output_tokens_for("market_focus") == 49_152
 
 
+def test_runtime_policy_changes_schema_identity(monkeypatch):
+    _, before = runtime.schema_identity("news_impact")
+    monkeypatch.setitem(
+        runtime.AI_TASK_MAX_OUTPUT_TOKENS,
+        "news_impact",
+        runtime.max_output_tokens_for("news_impact") + 1,
+    )
+    _, after = runtime.schema_identity("news_impact")
+    assert after != before
+
+
 def test_daily_paid_submission_limit_is_atomic_and_capped_at_four(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     jobs = [_create_job(repository, ticker) for ticker in ("AAA", "BBB", "CCC", "DDD", "EEE")]
@@ -393,7 +520,7 @@ def test_daily_paid_submission_limit_is_atomic_and_capped_at_four(tmp_path):
         claimed = repository.claim_due(owner, 60)
         assert claimed["job_id"] == job["job_id"]
         assert repository.mark_submission_started(
-            job["job_id"], owner, daily_limit=100
+            job["job_id"], owner, daily_limit=100, daily_budget_usd=100
         ) == "started"
         repository.fail(job["job_id"], owner, "provider_failed")
 
@@ -401,7 +528,7 @@ def test_daily_paid_submission_limit_is_atomic_and_capped_at_four(tmp_path):
     claimed = repository.claim_due(owner, 60)
     assert claimed["job_id"] == jobs[4]["job_id"]
     assert repository.mark_submission_started(
-        jobs[4]["job_id"], owner, daily_limit=100
+        jobs[4]["job_id"], owner, daily_limit=100, daily_budget_usd=100
     ) == "daily_limit"
     blocked = repository.get_job(jobs[4]["job_id"])
     assert blocked["status"] == "budget_blocked"
@@ -453,6 +580,15 @@ def test_unknown_submission_holds_the_global_concurrency_slot(tmp_path):
     ) == "concurrency_limit"
     health = repository.health()
     assert health["submission_unknown"] == 1
+    snapshot = repository.budget_snapshot(
+        daily_limit=4,
+        daily_budget_usd=2.0,
+    )
+    assert snapshot["concurrency_available"] is False
+    assert snapshot["active_job"]["error_code"] == "submission_outcome_unknown"
+    assert repository.get_job(first["job_id"])["budget_charge_microusd"] == (
+        runtime.budget_reservation_microusd("earnings_impact")
+    )
 
 
 def test_local_preflight_failure_does_not_consume_budget_or_become_unknown(

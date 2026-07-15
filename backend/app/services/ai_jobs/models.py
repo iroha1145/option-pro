@@ -89,6 +89,25 @@ _COMMON_TRADITIONAL_ORTHOGRAPHY = frozenset(
 )
 _TRADITIONAL_ONLY = (
     _load_unihan_traditional_conflicts() | _COMMON_TRADITIONAL_ORTHOGRAPHY
+) - frozenset("查")
+_TRADITIONAL_CONFLICT_PHRASES = frozenset(
+    {
+        "乾旱",
+        "乾涸",
+        "乾燥",
+        "徵信",
+        "徵兆",
+        "徵收",
+        "徵求",
+        "特徵",
+        "瞭解",
+        "著手",
+        "著眼",
+        "著重",
+        "藉此",
+        "藉由",
+        "象徵",
+    }
 )
 _SENTENCE_SPLIT = re.compile(r"[。！？!?；;\n]+")
 _LATIN_WORD = re.compile(r"[A-Za-z][A-Za-z'-]*")
@@ -125,7 +144,9 @@ def validate_simplified_chinese_text(value: str) -> str:
     if not text:
         raise ValueError("simplified_chinese_text_required")
     traditional = sorted({char for char in text if char in _TRADITIONAL_ONLY})
-    if traditional:
+    if traditional or any(
+        phrase in text for phrase in _TRADITIONAL_CONFLICT_PHRASES
+    ):
         raise ValueError("traditional_chinese_not_allowed")
     cjk_count = sum(1 for char in text if _is_cjk(char))
     if cjk_count == 0:

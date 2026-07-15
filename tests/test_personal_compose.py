@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
 
 import yaml
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 and older local verification.
+    import tomli as tomllib
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,7 +47,7 @@ def test_formal_compose_has_only_backend_worker_and_one_volume() -> None:
                 "required": False,
             }
         ]
-        assert service["environment"]["DATA_DIR"] == "/data"
+        assert "DATA_DIR" not in service["environment"]
         assert "OPTIX_WORKER_DB_PATH" not in service["environment"]
         assert "OPTIX_WORKER_LOCK_PATH" not in service["environment"]
         assert "OPTION_PRO_RUNTIME_SETTINGS_PATH" not in service["environment"]
@@ -108,6 +112,7 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
     assert "PUBLIC_READ_API_ENABLED" not in all_keys
     assert "MACROLENS_INTERNAL_TOKEN" not in all_keys
     assert "MACROLENS_BASE_URL" not in all_keys
+    assert "ACCESS_MODE" not in all_keys
 
     config = tomllib.loads(
         (ROOT / "config" / "personal.toml").read_text(encoding="utf-8")
@@ -116,6 +121,34 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
     assert config["ai"]["reasoning"] == "max"
     assert config["ai"]["daily_budget_usd"] == 2.0
     assert config["features"]["catalyst_mode"] == "manual"
+    assert config["access"]["mode"] in {"private_network", "password"}
+
+
+def test_compose_and_templates_have_no_legacy_services_or_independent_paths() -> None:
+    sources = "\n".join(
+        (
+            (ROOT / "docker-compose.yml").read_text(encoding="utf-8"),
+            (ROOT / ".env.example").read_text(encoding="utf-8"),
+            (ROOT / "secrets.env.example").read_text(encoding="utf-8"),
+        )
+    )
+    for legacy_service in (
+        "ai-worker",
+        "catalyst-sync-worker",
+        "focus-context-producer",
+        "breakout-worker",
+    ):
+        assert legacy_service not in sources
+    for legacy_path in (
+        "OPENAI_JOB_DB_PATH",
+        "MACROLENS_CACHE_DB_PATH",
+        "BREAKOUT_DB_PATH",
+        "OPTIX_WORKER_DB_PATH",
+        "OPTIX_WORKER_LOCK_PATH",
+        "WATCHLIST_SNAPSHOT_PATH",
+        "OPTION_PRO_RUNTIME_SETTINGS_PATH",
+    ):
+        assert legacy_path not in sources
 
 
 def test_runtime_services_keep_the_container_security_baseline() -> None:

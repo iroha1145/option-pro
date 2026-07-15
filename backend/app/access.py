@@ -136,6 +136,7 @@ class OwnerAccessRuntime:
         self._session_digest: bytes | None = None
         self._session_expires_at = 0.0
         self._login_failures: dict[str, tuple[int, float, float]] = {}
+        self._login_in_flight: set[str] = set()
 
     @property
     def password_configured(self) -> bool:
@@ -231,8 +232,17 @@ class OwnerAccessRuntime:
                     "login_cooldown",
                     retry_after=max(1, int(blocked_until - now + 0.999)),
                 )
-        valid = verify_owner_password(password, self._password_hash)
+            if client_key in self._login_in_flight:
+                raise LoginRejected("login_cooldown", retry_after=1)
+            self._login_in_flight.add(client_key)
+        try:
+            valid = verify_owner_password(password, self._password_hash)
+        except BaseException:
+            with self._lock:
+                self._login_in_flight.discard(client_key)
+            raise
         with self._lock:
+            self._login_in_flight.discard(client_key)
             now = self._clock()
             if not valid:
                 count, started_at, _blocked_until = self._login_failures.get(

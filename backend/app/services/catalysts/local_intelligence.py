@@ -21,6 +21,7 @@ from .errors import CatalystError, InvalidCursorError
 
 
 Mode = Literal["off", "read", "manual", "scheduled"]
+SubmissionSource = Literal["manual", "scheduled"]
 MODEL = "gpt-5.6-terra"
 REASONING = "max"
 EXECUTION_MODE = "background"
@@ -1386,9 +1387,7 @@ class LocalCatalystIntelligence:
             "status": "active" if revision else "empty",
             "as_of": _iso(observed),
             "last_sync_at": self.status(now=observed).get("last_sync_at"),
-            "manual_enabled": self.mode in {"manual", "scheduled"} and count > 0,
-            "action_enabled": self.mode in {"manual", "scheduled"},
-            "capability": "enabled" if self.mode in {"manual", "scheduled"} and count > 0 else "disabled",
+            "manual_enabled": self.mode in {"manual", "scheduled"},
             "warnings": [],
         }
 
@@ -1501,9 +1500,14 @@ class LocalCatalystIntelligence:
         as_of: datetime | None = None,
         expected_change_sequence: int | None = None,
         expected_content_hash: str | None = None,
+        submission_source: SubmissionSource = "manual",
     ) -> dict[str, Any]:
         if self.mode not in {"manual", "scheduled"}:
-            raise CatalystError("capability_disabled", "News analysis is disabled in read mode", counts_for_circuit=False)
+            raise CatalystError(
+                "read_only_mode",
+                "News analysis is disabled in read mode",
+                counts_for_circuit=False,
+            )
         observed = as_of or _utc_now()
         row = self._current_revision(news_id, now=observed)
         if row is None:
@@ -1586,6 +1590,7 @@ class LocalCatalystIntelligence:
             schema_version=schema_version,
             schema_sha256=schema_hash,
             max_queued=self.max_queued,
+            submission_source=submission_source,
             priority=70,
             # A forced request is a new immutable analysis revision. The
             # minute bucket above keeps repeated confirmation clicks idempotent.
@@ -1615,8 +1620,6 @@ class LocalCatalystIntelligence:
         return self._identity_public_job(row, expected_type="news_impact")
 
     def cancel_analysis_job(self, job_id: str) -> dict[str, Any] | None:
-        if self.mode not in {"manual", "scheduled"}:
-            raise CatalystError("capability_disabled", "News analysis is disabled in read mode", counts_for_circuit=False)
         row = self.ai_repository.get_job(job_id)
         if row is None or row.get("job_type") != "news_impact":
             return None
@@ -1759,6 +1762,7 @@ class LocalCatalystIntelligence:
                 as_of=observed,
                 expected_change_sequence=int(detail["item"]["change_sequence"]),
                 expected_content_hash=str(detail["item"]["content_hash"]),
+                submission_source="scheduled",
             )
             if job.get("status") in {"pending", "queued", "in_progress"}:
                 queued += 1
@@ -1783,6 +1787,7 @@ class LocalCatalystIntelligence:
                     focus = self.request_market_focus_cycle(
                         expected_prepared_revision=prepared_revision,
                         as_of=observed,
+                        submission_source="scheduled",
                     )
                 except CatalystError:
                     skipped += 1
@@ -1884,6 +1889,8 @@ class LocalCatalystIntelligence:
     def _create_focus_job(
         self,
         payload: dict[str, Any],
+        *,
+        submission_source: SubmissionSource = "manual",
     ) -> tuple[dict[str, Any], bool]:
         schema_version, schema_hash = ai_runtime.schema_identity("market_focus")
         return self.ai_repository.create_job(
@@ -1896,11 +1903,17 @@ class LocalCatalystIntelligence:
             schema_version=schema_version,
             schema_sha256=schema_hash,
             max_queued=self.max_queued,
+            submission_source=submission_source,
             priority=60,
             force_retry=False,
         )
 
-    def _resume_focus_intent(self, cycle_id: str) -> dict[str, Any]:
+    def _resume_focus_intent(
+        self,
+        cycle_id: str,
+        *,
+        submission_source: SubmissionSource = "manual",
+    ) -> dict[str, Any]:
         """Create or relink the paid job for one durable local intent.
 
         The local intent is committed before the AI job. If the later local
@@ -1921,7 +1934,10 @@ class LocalCatalystIntelligence:
         if not isinstance(payload, dict):
             raise RuntimeError("market_focus_intent_payload_invalid")
 
-        job, created = self._create_focus_job(payload)
+        job, created = self._create_focus_job(
+            payload,
+            submission_source=submission_source,
+        )
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
@@ -1955,6 +1971,7 @@ class LocalCatalystIntelligence:
         *,
         force: bool = False,
         as_of: datetime | None = None,
+        submission_source: SubmissionSource = "manual",
     ) -> dict[str, Any]:
         revision_row, items = self._hotspots_for_revision(revision, limit=20)
         if not items:
@@ -2071,9 +2088,17 @@ class LocalCatalystIntelligence:
                 connection.rollback()
                 raise
         assert resume_cycle_id is not None
-        return self._resume_focus_intent(resume_cycle_id)
+        return self._resume_focus_intent(
+            resume_cycle_id,
+            submission_source=submission_source,
+        )
 
-    def _retry_focus(self, cycle_id: str) -> dict[str, Any]:
+    def _retry_focus(
+        self,
+        cycle_id: str,
+        *,
+        submission_source: SubmissionSource = "manual",
+    ) -> dict[str, Any]:
         schema_version, schema_hash = ai_runtime.schema_identity("market_focus")
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -2132,6 +2157,7 @@ class LocalCatalystIntelligence:
                     schema_version=schema_version,
                     schema_sha256=schema_hash,
                     max_queued=self.max_queued,
+                    submission_source=submission_source,
                     priority=60,
                     force_retry=True,
                 )
@@ -2155,9 +2181,14 @@ class LocalCatalystIntelligence:
         retry_cycle_id: str | None = None,
         force: bool = False,
         as_of: datetime | None = None,
+        submission_source: SubmissionSource = "manual",
     ) -> dict[str, Any]:
         if self.mode not in {"manual", "scheduled"}:
-            raise CatalystError("capability_disabled", "Market focus is disabled in read mode", counts_for_circuit=False)
+            raise CatalystError(
+                "read_only_mode",
+                "Market focus is disabled in read mode",
+                counts_for_circuit=False,
+            )
         if retry_cycle_id:
             if force:
                 raise CatalystError(
@@ -2165,7 +2196,10 @@ class LocalCatalystIntelligence:
                     "A retry cannot also be a forced cycle",
                     counts_for_circuit=False,
                 )
-            return self._retry_focus(retry_cycle_id)
+            return self._retry_focus(
+                retry_cycle_id,
+                submission_source=submission_source,
+            )
         observed = as_of or _utc_now()
         status = self.hotspot_status(now=observed)
         if expected_prepared_revision is None:
@@ -2182,6 +2216,7 @@ class LocalCatalystIntelligence:
             expected_prepared_revision,
             force=force,
             as_of=observed,
+            submission_source=submission_source,
         )
 
     def market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
@@ -2260,8 +2295,6 @@ class LocalCatalystIntelligence:
         }
 
     def cancel_market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
-        if self.mode not in {"manual", "scheduled"}:
-            raise CatalystError("capability_disabled", "Market focus is disabled in read mode", counts_for_circuit=False)
         cycle = self.market_focus_cycle(cycle_id)
         if cycle is None:
             return None

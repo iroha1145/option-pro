@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from app.config import Settings
 from app.personal_config import AIConfig, PersonalConfig, load_personal_config
+from app.services.breakouts.config import BreakoutSettings
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +44,13 @@ def test_personal_ai_limits_are_fixed() -> None:
         AIConfig(daily_max_jobs=5)
 
 
+def test_force_reanalysis_is_fixed_on_in_personal_configuration() -> None:
+    with pytest.raises(ValidationError):
+        PersonalConfig.model_validate(
+            {"catalyst": {"manual_force_reanalysis": False}}
+        )
+
+
 def test_personal_configuration_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         PersonalConfig.model_validate({"features": {}, "unknown": True})
@@ -65,3 +74,42 @@ def test_environment_template_does_not_duplicate_behavior_configuration() -> Non
         "OPTION_PRO_RUNTIME_SETTINGS_PATH=",
     )
     assert all(item not in example for item in forbidden)
+
+
+def test_legacy_environment_cannot_override_personal_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    legacy_values = {
+        "OPENAI_MODEL": "legacy-model",
+        "OPENAI_REASONING": "low",
+        "OPENAI_MAX_CONCURRENCY": "8",
+        "OPENAI_DAILY_MAX_JOBS": "2",
+        "OPENAI_DAILY_BUDGET_USD": "9",
+        "OPENAI_MANUAL_COOLDOWN_SECONDS": "900",
+        "OPENAI_EXECUTION_MODE": "worker_sync",
+        "BREAKOUT_RADAR_ENABLED": "false",
+        "BREAKOUT_SCAN_INTERVAL_PREMARKET_SECONDS": "61",
+        "BREAKOUT_SCAN_INTERVAL_REGULAR_SECONDS": "62",
+        "BREAKOUT_SCAN_INTERVAL_CLOSED_SECONDS": "301",
+        "BREAKOUT_SCAN_RETENTION_DAYS": "1",
+        "RANGE_PERSISTENCE_MODE": "disabled",
+    }
+    for key, value in legacy_values.items():
+        monkeypatch.setenv(key, value)
+
+    settings = Settings(_env_file=None)
+    breakout = BreakoutSettings(_env_file=None)
+
+    assert settings.openai_model == "gpt-5.6-terra"
+    assert settings.openai_reasoning == "max"
+    assert settings.openai_max_concurrency == 1
+    assert settings.openai_daily_max_jobs == 4
+    assert settings.openai_daily_budget_usd == 2.0
+    assert settings.openai_manual_cooldown_seconds == 30
+    assert settings.openai_execution_mode == "background"
+    assert breakout.enabled is True
+    assert breakout.scan_interval_premarket_seconds == 600
+    assert breakout.scan_interval_regular_seconds == 300
+    assert breakout.scan_interval_closed_seconds == 1800
+    assert breakout.scan_retention_days == 90
+    assert breakout.range_persistence_mode == "shadow"

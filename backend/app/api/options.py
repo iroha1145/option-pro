@@ -7,7 +7,7 @@ import time
 from typing import Literal
 
 import yfinance as yf
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query
 
 from app.services import yahoo
 from app.services.cache import cache
@@ -92,23 +92,12 @@ def _cooldown_error(retry_after: int) -> HTTPException:
 async def unusual_activity(
     type: Literal["all", "call", "put"] = "all",
     min_vol_oi: float = Query(1.0, ge=0),
-    request: Request = None,
 ):
     """Scan popular tickers for unusual options activity, parallel per ticker.
 
     Cached (with a per-key lock) — previously every request re-scanned
     10 tickers x (expirations + 2 chains) against Yahoo with no cache at all.
     """
-    request_state = getattr(request, "state", None)
-    if (
-        getattr(request_state, "public_read_authenticated", False)
-        and not getattr(request_state, "app_authenticated", False)
-        and (type != "all" or min_vol_oi != 1.0)
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="Custom unusual-options scans require app authentication",
-        )
     key = _unusual_key(type, min_vol_oi)
     retry_after = _failure_cooldown(key)
     if retry_after > 0:

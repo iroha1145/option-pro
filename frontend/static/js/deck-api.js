@@ -79,6 +79,8 @@
     [/^\/api\/catalysts\/hotspots/, 120e3],
     [/^\/api\/catalysts\/market-focus-cycles\/latest/, 120e3],
     [/^\/api\/catalysts\/news\//, 120e3],
+    [/^\/api\/worker\/status/, 5e3],
+    [/^\/api\/worker\/actions/, 5e3],
     [/^\/api\/options\//, 120e3],
   ];
   const ttlFor = p => { for (const [re, t] of TTL) if (re.test(p)) return t; return 60e3; };
@@ -282,7 +284,7 @@
     return { bars: shown, all: bars.length, asOf: d.as_of, lastBarAt: d.last_bar_at, stale: !!d._stale, tz: d.exchange_timezone };
   }
 
-  const scan = (params, force) => jget("/api/strength/scan" + qs(params), { force });
+  const scan = (params, force) => jget("/api/strength/scan" + qs(params), { force, retry5xx: false });
   const breakoutsCurrent = force => jget("/api/breakouts/current", { force });
   const breakoutsStatus = force => jget("/api/breakouts/status", { force });
   const breakoutsEvents = (filters, force) => jget("/api/breakouts/events" + qs(filters), { force });
@@ -290,7 +292,12 @@
   const breakoutTicker = t => jget("/api/breakouts/tickers/" + enc(t));
   const sectors = () => jget("/api/sectors");
   const sectorIV = id => jget("/api/sectors/" + enc(id) + "/iv-ranking");
-  const earnings = force => jget("/api/earnings/upcoming", { force });
+  const earnings = force => force
+    ? jpost("/api/earnings/upcoming/refresh", {}, { retry5xx: false }).then(body => {
+        invalidateCache("/api/earnings/upcoming");
+        return body;
+      })
+    : jget("/api/earnings/upcoming");
   const earningsImpact = t => jget("/api/ai/earnings-impact/" + enc(t));
   const catalystStatus = (force, signal) => jget("/api/catalysts/status", { force, signal });
   const catalystFeed = (params, options) => jget("/api/catalysts/feed" + qs(params), options || {});
@@ -350,6 +357,26 @@
     payload,
     Object.assign({ retry5xx: false }, options || {}),
   );
+  const workerStatus = options => jget(
+    "/api/worker/status",
+    Object.assign({ noCache: true, retry5xx: false }, options || {}),
+  );
+  const workerActions = (actionType, options) => jget(
+    "/api/worker/actions" + qs({ action_type: actionType, limit: 30 }),
+    Object.assign({ noCache: true, retry5xx: false }, options || {}),
+  );
+  const workerAction = (requestId, options) => jget(
+    "/api/worker/actions/" + enc(requestId),
+    Object.assign({ noCache: true, lowPriority: true, retry5xx: false }, options || {}),
+  );
+  const requestWorkerAction = (actionType, payload, options) => jpost(
+    "/api/worker/actions/" + enc(actionType),
+    payload || {},
+    Object.assign({ retry5xx: false }, options || {}),
+  ).then(body => {
+    invalidateCache("/api/worker/");
+    return body;
+  });
   const createCatalystAnalysis = (id, force, options) => jpost("/api/catalysts/news/" + enc(id) + "/analysis", { force: !!force }, options || {});
   const catalystAnalysisJob = (id, options) => jget("/api/catalysts/analysis-jobs/" + enc(id), Object.assign({ noCache: true, lowPriority: true, retry5xx: false }, options || {}));
   const cancelCatalystAnalysisJob = (id, options) => jpost("/api/catalysts/analysis-jobs/" + enc(id) + "/cancel", {}, Object.assign({ lowPriority: true }, options || {}));
@@ -498,6 +525,7 @@
     catalystHotspotStatus, catalystHotspots, catalystMarketCycleLatest, catalystMarketCycle,
     createCatalystMarketCycle, catalystRefresh, catalystRefreshStatus,
     runtimeSettings, runtimeSettingsHistory, updateRuntimeSettings, rollbackRuntimeSettings,
+    workerStatus, workerActions, workerAction, requestWorkerAction,
     createCatalystAnalysis, catalystAnalysisJob, cancelCatalystAnalysisJob,
     createEarningsImpactJob, createOptionAlertsJob, aiJob, cancelAiJob,
     buildWeek, etToday,

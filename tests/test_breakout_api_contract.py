@@ -98,7 +98,7 @@ def _settings(path, *, enabled: bool = True) -> BreakoutSettings:
     return BreakoutSettings(
         _env_file=None,
         BREAKOUT_RADAR_ENABLED=enabled,
-        BREAKOUT_DB_PATH=path,
+        db_path=path,
     )
 
 

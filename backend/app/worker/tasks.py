@@ -4,9 +4,11 @@ import asyncio
 import inspect
 import sqlite3
 import time
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
+from app.data_paths import get_data_paths
 from app.personal_config import get_personal_config
 
 from .runtime import TaskResult, TaskSpec
@@ -52,6 +54,23 @@ async def _close_optional(resource: Any) -> None:
         await result
 
 
+def _timestamp_text(value: float) -> str:
+    return datetime.fromtimestamp(value, timezone.utc).isoformat().replace(
+        "+00:00", "Z"
+    )
+
+
+def _personal_analysis_permissions(config: Any) -> tuple[bool, bool]:
+    features = getattr(config, "features", None)
+    mode = getattr(features, "catalyst_mode", None)
+    if mode is not None:
+        return mode in {"manual", "scheduled"}, mode == "scheduled"
+    return (
+        bool(getattr(config, "catalyst_manual_enabled", False)),
+        bool(getattr(config, "catalyst_scheduled_enabled", False)),
+    )
+
+
 async def _build_local_intelligence(
     config: Any,
     settings: Any,
@@ -81,11 +100,21 @@ async def _build_local_intelligence(
         intelligence_mode = "read"
         refresh_cooldown = 30
     else:
+        mode_allows_manual, mode_allows_scheduled = (
+            _personal_analysis_permissions(config)
+        )
+        manual_analysis_enabled = bool(
+            mode_allows_manual and runtime_settings.ai.manual_analysis_enabled
+        )
+        scheduled_analysis_enabled = bool(
+            mode_allows_scheduled
+            and runtime_settings.catalyst.scheduled_analysis_enabled
+        )
         intelligence_mode = (
             "scheduled"
-            if runtime_settings.catalyst.scheduled_analysis_enabled
+            if scheduled_analysis_enabled
             else "manual"
-            if runtime_settings.ai.manual_analysis_enabled
+            if manual_analysis_enabled
             else "read"
         )
         refresh_cooldown = int(
@@ -106,8 +135,15 @@ async def _build_local_intelligence(
 
 
 class AIJobsTask:
-    def __init__(self, owner_id: str, *, settings: Any) -> None:
+    def __init__(
+        self,
+        owner_id: str,
+        *,
+        settings: Any | None = None,
+        personal_config: Any | None = None,
+    ) -> None:
         self.owner_id = f"{owner_id}:ai"
+        self._personal_config = personal_config or get_personal_config()
         self._settings = settings
         self._repository: Any = None
 
@@ -130,6 +166,7 @@ class AIJobsTask:
             self._repository,
             self._settings,
             self.owner_id,
+            personal_config=self._personal_config,
         )
         if runtime_state == "runtime_settings_unavailable":
             return TaskResult(
@@ -169,6 +206,10 @@ class CatalystSyncTask:
         initial_sync_complete: asyncio.Event | None = None,
     ) -> None:
         self.owner_id = f"{owner_id}:catalyst"
+        if settings is None:
+            from app.config import get_settings
+
+            settings = get_settings()
         self._runtime_settings = settings
         self._personal_config = personal_config or get_personal_config()
         self._etl_transport = etl_transport
@@ -269,17 +310,16 @@ class CatalystSyncTask:
             self._intelligence.manual_refresh_cooldown_seconds = int(
                 effective.catalyst.manual_refresh_cooldown_seconds
             )
-        if effective.catalyst.manual_refresh_enabled:
-            try:
-                raw_request = await _call_local(
-                    self._intelligence.consume_refresh_requested
-                )
-                if isinstance(raw_request, dict):
-                    manual_request = raw_request
-                else:
-                    legacy_refresh_requested = bool(raw_request)
-            except Exception as exc:
-                errors["refresh_request"] = self._error_code(exc)
+        try:
+            raw_request = await _call_local(
+                self._intelligence.consume_refresh_requested
+            )
+            if isinstance(raw_request, dict):
+                manual_request = raw_request
+            else:
+                legacy_refresh_requested = bool(raw_request)
+        except Exception as exc:
+            errors["refresh_request"] = self._error_code(exc)
 
         sync_seconds = float(effective.catalyst.sync_seconds)
         clock = time.monotonic()
@@ -425,13 +465,17 @@ class FocusTask:
         owner_id: str,
         *,
         enabled: bool,
-        settings: Any,
+        settings: Any | None = None,
         personal_config: Any | None = None,
         intelligence_factory: Any | None = None,
         initial_sync_complete: asyncio.Event | None = None,
     ) -> None:
         self.owner_id = f"focus-producer:{owner_id}"
         self.enabled = enabled
+        if settings is None:
+            from app.config import get_settings
+
+            settings = get_settings()
         self._runtime_settings = settings
         self._personal_config = personal_config or get_personal_config()
         self._intelligence_factory = intelligence_factory
@@ -485,10 +529,20 @@ class FocusTask:
             )
 
         delay = float(effective.catalyst.focus_seconds)
-        if not effective.catalyst.scheduled_analysis_enabled:
+        mode_allows_manual, mode_allows_scheduled = _personal_analysis_permissions(
+            self._personal_config
+        )
+        manual_analysis_enabled = bool(
+            mode_allows_manual and effective.ai.manual_analysis_enabled
+        )
+        scheduled_analysis_enabled = bool(
+            mode_allows_scheduled
+            and effective.catalyst.scheduled_analysis_enabled
+        )
+        if not scheduled_analysis_enabled:
             if hasattr(self._intelligence, "mode"):
                 self._intelligence.mode = (
-                    "manual" if effective.ai.manual_analysis_enabled else "read"
+                    "manual" if manual_analysis_enabled else "read"
                 )
             return TaskResult(
                 status="idle",
@@ -525,6 +579,143 @@ class FocusTask:
         await _close_optional(self._intelligence)
         self._intelligence = None
         self._mode = None
+
+
+class FocusRefreshTask:
+    """Rebuild the shared full-watchlist snapshot on an explicit request."""
+
+    def __init__(
+        self,
+        *,
+        builder: Callable[..., Any] | None = None,
+        writer: Callable[..., Any] | None = None,
+        snapshot_path: Path | None = None,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        self._builder = builder
+        self._writer = writer
+        self._snapshot_path = snapshot_path
+        self._clock = clock
+
+    async def __call__(self) -> TaskResult:
+        from app.api import stocks
+
+        builder = self._builder or stocks._build_watchlist
+        writer = self._writer or stocks._write_watchlist_snapshot
+        path = self._snapshot_path or get_data_paths().watchlist_snapshot
+        payload = await _call_local(builder)
+        saved_at = float(self._clock())
+        await _call_local(
+            writer,
+            path,
+            payload=payload,
+            saved_at=saved_at,
+        )
+        succeeded = (
+            int(payload.get("succeeded") or 0)
+            if isinstance(payload, dict)
+            else 0
+        )
+        return TaskResult(
+            status="idle",
+            details={
+                "result": "refreshed",
+                "snapshot": path.name,
+                "succeeded": max(0, succeeded),
+                "completed_at": _timestamp_text(saved_at),
+            },
+        )
+
+
+class StrengthRefreshTask:
+    """Run and persist the default Strength Radar scan on demand."""
+
+    def __init__(
+        self,
+        *,
+        scanner: Callable[..., Any] | None = None,
+        writer: Callable[..., Any] | None = None,
+        snapshot_path: Path | None = None,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        self._scanner = scanner
+        self._writer = writer
+        self._snapshot_path = snapshot_path
+        self._clock = clock
+
+    async def _run(self, parameters: dict[str, Any]) -> TaskResult:
+        from app.api.strength import (
+            _strength_snapshot_path,
+            _write_strength_snapshot,
+            normalize_strength_scan_parameters,
+            strength_scan_parameters_hash,
+        )
+        from app.services.strength.scanner import scan_strength
+        from app.services.utils import sanitize
+
+        scanner = self._scanner or scan_strength
+        writer = self._writer or _write_strength_snapshot
+        base_path = self._snapshot_path or get_data_paths().strength_snapshot
+        parameters = normalize_strength_scan_parameters(parameters)
+        path = _strength_snapshot_path(parameters, base_path=base_path)
+        payload = sanitize(
+            await _call_local(
+                scanner,
+                **parameters,
+                force_refresh=True,
+            )
+        )
+        saved_at = float(self._clock())
+        await _call_local(
+            writer,
+            path,
+            parameters=parameters,
+            payload=payload,
+            saved_at=saved_at,
+            base_path=base_path,
+        )
+        count = int(payload.get("count") or 0) if isinstance(payload, dict) else 0
+        return TaskResult(
+            status="idle",
+            details={
+                "result": "refreshed",
+                "snapshot": path.name,
+                "count": max(0, count),
+                "parameters": parameters,
+                "parameters_hash": strength_scan_parameters_hash(parameters),
+                "completed_at": _timestamp_text(saved_at),
+            },
+        )
+
+    async def run_for_actions(self, actions: list[dict[str, Any]]) -> TaskResult:
+        from app.api.strength import (
+            DEFAULT_STRENGTH_SCAN_PARAMETERS,
+            normalize_strength_scan_parameters,
+            strength_scan_parameters_hash,
+        )
+
+        selected: dict[str, Any] | None = None
+        for action in actions:
+            details = action.get("details") if isinstance(action, dict) else None
+            raw = details.get("parameters") if isinstance(details, dict) else None
+            if not isinstance(raw, dict):
+                raise ValueError("strength refresh action parameters are missing")
+            parameters = normalize_strength_scan_parameters(raw)
+            expected_hash = strength_scan_parameters_hash(parameters)
+            stored_hash = details.get("parameters_hash")
+            if stored_hash is not None and stored_hash != expected_hash:
+                raise ValueError("strength refresh action parameter hash is invalid")
+            if selected is not None and parameters != selected:
+                raise ValueError("strength refresh actions have conflicting parameters")
+            selected = parameters
+        return await self._run(
+            selected or dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
+        )
+
+    async def __call__(self) -> TaskResult:
+        from app.api.strength import DEFAULT_STRENGTH_SCAN_PARAMETERS
+
+        return await self._run(dict(DEFAULT_STRENGTH_SCAN_PARAMETERS))
 
 
 class BreakoutTask:
@@ -647,9 +838,128 @@ class MaintenanceTask:
         return TaskResult(status="idle", details=details)
 
 
+class RetentionTask:
+    """Back up personal databases before pruning bounded scan attachments."""
+
+    def __init__(
+        self,
+        owner_id: str,
+        backup: MaintenanceTask,
+        *,
+        settings_factory: Callable[[], Any] | None = None,
+        repository_factory: Callable[[Path], Any] | None = None,
+        now: Callable[[], datetime] | None = None,
+    ) -> None:
+        self.owner_id = f"{owner_id}:retention"
+        self.backup = backup
+        self._settings_factory = settings_factory
+        self._repository_factory = repository_factory
+        self._now = now or (lambda: datetime.now(timezone.utc))
+
+    async def __call__(self) -> TaskResult:
+        backup_result = await self.backup()
+        if not isinstance(backup_result, TaskResult):
+            raise TypeError("retention backup must return TaskResult")
+        if backup_result.status == "degraded":
+            return TaskResult(
+                status="degraded",
+                error_code=backup_result.error_code or "backup_failed",
+                details={
+                    "backup": dict(backup_result.details),
+                    "retention": {"status": "skipped_backup_failed"},
+                    "completed_at": self._now()
+                    .astimezone(timezone.utc)
+                    .isoformat()
+                    .replace("+00:00", "Z"),
+                },
+            )
+
+        if self._settings_factory is None:
+            from app.services.breakouts.config import get_breakout_settings
+
+            settings_factory = get_breakout_settings
+        else:
+            settings_factory = self._settings_factory
+        settings = await _call_local(settings_factory)
+        database_path = Path(settings.db_path)
+        if not database_path.is_file():
+            completed = self._now().astimezone(timezone.utc)
+            return TaskResult(
+                status="idle",
+                details={
+                    "backup": dict(backup_result.details),
+                    "retention": {"status": "skipped_missing_database"},
+                    "completed_at": completed.isoformat().replace("+00:00", "Z"),
+                },
+            )
+
+        if self._repository_factory is None:
+            from app.services.breakouts.repository import BreakoutRepository
+
+            repository_factory = BreakoutRepository
+        else:
+            repository_factory = self._repository_factory
+        repository = await _call_local(repository_factory, database_path)
+        await _call_local(repository.initialize)
+
+        from app.services.breakouts.repository import DEFAULT_LOCK_NAME
+
+        observed = self._now().astimezone(timezone.utc)
+        lease_seconds = float(
+            getattr(settings, "worker_lease_ttl_seconds", 90.0)
+        )
+        lease_token = await _call_local(
+            repository.acquire_lock,
+            DEFAULT_LOCK_NAME,
+            self.owner_id,
+            lease_seconds,
+            observed,
+        )
+        if lease_token is None:
+            return TaskResult(
+                status="degraded",
+                error_code="retention_locked",
+                details={
+                    "backup": dict(backup_result.details),
+                    "retention": {"status": "locked"},
+                    "completed_at": observed.isoformat().replace("+00:00", "Z"),
+                },
+            )
+        try:
+            counts = await _call_local(
+                repository.prune_retention,
+                owner_id=self.owner_id,
+                lease_token=int(lease_token),
+                raw_payload_hours=int(settings.raw_payload_retention_hours),
+                scan_days=int(settings.scan_retention_days),
+                batch_size=int(settings.retention_batch_size),
+                now=observed,
+            )
+        finally:
+            await _call_local(
+                repository.release_lock,
+                DEFAULT_LOCK_NAME,
+                self.owner_id,
+                int(lease_token),
+                self._now().astimezone(timezone.utc),
+            )
+        completed = self._now().astimezone(timezone.utc)
+        return TaskResult(
+            status="idle",
+            details={
+                "backup": dict(backup_result.details),
+                "retention": {
+                    "status": "completed",
+                    **{str(key): int(value) for key, value in dict(counts).items()},
+                },
+                "completed_at": completed.isoformat().replace("+00:00", "Z"),
+            },
+        )
+
+
 def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]:
     config = get_personal_config()
-    ai = AIJobsTask(owner_id, settings=settings)
+    ai = AIJobsTask(owner_id, settings=settings, personal_config=config)
     initial_sync_complete = asyncio.Event()
     catalyst = CatalystSyncTask(
         owner_id,
@@ -665,6 +975,7 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         initial_sync_complete=initial_sync_complete,
     )
     breakout = BreakoutTask(owner_id)
+    manual_breakout = BreakoutTask(f"{owner_id}:manual")
     maintenance = MaintenanceTask(
         {
             "optix": settings.breakout_db_path,
@@ -675,6 +986,12 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         destination=settings.optix_backup_dir,
         keep=config.storage.backup_keep,
     )
+    retention_backup = MaintenanceTask(
+        dict(maintenance.databases),
+        destination=maintenance.destination,
+        keep=maintenance.keep,
+    )
+    retention = RetentionTask(owner_id, retention_backup)
     return (
         TaskSpec(
             "breakout",
@@ -714,6 +1031,37 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             failure_backoff_seconds=300.0,
             max_backoff_seconds=3600.0,
         ),
+        TaskSpec(
+            "focus_refresh",
+            FocusRefreshTask(),
+            interval_seconds=86_400.0,
+            timeout_seconds=300.0,
+            manual_only=True,
+        ),
+        TaskSpec(
+            "strength_refresh",
+            StrengthRefreshTask(),
+            interval_seconds=86_400.0,
+            timeout_seconds=1200.0,
+            manual_only=True,
+        ),
+        TaskSpec(
+            "breakout_refresh",
+            manual_breakout,
+            interval_seconds=86_400.0,
+            enabled=config.features.breakout_enabled,
+            timeout_seconds=900.0,
+            manual_only=True,
+        ),
+        TaskSpec(
+            "retention",
+            retention,
+            interval_seconds=86_400.0,
+            timeout_seconds=1800.0,
+            failure_backoff_seconds=300.0,
+            max_backoff_seconds=3600.0,
+            manual_only=True,
+        ),
     )
 
 
@@ -722,7 +1070,10 @@ __all__ = [
     "BreakoutTask",
     "CatalystSyncTask",
     "FocusTask",
+    "FocusRefreshTask",
     "MaintenanceTask",
     "DEFAULT_TASK_NAMES",
+    "RetentionTask",
+    "StrengthRefreshTask",
     "build_default_tasks",
 ]

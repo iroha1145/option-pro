@@ -101,8 +101,6 @@ class StubPersonalService:
             "status": "ok",
             "prepared_revision": 3,
             "manual_enabled": True,
-            "action_enabled": True,
-            "capability": "enabled",
             "private_state": "hidden",
         }
 

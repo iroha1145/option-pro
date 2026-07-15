@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Annotated, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi import APIRouter, HTTPException, Path, Request
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from pydantic import (
@@ -17,6 +17,7 @@ from pydantic import (
 
 from app.api.stocks import _sanitize
 from app.config import get_settings
+from app.personal_config import get_personal_config
 from app.services.ai_jobs import runtime as ai_job_runtime
 from app.services.ai_jobs.models import (
     CancelRequest,
@@ -24,7 +25,10 @@ from app.services.ai_jobs.models import (
     OptionAlertJobRequest,
 )
 from app.services.ai_jobs.repository import AIJobRepository
-from app.services.ai_jobs.security import require_expensive_action
+from app.services.runtime_settings import (
+    RuntimeSettingsStorageError,
+    get_effective_runtime_settings,
+)
 
 _MAX_AI_BODY_BYTES = 64 * 1024
 _PROMPT_VERSIONS = {
@@ -156,10 +160,48 @@ def _require_runtime_capability() -> None:
         raise HTTPException(
             status_code=503,
             detail={
-                "code": capability.get("status") or "capability_disabled",
+                "code": capability.get("status") or "ai_runtime_unavailable",
                 "message": "Persistent AI analysis is not available",
             },
         )
+
+
+def _require_manual_analysis_enabled() -> None:
+    """Fail closed before any user-initiated paid task reaches the queue."""
+
+    if not get_personal_config().catalyst_manual_enabled:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "read_only_mode",
+                "message": "当前为只读模式",
+            },
+        )
+    try:
+        effective = get_effective_runtime_settings()
+    except RuntimeSettingsStorageError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "runtime_settings_unavailable",
+                "message": "运行设置暂不可用",
+            },
+        ) from exc
+    if not effective.ai.manual_analysis_enabled:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "manual_analysis_disabled",
+                "message": "手动分析已关闭",
+            },
+        )
+
+
+def _require_manual_submission() -> None:
+    # Check the owner switch before provider configuration so callers receive
+    # one stable public reason whenever manual paid work is disabled.
+    _require_manual_analysis_enabled()
+    _require_runtime_capability()
 
 
 def _create_job(
@@ -168,6 +210,9 @@ def _create_job(
     *,
     force_retry: bool = False,
 ) -> tuple[dict, bool]:
+    # Recheck at the durable enqueue boundary in case the owner changed the
+    # switch after the endpoint's initial validation.
+    _require_manual_analysis_enabled()
     settings = get_settings()
     ai_job_runtime.validate_job_payload(job_type, payload)
     schema_version, schema_sha256 = ai_job_runtime.schema_identity(job_type)
@@ -182,6 +227,7 @@ def _create_job(
             schema_version=schema_version,
             schema_sha256=schema_sha256,
             max_queued=settings.openai_job_max_queued,
+            submission_source="manual",
             priority=80,
             force_retry=force_retry,
         )
@@ -267,12 +313,9 @@ async def earnings_impact(
     )
 
 
-@router.post(
-    "/jobs/earnings-impact",
-    dependencies=[Depends(require_expensive_action)],
-)
+@router.post("/jobs/earnings-impact")
 async def create_earnings_impact_job(req: EarningsImpactJobRequest):
-    _require_runtime_capability()
+    _require_manual_submission()
     request_payload = req.model_dump(mode="json", exclude={"force"})
     row, created = _create_job(
         "earnings_impact",
@@ -290,12 +333,9 @@ async def create_earnings_impact_job(req: EarningsImpactJobRequest):
     )
 
 
-@router.post(
-    "/jobs/option-alerts",
-    dependencies=[Depends(require_expensive_action)],
-)
+@router.post("/jobs/option-alerts")
 async def create_option_alert_job(req: AlertsRequest):
-    _require_runtime_capability()
+    _require_manual_submission()
     payload = OptionAlertJobRequest.model_validate(
         req.model_dump(mode="json", exclude={"force"})
     ).model_dump(mode="json")
@@ -323,10 +363,7 @@ async def get_ai_job(job_id: Annotated[str, Path(min_length=10, max_length=80)])
     return _job_repository().public(row)
 
 
-@router.post(
-    "/jobs/{job_id}/cancel",
-    dependencies=[Depends(require_expensive_action)],
-)
+@router.post("/jobs/{job_id}/cancel")
 async def cancel_ai_job(
     job_id: Annotated[str, Path(min_length=10, max_length=80)],
     req: CancelRequest,

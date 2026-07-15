@@ -1,16 +1,27 @@
 # 个人版正式切换与回滚
 
-本文保留个人版试运行阶段的迁移要点，但命令已经更新为现行正式编排。独立的个人版编排文件已删除，所有命令均使用`docker-compose.yml`。
+本文保留试运行阶段的数据保护要求，命令已改为现行正式编排。所有命令均使用`docker-compose.yml`，服务清单只有`backend`与`worker`。
 
 ## 切换前
 
 ```bash
 cp .env.example .env
-chmod 600 .env
+cp secrets.env.example secrets.env
+chmod 600 .env secrets.env
 docker compose config -q
 ```
 
-核对`.env`只含密钥、HTTPS 地址和机器网络边界。模型、推理等级和运行频率以`config/personal.toml`为准。
+核对`.env`只含监听地址、端口、MacroLens 地址和反向代理边界；`secrets.env`只含服务端密钥、Owner 密码摘要和`DATA_DIR`。访问模式、模型、推理等级、运行频率和预算以`config/personal.toml`为准。
+
+密钥优先通过个人版命令行写入，避免出现在命令参数和终端输出中：
+
+```bash
+./personal.sh secrets set OPENAI_API_KEY
+./personal.sh secrets set INTERNAL_API_TOKEN
+./personal.sh secrets set APP_PASSWORD_HASH
+./personal.sh secrets status
+./personal.sh secrets validate
+```
 
 使用备份工具保存现有数据库：
 
@@ -22,11 +33,12 @@ docker compose run --rm --no-deps \
   --database optix=/data/optix.db \
   --database catalyst-cache=/data/catalyst-cache.db \
   --database ai-jobs=/data/ai-jobs.db \
+  --database worker=/data/optix-worker.db \
   --destination /backups \
   --keep 7
 ```
 
-某个数据库从未创建时，确认原因后从命令中去掉该项，不要创建空文件冒充数据。统一工作进程运行后，将`/data/optix-worker.db`加入日常备份。
+某个数据库尚未创建时，确认原因后从命令中去掉该项，不创建空文件冒充数据。
 
 ## 正式切换
 
@@ -34,7 +46,7 @@ docker compose run --rm --no-deps \
 bash ./scripts/deploy.sh
 ```
 
-脚本会先构建镜像，再停止并确认旧工作容器退出，最后启动`backend`与`worker`。它不会删除命名卷。
+发布脚本会从`config/personal.toml`读取访问模式，在启动前检查私网监听边界或 Owner 密码摘要。它只构建现行镜像，并通过容器编排（Docker Compose）的`--remove-orphans`移除已不在现行服务清单中的容器，不再按旧服务名逐个处理。命名卷不会被删除。
 
 启动后检查：
 
@@ -44,11 +56,11 @@ curl --fail http://127.0.0.1:${PORT:-2000}/ready
 docker compose exec -T worker python -m app.worker --healthcheck
 ```
 
-工作进程健康结果应包含`breakout`、`catalyst_sync`、`focus`、`ai_jobs`和`maintenance`。
+工作进程健康结果应且只应包含`breakout`、`catalyst_sync`、`focus`、`ai_jobs`、`maintenance`、`focus_refresh`、`strength_refresh`、`breakout_refresh`和`retention`。
 
 ## 观察与旧数据只读期
 
-切换后观察一个完整美国交易周。旧 Catalyst 表、旧任务记录和旧分析投影至少保留 90 天，只供审计与兼容读取。不得在观察期清表、重写旧任务状态，或把旧备份覆盖到现行数据库。
+切换后观察一个完整美国交易周。旧 Catalyst 表、旧任务记录和旧分析修订至少保留 90 天，只供审计与兼容读取。观察期内不得清表、重写旧任务状态，或把旧备份覆盖到现行数据库。
 
 ## 回滚
 
@@ -58,4 +70,4 @@ git switch --detach <previous-verified-tag>
 docker compose up -d --build
 ```
 
-回滚继续使用同一数据卷，不附加`--volumes`。如需恢复备份，必须先停止所有写入者，核对摘要、清单、完整性检查和外键检查，再替换损坏文件。
+回滚继续使用同一数据卷，不附加`--volumes`。若需恢复备份，必须先停止所有写入者，核对摘要、清单、完整性检查和外键检查，再替换损坏文件。

@@ -70,10 +70,6 @@ def test_defaults_follow_non_secret_personal_configuration(tmp_path: Path) -> No
     assert document.settings.catalyst.sync_seconds == personal.catalyst.sync_seconds
     assert document.settings.catalyst.focus_seconds == personal.catalyst.focus_seconds
     assert (
-        document.settings.catalyst.manual_force_reanalysis
-        is personal.catalyst.manual_force_reanalysis
-    )
-    assert (
         document.settings.catalyst.manual_refresh_cooldown_seconds
         == personal.catalyst.manual_refresh_cooldown_seconds
     )
@@ -85,6 +81,9 @@ def test_defaults_follow_non_secret_personal_configuration(tmp_path: Path) -> No
     assert document.settings.catalyst.scheduled_times_et == tuple(
         personal.catalyst.scheduled_times_et
     )
+    catalyst_document = document.settings.catalyst.model_dump()
+    assert "manual_force_reanalysis" not in catalyst_document
+    assert "manual_refresh_enabled" not in catalyst_document
     assert not store.path.exists(), "读取默认值不应产生设置文件"
 
 
@@ -314,6 +313,74 @@ def test_invalid_or_secret_bearing_file_is_never_returned(tmp_path: Path) -> Non
     assert "must-not-leak" not in response.text
 
 
+def test_legacy_false_action_switches_are_ignored_and_next_write_is_compact(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "runtime-settings.json"
+    store = make_store(path)
+    payload = store.read().model_dump(mode="json")
+    payload["version"] = 4
+    payload["updated_at"] = "2026-07-16T00:00:00Z"
+    payload["settings"]["catalyst"].update(
+        {
+            "manual_force_reanalysis": False,
+            "manual_refresh_enabled": False,
+        }
+    )
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    migrated = store.read()
+
+    assert migrated.version == 4
+    assert "manual_force_reanalysis" not in migrated.settings.catalyst.model_dump()
+    assert "manual_refresh_enabled" not in migrated.settings.catalyst.model_dump()
+
+    updated = store.update(
+        RuntimeSettingsPatch(
+            catalyst=RuntimeCatalystSettingsPatch(sync_seconds=180),
+        ),
+        expected_version=4,
+    )
+
+    assert updated.version == 5
+    for document_path in (path, store._backup_path(4)):
+        persisted = json.loads(document_path.read_text(encoding="utf-8"))
+        catalyst = persisted["settings"]["catalyst"]
+        assert "manual_force_reanalysis" not in catalyst
+        assert "manual_refresh_enabled" not in catalyst
+
+
+def test_legacy_false_action_switches_in_backup_are_ignored_on_rollback(
+    tmp_path: Path,
+) -> None:
+    store = make_store(tmp_path / "runtime-settings.json")
+    current = store.update(
+        RuntimeSettingsPatch(
+            ai=RuntimeAISettingsPatch(daily_budget_usd=2.5),
+        ),
+        expected_version=1,
+    )
+    backup_path = store._backup_path(1)
+    backup = json.loads(backup_path.read_text(encoding="utf-8"))
+    backup["settings"]["catalyst"].update(
+        {
+            "manual_force_reanalysis": False,
+            "manual_refresh_enabled": False,
+        }
+    )
+    backup_path.write_text(json.dumps(backup), encoding="utf-8")
+
+    assert [item.version for item in store.history()] == [2, 1]
+    restored = store.rollback(1, expected_version=current.version)
+
+    assert restored.version == 3
+    catalyst = json.loads(store.path.read_text(encoding="utf-8"))["settings"][
+        "catalyst"
+    ]
+    assert "manual_force_reanalysis" not in catalyst
+    assert "manual_refresh_enabled" not in catalyst
+
+
 def test_api_reads_updates_history_and_rolls_back_without_secret_fields(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -334,8 +401,6 @@ def test_api_reads_updates_history_and_rolls_back_without_secret_fields(
                     "manual_analysis_cooldown_seconds": 90,
                 },
                 "catalyst": {
-                    "manual_force_reanalysis": True,
-                    "manual_refresh_enabled": True,
                     "manual_refresh_cooldown_seconds": 40,
                     "scheduled_analysis_enabled": True,
                     "scheduled_times_et": ["08:00", "12:30", "08:00"],
@@ -371,6 +436,31 @@ def test_api_reads_updates_history_and_rolls_back_without_secret_fields(
     assert "api_key" not in combined
     assert "password" not in combined
     assert "token" not in combined
+    assert "manual_force_reanalysis" not in combined
+    assert "manual_refresh_enabled" not in combined
+
+
+@pytest.mark.parametrize(
+    "legacy_field",
+    ["manual_force_reanalysis", "manual_refresh_enabled"],
+)
+def test_api_rejects_removed_action_switches_in_new_patches(
+    tmp_path: Path,
+    legacy_field: str,
+) -> None:
+    store = make_store(tmp_path / "runtime-settings.json")
+    response = make_client(store).put(
+        "/api/runtime-settings",
+        json={
+            "expected_version": 1,
+            "settings": {"catalyst": {legacy_field: False}},
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_settings"
+    assert store.read().version == 1
+    assert not store.path.exists()
 
 
 @pytest.mark.parametrize(

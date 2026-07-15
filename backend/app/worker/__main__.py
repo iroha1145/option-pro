@@ -19,7 +19,6 @@ from .state import WorkerAlreadyRunning, WorkerLeaseLost, WorkerStateRepository
 if TYPE_CHECKING:
     from app.config import Settings
 
-
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Optix personal single-process worker")
     mode = parser.add_mutually_exclusive_group()

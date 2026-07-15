@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import sqlite3
 import uuid
@@ -16,6 +17,10 @@ LOCK_NAME = "optix-worker"
 _MAX_DETAILS_BYTES = 16 * 1024
 _ACTION_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9._:-]{1,200}$")
+_SENSITIVE_DETAIL_KEY = re.compile(
+    r"(?:authorization|cookie|credential|password|passwd|secret|token|api_key|private_key)",
+    re.IGNORECASE,
+)
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS optix_worker_schema (
     version TEXT PRIMARY KEY,
@@ -109,6 +114,44 @@ def _details_json(details: Mapping[str, Any] | None) -> str:
     if len(raw.encode("utf-8")) > _MAX_DETAILS_BYTES:
         raise ValueError("worker task details are too large")
     return raw
+
+
+def _validate_action_detail(value: Any, *, depth: int = 0) -> None:
+    if depth > 8:
+        raise ValueError("worker action details are too deeply nested")
+    if value is None or isinstance(value, (bool, int)):
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("worker action details contain a non-finite number")
+        return
+    if isinstance(value, str):
+        if len(value.encode("utf-8")) > 1024:
+            raise ValueError("worker action detail string is too large")
+        return
+    if isinstance(value, Mapping):
+        if len(value) > 64:
+            raise ValueError("worker action details contain too many fields")
+        for key, item in value.items():
+            if not isinstance(key, str) or not key or len(key) > 80:
+                raise ValueError("worker action detail key is invalid")
+            if _SENSITIVE_DETAIL_KEY.search(key):
+                raise ValueError("worker action details cannot contain sensitive fields")
+            _validate_action_detail(item, depth=depth + 1)
+        return
+    if isinstance(value, (list, tuple)):
+        if len(value) > 128:
+            raise ValueError("worker action details contain too many items")
+        for item in value:
+            _validate_action_detail(item, depth=depth + 1)
+        return
+    raise ValueError("worker action details contain an unsupported value")
+
+
+def _action_details_json(details: Mapping[str, Any] | None) -> str:
+    document = dict(details or {})
+    _validate_action_detail(document)
+    return _details_json(document)
 
 
 class WorkerStateRepository:
@@ -324,6 +367,7 @@ class WorkerStateRepository:
         idempotency_key: str,
         *,
         cooldown_seconds: float = 0.0,
+        details: Mapping[str, Any] | None = None,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         if not _ACTION_NAME.fullmatch(action_type):
@@ -334,6 +378,7 @@ class WorkerStateRepository:
             raise ValueError("worker action idempotency key is invalid")
         if not 0 <= float(cooldown_seconds) <= 86_400:
             raise ValueError("worker action cooldown is invalid")
+        details_json = _action_details_json(details)
         observed = _as_utc(now or utc_now())
         observed_text = _iso(observed)
         with self._connect() as connection:
@@ -394,7 +439,7 @@ class WorkerStateRepository:
                     "queued",
                     float(cooldown_seconds),
                     observed_text,
-                    "{}",
+                    details_json,
                     observed_text,
                 ),
             )
@@ -483,42 +528,64 @@ class WorkerStateRepository:
             raise ValueError("worker action error code is invalid")
         observed = _as_utc(now or utc_now())
         observed_text = _iso(observed)
-        body = _details_json(details)
-        placeholders = ",".join("?" for _ in request_ids)
+        completion = dict(details or {})
+        _validate_action_detail(completion)
+        unique_request_ids = list(dict.fromkeys(request_ids))
+        placeholders = ",".join("?" for _ in unique_request_ids)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             self._assert_fence(connection, owner_id, fencing_token, observed)
-            cursor = connection.execute(
+            rows = connection.execute(
                 f"""
-                UPDATE worker_action_requests
-                SET status=?,completed_at=?,
-                    cooldown_until=CASE
-                        WHEN ? THEN strftime(
-                            '%Y-%m-%dT%H:%M:%fZ',
-                            ?,
-                            '+' || cooldown_seconds || ' seconds'
-                        )
-                        ELSE NULL
-                    END,
-                    error_code=?,details_json=?,updated_at=?
+                SELECT request_id,details_json FROM worker_action_requests
                 WHERE request_id IN ({placeholders})
                   AND status='running' AND owner_id=? AND fencing_token=?
                 """,
-                (
-                    "completed" if succeeded else "failed",
-                    observed_text,
-                    int(succeeded),
-                    observed_text,
-                    None if succeeded else error_code,
-                    body,
-                    observed_text,
-                    *request_ids,
-                    owner_id,
-                    int(fencing_token),
-                ),
-            )
+                (*unique_request_ids, owner_id, int(fencing_token)),
+            ).fetchall()
+            updated = 0
+            for row in rows:
+                try:
+                    request_details = json.loads(row["details_json"])
+                except (TypeError, json.JSONDecodeError):
+                    request_details = {}
+                if not isinstance(request_details, dict):
+                    request_details = {}
+                merged = dict(request_details)
+                merged.update(completion)
+                body = _action_details_json(merged)
+                cursor = connection.execute(
+                    """
+                    UPDATE worker_action_requests
+                    SET status=?,completed_at=?,
+                        cooldown_until=CASE
+                            WHEN ? THEN strftime(
+                                '%Y-%m-%dT%H:%M:%fZ',
+                                ?,
+                                '+' || cooldown_seconds || ' seconds'
+                            )
+                            ELSE NULL
+                        END,
+                        error_code=?,details_json=?,updated_at=?
+                    WHERE request_id=? AND status='running'
+                      AND owner_id=? AND fencing_token=?
+                    """,
+                    (
+                        "completed" if succeeded else "failed",
+                        observed_text,
+                        int(succeeded),
+                        observed_text,
+                        None if succeeded else error_code,
+                        body,
+                        observed_text,
+                        row["request_id"],
+                        owner_id,
+                        int(fencing_token),
+                    ),
+                )
+                updated += cursor.rowcount
             connection.commit()
-            return cursor.rowcount
+            return updated
 
     def action_requests(
         self,

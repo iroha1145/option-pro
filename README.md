@@ -1,11 +1,11 @@
 # Optix Pro
 
-Optix Pro 是面向个人使用的美股期权、突破信号与新闻分析工作台。网页、接口和后台任务共用同一份代码与数据卷，长期运行的容器只有两个：
+Optix Pro 是面向个人使用的美股期权、突破信号与新闻分析工作台。正式运行只有两个常驻容器：
 
-- `backend`：提供网页、接口和只读查询，也接收所有者明确发起的任务。
+- `backend`：提供网页、接口和查询，也接收所有者明确发起的任务。
 - `worker`：统一管理突破扫描、新闻同步、焦点快照、模型任务、刷新、备份与清理。
 
-模型固定为 GPT-5.6 Terra，推理等级固定为 `max`，最大并发数固定为 1。新闻标题、摘要、等待提示和分析内容必须通过简体中文校验；来源原文只作为内部证据保留。
+两个容器共用同一镜像和数据卷。模型固定为 GPT-5.6 Terra，推理等级固定为 `max`，最大并发数固定为 1。新闻标题、摘要、等待提示和分析内容必须通过简体中文校验；来源原文只作为内部证据保留。
 
 本项目不是实时行情终端，也不构成投资建议。Yahoo 等公开数据可能延迟、缺失或临时不可用，下单前仍需用券商行情核对。
 
@@ -36,11 +36,11 @@ chmod 600 .env machine.env secrets.env
 
 完成后访问 <http://localhost:2000>。进程健康信息位于 `/health`，部署就绪检查位于 `/ready`。
 
-部署脚本会构建当前提交，停止同一编排项目中的旧工作容器，确认旧写入者已经退出，再启动 `backend` 与统一的 `worker`。不要用 `docker compose restart` 代替新版本构建。
+部署脚本会校验配置、构建当前提交，停止同一编排项目中的旧工作容器，确认旧写入者已经退出，再启动 `backend` 与统一的 `worker`。它不会刷新新闻、运行扫描或创建模型任务，也不能用 `docker compose restart` 代替新版本构建。
 
 ## 配置边界
 
-`config/personal.toml` 管理功能行为、任务频率、模型限制、预算与数据保留期。正式运行参数不能通过环境变量改成其他模型或更高并发。
+`config/personal.toml` 管理访问模式、功能行为、任务频率、模型限制、预算、冷却与数据保留期。正式运行参数不能通过环境变量改成其他模型或更高并发。
 
 `machine.env` 只保存七项机器配置：
 
@@ -62,7 +62,7 @@ chmod 600 .env machine.env secrets.env
 
 进程已经导出的值优先级最高；文件加载顺序为 `.env`、`machine.env`、`secrets.env`。`.env` 只保留一个版本迁移期的兼容用途，新安装应把机器配置和密钥放入对应文件。
 
-旧名称 `MARKETDATA_API_TOKEN`、`MACROLENS_BASE_URL` 和 `MACROLENS_INTERNAL_TOKEN` 只供迁移工具识别。旧名与新名同时存在且值不一致时，迁移会停止，不会猜测采用哪一项。旧签名密钥、Nonce、Key ID、前一把密钥和浏览器令牌不会进入最终运行配置。
+旧名称 `MARKETDATA_API_TOKEN`、`MACROLENS_BASE_URL` 和 `MACROLENS_INTERNAL_TOKEN` 只供迁移工具识别。旧名与新名同时存在且值不一致时，迁移会停止，不会猜测采用哪一项。旧签名密钥、请求随机数（Nonce）、密钥编号（Key ID）、前一把密钥和浏览器令牌不会进入最终运行配置。
 
 ## 模型分析
 
@@ -82,23 +82,47 @@ OPENAI_MAX_RETRIES=0
 OPENAI_MAX_CONCURRENCY=1
 ```
 
-模型任务保留严格结构化输出、每日任务次数、每日美元预算与冷却限制。相同输入会先复用原任务，即使队列已经满也不会重复计费；只有新任务在队列饱和时返回 429 和 `Retry-After: 60`。
+模型任务保留严格结构化输出、每日任务次数、每日美元预算与冷却限制。相同输入会先复用原任务，即使队列已满也不会重复计费；只有新任务在队列饱和时返回 429 和 `Retry-After: 60`。
+
+每日美元预算是提交前的本地保守预留，不是供应商的实时账单，最终费用仍以供应商后台为准。
 
 ## 访问安全
 
-默认只发布到 `127.0.0.1:2000`。
+访问模式只在 `config/personal.toml` 中设置：
 
-`private_network` 只用于本机、SSH 转发、可信虚拟专用网络（VPN）或直接私网连接。该模式必须保持 `TRUST_PROXY_HEADERS=false`，不能放在 Nginx、Caddy、Cloudflare Tunnel 或公网负载均衡器后；监听地址和允许主机也只能使用本机或许可私网地址。
+```toml
+[access]
+mode = "private_network"
+```
+
+`private_network` 只用于本机、安全外壳（SSH）转发、可信虚拟专用网络（VPN）或直接私网连接。该模式必须保持 `TRUST_PROXY_HEADERS=false`，不能放在 Nginx、Caddy、Cloudflare Tunnel 或公网负载均衡器后；监听地址和允许主机也只能使用本机或许可私网地址。
 
 任何反向代理、公开域名或公网入口都必须使用 `password` 模式，并满足以下条件：
 
 - `secrets.env` 中存在有效的 `APP_PASSWORD_HASH`；
 - `machine.env` 明确列出允许访问的域名；
-- 外层代理提供有效的 HTTPS；
+- 外层代理提供有效的超文本传输安全协议（HTTPS）；
 - 只有代理确实清洗转发头时才启用 `TRUST_PROXY_HEADERS`；
 - `TRUSTED_PROXY_CIDRS` 只包含实际代理来源网段，不得使用公网全网段。
 
 例如 `option.openweb-ui.xyz` 一类公开域名必须使用密码模式和 HTTPS。应用启动、`./personal.sh doctor` 与部署脚本共用同一校验器，配置不完整时都会停止。
+
+密码模式只有一个所有者（Owner）密码，不提供用户、角色、注册或找回密码。密码会话使用有时效的 `HttpOnly`、`Secure`、`SameSite=Strict` Cookie；`/health` 与 `/ready` 无需登录，其余页面和接口共用同一所有者边界。
+
+## 密钥管理
+
+```bash
+./personal.sh secrets status
+./personal.sh secrets set OPENAI_API_KEY
+./personal.sh secrets set FINNHUB_API_KEY
+./personal.sh secrets set MARKETDATA_TOKEN
+./personal.sh secrets set INTERNAL_API_TOKEN
+./personal.sh secrets set APP_PASSWORD_HASH
+./personal.sh secrets remove OPENAI_API_KEY
+./personal.sh secrets validate
+```
+
+`status` 只显示是否配置，不回显值。`validate` 只做格式、安全权限和免计费连通性检查，不创建模型任务。密钥写入使用锁、私有临时文件和原子替换，避免并发修改相互覆盖。
 
 ## 健康检查
 
@@ -107,7 +131,7 @@ curl --fail http://127.0.0.1:2000/ready
 docker compose exec -T worker python -m app.worker --healthcheck
 ```
 
-最终统一工作进程应报告九项任务：
+统一工作进程应且只应报告九项任务：
 
 - `breakout`
 - `catalyst_sync`
@@ -119,20 +143,21 @@ docker compose exec -T worker python -m app.worker --healthcheck
 - `breakout_refresh`
 - `retention`
 
-健康检查只读取本地进程锁、心跳和任务状态，不会创建模型任务，不会请求真实新闻源，也不会消耗付费额度。
+健康检查只读取本地进程锁、心跳和任务状态，不会运行扫描、请求真实新闻源或创建模型任务，也不会消耗付费额度。
 
 ## 数据与迁移
 
-所有运行数据保存在 `optix-data` 命名卷。升级和回滚时不要附加 `--volumes` 或 `-v`。
-
-主要数据库位于统一的 `DATA_DIR`：
+所有运行数据保存在 `optix-data` 命名卷，并从统一的 `DATA_DIR` 派生：
 
 - `optix.db`
 - `catalyst-cache.db`
 - `ai-jobs.db`
 - `optix-worker.db`
+- `runtime-settings.json`
+- `watchlist-snapshot-v1.json`
+- `backups/`
 
-迁移工具会生成 `personal.toml`、`machine.env`、`secrets.env` 和不含任何值的 `migration-report.json`。详细边界见[个人版迁移说明](docs/personal-edition/migration.md)。
+升级和回滚时不要附加 `--volumes` 或 `-v`。迁移工具会生成 `personal.toml`、`machine.env`、`secrets.env` 和不含任何值的 `migration-report.json`。详细边界见[个人版迁移说明](docs/personal-edition/migration.md)。
 
 ## 期权异动范围
 
@@ -149,18 +174,18 @@ node frontend/tests/static_assertions.mjs
 npm --prefix frontend run test:visual
 ```
 
-持续集成（CI）只使用本地夹具和模拟连接，不访问真实 OpenAI、新闻源、行情源或生产数据库。
+持续集成（CI）只使用本地夹具和模拟连接，不访问真实 OpenAI、新闻源、行情源或生产数据库。检查通过只说明该提交通过测试与容器验证，不代表生产服务器已经更新。
 
 ## 日常管理
 
 ```bash
 docker compose ps
 docker compose logs -f backend worker
-docker compose restart backend
+docker compose restart backend worker
 docker compose down
 ```
 
-持续集成通过只说明该提交通过测试与容器检查，不代表生产服务器已经更新。
+工作进程的停止宽限期为 2100 秒，避免把正在保存响应身份的模型任务留在未知状态。
 
 ## 许可证
 

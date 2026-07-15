@@ -127,8 +127,49 @@
     brkCurrent: null, brkStatus: null, brkEvents: null, brkCursor: null,
     sectors: null, sectorIV: {},
     impacts: {},           // ticker → result | {error} | "loading"
+    runtimeSettings: null,
   };
   let gen = 0; // 路由代际,防陈旧渲染
+
+  function manualAnalysisDecision(documentState) {
+    const value = documentState && documentState.settings
+      && documentState.settings.ai
+      && documentState.settings.ai.manual_analysis_enabled;
+    if (value === true) return { enabled: true, title: "允许手动分析", detail: "" };
+    if (value === false) return {
+      enabled: false,
+      title: "手动分析已关闭",
+      detail: "运行设置关闭了手动分析，已有任务仍可查询和取消。",
+    };
+    return {
+      enabled: false,
+      title: "手动分析暂不可用",
+      detail: "运行设置暂时无法读取，恢复前不会创建付费任务。",
+    };
+  }
+
+  let runtimeSettingsPromise = null;
+  async function loadManualAnalysisControl() {
+    if (runtimeSettingsPromise) return runtimeSettingsPromise;
+    const request = N.runtimeSettings()
+      .then(documentState => {
+        St.runtimeSettings = documentState;
+        return manualAnalysisDecision(documentState);
+      })
+      .catch(() => {
+        St.runtimeSettings = null;
+        return manualAnalysisDecision(null);
+      })
+      .finally(() => {
+        if (runtimeSettingsPromise === request) runtimeSettingsPromise = null;
+      });
+    runtimeSettingsPromise = request;
+    return request;
+  }
+
+  function rememberManualAnalysisDisabled() {
+    St.runtimeSettings = { settings: { ai: { manual_analysis_enabled: false } } };
+  }
 
   /* ---------- 通用状态块 ---------- */
   const loadingView = label => `<div class="view-loading" role="status"><span class="spinner" aria-hidden="true"></span><p>${esc(label)}</p><small>实时读取生产数据 · 冷启动扫描约需 1—2 分钟</small></div>`;
@@ -645,23 +686,271 @@
     };
   }
   const scr = { tf: "all", profile: "balanced", top: "20", minPrice: "5", minTurnover: "10", sector: "" };
-  const scanParams = () => ({
-    timeframe: scr.tf, profile: scr.profile, top: scr.top,
-    sector_id: scr.sector || undefined,
-    min_price: scr.minPrice === "" ? undefined : scr.minPrice,
-    min_avg_dollar_volume: scr.minTurnover === "" ? undefined : String(parseFloat(scr.minTurnover) * 1e6),
+  const strengthBoundedNumber = (value, fallback) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+  };
+  const strengthScanParameters = () => ({
+    universe: "themes",
+    timeframe: scr.tf,
+    profile: scr.profile,
+    top: Math.max(5, Math.min(120, Math.trunc(strengthBoundedNumber(scr.top, 20)))),
+    sector_id: scr.sector || null,
+    min_price: strengthBoundedNumber(scr.minPrice, 0),
+    min_avg_dollar_volume: strengthBoundedNumber(scr.minTurnover, 0) * 1e6,
+    include_options: true,
   });
+  function canonicalStrengthParameters(value) {
+    if (!value || typeof value !== "object") return null;
+    const top = Number(value.top), minPrice = Number(value.min_price), minTurnover = Number(value.min_avg_dollar_volume);
+    const sector = value.sector_id == null || value.sector_id === "" ? null : String(value.sector_id);
+    if (value.universe !== "themes"
+      || !["short", "mid", "long", "all"].includes(value.timeframe)
+      || !["conservative", "balanced", "aggressive"].includes(value.profile)
+      || !Number.isInteger(top) || top < 5 || top > 120
+      || !Number.isFinite(minPrice) || minPrice < 0
+      || !Number.isFinite(minTurnover) || minTurnover < 0
+      || typeof value.include_options !== "boolean") return null;
+    return {
+      universe: "themes", timeframe: value.timeframe, profile: value.profile, top,
+      sector_id: sector, min_price: minPrice, min_avg_dollar_volume: minTurnover,
+      include_options: value.include_options,
+    };
+  }
+  const strengthQueryParams = parameters => ({
+    universe: parameters.universe,
+    timeframe: parameters.timeframe,
+    profile: parameters.profile,
+    top: parameters.top,
+    sector_id: parameters.sector_id || undefined,
+    min_price: parameters.min_price,
+    min_avg_dollar_volume: parameters.min_avg_dollar_volume,
+    include_options: parameters.include_options,
+  });
+  const scanParams = () => strengthQueryParams(strengthScanParameters());
+  const strengthParametersEqual = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+  function applyStrengthParameters(parameters) {
+    scr.tf = parameters.timeframe;
+    scr.profile = parameters.profile;
+    scr.top = String(parameters.top);
+    scr.sector = parameters.sector_id || "";
+    scr.minPrice = String(parameters.min_price);
+    scr.minTurnover = String(parameters.min_avg_dollar_volume / 1e6);
+  }
+  const strengthParametersText = parameters => `${N.TIMEFRAME_CN[parameters.timeframe] || parameters.timeframe} · ${N.PROFILE_CN[parameters.profile] || parameters.profile} · 前 ${parameters.top} 只${parameters.sector_id ? ` · 板块 ${parameters.sector_id}` : ""}`;
   const planText = (secName) => `当前方案:${N.PROFILE_CN[scr.profile]} · ${N.TIMEFRAME_CN[scr.tf]} · 前 ${scr.top} 只 · 股价 ≥ $${scr.minPrice || 0} · 日均额 ≥ ${(parseFloat(scr.minTurnover || 0) * 100).toLocaleString("zh-CN")} 万美元 · ${secName || "全部板块"}`;
 
-  async function renderScreener(forceScan) {
+  const STRENGTH_REFRESH_TIMEOUT_MS = 21 * 60e3;
+  const STRENGTH_REFRESH_POLL_MS = 1500;
+  let strengthRefreshPromise = null;
+  let strengthRefreshGeneration = -1;
+  const strengthRefreshDelay = ms => new Promise(resolve => window.setTimeout(resolve, ms));
+  const strengthActionStatus = operation => String(operation && operation.status || "").toLowerCase();
+
+  function setStrengthRefreshUi(status, message) {
+    const busy = ["submitting", "queued", "running", "loading"].includes(status);
+    const labels = {
+      submitting: "正在提交",
+      queued: "后台已排队",
+      running: "后台扫描中",
+      loading: "正在读取快照",
+    };
+    $$('[data-strength-refresh]', view).forEach(button => {
+      if (!button.dataset.idleLabel) button.dataset.idleLabel = button.textContent.trim() || "重新扫描";
+      button.disabled = busy;
+      button.setAttribute("aria-busy", busy ? "true" : "false");
+      button.textContent = labels[status] || button.dataset.idleLabel;
+    });
+    $$('[data-strength-refresh-state]', view).forEach(state => {
+      state.dataset.status = status || "idle";
+      state.textContent = message || "";
+    });
+    $$('.fchip[data-k], #scr-minprice, #scr-minturn', view).forEach(control => {
+      control.disabled = busy;
+    });
+  }
+
+  function strengthRefreshFailureText(error) {
+    const code = String(error && (error.code || error.errorCode) || "");
+    if (code === "worker_unavailable") return "后台工作进程暂不可用，当前页面内容保持不变。";
+    if (code === "worker_task_unavailable") return "强势雷达后台任务暂不可用，当前页面内容保持不变。";
+    if (code === "worker_task_disabled") return "强势雷达后台任务已停用，当前页面内容保持不变。";
+    if (code === "strength_snapshot_unavailable") return "后台扫描已结束，但当前条件没有匹配的快照，原有结果继续保留。";
+    if (code === "strength_refresh_timeout") return "后台扫描仍未结束，可稍后再查看；原有结果继续保留。";
+    if (code === "strength_refresh_failed") return `后台扫描失败${error && error.errorCode ? `（${String(error.errorCode)}）` : ""}，原有结果继续保留。`;
+    return `${error && error.message ? error.message : "后台扫描未完成"}，原有结果继续保留。`;
+  }
+
+  async function pollStrengthRefresh(operation, generation) {
+    let current = operation;
+    const deadline = Date.now() + STRENGTH_REFRESH_TIMEOUT_MS;
+    while (["queued", "running"].includes(strengthActionStatus(current))) {
+      const status = strengthActionStatus(current);
+      setStrengthRefreshUi(
+        status,
+        status === "running"
+          ? "后台正在扫描全市场，页面保留现有结果。"
+          : "任务已进入后台队列，页面保留现有结果。",
+      );
+      if (Date.now() >= deadline) {
+        const error = new Error("strength refresh timed out");
+        error.code = "strength_refresh_timeout";
+        throw error;
+      }
+      await strengthRefreshDelay(STRENGTH_REFRESH_POLL_MS);
+      if (generation !== gen) return null;
+      if (!current || !current.request_id) {
+        const error = new Error("strength refresh request id missing");
+        error.code = "strength_refresh_failed";
+        throw error;
+      }
+      try {
+        current = await N.workerAction(current.request_id);
+      } catch (error) {
+        if (generation !== gen) return null;
+        if (error && error.status && error.status < 500) throw error;
+        setStrengthRefreshUi("running", "后台任务状态暂时读不到，正在继续等待；页面保留现有结果。");
+        continue;
+      }
+      if (generation !== gen) return null;
+    }
+    return current;
+  }
+
+  async function refreshStrengthSnapshot() {
+    const generation = gen;
+    if (strengthRefreshPromise && strengthRefreshGeneration === generation) return strengthRefreshPromise;
+    const requestedParameters = strengthScanParameters();
+    const task = (async () => {
+      setStrengthRefreshUi("submitting", "正在提交强势雷达后台任务，页面保留现有结果。");
+      let operation = await N.requestWorkerAction(
+        "strength_refresh",
+        { parameters: requestedParameters },
+      );
+      if (generation !== gen) return;
+      const submissionReason = String(operation && operation.reason || "");
+      const submissionReused = !!(operation && operation.reused);
+      operation = await pollStrengthRefresh(operation, generation);
+      if (!operation || generation !== gen) return;
+      const status = strengthActionStatus(operation);
+      if (status === "failed") {
+        const error = new Error("strength refresh failed");
+        error.code = "strength_refresh_failed";
+        error.errorCode = operation.error_code || "unknown";
+        throw error;
+      }
+      if (status !== "completed") {
+        const error = new Error("strength refresh returned an unknown status");
+        error.code = "strength_refresh_failed";
+        error.errorCode = status || "unknown";
+        throw error;
+      }
+      const actualParameters = canonicalStrengthParameters(
+        operation.details && operation.details.parameters,
+      );
+      if (!actualParameters) {
+        const error = new Error("strength refresh parameters missing");
+        error.code = "strength_refresh_failed";
+        error.errorCode = "parameters_missing";
+        throw error;
+      }
+      const reusedDifferent = !strengthParametersEqual(requestedParameters, actualParameters);
+      setStrengthRefreshUi(
+        "loading",
+        reusedDifferent
+          ? "后台已有另一组条件的任务，正在读取该任务的实际快照。"
+          : "后台扫描已完成，正在读取对应快照。",
+      );
+      N.invalidateCache("/api/strength/scan");
+      const snapshot = await N.scan(strengthQueryParams(actualParameters), true);
+      if (generation !== gen) return;
+      applyStrengthParameters(actualParameters);
+      const renderGeneration = gen + 1;
+      await renderScreener(snapshot);
+      if (gen !== renderGeneration) return;
+      const actualLabel = strengthParametersText(actualParameters);
+      if (reusedDifferent) {
+        setStrengthRefreshUi(
+          "reused",
+          `另一组条件的任务已被复用，现按其实际条件显示：${actualLabel}。`,
+        );
+      } else if (submissionReason === "cooldown") {
+        setStrengthRefreshUi("cooldown", `仍在冷却期，本次未重复扫描；已显示最近快照：${actualLabel}。`);
+      } else if (submissionReused) {
+        setStrengthRefreshUi("reused", `相同后台任务已复用，已显示对应快照：${actualLabel}。`);
+      } else {
+        setStrengthRefreshUi("completed", `后台扫描完成，已显示新快照：${actualLabel}。`);
+      }
+    })();
+    const tracked = task.catch(error => {
+      if (generation === gen && (!error || error.name !== "AbortError")) {
+        setStrengthRefreshUi("failed", strengthRefreshFailureText(error));
+      }
+    }).finally(() => {
+      if (generation === gen) {
+        $$('[data-strength-refresh]', view).forEach(button => {
+          button.disabled = false;
+          button.setAttribute("aria-busy", "false");
+          button.textContent = button.dataset.idleLabel || "重新扫描";
+        });
+      }
+      if (strengthRefreshPromise === tracked) {
+        strengthRefreshPromise = null;
+        strengthRefreshGeneration = -1;
+      }
+    });
+    strengthRefreshPromise = tracked;
+    strengthRefreshGeneration = generation;
+    return tracked;
+  }
+
+  function bindStrengthRefresh() {
+    $$('[data-strength-refresh]', view).forEach(button => {
+      button.dataset.idleLabel = button.textContent.trim() || "重新扫描";
+      button.addEventListener("click", refreshStrengthSnapshot);
+    });
+  }
+
+  function renderStrengthUnavailable(error) {
+    view.innerHTML = `
+      <div class="view-head" data-reveal style="--reveal-i:0">
+        <div>
+          <p class="view-head__kicker">02 · Screener</p>
+          <h1>从市场里,筛出值得研究的股票<small>扫描由后台统一执行，打开页面只读取已有快照。</small></h1>
+        </div>
+        <div class="view-head__aside">${dataState("后台快照暂不可用", true)}</div>
+      </div>
+      <section class="panel panel--pad" data-reveal style="--reveal-i:1" aria-label="强势雷达快照状态">
+        <div class="empty-note" role="status" style="padding:34px 20px">
+          <p>尚无可用的强势雷达后台快照</p>
+          <small>${esc(error && error.message || "后台快照暂不可用")}。页面不会自行发起全市场扫描。</small>
+          <button class="btn btn--amber btn--sm" id="rescan" data-strength-refresh>开始后台扫描</button>
+          <span class="mono" data-strength-refresh-state aria-live="polite" style="display:block;margin-top:10px;font-size:10.5px;color:var(--faint)">暂不可用</span>
+        </div>
+      </section>`;
+    postRender();
+    bindStrengthRefresh();
+  }
+
+  async function renderScreener(prefetchedScan) {
     const g0 = ++gen;
-    view.innerHTML = loadingView(forceScan ? "正在重新扫描全市场…" : "正在读取扫描结果…");
+    view.innerHTML = `<div class="view-loading" role="status"><span class="spinner" aria-hidden="true"></span><p>正在读取强势雷达后台快照…</p><small>打开页面不会发起全市场扫描</small></div>`;
     const [prof, scanR] = await Promise.all([
       settle(N.profiles()),
-      settle(N.scan(scanParams(), forceScan)),
+      prefetchedScan && typeof prefetchedScan === "object"
+        ? Promise.resolve({ ok: true, v: prefetchedScan })
+        : settle(N.scan(scanParams())),
     ]);
     if (g0 !== gen) return;
-    if (!scanR.ok) { view.innerHTML = errorView("扫描接口读取失败", scanR.e.message); bindRetry(() => renderScreener()); return; }
+    if (!scanR.ok) {
+      if (scanR.e && scanR.e.code === "strength_snapshot_unavailable") {
+        renderStrengthUnavailable(scanR.e);
+        return;
+      }
+      view.innerHTML = errorView("强势雷达快照读取失败", scanR.e.message);
+      bindRetry(() => renderScreener());
+      return;
+    }
     St.profiles = prof.ok ? prof.v : { profiles: ["balanced"], timeframes: ["all"], sectors: [] };
     St.scan = scanR.v;
 
@@ -672,7 +961,7 @@
     const secName = scr.sector ? ((P.sectors || []).find(s => s.id === scr.sector) || {}).name : "";
     const skipped = D2.skipped || {};
     const skippedTotal = Object.values(skipped).reduce((a, b) => a + (b || 0), 0);
-    const degraded = (dsrc.prices && dsrc.prices.status && dsrc.prices.status !== "active");
+    const degraded = !!D2._stale || (dsrc.prices && dsrc.prices.status && dsrc.prices.status !== "active");
 
     const inputChips = [
       dsrc.prices && { k: "价格与成交量", p: dsrc.prices.provider, s: N.srcCN(dsrc.prices.status), warn: dsrc.prices.status !== "active", msg: dsrc.prices.message },
@@ -695,7 +984,7 @@
         <p class="view-head__kicker">02 · Screener</p>
         <h1>从市场里,筛出值得研究的股票<small>先设条件,再看环境和候选;详细依据只在需要时展开。</small></h1>
       </div>
-      <div class="view-head__aside">${dataState(`扫描 ${N.fmtTime(D2.as_of)} · 服务端缓存至 ${N.fmtTime(D2.cache_expires_at)}`, degraded)}</div>
+      <div class="view-head__aside">${dataState(`${D2._stale ? "后台过期快照" : "后台快照"} ${N.fmtTime(D2.as_of)} · ${D2._stale ? "等待手动刷新" : `有效至 ${N.fmtTime(D2.cache_expires_at)}`}`, degraded)}</div>
     </div>
 
     <section class="panel panel--pad" data-reveal style="--reveal-i:1" aria-label="扫描设置">
@@ -734,7 +1023,8 @@
       <div class="setup-foot">
         <span class="mono" id="plan-line" style="font-size:11px;color:var(--faint)">${esc(planText(secName))}</span>
         <span style="flex:1"></span>
-        <button class="btn btn--amber btn--sm" id="rescan">重新扫描</button>
+        <span class="mono" data-strength-refresh-state aria-live="polite" style="font-size:10.5px;color:var(--faint)">${D2._stale ? "当前快照已过期，可提交后台扫描更新。" : "页面只读取后台快照，不会即时扫描全市场。"}</span>
+        <button class="btn btn--amber btn--sm" id="rescan" data-strength-refresh>重新扫描</button>
       </div>
     </section>
 
@@ -743,7 +1033,7 @@
       <div class="scan-status ${degraded || !rows.length ? "is-warn" : ""}" style="margin-bottom:16px">
         <i></i><b>${rows.length ? `已找到 ${rows.length} 只候选` : "本轮没有候选"}</b>
         <span>${rows.length
-          ? `覆盖 ${secName || "全部板块"} · ${N.TIMEFRAME_CN[scr.tf]}周期 · 评分偏好${N.PROFILE_CN[scr.profile]}`
+          ? `${D2._stale ? "当前为过期快照 · " : ""}覆盖 ${secName || "全部板块"} · ${N.TIMEFRAME_CN[scr.tf]}周期 · 评分偏好${N.PROFILE_CN[scr.profile]}`
           : degraded
             ? esc((dsrc.prices && dsrc.prices.message) || "行情数据源降级,扫描未能完成")
             : `通过初筛 ${D2.screened_count != null ? D2.screened_count : 0} 只 · 跳过 ${skippedTotal} 只`}</span>
@@ -825,15 +1115,16 @@
             <div class="cand__actions">
               <button class="btn btn--sm" data-cevt="${i}">查看完整证据</button>
               <button class="btn btn--amber btn--sm" data-open="${esc(c.ticker)}">打开研究页 →</button>
-              <span class="mono" style="font-size:9.5px;color:var(--faint)">证据字段来自 /api/strength/scan 实时输出</span>
+              <span class="mono" style="font-size:9.5px;color:var(--faint)">证据字段来自 /api/strength/scan 后台快照</span>
             </div>
           </div>
         </details>`;
         }).join("") : `
         <div class="empty-note" style="padding:34px 20px">
           <p>${degraded ? "数据源降级,本轮扫描没有产出候选" : "当前条件下没有候选"}</p>
-          <small>${degraded ? esc((dsrc.prices && dsrc.prices.message) || "") + " · 服务端会在缓存过期后自动重试" : "试试放宽最低股价 / 成交额,或切换板块范围"}</small>
-          <button class="btn btn--sm" id="rescan-empty">重新扫描</button>
+          <small>${degraded ? esc((dsrc.prices && dsrc.prices.message) || "") + " · 可点重新扫描提交后台任务" : "试试放宽最低股价 / 成交额,或切换板块范围"}</small>
+          <button class="btn btn--sm" id="rescan-empty" data-strength-refresh>重新扫描</button>
+          <span class="mono" data-strength-refresh-state aria-live="polite" style="display:block;margin-top:10px;font-size:10.5px;color:var(--faint)">${D2._stale ? "当前快照已过期。" : "后台快照已读取。"}</span>
         </div>`}
       </div>
     </section>`;
@@ -848,9 +1139,7 @@
     const mp = $("#scr-minprice"), mt = $("#scr-minturn");
     if (mp) mp.addEventListener("change", e => { scr.minPrice = e.target.value; $("#plan-line").textContent = planText(secName); });
     if (mt) mt.addEventListener("change", e => { scr.minTurnover = e.target.value; $("#plan-line").textContent = planText(secName); });
-    const rescan = () => renderScreener(true);
-    const rs = $("#rescan"); if (rs) rs.addEventListener("click", rescan);
-    const rse = $("#rescan-empty"); if (rse) rse.addEventListener("click", rescan);
+    bindStrengthRefresh();
   }
 
   /* ---------- 视图:突破雷达 ---------- */
@@ -1197,6 +1486,7 @@
   const dayCN = d => d.replace(".", " 月 ") + " 日";
   async function renderEarnings(forceReload) {
     const g0 = ++gen;
+    const manualControlRequest = loadManualAnalysisControl();
     if (!St.earnWeek || !St.earnMeta || forceReload) {
       view.innerHTML = loadingView("正在读取财报日历…");
       const r = await settle(N.earnings(forceReload).then(d => ({ week: N.buildWeek(d.earnings || []), meta: d })));
@@ -1204,6 +1494,8 @@
       if (!r.ok) { view.innerHTML = errorView("财报日历读取失败", r.e.message); bindRetry(() => renderEarnings(true)); return; }
       St.earnWeek = r.v.week; St.earnMeta = r.v.meta;
     }
+    await manualControlRequest;
+    if (g0 !== gen) return;
     const E = St.earnWeek;
     if (!earnDay || !E.week.some(w => w.d === earnDay)) earnDay = E.week[0].d;
     const dayInfo = E.week.find(w => w.d === earnDay) || E.week[0];
@@ -1311,15 +1603,17 @@
     const elapsed = Jobs && active ? Jobs.elapsed(impact) : null;
     const statusTone = status === "completed" ? "chip--up" : status === "failed" ? "chip--down" : active ? "chip--amber" : "chip--mute";
     const retryBlocked = status === "failed" && impact && impact.error_code === "submission_outcome_unknown";
+    const manualControl = manualAnalysisDecision(St.runtimeSettings);
     const head = `<div class="sect-head" style="margin-bottom:12px"><span class="sect-head__no">IMPACT</span><h2 style="font-size:14.5px">关联影响 · ${esc(sel)}</h2><span class="sect-head__rule"></span><span class="chip ${statusTone}">${esc(statusCN[status] || status)}</span></div>`;
     if (status === "idle" || status === "cancelled" || status === "failed" || status === "budget_blocked") return `${head}
       <div class="empty-note" style="padding:22px 8px">
         <p>${status === "failed" ? "关联分析任务失败" : status === "cancelled" ? "关联分析任务已取消" : status === "budget_blocked" ? "当前预算门禁阻止创建任务" : "尚未生成关联分析"}</p>
         <small>${esc(impact && (impact.error_message || impact.message || impact.error_code || impact.error) || "生成后将通过后台任务处理，页面不会长时间等待。")}</small>
-        ${status !== "budget_blocked" && !retryBlocked ? `<button class="btn btn--amber btn--sm" id="impact-run" type="button" data-impact-run>${status === "failed" || status === "cancelled" ? "显式重试" : "生成模型关联分析"}</button>` : ""}
+        ${status !== "budget_blocked" && !retryBlocked && manualControl.enabled ? `<button class="btn btn--amber btn--sm" id="impact-run" type="button" data-impact-run>${status === "failed" || status === "cancelled" ? "显式重试" : "生成模型关联分析"}</button>` : ""}
+        ${status !== "budget_blocked" && !retryBlocked && !manualControl.enabled ? `<small class="mono">${esc(manualControl.title)} · ${esc(manualControl.detail)}</small>` : ""}
         ${retryBlocked ? `<small>上游是否已接受请求无法确认，为避免重复计费，本次不能自动重提。</small>` : ""}
       </div>`;
-    if (active) return `${head}<div class="empty-note" style="padding:22px 8px"><p>${status === "in_progress" ? "模型正在分析" : "任务正在排队"}</p><small>${impact && (impact.submitted_at || impact.created_at) ? "提交 " + N.fmtDateTime(impact.submitted_at || impact.created_at) : "已交给后台任务"}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · 不显示估算进度</small><button class="btn btn--sm" id="impact-cancel" type="button" data-impact-cancel>取消任务</button></div>`;
+    if (active) return `${head}<div class="empty-note" style="padding:22px 8px"><p>分析任务正在运行</p><small>${impact && (impact.submitted_at || impact.created_at) ? "提交 " + N.fmtDateTime(impact.submitted_at || impact.created_at) : "已交给后台任务"}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · 不显示估算进度</small><button class="btn btn--sm" id="impact-cancel" type="button" data-impact-cancel>取消任务</button></div>`;
     if (status === "insufficient_context") return `${head}<div class="empty-note" style="padding:22px 8px"><p>信息不足，未生成方向性分析</p><small>服务端没有为缺失信息补造结论，也不会显示假结果。</small></div>`;
     const impacted = Array.isArray(result && result.impacted) ? result.impacted : Array.isArray(result && result.affected_stocks) ? result.affected_stocks : [];
     const groups = new Map();
@@ -1371,8 +1665,13 @@
     window.scrollTo({ top: y, behavior: "instant" });
   }
 
-  function runEarningsImpact() {
+  async function runEarningsImpact() {
     if (!earnSel || !Jobs) return;
+    const manualControl = await loadManualAnalysisControl();
+    if (!manualControl.enabled) {
+      updateImpactPanel();
+      return;
+    }
     const ticker = earnSel;
     const event = selectedEarningsEvent();
     const payload = {
@@ -1392,7 +1691,11 @@
       cancel: jobId => N.cancelAiJob(jobId),
       onUpdate: job => { St.impacts[ticker] = job; if (earnSel === ticker) updateImpactPanel(); },
       onComplete: job => { St.impacts[ticker] = job; if (earnSel === ticker) updateImpactPanel(); },
-      onError: error => { St.impacts[ticker] = { status: "failed", error_code: error.code || "job_request_failed", error_message: error.message }; if (earnSel === ticker) updateImpactPanel(); },
+      onError: error => {
+        if (error.code === "manual_analysis_disabled") rememberManualAnalysisDisabled();
+        St.impacts[ticker] = { status: "failed", error_code: error.code || "job_request_failed", error_message: error.message };
+        if (earnSel === ticker) updateImpactPanel();
+      },
     });
   }
 
@@ -1862,9 +2165,10 @@
     if (isIndexSym(ticker)) { openIndexDrawer(ticker); return; }
     const dg = ++drawerGen;
     drawerShell(loadingView("正在读取 " + ticker + " 研究数据…"));
-    const [q, ch, sig, deep, exps] = await Promise.all([
+    const [q, ch, sig, deep, exps, manualControl] = await Promise.all([
       settle(N.stock(ticker)), settle(N.chart(ticker, "1d")), settle(N.stockSignals(ticker)),
       settle(N.signalDeep(ticker)), settle(N.expirations(ticker)),
+      loadManualAnalysisControl(),
     ]);
     if (dg !== drawerGen) return;
     if (!q.ok) { drawerShell(`<div style="padding:30px 6px">${inlineErr("标的行情读取失败", q.e.message + (q.e.status === 404 ? " · 该代码可能不在数据源覆盖内" : ""))}</div>`); return; }
@@ -2004,7 +2308,7 @@
         <div id="ai-box">
           ${alerts.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px">${alerts.slice(0, 3).map(a2 => `<span class="chip chip--amber"><i></i>${fmt(a2.strike)} ${a2.type === "call" ? "Call" : "Put"} · 量比 ${isNum(a2.vol_oi_ratio) ? a2.vol_oi_ratio.toFixed(1) : "—"}×</span>`).join("")}</div>` : ""}
           <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.7">模型解读通过后台持久任务生成；选择股票和打开抽屉都不会产生调用。</p>
-          <button class="btn btn--amber btn--sm" id="ai-run">生成模型解读</button>
+          ${manualControl.enabled ? '<button class="btn btn--amber btn--sm" id="ai-run">生成模型解读</button>' : `<div class="empty-note" style="padding:12px 8px"><p>${esc(manualControl.title)}</p><small>${esc(manualControl.detail)}</small></div>`}
         </div>
       </section>`);
     measurePaths(drawer); animateBars(drawer); countUp(drawer);
@@ -2029,7 +2333,7 @@
         const active = Jobs.isActive(status);
         if (active) {
           const elapsed = Jobs.elapsed(job);
-          box.innerHTML = `<span class="chip chip--amber"><i></i>${status === "in_progress" ? "分析中" : "排队中"}</span><p style="margin:10px 0 12px;font-size:12px;color:var(--muted)">${job.submitted_at ? "提交 " + N.fmtDateTime(job.submitted_at) : "后台任务已创建"}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · 不显示估算进度</p>${job.cancellable !== false ? `<button class="btn btn--sm" id="option-ai-cancel">取消任务</button>` : ""}`;
+          box.innerHTML = `<span class="chip chip--amber"><i></i>${status === "in_progress" ? "分析中" : "排队中"}</span><p style="margin:10px 0 12px;font-size:12px;color:var(--muted)">分析任务正在运行 · ${job.submitted_at ? "提交 " + N.fmtDateTime(job.submitted_at) : "后台任务已创建"}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · 不显示估算进度</p>${job.cancellable !== false ? `<button class="btn btn--sm" id="option-ai-cancel">取消任务</button>` : ""}`;
           const cancel = $("#option-ai-cancel", box); if (cancel) cancel.addEventListener("click", async () => { if (!window.confirm("确认取消这项异动解读任务？")) return; cancel.disabled = true; await Jobs.cancel(scope); });
           restoreFocus();
           return;
@@ -2044,6 +2348,12 @@
           restoreFocus();
           return;
         }
+        if (status === "manual_analysis_disabled") {
+          rememberManualAnalysisDisabled();
+          box.innerHTML = `<div class="empty-note" style="padding:18px 8px"><p>手动分析已关闭</p><small>运行设置关闭了手动分析，已有任务仍可查询和取消。</small></div>`;
+          restoreFocus();
+          return;
+        }
         if (status === "analysis_required") {
           box.innerHTML = `<div class="empty-note" style="padding:18px 8px"><p>尚未创建异动解读任务</p><small>服务端要求重新明确提交；这不是模型分析失败。</small><button class="btn btn--sm" id="option-ai-retry">重新提交任务</button></div>`;
           const retry = $("#option-ai-retry", box); if (retry) retry.addEventListener("click", () => startSignalJob(false));
@@ -2055,7 +2365,12 @@
         const retry = $("#option-ai-retry", box); if (retry) retry.addEventListener("click", () => startSignalJob(true));
         restoreFocus();
       };
-      startSignalJob = force => {
+      startSignalJob = async force => {
+        const currentControl = await loadManualAnalysisControl();
+        if (!currentControl.enabled) {
+          renderOptionJob({ status: "manual_analysis_disabled" });
+          return;
+        }
         Jobs.start({
           scope,
           create: signal => N.aiStock(ticker, force, { signal }),
@@ -2063,7 +2378,7 @@
           cancel: jobId => N.cancelAiJob(jobId),
           onUpdate: renderOptionJob,
           onComplete: renderOptionJob,
-          onError: error => renderOptionJob({ status: error.status === 409 ? "analysis_required" : "failed", error_code: error.code || error.message }),
+          onError: error => renderOptionJob({ status: error.code === "manual_analysis_disabled" ? "manual_analysis_disabled" : error.status === 409 ? "analysis_required" : "failed", error_code: error.code || error.message }),
         });
       };
       aiBtn.addEventListener("click", () => startSignalJob(false));
@@ -2106,6 +2421,7 @@
   backdrop.addEventListener("click", closeDrawer);
   window.OPTIX_DECK = {
     openStockDrawer: openDrawer,
+    manualAnalysisDecision,
     drawer: {
       open: drawerShell,
       close: closeDrawer,

@@ -20,6 +20,17 @@ logger = logging.getLogger(__name__)
 _NEW_SUBMISSION_RETRY_SECONDS = 30.0
 
 
+def _personal_analysis_permissions(config: Any) -> tuple[bool, bool]:
+    features = getattr(config, "features", None)
+    mode = getattr(features, "catalyst_mode", None)
+    if mode is not None:
+        return mode in {"manual", "scheduled"}, mode == "scheduled"
+    return (
+        bool(getattr(config, "catalyst_manual_enabled", False)),
+        bool(getattr(config, "catalyst_scheduled_enabled", False)),
+    )
+
+
 def _poll_delay(settings: Any, poll_count: int) -> float:
     initial = float(settings.openai_background_initial_poll_seconds)
     maximum = float(settings.openai_background_max_poll_seconds)
@@ -137,31 +148,56 @@ async def _finish_response(
             ),
         )
         return
+    usage = runtime.response_usage(response)
     terminal_error = runtime.response_terminal_error(response)
     if status == "completed":
         if terminal_error:
-            repository.fail(job["job_id"], owner, terminal_error)
+            repository.fail(
+                job["job_id"],
+                owner,
+                terminal_error,
+                usage=usage,
+            )
             return
         payload = json.loads(job["payload_json"])
-        result = runtime.response_result(response, job["job_type"], payload)
+        try:
+            result = runtime.response_result(response, job["job_type"], payload)
+        except Exception as exc:
+            repository.fail(
+                job["job_id"],
+                owner,
+                _public_error(
+                    exc,
+                    submitted=True,
+                    response_id=response_id or None,
+                ),
+                usage=usage,
+            )
+            return
         repository.complete(
             job["job_id"],
             owner,
             result,
-            runtime.response_usage(response),
+            usage,
         )
         return
     if status == "cancelled":
-        repository.mark_cancelled(job["job_id"], owner)
+        repository.mark_cancelled(job["job_id"], owner, usage=usage)
         return
     if status in {"failed", "incomplete"}:
         repository.fail(
             job["job_id"],
             owner,
             terminal_error or f"provider_{status}",
+            usage=usage,
         )
         return
-    repository.fail(job["job_id"], owner, "provider_status_unsupported")
+    repository.fail(
+        job["job_id"],
+        owner,
+        "provider_status_unsupported",
+        usage=usage,
+    )
 
 
 async def process_job(
@@ -172,6 +208,8 @@ async def process_job(
     *,
     allow_new_submissions: bool = True,
     new_submission_block_reason: str = "analysis_disabled",
+    manual_analysis_enabled: bool = True,
+    scheduled_analysis_enabled: bool = True,
 ) -> None:
     stop = asyncio.Event()
     heartbeat = asyncio.create_task(
@@ -262,6 +300,25 @@ async def process_job(
                 delay_seconds=_NEW_SUBMISSION_RETRY_SECONDS,
                 error_code=new_submission_block_reason,
             )
+            return
+
+        submission_source = (
+            str(job.get("submission_source"))
+            if job.get("submission_source") in {"manual", "scheduled"}
+            else "manual"
+        )
+        source_disabled_error = (
+            "manual_analysis_disabled"
+            if submission_source == "manual" and not manual_analysis_enabled
+            else "scheduled_analysis_disabled"
+            if submission_source == "scheduled" and not scheduled_analysis_enabled
+            else None
+        )
+        if source_disabled_error is not None:
+            # This task has never reached the provider. Make the disabled
+            # decision terminal so a later switch change cannot revive old
+            # queue entries and unexpectedly spend money.
+            repository.fail(job["job_id"], owner, source_disabled_error)
             return
 
         current_schema_version, current_schema_sha256 = runtime.schema_identity(
@@ -358,6 +415,8 @@ async def run_once(
     *,
     allow_new_submissions: bool = True,
     new_submission_block_reason: str = "analysis_disabled",
+    manual_analysis_enabled: bool = True,
+    scheduled_analysis_enabled: bool = True,
 ) -> int:
     job = await asyncio.to_thread(
         repository.claim_due,
@@ -373,6 +432,8 @@ async def run_once(
         owner,
         allow_new_submissions=allow_new_submissions,
         new_submission_block_reason=new_submission_block_reason,
+        manual_analysis_enabled=manual_analysis_enabled,
+        scheduled_analysis_enabled=scheduled_analysis_enabled,
     )
     return 1
 
@@ -381,6 +442,8 @@ async def run_configured_once(
     repository: AIJobRepository,
     settings: Any,
     owner: str,
+    *,
+    personal_config: Any | None = None,
 ) -> tuple[int, str]:
     """Run one due job using the latest non-secret runtime controls.
 
@@ -406,6 +469,14 @@ async def run_configured_once(
         )
         return processed, "runtime_settings_unavailable"
 
+    if personal_config is None:
+        from app.personal_config import get_personal_config
+
+        personal_config = get_personal_config()
+    mode_allows_manual, mode_allows_scheduled = _personal_analysis_permissions(
+        personal_config
+    )
+
     effective_settings = settings.model_copy(
         update={
             "openai_daily_max_jobs": effective.ai.daily_max_jobs,
@@ -415,16 +486,24 @@ async def run_configured_once(
             ),
         }
     )
-    analysis_enabled = bool(
-        effective.ai.manual_analysis_enabled
-        or effective.catalyst.scheduled_analysis_enabled
+    manual_analysis_enabled = bool(
+        mode_allows_manual and effective.ai.manual_analysis_enabled
     )
+    scheduled_analysis_enabled = bool(
+        mode_allows_scheduled and effective.catalyst.scheduled_analysis_enabled
+    )
+    analysis_enabled = bool(manual_analysis_enabled or scheduled_analysis_enabled)
     processed = await run_once(
         repository,
         effective_settings,
         owner,
-        allow_new_submissions=analysis_enabled,
+        # The source-specific switches below decide whether an unsubmitted
+        # task may proceed. The global flag remains reserved for an unreadable
+        # runtime document, which is retryable rather than terminal.
+        allow_new_submissions=True,
         new_submission_block_reason="analysis_disabled",
+        manual_analysis_enabled=manual_analysis_enabled,
+        scheduled_analysis_enabled=scheduled_analysis_enabled,
     )
     return processed, "enabled" if analysis_enabled else "analysis_disabled"
 

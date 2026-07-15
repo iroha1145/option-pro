@@ -14,10 +14,11 @@ NC='\033[0m'
 
 trap 'echo -e "${RED}安装在第 ${LINENO} 行失败，请查看上方信息。${NC}" >&2' ERR
 
-set_env_value() {
-    local key="$1"
-    local value="$2"
-    local temporary=".env.tmp.$$"
+set_file_value() {
+    local file="$1"
+    local key="$2"
+    local value="$3"
+    local temporary="${file}.tmp.$$"
     case "$value" in
         *$'\n'*|*$'\r'*)
             echo "配置值不能包含换行符。" >&2
@@ -35,9 +36,63 @@ set_env_value() {
         index($0, key "=") == 1 { print key "=" value; found=1; next }
         { print }
         END { if (!found) print key "=" value }
-    ' .env > "$temporary"
+    ' "$file" > "$temporary"
     chmod 600 "$temporary"
-    mv "$temporary" .env
+    mv "$temporary" "$file"
+}
+
+validate_service_secret() {
+    local value="$1"
+    if ! printf '%s' "$value" | python3 -c '
+import sys
+
+value = sys.stdin.read()
+unsafe = "#\047\"\\$"
+valid = (
+    0 < len(value) <= 8192
+    and all(33 <= ord(character) <= 126 for character in value)
+    and not any(character in unsafe for character in value)
+)
+raise SystemExit(0 if valid else 1)
+'; then
+        echo "接口密钥包含不支持的字符。" >&2
+        return 1
+    fi
+}
+
+personal_access_mode() {
+    awk '
+        /^\[access\][[:space:]]*$/ { in_access=1; next }
+        /^\[/ { in_access=0 }
+        in_access && /^[[:space:]]*mode[[:space:]]*=/ {
+            value=$0
+            sub(/^[^=]*=[[:space:]]*/, "", value)
+            sub(/[[:space:]]*#.*$/, "", value)
+            gsub(/^[[:space:]\047\"]+|[[:space:]\047\"]+$/, "", value)
+            print value
+            exit
+        }
+    ' config/personal.toml
+}
+
+hash_owner_password() {
+    printf '%s' "$1" | python3 -c '
+import base64
+import hashlib
+import secrets
+import sys
+
+password = sys.stdin.read()
+if len(password) < 12 or any(item in password for item in ("\0", "\r", "\n")):
+    raise SystemExit("Owner password must contain at least 12 characters")
+salt = secrets.token_bytes(16)
+iterations = 600_000
+digest = hashlib.pbkdf2_hmac(
+    "sha256", password.encode("utf-8"), salt, iterations, dklen=32
+)
+encode = lambda value: base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+print(f"pbkdf2_sha256${iterations}${encode(salt)}${encode(digest)}")
+'
 }
 
 require_docker() {
@@ -61,18 +116,29 @@ require_docker() {
 }
 
 configure_environment() {
-    if [ -f .env ]; then
-        chmod 600 .env
-        echo -e "${YELLOW}.env 已存在，本次沿用原配置。${NC}"
+    local existing=false
+    if [ -f .env ] || [ -f secrets.env ]; then
+        existing=true
+    fi
+    if [ ! -f .env ]; then
+        cp .env.example .env
+    fi
+    if [ ! -f secrets.env ]; then
+        cp secrets.env.example secrets.env
+    fi
+    chmod 600 .env secrets.env
+    if [ "$existing" = true ]; then
+        echo -e "${YELLOW}.env 或 secrets.env 已存在，本次沿用原配置。${NC}"
         return
     fi
 
-    cp .env.example .env
-    chmod 600 .env
-
-    local openai_key macrolens_url macrolens_token auth_token
+    local openai_key macrolens_url macrolens_token
+    local access_mode owner_password owner_password_confirm password_hash
     read -rsp "OpenAI 接口密钥（可留空）: " openai_key
     echo
+    if [ -n "$openai_key" ]; then
+        validate_service_secret "$openai_key"
+    fi
     read -rp "MacroLens 地址（可留空）: " macrolens_url
     if [ -n "$macrolens_url" ]; then
         case "$macrolens_url" in
@@ -88,17 +154,34 @@ configure_environment() {
             echo "填写 MacroLens 地址时也必须填写内部令牌。" >&2
             exit 1
         fi
+        validate_service_secret "$macrolens_token"
     else
         macrolens_token=""
     fi
-    read -rsp "网页访问令牌（仅本机使用时可留空）: " auth_token
-    echo
 
-    set_env_value OPENAI_API_KEY "$openai_key"
-    set_env_value MACROLENS_BASE_URL "$macrolens_url"
-    set_env_value MACROLENS_INTERNAL_TOKEN "$macrolens_token"
-    set_env_value APP_AUTH_TOKEN "$auth_token"
-    echo -e "${GREEN}.env 已生成，文件权限为 0600。${NC}"
+    access_mode="$(personal_access_mode)"
+    if [ "$access_mode" = password ]; then
+        read -rsp "Owner 密码（至少 12 个字符）: " owner_password
+        echo
+        read -rsp "再次输入 Owner 密码: " owner_password_confirm
+        echo
+        if [ "$owner_password" != "$owner_password_confirm" ]; then
+            echo "两次输入的 Owner 密码不一致。" >&2
+            exit 1
+        fi
+        password_hash="$(hash_owner_password "$owner_password")"
+        unset owner_password owner_password_confirm
+        set_file_value secrets.env APP_PASSWORD_HASH "$password_hash"
+    elif [ "$access_mode" != private_network ]; then
+        echo "config/personal.toml 中的访问模式无效。" >&2
+        exit 1
+    fi
+
+    set_file_value secrets.env OPENAI_API_KEY "$openai_key"
+    set_file_value secrets.env INTERNAL_API_TOKEN "$macrolens_token"
+    set_file_value .env MACROLENS_URL "$macrolens_url"
+    unset openai_key macrolens_token password_hash
+    echo -e "${GREEN}.env 与 secrets.env 已生成，文件权限为 0600。${NC}"
 }
 
 echo -e "${CYAN}${BOLD}Optix Pro 个人版安装${NC}"
@@ -112,7 +195,11 @@ published_address="$(docker compose port backend 8000 2>/dev/null || true)"
 published_port="${published_address##*:}"
 published_port="${published_port:-2000}"
 echo -e "${GREEN}${BOLD}Optix Pro 已启动。${NC}"
-echo -e "访问地址：${CYAN}http://localhost:${published_port}${NC}"
+if [ "$(personal_access_mode)" = password ]; then
+    echo "密码模式已启用，请通过已配置的 HTTPS 反向代理访问。"
+else
+    echo -e "访问地址：${CYAN}http://localhost:${published_port}${NC}"
+fi
 echo "查看状态：docker compose ps"
 echo "查看日志：docker compose logs -f backend worker"
 echo "停止服务：docker compose down"

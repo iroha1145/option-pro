@@ -212,13 +212,8 @@ def write_snapshot(path: Path, *, payload: Any, saved_at: float) -> None:
         raise
 
 
-def request_headers() -> dict[str, str]:
-    token = os.environ.get("APP_AUTH_TOKEN", "").strip()
-    return {"Authorization": f"Bearer {token}"} if token else {}
-
-
 def fetch_watchlist(*, timeout: float) -> dict[str, Any]:
-    request = urllib.request.Request(WATCHLIST_URL, headers=request_headers())
+    request = urllib.request.Request(WATCHLIST_URL)
     with urllib.request.urlopen(request, timeout=timeout) as response:
         payload = json.load(response)
     if clean_payload(payload) is None:
@@ -307,10 +302,10 @@ def main() -> int:
     parser.add_argument("action", choices=("seed", "validate", "wait"))
     parser.add_argument("--timeout", type=int, default=120)
     args = parser.parse_args()
-    path = Path(
-        os.environ.get("WATCHLIST_SNAPSHOT_PATH", "").strip()
-        or "/data/watchlist-snapshot-v1.json"
-    )
+    data_dir = Path(os.environ.get("DATA_DIR", "").strip() or "/data")
+    if not data_dir.is_absolute() or ".." in data_dir.parts:
+        parser.error("DATA_DIR must be an absolute path without parent traversal")
+    path = data_dir / "watchlist-snapshot-v1.json"
     if args.action == "seed":
         return seed(path)
     if args.action == "validate":

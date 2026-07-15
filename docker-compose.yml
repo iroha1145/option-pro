@@ -14,7 +14,6 @@ x-optix-runtime: &optix-runtime
     - path: secrets.env
       required: false
   environment:
-    DATA_DIR: /data
     MACROLENS_URL: "${MACROLENS_URL:-}"
     HOST_BIND: "${HOST_BIND:-127.0.0.1}"
     ALLOWED_HOSTS: "${ALLOWED_HOSTS:-localhost,127.0.0.1}"

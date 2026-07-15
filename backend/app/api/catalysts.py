@@ -174,11 +174,16 @@ def _raise_safe(error: CatalystError) -> None:
         "daily_output_token_limit_reached": 429,
         "analysis_cooldown_active": 429,
         "analysis_in_progress": 409,
+        "read_only_mode": 409,
+        "manual_analysis_disabled": 409,
+        "manual_refresh_disabled": 409,
+        "force_reanalysis_disabled": 409,
+        "catalyst_disabled": 409,
         "ai_not_configured": 503,
         "worker_unavailable": 503,
         "runtime_settings_unavailable": 503,
         "cache_unavailable": 503,
-        "capability_disabled": 503,
+        "analysis_unavailable": 503,
     }.get(error.code, 503)
     headers = (
         {"Retry-After": str(error.retry_after_seconds)}

@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const NOW = "2026-07-13T14:30:00Z";
 const SCREENSHOT_DIR = join(process.cwd(), "test-results", "visual-evidence");
+const SECRET_RESPONSE_PATTERN = /(?:sk-proj-[A-Za-z0-9_-]{20,}|OPENAI_API_KEY|FINNHUB_API_KEY|INTERNAL_API_TOKEN|APP_PASSWORD_HASH|APP_AUTH_TOKEN|MACROLENS_INTERNAL_TOKEN|authorization["']?\s*:\s*["']?bearer)/i;
 
 const SCENARIOS = [
   { name: "1440x900-dark-active", width: 1440, height: 900, theme: "dark", state: "active" },
@@ -15,8 +16,9 @@ const SCENARIOS = [
   { name: "1280x800-dark-focus-fallback", width: 1280, height: 800, theme: "dark", state: "focus_fallback" },
   { name: "1280x800-dark-unavailable", width: 1280, height: 800, theme: "dark", state: "unavailable", authenticated: true },
   { name: "1280x800-light-disabled", width: 1280, height: 800, theme: "light", state: "disabled", authenticated: true },
-  { name: "1280x800-light-read-only-analysis", width: 1280, height: 800, theme: "light", state: "analysis_unrequested" },
-  { name: "390x844-light-read-only-analysis", width: 390, height: 844, theme: "light", state: "analysis_unrequested", mobile: true },
+  { name: "1280x800-light-read-only-analysis", width: 1280, height: 800, theme: "light", state: "read_only" },
+  { name: "390x844-light-read-only-analysis", width: 390, height: 844, theme: "light", state: "read_only", mobile: true },
+  { name: "1280x800-dark-manual-analysis", width: 1280, height: 800, theme: "dark", state: "manual_analysis" },
   { name: "1280x800-dark-prepared", width: 1280, height: 800, theme: "dark", state: "prepared", authenticated: true },
   { name: "1280x800-dark-queued", width: 1280, height: 800, theme: "dark", state: "queued" },
   { name: "1280x800-dark-in-progress", width: 1280, height: 800, theme: "dark", state: "in_progress" },
@@ -27,7 +29,9 @@ const SCENARIOS = [
 ];
 
 function newsItem(state) {
-  const unrequested = state === "analysis_unrequested";
+  const readOnly = state === "read_only";
+  const unrequested = ["analysis_unrequested", "manual_analysis", "read_only"].includes(state);
+  const manualAnalysis = state === "manual_analysis";
   const failed = state === "failed";
   return {
     news_id: "visual-news-1",
@@ -36,8 +40,19 @@ function newsItem(state) {
     summary: "这是一条用于发布验收的有界本地记录，用来检查长标题换行、状态标签和信息层级。",
     published_at: "2026-07-13T13:40:00Z",
     fetched_at: "2026-07-13T13:42:00Z",
-    analysis_status: failed ? "failed" : unrequested ? "not_requested" : "completed",
-    analysis_trigger_enabled: false,
+    analysis_status: failed ? "failed" : readOnly ? "queued" : unrequested ? "not_requested" : "completed",
+    analysis_trigger_enabled: manualAnalysis,
+    analysis_availability: readOnly ? { enabled: false, reason: "read_only_mode" } : undefined,
+    analysis_job: readOnly ? {
+      job_id: "aij-visual-read-only",
+      job_type: "news_impact",
+      status: "queued",
+      model: "gpt-5.6-terra",
+      reasoning: "max",
+      submission_source: "manual",
+      created_at: NOW,
+      updated_at: NOW,
+    } : undefined,
     trusted_stock_impacts: failed || unrequested ? [] : [
       { ticker: "NVDA", impact_score: 42, confidence: 76, horizon: "days", mechanism: "direct_company", validation_status: "canonical", reason: "订单能见度改善，但估值与交付节奏仍是主要风险。" },
     ],
@@ -144,7 +159,8 @@ function jsonFor(pathname, state) {
       last_sync_at: NOW,
       model: "gpt-5.6-terra",
       reasoning: "max",
-      analysis_trigger_enabled: false,
+      analysis_trigger_enabled: state === "manual_analysis",
+      analysis_availability: state === "read_only" ? { enabled: false, reason: "read_only_mode" } : undefined,
       warnings: focusFallback
         ? ["焦点行情使用最近一次可靠日线快照，未把缺失盘中数据补成中性值。"]
         : publicState === "degraded" ? ["一个来源暂时不可用，已有本地快照继续展示。"] : [],
@@ -166,15 +182,45 @@ function jsonFor(pathname, state) {
   if (pathname.startsWith("/api/catalysts/news/")) {
     return newsItem(state);
   }
+  if (pathname === "/api/catalysts/analysis-jobs/aij-visual-manual") {
+    return {
+      job_id: "aij-visual-manual",
+      job_type: "news_impact",
+      status: "queued",
+      model: "gpt-5.6-terra",
+      reasoning: "max",
+      submission_source: "manual",
+      created_at: NOW,
+      updated_at: NOW,
+    };
+  }
+  if (pathname === "/api/catalysts/analysis-jobs/aij-visual-read-only") {
+    return {
+      job_id: "aij-visual-read-only",
+      job_type: "news_impact",
+      status: "queued",
+      model: "gpt-5.6-terra",
+      reasoning: "max",
+      submission_source: "manual",
+      created_at: NOW,
+      updated_at: NOW,
+    };
+  }
   if (pathname === "/api/catalysts/hotspots/status") {
     const noHotspots = ["empty", "unavailable", "disabled"].includes(publicState);
     const disabled = publicState === "disabled";
+    const readOnly = state === "read_only";
     const budgetBlocked = state === "budget_blocked";
     return {
       status: publicState,
-      capability: budgetBlocked ? "budget_configuration_required" : disabled ? "disabled" : "enabled",
-      action_enabled: !disabled,
-      manual_enabled: !disabled,
+      manual_enabled: !disabled && !readOnly,
+      analysis_availability: budgetBlocked
+        ? { enabled: false, reason: "budget_exhausted", budget_available: false }
+        : disabled
+          ? { enabled: false, reason: "catalyst_disabled" }
+          : readOnly
+            ? { enabled: false, reason: "read_only_mode" }
+          : { enabled: true, reason: "available", budget_available: true, worker_healthy: true, concurrency_available: true },
       prepared_hot_count: noHotspots ? 0 : 1,
       prepared_revision: noHotspots ? 7 : 8,
       last_consumed_revision: 7,
@@ -191,15 +237,116 @@ function jsonFor(pathname, state) {
   return {};
 }
 
-async function installApiFixtures(page, state) {
+async function installApiFixtures(page, state, mutationRequests) {
   await page.route("**/api/**", async route => {
     const request = route.request();
+    const pathname = new URL(request.url()).pathname;
     if (request.method() !== "GET") {
+      if (
+        state === "manual_analysis"
+        && request.method() === "POST"
+        && pathname === "/api/catalysts/news/visual-news-1/analysis"
+      ) {
+        mutationRequests.push({
+          method: request.method(),
+          pathname,
+          headers: await request.allHeaders(),
+          body: request.postDataJSON(),
+        });
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            job_id: "aij-visual-manual",
+            job_type: "news_impact",
+            status: "queued",
+            model: "gpt-5.6-terra",
+            reasoning: "max",
+            submission_source: "manual",
+            created_at: NOW,
+            updated_at: NOW,
+          }),
+        });
+        return;
+      }
       await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ detail: "visual_fixture_read_only" }) });
       return;
     }
-    const body = jsonFor(new URL(request.url()).pathname, state);
+    const body = jsonFor(pathname, state);
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+}
+
+async function installCatalystFailureFixtures(page) {
+  await page.route("**/api/**", async route => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname.startsWith("/api/catalysts/")) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "catalyst_unavailable", message: "Catalyst fixture unavailable" }),
+      });
+      return;
+    }
+    let body = jsonFor(pathname, "active");
+    if (pathname === "/api/stocks/watchlist") {
+      body = {
+        groups: [{
+          id: "core",
+          name: "核心观察",
+          stocks: [{
+            ticker: "NVDA",
+            name: "英伟达",
+            price: 142.35,
+            change: 1.2,
+            change_percent: 0.85,
+            spark: [138, 139, 141, 142.35],
+            quote_as_of: NOW,
+            quote_session: "regular",
+          }],
+        }],
+        as_of: NOW,
+        data_through: NOW,
+        oldest_quote_at: NOW,
+        latest_quote_at: NOW,
+        quote_interval: "5m",
+        source_status: "active",
+        attempted: 1,
+        succeeded: 1,
+        failed: 0,
+        failed_tickers: [],
+        delayed: 0,
+        delayed_tickers: [],
+      };
+    } else if (pathname === "/api/earnings/upcoming") {
+      body = { earnings: [] };
+    } else if (pathname === "/api/options/unusual") {
+      body = { results: [], attempted: 0, as_of: NOW };
+    } else if (pathname === "/api/stocks/NVDA") {
+      body = { ticker: "NVDA", price: 142.35, change_percent: 0.85, volume: 48_000_000, market_cap: 3_500_000_000_000 };
+    } else if (pathname === "/api/stocks/NVDA/chart") {
+      body = { bars: [{ t: NOW, o: 140, h: 143, l: 139, c: 142.35, v: 48_000_000 }], as_of: NOW, last_bar_at: NOW, exchange_timezone: "America/New_York" };
+    } else if (pathname === "/api/stocks/NVDA/signals") {
+      body = { score: 68, overall: "bullish", signals: { rsi: { value: 58 } } };
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+}
+
+function installSecretResponseScanner(page, pendingScans, leaks) {
+  page.on("response", response => {
+    const scan = (async () => {
+      const resource = new URL(response.url()).pathname;
+      const headers = JSON.stringify(response.headers());
+      if (SECRET_RESPONSE_PATTERN.test(headers)) leaks.push({ resource, surface: "headers" });
+      const contentType = response.headers()["content-type"] || "";
+      if (!/(?:json|javascript|text|css|html)/i.test(contentType)) return;
+      const body = await response.text();
+      if (SECRET_RESPONSE_PATTERN.test(body)) leaks.push({ resource, surface: "body" });
+    })().catch(() => {
+      leaks.push({ resource: "unreadable-response", surface: "scan" });
+    });
+    pendingScans.push(scan);
   });
 }
 
@@ -208,17 +355,33 @@ async function assertStableViewport(page, errors) {
   await expect(page.locator(".cat-desk")).toBeVisible();
   const fits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
   expect(fits).toBe(true);
+  const browserState = await page.evaluate(() => ({
+    localKeys: Object.keys(localStorage).sort(),
+    sessionKeys: Object.keys(sessionStorage).sort(),
+    cookie: document.cookie,
+    htmlContainsProjectKey: /sk-proj-[A-Za-z0-9_-]{20,}/.test(document.documentElement.innerHTML),
+  }));
+  expect(browserState).toEqual({
+    localKeys: ["optix.theme"],
+    sessionKeys: [],
+    cookie: "",
+    htmlContainsProjectKey: false,
+  });
   expect(errors).toEqual([]);
 }
 
 for (const scenario of SCENARIOS) {
   test(`Catalyst Desk visual evidence: ${scenario.name}`, async ({ page }) => {
     const errors = [];
+    const responseScans = [];
+    const responseLeaks = [];
+    const mutationRequests = [];
     page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
     page.on("pageerror", error => errors.push(error.message));
+    installSecretResponseScanner(page, responseScans, responseLeaks);
     await page.setViewportSize({ width: scenario.width, height: scenario.height });
     await page.addInitScript(theme => localStorage.setItem("optix.theme", theme), scenario.theme);
-    await installApiFixtures(page, scenario.state);
+    await installApiFixtures(page, scenario.state, mutationRequests);
     await page.goto("/#catalysts", { waitUntil: "networkidle" });
     await assertStableViewport(page, errors);
 
@@ -228,27 +391,50 @@ for (const scenario of SCENARIOS) {
       await expect(focusAction).toHaveText("热点快照暂不可用");
     }
     if (scenario.state === "disabled") {
-      await expect(page.locator("#cat-focus-run")).toBeDisabled();
-      await expect(page.locator("#cat-focus-run")).toHaveText("分析功能未启用");
+      await expect(page.locator("#cat-focus-run")).toHaveCount(0);
+      await expect(page.locator("#cat-focus-body")).toContainText("分析功能未启用");
     }
     if (scenario.state === "budget_blocked") {
       await expect(page.locator("#cat-focus-run")).toBeDisabled();
-      await expect(page.locator("#cat-focus-run")).toHaveText("今日分析预算已用完");
+      await expect(page.locator("#cat-focus-run")).toHaveText("今日预算已用完");
     }
     if (scenario.state === "prepared") {
       await expect(page.locator("#cat-focus-run")).toBeEnabled();
       await expect(page.locator("#cat-focus-run")).toContainText("重新分析");
     }
-    await expect(page.locator('[data-cat-refresh="news"]')).toHaveCount(1);
-    await expect(page.locator('[data-cat-refresh="calendar"]')).toHaveCount(1);
-    await expect(page.locator('[data-cat-refresh="source_health"]')).toHaveCount(1);
-    await expect(page.locator("#cat-focus-run")).toHaveCount(1);
-    if (scenario.state === "analysis_unrequested") {
+    for (const operationType of ["news", "calendar", "source_health"]) {
+      await expect(page.locator(`[data-cat-refresh="${operationType}"]`)).toHaveCount(1);
+    }
+    await expect(page.locator("#cat-focus-run")).toHaveCount(["disabled", "read_only"].includes(scenario.state) ? 0 : 1);
+    if (scenario.state === "read_only") {
+      await expect(page.locator("#cat-focus-body")).toContainText("当前为只读模式");
+      await expect(page.locator("[data-catalyst-analyze]")).toHaveCount(0);
       await page.locator("[data-catalyst-news]").first().click();
-      await expect(page.locator("#cat-analysis-body")).toContainText("当前模式仅供查看");
-      const analyzeAction = page.locator("#cat-analysis-body [data-cat-analyze]");
-      await expect(analyzeAction).toHaveCount(1);
-      await expect(analyzeAction).toBeDisabled();
+      await expect(page.locator("#cat-analysis-body")).toContainText("当前为只读模式");
+      await expect(page.locator("#cat-analysis-body [data-cat-analyze]")).toHaveCount(0);
+      await expect(page.locator("#cat-analysis-body [data-cat-cancel-job]")).toBeVisible();
+    }
+    if (scenario.state === "manual_analysis") {
+      await page.locator("[data-catalyst-news]").first().click();
+      const analyze = page.locator("#cat-analysis-body [data-cat-analyze]");
+      await expect(analyze).toBeVisible();
+      await expect(analyze).toBeEnabled();
+      await expect(analyze).toHaveText("生成分析");
+      const confirmations = [];
+      page.once("dialog", async dialog => {
+        confirmations.push(dialog.message());
+        await dialog.accept();
+      });
+      await analyze.click();
+      await expect.poll(() => mutationRequests.length).toBe(1);
+      expect(confirmations).toHaveLength(1);
+      expect(confirmations[0]).toContain("可能产生模型费用");
+      expect(mutationRequests[0].method).toBe("POST");
+      expect(mutationRequests[0].pathname).toBe("/api/catalysts/news/visual-news-1/analysis");
+      expect(mutationRequests[0].body).toEqual({ force: false });
+      expect(mutationRequests[0].headers["content-type"]).toContain("application/json");
+      expect(mutationRequests[0].headers["x-optix-action"]).toBe("1");
+      await expect(page.locator("#cat-analysis-body")).toContainText("分析任务正在运行");
     }
     if (scenario.state === "failed") {
       const focusBody = page.locator("#cat-focus-body");
@@ -279,5 +465,58 @@ for (const scenario of SCENARIOS) {
       animations: "disabled",
       fullPage: false,
     });
+    await page.waitForLoadState("networkidle");
+    await Promise.all(responseScans);
+    expect(responseLeaks).toEqual([]);
   });
 }
+
+test("research drawer traps keyboard focus and restores the opener", async ({ page }) => {
+  const mutationRequests = [];
+  await installApiFixtures(page, "active", mutationRequests);
+  await page.goto("/#catalysts", { waitUntil: "networkidle" });
+  const opener = page.locator("[data-catalyst-news]").first();
+  await opener.click();
+  const drawer = page.locator("#drawer");
+  const close = page.locator("#drawer-close");
+  await expect(drawer).toBeVisible();
+  await expect(close).toBeFocused();
+
+  const lastFocusable = drawer.locator("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])").last();
+  await lastFocusable.focus();
+  await page.keyboard.press("Tab");
+  await expect(close).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(lastFocusable).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  await expect(opener).toBeFocused();
+});
+
+test("server task state survives a full page reload without creating another task", async ({ page }) => {
+  const mutationRequests = [];
+  const latestRequests = [];
+  page.on("request", request => {
+    if (new URL(request.url()).pathname === "/api/catalysts/market-focus-cycles/latest") latestRequests.push(request.method());
+  });
+  await installApiFixtures(page, "queued", mutationRequests);
+  await page.goto("/#catalysts", { waitUntil: "networkidle" });
+  await expect(page.locator("#cat-focus-body")).toContainText("分析任务正在运行");
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.locator("#cat-focus-body")).toContainText("分析任务正在运行");
+  expect(latestRequests).toEqual(["GET", "GET"]);
+  expect(mutationRequests).toEqual([]);
+});
+
+test("Catalyst outage stays inside Catalyst Desk", async ({ page }) => {
+  await installCatalystFailureFixtures(page);
+  await page.goto("/#catalysts", { waitUntil: "networkidle" });
+  await expect(page.locator("#cat-read-state")).toContainText("新闻读取失败");
+
+  await page.locator('.deck-nav a[data-route="watchlist"]').click();
+  await expect(page.locator(".view-head h1")).toContainText("自选观察");
+  await expect(page.locator('[data-card="NVDA"]')).toBeVisible();
+  await page.locator('[data-card="NVDA"]').click();
+  await expect(page.locator('[data-card="NVDA"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#cat-read-state")).toHaveCount(0);
+});

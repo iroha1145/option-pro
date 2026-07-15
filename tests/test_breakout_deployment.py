@@ -36,7 +36,8 @@ def test_breakout_runs_inside_the_unified_worker() -> None:
     assert set(compose["services"]) == {"backend", "worker"}
     assert worker["command"] == ["python", "-m", "app.worker"]
     assert "ports" not in worker
-    assert worker["environment"]["BREAKOUT_DB_PATH"] == "/data/optix.db"
+    assert "DATA_DIR" not in worker["environment"]
+    assert "BREAKOUT_DB_PATH" not in worker["environment"]
     assert "optix-data:/data" in worker["volumes"]
 
 
@@ -44,7 +45,19 @@ def test_deployment_checks_only_the_unified_worker_inventory() -> None:
     script = (ROOT / "scripts" / "deploy.sh").read_text(encoding="utf-8")
 
     assert 'docker compose exec -T worker python -m app.worker --healthcheck' in script
-    assert '{"breakout", "catalyst_sync", "focus", "ai_jobs", "maintenance"}' in script
+    for task_name in (
+        "breakout",
+        "catalyst_sync",
+        "focus",
+        "ai_jobs",
+        "maintenance",
+        "focus_refresh",
+        "strength_refresh",
+        "breakout_refresh",
+        "retention",
+    ):
+        assert f'"{task_name}"' in script
+    assert "all nine task types" in script
     assert "app.services.breakouts.worker --healthcheck" not in script
     assert "app.services.ai_jobs.worker --healthcheck" not in script
     assert "app.services.catalysts.worker --healthcheck" not in script

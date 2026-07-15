@@ -124,11 +124,21 @@ import json
 import os
 
 payload = json.loads(os.environ["WORKER_HEALTH"])
-expected = {"breakout", "catalyst_sync", "focus", "ai_jobs", "maintenance"}
+expected = {
+    "breakout",
+    "catalyst_sync",
+    "focus",
+    "ai_jobs",
+    "maintenance",
+    "focus_refresh",
+    "strength_refresh",
+    "breakout_refresh",
+    "retention",
+}
 actual = {item.get("task_name") for item in payload.get("tasks", [])}
 if payload.get("healthy") is not True:
     raise SystemExit(1)
-if payload.get("schema_version") != "optix-worker-v1":
+if payload.get("schema_version") != "optix-worker-v2":
     raise SystemExit(1)
 if actual != expected:
     raise SystemExit(1)
@@ -148,7 +158,7 @@ verify_worker() {
         sleep 2
     done
     printf '%s\n' "$payload" >&2
-    fail "Unified worker did not report all five task types."
+    fail "Unified worker did not report all nine task types."
 }
 
 require_tools

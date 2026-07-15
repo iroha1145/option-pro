@@ -22,14 +22,31 @@ from app.worker.runtime import TaskResult, TaskSpec, WorkerSupervisor
 from app.worker.state import WorkerStateRepository
 from app.worker.tasks import (
     AIJobsTask,
+    BreakoutTask,
     CatalystSyncTask,
+    FocusRefreshTask,
     FocusTask,
     MaintenanceTask,
+    RetentionTask,
+    StrengthRefreshTask,
     build_default_tasks,
 )
 
 
-TASK_NAMES = {"breakout", "focus", "catalyst_sync", "ai_jobs", "maintenance"}
+SCHEDULED_TASK_NAMES = {
+    "breakout",
+    "focus",
+    "catalyst_sync",
+    "ai_jobs",
+    "maintenance",
+}
+MANUAL_TASK_NAMES = {
+    "focus_refresh",
+    "strength_refresh",
+    "breakout_refresh",
+    "retention",
+}
+DEFAULT_TASK_NAMES = SCHEDULED_TASK_NAMES | MANUAL_TASK_NAMES
 NOW = datetime(2026, 7, 16, 0, 0, tzinfo=timezone.utc)
 ETL_AS_OF = "2026-07-15T12:00:00Z"
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -79,7 +96,6 @@ def _runtime_settings(
         catalyst=SimpleNamespace(
             sync_seconds=sync_seconds,
             focus_seconds=focus_seconds,
-            manual_refresh_enabled=True,
             manual_refresh_cooldown_seconds=30,
             scheduled_analysis_enabled=scheduled,
             scheduled_times_et=scheduled_times,
@@ -123,6 +139,7 @@ def test_manual_actions_are_idempotent_fenced_and_cooled_down(tmp_path: Path) ->
         "catalyst_sync",
         "news-refresh:2026-07-16T00:00",
         cooldown_seconds=30,
+        details={"request": {"stream": "news"}},
         now=NOW,
     )
     duplicate = repository.request_action(
@@ -152,6 +169,10 @@ def test_manual_actions_are_idempotent_fenced_and_cooled_down(tmp_path: Path) ->
         details={"task_status": "idle"},
         now=NOW + timedelta(seconds=3),
     ) == 1
+    completed = repository.action_request(queued["request_id"])
+    assert completed is not None
+    assert completed["details"]["request"] == {"stream": "news"}
+    assert completed["details"]["task_status"] == "idle"
 
     cooling = repository.request_action(
         "news_refresh",
@@ -171,6 +192,29 @@ def test_manual_actions_are_idempotent_fenced_and_cooled_down(tmp_path: Path) ->
     )
     assert next_request["request_id"] != queued["request_id"]
     assert next_request["status"] == "queued"
+
+
+def test_manual_action_details_are_bounded_and_reject_sensitive_fields(
+    tmp_path: Path,
+) -> None:
+    repository = WorkerStateRepository(tmp_path / "action-details.db")
+    repository.initialize(now=NOW)
+    with pytest.raises(ValueError, match="sensitive"):
+        repository.request_action(
+            "strength_refresh",
+            "strength_refresh",
+            "strength:secret",
+            details={"api_key": "must-not-be-stored"},
+            now=NOW,
+        )
+    with pytest.raises(ValueError, match="too large"):
+        repository.request_action(
+            "strength_refresh",
+            "strength_refresh",
+            "strength:oversized",
+            details={"parameters": {"note": "x" * 1025}},
+            now=NOW,
+        )
 
 
 def test_manual_action_wakes_long_interval_worker_and_completes(tmp_path: Path) -> None:
@@ -213,7 +257,214 @@ def test_manual_action_wakes_long_interval_worker_and_completes(tmp_path: Path) 
         else:
             raise AssertionError("manual action did not reach a terminal state")
         assert action["request_id"] == queued["request_id"]
-        assert action["details"] == {"task_status": "idle"}
+        assert action["details"]["task_status"] == "idle"
+        assert action["details"]["task_completed_at"].endswith("Z")
+        supervisor.request_stop()
+        await asyncio.wait_for(running, timeout=2)
+
+    asyncio.run(scenario())
+
+
+def test_manual_only_task_waits_for_action_and_never_runs_at_startup(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        ran = asyncio.Event()
+        calls = 0
+
+        async def refresh() -> TaskResult:
+            nonlocal calls
+            calls += 1
+            ran.set()
+            return TaskResult(status="idle", details={"result": "refreshed"})
+
+        repository = WorkerStateRepository(tmp_path / "manual-only.db")
+        supervisor = WorkerSupervisor(
+            repository,
+            (
+                TaskSpec(
+                    "strength_refresh",
+                    refresh,
+                    86_400,
+                    manual_only=True,
+                ),
+            ),
+            owner_id="manual-only-worker",
+            lease_seconds=5,
+            process_lock=ProcessFileLock(tmp_path / "manual-only.lock"),
+        )
+        running = asyncio.create_task(supervisor.run_forever())
+        for _ in range(100):
+            states = repository.task_states()
+            if states:
+                break
+            await asyncio.sleep(0.01)
+        assert states[0]["status"] == "idle"
+        assert states[0]["details"] == {"mode": "manual", "waiting": True}
+        await asyncio.sleep(0.05)
+        assert calls == 0
+
+        queued = repository.request_action(
+            "strength_refresh",
+            "strength_refresh",
+            "strength-refresh:manual-only",
+            cooldown_seconds=30,
+        )
+        await asyncio.wait_for(ran.wait(), timeout=2)
+        for _ in range(100):
+            action = repository.action_request(queued["request_id"])
+            if action is not None and action["status"] == "completed":
+                break
+            await asyncio.sleep(0.01)
+        assert action is not None
+        assert action["status"] == "completed"
+        assert action["completed_at"] is not None
+        assert action["details"]["task_completed_at"].endswith("Z")
+        assert calls == 1
+        supervisor.request_stop()
+        await asyncio.wait_for(running, timeout=2)
+
+    asyncio.run(scenario())
+
+
+def test_manual_runner_receives_claimed_actions_and_completion_keeps_request_and_result(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        observed_actions: list[dict] = []
+
+        class ParameterRunner:
+            async def __call__(self) -> TaskResult:
+                raise AssertionError("manual action must use run_for_actions")
+
+            async def run_for_actions(self, actions: list[dict]) -> TaskResult:
+                observed_actions.extend(actions)
+                return TaskResult(
+                    status="idle",
+                    details={"snapshot": "strength-snapshot-v1-test.json"},
+                )
+
+        repository = WorkerStateRepository(tmp_path / "manual-parameters.db")
+        supervisor = WorkerSupervisor(
+            repository,
+            (
+                TaskSpec(
+                    "strength_refresh",
+                    ParameterRunner(),
+                    86_400,
+                    manual_only=True,
+                ),
+            ),
+            owner_id="manual-parameters-worker",
+            lease_seconds=5,
+            process_lock=ProcessFileLock(tmp_path / "manual-parameters.lock"),
+        )
+        running = asyncio.create_task(supervisor.run_forever())
+        for _ in range(100):
+            if repository.task_states():
+                break
+            await asyncio.sleep(0.01)
+        queued = repository.request_action(
+            "strength_refresh",
+            "strength_refresh",
+            "strength-refresh:parameters",
+            details={"parameters": {"top": 30}},
+        )
+        for _ in range(200):
+            action = repository.action_request(queued["request_id"])
+            if action is not None and action["status"] == "completed":
+                break
+            await asyncio.sleep(0.01)
+        else:
+            raise AssertionError("manual parameter action did not complete")
+
+        assert observed_actions[0]["details"] == {"parameters": {"top": 30}}
+        assert action is not None
+        assert action["details"]["parameters"] == {"top": 30}
+        assert action["details"]["result"] == {
+            "snapshot": "strength-snapshot-v1-test.json"
+        }
+        supervisor.request_stop()
+        await asyncio.wait_for(running, timeout=2)
+
+    asyncio.run(scenario())
+
+
+def test_run_once_skips_manual_only_task_without_a_request(tmp_path: Path) -> None:
+    calls = 0
+
+    async def expensive_refresh() -> TaskResult:
+        nonlocal calls
+        calls += 1
+        return TaskResult(status="idle")
+
+    repository = WorkerStateRepository(tmp_path / "manual-once.db")
+    supervisor = WorkerSupervisor(
+        repository,
+        (
+            TaskSpec(
+                "focus_refresh",
+                expensive_refresh,
+                86_400,
+                manual_only=True,
+            ),
+        ),
+        owner_id="manual-once-worker",
+        process_lock=ProcessFileLock(tmp_path / "manual-once.lock"),
+    )
+
+    payload = asyncio.run(supervisor.run_once())
+
+    assert calls == 0
+    assert payload["tasks"]["focus_refresh"]["manual_only"] is True
+    assert repository.task_states()[0]["last_started_at"] is None
+
+
+def test_manual_only_failure_is_terminal_and_timestamped(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        async def failed_refresh() -> TaskResult:
+            raise RuntimeError("private provider detail")
+
+        repository = WorkerStateRepository(tmp_path / "manual-failure.db")
+        supervisor = WorkerSupervisor(
+            repository,
+            (
+                TaskSpec(
+                    "focus_refresh",
+                    failed_refresh,
+                    86_400,
+                    manual_only=True,
+                ),
+            ),
+            owner_id="manual-failure-worker",
+            lease_seconds=5,
+            process_lock=ProcessFileLock(tmp_path / "manual-failure.lock"),
+        )
+        running = asyncio.create_task(supervisor.run_forever())
+        for _ in range(100):
+            if repository.task_states():
+                break
+            await asyncio.sleep(0.01)
+        queued = repository.request_action(
+            "focus_refresh",
+            "focus_refresh",
+            "focus-refresh:failure",
+        )
+        for _ in range(200):
+            action = repository.action_request(queued["request_id"])
+            if action is not None and action["status"] == "failed":
+                break
+            await asyncio.sleep(0.01)
+        assert action is not None
+        assert action["status"] == "failed"
+        assert action["error_code"] == "task_failed"
+        assert action["completed_at"] is not None
+        assert action["details"]["task_completed_at"].endswith("Z")
+        assert "private provider detail" not in json.dumps(action)
+        state = repository.task_states()[0]
+        assert state["status"] == "degraded"
+        assert state["last_completed_at"] is not None
+        assert state["next_run_at"] is None
         supervisor.request_stop()
         await asyncio.wait_for(running, timeout=2)
 
@@ -302,6 +553,77 @@ def test_ai_worker_uses_fresh_runtime_budget_without_restart(
     assert seen == [(3, 1.25, 45), (3, 1.0, 45)]
 
 
+@pytest.mark.parametrize("mode", ["read", "off"])
+@pytest.mark.parametrize("submission_source", ["manual", "scheduled"])
+def test_ai_worker_mode_caps_stale_enabled_runtime_switches(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+    submission_source: str,
+) -> None:
+    from app.services.ai_jobs import runtime, worker as ai_worker
+    from app.services.ai_jobs.repository import AIJobRepository
+
+    class CopyableSettings(SimpleNamespace):
+        def model_copy(self, *, update: dict[str, object]):
+            values = dict(vars(self))
+            values.update(update)
+            return CopyableSettings(**values)
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    schema_version, schema_sha256 = runtime.schema_identity("earnings_impact")
+    job, created = repository.create_job(
+        job_type="earnings_impact",
+        payload={"ticker": "AAPL", "name": "Apple"},
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version=f"mode-cap-{mode}-{submission_source}",
+        schema_version=schema_version,
+        schema_sha256=schema_sha256,
+        max_queued=200,
+        submission_source=submission_source,
+    )
+    assert created is True
+    settings = CopyableSettings(
+        openai_job_lease_seconds=60,
+        openai_daily_max_jobs=4,
+        openai_daily_budget_usd=2.0,
+        openai_manual_cooldown_seconds=30,
+    )
+    monkeypatch.setattr(
+        "app.services.runtime_settings.get_effective_runtime_settings",
+        lambda: _runtime_settings(manual=True, scheduled=True),
+    )
+    provider_calls = 0
+
+    async def forbidden_submission(*_args, **_kwargs):
+        nonlocal provider_calls
+        provider_calls += 1
+        raise AssertionError("read/off mode must not submit provider work")
+
+    monkeypatch.setattr(runtime, "submit_background", forbidden_submission)
+    personal_config = SimpleNamespace(
+        features=SimpleNamespace(catalyst_mode=mode),
+    )
+
+    processed, runtime_state = asyncio.run(
+        ai_worker.run_configured_once(
+            repository,
+            settings,
+            f"mode-cap-{mode}-{submission_source}",
+            personal_config=personal_config,
+        )
+    )
+    stored = repository.get_job(job["job_id"])
+
+    assert (processed, runtime_state) == (1, "analysis_disabled")
+    assert stored["status"] == "failed"
+    assert stored["error_code"] == f"{submission_source}_analysis_disabled"
+    assert stored["submission_started_at"] is None
+    assert provider_calls == 0
+
+
 def test_process_file_lock_excludes_two_descriptors_and_processes(tmp_path: Path) -> None:
     lock_path = tmp_path / "worker.lock"
     first = ProcessFileLock(lock_path)
@@ -359,11 +681,11 @@ def test_worker_once_records_five_tasks_and_isolates_failure(tmp_path: Path) -> 
     payload = asyncio.run(supervisor.run_once())
 
     assert payload["status"] == "completed"
-    assert set(payload["tasks"]) == TASK_NAMES
+    assert set(payload["tasks"]) == SCHEDULED_TASK_NAMES
     assert payload["tasks"]["catalyst_sync"]["status"] == "degraded"
-    assert set(calls) == TASK_NAMES
+    assert set(calls) == SCHEDULED_TASK_NAMES
     states = {item["task_name"]: item for item in repository.task_states()}
-    assert set(states) == TASK_NAMES
+    assert set(states) == SCHEDULED_TASK_NAMES
     assert states["catalyst_sync"]["error_code"] == "task_failed"
     assert states["catalyst_sync"]["details"] == {"error_type": "RuntimeError"}
     assert "secret upstream detail" not in json.dumps(states)
@@ -527,9 +849,8 @@ def test_status_is_read_only_and_does_not_require_live_lock(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    state_path = tmp_path / "status.db"
-    monkeypatch.setenv("OPTIX_WORKER_DB_PATH", str(state_path))
-    monkeypatch.setenv("OPTIX_WORKER_LOCK_PATH", str(tmp_path / "status.lock"))
+    state_path = tmp_path / "optix-worker.db"
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
 
     assert main(["--status"]) == 0
     status = json.loads(capsys.readouterr().out)
@@ -826,7 +1147,7 @@ def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
         ) -> None:
             assert database_path == cache_path
             assert getattr(ai_repository, "path") == ai_path
-            assert options["mode"] == "manual"
+            assert options["mode"] == "read"
             assert options["model"] == "gpt-5.6-terra"
             assert options["reasoning"] == "max"
             tickers = set(options["canonical_tickers"])
@@ -855,12 +1176,11 @@ def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
         }
         return httpx.Response(200, json=_empty_etl_page(request.url.path))
 
-    cache_path = tmp_path / "personal-catalyst.db"
+    cache_path = tmp_path / "catalyst-cache.db"
     ai_path = tmp_path / "ai-jobs.db"
     monkeypatch.setenv("INTERNAL_API_TOKEN", "owner-token")
     monkeypatch.setenv("MACROLENS_URL", "https://macrolens.example")
-    monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(cache_path))
-    monkeypatch.setenv("OPENAI_JOB_DB_PATH", str(ai_path))
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
     config = SimpleNamespace(
         catalyst=SimpleNamespace(sync_seconds=37),
         features=SimpleNamespace(catalyst_mode="read"),
@@ -919,12 +1239,11 @@ def test_personal_catalyst_task_reconciles_with_real_local_store(
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=_empty_etl_page(request.url.path))
 
-    cache_path = tmp_path / "real-local-catalyst.db"
-    ai_path = tmp_path / "real-local-ai.db"
+    cache_path = tmp_path / "catalyst-cache.db"
+    ai_path = tmp_path / "ai-jobs.db"
     monkeypatch.setenv("INTERNAL_API_TOKEN", "owner-token")
     monkeypatch.setenv("MACROLENS_URL", "https://macrolens.example")
-    monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(cache_path))
-    monkeypatch.setenv("OPENAI_JOB_DB_PATH", str(ai_path))
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
     config = SimpleNamespace(
         catalyst=SimpleNamespace(sync_seconds=53),
         features=SimpleNamespace(catalyst_mode="read"),
@@ -1079,7 +1398,7 @@ def test_personal_catalyst_task_rejects_http_without_network(
 ) -> None:
     monkeypatch.setenv("INTERNAL_API_TOKEN", "owner-token")
     monkeypatch.setenv("MACROLENS_URL", "http://macrolens.example")
-    monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(tmp_path / "unused.db"))
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
     task = CatalystSyncTask(
         "invalid-worker",
         settings=_worker_config(
@@ -1095,7 +1414,7 @@ def test_personal_catalyst_task_rejects_http_without_network(
 
     assert task._mode is None
     assert task._client is None
-    assert not (tmp_path / "unused.db").exists()
+    assert not (tmp_path / "catalyst-cache.db").exists()
 
 
 def test_personal_tasks_disable_without_token_and_never_choose_legacy(
@@ -1191,15 +1510,17 @@ def test_catalyst_initialization_failure_leaves_no_cached_half_state(
     asyncio.run(task.aclose())
 
 
-def test_default_read_focus_never_runs_scheduled_ai_work(
+@pytest.mark.parametrize("mode", ["read", "off"])
+def test_read_and_off_focus_ignore_stale_enabled_runtime_switches(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    mode: str,
 ) -> None:
     calls: list[str] = []
 
     class FakeLocalIntelligence:
         def __init__(self, _path: Path, _ai_repository: object, **options: object):
-            assert options["mode"] == "manual"
+            assert options["mode"] == "read"
 
         def initialize(self) -> None:
             calls.append("initialize")
@@ -1207,15 +1528,23 @@ def test_default_read_focus_never_runs_scheduled_ai_work(
         def run_scheduled(self, **_kwargs) -> dict:
             raise AssertionError("read mode must not queue scheduled work")
 
-    ai_path = tmp_path / "read-ai-jobs.db"
+    ai_path = tmp_path / "ai-jobs.db"
     monkeypatch.setenv("INTERNAL_API_TOKEN", "owner-token")
     monkeypatch.setenv("MACROLENS_URL", "https://macrolens.example")
-    monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(tmp_path / "catalyst.db"))
-    monkeypatch.setenv("OPENAI_JOB_DB_PATH", str(ai_path))
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        "app.services.runtime_settings.get_effective_runtime_settings",
+        lambda: _runtime_settings(
+            manual=True,
+            scheduled=True,
+            focus_seconds=601,
+        ),
+    )
     config = SimpleNamespace(
         catalyst=SimpleNamespace(focus_seconds=1800),
+        catalyst_manual_enabled=False,
         catalyst_scheduled_enabled=False,
-        features=SimpleNamespace(catalyst_mode="read"),
+        features=SimpleNamespace(catalyst_mode=mode),
         ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),
     )
     task = FocusTask(
@@ -1235,7 +1564,7 @@ def test_default_read_focus_never_runs_scheduled_ai_work(
 
     assert result.status == "idle"
     assert result.details == {"result": "not_scheduled", "queued": 0, "skipped": 0}
-    assert result.next_delay_seconds == 1800
+    assert result.next_delay_seconds == 601
     assert calls == ["initialize"]
     with sqlite3.connect(ai_path) as connection:
         assert connection.execute("SELECT count(*) FROM ai_jobs").fetchone()[0] == 0
@@ -1261,8 +1590,7 @@ def test_scheduled_focus_calls_local_scheduler_once(
 
     monkeypatch.setenv("INTERNAL_API_TOKEN", "owner-token")
     monkeypatch.setenv("MACROLENS_URL", "https://macrolens.example")
-    monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(tmp_path / "catalyst.db"))
-    monkeypatch.setenv("OPENAI_JOB_DB_PATH", str(tmp_path / "ai-jobs.db"))
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setattr(
         "app.services.runtime_settings.get_effective_runtime_settings",
         lambda: _runtime_settings(scheduled=True, focus_seconds=601),
@@ -1445,18 +1773,286 @@ def test_catalyst_failure_releases_initial_focus_gate(tmp_path: Path) -> None:
     assert released is True
 
 
+def test_focus_refresh_rebuilds_atomic_watchlist_snapshot_without_network(
+    tmp_path: Path,
+) -> None:
+    snapshot_path = tmp_path / "nested" / "watchlist-snapshot-v1.json"
+    payload = {
+        "groups": [
+            {
+                "id": "focus",
+                "name": "关注",
+                "stocks": [
+                    {
+                        "ticker": "AAPL",
+                        "name": "苹果",
+                        "price": 100.0,
+                        "change_percent": 1.25,
+                        "spark": [96.0, 97.0, 98.0, 99.0, 100.0],
+                    }
+                ],
+            }
+        ],
+        "succeeded": 1,
+    }
+    calls = 0
+
+    async def fake_builder() -> dict:
+        nonlocal calls
+        calls += 1
+        return payload
+
+    result = asyncio.run(
+        FocusRefreshTask(
+            builder=fake_builder,
+            snapshot_path=snapshot_path,
+            clock=lambda: 1_789_000_000.0,
+        )()
+    )
+
+    assert calls == 1
+    assert result.status == "idle"
+    assert result.details["succeeded"] == 1
+    document = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    assert document["saved_at"] == 1_789_000_000.0
+    assert document["parameters"] == {"tickers": None}
+    assert document["payload"] == payload
+    assert list(snapshot_path.parent.glob(".*.tmp")) == []
+
+
+def test_strength_refresh_runs_default_forced_scan_and_persists_snapshot(
+    tmp_path: Path,
+) -> None:
+    from app.api import strength
+
+    snapshot_path = tmp_path / "strength-snapshot-v1.json"
+    calls: list[dict] = []
+    row = {"ticker": "AAPL", "score": 91.0}
+
+    async def fake_scanner(**kwargs) -> dict:
+        calls.append(kwargs)
+        return {
+            "as_of": "2026-07-16T00:00:00+00:00",
+            "params": {
+                key: value
+                for key, value in kwargs.items()
+                if key not in {"include_options", "force_refresh"}
+            },
+            "count": 1,
+            "rows": [row],
+            "results": [row],
+        }
+
+    result = asyncio.run(
+        StrengthRefreshTask(
+            scanner=fake_scanner,
+            snapshot_path=snapshot_path,
+            clock=lambda: 1_789_000_000.0,
+        )()
+    )
+
+    assert calls == [
+        {
+            **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS,
+            "force_refresh": True,
+        }
+    ]
+    assert result.status == "idle"
+    assert result.details["count"] == 1
+    snapshot = strength._read_strength_snapshot(
+        snapshot_path,
+        parameters=dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS),
+        now=1_789_000_001.0,
+    )
+    assert snapshot is not None
+    assert snapshot["payload"]["rows"] == [row]
+
+
+def test_strength_refresh_runs_claimed_nondefault_parameters_and_writes_variant(
+    tmp_path: Path,
+) -> None:
+    from app.api import strength
+
+    base_path = tmp_path / "strength-snapshot-v1.json"
+    calls: list[dict] = []
+    parameters = {
+        **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS,
+        "timeframe": "long",
+        "profile": "aggressive",
+        "top": 30,
+        "sector_id": "software",
+        "min_price": 20.0,
+        "min_avg_dollar_volume": 50_000_000.0,
+        "include_options": False,
+    }
+    row = {"ticker": "MSFT", "score": 93.0}
+
+    async def fake_scanner(**kwargs) -> dict:
+        calls.append(kwargs)
+        return {
+            "as_of": "2026-07-16T00:00:00+00:00",
+            "params": {
+                key: value
+                for key, value in kwargs.items()
+                if key not in {"include_options", "force_refresh"}
+            },
+            "count": 1,
+            "rows": [row],
+            "results": [row],
+        }
+
+    result = asyncio.run(
+        StrengthRefreshTask(
+            scanner=fake_scanner,
+            snapshot_path=base_path,
+            clock=lambda: 1_789_000_000.0,
+        ).run_for_actions(
+            [
+                {
+                    "request_id": "act_test",
+                    "details": {"parameters": parameters},
+                }
+            ]
+        )
+    )
+
+    target = strength._strength_snapshot_path(parameters, base_path=base_path)
+    assert calls == [{**parameters, "force_refresh": True}]
+    assert target.is_file()
+    assert not base_path.exists()
+    assert result.details["parameters"] == parameters
+    assert result.details["parameters_hash"] == strength.strength_scan_parameters_hash(
+        parameters
+    )
+    snapshot = strength._read_strength_snapshot(
+        target,
+        parameters=parameters,
+        now=1_789_000_001.0,
+    )
+    assert snapshot is not None
+    assert snapshot["payload"]["rows"] == [row]
+
+
+def test_strength_refresh_failure_keeps_the_previous_snapshot(
+    tmp_path: Path,
+) -> None:
+    from app.api import strength
+
+    base_path = tmp_path / "strength-snapshot-v1.json"
+    row = {"ticker": "AAPL", "score": 88.0}
+    payload = {
+        "as_of": "2026-07-16T00:00:00+00:00",
+        "params": {
+            key: value
+            for key, value in strength.DEFAULT_STRENGTH_SCAN_PARAMETERS.items()
+            if key != "include_options"
+        },
+        "count": 1,
+        "rows": [row],
+        "results": [row],
+    }
+    strength._write_strength_snapshot(
+        base_path,
+        parameters=dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS),
+        payload=payload,
+        saved_at=1_788_999_900.0,
+    )
+    original = base_path.read_bytes()
+
+    async def failed_scanner(**_kwargs) -> dict:
+        raise RuntimeError("provider unavailable")
+
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        asyncio.run(
+            StrengthRefreshTask(
+                scanner=failed_scanner,
+                snapshot_path=base_path,
+                clock=lambda: 1_789_000_000.0,
+            )()
+        )
+
+    assert base_path.read_bytes() == original
+
+
+def test_retention_backs_up_before_pruning_existing_bounded_data(
+    tmp_path: Path,
+) -> None:
+    order: list[str] = []
+    database_path = tmp_path / "optix.db"
+    database_path.touch()
+
+    class Backup:
+        async def __call__(self) -> TaskResult:
+            order.append("backup")
+            return TaskResult(
+                status="idle",
+                details={"backed_up": ["optix"], "failed": []},
+            )
+
+    class Repository:
+        def initialize(self) -> None:
+            order.append("initialize")
+
+        def acquire_lock(self, *_args) -> int:
+            order.append("lock")
+            return 7
+
+        def prune_retention(self, **kwargs) -> dict[str, int]:
+            order.append("prune")
+            assert kwargs["owner_id"] == "test:retention"
+            assert kwargs["lease_token"] == 7
+            assert kwargs["raw_payload_hours"] == 24
+            assert kwargs["scan_days"] == 90
+            assert kwargs["batch_size"] == 500
+            return {
+                "provider_payloads": 2,
+                "candidate_raw": 3,
+                "scan_attachments": 4,
+            }
+
+        def release_lock(self, *_args) -> bool:
+            order.append("release")
+            return True
+
+    settings = SimpleNamespace(
+        db_path=database_path,
+        worker_lease_ttl_seconds=90,
+        raw_payload_retention_hours=24,
+        scan_retention_days=90,
+        retention_batch_size=500,
+    )
+    result = asyncio.run(
+        RetentionTask(
+            "test",
+            Backup(),  # type: ignore[arg-type]
+            settings_factory=lambda: settings,
+            repository_factory=lambda path: Repository(),
+            now=lambda: NOW,
+        )()
+    )
+
+    assert order == ["backup", "initialize", "lock", "prune", "release"]
+    assert result.status == "idle"
+    assert result.details["retention"] == {
+        "status": "completed",
+        "provider_payloads": 2,
+        "candidate_raw": 3,
+        "scan_attachments": 4,
+    }
+    assert result.details["completed_at"] == "2026-07-16T00:00:00Z"
+
+
 def test_default_task_inventory_and_maintenance_backup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
     paths = {
-        "BREAKOUT_DB_PATH": tmp_path / "optix.db",
-        "MACROLENS_CACHE_DB_PATH": tmp_path / "catalyst-cache.db",
-        "OPENAI_JOB_DB_PATH": tmp_path / "ai-jobs.db",
-        "OPTIX_BACKUP_DIR": tmp_path / "backups",
+        "optix": tmp_path / "optix.db",
+        "catalyst-cache": tmp_path / "catalyst-cache.db",
+        "ai-jobs": tmp_path / "ai-jobs.db",
+        "backups": tmp_path / "backups",
     }
-    for name, path in paths.items():
-        monkeypatch.setenv(name, str(path))
     worker_db = tmp_path / "optix-worker.db"
     for path in (*paths.values(), worker_db):
         if path.name == "backups":
@@ -1467,20 +2063,26 @@ def test_default_task_inventory_and_maintenance_backup(
 
     worker_settings = _worker_config(
         tmp_path,
-        cache_path=paths["MACROLENS_CACHE_DB_PATH"],
-        ai_path=paths["OPENAI_JOB_DB_PATH"],
+        cache_path=paths["catalyst-cache"],
+        ai_path=paths["ai-jobs"],
     )
-    worker_settings.breakout_db_path = paths["BREAKOUT_DB_PATH"]
+    worker_settings.breakout_db_path = paths["optix"]
     worker_settings.optix_worker_db_path = worker_db
-    worker_settings.optix_backup_dir = paths["OPTIX_BACKUP_DIR"]
+    worker_settings.optix_backup_dir = paths["backups"]
     specs = build_default_tasks("inventory", settings=worker_settings)
-    assert {spec.name for spec in specs} == TASK_NAMES
+    assert {spec.name for spec in specs} == DEFAULT_TASK_NAMES
     names = [spec.name for spec in specs]
     assert names.index("catalyst_sync") < names.index("focus")
     catalyst_spec = next(spec for spec in specs if spec.name == "catalyst_sync")
     assert catalyst_spec.interval_seconds == 120
     maintenance_spec = next(spec for spec in specs if spec.name == "maintenance")
     assert isinstance(maintenance_spec.runner, MaintenanceTask)
+    manual_specs = {spec.name: spec for spec in specs if spec.manual_only}
+    assert set(manual_specs) == MANUAL_TASK_NAMES
+    assert isinstance(manual_specs["focus_refresh"].runner, FocusRefreshTask)
+    assert isinstance(manual_specs["strength_refresh"].runner, StrengthRefreshTask)
+    assert isinstance(manual_specs["breakout_refresh"].runner, BreakoutTask)
+    assert isinstance(manual_specs["retention"].runner, RetentionTask)
     result = asyncio.run(maintenance_spec.runner())
     assert result.status == "idle"
     assert set(result.details["backed_up"]) == {

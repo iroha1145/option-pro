@@ -21,7 +21,9 @@ from zoneinfo import ZoneInfo
 
 import httpx
 import yfinance as yf
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Response
+
+from app.data_paths import get_data_paths
 
 
 router = APIRouter(prefix="/api/stocks", tags=["stocks"])
@@ -621,10 +623,8 @@ _watchlist_provider_close_cache: dict[str, tuple[float, float | None]] = {}
 _watchlist_provider_close_inflight: dict[str, Any] = {}
 _WATCHLIST_SNAPSHOT_VERSION = 1
 _WATCHLIST_SNAPSHOT_MAX_BYTES = 2 * 1024 * 1024
-_WATCHLIST_SNAPSHOT_PATH = Path(
-    os.environ.get("WATCHLIST_SNAPSHOT_PATH", "").strip()
-    or "/data/watchlist-snapshot-v1.json"
-)
+_WATCHLIST_SNAPSHOT_PATH = get_data_paths().watchlist_snapshot
+_WATCHLIST_SNAPSHOT_PARAMETERS = {"tickers": None}
 _WATCHLIST_SNAPSHOT_TRANSPORT_FIELDS = frozenset(
     {
         "_stale",
@@ -635,6 +635,7 @@ _WATCHLIST_SNAPSHOT_TRANSPORT_FIELDS = frozenset(
     }
 )
 _watchlist_snapshot_load_attempted = False
+_watchlist_snapshot_observed: tuple[str, tuple[int, int, int]] | None = None
 _WATCHLIST_TICKER_PATTERN = re.compile(
     r"^(?:\^[A-Z0-9][A-Z0-9.^_=-]{0,30}|[A-Z0-9][A-Z0-9.^_=-]{0,31})$"
 )
@@ -937,6 +938,8 @@ def _read_watchlist_snapshot(
             or version != _WATCHLIST_SNAPSHOT_VERSION
         ):
             return None
+        if document.get("parameters") != _WATCHLIST_SNAPSHOT_PARAMETERS:
+            return None
         saved_at = document.get("saved_at")
         if (
             isinstance(saved_at, bool)
@@ -988,6 +991,7 @@ def _write_watchlist_snapshot(
         {
             "version": _WATCHLIST_SNAPSHOT_VERSION,
             "saved_at": saved_at,
+            "parameters": _WATCHLIST_SNAPSHOT_PARAMETERS,
             "payload": cleaned,
         },
         allow_nan=False,
@@ -997,6 +1001,7 @@ def _write_watchlist_snapshot(
     if len(encoded) > _WATCHLIST_SNAPSHOT_MAX_BYTES:
         raise ValueError("watchlist snapshot exceeds the size limit")
 
+    path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{path.name}.",
         suffix=".tmp",
@@ -1024,15 +1029,39 @@ def _persist_watchlist_snapshot(payload: Any, saved_at: float) -> None:
     )
 
 
+def _watchlist_snapshot_identity(path: Path) -> tuple[int, int, int]:
+    try:
+        item = path.lstat()
+    except FileNotFoundError:
+        return (0, 0, 0)
+    except OSError:
+        return (-1, 0, 0)
+    return (int(item.st_ino), int(item.st_mtime_ns), int(item.st_size))
+
+
 def _load_watchlist_snapshot_once(now: float) -> None:
-    global _watchlist_snapshot_load_attempted
-    if _watchlist_snapshot_load_attempted:
+    """Load a newer worker snapshot without relabeling old memory as fresh."""
+
+    global _watchlist_snapshot_load_attempted, _watchlist_snapshot_observed
+    path_key = str(_WATCHLIST_SNAPSHOT_PATH)
+    # Some callers deliberately disable disk loading after seeding an in-memory
+    # cache. Preserve that contract when no observation exists for this path.
+    if _watchlist_snapshot_load_attempted and (
+        _watchlist_snapshot_observed is None
+        or _watchlist_snapshot_observed[0] != path_key
+    ):
+        return
+    identity = _watchlist_snapshot_identity(_WATCHLIST_SNAPSHOT_PATH)
+    observed = (path_key, identity)
+    if _watchlist_snapshot_load_attempted and observed == _watchlist_snapshot_observed:
         return
     _watchlist_snapshot_load_attempted = True
-    if "watchlist" in _endpoint_cache:
-        return
+    _watchlist_snapshot_observed = observed
     entry = _read_watchlist_snapshot(_WATCHLIST_SNAPSHOT_PATH, now=now)
-    if entry is not None:
+    if entry is None:
+        return
+    current = _endpoint_cache.get("watchlist")
+    if current is None or entry.fetched_at > current.fetched_at:
         _endpoint_cache["watchlist"] = entry
 
 
@@ -1077,22 +1106,11 @@ def _watchlist_cache_key(tickers: list[str] | None) -> str:
 
 @router.get("/watchlist")
 async def watchlist(
-    request: Request,
     tickers: Annotated[
         Optional[str],
         Query(max_length=_WATCHLIST_QUERY_MAX_LENGTH),
     ] = None,
 ):
-    request_state = getattr(request, "state", None)
-    if (
-        tickers is not None
-        and getattr(request_state, "public_read_authenticated", False)
-        and not getattr(request_state, "app_authenticated", False)
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="Custom watchlist queries require app authentication",
-        )
     requested_tickers = _parse_watchlist_tickers(tickers)
     cache_key = _watchlist_cache_key(requested_tickers)
     # Keep the zero-argument loader for the original endpoint. Besides

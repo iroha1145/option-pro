@@ -9,19 +9,21 @@ const read = relativePath => readFile(path.join(frontend, relativePath), 'utf8')
 
 const activePaths = [
   'index.html',
+  'login.html',
   'static/favicon.svg',
   'static/css/optix-deck.css',
   'static/css/optix-catalysts.css',
   'static/js/theme-init.js',
+  'static/js/login.js',
   'static/js/deck-api.js',
   'static/js/deck-ai-jobs.js',
   'static/js/deck-catalysts.js',
   'static/js/deck-app.js',
 ];
 
-const [index, favicon, deckCss, catalystCss, themeInit, api, jobs, catalysts, app] =
+const [index, login, favicon, deckCss, catalystCss, themeInit, loginScript, api, jobs, catalysts, app] =
   await Promise.all(activePaths.map(read));
-const productionBundle = [index, favicon, deckCss, catalystCss, themeInit, api, jobs, catalysts, app].join('\n');
+const productionBundle = [index, login, favicon, deckCss, catalystCss, themeInit, loginScript, api, jobs, catalysts, app].join('\n');
 
 const retiredPaths = [
   'static/css/styles.css',
@@ -70,6 +72,15 @@ assert.match(index, /<main id="view"[^>]+tabindex="-1"/, 'route changes need a f
 assert.match(index, /id="drawer"[^>]*role="dialog"[^>]*aria-modal="true"/, 'research drawers need dialog semantics');
 assert.match(index, /id="theme-toggle"/, 'the theme control must remain in the production shell');
 
+const passwordInput = login.match(/<input\b[^>]*id="owner-password"[^>]*>/)?.[0] || '';
+assert.ok(passwordInput, 'the Owner login page must keep its password field');
+assert.doesNotMatch(passwordInput, /\bvalue\s*=/i, 'the password field must never be prefilled by the application');
+assert.match(passwordInput, /autocomplete="current-password"/, 'the password field must use the browser password control');
+assert.doesNotMatch(loginScript, /localStorage|sessionStorage|indexedDB|document\.cookie/i, 'the login script must not persist passwords or sessions in browser storage');
+assert.match(loginScript, /credentials:\s*"same-origin"/, 'login requests must remain same-origin');
+assert.match(loginScript, /JSON\.stringify\(\{ password: password\.value \}\)/, 'the password must only be sent in the login JSON body');
+assert.match(loginScript, /password\.value = ""/, 'the password field must be cleared after each login attempt');
+
 const linkedStyles = [...index.matchAll(/<link\s+rel="stylesheet"\s+href="([^"]+)"/g)]
   .map(match => match[1].split('?')[0]);
 assert.deepEqual(linkedStyles, [
@@ -112,6 +123,25 @@ assert.doesNotMatch(
 assert.match(api, /headers\["X-Optix-Action"\] = "1"/, 'JSON actions need the same-origin custom header');
 assert.doesNotMatch(productionBundle, /gpt-5\.6-luna/i, 'the frontend model label must remain on GPT-5.6 Terra');
 assert.match(productionBundle, /gpt-5\.6-terra/, 'the current GPT-5.6 Terra model label must remain visible');
+
+for (const requiredCopy of [
+  '当前为只读模式',
+  '尚未配置OpenAI',
+  '今日预算已用完',
+  '分析任务正在运行',
+  '服务暂不可用',
+]) {
+  assert.ok(productionBundle.includes(requiredCopy), `required status copy is missing: ${requiredCopy}`);
+}
+for (const forbiddenCopy of [
+  '无分析权限',
+  '请设置APP_AUTH_TOKEN',
+  '请在sessionStorage写入Token',
+  'Action Key未授权',
+  '当前用户无权操作',
+]) {
+  assert.ok(!productionBundle.includes(forbiddenCopy), `retired permission copy returned: ${forbiddenCopy}`);
+}
 
 assert.match(
   app,

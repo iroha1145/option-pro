@@ -56,6 +56,7 @@ class TaskSpec:
     failure_backoff_seconds: float = 5.0
     max_backoff_seconds: float = 900.0
     drain_on_shutdown: bool = False
+    manual_only: bool = False
     close: Callable[[], Awaitable[None] | None] | None = None
 
     def __post_init__(self) -> None:
@@ -194,7 +195,12 @@ class WorkerSupervisor:
         )
         manual_request_ids = [item["request_id"] for item in manual_actions]
         try:
-            operation = _maybe_await(task.runner())
+            action_runner = getattr(task.runner, "run_for_actions", None)
+            operation = _maybe_await(
+                action_runner(manual_actions)
+                if manual_actions and callable(action_runner)
+                else task.runner()
+            )
             if task.timeout_seconds is None:
                 result = await operation
             else:
@@ -210,6 +216,19 @@ class WorkerSupervisor:
             completed = utc_now()
             error_code = _public_error_code(error)
             details = {"error_type": type(error).__name__}
+            await self._record(
+                task,
+                status="degraded",
+                consecutive_failures=failures,
+                last_completed_at=completed,
+                next_run_at=(
+                    None
+                    if task.manual_only
+                    else completed + timedelta(seconds=delay)
+                ),
+                error_code=error_code,
+                details=details,
+            )
             if manual_request_ids:
                 await asyncio.to_thread(
                     self.repository.finish_actions,
@@ -218,18 +237,15 @@ class WorkerSupervisor:
                     manual_request_ids,
                     succeeded=False,
                     error_code=error_code,
-                    details={"task_status": "degraded"},
+                    details={
+                        "task_status": "degraded",
+                        "task_completed_at": completed.isoformat().replace(
+                            "+00:00", "Z"
+                        ),
+                        "result": details,
+                    },
                     now=completed,
                 )
-            await self._record(
-                task,
-                status="degraded",
-                consecutive_failures=failures,
-                last_completed_at=completed,
-                next_run_at=completed + timedelta(seconds=delay),
-                error_code=error_code,
-                details=details,
-            )
             payload = {
                 "status": "degraded",
                 "error_code": error_code,
@@ -261,7 +277,11 @@ class WorkerSupervisor:
                 consecutive_failures=failures,
                 last_completed_at=completed,
                 last_success_at=None if degraded else completed,
-                next_run_at=completed + timedelta(seconds=delay),
+                next_run_at=(
+                    None
+                    if task.manual_only
+                    else completed + timedelta(seconds=delay)
+                ),
                 error_code=result.error_code,
                 details=result.details,
             )
@@ -276,7 +296,11 @@ class WorkerSupervisor:
                 status="degraded",
                 consecutive_failures=failures,
                 last_completed_at=completed,
-                next_run_at=completed + timedelta(seconds=delay),
+                next_run_at=(
+                    None
+                    if task.manual_only
+                    else completed + timedelta(seconds=delay)
+                ),
                 error_code="task_result_invalid",
                 details={"error_type": type(error).__name__},
             )
@@ -299,7 +323,13 @@ class WorkerSupervisor:
                 manual_request_ids,
                 succeeded=not degraded,
                 error_code=result.error_code or "task_degraded",
-                details={"task_status": result.status},
+                details={
+                    "task_status": result.status,
+                    "task_completed_at": completed.isoformat().replace(
+                        "+00:00", "Z"
+                    ),
+                    "result": dict(result.details),
+                },
                 now=completed,
             )
         self._results[task.name] = payload
@@ -331,6 +361,22 @@ class WorkerSupervisor:
                 continue
         return False
 
+    async def _wait_for_manual_action(self, task: TaskSpec) -> bool:
+        """Wait indefinitely; manual-only tasks have no scheduled deadline."""
+
+        while not self.stop.is_set():
+            if await asyncio.to_thread(
+                self.repository.has_pending_actions,
+                task.name,
+            ):
+                return True
+            try:
+                await asyncio.wait_for(self.stop.wait(), timeout=0.5)
+                return False
+            except asyncio.TimeoutError:
+                continue
+        return False
+
     async def _task_loop(self, task: TaskSpec) -> None:
         if not task.enabled:
             await self._record(
@@ -339,6 +385,35 @@ class WorkerSupervisor:
                 consecutive_failures=0,
                 details={},
             )
+            return
+        if task.manual_only:
+            await self._record(
+                task,
+                status="idle",
+                consecutive_failures=0,
+                details={"mode": "manual", "waiting": True},
+            )
+            try:
+                while not self.stop.is_set():
+                    if not await self._wait_for_manual_action(task):
+                        return
+                    if self.stop.is_set():
+                        return
+                    await self._execute(task)
+            except asyncio.CancelledError:
+                if not self._lease_lost.is_set():
+                    try:
+                        await self._record(
+                            task,
+                            status="interrupted",
+                            consecutive_failures=self._failures[task.name],
+                            last_completed_at=utc_now(),
+                            error_code="shutdown_cancelled",
+                            details={"mode": "manual"},
+                        )
+                    except WorkerLeaseLost:
+                        pass
+                raise
             return
         delay = 0.0
         try:
@@ -460,6 +535,23 @@ class WorkerSupervisor:
                             "status": "disabled",
                             "error_code": None,
                             "next_delay_seconds": task.interval_seconds,
+                        }
+                        continue
+                    if task.manual_only and not await asyncio.to_thread(
+                        self.repository.has_pending_actions,
+                        task.name,
+                    ):
+                        await self._record(
+                            task,
+                            status="idle",
+                            consecutive_failures=0,
+                            details={"mode": "manual", "waiting": True},
+                        )
+                        self._results[task.name] = {
+                            "status": "idle",
+                            "error_code": None,
+                            "next_delay_seconds": task.interval_seconds,
+                            "manual_only": True,
                         }
                         continue
                     await self._execute(task)

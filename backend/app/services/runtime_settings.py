@@ -27,12 +27,15 @@ from pydantic import (
     field_validator,
 )
 
+from app.data_paths import get_data_paths
 from app.personal_config import PersonalConfig, get_personal_config
 
 
-DEFAULT_DATA_DIR = Path("/data")
 _MAX_DOCUMENT_BYTES = 256 * 1024
 _BASELINE_UPDATED_AT = datetime(1970, 1, 1, tzinfo=timezone.utc)
+_LEGACY_CATALYST_ACTION_FIELDS = frozenset(
+    {"manual_force_reanalysis", "manual_refresh_enabled"}
+)
 
 
 class _StrictModel(BaseModel):
@@ -64,8 +67,6 @@ class RuntimeAISettings(_StrictModel):
 class RuntimeCatalystSettings(_StrictModel):
     sync_seconds: int = Field(default=120, ge=30, le=86_400)
     focus_seconds: int = Field(default=1800, ge=300, le=86_400)
-    manual_force_reanalysis: bool = True
-    manual_refresh_enabled: bool = True
     manual_refresh_cooldown_seconds: int = Field(default=30, ge=0, le=3_600)
     scheduled_analysis_enabled: bool = False
     scheduled_times_et: tuple[str, ...] = Field(
@@ -104,8 +105,6 @@ class RuntimeAISettingsPatch(_StrictModel):
 class RuntimeCatalystSettingsPatch(_StrictModel):
     sync_seconds: Optional[int] = Field(default=None, ge=30, le=86_400)
     focus_seconds: Optional[int] = Field(default=None, ge=300, le=86_400)
-    manual_force_reanalysis: Optional[bool] = None
-    manual_refresh_enabled: Optional[bool] = None
     manual_refresh_cooldown_seconds: Optional[int] = Field(
         default=None,
         ge=0,
@@ -181,8 +180,6 @@ def runtime_settings_from_personal_config(config: PersonalConfig) -> RuntimeSett
         catalyst=RuntimeCatalystSettings(
             sync_seconds=config.catalyst.sync_seconds,
             focus_seconds=config.catalyst.focus_seconds,
-            manual_force_reanalysis=config.catalyst.manual_force_reanalysis,
-            manual_refresh_enabled=config.catalyst_sync_enabled,
             manual_refresh_cooldown_seconds=(
                 config.catalyst.manual_refresh_cooldown_seconds
             ),
@@ -199,6 +196,30 @@ def _merge_patch(base: dict[str, Any], patch: Mapping[str, Any]) -> dict[str, An
         else:
             base[key] = value
     return base
+
+
+def _drop_legacy_catalyst_action_fields(payload: Any) -> Any:
+    """Accept old persisted documents without reviving removed action gates."""
+
+    if not isinstance(payload, dict):
+        return payload
+    settings = payload.get("settings")
+    if not isinstance(settings, dict):
+        return payload
+    catalyst = settings.get("catalyst")
+    if not isinstance(catalyst, dict) or not any(
+        field in catalyst for field in _LEGACY_CATALYST_ACTION_FIELDS
+    ):
+        return payload
+
+    migrated = dict(payload)
+    migrated_settings = dict(settings)
+    migrated_catalyst = dict(catalyst)
+    for field in _LEGACY_CATALYST_ACTION_FIELDS:
+        migrated_catalyst.pop(field, None)
+    migrated_settings["catalyst"] = migrated_catalyst
+    migrated["settings"] = migrated_settings
+    return migrated
 
 
 class RuntimeSettingsStore:
@@ -264,6 +285,7 @@ class RuntimeSettingsStore:
             if path.stat().st_size > _MAX_DOCUMENT_BYTES:
                 raise RuntimeSettingsStorageError("runtime settings document is too large")
             payload = json.loads(path.read_text(encoding="utf-8"))
+            payload = _drop_legacy_catalyst_action_fields(payload)
             return RuntimeSettingsDocument.model_validate(payload)
         except RuntimeSettingsStorageError:
             raise
@@ -478,10 +500,8 @@ class RuntimeSettingsStore:
 @lru_cache(maxsize=1)
 def get_runtime_settings_store() -> RuntimeSettingsStore:
     config = get_personal_config()
-    raw_data_dir = os.environ.get("DATA_DIR", "").strip()
-    data_dir = Path(raw_data_dir) if raw_data_dir else DEFAULT_DATA_DIR
     return RuntimeSettingsStore(
-        data_dir / "runtime-settings.json",
+        get_data_paths().runtime_settings,
         defaults=runtime_settings_from_personal_config(config),
         backup_keep=config.storage.backup_keep,
     )

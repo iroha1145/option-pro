@@ -281,7 +281,7 @@ def test_read_only_api_reports_legacy_schema_without_mutating_it(
     settings = BreakoutSettings(
         _env_file=None,
         BREAKOUT_RADAR_ENABLED=True,
-        BREAKOUT_DB_PATH=path,
+        db_path=path,
     )
     monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: settings)
 

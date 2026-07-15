@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +10,12 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.api.strength import (
+    DEFAULT_STRENGTH_SCAN_PARAMETERS,
+    normalize_strength_scan_parameters,
+    strength_scan_parameters_hash,
+)
+from app.data_paths import get_data_paths
 from app.worker.state import WorkerStateRepository
 
 
@@ -24,10 +29,10 @@ ActionType = Literal[
 ]
 
 _ACTION_TASKS: dict[str, str] = {
-    "focus_refresh": "focus",
-    "strength_refresh": "focus",
-    "breakout_refresh": "breakout",
-    "retention": "maintenance",
+    "focus_refresh": "focus_refresh",
+    "strength_refresh": "strength_refresh",
+    "breakout_refresh": "breakout_refresh",
+    "retention": "retention",
 }
 _ACTION_COOLDOWNS: dict[str, float] = {
     "focus_refresh": 30.0,
@@ -37,8 +42,31 @@ _ACTION_COOLDOWNS: dict[str, float] = {
 }
 
 
+class StrengthRefreshParameters(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        strict=True,
+        str_strip_whitespace=True,
+        allow_inf_nan=False,
+    )
+
+    universe: Literal["themes"]
+    timeframe: Literal["short", "mid", "long", "all"]
+    profile: Literal["conservative", "balanced", "aggressive"]
+    top: int = Field(ge=5, le=120)
+    sector_id: str | None
+    min_price: float = Field(ge=0)
+    min_avg_dollar_volume: float = Field(ge=0)
+    include_options: bool
+
+
 class ManualActionRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        strict=True,
+        str_strip_whitespace=True,
+        allow_inf_nan=False,
+    )
 
     idempotency_key: str | None = Field(
         default=None,
@@ -46,18 +74,15 @@ class ManualActionRequest(BaseModel):
         max_length=160,
         pattern=r"^[A-Za-z0-9._:-]+$",
     )
+    parameters: StrengthRefreshParameters | None = None
 
 
 def _state_path() -> Path:
-    legacy = os.environ.get("OPTIX_WORKER_DB_PATH", "").strip()
-    if legacy:
-        path = Path(legacy).expanduser()
-    else:
-        data_dir = Path(
-            os.environ.get("DATA_DIR", "/data").strip() or "/data"
-        ).expanduser()
-        path = data_dir / "optix-worker.db"
-    if not path.is_absolute() or ".." in path.parts:
+    try:
+        path = get_data_paths().worker_db
+    except ValueError as exc:
+        raise RuntimeError("worker_state_path_invalid") from exc
+    if not path.is_absolute():
         raise RuntimeError("worker_state_path_invalid")
     return path
 
@@ -66,9 +91,15 @@ def _repository() -> WorkerStateRepository:
     return WorkerStateRepository(_state_path())
 
 
-def _minute_key(action_type: str, observed: datetime | None = None) -> str:
+def _minute_key(
+    action_type: str,
+    observed: datetime | None = None,
+    *,
+    parameters_hash: str | None = None,
+) -> str:
     current = (observed or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    return f"{action_type}:{current.strftime('%Y%m%dT%H%MZ')}"
+    key = f"{action_type}:{current.strftime('%Y%m%dT%H%MZ')}"
+    return f"{key}:{parameters_hash}" if parameters_hash else key
 
 
 def _task_state(worker: dict[str, Any], task_name: str) -> dict[str, Any] | None:
@@ -176,6 +207,38 @@ async def request_action(
     body: ManualActionRequest,
     response: Response,
 ) -> dict[str, Any]:
+    parameters_were_supplied = "parameters" in body.model_fields_set
+    action_details: dict[str, Any] = {}
+    parameters_hash: str | None = None
+    if action_type == "strength_refresh":
+        if parameters_were_supplied and body.parameters is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={"code": "strength_parameters_required"},
+            )
+        raw_parameters = (
+            body.parameters.model_dump()
+            if body.parameters is not None
+            else dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
+        )
+        try:
+            parameters = normalize_strength_scan_parameters(raw_parameters)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={"code": "strength_parameters_invalid"},
+            ) from exc
+        parameters_hash = strength_scan_parameters_hash(parameters)
+        action_details = {
+            "parameters": parameters,
+            "parameters_hash": parameters_hash,
+        }
+    elif parameters_were_supplied:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "action_parameters_not_allowed"},
+        )
+
     repository = _repository()
     worker = _read_health(repository)
     if not worker.get("healthy"):
@@ -200,13 +263,17 @@ async def request_action(
             detail={"code": "worker_task_disabled", "task": task_name},
         )
 
-    key = body.idempotency_key or _minute_key(action_type)
+    key = body.idempotency_key or _minute_key(
+        action_type,
+        parameters_hash=parameters_hash,
+    )
     try:
         item = repository.request_action(
             action_type,
             task_name,
             key,
             cooldown_seconds=_ACTION_COOLDOWNS[action_type],
+            details=action_details,
         )
     except (OSError, sqlite3.Error, ValueError) as exc:
         raise HTTPException(

@@ -2,12 +2,21 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
-from pydantic import AliasChoices, AnyHttpUrl, Field, SecretStr, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    AnyHttpUrl,
+    Field,
+    PrivateAttr,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.data_paths import explicit_data_path, get_data_paths
 from app.personal_config import get_personal_config
 from app.runtime_environment import (
     RUNTIME_ENV_FILES,
@@ -114,10 +123,7 @@ class Settings(BaseSettings):
         le=60.0,
         alias="OPENAI_CONTROL_TIMEOUT_SECONDS",
     )
-    openai_job_db_path: Path = Field(
-        default=Path("/data/ai-jobs.db"),
-        alias="OPENAI_JOB_DB_PATH",
-    )
+    _openai_job_db_path_override: Path | None = PrivateAttr(default=None)
     openai_job_lease_seconds: int = Field(
         default=60,
         ge=30,
@@ -151,26 +157,11 @@ class Settings(BaseSettings):
         alias="MACROLENS_CA_BUNDLE",
         max_length=4096,
     )
-    macrolens_cache_db_path: Path = Field(
-        default=Path("/data/catalyst-cache.db"),
-        alias="MACROLENS_CACHE_DB_PATH",
-    )
-    optix_worker_db_path: Path = Field(
-        default=Path("/data/optix-worker.db"),
-        alias="OPTIX_WORKER_DB_PATH",
-    )
-    optix_worker_lock_path: Path = Field(
-        default=Path("/data/optix-worker.lock"),
-        alias="OPTIX_WORKER_LOCK_PATH",
-    )
-    breakout_db_path: Path = Field(
-        default=Path("/data/optix.db"),
-        alias="BREAKOUT_DB_PATH",
-    )
-    optix_backup_dir: Path = Field(
-        default=Path("/data/backups"),
-        alias="OPTIX_BACKUP_DIR",
-    )
+    _macrolens_cache_db_path_override: Path | None = PrivateAttr(default=None)
+    _optix_worker_db_path_override: Path | None = PrivateAttr(default=None)
+    _optix_worker_lock_path_override: Path | None = PrivateAttr(default=None)
+    _breakout_db_path_override: Path | None = PrivateAttr(default=None)
+    _optix_backup_dir_override: Path | None = PrivateAttr(default=None)
 
     # Migration-only sentinels. The worker never consumes either legacy name;
     # retaining them here lets startup reject an unmigrated or conflicting file
@@ -189,8 +180,6 @@ class Settings(BaseSettings):
         repr=False,
     )
 
-    massive_api_key: str = Field(default="", alias="MASSIVE_API_KEY")
-    massive_base_url: AnyHttpUrl = Field(default="https://api.massive.com", alias="MASSIVE_BASE_URL")
     finnhub_api_key: str = Field(default="", alias="FINNHUB_API_KEY")
     finnhub_base_url: AnyHttpUrl = Field(default="https://finnhub.io/api/v1", alias="FINNHUB_BASE_URL")
     finnhub_enrich_limit: int = Field(default=20, alias="FINNHUB_ENRICH_LIMIT")
@@ -223,21 +212,6 @@ class Settings(BaseSettings):
         extra="ignore",
         populate_by_name=True,
     )
-
-    @field_validator(
-        "openai_job_db_path",
-        "macrolens_cache_db_path",
-        "optix_worker_db_path",
-        "optix_worker_lock_path",
-        "breakout_db_path",
-        "optix_backup_dir",
-    )
-    @classmethod
-    def validate_local_path(cls, value: Path) -> Path:
-        value = value.expanduser()
-        if not value.is_absolute() or ".." in value.parts:
-            raise ValueError("runtime data paths must be absolute without parent traversal")
-        return value
 
     @field_validator("macrolens_url")
     @classmethod
@@ -278,6 +252,86 @@ class Settings(BaseSettings):
         if not path.is_file():
             raise ValueError("MACROLENS_CA_BUNDLE must point to a readable file")
         return str(path)
+
+    def __init__(
+        self,
+        *,
+        openai_job_db_path: str | Path | None = None,
+        macrolens_cache_db_path: str | Path | None = None,
+        optix_worker_db_path: str | Path | None = None,
+        optix_worker_lock_path: str | Path | None = None,
+        breakout_db_path: str | Path | None = None,
+        optix_backup_dir: str | Path | None = None,
+        **values: Any,
+    ) -> None:
+        normalized = dict(values)
+        personal_runtime = {
+            "openai_model": _PERSONAL_CONFIG.ai.model,
+            "openai_reasoning": _PERSONAL_CONFIG.ai.reasoning,
+            "openai_max_concurrency": _PERSONAL_CONFIG.ai.max_concurrency,
+            "openai_daily_max_jobs": _PERSONAL_CONFIG.ai.daily_max_jobs,
+            "openai_daily_budget_usd": _PERSONAL_CONFIG.ai.daily_budget_usd,
+            "openai_manual_cooldown_seconds": (
+                _PERSONAL_CONFIG.catalyst.manual_refresh_cooldown_seconds
+            ),
+            "openai_execution_mode": _PERSONAL_CONFIG.ai.execution_mode,
+        }
+        # These values moved from the process environment to personal.toml.
+        # Supplying them as the highest-priority settings source prevents a
+        # stale exported OPENAI_* variable from silently changing production.
+        # Explicit constructor values remain available to isolated tests.
+        for field_name, value in personal_runtime.items():
+            field = type(self).model_fields[field_name]
+            alias = field.alias
+            if field_name in normalized or (
+                isinstance(alias, str) and alias in normalized
+            ):
+                continue
+            normalized[alias if isinstance(alias, str) else field_name] = value
+        super().__init__(**normalized)
+        overrides = (
+            ("_openai_job_db_path_override", "openai_job_db_path", openai_job_db_path),
+            (
+                "_macrolens_cache_db_path_override",
+                "macrolens_cache_db_path",
+                macrolens_cache_db_path,
+            ),
+            ("_optix_worker_db_path_override", "optix_worker_db_path", optix_worker_db_path),
+            (
+                "_optix_worker_lock_path_override",
+                "optix_worker_lock_path",
+                optix_worker_lock_path,
+            ),
+            ("_breakout_db_path_override", "breakout_db_path", breakout_db_path),
+            ("_optix_backup_dir_override", "optix_backup_dir", optix_backup_dir),
+        )
+        for attribute, name, value in overrides:
+            if value is not None:
+                setattr(self, attribute, explicit_data_path(value, name=name))
+
+    @property
+    def openai_job_db_path(self) -> Path:
+        return self._openai_job_db_path_override or get_data_paths().ai_jobs_db
+
+    @property
+    def macrolens_cache_db_path(self) -> Path:
+        return self._macrolens_cache_db_path_override or get_data_paths().catalyst_cache_db
+
+    @property
+    def optix_worker_db_path(self) -> Path:
+        return self._optix_worker_db_path_override or get_data_paths().worker_db
+
+    @property
+    def optix_worker_lock_path(self) -> Path:
+        return self._optix_worker_lock_path_override or get_data_paths().worker_lock
+
+    @property
+    def breakout_db_path(self) -> Path:
+        return self._breakout_db_path_override or get_data_paths().optix_db
+
+    @property
+    def optix_backup_dir(self) -> Path:
+        return self._optix_backup_dir_override or get_data_paths().backups_dir
 
     @model_validator(mode="after")
     def validate_openai_runtime(self) -> "Settings":

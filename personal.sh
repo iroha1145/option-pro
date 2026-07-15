@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 root="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 cd "$root"
@@ -56,15 +57,16 @@ if ! command -v docker >/dev/null 2>&1 || [ ! -f "$root/docker-compose.yml" ]; t
 fi
 
 case "$key" in
-    OPENAI_API_KEY) services=(backend ai-worker) ;;
-    FINNHUB_API_KEY|MARKETDATA_TOKEN|INTERNAL_API_TOKEN) services=(backend) ;;
+    OPENAI_API_KEY|FINNHUB_API_KEY|MARKETDATA_TOKEN|INTERNAL_API_TOKEN)
+        services=(backend worker)
+        ;;
     APP_PASSWORD_HASH) services=(backend) ;;
     *) services=() ;;
 esac
 
 running=()
 for service in "${services[@]}"; do
-    if [ -n "$(docker compose -f "$root/docker-compose.yml" ps -q "$service" 2>/dev/null)" ]; then
+    if [ -n "$(docker compose -f "$root/docker-compose.yml" ps --status running -q "$service" 2>/dev/null)" ]; then
         running+=("$service")
     fi
 done

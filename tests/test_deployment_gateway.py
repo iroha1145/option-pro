@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import re
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
+
 import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
@@ -12,6 +16,7 @@ from app.access import (
     require_owner_access,
     require_same_origin_action,
 )
+import app.access as access_module
 from app.api import access as access_api
 import app.main as main
 from app.main import _GatewayMiddleware, _configured_allowed_hosts
@@ -296,6 +301,40 @@ def test_repeated_login_failures_enter_a_bounded_cooldown() -> None:
     assert rejected.value.retry_after is not None
 
 
+def test_parallel_login_from_one_source_runs_only_one_password_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _runtime("password")
+    entered = Event()
+    release = Event()
+    calls = 0
+
+    def slow_rejection(_password: str, _encoded_hash: str) -> bool:
+        nonlocal calls
+        calls += 1
+        entered.set()
+        assert release.wait(timeout=2)
+        return False
+
+    monkeypatch.setattr(access_module, "verify_owner_password", slow_rejection)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        first = executor.submit(
+            runtime.login,
+            "wrong-password",
+            client_key="127.0.0.1",
+        )
+        assert entered.wait(timeout=2)
+        with pytest.raises(LoginRejected) as concurrent_rejection:
+            runtime.login("wrong-password", client_key="127.0.0.1")
+        assert concurrent_rejection.value.code == "login_cooldown"
+        assert concurrent_rejection.value.retry_after == 1
+        release.set()
+        with pytest.raises(LoginRejected) as first_rejection:
+            first.result(timeout=2)
+        assert first_rejection.value.code == "invalid_owner_password"
+    assert calls == 1
+
+
 @pytest.mark.parametrize(
     ("headers", "use_json", "expected"),
     [
@@ -339,6 +378,128 @@ def test_password_login_itself_requires_https_and_same_origin_json() -> None:
             json={"password": PASSWORD},
             headers={"Origin": "https://evil.example", "X-Optix-Action": "1"},
         ).status_code == 403
+
+
+def test_password_login_rejects_large_body_before_json_parsing() -> None:
+    sentinel = "oversized-login-body-sentinel"
+    body = (f'{{"password":"{sentinel}' + ("x" * 5000) + '"}').encode()
+    with TestClient(
+        _test_app(_runtime("password")),
+        base_url="https://testserver",
+    ) as client:
+        response = client.post(
+            "/api/access/login",
+            content=body,
+            headers={
+                **_action_headers(),
+                "Content-Type": "application/json",
+            },
+        )
+    assert response.status_code == 413
+    assert sentinel not in response.text
+
+
+def test_production_validation_errors_never_echo_submitted_password() -> None:
+    submitted_password = "password-response-sentinel-" + ("x" * 1024)
+    client = TestClient(
+        _PeerAddress(main.app, "127.0.0.1"),
+        base_url="http://localhost",
+    )
+    try:
+        main._rl_buckets.clear()
+        response = client.post(
+            "/api/access/login",
+            json={"password": submitted_password},
+            headers={
+                "Origin": "http://localhost",
+                "X-Optix-Action": "1",
+            },
+        )
+        assert response.status_code == 422
+        assert submitted_password not in response.text
+        assert "password-response-sentinel" not in response.text
+        assert all(
+            set(error) == {"type", "loc", "msg"}
+            for error in response.json()["detail"]
+        )
+
+        field_sentinel = "owner-password-as-extra-field-sentinel"
+        main._rl_buckets.clear()
+        extra_field = client.post(
+            "/api/access/login",
+            json={"password": "x", field_sentinel: 1},
+            headers={
+                "Origin": "http://localhost",
+                "X-Optix-Action": "1",
+            },
+        )
+        assert extra_field.status_code == 422
+        assert field_sentinel not in extra_field.text
+        assert extra_field.json()["detail"] == [
+            {
+                "type": "request_validation_failed",
+                "loc": ["request"],
+                "msg": "Invalid request",
+            }
+        ]
+    finally:
+        client.close()
+
+
+def test_every_real_mutating_route_rejects_cross_site_and_form_requests() -> None:
+    schema = main.app.openapi()
+    mutations = [
+        (method.upper(), path)
+        for path, operations in schema["paths"].items()
+        for method in operations
+        if method in {"post", "put", "patch", "delete"}
+    ]
+    assert len(mutations) >= 17
+    client = TestClient(
+        _PeerAddress(main.app, "127.0.0.1"),
+        base_url="http://localhost",
+    )
+    try:
+        for method, template in mutations:
+            path = re.sub(r"\{[^}]+\}", "boundary-test", template)
+            main._rl_buckets.clear()
+            cross_site = client.request(
+                method,
+                path,
+                json={},
+                headers={
+                    "Origin": "http://evil.example",
+                    "X-Optix-Action": "1",
+                },
+            )
+            assert cross_site.status_code == 403, (method, template, cross_site.text)
+
+            main._rl_buckets.clear()
+            missing_header = client.request(
+                method,
+                path,
+                json={},
+                headers={"Origin": "http://localhost"},
+            )
+            assert missing_header.status_code == 403, (
+                method,
+                template,
+                missing_header.text,
+            )
+
+            main._rl_buckets.clear()
+            form = client.request(
+                method,
+                path,
+                data={"value": "1"},
+                headers={
+                    "Origin": "http://localhost",
+                    "X-Optix-Action": "1",
+                },
+            )
+            assert form.status_code == 415, (method, template, form.text)
+    finally:
+        client.close()
 
 
 def test_frontend_integrity_and_host_validation_remain_fail_closed(

@@ -1667,11 +1667,12 @@ async def scan_strength(
     universe: str = "themes",
     timeframe: str = "all",
     profile: str = "balanced",
-    top: int = 30,
+    top: int = 20,
     sector_id: str | None = None,
     min_price: float = 5.0,
     min_avg_dollar_volume: float = 10_000_000,
     include_options: bool = True,
+    force_refresh: bool = False,
 ) -> dict[str, Any]:
     settings = get_settings()
     from app.services.breakouts.config import get_breakout_settings
@@ -1726,11 +1727,15 @@ async def scan_strength(
                     raise RuntimeError("strength_price_history_unavailable")
                 return history
 
-            raw_history, _, _ = await cache.get_or_set_with_meta(
-                history_key,
-                STRENGTH_CACHE_TTL_SECONDS,
-                load_history,
-            )
+            if force_refresh:
+                raw_history = await load_history()
+                cache.set(history_key, raw_history, STRENGTH_CACHE_TTL_SECONDS)
+            else:
+                raw_history, _, _ = await cache.get_or_set_with_meta(
+                    history_key,
+                    STRENGTH_CACHE_TTL_SECONDS,
+                    load_history,
+                )
 
         return await asyncio.to_thread(
             _scan_sync,
@@ -1745,11 +1750,20 @@ async def scan_strength(
             raw_history=raw_history,
         )
 
-    payload, was_cached, expires_at = await cache.get_or_set_with_meta(
-        key,
-        STRENGTH_CACHE_TTL_SECONDS,
-        produce,
-    )
+    if force_refresh:
+        payload = await produce()
+        cache.set(key, payload, STRENGTH_CACHE_TTL_SECONDS)
+        cached = cache.get_with_expiry(key)
+        if cached is None:  # pragma: no cover - set() guarantees this branch
+            raise RuntimeError("strength_cache_write_failed")
+        expires_at = cached[0]
+        was_cached = False
+    else:
+        payload, was_cached, expires_at = await cache.get_or_set_with_meta(
+            key,
+            STRENGTH_CACHE_TTL_SECONDS,
+            produce,
+        )
     return {
         **payload,
         "_cached": was_cached,

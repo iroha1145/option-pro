@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal, Protocol, cast
 
 from app.config import Settings, get_settings
+from app.data_paths import get_data_paths
 from app.personal_config import PersonalConfig, get_personal_config
 from app.services.ai_jobs import runtime as ai_runtime
 from app.services.ai_jobs.models import (
@@ -29,7 +30,7 @@ from .errors import CatalystError
 _WAITING_TITLE = "中文标题等待生成"
 _WAITING_SUMMARY = "中文摘要等待生成"
 _WAITING_HOTSPOT_TITLE = "热点标题等待中文分析"
-_ACTION_MODES = frozenset({"manual", "scheduled"})
+_INTERACTIVE_MODES = frozenset({"manual", "scheduled"})
 _NEWS_PROMPT_VERSION = "news-impact-zh-cn-v2"
 _LOCAL_STORE_RUNTIME_CODES = frozenset(
     {
@@ -257,8 +258,9 @@ class PersonalCatalystService:
                 )
             except (OSError, sqlite3.Error, RuntimeError, TypeError, ValueError):
                 capacity["concurrency_available"] = False
-        mode_enabled = bool(
-            self.mode in _ACTION_MODES
+        mode_enabled = self.mode in _INTERACTIVE_MODES
+        manual_enabled = bool(
+            mode_enabled
             and runtime_settings is not None
             and runtime_settings.ai.manual_analysis_enabled
         )
@@ -269,6 +271,8 @@ class PersonalCatalystService:
             reason = "settings_unavailable"
         elif not mode_enabled:
             reason = "read_only_mode"
+        elif not manual_enabled:
+            reason = "manual_analysis_disabled"
         elif not configured:
             reason = "not_configured"
         elif not worker_healthy:
@@ -304,8 +308,6 @@ class PersonalCatalystService:
         }:
             return
         reason = str(availability["reason"])
-        if reason == "read_only_mode":
-            self._require_action_mode()
         retry_after: int | None = None
         if reason == "cooldown_active":
             until = _parse_utc(availability.get("cooldown_until"))
@@ -319,12 +321,16 @@ class PersonalCatalystService:
             "analysis_in_progress": "analysis_in_progress",
             "cooldown_active": "analysis_cooldown_active",
             "settings_unavailable": "runtime_settings_unavailable",
-        }.get(reason, "capability_disabled")
+            "read_only_mode": "read_only_mode",
+            "manual_analysis_disabled": "manual_analysis_disabled",
+        }.get(reason, "analysis_unavailable")
         message = {
             "daily_job_limit_reached": "今日任务次数已用完",
             "daily_budget_usd_reached": "今日分析预算已用完",
             "analysis_cooldown_active": "分析正在冷却中",
             "worker_unavailable": "后台工作进程暂不可用",
+            "read_only_mode": "当前模式只允许读取新闻",
+            "manual_analysis_disabled": "手动分析功能当前未启用",
         }.get(code, "当前无法开始新闻分析")
         raise CatalystError(
             code,
@@ -338,18 +344,13 @@ class PersonalCatalystService:
             counts_for_circuit=False,
         )
 
-    @property
-    def action_enabled(self) -> bool:
-        return self.mode in _ACTION_MODES
-
-    def _require_action_mode(self) -> None:
-        if not self.action_enabled:
-            raise CatalystError(
-                "capability_disabled",
-                "Catalyst analysis actions are disabled in the current mode",
-                retryable=False,
-                counts_for_circuit=False,
-            )
+    def _manual_analysis_enabled(self) -> bool:
+        runtime_settings = self._effective_runtime()
+        return bool(
+            self.mode in _INTERACTIVE_MODES
+            and runtime_settings is not None
+            and runtime_settings.ai.manual_analysis_enabled
+        )
 
     def _cache_file_ready(self) -> bool:
         if self._intelligence_injected:
@@ -776,7 +777,6 @@ class PersonalCatalystService:
                 "last_sync_at": None,
                 "remote_status": None,
                 "analysis_trigger_enabled": False,
-                "action_enabled": False,
                 "model": self.settings.model,
                 "reasoning": self.settings.reasoning,
                 "execution_mode": "background",
@@ -798,7 +798,6 @@ class PersonalCatalystService:
                 "last_sync_at": None,
                 "remote_status": None,
                 "analysis_trigger_enabled": False,
-                "action_enabled": False,
                 "model": self.settings.model,
                 "reasoning": self.settings.reasoning,
                 "execution_mode": "background",
@@ -808,10 +807,8 @@ class PersonalCatalystService:
             payload["analysis_availability"] = self.analysis_availability(now=observed)
             return payload
         payload["analysis_trigger_enabled"] = bool(
-            self.action_enabled and payload.get("analysis_trigger_enabled", True)
-        )
-        payload["action_enabled"] = bool(
-            self.action_enabled and payload.get("action_enabled", True)
+            self._manual_analysis_enabled()
+            and payload.get("analysis_trigger_enabled", True)
         )
         payload["analysis_availability"] = self.analysis_availability(now=observed)
         return payload
@@ -884,7 +881,8 @@ class PersonalCatalystService:
         if projected.get("item") is None:
             return None
         projected["analysis_trigger_enabled"] = bool(
-            self.action_enabled and projected.get("analysis_trigger_enabled", True)
+            self._manual_analysis_enabled()
+            and projected.get("analysis_trigger_enabled", True)
         )
         projected["analysis_availability"] = self.analysis_availability(now=as_of)
         return projected
@@ -987,18 +985,15 @@ class PersonalCatalystService:
         *,
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
-        self._require_action_mode()
-        self._require_cache_ready()
-        runtime_settings = self._effective_runtime()
-        if runtime_settings is None or not runtime_settings.catalyst.manual_refresh_enabled:
+        if self.mode == "off":
             raise CatalystError(
-                "runtime_settings_unavailable"
-                if runtime_settings is None
-                else "capability_disabled",
-                "Manual Catalyst refresh is disabled",
+                "catalyst_disabled",
+                "Catalyst refresh is disabled while the feature is off",
                 retryable=False,
                 counts_for_circuit=False,
             )
+        self._require_cache_ready()
+        runtime_settings = self._effective_runtime()
         if not self._worker_healthy():
             raise CatalystError(
                 "worker_unavailable",
@@ -1009,6 +1004,8 @@ class PersonalCatalystService:
         if hasattr(self.intelligence, "manual_refresh_cooldown_seconds"):
             self.intelligence.manual_refresh_cooldown_seconds = int(
                 runtime_settings.catalyst.manual_refresh_cooldown_seconds
+                if runtime_settings is not None
+                else self.personal_config.catalyst.manual_refresh_cooldown_seconds
             )
         try:
             if operation_type == "news" and idempotency_key is None:
@@ -1051,8 +1048,6 @@ class PersonalCatalystService:
                 "as_of": status["as_of"],
                 "last_sync_at": status.get("last_sync_at"),
                 "manual_enabled": False,
-                "action_enabled": False,
-                "capability": "disabled",
                 "warnings": status.get("warnings", []),
             }
             payload["analysis_availability"] = status.get(
@@ -1078,8 +1073,6 @@ class PersonalCatalystService:
                     "as_of": _iso(observed),
                     "last_sync_at": None,
                     "manual_enabled": False,
-                    "action_enabled": False,
-                    "capability": "disabled",
                     "warnings": ["cache_unavailable"],
                 }
                 payload["analysis_availability"] = self.analysis_availability(
@@ -1088,13 +1081,9 @@ class PersonalCatalystService:
                 return payload
             raise
         payload["manual_enabled"] = bool(
-            self.action_enabled and payload.get("manual_enabled", True)
+            self._manual_analysis_enabled()
+            and payload.get("manual_enabled", True)
         )
-        payload["action_enabled"] = bool(
-            self.action_enabled and payload.get("action_enabled", True)
-        )
-        if not self.action_enabled:
-            payload["capability"] = "disabled"
         payload["analysis_availability"] = self.analysis_availability(now=observed)
         return payload
 
@@ -1161,20 +1150,8 @@ class PersonalCatalystService:
         retry_cycle_id: str | None = None,
         force: bool = False,
     ) -> dict[str, Any]:
-        self._require_action_mode()
         self._require_cache_ready()
         self._require_analysis_available()
-        runtime_settings = self._effective_runtime()
-        if force and (
-            runtime_settings is None
-            or not runtime_settings.catalyst.manual_force_reanalysis
-        ):
-            raise CatalystError(
-                "capability_disabled",
-                "Forced market focus reanalysis is disabled",
-                retryable=False,
-                counts_for_circuit=False,
-            )
         try:
             arguments = {
                 "expected_prepared_revision": expected_prepared_revision,
@@ -1202,7 +1179,6 @@ class PersonalCatalystService:
         return self._project_focus_cycle(cycle)
 
     def cancel_market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
-        self._require_action_mode()
         self._require_cache_ready()
         try:
             cycle = self.intelligence.cancel_market_focus_cycle(cycle_id)
@@ -1213,7 +1189,6 @@ class PersonalCatalystService:
         return self._project_focus_cycle(cycle)
 
     def request_analysis(self, news_id: int, *, force: bool) -> dict[str, Any]:
-        self._require_action_mode()
         self._require_cache_ready()
         self._require_analysis_available()
         try:
@@ -1233,7 +1208,6 @@ class PersonalCatalystService:
         return self.ai_repository.public(row)
 
     def cancel_analysis_job(self, job_id: str) -> dict[str, Any] | None:
-        self._require_action_mode()
         self._require_cache_ready()
         if not self._ai_store_ready():
             raise self._cache_unavailable()
