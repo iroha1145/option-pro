@@ -63,6 +63,7 @@ def test_legacy_environment_is_reduced_to_typed_config_and_small_runtime_env() -
                 "MACROLENS_FEED_INTERVAL_SECONDS": "240",
                 "MARKETDATA_API_TOKEN": "market-secret",
                 "MACROLENS_BASE_URL": "https://macrolens.example",
+                "MACROLENS_INTERNAL_TOKEN": "legacy-token",
                 "UNMAPPED_SWITCH": "legacy",
             }
         )
@@ -74,14 +75,31 @@ def test_legacy_environment_is_reduced_to_typed_config_and_small_runtime_env() -
     assert migration.secrets == {
         "OPENAI_API_KEY": "secret-value",
         "MARKETDATA_TOKEN": "market-secret",
+        "INTERNAL_API_TOKEN": "legacy-token",
     }
     assert migration.machine == {"MACROLENS_URL": "https://macrolens.example"}
     assert migration.unmapped_keys == ("UNMAPPED_SWITCH",)
     assert migration.deprecated_keys == (
         "MACROLENS_BASE_URL",
+        "MACROLENS_INTERNAL_TOKEN",
         "MARKETDATA_API_TOKEN",
     )
     assert migration.requires_owner_password is False
+
+
+def test_legacy_macrolens_token_name_is_normalized_for_personal_runtime() -> None:
+    with pytest.warns(DeprecationWarning):
+        migration = migrate_legacy_environment(
+            {
+                "MACROLENS_URL": "https://legacy-macrolens.example",
+                "MACROLENS_INTERNAL_TOKEN": "legacy-token",
+            }
+        )
+
+    assert migration.secrets == {"INTERNAL_API_TOKEN": "legacy-token"}
+    assert migration.machine == {"MACROLENS_URL": "https://legacy-macrolens.example"}
+    assert migration.unmapped_keys == ()
+    assert migration.deprecated_keys == ("MACROLENS_INTERNAL_TOKEN",)
 
 
 def test_migration_command_writes_private_secrets_and_review_report(

@@ -24,28 +24,20 @@ def _poll_delay(settings: Any, poll_count: int) -> float:
     return min(maximum, initial * (2 ** min(max(0, poll_count), 4)))
 
 
-def _job_age_seconds(job: dict[str, Any]) -> float:
-    created = str(job.get("created_at") or "")
-    try:
-        created_at = datetime.fromisoformat(created.replace("Z", "+00:00"))
-    except ValueError:
-        return 0.0
-    return max(
-        0.0,
-        (datetime.now(timezone.utc) - created_at).total_seconds(),
-    )
-
-
 def _submitted_age_seconds(job: dict[str, Any]) -> float:
-    submitted = str(job.get("submitted_at") or "")
-    try:
-        submitted_at = datetime.fromisoformat(submitted.replace("Z", "+00:00"))
-    except ValueError:
-        return 0.0
-    return max(
-        0.0,
-        (datetime.now(timezone.utc) - submitted_at).total_seconds(),
-    )
+    for field in ("submitted_at", "submission_started_at", "created_at"):
+        submitted = str(job.get(field) or "")
+        if not submitted:
+            continue
+        try:
+            submitted_at = datetime.fromisoformat(submitted.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        return max(
+            0.0,
+            (datetime.now(timezone.utc) - submitted_at).total_seconds(),
+        )
+    return 0.0
 
 
 def _public_error(
@@ -53,20 +45,32 @@ def _public_error(
     *,
     submitted: bool,
     response_id: str | None,
-    execution_mode: str,
 ) -> str:
-    if submitted and not response_id:
-        return (
-            "submission_outcome_unknown"
-            if execution_mode == "background"
-            else "worker_interrupted"
-        )
+    status_code = getattr(exc, "status_code", None)
+    if submitted and not response_id and not isinstance(status_code, int):
+        return "submission_outcome_unknown"
+    if isinstance(status_code, int):
+        if status_code in {401, 403}:
+            return "provider_auth_failed"
+        if status_code == 429:
+            return "provider_rate_limited"
+        if status_code >= 500:
+            return "provider_server_error"
+        return "provider_request_rejected"
     if isinstance(exc, ValueError):
         code = str(exc)
         if code in {
+            "ai_input_too_large",
             "ai_empty_response",
             "earnings_ticker_mismatch",
             "earnings_impacted_count_invalid",
+            "news_identity_mismatch",
+            "news_ticker_binding_mismatch",
+            "market_focus_cycle_mismatch",
+            "market_focus_as_of_mismatch",
+            "market_focus_input_hash_mismatch",
+            "market_focus_event_binding_mismatch",
+            "market_focus_ticker_binding_mismatch",
         }:
             return code
         return "schema_validation_failed"
@@ -75,7 +79,7 @@ def _public_error(
         if code in {
             "ai_not_configured",
             "ai_sdk_unavailable",
-            "unsupported_provider_capability",
+            "runtime_configuration_invalid",
         }:
             return code
     return "provider_unavailable"
@@ -131,7 +135,11 @@ async def _finish_response(
             ),
         )
         return
+    terminal_error = runtime.response_terminal_error(response)
     if status == "completed":
+        if terminal_error:
+            repository.fail(job["job_id"], owner, terminal_error)
+            return
         payload = json.loads(job["payload_json"])
         result = runtime.response_result(response, job["job_type"], payload)
         repository.complete(
@@ -145,7 +153,11 @@ async def _finish_response(
         repository.mark_cancelled(job["job_id"], owner)
         return
     if status in {"failed", "incomplete"}:
-        repository.fail(job["job_id"], owner, f"provider_{status}")
+        repository.fail(
+            job["job_id"],
+            owner,
+            terminal_error or f"provider_{status}",
+        )
         return
     repository.fail(job["job_id"], owner, "provider_status_unsupported")
 
@@ -170,8 +182,10 @@ async def process_job(
     response_id = job.get("openai_response_id")
     try:
         if job.get("cancel_requested_at"):
-            if response_id and job["execution_mode"] == "background":
-                if _job_age_seconds(job) > int(settings.openai_job_max_age_seconds):
+            if response_id:
+                if _submitted_age_seconds(job) > int(
+                    settings.openai_job_max_age_seconds
+                ):
                     repository.fail(job["job_id"], owner, "provider_response_expired")
                     return
                 try:
@@ -203,7 +217,9 @@ async def process_job(
             return
 
         if response_id:
-            if _job_age_seconds(job) > int(settings.openai_job_max_age_seconds):
+            if _submitted_age_seconds(job) > int(
+                settings.openai_job_max_age_seconds
+            ):
                 repository.fail(job["job_id"], owner, "provider_response_expired")
                 return
             try:
@@ -230,11 +246,7 @@ async def process_job(
             repository.fail(
                 job["job_id"],
                 owner,
-                (
-                    "submission_outcome_unknown"
-                    if job["execution_mode"] == "background"
-                    else "worker_interrupted"
-                ),
+                "submission_outcome_unknown",
             )
             return
 
@@ -242,9 +254,10 @@ async def process_job(
             job["job_type"]
         )
         if (
-            job["model"] != settings.openai_model
-            or job["reasoning"] != settings.openai_reasoning
-            or job["execution_mode"] != settings.openai_execution_mode
+            job["model"] != runtime.OFFICIAL_OPENAI_MODEL
+            or job["reasoning"] != runtime.OFFICIAL_REASONING_EFFORT
+            or job["execution_mode"] != runtime.OFFICIAL_EXECUTION_MODE
+            or not runtime.runtime_configuration_valid(settings)
             or job["schema_version"] != current_schema_version
             or job["schema_sha256"] != current_schema_sha256
         ):
@@ -255,58 +268,58 @@ async def process_job(
             )
             return
 
+        payload = json.loads(job["payload_json"])
+        prepared = runtime.prepare_background(
+            settings,
+            job["job_type"],
+            payload,
+        )
         try:
-            submission_started = repository.mark_submission_started(
+            submission_state = repository.mark_submission_started(
                 job["job_id"],
                 owner,
-                daily_limit=settings.openai_daily_max_jobs,
+                daily_limit=int(settings.openai_daily_max_jobs),
             )
         except RuntimeError as exc:
             if str(exc) == "ai_job_not_submittable":
                 return
             raise
-        if not submission_started:
+        if submission_state != "started":
             return
+        # Every local validation and SDK construction step has completed. From
+        # this point an exception can represent a request whose upstream
+        # outcome is unknown, so it must consume both budget and concurrency.
         submitted = True
-        payload = json.loads(job["payload_json"])
-        if job["execution_mode"] == "background":
-            response = await runtime.submit_background(
-                settings,
-                job["job_type"],
-                payload,
-            )
-            submitted_response_id = str(getattr(response, "id", "") or "") or None
-            if not submitted_response_id:
-                repository.fail(
-                    job["job_id"],
-                    owner,
-                    "provider_response_id_missing",
-                )
-                return
-            repository.link_background_response(
+        response = await runtime.submit_background(
+            settings,
+            job["job_type"],
+            payload,
+            prepared=prepared,
+        )
+        submitted_response_id = str(getattr(response, "id", "") or "") or None
+        if not submitted_response_id:
+            repository.fail(
                 job["job_id"],
                 owner,
-                submitted_response_id,
+                "submission_outcome_unknown",
             )
-            # Treat the upstream identity as recoverable only after it is
-            # durably linked. A failed link otherwise makes an untracked paid
-            # response look retryable and can submit the same job twice.
-            response_id = submitted_response_id
-            job["openai_response_id"] = response_id
-        else:
-            response = await runtime.run_worker_sync(
-                settings,
-                job["job_type"],
-                payload,
-            )
-            response_id = str(getattr(response, "id", "") or "") or None
+            return
+        repository.link_background_response(
+            job["job_id"],
+            owner,
+            submitted_response_id,
+        )
+        # Treat the upstream identity as recoverable only after it is
+        # durably linked. A failed link otherwise makes an untracked paid
+        # response look retryable and can submit the same job twice.
+        response_id = submitted_response_id
+        job["openai_response_id"] = response_id
         await _finish_response(repository, settings, job, owner, response)
     except Exception as exc:
         code = _public_error(
             exc,
             submitted=submitted,
             response_id=response_id,
-            execution_mode=job["execution_mode"],
         )
         logger.warning("AI job failed (%s, %s)", code, type(exc).__name__)
         with suppress(Exception):
@@ -323,24 +336,15 @@ async def run_once(
     settings: Any,
     owner: str,
 ) -> int:
-    claimed: list[dict[str, Any]] = []
-    for _ in range(int(settings.openai_max_concurrency)):
-        job = await asyncio.to_thread(
-            repository.claim_due,
-            owner,
-            int(settings.openai_job_lease_seconds),
-        )
-        if not job:
-            break
-        claimed.append(job)
-    if claimed:
-        await asyncio.gather(
-            *[
-                process_job(repository, settings, job, owner)
-                for job in claimed
-            ]
-        )
-    return len(claimed)
+    job = await asyncio.to_thread(
+        repository.claim_due,
+        owner,
+        int(settings.openai_job_lease_seconds),
+    )
+    if not job:
+        return 0
+    await process_job(repository, settings, job, owner)
+    return 1
 
 
 def health_payload(repository: AIJobRepository, settings: Any) -> dict[str, Any]:
@@ -358,11 +362,9 @@ def health_payload(repository: AIJobRepository, settings: Any) -> dict[str, Any]
             ),
             "configured": configured,
             "provider_capability_supported": bool(capability.get("supported")),
-            "sdk_capability_supported": bool(capability.get("sdk_supported")),
-            "methods": capability.get("methods", {}),
-            "model": settings.openai_model,
-            "reasoning": settings.openai_reasoning,
-            "execution_mode": settings.openai_execution_mode,
+            "model": runtime.OFFICIAL_OPENAI_MODEL,
+            "reasoning": runtime.OFFICIAL_REASONING_EFFORT,
+            "execution_mode": runtime.OFFICIAL_EXECUTION_MODE,
         }
     )
     if not configured and payload["healthy"]:

@@ -3,7 +3,6 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlsplit
 
 from pydantic import AliasChoices, AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,22 +23,26 @@ class Settings(BaseSettings):
     """Runtime configuration loaded from environment or .env."""
 
     openai_api_key: SecretStr = Field(default=SecretStr(""), alias="OPENAI_API_KEY")
-    openai_base_url: str = Field(default="", alias="OPENAI_BASE_URL")
-    allow_custom_openai_base_url: bool = Field(
+    # Deprecated provider switches remain as rejecting sentinels for one
+    # migration release. They cannot alter the official Responses runtime.
+    openai_base_url: Literal[""] = Field(default="", alias="OPENAI_BASE_URL")
+    allow_custom_openai_base_url: Literal[False] = Field(
         default=False,
         alias="ALLOW_CUSTOM_OPENAI_BASE_URL",
     )
-    openai_custom_capabilities_confirmed: bool = Field(
+    openai_custom_capabilities_confirmed: Literal[False] = Field(
         default=False,
         alias="OPENAI_CUSTOM_CAPABILITIES_CONFIRMED",
     )
-    openai_model: str = Field(
+    openai_require_zdr: Literal[False] = Field(
+        default=False,
+        alias="OPENAI_REQUIRE_ZDR",
+    )
+    openai_model: Literal["gpt-5.6-terra"] = Field(
         default=_PERSONAL_CONFIG.ai.model,
-        min_length=1,
-        max_length=120,
         alias="OPENAI_MODEL",
     )
-    openai_reasoning: Literal["none", "low", "medium", "high", "xhigh", "max"] = Field(
+    openai_reasoning: Literal["max"] = Field(
         default=_PERSONAL_CONFIG.ai.reasoning,
         alias="OPENAI_REASONING",
     )
@@ -59,16 +62,14 @@ class Settings(BaseSettings):
             "OPENAI_MAX_OUTPUT_TOKENS",
         ),
     )
-    openai_max_concurrency: int = Field(
+    openai_max_concurrency: Literal[1] = Field(
         default=_PERSONAL_CONFIG.ai.max_concurrency,
-        ge=1,
-        le=4,
         alias="OPENAI_MAX_CONCURRENCY",
     )
     openai_daily_max_jobs: int = Field(
         default=_PERSONAL_CONFIG.ai.daily_max_jobs,
         ge=1,
-        le=100,
+        le=4,
         alias="OPENAI_DAILY_MAX_JOBS",
     )
     openai_daily_budget_usd: float = Field(
@@ -77,11 +78,10 @@ class Settings(BaseSettings):
         le=100.0,
         alias="OPENAI_DAILY_BUDGET_USD",
     )
-    openai_execution_mode: Literal["background", "worker_sync"] = Field(
+    openai_execution_mode: Literal["background"] = Field(
         default=_PERSONAL_CONFIG.ai.execution_mode,
         alias="OPENAI_EXECUTION_MODE",
     )
-    openai_require_zdr: bool = Field(default=False, alias="OPENAI_REQUIRE_ZDR")
     openai_background_poll_timeout_seconds: float = Field(
         default=1800.0,
         ge=60.0,
@@ -164,44 +164,6 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
-    @field_validator("openai_base_url")
-    @classmethod
-    def validate_openai_base_url(cls, value: str) -> str:
-        value = value.strip().rstrip("/")
-        if value and not value.startswith(("https://", "http://")):
-            raise ValueError("OPENAI_BASE_URL must be empty or start with https:// or http://")
-        if any(char.isspace() for char in value):
-            raise ValueError("OPENAI_BASE_URL must not contain whitespace")
-        if value:
-            parsed = urlsplit(value)
-            if not parsed.hostname:
-                raise ValueError("OPENAI_BASE_URL must include a hostname")
-            if parsed.username or parsed.password:
-                raise ValueError("OPENAI_BASE_URL must not contain credentials")
-        return value
-
-    @field_validator("openai_model")
-    @classmethod
-    def validate_openai_model(cls, value: str) -> str:
-        value = value.strip()
-        if not value or any(char.isspace() or ord(char) < 32 for char in value):
-            raise ValueError("OPENAI_MODEL must be a bounded model identifier without whitespace")
-        return value
-
-    @model_validator(mode="after")
-    def require_custom_base_url_opt_in(self) -> "Settings":
-        if not self.openai_base_url:
-            return self
-        if not self.allow_custom_openai_base_url:
-            raise ValueError(
-                "custom OPENAI_BASE_URL requires ALLOW_CUSTOM_OPENAI_BASE_URL=true"
-            )
-        parsed = urlsplit(self.openai_base_url)
-        local_hosts = {"localhost", "127.0.0.1", "::1"}
-        if parsed.scheme != "https" and parsed.hostname not in local_hosts:
-            raise ValueError("custom OPENAI_BASE_URL must use HTTPS unless it is localhost")
-        return self
-
     @model_validator(mode="after")
     def validate_openai_runtime(self) -> "Settings":
         if (
@@ -210,10 +172,6 @@ class Settings(BaseSettings):
         ):
             raise ValueError(
                 "OPENAI_BACKGROUND_MAX_POLL_SECONDS must be at least the initial interval"
-            )
-        if self.openai_require_zdr and self.openai_execution_mode == "background":
-            raise ValueError(
-                "OPENAI_REQUIRE_ZDR=true requires OPENAI_EXECUTION_MODE=worker_sync"
             )
         return self
 

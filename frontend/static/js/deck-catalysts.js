@@ -596,7 +596,7 @@
       : null;
     return `<article class="cat-hotspot">
       <header><span class="chip ${hotScore != null && hotScore >= 75 ? "chip--down" : "chip--amber"}">热点 ${score(hotScore)}</span><span class="chip chip--mute">${esc(statusLabel(item.status || "prepared"))}</span></header>
-      <h3>${esc(item.representative_title || item.title || "未命名事件组")}</h3>
+      <h3>${esc(item.representative_title || "热点标题等待中文分析")}</h3>
       <p class="cat-hotspot__meta">${esc(item.event_type || "other")} · 独立来源 ${finite(item.source_count) ? Math.round(item.source_count) : sources.length || "—"} · 市场确认 ${confirmation == null ? "缺失并重算权重" : score(confirmation)}</p>
       <p class="cat-hotspot__meta">首次 ${timeHtml(item.first_published_at || item.available_at)} · 最近 ${timeHtml(item.last_published_at || item.available_at)}</p>
       ${reasons.length ? `<p>${esc(reasons.join(" · "))}</p>` : ""}
@@ -1054,7 +1054,7 @@
       return `<div class="cat-analysis-state">
         <span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span>
         <h3>${isActive ? status === "in_progress" ? "模型正在分析" : "分析任务已排队" : status === "failed" ? "分析任务失败" : esc(access.title)}</h3>
-        <p>${isActive ? `${statusPayload.submitted_at || statusPayload.created_at ? "提交 " + N.fmtDateTime(statusPayload.submitted_at || statusPayload.created_at) : ""}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · ${esc(model)} · ${esc(reasoning)}；不显示估算进度。` : status === "failed" ? "原始新闻仍可阅读；失败状态不会补成中性方向。" : esc(access.detail)}</p>
+        <p>${isActive ? `${statusPayload.submitted_at || statusPayload.created_at ? "提交 " + N.fmtDateTime(statusPayload.submitted_at || statusPayload.created_at) : ""}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · ${esc(model)} · ${esc(reasoning)}；不显示估算进度。` : status === "failed" ? "来源信息仍可查看；失败状态不会补成中性方向。" : esc(access.detail)}</p>
         ${statusPayload && statusPayload.error_code ? `<p class="d">安全错误码：${esc(statusPayload.error_code)}${statusPayload.retry_after_seconds || statusPayload.retry_after ? ` · ${Math.ceil(statusPayload.retry_after_seconds || statusPayload.retry_after)} 秒后可重试` : ""}</p>` : ""}
         ${accessNotice}
         <div class="cat-analysis-actions">

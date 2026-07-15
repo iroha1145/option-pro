@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from app.config import Settings
+from app.personal_config import AIConfig
 from app.services.breakouts import config as breakout_config
 from app.services.breakouts.config import BreakoutSettings
 from app.services.catalysts.config import CatalystSettings
@@ -10,6 +12,12 @@ from app.services.catalysts.focus_config import FocusContextSettings
 
 
 READ_SECRET = "read-secret-0123456789abcdef-0001"
+
+
+def test_personal_ai_daily_limit_cannot_exceed_four() -> None:
+    assert AIConfig(daily_max_jobs=4).daily_max_jobs == 4
+    with pytest.raises(ValidationError):
+        AIConfig(daily_max_jobs=5)
 
 
 def test_personal_toml_supplies_runtime_defaults(monkeypatch) -> None:
@@ -71,7 +79,9 @@ def test_personal_toml_supplies_runtime_defaults(monkeypatch) -> None:
     assert focus.snapshot_retention_days == 90
 
 
-def test_legacy_environment_cannot_disable_personal_breakout(monkeypatch) -> None:
+def test_legacy_environment_cannot_override_fixed_ai_or_disable_breakout(
+    monkeypatch,
+) -> None:
     overrides = {
         "OPENAI_MODEL": "legacy-model",
         "OPENAI_REASONING": "high",
@@ -95,12 +105,22 @@ def test_legacy_environment_cannot_disable_personal_breakout(monkeypatch) -> Non
     for name, value in overrides.items():
         monkeypatch.setenv(name, value)
 
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+    for name in (
+        "OPENAI_MODEL",
+        "OPENAI_REASONING",
+        "OPENAI_MAX_CONCURRENCY",
+        "OPENAI_DAILY_MAX_JOBS",
+        "OPENAI_EXECUTION_MODE",
+    ):
+        monkeypatch.delenv(name)
     settings = Settings(_env_file=None)
-    assert settings.openai_model == "legacy-model"
-    assert settings.openai_reasoning == "high"
-    assert settings.openai_max_concurrency == 2
-    assert settings.openai_daily_max_jobs == 9
-    assert settings.openai_execution_mode == "worker_sync"
+    assert settings.openai_model == "gpt-5.6-terra"
+    assert settings.openai_reasoning == "max"
+    assert settings.openai_max_concurrency == 1
+    assert settings.openai_daily_max_jobs == 4
+    assert settings.openai_execution_mode == "background"
 
     monkeypatch.setattr(breakout_config, "_LEGACY_BREAKOUT_WARNING_EMITTED", False)
     with pytest.warns(DeprecationWarning, match="personal.toml takes precedence"):
@@ -116,8 +136,8 @@ def test_legacy_environment_cannot_disable_personal_breakout(monkeypatch) -> Non
     assert catalyst.enabled is False
     assert catalyst.catalyst_mode == "disabled"
     assert catalyst.feed_interval_seconds == 240
-    assert catalyst.model == "legacy-model"
-    assert catalyst.reasoning == "high"
+    assert catalyst.model == "gpt-5.6-terra"
+    assert catalyst.reasoning == "max"
 
     focus = FocusContextSettings(_env_file=None)
     assert focus.refresh_seconds == 3600

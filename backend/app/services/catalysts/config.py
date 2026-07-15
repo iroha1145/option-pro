@@ -46,6 +46,11 @@ class CatalystSettings(BaseSettings):
         validation_alias=AliasChoices("MACROLENS_URL", "MACROLENS_BASE_URL"),
         max_length=500,
     )
+    internal_token: SecretStr = Field(
+        default=SecretStr(""),
+        alias="INTERNAL_API_TOKEN",
+        validation_alias=AliasChoices("INTERNAL_API_TOKEN", "MACROLENS_INTERNAL_TOKEN"),
+    )
     allow_local_http: bool = Field(
         default=False, alias="MACROLENS_ALLOW_LOCAL_HTTP"
     )
@@ -206,8 +211,16 @@ class CatalystSettings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_remote_boundary(self) -> "CatalystSettings":
+        internal_token = self.internal_token.get_secret_value().strip()
         read_secret = self.read_secret.get_secret_value()
         action_secret = self.action_secret.get_secret_value()
+        if internal_token:
+            if not self.enabled:
+                return self
+            if not self.base_url:
+                raise ValueError("MACROLENS_URL is required with INTERNAL_API_TOKEN")
+            self._validate_transport_boundary()
+            return self
         if bool(self.read_key_id) != bool(read_secret):
             raise ValueError("MacroLens read key id and secret must be configured together")
         if bool(self.action_key_id) != bool(action_secret):
@@ -217,7 +230,17 @@ class CatalystSettings(BaseSettings):
         if not self.enabled:
             return self
         if not self.base_url:
+            if self.catalyst_mode == "display" and not self.read_key_id:
+                # The Personal Edition web process can safely expose an empty
+                # local read view before the ETL owner token is configured.
+                return self
             raise ValueError("MACROLENS_URL is required when MACROLENS_ENABLED=true")
+        self._validate_transport_boundary()
+        if not self.read_key_id or not read_secret:
+            raise ValueError("MacroLens read credentials are required when enabled")
+        return self
+
+    def _validate_transport_boundary(self) -> None:
         parsed = urlsplit(self.base_url)
         hostname = (parsed.hostname or "").lower()
         is_local = hostname in _LOCAL_HOSTS
@@ -232,9 +255,6 @@ class CatalystSettings(BaseSettings):
             raise ValueError("MACROLENS_VERIFY_TLS cannot be disabled for a remote host")
         if self.ca_bundle and not Path(self.ca_bundle).is_file():
             raise ValueError("MACROLENS_CA_BUNDLE must point to a readable file")
-        if not self.read_key_id or not read_secret:
-            raise ValueError("MacroLens read credentials are required when enabled")
-        return self
 
     @property
     def action_enabled(self) -> bool:

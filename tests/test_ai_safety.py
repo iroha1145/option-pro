@@ -83,35 +83,23 @@ def test_terra_defaults_and_runtime_bounds(monkeypatch):
     )
     with pytest.raises(ValidationError):
         Settings(_env_file=None, OPTION_PRO_AI_MAX_OUTPUT_TOKENS=128001)
-    with pytest.raises(ValidationError, match="worker_sync"):
-        Settings(
-            _env_file=None,
-            OPENAI_REQUIRE_ZDR=True,
-            OPENAI_EXECUTION_MODE="background",
-        )
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, OPENAI_REQUIRE_ZDR=True)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, OPENAI_EXECUTION_MODE="worker_sync")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, OPENAI_MAX_CONCURRENCY=2)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, OPENAI_DAILY_MAX_JOBS=5)
 
 
-def test_custom_openai_base_url_requires_explicit_opt_in():
-    with pytest.raises(ValidationError, match="ALLOW_CUSTOM_OPENAI_BASE_URL"):
+def test_custom_openai_base_url_switches_are_rejected():
+    with pytest.raises(ValidationError):
         Settings(_env_file=None, OPENAI_BASE_URL="https://proxy.example/v1")
-    settings = Settings(
-        _env_file=None,
-        OPENAI_BASE_URL="https://proxy.example/v1/",
-        ALLOW_CUSTOM_OPENAI_BASE_URL=True,
-    )
-    assert settings.openai_base_url == "https://proxy.example/v1"
-    with pytest.raises(ValidationError, match="must use HTTPS"):
-        Settings(
-            _env_file=None,
-            OPENAI_BASE_URL="http://proxy.example/v1",
-            ALLOW_CUSTOM_OPENAI_BASE_URL=True,
-        )
-    with pytest.raises(ValidationError, match="must be empty or start with"):
-        Settings(
-            _env_file=None,
-            OPENAI_BASE_URL="proxy.example/v1",
-            ALLOW_CUSTOM_OPENAI_BASE_URL=True,
-        )
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, ALLOW_CUSTOM_OPENAI_BASE_URL=True)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, OPENAI_CUSTOM_CAPABILITIES_CONFIRMED=True)
 
 
 def test_alert_request_rejects_unbounded_or_unexpected_input():

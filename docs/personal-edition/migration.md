@@ -5,7 +5,7 @@
 1. Add typed TOML configuration, the legacy environment converter and Night Desk-only packaging. Keep the old Compose file runnable for one release.
 2. Run `optix-worker` against offline fixtures and private databases. Compare its outputs with the old independent workers; never let both write the same production database.
 3. Stop old Option Pro workers, start the unified worker and retain the previous release tag and Compose file for rollback.
-4. Enable MacroLens ETL-only endpoints. Import the latest visible legacy analysis into Option Pro, then create all new analysis locally.
+4. Enable MacroLens ETL-only endpoints. Option Pro audits compatible legacy analysis in its local database and imports only a result whose current content identity, model, prompt schema and Simplified Chinese output all match. Every new analysis is then created locally.
 5. Observe one full United States trading week before deleting the legacy runtime and the compatibility adapter.
 
 ## Database handling
@@ -14,6 +14,8 @@
 - Record schema versions, table counts, SHA-256 checksums, `quick_check`, `integrity_check` and `foreign_key_check`.
 - Roll back code and containers, not database files. Additive migrations must leave old rows readable.
 - Preserve response identifiers and `submission_outcome_unknown`; never replay an uncertain paid submission.
+- Keep legacy Catalyst tables intact during the first release. The importer reads them without changing or deleting old rows and records every accepted or rejected candidate in the local audit table.
+- Importing a legacy result does not consume the new daily submission allowance. Superseded news revisions, English output and obsolete prompt schemas remain hidden.
 
 ## Configuration conversion
 
@@ -30,7 +32,7 @@ The command writes four files:
 - `machine.env`: `HOST_BIND`, `PORT`, `MACROLENS_URL`, `ALLOWED_HOSTS`, `TRUST_PROXY_HEADERS`, `TRUSTED_PROXY_CIDRS` and `DATA_DIR`;
 - `migration-report.json`: key names and migration status only.
 
-The last three files use mode `0600`. The report never contains values, value lengths, hashes, URL values or secret fragments. `MARKETDATA_API_TOKEN` migrates to `MARKETDATA_TOKEN`, and `MACROLENS_BASE_URL` migrates to `MACROLENS_URL`. If either old and new name is present with a different non-empty value, conversion stops and records only the conflicting key names.
+The last three files use mode `0600`. The report never contains values, value lengths, hashes, URL values or secret fragments. `MARKETDATA_API_TOKEN` migrates to `MARKETDATA_TOKEN`, `MACROLENS_BASE_URL` migrates to `MACROLENS_URL`, and `MACROLENS_INTERNAL_TOKEN` migrates to `INTERNAL_API_TOKEN`. If either old and new name is present with a different non-empty value, conversion stops and records only the conflicting key names.
 
 Old browser and HMAC credentials are not copied. They appear under `removed_keys` with status `removed_by_personal_edition`. If `APP_AUTH_TOKEN` exists without `APP_PASSWORD_HASH`, the report sets `requires_owner_password=true`; configure the replacement with:
 

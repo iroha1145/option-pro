@@ -130,6 +130,8 @@ assert.match(catalysts, /analysis\.summary_zh \|\| analysis\.headline_summary/, 
 assert.match(catalysts, /中文摘要等待生成/, 'missing Chinese summaries need a Chinese waiting state');
 assert.doesNotMatch(catalysts, /item\.title \|\| item\.headline/, 'news titles must never fall back to the source-language headline');
 assert.doesNotMatch(catalysts, /item\.summary \|\| item\.description/, 'news summaries must never fall back to source-language text');
+assert.doesNotMatch(catalysts, /representative_title \|\| item\.title/, 'hotspot titles must never fall back to source-language news');
+assert.match(catalysts, /热点标题等待中文分析/, 'hotspots without a Chinese analysis need a Chinese waiting state');
 
 assert.match(deckCss, /:focus-visible/, 'the shell must retain keyboard focus styles');
 assert.match(deckCss, /@media \(max-width: 860px\)[\s\S]*\.dock/, 'the mobile navigation must remain responsive');

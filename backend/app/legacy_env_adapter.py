@@ -28,6 +28,7 @@ MACHINE_KEYS = {
 ALIASES = {
     "MARKETDATA_API_TOKEN": "MARKETDATA_TOKEN",
     "MACROLENS_BASE_URL": "MACROLENS_URL",
+    "MACROLENS_INTERNAL_TOKEN": "INTERNAL_API_TOKEN",
 }
 REMOVED_KEYS = {
     "APP_AUTH_TOKEN",
@@ -328,7 +329,9 @@ def migrate_legacy_environment(values: Mapping[str, str]) -> LegacyMigration:
             "MARKETDATA_TOKEN": _canonical_value(
                 values, "MARKETDATA_TOKEN", "MARKETDATA_API_TOKEN"
             ),
-            "INTERNAL_API_TOKEN": _canonical_value(values, "INTERNAL_API_TOKEN"),
+            "INTERNAL_API_TOKEN": _canonical_value(
+                values, "INTERNAL_API_TOKEN", "MACROLENS_INTERNAL_TOKEN"
+            ),
             "APP_PASSWORD_HASH": _canonical_value(values, "APP_PASSWORD_HASH"),
         }.items()
         if value

@@ -82,7 +82,7 @@ class AIConfig(StrictConfigModel):
     model: Literal["gpt-5.6-terra"] = "gpt-5.6-terra"
     reasoning: Literal["max"] = "max"
     max_concurrency: Literal[1] = 1
-    daily_max_jobs: int = Field(default=4, ge=1, le=100)
+    daily_max_jobs: int = Field(default=4, ge=1, le=4)
     daily_budget_usd: float = Field(default=2.0, ge=0.01, le=100.0)
     execution_mode: Literal["background"] = "background"
 

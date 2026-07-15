@@ -8,18 +8,51 @@ import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from app.worker.__main__ import main
 from app.worker.lock import ProcessFileLock
 from app.worker.runtime import TaskResult, TaskSpec, WorkerSupervisor
 from app.worker.state import WorkerStateRepository
-from app.worker.tasks import MaintenanceTask, build_default_tasks
+from app.worker.tasks import (
+    CatalystSyncTask,
+    FocusTask,
+    MaintenanceTask,
+    build_default_tasks,
+)
 
 
 TASK_NAMES = {"breakout", "focus", "catalyst_sync", "ai_jobs", "maintenance"}
 NOW = datetime(2026, 7, 16, 0, 0, tzinfo=timezone.utc)
+ETL_AS_OF = "2026-07-15T12:00:00Z"
+
+
+def _empty_etl_page(path: str) -> dict:
+    payload = {
+        "items": [],
+        "has_more": False,
+        "next_cursor": None,
+        "next_updated_after": ETL_AS_OF,
+        "next_after_sequence": 0,
+    }
+    if path.endswith("/news/changes"):
+        payload["watermark"] = {"sequence": 0, "as_of": ETL_AS_OF}
+    else:
+        payload.update(
+            {
+                "watermark": {
+                    "sequence": 0,
+                    "as_of": ETL_AS_OF,
+                    "snapshot_token": None,
+                },
+                "data_through": None,
+                "is_stale": False,
+            }
+        )
+    return payload
 
 
 def test_manual_actions_are_idempotent_fenced_and_cooled_down(tmp_path: Path) -> None:
@@ -361,6 +394,426 @@ def test_status_is_read_only_and_does_not_require_live_lock(
     assert health["healthy"] is False
 
 
+def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[httpx.Request] = []
+    local_calls: list[str] = []
+
+    class FakeLocalIntelligence:
+        def __init__(
+            self,
+            database_path: Path,
+            ai_repository: object,
+            **options: object,
+        ) -> None:
+            assert database_path == cache_path
+            assert getattr(ai_repository, "path") == ai_path
+            assert options["mode"] == "read"
+            assert options["model"] == "gpt-5.6-terra"
+            assert options["reasoning"] == "max"
+            tickers = set(options["canonical_tickers"])
+            assert "NVDA" in tickers
+            assert "ZZZZ" not in tickers
+
+        def initialize(self) -> None:
+            local_calls.append("initialize")
+
+        def consume_refresh_requested(self) -> bool:
+            local_calls.append("consume_refresh_requested")
+            return True
+
+        def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict:
+            assert allow_scheduled_jobs is False
+            local_calls.append("reconcile")
+            return {"news": 0, "queued": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.url.scheme == "https"
+        assert request.headers.get_list("authorization") == ["Bearer owner-token"]
+        assert request.url.path in {
+            "/internal/v1/news/changes",
+            "/internal/v1/calendar",
+        }
+        return httpx.Response(200, json=_empty_etl_page(request.url.path))
+
+    cache_path = tmp_path / "personal-catalyst.db"
+    ai_path = tmp_path / "ai-jobs.db"
+    monkeypatch.setenv("MACROLENS_INTERNAL_TOKEN", "owner-token")
+    monkeypatch.setenv("MACROLENS_BASE_URL", "https://macrolens.example")
+    monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(cache_path))
+    monkeypatch.setenv("OPENAI_JOB_DB_PATH", str(ai_path))
+    config = SimpleNamespace(
+        catalyst=SimpleNamespace(sync_seconds=37),
+        features=SimpleNamespace(catalyst_mode="read"),
+        ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),
+    )
+    task = CatalystSyncTask(
+        "personal-worker",
+        personal_config=config,
+        etl_transport=httpx.MockTransport(handler),
+        intelligence_factory=FakeLocalIntelligence,
+    )
+
+    async def run() -> tuple[TaskResult, object]:
+        result = await task()
+        client = task._client
+        await task.aclose()
+        return result, client
+
+    result, client = asyncio.run(run())
+
+    assert result.status == "idle"
+    assert result.next_delay_seconds == 37
+    assert result.details["processed"] == [
+        "news",
+        "calendar",
+        "local_intelligence",
+    ]
+    assert result.details["refresh_requested"] is True
+    assert set(result.details["streams"]) == {"news", "calendar"}
+    assert [request.url.path for request in requests] == [
+        "/internal/v1/news/changes",
+        "/internal/v1/calendar",
+    ]
+    assert all(request.url.params["after_sequence"] == "0" for request in requests)
+    assert all(request.url.params["limit"] == "50" for request in requests)
+    assert getattr(client, "_client").is_closed is True
+    assert task._client is None
+    assert cache_path.is_file()
+    assert "owner-token" not in repr(getattr(client, "config"))
+    assert local_calls == ["initialize", "consume_refresh_requested", "reconcile"]
+    with sqlite3.connect(ai_path) as connection:
+        assert connection.execute("SELECT count(*) FROM ai_jobs").fetchone()[0] == 0
+
+
+def test_personal_catalyst_task_reconciles_with_real_local_store(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_empty_etl_page(request.url.path))
+
+    cache_path = tmp_path / "real-local-catalyst.db"
+    ai_path = tmp_path / "real-local-ai.db"
+    monkeypatch.setenv("MACROLENS_INTERNAL_TOKEN", "owner-token")
+    monkeypatch.setenv("MACROLENS_BASE_URL", "https://macrolens.example")
+    monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(cache_path))
+    monkeypatch.setenv("OPENAI_JOB_DB_PATH", str(ai_path))
+    config = SimpleNamespace(
+        catalyst=SimpleNamespace(sync_seconds=53),
+        features=SimpleNamespace(catalyst_mode="read"),
+        ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),
+    )
+    task = CatalystSyncTask(
+        "real-local-worker",
+        personal_config=config,
+        etl_transport=httpx.MockTransport(handler),
+    )
+
+    async def run() -> TaskResult:
+        result = await task()
+        await task.aclose()
+        return result
+
+    result = asyncio.run(run())
+
+    assert result.status == "idle"
+    assert result.details["local_intelligence"]["ingested"] == 0
+    assert result.details["local_intelligence"]["queued"] == 0
+    with sqlite3.connect(cache_path) as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+    assert "macrolens_etl_state" in tables
+    assert "catalyst_local_schema" in tables
+    with sqlite3.connect(ai_path) as connection:
+        assert connection.execute("SELECT count(*) FROM ai_jobs").fetchone()[0] == 0
+
+
+def test_personal_catalyst_task_isolates_stream_failure() -> None:
+    class SyncError(RuntimeError):
+        code = "upstream_unavailable"
+
+    class FakeSync:
+        async def sync_news(self) -> None:
+            raise SyncError("private upstream detail")
+
+        async def sync_calendar(self) -> object:
+            return SimpleNamespace(
+                pages=1,
+                records=2,
+                deletes=0,
+                replayed=0,
+                complete=True,
+                watermark_sequence=9,
+            )
+
+    class FakeIntelligence:
+        def consume_refresh_requested(self) -> bool:
+            return False
+
+        def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict:
+            assert allow_scheduled_jobs is False
+            return {"news": 2, "queued": 0}
+
+    task = CatalystSyncTask(
+        "isolated-worker",
+        personal_config=SimpleNamespace(catalyst=SimpleNamespace(sync_seconds=41)),
+    )
+    task._mode = "personal"
+    task._service = FakeSync()
+    task._intelligence = FakeIntelligence()
+
+    result = asyncio.run(task())
+
+    assert result.status == "degraded"
+    assert result.error_code == "catalyst_sync_degraded"
+    assert result.next_delay_seconds == 41
+    assert result.details["processed"] == ["calendar", "local_intelligence"]
+    assert result.details["errors"] == {"news": "upstream_unavailable"}
+    assert "private upstream detail" not in json.dumps(result.details)
+
+
+def test_personal_catalyst_task_rejects_http_without_network(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MACROLENS_INTERNAL_TOKEN", "owner-token")
+    monkeypatch.setenv("MACROLENS_BASE_URL", "http://macrolens.example")
+    monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(tmp_path / "unused.db"))
+    task = CatalystSyncTask(
+        "invalid-worker",
+        personal_config=SimpleNamespace(catalyst=SimpleNamespace(sync_seconds=43)),
+    )
+
+    result = asyncio.run(task())
+
+    assert result.status == "degraded"
+    assert result.error_code == "personal_etl_configuration_invalid"
+    assert result.next_delay_seconds == 43
+    assert task._client is None
+    assert not (tmp_path / "unused.db").exists()
+
+
+def test_default_read_focus_never_runs_scheduled_ai_work(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    class FakeLocalIntelligence:
+        def __init__(self, _path: Path, _ai_repository: object, **options: object):
+            assert options["mode"] == "read"
+
+        def initialize(self) -> None:
+            calls.append("initialize")
+
+        def run_scheduled(self, **_kwargs) -> dict:
+            raise AssertionError("read mode must not queue scheduled work")
+
+    ai_path = tmp_path / "read-ai-jobs.db"
+    monkeypatch.setenv("MACROLENS_INTERNAL_TOKEN", "owner-token")
+    monkeypatch.setenv("MACROLENS_BASE_URL", "https://macrolens.example")
+    monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(tmp_path / "catalyst.db"))
+    monkeypatch.setenv("OPENAI_JOB_DB_PATH", str(ai_path))
+    config = SimpleNamespace(
+        catalyst=SimpleNamespace(focus_seconds=1800),
+        catalyst_scheduled_enabled=False,
+        features=SimpleNamespace(catalyst_mode="read"),
+        ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),
+    )
+    task = FocusTask(
+        "read-worker",
+        enabled=True,
+        personal_config=config,
+        intelligence_factory=FakeLocalIntelligence,
+    )
+
+    result = asyncio.run(task())
+
+    assert result.status == "idle"
+    assert result.details == {"result": "not_scheduled", "queued": 0, "skipped": 0}
+    assert result.next_delay_seconds == 1800
+    assert calls == ["initialize"]
+    with sqlite3.connect(ai_path) as connection:
+        assert connection.execute("SELECT count(*) FROM ai_jobs").fetchone()[0] == 0
+
+
+def test_scheduled_focus_calls_local_scheduler_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    class FakeLocalIntelligence:
+        def __init__(self, _path: Path, _ai_repository: object, **options: object):
+            assert options["mode"] == "scheduled"
+
+        def initialize(self) -> None:
+            calls.append("initialize")
+
+        def run_scheduled(self, **kwargs) -> dict:
+            assert kwargs["scheduled_times_et"] == ("08:00", "12:00", "16:00")
+            calls.append("run_scheduled")
+            return {"queued": 1, "skipped": 2}
+
+    monkeypatch.setenv("MACROLENS_INTERNAL_TOKEN", "owner-token")
+    monkeypatch.setenv("MACROLENS_BASE_URL", "https://macrolens.example")
+    monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(tmp_path / "catalyst.db"))
+    monkeypatch.setenv("OPENAI_JOB_DB_PATH", str(tmp_path / "ai-jobs.db"))
+    config = SimpleNamespace(
+        catalyst=SimpleNamespace(focus_seconds=601),
+        catalyst_scheduled_enabled=True,
+        features=SimpleNamespace(catalyst_mode="scheduled"),
+        ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),
+    )
+    task = FocusTask(
+        "scheduled-worker",
+        enabled=True,
+        personal_config=config,
+        intelligence_factory=FakeLocalIntelligence,
+    )
+
+    result = asyncio.run(task())
+
+    assert result.status == "idle"
+    assert result.details == {"result": "scheduled", "queued": 1, "skipped": 2}
+    assert result.next_delay_seconds == 601
+    assert calls == ["initialize", "run_scheduled"]
+
+
+def test_focus_waits_for_first_catalyst_sync_attempt() -> None:
+    async def scenario() -> tuple[TaskResult, TaskResult, list[str]]:
+        initial_sync_complete = asyncio.Event()
+        sync_started = asyncio.Event()
+        release_sync = asyncio.Event()
+        calls: list[str] = []
+
+        def sync_result() -> object:
+            return SimpleNamespace(
+                pages=1,
+                records=0,
+                deletes=0,
+                replayed=0,
+                complete=True,
+                watermark_sequence=0,
+            )
+
+        class FakeSync:
+            async def sync_news(self) -> object:
+                calls.append("news_started")
+                sync_started.set()
+                await release_sync.wait()
+                calls.append("news_completed")
+                return sync_result()
+
+            async def sync_calendar(self) -> object:
+                calls.append("calendar_completed")
+                return sync_result()
+
+        class FakeCatalystIntelligence:
+            def consume_refresh_requested(self) -> bool:
+                return False
+
+            def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict:
+                assert allow_scheduled_jobs is False
+                calls.append("reconciled")
+                return {"news": 0, "queued": 0}
+
+        class FakeFocusIntelligence:
+            def run_scheduled(self, **kwargs: object) -> dict:
+                assert kwargs["scheduled_times_et"] == ("08:00",)
+                calls.append("focus_scheduled")
+                return {"queued": 0, "skipped": 0}
+
+        config = SimpleNamespace(
+            catalyst=SimpleNamespace(
+                sync_seconds=120,
+                focus_seconds=1800,
+                scheduled_times_et=("08:00",),
+            ),
+            catalyst_scheduled_enabled=True,
+        )
+        catalyst = CatalystSyncTask(
+            "startup-order",
+            personal_config=config,
+            initial_sync_complete=initial_sync_complete,
+        )
+        catalyst._mode = "personal"
+        catalyst._service = FakeSync()
+        catalyst._intelligence = FakeCatalystIntelligence()
+        focus = FocusTask(
+            "startup-order",
+            enabled=True,
+            personal_config=config,
+            initial_sync_complete=initial_sync_complete,
+        )
+        focus._mode = "personal"
+        focus._intelligence = FakeFocusIntelligence()
+
+        focus_run = asyncio.create_task(focus())
+        await asyncio.sleep(0)
+        assert calls == []
+        catalyst_run = asyncio.create_task(catalyst())
+        await asyncio.wait_for(sync_started.wait(), timeout=1)
+        await asyncio.sleep(0)
+        assert "focus_scheduled" not in calls
+
+        release_sync.set()
+        catalyst_result, focus_result = await asyncio.gather(
+            catalyst_run,
+            focus_run,
+        )
+        assert initial_sync_complete.is_set()
+        return catalyst_result, focus_result, calls
+
+    catalyst_result, focus_result, calls = asyncio.run(scenario())
+
+    assert catalyst_result.status == "idle"
+    assert focus_result.status == "idle"
+    assert calls == [
+        "news_started",
+        "news_completed",
+        "calendar_completed",
+        "reconciled",
+        "focus_scheduled",
+    ]
+
+
+def test_catalyst_failure_releases_initial_focus_gate() -> None:
+    async def scenario() -> tuple[BaseException | None, bool]:
+        initial_sync_complete = asyncio.Event()
+        catalyst = CatalystSyncTask(
+            "startup-failure",
+            personal_config=SimpleNamespace(
+                catalyst=SimpleNamespace(sync_seconds=120)
+            ),
+            initial_sync_complete=initial_sync_complete,
+        )
+
+        async def fail() -> str:
+            raise RuntimeError("offline")
+
+        catalyst._prepare = fail
+        error: BaseException | None = None
+        try:
+            await catalyst()
+        except BaseException as exc:
+            error = exc
+        return error, initial_sync_complete.is_set()
+
+    error, released = asyncio.run(scenario())
+
+    assert isinstance(error, RuntimeError)
+    assert released is True
+
+
 def test_default_task_inventory_and_maintenance_backup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -383,6 +836,10 @@ def test_default_task_inventory_and_maintenance_backup(
 
     specs = build_default_tasks("inventory", worker_db_path=worker_db)
     assert {spec.name for spec in specs} == TASK_NAMES
+    names = [spec.name for spec in specs]
+    assert names.index("catalyst_sync") < names.index("focus")
+    catalyst_spec = next(spec for spec in specs if spec.name == "catalyst_sync")
+    assert catalyst_spec.interval_seconds == 120
     maintenance_spec = next(spec for spec in specs if spec.name == "maintenance")
     assert isinstance(maintenance_spec.runner, MaintenanceTask)
     result = asyncio.run(maintenance_spec.runner())

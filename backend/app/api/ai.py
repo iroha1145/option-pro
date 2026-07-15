@@ -28,9 +28,11 @@ from app.services.ai_jobs.security import require_expensive_action
 
 _MAX_AI_BODY_BYTES = 64 * 1024
 _PROMPT_VERSIONS = {
-    "earnings_impact": "earnings-impact-v2",
-    "option_alerts": "option-alerts-v2",
-    "signal_analysis": "signal-analysis-v2",
+    "earnings_impact": "earnings-impact-zh-cn-v3",
+    "option_alerts": "option-alerts-zh-cn-v3",
+    "signal_analysis": "signal-analysis-zh-cn-v3",
+    "news_impact": "news-impact-zh-cn-v2",
+    "market_focus": "market-focus-zh-cn-v2",
 }
 
 
@@ -167,6 +169,7 @@ def _create_job(
     force_retry: bool = False,
 ) -> tuple[dict, bool]:
     settings = get_settings()
+    ai_job_runtime.validate_job_payload(job_type, payload)
     schema_version, schema_sha256 = ai_job_runtime.schema_identity(job_type)
     try:
         return _job_repository().create_job(
@@ -244,15 +247,16 @@ async def earnings_impact(
     repository = _job_repository()
     row = repository.latest_completed("earnings_impact", ticker)
     if row:
-        result = repository.public(row, cached=True)["result"] or {}
-        return _sanitize(
-            {
-                **result,
-                "_cached": True,
-                "_job_id": row["job_id"],
-                "_generated_at": row.get("completed_at"),
-            }
-        )
+        result = repository.public(row, cached=True)["result"]
+        if result is not None:
+            return _sanitize(
+                {
+                    **result,
+                    "_cached": True,
+                    "_job_id": row["job_id"],
+                    "_generated_at": row.get("completed_at"),
+                }
+            )
     return JSONResponse(
         {
             "status": "analysis_required",

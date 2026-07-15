@@ -4,6 +4,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import json
 import sys
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -23,7 +24,6 @@ from app.services.ai_jobs.worker import process_job
 def _settings(path):
     return SimpleNamespace(
         openai_api_key=SecretStr("test-key"),
-        openai_base_url="",
         openai_model="gpt-5.6-terra",
         openai_reasoning="max",
         openai_execution_mode="background",
@@ -31,7 +31,8 @@ def _settings(path):
         openai_control_timeout_seconds=30,
         openai_max_retries=0,
         openai_max_output_tokens=16384,
-        openai_max_concurrency=2,
+        openai_max_concurrency=1,
+        openai_daily_max_jobs=4,
         openai_background_initial_poll_seconds=2,
         openai_background_max_poll_seconds=15,
         openai_background_poll_timeout_seconds=1800,
@@ -60,6 +61,7 @@ def _create_earnings_job(repository: AIJobRepository):
 
 def _earnings_result():
     return {
+        "output_language": "zh-CN",
         "ticker": "AAPL",
         "summary": "供应链与大型科技股可能出现联动。",
         "expectation": "关注营收、利润率与指引。",
@@ -86,6 +88,7 @@ def _large_signal_result():
     twelve = [evidence for _ in range(12)]
     ten = [evidence for _ in range(10)]
     return {
+        "output_language": "zh-CN",
         "asset": "AAPL",
         "horizon": "数日到数周",
         "dominant_regime": "趋势与波动交织",
@@ -141,27 +144,27 @@ def test_terra_runtime_defaults_are_explicit(monkeypatch):
     assert settings.openai_execution_mode == "background"
 
 
-def test_custom_provider_requires_explicit_capability_attestation(tmp_path):
+def test_runtime_capability_rejects_non_official_configuration(tmp_path):
     settings = _settings(tmp_path / "ai-jobs.db")
-    settings.openai_base_url = "https://proxy.example/v1"
-    settings.openai_custom_capabilities_confirmed = False
+    settings.openai_model = "unsupported-model"
     status = runtime.capability_status(settings)
     assert status["supported"] is False
-    assert status["reason"] == "custom_base_url_not_attested"
+    assert status["status"] == "runtime_configuration_invalid"
 
 
-@pytest.mark.parametrize(
-    ("configured_base_url", "expected_base_url"),
-    [
-        ("", "https://api.openai.com/v1"),
-        ("https://proxy.example/v1", "https://proxy.example/v1"),
-    ],
-)
-def test_client_always_receives_an_explicit_validated_base_url(
+def test_all_paid_job_prompt_versions_invalidate_legacy_english_cache():
+    assert ai._PROMPT_VERSIONS == {
+        "earnings_impact": "earnings-impact-zh-cn-v3",
+        "option_alerts": "option-alerts-zh-cn-v3",
+        "signal_analysis": "signal-analysis-zh-cn-v3",
+        "news_impact": "news-impact-zh-cn-v2",
+        "market_focus": "market-focus-zh-cn-v2",
+    }
+
+
+def test_client_is_fixed_to_the_official_openai_base_url(
     tmp_path,
     monkeypatch,
-    configured_base_url,
-    expected_base_url,
 ):
     captured: dict = {}
     sentinel = object()
@@ -178,11 +181,11 @@ def test_client_always_receives_an_explicit_validated_base_url(
     monkeypatch.setattr(runtime, "_CLIENT", None)
     monkeypatch.setattr(runtime, "_CLIENT_SIGNATURE", None)
     settings = _settings(tmp_path / "ai-jobs.db")
-    settings.openai_base_url = configured_base_url
 
     assert runtime._client(settings) is sentinel
-    assert captured["base_url"] == expected_base_url
+    assert captured["base_url"] == "https://api.openai.com/v1"
     assert captured["api_key"] == "test-key"
+    assert captured["max_retries"] == 0
 
 
 def test_job_dedupe_is_persistent_and_public_shape_hides_response_id(tmp_path):
@@ -198,25 +201,24 @@ def test_job_dedupe_is_persistent_and_public_shape_hides_response_id(tmp_path):
     assert public["reasoning"] == "max"
 
 
-def test_job_identity_separates_execution_modes_and_migrates_legacy_hash(tmp_path):
+def test_job_identity_rejects_sync_mode_and_migrates_legacy_hash(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     background, created = _create_earnings_job(repository)
     assert created is True
 
     version, digest = runtime.schema_identity("earnings_impact")
-    worker_sync, created = repository.create_job(
-        job_type="earnings_impact",
-        payload={"ticker": "AAPL", "name": "Apple"},
-        model="gpt-5.6-terra",
-        reasoning="max",
-        execution_mode="worker_sync",
-        prompt_version="earnings-impact-v2",
-        schema_version=version,
-        schema_sha256=digest,
-        max_queued=200,
-    )
-    assert created is True
-    assert worker_sync["job_id"] != background["job_id"]
+    with pytest.raises(ValueError, match="background_execution_required"):
+        repository.create_job(
+            job_type="earnings_impact",
+            payload={"ticker": "AAPL", "name": "Apple"},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="worker_sync",
+            prompt_version="earnings-impact-v2",
+            schema_version=version,
+            schema_sha256=digest,
+            max_queued=200,
+        )
 
     payload_json = repository._canonical_payload({"ticker": "AAPL", "name": "Apple"})
     legacy_hash = repository._request_hash_legacy(
@@ -428,17 +430,19 @@ def test_elapsed_poll_window_keeps_the_existing_background_response(
         return SimpleNamespace(status="in_progress", id="resp_existing")
 
     monkeypatch.setattr(runtime, "retrieve", fake_retrieve)
+    submitted_at = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
     with repository._connect() as connection:
         connection.execute(
             """
             UPDATE ai_jobs
             SET status='in_progress', openai_response_id='resp_existing',
-                submission_started_at='2020-01-01T00:00:00Z',
-                submitted_at='2020-01-01T00:00:00Z',
+                submission_started_at=?, submitted_at=?,
                 next_attempt_at='1970-01-01T00:00:00Z'
             WHERE job_id=?
             """,
-            (row["job_id"],),
+            (submitted_at, submitted_at, row["job_id"]),
         )
         connection.commit()
 
@@ -449,6 +453,46 @@ def test_elapsed_poll_window_keeps_the_existing_background_response(
     assert deferred["status"] == "in_progress"
     assert deferred["openai_response_id"] == "resp_existing"
     assert deferred["error_code"] == "poll_window_elapsed"
+
+
+def test_response_expiry_uses_submission_time_not_queue_creation_time(
+    monkeypatch,
+    tmp_path,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    settings = _settings(tmp_path / "ai-jobs.db")
+    owner = "worker-old-queue"
+    retrieved = 0
+
+    async def fake_retrieve(*_args, **_kwargs):
+        nonlocal retrieved
+        retrieved += 1
+        return SimpleNamespace(status="in_progress", id="resp_recent")
+
+    monkeypatch.setattr(runtime, "retrieve", fake_retrieve)
+    submitted_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    with repository._connect() as connection:
+        connection.execute(
+            """
+            UPDATE ai_jobs
+            SET status='in_progress', openai_response_id='resp_recent',
+                created_at='2020-01-01T00:00:00Z',
+                submission_started_at=?, submitted_at=?,
+                next_attempt_at='1970-01-01T00:00:00Z'
+            WHERE job_id=?
+            """,
+            (submitted_at, submitted_at, row["job_id"]),
+        )
+        connection.commit()
+
+    claimed = repository.claim_due(owner, 60)
+    asyncio.run(process_job(repository, settings, claimed, owner))
+
+    waiting = repository.get_job(row["job_id"])
+    assert retrieved == 1
+    assert waiting["status"] == "in_progress"
+    assert waiting["error_code"] is None
 
 
 def test_legacy_get_never_creates_paid_analysis(monkeypatch, tmp_path):
@@ -463,6 +507,27 @@ def test_legacy_get_never_creates_paid_analysis(monkeypatch, tmp_path):
     assert response.status_code == 409
     assert response.json()["status"] == "analysis_required"
     assert repository.health()["pending"] == 0
+
+
+def test_cached_get_hides_a_forged_zh_cn_legacy_result(monkeypatch, tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    owner = "legacy-cache-owner"
+    claimed = repository.claim_due(owner, 60)
+    legacy = _earnings_result()
+    legacy["summary"] = "Markets rally after strong earnings"
+    repository.complete(claimed["job_id"], owner, legacy, {})
+    monkeypatch.setattr(ai, "_job_repository", lambda: repository)
+    app = FastAPI()
+    app.include_router(ai.router)
+    client = TestClient(app, base_url="http://localhost")
+
+    response = client.get("/api/ai/earnings-impact/AAPL")
+
+    assert response.status_code == 409
+    assert response.json()["status"] == "analysis_required"
+    assert "Markets rally" not in response.text
+    assert repository.get_job(row["job_id"])["result_json"] is not None
 
 
 def test_job_post_is_fast_local_and_idempotent(monkeypatch, tmp_path):
@@ -491,6 +556,8 @@ def test_job_post_is_fast_local_and_idempotent(monkeypatch, tmp_path):
     assert first.json()["job_id"] == second.json()["job_id"]
     assert first.json()["status"] == "pending"
     assert second.json()["cached"] is False
+    stored = repository.get_job(first.json()["job_id"])
+    assert stored["prompt_version"] == "earnings-impact-zh-cn-v3"
 
 
 def test_option_alert_failed_job_requires_explicit_force_to_requeue(
@@ -523,8 +590,11 @@ def test_option_alert_failed_job_requires_explicit_force_to_requeue(
     assert first.status_code == 202
     assert reused.json()["status"] == "failed"
     assert retried.status_code == 202
-    assert retried.json()["job_id"] == first.json()["job_id"]
+    assert retried.json()["job_id"] != first.json()["job_id"]
     assert retried.json()["status"] == "pending"
+    assert repository.get_job(first.json()["job_id"])["status"] == "failed"
+    retried_row = repository.get_job(retried.json()["job_id"])
+    assert retried_row["retry_of_job_id"] == first.json()["job_id"]
 
 
 def test_large_valid_signal_result_is_persisted_separately_from_request_limit(
@@ -755,11 +825,13 @@ def test_explicit_retry_requeues_safe_terminal_job_but_not_unknown_submission(
         force_retry=True,
     )
     assert created is True
-    assert retried["job_id"] == row["job_id"]
+    assert retried["job_id"] != row["job_id"]
+    assert retried["retry_of_job_id"] == row["job_id"]
+    assert retried["execution_number"] == 2
     assert retried["status"] == "pending"
 
     claimed = repository.claim_due(owner, 60)
-    repository.fail(row["job_id"], owner, "submission_outcome_unknown")
+    repository.fail(retried["job_id"], owner, "submission_outcome_unknown")
     blocked, created = repository.create_job(
         job_type="earnings_impact",
         payload={"ticker": "AAPL", "name": "Apple"},
@@ -777,58 +849,21 @@ def test_explicit_retry_requeues_safe_terminal_job_but_not_unknown_submission(
     assert blocked["error_code"] == "submission_outcome_unknown"
 
 
-def test_interrupted_worker_sync_job_can_be_explicitly_retried(tmp_path):
+def test_worker_sync_job_creation_is_sealed(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     version, digest = runtime.schema_identity("earnings_impact")
-    row, _ = repository.create_job(
-        job_type="earnings_impact",
-        payload={"ticker": "AAPL", "name": "Apple"},
-        model="gpt-5.6-terra",
-        reasoning="max",
-        execution_mode="worker_sync",
-        prompt_version="earnings-impact-v2",
-        schema_version=version,
-        schema_sha256=digest,
-        max_queued=200,
-    )
-    with repository._connect() as connection:
-        connection.execute(
-            """
-            UPDATE ai_jobs
-            SET status='in_progress', submission_started_at=created_at,
-                submitted_at=created_at, lease_owner=NULL,
-                lease_expires_at='1970-01-01T00:00:00Z',
-                next_attempt_at='1970-01-01T00:00:00Z'
-            WHERE job_id=?
-            """,
-            (row["job_id"],),
+    with pytest.raises(ValueError, match="background_execution_required"):
+        repository.create_job(
+            job_type="earnings_impact",
+            payload={"ticker": "AAPL", "name": "Apple"},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="worker_sync",
+            prompt_version="earnings-impact-v2",
+            schema_version=version,
+            schema_sha256=digest,
+            max_queued=200,
         )
-        connection.commit()
-
-    owner = "worker-sync-recovery"
-    claimed = repository.claim_due(owner, 60)
-    settings = _settings(tmp_path / "ai-jobs.db")
-    settings.openai_execution_mode = "worker_sync"
-    asyncio.run(process_job(repository, settings, claimed, owner))
-    interrupted = repository.get_job(row["job_id"])
-    assert interrupted["status"] == "failed"
-    assert interrupted["error_code"] == "worker_interrupted"
-
-    retried, created = repository.create_job(
-        job_type="earnings_impact",
-        payload={"ticker": "AAPL", "name": "Apple"},
-        model="gpt-5.6-terra",
-        reasoning="max",
-        execution_mode="worker_sync",
-        prompt_version="earnings-impact-v2",
-        schema_version=version,
-        schema_sha256=digest,
-        max_queued=200,
-        force_retry=True,
-    )
-    assert created is True
-    assert retried["job_id"] == row["job_id"]
-    assert retried["status"] == "pending"
 
 
 def test_background_cancel_waits_for_provider_terminal_state(

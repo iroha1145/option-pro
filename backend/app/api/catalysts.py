@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Any, Literal, Optional
@@ -20,6 +21,7 @@ from pydantic import (
 from app.services.catalysts.config import CatalystSettings, get_catalyst_settings
 from app.services.catalysts.errors import CatalystError, InvalidCursorError
 from app.services.catalysts.models import TICKER_PATTERN
+from app.services.catalysts.personal_service import PersonalCatalystService
 from app.services.catalysts.service import CatalystService
 from app.services.ai_jobs.security import require_expensive_action
 
@@ -317,9 +319,39 @@ class MarketFocusCycleRequest(_RequestModel):
         return self
 
 
+CatalystApiService = CatalystService | PersonalCatalystService
+
+
+def _internal_token_configured(settings: CatalystSettings) -> bool:
+    value = getattr(settings, "internal_token", None)
+    if hasattr(value, "get_secret_value"):
+        value = value.get_secret_value()
+    if isinstance(value, str) and value.strip():
+        return True
+    # Kept as a migration bridge until CatalystSettings owns the new field.
+    # Only the presence bit is read; the token is never copied or logged.
+    return bool(os.environ.get("MACROLENS_INTERNAL_TOKEN", "").strip())
+
+
+def _legacy_read_configured(settings: CatalystSettings) -> bool:
+    secret = getattr(settings, "read_secret", None)
+    if hasattr(secret, "get_secret_value"):
+        secret = secret.get_secret_value()
+    return bool(getattr(settings, "read_key_id", "") and secret)
+
+
 def _service(
     settings: CatalystSettings = Depends(get_catalyst_settings),
-) -> CatalystService:
+) -> CatalystApiService:
+    if (
+        getattr(settings, "enabled", True)
+        and settings.catalyst_mode != "disabled"
+        and (
+            _internal_token_configured(settings)
+            or not _legacy_read_configured(settings)
+        )
+    ):
+        return PersonalCatalystService(settings)
     return CatalystService(settings)
 
 

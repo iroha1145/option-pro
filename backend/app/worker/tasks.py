@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import os
 import sqlite3
 from pathlib import Path
@@ -18,6 +19,59 @@ DEFAULT_TASK_NAMES = (
     "ai_jobs",
     "maintenance",
 )
+
+
+def _canonical_sector_tickers() -> tuple[str, ...]:
+    """Return only the checked-in market universe; ticker-shaped text is not trusted."""
+
+    from app.services.sectors import SECTORS
+
+    values = {
+        ticker.strip().upper()
+        for sector in SECTORS.values()
+        for ticker in sector.get("tickers", [])
+        if isinstance(ticker, str) and ticker.strip()
+    }
+    return tuple(sorted(values))
+
+
+async def _call_local(method: Any, *args: Any, **kwargs: Any) -> Any:
+    if inspect.iscoroutinefunction(method):
+        return await method(*args, **kwargs)
+    return await asyncio.to_thread(method, *args, **kwargs)
+
+
+async def _build_local_intelligence(
+    config: Any,
+    *,
+    factory: Any | None = None,
+) -> Any:
+    from app.services.ai_jobs.repository import AIJobRepository
+
+    if factory is None:
+        from app.services.catalysts.local_intelligence import (
+            LocalCatalystIntelligence,
+        )
+
+        factory = LocalCatalystIntelligence
+    database_path = _path_from_env(
+        "MACROLENS_CACHE_DB_PATH", "/data/catalyst-cache.db"
+    )
+    ai_repository = AIJobRepository(
+        _path_from_env("OPENAI_JOB_DB_PATH", "/data/ai-jobs.db")
+    )
+    await asyncio.to_thread(ai_repository.initialize)
+    intelligence = factory(
+        database_path,
+        ai_repository,
+        mode=config.features.catalyst_mode,
+        canonical_tickers=_canonical_sector_tickers(),
+        model=config.ai.model,
+        reasoning=config.ai.reasoning,
+        max_queued=200,
+    )
+    await _call_local(intelligence.initialize)
+    return intelligence
 
 
 class AIJobsTask:
@@ -52,16 +106,74 @@ class AIJobsTask:
 
 
 class CatalystSyncTask:
-    def __init__(self, owner_id: str) -> None:
+    def __init__(
+        self,
+        owner_id: str,
+        *,
+        personal_config: Any | None = None,
+        etl_transport: Any | None = None,
+        intelligence_factory: Any | None = None,
+        initial_sync_complete: asyncio.Event | None = None,
+    ) -> None:
         self.owner_id = f"{owner_id}:catalyst"
+        self._personal_config = personal_config or get_personal_config()
+        self._etl_transport = etl_transport
+        self._intelligence_factory = intelligence_factory
+        self._initial_sync_complete = initial_sync_complete
+        self._mode: str | None = None
         self._settings: Any = None
         self._repository: Any = None
         self._client: Any = None
         self._service: Any = None
+        self._intelligence: Any = None
 
-    async def _prepare(self) -> bool:
-        if self._settings is not None:
-            return bool(self._settings.enabled)
+    async def _prepare_personal(self, token: str) -> str:
+        from app.services.catalysts.etl_client import EtlClientConfig, MacroLensEtlClient
+        from app.services.catalysts.etl_repository import CatalystEtlRepository
+        from app.services.catalysts.etl_sync import MacroLensIncrementalSync
+
+        base_url = os.environ.get("MACROLENS_BASE_URL", "")
+        ca_bundle = os.environ.get("MACROLENS_CA_BUNDLE", "") or None
+        try:
+            if base_url != base_url.strip() or any(
+                character.isspace() for character in base_url
+            ):
+                raise ValueError("MacroLens base URL contains whitespace")
+            client_config = EtlClientConfig(
+                base_url=base_url,
+                owner_token=token,
+                ca_bundle=ca_bundle,
+            )
+            cache_path = _path_from_env(
+                "MACROLENS_CACHE_DB_PATH", "/data/catalyst-cache.db"
+            )
+        except (OSError, ValueError):
+            self._mode = "personal_invalid"
+            return self._mode
+
+        repository = CatalystEtlRepository(cache_path)
+        await asyncio.to_thread(repository.initialize)
+        intelligence = await _build_local_intelligence(
+            self._personal_config,
+            factory=self._intelligence_factory,
+        )
+        client = MacroLensEtlClient(
+            client_config,
+            transport=self._etl_transport,
+        )
+        try:
+            service = MacroLensIncrementalSync(client, repository)
+        except Exception:
+            await client.aclose()
+            raise
+        self._repository = repository
+        self._client = client
+        self._service = service
+        self._intelligence = intelligence
+        self._mode = "personal"
+        return self._mode
+
+    async def _prepare_legacy(self) -> str:
         from app.services.catalysts.client import MacroLensClient
         from app.services.catalysts.config import get_catalyst_settings
         from app.services.catalysts.repository import CatalystRepository
@@ -69,7 +181,8 @@ class CatalystSyncTask:
 
         self._settings = get_catalyst_settings()
         if not self._settings.enabled or self._settings.catalyst_mode == "disabled":
-            return False
+            self._mode = "disabled"
+            return self._mode
         self._repository = CatalystRepository(self._settings.cache_db_path)
         await asyncio.to_thread(self._repository.initialize)
         self._client = MacroLensClient(self._settings)
@@ -80,11 +193,107 @@ class CatalystSyncTask:
             self._client,
             worker_id=self.owner_id,
         )
-        return True
+        self._mode = "legacy"
+        return self._mode
 
-    async def __call__(self) -> TaskResult:
-        if not await self._prepare():
+    async def _prepare(self) -> str:
+        if self._mode is not None:
+            return self._mode
+        token = os.environ.get("MACROLENS_INTERNAL_TOKEN", "")
+        if token:
+            return await self._prepare_personal(token)
+        return await self._prepare_legacy()
+
+    @staticmethod
+    def _error_code(error: Exception) -> str:
+        code = str(getattr(error, "code", "") or "")
+        if code and code.replace("_", "").isalnum() and code.islower():
+            return code[:120]
+        return "sync_failed"
+
+    async def _run_personal(self) -> TaskResult:
+        processed: list[str] = []
+        errors: dict[str, str] = {}
+        metrics: dict[str, dict[str, int | bool]] = {}
+        refresh_requested = False
+        try:
+            refresh_requested = bool(
+                await _call_local(self._intelligence.consume_refresh_requested)
+            )
+        except Exception as exc:
+            errors["refresh_request"] = self._error_code(exc)
+        for stream, operation in (
+            ("news", self._service.sync_news),
+            ("calendar", self._service.sync_calendar),
+        ):
+            try:
+                result = await operation()
+            except Exception as exc:
+                errors[stream] = self._error_code(exc)
+                continue
+            processed.append(stream)
+            metrics[stream] = {
+                "pages": int(result.pages),
+                "records": int(result.records),
+                "replayed": int(result.replayed),
+                "complete": bool(result.complete),
+                "watermark_sequence": int(result.watermark_sequence),
+            }
+            if stream == "news":
+                metrics[stream]["deletes"] = int(result.deletes)
+
+        try:
+            projection = await _call_local(
+                self._intelligence.reconcile,
+                allow_scheduled_jobs=False,
+            )
+        except Exception as exc:
+            errors["local_intelligence"] = self._error_code(exc)
+            projection = None
+        else:
+            processed.append("local_intelligence")
+
+        delay = float(self._personal_config.catalyst.sync_seconds)
+        details: dict[str, Any] = {
+            "processed": processed,
+            "streams": metrics,
+            "refresh_requested": refresh_requested,
+        }
+        if isinstance(projection, dict):
+            projection_metrics: dict[str, bool | int | float | None] = {}
+            for index, (key, value) in enumerate(projection.items()):
+                if index >= 16:
+                    break
+                if isinstance(value, (bool, int, float, type(None))):
+                    projection_metrics[str(key)[:64]] = value
+            details["local_intelligence"] = projection_metrics
+        if errors:
+            details["errors"] = errors
+            return TaskResult(
+                status="degraded",
+                error_code="catalyst_sync_degraded",
+                details=details,
+                next_delay_seconds=delay,
+            )
+        return TaskResult(
+            status="idle",
+            details=details,
+            next_delay_seconds=delay,
+        )
+
+    async def _run_once(self) -> TaskResult:
+        mode = await self._prepare()
+        if mode == "personal_invalid":
+            return TaskResult(
+                status="degraded",
+                error_code="personal_etl_configuration_invalid",
+                details={"processed": []},
+                next_delay_seconds=float(self._personal_config.catalyst.sync_seconds),
+            )
+        if mode == "disabled":
             return TaskResult(status="disabled", next_delay_seconds=30.0)
+        if mode == "personal":
+            return await self._run_personal()
         payload = await self._service.run_once()
         if payload.get("status") == "standby":
             return TaskResult(
@@ -99,29 +308,77 @@ class CatalystSyncTask:
                 "processed": list(payload.get("processed") or [])[:8],
                 "jobs": int(payload.get("jobs") or 0),
             },
-            next_delay_seconds=1.0,
+            next_delay_seconds=float(self._personal_config.catalyst.sync_seconds),
         )
 
+    async def __call__(self) -> TaskResult:
+        try:
+            return await self._run_once()
+        finally:
+            # Focus may start concurrently with this task. Release it after the
+            # first ETL attempt even when setup, transport, or shutdown fails.
+            if self._initial_sync_complete is not None:
+                self._initial_sync_complete.set()
+
     async def aclose(self) -> None:
-        if self._service is not None:
+        if self._mode == "legacy" and self._service is not None:
             self._service.release()
         if self._client is not None:
-            await self._client.__aexit__(None, None, None)
+            if self._mode == "personal":
+                await self._client.aclose()
+            else:
+                await self._client.__aexit__(None, None, None)
         self._service = None
         self._client = None
+        self._repository = None
+        self._intelligence = None
+        self._mode = None
 
 
 class FocusTask:
-    def __init__(self, owner_id: str, *, enabled: bool) -> None:
+    def __init__(
+        self,
+        owner_id: str,
+        *,
+        enabled: bool,
+        personal_config: Any | None = None,
+        intelligence_factory: Any | None = None,
+        initial_sync_complete: asyncio.Event | None = None,
+    ) -> None:
         self.owner_id = f"focus-producer:{owner_id}"
         self.enabled = enabled
+        self._personal_config = personal_config or get_personal_config()
+        self._intelligence_factory = intelligence_factory
+        self._initial_sync_complete = initial_sync_complete
+        self._mode: str | None = None
+        self._intelligence: Any = None
         self._producer: Any = None
 
-    async def _prepare(self) -> bool:
-        if not self.enabled:
-            return False
-        if self._producer is not None:
-            return True
+    async def _prepare_personal(self, token: str) -> str:
+        from app.services.catalysts.etl_client import EtlClientConfig
+
+        try:
+            base_url = os.environ.get("MACROLENS_BASE_URL", "")
+            if base_url != base_url.strip() or any(
+                character.isspace() for character in base_url
+            ):
+                raise ValueError("MacroLens base URL contains whitespace")
+            EtlClientConfig(
+                base_url=base_url,
+                owner_token=token,
+                ca_bundle=os.environ.get("MACROLENS_CA_BUNDLE", "") or None,
+            )
+        except (OSError, ValueError):
+            self._mode = "personal_invalid"
+            return self._mode
+        self._intelligence = await _build_local_intelligence(
+            self._personal_config,
+            factory=self._intelligence_factory,
+        )
+        self._mode = "personal"
+        return self._mode
+
+    async def _prepare_legacy(self) -> str:
         from app.services.catalysts.focus_config import get_focus_context_settings
         from app.services.catalysts.focus_worker import FocusContextProducer
         from app.services.catalysts.repository import CatalystRepository
@@ -136,11 +393,64 @@ class FocusTask:
             repository=repository,
             owner_id=self.owner_id,
         )
-        return True
+        self._mode = "legacy"
+        return self._mode
+
+    async def _prepare(self) -> str:
+        if not self.enabled:
+            return "disabled"
+        if self._mode is not None:
+            return self._mode
+        token = os.environ.get("MACROLENS_INTERNAL_TOKEN", "")
+        if token:
+            return await self._prepare_personal(token)
+        return await self._prepare_legacy()
+
+    async def _run_personal(self) -> TaskResult:
+        delay = float(self._personal_config.catalyst.focus_seconds)
+        if not self._personal_config.catalyst_scheduled_enabled:
+            return TaskResult(
+                status="idle",
+                details={"result": "not_scheduled", "queued": 0, "skipped": 0},
+                next_delay_seconds=delay,
+            )
+        payload = await _call_local(
+            lambda: self._intelligence.run_scheduled(
+                scheduled_times_et=tuple(
+                    getattr(
+                        self._personal_config.catalyst,
+                        "scheduled_times_et",
+                        ("08:00", "12:00", "16:00"),
+                    )
+                )
+            )
+        )
+        payload = payload if isinstance(payload, dict) else {}
+        return TaskResult(
+            status="idle",
+            details={
+                "result": "scheduled",
+                "queued": max(0, int(payload.get("queued") or 0)),
+                "skipped": max(0, int(payload.get("skipped") or 0)),
+            },
+            next_delay_seconds=delay,
+        )
 
     async def __call__(self) -> TaskResult:
-        if not await self._prepare():
+        if self._initial_sync_complete is not None:
+            await self._initial_sync_complete.wait()
+        mode = await self._prepare()
+        if mode == "disabled":
             return TaskResult(status="disabled", next_delay_seconds=30.0)
+        if mode == "personal_invalid":
+            return TaskResult(
+                status="degraded",
+                error_code="personal_etl_configuration_invalid",
+                details={"result": "configuration_invalid"},
+                next_delay_seconds=float(self._personal_config.catalyst.focus_seconds),
+            )
+        if mode == "personal":
+            return await self._run_personal()
         payload = await self._producer.run_once()
         status = str(payload.get("status") or "unavailable")
         if status in {"unavailable", "locked"}:
@@ -288,8 +598,18 @@ def _path_from_env(name: str, default: str) -> Path:
 def build_default_tasks(owner_id: str, *, worker_db_path: Path) -> tuple[TaskSpec, ...]:
     config = get_personal_config()
     ai = AIJobsTask(owner_id)
-    catalyst = CatalystSyncTask(owner_id)
-    focus = FocusTask(owner_id, enabled=config.catalyst_sync_enabled)
+    initial_sync_complete = asyncio.Event()
+    catalyst = CatalystSyncTask(
+        owner_id,
+        personal_config=config,
+        initial_sync_complete=initial_sync_complete,
+    )
+    focus = FocusTask(
+        owner_id,
+        enabled=config.catalyst_sync_enabled,
+        personal_config=config,
+        initial_sync_complete=initial_sync_complete,
+    )
     breakout = BreakoutTask(owner_id)
     maintenance = MaintenanceTask(
         {
@@ -312,19 +632,19 @@ def build_default_tasks(owner_id: str, *, worker_db_path: Path) -> tuple[TaskSpe
             timeout_seconds=900.0,
         ),
         TaskSpec(
+            "catalyst_sync",
+            catalyst,
+            interval_seconds=float(config.catalyst.sync_seconds),
+            enabled=config.catalyst_sync_enabled,
+            timeout_seconds=120.0,
+            close=catalyst.aclose,
+        ),
+        TaskSpec(
             "focus",
             focus,
             interval_seconds=float(config.catalyst.focus_seconds),
             enabled=config.catalyst_sync_enabled,
             timeout_seconds=1200.0,
-        ),
-        TaskSpec(
-            "catalyst_sync",
-            catalyst,
-            interval_seconds=1.0,
-            enabled=config.catalyst_sync_enabled,
-            timeout_seconds=120.0,
-            close=catalyst.aclose,
         ),
         TaskSpec(
             "ai_jobs",
