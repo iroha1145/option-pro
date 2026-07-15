@@ -31,7 +31,6 @@ RUN python -m pip install --require-hashes -r requirements.txt \
 # Application files remain root-owned and read-only to the runtime user.
 COPY backend/app ./app
 COPY config/personal.toml /app/config/personal.toml
-COPY contracts /app/contracts
 COPY frontend /app/frontend
 COPY THIRD_PARTY_NOTICES.md /licenses/THIRD_PARTY_NOTICES.md
 COPY third_party/BreakoutAnalysis-LICENSE /licenses/BreakoutAnalysis-LICENSE

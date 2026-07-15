@@ -419,17 +419,23 @@ def test_restart_abandons_legacy_running_scan_without_touching_completed(tmp_pat
 
 def test_slow_scan_renews_lease_and_prevents_takeover(tmp_path):
     settings = Settings(tmp_path / "slow.db")
-    real_started_at = datetime.now(timezone.utc)
+    current_time = NOW
+    scan_started: asyncio.Event | None = None
+    release_scan: asyncio.Event | None = None
+    renewed: asyncio.Event | None = None
 
-    def advancing_market_time() -> datetime:
-        return NOW + (datetime.now(timezone.utc) - real_started_at)
+    def controlled_market_time() -> datetime:
+        return current_time
 
-    market_clock = MarketClock(now=advancing_market_time)
+    market_clock = MarketClock(now=controlled_market_time)
 
     class SlowProvider(Provider):
         async def scan(self, *, session, as_of, profile):
             self.calls += 1
-            await asyncio.sleep(0.8)
+            assert scan_started is not None
+            assert release_scan is not None
+            scan_started.set()
+            await release_scan.wait()
             return Discovery(
                 provider="fixture",
                 status="active",
@@ -438,6 +444,16 @@ def test_slow_scan_renews_lease_and_prevents_takeover(tmp_path):
             )
 
     repository = BreakoutRepository(settings.db_path)
+    original_heartbeat_lock = repository.heartbeat_lock
+
+    def observed_heartbeat_lock(*args, **kwargs):
+        did_renew = original_heartbeat_lock(*args, **kwargs)
+        if did_renew and current_time >= NOW + timedelta(seconds=0.4):
+            assert renewed is not None
+            renewed.set()
+        return did_renew
+
+    repository.heartbeat_lock = observed_heartbeat_lock
     worker = BreakoutWorker(
         settings,
         repository,
@@ -449,16 +465,25 @@ def test_slow_scan_renews_lease_and_prevents_takeover(tmp_path):
     )
 
     async def scenario():
+        nonlocal current_time, scan_started, release_scan, renewed
+        scan_started = asyncio.Event()
+        release_scan = asyncio.Event()
+        renewed = asyncio.Event()
         running = asyncio.create_task(worker.run_once())
-        # Cross the original lease boundary. The provider is still running,
-        # so only a heartbeat renewal can keep the contender out.
-        await asyncio.sleep(0.6)
+        await asyncio.wait_for(scan_started.wait(), timeout=2.0)
+        current_time = NOW + timedelta(seconds=0.4)
+        await asyncio.wait_for(renewed.wait(), timeout=2.0)
+
+        # The original lease expired at NOW + 0.5 seconds. The heartbeat at
+        # NOW + 0.4 seconds extended it through NOW + 0.9 seconds.
+        current_time = NOW + timedelta(seconds=0.6)
         takeover = repository.acquire_lock(
             "breakout-worker",
             "contender",
             1.0,
-            market_clock.now(),
+            current_time,
         )
+        release_scan.set()
         return takeover, await running
 
     takeover, result = asyncio.run(scenario())
