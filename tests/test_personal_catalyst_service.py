@@ -515,7 +515,9 @@ def test_api_factory_uses_personal_read_view_and_keeps_legacy_fallback(
     assert catalyst_api._service(settings) is legacy
 
 
-def test_new_bearer_settings_do_not_require_legacy_hmac(tmp_path) -> None:
+def test_new_bearer_settings_do_not_require_legacy_hmac(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("MACROLENS_ENABLED", raising=False)
+    monkeypatch.delenv("CATALYST_MODE", raising=False)
     settings = CatalystSettings(
         _env_file=None,
         MACROLENS_BASE_URL="https://macrolens.example",
@@ -539,7 +541,10 @@ def test_new_bearer_settings_do_not_require_legacy_hmac(tmp_path) -> None:
 
 def test_unconfigured_default_read_view_is_safe_and_does_not_create_cache(
     tmp_path,
+    monkeypatch,
 ) -> None:
+    monkeypatch.delenv("MACROLENS_ENABLED", raising=False)
+    monkeypatch.delenv("CATALYST_MODE", raising=False)
     cache_path = tmp_path / "missing.db"
     settings = CatalystSettings(
         _env_file=None,

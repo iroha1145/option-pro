@@ -26,15 +26,15 @@ class Settings(BaseSettings):
     # Deprecated provider switches remain as rejecting sentinels for one
     # migration release. They cannot alter the official Responses runtime.
     openai_base_url: Literal[""] = Field(default="", alias="OPENAI_BASE_URL")
-    allow_custom_openai_base_url: Literal[False] = Field(
+    allow_custom_openai_base_url: bool = Field(
         default=False,
         alias="ALLOW_CUSTOM_OPENAI_BASE_URL",
     )
-    openai_custom_capabilities_confirmed: Literal[False] = Field(
+    openai_custom_capabilities_confirmed: bool = Field(
         default=False,
         alias="OPENAI_CUSTOM_CAPABILITIES_CONFIRMED",
     )
-    openai_require_zdr: Literal[False] = Field(
+    openai_require_zdr: bool = Field(
         default=False,
         alias="OPENAI_REQUIRE_ZDR",
     )
@@ -62,8 +62,10 @@ class Settings(BaseSettings):
             "OPENAI_MAX_OUTPUT_TOKENS",
         ),
     )
-    openai_max_concurrency: Literal[1] = Field(
+    openai_max_concurrency: int = Field(
         default=_PERSONAL_CONFIG.ai.max_concurrency,
+        ge=1,
+        le=1,
         alias="OPENAI_MAX_CONCURRENCY",
     )
     openai_daily_max_jobs: int = Field(
@@ -166,6 +168,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_openai_runtime(self) -> "Settings":
+        if self.allow_custom_openai_base_url:
+            raise ValueError("custom OpenAI endpoints are disabled")
+        if self.openai_custom_capabilities_confirmed:
+            raise ValueError("custom OpenAI capabilities are disabled")
+        if self.openai_require_zdr:
+            raise ValueError("background Responses cannot require ZDR")
         if (
             self.openai_background_max_poll_seconds
             < self.openai_background_initial_poll_seconds
