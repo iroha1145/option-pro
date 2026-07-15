@@ -14,7 +14,7 @@ from dotenv import dotenv_values
 ROOT = Path(__file__).resolve().parents[1]
 
 WORKER_HEALTH = (
-    '{"healthy":true,"schema_version":"optix-worker-v1","tasks":['
+    '{"healthy":true,"schema_version":"optix-worker-v2","tasks":['
     '{"task_name":"breakout"},{"task_name":"catalyst_sync"},'
     '{"task_name":"focus"},{"task_name":"ai_jobs"},'
     '{"task_name":"maintenance"},{"task_name":"focus_refresh"},'
@@ -219,7 +219,7 @@ def test_deploy_builds_only_current_services_and_verifies_both(tmp_path: Path) -
 def test_deploy_requires_all_nine_unified_task_types(tmp_path: Path) -> None:
     root, environment = _deployment_root(tmp_path)
     environment["FAKE_WORKER_HEALTH"] = (
-        '{"healthy":true,"schema_version":"optix-worker-v1",'
+        '{"healthy":true,"schema_version":"optix-worker-v2",'
         '"tasks":[{"task_name":"breakout"}]}'
     )
 

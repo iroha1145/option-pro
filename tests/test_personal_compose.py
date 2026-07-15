@@ -131,6 +131,27 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
         "text.replace('catalyst_mode = \"manual\"', "
         "'catalyst_mode = \"off\"', 1)"
     ) in workflow
+    health_line = next(
+        line
+        for line in workflow.splitlines()
+        if 'actual={x.get("task_name")' in line
+    )
+    expected_text = health_line.split("expected={", 1)[1].split("}; actual", 1)[0]
+    expected_tasks = {
+        item.strip().strip('"') for item in expected_text.split(",")
+    }
+    assert expected_tasks == {
+        "breakout",
+        "catalyst_sync",
+        "focus",
+        "ai_jobs",
+        "maintenance",
+        "focus_refresh",
+        "strength_refresh",
+        "breakout_refresh",
+        "retention",
+    }
+    assert 'p.get("schema_version")=="optix-worker-v2"' in health_line
 
 
 def test_compose_and_templates_have_no_legacy_services_or_independent_paths() -> None:

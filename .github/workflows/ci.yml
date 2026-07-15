@@ -170,7 +170,7 @@ jobs:
           worker_ready=false
           for attempt in {1..30}; do
             if docker compose exec -T worker python -m app.worker --healthcheck |
-              python -c 'import json,sys; p=json.load(sys.stdin); expected={"breakout","catalyst_sync","focus","ai_jobs","maintenance"}; actual={x.get("task_name") for x in p.get("tasks",[])}; assert p.get("healthy") is True; assert p.get("schema_version")=="optix-worker-v1"; assert actual==expected'; then
+              python -c 'import json,sys; p=json.load(sys.stdin); expected={"breakout","catalyst_sync","focus","ai_jobs","maintenance","focus_refresh","strength_refresh","breakout_refresh","retention"}; actual={x.get("task_name") for x in p.get("tasks",[])}; assert p.get("healthy") is True; assert p.get("schema_version")=="optix-worker-v2"; assert actual==expected'; then
               worker_ready=true
               break
             fi
