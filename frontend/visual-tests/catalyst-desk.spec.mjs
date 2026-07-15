@@ -15,8 +15,8 @@ const SCENARIOS = [
   { name: "1280x800-dark-focus-fallback", width: 1280, height: 800, theme: "dark", state: "focus_fallback" },
   { name: "1280x800-dark-unavailable", width: 1280, height: 800, theme: "dark", state: "unavailable", authenticated: true },
   { name: "1280x800-light-disabled", width: 1280, height: 800, theme: "light", state: "disabled", authenticated: true },
-  { name: "1280x800-light-anonymous-analysis", width: 1280, height: 800, theme: "light", state: "analysis_unrequested" },
-  { name: "390x844-light-anonymous-analysis", width: 390, height: 844, theme: "light", state: "analysis_unrequested", mobile: true },
+  { name: "1280x800-light-read-only-analysis", width: 1280, height: 800, theme: "light", state: "analysis_unrequested" },
+  { name: "390x844-light-read-only-analysis", width: 390, height: 844, theme: "light", state: "analysis_unrequested", mobile: true },
   { name: "1280x800-dark-prepared", width: 1280, height: 800, theme: "dark", state: "prepared", authenticated: true },
   { name: "1280x800-dark-queued", width: 1280, height: 800, theme: "dark", state: "queued" },
   { name: "1280x800-dark-in-progress", width: 1280, height: 800, theme: "dark", state: "in_progress" },
@@ -233,18 +233,22 @@ for (const scenario of SCENARIOS) {
     }
     if (scenario.state === "budget_blocked") {
       await expect(page.locator("#cat-focus-run")).toBeDisabled();
-      await expect(page.locator("#cat-focus-run")).toHaveText("分析预算未配置");
+      await expect(page.locator("#cat-focus-run")).toHaveText("今日分析预算已用完");
     }
     if (scenario.state === "prepared") {
       await expect(page.locator("#cat-focus-run")).toBeEnabled();
       await expect(page.locator("#cat-focus-run")).toContainText("重新分析");
     }
-    await expect(page.locator("#cat-refresh")).toHaveCount(1);
+    await expect(page.locator('[data-cat-refresh="news"]')).toHaveCount(1);
+    await expect(page.locator('[data-cat-refresh="calendar"]')).toHaveCount(1);
+    await expect(page.locator('[data-cat-refresh="source_health"]')).toHaveCount(1);
     await expect(page.locator("#cat-focus-run")).toHaveCount(1);
     if (scenario.state === "analysis_unrequested") {
       await page.locator("[data-catalyst-news]").first().click();
-      await expect(page.locator("#cat-analysis-body")).toContainText("分析功能未启用");
-      await expect(page.locator("#cat-analysis-body [data-cat-analyze]")).toHaveCount(0);
+      await expect(page.locator("#cat-analysis-body")).toContainText("当前模式仅供查看");
+      const analyzeAction = page.locator("#cat-analysis-body [data-cat-analyze]");
+      await expect(analyzeAction).toHaveCount(1);
+      await expect(analyzeAction).toBeDisabled();
     }
     if (scenario.state === "failed") {
       await expect(page.locator("#cat-focus-body")).toContainText("invalid_structured_output");
