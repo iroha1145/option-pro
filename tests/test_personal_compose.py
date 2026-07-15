@@ -123,6 +123,15 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
     assert config["features"]["catalyst_mode"] == "manual"
     assert config["access"]["mode"] in {"private_network", "password"}
 
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "text.count('catalyst_mode = \"manual\"') != 1" in workflow
+    assert (
+        "text.replace('catalyst_mode = \"manual\"', "
+        "'catalyst_mode = \"off\"', 1)"
+    ) in workflow
+
 
 def test_compose_and_templates_have_no_legacy_services_or_independent_paths() -> None:
     sources = "\n".join(
