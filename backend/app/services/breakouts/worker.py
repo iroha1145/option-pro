@@ -329,7 +329,10 @@ class BreakoutWorker:
     ) -> Any:
         """Keep the fencing lease alive while Provider/enrichment is running."""
         task = asyncio.create_task(operation)
-        interval = max(0.05, min(30.0, self.lease_ttl_seconds / 3.0))
+        # Renew with a wider safety margin than the lease's one-third point.
+        # Busy shared runners and short test leases can otherwise consume the
+        # whole remaining window before SQLite records the heartbeat.
+        interval = max(0.01, min(30.0, self.lease_ttl_seconds / 4.0))
         try:
             while True:
                 done, _ = await asyncio.wait({task}, timeout=interval)

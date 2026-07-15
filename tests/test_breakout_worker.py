@@ -429,7 +429,7 @@ def test_slow_scan_renews_lease_and_prevents_takeover(tmp_path):
     class SlowProvider(Provider):
         async def scan(self, *, session, as_of, profile):
             self.calls += 1
-            await asyncio.sleep(0.25)
+            await asyncio.sleep(0.8)
             return Discovery(
                 provider="fixture",
                 status="active",
@@ -445,12 +445,14 @@ def test_slow_scan_renews_lease_and_prevents_takeover(tmp_path):
         scan_service=ScanService(),
         clock=market_clock,
         owner_id="slow-worker",
-        lease_ttl_seconds=0.15,
+        lease_ttl_seconds=0.5,
     )
 
     async def scenario():
         running = asyncio.create_task(worker.run_once())
-        await asyncio.sleep(0.18)
+        # Cross the original lease boundary. The provider is still running,
+        # so only a heartbeat renewal can keep the contender out.
+        await asyncio.sleep(0.6)
         takeover = repository.acquire_lock(
             "breakout-worker",
             "contender",
