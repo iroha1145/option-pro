@@ -251,7 +251,10 @@
       stocks: (g.stocks || []).map(s => ({
         ticker: s.ticker, name: s.name || s.ticker, price: s.price,
         chg: s.change_percent == null ? 0 : s.change_percent,
+        change: s.change == null ? null : s.change,
         spark: Array.isArray(s.spark) ? s.spark : [],
+        quoteAsOf: s.quote_as_of || null,
+        quoteSession: s.quote_session || null,
         group: g.name, groupId: g.id,
       })),
     }));
@@ -259,9 +262,14 @@
     groups.forEach(g => g.stocks.forEach(s => { if (!seen.has(s.ticker)) seen.set(s.ticker, s); }));
     const flat = Array.from(seen.values()); // 跨主题去重:同一标的可属多个分组
     return {
-      groups, flat, asOf: d.as_of, stale: !!d._stale, sourceStatus: d.source_status,
+      groups, flat, asOf: d.as_of, dataThrough: d.data_through,
+      oldestQuoteAt: d.oldest_quote_at, latestQuoteAt: d.latest_quote_at,
+      quoteInterval: d.quote_interval,
+      stale: !!d._stale, sourceStatus: d.source_status,
       attempted: d.attempted, succeeded: d.succeeded, failed: d.failed,
       failedTickers: Array.isArray(d.failed_tickers) ? d.failed_tickers : [],
+      delayed: d.delayed || 0,
+      delayedTickers: Array.isArray(d.delayed_tickers) ? d.delayed_tickers : [],
     };
   }
 

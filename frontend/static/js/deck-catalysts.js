@@ -473,6 +473,91 @@
     });
   }
 
+  function focusCycleDecision(rawStatus, cycleState, preparedCountValue, privateAccess) {
+    const raw = rawStatus || {};
+    const cycle = cycleState || {};
+    const preparedRevision = Number(raw.prepared_revision || 0);
+    const consumedRevision = Number(raw.last_consumed_revision || 0);
+    const rawCyclePreparedRevision = Number(cycle.prepared_revision);
+    const cycleHasPreparedRevision = Number.isFinite(rawCyclePreparedRevision) && rawCyclePreparedRevision >= 0;
+    const cyclePreparedRevision = cycleHasPreparedRevision ? rawCyclePreparedRevision : 0;
+    const preparedCount = finite(preparedCountValue) ? preparedCountValue : 0;
+    const active = !!((cycle.cycle_id || raw.active_cycle_id) && Jobs.isActive(cycle.status));
+    const capability = className(raw.capability || "disabled");
+    const budgetMissing = capability === "budget_configuration_required";
+    const actionMissing = raw.action_enabled === false || capability === "action_disabled" || capability === "disabled";
+    const snapshotUnavailable = ["stale", "unavailable", "disabled"].includes(className(raw.status));
+    const hasNew = preparedRevision > consumedRevision && preparedCount > 0;
+    const cooldown = !!(raw.cooldown_until && new Date(raw.cooldown_until).getTime() > Date.now());
+    const unknownSubmission = className(cycle.error_code) === "submission_outcome_unknown";
+    const newPreparationAfterUnknown = unknownSubmission
+      && cycleHasPreparedRevision
+      && preparedRevision > cyclePreparedRevision;
+    const retryable = !!(
+      cycle.cycle_id
+      && !unknownSubmission
+      && ["failed", "cancelled", "incomplete_output"].includes(className(cycle.status))
+    );
+    const commonAllowed = !!privateAccess && !active && !budgetMissing && !actionMissing && !snapshotUnavailable && !cooldown;
+    const canRetry = commonAllowed && retryable;
+    const canCreate = commonAllowed
+      && !retryable
+      && capability === "enabled"
+      && !!raw.manual_enabled
+      && hasNew
+      && (!unknownSubmission || newPreparationAfterUnknown);
+    const canRun = canRetry || canCreate;
+    const buttonText = active ? "正在分析"
+      : budgetMissing ? "分析预算未配置"
+        : actionMissing ? "分析功能未启用"
+          : snapshotUnavailable ? "热点快照暂不可用"
+            : unknownSubmission && !newPreparationAfterUnknown ? "提交结果待核对"
+              : cooldown ? "分析冷却中"
+                : canCreate ? (unknownSubmission
+                ? `基于 ${Math.round(preparedCount)} 个新热点创建新周期`
+                : `基于 ${Math.round(preparedCount)} 个新热点重新分析`)
+                  : retryable ? "重试同一不可变快照"
+                    : hasNew ? `基于 ${Math.round(preparedCount)} 个新热点重新分析`
+                      : "暂无新热点";
+    return {
+      preparedRevision, consumedRevision, cyclePreparedRevision, cycleHasPreparedRevision, preparedCount,
+      active, capability, budgetMissing, actionMissing, snapshotUnavailable,
+      hasNew, cooldown, unknownSubmission, newPreparationAfterUnknown,
+      retryable, canRetry, canCreate, canRun, buttonText,
+      showHistoricalUnknown: unknownSubmission && (
+        newPreparationAfterUnknown || actionMissing || budgetMissing || snapshotUnavailable
+      ),
+    };
+  }
+
+  function focusCycleRequest(decision, cycleState) {
+    const cycle = cycleState || {};
+    if (!decision || !decision.canRun) return null;
+    if (decision.canRetry && cycle.cycle_id) return { retry_cycle_id: cycle.cycle_id };
+    if (decision.canCreate) return { expected_prepared_revision: decision.preparedRevision };
+    return null;
+  }
+
+  function focusUnknownHistoryHtml(cycleState, decision) {
+    const cycle = cycleState || {};
+    if (!decision || !decision.showHistoricalUnknown) return "";
+    const occurredAt = cycle.completed_at || cycle.updated_at || cycle.created_at;
+    const occurredLabel = occurredAt ? N.fmtDateTime(occurredAt) : "时间未知";
+    const revisionLabel = decision.cyclePreparedRevision > 0
+      ? `准备版本 ${decision.cyclePreparedRevision}`
+      : "旧准备版本";
+    const nextStep = decision.canCreate
+      ? "当前的新准备版本可另行创建全新周期。"
+      : decision.newPreparationAfterUnknown
+        ? "新的准备版本不属于该历史周期，需待分析功能可用后另建周期。"
+        : "需等待服务端完成核对。";
+    return stateBlock(
+      "degraded",
+      `历史记录 · 提交结果待核对 · ${occurredLabel}`,
+      `${revisionLabel} 无法确认远端是否已经受理，仍禁止重试同一周期。${nextStep}`,
+    );
+  }
+
   function compactValues(values, limit) {
     return list({ values: Array.isArray(values) ? values : [] }, ["values"])
       .slice(0, limit || 6)
@@ -528,36 +613,12 @@
     const raw = page.focusStatus || {};
     const cycle = cyclePayload(page.marketCycle || {});
     const events = hotspotItems(page.hotspots);
-    const preparedRevision = Number(raw.prepared_revision || 0);
-    const consumedRevision = Number(raw.last_consumed_revision || 0);
     const preparedCount = finite(raw.prepared_hot_count) ? raw.prepared_hot_count : events.filter(item => className(item.status) === "prepared").length;
-    const active = !!((cycle.cycle_id || raw.active_cycle_id) && Jobs.isActive(cycle.status));
-    const capability = className(raw.capability || "disabled");
-    const budgetMissing = capability === "budget_configuration_required";
-    const snapshotUnavailable = ["stale", "unavailable", "disabled"].includes(className(raw.status));
-    const actionMissing = raw.action_enabled === false || capability === "action_disabled" || capability === "disabled";
-    const hasNew = preparedRevision > consumedRevision && preparedCount > 0;
-    const cooldown = raw.cooldown_until && new Date(raw.cooldown_until).getTime() > Date.now();
-    const unknownSubmission = className(cycle.error_code) === "submission_outcome_unknown";
-    const retryable = !!(
-      cycle.cycle_id
-      && !unknownSubmission
-      && ["failed", "cancelled", "incomplete_output"].includes(className(cycle.status))
-    );
-    const canRetry = privateActionsAvailable() && retryable && !active && !budgetMissing && !actionMissing && !snapshotUnavailable && !cooldown;
-    const canRun = privateActionsAvailable() && !unknownSubmission && (canRetry || (!!raw.manual_enabled && hasNew && !active && !budgetMissing && !actionMissing && !snapshotUnavailable && !cooldown));
+    const decision = focusCycleDecision(raw, cycle, preparedCount, privateActionsAvailable());
     const button = $("#cat-focus-run", page.view);
     if (button) {
-      button.disabled = !canRun;
-      button.textContent = active ? "正在分析"
-        : unknownSubmission ? "提交结果待核对"
-        : budgetMissing ? "分析预算未配置"
-          : actionMissing ? "分析功能未启用"
-            : snapshotUnavailable ? "热点快照暂不可用"
-            : cooldown ? "分析冷却中"
-              : retryable ? "重试同一不可变快照"
-                : hasNew ? `基于 ${Math.round(preparedCount)} 个新热点重新分析`
-                : "暂无新热点";
+      button.disabled = !decision.canRun;
+      button.textContent = decision.buttonText;
     }
     $("#cat-focus-meta", page.view).innerHTML = [
       ["准备热点", finite(preparedCount) ? Math.round(preparedCount) : "—"],
@@ -569,13 +630,16 @@
     ].map(([label, value]) => `<span><small>${esc(label)}</small><b>${esc(value)}</b></span>`).join("");
 
     let state = "";
-    if (active) state = stateBlock(cycle.status, statusLabel(cycle.status), "新热点仍会进入下一准备版本，不会混入当前不可变快照。 ");
-    else if (unknownSubmission) state = stateBlock("degraded", "提交结果待核对", "无法确认远端是否已经受理。为避免重复计费，本周期禁止重试，需等待服务端核对结果。 ");
-    else if (budgetMissing) state = stateBlock("disabled", "分析预算尚未配置", "每日任务和每日输出 Token 两项预算齐全后，自动周期才允许启用。 ");
-    else if (cycle.status === "failed" || cycle.status === "incomplete_output") state = stateBlock("failed", statusLabel(cycle.status), cycle.error_code ? `安全错误码：${cycle.error_code}；准备版本尚未消费。` : "准备版本尚未消费，可在冷却结束后显式重试。 ");
-    else if (!hasNew && !cycleResultHtml(cycle)) state = stateBlock("empty", "暂无新热点", "普通新闻仍会保存；没有合格热点时不会创建手动综合分析。 ");
+    if (decision.active) state = stateBlock(cycle.status, statusLabel(cycle.status), "新热点仍会进入下一准备版本，不会混入当前不可变快照。 ");
+    else if (decision.budgetMissing) state = stateBlock("disabled", "分析预算尚未配置", "每日任务和每日输出 Token 两项预算齐全后，自动周期才允许启用。 ");
+    else if (decision.actionMissing) state = stateBlock("disabled", "分析功能未启用", "当前只显示历史结果和热点准备状态，不会创建新的模型任务。 ");
+    else if (decision.snapshotUnavailable) state = stateBlock("unavailable", "热点快照暂不可用", "当前快照恢复后才能创建新的综合分析周期。 ");
+    else if (decision.unknownSubmission && !decision.newPreparationAfterUnknown) state = stateBlock("degraded", "提交结果待核对", "无法确认远端是否已经受理。为避免重复计费，本周期禁止重试，需等待服务端核对结果。 ");
+    else if (!decision.unknownSubmission && (cycle.status === "failed" || cycle.status === "incomplete_output")) state = stateBlock("failed", statusLabel(cycle.status), cycle.error_code ? `安全错误码：${cycle.error_code}；准备版本尚未消费。` : "准备版本尚未消费，可在冷却结束后显式重试。 ");
+    else if (!decision.hasNew && !cycleResultHtml(cycle)) state = stateBlock("empty", "暂无新热点", "普通新闻仍会保存；没有合格热点时不会创建手动综合分析。 ");
+    const history = focusUnknownHistoryHtml(cycle, decision);
     const cards = events.length ? `<div class="cat-hotspot-list">${events.slice(0, 8).map(hotspotCard).join("")}</div>` : "";
-    $("#cat-focus-body", page.view).innerHTML = `${state}${cycleResultHtml(cycle)}${cards}` || stateBlock("empty", "暂无热点准备记录", "确定性门控不会用中性分填充缺失证据。 ");
+    $("#cat-focus-body", page.view).innerHTML = `${state}${history}${cycleResultHtml(cycle)}${cards}` || stateBlock("empty", "暂无热点准备记录", "确定性门控不会用中性分填充缺失证据。 ");
   }
 
   function summaryValue(summary, keys) {
@@ -836,22 +900,16 @@
     if (!privateActionsAvailable()) return;
     const raw = page.focusStatus || {};
     const cycle = cyclePayload(page.marketCycle || {});
-    if (className(cycle.error_code) === "submission_outcome_unknown") return;
-    const retryCycleId = cycle.cycle_id
-      && ["failed", "cancelled", "incomplete_output"].includes(className(cycle.status))
-      ? cycle.cycle_id
-      : null;
-    const revision = Number(raw.prepared_revision || 0);
     const preparedCount = finite(raw.prepared_hot_count)
       ? raw.prepared_hot_count
       : hotspotItems(page.hotspots).filter(item => className(item.status) === "prepared").length;
-    if (!retryCycleId && (!raw.manual_enabled || revision <= Number(raw.last_consumed_revision || 0) || preparedCount <= 0)) return;
+    const decision = focusCycleDecision(raw, cycle, preparedCount, true);
+    const request = focusCycleRequest(decision, cycle);
+    if (!request) return;
     Jobs.start({
       scope: "catalyst-page:market-focus",
       create: signal => N.createCatalystMarketCycle(
-        retryCycleId
-          ? { retry_cycle_id: retryCycleId }
-          : { expected_prepared_revision: revision },
+        request,
         { signal },
       ).then(cyclePayload),
       poll: (id, signal) => N.catalystMarketCycle(id, { signal }).then(cyclePayload),
@@ -1240,5 +1298,6 @@
     labels: { statusLabel, classLabel },
     formatConfidence: pct,
     impactsOf, impactDirection, sentimentOf, isRuleOnlyAnalysis, analysisOriginLabel, analysisRetryForce, compactNews, plainText,
+    focusCycleDecision, focusCycleRequest, focusUnknownHistoryHtml,
   };
 })();

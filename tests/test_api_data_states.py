@@ -11,6 +11,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.api import earnings, options, stocks
+from app.services import sectors as sector_service
 
 
 def _watchlist_payload(label: str, *, succeeded: int = 1):
@@ -837,20 +838,33 @@ def test_targeted_watchlist_uses_normalized_tickers_and_isolated_cache_keys(monk
 
 
 def test_targeted_watchlist_downloads_only_requested_tickers(monkeypatch):
-    captured = {}
+    captured = []
 
-    def fake_download(*, tickers, **_kwargs):
-        captured["tickers"] = tickers
+    def fake_download(*, tickers, interval, **_kwargs):
+        captured.append((tickers, interval))
         columns = pd.MultiIndex.from_tuples([
             ("AAPL", "Close"),
             ("MSFT", "Close"),
             ("ES=F", "Close"),
         ])
+        if interval == "5m":
+            return pd.DataFrame(
+                [
+                    [192.5, 424.5, 5_526.0],
+                    [193.0, 425.0, 5_530.0],
+                ],
+                index=pd.DatetimeIndex(
+                    ["2026-07-14 15:55", "2026-07-14 16:00"],
+                    tz="America/New_York",
+                ),
+                columns=columns,
+            )
         return pd.DataFrame(
             [
                 [190.0, 420.0, 5_500.0],
                 [192.0, 424.0, 5_525.0],
             ],
+            index=pd.to_datetime(["2026-07-13", "2026-07-14"]),
             columns=columns,
         )
 
@@ -863,10 +877,241 @@ def test_targeted_watchlist_downloads_only_requested_tickers(monkeypatch):
         for item in group["stocks"]
     ]
 
-    assert captured["tickers"] == "AAPL MSFT ES=F"
+    assert captured == [
+        ("AAPL MSFT ES=F", "1d"),
+        ("AAPL MSFT ES=F", "5m"),
+    ]
     assert sorted(returned) == ["AAPL", "ES=F", "MSFT"]
     assert len(returned) == len(set(returned))
     assert payload["attempted"] == 3
     assert payload["succeeded"] == 3
     assert any(group["id"] == "custom" for group in payload["groups"])
     assert stocks._clean_watchlist_snapshot_payload(payload) is not None
+
+
+def test_watchlist_overlays_extended_quote_when_current_daily_bar_is_missing(monkeypatch):
+    def fake_download(*, interval, **_kwargs):
+        if interval == "5m":
+            return pd.DataFrame(
+                {"Close": [196.0, 197.0]},
+                index=pd.DatetimeIndex(
+                    ["2026-07-14 19:50", "2026-07-14 19:55"],
+                    tz="America/New_York",
+                ),
+            )
+        return pd.DataFrame(
+            {"Close": [190.0, 192.0, float("nan")]},
+            index=pd.to_datetime(["2026-07-10", "2026-07-13", "2026-07-14"]),
+        )
+
+    monkeypatch.setattr(stocks.yf, "download", fake_download)
+
+    payload = asyncio.run(stocks._build_watchlist(["AAPL"]))
+    item = payload["groups"][0]["stocks"][0]
+
+    assert item["price"] == 197.0
+    assert item["change"] == 5.0
+    assert item["change_percent"] == 2.6
+    assert item["spark"] == [190.0, 192.0, 197.0]
+    assert item["quote_session"] == "post_market"
+    assert item["quote_as_of"] == "2026-07-14T23:55:00+00:00"
+    assert payload["data_through"] == item["quote_as_of"]
+    assert payload["source_status"] == "active"
+
+
+def test_watchlist_replaces_current_daily_bar_and_keeps_previous_close_baseline(monkeypatch):
+    def fake_download(*, interval, **_kwargs):
+        if interval == "5m":
+            return pd.DataFrame(
+                {"Close": [196.0, 197.0]},
+                index=pd.DatetimeIndex(
+                    ["2026-07-14 15:55", "2026-07-14 16:00"],
+                    tz="America/New_York",
+                ),
+            )
+        return pd.DataFrame(
+            {"Close": [190.0, 195.0]},
+            index=pd.to_datetime(["2026-07-13", "2026-07-14"]),
+        )
+
+    monkeypatch.setattr(stocks.yf, "download", fake_download)
+
+    payload = asyncio.run(stocks._build_watchlist(["AAPL"]))
+    item = payload["groups"][0]["stocks"][0]
+
+    assert item["price"] == 197.0
+    assert item["change"] == 7.0
+    assert item["change_percent"] == 3.68
+    assert item["spark"] == [190.0, 197.0]
+    assert item["quote_session"] == "post_market"
+
+
+def test_watchlist_omits_ticker_without_latest_quote_and_marks_batch_degraded(monkeypatch):
+    columns = pd.MultiIndex.from_tuples([
+        ("AAPL", "Close"),
+        ("MSFT", "Close"),
+        ("NVDA", "Close"),
+    ])
+
+    def fake_download(*, interval, **_kwargs):
+        if interval == "5m":
+            return pd.DataFrame(
+                [[197.0, 425.0, float("nan")]],
+                index=pd.DatetimeIndex(["2026-07-14 16:00"], tz="America/New_York"),
+                columns=columns,
+            )
+        return pd.DataFrame(
+            [[190.0, 420.0, 200.0], [192.0, 424.0, 203.0]],
+            index=pd.to_datetime(["2026-07-13", "2026-07-14"]),
+            columns=columns,
+        )
+
+    monkeypatch.setattr(stocks.yf, "download", fake_download)
+
+    payload = asyncio.run(stocks._build_watchlist(["AAPL", "MSFT", "NVDA"]))
+    returned = {
+        item["ticker"]
+        for group in payload["groups"]
+        for item in group["stocks"]
+    }
+
+    assert returned == {"AAPL", "MSFT"}
+    assert payload["succeeded"] == 2
+    assert payload["failed"] == 1
+    assert payload["failed_tickers"] == ["NVDA"]
+    assert payload["source_status"] == "degraded"
+    assert payload["data_limited"] is True
+
+
+def test_full_watchlist_partial_latest_batch_fails_closed_per_ticker(monkeypatch):
+    monkeypatch.setattr(
+        sector_service,
+        "SECTORS",
+        {"test": {"name": "测试", "tickers": ["AAPL", "MSFT", "NVDA"]}},
+    )
+    columns = pd.MultiIndex.from_tuples([
+        ("AAPL", "Close"),
+        ("MSFT", "Close"),
+        ("NVDA", "Close"),
+    ])
+
+    def fake_download(*, interval, **_kwargs):
+        if interval == "5m":
+            return pd.DataFrame(
+                [[197.0, 425.0, float("nan")]],
+                index=pd.DatetimeIndex(["2026-07-14 16:00"], tz="America/New_York"),
+                columns=columns,
+            )
+        return pd.DataFrame(
+            [[190.0, 420.0, 200.0], [192.0, 424.0, 203.0]],
+            index=pd.to_datetime(["2026-07-13", "2026-07-14"]),
+            columns=columns,
+        )
+
+    monkeypatch.setattr(stocks.yf, "download", fake_download)
+
+    payload = asyncio.run(stocks._build_watchlist())
+    returned = {
+        item["ticker"]
+        for group in payload["groups"]
+        for item in group["stocks"]
+    }
+
+    assert returned == {"AAPL", "MSFT"}
+    assert payload["attempted"] == 3
+    assert payload["succeeded"] == 2
+    assert payload["failed_tickers"] == ["NVDA"]
+    assert payload["source_status"] == "degraded"
+
+
+def test_watchlist_marks_previous_market_date_quote_delayed_and_uses_oldest_time(monkeypatch):
+    columns = pd.MultiIndex.from_tuples([
+        ("AAPL", "Close"),
+        ("MSFT", "Close"),
+        ("NVDA", "Close"),
+    ])
+
+    def fake_download(*, interval, **_kwargs):
+        if interval == "5m":
+            return pd.DataFrame(
+                [
+                    [float("nan"), float("nan"), 203.0],
+                    [197.0, 425.0, float("nan")],
+                ],
+                index=pd.DatetimeIndex(
+                    ["2026-07-13 16:00", "2026-07-14 16:00"],
+                    tz="America/New_York",
+                ),
+                columns=columns,
+            )
+        return pd.DataFrame(
+            [[188.0, 418.0, 198.0], [192.0, 424.0, 202.0]],
+            index=pd.to_datetime(["2026-07-12", "2026-07-13"]),
+            columns=columns,
+        )
+
+    monkeypatch.setattr(stocks.yf, "download", fake_download)
+
+    payload = asyncio.run(stocks._build_watchlist(["AAPL", "MSFT", "NVDA"]))
+    by_ticker = {
+        item["ticker"]: item
+        for group in payload["groups"]
+        for item in group["stocks"]
+    }
+
+    assert set(by_ticker) == {"AAPL", "MSFT", "NVDA"}
+    assert by_ticker["NVDA"]["quote_delayed"] is True
+    assert "quote_delayed" not in by_ticker["AAPL"]
+    assert payload["delayed"] == 1
+    assert payload["delayed_tickers"] == ["NVDA"]
+    assert payload["data_through"] == "2026-07-13T20:00:00+00:00"
+    assert payload["oldest_quote_at"] == payload["data_through"]
+    assert payload["latest_quote_at"] == "2026-07-14T20:00:00+00:00"
+    assert payload["source_status"] == "degraded"
+    assert payload["data_limited"] is True
+
+
+def test_watchlist_does_not_compare_foreign_exchange_or_premarket_dates(monkeypatch):
+    columns = pd.MultiIndex.from_tuples([
+        ("AAPL", "Close"),
+        ("MSFT", "Close"),
+        ("RMS.PA", "Close"),
+    ])
+
+    def fake_download(*, interval, **_kwargs):
+        if interval == "5m":
+            return pd.DataFrame(
+                [
+                    [195.0, float("nan"), float("nan")],
+                    [float("nan"), 424.5, float("nan")],
+                    [float("nan"), float("nan"), 2_420.0],
+                ],
+                index=pd.DatetimeIndex(
+                    [
+                        "2026-07-14 19:55",
+                        "2026-07-15 04:05",
+                        "2026-07-15 05:30",
+                    ],
+                    tz="America/New_York",
+                ),
+                columns=columns,
+            )
+        return pd.DataFrame(
+            [
+                [190.0, 420.0, 2_390.0],
+                [192.0, 424.0, 2_410.0],
+            ],
+            index=pd.to_datetime(["2026-07-13", "2026-07-14"]),
+            columns=columns,
+        )
+
+    monkeypatch.setattr(stocks.yf, "download", fake_download)
+
+    payload = asyncio.run(stocks._build_watchlist(["AAPL", "MSFT", "RMS.PA"]))
+
+    assert payload["succeeded"] == 3
+    assert payload["delayed"] == 0
+    assert payload["delayed_tickers"] == []
+    assert payload["data_through"] == "2026-07-14T23:55:00+00:00"
+    assert payload["latest_quote_at"] == "2026-07-15T09:30:00+00:00"
+    assert payload["source_status"] == "active"

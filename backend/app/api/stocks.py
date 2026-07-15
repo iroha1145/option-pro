@@ -552,6 +552,8 @@ _WATCHLIST_QUERY_MAX_LENGTH = 4096
 _WATCHLIST_FRESH_TTL_SECONDS = 5 * 60
 _WATCHLIST_MAX_SNAPSHOT_AGE_SECONDS = 24 * 60 * 60
 _WATCHLIST_TARGETED_STALE_TTL_SECONDS = 15 * 60
+_WATCHLIST_LATEST_INTERVAL = "5m"
+_WATCHLIST_MARKET_TIMEZONE = ZoneInfo("America/New_York")
 _WATCHLIST_SNAPSHOT_VERSION = 1
 _WATCHLIST_SNAPSHOT_MAX_BYTES = 2 * 1024 * 1024
 _WATCHLIST_SNAPSHOT_PATH = Path(
@@ -908,12 +910,20 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
     else:
         all_tickers = requested_tickers
 
-    # Fetch daily closes once and derive both card prices and sparklines from
-    # the same batch. This avoids one fast_info request per ticker on cold load.
+    # Daily bars provide the seven-session sparkline and previous official
+    # close. A second, still-batched intraday request provides the latest
+    # regular/extended-hours price. Keeping both calls batched avoids the old
+    # one-fast_info-request-per-ticker cold-load penalty without presenting a
+    # previous daily close as a freshly fetched quote.
     def _fetch_quotes():
         try:
             import yfinance as yf_mod
-            df = yf_mod.download(
+            session = getattr(
+                __import__("app.services.yahoo", fromlist=["_yf_session"]),
+                "_yf_session",
+                None,
+            )
+            daily_df = yf_mod.download(
                 tickers=" ".join(all_tickers),
                 period="7d",
                 interval="1d",
@@ -921,40 +931,143 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
                 threads=True,
                 progress=False,
                 auto_adjust=False,
-                session=getattr(__import__("app.services.yahoo", fromlist=["_yf_session"]),
-                                "_yf_session", None),
+                session=session,
+            )
+            latest_df = yf_mod.download(
+                tickers=" ".join(all_tickers),
+                period="1d",
+                interval=_WATCHLIST_LATEST_INTERVAL,
+                prepost=True,
+                group_by="ticker",
+                threads=True,
+                progress=False,
+                auto_adjust=False,
+                session=session,
             )
             from app.services.zh_names import get_zh_name
+
+            def frame_for(dataset, ticker):
+                if dataset is None or getattr(dataset, "empty", True):
+                    return None
+                columns = getattr(dataset, "columns", None)
+                if getattr(columns, "nlevels", 1) > 1:
+                    level_zero = columns.get_level_values(0)
+                    if ticker in level_zero:
+                        return dataset[ticker]
+                    level_one = columns.get_level_values(1)
+                    if ticker in level_one:
+                        return dataset.xs(ticker, axis=1, level=1)
+                    return None
+                return dataset if len(all_tickers) == 1 else None
+
+            def finite_closes(frame):
+                if frame is None or frame.empty:
+                    return []
+                close_col = "Close" if "Close" in frame.columns else "Adj Close"
+                if close_col not in frame.columns:
+                    return []
+                points = []
+                for index, value in frame[close_col].items():
+                    try:
+                        price = float(value)
+                    except (TypeError, ValueError, OverflowError):
+                        continue
+                    if not math.isfinite(price) or price <= 0:
+                        continue
+                    raw_dt = index.to_pydatetime() if hasattr(index, "to_pydatetime") else index
+                    if not isinstance(raw_dt, datetime):
+                        continue
+                    if raw_dt.tzinfo is None:
+                        market_dt = raw_dt.replace(tzinfo=_WATCHLIST_MARKET_TIMEZONE)
+                    else:
+                        market_dt = raw_dt.astimezone(_WATCHLIST_MARKET_TIMEZONE)
+                    points.append((market_dt, price))
+                return points
+
+            def session_name(market_dt):
+                minute = market_dt.hour * 60 + market_dt.minute
+                if minute < 9 * 60 + 30:
+                    return "pre_market"
+                if minute < 16 * 60:
+                    return "regular"
+                return "post_market"
+
             quotes = {}
+            quote_times = []
+            quote_market_datetimes = {}
             for t in all_tickers:
                 try:
-                    frame = None
-                    if getattr(df.columns, "nlevels", 1) > 1 and t in df.columns.get_level_values(0):
-                        frame = df[t]
-                    elif len(all_tickers) == 1:
-                        frame = df
-                    if frame is None or frame.empty:
+                    daily = finite_closes(frame_for(daily_df, t))
+                    latest = finite_closes(frame_for(latest_df, t))
+                    if not daily or not latest:
                         continue
-                    close_col = "Close" if "Close" in frame.columns else "Adj Close"
-                    closes = [float(c) for c in frame[close_col].dropna().tolist() if math.isfinite(float(c))]
-                    if not closes:
+
+                    quote_dt, price = latest[-1]
+                    daily_dt, daily_close = daily[-1]
+                    if daily_dt.date() > quote_dt.date():
+                        # The intraday batch is older than the available daily
+                        # bar and therefore cannot truthfully be called latest.
                         continue
-                    price = closes[-1]
-                    prev = closes[-2] if len(closes) > 1 else price
+
+                    if daily_dt.date() == quote_dt.date():
+                        if len(daily) < 2:
+                            continue
+                        previous_close = daily[-2][1]
+                        spark = [point[1] for point in daily[-7:]]
+                        spark[-1] = price
+                    else:
+                        previous_close = daily_close
+                        spark = [point[1] for point in daily[-6:]] + [price]
+
+                    quote_times.append(quote_dt.astimezone(timezone.utc))
+                    quote_market_datetimes[t] = quote_dt
                     quotes[t] = {
                         "ticker": t,
                         "name": get_zh_name(t) or t,
                         "price": round(price, 2),
-                        "change_percent": round((price - prev) / prev * 100, 2) if prev else 0,
-                        "spark": [round(c, 2) for c in closes[-7:]],
+                        "change": round(price - previous_close, 2),
+                        "change_percent": round(
+                            (price - previous_close) / previous_close * 100,
+                            2,
+                        ),
+                        "spark": [round(point, 2) for point in spark[-7:]],
+                        "quote_as_of": quote_dt.astimezone(timezone.utc).isoformat(),
+                        "quote_session": session_name(quote_dt),
                     }
                 except Exception:
                     continue
-            return quotes
+            # Compare trading dates only within the U.S. equity/ETF session.
+            # The universe also contains RMS.PA and futures; comparing their
+            # exchange dates to New York equities would create a predictable
+            # false warning every morning. Before 09:30 ET, a U.S. symbol with
+            # no pre-market print is also legitimately still at the prior
+            # official close.
+            us_quote_datetimes = {
+                ticker: quote_dt
+                for ticker, quote_dt in quote_market_datetimes.items()
+                if "." not in ticker
+                and "=" not in ticker
+                and not ticker.startswith("^")
+            }
+            newest_us_quote = max(us_quote_datetimes.values(), default=None)
+            us_regular_session_started = bool(
+                newest_us_quote
+                and newest_us_quote.hour * 60 + newest_us_quote.minute >= 9 * 60 + 30
+            )
+            delayed_tickers = sorted(
+                ticker
+                for ticker, quote_dt in us_quote_datetimes.items()
+                if us_regular_session_started
+                and newest_us_quote is not None
+                and quote_dt.date() < newest_us_quote.date()
+            )
+            for ticker in delayed_tickers:
+                quotes[ticker]["quote_delayed"] = True
+            return quotes, quote_times, delayed_tickers
         except Exception:
-            return {}
+            return {}, [], []
 
-    price_map = await asyncio.to_thread(_fetch_quotes)
+    price_map, quote_times, delayed_tickers = await asyncio.to_thread(_fetch_quotes)
 
     # If yfinance limited us hard, less than 30% succeeded — treat as failure
     # so the cache returns the previous (stale) snapshot instead of an empty one.
@@ -998,8 +1111,21 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
         "succeeded": len(price_map),
         "failed": len(all_tickers) - len(price_map),
         "failed_tickers": sorted(t for t in all_tickers if t not in price_map),
-        "data_limited": success_ratio < 1.0,
-        "source_status": "active" if success_ratio == 1.0 else "degraded",
+        "data_limited": success_ratio < 1.0 or bool(delayed_tickers),
+        "delayed": len(delayed_tickers),
+        "delayed_tickers": delayed_tickers,
+        "quote_interval": _WATCHLIST_LATEST_INTERVAL,
+        # A collection is only complete through its oldest constituent quote.
+        # Keep the newest timestamp separately so the UI cannot hide one stale
+        # symbol behind another symbol's recent trade.
+        "data_through": min(quote_times).isoformat() if quote_times else None,
+        "oldest_quote_at": min(quote_times).isoformat() if quote_times else None,
+        "latest_quote_at": max(quote_times).isoformat() if quote_times else None,
+        "source_status": (
+            "active"
+            if success_ratio == 1.0 and not delayed_tickers
+            else "degraded"
+        ),
     })
 
 

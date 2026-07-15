@@ -150,23 +150,42 @@
     : `<span class="data-state ${warn ? "is-warn" : ""}"><i></i>${label}</span>`;
 
   // 数据源明细弹层:失败名单如实列出;正常时只报总数,不铺全量代码
-  function srcTip({ attempted, succeeded, failedTickers, failed, stale, asOf, label }) {
+  function srcTip({ attempted, succeeded, failedTickers, failed, delayedTickers, stale, asOf, latestAsOf, label }) {
     const bad = Array.isArray(failedTickers) ? failedTickers : [];
+    const delayed = Array.isArray(delayedTickers) ? delayedTickers : [];
     const okCount = succeeded != null ? succeeded : Math.max((attempted || 0) - bad.length, 0);
     const rows = [];
     if (bad.length) {
       rows.push(`<b class="data-tip__bad">本轮拉取失败 ${bad.length} 只</b>`);
       rows.push(`<span class="data-tip__codes">${bad.map(t => `<i>${esc(t)}</i>`).join("")}</span>`);
-      rows.push(`<small>其余 ${okCount} 只正常 · 失败标的暂缺行情,下轮刷新自动重试</small>`);
+      rows.push(`<small>其余 ${okCount} 只有有效报价 · 失败标的暂缺行情,下轮刷新自动重试</small>`);
     } else if (failed > 0) {
       rows.push(`<b class="data-tip__bad">本轮拉取失败 ${failed} 只</b>`);
       rows.push(`<small>本次快照未附失败名单,下轮刷新后可见</small>`);
-    } else {
+    } else if (!delayed.length) {
       rows.push(`<b class="data-tip__ok">${attempted != null ? okCount + "/" + attempted + " " : ""}全部拉取成功</b>`);
-      rows.push(`<small>${label || "数据源"}正常${asOf ? " · 更新 " + N.fmtTime(asOf) : ""}</small>`);
+      const coverage = asOf
+        ? latestAsOf && latestAsOf !== asOf
+          ? ` · 覆盖 ${N.fmtTime(asOf)}—${N.fmtTime(latestAsOf)}`
+          : ` · 更新 ${N.fmtTime(asOf)}`
+        : "";
+      rows.push(`<small>${label || "数据源"}正常${coverage}</small>`);
+    }
+    if (delayed.length) {
+      rows.push(`<b class="data-tip__bad">${delayed.length} 只标的仍停留在较早交易日</b>`);
+      rows.push(`<span class="data-tip__codes">${delayed.map(t => `<i>${esc(t)}</i>`).join("")}</span>`);
+      rows.push(`<small>页面保留其最近一笔有效报价，并将整批状态标为降级。</small>`);
     }
     if (stale) rows.push(`<small class="data-tip__warn">当前为过期快照:上游暂时不可用,展示最近一次成功数据</small>`);
     return rows.join("");
+  }
+
+  function watchQuoteCoverage(snapshot) {
+    const first = snapshot && (snapshot.dataThrough || snapshot.asOf);
+    const last = snapshot && (snapshot.latestQuoteAt || first);
+    if (!first) return "时间未知";
+    if (!last || last === first) return N.fmtTime(first);
+    return `${N.fmtTime(first)}—${N.fmtTime(last)}`;
   }
 
   /* ---------- 视图:自选 ---------- */
@@ -449,7 +468,7 @@
         <h1>自选观察<small>${flat.length} 只标的 · ${up} 涨 ${flat.length - up} 跌 · 平均 <span class="num ${tone(avg)}">${pct(avg)}</span> · 延迟行情,仅供研究</small></h1>
       </div>
       <div class="view-head__aside">
-        ${dataState(`YAHOO ${N.srcCN(watchSnapshot.sourceStatus)} · ${watchSnapshot.succeeded}/${watchSnapshot.attempted} · ${N.fmtTime(watchSnapshot.asOf)}`, watchSnapshot.sourceStatus !== "active" || watchSnapshot.stale, srcTip({ attempted: watchSnapshot.attempted, succeeded: watchSnapshot.succeeded, failedTickers: watchSnapshot.failedTickers, failed: watchSnapshot.failed, stale: watchSnapshot.stale, asOf: watchSnapshot.asOf, label: "Yahoo 行情源" }))}
+        ${dataState(`YAHOO ${N.srcCN(watchSnapshot.sourceStatus)} · ${watchSnapshot.succeeded}/${watchSnapshot.attempted} · 覆盖 ${watchQuoteCoverage(watchSnapshot)}`, watchSnapshot.sourceStatus !== "active" || watchSnapshot.stale, srcTip({ attempted: watchSnapshot.attempted, succeeded: watchSnapshot.succeeded, failedTickers: watchSnapshot.failedTickers, failed: watchSnapshot.failed, delayedTickers: watchSnapshot.delayedTickers, stale: watchSnapshot.stale, asOf: watchSnapshot.dataThrough || watchSnapshot.asOf, latestAsOf: watchSnapshot.latestQuoteAt, label: "Yahoo 行情源" }))}
       </div>
     </div>
 
@@ -463,7 +482,7 @@
           </div>
           <div class="focus-price">
             <div class="focus-price__now" data-count="${f.price}">0.00</div>
-            <div class="focus-price__chg"><span class="${tone(f.chg)}">${arrow(f.chg)} ${pct(f.chg)}</span><span class="dim">${q ? sign(q.change) : ""}</span></div>
+            <div class="focus-price__chg"><span class="${tone(f.chg)}">${arrow(f.chg)} ${pct(f.chg)}</span><span class="dim">${isNum(f.change) ? sign(f.change) : ""}</span></div>
           </div>
         </div>
         <div class="focus-ranges" role="tablist" aria-label="图表周期">
@@ -493,7 +512,7 @@
             <span style="display:flex;align-items:center;gap:9px"><span class="chip chip--down"><i></i>承压</span><b class="mono" style="font-size:13px">${esc(lag.ticker)}</b><span style="font-size:11.5px;color:var(--muted)">${esc(lag.name)}</span></span>
             <b class="num d" style="font-size:13px">${pct(lag.chg)}</b>
           </button>
-          <div class="pulse-live"><i></i>快照 ${N.fmtTime(watchSnapshot.asOf)} · 每 75 秒检查 · 五分钟行情快照</div>
+          <div class="pulse-live"><i></i>报价覆盖 ${watchQuoteCoverage(watchSnapshot)} · 每 75 秒检查 · 五分钟盘前、盘中及盘后报价</div>
         </section>
 
         <section class="panel panel--pad" data-reveal style="--reveal-i:3" aria-label="下一事件">
@@ -1076,7 +1095,7 @@
         <p class="view-head__kicker">04 · Sectors</p>
         <h1>板块<small>${upCount} 个板块上涨${list[0] && list[0].perf != null ? "," + esc(list[0].name) + "暂时领先" : ""} · 先看资金方向,再查内部波动</small></h1>
       </div>
-      <div class="view-head__aside">${dataState(`行情快照 ${N.fmtTime(St.watch.asOf)} · ${St.watch.flat.length} 只成分`, St.watch.stale, srcTip({ attempted: St.watch.attempted, succeeded: St.watch.succeeded, failedTickers: St.watch.failedTickers, failed: St.watch.failed, stale: St.watch.stale, asOf: St.watch.asOf, label: "Yahoo 行情源" }))}</div>
+      <div class="view-head__aside">${dataState(`行情覆盖 ${watchQuoteCoverage(St.watch)} · ${St.watch.flat.length} 只成分`, St.watch.sourceStatus !== "active" || St.watch.stale, srcTip({ attempted: St.watch.attempted, succeeded: St.watch.succeeded, failedTickers: St.watch.failedTickers, failed: St.watch.failed, delayedTickers: St.watch.delayedTickers, stale: St.watch.stale, asOf: St.watch.dataThrough || St.watch.asOf, latestAsOf: St.watch.latestQuoteAt, label: "Yahoo 行情源" }))}</div>
     </div>
 
     <div class="sector-grid">
