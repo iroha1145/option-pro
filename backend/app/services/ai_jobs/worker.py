@@ -362,6 +362,8 @@ def health_payload(repository: AIJobRepository, settings: Any) -> dict[str, Any]
             ),
             "configured": configured,
             "provider_capability_supported": bool(capability.get("supported")),
+            "sdk_capability_supported": bool(capability.get("sdk_supported")),
+            "methods": capability.get("methods", {}),
             "model": runtime.OFFICIAL_OPENAI_MODEL,
             "reasoning": runtime.OFFICIAL_REASONING_EFFORT,
             "execution_mode": runtime.OFFICIAL_EXECUTION_MODE,

@@ -18,7 +18,7 @@ from app.services.ai_jobs import runtime
 from app.services.ai_jobs.models import validate_result
 from app.services.ai_jobs.repository import AIJobRepository
 from app.services.ai_jobs.security import require_expensive_action
-from app.services.ai_jobs.worker import process_job
+from app.services.ai_jobs.worker import health_payload, process_job
 
 
 def _settings(path):
@@ -150,6 +150,22 @@ def test_runtime_capability_rejects_non_official_configuration(tmp_path):
     status = runtime.capability_status(settings)
     assert status["supported"] is False
     assert status["status"] == "runtime_configuration_invalid"
+
+
+def test_worker_health_reports_official_responses_sdk_without_a_key(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    repository.initialize()
+    settings = _settings(repository.path)
+    settings.openai_api_key = SecretStr("")
+
+    status = health_payload(repository, settings)
+
+    assert status["status"] == "disabled"
+    assert status["sdk_capability_supported"] is True
+    assert all(
+        status["methods"].get(name) is True
+        for name in ("create", "retrieve", "cancel")
+    )
 
 
 def test_all_paid_job_prompt_versions_invalidate_legacy_english_cache():
