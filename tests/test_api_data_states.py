@@ -355,6 +355,34 @@ def test_legacy_stock_signals_accepts_indices_but_rejects_invalid_symbols(monkey
     assert stocks._WATCHLIST_TICKER_PATTERN.fullmatch("^GSPC")
 
 
+def test_legacy_stock_signals_ignores_incomplete_daily_bar(monkeypatch):
+    completed_closes = [100.0 + index * 0.5 for index in range(60)]
+    history = pd.DataFrame(
+        {
+            "Close": completed_closes + [float("nan")],
+            "Volume": [1_000_000 + index for index in range(60)] + [5_000_000],
+        },
+        index=pd.date_range("2026-04-01", periods=61, freq="B"),
+    )
+
+    class IncompleteTicker:
+        def __init__(self, _symbol):
+            pass
+
+        def history(self, *, period):
+            assert period == "100d"
+            return history
+
+    monkeypatch.setattr(stocks.yf, "Ticker", IncompleteTicker)
+    stocks._endpoint_cache.pop("technical-signals:NANBAR", None)
+
+    payload = asyncio.run(stocks.stock_signals("NANBAR"))
+
+    assert payload["price"] == completed_closes[-1]
+    assert payload["signals"]["rsi"]["value"] == 100.0
+    assert payload["signals"]["volume"]["value"] < 2
+
+
 def test_watchlist_reports_provider_failure_without_unbounded_stale_data(monkeypatch):
     async def failed_watchlist():
         raise RuntimeError("provider unavailable")
