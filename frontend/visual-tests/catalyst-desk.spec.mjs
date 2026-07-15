@@ -16,6 +16,7 @@ const SCENARIOS = [
   { name: "1280x800-dark-unavailable", width: 1280, height: 800, theme: "dark", state: "unavailable", authenticated: true },
   { name: "1280x800-light-disabled", width: 1280, height: 800, theme: "light", state: "disabled", authenticated: true },
   { name: "1280x800-light-anonymous-analysis", width: 1280, height: 800, theme: "light", state: "analysis_unrequested" },
+  { name: "390x844-light-anonymous-analysis", width: 390, height: 844, theme: "light", state: "analysis_unrequested", mobile: true },
   { name: "1280x800-dark-prepared", width: 1280, height: 800, theme: "dark", state: "prepared", authenticated: true },
   { name: "1280x800-dark-queued", width: 1280, height: 800, theme: "dark", state: "queued" },
   { name: "1280x800-dark-in-progress", width: 1280, height: 800, theme: "dark", state: "in_progress" },
@@ -251,6 +252,10 @@ for (const scenario of SCENARIOS) {
       await expect(page.locator("#cat-analysis-body")).toContainText("管理会话未解锁");
       await expect(page.locator("#cat-analysis-body")).toContainText("当前标签页没有管理令牌");
       await expect(page.locator("#cat-analysis-body [data-cat-analyze]")).toHaveCount(0);
+    }
+    if (scenario.state === "failed") {
+      await expect(page.locator("#cat-focus-body")).toContainText("invalid_structured_output");
+      await expect(page.locator("#cat-focus-body")).toContainText("管理会话未解锁");
     }
     if (scenario.state === "focus_fallback") {
       await expect(page.getByText("兜底源", { exact: true })).toBeVisible();

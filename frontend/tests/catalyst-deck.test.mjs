@@ -175,6 +175,20 @@ test('an old unknown market-focus cycle stays immutable while a newer prepared r
   assert.equal(anonymous.canRun, false);
   assert.equal(anonymous.buttonText, '需要管理令牌');
 
+  const anonymousUnknown = desk.focusCycleDecision({
+    status: 'active',
+    capability: 'disabled',
+    action_enabled: false,
+    manual_enabled: false,
+    prepared_revision: 54331,
+    last_consumed_revision: 0,
+  }, oldCycle, 1055, false);
+  assert.equal(anonymousUnknown.newPreparationAfterUnknown, true);
+  assert.match(
+    desk.focusUnknownHistoryHtml(oldCycle, anonymousUnknown),
+    /解锁管理会话后可另建周期/,
+  );
+
   const enabled = desk.focusCycleDecision({
     status: 'active',
     capability: 'enabled',

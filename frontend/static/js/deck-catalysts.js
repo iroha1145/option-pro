@@ -570,7 +570,9 @@
     const nextStep = decision.canCreate
       ? "当前的新准备版本可另行创建全新周期。"
       : decision.newPreparationAfterUnknown
-        ? "新的准备版本不属于该历史周期，需待分析功能可用后另建周期。"
+        ? decision.authMissing
+          ? "新的准备版本不属于该历史周期，解锁管理会话后可另建周期。"
+          : "新的准备版本不属于该历史周期，需待分析功能可用后另建周期。"
         : "需等待服务端完成核对。";
     return stateBlock(
       "degraded",
@@ -650,18 +652,24 @@
       ["数据截止", raw.data_through ? N.fmtDateTime(raw.data_through) : "—"],
     ].map(([label, value]) => `<span><small>${esc(label)}</small><b>${esc(value)}</b></span>`).join("");
 
+    const terminalFailure = !decision.unknownSubmission
+      && (cycle.status === "failed" || cycle.status === "incomplete_output");
+    const unknownNeedsReview = decision.unknownSubmission && !decision.newPreparationAfterUnknown;
     let state = "";
     if (decision.active) state = stateBlock(cycle.status, statusLabel(cycle.status), "新热点仍会进入下一准备版本，不会混入当前不可变快照。 ");
+    else if (unknownNeedsReview) state = stateBlock("degraded", "提交结果待核对", "无法确认远端是否已经受理。为避免重复计费，本周期禁止重试，需等待服务端核对结果。 ");
+    else if (terminalFailure) state = stateBlock("failed", statusLabel(cycle.status), cycle.error_code ? `安全错误码：${cycle.error_code}；准备版本尚未消费。` : "准备版本尚未消费，可在冷却结束后显式重试。 ");
     else if (decision.authMissing) state = stateBlock("disabled", "管理会话未解锁", "当前标签页没有管理令牌；历史结果仍可查看，付费分析操作不会显示。 ");
     else if (decision.budgetMissing) state = stateBlock("disabled", "分析预算尚未配置", "每日任务和每日输出 Token 两项预算齐全后，自动周期才允许启用。 ");
     else if (decision.actionMissing) state = stateBlock("disabled", "分析功能未启用", "当前只显示历史结果和热点准备状态，不会创建新的模型任务。 ");
     else if (decision.snapshotUnavailable) state = stateBlock("unavailable", "热点快照暂不可用", "当前快照恢复后才能创建新的综合分析周期。 ");
-    else if (decision.unknownSubmission && !decision.newPreparationAfterUnknown) state = stateBlock("degraded", "提交结果待核对", "无法确认远端是否已经受理。为避免重复计费，本周期禁止重试，需等待服务端核对结果。 ");
-    else if (!decision.unknownSubmission && (cycle.status === "failed" || cycle.status === "incomplete_output")) state = stateBlock("failed", statusLabel(cycle.status), cycle.error_code ? `安全错误码：${cycle.error_code}；准备版本尚未消费。` : "准备版本尚未消费，可在冷却结束后显式重试。 ");
     else if (!decision.hasNew && !cycleResultHtml(cycle)) state = stateBlock("empty", "暂无新热点", "普通新闻仍会保存；没有合格热点时不会创建手动综合分析。 ");
+    const accessNotice = decision.authMissing && (terminalFailure || unknownNeedsReview)
+      ? stateBlock("disabled", "管理会话未解锁", "当前标签页没有管理令牌；只读任务状态仍会显示，付费分析操作不会显示。 ")
+      : "";
     const history = focusUnknownHistoryHtml(cycle, decision);
     const cards = events.length ? `<div class="cat-hotspot-list">${events.slice(0, 8).map(hotspotCard).join("")}</div>` : "";
-    $("#cat-focus-body", page.view).innerHTML = `${state}${history}${cycleResultHtml(cycle)}${cards}` || stateBlock("empty", "暂无热点准备记录", "确定性门控不会用中性分填充缺失证据。 ");
+    $("#cat-focus-body", page.view).innerHTML = `${state}${accessNotice}${history}${cycleResultHtml(cycle)}${cards}` || stateBlock("empty", "暂无热点准备记录", "确定性门控不会用中性分填充缺失证据。 ");
   }
 
   function summaryValue(summary, keys) {
