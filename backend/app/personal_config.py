@@ -90,6 +90,8 @@ class AIConfig(StrictConfigModel):
 class CatalystConfig(StrictConfigModel):
     sync_seconds: int = Field(default=120, ge=30, le=86_400)
     focus_seconds: int = Field(default=1800, ge=300, le=86_400)
+    manual_force_reanalysis: bool = True
+    manual_refresh_cooldown_seconds: int = Field(default=30, ge=0, le=3600)
     scheduled_times_et: list[str] = Field(
         default_factory=lambda: ["08:00", "12:00", "16:00"],
         min_length=1,

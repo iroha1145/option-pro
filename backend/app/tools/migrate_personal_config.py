@@ -42,6 +42,8 @@ execution_mode = "background"
 sync_seconds = {config.catalyst.sync_seconds}
 focus_seconds = {config.catalyst.focus_seconds}
 scheduled_times_et = [{times}]
+manual_force_reanalysis = {str(config.catalyst.manual_force_reanalysis).lower()}
+manual_refresh_cooldown_seconds = {config.catalyst.manual_refresh_cooldown_seconds}
 
 [breakout]
 regular_seconds = {config.breakout.regular_seconds}

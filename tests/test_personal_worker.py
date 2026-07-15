@@ -12,12 +12,14 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from pydantic import SecretStr
 
 from app.worker.__main__ import main
 from app.worker.lock import ProcessFileLock
 from app.worker.runtime import TaskResult, TaskSpec, WorkerSupervisor
 from app.worker.state import WorkerStateRepository
 from app.worker.tasks import (
+    AIJobsTask,
     CatalystSyncTask,
     FocusTask,
     MaintenanceTask,
@@ -28,6 +30,35 @@ from app.worker.tasks import (
 TASK_NAMES = {"breakout", "focus", "catalyst_sync", "ai_jobs", "maintenance"}
 NOW = datetime(2026, 7, 16, 0, 0, tzinfo=timezone.utc)
 ETL_AS_OF = "2026-07-15T12:00:00Z"
+
+
+def _runtime_settings(
+    *,
+    manual: bool = True,
+    scheduled: bool = False,
+    sync_seconds: int = 120,
+    focus_seconds: int = 1800,
+    scheduled_times: tuple[str, ...] = ("08:00", "12:00", "16:00"),
+    daily_max_jobs: int = 4,
+    daily_budget_usd: float = 2.0,
+    analysis_cooldown_seconds: int = 30,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        ai=SimpleNamespace(
+            manual_analysis_enabled=manual,
+            daily_max_jobs=daily_max_jobs,
+            daily_budget_usd=daily_budget_usd,
+            manual_analysis_cooldown_seconds=analysis_cooldown_seconds,
+        ),
+        catalyst=SimpleNamespace(
+            sync_seconds=sync_seconds,
+            focus_seconds=focus_seconds,
+            manual_refresh_enabled=True,
+            manual_refresh_cooldown_seconds=30,
+            scheduled_analysis_enabled=scheduled,
+            scheduled_times_et=scheduled_times,
+        ),
+    )
 
 
 def _empty_etl_page(path: str) -> dict:
@@ -161,6 +192,91 @@ def test_manual_action_wakes_long_interval_worker_and_completes(tmp_path: Path) 
         await asyncio.wait_for(running, timeout=2)
 
     asyncio.run(scenario())
+
+
+def test_ai_worker_fails_closed_when_runtime_settings_are_unreadable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.runtime_settings import RuntimeSettingsStorageError
+
+    settings = SimpleNamespace(
+        openai_job_db_path=tmp_path / "ai-jobs.db",
+        openai_api_key=SecretStr("test-only-key"),
+        openai_job_lease_seconds=60,
+    )
+    monkeypatch.setattr("app.config.get_settings", lambda: settings)
+
+    def unreadable():
+        raise RuntimeSettingsStorageError("invalid runtime document")
+
+    monkeypatch.setattr(
+        "app.services.runtime_settings.get_effective_runtime_settings",
+        unreadable,
+    )
+    result = asyncio.run(AIJobsTask("fail-closed")())
+
+    assert result.status == "degraded"
+    assert result.error_code == "runtime_settings_unavailable"
+    assert result.details == {
+        "reason": "runtime_settings_unavailable",
+        "processed": 0,
+    }
+
+
+def test_ai_worker_uses_fresh_runtime_budget_without_restart(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeSettings(SimpleNamespace):
+        def model_copy(self, *, update: dict[str, object]):
+            values = dict(vars(self))
+            values.update(update)
+            return FakeSettings(**values)
+
+    settings = FakeSettings(
+        openai_job_db_path=tmp_path / "ai-jobs.db",
+        openai_api_key=SecretStr("test-only-key"),
+        openai_daily_max_jobs=4,
+        openai_daily_budget_usd=2.0,
+        openai_manual_cooldown_seconds=30,
+    )
+    effective = _runtime_settings(
+        daily_max_jobs=3,
+        daily_budget_usd=1.25,
+        analysis_cooldown_seconds=45,
+    )
+    seen: list[tuple[int, float, int]] = []
+
+    monkeypatch.setattr("app.config.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "app.services.runtime_settings.get_effective_runtime_settings",
+        lambda: effective,
+    )
+
+    async def capture(
+        _repository,
+        worker_settings,
+        _owner,
+        **_options,
+    ):
+        seen.append(
+            (
+                worker_settings.openai_daily_max_jobs,
+                worker_settings.openai_daily_budget_usd,
+                worker_settings.openai_manual_cooldown_seconds,
+            )
+        )
+        return False
+
+    monkeypatch.setattr("app.services.ai_jobs.worker.run_once", capture)
+    task = AIJobsTask("runtime-budget")
+    first = asyncio.run(task())
+    effective.ai.daily_budget_usd = 1.0
+    second = asyncio.run(task())
+
+    assert first.status == second.status == "idle"
+    assert seen == [(3, 1.25, 45), (3, 1.0, 45)]
 
 
 def test_process_file_lock_excludes_two_descriptors_and_processes(tmp_path: Path) -> None:
@@ -419,7 +535,7 @@ def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
         ) -> None:
             assert database_path == cache_path
             assert getattr(ai_repository, "path") == ai_path
-            assert options["mode"] == "read"
+            assert options["mode"] == "manual"
             assert options["model"] == "gpt-5.6-terra"
             assert options["reasoning"] == "max"
             tickers = set(options["canonical_tickers"])
@@ -475,7 +591,7 @@ def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
     result, client = asyncio.run(run())
 
     assert result.status == "idle"
-    assert result.next_delay_seconds == 37
+    assert result.next_delay_seconds == 2
     assert result.details["processed"] == [
         "news",
         "calendar",
@@ -583,10 +699,62 @@ def test_personal_catalyst_task_isolates_stream_failure() -> None:
 
     assert result.status == "degraded"
     assert result.error_code == "catalyst_sync_degraded"
-    assert result.next_delay_seconds == 41
+    assert result.next_delay_seconds == 2
     assert result.details["processed"] == ["calendar", "local_intelligence"]
     assert result.details["errors"] == {"news": "upstream_unavailable"}
     assert "private upstream detail" not in json.dumps(result.details)
+
+
+def test_personal_catalyst_task_makes_no_calls_when_runtime_settings_are_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.runtime_settings import RuntimeSettingsStorageError
+
+    calls: list[str] = []
+
+    class NetworkForbidden:
+        async def sync_news(self) -> None:
+            calls.append("sync_news")
+
+        async def sync_calendar(self) -> None:
+            calls.append("sync_calendar")
+
+    class LocalWorkForbidden:
+        def consume_refresh_requested(self) -> bool:
+            calls.append("consume_refresh_requested")
+            return True
+
+        def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict:
+            calls.append("reconcile")
+            return {}
+
+    def unreadable():
+        raise RuntimeSettingsStorageError("invalid runtime document")
+
+    monkeypatch.setattr(
+        "app.services.runtime_settings.get_effective_runtime_settings",
+        unreadable,
+    )
+    task = CatalystSyncTask(
+        "runtime-settings-failure",
+        personal_config=SimpleNamespace(catalyst=SimpleNamespace(sync_seconds=41)),
+    )
+    task._mode = "personal"
+    task._service = NetworkForbidden()
+    task._intelligence = LocalWorkForbidden()
+
+    result = asyncio.run(task())
+
+    assert result.status == "degraded"
+    assert result.error_code == "runtime_settings_unavailable"
+    assert result.next_delay_seconds == 30
+    assert result.details == {
+        "processed": [],
+        "streams": {},
+        "refresh_requested": False,
+        "errors": {"runtime_settings": "runtime_settings_unavailable"},
+    }
+    assert calls == []
 
 
 def test_personal_catalyst_task_rejects_http_without_network(
@@ -618,7 +786,7 @@ def test_default_read_focus_never_runs_scheduled_ai_work(
 
     class FakeLocalIntelligence:
         def __init__(self, _path: Path, _ai_repository: object, **options: object):
-            assert options["mode"] == "read"
+            assert options["mode"] == "manual"
 
         def initialize(self) -> None:
             calls.append("initialize")
@@ -676,8 +844,12 @@ def test_scheduled_focus_calls_local_scheduler_once(
     monkeypatch.setenv("MACROLENS_BASE_URL", "https://macrolens.example")
     monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(tmp_path / "catalyst.db"))
     monkeypatch.setenv("OPENAI_JOB_DB_PATH", str(tmp_path / "ai-jobs.db"))
+    monkeypatch.setattr(
+        "app.services.runtime_settings.get_effective_runtime_settings",
+        lambda: _runtime_settings(scheduled=True, focus_seconds=601),
+    )
     config = SimpleNamespace(
-        catalyst=SimpleNamespace(focus_seconds=601),
+        catalyst=SimpleNamespace(focus_seconds=777),
         catalyst_scheduled_enabled=True,
         features=SimpleNamespace(catalyst_mode="scheduled"),
         ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),
@@ -697,7 +869,16 @@ def test_scheduled_focus_calls_local_scheduler_once(
     assert calls == ["initialize", "run_scheduled"]
 
 
-def test_focus_waits_for_first_catalyst_sync_attempt() -> None:
+def test_focus_waits_for_first_catalyst_sync_attempt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.runtime_settings.get_effective_runtime_settings",
+        lambda: _runtime_settings(
+            scheduled=True,
+            scheduled_times=("08:00",),
+        ),
+    )
     async def scenario() -> tuple[TaskResult, TaskResult, list[str]]:
         initial_sync_complete = asyncio.Event()
         sync_started = asyncio.Event()

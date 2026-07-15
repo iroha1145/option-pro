@@ -166,6 +166,15 @@
     }));
   }
 
+  async function jput(path, payload, opts) {
+    opts = opts || {};
+    return fetchJSON(path, Object.assign({}, opts, {
+      method: "PUT",
+      body: JSON.stringify(payload || {}),
+      retry5xx: opts.retry5xx === true,
+    }));
+  }
+
   function invalidateCache(prefix) {
     for (const key of cache.keys()) if (!prefix || key.startsWith(prefix)) cache.delete(key);
   }
@@ -300,17 +309,47 @@
     const input = request || {};
     const payload = input.retry_cycle_id
       ? { trigger: "manual", retry_cycle_id: input.retry_cycle_id }
-      : { trigger: "manual", expected_prepared_revision: input.expected_prepared_revision };
+      : {
+          trigger: "manual",
+          expected_prepared_revision: input.expected_prepared_revision,
+          force: !!input.force,
+        };
     return jpost(
       "/api/catalysts/market-focus-cycles",
       payload,
       Object.assign({ lowPriority: true }, options || {}),
     );
   };
-  const catalystRefresh = options => jpost("/api/catalysts/refresh", {}, options || {}).then(body => {
+  const catalystRefresh = (operationType, options) => jpost(
+    "/api/catalysts/refresh",
+    { operation_type: operationType || "news" },
+    options || {},
+  ).then(body => {
     invalidateCache("/api/catalysts/");
     return body;
   });
+  const catalystRefreshStatus = (id, options) => jget(
+    "/api/catalysts/refresh/" + enc(id),
+    Object.assign({ noCache: true, lowPriority: true, retry5xx: false }, options || {}),
+  );
+  const runtimeSettings = options => jget(
+    "/api/runtime-settings",
+    Object.assign({ noCache: true, retry5xx: false }, options || {}),
+  );
+  const runtimeSettingsHistory = options => jget(
+    "/api/runtime-settings/history",
+    Object.assign({ noCache: true, retry5xx: false }, options || {}),
+  );
+  const updateRuntimeSettings = (payload, options) => jput(
+    "/api/runtime-settings",
+    payload,
+    Object.assign({ retry5xx: false }, options || {}),
+  );
+  const rollbackRuntimeSettings = (payload, options) => jpost(
+    "/api/runtime-settings/rollback",
+    payload,
+    Object.assign({ retry5xx: false }, options || {}),
+  );
   const createCatalystAnalysis = (id, force, options) => jpost("/api/catalysts/news/" + enc(id) + "/analysis", { force: !!force }, options || {});
   const catalystAnalysisJob = (id, options) => jget("/api/catalysts/analysis-jobs/" + enc(id), Object.assign({ noCache: true, lowPriority: true, retry5xx: false }, options || {}));
   const cancelCatalystAnalysisJob = (id, options) => jpost("/api/catalysts/analysis-jobs/" + enc(id) + "/cancel", {}, Object.assign({ lowPriority: true }, options || {}));
@@ -451,13 +490,14 @@
   }
 
   window.OPTIX_NET = {
-    jget, jpost, invalidateCache, accessStatus, logoutOwner, cnAmount, indexInfo, INDEX_NAMES, CHART_RANGES,
+    jget, jpost, jput, invalidateCache, accessStatus, logoutOwner, cnAmount, indexInfo, INDEX_NAMES, CHART_RANGES,
     indices, marketStatus, watchlist, stock, stockSignals, signalDeep, signalsMarket, strengthMarket,
     profiles, chart, scan, breakoutsCurrent, breakoutsStatus, breakoutsEvents, breakoutEventDetail, breakoutTicker,
     sectors, sectorIV, earnings, earningsImpact, unusual, expirations, chain, search, aiStock,
     catalystStatus, catalystFeed, catalystNews, tickerCatalysts, catalystBatch, catalystCalendar,
     catalystHotspotStatus, catalystHotspots, catalystMarketCycleLatest, catalystMarketCycle,
-    createCatalystMarketCycle, catalystRefresh,
+    createCatalystMarketCycle, catalystRefresh, catalystRefreshStatus,
+    runtimeSettings, runtimeSettingsHistory, updateRuntimeSettings, rollbackRuntimeSettings,
     createCatalystAnalysis, catalystAnalysisJob, cancelCatalystAnalysisJob,
     createEarningsImpactJob, createOptionAlertsJob, aiJob, cancelAiJob,
     buildWeek, etToday,

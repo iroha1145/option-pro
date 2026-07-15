@@ -40,6 +40,7 @@ from app.api import (
     integrations,
     market,
     options,
+    runtime_settings,
     sectors,
     settings,
     signals,
@@ -365,6 +366,7 @@ app.include_router(integrations.router)
 app.include_router(strength.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(breakouts.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(worker_actions.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(runtime_settings.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(access.router)
 app.include_router(settings.router)
 

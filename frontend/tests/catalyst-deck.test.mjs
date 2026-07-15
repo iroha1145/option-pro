@@ -57,11 +57,28 @@ test('paid analysis is explicit and earnings no longer uses the synchronous GET 
   assert.doesNotMatch(api, /hasAppToken|appToken/);
   assert.doesNotMatch(catalysts, /privateActionsAvailable|管理令牌|管理会话未解锁/);
   assert.doesNotMatch(app, /privateActionsAvailable|管理授权|公开页面不会创建付费任务/);
-  assert.match(catalysts, /const access = analysisActionDecision\(triggerEnabled\)[\s\S]*const canTrigger = access\.canTrigger/);
-  assert.match(catalysts, /id="cat-refresh">请求后台同步/);
+  assert.match(api, /jget, jpost, jput, invalidateCache, accessStatus, logoutOwner/);
+  assert.match(catalysts, /data-cat-refresh="news"/);
+  assert.match(catalysts, /data-cat-refresh="calendar"/);
+  assert.match(catalysts, /data-cat-refresh="source_health"/);
+  assert.match(catalysts, /analysisAvailabilityOf\(item\)/);
+  assert.match(catalysts, /analysisActionDecision\(triggerEnabled, analysisAvailabilityOf\(item\)\)/);
+  assert.match(catalysts, /运行设置恢复前不会创建模型任务/);
   assert.match(catalysts, /id="cat-focus-run" disabled/);
   assert.match(catalysts, /data-cat-analyze/);
   assert.match(catalysts, /createCatalystAnalysis/);
+  assert.match(catalysts, /重新分析会创建新的分析版本/);
+  assert.match(catalysts, /budgetPolicyText\(\)/);
+  assert.match(catalysts, /manual_refreshes/);
+  assert.match(catalysts, /刷新中 · \$\{elapsed\}秒/);
+  assert.match(catalysts, /稍后可刷新 · \$\{Math\.max\(1, remaining\)\}秒/);
+  assert.match(catalysts, /刷新服务暂不可用/);
+  assert.match(api, /runtimeSettingsHistory/);
+  assert.match(api, /updateRuntimeSettings/);
+  assert.match(api, /rollbackRuntimeSettings/);
+  assert.match(catalysts, /每日系统预算（美元）/);
+  assert.match(catalysts, /固定分析时刻（美东）/);
+  assert.match(catalysts, /运行设置已保存并立即生效/);
   assert.match(app, /data-impact-run/);
   assert.match(app, /createEarningsImpactJob/);
   assert.match(api, /createOptionAlertsJob/);
@@ -88,7 +105,9 @@ test('market-focus cycles are explicit, revision-bound, and never triggered by p
   assert.match(catalysts, /preparedRevision > consumedRevision/);
   assert.match(catalysts, /新热点仍会进入下一准备版本，不会混入当前不可变快照/);
   assert.match(catalysts, /准备版本尚未消费/);
-  assert.match(catalysts, /分析预算未配置/);
+  assert.match(catalysts, /今日分析预算已用完/);
+  assert.match(catalysts, /重新分析当前上下文/);
+  assert.match(catalysts, /force: true/);
   assert.match(catalysts, /普通页面刷新不会创建模型任务/);
   assert.match(catalysts, /不进入正式股票排名、突破评分或市场形态/);
   assert.match(catalysts, /signedScore\(item\.weighted_catalyst_context\)/);
@@ -116,12 +135,13 @@ test('an old unknown market-focus cycle stays immutable while a newer prepared r
   });
   vm.runInContext(catalysts, context, { filename: 'deck-catalysts.js' });
   const desk = context.window.OPTIX_CATALYSTS;
-  const disabledAnalysis = desk.analysisActionDecision(false);
+  const disabledAnalysis = desk.analysisActionDecision(false, { enabled: false, reason: 'read_only_mode' });
   assert.equal(disabledAnalysis.actionMissing, true);
   assert.equal(disabledAnalysis.canTrigger, false);
-  assert.equal(disabledAnalysis.title, '分析功能未启用');
+  assert.equal(disabledAnalysis.title, '当前模式仅供查看');
+  assert.match(disabledAnalysis.detail, /手动分析/);
 
-  const enabledAnalysis = desk.analysisActionDecision(true);
+  const enabledAnalysis = desk.analysisActionDecision(true, { enabled: true, reason: 'available' });
   assert.equal(enabledAnalysis.canTrigger, true);
   assert.equal(enabledAnalysis.title, '尚未生成模型分析');
 
@@ -435,7 +455,7 @@ test('Catalyst confidence uses the contract 0..100 scale and ticker projections 
   assert.equal(desk.analysisOriginLabel({ analysis: { insufficient_context: false, model: 'gpt-5.6-terra' } }), '模型推断');
   assert.equal(desk.analysisRetryForce({ analysis_status: 'completed' }, { status: 'failed' }), true);
   assert.equal(desk.analysisRetryForce({ analysis_status: 'failed' }, { status: 'cancelled' }), true);
-  assert.equal(desk.analysisRetryForce({ analysis_status: 'failed' }, { status: 'completed' }), false);
+  assert.equal(desk.analysisRetryForce({ analysis_status: 'failed' }, { status: 'completed' }), true);
   assert.equal(
     desk.plainText('<p class="lead">US CPI &amp; rates</p><p>Second paragraph.</p>'),
     'US CPI & rates Second paragraph.',
@@ -510,8 +530,8 @@ test('a completed local job can render its validated result before feed publicat
 test('drawer retry follows the current job state and keeps that job bound after rerender', () => {
   assert.match(catalysts, /analysisRetryForce\(item, job\)/);
   assert.match(catalysts, /bindAnalysisActions\(item, job, false, asOf\)/);
-  assert.match(catalysts, /status === "failed" \|\| status === "cancelled"/);
-  assert.match(catalysts, /显式重试分析/);
+  assert.match(catalysts, /\["completed", "insufficient_context", "failed", "cancelled"\]/);
+  assert.match(catalysts, />重新分析<\/button>/);
 });
 
 test('source health uses the v1 counters and treats ok as a healthy state', () => {

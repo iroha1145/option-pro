@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timezone
@@ -15,6 +16,11 @@ from app.services.ai_jobs.models import (
     validate_simplified_chinese_text,
 )
 from app.services.ai_jobs.repository import AIJobRepository
+from app.services.runtime_settings import (
+    RuntimeSettingsStorageError,
+    get_effective_runtime_settings,
+)
+from app.worker.state import WorkerStateRepository
 from app.services.sectors import SECTORS
 
 from .config import CatalystSettings
@@ -91,10 +97,17 @@ class _LocalIntelligence(Protocol):
         *,
         expected_prepared_revision: int | None,
         retry_cycle_id: str | None = None,
+        force: bool = False,
     ) -> dict[str, Any]: ...
     def market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None: ...
     def cancel_market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None: ...
-    def request_refresh(self) -> dict[str, Any]: ...
+    def request_refresh(
+        self,
+        operation_type: Literal["news", "calendar", "source_health"] = "news",
+        *,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]: ...
+    def manual_operation(self, request_id: str) -> dict[str, Any] | None: ...
     def request_analysis(self, news_id: int, *, force: bool) -> dict[str, Any]: ...
     def analysis_job(self, job_id: str) -> dict[str, Any] | None: ...
     def cancel_analysis_job(self, job_id: str) -> dict[str, Any] | None: ...
@@ -123,6 +136,11 @@ class PersonalCatalystService:
             self.personal_config.features.catalyst_mode
         )
         resolved_ai_settings = ai_settings or get_settings()
+        self.ai_settings = resolved_ai_settings
+        try:
+            effective_runtime = get_effective_runtime_settings()
+        except RuntimeSettingsStorageError:
+            effective_runtime = None
         self._ai_repository_injected = ai_repository is not None
         self.ai_repository = ai_repository or AIJobRepository(
             resolved_ai_settings.openai_job_db_path
@@ -142,8 +160,164 @@ class PersonalCatalystService:
                 model=resolved_ai_settings.openai_model,
                 reasoning=resolved_ai_settings.openai_reasoning,
                 max_queued=resolved_ai_settings.openai_job_max_queued,
+                manual_refresh_cooldown_seconds=(
+                    effective_runtime.catalyst.manual_refresh_cooldown_seconds
+                    if effective_runtime is not None
+                    else self.personal_config.catalyst.manual_refresh_cooldown_seconds
+                ),
             )
         self.intelligence = intelligence
+
+    def _effective_runtime(self) -> Any | None:
+        try:
+            return get_effective_runtime_settings()
+        except RuntimeSettingsStorageError:
+            return None
+
+    def _ai_configured(self) -> bool:
+        secret = getattr(self.ai_settings, "openai_api_key", None)
+        if secret is None:
+            return bool(self._ai_repository_injected or self._intelligence_injected)
+        if hasattr(secret, "get_secret_value"):
+            secret = secret.get_secret_value()
+        return bool(str(secret or "").strip())
+
+    def _worker_healthy(self) -> bool:
+        if self._ai_repository_injected or self._intelligence_injected:
+            return True
+        path = Path(os.environ.get("OPTIX_WORKER_DB_PATH", "/data/optix-worker.db"))
+        try:
+            health = WorkerStateRepository(path).health()
+            return bool(
+                health.get("healthy")
+                and str(health.get("status") or "").lower() == "ok"
+            )
+        except (OSError, sqlite3.Error, TypeError, ValueError):
+            return False
+
+    def analysis_availability(
+        self,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        observed = now or _utc_now()
+        runtime_settings = self._effective_runtime()
+        daily_limit = int(
+            runtime_settings.ai.daily_max_jobs
+            if runtime_settings is not None
+            else self.personal_config.ai.daily_max_jobs
+        )
+        daily_budget = float(
+            runtime_settings.ai.daily_budget_usd
+            if runtime_settings is not None
+            else self.personal_config.ai.daily_budget_usd
+        )
+        cooldown_seconds = int(
+            runtime_settings.ai.manual_analysis_cooldown_seconds
+            if runtime_settings is not None
+            else self.personal_config.catalyst.manual_refresh_cooldown_seconds
+        )
+        capacity = {
+            "daily_max_jobs": daily_limit,
+            "daily_budget_usd": daily_budget,
+            "submitted_jobs": 0,
+            "budget_used_usd": 0.0,
+            "budget_remaining_usd": daily_budget,
+            "usage_total_tokens": 0,
+            "budget_available": True,
+            "job_limit_available": True,
+            "dollar_budget_available": True,
+            "concurrency_available": True,
+            "active_job": None,
+            "cooldown_until": None,
+            "cooldown_complete": True,
+        }
+        repository_has_path = hasattr(self.ai_repository, "path")
+        if hasattr(self.ai_repository, "budget_snapshot") and (
+            not repository_has_path or self._ai_store_ready()
+        ):
+            try:
+                capacity.update(
+                    self.ai_repository.budget_snapshot(
+                        daily_limit=daily_limit,
+                        daily_budget_usd=daily_budget,
+                        cooldown_seconds=cooldown_seconds,
+                        now=observed,
+                    )
+                )
+            except (OSError, sqlite3.Error, RuntimeError, TypeError, ValueError):
+                capacity["concurrency_available"] = False
+        mode_enabled = bool(
+            self.mode in _ACTION_MODES
+            and runtime_settings is not None
+            and runtime_settings.ai.manual_analysis_enabled
+        )
+        configured = self._ai_configured()
+        worker_healthy = self._worker_healthy()
+        reason = "available"
+        if runtime_settings is None:
+            reason = "settings_unavailable"
+        elif not mode_enabled:
+            reason = "read_only_mode"
+        elif not configured:
+            reason = "not_configured"
+        elif not worker_healthy:
+            reason = "worker_unavailable"
+        elif not capacity["budget_available"]:
+            reason = "budget_exhausted"
+        elif not capacity["concurrency_available"]:
+            reason = "analysis_in_progress"
+        elif not capacity["cooldown_complete"]:
+            reason = "cooldown_active"
+        enabled = reason == "available"
+        return {
+            "enabled": enabled,
+            "configured": configured,
+            "worker_healthy": worker_healthy,
+            "budget_available": bool(capacity["budget_available"]),
+            "concurrency_available": bool(capacity["concurrency_available"]),
+            "cooldown_complete": bool(capacity["cooldown_complete"]),
+            "reason": reason,
+            **capacity,
+        }
+
+    def _require_analysis_available(self) -> None:
+        availability = self.analysis_availability()
+        if availability["enabled"] or availability["reason"] in {
+            # The durable queue performs the final atomic check. Allowing these
+            # states through preserves duplicate-request idempotency and lets a
+            # task become budget_blocked without a second submission attempt.
+            "budget_exhausted",
+            "analysis_in_progress",
+            "cooldown_active",
+        }:
+            return
+        reason = str(availability["reason"])
+        if reason == "read_only_mode":
+            self._require_action_mode()
+        retry_after: int | None = None
+        if reason == "cooldown_active":
+            until = _parse_utc(availability.get("cooldown_until"))
+            if until is not None:
+                retry_after = max(1, int((until - _utc_now()).total_seconds()) + 1)
+        raise CatalystError(
+            {
+                "not_configured": "ai_not_configured",
+                "worker_unavailable": "worker_unavailable",
+                "budget_exhausted": "daily_budget_usd_reached",
+                "analysis_in_progress": "analysis_in_progress",
+                "cooldown_active": "analysis_cooldown_active",
+                "settings_unavailable": "runtime_settings_unavailable",
+            }.get(reason, "capability_disabled"),
+            "Catalyst analysis is not currently available",
+            retryable=reason in {
+                "worker_unavailable",
+                "analysis_in_progress",
+                "cooldown_active",
+            },
+            retry_after_seconds=retry_after,
+            counts_for_circuit=False,
+        )
 
     @property
     def action_enabled(self) -> bool:
@@ -539,7 +713,7 @@ class PersonalCatalystService:
     def status(self, *, now: datetime | None = None) -> dict[str, Any]:
         observed = now or _utc_now()
         if self.mode == "off":
-            return {
+            payload = {
                 "enabled": False,
                 "status": "disabled",
                 "as_of": _iso(observed),
@@ -549,10 +723,13 @@ class PersonalCatalystService:
                 "model": self.settings.model,
                 "reasoning": self.settings.reasoning,
                 "execution_mode": "background",
+                "manual_refreshes": {},
                 "warnings": [],
             }
+            payload["analysis_availability"] = self.analysis_availability(now=observed)
+            return payload
         if not self._cache_file_ready():
-            return {
+            payload = {
                 "enabled": True,
                 "status": "unavailable",
                 "as_of": _iso(observed),
@@ -564,14 +741,17 @@ class PersonalCatalystService:
                 "model": self.settings.model,
                 "reasoning": self.settings.reasoning,
                 "execution_mode": "background",
+                "manual_refreshes": {},
                 "warnings": ["cache_unavailable"],
             }
+            payload["analysis_availability"] = self.analysis_availability(now=observed)
+            return payload
         try:
             payload = dict(self.intelligence.status(now=observed))
         except Exception as error:
             if not self._is_local_store_error(error):
                 raise
-            return {
+            payload = {
                 "enabled": True,
                 "status": "unavailable",
                 "as_of": _iso(observed),
@@ -583,21 +763,25 @@ class PersonalCatalystService:
                 "model": self.settings.model,
                 "reasoning": self.settings.reasoning,
                 "execution_mode": "background",
+                "manual_refreshes": {},
                 "warnings": ["cache_unavailable"],
             }
+            payload["analysis_availability"] = self.analysis_availability(now=observed)
+            return payload
         payload["analysis_trigger_enabled"] = bool(
             self.action_enabled and payload.get("analysis_trigger_enabled", True)
         )
         payload["action_enabled"] = bool(
             self.action_enabled and payload.get("action_enabled", True)
         )
+        payload["analysis_availability"] = self.analysis_availability(now=observed)
         return payload
 
     def feed(self, **kwargs: Any) -> dict[str, Any]:
         observed = kwargs.get("as_of") or _utc_now()
         status = self.status(now=observed)
         if status["status"] in {"disabled", "unavailable"}:
-            return {
+            payload = {
                 "status": status["status"],
                 "as_of": status["as_of"],
                 "data_through": status.get("data_through"),
@@ -615,6 +799,11 @@ class PersonalCatalystService:
                 "has_more": False,
                 "warnings": status.get("warnings", []),
             }
+            payload["analysis_availability"] = status.get(
+                "analysis_availability",
+                self.analysis_availability(now=observed),
+            )
+            return payload
         try:
             payload = self.intelligence.feed(**kwargs)
         except Exception as error:
@@ -658,6 +847,7 @@ class PersonalCatalystService:
         projected["analysis_trigger_enabled"] = bool(
             self.action_enabled and projected.get("analysis_trigger_enabled", True)
         )
+        projected["analysis_availability"] = self.analysis_availability(now=as_of)
         return projected
 
     def ticker(self, ticker: str, **kwargs: Any) -> dict[str, Any]:
@@ -752,11 +942,53 @@ class PersonalCatalystService:
                 "warnings": ["cache_unavailable"],
             }
 
-    def request_refresh(self) -> dict[str, Any]:
+    def request_refresh(
+        self,
+        operation_type: Literal["news", "calendar", "source_health"] = "news",
+        *,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
         self._require_action_mode()
         self._require_cache_ready()
+        runtime_settings = self._effective_runtime()
+        if runtime_settings is None or not runtime_settings.catalyst.manual_refresh_enabled:
+            raise CatalystError(
+                "runtime_settings_unavailable"
+                if runtime_settings is None
+                else "capability_disabled",
+                "Manual Catalyst refresh is disabled",
+                retryable=False,
+                counts_for_circuit=False,
+            )
+        if not self._worker_healthy():
+            raise CatalystError(
+                "worker_unavailable",
+                "Catalyst refresh worker is unavailable",
+                retryable=True,
+                counts_for_circuit=False,
+            )
+        if hasattr(self.intelligence, "manual_refresh_cooldown_seconds"):
+            self.intelligence.manual_refresh_cooldown_seconds = int(
+                runtime_settings.catalyst.manual_refresh_cooldown_seconds
+            )
         try:
-            return self.intelligence.request_refresh()
+            if operation_type == "news" and idempotency_key is None:
+                return self.intelligence.request_refresh()
+            return self.intelligence.request_refresh(
+                operation_type,
+                idempotency_key=idempotency_key,
+            )
+        except Exception as error:
+            if self._is_local_store_error(error):
+                raise self._cache_unavailable() from error
+            raise
+
+    def manual_operation(self, request_id: str) -> dict[str, Any] | None:
+        if self.mode == "off":
+            return None
+        self._require_cache_ready()
+        try:
+            return self.intelligence.manual_operation(request_id)
         except Exception as error:
             if self._is_local_store_error(error):
                 raise self._cache_unavailable() from error
@@ -766,7 +998,7 @@ class PersonalCatalystService:
         observed = now or _utc_now()
         status = self.status(now=observed)
         if status["status"] in {"disabled", "unavailable"}:
-            return {
+            payload = {
                 "prepared_revision": 0,
                 "last_consumed_revision": 0,
                 "prepared_hot_count": 0,
@@ -784,11 +1016,16 @@ class PersonalCatalystService:
                 "capability": "disabled",
                 "warnings": status.get("warnings", []),
             }
+            payload["analysis_availability"] = status.get(
+                "analysis_availability",
+                self.analysis_availability(now=observed),
+            )
+            return payload
         try:
             payload = dict(self.intelligence.hotspot_status(now=observed))
         except Exception as error:
             if self._is_local_store_error(error):
-                return {
+                payload = {
                     "prepared_revision": 0,
                     "last_consumed_revision": 0,
                     "prepared_hot_count": 0,
@@ -806,6 +1043,10 @@ class PersonalCatalystService:
                     "capability": "disabled",
                     "warnings": ["cache_unavailable"],
                 }
+                payload["analysis_availability"] = self.analysis_availability(
+                    now=observed
+                )
+                return payload
             raise
         payload["manual_enabled"] = bool(
             self.action_enabled and payload.get("manual_enabled", True)
@@ -815,6 +1056,7 @@ class PersonalCatalystService:
         )
         if not self.action_enabled:
             payload["capability"] = "disabled"
+        payload["analysis_availability"] = self.analysis_availability(now=observed)
         return payload
 
     def hotspots(
@@ -878,14 +1120,30 @@ class PersonalCatalystService:
         *,
         expected_prepared_revision: int | None,
         retry_cycle_id: str | None = None,
+        force: bool = False,
     ) -> dict[str, Any]:
         self._require_action_mode()
         self._require_cache_ready()
-        try:
-            return self.intelligence.request_market_focus_cycle(
-                expected_prepared_revision=expected_prepared_revision,
-                retry_cycle_id=retry_cycle_id,
+        self._require_analysis_available()
+        runtime_settings = self._effective_runtime()
+        if force and (
+            runtime_settings is None
+            or not runtime_settings.catalyst.manual_force_reanalysis
+        ):
+            raise CatalystError(
+                "capability_disabled",
+                "Forced market focus reanalysis is disabled",
+                retryable=False,
+                counts_for_circuit=False,
             )
+        try:
+            arguments = {
+                "expected_prepared_revision": expected_prepared_revision,
+                "retry_cycle_id": retry_cycle_id,
+            }
+            if force:
+                arguments["force"] = True
+            return self.intelligence.request_market_focus_cycle(**arguments)
         except Exception as error:
             if self._is_local_store_error(error):
                 raise self._cache_unavailable() from error
@@ -917,6 +1175,7 @@ class PersonalCatalystService:
     def request_analysis(self, news_id: int, *, force: bool) -> dict[str, Any]:
         self._require_action_mode()
         self._require_cache_ready()
+        self._require_analysis_available()
         try:
             return self.intelligence.request_analysis(news_id, force=force)
         except Exception as error:

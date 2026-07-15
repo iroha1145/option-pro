@@ -31,8 +31,10 @@ SUMMARY_WAITING = "中文摘要等待生成"
 HOTSPOT_WAITING = "热点标题等待中文分析"
 AMBIGUOUS_TICKERS = frozenset({"AI", "ON", "CAT"})
 TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-^]{0,11}$")
-SCHEMA_VERSION = "optix-local-catalyst-v1"
+SCHEMA_VERSION = "optix-local-catalyst-v2"
 SCHEDULE_CLAIM_TTL_SECONDS = 10 * 60
+MANUAL_REFRESH_CLAIM_TTL_SECONDS = 10 * 60
+MANUAL_REFRESH_TYPES = ("news", "calendar", "source_health")
 
 
 _SCHEMA = """
@@ -148,6 +150,25 @@ CREATE TABLE IF NOT EXISTS catalyst_local_refresh_requests (
     consumed_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS catalyst_local_manual_operations (
+    request_id TEXT PRIMARY KEY,
+    operation_type TEXT NOT NULL CHECK(operation_type IN (
+        'news','calendar','source_health'
+    )),
+    idempotency_key TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN (
+        'queued','running','completed','failed'
+    )),
+    requested_at TEXT NOT NULL,
+    started_at TEXT,
+    completed_at TEXT,
+    cooldown_until TEXT,
+    error_code TEXT,
+    UNIQUE(operation_type,idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS idx_local_manual_operations_due
+    ON catalyst_local_manual_operations(status,requested_at);
+
 CREATE TABLE IF NOT EXISTS catalyst_local_schedule_runs (
     slot_key TEXT PRIMARY KEY,
     scheduled_for TEXT NOT NULL,
@@ -186,6 +207,11 @@ def _parse_time(value: str | None) -> datetime | None:
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         return None
     return parsed.astimezone(timezone.utc)
+
+
+def _minute_bucket(value: datetime) -> str:
+    observed = value.astimezone(timezone.utc).replace(second=0, microsecond=0)
+    return _iso(observed)
 
 
 def _json(value: Any) -> str:
@@ -352,6 +378,7 @@ class LocalCatalystIntelligence:
         model: str = MODEL,
         reasoning: str = REASONING,
         max_queued: int = 200,
+        manual_refresh_cooldown_seconds: int = 30,
     ) -> None:
         if mode not in {"off", "read", "manual", "scheduled"}:
             raise ValueError("invalid catalyst mode")
@@ -365,6 +392,14 @@ class LocalCatalystIntelligence:
         self.model = model
         self.reasoning = reasoning
         self.max_queued = max_queued
+        if (
+            isinstance(manual_refresh_cooldown_seconds, bool)
+            or not 0 <= int(manual_refresh_cooldown_seconds) <= 3600
+        ):
+            raise ValueError("manual refresh cooldown is invalid")
+        self.manual_refresh_cooldown_seconds = int(
+            manual_refresh_cooldown_seconds
+        )
         normalized = {
             str(value).strip().upper()
             for value in canonical_tickers
@@ -1004,6 +1039,7 @@ class LocalCatalystIntelligence:
                 "schema_version": SCHEMA_VERSION,
                 "sources": [],
                 "streams": {},
+                "manual_refreshes": self._empty_manual_refreshes("disabled"),
                 "warnings": [],
             }
         if not self.db_path.is_file():
@@ -1023,6 +1059,7 @@ class LocalCatalystIntelligence:
                 "schema_version": SCHEMA_VERSION,
                 "sources": [],
                 "streams": {},
+                "manual_refreshes": self._empty_manual_refreshes("unavailable"),
                 "warnings": ["cache_unavailable"],
             }
         try:
@@ -1045,6 +1082,10 @@ class LocalCatalystIntelligence:
         successes = [str(row["last_success_at"]) for row in states if row["last_success_at"]]
         through = [str(row["completed_as_of"]) for row in states if row["completed_as_of"]]
         ready = bool(states) and all(row["last_success_at"] for row in states)
+        try:
+            manual_refreshes = self.manual_refresh_statuses(now=observed)
+        except sqlite3.Error:
+            manual_refreshes = self._empty_manual_refreshes("unavailable")
         return {
             "enabled": True,
             "status": "active" if ready else "degraded",
@@ -1061,6 +1102,7 @@ class LocalCatalystIntelligence:
             "schema_version": SCHEMA_VERSION,
             "sources": [],
             "streams": streams,
+            "manual_refreshes": manual_refreshes,
             "warnings": [] if ready else ["first_sync_pending"],
         }
 
@@ -1173,11 +1215,34 @@ class LocalCatalystIntelligence:
                 row,
                 as_of=as_of,
             )
+            history_links = connection.execute(
+                """SELECT job_id FROM catalyst_local_analysis_links
+                   WHERE news_id=? AND change_sequence=? AND content_hash=?
+                     AND created_at<=?
+                   ORDER BY created_at DESC,job_id DESC""",
+                (
+                    row["news_id"],
+                    row["change_sequence"],
+                    row["content_hash"],
+                    _iso(as_of),
+                ),
+            ).fetchall()
+        analysis_revisions: list[dict[str, Any]] = []
+        for link in history_links:
+            job = self._read_ai_job(str(link["job_id"]))
+            public = self._verified_public_job(job, expected_type="news_impact")
+            if public is None or public.get("status") != "completed":
+                continue
+            completed_at = _parse_time(str(public.get("completed_at") or ""))
+            if completed_at is None or completed_at > as_of:
+                continue
+            analysis_revisions.append(public)
         return {
             "status": "active",
             "as_of": _iso(as_of),
             "item": item,
             "analysis_job": detail_job,
+            "analysis_revisions": analysis_revisions,
             "analysis_trigger_enabled": self.mode in {"manual", "scheduled"},
         }
 
@@ -1291,12 +1356,26 @@ class LocalCatalystIntelligence:
                    WHERE created_at<=? ORDER BY created_at DESC LIMIT 1""",
                 (_iso(observed),),
             ).fetchone()
+            consumed_cycle = connection.execute(
+                """SELECT MAX(prepared_revision) AS prepared_revision
+                   FROM catalyst_local_focus_cycles
+                   WHERE status='completed' AND completed_at<=?
+                     AND COALESCE(json_extract(payload_json,'$.force'),0)=0
+                """,
+                (_iso(observed),),
+            ).fetchone()
         prepared_revision = int(revision["prepared_revision"]) if revision else 0
-        last_consumed = int(last_cycle["prepared_revision"]) if last_cycle else 0
+        last_consumed = (
+            int(consumed_cycle["prepared_revision"])
+            if consumed_cycle is not None
+            and consumed_cycle["prepared_revision"] is not None
+            else 0
+        )
         count = int(revision["item_count"]) if revision else 0
         return {
             "prepared_revision": prepared_revision,
             "last_consumed_revision": last_consumed,
+            "has_new_hotspots": prepared_revision > last_consumed and count > 0,
             "prepared_hot_count": count,
             "prepared_since": revision["prepared_at"] if revision else None,
             "last_cycle_at": last_cycle["created_at"] if last_cycle else None,
@@ -1425,7 +1504,8 @@ class LocalCatalystIntelligence:
     ) -> dict[str, Any]:
         if self.mode not in {"manual", "scheduled"}:
             raise CatalystError("capability_disabled", "News analysis is disabled in read mode", counts_for_circuit=False)
-        row = self._current_revision(news_id, now=as_of)
+        observed = as_of or _utc_now()
+        row = self._current_revision(news_id, now=observed)
         if row is None:
             raise CatalystError("news_not_found", "News item is not in the local ETL store", counts_for_circuit=False)
         if (
@@ -1454,7 +1534,47 @@ class LocalCatalystIntelligence:
             "source_count": int(row.get("source_count") or 1),
             "source_ticker_hints": _loads(row.get("source_tickers_json"), []),
             "allowed_tickers": list(row.get("canonical_tickers") or []),
+            "analysis_revision": 1,
         }
+        scheduled_retry = bool(
+            force
+            and expected_change_sequence is not None
+            and expected_content_hash is not None
+        )
+        if force and not scheduled_retry:
+            bucket = _minute_bucket(observed)
+            with self._connect() as connection:
+                links = connection.execute(
+                    """SELECT job_id FROM catalyst_local_analysis_links
+                       WHERE news_id=? AND change_sequence=? AND content_hash=?
+                       ORDER BY created_at,job_id""",
+                    (
+                        row["news_id"],
+                        row["change_sequence"],
+                        row["content_hash"],
+                    ),
+                ).fetchall()
+            highest_revision = 1 if links else 0
+            for link in links:
+                linked_job = self.ai_repository.get_job(str(link["job_id"]))
+                if linked_job is None:
+                    continue
+                linked_payload = self._job_payload(linked_job) or {}
+                revision_value = linked_payload.get("analysis_revision")
+                if isinstance(revision_value, int) and revision_value >= 1:
+                    highest_revision = max(highest_revision, revision_value)
+                public = self._identity_public_job(
+                    linked_job,
+                    expected_type="news_impact",
+                )
+                if public is None:
+                    continue
+                if public["status"] in {"pending", "queued", "in_progress"}:
+                    return public
+                if linked_payload.get("manual_force_bucket") == bucket:
+                    return public
+            payload["analysis_revision"] = highest_revision + 1
+            payload["manual_force_bucket"] = bucket
         schema_version, schema_hash = ai_runtime.schema_identity("news_impact")
         job, created = self.ai_repository.create_job(
             job_type="news_impact",
@@ -1467,7 +1587,9 @@ class LocalCatalystIntelligence:
             schema_sha256=schema_hash,
             max_queued=self.max_queued,
             priority=70,
-            force_retry=force,
+            # A forced request is a new immutable analysis revision. The
+            # minute bucket above keeps repeated confirmation clicks idempotent.
+            force_retry=scheduled_retry,
         )
         with self._connect() as connection:
             connection.execute(
@@ -1763,6 +1885,7 @@ class LocalCatalystIntelligence:
         self,
         revision: int,
         *,
+        force: bool = False,
         as_of: datetime | None = None,
     ) -> dict[str, Any]:
         revision_row, items = self._hotspots_for_revision(revision, limit=20)
@@ -1806,20 +1929,50 @@ class LocalCatalystIntelligence:
             "allowed_event_group_ids": allowed_events,
             "allowed_tickers": allowed_tickers,
             "events": event_snapshot,
+            "force": bool(force),
         }
+        force_bucket = _minute_bucket(observed) if force else None
+        if force_bucket is not None:
+            payload["force_bucket"] = force_bucket
         schema_version, schema_hash = ai_runtime.schema_identity("market_focus")
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
-                existing = connection.execute(
-                    """SELECT cycle_id FROM catalyst_local_focus_cycles
-                       WHERE prepared_revision=?
-                       ORDER BY created_at DESC LIMIT 1""",
-                    (revision,),
-                ).fetchone()
+                if force:
+                    existing = connection.execute(
+                        """SELECT cycle_id FROM catalyst_local_focus_cycles
+                           WHERE prepared_revision=?
+                             AND json_extract(payload_json,'$.force_bucket')=?
+                           ORDER BY created_at DESC LIMIT 1""",
+                        (revision, force_bucket),
+                    ).fetchone()
+                else:
+                    existing = connection.execute(
+                        """SELECT cycle_id FROM catalyst_local_focus_cycles
+                           WHERE prepared_revision=?
+                             AND COALESCE(json_extract(payload_json,'$.force'),0)=0
+                           ORDER BY created_at DESC LIMIT 1""",
+                        (revision,),
+                    ).fetchone()
                 if existing is not None:
                     connection.commit()
                     return self._cycle_with_job(str(existing["cycle_id"]))
+                active = connection.execute(
+                    """SELECT cycle_id FROM catalyst_local_focus_cycles
+                       WHERE status IN ('pending','queued','in_progress')
+                       ORDER BY created_at LIMIT 1"""
+                ).fetchone()
+                if active is not None:
+                    connection.commit()
+                    return self._cycle_with_job(str(active["cycle_id"]))
+                revision_count = int(
+                    connection.execute(
+                        """SELECT COUNT(*) FROM catalyst_local_focus_cycles
+                           WHERE prepared_revision=?""",
+                        (revision,),
+                    ).fetchone()[0]
+                )
+                payload["cycle_revision"] = revision_count + 1
                 job, created = self.ai_repository.create_job(
                     job_type="market_focus",
                     payload=payload,
@@ -1938,11 +2091,18 @@ class LocalCatalystIntelligence:
         *,
         expected_prepared_revision: int | None,
         retry_cycle_id: str | None = None,
+        force: bool = False,
         as_of: datetime | None = None,
     ) -> dict[str, Any]:
         if self.mode not in {"manual", "scheduled"}:
             raise CatalystError("capability_disabled", "Market focus is disabled in read mode", counts_for_circuit=False)
         if retry_cycle_id:
+            if force:
+                raise CatalystError(
+                    "invalid_market_focus_request",
+                    "A retry cannot also be a forced cycle",
+                    counts_for_circuit=False,
+                )
             return self._retry_focus(retry_cycle_id)
         observed = as_of or _utc_now()
         status = self.hotspot_status(now=observed)
@@ -1950,7 +2110,17 @@ class LocalCatalystIntelligence:
             raise CatalystError("invalid_market_focus_request", "Prepared revision is required", counts_for_circuit=False)
         if int(status["prepared_revision"]) != expected_prepared_revision:
             raise CatalystError("prepared_revision_changed", "Prepared hotspot revision changed", counts_for_circuit=False)
-        return self._enqueue_focus(expected_prepared_revision, as_of=observed)
+        if force and bool(status.get("has_new_hotspots")):
+            raise CatalystError(
+                "invalid_market_focus_request",
+                "Forced reanalysis requires an already-consumed prepared revision",
+                counts_for_circuit=False,
+            )
+        return self._enqueue_focus(
+            expected_prepared_revision,
+            force=force,
+            as_of=observed,
+        )
 
     def market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
         with self._connect() as connection:
@@ -1961,13 +2131,26 @@ class LocalCatalystIntelligence:
             return None
         payload = dict(row)
         result = _loads(payload.pop("result_json"), None)
-        payload.pop("payload_json", None)
+        cycle_payload = _loads(payload.pop("payload_json", None), {})
+        linked_job = self.ai_repository.get_job(str(payload["job_id"]))
+        public_job = self._identity_public_job(
+            linked_job,
+            expected_type="market_focus",
+        )
+        cancel_requested = bool(
+            public_job and public_job.get("cancel_requested")
+        )
         payload.update(
             {
+                "status": "cancel_requested" if cancel_requested else payload["status"],
+                "cancel_requested": cancel_requested,
                 "no_new_hot_events": False,
                 "focus_revision": payload["prepared_revision"],
-                "event_group_count": len(_loads(row["payload_json"], {}).get("allowed_event_group_ids", [])),
-                "focus_symbol_count": len(_loads(row["payload_json"], {}).get("allowed_tickers", [])),
+                "cycle_revision": int(cycle_payload.get("cycle_revision") or 1),
+                "force": bool(cycle_payload.get("force")),
+                "consumes_prepared_revision": not bool(cycle_payload.get("force")),
+                "event_group_count": len(cycle_payload.get("allowed_event_group_ids", [])),
+                "focus_symbol_count": len(cycle_payload.get("allowed_tickers", [])),
                 "model": self.model,
                 "reasoning_effort": self.reasoning,
                 "result": result,
@@ -1983,7 +2166,19 @@ class LocalCatalystIntelligence:
                    WHERE created_at<=? ORDER BY created_at DESC LIMIT 1""",
                 (_iso(observed),),
             ).fetchone()
+            successful_row = connection.execute(
+                """SELECT cycle_id FROM catalyst_local_focus_cycles
+                   WHERE status='completed' AND result_json IS NOT NULL
+                     AND completed_at<=?
+                   ORDER BY completed_at DESC,created_at DESC LIMIT 1""",
+                (_iso(observed),),
+            ).fetchone()
         cycle = self.market_focus_cycle(str(row["cycle_id"])) if row else None
+        latest_successful_cycle = (
+            self.market_focus_cycle(str(successful_row["cycle_id"]))
+            if successful_row is not None
+            else None
+        )
         if (
             cycle is not None
             and cycle.get("completed_at")
@@ -1998,6 +2193,7 @@ class LocalCatalystIntelligence:
             "as_of": _iso(observed),
             "data_through": self.hotspot_status(now=observed).get("data_through"),
             "cycle": cycle,
+            "latest_successful_cycle": latest_successful_cycle,
             "warnings": [],
         }
 
@@ -2018,32 +2214,269 @@ class LocalCatalystIntelligence:
                 connection.commit()
         return self.market_focus_cycle(cycle_id)
 
-    def request_refresh(self) -> dict[str, Any]:
-        request_id = "refresh_" + uuid.uuid4().hex
-        with self._connect() as connection:
-            connection.execute(
-                "INSERT INTO catalyst_local_refresh_requests(request_id,requested_at) VALUES(?,?)",
-                (request_id, _iso()),
-            )
-            connection.commit()
-        return {"request_id": request_id, "status": "queued"}
+    @staticmethod
+    def _manual_operation_public(
+        row: sqlite3.Row | dict[str, Any],
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        payload = dict(row)
+        payload.pop("idempotency_key", None)
+        observed = now or _utc_now()
+        cooldown_until = _parse_time(payload.get("cooldown_until"))
+        cooldown_active = bool(
+            cooldown_until is not None and cooldown_until > observed
+        )
+        payload["cooldown_active"] = cooldown_active
+        payload["retry_after_seconds"] = (
+            max(1, int((cooldown_until - observed).total_seconds()) + 1)
+            if cooldown_active and cooldown_until is not None
+            else None
+        )
+        if (
+            payload.get("status") == "completed"
+            and cooldown_active
+        ):
+            payload["status"] = "cooldown"
+        return payload
 
-    def consume_refresh_requested(self) -> bool:
+    @staticmethod
+    def _recover_stale_manual_operations(
+        connection: sqlite3.Connection,
+        *,
+        now: datetime,
+    ) -> int:
+        cutoff = _iso(
+            now - timedelta(seconds=MANUAL_REFRESH_CLAIM_TTL_SECONDS)
+        )
+        return int(
+            connection.execute(
+                """UPDATE catalyst_local_manual_operations
+                   SET status='queued',started_at=NULL,completed_at=NULL,
+                       cooldown_until=NULL,error_code=NULL
+                   WHERE status='running'
+                     AND (started_at IS NULL OR started_at<=?)""",
+                (cutoff,),
+            ).rowcount
+        )
+
+    @staticmethod
+    def _empty_manual_refreshes(status: str = "idle") -> dict[str, dict[str, Any]]:
+        return {
+            operation_type: {
+                "operation_type": operation_type,
+                "status": status,
+                "request_id": None,
+                "requested_at": None,
+                "started_at": None,
+                "completed_at": None,
+                "cooldown_until": None,
+                "cooldown_active": False,
+                "retry_after_seconds": None,
+                "error_code": None,
+            }
+            for operation_type in MANUAL_REFRESH_TYPES
+        }
+
+    def manual_refresh_statuses(
+        self,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        observed = now or _utc_now()
+        output = self._empty_manual_refreshes()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            self._recover_stale_manual_operations(connection, now=observed)
+            for operation_type in MANUAL_REFRESH_TYPES:
+                row = connection.execute(
+                    """SELECT * FROM catalyst_local_manual_operations
+                       WHERE operation_type=?
+                       ORDER BY requested_at DESC,request_id DESC LIMIT 1""",
+                    (operation_type,),
+                ).fetchone()
+                if row is not None:
+                    output[operation_type] = self._manual_operation_public(
+                        row,
+                        now=observed,
+                    )
+            connection.commit()
+        return output
+
+    def request_refresh(
+        self,
+        operation_type: Literal["news", "calendar", "source_health"] = "news",
+        *,
+        idempotency_key: str | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        if operation_type not in {"news", "calendar", "source_health"}:
+            raise CatalystError(
+                "invalid_refresh_type",
+                "Unsupported Catalyst refresh type",
+                counts_for_circuit=False,
+            )
+        observed = now or _utc_now()
+        normalized_key = str(idempotency_key or "").strip()
+        if normalized_key and (
+            len(normalized_key) > 128
+            or re.fullmatch(r"[A-Za-z0-9._:-]+", normalized_key) is None
+        ):
+            raise CatalystError(
+                "invalid_idempotency_key",
+                "Refresh idempotency key is invalid",
+                counts_for_circuit=False,
+            )
+        if not normalized_key:
+            window = max(1, self.manual_refresh_cooldown_seconds or 30)
+            bucket = int(observed.timestamp()) // window
+            normalized_key = f"auto:{operation_type}:{bucket}"
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._recover_stale_manual_operations(connection, now=observed)
+            active = connection.execute(
+                """SELECT * FROM catalyst_local_manual_operations
+                   WHERE operation_type=? AND status IN ('queued','running')
+                   ORDER BY requested_at LIMIT 1""",
+                (operation_type,),
+            ).fetchone()
+            if active is not None:
+                connection.commit()
+                return self._manual_operation_public(active, now=observed)
+            latest = connection.execute(
+                """SELECT * FROM catalyst_local_manual_operations
+                   WHERE operation_type=? ORDER BY requested_at DESC LIMIT 1""",
+                (operation_type,),
+            ).fetchone()
+            if latest is not None:
+                cooldown_until = _parse_time(latest["cooldown_until"])
+                if cooldown_until is not None and cooldown_until > observed:
+                    connection.commit()
+                    return self._manual_operation_public(latest, now=observed)
+            request_id = "refresh_" + uuid.uuid4().hex
+            try:
+                connection.execute(
+                    """INSERT INTO catalyst_local_manual_operations(
+                           request_id,operation_type,idempotency_key,status,
+                           requested_at
+                       ) VALUES(?,?,?,?,?)""",
+                    (
+                        request_id,
+                        operation_type,
+                        normalized_key,
+                        "queued",
+                        _iso(observed),
+                    ),
+                )
+            except sqlite3.IntegrityError:
+                duplicate = connection.execute(
+                    """SELECT * FROM catalyst_local_manual_operations
+                       WHERE operation_type=? AND idempotency_key=?""",
+                    (operation_type, normalized_key),
+                ).fetchone()
+                connection.commit()
+                if duplicate is None:
+                    raise
+                return self._manual_operation_public(duplicate, now=observed)
+            created = connection.execute(
+                """SELECT * FROM catalyst_local_manual_operations
+                   WHERE request_id=?""",
+                (request_id,),
+            ).fetchone()
+            connection.commit()
+        assert created is not None
+        return self._manual_operation_public(created, now=observed)
+
+    def manual_operation(self, request_id: str) -> dict[str, Any] | None:
+        observed = _utc_now()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._recover_stale_manual_operations(connection, now=observed)
             row = connection.execute(
-                """SELECT request_id FROM catalyst_local_refresh_requests
-                   WHERE consumed_at IS NULL ORDER BY requested_at LIMIT 1"""
+                """SELECT * FROM catalyst_local_manual_operations
+                   WHERE request_id=?""",
+                (request_id,),
+            ).fetchone()
+            connection.commit()
+        return (
+            self._manual_operation_public(row, now=observed)
+            if row is not None
+            else None
+        )
+
+    def consume_refresh_requested(self) -> dict[str, Any] | None:
+        observed = _utc_now()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._recover_stale_manual_operations(connection, now=observed)
+            row = connection.execute(
+                """SELECT * FROM catalyst_local_manual_operations
+                   WHERE status='queued' ORDER BY requested_at LIMIT 1"""
             ).fetchone()
             if row is None:
                 connection.commit()
-                return False
-            connection.execute(
-                "UPDATE catalyst_local_refresh_requests SET consumed_at=? WHERE request_id=?",
-                (_iso(), row["request_id"]),
-            )
+                return None
+            started_at = _iso(observed)
+            updated = connection.execute(
+                """UPDATE catalyst_local_manual_operations
+                   SET status='running',started_at=?
+                   WHERE request_id=? AND status='queued'""",
+                (started_at, row["request_id"]),
+            ).rowcount
+            current = connection.execute(
+                """SELECT * FROM catalyst_local_manual_operations
+                   WHERE request_id=?""",
+                (row["request_id"],),
+            ).fetchone()
             connection.commit()
-            return True
+        return (
+            self._manual_operation_public(current)
+            if updated == 1 and current is not None
+            else None
+        )
+
+    def complete_refresh_request(
+        self,
+        request_id: str,
+        *,
+        error_code: str | None = None,
+    ) -> dict[str, Any] | None:
+        completed_at = _utc_now()
+        cooldown_until = completed_at + timedelta(
+            seconds=self.manual_refresh_cooldown_seconds
+        )
+        status = "failed" if error_code else "completed"
+        safe_error = (
+            str(error_code)[:120]
+            if error_code and str(error_code).replace("_", "").isalnum()
+            else "refresh_failed"
+            if error_code
+            else None
+        )
+        with self._connect() as connection:
+            connection.execute(
+                """UPDATE catalyst_local_manual_operations SET
+                       status=?,completed_at=?,cooldown_until=?,error_code=?
+                   WHERE request_id=? AND status='running'""",
+                (
+                    status,
+                    _iso(completed_at),
+                    _iso(cooldown_until),
+                    safe_error,
+                    request_id,
+                ),
+            )
+            row = connection.execute(
+                """SELECT * FROM catalyst_local_manual_operations
+                   WHERE request_id=?""",
+                (request_id,),
+            ).fetchone()
+            connection.commit()
+        return (
+            self._manual_operation_public(row, now=completed_at)
+            if row is not None
+            else None
+        )
 
     def import_verified_legacy_rows(self, rows: Iterable[dict[str, Any]]) -> dict[str, int]:
         """Import only exact current-identity, current-schema Chinese results."""

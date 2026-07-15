@@ -80,6 +80,12 @@ class Settings(BaseSettings):
         le=100.0,
         alias="OPENAI_DAILY_BUDGET_USD",
     )
+    openai_manual_cooldown_seconds: int = Field(
+        default=_PERSONAL_CONFIG.catalyst.manual_refresh_cooldown_seconds,
+        ge=0,
+        le=3600,
+        alias="OPENAI_MANUAL_COOLDOWN_SECONDS",
+    )
     openai_execution_mode: Literal["background"] = Field(
         default=_PERSONAL_CONFIG.ai.execution_mode,
         alias="OPENAI_EXECUTION_MODE",

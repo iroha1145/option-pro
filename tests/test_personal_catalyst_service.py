@@ -426,6 +426,17 @@ def test_action_modes_only_delegate_explicit_calls(mode: str) -> None:
     ]
 
 
+def test_manual_refresh_fails_closed_when_worker_is_unavailable(monkeypatch) -> None:
+    engine = FakeIntelligence()
+    service = _service("manual", engine=engine)
+    monkeypatch.setattr(service, "_worker_healthy", lambda: False)
+
+    with pytest.raises(CatalystError, match="worker_unavailable"):
+        service.request_refresh()
+
+    assert engine.actions == []
+
+
 def test_analysis_job_endpoint_is_limited_to_news_jobs() -> None:
     news_id = "aij_" + "n" * 32
     other_id = "aij_" + "o" * 32

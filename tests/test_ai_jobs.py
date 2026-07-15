@@ -14,7 +14,7 @@ from pydantic import SecretStr, ValidationError
 
 from app.api import ai
 from app.config import Settings
-from app.services.ai_jobs import runtime
+from app.services.ai_jobs import runtime, worker as ai_worker
 from app.services.ai_jobs.models import validate_result
 from app.services.ai_jobs.repository import AIJobRepository
 from app.services.ai_jobs.security import require_expensive_action
@@ -124,6 +124,251 @@ def _large_signal_result():
         "data_quality_notes": twelve,
         "summary": "结" * 1200,
     }
+
+
+def test_standalone_worker_reads_fresh_runtime_controls_each_iteration(
+    tmp_path,
+    monkeypatch,
+):
+    class CopyableSettings(SimpleNamespace):
+        def model_copy(self, *, update):
+            values = dict(vars(self))
+            values.update(update)
+            return CopyableSettings(**values)
+
+    settings = CopyableSettings(**vars(_settings(tmp_path / "ai-jobs.db")))
+    effective = SimpleNamespace(
+        ai=SimpleNamespace(
+            daily_max_jobs=3,
+            daily_budget_usd=1.25,
+            manual_analysis_cooldown_seconds=45,
+            manual_analysis_enabled=True,
+        ),
+        catalyst=SimpleNamespace(scheduled_analysis_enabled=False),
+    )
+    seen = []
+
+    monkeypatch.setattr(
+        "app.services.runtime_settings.get_effective_runtime_settings",
+        lambda: effective,
+    )
+
+    async def capture(
+        _repository,
+        worker_settings,
+        _owner,
+        *,
+        allow_new_submissions,
+        new_submission_block_reason,
+    ):
+        seen.append(
+            (
+                worker_settings.openai_daily_max_jobs,
+                worker_settings.openai_daily_budget_usd,
+                worker_settings.openai_manual_cooldown_seconds,
+                allow_new_submissions,
+                new_submission_block_reason,
+            )
+        )
+        return 0
+
+    monkeypatch.setattr(ai_worker, "run_once", capture)
+    repository = AIJobRepository(settings.openai_job_db_path)
+
+    first = asyncio.run(
+        ai_worker.run_configured_once(repository, settings, "standalone")
+    )
+    effective.ai.daily_budget_usd = 1.0
+    second = asyncio.run(
+        ai_worker.run_configured_once(repository, settings, "standalone")
+    )
+    effective.ai.manual_analysis_enabled = False
+    third = asyncio.run(
+        ai_worker.run_configured_once(repository, settings, "standalone")
+    )
+
+    assert first == (0, "enabled")
+    assert second == (0, "enabled")
+    assert third == (0, "analysis_disabled")
+    assert seen == [
+        (3, 1.25, 45, True, "analysis_disabled"),
+        (3, 1.0, 45, True, "analysis_disabled"),
+        (3, 1.0, 45, False, "analysis_disabled"),
+    ]
+
+
+def test_runtime_settings_failure_defers_unsubmitted_job_without_provider_call(
+    tmp_path,
+    monkeypatch,
+):
+    from app.services.runtime_settings import RuntimeSettingsStorageError
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    job, _ = _create_earnings_job(repository)
+    settings = _settings(repository.path)
+    submit_calls = 0
+
+    def unreadable():
+        raise RuntimeSettingsStorageError("invalid runtime document")
+
+    async def unexpected_submit(*_args, **_kwargs):
+        nonlocal submit_calls
+        submit_calls += 1
+        raise AssertionError("provider submission must stay closed")
+
+    monkeypatch.setattr(
+        "app.services.runtime_settings.get_effective_runtime_settings",
+        unreadable,
+    )
+    monkeypatch.setattr(runtime, "submit_background", unexpected_submit)
+
+    result = asyncio.run(
+        ai_worker.run_configured_once(repository, settings, "fail-closed")
+    )
+
+    stored = repository.get_job(job["job_id"])
+    assert result == (1, "runtime_settings_unavailable")
+    assert submit_calls == 0
+    assert stored["status"] == "pending"
+    assert stored["submission_started_at"] is None
+    assert stored["openai_response_id"] is None
+    assert stored["lease_owner"] is None
+    assert stored["error_code"] == "runtime_settings_unavailable"
+
+
+@pytest.mark.parametrize("cancel_requested", [False, True])
+def test_runtime_settings_failure_finishes_submitted_and_cancelled_jobs(
+    tmp_path,
+    monkeypatch,
+    cancel_requested,
+):
+    from app.services.runtime_settings import RuntimeSettingsStorageError
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    job, _ = _create_earnings_job(repository)
+    settings = _settings(repository.path)
+    setup_owner = "setup-owner"
+    claimed = repository.claim_due(setup_owner, 60)
+    assert claimed is not None
+    assert repository.mark_submission_started(
+        job["job_id"],
+        setup_owner,
+        daily_limit=4,
+    ) == "started"
+    repository.link_background_response(
+        job["job_id"],
+        setup_owner,
+        "resp_existing",
+    )
+    repository.record_background_response(
+        job["job_id"],
+        setup_owner,
+        "resp_existing",
+        "queued",
+        delay_seconds=1,
+    )
+    if cancel_requested:
+        repository.request_cancel(job["job_id"])
+    else:
+        with repository._connect() as connection:
+            connection.execute(
+                "UPDATE ai_jobs SET next_attempt_at='1970-01-01T00:00:00Z' "
+                "WHERE job_id=?",
+                (job["job_id"],),
+            )
+            connection.commit()
+
+    calls = {"submit": 0, "retrieve": 0, "cancel": 0}
+
+    def unreadable():
+        raise RuntimeSettingsStorageError("invalid runtime document")
+
+    async def unexpected_submit(*_args, **_kwargs):
+        calls["submit"] += 1
+        raise AssertionError("provider submission must stay closed")
+
+    async def retrieve(*_args, **_kwargs):
+        calls["retrieve"] += 1
+        return SimpleNamespace(
+            status="completed",
+            id="resp_existing",
+            output_text=json.dumps(_earnings_result()),
+            usage=None,
+        )
+
+    async def cancel(*_args, **_kwargs):
+        calls["cancel"] += 1
+        return SimpleNamespace(status="cancelled", id="resp_existing")
+
+    monkeypatch.setattr(
+        "app.services.runtime_settings.get_effective_runtime_settings",
+        unreadable,
+    )
+    monkeypatch.setattr(runtime, "submit_background", unexpected_submit)
+    monkeypatch.setattr(runtime, "retrieve", retrieve)
+    monkeypatch.setattr(runtime, "cancel", cancel)
+
+    result = asyncio.run(
+        ai_worker.run_configured_once(repository, settings, "drain-owner")
+    )
+
+    stored = repository.get_job(job["job_id"])
+    assert result == (1, "runtime_settings_unavailable")
+    assert calls["submit"] == 0
+    if cancel_requested:
+        assert stored["status"] == "cancelled"
+        assert calls == {"submit": 0, "retrieve": 0, "cancel": 1}
+    else:
+        assert stored["status"] == "completed"
+        assert calls == {"submit": 0, "retrieve": 1, "cancel": 0}
+
+
+def test_dollar_budget_blocks_before_provider_submission(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    repository.initialize()
+    job, created = _create_earnings_job(repository)
+    assert created is True
+    claimed = repository.claim_due("budget-owner", lease_seconds=60)
+    assert claimed is not None and claimed["job_id"] == job["job_id"]
+
+    outcome = repository.mark_submission_started(
+        job["job_id"],
+        "budget-owner",
+        daily_limit=4,
+        daily_budget_usd=0.49,
+        reservation_usd=0.5,
+    )
+    stored = repository.get_job(job["job_id"])
+    snapshot = repository.budget_snapshot(
+        daily_limit=4,
+        daily_budget_usd=0.49,
+    )
+
+    assert outcome == "daily_budget"
+    assert stored is not None and stored["status"] == "budget_blocked"
+    assert stored["error_code"] == "daily_budget_usd_reached"
+    assert stored["submission_started_at"] is None
+    assert snapshot["dollar_budget_available"] is False
+    assert snapshot["budget_available"] is False
+
+
+def test_cancel_requested_is_visible_while_provider_job_is_active(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    repository.initialize()
+    job, created = _create_earnings_job(repository)
+    assert created is True
+    claimed = repository.claim_due("cancel-owner", lease_seconds=60)
+    assert claimed is not None
+    assert repository.mark_submission_started(
+        job["job_id"], "cancel-owner", daily_limit=4
+    ) == "started"
+
+    cancelled = repository.request_cancel(job["job_id"])
+    assert cancelled is not None
+    public = repository.public(cancelled)
+    assert public["status"] == "in_progress"
+    assert public["cancel_requested"] is True
+    assert public["cancellable"] is False
 
 
 def test_terra_runtime_defaults_are_explicit(monkeypatch):

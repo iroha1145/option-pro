@@ -39,6 +39,13 @@
 .cat-command__model { min-width: 0; }
 .cat-command__model p { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.65; }
 
+.cat-runtime-settings { margin-top: clamp(16px, 2.4vw, 28px); overflow: visible; }
+.cat-runtime-settings summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; }
+.cat-runtime-settings summary strong { font-size: 15px; }
+.cat-runtime-settings summary .mono { color: var(--amber); font-size: 9px; }
+.cat-runtime-settings > p { margin: 10px 0 16px; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.cat-runtime-settings input:disabled { cursor: not-allowed; opacity: .62; }
+
 .cat-focus-cycle { margin-top: clamp(16px, 2.4vw, 28px); overflow: visible; }
 .cat-focus-cycle__head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; }
 .cat-focus-cycle__head > div { min-width: 0; }

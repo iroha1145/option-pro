@@ -84,6 +84,7 @@ _HOTSPOT_STATUS_PUBLIC_FIELDS = frozenset(
     {
         "prepared_revision",
         "last_consumed_revision",
+        "has_new_hotspots",
         "prepared_hot_count",
         "prepared_since",
         "last_cycle_at",
@@ -95,6 +96,7 @@ _HOTSPOT_STATUS_PUBLIC_FIELDS = frozenset(
         "as_of",
         "last_sync_at",
         "warnings",
+        "analysis_availability",
     }
 )
 _CATALYST_STATUS_PUBLIC_FIELDS = frozenset(
@@ -116,6 +118,8 @@ _CATALYST_STATUS_PUBLIC_FIELDS = frozenset(
         "sources",
         "streams",
         "warnings",
+        "analysis_availability",
+        "manual_refreshes",
     }
 )
 _CATALYST_STREAM_PUBLIC_FIELDS = frozenset(
@@ -183,6 +187,10 @@ _MARKET_FOCUS_CYCLE_PUBLIC_FIELDS = frozenset(
         "created_at",
         "completed_at",
         "updated_at",
+        "cycle_revision",
+        "force",
+        "consumes_prepared_revision",
+        "cancel_requested",
     }
 )
 _MARKET_FOCUS_ENVELOPE_PUBLIC_FIELDS = frozenset(
@@ -303,12 +311,23 @@ class AnalysisRequest(_RequestModel):
     force: bool = False
 
 
+class RefreshRequest(_RequestModel):
+    operation_type: Literal["news", "calendar", "source_health"] = "news"
+    idempotency_key: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
+
+
 class MarketFocusCycleRequest(_RequestModel):
     trigger: Literal["manual"] = "manual"
     expected_prepared_revision: Optional[int] = Field(default=None, ge=0)
     retry_cycle_id: Optional[str] = Field(
         default=None, pattern=r"^mfc_[0-9a-f]{32}$"
     )
+    force: bool = False
 
     @model_validator(mode="after")
     def validate_creation_mode(self) -> "MarketFocusCycleRequest":
@@ -316,6 +335,8 @@ class MarketFocusCycleRequest(_RequestModel):
             raise ValueError(
                 "exactly one of expected_prepared_revision or retry_cycle_id is required"
             )
+        if self.retry_cycle_id is not None and self.force:
+            raise ValueError("retry_cycle_id cannot be combined with force")
         return self
 
 
@@ -377,8 +398,16 @@ def _raise_safe(error: CatalystError) -> None:
         "market_focus_retry_snapshot_unavailable": 409,
         "market_focus_retry_outcome_unknown": 409,
         "invalid_market_focus_request": 422,
+        "invalid_refresh_type": 422,
+        "invalid_idempotency_key": 422,
         "daily_job_limit_reached": 429,
+        "daily_budget_usd_reached": 429,
         "daily_output_token_limit_reached": 429,
+        "analysis_cooldown_active": 429,
+        "analysis_in_progress": 409,
+        "ai_not_configured": 503,
+        "worker_unavailable": 503,
+        "runtime_settings_unavailable": 503,
         "cache_unavailable": 503,
         "capability_disabled": 503,
     }.get(error.code, 503)
@@ -608,6 +637,7 @@ def request_market_focus_cycle(
         return service.request_market_focus_cycle(
             expected_prepared_revision=request.expected_prepared_revision,
             retry_cycle_id=request.retry_cycle_id,
+            force=request.force,
         )
     except CatalystError as error:
         _raise_safe(error)
@@ -659,11 +689,35 @@ def cancel_market_focus_cycle(
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require_expensive_action)],
 )
-def refresh_catalysts(service: CatalystService = Depends(_service)) -> dict:
+def refresh_catalysts(
+    request: Optional[RefreshRequest] = None,
+    service: CatalystService = Depends(_service),
+) -> dict:
     try:
-        return service.request_refresh()
+        payload = request or RefreshRequest()
+        return service.request_refresh(
+            payload.operation_type,
+            idempotency_key=payload.idempotency_key,
+        )
     except CatalystError as error:
         _raise_safe(error)
+
+
+@router.get("/refresh/{request_id}")
+def catalyst_refresh_status(
+    request_id: Annotated[
+        str,
+        Path(pattern=r"^refresh_[0-9a-f]{32}$"),
+    ],
+    service: CatalystService = Depends(_service),
+) -> dict:
+    try:
+        operation = service.manual_operation(request_id)
+    except CatalystError as error:
+        _raise_safe(error)
+    if operation is None:
+        raise HTTPException(status_code=404, detail="refresh request not found")
+    return operation
 
 
 @router.post(

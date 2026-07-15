@@ -188,10 +188,44 @@ def _finish_job(
     )
 
 
+def _fail_job(
+    repository: AIJobRepository,
+    job_id: str,
+    error_code: str = "provider_failed",
+) -> None:
+    owner = f"test-owner-{job_id}"
+    claimed = repository.claim_due(owner, lease_seconds=60)
+    assert claimed is not None and claimed["job_id"] == job_id
+    repository.fail(job_id, owner, error_code)
+
+
 def _job_payload(repository: AIJobRepository, job_id: str) -> dict[str, Any]:
     row = repository.get_job(job_id)
     assert row is not None
     return json.loads(row["payload_json"])
+
+
+def _focus_result(
+    repository: AIJobRepository,
+    cycle: dict[str, Any],
+) -> dict[str, Any]:
+    payload = _job_payload(repository, cycle["job_id"])
+    return {
+        "output_language": "zh-CN",
+        "cycle_id": payload["cycle_id"],
+        "as_of": payload["as_of"],
+        "input_hash": payload["input_hash"],
+        "title_zh": "市场热点综合分析",
+        "summary_zh": "当前公开信息不足以形成新的确定方向。",
+        "headline_summary": "热点证据已整理，方向仍需后续数据确认。",
+        "market_summary": "当前热点信息有限，暂不形成方向判断。",
+        "dominant_events": [],
+        "market_uncertainties": ["后续数据仍可能改变市场判断。"],
+        "affected_sectors": [],
+        "focus_ticker_assessments": [],
+        "no_new_material_catalyst": True,
+        "insufficient_context": True,
+    }
 
 
 def _canonical_hash(value: Any) -> str:
@@ -1289,3 +1323,365 @@ def test_local_publication_rejects_mostly_english_model_text(tmp_path):
         {"detail": detail, "job": public_job},
         ensure_ascii=False,
     )
+
+
+def test_completed_news_force_creates_immutable_minute_revisions(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    first_now = datetime(2026, 7, 16, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: first_now)
+    _apply_news(
+        etl,
+        [_news_change(1, 181, available_at=first_now - timedelta(minutes=10))],
+        as_of=first_now - timedelta(minutes=9),
+    )
+    intelligence.reconcile()
+    initial = intelligence.request_analysis(181, force=False)
+    _finish_job(
+        ai,
+        initial["job_id"],
+        _news_result(news_id=181, change_sequence=1, content_hash="hash-181-1"),
+    )
+    intelligence.reconcile()
+
+    force_now = first_now + timedelta(minutes=1)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: force_now)
+    forced = intelligence.request_analysis(181, force=True)
+    duplicate = intelligence.request_analysis(181, force=True)
+    assert duplicate["job_id"] == forced["job_id"]
+    assert _job_payload(ai, forced["job_id"])["analysis_revision"] == 2
+    _finish_job(
+        ai,
+        forced["job_id"],
+        _news_result(news_id=181, change_sequence=1, content_hash="hash-181-1"),
+    )
+    intelligence.reconcile()
+
+    monkeypatch.setattr(
+        local_module,
+        "_utc_now",
+        lambda: force_now + timedelta(minutes=1),
+    )
+    next_revision = intelligence.request_analysis(181, force=True)
+    assert next_revision["job_id"] != forced["job_id"]
+    assert _job_payload(ai, next_revision["job_id"])["analysis_revision"] == 3
+    detail = intelligence.news(181, as_of=force_now + timedelta(minutes=2))
+    assert detail is not None and detail["item"]["analysis"] is not None
+    assert [item["analysis_revision"] for item in detail["analysis_revisions"]] == [2, 1]
+
+
+def test_typed_manual_refresh_is_idempotent_and_never_uses_ai_budget(
+    tmp_path,
+    monkeypatch,
+):
+    _etl, ai, intelligence = _stack(tmp_path)
+    observed = datetime(2026, 7, 16, 13, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: observed)
+
+    news = intelligence.request_refresh("news", now=observed)
+    duplicate = intelligence.request_refresh("news", now=observed)
+    calendar = intelligence.request_refresh("calendar", now=observed)
+    assert duplicate["request_id"] == news["request_id"]
+    assert calendar["request_id"] != news["request_id"]
+    assert calendar["operation_type"] == "calendar"
+
+    running = intelligence.consume_refresh_requested()
+    assert running is not None and running["request_id"] == news["request_id"]
+    completed = intelligence.complete_refresh_request(news["request_id"])
+    assert completed is not None and completed["status"] == "cooldown"
+    cooled = intelligence.request_refresh("news", now=observed + timedelta(seconds=1))
+    assert cooled["request_id"] == news["request_id"]
+    assert cooled["retry_after_seconds"] > 0
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0] == 0
+
+
+def test_forced_focus_cycle_is_minute_idempotent_and_does_not_consume_revision(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    first_now = datetime(2030, 7, 16, 14, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: first_now)
+    _apply_news(
+        etl,
+        [_news_change(1, 191, available_at=first_now - timedelta(minutes=10))],
+        as_of=first_now - timedelta(minutes=9),
+    )
+    first_revision = intelligence.reconcile()["prepared_revision"]
+    ordinary = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=first_revision
+    )
+    _finish_job(ai, ordinary["job_id"], _focus_result(ai, ordinary))
+    intelligence.reconcile()
+    initial_status = intelligence.hotspot_status(now=first_now)
+    assert initial_status["last_consumed_revision"] == first_revision
+    assert initial_status["has_new_hotspots"] is False
+
+    force_now = first_now + timedelta(minutes=1)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: force_now)
+    forced = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=first_revision,
+        force=True,
+    )
+    duplicate = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=first_revision,
+        force=True,
+    )
+    assert duplicate["cycle_id"] == forced["cycle_id"]
+    assert forced["cycle_revision"] == 2
+    assert forced["force"] is True
+    assert forced["consumes_prepared_revision"] is False
+    _finish_job(ai, forced["job_id"], _focus_result(ai, forced))
+    intelligence.reconcile()
+
+    status = intelligence.hotspot_status(now=force_now + timedelta(minutes=1))
+    assert status["prepared_revision"] == first_revision
+    assert status["last_consumed_revision"] == first_revision
+
+
+def test_forced_focus_rejects_an_unconsumed_hotspot_revision(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    first_now = datetime(2030, 7, 16, 15, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: first_now)
+    _apply_news(
+        etl,
+        [_news_change(1, 201, available_at=first_now - timedelta(minutes=10))],
+        as_of=first_now - timedelta(minutes=9),
+    )
+    first_revision = intelligence.reconcile()["prepared_revision"]
+    ordinary = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=first_revision
+    )
+    _finish_job(ai, ordinary["job_id"], _focus_result(ai, ordinary))
+    intelligence.reconcile()
+
+    second_now = first_now + timedelta(hours=1)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: second_now)
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                2,
+                202,
+                available_at=second_now - timedelta(minutes=1),
+                tickers=("AMD",),
+            )
+        ],
+        as_of=second_now,
+    )
+    second_revision = intelligence.reconcile()["prepared_revision"]
+    status = intelligence.hotspot_status(now=second_now)
+    assert second_revision > first_revision
+    assert status["has_new_hotspots"] is True
+
+    with pytest.raises(CatalystError) as captured:
+        intelligence.request_market_focus_cycle(
+            expected_prepared_revision=second_revision,
+            force=True,
+        )
+
+    assert captured.value.code == "invalid_market_focus_request"
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 1
+
+
+def test_completed_focus_revision_never_regresses_after_older_retry(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    first_now = datetime(2030, 7, 16, 16, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: first_now)
+    _apply_news(
+        etl,
+        [_news_change(1, 211, available_at=first_now - timedelta(minutes=10))],
+        as_of=first_now - timedelta(minutes=9),
+    )
+    first_revision = intelligence.reconcile()["prepared_revision"]
+    first_cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=first_revision
+    )
+    _fail_job(ai, first_cycle["job_id"], "first_revision_failed")
+    intelligence.reconcile()
+
+    second_now = first_now + timedelta(hours=1)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: second_now)
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                2,
+                212,
+                available_at=second_now - timedelta(minutes=1),
+                tickers=("AMD",),
+            )
+        ],
+        as_of=second_now,
+    )
+    second_revision = intelligence.reconcile()["prepared_revision"]
+    second_cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=second_revision
+    )
+    _finish_job(ai, second_cycle["job_id"], _focus_result(ai, second_cycle))
+    intelligence.reconcile()
+    assert (
+        intelligence.hotspot_status(now=second_now)["last_consumed_revision"]
+        == second_revision
+    )
+
+    retry = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=None,
+        retry_cycle_id=first_cycle["cycle_id"],
+    )
+    _finish_job(ai, retry["job_id"], _focus_result(ai, retry))
+    intelligence.reconcile()
+
+    final_status = intelligence.hotspot_status(
+        now=second_now + timedelta(minutes=1)
+    )
+    assert final_status["last_consumed_revision"] == second_revision
+
+
+def test_stale_running_refresh_is_requeued_and_can_be_claimed_again(
+    tmp_path,
+    monkeypatch,
+):
+    _etl, _ai, intelligence = _stack(tmp_path)
+    first_now = datetime(2030, 7, 16, 17, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: first_now)
+    requested = intelligence.request_refresh("news", now=first_now)
+    first_claim = intelligence.consume_refresh_requested()
+    assert first_claim is not None and first_claim["status"] == "running"
+
+    recovered_at = first_now + timedelta(minutes=11)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: recovered_at)
+    recovered = intelligence.manual_operation(requested["request_id"])
+    assert recovered is not None
+    assert recovered["status"] == "queued"
+    assert recovered["started_at"] is None
+
+    second_claim = intelligence.consume_refresh_requested()
+    assert second_claim is not None
+    assert second_claim["request_id"] == requested["request_id"]
+    assert second_claim["status"] == "running"
+    assert second_claim["started_at"] == _iso(recovered_at)
+    completed = intelligence.complete_refresh_request(requested["request_id"])
+    assert completed is not None and completed["status"] == "cooldown"
+
+
+def test_status_exposes_each_manual_refresh_state_and_cooldown(
+    tmp_path,
+    monkeypatch,
+):
+    _etl, _ai, intelligence = _stack(tmp_path)
+    observed = datetime(2030, 7, 16, 18, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: observed)
+
+    news = intelligence.request_refresh("news", now=observed)
+    assert intelligence.consume_refresh_requested()["request_id"] == news["request_id"]
+    intelligence.complete_refresh_request(news["request_id"])
+
+    calendar = intelligence.request_refresh("calendar", now=observed)
+    assert (
+        intelligence.consume_refresh_requested()["request_id"]
+        == calendar["request_id"]
+    )
+    intelligence.complete_refresh_request(
+        calendar["request_id"],
+        error_code="calendar_upstream_failed",
+    )
+
+    refreshes = intelligence.status(now=observed)["manual_refreshes"]
+    assert set(refreshes) == {"news", "calendar", "source_health"}
+    assert refreshes["news"]["status"] == "cooldown"
+    assert refreshes["news"]["cooldown_active"] is True
+    assert refreshes["news"]["retry_after_seconds"] > 0
+    assert refreshes["calendar"]["status"] == "failed"
+    assert refreshes["calendar"]["cooldown_active"] is True
+    assert refreshes["calendar"]["error_code"] == "calendar_upstream_failed"
+    assert refreshes["source_health"]["status"] == "idle"
+    assert all("idempotency_key" not in item for item in refreshes.values())
+
+
+def test_failed_forced_focus_keeps_latest_successful_cycle_visible(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    first_now = datetime(2030, 7, 16, 19, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: first_now)
+    _apply_news(
+        etl,
+        [_news_change(1, 221, available_at=first_now - timedelta(minutes=10))],
+        as_of=first_now - timedelta(minutes=9),
+    )
+    revision = intelligence.reconcile()["prepared_revision"]
+    ordinary = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=revision
+    )
+    _finish_job(ai, ordinary["job_id"], _focus_result(ai, ordinary))
+    intelligence.reconcile()
+
+    force_now = first_now + timedelta(minutes=1)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: force_now)
+    forced = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=revision,
+        force=True,
+    )
+    _fail_job(ai, forced["job_id"], "forced_focus_failed")
+    intelligence.reconcile()
+
+    latest = intelligence.latest_market_focus_cycle(
+        now=force_now + timedelta(minutes=1)
+    )
+    assert latest["cycle"]["cycle_id"] == forced["cycle_id"]
+    assert latest["cycle"]["status"] == "failed"
+    assert latest["cycle"]["result"] is None
+    successful = latest["latest_successful_cycle"]
+    assert successful["cycle_id"] == ordinary["cycle_id"]
+    assert successful["status"] == "completed"
+    assert successful["result"] is not None
+
+
+def test_failed_forced_news_revision_preserves_previous_analysis(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    first_now = datetime(2030, 7, 16, 20, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: first_now)
+    _apply_news(
+        etl,
+        [_news_change(1, 231, available_at=first_now - timedelta(minutes=10))],
+        as_of=first_now - timedelta(minutes=9),
+    )
+    intelligence.reconcile()
+    ordinary = intelligence.request_analysis(231, force=False)
+    _finish_job(
+        ai,
+        ordinary["job_id"],
+        _news_result(news_id=231, change_sequence=1, content_hash="hash-231-1"),
+    )
+    intelligence.reconcile()
+
+    force_now = first_now + timedelta(minutes=1)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: force_now)
+    forced = intelligence.request_analysis(231, force=True)
+    _fail_job(ai, forced["job_id"], "forced_news_failed")
+    intelligence.reconcile()
+
+    detail = intelligence.news(231, as_of=force_now + timedelta(minutes=1))
+    assert detail is not None
+    assert detail["item"]["analysis"] is not None
+    assert detail["analysis_job"]["status"] == "failed"
+    assert [
+        item["analysis_revision"] for item in detail["analysis_revisions"]
+    ] == [1]

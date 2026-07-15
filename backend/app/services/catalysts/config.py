@@ -230,7 +230,7 @@ class CatalystSettings(BaseSettings):
         if not self.enabled:
             return self
         if not self.base_url:
-            if self.catalyst_mode == "display" and not self.read_key_id:
+            if not self.read_key_id:
                 # The Personal Edition web process can safely expose an empty
                 # local read view before the ETL owner token is configured.
                 return self

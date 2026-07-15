@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timezone
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Any, Literal, Optional, Sequence
 
 from .config import CatalystSettings
 from .errors import CatalystError, CatalystRepositoryError
@@ -216,9 +216,24 @@ class CatalystService:
         result["warnings"] = status.get("warnings", [])
         return result
 
-    def request_refresh(self) -> dict[str, Any]:
+    def request_refresh(
+        self,
+        operation_type: Literal["news", "calendar", "source_health"] = "news",
+        *,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
         request_id = self._repository(writer=True).enqueue_refresh()
-        return {"request_id": request_id, "status": "queued"}
+        return {
+            "request_id": request_id,
+            "operation_type": operation_type,
+            "idempotency_key": idempotency_key,
+            "status": "queued",
+        }
+
+    def manual_operation(self, request_id: str) -> dict[str, Any] | None:
+        # The legacy proxy queue has no durable typed-operation projection.
+        # PR4 callers use PersonalCatalystService; keep this read fail-closed.
+        return None
 
     def request_analysis(self, news_id: int, *, force: bool) -> dict[str, Any]:
         if not self.settings.action_enabled:
@@ -339,6 +354,7 @@ class CatalystService:
         *,
         expected_prepared_revision: int | None,
         retry_cycle_id: str | None = None,
+        force: bool = False,
     ) -> dict[str, Any]:
         if not self.settings.action_enabled:
             raise CatalystError(
@@ -348,6 +364,13 @@ class CatalystService:
                 counts_for_circuit=False,
             )
         repository = self._repository(writer=True)
+        if force:
+            raise CatalystError(
+                "capability_disabled",
+                "Forced focus reanalysis requires the local Catalyst runtime",
+                retryable=False,
+                counts_for_circuit=False,
+            )
         if retry_cycle_id is not None:
             if expected_prepared_revision is not None:
                 raise CatalystError(

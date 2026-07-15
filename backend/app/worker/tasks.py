@@ -4,6 +4,7 @@ import asyncio
 import inspect
 import os
 import sqlite3
+import time
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,10 @@ async def _build_local_intelligence(
     factory: Any | None = None,
 ) -> Any:
     from app.services.ai_jobs.repository import AIJobRepository
+    from app.services.runtime_settings import (
+        RuntimeSettingsStorageError,
+        get_effective_runtime_settings,
+    )
 
     if factory is None:
         from app.services.catalysts.local_intelligence import (
@@ -61,14 +66,33 @@ async def _build_local_intelligence(
         _path_from_env("OPENAI_JOB_DB_PATH", "/data/ai-jobs.db")
     )
     await asyncio.to_thread(ai_repository.initialize)
+    try:
+        runtime_settings = get_effective_runtime_settings()
+    except RuntimeSettingsStorageError:
+        runtime_settings = None
+    if runtime_settings is None:
+        intelligence_mode = "read"
+        refresh_cooldown = 30
+    else:
+        intelligence_mode = (
+            "scheduled"
+            if runtime_settings.catalyst.scheduled_analysis_enabled
+            else "manual"
+            if runtime_settings.ai.manual_analysis_enabled
+            else "read"
+        )
+        refresh_cooldown = int(
+            runtime_settings.catalyst.manual_refresh_cooldown_seconds
+        )
     intelligence = factory(
         database_path,
         ai_repository,
-        mode=config.features.catalyst_mode,
+        mode=intelligence_mode,
         canonical_tickers=_canonical_sector_tickers(),
         model=config.ai.model,
         reasoning=config.ai.reasoning,
         max_queued=200,
+        manual_refresh_cooldown_seconds=refresh_cooldown,
     )
     await _call_local(intelligence.initialize)
     return intelligence
@@ -95,9 +119,32 @@ class AIJobsTask:
                 details={"reason": "api_key_missing"},
                 next_delay_seconds=30.0,
             )
-        from app.services.ai_jobs.worker import run_once
+        from app.services.ai_jobs.worker import run_configured_once
 
-        processed = await run_once(self._repository, self._settings, self.owner_id)
+        processed, runtime_state = await run_configured_once(
+            self._repository,
+            self._settings,
+            self.owner_id,
+        )
+        if runtime_state == "runtime_settings_unavailable":
+            return TaskResult(
+                status="degraded",
+                error_code="runtime_settings_unavailable",
+                details={
+                    "reason": "runtime_settings_unavailable",
+                    "processed": int(processed),
+                },
+                next_delay_seconds=0.5 if processed else 30.0,
+            )
+        if runtime_state == "analysis_disabled":
+            return TaskResult(
+                status="disabled",
+                details={
+                    "reason": "analysis_disabled",
+                    "processed": int(processed),
+                },
+                next_delay_seconds=0.5 if processed else 30.0,
+            )
         return TaskResult(
             status="idle",
             details={"processed": int(processed)},
@@ -126,6 +173,7 @@ class CatalystSyncTask:
         self._client: Any = None
         self._service: Any = None
         self._intelligence: Any = None
+        self._last_personal_sync_monotonic: float | None = None
 
     async def _prepare_personal(self, token: str) -> str:
         from app.services.catalysts.etl_client import EtlClientConfig, MacroLensEtlClient
@@ -212,20 +260,82 @@ class CatalystSyncTask:
         return "sync_failed"
 
     async def _run_personal(self) -> TaskResult:
+        from app.services.runtime_settings import (
+            RuntimeSettingsStorageError,
+            get_effective_runtime_settings,
+        )
+
         processed: list[str] = []
         errors: dict[str, str] = {}
         metrics: dict[str, dict[str, int | bool]] = {}
-        refresh_requested = False
+        manual_request: dict[str, Any] | None = None
+        legacy_refresh_requested = False
         try:
-            refresh_requested = bool(
-                await _call_local(self._intelligence.consume_refresh_requested)
+            effective = get_effective_runtime_settings()
+        except RuntimeSettingsStorageError:
+            return TaskResult(
+                status="degraded",
+                error_code="runtime_settings_unavailable",
+                details={
+                    "processed": [],
+                    "streams": {},
+                    "refresh_requested": False,
+                    "errors": {
+                        "runtime_settings": "runtime_settings_unavailable"
+                    },
+                },
+                next_delay_seconds=30.0,
             )
-        except Exception as exc:
-            errors["refresh_request"] = self._error_code(exc)
-        for stream, operation in (
-            ("news", self._service.sync_news),
-            ("calendar", self._service.sync_calendar),
-        ):
+
+        if hasattr(self._intelligence, "manual_refresh_cooldown_seconds"):
+            self._intelligence.manual_refresh_cooldown_seconds = int(
+                effective.catalyst.manual_refresh_cooldown_seconds
+            )
+        if effective.catalyst.manual_refresh_enabled:
+            try:
+                raw_request = await _call_local(
+                    self._intelligence.consume_refresh_requested
+                )
+                if isinstance(raw_request, dict):
+                    manual_request = raw_request
+                else:
+                    legacy_refresh_requested = bool(raw_request)
+            except Exception as exc:
+                errors["refresh_request"] = self._error_code(exc)
+
+        sync_seconds = float(effective.catalyst.sync_seconds)
+        clock = time.monotonic()
+        scheduled_due = (
+            self._last_personal_sync_monotonic is None
+            or clock - self._last_personal_sync_monotonic >= sync_seconds
+        )
+        requested_type = (
+            str(manual_request.get("operation_type"))
+            if manual_request is not None
+            else "source_health"
+            if legacy_refresh_requested
+            else None
+        )
+        if not scheduled_due and requested_type is None and not errors:
+            return TaskResult(
+                status="idle",
+                details={
+                    "processed": [],
+                    "streams": {},
+                    "refresh_requested": False,
+                },
+                next_delay_seconds=2.0,
+            )
+        stream_operations = {
+            "news": ("news", self._service.sync_news),
+            "calendar": ("calendar", self._service.sync_calendar),
+        }
+        selected_streams = (
+            [stream_operations[requested_type]]
+            if requested_type in stream_operations
+            else list(stream_operations.values())
+        )
+        for stream, operation in selected_streams:
             try:
                 result = await operation()
             except Exception as exc:
@@ -242,22 +352,47 @@ class CatalystSyncTask:
             if stream == "news":
                 metrics[stream]["deletes"] = int(result.deletes)
 
-        try:
-            projection = await _call_local(
-                self._intelligence.reconcile,
-                allow_scheduled_jobs=False,
-            )
-        except Exception as exc:
-            errors["local_intelligence"] = self._error_code(exc)
-            projection = None
-        else:
-            processed.append("local_intelligence")
+        projection = None
+        if selected_streams:
+            try:
+                projection = await _call_local(
+                    self._intelligence.reconcile,
+                    allow_scheduled_jobs=False,
+                )
+            except Exception as exc:
+                errors["local_intelligence"] = self._error_code(exc)
+            else:
+                processed.append("local_intelligence")
+        if scheduled_due:
+            self._last_personal_sync_monotonic = clock
 
-        delay = float(self._personal_config.catalyst.sync_seconds)
+        if manual_request is not None and hasattr(
+            self._intelligence,
+            "complete_refresh_request",
+        ):
+            error_code = next(iter(errors.values()), None)
+            try:
+                await _call_local(
+                    self._intelligence.complete_refresh_request,
+                    str(manual_request["request_id"]),
+                    error_code=error_code,
+                )
+            except Exception as exc:
+                errors["refresh_completion"] = self._error_code(exc)
+
+        delay = 2.0
         details: dict[str, Any] = {
             "processed": processed,
             "streams": metrics,
-            "refresh_requested": refresh_requested,
+            "refresh_requested": bool(
+                manual_request is not None or legacy_refresh_requested
+            ),
+            "refresh_operation_type": requested_type,
+            "refresh_request_id": (
+                manual_request.get("request_id")
+                if manual_request is not None
+                else None
+            ),
         }
         if isinstance(projection, dict):
             projection_metrics: dict[str, bool | int | float | None] = {}
@@ -407,22 +542,39 @@ class FocusTask:
         return await self._prepare_legacy()
 
     async def _run_personal(self) -> TaskResult:
-        delay = float(self._personal_config.catalyst.focus_seconds)
-        if not self._personal_config.catalyst_scheduled_enabled:
+        from app.services.runtime_settings import (
+            RuntimeSettingsStorageError,
+            get_effective_runtime_settings,
+        )
+
+        try:
+            effective = get_effective_runtime_settings()
+        except RuntimeSettingsStorageError:
+            return TaskResult(
+                status="degraded",
+                error_code="runtime_settings_unavailable",
+                details={"result": "runtime_settings_unavailable"},
+                next_delay_seconds=float(
+                    self._personal_config.catalyst.focus_seconds
+                ),
+            )
+
+        delay = float(effective.catalyst.focus_seconds)
+        if not effective.catalyst.scheduled_analysis_enabled:
+            if hasattr(self._intelligence, "mode"):
+                self._intelligence.mode = (
+                    "manual" if effective.ai.manual_analysis_enabled else "read"
+                )
             return TaskResult(
                 status="idle",
                 details={"result": "not_scheduled", "queued": 0, "skipped": 0},
                 next_delay_seconds=delay,
             )
+        if hasattr(self._intelligence, "mode"):
+            self._intelligence.mode = "scheduled"
         payload = await _call_local(
             lambda: self._intelligence.run_scheduled(
-                scheduled_times_et=tuple(
-                    getattr(
-                        self._personal_config.catalyst,
-                        "scheduled_times_et",
-                        ("08:00", "12:00", "16:00"),
-                    )
-                )
+                scheduled_times_et=tuple(effective.catalyst.scheduled_times_et)
             )
         )
         payload = payload if isinstance(payload, dict) else {}

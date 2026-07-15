@@ -12,7 +12,8 @@ from typing import Any, Iterator
 from app.services.ai_jobs.models import AIJobPublic, validate_result
 
 
-_SCHEMA_VERSION = "ai-jobs-v2"
+_SCHEMA_VERSION = "ai-jobs-v3"
+_DEFAULT_JOB_BUDGET_RESERVATION_MICROUSD = 500_000
 _MAX_REQUEST_JSON_BYTES = 64 * 1024
 _MAX_RESULT_JSON_BYTES = 1024 * 1024
 _TERMINAL = {
@@ -65,6 +66,8 @@ CREATE TABLE IF NOT EXISTS ai_jobs (
     usage_output_tokens INTEGER,
     usage_reasoning_tokens INTEGER,
     usage_total_tokens INTEGER,
+    budget_charge_microusd INTEGER NOT NULL DEFAULT 0
+        CHECK(budget_charge_microusd >= 0),
     cancel_requested_at TEXT,
     lease_owner TEXT,
     lease_expires_at TEXT,
@@ -145,7 +148,26 @@ class AIJobRepository:
                 ):
                     self._migrate_v2(connection)
                 else:
+                    columns = {
+                        str(row["name"])
+                        for row in connection.execute(
+                            "PRAGMA table_info(ai_jobs)"
+                        ).fetchall()
+                    }
+                    if "budget_charge_microusd" not in columns:
+                        connection.execute(
+                            """ALTER TABLE ai_jobs
+                               ADD COLUMN budget_charge_microusd INTEGER
+                               NOT NULL DEFAULT 0
+                               CHECK(budget_charge_microusd >= 0)"""
+                        )
                     self._ensure_indexes(connection)
+            connection.execute(
+                """UPDATE ai_jobs SET budget_charge_microusd=?
+                   WHERE submission_started_at IS NOT NULL
+                     AND budget_charge_microusd=0""",
+                (_DEFAULT_JOB_BUDGET_RESERVATION_MICROUSD,),
+            )
             row = connection.execute(
                 "SELECT checksum FROM ai_job_schema WHERE version=?",
                 (_SCHEMA_VERSION,),
@@ -597,8 +619,11 @@ class AIJobRepository:
         owner: str,
         *,
         daily_limit: int = 4,
+        daily_budget_usd: float = 2.0,
+        reservation_usd: float = 0.5,
+        cooldown_seconds: int = 0,
     ) -> str:
-        """Atomically enforce the one-in-flight and four-per-day paid limits."""
+        """Atomically enforce concurrency, daily count, and dollar budget."""
 
         if daily_limit < 1:
             raise ValueError("daily_limit must be positive")
@@ -610,6 +635,8 @@ class AIJobRepository:
             + timedelta(days=1)
         )
         paid_limit = min(4, max(1, int(daily_limit)))
+        budget_limit_microusd = max(1, round(float(daily_budget_usd) * 1_000_000))
+        reservation_microusd = max(1, round(float(reservation_usd) * 1_000_000))
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
@@ -648,6 +675,37 @@ class AIJobRepository:
                 )
                 connection.commit()
                 return "concurrency_limit"
+            if int(cooldown_seconds) > 0:
+                latest_terminal = connection.execute(
+                    """SELECT COALESCE(completed_at,submission_started_at)
+                       FROM ai_jobs
+                       WHERE job_id<>? AND submission_started_at IS NOT NULL
+                         AND status IN ('completed','failed','cancelled',
+                                        'insufficient_context','budget_blocked')
+                       ORDER BY COALESCE(completed_at,submission_started_at) DESC
+                       LIMIT 1""",
+                    (job_id,),
+                ).fetchone()
+                latest_at = (
+                    _parse_time(latest_terminal[0])
+                    if latest_terminal is not None
+                    else None
+                )
+                cooldown_until = (
+                    latest_at + timedelta(seconds=int(cooldown_seconds))
+                    if latest_at is not None
+                    else None
+                )
+                if cooldown_until is not None and cooldown_until > now_dt:
+                    connection.execute(
+                        """UPDATE ai_jobs
+                           SET next_attempt_at=?,error_code='analysis_cooldown_active',
+                               lease_owner=NULL,lease_expires_at=NULL,updated_at=?
+                           WHERE job_id=? AND lease_owner=? AND status='pending'""",
+                        (_iso(cooldown_until), now, job_id, owner),
+                    )
+                    connection.commit()
+                    return "cooldown"
             submitted_today = int(
                 connection.execute(
                     """
@@ -671,18 +729,44 @@ class AIJobRepository:
                 )
                 connection.commit()
                 return "daily_limit"
+            charged_today = int(
+                connection.execute(
+                    """
+                    SELECT COALESCE(SUM(budget_charge_microusd),0) FROM ai_jobs
+                    WHERE submission_started_at>=? AND submission_started_at<?
+                    """,
+                    (day_start, day_end),
+                ).fetchone()[0]
+            )
+            if charged_today + reservation_microusd > budget_limit_microusd:
+                connection.execute(
+                    """
+                    UPDATE ai_jobs
+                    SET status='budget_blocked',
+                        error_code='daily_budget_usd_reached',completed_at=?,
+                        next_attempt_at=NULL,lease_owner=NULL,
+                        lease_expires_at=NULL,updated_at=?
+                    WHERE job_id=? AND lease_owner=? AND status='pending'
+                    """,
+                    (now, now, job_id, owner),
+                )
+                connection.commit()
+                return "daily_budget"
             updated = connection.execute(
                 """
                 UPDATE ai_jobs
                 SET submission_started_at=COALESCE(submission_started_at,?),
                     submitted_at=COALESCE(submitted_at,?),
+                    budget_charge_microusd=CASE
+                        WHEN budget_charge_microusd=0 THEN ?
+                        ELSE budget_charge_microusd END,
                     status='in_progress',
                     attempt_count=attempt_count+1,
                     updated_at=?
                 WHERE job_id=? AND lease_owner=? AND openai_response_id IS NULL
                   AND status='pending' AND cancel_requested_at IS NULL
                 """,
-                (now, now, now, job_id, owner),
+                (now, now, reservation_microusd, now, job_id, owner),
             ).rowcount
             connection.commit()
             if updated != 1:
@@ -918,11 +1002,14 @@ class AIJobRepository:
 
     @staticmethod
     def public(row: dict[str, Any], *, cached: bool = False) -> dict[str, Any]:
+        try:
+            payload = json.loads(row["payload_json"])
+        except (KeyError, TypeError, json.JSONDecodeError):
+            payload = {}
         result = json.loads(row["result_json"]) if row.get("result_json") else None
         legacy_output_hidden = False
         if result is not None:
             try:
-                payload = json.loads(row["payload_json"])
                 result = validate_result(
                     str(row["job_type"]),
                     json.dumps(
@@ -953,9 +1040,116 @@ class AIJobRepository:
             retry_after=None,
             result=result,
             cached=cached,
-            cancellable=row["status"] in {"pending", "queued", "in_progress"},
+            cancellable=(
+                row["status"] in {"pending", "queued", "in_progress"}
+                and not bool(row.get("cancel_requested_at"))
+            ),
+            cancel_requested=(
+                bool(row.get("cancel_requested_at"))
+                and row["status"] in {"pending", "queued", "in_progress"}
+            ),
+            analysis_revision=(
+                int(payload["analysis_revision"])
+                if isinstance(payload.get("analysis_revision"), int)
+                and payload["analysis_revision"] >= 1
+                else None
+            ),
+            cycle_revision=(
+                int(payload["cycle_revision"])
+                if isinstance(payload.get("cycle_revision"), int)
+                and payload["cycle_revision"] >= 1
+                else None
+            ),
+            budget_charge_usd=(
+                max(0, int(row.get("budget_charge_microusd") or 0)) / 1_000_000
+            ),
+            usage={
+                "input_tokens": row.get("usage_input_tokens"),
+                "cached_input_tokens": row.get("usage_cached_input_tokens"),
+                "output_tokens": row.get("usage_output_tokens"),
+                "reasoning_tokens": row.get("usage_reasoning_tokens"),
+                "total_tokens": row.get("usage_total_tokens"),
+            },
         )
         return public.model_dump(mode="json")
+
+    def budget_snapshot(
+        self,
+        *,
+        daily_limit: int,
+        daily_budget_usd: float,
+        cooldown_seconds: int = 0,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Return a secret-free, point-in-time view of paid task capacity."""
+
+        self.initialize()
+        observed = now or _utcnow()
+        day_start_dt = observed.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end_dt = day_start_dt + timedelta(days=1)
+        with self._connect() as connection:
+            totals = connection.execute(
+                """
+                SELECT COUNT(*) AS submitted_jobs,
+                       COALESCE(SUM(budget_charge_microusd),0) AS charged,
+                       COALESCE(SUM(usage_total_tokens),0) AS total_tokens
+                FROM ai_jobs
+                WHERE submission_started_at>=? AND submission_started_at<?
+                """,
+                (_iso(day_start_dt), _iso(day_end_dt)),
+            ).fetchone()
+            active = connection.execute(
+                """
+                SELECT * FROM ai_jobs
+                WHERE status IN ('pending','queued','in_progress')
+                ORDER BY created_at LIMIT 1
+                """
+            ).fetchone()
+            latest_paid = connection.execute(
+                """
+                SELECT COALESCE(completed_at,submission_started_at) AS activity_at
+                FROM ai_jobs
+                WHERE submission_started_at IS NOT NULL
+                  AND status IN ('completed','failed','cancelled',
+                                 'insufficient_context','budget_blocked')
+                ORDER BY COALESCE(completed_at,submission_started_at) DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        submitted_jobs = int(totals["submitted_jobs"] if totals else 0)
+        charged_microusd = int(totals["charged"] if totals else 0)
+        daily_limit = min(4, max(1, int(daily_limit)))
+        budget_limit_microusd = max(1, round(float(daily_budget_usd) * 1_000_000))
+        cooldown_until: datetime | None = None
+        if latest_paid is not None and int(cooldown_seconds) > 0:
+            activity_at = _parse_time(latest_paid["activity_at"])
+            if activity_at is not None:
+                candidate = activity_at + timedelta(seconds=int(cooldown_seconds))
+                if candidate > observed:
+                    cooldown_until = candidate
+        active_public = self.public(dict(active)) if active is not None else None
+        jobs_available = submitted_jobs < daily_limit
+        dollars_available = (
+            charged_microusd + _DEFAULT_JOB_BUDGET_RESERVATION_MICROUSD
+            <= budget_limit_microusd
+        )
+        return {
+            "daily_max_jobs": daily_limit,
+            "daily_budget_usd": budget_limit_microusd / 1_000_000,
+            "submitted_jobs": submitted_jobs,
+            "budget_used_usd": charged_microusd / 1_000_000,
+            "budget_remaining_usd": max(
+                0, budget_limit_microusd - charged_microusd
+            ) / 1_000_000,
+            "usage_total_tokens": int(totals["total_tokens"] if totals else 0),
+            "budget_available": bool(jobs_available and dollars_available),
+            "job_limit_available": jobs_available,
+            "dollar_budget_available": dollars_available,
+            "concurrency_available": active is None,
+            "active_job": active_public,
+            "cooldown_until": _iso(cooldown_until) if cooldown_until else None,
+            "cooldown_complete": cooldown_until is None,
+        }
 
     def health(self) -> dict[str, Any]:
         try:

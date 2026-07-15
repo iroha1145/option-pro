@@ -67,7 +67,7 @@ def test_personal_toml_supplies_runtime_defaults(monkeypatch) -> None:
         MACROLENS_READ_SECRET=READ_SECRET,
     )
     assert catalyst.enabled is True
-    assert catalyst.catalyst_mode == "display"
+    assert catalyst.catalyst_mode == "enabled"
     assert catalyst.feed_interval_seconds == 120
     assert catalyst.model == "gpt-5.6-terra"
     assert catalyst.reasoning == "max"

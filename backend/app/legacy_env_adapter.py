@@ -292,6 +292,10 @@ def migrate_legacy_environment(values: Mapping[str, str]) -> LegacyMigration:
                 defaults.catalyst.focus_seconds,
             ),
             "scheduled_times_et": defaults.catalyst.scheduled_times_et,
+            "manual_force_reanalysis": defaults.catalyst.manual_force_reanalysis,
+            "manual_refresh_cooldown_seconds": (
+                defaults.catalyst.manual_refresh_cooldown_seconds
+            ),
         },
         "breakout": {
             "regular_seconds": _integer(

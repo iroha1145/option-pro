@@ -156,6 +156,9 @@ def runtime_configuration_valid(settings: Any) -> bool:
         and str(settings.openai_execution_mode) == OFFICIAL_EXECUTION_MODE
         and int(settings.openai_max_concurrency) == 1
         and 1 <= int(settings.openai_daily_max_jobs) <= 4
+        and 0.01
+        <= float(getattr(settings, "openai_daily_budget_usd", 2.0))
+        <= 100.0
     )
 
 

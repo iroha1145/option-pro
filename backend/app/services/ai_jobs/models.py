@@ -484,6 +484,11 @@ class AIJobPublic(StrictModel):
     result: Optional[dict] = None
     cached: StrictBool = False
     cancellable: StrictBool = False
+    cancel_requested: StrictBool = False
+    analysis_revision: Optional[StrictInt] = Field(default=None, ge=1)
+    cycle_revision: Optional[StrictInt] = Field(default=None, ge=1)
+    budget_charge_usd: float = Field(default=0.0, ge=0)
+    usage: dict[str, Optional[StrictInt]] = Field(default_factory=dict)
 
 
 class CancelRequest(StrictModel):

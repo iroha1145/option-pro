@@ -17,6 +17,8 @@ from app.services.ai_jobs.repository import AIJobRepository
 
 logger = logging.getLogger(__name__)
 
+_NEW_SUBMISSION_RETRY_SECONDS = 30.0
+
 
 def _poll_delay(settings: Any, poll_count: int) -> float:
     initial = float(settings.openai_background_initial_poll_seconds)
@@ -167,6 +169,9 @@ async def process_job(
     settings: Any,
     job: dict[str, Any],
     owner: str,
+    *,
+    allow_new_submissions: bool = True,
+    new_submission_block_reason: str = "analysis_disabled",
 ) -> None:
     stop = asyncio.Event()
     heartbeat = asyncio.create_task(
@@ -250,6 +255,15 @@ async def process_job(
             )
             return
 
+        if not allow_new_submissions:
+            repository.defer(
+                job["job_id"],
+                owner,
+                delay_seconds=_NEW_SUBMISSION_RETRY_SECONDS,
+                error_code=new_submission_block_reason,
+            )
+            return
+
         current_schema_version, current_schema_sha256 = runtime.schema_identity(
             job["job_type"]
         )
@@ -279,6 +293,12 @@ async def process_job(
                 job["job_id"],
                 owner,
                 daily_limit=int(settings.openai_daily_max_jobs),
+                daily_budget_usd=float(
+                    getattr(settings, "openai_daily_budget_usd", 2.0)
+                ),
+                cooldown_seconds=int(
+                    getattr(settings, "openai_manual_cooldown_seconds", 30)
+                ),
             )
         except RuntimeError as exc:
             if str(exc) == "ai_job_not_submittable":
@@ -335,6 +355,9 @@ async def run_once(
     repository: AIJobRepository,
     settings: Any,
     owner: str,
+    *,
+    allow_new_submissions: bool = True,
+    new_submission_block_reason: str = "analysis_disabled",
 ) -> int:
     job = await asyncio.to_thread(
         repository.claim_due,
@@ -343,8 +366,73 @@ async def run_once(
     )
     if not job:
         return 0
-    await process_job(repository, settings, job, owner)
+    await process_job(
+        repository,
+        settings,
+        job,
+        owner,
+        allow_new_submissions=allow_new_submissions,
+        new_submission_block_reason=new_submission_block_reason,
+    )
     return 1
+
+
+async def run_configured_once(
+    repository: AIJobRepository,
+    settings: Any,
+    owner: str,
+) -> tuple[int, str]:
+    """Run one due job using the latest non-secret runtime controls.
+
+    Invalid runtime settings pause only new provider submissions. Jobs that
+    already have an upstream response, an uncertain submission outcome, or a
+    cancellation request still pass through ``process_job`` and can finish.
+    """
+
+    from app.services.runtime_settings import (
+        RuntimeSettingsStorageError,
+        get_effective_runtime_settings,
+    )
+
+    try:
+        effective = get_effective_runtime_settings()
+    except RuntimeSettingsStorageError:
+        processed = await run_once(
+            repository,
+            settings,
+            owner,
+            allow_new_submissions=False,
+            new_submission_block_reason="runtime_settings_unavailable",
+        )
+        return processed, "runtime_settings_unavailable"
+
+    effective_settings = settings.model_copy(
+        update={
+            "openai_daily_max_jobs": effective.ai.daily_max_jobs,
+            "openai_daily_budget_usd": effective.ai.daily_budget_usd,
+            "openai_manual_cooldown_seconds": (
+                effective.ai.manual_analysis_cooldown_seconds
+            ),
+        }
+    )
+    analysis_enabled = bool(
+        effective.ai.manual_analysis_enabled
+        or effective.catalyst.scheduled_analysis_enabled
+    )
+    processed = await run_once(
+        repository,
+        effective_settings,
+        owner,
+        allow_new_submissions=analysis_enabled,
+        new_submission_block_reason="analysis_disabled",
+    )
+    return processed, "enabled" if analysis_enabled else "analysis_disabled"
+
+
+def _next_iteration_delay(processed: int, runtime_state: str) -> float:
+    if processed:
+        return 0.5
+    return 2.0 if runtime_state == "enabled" else 30.0
 
 
 def health_payload(repository: AIJobRepository, settings: Any) -> dict[str, Any]:
@@ -383,8 +471,12 @@ async def run_forever() -> None:
         if not settings.openai_api_key.get_secret_value().strip():
             await asyncio.sleep(30)
             continue
-        processed = await run_once(repository, settings, owner)
-        await asyncio.sleep(0.5 if processed else 2.0)
+        processed, runtime_state = await run_configured_once(
+            repository,
+            settings,
+            owner,
+        )
+        await asyncio.sleep(_next_iteration_delay(processed, runtime_state))
 
 
 def main() -> None:
@@ -412,10 +504,23 @@ def main() -> None:
             )
             return
         owner = f"once-{os.getpid()}-{uuid.uuid4().hex[:8]}"
-        processed = asyncio.run(run_once(repository, settings, owner))
+        processed, runtime_state = asyncio.run(
+            run_configured_once(repository, settings, owner)
+        )
+        worker_status = (
+            "degraded"
+            if runtime_state == "runtime_settings_unavailable"
+            else "disabled"
+            if runtime_state == "analysis_disabled"
+            else "completed"
+        )
         print(
             json.dumps(
-                {"status": "completed", "processed": processed},
+                {
+                    "status": worker_status,
+                    "processed": processed,
+                    "runtime_state": runtime_state,
+                },
                 separators=(",", ":"),
             )
         )
