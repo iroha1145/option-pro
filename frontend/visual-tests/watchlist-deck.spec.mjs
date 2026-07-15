@@ -451,7 +451,7 @@ test("a background snapshot redraws while focus details remain pending", async (
 
   await expect(page.getByRole("heading", { name: /超微半导体 AMD/ })).toBeVisible();
   await expect(page.locator('[data-card="AMD"] .stock-card__quote b')).toHaveText("160.00");
-  await expect(page.locator(".pulse-live")).toContainText("快照 14:30");
+  await expect(page.locator(".pulse-live")).toContainText("报价覆盖 14:30");
   await expect(page.locator("#view")).not.toContainText("正在后台更新");
 });
 
