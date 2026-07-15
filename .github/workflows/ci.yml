@@ -130,7 +130,7 @@ jobs:
           grep -qi '^content-security-policy:' /tmp/optix-root.headers
           grep -qi '^cache-control:.*no-store' /tmp/optix-root.headers
           grep -q '<title>Optix Pro' /tmp/optix-root.html
-          curl --fail --silent --show-error -H 'Accept-Encoding: gzip' -D /tmp/optix-static.headers -o /tmp/optix-styles.gz http://127.0.0.1:2000/static/css/optix-core-v3.css
+          curl --fail --silent --show-error -H 'Accept-Encoding: gzip' -D /tmp/optix-static.headers -o /tmp/optix-styles.gz http://127.0.0.1:2000/static/css/optix-deck.css
           grep -qi '^content-encoding: gzip' /tmp/optix-static.headers
           grep -qi '^cache-control:.*max-age=300' /tmp/optix-static.headers
           curl --fail --silent --show-error http://127.0.0.1:2000/api/breakouts/status |

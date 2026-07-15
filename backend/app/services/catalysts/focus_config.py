@@ -9,12 +9,14 @@ from pathlib import Path
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.personal_config import get_personal_config
 from app.services.request_security import parse_trusted_proxy_cidrs
 
 
 _ROOT_ENV_FILE = Path(__file__).resolve().parents[4] / ".env"
 _KEY_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 _TICKER_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.^/_-]{0,19}$")
+_PERSONAL_CONFIG = get_personal_config()
 
 
 def _ticker_list(value: str) -> str:
@@ -65,7 +67,10 @@ class FocusContextSettings(BaseSettings):
         default=5, ge=0, le=100, alias="FOCUS_MAX_REPLACEMENTS_PER_CYCLE"
     )
     refresh_seconds: int = Field(
-        default=1800, ge=60, le=86400, alias="FOCUS_CONTEXT_REFRESH_SECONDS"
+        default=_PERSONAL_CONFIG.catalyst.focus_seconds,
+        ge=60,
+        le=86400,
+        alias="FOCUS_CONTEXT_REFRESH_SECONDS",
     )
     producer_snapshot_grace_seconds: int = Field(
         default=120,
@@ -77,9 +82,9 @@ class FocusContextSettings(BaseSettings):
         default=False, alias="FOCUS_PRODUCER_ENABLED"
     )
     producer_interval_seconds: int = Field(
-        default=1800,
-        ge=1800,
-        le=1800,
+        default=_PERSONAL_CONFIG.catalyst.focus_seconds,
+        ge=300,
+        le=86400,
         alias="FOCUS_PRODUCER_INTERVAL_SECONDS",
     )
     producer_candidate_limit: int = Field(
@@ -125,13 +130,13 @@ class FocusContextSettings(BaseSettings):
         alias="FOCUS_DAILY_STRENGTH_MIN_COVERAGE",
     )
     daily_strength_retention_days: int = Field(
-        default=30,
+        default=_PERSONAL_CONFIG.storage.retention_days,
         ge=1,
         le=365,
         alias="FOCUS_DAILY_STRENGTH_RETENTION_DAYS",
     )
     snapshot_retention_days: int = Field(
-        default=90,
+        default=_PERSONAL_CONFIG.storage.retention_days,
         ge=1,
         le=730,
         alias="FOCUS_SNAPSHOT_RETENTION_DAYS",

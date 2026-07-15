@@ -125,17 +125,17 @@ else
     fi
 
     # Model
-    read -rp "  模型 [gpt-5.4-mini-2026-03-17]: " model
-    model=${model:-gpt-5.4-mini-2026-03-17}
+    read -rp "  模型 [gpt-5.6-terra]: " model
+    model=${model:-gpt-5.6-terra}
 
     # Reasoning effort
-    read -rp "  推理等级 (minimal/low/medium/high/xhigh) [low]: " reasoning
-    reasoning=${reasoning:-low}
+    read -rp "  推理等级 (none/low/medium/high/xhigh/max) [max]: " reasoning
+    reasoning=${reasoning:-max}
     case "$reasoning" in
-        minimal|low|medium|high|xhigh) ;;
+        none|low|medium|high|xhigh|max) ;;
         *)
-            echo -e "${YELLOW}! 无效推理等级，改用 low${NC}"
-            reasoning=low
+            echo -e "${YELLOW}! 无效推理等级，改用 max${NC}"
+            reasoning=max
             ;;
     esac
 

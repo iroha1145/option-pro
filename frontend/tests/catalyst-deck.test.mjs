@@ -399,6 +399,37 @@ test('Catalyst confidence uses the contract 0..100 scale and ticker projections 
   vm.runInContext(catalysts, context, { filename: 'deck-catalysts.js' });
   const desk = context.window.OPTIX_CATALYSTS;
   assert.equal(desk.formatConfidence(1), '1%');
+  assert.equal(
+    desk.itemTitle({
+      title: 'English source title',
+      title_zh: '顶层中文标题',
+      analysis: { title_zh: '分析生成的中文标题' },
+    }),
+    '分析生成的中文标题',
+  );
+  assert.equal(
+    desk.itemTitle({ title: 'English source title', headline: 'English fallback' }),
+    '中文标题等待生成',
+  );
+  assert.equal(
+    desk.itemSummary({
+      summary: 'English source summary',
+      summary_zh: '<p>顶层中文摘要</p>',
+      analysis: { headline_summary: '分析生成的中文摘要' },
+    }),
+    '顶层中文摘要',
+  );
+  assert.equal(
+    desk.itemSummary({
+      summary: 'English source summary',
+      analysis: { headline_summary: '<p>分析生成的中文摘要</p>' },
+    }),
+    '分析生成的中文摘要',
+  );
+  assert.equal(
+    desk.itemSummary({ summary: 'English source summary', description: 'English fallback' }),
+    '中文摘要等待生成',
+  );
   const own = [{ ticker: 'NVDA', impact_score: 40 }];
   const all = [...own, { ticker: 'AMD', impact_score: -30 }];
   assert.deepEqual(
@@ -522,7 +553,9 @@ test('long stock-impact reasons are accessible without crowding the drawer', () 
 
 test('feed summaries remove source markup and stay visually bounded', () => {
   assert.match(catalysts, /const plainText = value/);
-  assert.match(catalysts, /return plainText\(item && \(item\.summary \|\| item\.description\)/);
+  assert.match(catalysts, /item && item\.summary_zh/);
+  assert.match(catalysts, /analysis\.summary_zh \|\| analysis\.headline_summary/);
+  assert.doesNotMatch(catalysts, /item\.summary \|\| item\.description/);
   assert.match(catalystCss, /\.cat-news__summary[^}]*-webkit-line-clamp:\s*3/);
 });
 

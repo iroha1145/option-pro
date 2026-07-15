@@ -9,10 +9,13 @@ from dotenv import load_dotenv
 from pydantic import AliasChoices, AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.personal_config import get_personal_config
+
 
 # Resolve the repository-level .env independently of the process working
 # directory. This keeps `uvicorn app.main:app` reliable when run from backend/.
 _ROOT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+_PERSONAL_CONFIG = get_personal_config()
 # Several existing middleware settings are read directly from os.environ.
 # Load the same root file once (without overriding exported variables) so local
 # uvicorn runs and BaseSettings observe one consistent configuration source.
@@ -33,13 +36,13 @@ class Settings(BaseSettings):
         alias="OPENAI_CUSTOM_CAPABILITIES_CONFIRMED",
     )
     openai_model: str = Field(
-        default="gpt-5.6-terra",
+        default=_PERSONAL_CONFIG.ai.model,
         min_length=1,
         max_length=120,
         alias="OPENAI_MODEL",
     )
     openai_reasoning: Literal["none", "low", "medium", "high", "xhigh", "max"] = Field(
-        default="max",
+        default=_PERSONAL_CONFIG.ai.reasoning,
         alias="OPENAI_REASONING",
     )
     openai_timeout_seconds: float = Field(
@@ -59,13 +62,19 @@ class Settings(BaseSettings):
         ),
     )
     openai_max_concurrency: int = Field(
-        default=2,
+        default=_PERSONAL_CONFIG.ai.max_concurrency,
         ge=1,
         le=4,
         alias="OPENAI_MAX_CONCURRENCY",
     )
+    openai_daily_max_jobs: int = Field(
+        default=_PERSONAL_CONFIG.ai.daily_max_jobs,
+        ge=1,
+        le=100,
+        alias="OPENAI_DAILY_MAX_JOBS",
+    )
     openai_execution_mode: Literal["background", "worker_sync"] = Field(
-        default="background",
+        default=_PERSONAL_CONFIG.ai.execution_mode,
         alias="OPENAI_EXECUTION_MODE",
     )
     openai_require_zdr: bool = Field(default=False, alias="OPENAI_REQUIRE_ZDR")

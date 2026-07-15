@@ -1,0 +1,25 @@
+[features]
+breakout_enabled = true
+catalyst_mode = "read"
+
+[ai]
+model = "gpt-5.6-terra"
+reasoning = "max"
+max_concurrency = 1
+daily_max_jobs = 4
+execution_mode = "background"
+
+[catalyst]
+sync_seconds = 120
+focus_seconds = 1800
+scheduled_times_et = ["08:00", "12:00", "16:00"]
+
+[breakout]
+regular_seconds = 300
+premarket_seconds = 600
+closed_seconds = 1800
+range_persistence_mode = "shadow"
+
+[storage]
+retention_days = 90
+backup_keep = 7

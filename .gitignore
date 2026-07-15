@@ -24,3 +24,6 @@ build/
 output/
 .playwright-cli/
 frontend/test-results/
+config/migrated/
+config/secrets.env
+config/unmapped-env.json

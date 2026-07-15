@@ -9,12 +9,23 @@ from typing import Any, Literal
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.personal_config import get_personal_config
+
 
 _ROOT_ENV_FILE = Path(__file__).resolve().parents[4] / ".env"
+_PERSONAL_CONFIG = get_personal_config()
+_PERSONAL_RANGE_PERSISTENCE_MODE = {
+    "off": "disabled",
+    "shadow": "shadow",
+    "active": "enabled",
+}[_PERSONAL_CONFIG.breakout.range_persistence_mode]
 
 
 class BreakoutSettings(BaseSettings):
-    enabled: bool = Field(default=False, alias="BREAKOUT_RADAR_ENABLED")
+    enabled: bool = Field(
+        default=_PERSONAL_CONFIG.features.breakout_enabled,
+        alias="BREAKOUT_RADAR_ENABLED",
+    )
     discovery_provider: Literal["tradingview"] = Field(
         default="tradingview",
         alias="BREAKOUT_DISCOVERY_PROVIDER",
@@ -80,13 +91,22 @@ class BreakoutSettings(BaseSettings):
         default=40, ge=1, le=40, alias="BREAKOUT_EXPIRED_DUE_LIMIT"
     )
     scan_interval_premarket_seconds: int = Field(
-        default=600, ge=60, le=3600, alias="BREAKOUT_SCAN_INTERVAL_PREMARKET_SECONDS"
+        default=_PERSONAL_CONFIG.breakout.premarket_seconds,
+        ge=60,
+        le=3600,
+        alias="BREAKOUT_SCAN_INTERVAL_PREMARKET_SECONDS",
     )
     scan_interval_regular_seconds: int = Field(
-        default=300, ge=60, le=1800, alias="BREAKOUT_SCAN_INTERVAL_REGULAR_SECONDS"
+        default=_PERSONAL_CONFIG.breakout.regular_seconds,
+        ge=60,
+        le=1800,
+        alias="BREAKOUT_SCAN_INTERVAL_REGULAR_SECONDS",
     )
     scan_interval_closed_seconds: int = Field(
-        default=1800, ge=300, le=7200, alias="BREAKOUT_SCAN_INTERVAL_CLOSED_SECONDS"
+        default=_PERSONAL_CONFIG.breakout.closed_seconds,
+        ge=300,
+        le=7200,
+        alias="BREAKOUT_SCAN_INTERVAL_CLOSED_SECONDS",
     )
     worker_lease_ttl_seconds: int = Field(
         default=90, ge=15, le=900, alias="BREAKOUT_WORKER_LEASE_TTL_SECONDS"
@@ -98,7 +118,10 @@ class BreakoutSettings(BaseSettings):
         default=24, ge=1, le=168, alias="BREAKOUT_RAW_PAYLOAD_RETENTION_HOURS"
     )
     scan_retention_days: int = Field(
-        default=30, ge=1, le=365, alias="BREAKOUT_SCAN_RETENTION_DAYS"
+        default=_PERSONAL_CONFIG.storage.retention_days,
+        ge=1,
+        le=365,
+        alias="BREAKOUT_SCAN_RETENTION_DAYS",
     )
     retention_batch_size: int = Field(
         default=500, ge=10, le=5000, alias="BREAKOUT_RETENTION_BATCH_SIZE"
@@ -165,7 +188,8 @@ class BreakoutSettings(BaseSettings):
     )
 
     range_persistence_mode: Literal["disabled", "shadow", "enabled"] = Field(
-        default="shadow", alias="RANGE_PERSISTENCE_MODE"
+        default=_PERSONAL_RANGE_PERSISTENCE_MODE,
+        alias="RANGE_PERSISTENCE_MODE",
     )
     range_persistence_validation_version: str = Field(
         default="", max_length=80, alias="RANGE_PERSISTENCE_VALIDATION_VERSION"

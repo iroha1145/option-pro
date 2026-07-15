@@ -10,10 +10,19 @@ from urllib.parse import urlsplit
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.personal_config import get_personal_config
+
 
 _ROOT_ENV_FILE = Path(__file__).resolve().parents[4] / ".env"
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 _KEY_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+_PERSONAL_CONFIG = get_personal_config()
+_PERSONAL_CATALYST_MODE = {
+    "off": "disabled",
+    "read": "display",
+    "manual": "enabled",
+    "scheduled": "enabled",
+}[_PERSONAL_CONFIG.features.catalyst_mode]
 
 
 class CatalystSettings(BaseSettings):
@@ -23,9 +32,12 @@ class CatalystSettings(BaseSettings):
     the core API remains safe when the integration is disabled or incomplete.
     """
 
-    enabled: bool = Field(default=False, alias="MACROLENS_ENABLED")
+    enabled: bool = Field(
+        default=_PERSONAL_CONFIG.catalyst_sync_enabled,
+        alias="MACROLENS_ENABLED",
+    )
     catalyst_mode: Literal["disabled", "display", "shadow", "enabled"] = Field(
-        default="display", alias="CATALYST_MODE"
+        default=_PERSONAL_CATALYST_MODE, alias="CATALYST_MODE"
     )
     base_url: str = Field(default="", alias="MACROLENS_BASE_URL", max_length=500)
     allow_local_http: bool = Field(
@@ -74,7 +86,10 @@ class CatalystSettings(BaseSettings):
         default=60, ge=5, le=3600, alias="MACROLENS_HEALTH_INTERVAL_SECONDS"
     )
     feed_interval_seconds: int = Field(
-        default=120, ge=10, le=7200, alias="MACROLENS_FEED_INTERVAL_SECONDS"
+        default=_PERSONAL_CONFIG.catalyst.sync_seconds,
+        ge=10,
+        le=7200,
+        alias="MACROLENS_FEED_INTERVAL_SECONDS",
     )
     calendar_interval_seconds: int = Field(
         default=600, ge=30, le=21_600, alias="MACROLENS_CALENDAR_INTERVAL_SECONDS"
@@ -117,9 +132,13 @@ class CatalystSettings(BaseSettings):
         default="macrolens-option-pro-v2", alias="MACROLENS_SCHEMA_VERSION"
     )
     schema_sha256: str = Field(default="", alias="MACROLENS_SCHEMA_SHA256", max_length=64)
-    model: str = Field(default="gpt-5.6-terra", alias="OPENAI_MODEL", max_length=120)
+    model: str = Field(
+        default=_PERSONAL_CONFIG.ai.model,
+        alias="OPENAI_MODEL",
+        max_length=120,
+    )
     reasoning: Literal["none", "low", "medium", "high", "xhigh", "max"] = Field(
-        default="max", alias="OPENAI_REASONING"
+        default=_PERSONAL_CONFIG.ai.reasoning, alias="OPENAI_REASONING"
     )
 
     model_config = SettingsConfigDict(

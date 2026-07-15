@@ -120,7 +120,7 @@ def test_gateway_adds_security_cache_and_compression_headers():
     assert root.headers["x-app-commit"] == main._APP_COMMIT
     assert root.headers["content-encoding"] == "gzip"
 
-    static = client.get("/static/css/styles.css", headers={"accept-encoding": "gzip"})
+    static = client.get("/static/css/optix-deck.css", headers={"accept-encoding": "gzip"})
     assert static.status_code == 200
     assert "max-age=300" in static.headers["cache-control"]
     assert static.headers["content-encoding"] == "gzip"

@@ -534,8 +534,14 @@ else:
 
 _FRONTEND_REQUIRED_FILES = (
     "index.html",
-    "static/css/styles.css",
-    "static/js/app.js",
+    "static/favicon.svg",
+    "static/css/optix-deck.css",
+    "static/css/optix-catalysts.css",
+    "static/js/theme-init.js",
+    "static/js/deck-api.js",
+    "static/js/deck-ai-jobs.js",
+    "static/js/deck-catalysts.js",
+    "static/js/deck-app.js",
 )
 _FRONTEND_MANIFEST_NAME = ".integrity-manifest"
 

@@ -171,10 +171,22 @@
     return value > 0 ? "bullish" : value < 0 ? "bearish" : "neutral";
   }
   function itemId(item) { return String(item && (item.news_id || item.id) || ""); }
-  function itemTitle(item) { return item && (item.title_zh || item.title || item.headline) || "未命名新闻"; }
+  function itemTitle(item) {
+    const analysis = analysisOf(item);
+    return plainText(
+      (analysis && analysis.title_zh)
+      || (item && item.title_zh)
+      || "中文标题等待生成",
+    );
+  }
   function itemSummary(item) {
     const analysis = analysisOf(item);
-    return plainText(item && (item.summary || item.description) || (analysis && (analysis.headline_summary || analysis.title_zh)) || "");
+    return plainText(
+      (item && item.summary_zh)
+      || (analysis && (analysis.summary_zh || analysis.headline_summary))
+      || (item && item.headline_summary)
+      || "中文摘要等待生成",
+    );
   }
   function feedItems(payload) { return list(payload, ["items", "news", "results", "feed"]); }
   function newsItemFromPayload(payload) {
@@ -1337,6 +1349,7 @@
     labels: { statusLabel, classLabel },
     formatConfidence: pct,
     impactsOf, impactDirection, sentimentOf, isRuleOnlyAnalysis, analysisOriginLabel, analysisRetryForce, compactNews, plainText,
+    itemTitle, itemSummary,
     analysisActionDecision, focusCycleDecision, focusCycleRequest, focusUnknownHistoryHtml,
   };
 })();
