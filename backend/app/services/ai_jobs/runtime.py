@@ -160,19 +160,40 @@ def runtime_configuration_valid(settings: Any) -> bool:
 
 
 def capability_status(settings: Any) -> dict[str, Any]:
-    """Report local readiness without probing an SDK or alternate provider."""
+    """Report local readiness without contacting OpenAI or another provider."""
 
+    methods = {"create": False, "retrieve": False, "cancel": False}
+    try:
+        from openai.resources.responses.responses import AsyncResponses
+
+        methods = {
+            name: callable(getattr(AsyncResponses, name, None))
+            for name in methods
+        }
+    except (ImportError, AttributeError):
+        pass
+    sdk_supported = all(methods.values())
     configured = bool(settings.openai_api_key.get_secret_value().strip())
     if not runtime_configuration_valid(settings):
         return {
             "status": "runtime_configuration_invalid",
             "supported": False,
+            "sdk_supported": sdk_supported,
             "execution_mode": OFFICIAL_EXECUTION_MODE,
+            "methods": methods,
         }
     return {
-        "status": "supported" if configured else "not_configured",
-        "supported": configured,
+        "status": (
+            "supported"
+            if configured and sdk_supported
+            else "unsupported_provider_capability"
+            if configured
+            else "not_configured"
+        ),
+        "supported": configured and sdk_supported,
+        "sdk_supported": sdk_supported,
         "execution_mode": OFFICIAL_EXECUTION_MODE,
+        "methods": methods,
     }
 
 
