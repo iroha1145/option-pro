@@ -890,20 +890,13 @@ async def _default_intraday_loader(
     )
 
 
-def _stale_draft(
-    current: FocusContextResponse,
-    *,
-    observed: datetime,
-    warning: str,
-) -> FocusContextDraft | None:
-    if not any(symbol.data_status == "active" for symbol in current.symbols):
-        return None
-    symbols: list[FocusSymbol] = []
-    for symbol in current.symbols:
+def _stale_symbols(symbols: Sequence[FocusSymbol]) -> list[FocusSymbol]:
+    stale: list[FocusSymbol] = []
+    for symbol in symbols:
         reasons = list(symbol.universe_reasons)
         if "stale_retained" not in reasons:
             reasons = [*reasons[:11], "stale_retained"]
-        symbols.append(
+        stale.append(
             symbol.model_copy(
                 update={
                     "data_status": "stale",
@@ -915,6 +908,17 @@ def _stale_draft(
                 }
             )
         )
+    return stale
+
+
+def _stale_draft(
+    current: FocusContextResponse,
+    *,
+    observed: datetime,
+    warning: str,
+) -> FocusContextDraft | None:
+    if not any(symbol.data_status == "active" for symbol in current.symbols):
+        return None
     return FocusContextDraft(
         schema_version=current.schema_version,
         schema_sha256=current.schema_sha256,
@@ -922,10 +926,73 @@ def _stale_draft(
         data_through=current.data_through,
         market_session=_market_session(observed),
         universe_version=current.universe_version,
-        symbols=symbols,
+        symbols=_stale_symbols(current.symbols),
         major_market_symbols=current.major_market_symbols,
         warnings=list(
             dict.fromkeys([*current.warnings, "focus_snapshot_stale", warning])
+        )[:50],
+    )
+
+
+def _is_closed_session_retained(
+    context: FocusContextDraft | FocusContextResponse | None,
+) -> bool:
+    if (
+        context is None
+        or context.market_session != "closed"
+        or not context.symbols
+    ):
+        return False
+    warnings = set(context.warnings)
+    return bool(
+        "focus_closed_session_snapshot_retained" in warnings
+        and "focus_snapshot_stale" in warnings
+        and all(
+            symbol.data_status == "stale" and symbol.source_status == "stale"
+            for symbol in context.symbols
+        )
+    )
+
+
+def _closed_session_retained_draft(
+    current: FocusContextResponse | None,
+    candidate: FocusContextDraft,
+    *,
+    observed: datetime,
+) -> FocusContextDraft | None:
+    """Retain a newer closed-session snapshot when only older data is available."""
+
+    if current is None or candidate.market_session != "closed":
+        return None
+    current_data_through = _as_utc(current.data_through)
+    candidate_data_through = _as_utc(candidate.data_through)
+    if (
+        current_data_through is None
+        or candidate_data_through is None
+        or candidate_data_through >= current_data_through
+    ):
+        return None
+    if _is_closed_session_retained(current):
+        return FocusContextDraft.model_validate(
+            current.model_dump(mode="python", exclude={"revision"})
+        )
+    return FocusContextDraft(
+        schema_version=current.schema_version,
+        schema_sha256=current.schema_sha256,
+        as_of=max(observed, current.as_of),
+        data_through=current.data_through,
+        market_session="closed",
+        universe_version=current.universe_version,
+        symbols=_stale_symbols(current.symbols),
+        major_market_symbols=current.major_market_symbols,
+        warnings=list(
+            dict.fromkeys(
+                [
+                    "focus_closed_session_snapshot_retained",
+                    "focus_snapshot_stale",
+                    *current.warnings,
+                ]
+            )
         )[:50],
     )
 
@@ -1697,11 +1764,26 @@ class FocusContextProducer:
                 )
             ):
                 warnings.append("focus_market_leader_exact_coverage_incomplete")
-        draft = draft.model_copy(
-            update={
-                "warnings": list(dict.fromkeys([*draft.warnings, *warnings]))[:50]
-            }
+        closed_session_snapshot_retained = False
+        closed_session_snapshot_reused = False
+        current_is_closed_session_retained = _is_closed_session_retained(current)
+        retained_draft = _closed_session_retained_draft(
+            current,
+            draft,
+            observed=observed,
         )
+        if retained_draft is not None:
+            draft = retained_draft
+            closed_session_snapshot_retained = True
+            closed_session_snapshot_reused = current_is_closed_session_retained
+        if not closed_session_snapshot_reused:
+            draft = draft.model_copy(
+                update={
+                    "warnings": list(
+                        dict.fromkeys([*draft.warnings, *warnings])
+                    )[:50]
+                }
+            )
         coverage = _published_coverage(
             draft.symbols,
             market_volume_rank_scope=(
@@ -1732,6 +1814,10 @@ class FocusContextProducer:
             "cross_session_retained_count": retained_count,
             "cross_session_excluded_count": len(excluded_new_tickers),
             "cross_session_fresh_admitted_count": fresh_admitted_count,
+            "closed_session_snapshot_retained": (
+                closed_session_snapshot_retained
+            ),
+            "closed_session_snapshot_reused": closed_session_snapshot_reused,
             **coverage,
             "warnings": draft.warnings,
         }
@@ -1813,7 +1899,11 @@ class FocusContextProducer:
                 )
                 retention = {"status": "degraded", "error_code": "retention_failed"}
             result = {
-                "status": "completed",
+                "status": (
+                    "degraded"
+                    if details.get("closed_session_snapshot_retained")
+                    else "completed"
+                ),
                 "enabled": True,
                 "revision": response.revision,
                 "retention": retention,
@@ -1974,6 +2064,7 @@ def health_payload(
             "ready_dependency": False,
         }
     contract_valid = verify_focus_contract()
+    observed = now or datetime.now(timezone.utc)
     local_repository = repository or CatalystRepository(
         settings.cache_db_path,
         read_only=True,
@@ -1987,7 +2078,7 @@ def health_payload(
             ),
             snapshot_refresh_seconds=settings.refresh_seconds,
             startup_grace_seconds=settings.producer_snapshot_grace_seconds,
-            now=now,
+            now=observed,
         )
     except Exception as error:
         if not isinstance(error, (OSError, ValueError, sqlite3.Error)):
@@ -2000,6 +2091,36 @@ def health_payload(
             "status": "unavailable",
             "error_code": "focus_cache_unavailable",
         }
+    current_market_session = _market_session_name(
+        MarketClock(now=lambda: observed).snapshot(observed)
+    )
+    database_details = database.get("details")
+    closed_session_heartbeat_only = bool(
+        current_market_session == "closed"
+        and database.get("closed_session_retained_stale")
+        and database.get("heartbeat_fresh")
+        and database.get("lock_live")
+        and database.get("schema_healthy")
+        and isinstance(database_details, Mapping)
+        and database_details.get("closed_session_snapshot_retained")
+        and str(database.get("status") or "")
+        in {"degraded", "idle", "running"}
+    )
+    if closed_session_heartbeat_only:
+        database = dict(database)
+        database["healthy"] = True
+        database["status"] = "degraded"
+        database["closed_session_heartbeat_only"] = True
+        database["warnings"] = list(
+            dict.fromkeys(
+                [
+                    *database.get("warnings", []),
+                    "focus_closed_session_heartbeat_only",
+                ]
+            )
+        )
+    else:
+        database["closed_session_heartbeat_only"] = False
     healthy = bool(contract_valid and database.get("healthy"))
     production_status = str(database.get("status") or "unavailable")
     public_status = (
@@ -2013,6 +2134,7 @@ def health_payload(
         "production_status": production_status,
         "enabled": True,
         "ready_dependency": False,
+        "current_market_session": current_market_session,
         "contract": {"valid": contract_valid},
         "database": database,
     }

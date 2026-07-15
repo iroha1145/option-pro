@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -145,6 +146,41 @@ def test_custom_provider_requires_explicit_capability_attestation(tmp_path):
     status = runtime.capability_status(settings)
     assert status["supported"] is False
     assert status["reason"] == "custom_base_url_not_attested"
+
+
+@pytest.mark.parametrize(
+    ("configured_base_url", "expected_base_url"),
+    [
+        ("", "https://api.openai.com/v1"),
+        ("https://proxy.example/v1", "https://proxy.example/v1"),
+    ],
+)
+def test_client_always_receives_an_explicit_validated_base_url(
+    tmp_path,
+    monkeypatch,
+    configured_base_url,
+    expected_base_url,
+):
+    captured: dict = {}
+    sentinel = object()
+
+    def fake_client(**kwargs):
+        captured.update(kwargs)
+        return sentinel
+
+    monkeypatch.setitem(
+        sys.modules,
+        "openai",
+        SimpleNamespace(AsyncOpenAI=fake_client),
+    )
+    monkeypatch.setattr(runtime, "_CLIENT", None)
+    monkeypatch.setattr(runtime, "_CLIENT_SIGNATURE", None)
+    settings = _settings(tmp_path / "ai-jobs.db")
+    settings.openai_base_url = configured_base_url
+
+    assert runtime._client(settings) is sentinel
+    assert captured["base_url"] == expected_base_url
+    assert captured["api_key"] == "test-key"
 
 
 def test_job_dedupe_is_persistent_and_public_shape_hides_response_id(tmp_path):
