@@ -7,6 +7,7 @@ import path from 'node:path';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const frontend = path.resolve(here, '..');
 const app = await readFile(path.join(frontend, 'static/js/deck-app.js'), 'utf8');
+const api = await readFile(path.join(frontend, 'static/js/deck-api.js'), 'utf8');
 
 test('production watchlist uses one shared background loader without force refreshes', () => {
   assert.equal((app.match(/N\.watchlist\(/g) || []).length, 1);
@@ -63,6 +64,15 @@ test('each watchlist render is pinned to one local snapshot', () => {
   assert.match(app, /watchStateRevision !== watchRenderedRevision/);
 });
 
+test('focus price and absolute change come from the same watchlist quote', () => {
+  assert.match(api, /change: s\.change == null \? null : s\.change/);
+  assert.match(api, /dataThrough: d\.data_through/);
+  assert.match(api, /delayedTickers: Array\.isArray\(d\.delayed_tickers\)/);
+  assert.match(app, /focus-price__now[^\n]*f\.price/);
+  assert.match(app, /isNum\(f\.change\) \? sign\(f\.change\)/);
+  assert.doesNotMatch(app, /q \? sign\(q\.change\)/);
+});
+
 test('focus cache is bounded and never stores failed requests', () => {
   assert.match(app, /const WATCH_FOCUS_MAX_STALE_MS = 15 \* 60e3;/);
   assert.match(app, /if \(maxAge >= WATCH_FOCUS_MAX_STALE_MS\) store\.delete\(key\);/);
@@ -76,7 +86,16 @@ test('background redraws preserve a stable keyboard target', () => {
 });
 
 test('refresh copy describes the actual five-minute snapshot contract', () => {
-  assert.match(app, /每 75 秒检查 · 五分钟行情快照/);
+  assert.match(app, /function watchQuoteCoverage\(snapshot\)/);
+  assert.match(app, /报价覆盖 \$\{watchQuoteCoverage\(watchSnapshot\)\}/);
+  assert.match(app, /每 75 秒检查 · 五分钟盘前、盘中及盘后报价/);
   assert.match(app, /setInterval\([\s\S]*refreshWatchlistBackground\(\)[\s\S]*WATCH_CHECK_MS/);
   assert.doesNotMatch(app, /每 75 秒自动拉取/);
+});
+
+test('watchlist and sector timestamps use market data time and disclose delayed symbols', () => {
+  assert.match(app, /delayedTickers: watchSnapshot\.delayedTickers/);
+  assert.match(app, /仍停留在较早交易日/);
+  assert.match(app, /行情覆盖 \$\{watchQuoteCoverage\(St\.watch\)\}/);
+  assert.doesNotMatch(app, /行情快照 \$\{N\.fmtTime\(St\.watch\.asOf\)\}/);
 });

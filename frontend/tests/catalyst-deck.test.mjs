@@ -95,6 +95,128 @@ test('market-focus cycles are explicit, revision-bound, and never triggered by p
   assert.doesNotMatch(catalysts, /胜率\s*[:：]?\s*\d|收益概率\s*[:：]?\s*\d/);
 });
 
+test('an old unknown market-focus cycle stays immutable while a newer prepared revision can start separately', () => {
+  const context = vm.createContext({
+    window: {
+      location: { origin: 'https://option.example' },
+      OPTIX_NET: {
+        fmtDateTime: value => `DATE:${value}`,
+        hasAppToken: () => true,
+      },
+      OPTIX_AI_JOBS: {
+        normalizeStatus: value => String(value || 'pending').toLowerCase(),
+        isActive: value => ['pending', 'queued', 'in_progress'].includes(String(value || '').toLowerCase()),
+      },
+    },
+    document: { querySelector: () => null, querySelectorAll: () => [] },
+    URL,
+    URLSearchParams,
+    Date,
+    history: { replaceState: () => {} },
+  });
+  vm.runInContext(catalysts, context, { filename: 'deck-catalysts.js' });
+  const desk = context.window.OPTIX_CATALYSTS;
+  const oldCycle = {
+    cycle_id: 'mfc_old_unknown',
+    status: 'failed',
+    error_code: 'submission_outcome_unknown',
+    prepared_revision: 31669,
+    completed_at: '2026-07-14T14:45:33.549482Z',
+  };
+  const disabled = desk.focusCycleDecision({
+    status: 'active',
+    capability: 'disabled',
+    action_enabled: false,
+    manual_enabled: false,
+    prepared_revision: 54331,
+    last_consumed_revision: 0,
+  }, oldCycle, 1055, true);
+
+  assert.equal(disabled.actionMissing, true);
+  assert.equal(disabled.buttonText, '分析功能未启用');
+  assert.equal(disabled.canRun, false);
+  assert.equal(disabled.canRetry, false);
+  assert.equal(disabled.showHistoricalUnknown, true);
+  const historyHtml = desk.focusUnknownHistoryHtml(oldCycle, disabled);
+  assert.match(historyHtml, /历史记录 · 提交结果待核对 · DATE:2026-07-14T14:45:33\.549482Z/);
+  assert.match(historyHtml, /准备版本 31669/);
+  assert.match(historyHtml, /仍禁止重试同一周期/);
+
+  const enabled = desk.focusCycleDecision({
+    status: 'active',
+    capability: 'enabled',
+    action_enabled: true,
+    manual_enabled: true,
+    prepared_revision: 54331,
+    last_consumed_revision: 0,
+  }, oldCycle, 1055, true);
+  assert.equal(enabled.newPreparationAfterUnknown, true);
+  assert.equal(enabled.canCreate, true);
+  assert.equal(enabled.canRetry, false);
+  assert.equal(enabled.buttonText, '基于 1055 个新热点创建新周期');
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(desk.focusCycleRequest(enabled, oldCycle))),
+    { expected_prepared_revision: 54331 },
+  );
+
+  const sameRevision = desk.focusCycleDecision({
+    status: 'active',
+    capability: 'enabled',
+    action_enabled: true,
+    manual_enabled: true,
+    prepared_revision: 31669,
+    last_consumed_revision: 0,
+  }, oldCycle, 1, true);
+  assert.equal(sameRevision.canCreate, false);
+  assert.equal(sameRevision.canRetry, false);
+  assert.equal(desk.focusCycleRequest(sameRevision, oldCycle), null);
+
+  const sameRevisionDuringCooldown = desk.focusCycleDecision({
+    status: 'active',
+    capability: 'enabled',
+    action_enabled: true,
+    manual_enabled: true,
+    prepared_revision: 31669,
+    last_consumed_revision: 0,
+    cooldown_until: '2999-01-01T00:00:00Z',
+  }, oldCycle, 1, true);
+  assert.equal(sameRevisionDuringCooldown.buttonText, '提交结果待核对');
+  assert.equal(sameRevisionDuringCooldown.canRun, false);
+
+  const missingCycleRevision = desk.focusCycleDecision({
+    status: 'active',
+    capability: 'enabled',
+    action_enabled: true,
+    manual_enabled: true,
+    prepared_revision: 54331,
+    last_consumed_revision: 0,
+  }, { ...oldCycle, prepared_revision: undefined }, 1055, true);
+  assert.equal(missingCycleRevision.cycleHasPreparedRevision, false);
+  assert.equal(missingCycleRevision.canCreate, false);
+
+  const ordinaryFailedCycle = {
+    cycle_id: 'mfc_failed_retryable',
+    status: 'failed',
+    error_code: 'provider_timeout',
+    prepared_revision: 31669,
+  };
+  const retryBeforeNewBatch = desk.focusCycleDecision({
+    status: 'active',
+    capability: 'enabled',
+    action_enabled: true,
+    manual_enabled: true,
+    prepared_revision: 54331,
+    last_consumed_revision: 0,
+  }, ordinaryFailedCycle, 1055, true);
+  assert.equal(retryBeforeNewBatch.canRetry, true);
+  assert.equal(retryBeforeNewBatch.canCreate, false);
+  assert.equal(retryBeforeNewBatch.buttonText, '重试同一不可变快照');
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(desk.focusCycleRequest(retryBeforeNewBatch, ordinaryFailedCycle))),
+    { retry_cycle_id: 'mfc_failed_retryable' },
+  );
+});
+
 test('expired-watermark recovery keeps the stale snapshot visible', () => {
   assert.match(catalysts, /raw\.resync_required \|\| feedStream\.resync_required/);
   assert.match(catalysts, /旧快照 · 重新同步中/);

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -12,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
+import threading
 import time
 from typing import Annotated, Any, Optional
 from urllib.parse import urljoin, urlparse
@@ -552,6 +554,71 @@ _WATCHLIST_QUERY_MAX_LENGTH = 4096
 _WATCHLIST_FRESH_TTL_SECONDS = 5 * 60
 _WATCHLIST_MAX_SNAPSHOT_AGE_SECONDS = 24 * 60 * 60
 _WATCHLIST_TARGETED_STALE_TTL_SECONDS = 15 * 60
+_WATCHLIST_LATEST_INTERVAL = "5m"
+_WATCHLIST_MARKET_TIMEZONE = ZoneInfo("America/New_York")
+_WATCHLIST_SYMBOL_TIMEZONES = {
+    "^N225": "Asia/Tokyo",
+    "^HSI": "Asia/Hong_Kong",
+    "^FTSE": "Europe/London",
+    "^GDAXI": "Europe/Berlin",
+    "^FCHI": "Europe/Paris",
+    "^STOXX50E": "Europe/Berlin",
+    "^AXJO": "Australia/Sydney",
+    "^KS11": "Asia/Seoul",
+    "^TWII": "Asia/Taipei",
+    "^BSESN": "Asia/Kolkata",
+    "^NSEI": "Asia/Kolkata",
+}
+_WATCHLIST_SUFFIX_TIMEZONES = (
+    (".TWO", "Asia/Taipei"),
+    (".HK", "Asia/Hong_Kong"),
+    (".SS", "Asia/Shanghai"),
+    (".SZ", "Asia/Shanghai"),
+    (".TW", "Asia/Taipei"),
+    (".KS", "Asia/Seoul"),
+    (".KQ", "Asia/Seoul"),
+    (".AX", "Australia/Sydney"),
+    (".NZ", "Pacific/Auckland"),
+    (".SI", "Asia/Singapore"),
+    (".NS", "Asia/Kolkata"),
+    (".BO", "Asia/Kolkata"),
+    (".JK", "Asia/Jakarta"),
+    (".KL", "Asia/Kuala_Lumpur"),
+    (".BK", "Asia/Bangkok"),
+    (".VN", "Asia/Ho_Chi_Minh"),
+    (".PA", "Europe/Paris"),
+    (".AS", "Europe/Amsterdam"),
+    (".BR", "Europe/Brussels"),
+    (".DE", "Europe/Berlin"),
+    (".MI", "Europe/Rome"),
+    (".MC", "Europe/Madrid"),
+    (".SW", "Europe/Zurich"),
+    (".ST", "Europe/Stockholm"),
+    (".OL", "Europe/Oslo"),
+    (".CO", "Europe/Copenhagen"),
+    (".HE", "Europe/Helsinki"),
+    (".VI", "Europe/Vienna"),
+    (".IR", "Europe/Dublin"),
+    (".LS", "Europe/Lisbon"),
+    (".L", "Europe/London"),
+    (".T", "Asia/Tokyo"),
+    (".TO", "America/Toronto"),
+    (".V", "America/Toronto"),
+    (".SA", "America/Sao_Paulo"),
+    (".MX", "America/Mexico_City"),
+)
+_WATCHLIST_PROVIDER_CLOSE_WORKERS = 4
+_WATCHLIST_PROVIDER_CLOSE_BATCH_TIMEOUT_SECONDS = 12.0
+_WATCHLIST_PROVIDER_CLOSE_SUCCESS_TTL_SECONDS = 5 * 60
+_WATCHLIST_PROVIDER_CLOSE_FAILURE_TTL_SECONDS = 30
+_WATCHLIST_PROVIDER_CLOSE_CACHE_MAX_ENTRIES = 512
+_watchlist_provider_close_executor = ThreadPoolExecutor(
+    max_workers=_WATCHLIST_PROVIDER_CLOSE_WORKERS,
+    thread_name_prefix="watchlist-previous-close",
+)
+_watchlist_provider_close_lock = threading.RLock()
+_watchlist_provider_close_cache: dict[str, tuple[float, float | None]] = {}
+_watchlist_provider_close_inflight: dict[str, Any] = {}
 _WATCHLIST_SNAPSHOT_VERSION = 1
 _WATCHLIST_SNAPSHOT_MAX_BYTES = 2 * 1024 * 1024
 _WATCHLIST_SNAPSHOT_PATH = Path(
@@ -571,6 +638,165 @@ _watchlist_snapshot_load_attempted = False
 _WATCHLIST_TICKER_PATTERN = re.compile(
     r"^(?:\^[A-Z0-9][A-Z0-9.^_=-]{0,30}|[A-Z0-9][A-Z0-9.^_=-]{0,31})$"
 )
+
+
+def _watchlist_market_timezone(ticker: str) -> ZoneInfo:
+    explicit = _WATCHLIST_SYMBOL_TIMEZONES.get(ticker)
+    if explicit:
+        return ZoneInfo(explicit)
+    if ticker.endswith("=F"):
+        return ZoneInfo("America/Chicago")
+    for suffix, timezone_name in _WATCHLIST_SUFFIX_TIMEZONES:
+        if ticker.endswith(suffix):
+            return ZoneInfo(timezone_name)
+    return _WATCHLIST_MARKET_TIMEZONE
+
+
+def _watchlist_requires_provider_previous_close(ticker: str) -> bool:
+    # Index and futures daily bars can skip sessions or use a settlement value
+    # that differs from Yahoo's published previous-close baseline.
+    return ticker.startswith("^") or ticker.endswith("=F")
+
+
+def _fetch_watchlist_provider_previous_close(
+    ticker: str,
+    *,
+    session: Any,
+) -> float | None:
+    try:
+        instrument = yf.Ticker(ticker, session=session)
+        instrument.history(
+            period="1d",
+            interval=_WATCHLIST_LATEST_INTERVAL,
+            prepost=True,
+            actions=False,
+            auto_adjust=False,
+            timeout=10,
+        )
+        metadata = instrument.history_metadata or {}
+        for key in ("previousClose", "chartPreviousClose"):
+            value = metadata.get(key)
+            try:
+                previous_close = float(value)
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if math.isfinite(previous_close) and previous_close > 0:
+                return previous_close
+    except Exception:
+        pass
+    return None
+
+
+def _cache_watchlist_provider_previous_close(ticker: str, future: Any) -> None:
+    try:
+        previous_close = future.result()
+    except Exception:
+        previous_close = None
+    now = time.monotonic()
+    ttl = (
+        _WATCHLIST_PROVIDER_CLOSE_SUCCESS_TTL_SECONDS
+        if previous_close is not None
+        else _WATCHLIST_PROVIDER_CLOSE_FAILURE_TTL_SECONDS
+    )
+    with _watchlist_provider_close_lock:
+        if _watchlist_provider_close_inflight.get(ticker) is future:
+            _watchlist_provider_close_inflight.pop(ticker, None)
+        _watchlist_provider_close_cache[ticker] = (now + ttl, previous_close)
+        if len(_watchlist_provider_close_cache) > _WATCHLIST_PROVIDER_CLOSE_CACHE_MAX_ENTRIES:
+            remove_count = (
+                len(_watchlist_provider_close_cache)
+                - _WATCHLIST_PROVIDER_CLOSE_CACHE_MAX_ENTRIES
+            )
+            for expired_ticker, _ in sorted(
+                _watchlist_provider_close_cache.items(),
+                key=lambda item: item[1][0],
+            )[:remove_count]:
+                _watchlist_provider_close_cache.pop(expired_ticker, None)
+
+
+def _fetch_watchlist_provider_previous_closes(
+    tickers: list[str],
+    *,
+    session: Any,
+) -> dict[str, float]:
+    if not tickers:
+        return {}
+
+    unique_tickers = list(dict.fromkeys(tickers))
+    deadline = time.monotonic() + _WATCHLIST_PROVIDER_CLOSE_BATCH_TIMEOUT_SECONDS
+    previous_closes: dict[str, float] = {}
+    waiting: dict[str, Any] = {}
+    pending: list[str] = []
+
+    now = time.monotonic()
+    with _watchlist_provider_close_lock:
+        for ticker in unique_tickers:
+            cached = _watchlist_provider_close_cache.get(ticker)
+            if cached is not None and cached[0] > now:
+                if cached[1] is not None:
+                    previous_closes[ticker] = cached[1]
+                continue
+            if cached is not None:
+                _watchlist_provider_close_cache.pop(ticker, None)
+            future = _watchlist_provider_close_inflight.get(ticker)
+            if future is not None:
+                waiting[ticker] = future
+            else:
+                pending.append(ticker)
+
+    while pending or waiting:
+        with _watchlist_provider_close_lock:
+            available_slots = max(
+                0,
+                _WATCHLIST_PROVIDER_CLOSE_WORKERS
+                - len(_watchlist_provider_close_inflight),
+            )
+            for ticker in pending[:available_slots]:
+                future = _watchlist_provider_close_executor.submit(
+                    _fetch_watchlist_provider_previous_close,
+                    ticker,
+                    session=session,
+                )
+                _watchlist_provider_close_inflight[ticker] = future
+                waiting[ticker] = future
+                future.add_done_callback(
+                    lambda completed, symbol=ticker: _cache_watchlist_provider_previous_close(
+                        symbol,
+                        completed,
+                    )
+                )
+            if available_slots:
+                del pending[:available_slots]
+
+        if not waiting:
+            # Other requests own all global worker slots. Returning the cached
+            # subset keeps this request bounded; missing symbols fail closed.
+            break
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        done, _ = wait(
+            set(waiting.values()),
+            timeout=remaining,
+            return_when=FIRST_COMPLETED,
+        )
+        if not done:
+            break
+        for ticker, future in list(waiting.items()):
+            if future not in done:
+                continue
+            try:
+                previous_close = future.result()
+            except Exception:
+                previous_close = None
+            # Do not rely on the worker-thread callback to free the global
+            # slot. The waiter can observe a completed future before its
+            # callback runs and would otherwise stop with pending symbols.
+            _cache_watchlist_provider_previous_close(ticker, future)
+            if previous_close is not None:
+                previous_closes[ticker] = previous_close
+            waiting.pop(ticker, None)
+    return previous_closes
 
 
 def _is_finite_json_tree(value: Any, *, depth: int = 0) -> bool:
@@ -908,12 +1134,20 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
     else:
         all_tickers = requested_tickers
 
-    # Fetch daily closes once and derive both card prices and sparklines from
-    # the same batch. This avoids one fast_info request per ticker on cold load.
+    # Daily bars provide the seven-session sparkline and previous official
+    # close. A second, still-batched intraday request provides the latest
+    # regular/extended-hours price. Keeping both calls batched avoids the old
+    # one-fast_info-request-per-ticker cold-load penalty without presenting a
+    # previous daily close as a freshly fetched quote.
     def _fetch_quotes():
         try:
             import yfinance as yf_mod
-            df = yf_mod.download(
+            session = getattr(
+                __import__("app.services.yahoo", fromlist=["_yf_session"]),
+                "_yf_session",
+                None,
+            )
+            daily_df = yf_mod.download(
                 tickers=" ".join(all_tickers),
                 period="7d",
                 interval="1d",
@@ -921,40 +1155,176 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
                 threads=True,
                 progress=False,
                 auto_adjust=False,
-                session=getattr(__import__("app.services.yahoo", fromlist=["_yf_session"]),
-                                "_yf_session", None),
+                session=session,
+            )
+            latest_df = yf_mod.download(
+                tickers=" ".join(all_tickers),
+                period="1d",
+                interval=_WATCHLIST_LATEST_INTERVAL,
+                prepost=True,
+                group_by="ticker",
+                threads=True,
+                progress=False,
+                auto_adjust=False,
+                session=session,
+            )
+            provider_previous_closes = _fetch_watchlist_provider_previous_closes(
+                [
+                    ticker
+                    for ticker in all_tickers
+                    if _watchlist_requires_provider_previous_close(ticker)
+                ],
+                session=session,
             )
             from app.services.zh_names import get_zh_name
+
+            def frame_for(dataset, ticker):
+                if dataset is None or getattr(dataset, "empty", True):
+                    return None
+                columns = getattr(dataset, "columns", None)
+                if getattr(columns, "nlevels", 1) > 1:
+                    level_zero = columns.get_level_values(0)
+                    if ticker in level_zero:
+                        return dataset[ticker]
+                    level_one = columns.get_level_values(1)
+                    if ticker in level_one:
+                        return dataset.xs(ticker, axis=1, level=1)
+                    return None
+                return dataset if len(all_tickers) == 1 else None
+
+            def finite_closes(frame, market_timezone):
+                if frame is None or frame.empty:
+                    return []
+                close_col = "Close" if "Close" in frame.columns else "Adj Close"
+                if close_col not in frame.columns:
+                    return []
+                points = []
+                for index, value in frame[close_col].items():
+                    try:
+                        price = float(value)
+                    except (TypeError, ValueError, OverflowError):
+                        continue
+                    if not math.isfinite(price) or price <= 0:
+                        continue
+                    raw_dt = index.to_pydatetime() if hasattr(index, "to_pydatetime") else index
+                    if not isinstance(raw_dt, datetime):
+                        continue
+                    if raw_dt.tzinfo is None:
+                        market_dt = raw_dt.replace(tzinfo=market_timezone)
+                    else:
+                        market_dt = raw_dt.astimezone(market_timezone)
+                    points.append((market_dt, price))
+                return points
+
+            def session_name(market_dt, market_timezone):
+                if market_timezone.key != _WATCHLIST_MARKET_TIMEZONE.key:
+                    return "exchange_session"
+                minute = market_dt.hour * 60 + market_dt.minute
+                if minute < 9 * 60 + 30:
+                    return "pre_market"
+                if minute < 16 * 60:
+                    return "regular"
+                return "post_market"
+
             quotes = {}
+            quote_times = []
+            quote_market_datetimes = {}
             for t in all_tickers:
                 try:
-                    frame = None
-                    if getattr(df.columns, "nlevels", 1) > 1 and t in df.columns.get_level_values(0):
-                        frame = df[t]
-                    elif len(all_tickers) == 1:
-                        frame = df
-                    if frame is None or frame.empty:
+                    market_timezone = _watchlist_market_timezone(t)
+                    daily = finite_closes(frame_for(daily_df, t), market_timezone)
+                    latest = finite_closes(frame_for(latest_df, t), market_timezone)
+                    if not daily or not latest:
                         continue
-                    close_col = "Close" if "Close" in frame.columns else "Adj Close"
-                    closes = [float(c) for c in frame[close_col].dropna().tolist() if math.isfinite(float(c))]
-                    if not closes:
+
+                    quote_dt, price = latest[-1]
+                    daily_dt, daily_close = daily[-1]
+                    overnight_contract = t.endswith("=F")
+                    next_futures_session = (
+                        overnight_contract
+                        and daily_dt.date().toordinal() == quote_dt.date().toordinal() + 1
+                        and quote_dt.weekday() in {0, 1, 2, 3, 6}
+                        and quote_dt.hour >= 17
+                    )
+                    daily_is_current = (
+                        daily_dt.date() == quote_dt.date() or next_futures_session
+                    )
+                    if daily_dt.date() > quote_dt.date() and not daily_is_current:
+                        # The intraday batch is older than the available daily
+                        # bar and therefore cannot truthfully be called latest.
                         continue
-                    price = closes[-1]
-                    prev = closes[-2] if len(closes) > 1 else price
+
+                    if daily_is_current:
+                        if len(daily) < 2:
+                            continue
+                        daily_previous_close = daily[-2][1]
+                        spark = [point[1] for point in daily[-7:]]
+                        spark[-1] = price
+                    else:
+                        daily_previous_close = daily_close
+                        spark = [point[1] for point in daily[-6:]] + [price]
+
+                    if _watchlist_requires_provider_previous_close(t):
+                        previous_close = provider_previous_closes.get(t)
+                        if previous_close is None:
+                            # A daily fallback would silently change the
+                            # provider's published index/futures baseline.
+                            continue
+                        previous_close_source = "provider_metadata"
+                    else:
+                        previous_close = daily_previous_close
+                        previous_close_source = "daily_close"
+
+                    quote_times.append(quote_dt.astimezone(timezone.utc))
+                    quote_market_datetimes[t] = quote_dt
                     quotes[t] = {
                         "ticker": t,
                         "name": get_zh_name(t) or t,
                         "price": round(price, 2),
-                        "change_percent": round((price - prev) / prev * 100, 2) if prev else 0,
-                        "spark": [round(c, 2) for c in closes[-7:]],
+                        "change": round(price - previous_close, 2),
+                        "change_percent": round(
+                            (price - previous_close) / previous_close * 100,
+                            2,
+                        ),
+                        "spark": [round(point, 2) for point in spark[-7:]],
+                        "quote_as_of": quote_dt.astimezone(timezone.utc).isoformat(),
+                        "quote_session": session_name(quote_dt, market_timezone),
+                        "previous_close_source": previous_close_source,
                     }
                 except Exception:
                     continue
-            return quotes
+            # Compare trading dates only within the U.S. equity/ETF session.
+            # The universe also contains RMS.PA and futures; comparing their
+            # exchange dates to New York equities would create a predictable
+            # false warning every morning. Before 09:30 ET, a U.S. symbol with
+            # no pre-market print is also legitimately still at the prior
+            # official close.
+            us_quote_datetimes = {
+                ticker: quote_dt
+                for ticker, quote_dt in quote_market_datetimes.items()
+                if "." not in ticker
+                and "=" not in ticker
+                and not ticker.startswith("^")
+            }
+            newest_us_quote = max(us_quote_datetimes.values(), default=None)
+            us_regular_session_started = bool(
+                newest_us_quote
+                and newest_us_quote.hour * 60 + newest_us_quote.minute >= 9 * 60 + 30
+            )
+            delayed_tickers = sorted(
+                ticker
+                for ticker, quote_dt in us_quote_datetimes.items()
+                if us_regular_session_started
+                and newest_us_quote is not None
+                and quote_dt.date() < newest_us_quote.date()
+            )
+            for ticker in delayed_tickers:
+                quotes[ticker]["quote_delayed"] = True
+            return quotes, quote_times, delayed_tickers
         except Exception:
-            return {}
+            return {}, [], []
 
-    price_map = await asyncio.to_thread(_fetch_quotes)
+    price_map, quote_times, delayed_tickers = await asyncio.to_thread(_fetch_quotes)
 
     # If yfinance limited us hard, less than 30% succeeded — treat as failure
     # so the cache returns the previous (stale) snapshot instead of an empty one.
@@ -998,8 +1368,21 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
         "succeeded": len(price_map),
         "failed": len(all_tickers) - len(price_map),
         "failed_tickers": sorted(t for t in all_tickers if t not in price_map),
-        "data_limited": success_ratio < 1.0,
-        "source_status": "active" if success_ratio == 1.0 else "degraded",
+        "data_limited": success_ratio < 1.0 or bool(delayed_tickers),
+        "delayed": len(delayed_tickers),
+        "delayed_tickers": delayed_tickers,
+        "quote_interval": _WATCHLIST_LATEST_INTERVAL,
+        # A collection is only complete through its oldest constituent quote.
+        # Keep the newest timestamp separately so the UI cannot hide one stale
+        # symbol behind another symbol's recent trade.
+        "data_through": min(quote_times).isoformat() if quote_times else None,
+        "oldest_quote_at": min(quote_times).isoformat() if quote_times else None,
+        "latest_quote_at": max(quote_times).isoformat() if quote_times else None,
+        "source_status": (
+            "active"
+            if success_ratio == 1.0 and not delayed_tickers
+            else "degraded"
+        ),
     })
 
 

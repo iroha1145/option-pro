@@ -191,7 +191,7 @@ test("a live quote snapshot redraws while every auxiliary promise remains pendin
 
   await expect.poll(() => watchlistRequests).toBe(2);
   await expect(page.locator('[data-card="NVDA"] .stock-card__quote b')).toHaveText("222.22");
-  await expect(page.locator(".pulse-live")).toContainText("快照 14:30");
+  await expect(page.locator(".pulse-live")).toContainText("报价覆盖 14:30");
   await expect(page.locator("#view > .view-loading")).toHaveCount(0);
 });
 
@@ -232,7 +232,7 @@ test("a pending chart range does not block quote refresh or duplicate the chart 
 
   await expect.poll(() => watchlistRequests).toBe(2);
   await expect(page.locator('[data-card="NVDA"] .stock-card__quote b')).toHaveText("222.22");
-  await expect(page.locator(".pulse-live")).toContainText("快照 14:30");
+  await expect(page.locator(".pulse-live")).toContainText("报价覆盖 14:30");
   await expect(page.locator("#view")).toContainText("K线后台读取中");
   expect(rangeChartRequests).toBe(1);
 
@@ -446,12 +446,12 @@ test("a background snapshot redraws while focus details remain pending", async (
   releaseWatchlist();
   await expect.poll(() => heldFocusRequests).toBe(3);
   await expect(page.locator('[data-card="AMD"] .stock-card__quote b')).toHaveText("160.00");
-  await expect(page.locator(".pulse-live")).toContainText("快照 14:30");
+  await expect(page.locator(".pulse-live")).toContainText("报价覆盖 14:30");
   releaseFocus();
 
   await expect(page.getByRole("heading", { name: /超微半导体 AMD/ })).toBeVisible();
   await expect(page.locator('[data-card="AMD"] .stock-card__quote b')).toHaveText("160.00");
-  await expect(page.locator(".pulse-live")).toContainText("快照 14:30");
+  await expect(page.locator(".pulse-live")).toContainText("报价覆盖 14:30");
   await expect(page.locator("#view")).not.toContainText("正在后台更新");
 });
 
