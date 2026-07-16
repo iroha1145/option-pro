@@ -166,6 +166,20 @@ def test_worker_is_isolated_and_has_an_independent_healthcheck() -> None:
     assert "healthcheck:" in worker
 
 
+def test_ci_smoke_matches_personal_breakout_runtime() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        'assert p["status"] != "disabled"; assert p["healthy"] is True; '
+        'assert p["enabled"] is True'
+    ) in workflow
+    assert (
+        'assert p["status"] == "locked"; assert p["scan_run_id"] is None'
+    ) in workflow
+
+
 def test_both_runtime_services_keep_the_container_security_baseline() -> None:
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     for name in ("backend", "breakout-worker"):

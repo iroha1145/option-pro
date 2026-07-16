@@ -193,7 +193,7 @@ jobs:
           smoke_api_route options-unusual 'http://127.0.0.1:2000/api/options/unusual?min_vol_oi=1'
           smoke_api_route earnings-upcoming http://127.0.0.1:2000/api/earnings/upcoming
           docker compose exec -T breakout-worker python -m app.services.breakouts.worker --healthcheck |
-            python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["healthy"] is True'
+            python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] != "disabled"; assert p["healthy"] is True; assert p["enabled"] is True'
           docker compose exec -T ai-worker python -m app.services.ai_jobs.worker --healthcheck |
             python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["healthy"] is True; assert p["configured"] is False; assert p["sdk_capability_supported"] is True; assert p["model"] == "gpt-5.6-terra"; assert p["reasoning"] == "max"; assert all(p["methods"].get(x) is True for x in ("create","retrieve","cancel"))'
           docker compose exec -T catalyst-sync-worker python -m app.services.catalysts.worker --healthcheck |
@@ -203,7 +203,7 @@ jobs:
           docker compose run --rm --no-deps catalyst-sync-worker python -m app.services.catalysts.worker --once |
             python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["enabled"] is False; assert p["processed"] == []'
           docker compose run --rm --no-deps breakout-worker python -m app.services.breakouts.worker --once |
-            python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["scan_run_id"] is None'
+            python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "locked"; assert p["scan_run_id"] is None'
 
       - name: Exercise enabled closed and mocked-active Breakout Radar in the production image
         shell: bash
