@@ -11,6 +11,8 @@ x-optix-runtime: &optix-runtime
   <<: *optix-image
   init: true
   env_file:
+    - path: ${PERSONAL_MACHINE_FILE:-machine.env}
+      required: false
     - path: ${PERSONAL_SECRETS_FILE:-config/migrated/secrets.env}
       required: false
   environment:

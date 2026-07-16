@@ -11,6 +11,15 @@ from app.personal_config import get_personal_config
 from .runtime import TaskResult, TaskSpec
 
 
+DEFAULT_TASK_NAMES = (
+    "breakout",
+    "focus",
+    "catalyst_sync",
+    "ai_jobs",
+    "maintenance",
+)
+
+
 class AIJobsTask:
     def __init__(self, owner_id: str) -> None:
         self.owner_id = f"{owner_id}:ai"
@@ -341,5 +350,6 @@ __all__ = [
     "CatalystSyncTask",
     "FocusTask",
     "MaintenanceTask",
+    "DEFAULT_TASK_NAMES",
     "build_default_tasks",
 ]

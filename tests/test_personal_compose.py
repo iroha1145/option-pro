@@ -22,6 +22,10 @@ def test_personal_compose_has_only_web_worker_and_one_persistent_volume() -> Non
         assert service["restart"] == "unless-stopped"
         assert service["env_file"] == [
             {
+                "path": "${PERSONAL_MACHINE_FILE:-machine.env}",
+                "required": False,
+            },
+            {
                 "path": "${PERSONAL_SECRETS_FILE:-config/migrated/secrets.env}",
                 "required": False,
             }
@@ -39,6 +43,7 @@ def test_personal_compose_has_only_web_worker_and_one_persistent_volume() -> Non
         "reasoning": "max",
         "max_concurrency": 1,
         "daily_max_jobs": 4,
+        "daily_budget_usd": 2.0,
         "execution_mode": "background",
     }
 

@@ -395,6 +395,34 @@ class WorkerSupervisor:
         if protected:
             await asyncio.gather(*protected, return_exceptions=True)
 
+    async def _wait_for_stop_or_loop_failure(
+        self,
+        loops: Mapping[TaskSpec, asyncio.Task[None]],
+    ) -> None:
+        """Stop the process when an enabled task loop exits unexpectedly."""
+
+        stop_waiter = asyncio.create_task(self.stop.wait(), name="worker-stop-waiter")
+        try:
+            done, _pending = await asyncio.wait(
+                (stop_waiter, *loops.values()),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if stop_waiter in done:
+                return
+
+            self.stop.set()
+            failed = next(loop for loop in loops.values() if loop in done)
+            if failed.cancelled():
+                raise RuntimeError("worker task loop was cancelled unexpectedly")
+            error = failed.exception()
+            if error is None:
+                raise RuntimeError("worker task loop exited unexpectedly")
+            raise RuntimeError("worker task loop failed") from error
+        finally:
+            if not stop_waiter.done():
+                stop_waiter.cancel()
+            await asyncio.gather(stop_waiter, return_exceptions=True)
+
     async def _run(self, *, once: bool) -> dict[str, Any]:
         if not await asyncio.to_thread(self.process_lock.acquire, self.owner_id):
             raise WorkerAlreadyRunning("another unified worker holds the process file lock")
@@ -436,14 +464,29 @@ class WorkerSupervisor:
                         continue
                     await self._execute(task)
             else:
+                for task in self.tasks:
+                    if task.enabled:
+                        continue
+                    await self._record(
+                        task,
+                        status="disabled",
+                        consecutive_failures=0,
+                        details={},
+                    )
+                    self._results[task.name] = {
+                        "status": "disabled",
+                        "error_code": None,
+                        "next_delay_seconds": task.interval_seconds,
+                    }
                 loops = {
                     task: asyncio.create_task(
                         self._task_loop(task),
                         name=f"worker-task-{task.name}",
                     )
                     for task in self.tasks
+                    if task.enabled
                 }
-                await self.stop.wait()
+                await self._wait_for_stop_or_loop_failure(loops)
                 await self._drain(loops)
             if self._lease_lost.is_set():
                 raise WorkerLeaseLost("unified worker lease was lost")

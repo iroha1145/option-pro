@@ -246,6 +246,38 @@ def test_each_task_has_independent_backoff(tmp_path: Path) -> None:
     assert 2 <= failing_count <= 3
 
 
+def test_unexpected_task_loop_exit_terminates_supervisor_and_releases_lock(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        repository = WorkerStateRepository(tmp_path / "failed-loop.db")
+        lock_path = tmp_path / "failed-loop.lock"
+        original_record = repository.record_task
+
+        def fail_running_record(*args: object, **kwargs: object) -> None:
+            if kwargs.get("status") == "running":
+                raise sqlite3.OperationalError("simulated state failure")
+            original_record(*args, **kwargs)
+
+        repository.record_task = fail_running_record  # type: ignore[method-assign]
+        supervisor = WorkerSupervisor(
+            repository,
+            (TaskSpec("breakout", lambda: TaskResult(), 60),),
+            owner_id="failed-loop-worker",
+            lease_seconds=2,
+            process_lock=ProcessFileLock(lock_path),
+        )
+
+        with pytest.raises(RuntimeError, match="task loop failed"):
+            await asyncio.wait_for(supervisor.run_forever(), timeout=2)
+
+        contender = ProcessFileLock(lock_path)
+        assert contender.acquire("contender") is True
+        contender.release()
+
+    asyncio.run(scenario())
+
+
 def test_shutdown_drains_paid_task_and_cancels_other_long_task(tmp_path: Path) -> None:
     async def scenario() -> None:
         paid_started = asyncio.Event()

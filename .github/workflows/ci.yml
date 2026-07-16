@@ -94,10 +94,32 @@ jobs:
         run: bash -n setup.sh scripts/deploy.sh scripts/lock-dependencies.sh
 
       - name: Validate Docker Compose configuration
-        run: docker compose config -q
+        shell: bash
+        run: |
+          docker compose config -q
+          docker compose -f docker-compose.personal.yml config -q
 
       - name: Build production image
-        run: docker compose build backend
+        shell: bash
+        run: |
+          docker compose build backend
+          docker compose -f docker-compose.personal.yml build worker
+
+      - name: Start and health-check the personal unified worker
+        shell: bash
+        run: |
+          docker compose -f docker-compose.personal.yml up -d --no-build --no-deps worker
+          for attempt in {1..60}; do
+            if docker compose -f docker-compose.personal.yml exec -T worker \
+              python -m app.worker --healthcheck > /tmp/personal-worker-health.json; then
+              break
+            fi
+            sleep 2
+          done
+          python -c 'import json; p=json.load(open("/tmp/personal-worker-health.json", encoding="utf-8")); assert p["healthy"] is True; assert p["task_inventory_complete"] is True; assert {item["task_name"] for item in p["tasks"]} == {"breakout","focus","catalyst_sync","ai_jobs","maintenance"}'
+          docker compose -f docker-compose.personal.yml exec -T worker \
+            python -c 'import os; assert os.geteuid() != 0'
+          docker compose -f docker-compose.personal.yml down --remove-orphans --volumes
 
       - name: Start production containers and wait for readiness
         run: docker compose up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180

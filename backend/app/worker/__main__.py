@@ -14,7 +14,7 @@ from typing import Sequence
 from .lock import ProcessFileLock
 from .runtime import WorkerSupervisor
 from .state import WorkerAlreadyRunning, WorkerLeaseLost, WorkerStateRepository
-from .tasks import build_default_tasks
+from .tasks import DEFAULT_TASK_NAMES, build_default_tasks
 
 
 def _absolute_path(name: str, default: str) -> Path:
@@ -79,7 +79,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         lock_path = _absolute_path("OPTIX_WORKER_LOCK_PATH", "/data/optix-worker.lock")
         repository = WorkerStateRepository(state_path)
         if arguments.healthcheck or arguments.status:
-            payload = repository.health()
+            payload = repository.health(expected_tasks=DEFAULT_TASK_NAMES)
             _print(payload)
             if arguments.status:
                 return 0

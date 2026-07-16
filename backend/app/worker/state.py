@@ -8,7 +8,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator, Mapping
+from typing import Any, Iterator, Mapping, Sequence
 
 
 SCHEMA_VERSION = "optix-worker-v2"
@@ -641,6 +641,7 @@ class WorkerStateRepository:
         *,
         heartbeat_stale_seconds: float = 120.0,
         now: datetime | None = None,
+        expected_tasks: Sequence[str] | None = None,
     ) -> dict[str, Any]:
         observed = _as_utc(now or utc_now())
         if not self.path.is_file():
@@ -698,7 +699,14 @@ class WorkerStateRepository:
             task["enabled"] and task["status"] in {"degraded", "failed", "interrupted"}
             for task in tasks
         )
-        healthy = bool(checksum_ok and lock_live and heartbeat_fresh)
+        observed_task_names = {str(task["task_name"]) for task in tasks}
+        expected_task_names = set(expected_tasks or ())
+        task_inventory_complete = bool(
+            not expected_task_names or expected_task_names == observed_task_names
+        )
+        healthy = bool(
+            checksum_ok and lock_live and heartbeat_fresh and task_inventory_complete
+        )
         return {
             "healthy": healthy,
             "status": "degraded" if healthy and degraded else "ok" if healthy else "unhealthy",
@@ -707,6 +715,7 @@ class WorkerStateRepository:
             "lock_live": lock_live,
             "heartbeat_at": _iso(heartbeat) if heartbeat else None,
             "heartbeat_age_seconds": heartbeat_age,
+            "task_inventory_complete": task_inventory_complete,
             "tasks": tasks,
             "actions": actions,
         }
