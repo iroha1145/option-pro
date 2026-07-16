@@ -154,6 +154,7 @@ jobs:
             --env MACROLENS_URL=https://macrolens.fixture \
             --env MACROLENS_CACHE_DB_PATH=/data/container-catalyst.db \
             --env OPENAI_JOB_DB_PATH=/data/container-ai-jobs.db \
+            --env PYTHONPATH=/app/backend \
             --volume "${GITHUB_WORKSPACE}/tests:/ci-tests:ro" \
             worker python /ci-tests/container_personal_catalyst_smoke.py |
             python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "idle"; assert p["processed"] == ["news","calendar","local_intelligence"]; assert p["model"] == "gpt-5.6-terra"; assert p["reasoning"] == "max"; assert p["max_concurrency"] == 1; assert p["authorization_checked"] is True'

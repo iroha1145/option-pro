@@ -78,3 +78,12 @@ def test_personal_backend_binds_to_loopback_by_default() -> None:
     assert compose["services"]["backend"]["ports"] == [
         "${HOST_BIND:-127.0.0.1}:${PORT:-2000}:8000"
     ]
+
+
+def test_personal_container_catalyst_smoke_uses_the_image_import_path() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "container_personal_catalyst_smoke.py" in workflow
+    assert "--env PYTHONPATH=/app/backend" in workflow
