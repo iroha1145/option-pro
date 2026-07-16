@@ -119,7 +119,7 @@ The style is a blend of **Modern Minimalism** and **Tactile Layering**. It utili
 
 ## Colors
 
-The palette is rooted in a "natural" spectrum. 
+The palette is rooted in a "natural" spectrum.
 
 - **Primary (Deep Indigo):** Used for core actions, AI-driven insights, and primary navigation. It provides a stable, authoritative anchor.
 - **Success (Mint Green):** A fresh, high-visibility green for "up" movements, gains, and bullish indicators.
@@ -134,7 +134,7 @@ Critical to this system is the use of **tabular figures** (monospaced numbers) f
 
 ## Layout & Spacing
 
-The layout follows a **Fluid Grid** model with high-density content zones. 
+The layout follows a **Fluid Grid** model with high-density content zones.
 
 - **Desktop:** A 12-column grid with 20px gutters. Main data tables and charts typically span 8-9 columns, with a 3-4 column "Action/Detail" sidebar on the right.
 - **Density:** We utilize "Functional Whitespace." While the data is dense, margins around container cards are kept generous (24px+) to prevent the interface from feeling cramped.
@@ -151,7 +151,7 @@ The background uses a subtle off-white (`#F8FAFC`). Components sit on "Level 1" 
 
 ## Shapes
 
-The shape language is "Soft-Modern." 
+The shape language is "Soft-Modern."
 
 - **Base Radius:** 8px (0.5rem) for small components like inputs and small buttons.
 - **Large Radius:** 16px (1rem) for main dashboard cards and container modules.

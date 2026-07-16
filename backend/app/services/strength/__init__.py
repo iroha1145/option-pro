@@ -1,2 +1,1 @@
 """Strength Radar service package."""
-
