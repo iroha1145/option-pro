@@ -631,7 +631,6 @@ def test_worker_once_selects_personal_etl_from_repository_files_offline(
         import httpx
 
         from app import personal_config, runtime_environment
-        from app.services.catalysts import etl_client
 
         config = personal_config.get_personal_config()
         features = config.features.model_copy(
@@ -643,6 +642,12 @@ def test_worker_once_selects_personal_etl_from_repository_files_offline(
             Path({str(root_env)!r}),
             Path({str(secrets_env)!r}),
         )
+
+        # Import the Catalyst package only after the isolated runtime files are
+        # selected.  Its settings module intentionally loads runtime files on
+        # import, so importing it earlier would let a checked-out repository
+        # .env shadow this subprocess fixture.
+        from app.services.catalysts import etl_client
 
         def handle(request):
             assert request.url.host == "macrolens.invalid"

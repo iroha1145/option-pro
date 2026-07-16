@@ -23,17 +23,18 @@ RUNTIME_ENV_FILES = (ROOT_ENV_FILE, MACHINE_ENV_FILE, SECRETS_ENV_FILE)
 
 
 def load_runtime_environment(
-    paths: Sequence[Path] = RUNTIME_ENV_FILES,
+    paths: Sequence[Path] | None = None,
     *,
     environ: MutableMapping[str, str] | None = None,
 ) -> tuple[Path, ...]:
     """Merge runtime files without ever overriding exported process values."""
 
+    selected_paths = RUNTIME_ENV_FILES if paths is None else paths
     target = os.environ if environ is None else environ
     exported_keys = set(target)
     merged: dict[str, str] = {}
     loaded: list[Path] = []
-    for path in paths:
+    for path in selected_paths:
         if not path.is_file():
             continue
         values = dotenv_values(path)
