@@ -93,6 +93,15 @@ case "${{1:-}}" in
     build)
         log build
         ;;
+    run)
+        if [[ " $* " == *" --rm --no-deps -T backend python -m app.tools.validate_personal_deployment "* ]]; then
+            log validate
+            PYTHONPATH="$PWD/backend${{PYTHONPATH:+:${{PYTHONPATH}}}}" \
+                "$FAKE_CONTAINER_PYTHON" -m app.tools.validate_personal_deployment
+        else
+            exit 2
+        fi
+        ;;
     up)
         log up
         ;;
@@ -214,6 +223,7 @@ def _deployment_root(
     _fake_tools(bin_dir)
     environment = _isolated_environment()
     environment["PATH"] = f"{bin_dir}{os.pathsep}{environment['PATH']}"
+    environment["FAKE_CONTAINER_PYTHON"] = sys.executable
     return root, environment
 
 
@@ -232,6 +242,34 @@ def _run_deploy(
     )
 
 
+def _commit_deployment_root(root: Path) -> None:
+    commands = (
+        ["git", "init", "--quiet"],
+        ["git", "add", "."],
+        [
+            "git",
+            "-c",
+            "user.name=Optix Test",
+            "-c",
+            "user.email=optix-test@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "test fixture",
+        ],
+    )
+    for command in commands:
+        completed = subprocess.run(
+            command,
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert completed.returncode == 0, completed.stderr
+
+
 def test_deploy_builds_only_current_services_and_verifies_both(tmp_path: Path) -> None:
     root, environment = _deployment_root(tmp_path)
 
@@ -240,6 +278,7 @@ def test_deploy_builds_only_current_services_and_verifies_both(tmp_path: Path) -
     assert result.returncode == 0, result.stderr
     assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
         "build",
+        "validate",
         "up",
         "verify-backend",
         "verify-worker",
@@ -248,6 +287,141 @@ def test_deploy_builds_only_current_services_and_verifies_both(tmp_path: Path) -
     assert "docker compose build --pull backend" in script
     assert "docker compose up -d --no-build --force-recreate" in script
     assert "Stopping legacy workers before the unified worker starts." in script
+
+
+def test_deploy_validates_with_built_runtime_when_host_python_lacks_dependencies(
+    tmp_path: Path,
+) -> None:
+    root, environment = _deployment_root(tmp_path)
+    unavailable_host_python = tmp_path / "host-python"
+    unavailable_host_python.write_text(
+        "#!/usr/bin/env bash\n"
+        "echo \"ModuleNotFoundError: No module named 'pydantic'\" >&2\n"
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    unavailable_host_python.chmod(0o755)
+    environment["PYTHON_BIN"] = str(unavailable_host_python)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode == 0, result.stderr
+    assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
+        "build",
+        "validate",
+        "up",
+        "verify-backend",
+        "verify-worker",
+    ]
+    assert "ModuleNotFoundError" not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("staged", (False, True))
+def test_deploy_allows_only_personal_config_content_changes(
+    tmp_path: Path,
+    staged: bool,
+) -> None:
+    root, environment = _deployment_root(tmp_path)
+    _commit_deployment_root(root)
+    personal_config = root / "config" / "personal.toml"
+    personal_config.write_text(
+        personal_config.read_text(encoding="utf-8")
+        + "\n# Local owner configuration.\n",
+        encoding="utf-8",
+    )
+    if staged:
+        completed = subprocess.run(
+            ["git", "add", "config/personal.toml"],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert completed.returncode == 0, completed.stderr
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("state", ("tracked", "staged", "untracked"))
+def test_deploy_rejects_every_other_worktree_change(
+    tmp_path: Path,
+    state: str,
+) -> None:
+    root, environment = _deployment_root(tmp_path)
+    _commit_deployment_root(root)
+    if state == "untracked":
+        (root / "local-note.txt").write_text("not part of release\n", encoding="utf-8")
+    else:
+        compose = root / "docker-compose.yml"
+        compose.write_text(
+            compose.read_text(encoding="utf-8") + "\n# unexpected change\n",
+            encoding="utf-8",
+        )
+        if state == "staged":
+            completed = subprocess.run(
+                ["git", "add", "docker-compose.yml"],
+                cwd=root,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            assert completed.returncode == 0, completed.stderr
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "Refusing to deploy a dirty working tree." in result.stderr
+    assert not (root / ".fake-order").exists()
+
+
+@pytest.mark.parametrize("replacement", ("missing", "symlink"))
+def test_deploy_requires_personal_config_to_remain_a_regular_file(
+    tmp_path: Path,
+    replacement: str,
+) -> None:
+    root, environment = _deployment_root(tmp_path)
+    _commit_deployment_root(root)
+    personal_config = root / "config" / "personal.toml"
+    personal_config.unlink()
+    if replacement == "symlink":
+        personal_config.symlink_to(root / ".env")
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "config/personal.toml must remain a regular file." in result.stderr
+    assert not (root / ".fake-order").exists()
+
+
+def test_deploy_fails_closed_when_worktree_status_cannot_be_read(
+    tmp_path: Path,
+) -> None:
+    root, environment = _deployment_root(tmp_path)
+    _commit_deployment_root(root)
+    real_git = shutil.which("git")
+    assert real_git is not None
+    fake_git = Path(environment["PATH"].split(os.pathsep, maxsplit=1)[0]) / "git"
+    fake_git.write_text(
+        "#!/usr/bin/env bash\n"
+        "for argument in \"$@\"; do\n"
+        "    if [ \"$argument\" = \":(top,exclude)config/personal.toml\" ]; then\n"
+        "        exit 42\n"
+        "    fi\n"
+        "done\n"
+        f'exec "{real_git}" "$@"\n',
+        encoding="utf-8",
+    )
+    fake_git.chmod(0o755)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "Unable to inspect the working tree." in result.stderr
+    assert not (root / ".fake-order").exists()
 
 
 def test_deploy_selects_machine_file_without_caller_exports(tmp_path: Path) -> None:
@@ -316,7 +490,10 @@ def test_private_network_rejects_wildcard_public_and_hostname_bindings(
 
     assert result.returncode != 0
     assert "private_network" in result.stderr
-    assert not (root / ".fake-order").exists()
+    assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
+        "build",
+        "validate",
+    ]
 
 
 def test_stale_secret_file_cannot_mask_the_machine_access_boundary(
@@ -338,7 +515,10 @@ def test_stale_secret_file_cannot_mask_the_machine_access_boundary(
 
     assert result.returncode != 0
     assert "private_network" in result.stderr
-    assert not (root / ".fake-order").exists()
+    assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
+        "build",
+        "validate",
+    ]
 
 
 def test_private_network_rejects_a_public_cidr_even_when_explicitly_listed(
@@ -365,7 +545,10 @@ def test_private_network_rejects_a_public_cidr_even_when_explicitly_listed(
 
     assert result.returncode != 0
     assert "private access networks" in result.stderr
-    assert not (root / ".fake-order").exists()
+    assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
+        "build",
+        "validate",
+    ]
 
 
 def test_password_mode_requires_only_configured_password_hash(tmp_path: Path) -> None:
@@ -443,7 +626,10 @@ def test_deploy_rejects_incomplete_proxy_boundary(
 
     assert result.returncode != 0
     assert message in result.stderr
-    assert not (root / ".fake-order").exists()
+    assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
+        "build",
+        "validate",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -571,7 +757,10 @@ def test_deploy_rejects_invalid_macrolens_values_without_echo(
     assert message in output
     assert url not in output
     assert token not in output
-    assert not (root / ".fake-order").exists()
+    assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
+        "build",
+        "validate",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -591,7 +780,10 @@ def test_deploy_rejects_data_directory_outside_the_container_volume(
     assert result.returncode != 0
     assert "DATA_DIR must be" in output
     assert data_directory not in output
-    assert not (root / ".fake-order").exists()
+    assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
+        "build",
+        "validate",
+    ]
 
 
 def test_deploy_accepts_a_nested_directory_inside_the_container_volume(
@@ -652,6 +844,7 @@ def _setup_root(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     _fake_tools(bin_dir)
     environment = _isolated_environment()
     environment["PATH"] = f"{bin_dir}{os.pathsep}{environment['PATH']}"
+    environment["FAKE_CONTAINER_PYTHON"] = sys.executable
     return root, environment
 
 

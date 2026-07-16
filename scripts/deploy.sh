@@ -40,15 +40,11 @@ prepare_runtime_files() {
 }
 
 validate_runtime_boundary() {
-    local python_bin report
-    python_bin="${PYTHON_BIN:-${ROOT_DIR}/.venv/bin/python}"
-    if [ ! -x "$python_bin" ]; then
-        python_bin=python3
-    fi
+    local report
     report=""
     if ! report="$(
-        PYTHONPATH="${ROOT_DIR}/backend${PYTHONPATH:+:${PYTHONPATH}}" \
-            "$python_bin" -m app.tools.validate_personal_deployment
+        docker compose run --rm --no-deps -T backend \
+            python -m app.tools.validate_personal_deployment
     )"; then
         printf '%s\n' "$report" >&2
         fail "Personal deployment boundary validation failed."
@@ -58,7 +54,28 @@ validate_runtime_boundary() {
 
 release_identity() {
     if git rev-parse --verify HEAD >/dev/null 2>&1; then
-        [ -z "$(git status --porcelain --untracked-files=normal)" ] ||
+        local personal_status worktree_status
+        git ls-files --error-unmatch -- config/personal.toml >/dev/null 2>&1 ||
+            fail "config/personal.toml must remain tracked."
+        [ -f config/personal.toml ] && [ ! -L config/personal.toml ] ||
+            fail "config/personal.toml must remain a regular file."
+        if ! personal_status="$(
+            git status --porcelain=v1 --untracked-files=normal -- \
+                config/personal.toml
+        )"; then
+            fail "Unable to inspect config/personal.toml."
+        fi
+        case "$personal_status" in
+            ""|" M config/personal.toml"|"M  config/personal.toml"|"MM config/personal.toml") ;;
+            *) fail "Only content changes are allowed in config/personal.toml." ;;
+        esac
+        if ! worktree_status="$(
+            git status --porcelain=v1 --untracked-files=normal -- \
+                . ':(top,exclude)config/personal.toml'
+        )"; then
+            fail "Unable to inspect the working tree."
+        fi
+        [ -z "$worktree_status" ] ||
             fail "Refusing to deploy a dirty working tree."
         APP_COMMIT="$(git rev-parse --verify HEAD)"
     else
@@ -162,12 +179,12 @@ verify_worker() {
 main() {
     require_tools
     prepare_runtime_files
-    validate_runtime_boundary
     release_identity
     docker compose config -q
 
     echo "Building Optix Pro ${APP_VERSION} (${APP_COMMIT})."
     docker compose build --pull backend
+    validate_runtime_boundary
     stop_legacy_workers
 
     if ! docker compose up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180; then

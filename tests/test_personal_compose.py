@@ -300,3 +300,8 @@ def test_deploy_uses_the_unified_runtime_loader_and_validator() -> None:
     assert "resolve_container_data_dir" not in script
     assert "dotenv_values" not in script
     assert "    validate_runtime_boundary\n" in script
+    assert (
+        "docker compose run --rm --no-deps -T backend \\\n"
+        "            python -m app.tools.validate_personal_deployment"
+    ) in script
+    assert 'PYTHONPATH="${ROOT_DIR}/backend' not in script
