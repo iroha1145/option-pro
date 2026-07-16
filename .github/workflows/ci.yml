@@ -119,6 +119,14 @@ jobs:
           python -c 'import json; p=json.load(open("/tmp/personal-worker-health.json", encoding="utf-8")); assert p["healthy"] is True; assert p["task_inventory_complete"] is True; assert {item["task_name"] for item in p["tasks"]} == {"breakout","focus","catalyst_sync","ai_jobs","maintenance"}'
           docker compose -f docker-compose.personal.yml exec -T worker \
             python -c 'import os; assert os.geteuid() != 0'
+          docker compose -f docker-compose.personal.yml run --rm --no-deps \
+            --env INTERNAL_API_TOKEN=container-fixture-owner \
+            --env MACROLENS_URL=https://macrolens.fixture \
+            --env MACROLENS_CACHE_DB_PATH=/data/container-catalyst.db \
+            --env OPENAI_JOB_DB_PATH=/data/container-ai-jobs.db \
+            --volume "${GITHUB_WORKSPACE}/tests:/ci-tests:ro" \
+            worker python /ci-tests/container_personal_catalyst_smoke.py |
+            python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "idle"; assert p["processed"] == ["news","calendar","local_intelligence"]; assert p["model"] == "gpt-5.6-terra"; assert p["reasoning"] == "max"; assert p["max_concurrency"] == 1; assert p["authorization_checked"] is True'
           docker compose -f docker-compose.personal.yml down --remove-orphans --volumes
 
       - name: Start production containers and wait for readiness

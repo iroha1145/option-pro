@@ -8,20 +8,16 @@ import os
 import signal
 import socket
 import uuid
-from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
+
+from app import runtime_environment
 
 from .lock import ProcessFileLock
 from .runtime import WorkerSupervisor
 from .state import WorkerAlreadyRunning, WorkerLeaseLost, WorkerStateRepository
-from .tasks import DEFAULT_TASK_NAMES, build_default_tasks
 
-
-def _absolute_path(name: str, default: str) -> Path:
-    path = Path(os.environ.get(name, default)).expanduser()
-    if not path.is_absolute() or ".." in path.parts:
-        raise ValueError(f"{name} must be an absolute path without parent traversal")
-    return path
+if TYPE_CHECKING:
+    from app.config import Settings
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -45,14 +41,26 @@ def _print(payload: object) -> None:
     print(json.dumps(payload, ensure_ascii=False, allow_nan=False, separators=(",", ":")))
 
 
-async def _run(once: bool, state_path: Path, lock_path: Path) -> int:
+def _load_worker_settings() -> Settings:
+    # No module that constructs subsystem settings is imported before this
+    # merge. Repository files therefore have deterministic precedence in every
+    # CLI mode and are not dependent on task scheduling or import order.
+    runtime_environment.load_runtime_environment(runtime_environment.RUNTIME_ENV_FILES)
+    from app.config import Settings
+
+    return Settings()
+
+
+async def _run(once: bool, settings: Settings) -> int:
+    from .tasks import build_default_tasks
+
     owner_id = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:12]}"
-    repository = WorkerStateRepository(state_path)
+    repository = WorkerStateRepository(settings.optix_worker_db_path)
     supervisor = WorkerSupervisor(
         repository,
-        build_default_tasks(owner_id, worker_db_path=state_path),
+        build_default_tasks(owner_id, settings=settings),
         owner_id=owner_id,
-        process_lock=ProcessFileLock(lock_path),
+        process_lock=ProcessFileLock(settings.optix_worker_lock_path),
     )
     loop = asyncio.get_running_loop()
     for signum in (signal.SIGTERM, signal.SIGINT):
@@ -75,16 +83,17 @@ async def _run(once: bool, state_path: Path, lock_path: Path) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     try:
-        state_path = _absolute_path("OPTIX_WORKER_DB_PATH", "/data/optix-worker.db")
-        lock_path = _absolute_path("OPTIX_WORKER_LOCK_PATH", "/data/optix-worker.lock")
-        repository = WorkerStateRepository(state_path)
+        settings = _load_worker_settings()
+        repository = WorkerStateRepository(settings.optix_worker_db_path)
         if arguments.healthcheck or arguments.status:
+            from .tasks import DEFAULT_TASK_NAMES
+
             payload = repository.health(expected_tasks=DEFAULT_TASK_NAMES)
             _print(payload)
             if arguments.status:
                 return 0
             return 0 if payload["healthy"] else 1
-        return asyncio.run(_run(arguments.once, state_path, lock_path))
+        return asyncio.run(_run(arguments.once, settings))
     except WorkerAlreadyRunning:
         _print({"healthy": False, "status": "already_running", "error_code": "worker_locked"})
         return 1

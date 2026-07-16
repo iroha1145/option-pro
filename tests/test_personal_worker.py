@@ -14,7 +14,8 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from app.worker.__main__ import main
+from app import runtime_environment
+from app.worker.__main__ import _load_worker_settings, main
 from app.worker.lock import ProcessFileLock
 from app.worker.runtime import TaskResult, TaskSpec, WorkerSupervisor
 from app.worker.state import WorkerStateRepository
@@ -30,6 +31,28 @@ from app.worker.tasks import (
 TASK_NAMES = {"breakout", "focus", "catalyst_sync", "ai_jobs", "maintenance"}
 NOW = datetime(2026, 7, 16, 0, 0, tzinfo=timezone.utc)
 ETL_AS_OF = "2026-07-15T12:00:00Z"
+
+
+def _worker_config(
+    tmp_path: Path,
+    *,
+    token: str = "",
+    url: str = "",
+    cache_path: Path | None = None,
+    ai_path: Path | None = None,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        internal_api_token=SecretStr(token),
+        macrolens_url=url,
+        macrolens_ca_bundle="",
+        macrolens_cache_db_path=cache_path or tmp_path / "catalyst-cache.db",
+        openai_job_db_path=ai_path or tmp_path / "ai-jobs.db",
+        optix_worker_db_path=tmp_path / "optix-worker.db",
+        optix_worker_lock_path=tmp_path / "optix-worker.lock",
+        breakout_db_path=tmp_path / "optix.db",
+        optix_backup_dir=tmp_path / "backups",
+        personal_etl_enabled=bool(token and url),
+    )
 
 
 def _runtime_settings(
@@ -205,8 +228,6 @@ def test_ai_worker_fails_closed_when_runtime_settings_are_unreadable(
         openai_api_key=SecretStr("test-only-key"),
         openai_job_lease_seconds=60,
     )
-    monkeypatch.setattr("app.config.get_settings", lambda: settings)
-
     def unreadable():
         raise RuntimeSettingsStorageError("invalid runtime document")
 
@@ -214,7 +235,7 @@ def test_ai_worker_fails_closed_when_runtime_settings_are_unreadable(
         "app.services.runtime_settings.get_effective_runtime_settings",
         unreadable,
     )
-    result = asyncio.run(AIJobsTask("fail-closed")())
+    result = asyncio.run(AIJobsTask("fail-closed", settings=settings)())
 
     assert result.status == "degraded"
     assert result.error_code == "runtime_settings_unavailable"
@@ -248,7 +269,6 @@ def test_ai_worker_uses_fresh_runtime_budget_without_restart(
     )
     seen: list[tuple[int, float, int]] = []
 
-    monkeypatch.setattr("app.config.get_settings", lambda: settings)
     monkeypatch.setattr(
         "app.services.runtime_settings.get_effective_runtime_settings",
         lambda: effective,
@@ -270,7 +290,7 @@ def test_ai_worker_uses_fresh_runtime_budget_without_restart(
         return False
 
     monkeypatch.setattr("app.services.ai_jobs.worker.run_once", capture)
-    task = AIJobsTask("runtime-budget")
+    task = AIJobsTask("runtime-budget", settings=settings)
     first = asyncio.run(task())
     effective.ai.daily_budget_usd = 1.0
     second = asyncio.run(task())
@@ -519,6 +539,75 @@ def test_status_is_read_only_and_does_not_require_live_lock(
     assert health["healthy"] is False
 
 
+def test_worker_loads_root_files_once_and_injects_one_settings_object(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    root_env = tmp_path / ".env"
+    machine_env = tmp_path / "machine.env"
+    secrets_env = tmp_path / "secrets.env"
+    root_env.write_text(
+        "MACROLENS_URL=https://macrolens.example\n",
+        encoding="utf-8",
+    )
+    machine_env.write_text(
+        "OPTIX_WORKER_DB_PATH=" + str(tmp_path / "worker.db") + "\n"
+        "OPTIX_WORKER_LOCK_PATH=" + str(tmp_path / "worker.lock") + "\n"
+        "MACROLENS_CACHE_DB_PATH=" + str(tmp_path / "catalyst.db") + "\n"
+        "OPENAI_JOB_DB_PATH=" + str(tmp_path / "ai-jobs.db") + "\n"
+        "BREAKOUT_DB_PATH=" + str(tmp_path / "breakout.db") + "\n"
+        "OPTIX_BACKUP_DIR=" + str(tmp_path / "backups") + "\n",
+        encoding="utf-8",
+    )
+    secrets_env.write_text(
+        "INTERNAL_API_TOKEN=test-owner-token\n",
+        encoding="utf-8",
+    )
+    keys = {
+        "MACROLENS_URL",
+        "INTERNAL_API_TOKEN",
+        "MACROLENS_BASE_URL",
+        "MACROLENS_INTERNAL_TOKEN",
+        "OPTIX_WORKER_DB_PATH",
+        "OPTIX_WORKER_LOCK_PATH",
+        "MACROLENS_CACHE_DB_PATH",
+        "OPENAI_JOB_DB_PATH",
+        "BREAKOUT_DB_PATH",
+        "OPTIX_BACKUP_DIR",
+    }
+    original = {key: os.environ.get(key) for key in keys}
+    monkeypatch.setattr(
+        runtime_environment,
+        "RUNTIME_ENV_FILES",
+        (root_env, machine_env, secrets_env),
+    )
+    try:
+        for key in keys:
+            os.environ.pop(key, None)
+        settings = _load_worker_settings()
+        assert settings.macrolens_url == "https://macrolens.example"
+        assert settings.internal_api_token.get_secret_value() == "test-owner-token"
+        assert settings.optix_worker_db_path == tmp_path / "worker.db"
+
+        specs = build_default_tasks("settings-injection", settings=settings)
+        runners = {spec.name: spec.runner for spec in specs}
+        assert runners["ai_jobs"]._settings is settings
+        assert runners["catalyst_sync"]._runtime_settings is settings
+        assert runners["focus"]._runtime_settings is settings
+
+        monkeypatch.chdir(tmp_path)
+        assert main(["--status"]) == 0
+        output = capsys.readouterr().out
+        assert "test-owner-token" not in output
+        assert json.loads(output)["status"] == "not_started"
+    finally:
+        for key in keys:
+            os.environ.pop(key, None)
+            if original[key] is not None:
+                os.environ[key] = original[key]
+
+
 def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -566,8 +655,8 @@ def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
 
     cache_path = tmp_path / "personal-catalyst.db"
     ai_path = tmp_path / "ai-jobs.db"
-    monkeypatch.setenv("MACROLENS_INTERNAL_TOKEN", "owner-token")
-    monkeypatch.setenv("MACROLENS_BASE_URL", "https://macrolens.example")
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "owner-token")
+    monkeypatch.setenv("MACROLENS_URL", "https://macrolens.example")
     monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(cache_path))
     monkeypatch.setenv("OPENAI_JOB_DB_PATH", str(ai_path))
     config = SimpleNamespace(
@@ -577,6 +666,13 @@ def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
     )
     task = CatalystSyncTask(
         "personal-worker",
+        settings=_worker_config(
+            tmp_path,
+            token="owner-token",
+            url="https://macrolens.example",
+            cache_path=cache_path,
+            ai_path=ai_path,
+        ),
         personal_config=config,
         etl_transport=httpx.MockTransport(handler),
         intelligence_factory=FakeLocalIntelligence,
@@ -623,8 +719,8 @@ def test_personal_catalyst_task_reconciles_with_real_local_store(
 
     cache_path = tmp_path / "real-local-catalyst.db"
     ai_path = tmp_path / "real-local-ai.db"
-    monkeypatch.setenv("MACROLENS_INTERNAL_TOKEN", "owner-token")
-    monkeypatch.setenv("MACROLENS_BASE_URL", "https://macrolens.example")
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "owner-token")
+    monkeypatch.setenv("MACROLENS_URL", "https://macrolens.example")
     monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(cache_path))
     monkeypatch.setenv("OPENAI_JOB_DB_PATH", str(ai_path))
     config = SimpleNamespace(
@@ -634,6 +730,13 @@ def test_personal_catalyst_task_reconciles_with_real_local_store(
     )
     task = CatalystSyncTask(
         "real-local-worker",
+        settings=_worker_config(
+            tmp_path,
+            token="owner-token",
+            url="https://macrolens.example",
+            cache_path=cache_path,
+            ai_path=ai_path,
+        ),
         personal_config=config,
         etl_transport=httpx.MockTransport(handler),
     )
@@ -661,7 +764,7 @@ def test_personal_catalyst_task_reconciles_with_real_local_store(
         assert connection.execute("SELECT count(*) FROM ai_jobs").fetchone()[0] == 0
 
 
-def test_personal_catalyst_task_isolates_stream_failure() -> None:
+def test_personal_catalyst_task_isolates_stream_failure(tmp_path: Path) -> None:
     class SyncError(RuntimeError):
         code = "upstream_unavailable"
 
@@ -689,6 +792,11 @@ def test_personal_catalyst_task_isolates_stream_failure() -> None:
 
     task = CatalystSyncTask(
         "isolated-worker",
+        settings=_worker_config(
+            tmp_path,
+            token="owner-token",
+            url="https://macrolens.example",
+        ),
         personal_config=SimpleNamespace(catalyst=SimpleNamespace(sync_seconds=41)),
     )
     task._mode = "personal"
@@ -706,6 +814,7 @@ def test_personal_catalyst_task_isolates_stream_failure() -> None:
 
 
 def test_personal_catalyst_task_makes_no_calls_when_runtime_settings_are_invalid(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.services.runtime_settings import RuntimeSettingsStorageError
@@ -737,6 +846,11 @@ def test_personal_catalyst_task_makes_no_calls_when_runtime_settings_are_invalid
     )
     task = CatalystSyncTask(
         "runtime-settings-failure",
+        settings=_worker_config(
+            tmp_path,
+            token="owner-token",
+            url="https://macrolens.example",
+        ),
         personal_config=SimpleNamespace(catalyst=SimpleNamespace(sync_seconds=41)),
     )
     task._mode = "personal"
@@ -761,21 +875,118 @@ def test_personal_catalyst_task_rejects_http_without_network(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("MACROLENS_INTERNAL_TOKEN", "owner-token")
-    monkeypatch.setenv("MACROLENS_BASE_URL", "http://macrolens.example")
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "owner-token")
+    monkeypatch.setenv("MACROLENS_URL", "http://macrolens.example")
     monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(tmp_path / "unused.db"))
     task = CatalystSyncTask(
         "invalid-worker",
+        settings=_worker_config(
+            tmp_path,
+            token="owner-token",
+            url="http://macrolens.example",
+        ),
         personal_config=SimpleNamespace(catalyst=SimpleNamespace(sync_seconds=43)),
     )
 
-    result = asyncio.run(task())
+    with pytest.raises(ValueError, match="HTTPS"):
+        asyncio.run(task())
 
-    assert result.status == "degraded"
-    assert result.error_code == "personal_etl_configuration_invalid"
-    assert result.next_delay_seconds == 43
+    assert task._mode is None
     assert task._client is None
     assert not (tmp_path / "unused.db").exists()
+
+
+def test_personal_tasks_disable_without_token_and_never_choose_legacy(
+    tmp_path: Path,
+) -> None:
+    settings = _worker_config(
+        tmp_path,
+        url="https://macrolens.example",
+        token="",
+    )
+    config = SimpleNamespace(
+        catalyst=SimpleNamespace(sync_seconds=120, focus_seconds=1800),
+    )
+    catalyst = CatalystSyncTask(
+        "disabled-personal",
+        settings=settings,
+        personal_config=config,
+    )
+    focus = FocusTask(
+        "disabled-personal",
+        enabled=True,
+        settings=settings,
+        personal_config=config,
+    )
+
+    catalyst_result = asyncio.run(catalyst())
+    focus_result = asyncio.run(focus())
+
+    assert catalyst_result.status == focus_result.status == "disabled"
+    assert catalyst._mode is None
+    assert focus._mode is None
+    assert catalyst._service is None
+    assert focus._intelligence is None
+
+
+def test_catalyst_initialization_failure_leaves_no_cached_half_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+
+    class FlakyIntelligence:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def initialize(self) -> None:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise OSError("local initialization failed")
+
+        def consume_refresh_requested(self) -> bool:
+            return False
+
+        def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict:
+            assert allow_scheduled_jobs is False
+            return {"queued": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_empty_etl_page(request.url.path))
+
+    monkeypatch.setattr(
+        "app.services.runtime_settings.get_effective_runtime_settings",
+        lambda: _runtime_settings(),
+    )
+    config = SimpleNamespace(
+        catalyst=SimpleNamespace(sync_seconds=120),
+        features=SimpleNamespace(catalyst_mode="read"),
+        ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),
+    )
+    task = CatalystSyncTask(
+        "retry-initialization",
+        settings=_worker_config(
+            tmp_path,
+            token="owner-token",
+            url="https://macrolens.example",
+        ),
+        personal_config=config,
+        etl_transport=httpx.MockTransport(handler),
+        intelligence_factory=FlakyIntelligence,
+    )
+
+    with pytest.raises(OSError, match="local initialization failed"):
+        asyncio.run(task())
+    assert task._mode is None
+    assert task._client is None
+    assert task._service is None
+    assert task._intelligence is None
+
+    result = asyncio.run(task())
+    assert result.status == "idle"
+    assert attempts == 2
+    asyncio.run(task.aclose())
 
 
 def test_default_read_focus_never_runs_scheduled_ai_work(
@@ -795,8 +1006,8 @@ def test_default_read_focus_never_runs_scheduled_ai_work(
             raise AssertionError("read mode must not queue scheduled work")
 
     ai_path = tmp_path / "read-ai-jobs.db"
-    monkeypatch.setenv("MACROLENS_INTERNAL_TOKEN", "owner-token")
-    monkeypatch.setenv("MACROLENS_BASE_URL", "https://macrolens.example")
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "owner-token")
+    monkeypatch.setenv("MACROLENS_URL", "https://macrolens.example")
     monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(tmp_path / "catalyst.db"))
     monkeypatch.setenv("OPENAI_JOB_DB_PATH", str(ai_path))
     config = SimpleNamespace(
@@ -808,6 +1019,12 @@ def test_default_read_focus_never_runs_scheduled_ai_work(
     task = FocusTask(
         "read-worker",
         enabled=True,
+        settings=_worker_config(
+            tmp_path,
+            token="owner-token",
+            url="https://macrolens.example",
+            ai_path=ai_path,
+        ),
         personal_config=config,
         intelligence_factory=FakeLocalIntelligence,
     )
@@ -840,8 +1057,8 @@ def test_scheduled_focus_calls_local_scheduler_once(
             calls.append("run_scheduled")
             return {"queued": 1, "skipped": 2}
 
-    monkeypatch.setenv("MACROLENS_INTERNAL_TOKEN", "owner-token")
-    monkeypatch.setenv("MACROLENS_BASE_URL", "https://macrolens.example")
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "owner-token")
+    monkeypatch.setenv("MACROLENS_URL", "https://macrolens.example")
     monkeypatch.setenv("MACROLENS_CACHE_DB_PATH", str(tmp_path / "catalyst.db"))
     monkeypatch.setenv("OPENAI_JOB_DB_PATH", str(tmp_path / "ai-jobs.db"))
     monkeypatch.setattr(
@@ -857,6 +1074,12 @@ def test_scheduled_focus_calls_local_scheduler_once(
     task = FocusTask(
         "scheduled-worker",
         enabled=True,
+        settings=_worker_config(
+            tmp_path,
+            token="owner-token",
+            url="https://macrolens.example",
+            ai_path=tmp_path / "ai-jobs.db",
+        ),
         personal_config=config,
         intelligence_factory=FakeLocalIntelligence,
     )
@@ -870,6 +1093,7 @@ def test_scheduled_focus_calls_local_scheduler_once(
 
 
 def test_focus_waits_for_first_catalyst_sync_attempt(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -932,6 +1156,11 @@ def test_focus_waits_for_first_catalyst_sync_attempt(
         )
         catalyst = CatalystSyncTask(
             "startup-order",
+            settings=_worker_config(
+                tmp_path,
+                token="owner-token",
+                url="https://macrolens.example",
+            ),
             personal_config=config,
             initial_sync_complete=initial_sync_complete,
         )
@@ -941,6 +1170,11 @@ def test_focus_waits_for_first_catalyst_sync_attempt(
         focus = FocusTask(
             "startup-order",
             enabled=True,
+            settings=_worker_config(
+                tmp_path,
+                token="owner-token",
+                url="https://macrolens.example",
+            ),
             personal_config=config,
             initial_sync_complete=initial_sync_complete,
         )
@@ -976,11 +1210,16 @@ def test_focus_waits_for_first_catalyst_sync_attempt(
     ]
 
 
-def test_catalyst_failure_releases_initial_focus_gate() -> None:
+def test_catalyst_failure_releases_initial_focus_gate(tmp_path: Path) -> None:
     async def scenario() -> tuple[BaseException | None, bool]:
         initial_sync_complete = asyncio.Event()
         catalyst = CatalystSyncTask(
             "startup-failure",
+            settings=_worker_config(
+                tmp_path,
+                token="owner-token",
+                url="https://macrolens.example",
+            ),
             personal_config=SimpleNamespace(
                 catalyst=SimpleNamespace(sync_seconds=120)
             ),
@@ -1024,7 +1263,15 @@ def test_default_task_inventory_and_maintenance_backup(
             connection.execute("CREATE TABLE sample(value INTEGER)")
             connection.execute("INSERT INTO sample VALUES(1)")
 
-    specs = build_default_tasks("inventory", worker_db_path=worker_db)
+    worker_settings = _worker_config(
+        tmp_path,
+        cache_path=paths["MACROLENS_CACHE_DB_PATH"],
+        ai_path=paths["OPENAI_JOB_DB_PATH"],
+    )
+    worker_settings.breakout_db_path = paths["BREAKOUT_DB_PATH"]
+    worker_settings.optix_worker_db_path = worker_db
+    worker_settings.optix_backup_dir = paths["OPTIX_BACKUP_DIR"]
+    specs = build_default_tasks("inventory", settings=worker_settings)
     assert {spec.name for spec in specs} == TASK_NAMES
     names = [spec.name for spec in specs]
     assert names.index("catalyst_sync") < names.index("focus")

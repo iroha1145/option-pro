@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -12,6 +14,65 @@ from app.services.catalysts.focus_config import FocusContextSettings
 
 
 READ_SECRET = "read-secret-0123456789abcdef-0001"
+
+
+def test_unified_settings_own_canonical_macrolens_and_worker_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MACROLENS_BASE_URL", raising=False)
+    monkeypatch.delenv("MACROLENS_INTERNAL_TOKEN", raising=False)
+    settings = Settings(
+        _env_file=None,
+        MACROLENS_URL="https://macrolens.example/",
+        INTERNAL_API_TOKEN="owner-token",
+        MACROLENS_CACHE_DB_PATH=tmp_path / "catalyst.db",
+        OPENAI_JOB_DB_PATH=tmp_path / "ai-jobs.db",
+        OPTIX_WORKER_DB_PATH=tmp_path / "worker.db",
+        OPTIX_WORKER_LOCK_PATH=tmp_path / "worker.lock",
+        BREAKOUT_DB_PATH=tmp_path / "breakout.db",
+        OPTIX_BACKUP_DIR=tmp_path / "backups",
+    )
+
+    assert settings.macrolens_url == "https://macrolens.example"
+    assert settings.personal_etl_enabled is True
+    assert settings.macrolens_cache_db_path == tmp_path / "catalyst.db"
+    assert settings.optix_worker_db_path == tmp_path / "worker.db"
+    assert "owner-token" not in repr(settings)
+    assert "owner-token" not in settings.model_dump_json()
+
+
+def test_unified_settings_disable_empty_token_and_fail_closed_on_bad_pairs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MACROLENS_BASE_URL", raising=False)
+    monkeypatch.delenv("MACROLENS_INTERNAL_TOKEN", raising=False)
+    disabled = Settings(
+        _env_file=None,
+        MACROLENS_URL="https://macrolens.example",
+        INTERNAL_API_TOKEN="",
+    )
+    assert disabled.personal_etl_enabled is False
+
+    with pytest.raises(ValidationError, match="required with INTERNAL_API_TOKEN"):
+        Settings(_env_file=None, INTERNAL_API_TOKEN="owner-token")
+    with pytest.raises(ValidationError, match="absolute HTTPS origin"):
+        Settings(
+            _env_file=None,
+            MACROLENS_URL="http://macrolens.example",
+            INTERNAL_API_TOKEN="owner-token",
+        )
+    with pytest.raises(ValidationError, match="conflicting MacroLens URL"):
+        Settings(
+            _env_file=None,
+            MACROLENS_URL="https://new.example",
+            MACROLENS_BASE_URL="https://old.example",
+        )
+    with pytest.raises(ValidationError, match="migration-only"):
+        Settings(
+            _env_file=None,
+            MACROLENS_INTERNAL_TOKEN="legacy-token",
+        )
 
 
 def test_personal_ai_daily_limit_cannot_exceed_four() -> None:

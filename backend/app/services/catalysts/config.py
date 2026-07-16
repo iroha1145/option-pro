@@ -219,6 +219,8 @@ class CatalystSettings(BaseSettings):
                 return self
             if not self.base_url:
                 raise ValueError("MACROLENS_URL is required with INTERNAL_API_TOKEN")
+            if urlsplit(self.base_url).scheme != "https":
+                raise ValueError("INTERNAL_API_TOKEN connections must use HTTPS")
             self._validate_transport_boundary()
             return self
         if bool(self.read_key_id) != bool(read_secret):

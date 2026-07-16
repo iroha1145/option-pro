@@ -3,13 +3,13 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import AliasChoices, AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.personal_config import get_personal_config
 from app.runtime_environment import (
-    ROOT_ENV_FILE as _ROOT_ENV_FILE,
     RUNTIME_ENV_FILES,
     load_runtime_environment,
 )
@@ -137,6 +137,58 @@ class Settings(BaseSettings):
         alias="OPENAI_JOB_MAX_QUEUED",
     )
 
+    macrolens_url: str = Field(
+        default="",
+        alias="MACROLENS_URL",
+        max_length=500,
+    )
+    internal_api_token: SecretStr = Field(
+        default=SecretStr(""),
+        alias="INTERNAL_API_TOKEN",
+    )
+    macrolens_ca_bundle: str = Field(
+        default="",
+        alias="MACROLENS_CA_BUNDLE",
+        max_length=4096,
+    )
+    macrolens_cache_db_path: Path = Field(
+        default=Path("/data/catalyst-cache.db"),
+        alias="MACROLENS_CACHE_DB_PATH",
+    )
+    optix_worker_db_path: Path = Field(
+        default=Path("/data/optix-worker.db"),
+        alias="OPTIX_WORKER_DB_PATH",
+    )
+    optix_worker_lock_path: Path = Field(
+        default=Path("/data/optix-worker.lock"),
+        alias="OPTIX_WORKER_LOCK_PATH",
+    )
+    breakout_db_path: Path = Field(
+        default=Path("/data/optix.db"),
+        alias="BREAKOUT_DB_PATH",
+    )
+    optix_backup_dir: Path = Field(
+        default=Path("/data/backups"),
+        alias="OPTIX_BACKUP_DIR",
+    )
+
+    # Migration-only sentinels. The worker never consumes either legacy name;
+    # retaining them here lets startup reject an unmigrated or conflicting file
+    # without exposing either value.
+    legacy_macrolens_base_url: str = Field(
+        default="",
+        alias="MACROLENS_BASE_URL",
+        max_length=500,
+        exclude=True,
+        repr=False,
+    )
+    legacy_macrolens_internal_token: SecretStr = Field(
+        default=SecretStr(""),
+        alias="MACROLENS_INTERNAL_TOKEN",
+        exclude=True,
+        repr=False,
+    )
+
     massive_api_key: str = Field(default="", alias="MASSIVE_API_KEY")
     massive_base_url: AnyHttpUrl = Field(default="https://api.massive.com", alias="MASSIVE_BASE_URL")
     finnhub_api_key: str = Field(default="", alias="FINNHUB_API_KEY")
@@ -172,6 +224,61 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
+    @field_validator(
+        "openai_job_db_path",
+        "macrolens_cache_db_path",
+        "optix_worker_db_path",
+        "optix_worker_lock_path",
+        "breakout_db_path",
+        "optix_backup_dir",
+    )
+    @classmethod
+    def validate_local_path(cls, value: Path) -> Path:
+        value = value.expanduser()
+        if not value.is_absolute() or ".." in value.parts:
+            raise ValueError("runtime data paths must be absolute without parent traversal")
+        return value
+
+    @field_validator("macrolens_url")
+    @classmethod
+    def validate_macrolens_url(cls, value: str) -> str:
+        if value != value.strip() or any(character.isspace() for character in value):
+            raise ValueError("MACROLENS_URL must not contain whitespace")
+        value = value.rstrip("/")
+        if not value:
+            return value
+        parsed = urlsplit(value)
+        if parsed.scheme != "https" or not parsed.hostname:
+            raise ValueError("MACROLENS_URL must be an absolute HTTPS origin")
+        if parsed.username or parsed.password:
+            raise ValueError("MACROLENS_URL must not contain credentials")
+        if parsed.path or parsed.query or parsed.fragment:
+            raise ValueError("MACROLENS_URL must contain only scheme, host, and port")
+        return value
+
+    @field_validator("internal_api_token")
+    @classmethod
+    def validate_internal_api_token(cls, value: SecretStr) -> SecretStr:
+        token = value.get_secret_value()
+        if token != token.strip() or "\r" in token or "\n" in token:
+            raise ValueError("INTERNAL_API_TOKEN contains unsupported whitespace")
+        if len(token) > 4096:
+            raise ValueError("INTERNAL_API_TOKEN is too long")
+        return SecretStr(token)
+
+    @field_validator("macrolens_ca_bundle")
+    @classmethod
+    def validate_macrolens_ca_bundle(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            return value
+        path = Path(value).expanduser()
+        if not path.is_absolute() or ".." in path.parts:
+            raise ValueError("MACROLENS_CA_BUNDLE must be an absolute path")
+        if not path.is_file():
+            raise ValueError("MACROLENS_CA_BUNDLE must point to a readable file")
+        return str(path)
+
     @model_validator(mode="after")
     def validate_openai_runtime(self) -> "Settings":
         if self.allow_custom_openai_base_url:
@@ -187,7 +294,26 @@ class Settings(BaseSettings):
             raise ValueError(
                 "OPENAI_BACKGROUND_MAX_POLL_SECONDS must be at least the initial interval"
             )
+        token = self.internal_api_token.get_secret_value()
+        legacy_url = self.legacy_macrolens_base_url.strip().rstrip("/")
+        legacy_token = self.legacy_macrolens_internal_token.get_secret_value().strip()
+        if legacy_url and not self.macrolens_url:
+            raise ValueError("MACROLENS_BASE_URL is migration-only; use MACROLENS_URL")
+        if legacy_url and legacy_url != self.macrolens_url:
+            raise ValueError("conflicting MacroLens URL settings")
+        if legacy_token and not token:
+            raise ValueError(
+                "MACROLENS_INTERNAL_TOKEN is migration-only; use INTERNAL_API_TOKEN"
+            )
+        if legacy_token and legacy_token != token:
+            raise ValueError("conflicting MacroLens token settings")
+        if token and not self.macrolens_url:
+            raise ValueError("MACROLENS_URL is required with INTERNAL_API_TOKEN")
         return self
+
+    @property
+    def personal_etl_enabled(self) -> bool:
+        return bool(self.macrolens_url and self.internal_api_token.get_secret_value())
 
 
 @lru_cache
