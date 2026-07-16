@@ -1,260 +1,163 @@
-# Option Pro Personal Edition 最终报告
+# Personal Edition 五阶段交付报告
 
-报告日期：2026-07-16
-范围：Option Pro 个人版的 Owner 访问、手动操作、密钥、部署与运行时收束。
-边界：本轮未连接真实 OpenAI，未部署生产服务器，未合并发布分支。
+更新时间：2026-07-16。
 
-## 结果概览
+本报告记录 Option Pro PR #17、#18、#19、#20 与 News-feed PR #18 的最终叠加复核。五个拉取请求（Pull Request）保持开放、未合并；没有生产部署，也没有调用真实 OpenAI、新闻源或行情源。
 
-- 正式容器从五个服务收束为`backend`与`worker`两个服务，四个独立工作容器并入统一工作进程。健康清单严格核对五类后台循环与四类手动工作，共九项。
-- 站点只支持`private_network`与`password`两种访问模式，不再拆分公开读取、动作和分析权限。
-- 所有日常操作面向唯一所有者（Owner）。操作能否执行由功能模式、数据、工作进程、幂等、冷却、并发与预算决定。
-- 密钥仅保存在`secrets.env`与服务端进程中。网页只能获知“已配置/未配置”，不读取、不裁剪展示、不缓存任何密钥内容；命令行可进行免计费格式与连通性检查，不创建模型推理。
-- 模型保持 GPT-5.6 Terra，推理等级为`max`。新闻标题、摘要、等待文案和分析结果均使用简体中文。
-- 每项分析任务都会持久记录最初的`manual`或`scheduled`来源，但来源不再拆分同一输入的幂等身份。关闭任一开关后，该来源尚未提交的旧任务会安全终止，不会在开关恢复后突然产生费用。
+## 交付核对表
 
-## 旧权限模型
+1. **两仓库起始主分支提交。** Option Pro 为 `d04ef67703316c52279fb020e10278eb7e3e82f5`，News-feed 为 `a5e896d3d248cf658075a91baf9120c94f1d70c4`；最终复核时，两仓库远端 `main` 仍分别指向这两个提交。工作目录中原有的本地 `main` 分别为 `18420ae32c15d7572b20e901027eafaf46d08d03` 与 `a3c9e3fce76c96c0ff84303f566fa2b0e2afd1bb`，它们不是本轮堆叠基线，本轮也没有推送这些本地引用。
+
+2. **五个原始头提交。** Option Pro #17：`1f3773cf9dd2eca46aa148a2041e78a2af1e79f1`；Option Pro #18：`a30944fa0ecd50d31a3d233f4b64259b64945f79`；News-feed #18：`4551f71cf1446814e6069b4ac53731978a661e15`；Option Pro #19：`190d1f0f855526ad2cc5f42d8d3307a69e9c6f08`；Option Pro #20：`11a97b845bfa72952bd2d82ca19ab52168554640`。
+
+3. **五个最终头提交。** Option Pro #17：`54a4b788e4dae7290502cbe481b151463d4543a1`；Option Pro #18：`511e73a7749514ba790eecbbf21bbdb9cd6dac26`；News-feed #18：`b2a77a2b36cf427de37b929c138a18e65e5c1997`；Option Pro #19：`d955c3d64904ffded4565bf5491f78ba60179695`。Option Pro #20 的代码验证头为 `f4f8e58103df628c3bd7203b124263bff734bc62`，本报告是其后的文档提交；最终分支头由 `refs/heads/refactor/personal-runtime-cleanup` 与 [PR #20](https://github.com/iroha1145/option-pro/pull/20) 页面共同确认。
+
+4. **每个拉取请求的基础分支。** Option Pro #17 → `main`；Option Pro #18 → `refactor/personal-edition`；News-feed #18 → `main`；Option Pro #19 → `refactor/personal-worker`；Option Pro #20 → `feat/local-catalyst-ai`。
+
+5. **精确提交列表。** 五个阶段的完整提交哈希和标题列在文末“提交附录”。第 20 号的报告提交因无法在自身内容中预先写入自身哈希，以 `HEAD（本报告）`标识；其父提交为上项所列代码验证头。
+
+6. **堆叠分支更新方式。** 先为旧头与本地待传播头建立远端 `backup/` 引用，再使用 `git rebase --merge --onto` 依次把 #18 建到新 #17、把 #19 建到新 #18、把 #20 建到新 #19。推送 #18、#19、#20 时只使用带旧远端哈希的精确 `--force-with-lease`；每层均先核对远端未出现第三方新提交。
+
+7. **审查线程。** 五个拉取请求共 10 条有效线程：Option Pro #17 四条、#18 一条、#19 两条、#20 一条，News-feed #18 两条。最终交付要求为 10 条全部回复并解决；#20 的旧 `contracts/` 线程只在最终头镜像构建和持续集成（Continuous Integration）通过后关闭。
+
+8. **`private_network` 最终规则。** 只允许本机回环、安全外壳（SSH）转发、RFC1918、Tailscale、WireGuard、运营者明确批准的私网地址和 IPv6 本地地址；禁止通配或公网监听、域名允许列表以及可信代理头。应用启动、部署脚本与 `personal.sh doctor` 共用同一个 Python 校验器。
+
+9. **`password` 最终规则。** 必须存在格式合法的 `APP_PASSWORD_HASH`，必须显式设置 `ALLOWED_HOSTS`，登录请求必须被应用识别为超文本传输安全协议（HTTPS），会话继续使用 `Secure`、`HttpOnly`、`SameSite=Strict` Cookie。
+
+10. **公网反向代理门禁。** `ALLOWED_HOSTS` 只要含域名，就必须设置 `TRUST_PROXY_HEADERS=true`，并配置非空且收窄到实际代理来源的 `TRUSTED_PROXY_CIDRS`。缺少代理信任的“公网域名 + 密码模式”组合不再通过部署校验；反向代理仍须正确传递超文本传输安全协议（HTTPS）信息。
+
+11. **规范密钥（Canonical Secret）列表。** 只有 `OPENAI_API_KEY`、`FINNHUB_API_KEY`、`MARKETDATA_TOKEN`、`INTERNAL_API_TOKEN`、`APP_PASSWORD_HASH` 五项。网页、接口、日志和报告只显示是否配置，不显示值、片段、长度或摘要。
+
+12. **MarketData 迁移语义。** 运行时只读取 `MARKETDATA_TOKEN`；`MARKETDATA_API_TOKEN` 仅由迁移器识别。新旧键同时存在且值不一致时失败关闭，报告只记录冲突键名。
+
+13. **`machine.env` 字段。** 只有 `HOST_BIND`、`PORT`、`MACROLENS_URL`、`ALLOWED_HOSTS`、`TRUST_PROXY_HEADERS`、`TRUSTED_PROXY_CIDRS`、`DATA_DIR` 七项。升级器会从旧 `.env` 与旧 `secrets.env` 恢复机器字段，识别 `MACROLENS_BASE_URL`，并以模板补齐缺失字段；文件权限为 `0600`。
+
+14. **迁移报告字段。** 只有 `mapped_keys`、`deprecated_keys`、`removed_keys`、`conflicting_keys`、`unmapped_keys`、`requires_owner_password`、`warnings`。`removed_keys` 只含键名与 `removed_by_personal_edition` 状态；报告权限为 `0600`。
+
+15. **迁移密钥泄漏扫描。** 迁移与密钥专项 49 项通过；报告断言不含密钥值、网址、长度、摘要或片段。受跟踪文件的密钥形态扫描只命中一个专门验证“不把误贴密钥当键名回显”的合成测试哨兵，生产代码、配置模板、文档和前端均无命中。
+
+16. **PR #17 独立模型预算验证。** #17 全量 Python 790 项通过；模型任务、个人配置与突破工作进程专项 37 项通过。每日任务上限在供应商提交前原子预留，并发争用不能越过上限；未调用真实 OpenAI。
+
+17. **PR #17 独立突破验证。** `breakout_enabled` 以 `personal.toml` 为准，旧环境值不能改变正式行为。慢扫描租约测试连续运行 10 次均通过，随后 #17 两条完整持续集成均成功。
+
+18. **备份精确标签实现。** 备份文件以严格文件名表达式和版本化 Manifest 为入口，核对完整标签、数据库、Manifest、摘要三件套、大小与摘要后才进入删除计划；不再使用前缀 Glob 判定标签归属。
+
+19. **备份保留测试。** 覆盖 `optix`、`optix-worker`、`optix-worker-state` 三组重叠标签、每标签独立保留、损坏 Manifest、不完整三件套、目录级锁与并发保留；不同标签不会互删。
+
+20. **日历持久化语义。** MacroLens 先抓取与规范化，再以 `BEGIN IMMEDIATE` 在一个事务中保存日历快照与来源健康；提交成功后才更新内存缓存。任何写入失败都会回滚，并保留上一份数据库与缓存。
+
+21. **大历史去重实现。** 当前内容哈希、旧版内容哈希与规范化网址按批次分块执行全库精确查询；最近 2000 条只用于模糊标题。5000 条历史、旧哈希、网址、来源证据、变化流和并发幂等均有回归覆盖。
+
+22. **统一工作进程配置加载。** 工作进程入口在导入任务模块前统一加载 `.env`、`machine.env`、`secrets.env`，并把一个 `Settings` 对象注入九类任务。文件归属在统一加载器中执行：七个机器字段不能被 `secrets.env` 覆盖，五个密钥不能被 `machine.env` 覆盖；`BaseSettings` 不再绕过加载器重读三份文件。
+
+23. **队列已满错误映射。** 相同任务先复用已有记录；只有新任务在队列饱和时返回 429、`ai_job_queue_full` 与 60 秒重试时间。数据库、预算、冷却和工作进程错误保持独立，不再把队列已满伪装成缓存或 SQLite 故障。
+
+24. **最终服务数量。** Option Pro 的正式组合配置只有 `backend` 与 `worker`；MacroLens 只有 `macrolens`。两仓库长期业务进程合计 3 个。
+
+25. **最终环境变量数量。** 正式模板合计 12 项：`machine.env` 七项、`secrets.env` 五项；`.env.example` 不含正式字段，只保留一个迁移版本的兼容说明。相较旧模板 189 项减少 177 项，约 93.7%。
+
+26. **最终配置项数量。** `config/personal.toml` 按叶子键统计为 21 项，数组整体算一个键；若逐个展开数组值则为 28 个值。加上 12 个环境字段，运营者可配置入口合计 33 项。
+
+27. **最终删除代码行数。** 统计范围为 Option Pro 起始提交 `d04ef677...` 到代码验证头 `f4f8e581...` 的整个仓库，包含程序、测试和文档：删除 68,467 行，新增 34,015 行，涉及 210 个文件。本报告提交不计入该代码瘦身数字。
+
+28. **Python 测试结果。** Option Pro 最终叠加树 987 项通过、4 条依赖弃用警告；News-feed 最终头 66 项通过；PR #17 独立全量 790 项通过。测试输出未报告失败或跳过项。
+
+29. **Node.js 测试结果。** 最终叠加树 37 项行为测试全部通过；11 个正式前端文件的静态断言通过，旧路径不存在或为空；全部正式 JavaScript 文件通过语法检查。
+
+30. **Playwright 结果。** 34 项全部通过，包括 19 种 Catalyst Desk 状态、键盘焦点、整页重载、故障隔离、真实密码模式与自选页并发场景。
+
+31. **Docker 结果。** 正式镜像构建成功；隔离项目中的 `backend` 与 `worker` 均健康，工作进程严格报告九类任务；两容器用户编号均为 100，根文件系统不可写；本地突破与 Catalyst 夹具通过；两个容器在独立数据卷上正确观察同一 SQLite 预写日志（WAL）事务的提交前后可见性。测试容器、网络和临时卷均已删除。
+
+32. **持续集成链接。** [Option Pro #17 检查](https://github.com/iroha1145/option-pro/pull/17/checks)、[Option Pro #18 检查](https://github.com/iroha1145/option-pro/pull/18/checks)、[News-feed #18 检查](https://github.com/iroha1145/News-feed/pull/18/checks)、[Option Pro #19 检查](https://github.com/iroha1145/option-pro/pull/19/checks)、[Option Pro #20 检查](https://github.com/iroha1145/option-pro/pull/20/checks)。这些链接始终指向各拉取请求当前头提交；最终批准以页面上全部检查成功为准。
+
+33. **浏览器产物。** 本地完整报告位于 `frontend/test-results/report/index.html`，状态截图位于 `frontend/test-results/visual-evidence/`。Option Pro 的持续集成在各个最终头提交上传 `catalyst-desk-visual-evidence-<SHA>`，保留 14 天。
+
+34. **生产部署。** 未执行；没有访问、重启或变更生产服务器，也没有合并任何拉取请求。
+
+35. **模型与简体中文输出。** 正式模型保持 `gpt-5.6-terra`，推理等级为 `max`，模型并发为 1；新闻标题、摘要、等待文案与分析结果必须为简体中文。相关回归均使用本地夹具或模拟传输，没有调用真实 OpenAI、新闻源或行情源。
+
+36. **已知 P2。** 本轮复核范围内没有发现未处理的功能性 P2。测试仍报告两类上游弃用提醒：Starlette `TestClient` 的 `httpx2` 迁移，以及 `HTTP_422_UNPROCESSABLE_ENTITY` 常量替换；它们不影响本轮运行结果，后续可随依赖升级处理。本轮复核范围内未发现未处理的 P0/P1。
+
+37. **未来正式合并顺序。** 先合并 Option Pro #17，再更新并合并 Option Pro #18；随后合并 News-feed #18，确认纯采集接口稳定；再更新并合并 Option Pro #19；最后重新核对并合并 Option Pro #20。每一步都重新检查基础分支、当前头、持续集成与部署前配置，但本轮不执行这些合并和生产发布动作。
+
+## 提交附录
+
+### Option Pro PR #17
 
 ```text
-进入站点
-  │
-  ├─ 公开读取开关 ─────────────┐
-  ├─ APP_AUTH_TOKEN ──> 浏览器存储 ──> Authorization 请求头
-  ├─ Action Key / 远端 Capability ─────┤
-  ├─ 分析与手动操作开关 ─────────┤
-  └─ 公开响应字段裁剪 ───────────┤
-                                          ▼
-                                  按钮显示与动作判定
+6894f17cca29bed66d4391aa43270c2c7ba14f32 refactor: add personal config and retire legacy frontend
+b1c8014b5e8cdf4eefefa92dc3daacad2e428277 refactor: replace browser tokens with owner access
+1f3773cf9dd2eca46aa148a2041e78a2af1e79f1 test: preserve private-network peer semantics
+3eece12265075e2259e153ba491a1875c39b0b3e fix: fail closed for proxied private-network deployments
+de97c701bdf28c506863fd8a2c852a77cead575c fix: migrate machine settings and canonical service secrets
+08a50c98249c8df41460e9b834f53d5d3accc5e9 fix: enforce the stage-one daily AI job limit
+72b50e60c1169e4ab40bae46d3662f0e424c62ce fix: keep breakout behavior aligned with personal configuration
+51deb5c971743bb33d5e07827045baf1876cb807 test: keep legacy breakout compatibility deterministic
+8269fb9f722331e41b25baa2e8cf3270afa00974 test: preserve breakout worker isolation
+2c18addfe6fd258ca8301b03bd796318d4d6ca2f test: align breakout CI smoke with personal configuration
+3a361b9e82aac94388f4a99013cad41d568b18e1 fix: require trusted proxy for password domains
+54a4b788e4dae7290502cbe481b151463d4543a1 test: harden worker lease timing
 ```
 
-这一结构将“能否进入站点”和“当前能否运行任务”混在一起。不同开关可相互矛盾，同一 Owner 仍需经过多次授权判定。
-
-## 新 Owner 访问模型
+### Option Pro PR #18
 
 ```text
-浏览器
-  │
-  ├─ private_network：来源地址通过 ────────┐
-  └─ password：Owner 会话有效 ────────────┤
-                                                ▼
-                                              Owner
-                                                │
-                         同源 JSON 动作 + 运行状态判定
-                                                │
-                         ├─ 查看与手动刷新
-                         ├─ 创建、重试与取消分析
-                         ├─ 修改非 Secret 运行设置
-                         └─ 查看预算、令牌用量与工作进程状态
+b7d1601a79308aa91797d11f133b4d8a112c702e refactor: consolidate personal background work
+3d98d761dfaa707d53cabfa2b7dd74ab174f4f44 test: harden worker lease timing
+4c014b68a69e4546853f7857cefc884e94471084 feat: queue manual work in the unified worker
+db72a26ea9d2c2c88887ad08847b60bad106342e feat: expose unified worker actions
+e39db56ebdfc63e3f4fcdcca58c551986392be2c fix: preserve SQLite backups by exact manifest label
+511e73a7749514ba790eecbbf21bbdb9cd6dac26 fix: fail the unified worker when a task loop dies
 ```
 
-`/health`与`/ready`在两种模式下均可以无登录读取。其他页面和接口共用同一 Owner 边界。
+### News-feed PR #18
 
-## 已删除的权限链
-
-### 后端依赖与分支
-
-- `require_expensive_action`、旧`require_app_auth`与独立模型动作鉴权；
-- 公开读取/认证动作双路径；
-- 匿名 Catalyst、Hotspot 响应的单独投影与字段删除；
-- `action_enabled`与用户 Capability 合并；
-- 跨服务动作签名、Action Key 与反向 Focus Pull；
-- 旧权限运行时兼容模块。
-
-现行状态修改端点统一使用`require_owner_access()`与`require_same_origin_action()`。
-
-### 权限环境变量
-
-运行时已删除`APP_AUTH_TOKEN`、`PUBLIC_READ_API_ENABLED`与`ALLOW_INSECURE_PUBLIC_BIND`。访问模式不是新的环境变量，而是`config/personal.toml`中的`[access].mode`。
-
-同时退出：
-
-- `MACROLENS_BASE_URL`、`MACROLENS_INTERNAL_TOKEN`以及旧式读取、动作、Focus 凭据；
-- Option Pro 中已无调用方的 Massive 客户端与`MASSIVE_API_KEY`、`MASSIVE_BASE_URL`设置；该新闻源只保留在 MacroLens；
-- `OPENAI_JOB_DB_PATH`、`MACROLENS_CACHE_DB_PATH`、`BREAKOUT_DB_PATH`与`WATCHLIST_SNAPSHOT_PATH`；
-- 按工作进程分散的发布门禁与功能开关。
-
-正式模板从旧`.env.example`的 189 个字段收束为 11 个：`.env.example`的 6 个机器边界字段，加`secrets.env.example`的 5 个服务端字段，减少 178 个。
-
-### 前端 Token 逻辑
-
-已删除`optix.app.token`、`sessionStorage`认证恢复、`localStorage`认证信息、`Authorization: Bearer`、`hasToken`、`privateActionsAvailable`以及因缺少 Token 而隐藏操作按钮的逻辑。
-
-主题喜好仍可保存在`localStorage`，该值不是认证信息。
-
-## 访问模式（ACCESS_MODE）语义
-
-“ACCESS_MODE”是访问模式概念，唯一运行配置位于`config/personal.toml`：
-
-```toml
-[access]
-mode = "private_network"
+```text
+df79f46698788316e9508f1b67bd0db6dc559e68 refactor: reduce macrolens to etl service
+026921496b9ff3182a66eb786cef4974f4e82f25 refactor: align macrolens internal access settings
+d650eb083686881c81cb04331bfa63a7f6a57fa2 fix: resolve packaged macrolens config path
+bba424f50b9385479f1d2d41a9d97c0de82c9f6e refactor: add server-only macrolens secret management
+4551f71cf1446814e6069b4ac53731978a661e15 fix: prepare server secrets for container CI
+2f0fd24d73940b51b945593f1a9b51b68e26a6b3 fix: query exact news keys across the full history
+b2a77a2b36cf427de37b929c138a18e65e5c1997 fix: commit calendar snapshots and source health atomically
 ```
 
-不支持通过同名环境变量覆盖，避免文件、容器和进程各有一份结果。
+### Option Pro PR #19
 
-### `private_network`
-
-- 适用于本机、安全外壳（SSH）隧道、Tailscale、WireGuard 和受防火墙保护的私网；
-- 浏览器不登录、不保存 Token；
-- 部署脚本只接受`localhost`或`allowed_private_cidrs`内的明确地址；
-- `0.0.0.0`、`::`、公网地址、主机名和未批准地址均使启动失败；
-- 应用层还会检查请求来源，不把“成功监听”当成“来源合格”。
-
-### `password`
-
-- 只有一个 Owner 密码，不存在用户表、注册、角色、找回密码或多因素认证；
-- 启动时必须存在格式合法的`APP_PASSWORD_HASH`，明文密码不落盘；
-- 登录成功后发放有时效的`HttpOnly`、`Secure`、`SameSite=Strict` Cookie；
-- 会话保存在服务端，新登录会使上一个会话失效，登出和过期会删除访问权；
-- 登录请求体在 JSON 解析前限制为 4 KiB，参数错误只返回固定脱敏结构，不回显密码、额外字段名或其他输入；
-- 连续登录失败会进入有界冷却；同一来源同一时刻只执行一次密码摘要校验，其余并发请求短暂退避，避免并发请求同时消耗处理器；
-- 适用于超文本传输安全协议（HTTPS）反向代理，不应用明文公网 HTTP 访问。
-
-## 手动操作
-
-### 刷新
-
-新闻、日历、来源状态、焦点股票池、强度雷达、突破雷达和保留期维护都可由 Owner 发起。请求写入持久化工作队列，由`worker`执行，而不是在页面请求中长时间运行。焦点、强度、突破和保留期手动请求分别由`focus_refresh`、`strength_refresh`、`breakout_refresh`和`retention`处理，不再挤入某一个长周期定时任务。刷新没有另设不可见的启停开关，能否执行只取决于功能模式、缓存、冷却、幂等和工作进程状态。
-
-强度雷达会把当前页面的股票范围、周期、策略、数量、行业、价格、成交额和期权过滤条件完整写入请求与幂等身份。工作进程按实际参数生成对应快照；默认条件保留原文件名，其他条件按参数摘要分开保存，最多保留 24 个变体。失败或冷却时继续显示上一份有效结果，超过 24 小时的旧结果也不会仅因年龄被清空。
-
-状态包含可刷新、刷新中、冷却中、工作进程不可用和远端不可用。同类重复点击复用现有请求，失败保留上一份数据。新闻、日历与焦点刷新不消耗 OpenAI 预算，普通页面刷新也不会自动创建付费任务。
-
-### 单篇新闻分析
-
-`manual`或`scheduled`模式且“允许手动分析”开关开启时，未分析新闻显示“生成分析”，已分析新闻显示“重新分析”。重新分析需要费用确认，生成新的不可变分析修订，不覆盖旧结果；定时开关不会代替手动开关把按钮打开。
-
-按钮只因未配置 OpenAI、工作进程异常、同一新闻已有任务、预算耗尽、冷却，或确定性规则已判定上下文不足而禁用。上下文不足时先显示规则结果，Owner 仍可选择强制分析；强制分析需要第二次费用确认，结果仍可能是`insufficient_context`。`read`模式的新任务返回`read_only_mode`；运行设置关闭手动分析时返回`manual_analysis_disabled`。个人配置中的`read`或`off`会与运行设置再次取交集，因此旧文件里残留的启用值也不能从入队或提交边界绕过只读模式。只读模式不渲染新闻生成、再次分析、财报关联分析、个股异动解读或热点综合分析操作，只显示原因、历史结果与真实状态；切换前已存在的排队或运行任务仍可取消，避免已提交任务失去终止通道。
-
-### 热点综合分析
-
-准备版本高于已消费版本时，Owner 可以“分析新热点”。没有新热点时，页面仍显示“重新分析当前上下文”。
-
-强制重跑使用`force=true`，需要二次确认，按当前新闻、焦点股票和市场数据创建新的 Cycle Revision。它不把旧事件伪装成新热点，不覆盖旧 Cycle，也不改变`last_consumed_revision`。同一上下文在同一分钟内的重复请求共用幂等键。正常热点分析成功后才推进已消费版本。强制重跑在个人配置中固定可用，不再受网页无法看见的运行开关控制。
-
-## 以预算与运行状态取代权限门禁
-
-付费分析保留三个硬约束：
-
-```toml
-[ai]
-max_concurrency = 1
-daily_max_jobs = 4
-daily_budget_usd = 2.0
+```text
+96ce1abdb2ed0ad5e3294b7124167e47a26f4d9b feat: move catalyst intelligence into option pro
+eeb832c238d2400f415d18d7ff25efdfd49ee00e fix: make personal AI config CI-safe
+224e945dd4b8d2e0169f355a923b2f38a8760f3b fix: report official Responses SDK capability
+8435eafeb4a2dfb9ec7dad4b7eb1f607aafe934d test: remove worker backoff timing race
+6e0bbdd1bb485feeccee052140593f5634389383 fix: expose SDK capability in worker health
+a49f973a92ee7dbe5300929a835b700115b2d6f7 feat: complete owner catalyst runtime controls
+a3cbecbed40789d4d50d4fa9810bc255e00a3141 test: align Catalyst visual evidence with owner controls
+3125157abd715adc95961aa98aad7ee9eac5209b fix: load unified worker configuration through settings
+d121c18497c89a245943ccc1e7b835150a3f66e0 fix: preserve AI queue and budget error semantics
+5f3933320196173026b76c3f5ae3e78cd684756e fix: preserve focus job identity across local commit failures
+c943f157b3dbe69c7a4c8209e525ed60bbabc2f5 fix: support unified worker CLI from the repository root
+094b8c51cf7507f4a7de4bfbdc1fca485618f41d fix: enforce complete simplified Chinese output gates
+0a8627529d7a137cadbca88753b76ca9f3d873d4 test: keep personal container checks fully offline
+4c733a4da1b15d600429038f30bb529701bd472a test: align AI safety with unified runtime environment
+528a1b04f2d264b568406eae381f3c725a0f56cb test: align offline breakout checks after parent update
+28eb31cf1a42862e9ede82739e2b38c50456742a test: verify offline breakout CI override
+da8503bc5a3c0e2013ce8d3e69214e84ee9e35da test: run the Catalyst container fixture from the image path
+31909becfe7cdc9bb0a32c65ea4300ae1df940be fix: honor selected worker environment files before imports
+c41a54a918c35273fa41d018ddbda509e7e1fe03 fix: reject mismatched active focus cycles
+d955c3d64904ffded4565bf5491f78ba60179695 test: keep visual failures in simplified Chinese
 ```
 
-供应商终态响应只要带有用量，就记录输入与输出令牌（Token）；完成、失败、不完整和取消均适用。同一输入保持幂等；超出本地预算时返回`budget_blocked`。已有响应编号的任务继续查询原响应；已经开始提交却没有取得响应编号时，保留整笔预留、停止重提并继续占用并发位置。系统不自动扩大预算、不自动更换模型、不降低推理等级，也不自动重试付费请求。
+### Option Pro PR #20
 
-每项任务同时记录最初的`manual`或`scheduled`来源，来源本身不进入幂等身份；手动与定时分析遇到相同输入时复用同一任务和同一付费执行。启动迁移会识别旧版包含来源的哈希：已经提交、提交状态未知、已有结果或预算受阻的记录会封存同输入的未付费重复项；从未提交过的同组记录只保留一个最新可执行项。迁移仍保留最初来源，并使用一次性标记避免重复处理。网页入队前、持久化入队边界和工作进程提交前均会重新核对可见的手动分析开关；定时新闻与热点任务在“来源开关”这一层只检查固定周期的定时开关，预算、并发、幂等与运行状态仍照常生效。关闭开关时，尚未提交的对应任务以明确错误码终止，已取得供应商响应编号的任务继续查询，取消通道始终保留。
-
-`daily_budget_usd`是本地提交门禁的硬上限，不等同于供应商账单封顶。调用供应商前，系统按本地输入估算上界、供应商最大输出参数和工具调用上限预留保守费用；取得终态用量后重新估算，结果不会高于原预留，用量缺失或异常时保留全额。现行五类任务的输入估算上界均为 69,632 个令牌，它由 60,000 字节业务数据、说明、结构定义和 4,096 个令牌余量保守推导，并没有作为`max_input_tokens`传给供应商。四类任务的最大输出为 32,768 个令牌，市场焦点为 49,152 个令牌；对应单项预留分别为 0.709120 美元和 0.954880 美元。
-
-价格常量于 2026-07-16 依据 [GPT-5.6 Terra 官方模型页](https://developers.openai.com/api/docs/models/gpt-5.6-terra)与[官方价格页](https://developers.openai.com/api/docs/pricing)核对。每百万令牌的短上下文输入、缓存读取、缓存写入和输出价格分别按 2.50、0.25、3.125 和 15 美元计算；输入超过 272,000 个令牌时，分别按 5、0.5、6.25 和 22.5 美元计算。响应没有单列缓存写入量，因此非缓存输入按较贵的缓存写入价格估算；用量缺失时不释放预留。
-
-财报影响任务暂不启用网页搜索（Web Search）。官方只公布每次搜索 0.01 美元，却没有给出默认搜索返回内容的数值型令牌上限；在无法证明最坏费用时关闭工具，避免绕过两美元日预算。这里显示的是偏保守的本地费用估算，仍不能替代供应商账单。
-
-## 简体中文输出契约
-
-所有模型请求都明确要求`zh-CN`，新闻任务还要求把原始标题与摘要翻译或改写为简体中文。结构化输出（Structured Outputs）完成后，服务端再次逐字段校验新闻标题、摘要、传导说明、行业、商品、风险、市场焦点和股票摘要。
-
-校验器在本地离线运行，覆盖常见繁体与地区异体冲突字符，并对“特徵、著手、瞭解、乾旱”等需要语境的词组单独判断；“著名、瞭望、乾照光电”及 NVIDIA、AMD、TSM、Blackwell 等必要专名仍可通过。整句英文和常见繁体表达都会使任务进入明确失败状态，不会把不合格内容发布到新闻页面。
-
-## Secret 命令行
-
-支持的 Option Pro 服务端字段只有`OPENAI_API_KEY`、`FINNHUB_API_KEY`、`INTERNAL_API_TOKEN`、`APP_PASSWORD_HASH`和`DATA_DIR`。
-
-```bash
-./personal.sh secrets status
-./personal.sh secrets set OPENAI_API_KEY
-./personal.sh secrets set FINNHUB_API_KEY
-./personal.sh secrets set INTERNAL_API_TOKEN
-./personal.sh secrets set APP_PASSWORD_HASH
-./personal.sh secrets remove OPENAI_API_KEY
-./personal.sh secrets validate
+```text
+5ccc6f7c95fa6c52cffbf95c790a073f86f6ec79 refactor: remove legacy personal runtime chains
+b4b3888c4e56eea0e07779e45ad9eeec40d22edd fix: stabilize personal runtime CI
+05b1ecc829efeda08aee0179a7efcb8887e1a350 fix: make compose service check order independent
+3d14dc7f6d43b248418202c54fc2632cdfbf692f refactor: separate secrets from deployment edges
+8db0377ef72b7efe24b649ed8e89d67a304fc845 refactor: finish personal owner runtime cleanup
+6d203604ad56daac9f49e5b458fc3f7091731cc2 fix: align offline CI with manual catalyst mode
+1f397597ef183a0c497b85fa49536519b10838ea fix: verify the complete worker v2 inventory
+b55760a1bbf1dbf528c1cb1e321e2784df362d7f fix: align final runtime configuration boundaries
+f4f8e58103df628c3bd7203b124263bff734bc62 docs: clarify personal runtime configuration
+HEAD docs: record final personal edition delivery report
 ```
-
-- 交互终端中的`set`通过无回显输入读取，非交互使用时只从标准输入首行读取；密钥不进入命令参数或终端输出；
-- 接口令牌只接受无空白的可打印安全字符，拒绝`#`、单双引号、反斜杠和`$`，防止环境文件注释、转义或变量插值改写原值；拒绝响应不回显原文；
-- Owner 密码在写入前转换为加盐摘要，明文不写入`secrets.env`；
-- 已有`secrets.env`时才创建备份；备份与新文件都先在隐藏临时文件上以`0600`创建并完成落盘，再通过单次文件系统操作公开完整备份或替换正式文件；不存在先以宽松权限出现、稍后再改为`0600`的时间窗口；
-- 同目录`0600`文件锁覆盖“读取、修改、备份、替换、目录同步”的完整过程，并发执行`set`或`remove`不会静默丢失另一项修改；异常退出后锁会释放；
-- `status`只返回是否配置；`validate`检查文件权限、格式与免计费连通性：OpenAI 固定读取`/v1/models`模型清单，Finnhub 固定读取 AAPL 报价，MacroLens 固定读取`/internal/v1/health`，绝不调用模型推理接口；Owner 密码摘要与`DATA_DIR`只做本地检查；
-- 连通性检查不使用系统代理、不跟随重定向，并限制超时和响应读取量；输出只含安全状态、布尔值与整数响应码，不含地址、异常原文、响应正文或密钥；
-- OpenAI、Finnhub、MacroLens 凭据或`DATA_DIR`变更时，只重建当时正在运行的`backend`与`worker`，使容器重新读取`secrets.env`；Owner 密码摘要变更时只重建正在运行的`backend`。普通`restart`不会重载环境文件，因此不再用于密钥轮换；原本停止的服务不会被启动。
-
-MacroLens 只使用`.env`中的`MACROLENS_URL`与`secrets.env`中的`INTERNAL_API_TOKEN`。令牌只在 Option Pro 后端与 MacroLens 后端之间传递，不进入浏览器。
-
-MacroLens 也有独立的服务器命令行工具，只允许管理`INTERNAL_API_TOKEN`、`FINNHUB_API_KEY`、`MASSIVE_API_KEY`、`NEWSAPI_API_KEY`、`GNEWS_API_KEY`和`DATA_DIR`六项。它同样使用标准输入、`0600`权限、同目录锁、变更前备份和原子替换；`status`只显示是否配置，`validate`只检查本地格式与文件安全，不访问新闻供应商。密钥变更后，工具只重建当时正在运行的`macrolens`，停止状态不会被启动。容器部署时`DATA_DIR`应设为挂载卷目录`/app/data`。
-
-## 同源动作保护
-
-单用户不等于可以删除跨站保护。所有修改状态的请求仍须同时满足：
-
-- `Origin`与`Host`匹配；
-- 请求体为 JSON；
-- 带`X-Optix-Action: 1`自定义请求头；
-- `password`模式的 Owner 会话有效，或`private_network`模式的来源地址合格。
-
-错误来源、缺少自定义请求头和表单内容类型均被拒绝，外部网页无法通过普通表单触发付费分析。
-
-## Secret 不暴露验证
-
-| 检查面 | 方法 | 结果 |
-|---|---|---|
-| 网页设置接口 | 向进程注入测试哨兵值，检查序列化响应 | 只返回 OpenAI 与 Finnhub 的`configured` 布尔值；内部令牌状态也不进入网页响应 |
-| 运行设置接口 | 向环境和损坏文件注入测试哨兵值，检查读取、更新、历史与错误响应 | 哨兵值不出现在任何响应中，敏感字段名被拒绝 |
-| 命令行与日志 | 检查标准输出、标准错误、进程参数与备份文件 | 不回显测试密钥，命令参数只包含字段名 |
-| HTML 与 JavaScript | 扫描 11 个现行生产前端文件的密钥字段、项目密钥格式、Bearer 头与旧浏览器 Token 标识 | 无命中 |
-| 浏览器存储 | 在本地实际 Chromium 浏览器中检查`localStorage`、`sessionStorage`、`document.cookie`和页面源码 | 私网场景的`localStorage`只有`optix.theme`，`sessionStorage`与`document.cookie`均为空；密码场景的会话 Cookie 为`HttpOnly`，网页脚本不可读取；页面不存在项目密钥格式 |
-| 浏览器网络响应 | 在 19 种 Catalyst 状态中读取 Chromium 实际收到的生产 HTML、JavaScript、样式，以及测试夹具生成的 JSON 响应正文与响应头，扫描密钥字段、项目密钥格式与 Bearer 认证内容 | 泄漏数为 0 |
-| 服务响应 | 向进程注入测试哨兵值，逐项读取 17 个成功响应面，并遍历全部 68 个已登记接口操作的私网拒绝或错误响应 | 哨兵值泄漏数为 0；`/api/settings`仅返回 OpenAI 与 Finnhub 的`configured`布尔值；框架参数错误不返回输入值、额外字段名或供应商原文 |
-
-界面同时经过 19 种 Catalyst 状态、深浅两种主题和 390×844 移动端视口检查：没有水平溢出，私网场景的浏览器存储中只有主题键`optix.theme`，`sessionStorage`与`document.cookie`为空，页面不含项目密钥格式，控制台没有错误。另有一项密码模式验收启动真实 Option Pro 后端，实际执行未登录跳转、登录、会话读取、登出与再次锁定；只有市场与 Catalyst 数据使用本地夹具，认证路由没有拦截。测试 Cookie 同时验证`HttpOnly`、`Secure`与`SameSite=Strict`，密码输入框保持空白，密码不进入网页存储。服务测试使用测试哨兵值，浏览器测试使用本地夹具和密钥模式扫描；报告不记录任何测试密钥原文。
-
-## 量化对比
-
-| 指标 | 收束前 | 现行 | 变化 |
-|---|---:|---:|---:|
-| 正式常驻服务 | 5 | 2 | -3；四个工作容器合并为一个`worker` |
-| 正式环境模板字段 | 189 | 11 | -178（94.2%） |
-| 权限可见状态组合 | 至少 16 | 3 | 至少 -13（81.3%） |
-| 旧授权标识所在的生产代码行 | 69 | 0 | -69 |
-
-状态组合采用保守算法：旧模型只计算公开读取、浏览器 Token、动作权限和分析权限四个二值维度，已有`2⁴ = 16`种可能组合；实际旧开关更多。现行只有私有网络 Owner、密码未登录和密码已登录三种可见状态。
-
-代码行统计不包含测试、文档与只负责迁移旧文件的`legacy_env_adapter.py`。“旧授权标识”从五个个人版变更的共同基线`d04ef67`统计`APP_AUTH_TOKEN`、`PUBLIC_READ_API_ENABLED`、`require_expensive_action`、`require_app_auth`、`optix.app.token`、`privateActionsAvailable`、`public_projection`、`is_anonymous`与`hasAppToken`在`backend/app`、`frontend/static`、部署脚本和编排文件中的命中行。该口径只计算能够机械复核的旧权限代码，不把新增的 Owner 会话、同源保护、运行状态、测试或文档误算成“权限减量”。
-
-## 旧兼容层删除版本
-
-旧访问兼容模块`legacy_access_adapter.py`与领域代码中的旧权限调用已在第五个个人版收尾变更中删除。当前运行时不读取旧变量，也不使用旧权限判定按钮。
-
-`legacy_env_adapter.py`仅供`migrate_personal_config`读取旧文件并生成人工核对报告，不参与应用启动、请求鉴权或按钮判定。迁移解析器不是运行时兼容层。
-
-## 已知限制
-
-- 每日美元额度是本地提交门禁，不是供应商账单的绝对封顶；缓存写入明细缺失、供应商计费调整或价格变化仍可能使两者不同。
-- GPT-5.6 Terra 的价格常量于 2026-07-16 按官方模型页和定价页核对；供应商调价或模型别名变化后必须复核并重新测试预算边界。
-- Owner 会话保存在单个后端进程内，后端重启后需要重新登录；该设计与单实例个人站的边界一致，不适用于多副本会话共享。
-- `password`模式依赖正确的超文本传输安全协议（HTTPS）与反向代理边界；错误信任代理头会削弱来源判定。
-- Secret `validate`的连通性结果只证明固定免计费端点当时可达且凭据未被拒绝，不证明付费推理一定成功；它不会创建模型响应，也不会绕过本地预算。
-- 本轮测试使用模拟连接，没有使用任何真实生产凭据执行`validate`，因此生产网络、证书和凭据状态仍需在发布流程中独立核对。
-- 本轮未使用真实供应商、未执行生产部署，因此外部连通性、代理证书与生产数据恢复仍需在发布流程中独立验证。
-
-## 回归证据
-
-| 检查 | 结果 |
-|---|---|
-| 全量 Python 回归 | 913 项通过；4 条提示来自 2 类 FastAPI/Starlette 依赖弃用，无测试失败 |
-| 前端 Node.js 回归 | 36 项通过 |
-| 浏览器回归 | 34 项通过：Catalyst 19 种状态，抽屉焦点、整页重载、故障隔离 3 项，真实密码模式 1 项，自选页 11 项 |
-| MacroLens 回归 | 55 项通过，其中新增的服务器密钥命令行测试 17 项；仍是只读新闻提取、转换与加载（ETL）服务 |
-| 生产前端静态扫描 | 11 个现行生产文件通过，包含登录页面与登录脚本；旧资源路径不存在或为空 |
-| 部署与 Secret | 私网启动保护、九类工作健康清单、密钥权限、跨进程锁、原子备份、模拟连通性检查与受影响服务重建均包含在全量回归中；Option Pro 的 Secret 命令行与响应防泄漏 36 项通过，MacroLens 的独立命令行新增测试 17 项通过 |
-| 脚本与编排语法 | `setup.sh`、`scripts/deploy.sh`、`personal.sh` 语法通过；`scripts/watchlist_snapshot.py` 编译通过；`docker compose config -q` 通过 |
-| 文本完整性 | `git diff --check` 通过 |
-| 旧配置与旧服务扫描 | 生产运行路径中 12 个旧配置名称命中 0；现行部署脚本、编排与运维文档的旧工作服务名称命中 0；前端旧浏览器 Token 逻辑命中 0 |
-| Secret 哨兵与真实浏览器 | 17 个成功响应面和 68 个已登记接口操作的拒绝或错误响应泄漏数为 0；19 种 Catalyst 浏览器状态确认存储、Cookie、项目密钥格式、主题与移动端行为 |
-
-回归使用本地夹具与测试哨兵值，没有调用真实 OpenAI，没有使用生产 Secret，也没有部署生产服务器。
-
-全仓剩余旧名称只位于迁移解析器、迁移/删除说明和回归断言。`legacy_env_adapter.py`仍识别旧浏览器 Token 与旧 MacroLens 令牌名，仅用于输出不含原值的迁移报告；应用启动、请求鉴权、工作进程与前端均不导入它。
