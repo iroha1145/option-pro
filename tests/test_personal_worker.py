@@ -6,6 +6,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import textwrap
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -31,6 +32,8 @@ from app.worker.tasks import (
 TASK_NAMES = {"breakout", "focus", "catalyst_sync", "ai_jobs", "maintenance"}
 NOW = datetime(2026, 7, 16, 0, 0, tzinfo=timezone.utc)
 ETL_AS_OF = "2026-07-15T12:00:00Z"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+BACKEND_ROOT = REPOSITORY_ROOT / "backend"
 
 
 def _worker_config(
@@ -537,6 +540,200 @@ def test_status_is_read_only_and_does_not_require_live_lock(
     assert main(["--healthcheck"]) == 1
     health = json.loads(capsys.readouterr().out)
     assert health["healthy"] is False
+
+
+@pytest.mark.parametrize(
+    ("working_directory", "directory_name"),
+    ((REPOSITORY_ROOT, "repository-root"), (BACKEND_ROOT, "backend")),
+    ids=("repository-root", "backend"),
+)
+@pytest.mark.parametrize(
+    ("argument", "expected_returncode"),
+    (("--status", 0), ("--healthcheck", 1)),
+)
+def test_worker_module_cli_is_identical_without_pythonpath(
+    tmp_path: Path,
+    working_directory: Path,
+    directory_name: str,
+    argument: str,
+    expected_returncode: int,
+) -> None:
+    data_dir = tmp_path / directory_name
+    environment = {
+        key: value
+        for key in ("HOME", "PATH", "TMPDIR", "LANG", "LC_ALL")
+        if (value := os.environ.get(key)) is not None
+    }
+    environment.update(
+        {
+            "PYTHONNOUSERSITE": "1",
+            "DATA_DIR": str(data_dir),
+            "OPTIX_WORKER_DB_PATH": str(data_dir / "optix-worker.db"),
+            "OPTIX_WORKER_LOCK_PATH": str(data_dir / "optix-worker.lock"),
+            "MACROLENS_CACHE_DB_PATH": str(data_dir / "catalyst-cache.db"),
+            "OPENAI_JOB_DB_PATH": str(data_dir / "ai-jobs.db"),
+            "BREAKOUT_DB_PATH": str(data_dir / "optix.db"),
+            "OPTIX_BACKUP_DIR": str(data_dir / "backups"),
+            "MACROLENS_URL": "",
+            "INTERNAL_API_TOKEN": "",
+            "MACROLENS_BASE_URL": "",
+            "MACROLENS_INTERNAL_TOKEN": "",
+            "OPENAI_API_KEY": "",
+        }
+    )
+    assert "PYTHONPATH" not in environment
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "app.worker", argument],
+        cwd=working_directory,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+
+    assert completed.returncode == expected_returncode, completed.stderr
+    assert "ModuleNotFoundError" not in completed.stderr
+    payload = json.loads(completed.stdout)
+    assert payload["healthy"] is False
+    assert payload["status"] == "not_started"
+    assert payload["tasks"] == []
+    assert not (data_dir / "optix-worker.db").exists()
+
+
+def test_worker_once_selects_personal_etl_from_repository_files_offline(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    root_env = tmp_path / ".env"
+    secrets_env = tmp_path / "secrets.env"
+    token = "subprocess-file-owner-token"
+    root_env.write_text(
+        "MACROLENS_URL=https://macrolens.invalid\n"
+        f"DATA_DIR={data_dir}\n"
+        f"OPTIX_WORKER_DB_PATH={data_dir / 'optix-worker.db'}\n"
+        f"OPTIX_WORKER_LOCK_PATH={data_dir / 'optix-worker.lock'}\n"
+        f"MACROLENS_CACHE_DB_PATH={data_dir / 'catalyst-cache.db'}\n"
+        f"OPENAI_JOB_DB_PATH={data_dir / 'ai-jobs.db'}\n"
+        f"BREAKOUT_DB_PATH={data_dir / 'optix.db'}\n"
+        f"OPTIX_BACKUP_DIR={data_dir / 'backups'}\n",
+        encoding="utf-8",
+    )
+    secrets_env.write_text(
+        f"INTERNAL_API_TOKEN={token}\n",
+        encoding="utf-8",
+    )
+    script = textwrap.dedent(
+        f"""
+        from pathlib import Path
+
+        import httpx
+
+        from app import personal_config, runtime_environment
+        from app.services.catalysts import etl_client
+
+        config = personal_config.get_personal_config()
+        features = config.features.model_copy(
+            update={{"breakout_enabled": False, "catalyst_mode": "manual"}}
+        )
+        config = config.model_copy(update={{"features": features}})
+        personal_config.get_personal_config = lambda: config
+        runtime_environment.RUNTIME_ENV_FILES = (
+            Path({str(root_env)!r}),
+            Path({str(secrets_env)!r}),
+        )
+
+        def handle(request):
+            assert request.url.host == "macrolens.invalid"
+            assert request.headers["authorization"] == "Bearer {token}"
+            payload = {{
+                "items": [],
+                "has_more": False,
+                "next_cursor": None,
+                "next_updated_after": "{ETL_AS_OF}",
+                "next_after_sequence": 0,
+            }}
+            if request.url.path.endswith("/news/changes"):
+                payload["watermark"] = {{"sequence": 0, "as_of": "{ETL_AS_OF}"}}
+            else:
+                assert request.url.path.endswith("/calendar")
+                payload.update(
+                    {{
+                        "watermark": {{
+                            "sequence": 0,
+                            "as_of": "{ETL_AS_OF}",
+                            "snapshot_token": None,
+                        }},
+                        "data_through": None,
+                        "is_stale": False,
+                    }}
+                )
+            return httpx.Response(
+                200,
+                headers={{"content-type": "application/json"}},
+                json=payload,
+            )
+
+        real_client = etl_client.MacroLensEtlClient
+
+        class OfflineMacroLensEtlClient(real_client):
+            def __init__(self, client_config, **_options):
+                super().__init__(
+                    client_config,
+                    transport=httpx.MockTransport(handle),
+                )
+
+        etl_client.MacroLensEtlClient = OfflineMacroLensEtlClient
+
+        from app.worker.__main__ import main
+
+        raise SystemExit(main(["--once"]))
+        """
+    )
+    environment = {
+        key: value
+        for key in ("HOME", "PATH", "TMPDIR", "LANG", "LC_ALL")
+        if (value := os.environ.get(key)) is not None
+    }
+    environment.update(
+        {
+            "PYTHONNOUSERSITE": "1",
+            "OPENAI_API_KEY": "",
+            "MACROLENS_BASE_URL": "",
+            "MACROLENS_INTERNAL_TOKEN": "",
+        }
+    )
+    assert "PYTHONPATH" not in environment
+    assert "MACROLENS_URL" not in environment
+    assert "INTERNAL_API_TOKEN" not in environment
+
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=REPOSITORY_ROOT,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert payload["status"] == "completed"
+    assert payload["tasks"]["breakout"]["status"] == "disabled"
+    assert payload["tasks"]["catalyst_sync"]["status"] == "idle"
+    assert payload["tasks"]["focus"]["status"] == "idle"
+    assert payload["tasks"]["ai_jobs"]["status"] == "disabled"
+    cache_path = data_dir / "catalyst-cache.db"
+    assert cache_path.is_file()
+    with sqlite3.connect(cache_path) as connection:
+        streams = connection.execute(
+            "SELECT stream,completed_as_of FROM macrolens_etl_state ORDER BY stream"
+        ).fetchall()
+    assert streams == [("calendar", ETL_AS_OF), ("news", ETL_AS_OF)]
+    assert token not in completed.stdout
+    assert token not in completed.stderr
 
 
 def test_worker_loads_root_files_once_and_injects_one_settings_object(
