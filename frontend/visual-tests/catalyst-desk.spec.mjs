@@ -251,7 +251,9 @@ for (const scenario of SCENARIOS) {
       await expect(analyzeAction).toBeDisabled();
     }
     if (scenario.state === "failed") {
-      await expect(page.locator("#cat-focus-body")).toContainText("invalid_structured_output");
+      const focusBody = page.locator("#cat-focus-body");
+      await expect(focusBody).toContainText("分析任务暂未完成，请稍后重试");
+      await expect(focusBody).not.toContainText("invalid_structured_output");
     }
     if (scenario.state === "focus_fallback") {
       await expect(page.getByText("兜底源", { exact: true })).toBeVisible();
