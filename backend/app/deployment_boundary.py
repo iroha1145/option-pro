@@ -110,6 +110,16 @@ def normalize_allowed_hosts(host_bind: str, raw: str) -> tuple[str, ...]:
     return tuple(sorted(hosts))
 
 
+def _explicit_dns_host_present(raw: str) -> bool:
+    for item in raw.split(","):
+        if not item.strip():
+            continue
+        host = _normalize_hostname(item)
+        if host != "localhost" and _parse_address(host) is None:
+            return True
+    return False
+
+
 def _trusted_proxy_network_allowed(network: ipaddress._BaseNetwork) -> bool:
     return any(
         network.version == envelope.version and network.subnet_of(envelope)
@@ -182,6 +192,11 @@ def validate_deployment_boundary(
         explicit_hosts = [item for item in allowed_hosts.split(",") if item.strip()]
         if not explicit_hosts:
             raise RuntimeError("password mode requires explicit ALLOWED_HOSTS")
+        if _explicit_dns_host_present(allowed_hosts) and not proxy_enabled:
+            raise RuntimeError(
+                "password mode with a DNS ALLOWED_HOSTS entry requires "
+                "TRUST_PROXY_HEADERS=true and TRUSTED_PROXY_CIDRS"
+            )
         if proxy_enabled:
             if not proxy_networks:
                 raise RuntimeError(

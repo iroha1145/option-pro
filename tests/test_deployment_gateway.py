@@ -148,6 +148,12 @@ def test_password_startup_requires_a_valid_password_hash() -> None:
 
 def test_password_proxy_boundary_rejects_missing_or_public_trust_ranges() -> None:
     runtime = _runtime("password")
+    with pytest.raises(RuntimeError, match="DNS ALLOWED_HOSTS"):
+        runtime.validate_startup(
+            "0.0.0.0",
+            allowed_hosts="option.example.com",
+            trust_proxy_headers=False,
+        )
     with pytest.raises(RuntimeError, match="TRUSTED_PROXY_CIDRS"):
         runtime.validate_startup(
             "127.0.0.1",
@@ -161,6 +167,21 @@ def test_password_proxy_boundary_rejects_missing_or_public_trust_ranges() -> Non
             trust_proxy_headers=True,
             trusted_proxy_cidrs="0.0.0.0/0",
         )
+
+
+def test_password_local_or_ip_hosts_can_use_direct_https_without_proxy_headers() -> None:
+    runtime = _runtime("password")
+    for host_bind, allowed_hosts in (
+        ("127.0.0.1", "localhost,127.0.0.1"),
+        ("10.20.30.40", "10.20.30.40"),
+    ):
+        boundary = runtime.validate_startup(
+            host_bind,
+            allowed_hosts=allowed_hosts,
+            trust_proxy_headers=False,
+        )
+        assert boundary.access_mode == "password"
+        assert boundary.trusted_proxy_cidrs == ()
 
 
 def test_private_network_uses_request_source_and_never_needs_a_browser_token() -> None:
