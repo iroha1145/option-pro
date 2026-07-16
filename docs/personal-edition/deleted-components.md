@@ -26,7 +26,7 @@
 |---|---|---|
 | `APP_AUTH_TOKEN`、`PUBLIC_READ_API_ENABLED`、`ALLOW_INSECURE_PUBLIC_BIND` | 页面读取、浏览器令牌和动作权限分属不同路径，状态组合过多 | `config/personal.toml` 中的`private_network`或`password`，共用一条 Owner 边界 |
 | 前端`sessionStorage`令牌和`Authorization`请求头 | 密钥需进入浏览器 | 密码模式的服务端会话 Cookie；私有网络模式不传递浏览器密钥 |
-| `MACROLENS_BASE_URL`、`MACROLENS_INTERNAL_TOKEN` 及旧式读取、动作、焦点凭据 | MacroLens 连接名称与方向不统一 | `.env` 中的`MACROLENS_URL`与`secrets.env`中的`INTERNAL_API_TOKEN`，仅限 Option Pro 读取 MacroLens |
+| `MACROLENS_BASE_URL`、`MACROLENS_INTERNAL_TOKEN` 及旧式读取、动作、焦点凭据 | MacroLens 连接名称与方向不统一 | `machine.env` 中的`MACROLENS_URL`与`secrets.env`中的`INTERNAL_API_TOKEN`，仅限 Option Pro 读取 MacroLens |
 | `OPENAI_JOB_DB_PATH`、`MACROLENS_CACHE_DB_PATH`、`BREAKOUT_DB_PATH`、`WATCHLIST_SNAPSHOT_PATH` | 同一数据卷内的文件路径可分别漂移 | 只配置`DATA_DIR`，数据库、锁、快照与备份均由程序派生 |
 | `ai-worker`等旧工作服务的独立部署、检查和停止逻辑 | 发布脚本需同时理解多套工作进程 | `backend`+`worker`的两服务发布，统一核对九类任务 |
 | 旧变量的运行时兼容读取层 | 迁移后仍可能被旧配置影响 | 运行时只读新配置；旧名称只留在迁移说明与回归断言中 |

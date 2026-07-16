@@ -60,7 +60,7 @@ chmod 600 .env machine.env secrets.env
 - `INTERNAL_API_TOKEN`
 - `APP_PASSWORD_HASH`
 
-进程已经导出的值优先级最高；文件加载顺序为 `.env`、`machine.env`、`secrets.env`。`.env` 只保留一个版本迁移期的兼容用途，新安装应把机器配置和密钥放入对应文件。
+进程已经导出的值优先级最高；`.env` 只保留一个版本迁移期的兼容用途，`machine.env` 只接收七个机器字段，`secrets.env` 只接收五个密钥。错放到其他文件的字段不会覆盖正式来源。
 
 旧名称 `MARKETDATA_API_TOKEN`、`MACROLENS_BASE_URL` 和 `MACROLENS_INTERNAL_TOKEN` 只供迁移工具识别。旧名与新名同时存在且值不一致时，迁移会停止，不会猜测采用哪一项。旧签名密钥、请求随机数（Nonce）、密钥编号（Key ID）、前一把密钥和浏览器令牌不会进入最终运行配置。
 
@@ -74,13 +74,15 @@ chmod 600 .env machine.env secrets.env
 
 个人版只连接 OpenAI 官方响应接口（Responses API），不接受自定义模型代理。固定参数为：
 
-```dotenv
-OPENAI_MODEL=gpt-5.6-terra
-OPENAI_REASONING=max
-OPENAI_EXECUTION_MODE=background
-OPENAI_MAX_RETRIES=0
-OPENAI_MAX_CONCURRENCY=1
+```toml
+[ai]
+model = "gpt-5.6-terra"
+reasoning = "max"
+max_concurrency = 1
+execution_mode = "background"
 ```
+
+供应商提交失败后的自动重试固定为零，不通过环境变量更改。
 
 模型任务保留严格结构化输出、每日任务次数、每日美元预算与冷却限制。相同输入会先复用原任务，即使队列已满也不会重复计费；只有新任务在队列饱和时返回 429 和 `Retry-After: 60`。
 
@@ -102,7 +104,7 @@ mode = "private_network"
 - `secrets.env` 中存在有效的 `APP_PASSWORD_HASH`；
 - `machine.env` 明确列出允许访问的域名；
 - 外层代理提供有效的超文本传输安全协议（HTTPS）；
-- 只有代理确实清洗转发头时才启用 `TRUST_PROXY_HEADERS`；
+- 允许主机中只要含有域名，就必须设置 `TRUST_PROXY_HEADERS=true`；
 - `TRUSTED_PROXY_CIDRS` 只包含实际代理来源网段，不得使用公网全网段。
 
 例如 `option.openweb-ui.xyz` 一类公开域名必须使用密码模式和 HTTPS。应用启动、`./personal.sh doctor` 与部署脚本共用同一校验器，配置不完整时都会停止。

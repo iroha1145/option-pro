@@ -37,11 +37,11 @@ Owner 能看到所有日常按钮。刷新或分析被阻止时，原因来自�
 
 ## 配置清单
 
-`.env.example` 只保留六个机器边界字段；`secrets.env.example` 只保留五个服务端字段。模型、推理等级、访问模式、功能模式、任务频率、定时时刻、并发、每日任务数、每日美元预留和保留期均由 `config/personal.toml` 管理。
+`.env.example` 不再含正式配置，只保留迁移兼容说明；`machine.env.example` 有七个机器字段，`secrets.env.example` 有五个服务端密钥，合计 12 项。模型、推理等级、访问模式、功能模式、任务频率、定时时刻、并发、每日任务数、每日美元预留和保留期均由 `config/personal.toml` 管理。
 
 MacroLens 连接只有：
 
-- `.env` 中的 `MACROLENS_URL`；
+- `machine.env` 中的 `MACROLENS_URL`；
 - `secrets.env` 中的 `INTERNAL_API_TOKEN`。
 
 没有反向动作接口、独立动作密钥或逐工作进程开关。

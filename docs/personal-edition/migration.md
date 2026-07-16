@@ -67,7 +67,7 @@ chmod 600 .env machine.env secrets.env
 
 `private_network` 用于本机回环、安全外壳（SSH）转发、RFC1918 私网、Tailscale、WireGuard 或 IPv6 本地地址。它要求 `TRUST_PROXY_HEADERS=false`；`HOST_BIND` 和 `ALLOWED_HOSTS` 只能包含获准的私网地址或本机名称，域名和通配监听会使启动失败。
 
-任何反向代理、公开域名、Cloudflare Tunnel 或公网负载均衡器都必须使用 `password`。该模式要求有效的 `APP_PASSWORD_HASH` 和明确的 `ALLOWED_HOSTS`。启用代理头时，`TRUSTED_PROXY_CIDRS` 只能包含实际代理来源网段，`0.0.0.0/0` 一类公网全网段会被拒绝。
+任何反向代理、公开域名、Cloudflare Tunnel 或公网负载均衡器都必须使用 `password`。该模式要求有效的 `APP_PASSWORD_HASH` 和明确的 `ALLOWED_HOSTS`。只要允许主机中含有域名，就必须设置 `TRUST_PROXY_HEADERS=true`，并让非空的 `TRUSTED_PROXY_CIDRS` 只包含实际代理来源网段；`0.0.0.0/0` 一类公网全网段会被拒绝。
 
 ## 数据保存
 

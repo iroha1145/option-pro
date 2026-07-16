@@ -49,7 +49,7 @@ docker compose exec -T worker python -m app.worker --healthcheck
 
 ## 容器边界
 
-`backend`与`worker`使用同一镜像和`optix-data`数据卷，根文件系统只读，以非根用户运行。`worker`不暴露端口。`.env`只保存机器网络边界，密钥与统一`DATA_DIR`保存在`secrets.env`。突破数据库路径由`DATA_DIR`派生，不再单独配置。日志不得输出密钥、请求头、新闻正文或原始模型响应。
+`backend`与`worker`使用同一镜像和`optix-data`数据卷，根文件系统只读，以非根用户运行。`worker`不暴露端口。机器网络边界与统一`DATA_DIR`保存在`machine.env`，五个服务端密钥保存在`secrets.env`。突破数据库路径由`DATA_DIR`派生，不再单独配置。日志不得输出密钥、请求头、新闻正文或原始模型响应。
 
 真实数据源扫描不是部署健康检查。持续集成使用关闭突破任务的容器配置；算法路径通过本地夹具和模拟传输验证。
 

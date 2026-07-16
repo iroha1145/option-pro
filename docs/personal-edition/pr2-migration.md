@@ -6,12 +6,13 @@
 
 ```bash
 cp .env.example .env
+cp machine.env.example machine.env
 cp secrets.env.example secrets.env
-chmod 600 .env secrets.env
+chmod 600 .env machine.env secrets.env
 docker compose config -q
 ```
 
-核对`.env`只含监听地址、端口、MacroLens 地址和反向代理边界；`secrets.env`只含服务端密钥、Owner 密码摘要和`DATA_DIR`。访问模式、模型、推理等级、运行频率和预算以`config/personal.toml`为准。
+核对`.env`只保留迁移兼容说明；`machine.env`只含监听地址、端口、MacroLens 地址、反向代理边界和`DATA_DIR`；`secrets.env`只含五个服务端密钥。访问模式、模型、推理等级、运行频率和预算以`config/personal.toml`为准。
 
 密钥优先通过个人版命令行写入，避免出现在命令参数和终端输出中：
 
