@@ -4,6 +4,7 @@ import hashlib
 import json
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable
 
@@ -547,6 +548,99 @@ def test_market_focus_payload_is_hash_bound_and_stays_immutable(tmp_path):
         ).fetchone()
 
     assert stored_after == stored_before
+
+
+def test_market_focus_relinks_the_same_paid_job_after_local_commit_failure(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime(2030, 7, 16, 10, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(
+        etl,
+        [_news_change(1, 63, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    original_connect = intelligence._connect
+    failure = {"armed": True}
+
+    class _FailFocusRelinkCommit:
+        def __init__(self, connection):
+            self.connection = connection
+            self.fail_commit = False
+
+        def execute(self, statement, *args, **kwargs):
+            normalized = " ".join(str(statement).split())
+            result = self.connection.execute(statement, *args, **kwargs)
+            if (
+                normalized.startswith("UPDATE catalyst_local_focus_cycles SET")
+                and "job_id=?" in normalized
+            ):
+                self.fail_commit = True
+            return result
+
+        def commit(self):
+            if self.fail_commit and failure["armed"]:
+                failure["armed"] = False
+                self.connection.rollback()
+                raise sqlite3.OperationalError("forced focus relink commit failure")
+            return self.connection.commit()
+
+        def __getattr__(self, name):
+            return getattr(self.connection, name)
+
+    @contextmanager
+    def failing_connect():
+        with original_connect() as connection:
+            yield _FailFocusRelinkCommit(connection)
+
+    monkeypatch.setattr(intelligence, "_connect", failing_connect)
+    with pytest.raises(
+        sqlite3.OperationalError,
+        match="forced focus relink commit failure",
+    ):
+        intelligence.request_market_focus_cycle(
+            expected_prepared_revision=prepared,
+            as_of=now,
+        )
+    monkeypatch.setattr(intelligence, "_connect", original_connect)
+
+    with sqlite3.connect(ai.path) as connection:
+        paid_rows = connection.execute(
+            "SELECT job_id,payload_json FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchall()
+    assert len(paid_rows) == 1
+    paid_job_id, paid_payload = paid_rows[0]
+    with sqlite3.connect(intelligence.db_path) as connection:
+        intent = connection.execute(
+            """SELECT status,job_id,payload_json
+               FROM catalyst_local_focus_cycles WHERE prepared_revision=?""",
+            (prepared,),
+        ).fetchone()
+    assert intent is not None
+    assert intent[0] == "preparing"
+    assert intent[1].startswith("intent:mfc_")
+    assert intent[2] == paid_payload
+
+    retried = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+        as_of=now + timedelta(minutes=5),
+    )
+
+    assert retried["job_id"] == paid_job_id
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 1
+    with sqlite3.connect(intelligence.db_path) as connection:
+        linked = connection.execute(
+            """SELECT status,job_id FROM catalyst_local_focus_cycles
+               WHERE cycle_id=?""",
+            (retried["cycle_id"],),
+        ).fetchone()
+    assert linked == ("pending", paid_job_id)
 
 
 def test_no_news_means_no_focus_paid_task(tmp_path):

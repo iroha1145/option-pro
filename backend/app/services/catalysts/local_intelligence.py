@@ -1881,6 +1881,74 @@ class LocalCatalystIntelligence:
         cycle["job"] = public_job
         return cycle
 
+    def _create_focus_job(
+        self,
+        payload: dict[str, Any],
+    ) -> tuple[dict[str, Any], bool]:
+        schema_version, schema_hash = ai_runtime.schema_identity("market_focus")
+        return self.ai_repository.create_job(
+            job_type="market_focus",
+            payload=payload,
+            model=self.model,
+            reasoning=self.reasoning,
+            execution_mode=EXECUTION_MODE,
+            prompt_version=FOCUS_PROMPT_VERSION,
+            schema_version=schema_version,
+            schema_sha256=schema_hash,
+            max_queued=self.max_queued,
+            priority=60,
+            force_retry=False,
+        )
+
+    def _resume_focus_intent(self, cycle_id: str) -> dict[str, Any]:
+        """Create or relink the paid job for one durable local intent.
+
+        The local intent is committed before the AI job. If the later local
+        relink commit fails, the immutable payload remains available and a
+        retry asks the AI repository for that exact same job identity.
+        """
+
+        with self._connect() as connection:
+            intent = connection.execute(
+                "SELECT * FROM catalyst_local_focus_cycles WHERE cycle_id=?",
+                (cycle_id,),
+            ).fetchone()
+        if intent is None:
+            raise RuntimeError("market_focus_intent_missing")
+        if str(intent["status"]) != "preparing":
+            return self._cycle_with_job(cycle_id)
+        payload = _loads(intent["payload_json"], None)
+        if not isinstance(payload, dict):
+            raise RuntimeError("market_focus_intent_payload_invalid")
+
+        job, created = self._create_focus_job(payload)
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                current = connection.execute(
+                    "SELECT status,payload_json FROM catalyst_local_focus_cycles WHERE cycle_id=?",
+                    (cycle_id,),
+                ).fetchone()
+                if current is None:
+                    raise RuntimeError("market_focus_intent_missing")
+                if str(current["status"]) == "preparing":
+                    current_payload = _loads(current["payload_json"], None)
+                    if not isinstance(current_payload, dict) or _json(
+                        current_payload
+                    ) != _json(payload):
+                        raise RuntimeError("market_focus_intent_payload_changed")
+                    connection.execute(
+                        """UPDATE catalyst_local_focus_cycles SET
+                               status=?,job_id=?,updated_at=?
+                           WHERE cycle_id=? AND status='preparing'""",
+                        (job["status"], job["job_id"], _iso(), cycle_id),
+                    )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+        return self._cycle_with_job(cycle_id, job=job, created=created)
+
     def _enqueue_focus(
         self,
         revision: int,
@@ -1934,7 +2002,7 @@ class LocalCatalystIntelligence:
         force_bucket = _minute_bucket(observed) if force else None
         if force_bucket is not None:
             payload["force_bucket"] = force_bucket
-        schema_version, schema_hash = ai_runtime.schema_identity("market_focus")
+        resume_cycle_id: str | None = None
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
@@ -1955,61 +2023,50 @@ class LocalCatalystIntelligence:
                         (revision,),
                     ).fetchone()
                 if existing is not None:
-                    connection.commit()
-                    return self._cycle_with_job(str(existing["cycle_id"]))
-                active = connection.execute(
-                    """SELECT cycle_id FROM catalyst_local_focus_cycles
-                       WHERE status IN ('pending','queued','in_progress')
-                       ORDER BY created_at LIMIT 1"""
-                ).fetchone()
-                if active is not None:
-                    connection.commit()
-                    return self._cycle_with_job(str(active["cycle_id"]))
-                revision_count = int(
-                    connection.execute(
-                        """SELECT COUNT(*) FROM catalyst_local_focus_cycles
-                           WHERE prepared_revision=?""",
-                        (revision,),
-                    ).fetchone()[0]
-                )
-                payload["cycle_revision"] = revision_count + 1
-                job, created = self.ai_repository.create_job(
-                    job_type="market_focus",
-                    payload=payload,
-                    model=self.model,
-                    reasoning=self.reasoning,
-                    execution_mode=EXECUTION_MODE,
-                    prompt_version=FOCUS_PROMPT_VERSION,
-                    schema_version=schema_version,
-                    schema_sha256=schema_hash,
-                    max_queued=self.max_queued,
-                    priority=60,
-                    force_retry=False,
-                )
-                created_at = _iso()
-                connection.execute(
-                    """INSERT INTO catalyst_local_focus_cycles(
-                           cycle_id,status,prepared_revision,snapshot_as_of,input_hash,
-                           job_id,payload_json,retry_of_cycle_id,created_at,updated_at
-                       ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
-                    (
-                        cycle_id,
-                        job["status"],
-                        revision,
-                        snapshot_as_of,
-                        input_hash,
-                        job["job_id"],
-                        _json(payload),
-                        None,
-                        created_at,
-                        created_at,
-                    ),
-                )
+                    resume_cycle_id = str(existing["cycle_id"])
+                else:
+                    active = connection.execute(
+                        """SELECT cycle_id FROM catalyst_local_focus_cycles
+                           WHERE status IN ('preparing','pending','queued','in_progress')
+                           ORDER BY created_at LIMIT 1"""
+                    ).fetchone()
+                    if active is not None:
+                        resume_cycle_id = str(active["cycle_id"])
+                    else:
+                        revision_count = int(
+                            connection.execute(
+                                """SELECT COUNT(*) FROM catalyst_local_focus_cycles
+                                   WHERE prepared_revision=?""",
+                                (revision,),
+                            ).fetchone()[0]
+                        )
+                        payload["cycle_revision"] = revision_count + 1
+                        created_at = _iso()
+                        connection.execute(
+                            """INSERT INTO catalyst_local_focus_cycles(
+                                   cycle_id,status,prepared_revision,snapshot_as_of,input_hash,
+                                   job_id,payload_json,retry_of_cycle_id,created_at,updated_at
+                               ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                            (
+                                cycle_id,
+                                "preparing",
+                                revision,
+                                snapshot_as_of,
+                                input_hash,
+                                f"intent:{cycle_id}",
+                                _json(payload),
+                                None,
+                                created_at,
+                                created_at,
+                            ),
+                        )
+                        resume_cycle_id = cycle_id
                 connection.commit()
             except Exception:
                 connection.rollback()
                 raise
-        return self._cycle_with_job(cycle_id, job=job, created=created)
+        assert resume_cycle_id is not None
+        return self._resume_focus_intent(resume_cycle_id)
 
     def _retry_focus(self, cycle_id: str) -> dict[str, Any]:
         schema_version, schema_hash = ai_runtime.schema_identity("market_focus")
