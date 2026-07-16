@@ -16,7 +16,11 @@ from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request, status
 
-from app.deployment_boundary import DeploymentBoundary, validate_deployment_boundary
+from app.deployment_boundary import (
+    DeploymentBoundary,
+    canonicalize_hostname,
+    validate_deployment_boundary,
+)
 from app.personal_config import AccessConfig, get_personal_config
 from app.services.request_security import (
     TRUSTED_PROXY_NETWORKS,
@@ -34,6 +38,126 @@ _LOGIN_FAILURE_LIMIT = 5
 _LOGIN_FAILURE_WINDOW_SECONDS = 5 * 60
 _LOGIN_COOLDOWN_SECONDS = 30
 _LOGIN_FAILURE_BUCKET_LIMIT = 256
+_DEFAULT_ORIGIN_PORTS = {"http": 80, "https": 443}
+
+
+def _canonical_origin_host(
+    value: str,
+    *,
+    require_ipv6: bool = False,
+) -> str | None:
+    hostname = canonicalize_hostname(value)
+    if hostname is None:
+        return None
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        address = None
+    if address is not None:
+        if require_ipv6 and not isinstance(address, ipaddress.IPv6Address):
+            return None
+        return hostname
+    if require_ipv6:
+        return None
+    labels = hostname.split(".")
+    if len(hostname) > 253 or any(
+        not label
+        or len(label) > 63
+        or label.startswith("-")
+        or label.endswith("-")
+        or any(not character.isalnum() and character != "-" for character in label)
+        for label in labels
+    ):
+        return None
+    return hostname
+
+
+def _canonical_origin(value: str) -> tuple[str, str, int] | None:
+    if (
+        not value
+        or value != value.strip()
+        or any(
+            ord(character) < 32 or ord(character) == 127
+            for character in value
+        )
+        or any(character in value for character in "\\?#")
+    ):
+        return None
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        return None
+    scheme = parsed.scheme.lower()
+    bracketed = parsed.netloc.startswith("[")
+    hostname = _canonical_origin_host(
+        parsed.hostname or "",
+        require_ipv6=bracketed,
+    )
+    if (
+        scheme not in _DEFAULT_ORIGIN_PORTS
+        or hostname is None
+        or not parsed.netloc
+        or (("[" in parsed.netloc or "]" in parsed.netloc) and not bracketed)
+        or parsed.netloc.endswith(":")
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+        or parsed.username is not None
+        or parsed.password is not None
+        or (port is not None and port < 1)
+    ):
+        return None
+    return (scheme, hostname, port or _DEFAULT_ORIGIN_PORTS[scheme])
+
+
+def _canonical_request_origin(
+    scheme: str,
+    authority: str,
+) -> tuple[str, str, int] | None:
+    if (
+        scheme not in _DEFAULT_ORIGIN_PORTS
+        or not authority
+        or authority != authority.strip()
+        or authority.endswith(":")
+        or any(
+            ord(character) < 33
+            or ord(character) == 127
+            or character in "/\\?#@,%"
+            for character in authority
+        )
+    ):
+        return None
+    try:
+        parsed = urlsplit(f"//{authority}")
+        port = parsed.port
+    except ValueError:
+        return None
+    bracketed = parsed.netloc.startswith("[")
+    hostname = _canonical_origin_host(
+        parsed.hostname or "",
+        require_ipv6=bracketed,
+    )
+    if (
+        hostname is None
+        or not parsed.netloc
+        or (("[" in parsed.netloc or "]" in parsed.netloc) and not bracketed)
+        or parsed.scheme
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+        or parsed.username is not None
+        or parsed.password is not None
+        or (port is not None and port < 1)
+    ):
+        return None
+    return (scheme, hostname, port or _DEFAULT_ORIGIN_PORTS[scheme])
+
+
+def canonical_request_host(authority: str) -> str | None:
+    origin = _canonical_request_origin("http", authority)
+    return origin[1] if origin is not None else None
+
 
 def _b64encode(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
@@ -335,30 +459,14 @@ def require_same_origin_json(request: Request) -> None:
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail={"code": "json_required", "message": "JSON request required"},
         )
-    origin = request.headers.get("origin", "").strip()
-    host = request.headers.get("host", "").strip().lower()
-    if not origin or not host or "," in host or any(character.isspace() for character in host):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "same_origin_required", "message": "Same-origin request required"},
-        )
-    try:
-        parsed = urlsplit(origin)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "same_origin_required", "message": "Same-origin request required"},
-        ) from exc
+    origins = request.headers.getlist("origin")
+    hosts = request.headers.getlist("host")
+    origin = origins[0] if len(origins) == 1 else ""
+    host = hosts[0] if len(hosts) == 1 else ""
     expected_scheme = "https" if request_uses_https(request) else "http"
-    valid = bool(
-        parsed.scheme == expected_scheme
-        and parsed.netloc.lower() == host
-        and not parsed.path
-        and not parsed.query
-        and not parsed.fragment
-        and parsed.username is None
-        and parsed.password is None
-    )
+    origin_key = _canonical_origin(origin)
+    request_key = _canonical_request_origin(expected_scheme, host)
+    valid = bool(origin_key is not None and origin_key == request_key)
     fetch_site = request.headers.get("sec-fetch-site", "").strip().lower()
     if fetch_site and fetch_site not in {"same-origin", "none"}:
         valid = False

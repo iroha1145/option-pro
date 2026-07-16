@@ -7,6 +7,8 @@ import re
 from dataclasses import dataclass
 from typing import Iterable, Literal
 
+import idna
+
 
 AccessMode = Literal["private_network", "password"]
 _HOST_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
@@ -78,19 +80,54 @@ def _address_allowed(
     )
 
 
+def canonicalize_hostname(value: str) -> str | None:
+    if not value or any(
+        ord(character) < 33
+        or ord(character) == 127
+        or character in "/\\?#@,%"
+        for character in value
+    ):
+        return None
+    value = value.rstrip(".")
+    if not value:
+        return None
+    try:
+        return ipaddress.ip_address(value).compressed.lower()
+    except ValueError:
+        pass
+    try:
+        return idna.encode(
+            value,
+            uts46=True,
+            transitional=False,
+            std3_rules=True,
+        ).decode("ascii").lower()
+    except (idna.IDNAError, UnicodeError):
+        return None
+
+
 def _normalize_hostname(value: str) -> str:
     host = value.strip().lower().rstrip(".")
     if not host or any(character.isspace() for character in host):
         raise RuntimeError("ALLOWED_HOSTS contains an empty or invalid host")
     if "*" in host or "/" in host or "://" in host or "@" in host:
         raise RuntimeError("ALLOWED_HOSTS must contain explicit host names")
-    unwrapped = host.strip("[]")
-    if _parse_address(unwrapped) is not None or unwrapped == "localhost":
-        return unwrapped
-    try:
-        ascii_host = unwrapped.encode("idna").decode("ascii")
-    except UnicodeError as exc:
-        raise RuntimeError("ALLOWED_HOSTS contains an invalid DNS host name") from exc
+    if "[" in host or "]" in host:
+        if not (
+            host.startswith("[")
+            and host.endswith("]")
+            and host.count("[") == 1
+            and host.count("]") == 1
+        ):
+            raise RuntimeError("ALLOWED_HOSTS contains an invalid IP literal")
+        unwrapped = host[1:-1]
+    else:
+        unwrapped = host
+    ascii_host = canonicalize_hostname(unwrapped)
+    if ascii_host is None:
+        raise RuntimeError("ALLOWED_HOSTS contains an invalid DNS host name")
+    if _parse_address(ascii_host) is not None or ascii_host == "localhost":
+        return ascii_host
     labels = ascii_host.split(".")
     if len(ascii_host) > 253 or len(labels) < 2 or any(
         not _HOST_LABEL.fullmatch(label) for label in labels

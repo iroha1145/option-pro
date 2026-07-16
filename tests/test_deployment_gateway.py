@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import ipaddress
 import re
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
@@ -9,6 +11,7 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from app.access import (
+    OWNER_COOKIE_NAME,
     OWNER_SESSION_SECONDS,
     LoginRejected,
     OwnerAccessRuntime,
@@ -362,6 +365,326 @@ def test_state_changes_require_origin_host_json_and_custom_header(
         assert response.status_code == expected
 
 
+def test_password_proxy_accepts_default_https_port_for_login_and_actions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(access_module, "TRUST_PROXY_HEADERS", True)
+    monkeypatch.setattr(
+        access_module,
+        "TRUSTED_PROXY_NETWORKS",
+        (ipaddress.ip_network("127.0.0.1/32"),),
+    )
+    app = _PeerAddress(_test_app(_runtime("password")), "127.0.0.1")
+    headers = {
+        "Host": "option.example.com:443",
+        "Origin": "https://option.example.com",
+        "X-Forwarded-Proto": "https",
+        "X-Optix-Action": "1",
+    }
+    with TestClient(app, base_url="http://option.example.com") as client:
+        login = client.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers=headers,
+        )
+        assert login.status_code == 200
+        session = login.cookies.get(OWNER_COOKIE_NAME)
+        assert session
+        action = client.post(
+            "/api/action",
+            json={},
+            headers={
+                **headers,
+                "Cookie": f"{OWNER_COOKIE_NAME}={session}",
+            },
+        )
+        assert action.status_code == 200
+
+
+def test_private_http_action_accepts_the_explicit_default_port() -> None:
+    app = _PeerAddress(_test_app(_runtime("private_network")), "10.20.30.40")
+    with TestClient(app, base_url="http://testserver") as client:
+        response = client.post(
+            "/api/action",
+            json={},
+            headers={
+                "Host": "testserver:80",
+                "Origin": "http://testserver",
+                "X-Optix-Action": "1",
+            },
+        )
+    assert response.status_code == 200
+
+
+def test_same_origin_keeps_non_default_ports_distinct() -> None:
+    app = _test_app(_runtime("password"))
+    with TestClient(app, base_url="https://testserver:8443") as client:
+        accepted = client.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers={
+                "Host": "testserver:8443",
+                "Origin": "https://testserver:8443",
+                "X-Optix-Action": "1",
+            },
+        )
+        rejected = client.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers={
+                "Host": "testserver:8443",
+                "Origin": "https://testserver",
+                "X-Optix-Action": "1",
+            },
+        )
+    assert accepted.status_code == 200
+    assert rejected.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "authority",
+    [
+        "testserver:",
+        "testserver:99999",
+        "user@testserver",
+        "testserver/path",
+        "testserver\\path",
+        "testserver?query",
+        "testserver#fragment",
+        "testserver,evil.example",
+        "2001:db8::1",
+        "[2001:db8::1",
+        "[v1.foo]:443",
+    ],
+)
+def test_same_origin_rejects_malformed_host_authorities(authority: str) -> None:
+    with TestClient(
+        _test_app(_runtime("password")),
+        base_url="https://testserver",
+    ) as client:
+        response = client.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers={
+                "Host": authority,
+                "Origin": "https://testserver",
+                "X-Optix-Action": "1",
+            },
+        )
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "https://testserver?",
+        "https://testserver#",
+        "https://testserver:",
+        "https://testserver:99999",
+        "https://user@testserver",
+        "https://testserver/path",
+        "https://testserver\\path",
+        "https://[v1.foo]",
+    ],
+)
+def test_same_origin_rejects_malformed_origins(origin: str) -> None:
+    with TestClient(
+        _test_app(_runtime("password")),
+        base_url="https://testserver",
+    ) as client:
+        response = client.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers={
+                "Host": "testserver",
+                "Origin": origin,
+                "X-Optix-Action": "1",
+            },
+        )
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize("duplicate", ["host", "origin"])
+def test_same_origin_rejects_duplicate_authority_headers(duplicate: str) -> None:
+    headers = [
+        ("Host", "testserver"),
+        ("Origin", "https://testserver"),
+        ("X-Optix-Action", "1"),
+    ]
+    if duplicate == "host":
+        headers.insert(1, ("Host", "testserver"))
+    else:
+        headers.insert(2, ("Origin", "https://testserver"))
+    with TestClient(
+        _test_app(_runtime("password")),
+        base_url="https://testserver",
+    ) as client:
+        response = client.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers=headers,
+        )
+    assert response.status_code == 403
+
+
+def test_proxy_scheme_and_forwarded_host_remain_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(access_module, "TRUST_PROXY_HEADERS", True)
+    monkeypatch.setattr(
+        access_module,
+        "TRUSTED_PROXY_NETWORKS",
+        (ipaddress.ip_network("127.0.0.1/32"),),
+    )
+    headers = {
+        "Host": "backend:2000",
+        "Origin": "https://option.example.com",
+        "X-Forwarded-Host": "option.example.com",
+        "X-Forwarded-Proto": "https",
+        "X-Optix-Action": "1",
+    }
+    trusted = TestClient(
+        _PeerAddress(_test_app(_runtime("password")), "127.0.0.1"),
+        base_url="http://backend:2000",
+    )
+    untrusted = TestClient(
+        _PeerAddress(_test_app(_runtime("password")), "8.8.8.8"),
+        base_url="http://option.example.com",
+    )
+    try:
+        assert trusted.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers=headers,
+        ).status_code == 403
+        assert untrusted.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers={**headers, "Host": "option.example.com:443"},
+        ).status_code == 403
+    finally:
+        trusted.close()
+        untrusted.close()
+
+
+def test_origin_helpers_normalize_default_ports_dns_and_ipv6() -> None:
+    assert access_module._canonical_origin("https://OPTION.example") == (
+        "https",
+        "option.example",
+        443,
+    )
+    assert access_module._canonical_request_origin(
+        "https",
+        "option.example:443",
+    ) == ("https", "option.example", 443)
+    assert access_module._canonical_origin(
+        "https://option.example:443"
+    ) == access_module._canonical_request_origin("https", "option.example")
+    assert access_module._canonical_origin("https://[2001:0db8::1]") == (
+        "https",
+        "2001:db8::1",
+        443,
+    )
+    assert access_module._canonical_request_origin(
+        "https",
+        "[2001:db8::1]:443",
+    ) == ("https", "2001:db8::1", 443)
+    assert access_module._canonical_origin(
+        "https://bücher.example"
+    ) == access_module._canonical_request_origin(
+        "https",
+        "xn--bcher-kva.example:443",
+    )
+    assert access_module._canonical_origin(
+        "https://faß.de"
+    ) == access_module._canonical_request_origin(
+        "https",
+        "xn--fa-hia.de:443",
+    )
+    assert access_module._canonical_origin("https://faß.de") != (
+        "https",
+        "fass.de",
+        443,
+    )
+    assert access_module._canonical_request_origin(
+        "https",
+        "option.example\x00:443",
+    ) is None
+
+
+def test_production_host_validation_accepts_bracketed_ipv6_loopback() -> None:
+    assert "::1" in main._ALLOWED_HOSTS
+
+    async def request(application, host: str) -> tuple[int, bytes]:
+        sent: list[dict] = []
+        received = False
+
+        async def receive() -> dict:
+            nonlocal received
+            if not received:
+                received = True
+                return {"type": "http.request", "body": b"", "more_body": False}
+            return {"type": "http.disconnect"}
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        await application(
+            {
+                "type": "http",
+                "asgi": {"version": "3.0"},
+                "http_version": "1.1",
+                "method": "GET",
+                "scheme": "http",
+                "path": "/health",
+                "raw_path": b"/health",
+                "query_string": b"",
+                "root_path": "",
+                "headers": [(b"host", host.encode("ascii"))],
+                "client": ("::1", 50000),
+                "server": ("::1", 2000),
+            },
+            receive,
+            send,
+        )
+        status_code = next(
+            message["status"]
+            for message in sent
+            if message["type"] == "http.response.start"
+        )
+        body = b"".join(
+            message.get("body", b"")
+            for message in sent
+            if message["type"] == "http.response.body"
+        )
+        return status_code, body
+
+    accepted_status, _accepted_body = asyncio.run(
+        request(main.app, "[::1]:2000")
+    )
+    rejected_status, rejected_body = asyncio.run(
+        request(main.app, "[::2]:2000")
+    )
+    assert accepted_status == 200
+    assert rejected_status == 400
+    assert rejected_body == b"Invalid host header"
+
+    async def accepted_app(_scope, _receive, send) -> None:
+        await send({"type": "http.response.start", "status": 204, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    middleware = main._ExactTrustedHostMiddleware(
+        accepted_app,
+        allowed_hosts=["2001:0db8:0:0:0:0:0:1", "faß.de"],
+    )
+    assert middleware.allowed_hosts == frozenset(
+        {"2001:db8::1", "xn--fa-hia.de"}
+    )
+    assert asyncio.run(request(middleware, "[2001:db8::1]:443"))[0] == 204
+    assert asyncio.run(request(middleware, "xn--fa-hia.de:443"))[0] == 204
+    assert asyncio.run(request(middleware, "fass.de:443"))[0] == 400
+
+
 def test_password_login_itself_requires_https_and_same_origin_json() -> None:
     app = _test_app(_runtime("password"))
     with TestClient(app, base_url="http://testserver") as insecure:
@@ -516,5 +839,14 @@ def test_frontend_integrity_and_host_validation_remain_fail_closed(
     assert "example.com" in _configured_allowed_hosts(
         "127.0.0.1", "example.com"
     )
+    internationalized = _configured_allowed_hosts("127.0.0.1", "faß.de")
+    assert "xn--fa-hia.de" in internationalized
+    assert "fass.de" not in internationalized
+    assert "2001:db8::1" in _configured_allowed_hosts(
+        "127.0.0.1",
+        "2001:0db8:0:0:0:0:0:1",
+    )
     with pytest.raises(RuntimeError):
         _configured_allowed_hosts("127.0.0.1", "*.example.com")
+    with pytest.raises(RuntimeError):
+        _configured_allowed_hosts("127.0.0.1", "[[::1]]")

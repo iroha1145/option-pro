@@ -20,18 +20,19 @@ from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.datastructures import MutableHeaders
+from starlette.datastructures import Headers, MutableHeaders
 from starlette.middleware.gzip import GZipMiddleware
-from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request as StarletteRequest
+from starlette.responses import PlainTextResponse
 
 from app.access import (
     OwnerAccessRuntime,
+    canonical_request_host,
     get_access_runtime,
     require_owner_access,
     require_same_origin_action,
 )
-from app.deployment_boundary import normalize_allowed_hosts
+from app.deployment_boundary import canonicalize_hostname, normalize_allowed_hosts
 from app.api import (
     access,
     ai,
@@ -78,6 +79,29 @@ _DEPLOYMENT_BOUNDARY = _ACCESS_RUNTIME.validate_startup(
     trusted_proxy_cidrs=_os.environ.get("TRUSTED_PROXY_CIDRS", ""),
 )
 _ALLOWED_HOSTS = list(_DEPLOYMENT_BOUNDARY.allowed_hosts)
+
+
+class _ExactTrustedHostMiddleware:
+    """Validate one explicit Host authority, including bracketed IPv6."""
+
+    def __init__(self, app, *, allowed_hosts: list[str]) -> None:
+        self.app = app
+        normalized = {canonicalize_hostname(host) for host in allowed_hosts}
+        if not normalized or None in normalized:
+            raise RuntimeError("allowed hosts are not canonical")
+        self.allowed_hosts = frozenset(normalized)
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] not in {"http", "websocket"}:
+            await self.app(scope, receive, send)
+            return
+        values = Headers(scope=scope).getlist("host")
+        hostname = canonical_request_host(values[0]) if len(values) == 1 else None
+        if hostname not in self.allowed_hosts:
+            response = PlainTextResponse("Invalid host header", status_code=400)
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
 app = FastAPI(
@@ -346,7 +370,7 @@ class _GatewayMiddleware:
 
 app.add_middleware(_GatewayMiddleware, access_runtime=_ACCESS_RUNTIME)
 app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS)
+app.add_middleware(_ExactTrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS)
 
 # The gateway gives HTML requests a friendly redirect. Router dependencies are
 # the single API boundary and remain in force when routers are mounted by tools
