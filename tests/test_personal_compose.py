@@ -274,6 +274,7 @@ def test_data_directory_cannot_split_across_exports_or_runtime_files(
         "ALLOWED_HOSTS",
         "TRUST_PROXY_HEADERS",
         "TRUSTED_PROXY_CIDRS",
+        "DATA_DIR",
     ):
         environment.pop(key, None)
     if exported_data_dir is not None:
