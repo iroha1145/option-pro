@@ -726,7 +726,7 @@ def test_configured_macrolens_token_requires_a_safe_https_origin(
     assert item["reason"] == expected_reason
 
 
-def test_macrolens_validation_reads_repository_dotenv_when_environment_is_empty(
+def test_macrolens_validation_uses_files_only_when_environment_is_absent(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -740,7 +740,7 @@ def test_macrolens_validation_reads_repository_dotenv_when_environment_is_empty(
     path = tmp_path / "secrets.env"
     monkeypatch.setattr(personal_secrets, "REPOSITORY_ROOT", repository_root)
     monkeypatch.setattr(personal_secrets, "DEFAULT_SECRETS_PATH", path)
-    monkeypatch.setenv("MACROLENS_URL", "")
+    monkeypatch.delenv("MACROLENS_URL", raising=False)
     token = "internal-dotenv-fallback-sentinel"
     personal_secrets.atomic_write({"INTERNAL_API_TOKEN": token}, path)
     requests: list[urllib.request.Request] = []
@@ -762,6 +762,18 @@ def test_macrolens_validation_reads_repository_dotenv_when_environment_is_empty(
     item = json.loads(output.out)["secrets"]["INTERNAL_API_TOKEN"]
     assert item["reason"] == "reachable"
     assert item["connection_ok"] is True
+
+    requests.clear()
+    monkeypatch.setenv("MACROLENS_URL", "")
+    assert personal_secrets.main(["validate"]) == 1
+    explicit_empty = capsys.readouterr()
+    assert explicit_empty.err == ""
+    assert token not in explicit_empty.out
+    assert requests == []
+    item = json.loads(explicit_empty.out)["secrets"]["INTERNAL_API_TOKEN"]
+    assert item["reason"] == "macrolens_url_missing"
+    assert item["connection_checked"] is False
+    assert item["connection_ok"] is False
 
 
 def test_password_hash_and_marketdata_token_use_local_validation_only(
@@ -893,6 +905,9 @@ def test_real_owner_surfaces_never_return_secret_sentinels(
     }
     for key, value in sentinels.items():
         monkeypatch.setenv(key, value)
+    # INTERNAL_API_TOKEN is only valid as one half of the canonical
+    # MacroLens connection pair. Keep this leak test on a valid runtime.
+    monkeypatch.setenv("MACROLENS_URL", "https://macrolens.invalid")
 
     paths = (
         "/health",

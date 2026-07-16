@@ -5,13 +5,59 @@ import json
 import os
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from app.access import OwnerAccessRuntime
+from app.config import Settings
+from app.data_paths import data_dir
 from app.personal_config import load_personal_config
 from app.runtime_environment import load_runtime_environment
 
 
+def _safe_settings_error(exc: ValidationError) -> str:
+    """Describe invalid settings without serializing their input values."""
+
+    messages: list[str] = []
+    for item in exc.errors(
+        include_url=False,
+        include_context=False,
+        include_input=False,
+    ):
+        location = ".".join(str(part) for part in item.get("loc", ()))
+        message = str(item.get("msg", "invalid value"))
+        if message.startswith("Value error, "):
+            message = message.removeprefix("Value error, ")
+        safe = f"{location}: {message}" if location else message
+        if safe not in messages:
+            messages.append(safe)
+    return "; ".join(messages) or "runtime settings are invalid"
+
+
+def _validated_settings() -> Settings:
+    """Use the runtime Settings model as the single validation authority."""
+
+    try:
+        return Settings()
+    except ValidationError as exc:
+        raise ValueError(_safe_settings_error(exc)) from None
+
+
+def _validate_container_data_dir() -> None:
+    """Keep persistent writes inside the volume mounted by Compose."""
+
+    try:
+        root = data_dir()
+    except ValueError:
+        raise ValueError("DATA_DIR must be an absolute path under /data") from None
+    volume_root = Path("/data")
+    if root != volume_root and volume_root not in root.parents:
+        raise ValueError("DATA_DIR must be /data or a directory under /data")
+
+
 def validate(config_path: Path) -> dict[str, object]:
     load_runtime_environment()
+    _validated_settings()
+    _validate_container_data_dir()
     config = load_personal_config(config_path)
     runtime = OwnerAccessRuntime(
         config.access,

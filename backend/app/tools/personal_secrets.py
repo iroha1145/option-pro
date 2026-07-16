@@ -23,6 +23,7 @@ from app.access import (
     hash_owner_password,
     owner_password_hash_is_valid,
 )
+from app.runtime_environment import load_runtime_environment
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -446,24 +447,18 @@ def _validate_connection(
 
 
 def _macrolens_health_url() -> tuple[str | None, str | None]:
-    origin = os.environ.get("MACROLENS_URL", "")
-    if not origin:
-        environment_path = REPOSITORY_ROOT / ".env"
-        try:
-            if (
-                environment_path.exists()
-                and environment_path.is_file()
-                and not environment_path.is_symlink()
-            ):
-                origin = str(
-                    dotenv_values(
-                        environment_path,
-                        interpolate=False,
-                    ).get("MACROLENS_URL")
-                    or ""
-                )
-        except Exception:
-            origin = ""
+    environment = dict(os.environ)
+    try:
+        load_runtime_environment(
+            tuple(
+                REPOSITORY_ROOT / filename
+                for filename in (".env", "machine.env", "secrets.env")
+            ),
+            environ=environment,
+        )
+    except Exception:
+        return None, "macrolens_url_missing"
+    origin = environment.get("MACROLENS_URL", "")
     if not origin:
         return None, "macrolens_url_missing"
     if (

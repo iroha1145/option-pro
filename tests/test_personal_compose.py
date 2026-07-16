@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 try:
@@ -38,16 +43,24 @@ def test_formal_compose_has_only_backend_worker_and_one_volume() -> None:
 
     for service in compose["services"].values():
         assert service["image"] == "option-pro:${APP_COMMIT:-local}"
-        assert "optix-data:/data" in service["volumes"]
         assert service["read_only"] is True
         assert service["restart"] == "unless-stopped"
         assert service["env_file"] == [
+            {
+                "path": ".env",
+                "required": False,
+            },
+            {
+                "path": "machine.env",
+                "required": False,
+            },
             {
                 "path": "secrets.env",
                 "required": False,
             }
         ]
-        assert "DATA_DIR" not in service["environment"]
+        assert "optix-data:/data" in service["volumes"]
+        assert service["environment"]["DATA_DIR"] == "${DATA_DIR:-/data}"
         assert "OPTIX_WORKER_DB_PATH" not in service["environment"]
         assert "OPTIX_WORKER_LOCK_PATH" not in service["environment"]
         assert "OPTION_PRO_RUNTIME_SETTINGS_PATH" not in service["environment"]
@@ -83,25 +96,31 @@ def test_backend_is_loopback_only_by_default() -> None:
 
 
 def test_environment_templates_separate_secrets_from_machine_edges() -> None:
-    deployment_keys = _environment_keys()
+    compatibility_keys = _environment_keys()
+    machine_keys = _environment_keys("machine.env.example")
     secret_keys = _environment_keys("secrets.env.example")
 
-    assert deployment_keys == [
+    assert compatibility_keys == []
+    assert machine_keys == [
         "HOST_BIND",
         "PORT",
         "MACROLENS_URL",
         "ALLOWED_HOSTS",
         "TRUST_PROXY_HEADERS",
         "TRUSTED_PROXY_CIDRS",
+        "DATA_DIR",
     ]
-    assert set(secret_keys) == {
+    assert secret_keys == [
         "OPENAI_API_KEY",
+        "FINNHUB_API_KEY",
+        "MARKETDATA_TOKEN",
         "INTERNAL_API_TOKEN",
         "APP_PASSWORD_HASH",
-        "FINNHUB_API_KEY",
-        "DATA_DIR",
-    }
-    all_keys = deployment_keys + secret_keys
+    ]
+    all_keys = machine_keys + secret_keys
+    assert len(machine_keys) == 7
+    assert len(secret_keys) == 5
+    assert len(all_keys) == 12
     assert len(all_keys) == len(set(all_keys))
     assert not any(key.startswith("DEPLOY_" + "REQUIRE") for key in all_keys)
     assert not any(key.startswith("FOCUS_PRODUCER") for key in all_keys)
@@ -159,6 +178,7 @@ def test_compose_and_templates_have_no_legacy_services_or_independent_paths() ->
         (
             (ROOT / "docker-compose.yml").read_text(encoding="utf-8"),
             (ROOT / ".env.example").read_text(encoding="utf-8"),
+            (ROOT / "machine.env.example").read_text(encoding="utf-8"),
             (ROOT / "secrets.env.example").read_text(encoding="utf-8"),
         )
     )
@@ -188,3 +208,95 @@ def test_runtime_services_keep_the_container_security_baseline() -> None:
         assert service["cap_drop"] == ["ALL"]
         assert service["pids_limit"] == 256
         assert "/tmp:rw,noexec,nosuid,size=134217728,mode=1777" in service["tmpfs"]
+
+
+@pytest.mark.parametrize(
+    ("exported_data_dir", "expected_data_dir"),
+    (
+        (None, "/data/machine"),
+        ("/data/caller-export", "/data/caller-export"),
+    ),
+)
+def test_data_directory_cannot_split_across_exports_or_runtime_files(
+    tmp_path: Path,
+    exported_data_dir: str | None,
+    expected_data_dir: str,
+) -> None:
+    docker = shutil.which("docker")
+    if docker is None:
+        pytest.skip("Docker Compose is unavailable")
+
+    shutil.copy2(ROOT / "docker-compose.yml", tmp_path / "docker-compose.yml")
+    (tmp_path / ".env").write_text(
+        "HOST_BIND=127.0.0.9\nPORT=2999\nDATA_DIR=/stale-data\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "machine.env").write_text(
+        "HOST_BIND=127.0.0.2\n"
+        "PORT=2444\n"
+        "MACROLENS_URL=https://macrolens.example\n"
+        "ALLOWED_HOSTS=127.0.0.2\n"
+        "TRUST_PROXY_HEADERS=false\n"
+        "TRUSTED_PROXY_CIDRS=\n"
+        "DATA_DIR=/data/machine\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "secrets.env").write_text(
+        "HOST_BIND=0.0.0.0\n"
+        "PORT=8999\n"
+        "MACROLENS_URL=https://wrong-secret.example\n"
+        "DATA_DIR=/stale-secret-data\n",
+        encoding="utf-8",
+    )
+
+    environment = os.environ.copy()
+    for key in (
+        "HOST_BIND",
+        "PORT",
+        "MACROLENS_URL",
+        "ALLOWED_HOSTS",
+        "TRUST_PROXY_HEADERS",
+        "TRUSTED_PROXY_CIDRS",
+    ):
+        environment.pop(key, None)
+    if exported_data_dir is not None:
+        environment["DATA_DIR"] = exported_data_dir
+    environment["COMPOSE_ENV_FILES"] = ".env,machine.env"
+    environment["COMPOSE_PROJECT_NAME"] = "optix-config-contract"
+
+    result = subprocess.run(
+        [docker, "compose", "config", "--format", "json"],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    backend = payload["services"]["backend"]
+    worker = payload["services"]["worker"]
+    published = backend["ports"][0]
+    assert published["host_ip"] == "127.0.0.2"
+    assert str(published["published"]) == "2444"
+    for service in (backend, worker):
+        assert service["environment"]["HOST_BIND"] == "127.0.0.2"
+        assert service["environment"]["PORT"] == "2444"
+        assert service["environment"]["DATA_DIR"] == expected_data_dir
+        assert service["environment"]["MACROLENS_URL"] == (
+            "https://macrolens.example"
+        )
+        assert any(
+            volume["source"] == "optix-data"
+            and volume["target"] == "/data"
+            for volume in service["volumes"]
+        )
+
+
+def test_deploy_uses_the_unified_runtime_loader_and_validator() -> None:
+    script = (ROOT / "scripts" / "deploy.sh").read_text(encoding="utf-8")
+
+    assert "resolve_container_data_dir" not in script
+    assert "dotenv_values" not in script
+    assert "    validate_runtime_boundary\n" in script

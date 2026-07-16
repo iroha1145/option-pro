@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
 from app.api import catalysts as catalyst_api
 from app.personal_config import FeatureConfig, PersonalConfig
@@ -638,28 +639,37 @@ def test_local_api_settings_keep_fixed_model_and_drop_remote_hmac_credentials(
         CatalystSettings(_env_file=None, model="other-model")
 
 
-def test_unified_worker_degrades_safely_when_owner_token_is_missing(
-    monkeypatch,
+def test_unified_worker_disables_safely_when_owner_token_is_missing(
+    tmp_path,
 ) -> None:
-    monkeypatch.delenv("INTERNAL_API_TOKEN", raising=False)
     personal = PersonalConfig(features=FeatureConfig(catalyst_mode="read"))
+    settings = SimpleNamespace(
+        internal_api_token=SecretStr(""),
+        macrolens_url="",
+        macrolens_ca_bundle="",
+        macrolens_cache_db_path=tmp_path / "catalyst-cache.db",
+        openai_job_db_path=tmp_path / "ai-jobs.db",
+        personal_etl_enabled=False,
+    )
 
     sync_result = asyncio.run(
-        CatalystSyncTask("test", personal_config=personal)()
+        CatalystSyncTask("test", settings=settings, personal_config=personal)()
     )
     focus_result = asyncio.run(
-        FocusTask("test", enabled=True, personal_config=personal)()
+        FocusTask(
+            "test",
+            enabled=True,
+            settings=settings,
+            personal_config=personal,
+        )()
     )
 
-    assert sync_result.status == "degraded"
-    assert sync_result.error_code == "personal_etl_token_missing"
-    assert sync_result.details == {
-        "processed": [],
-        "reason": "internal_token_missing",
-    }
-    assert focus_result.status == "degraded"
-    assert focus_result.error_code == "personal_etl_token_missing"
-    assert focus_result.details == {"result": "internal_token_missing"}
+    assert sync_result.status == "disabled"
+    assert sync_result.error_code is None
+    assert sync_result.details == {}
+    assert focus_result.status == "disabled"
+    assert focus_result.error_code is None
+    assert focus_result.details == {}
 
 
 def test_unconfigured_default_read_view_is_safe_and_does_not_create_cache(
@@ -733,7 +743,6 @@ def test_analysis_queue_full_returns_429_with_retry_after(
     app = FastAPI()
     app.include_router(catalyst_api.router)
     app.dependency_overrides[catalyst_api._service] = lambda: service
-    app.dependency_overrides[catalyst_api.require_expensive_action] = lambda: None
     client = TestClient(app)
 
     response = client.post(path, json=payload)
@@ -767,7 +776,6 @@ def test_active_market_focus_cycle_returns_409_with_safe_chinese_message() -> No
     app = FastAPI()
     app.include_router(catalyst_api.router)
     app.dependency_overrides[catalyst_api._service] = lambda: service
-    app.dependency_overrides[catalyst_api.require_expensive_action] = lambda: None
     client = TestClient(app)
 
     response = client.post(
@@ -865,7 +873,6 @@ def test_analysis_capacity_errors_keep_their_http_and_retry_semantics(
     app = FastAPI()
     app.include_router(catalyst_api.router)
     app.dependency_overrides[catalyst_api._service] = lambda: service
-    app.dependency_overrides[catalyst_api.require_expensive_action] = lambda: None
     client = TestClient(app)
     payload = {} if "/news/" in path else {"expected_prepared_revision": 3}
 

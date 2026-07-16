@@ -18,10 +18,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.data_paths import explicit_data_path, get_data_paths
 from app.personal_config import get_personal_config
-from app.runtime_environment import (
-    RUNTIME_ENV_FILES,
-    load_runtime_environment,
-)
+from app.runtime_environment import load_runtime_environment
 
 
 _PERSONAL_CONFIG = get_personal_config()
@@ -206,8 +203,6 @@ class Settings(BaseSettings):
     request_timeout: float = Field(default=20.0, alias="REQUEST_TIMEOUT")
 
     model_config = SettingsConfigDict(
-        env_file=tuple(str(path) for path in RUNTIME_ENV_FILES),
-        env_file_encoding="utf-8",
         env_ignore_empty=True,
         extra="ignore",
         populate_by_name=True,
@@ -224,6 +219,12 @@ class Settings(BaseSettings):
         parsed = urlsplit(value)
         if parsed.scheme != "https" or not parsed.hostname:
             raise ValueError("MACROLENS_URL must be an absolute HTTPS origin")
+        try:
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError("MACROLENS_URL contains an invalid port") from exc
+        if parsed.netloc.endswith(":") or (port is not None and port < 1):
+            raise ValueError("MACROLENS_URL contains an invalid port")
         if parsed.username or parsed.password:
             raise ValueError("MACROLENS_URL must not contain credentials")
         if parsed.path or parsed.query or parsed.fragment:
@@ -361,8 +362,10 @@ class Settings(BaseSettings):
             )
         if legacy_token and legacy_token != token:
             raise ValueError("conflicting MacroLens token settings")
+        if self.macrolens_url and not token:
+            raise ValueError("MACROLENS_URL requires INTERNAL_API_TOKEN")
         if token and not self.macrolens_url:
-            raise ValueError("MACROLENS_URL is required with INTERNAL_API_TOKEN")
+            raise ValueError("INTERNAL_API_TOKEN requires MACROLENS_URL")
         return self
 
     @property

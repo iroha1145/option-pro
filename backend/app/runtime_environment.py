@@ -1,9 +1,9 @@
 """Load repository runtime files before modules inspect ``os.environ``.
 
 The Personal Edition keeps three distinct files: legacy-compatible ``.env``,
-host-specific ``machine.env`` and server-only ``secrets.env``.  Values exported
-by the process always win; among files, later files win so canonical machine and
-secret settings cannot be shadowed by stale legacy entries.
+host-specific ``machine.env`` and server-only ``secrets.env``. Values exported
+by the process always win. The canonical files override legacy ``.env`` values
+only for the seven machine fields or five secrets that belong to them.
 """
 
 from __future__ import annotations
@@ -20,6 +20,36 @@ ROOT_ENV_FILE = REPOSITORY_ROOT / ".env"
 MACHINE_ENV_FILE = REPOSITORY_ROOT / "machine.env"
 SECRETS_ENV_FILE = REPOSITORY_ROOT / "secrets.env"
 RUNTIME_ENV_FILES = (ROOT_ENV_FILE, MACHINE_ENV_FILE, SECRETS_ENV_FILE)
+MACHINE_ENV_KEYS = frozenset(
+    {
+        "HOST_BIND",
+        "PORT",
+        "MACROLENS_URL",
+        "ALLOWED_HOSTS",
+        "TRUST_PROXY_HEADERS",
+        "TRUSTED_PROXY_CIDRS",
+        "DATA_DIR",
+    }
+)
+SECRET_ENV_KEYS = frozenset(
+    {
+        "OPENAI_API_KEY",
+        "FINNHUB_API_KEY",
+        "MARKETDATA_TOKEN",
+        "INTERNAL_API_TOKEN",
+        "APP_PASSWORD_HASH",
+    }
+)
+
+
+def _key_belongs_to_file(path: Path, key: str) -> bool:
+    """Enforce the canonical machine/secret file boundary during loading."""
+
+    if path.name == MACHINE_ENV_FILE.name:
+        return key in MACHINE_ENV_KEYS
+    if path.name == SECRETS_ENV_FILE.name:
+        return key in SECRET_ENV_KEYS
+    return True
 
 
 def load_runtime_environment(
@@ -37,10 +67,10 @@ def load_runtime_environment(
     for path in selected_paths:
         if not path.is_file():
             continue
-        values = dotenv_values(path)
+        values = dotenv_values(path, interpolate=False)
         loaded.append(path)
         for key, value in values.items():
-            if key and value is not None:
+            if key and value is not None and _key_belongs_to_file(path, key):
                 merged[key] = str(value)
     for key, value in merged.items():
         if key not in exported_keys:
@@ -50,9 +80,11 @@ def load_runtime_environment(
 
 __all__ = [
     "MACHINE_ENV_FILE",
+    "MACHINE_ENV_KEYS",
     "REPOSITORY_ROOT",
     "ROOT_ENV_FILE",
     "RUNTIME_ENV_FILES",
     "SECRETS_ENV_FILE",
+    "SECRET_ENV_KEYS",
     "load_runtime_environment",
 ]

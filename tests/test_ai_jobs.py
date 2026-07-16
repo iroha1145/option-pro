@@ -1322,7 +1322,10 @@ def test_daily_job_limit_is_reserved_atomically_before_provider_submission(
         claimed = repository.claim_due(owner, 60)
         assert claimed is not None and claimed["job_id"] == row["job_id"]
         assert repository.mark_submission_started(
-            row["job_id"], owner, daily_limit=4
+            row["job_id"],
+            owner,
+            daily_limit=4,
+            daily_budget_usd=10.0,
         ) == "started"
         repository.fail(row["job_id"], owner, "fixture_terminal")
 
@@ -1370,7 +1373,10 @@ def test_concurrent_daily_reservations_cannot_cross_the_limit(tmp_path) -> None:
         claimed = repository.claim_due(owner, 60)
         assert claimed is not None
         assert repository.mark_submission_started(
-            row["job_id"], owner, daily_limit=4
+            row["job_id"],
+            owner,
+            daily_limit=4,
+            daily_budget_usd=10.0,
         )
         repository.fail(row["job_id"], owner, "fixture_terminal")
 
@@ -1383,7 +1389,10 @@ def test_concurrent_daily_reservations_cannot_cross_the_limit(tmp_path) -> None:
         decisions = list(
             executor.map(
                 lambda pair: repository.mark_submission_started(
-                    pair[0]["job_id"], pair[1], daily_limit=4
+                    pair[0]["job_id"],
+                    pair[1],
+                    daily_limit=4,
+                    daily_budget_usd=10.0,
                 ),
                 zip(claimed_rows, owners, strict=True),
             )
@@ -1406,7 +1415,10 @@ def test_concurrent_daily_reservations_cannot_cross_the_limit(tmp_path) -> None:
     deferred = repository.claim_due(owners[deferred_index], 60)
     assert deferred is not None
     assert repository.mark_submission_started(
-        deferred["job_id"], owners[deferred_index], daily_limit=4
+        deferred["job_id"],
+        owners[deferred_index],
+        daily_limit=4,
+        daily_budget_usd=10.0,
     ) == "daily_limit"
     assert repository.get_job(deferred["job_id"])["status"] == "budget_blocked"
 

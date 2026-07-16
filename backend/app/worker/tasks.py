@@ -20,6 +20,10 @@ DEFAULT_TASK_NAMES = (
     "catalyst_sync",
     "ai_jobs",
     "maintenance",
+    "focus_refresh",
+    "strength_refresh",
+    "breakout_refresh",
+    "retention",
 )
 
 

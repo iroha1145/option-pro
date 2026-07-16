@@ -3,9 +3,10 @@ from __future__ import annotations
 import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from app.personal_config import PersonalConfig
+if TYPE_CHECKING:
+    from app.personal_config import PersonalConfig
 
 
 LEGACY_RELEASE_DEADLINE = "Personal Edition 2.0"
@@ -241,6 +242,8 @@ def _canonical_value(
 
 
 def migrate_legacy_environment(values: Mapping[str, str]) -> LegacyMigration:
+    from app.personal_config import PersonalConfig
+
     inventory = _inventory(values)
     if inventory["conflicting_keys"]:
         raise LegacyMigrationConflict(

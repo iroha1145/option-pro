@@ -36,7 +36,7 @@ def test_breakout_runs_inside_the_unified_worker() -> None:
     assert set(compose["services"]) == {"backend", "worker"}
     assert worker["command"] == ["python", "-m", "app.worker"]
     assert "ports" not in worker
-    assert "DATA_DIR" not in worker["environment"]
+    assert worker["environment"]["DATA_DIR"] == "${DATA_DIR:-/data}"
     assert "BREAKOUT_DB_PATH" not in worker["environment"]
     assert "optix-data:/data" in worker["volumes"]
 

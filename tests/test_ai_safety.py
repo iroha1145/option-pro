@@ -42,9 +42,12 @@ def _valid_alert(**overrides):
 def test_root_env_path_is_independent_of_working_directory():
     root = Path(__file__).resolve().parents[1]
     assert ROOT_ENV_FILE == root / ".env"
-    assert tuple(Path(value) for value in Settings.model_config["env_file"]) == tuple(
-        RUNTIME_ENV_FILES
+    assert RUNTIME_ENV_FILES == (
+        root / ".env",
+        root / "machine.env",
+        root / "secrets.env",
     )
+    assert Settings.model_config.get("env_file") is None
 
 
 def test_terra_defaults_and_runtime_bounds(monkeypatch):

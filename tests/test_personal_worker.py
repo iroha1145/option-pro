@@ -16,6 +16,7 @@ import pytest
 from pydantic import SecretStr
 
 from app import runtime_environment
+from app.worker import tasks as worker_tasks
 from app.worker.__main__ import _load_worker_settings, main
 from app.worker.lock import ProcessFileLock
 from app.worker.runtime import TaskResult, TaskSpec, WorkerSupervisor
@@ -1070,17 +1071,14 @@ def test_worker_loads_root_files_once_and_injects_one_settings_object(
     root_env = tmp_path / ".env"
     machine_env = tmp_path / "machine.env"
     secrets_env = tmp_path / "secrets.env"
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
     root_env.write_text(
         "MACROLENS_URL=https://macrolens.example\n",
         encoding="utf-8",
     )
     machine_env.write_text(
-        "OPTIX_WORKER_DB_PATH=" + str(tmp_path / "worker.db") + "\n"
-        "OPTIX_WORKER_LOCK_PATH=" + str(tmp_path / "worker.lock") + "\n"
-        "MACROLENS_CACHE_DB_PATH=" + str(tmp_path / "catalyst.db") + "\n"
-        "OPENAI_JOB_DB_PATH=" + str(tmp_path / "ai-jobs.db") + "\n"
-        "BREAKOUT_DB_PATH=" + str(tmp_path / "breakout.db") + "\n"
-        "OPTIX_BACKUP_DIR=" + str(tmp_path / "backups") + "\n",
+        "DATA_DIR=" + str(data_dir) + "\n",
         encoding="utf-8",
     )
     secrets_env.write_text(
@@ -1092,6 +1090,7 @@ def test_worker_loads_root_files_once_and_injects_one_settings_object(
         "INTERNAL_API_TOKEN",
         "MACROLENS_BASE_URL",
         "MACROLENS_INTERNAL_TOKEN",
+        "DATA_DIR",
         "OPTIX_WORKER_DB_PATH",
         "OPTIX_WORKER_LOCK_PATH",
         "MACROLENS_CACHE_DB_PATH",
@@ -1111,7 +1110,12 @@ def test_worker_loads_root_files_once_and_injects_one_settings_object(
         settings = _load_worker_settings()
         assert settings.macrolens_url == "https://macrolens.example"
         assert settings.internal_api_token.get_secret_value() == "test-owner-token"
-        assert settings.optix_worker_db_path == tmp_path / "worker.db"
+        assert settings.optix_worker_db_path == data_dir / "optix-worker.db"
+        assert settings.optix_worker_lock_path == data_dir / "optix-worker.lock"
+        assert settings.macrolens_cache_db_path == data_dir / "catalyst-cache.db"
+        assert settings.openai_job_db_path == data_dir / "ai-jobs.db"
+        assert settings.breakout_db_path == data_dir / "optix.db"
+        assert settings.optix_backup_dir == data_dir / "backups"
 
         specs = build_default_tasks("settings-injection", settings=settings)
         runners = {spec.name: spec.runner for spec in specs}
@@ -2071,6 +2075,7 @@ def test_default_task_inventory_and_maintenance_backup(
     worker_settings.optix_backup_dir = paths["backups"]
     specs = build_default_tasks("inventory", settings=worker_settings)
     assert {spec.name for spec in specs} == DEFAULT_TASK_NAMES
+    assert set(worker_tasks.DEFAULT_TASK_NAMES) == DEFAULT_TASK_NAMES
     names = [spec.name for spec in specs]
     assert names.index("catalyst_sync") < names.index("focus")
     catalyst_spec = next(spec for spec in specs if spec.name == "catalyst_sync")

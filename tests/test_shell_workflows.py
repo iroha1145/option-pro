@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 from dotenv import dotenv_values
 
+from app.tools import personal_secrets
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -49,9 +51,12 @@ def _template_keys(path: str) -> set[str]:
 
 def _isolated_environment() -> dict[str, str]:
     environment = os.environ.copy()
-    for key in _template_keys(".env.example") | _template_keys(
-        "secrets.env.example"
-    ) | set(REMOVED_RUNTIME_KEYS):
+    for key in (
+        _template_keys(".env.example")
+        | _template_keys("machine.env.example")
+        | _template_keys("secrets.env.example")
+        | set(REMOVED_RUNTIME_KEYS)
+    ):
         environment.pop(key, None)
     for key in tuple(environment):
         if key.startswith("COMPOSE_") or key.startswith("FAKE_"):
@@ -69,15 +74,21 @@ set -Eeuo pipefail
 
 log() {{ printf '%s\n' "$1" >> .fake-order; }}
 
-if [ "${{1:-}}" = "info" ]; then exit 0; fi
+if [ "${{1:-}}" = "info" ] || [ "${{1:-}}" = "ps" ]; then exit 0; fi
 if [ "${{1:-}}" != "compose" ]; then exit 2; fi
 shift
+if [ "${{1:-}}" != version ] && [ -n "${{FAKE_COMPOSE_ENV_LOG:-}}" ]; then
+    printf '%s\n' "${{COMPOSE_ENV_FILES:-}}" >> "$FAKE_COMPOSE_ENV_LOG"
+fi
 
 case "${{1:-}}" in
     version)
         printf '2.24.0\n'
         ;;
     config)
+        if [[ " $* " == *" --format json "* ]]; then
+            printf '{{"name":"option-pro"}}\n'
+        fi
         ;;
     build)
         log build
@@ -141,9 +152,31 @@ def _personal_config(mode: str = "private_network") -> str:
     raise AssertionError("[access].mode")
 
 
+def _copy_deployment_validator(root: Path) -> None:
+    backend = root / "backend" / "app"
+    (backend / "tools").mkdir(parents=True)
+    (backend / "services").mkdir()
+    for relative in (
+        "__init__.py",
+        "access.py",
+        "config.py",
+        "data_paths.py",
+        "deployment_boundary.py",
+        "legacy_env_adapter.py",
+        "personal_config.py",
+        "runtime_environment.py",
+        "services/__init__.py",
+        "services/request_security.py",
+        "tools/__init__.py",
+        "tools/migrate_legacy_machine_environment.py",
+        "tools/validate_personal_deployment.py",
+    ):
+        shutil.copy2(ROOT / "backend" / "app" / relative, backend / relative)
+
+
 def _deployment_root(
     tmp_path: Path,
-    environment_text: str | None = None,
+    machine_text: str | None = None,
     secrets_text: str | None = None,
     *,
     access_mode: str = "private_network",
@@ -156,9 +189,13 @@ def _deployment_root(
     shutil.copy2(ROOT / "scripts" / "deploy.sh", scripts / "deploy.sh")
     shutil.copy2(ROOT / "docker-compose.yml", root / "docker-compose.yml")
     (root / ".env").write_text(
-        environment_text
-        if environment_text is not None
-        else (ROOT / ".env.example").read_text(encoding="utf-8"),
+        (ROOT / ".env.example").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (root / "machine.env").write_text(
+        machine_text
+        if machine_text is not None
+        else (ROOT / "machine.env.example").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     (root / "secrets.env").write_text(
@@ -171,6 +208,7 @@ def _deployment_root(
         _personal_config(access_mode),
         encoding="utf-8",
     )
+    _copy_deployment_validator(root)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _fake_tools(bin_dir)
@@ -207,13 +245,25 @@ def test_deploy_builds_only_current_services_and_verifies_both(tmp_path: Path) -
         "verify-worker",
     ]
     script = (root / "scripts" / "deploy.sh").read_text(encoding="utf-8")
-    for legacy_service in (
-        "ai-worker",
-        "catalyst-sync-worker",
-        "focus-context-producer",
-        "breakout-worker",
-    ):
-        assert legacy_service not in script
+    assert "docker compose build --pull backend" in script
+    assert "docker compose up -d --no-build --force-recreate" in script
+    assert "Stopping legacy workers before the unified worker starts." in script
+
+
+def test_deploy_selects_machine_file_without_caller_exports(tmp_path: Path) -> None:
+    root, environment = _deployment_root(tmp_path)
+    capture = tmp_path / "compose-env-files"
+    environment["FAKE_COMPOSE_ENV_LOG"] = str(capture)
+    assert "COMPOSE_ENV_FILES" not in environment
+    assert "HOST_BIND" not in environment
+    assert "PORT" not in environment
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode == 0, result.stderr
+    selected = capture.read_text(encoding="utf-8").splitlines()
+    assert selected
+    assert set(selected) == {".env,machine.env"}
 
 
 def test_deploy_requires_all_nine_unified_task_types(tmp_path: Path) -> None:
@@ -238,7 +288,7 @@ def test_private_network_accepts_only_explicit_allowed_bindings(
     host_bind: str,
 ) -> None:
     configured = _replace(
-        (ROOT / ".env.example").read_text(encoding="utf-8"),
+        (ROOT / "machine.env.example").read_text(encoding="utf-8"),
         "HOST_BIND",
         host_bind,
     )
@@ -247,7 +297,7 @@ def test_private_network_accepts_only_explicit_allowed_bindings(
     result = _run_deploy(root, environment)
 
     assert result.returncode == 0, result.stderr
-    assert "Access mode: private_network" in result.stdout
+    assert '"access_mode": "private_network"' in result.stdout
 
 
 @pytest.mark.parametrize("host_bind", ("0.0.0.0", "8.8.8.8", "example.com"))
@@ -256,7 +306,7 @@ def test_private_network_rejects_wildcard_public_and_hostname_bindings(
     host_bind: str,
 ) -> None:
     configured = _replace(
-        (ROOT / ".env.example").read_text(encoding="utf-8"),
+        (ROOT / "machine.env.example").read_text(encoding="utf-8"),
         "HOST_BIND",
         host_bind,
     )
@@ -269,11 +319,33 @@ def test_private_network_rejects_wildcard_public_and_hostname_bindings(
     assert not (root / ".fake-order").exists()
 
 
+def test_stale_secret_file_cannot_mask_the_machine_access_boundary(
+    tmp_path: Path,
+) -> None:
+    configured = _replace(
+        (ROOT / "machine.env.example").read_text(encoding="utf-8"),
+        "HOST_BIND",
+        "0.0.0.0",
+    )
+    secrets = (
+        (ROOT / "secrets.env.example").read_text(encoding="utf-8")
+        + "HOST_BIND=127.0.0.1\n"
+        + "DATA_DIR=/outside-volume\n"
+    )
+    root, environment = _deployment_root(tmp_path, configured, secrets)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "private_network" in result.stderr
+    assert not (root / ".fake-order").exists()
+
+
 def test_private_network_rejects_a_public_cidr_even_when_explicitly_listed(
     tmp_path: Path,
 ) -> None:
     configured = _replace(
-        (ROOT / ".env.example").read_text(encoding="utf-8"),
+        (ROOT / "machine.env.example").read_text(encoding="utf-8"),
         "HOST_BIND",
         "8.8.8.8",
     )
@@ -292,13 +364,13 @@ def test_private_network_rejects_a_public_cidr_even_when_explicitly_listed(
     result = _run_deploy(root, environment)
 
     assert result.returncode != 0
-    assert "private_network CIDRs" in result.stderr
+    assert "private access networks" in result.stderr
     assert not (root / ".fake-order").exists()
 
 
 def test_password_mode_requires_only_configured_password_hash(tmp_path: Path) -> None:
     configured = _replace(
-        (ROOT / ".env.example").read_text(encoding="utf-8"),
+        (ROOT / "machine.env.example").read_text(encoding="utf-8"),
         "HOST_BIND",
         "0.0.0.0",
     )
@@ -310,21 +382,24 @@ def test_password_mode_requires_only_configured_password_hash(tmp_path: Path) ->
 
     missing = _run_deploy(root, environment)
     assert missing.returncode != 0
-    assert "requires APP_PASSWORD_HASH to be configured" in missing.stderr
+    assert "requires a valid APP_PASSWORD_HASH" in missing.stderr
     assert "APP_PASSWORD_HASH=" not in missing.stdout + missing.stderr
 
+    password_hash = personal_secrets.hash_owner_password(
+        "owner-password-for-deployment-test"
+    )
     secrets = _replace(
         (ROOT / "secrets.env.example").read_text(encoding="utf-8"),
         "APP_PASSWORD_HASH",
-        "configured-value-not-printed",
+        password_hash,
     )
     (root / "secrets.env").write_text(secrets, encoding="utf-8")
     configured_result = _run_deploy(root, environment)
     assert configured_result.returncode == 0, configured_result.stderr
-    assert "configured-value-not-printed" not in (
+    assert password_hash not in (
         configured_result.stdout + configured_result.stderr
     )
-    assert "Access mode: password" in configured_result.stdout
+    assert '"access_mode": "password"' in configured_result.stdout
 
 
 def test_access_mode_environment_cannot_override_personal_toml(tmp_path: Path) -> None:
@@ -334,20 +409,23 @@ def test_access_mode_environment_cannot_override_personal_toml(tmp_path: Path) -
     result = _run_deploy(root, environment)
 
     assert result.returncode == 0, result.stderr
-    assert "Access mode: private_network" in result.stdout
+    assert '"access_mode": "private_network"' in result.stdout
 
 
 @pytest.mark.parametrize(
     ("changes", "message"),
     [
-        ({"TRUST_PROXY_HEADERS": "true", "TRUSTED_PROXY_CIDRS": ""}, "requires TRUSTED_PROXY_CIDRS"),
+        (
+            {"TRUST_PROXY_HEADERS": "true", "TRUSTED_PROXY_CIDRS": ""},
+            "proxied deployments must use password mode",
+        ),
         (
             {
                 "TRUST_PROXY_HEADERS": "true",
                 "TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
                 "ALLOWED_HOSTS": "",
             },
-            "requires ALLOWED_HOSTS",
+            "proxied deployments must use password mode",
         ),
     ],
 )
@@ -356,7 +434,7 @@ def test_deploy_rejects_incomplete_proxy_boundary(
     changes: dict[str, str],
     message: str,
 ) -> None:
-    configured = (ROOT / ".env.example").read_text(encoding="utf-8")
+    configured = (ROOT / "machine.env.example").read_text(encoding="utf-8")
     for key, value in changes.items():
         configured = _replace(configured, key, value)
     root, environment = _deployment_root(tmp_path, configured)
@@ -373,7 +451,11 @@ def test_deploy_rejects_incomplete_proxy_boundary(
     [
         ("https://news.example", "", "MACROLENS_URL requires INTERNAL_API_TOKEN"),
         ("", "internal-token", "INTERNAL_API_TOKEN requires MACROLENS_URL"),
-        ("http://127.0.0.1:9000", "internal-token", "MACROLENS_URL must use HTTPS"),
+        (
+            "http://127.0.0.1:9000",
+            "internal-token",
+            "MACROLENS_URL must be an absolute HTTPS origin",
+        ),
     ],
 )
 def test_deploy_validates_the_single_macrolens_pair(
@@ -383,7 +465,7 @@ def test_deploy_validates_the_single_macrolens_pair(
     message: str,
 ) -> None:
     configured = _replace(
-        (ROOT / ".env.example").read_text(encoding="utf-8"),
+        (ROOT / "machine.env.example").read_text(encoding="utf-8"),
         "MACROLENS_URL",
         url,
     )
@@ -402,6 +484,153 @@ def test_deploy_validates_the_single_macrolens_pair(
         assert token not in result.stdout + result.stderr
 
 
+@pytest.mark.parametrize(
+    ("url", "token", "message"),
+    [
+        (
+            "https://news.example:not-a-port",
+            "valid-internal-token",
+            "MACROLENS_URL contains an invalid port",
+        ),
+        (
+            "https://news.example:70000",
+            "valid-internal-token",
+            "MACROLENS_URL contains an invalid port",
+        ),
+        (
+            "https://news.example:0",
+            "valid-internal-token",
+            "MACROLENS_URL contains an invalid port",
+        ),
+        (
+            "https://news.example:",
+            "valid-internal-token",
+            "MACROLENS_URL contains an invalid port",
+        ),
+        (
+            " https://news.example",
+            "valid-internal-token",
+            "MACROLENS_URL must not contain whitespace",
+        ),
+        (
+            "https://news.example\n",
+            "valid-internal-token",
+            "MACROLENS_URL must not contain whitespace",
+        ),
+        (
+            "https://owner:password@news.example",
+            "valid-internal-token",
+            "MACROLENS_URL must not contain credentials",
+        ),
+        (
+            "https://news.example/internal/v1",
+            "valid-internal-token",
+            "MACROLENS_URL must contain only scheme, host, and port",
+        ),
+        (
+            "https://news.example?target=other",
+            "valid-internal-token",
+            "MACROLENS_URL must contain only scheme, host, and port",
+        ),
+        (
+            "https://news.example#fragment",
+            "valid-internal-token",
+            "MACROLENS_URL must contain only scheme, host, and port",
+        ),
+        (
+            "https://" + "a" * 493,
+            "valid-internal-token",
+            "at most 500 characters",
+        ),
+        (
+            "https://news.example",
+            " token-with-leading-space",
+            "INTERNAL_API_TOKEN contains unsupported whitespace",
+        ),
+        (
+            "https://news.example",
+            "t" * 4097,
+            "INTERNAL_API_TOKEN is too long",
+        ),
+    ],
+)
+def test_deploy_rejects_invalid_macrolens_values_without_echo(
+    tmp_path: Path,
+    url: str,
+    token: str,
+    message: str,
+) -> None:
+    root, environment = _deployment_root(tmp_path)
+    environment["MACROLENS_URL"] = url
+    environment["INTERNAL_API_TOKEN"] = token
+
+    result = _run_deploy(root, environment)
+
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert message in output
+    assert url not in output
+    assert token not in output
+    assert not (root / ".fake-order").exists()
+
+
+@pytest.mark.parametrize(
+    "data_directory",
+    ("relative/data", "/srv/optix-data", "/data/../etc"),
+)
+def test_deploy_rejects_data_directory_outside_the_container_volume(
+    tmp_path: Path,
+    data_directory: str,
+) -> None:
+    root, environment = _deployment_root(tmp_path)
+    environment["DATA_DIR"] = data_directory
+
+    result = _run_deploy(root, environment)
+
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "DATA_DIR must be" in output
+    assert data_directory not in output
+    assert not (root / ".fake-order").exists()
+
+
+def test_deploy_accepts_a_nested_directory_inside_the_container_volume(
+    tmp_path: Path,
+) -> None:
+    root, environment = _deployment_root(tmp_path)
+    environment["DATA_DIR"] = "/data/option-pro"
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_secret_health_url_uses_machine_file_over_stale_dotenv(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".env").write_text(
+        "MACROLENS_URL=https://stale.example\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "machine.env").write_text(
+        "MACROLENS_URL=https://machine.example:9443/\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(personal_secrets, "REPOSITORY_ROOT", tmp_path)
+    monkeypatch.delenv("MACROLENS_URL", raising=False)
+
+    assert personal_secrets._macrolens_health_url() == (
+        "https://machine.example:9443/internal/v1/health",
+        None,
+    )
+    monkeypatch.setenv("MACROLENS_URL", "")
+    assert personal_secrets._macrolens_health_url() == (
+        None,
+        "macrolens_url_missing",
+    )
+
+
 def _setup_root(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     root = tmp_path / "option-pro"
     (root / "scripts").mkdir(parents=True)
@@ -410,12 +639,14 @@ def _setup_root(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         (ROOT / "setup.sh", root / "setup.sh"),
         (ROOT / "personal.sh", root / "personal.sh"),
         (ROOT / ".env.example", root / ".env.example"),
+        (ROOT / "machine.env.example", root / "machine.env.example"),
         (ROOT / "secrets.env.example", root / "secrets.env.example"),
         (ROOT / "docker-compose.yml", root / "docker-compose.yml"),
         (ROOT / "scripts" / "deploy.sh", root / "scripts" / "deploy.sh"),
         (ROOT / "config" / "personal.toml", root / "config" / "personal.toml"),
     ):
         shutil.copy2(source, destination)
+    _copy_deployment_validator(root)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _fake_tools(bin_dir)
@@ -468,10 +699,161 @@ def test_setup_separates_and_preserves_a_safe_service_secret(
     assert "OPENAI_API_KEY" not in deployment
     assert "INTERNAL_API_TOKEN" not in deployment
     assert "APP_PASSWORD_HASH=" not in deployment
+    machine = dotenv_values(root / "machine.env")
+    assert machine["MACROLENS_URL"] in {None, ""}
     assert dotenv_values(root / "secrets.env")["OPENAI_API_KEY"] == secret
     assert secret not in result.stdout + result.stderr
     assert stat.S_IMODE((root / ".env").stat().st_mode) == 0o600
+    assert stat.S_IMODE((root / "machine.env").stat().st_mode) == 0o600
     assert stat.S_IMODE((root / "secrets.env").stat().st_mode) == 0o600
+
+
+def test_setup_migrates_legacy_machine_values_without_template_overrides(
+    tmp_path: Path,
+) -> None:
+    root, environment = _setup_root(tmp_path)
+    token = "legacy-internal-token-never-printed"
+    legacy_values = {
+        "HOST_BIND": "10.24.5.6",
+        "PORT": "3201",
+        "MACROLENS_URL": "https://macrolens.example:9443",
+        "ALLOWED_HOSTS": "10.24.5.6",
+        "TRUST_PROXY_HEADERS": "false",
+        "TRUSTED_PROXY_CIDRS": "",
+        "DATA_DIR": "/data/legacy-option-pro",
+    }
+    (root / ".env").write_text(
+        "HOST_BIND='10.24.5.6'\n"
+        'PORT="3201"\n'
+        "MACROLENS_URL='https://macrolens.example:9443'\n"
+        "ALLOWED_HOSTS=10.24.5.6\n"
+        "TRUST_PROXY_HEADERS=false\n"
+        "TRUSTED_PROXY_CIDRS=\n",
+        encoding="utf-8",
+    )
+    (root / "secrets.env").write_text(
+        f"INTERNAL_API_TOKEN={token}\n"
+        "DATA_DIR=/data/legacy-option-pro\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", "setup.sh"],
+        cwd=root,
+        env=environment,
+        input="",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert dotenv_values(root / "machine.env") == legacy_values
+    assert "旧运行配置中的主机设置已迁移" in result.stdout
+    assert "沿用原配置" not in result.stdout
+    assert token not in result.stdout + result.stderr
+    for name in (".env", "machine.env", "secrets.env"):
+        assert stat.S_IMODE((root / name).stat().st_mode) == 0o600
+
+
+def test_setup_migrates_legacy_url_alias_and_secret_data_directory(
+    tmp_path: Path,
+) -> None:
+    root, environment = _setup_root(tmp_path)
+    token = "legacy-owner-token-never-printed"
+    (root / ".env").write_text(
+        "MACROLENS_BASE_URL=https://legacy-macrolens.example\n",
+        encoding="utf-8",
+    )
+    (root / "secrets.env").write_text(
+        f"INTERNAL_API_TOKEN={token}\n"
+        "DATA_DIR=/data/legacy-database\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", "setup.sh"],
+        cwd=root,
+        env=environment,
+        input="",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    assert result.returncode == 0, result.stderr
+    machine = dotenv_values(root / "machine.env")
+    assert list(machine) == [
+        "HOST_BIND",
+        "PORT",
+        "MACROLENS_URL",
+        "ALLOWED_HOSTS",
+        "TRUST_PROXY_HEADERS",
+        "TRUSTED_PROXY_CIDRS",
+        "DATA_DIR",
+    ]
+    assert machine["HOST_BIND"] == "127.0.0.1"
+    assert machine["MACROLENS_URL"] == "https://legacy-macrolens.example"
+    assert machine["DATA_DIR"] == "/data/legacy-database"
+    assert token not in result.stdout + result.stderr
+
+
+def test_setup_rejects_conflicting_legacy_macrolens_aliases(
+    tmp_path: Path,
+) -> None:
+    root, environment = _setup_root(tmp_path)
+    (root / ".env").write_text(
+        "MACROLENS_URL=https://canonical.example\n"
+        "MACROLENS_BASE_URL=https://legacy.example\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", "setup.sh"],
+        cwd=root,
+        env=environment,
+        input="",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    assert result.returncode != 0
+    assert "无法安全迁移旧 .env 中的 MACROLENS_URL" in result.stderr
+    assert "canonical.example" not in result.stdout + result.stderr
+    assert "legacy.example" not in result.stdout + result.stderr
+    assert not (root / "machine.env").exists()
+
+
+def test_setup_fails_closed_when_a_legacy_machine_value_cannot_be_preserved(
+    tmp_path: Path,
+) -> None:
+    root, environment = _setup_root(tmp_path)
+    unsafe = "${UNTRUSTED_HOST_BIND}"
+    (root / ".env").write_text(
+        f"HOST_BIND={unsafe}\nPORT=3201\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", "setup.sh"],
+        cwd=root,
+        env=environment,
+        input="",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    assert result.returncode != 0
+    assert "无法安全迁移旧 .env 中的 HOST_BIND" in result.stderr
+    assert unsafe not in result.stdout + result.stderr
+    assert not (root / "machine.env").exists()
+    assert not (root / ".fake-order").exists()
 
 
 @pytest.mark.parametrize(
@@ -479,8 +861,8 @@ def test_setup_separates_and_preserves_a_safe_service_secret(
     [
         ("OPENAI_API_KEY", "backend worker"),
         ("FINNHUB_API_KEY", "backend worker"),
+        ("MARKETDATA_TOKEN", "backend worker"),
         ("INTERNAL_API_TOKEN", "backend worker"),
-        ("DATA_DIR", "backend worker"),
         ("APP_PASSWORD_HASH", "backend"),
     ],
 )

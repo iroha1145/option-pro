@@ -8,7 +8,7 @@ from pydantic import PrivateAttr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.data_paths import explicit_data_path, get_data_paths
-from app.runtime_environment import RUNTIME_ENV_FILES, load_runtime_environment
+from app.runtime_environment import load_runtime_environment
 
 
 load_runtime_environment()
@@ -27,8 +27,6 @@ class CatalystSettings(BaseSettings):
     reasoning: Literal["max"] = "max"
 
     model_config = SettingsConfigDict(
-        env_file=tuple(str(path) for path in RUNTIME_ENV_FILES),
-        env_file_encoding="utf-8",
         env_ignore_empty=True,
         extra="ignore",
         populate_by_name=True,

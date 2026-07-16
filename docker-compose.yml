@@ -11,16 +11,27 @@ x-optix-runtime: &optix-runtime
   <<: *optix-image
   init: true
   env_file:
+    - path: .env
+      required: false
+    - path: machine.env
+      required: false
     - path: secrets.env
       required: false
   environment:
-    MACROLENS_URL: "${MACROLENS_URL:-}"
+    APP_VERSION: "${APP_VERSION:-dev}"
+    APP_COMMIT: "${APP_COMMIT:-unknown}"
+    # Machine settings are resolved from .env,machine.env for interpolation.
+    # Listing them explicitly keeps migration-era entries in secrets.env from
+    # overriding the canonical machine file inside the container.
     HOST_BIND: "${HOST_BIND:-127.0.0.1}"
+    PORT: "${PORT:-2000}"
+    MACROLENS_URL: "${MACROLENS_URL:-}"
     ALLOWED_HOSTS: "${ALLOWED_HOSTS:-localhost,127.0.0.1}"
     TRUST_PROXY_HEADERS: "${TRUST_PROXY_HEADERS:-false}"
     TRUSTED_PROXY_CIDRS: "${TRUSTED_PROXY_CIDRS:-}"
-    APP_VERSION: "${APP_VERSION:-dev}"
-    APP_COMMIT: "${APP_COMMIT:-unknown}"
+    # The named volume is the only persistent root. Exported test overrides
+    # remain available, but they must stay at /data or below.
+    DATA_DIR: "${DATA_DIR:-/data}"
   volumes:
     - optix-data:/data
   read_only: true

@@ -29,13 +29,11 @@ require_tools() {
 
 prepare_runtime_files() {
     [ -f .env ] || fail ".env is missing. Copy .env.example to .env first."
+    [ -f machine.env ] ||
+        fail "machine.env is missing. Copy machine.env.example to machine.env first."
     chmod 600 .env
-    if [ -f machine.env ]; then
-        chmod 600 machine.env
-        export COMPOSE_ENV_FILES=".env,machine.env"
-    else
-        export COMPOSE_ENV_FILES=".env"
-    fi
+    chmod 600 machine.env
+    export COMPOSE_ENV_FILES=".env,machine.env"
     if [ -f secrets.env ]; then
         chmod 600 secrets.env
     fi
@@ -161,22 +159,28 @@ verify_worker() {
     fail "Unified worker did not report all nine task types."
 }
 
-require_tools
-prepare_runtime_files
-validate_runtime_boundary
-release_identity
-docker compose config -q
+main() {
+    require_tools
+    prepare_runtime_files
+    validate_runtime_boundary
+    release_identity
+    docker compose config -q
 
-echo "Building Optix Pro ${APP_VERSION} (${APP_COMMIT})."
-docker compose build --pull backend
-stop_legacy_workers
+    echo "Building Optix Pro ${APP_VERSION} (${APP_COMMIT})."
+    docker compose build --pull backend
+    stop_legacy_workers
 
-if ! docker compose up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180; then
-    docker compose ps >&2 || true
-    docker compose logs --tail=200 backend worker >&2 || true
-    exit 1
+    if ! docker compose up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180; then
+        docker compose ps >&2 || true
+        docker compose logs --tail=200 backend worker >&2 || true
+        exit 1
+    fi
+
+    verify_backend
+    verify_worker
+    echo "Deployment verified: backend and unified worker are ready."
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    main "$@"
 fi
-
-verify_backend
-verify_worker
-echo "Deployment verified: backend and unified worker are ready."

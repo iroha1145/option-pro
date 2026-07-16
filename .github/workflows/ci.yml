@@ -195,8 +195,7 @@ jobs:
           docker compose run --rm --no-deps \
             --env INTERNAL_API_TOKEN=container-fixture-owner \
             --env MACROLENS_URL=https://macrolens.fixture \
-            --env MACROLENS_CACHE_DB_PATH=/data/container-catalyst.db \
-            --env OPENAI_JOB_DB_PATH=/data/container-ai-jobs.db \
+            --env DATA_DIR=/data/container-catalyst-fixture \
             --env PYTHONPATH=/app/backend \
             --volume "${GITHUB_WORKSPACE}/tests:/ci-tests:ro" \
             worker python /ci-tests/container_personal_catalyst_smoke.py |

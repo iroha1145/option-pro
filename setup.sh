@@ -95,6 +95,12 @@ print(f"pbkdf2_sha256${iterations}${encode(salt)}${encode(digest)}")
 '
 }
 
+migrate_legacy_machine_environment() {
+    PYTHONPATH="${ROOT_DIR}/backend${PYTHONPATH:+:${PYTHONPATH}}" \
+        python3 -m app.tools.migrate_legacy_machine_environment \
+        .env secrets.env machine.env.example machine.env
+}
+
 require_docker() {
     if ! command -v docker >/dev/null 2>&1; then
         echo -e "${RED}未安装 Docker，请先安装 Docker Desktop。${NC}" >&2
@@ -116,19 +122,35 @@ require_docker() {
 }
 
 configure_environment() {
-    local existing=false
-    if [ -f .env ] || [ -f secrets.env ]; then
+    local existing=false had_env=false had_machine=false had_secrets=false
+    local migrated_legacy_machine=false
+    [ ! -f .env ] || had_env=true
+    [ ! -f machine.env ] || had_machine=true
+    [ ! -f secrets.env ] || had_secrets=true
+    if [ "$had_env" = true ] || [ "$had_machine" = true ] || [ "$had_secrets" = true ]; then
         existing=true
     fi
-    if [ ! -f .env ]; then
+    if [ "$had_env" = false ]; then
         cp .env.example .env
     fi
-    if [ ! -f secrets.env ]; then
+    if [ "$had_machine" = false ]; then
+        if [ "$had_env" = true ] || [ "$had_secrets" = true ]; then
+            migrate_legacy_machine_environment
+            migrated_legacy_machine=true
+        else
+            cp machine.env.example machine.env
+        fi
+    fi
+    if [ "$had_secrets" = false ]; then
         cp secrets.env.example secrets.env
     fi
-    chmod 600 .env secrets.env
+    chmod 600 .env machine.env secrets.env
     if [ "$existing" = true ]; then
-        echo -e "${YELLOW}.env 或 secrets.env 已存在，本次沿用原配置。${NC}"
+        if [ "$migrated_legacy_machine" = true ]; then
+            echo -e "${YELLOW}旧运行配置中的主机设置已迁移到 machine.env，缺失字段已使用模板默认值补齐。${NC}"
+        else
+            echo -e "${YELLOW}检测到已有运行配置；已有文件保持不变，缺失文件已按模板补齐。${NC}"
+        fi
         return
     fi
 
@@ -179,9 +201,9 @@ configure_environment() {
 
     set_file_value secrets.env OPENAI_API_KEY "$openai_key"
     set_file_value secrets.env INTERNAL_API_TOKEN "$macrolens_token"
-    set_file_value .env MACROLENS_URL "$macrolens_url"
+    set_file_value machine.env MACROLENS_URL "$macrolens_url"
     unset openai_key macrolens_token password_hash
-    echo -e "${GREEN}.env 与 secrets.env 已生成，文件权限为 0600。${NC}"
+    echo -e "${GREEN}.env、machine.env 与 secrets.env 已生成，文件权限为 0600。${NC}"
 }
 
 echo -e "${CYAN}${BOLD}Optix Pro 个人版安装${NC}"
