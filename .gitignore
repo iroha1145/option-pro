@@ -24,3 +24,13 @@ build/
 output/
 .playwright-cli/
 frontend/test-results/
+config/migrated/
+config/secrets.env
+secrets.env
+secrets.env.bak.*
+machine.env
+machine.env.bak.*
+migration-report.json
+.secrets.env.lock
+.personal-operation.lock/
+config/unmapped-env.json

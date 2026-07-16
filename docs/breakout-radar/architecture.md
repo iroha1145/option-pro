@@ -48,8 +48,8 @@ Option Pro 自有行情重新验证，保存可重放的事件生命周期，并
 - app/services/breakouts/worker.py：独立运行入口。
 - app/services/breakouts/adapters：行情、强势、大盘形态和规范股票池适配器。
 - app/api/breakouts.py：Pydantic 只读响应。
-- frontend/static/js/pages/breakouts.js：只读快照、筛选、详情和个股轨迹接线。
-- frontend/static/css/optix-breakouts-v3.css：与 Optix Pro v3 隔离的响应式页面样式。
+- frontend/static/js/deck-app.js：夜间工作台中的突破雷达路由、只读快照、筛选、详情和个股轨迹接线。
+- frontend/static/css/optix-deck.css：夜间工作台共用的突破雷达响应式样式。
 
 禁止把新逻辑堆入 strength/scanner.py、api/stocks.py、signals.py 或单个超大
 service.py。旧模块只增加必要的窄入口。

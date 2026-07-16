@@ -1,28 +1,54 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
-import ipaddress
 import json as _json_mod
 import os as _os
-import re as _re
 import time as _time
 from collections import deque as _deque
 from pathlib import Path
+
+from app.runtime_environment import load_runtime_environment
+
+# This must run before request-security and service modules inspect os.environ.
+load_runtime_environment()
 
 # Import yahoo.py first — it monkey-patches yf.Ticker to use curl_cffi session
 # so all downstream yfinance usage dodges Yahoo's rate limiter.
 from app.services import yahoo  # noqa: F401
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.datastructures import MutableHeaders
+from starlette.datastructures import Headers, MutableHeaders
 from starlette.middleware.gzip import GZipMiddleware
-from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import PlainTextResponse
 
-from app.api import ai, breakouts, catalysts, earnings, integrations, market, options, sectors, signals, stocks, strength
+from app.access import (
+    OwnerAccessRuntime,
+    canonical_request_host,
+    get_access_runtime,
+    require_owner_access,
+    require_same_origin_action,
+)
+from app.deployment_boundary import canonicalize_hostname, normalize_allowed_hosts
+from app.api import (
+    access,
+    ai,
+    breakouts,
+    catalysts,
+    earnings,
+    market,
+    options,
+    runtime_settings,
+    sectors,
+    settings,
+    signals,
+    stocks,
+    strength,
+    worker_actions,
+)
 from app.services.request_security import (
     TRUSTED_PROXY_NETWORKS as _TRUSTED_PROXY_NETWORKS,
     TRUST_PROXY_HEADERS as _TRUST_PROXY_HEADERS,
@@ -32,17 +58,9 @@ from app.services.request_security import (
 
 
 _TRUTHY_VALUES = {"1", "true", "yes"}
-_APP_AUTH_TOKEN = _os.environ.get("APP_AUTH_TOKEN", "").strip()
-_PUBLIC_READ_API_ENABLED = (
-    _os.environ.get("PUBLIC_READ_API_ENABLED", "").strip().lower()
-    in _TRUTHY_VALUES
-)
 _APP_VERSION = _os.environ.get("APP_VERSION", "").strip() or "dev"
 _APP_COMMIT = _os.environ.get("APP_COMMIT", "").strip() or "unknown"
 _HOST_BIND = _os.environ.get("HOST_BIND", "127.0.0.1").strip() or "127.0.0.1"
-_ALLOW_INSECURE_PUBLIC_BIND = (
-    _os.environ.get("ALLOW_INSECURE_PUBLIC_BIND", "").strip().lower() in _TRUTHY_VALUES
-)
 _FRONTEND_MANIFEST_REQUIRED = (
     _os.environ.get("FRONTEND_MANIFEST_REQUIRED", "").strip().lower() in _TRUTHY_VALUES
 )
@@ -50,122 +68,40 @@ _FRONTEND_MANIFEST_PATH = _os.environ.get("FRONTEND_MANIFEST_PATH", "").strip()
 
 
 def _configured_allowed_hosts(host_bind: str, raw: str) -> list[str]:
-    hosts = {"localhost", "127.0.0.1", "::1"}
-    normalized_bind = host_bind.strip().strip("[]")
-    if normalized_bind and normalized_bind not in {"0.0.0.0", "::"}:
-        hosts.add(normalized_bind)
-    for item in raw.split(","):
-        host = item.strip().lower().rstrip(".")
-        if not host:
-            continue
-        if "*" in host or "/" in host or "://" in host:
-            raise RuntimeError("ALLOWED_HOSTS must contain explicit host names")
-        hosts.add(host.strip("[]"))
-    return sorted(hosts)
+    return list(normalize_allowed_hosts(host_bind, raw))
 
 
-_ALLOWED_HOSTS = _configured_allowed_hosts(
+_ACCESS_RUNTIME = get_access_runtime()
+_DEPLOYMENT_BOUNDARY = _ACCESS_RUNTIME.validate_startup(
     _HOST_BIND,
-    _os.environ.get("ALLOWED_HOSTS", ""),
+    allowed_hosts=_os.environ.get("ALLOWED_HOSTS", ""),
+    trust_proxy_headers=_os.environ.get("TRUST_PROXY_HEADERS", "false"),
+    trusted_proxy_cidrs=_os.environ.get("TRUSTED_PROXY_CIDRS", ""),
 )
+_ALLOWED_HOSTS = list(_DEPLOYMENT_BOUNDARY.allowed_hosts)
 
 
-def _is_loopback_bind(value: str) -> bool:
-    normalized = value.strip().lower()
-    if normalized == "localhost":
-        return True
-    if normalized.startswith("[") and normalized.endswith("]"):
-        normalized = normalized[1:-1]
-    normalized = normalized.split("%", 1)[0]
-    try:
-        return ipaddress.ip_address(normalized).is_loopback
-    except ValueError:
-        return False
+class _ExactTrustedHostMiddleware:
+    """Validate one explicit Host authority, including bracketed IPv6."""
 
+    def __init__(self, app, *, allowed_hosts: list[str]) -> None:
+        self.app = app
+        normalized = {canonicalize_hostname(host) for host in allowed_hosts}
+        if not normalized or None in normalized:
+            raise RuntimeError("allowed hosts are not canonical")
+        self.allowed_hosts = frozenset(normalized)
 
-def _validate_public_bind(host_bind: str, auth_token: str, allow_insecure: bool) -> None:
-    if _is_loopback_bind(host_bind) or auth_token or allow_insecure:
-        return
-    raise RuntimeError(
-        "Refusing non-loopback HOST_BIND without APP_AUTH_TOKEN. "
-        "Set a strong token, keep HOST_BIND on localhost, or explicitly set "
-        "ALLOW_INSECURE_PUBLIC_BIND=true only for a protected private network."
-    )
-
-
-def _validate_public_read_auth(public_read_enabled: bool, auth_token: str) -> None:
-    if public_read_enabled and not auth_token:
-        raise RuntimeError(
-            "PUBLIC_READ_API_ENABLED=true requires APP_AUTH_TOKEN so routes "
-            "outside the reviewed public read allowlist remain protected."
-        )
-
-
-_validate_public_bind(_HOST_BIND, _APP_AUTH_TOKEN, _ALLOW_INSECURE_PUBLIC_BIND)
-_validate_public_read_auth(_PUBLIC_READ_API_ENABLED, _APP_AUTH_TOKEN)
-
-
-_PUBLIC_READ_GET_EXACT = frozenset(
-    {
-        "/api/market/indices",
-        "/api/market/status",
-        "/api/stocks/watchlist",
-        "/api/stocks/search",
-        "/api/signals/market",
-        "/api/strength/scan",
-        "/api/strength/market",
-        "/api/strength/profiles",
-        "/api/breakouts/current",
-        "/api/breakouts/events",
-        "/api/breakouts/status",
-        "/api/sectors",
-        "/api/earnings/upcoming",
-        "/api/options/unusual",
-        "/api/catalysts/status",
-        "/api/catalysts/feed",
-        "/api/catalysts/calendar",
-        "/api/catalysts/hotspots/status",
-        "/api/catalysts/hotspots",
-        "/api/catalysts/market-focus-cycles/latest",
-    }
-)
-_PUBLIC_STOCK_SYMBOL = (
-    r"(?:\^[A-Z0-9][A-Z0-9._-]{0,30}|"
-    r"[A-Z0-9][A-Z0-9._-]{0,31})"
-)
-_PUBLIC_TICKER = r"[A-Z0-9][A-Z0-9.-]{0,19}"
-_PUBLIC_READ_GET_PATTERNS = tuple(
-    _re.compile(pattern)
-    for pattern in (
-        rf"/api/stocks/{_PUBLIC_STOCK_SYMBOL}(?:/(?:signals|chart))?",
-        rf"/api/signals/stock/{_PUBLIC_STOCK_SYMBOL}",
-        r"/api/breakouts/events/[^/]{1,128}",
-        r"/api/breakouts/tickers/[A-Z][A-Z0-9.-]{0,14}",
-        r"/api/sectors/[A-Za-z0-9_-]{1,80}/iv-ranking",
-        r"/api/options/[A-Z0-9][A-Z0-9.-]{0,11}/(?:expirations|chain)",
-        r"/api/catalysts/news/[1-9][0-9]*",
-        rf"/api/catalysts/tickers/{_PUBLIC_TICKER}",
-        r"/api/catalysts/market-focus-cycles/mfc_[0-9a-f]{32}",
-    )
-)
-_PUBLIC_READ_POST_EXACT = frozenset({"/api/catalysts/tickers/batch"})
-
-
-def _is_public_read_api(method: str, path: str) -> bool:
-    """Allow only bounded, non-mutating data reads for the public web UI."""
-
-    normalized = path or "/"
-    verb = method.upper()
-    if verb == "GET":
-        if normalized in _PUBLIC_READ_GET_EXACT:
-            return True
-        return any(
-            pattern.fullmatch(normalized)
-            for pattern in _PUBLIC_READ_GET_PATTERNS
-        )
-    # This endpoint is a bounded local-cache query (maximum 50 tickers), even
-    # though a JSON body makes POST the practical transport.
-    return verb == "POST" and normalized in _PUBLIC_READ_POST_EXACT
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] not in {"http", "websocket"}:
+            await self.app(scope, receive, send)
+            return
+        values = Headers(scope=scope).getlist("host")
+        hostname = canonical_request_host(values[0]) if len(values) == 1 else None
+        if hostname not in self.allowed_hosts:
+            response = PlainTextResponse("Invalid host header", status_code=400)
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
 app = FastAPI(
@@ -173,18 +109,28 @@ app = FastAPI(
     description="Personal stock, options, signal, and market-data API.",
     version=_APP_VERSION,
 )
+app.state.access_runtime = _ACCESS_RUNTIME
 
-# CORS: same-origin by default. Override with ALLOWED_ORIGINS only when the
-# frontend is hosted on a different trusted origin.
-_allowed = _os.environ.get("ALLOWED_ORIGINS", "").strip()
-_origins = [o.strip() for o in _allowed.split(",") if o.strip()] if _allowed else []
-if _origins:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=_origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type", "Authorization", "X-App-Token"],
+
+@app.exception_handler(RequestValidationError)
+async def _redacted_request_validation_error(
+    _request: StarletteRequest,
+    _exc: RequestValidationError,
+) -> JSONResponse:
+    """Keep submitted values out of every validation response."""
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": [
+                {
+                    "type": "request_validation_failed",
+                    "loc": ["request"],
+                    "msg": "Invalid request",
+                }
+            ]
+        },
+        headers={"Cache-Control": "no-store"},
     )
 
 # Rate limiter state. deque + per-IP buckets, pruned lazily so the dict can't
@@ -195,11 +141,6 @@ _RL_LIGHT_LIMIT = 200   # max requests / window for cheap endpoints
 _RL_WINDOW = 60         # seconds
 _RL_MAX_KEYS = 10_000   # safety valve against IP-churn memory growth
 _rl_last_prune = 0.0
-_auth_fail_buckets: dict[str, _deque] = {}
-_AUTH_FAIL_LIMIT = 12
-_AUTH_FAIL_WINDOW = 60
-_AUTH_FAIL_MAX_KEYS = 10_000
-_auth_fail_last_prune = 0.0
 
 _HEAVY_API_PREFIXES = (
     "/api/ai/",
@@ -222,7 +163,16 @@ _HTML_CSP = (
     "script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
     "img-src 'self' data:; connect-src 'self'; form-action 'self'"
 )
-_SERVICE_AUTH_PATHS = {"/api/integrations/macrolens/v1/focus-context"}
+_PUBLIC_ACCESS_PATHS = {
+    "/health",
+    "/ready",
+}
+_PASSWORD_ENTRY_PATHS = {
+    "/login.html",
+    "/api/access/login",
+    "/static/js/login.js",
+    "/static/favicon.svg",
+}
 
 
 def _scope_header(scope, name: bytes) -> str:
@@ -248,30 +198,6 @@ def _scope_is_https(scope) -> bool:
         scope,
         enabled=_TRUST_PROXY_HEADERS,
         networks=_TRUSTED_PROXY_NETWORKS,
-    )
-
-
-def _scope_token(scope) -> str:
-    auth = _scope_header(scope, b"authorization")
-    if auth.lower().startswith("bearer "):
-        return auth[7:].strip()
-    return _scope_header(scope, b"x-app-token").strip()
-
-
-def _raw_path_has_unsafe_escape(scope) -> bool:
-    """Reject encoded path separators and second-pass percent decoding.
-
-    ASGI servers expose a decoded ``scope['path']``. Without checking the raw
-    bytes, ``AAPL%2Fchart`` is indistinguishable from the real two-segment
-    route when the public-read allowlist runs.
-    """
-
-    raw_path = scope.get("raw_path", b"")
-    if isinstance(raw_path, str):
-        raw_path = raw_path.encode("latin-1", errors="ignore")
-    lowered = bytes(raw_path).lower()
-    return b"\\" in lowered or any(
-        marker in lowered for marker in (b"%2f", b"%5c", b"%25")
     )
 
 
@@ -301,22 +227,6 @@ def _is_heavy_api_path(path: str, method: str = "GET") -> bool:
     )
 
 
-def _cors_headers(scope) -> list[tuple[bytes, bytes]]:
-    if not _origins:
-        return []
-    origin = _scope_header(scope, b"origin")
-    if not origin:
-        return []
-    allow_origin = origin if "*" in _origins or origin in _origins else ""
-    if not allow_origin:
-        return []
-    return [
-        (b"access-control-allow-origin", allow_origin.encode("latin-1")),
-        (b"access-control-allow-credentials", b"true"),
-        (b"vary", b"Origin"),
-    ]
-
-
 def _prune_rl_buckets(now: float) -> None:
     """Drop stale buckets periodically and enforce the hard key limit."""
     global _rl_last_prune
@@ -336,42 +246,6 @@ def _prune_rl_buckets(now: float) -> None:
         )[:remove_count]
         for key in oldest:
             _rl_buckets.pop(key, None)
-
-
-def _auth_failure_limited(client_ip: str, now: float) -> bool:
-    global _auth_fail_last_prune
-    cutoff = now - _AUTH_FAIL_WINDOW
-    if (
-        now - _auth_fail_last_prune >= _AUTH_FAIL_WINDOW
-        or len(_auth_fail_buckets) >= _AUTH_FAIL_MAX_KEYS
-    ):
-        _auth_fail_last_prune = now
-        for key in [
-            key
-            for key, bucket in _auth_fail_buckets.items()
-            if not bucket or bucket[-1] < cutoff
-        ]:
-            _auth_fail_buckets.pop(key, None)
-        if len(_auth_fail_buckets) >= _AUTH_FAIL_MAX_KEYS:
-            remove_count = len(_auth_fail_buckets) - _AUTH_FAIL_MAX_KEYS + 1
-            oldest = sorted(
-                _auth_fail_buckets,
-                key=lambda key: (
-                    _auth_fail_buckets[key][-1]
-                    if _auth_fail_buckets[key]
-                    else float("-inf")
-                ),
-            )[:remove_count]
-            for key in oldest:
-                _auth_fail_buckets.pop(key, None)
-
-    bucket = _auth_fail_buckets.setdefault(client_ip, _deque())
-    while bucket and bucket[0] < cutoff:
-        bucket.popleft()
-    if len(bucket) >= _AUTH_FAIL_LIMIT:
-        return True
-    bucket.append(now)
-    return False
 
 
 async def _send_json(send, status: int, payload: dict, extra_headers: list | None = None) -> None:
@@ -396,8 +270,13 @@ class _GatewayMiddleware:
     - API and health metadata: private/no-store.
     """
 
-    def __init__(self, app):
+    def __init__(
+        self,
+        app,
+        access_runtime: OwnerAccessRuntime | None = None,
+    ):
         self.app = app
+        self.access_runtime = access_runtime or _ACCESS_RUNTIME
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -435,49 +314,37 @@ class _GatewayMiddleware:
                     headers["Cache-Control"] = "private, no-store"
             await send(message)
 
-        if method != "OPTIONS" and path.startswith("/api/"):
-            # ── Optional bearer-token auth ──
-            request_state = scope.setdefault("state", {})
-            request_state["app_auth_configured"] = bool(_APP_AUTH_TOKEN)
-            request_state["app_authenticated"] = False
-            unsafe_raw_path = _raw_path_has_unsafe_escape(scope)
-            service_authenticated = (
-                not unsafe_raw_path
-                and method == "GET"
-                and path in _SERVICE_AUTH_PATHS
+        publicly_available = bool(
+            path in _PUBLIC_ACCESS_PATHS
+            or (
+                self.access_runtime.mode == "password"
+                and path in _PASSWORD_ENTRY_PATHS
             )
-            public_read_authenticated = bool(
-                _PUBLIC_READ_API_ENABLED
-                and not unsafe_raw_path
-                and _is_public_read_api(method, path)
-            )
-            request_state["public_read_authenticated"] = public_read_authenticated
-            if _APP_AUTH_TOKEN and not service_authenticated:
-                token = _scope_token(scope)
-                try:
-                    valid = bool(token) and hmac.compare_digest(token, _APP_AUTH_TOKEN)
-                except Exception:
-                    valid = False
-                if valid:
-                    request_state["app_authenticated"] = True
-                elif not public_read_authenticated:
-                    if _auth_failure_limited(_scope_client_ip(scope), _time.time()):
-                        return await _send_json(
-                            send_with_response_headers,
-                            429,
-                            {
-                                "error": "auth_rate_limited",
-                                "message": "Too many failed authentication attempts",
-                            },
-                            extra_headers=_cors_headers(scope)
-                            + [(b"retry-after", str(_AUTH_FAIL_WINDOW).encode())],
-                        )
-                    return await _send_json(
-                        send_with_response_headers, 401,
-                        {"error": "unauthorized", "message": "Missing or invalid API token"},
-                        extra_headers=_cors_headers(scope),
-                    )
+        )
+        owner_request = StarletteRequest(scope, receive=receive)
+        owner_access = self.access_runtime.request_is_owner(owner_request)
+        scope.setdefault("state", {})["owner_access"] = owner_access
 
+        if (
+            method != "OPTIONS"
+            and not publicly_available
+            and not owner_access
+        ):
+            if self.access_runtime.mode == "password" and is_html:
+                response = RedirectResponse("/login.html", status_code=303)
+                return await response(scope, receive, send_with_response_headers)
+            code = (
+                "owner_login_required"
+                if self.access_runtime.mode == "password"
+                else "private_network_required"
+            )
+            return await _send_json(
+                send_with_response_headers,
+                401 if self.access_runtime.mode == "password" else 403,
+                {"error": code, "message": "Owner access is required"},
+            )
+
+        if method != "OPTIONS" and path.startswith("/api/"):
             # ── Per-IP rate limit ──
             is_heavy = _is_heavy_api_path(path, method)
             limit = _RL_HEAVY_LIMIT if is_heavy else _RL_LIGHT_LIMIT
@@ -494,28 +361,38 @@ class _GatewayMiddleware:
                 return await _send_json(
                     send_with_response_headers, 429,
                     {"error": "rate_limited", "message": f"Too many requests; try again in {_RL_WINDOW}s"},
-                    extra_headers=_cors_headers(scope) + [(b"retry-after", str(_RL_WINDOW).encode())],
+                    extra_headers=[(b"retry-after", str(_RL_WINDOW).encode())],
                 )
             bucket.append(now)
 
         return await self.app(scope, receive, send_with_response_headers)
 
 
-app.add_middleware(_GatewayMiddleware)
+app.add_middleware(_GatewayMiddleware, access_runtime=_ACCESS_RUNTIME)
 app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS)
+app.add_middleware(_ExactTrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS)
 
-app.include_router(stocks.router)
-app.include_router(options.router)
-app.include_router(earnings.router)
-app.include_router(sectors.router)
-app.include_router(market.router)
-app.include_router(signals.router)
-app.include_router(ai.router)
-app.include_router(catalysts.router)
-app.include_router(integrations.router)
-app.include_router(strength.router)
-app.include_router(breakouts.router)
+# The gateway gives HTML requests a friendly redirect. Router dependencies are
+# the single API boundary and remain in force when routers are mounted by tools
+# that do not use the production gateway.
+_OWNER_DEPENDENCIES = [
+    Depends(require_owner_access),
+    Depends(require_same_origin_action),
+]
+app.include_router(stocks.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(options.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(earnings.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(sectors.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(market.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(signals.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(ai.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(catalysts.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(strength.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(breakouts.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(worker_actions.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(runtime_settings.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(access.router)
+app.include_router(settings.router)
 
 # Docker-compose runs from /app/backend; local runs may be from repo root.
 # Allow override via FRONTEND_DIR env var for unusual deployments.
@@ -534,8 +411,16 @@ else:
 
 _FRONTEND_REQUIRED_FILES = (
     "index.html",
-    "static/css/styles.css",
-    "static/js/app.js",
+    "login.html",
+    "static/favicon.svg",
+    "static/css/optix-deck.css",
+    "static/css/optix-catalysts.css",
+    "static/js/theme-init.js",
+    "static/js/login.js",
+    "static/js/deck-api.js",
+    "static/js/deck-ai-jobs.js",
+    "static/js/deck-catalysts.js",
+    "static/js/deck-app.js",
 )
 _FRONTEND_MANIFEST_NAME = ".integrity-manifest"
 

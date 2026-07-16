@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import json
 import sys
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -12,17 +14,15 @@ from pydantic import SecretStr, ValidationError
 
 from app.api import ai
 from app.config import Settings
-from app.services.ai_jobs import runtime
+from app.services.ai_jobs import runtime, worker as ai_worker
 from app.services.ai_jobs.models import validate_result
 from app.services.ai_jobs.repository import AIJobRepository
-from app.services.ai_jobs.security import require_expensive_action
-from app.services.ai_jobs.worker import process_job
+from app.services.ai_jobs.worker import health_payload, process_job
 
 
 def _settings(path):
     return SimpleNamespace(
         openai_api_key=SecretStr("test-key"),
-        openai_base_url="",
         openai_model="gpt-5.6-terra",
         openai_reasoning="max",
         openai_execution_mode="background",
@@ -30,7 +30,7 @@ def _settings(path):
         openai_control_timeout_seconds=30,
         openai_max_retries=0,
         openai_max_output_tokens=16384,
-        openai_max_concurrency=2,
+        openai_max_concurrency=1,
         openai_background_initial_poll_seconds=2,
         openai_background_max_poll_seconds=15,
         openai_background_poll_timeout_seconds=1800,
@@ -38,10 +38,18 @@ def _settings(path):
         openai_job_lease_seconds=60,
         openai_job_max_age_seconds=86400,
         openai_job_max_queued=200,
+        openai_daily_max_jobs=4,
+        openai_daily_budget_usd=2.0,
+        openai_manual_cooldown_seconds=0,
     )
 
 
-def _create_earnings_job(repository: AIJobRepository):
+def _create_earnings_job(
+    repository: AIJobRepository,
+    *,
+    submission_source: str = "manual",
+    force_retry: bool = False,
+):
     version, digest = runtime.schema_identity("earnings_impact")
     return repository.create_job(
         job_type="earnings_impact",
@@ -53,11 +61,60 @@ def _create_earnings_job(repository: AIJobRepository):
         schema_version=version,
         schema_sha256=digest,
         max_queued=200,
+        submission_source=submission_source,
+        force_retry=force_retry,
+    )
+
+
+def _create_budget_job(
+    repository: AIJobRepository,
+    job_type: str,
+    suffix: str,
+):
+    payloads = {
+        "earnings_impact": {"ticker": suffix, "name": "Budget test"},
+        "option_alerts": {
+            "ticker": suffix,
+            "alerts": [],
+            "underlying_price": 100,
+        },
+        "signal_analysis": {
+            "ticker": suffix,
+            "signals": {},
+            "scores": {},
+            "as_of": "2026-07-16T00:00:00Z",
+        },
+        "news_impact": {
+            "news_id": int(suffix[-1], 36) + 1,
+            "change_sequence": 1,
+            "content_hash": suffix.lower() * 8,
+            "allowed_tickers": [suffix],
+        },
+        "market_focus": {
+            "cycle_id": f"cycle-{suffix}",
+            "as_of": "2026-07-16T00:00:00Z",
+            "input_hash": suffix.lower() * 8,
+            "allowed_event_group_ids": [],
+            "allowed_tickers": [suffix],
+        },
+    }
+    version, digest = runtime.schema_identity(job_type)
+    return repository.create_job(
+        job_type=job_type,
+        payload=payloads[job_type],
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version=f"budget-{job_type}-{suffix}",
+        schema_version=version,
+        schema_sha256=digest,
+        max_queued=200,
     )
 
 
 def _earnings_result():
     return {
+        "output_language": "zh-CN",
         "ticker": "AAPL",
         "summary": "供应链与大型科技股可能出现联动。",
         "expectation": "关注营收、利润率与指引。",
@@ -84,6 +141,7 @@ def _large_signal_result():
     twelve = [evidence for _ in range(12)]
     ten = [evidence for _ in range(10)]
     return {
+        "output_language": "zh-CN",
         "asset": "AAPL",
         "horizon": "数日到数周",
         "dominant_regime": "趋势与波动交织",
@@ -121,6 +179,487 @@ def _large_signal_result():
     }
 
 
+def test_standalone_worker_reads_fresh_runtime_controls_each_iteration(
+    tmp_path,
+    monkeypatch,
+):
+    class CopyableSettings(SimpleNamespace):
+        def model_copy(self, *, update):
+            values = dict(vars(self))
+            values.update(update)
+            return CopyableSettings(**values)
+
+    settings = CopyableSettings(**vars(_settings(tmp_path / "ai-jobs.db")))
+    effective = SimpleNamespace(
+        ai=SimpleNamespace(
+            daily_max_jobs=3,
+            daily_budget_usd=1.25,
+            manual_analysis_cooldown_seconds=45,
+            manual_analysis_enabled=True,
+        ),
+        catalyst=SimpleNamespace(scheduled_analysis_enabled=False),
+    )
+    seen = []
+
+    monkeypatch.setattr(
+        "app.services.runtime_settings.get_effective_runtime_settings",
+        lambda: effective,
+    )
+
+    async def capture(
+        _repository,
+        worker_settings,
+        _owner,
+        *,
+        allow_new_submissions,
+        new_submission_block_reason,
+        manual_analysis_enabled,
+        scheduled_analysis_enabled,
+    ):
+        seen.append(
+            (
+                worker_settings.openai_daily_max_jobs,
+                worker_settings.openai_daily_budget_usd,
+                worker_settings.openai_manual_cooldown_seconds,
+                allow_new_submissions,
+                new_submission_block_reason,
+                manual_analysis_enabled,
+                scheduled_analysis_enabled,
+            )
+        )
+        return 0
+
+    monkeypatch.setattr(ai_worker, "run_once", capture)
+    repository = AIJobRepository(settings.openai_job_db_path)
+
+    first = asyncio.run(
+        ai_worker.run_configured_once(repository, settings, "standalone")
+    )
+    effective.ai.daily_budget_usd = 1.0
+    second = asyncio.run(
+        ai_worker.run_configured_once(repository, settings, "standalone")
+    )
+    effective.ai.manual_analysis_enabled = False
+    third = asyncio.run(
+        ai_worker.run_configured_once(repository, settings, "standalone")
+    )
+
+    assert first == (0, "enabled")
+    assert second == (0, "enabled")
+    assert third == (0, "analysis_disabled")
+    assert seen == [
+        (3, 1.25, 45, True, "analysis_disabled", True, False),
+        (3, 1.0, 45, True, "analysis_disabled", True, False),
+        (3, 1.0, 45, True, "analysis_disabled", False, False),
+    ]
+
+
+def test_runtime_settings_failure_defers_unsubmitted_job_without_provider_call(
+    tmp_path,
+    monkeypatch,
+):
+    from app.services.runtime_settings import RuntimeSettingsStorageError
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    job, _ = _create_earnings_job(repository)
+    settings = _settings(repository.path)
+    submit_calls = 0
+
+    def unreadable():
+        raise RuntimeSettingsStorageError("invalid runtime document")
+
+    async def unexpected_submit(*_args, **_kwargs):
+        nonlocal submit_calls
+        submit_calls += 1
+        raise AssertionError("provider submission must stay closed")
+
+    monkeypatch.setattr(
+        "app.services.runtime_settings.get_effective_runtime_settings",
+        unreadable,
+    )
+    monkeypatch.setattr(runtime, "submit_background", unexpected_submit)
+
+    result = asyncio.run(
+        ai_worker.run_configured_once(repository, settings, "fail-closed")
+    )
+
+    stored = repository.get_job(job["job_id"])
+    assert result == (1, "runtime_settings_unavailable")
+    assert submit_calls == 0
+    assert stored["status"] == "pending"
+    assert stored["submission_started_at"] is None
+    assert stored["openai_response_id"] is None
+    assert stored["lease_owner"] is None
+    assert stored["error_code"] == "runtime_settings_unavailable"
+
+
+@pytest.mark.parametrize("cancel_requested", [False, True])
+def test_runtime_settings_failure_finishes_submitted_and_cancelled_jobs(
+    tmp_path,
+    monkeypatch,
+    cancel_requested,
+):
+    from app.services.runtime_settings import RuntimeSettingsStorageError
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    job, _ = _create_earnings_job(repository)
+    settings = _settings(repository.path)
+    setup_owner = "setup-owner"
+    claimed = repository.claim_due(setup_owner, 60)
+    assert claimed is not None
+    assert repository.mark_submission_started(
+        job["job_id"],
+        setup_owner,
+        daily_limit=4,
+    ) == "started"
+    repository.link_background_response(
+        job["job_id"],
+        setup_owner,
+        "resp_existing",
+    )
+    repository.record_background_response(
+        job["job_id"],
+        setup_owner,
+        "resp_existing",
+        "queued",
+        delay_seconds=1,
+    )
+    if cancel_requested:
+        repository.request_cancel(job["job_id"])
+    else:
+        with repository._connect() as connection:
+            connection.execute(
+                "UPDATE ai_jobs SET next_attempt_at='1970-01-01T00:00:00Z' "
+                "WHERE job_id=?",
+                (job["job_id"],),
+            )
+            connection.commit()
+
+    calls = {"submit": 0, "retrieve": 0, "cancel": 0}
+
+    def unreadable():
+        raise RuntimeSettingsStorageError("invalid runtime document")
+
+    async def unexpected_submit(*_args, **_kwargs):
+        calls["submit"] += 1
+        raise AssertionError("provider submission must stay closed")
+
+    async def retrieve(*_args, **_kwargs):
+        calls["retrieve"] += 1
+        return SimpleNamespace(
+            status="completed",
+            id="resp_existing",
+            output_text=json.dumps(_earnings_result()),
+            usage=None,
+        )
+
+    async def cancel(*_args, **_kwargs):
+        calls["cancel"] += 1
+        return SimpleNamespace(status="cancelled", id="resp_existing")
+
+    monkeypatch.setattr(
+        "app.services.runtime_settings.get_effective_runtime_settings",
+        unreadable,
+    )
+    monkeypatch.setattr(runtime, "submit_background", unexpected_submit)
+    monkeypatch.setattr(runtime, "retrieve", retrieve)
+    monkeypatch.setattr(runtime, "cancel", cancel)
+
+    result = asyncio.run(
+        ai_worker.run_configured_once(repository, settings, "drain-owner")
+    )
+
+    stored = repository.get_job(job["job_id"])
+    assert result == (1, "runtime_settings_unavailable")
+    assert calls["submit"] == 0
+    if cancel_requested:
+        assert stored["status"] == "cancelled"
+        assert calls == {"submit": 0, "retrieve": 0, "cancel": 1}
+    else:
+        assert stored["status"] == "completed"
+        assert calls == {"submit": 0, "retrieve": 1, "cancel": 0}
+
+
+def test_dollar_budget_blocks_before_provider_submission(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    repository.initialize()
+    job, created = _create_earnings_job(repository)
+    assert created is True
+    claimed = repository.claim_due("budget-owner", lease_seconds=60)
+    assert claimed is not None and claimed["job_id"] == job["job_id"]
+
+    reservation = runtime.budget_reservation_microusd("earnings_impact")
+    budget_usd = (reservation - 1) / 1_000_000
+    outcome = repository.mark_submission_started(
+        job["job_id"],
+        "budget-owner",
+        daily_limit=4,
+        daily_budget_usd=budget_usd,
+    )
+    stored = repository.get_job(job["job_id"])
+    snapshot = repository.budget_snapshot(
+        daily_limit=4,
+        daily_budget_usd=budget_usd,
+    )
+
+    assert outcome == "daily_budget"
+    assert stored is not None and stored["status"] == "budget_blocked"
+    assert stored["error_code"] == "daily_budget_usd_reached"
+    assert stored["submission_started_at"] is None
+    assert snapshot["dollar_budget_available"] is False
+    assert snapshot["budget_available"] is False
+
+
+def test_high_output_task_is_blocked_before_provider_call(tmp_path, monkeypatch):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    job, _ = _create_budget_job(repository, "market_focus", "A0000001")
+    settings = _settings(repository.path)
+    reservation = runtime.budget_reservation_microusd("market_focus")
+    settings.openai_daily_budget_usd = (reservation - 1) / 1_000_000
+    settings.openai_manual_cooldown_seconds = 0
+    calls = {"prepare": 0, "submit": 0}
+
+    def prepare(*_args, **_kwargs):
+        calls["prepare"] += 1
+        return object()
+
+    async def submit(*_args, **_kwargs):
+        calls["submit"] += 1
+        raise AssertionError("budget-blocked task reached the provider")
+
+    monkeypatch.setattr(runtime, "prepare_background", prepare)
+    monkeypatch.setattr(runtime, "submit_background", submit)
+    owner = "high-output-budget-owner"
+    claimed = repository.claim_due(owner, 60)
+    asyncio.run(process_job(repository, settings, claimed, owner))
+
+    stored = repository.get_job(job["job_id"])
+    assert runtime.max_output_tokens_for("market_focus") == 49_152
+    assert calls == {"prepare": 1, "submit": 0}
+    assert stored["status"] == "budget_blocked"
+    assert stored["error_code"] == "daily_budget_usd_reached"
+    assert stored["submission_started_at"] is None
+    assert stored["budget_charge_microusd"] == 0
+
+
+def test_completed_job_replaces_reservation_with_usage_cost(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    job, _ = _create_earnings_job(repository)
+    owner = "settlement-owner"
+    claimed = repository.claim_due(owner, 60)
+    assert claimed is not None
+    assert repository.mark_submission_started(
+        job["job_id"], owner, daily_limit=4
+    ) == "started"
+    reserved = repository.get_job(job["job_id"])
+    assert reserved["budget_charge_microusd"] == (
+        runtime.budget_reservation_microusd("earnings_impact")
+    )
+    usage = {
+        "input_tokens": 100,
+        "cached_input_tokens": 20,
+        "output_tokens": 50,
+        "reasoning_tokens": 10,
+        "total_tokens": 150,
+    }
+    repository.complete(job["job_id"], owner, _earnings_result(), usage)
+
+    completed = repository.get_job(job["job_id"])
+    expected = runtime.settled_usage_cost_microusd(
+        "earnings_impact",
+        usage,
+        fallback_microusd=reserved["budget_charge_microusd"],
+    )
+    assert expected == 1_005
+    assert completed["budget_charge_microusd"] == expected
+    assert completed["usage_total_tokens"] == 150
+
+
+def test_completed_charge_cannot_exceed_the_original_reservation(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    job, _ = _create_earnings_job(repository)
+    owner = "settlement-cap-owner"
+    claimed = repository.claim_due(owner, 60)
+    assert claimed is not None
+    assert repository.mark_submission_started(
+        job["job_id"], owner, daily_limit=4
+    ) == "started"
+    reservation = runtime.budget_reservation_microusd("earnings_impact")
+    repository.complete(
+        job["job_id"],
+        owner,
+        _earnings_result(),
+        {
+            "input_tokens": 1_050_000,
+            "cached_input_tokens": 0,
+            "output_tokens": 128_000,
+            "reasoning_tokens": 128_000,
+            "total_tokens": 1_178_000,
+        },
+    )
+
+    completed = repository.get_job(job["job_id"])
+    assert completed["budget_charge_microusd"] == reservation
+
+
+@pytest.mark.parametrize(
+    ("status", "refusal", "expected_status", "expected_error"),
+    [
+        ("completed", "不能处理", "failed", "provider_refusal"),
+        ("failed", None, "failed", "provider_failed"),
+        ("incomplete", None, "failed", "provider_incomplete"),
+        ("cancelled", None, "cancelled", None),
+    ],
+)
+def test_provider_terminal_non_success_persists_usage(
+    tmp_path,
+    monkeypatch,
+    status,
+    refusal,
+    expected_status,
+    expected_error,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    job, _ = _create_earnings_job(repository)
+    settings = _settings(repository.path)
+    usage = SimpleNamespace(
+        input_tokens=100,
+        output_tokens=50,
+        total_tokens=150,
+        input_tokens_details=SimpleNamespace(cached_tokens=20),
+        output_tokens_details=SimpleNamespace(reasoning_tokens=10),
+    )
+    response = SimpleNamespace(
+        status=status,
+        id=f"resp_{status}",
+        refusal=refusal,
+        usage=usage,
+    )
+
+    monkeypatch.setattr(runtime, "prepare_background", lambda *_args, **_kwargs: object())
+
+    async def submit(*_args, **_kwargs):
+        return response
+
+    monkeypatch.setattr(runtime, "submit_background", submit)
+    owner = f"terminal-{status}-owner"
+    claimed = repository.claim_due(owner, 60)
+    asyncio.run(process_job(repository, settings, claimed, owner))
+
+    stored = repository.get_job(job["job_id"])
+    assert stored["status"] == expected_status
+    assert stored["error_code"] == expected_error
+    assert stored["usage_input_tokens"] == 100
+    assert stored["usage_cached_input_tokens"] == 20
+    assert stored["usage_output_tokens"] == 50
+    assert stored["usage_reasoning_tokens"] == 10
+    assert stored["usage_total_tokens"] == 150
+    assert stored["budget_charge_microusd"] == 1_005
+
+
+def test_terminal_response_without_usage_keeps_full_reservation(
+    tmp_path,
+    monkeypatch,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    job, _ = _create_earnings_job(repository)
+    settings = _settings(repository.path)
+    response = SimpleNamespace(status="failed", id="resp_no_usage", usage=None)
+    monkeypatch.setattr(runtime, "prepare_background", lambda *_args, **_kwargs: object())
+
+    async def submit(*_args, **_kwargs):
+        return response
+
+    monkeypatch.setattr(runtime, "submit_background", submit)
+    owner = "terminal-no-usage-owner"
+    claimed = repository.claim_due(owner, 60)
+    asyncio.run(process_job(repository, settings, claimed, owner))
+
+    stored = repository.get_job(job["job_id"])
+    assert stored["status"] == "failed"
+    assert stored["usage_input_tokens"] is None
+    assert stored["usage_output_tokens"] is None
+    assert stored["budget_charge_microusd"] == (
+        runtime.budget_reservation_microusd("earnings_impact")
+    )
+
+
+def test_used_budget_plus_every_task_reservation_never_exceeds_cap(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    seed, _ = _create_budget_job(repository, "earnings_impact", "B0000001")
+    used_microusd = 480_000
+    budget_microusd = (
+        used_microusd + runtime.minimum_budget_reservation_microusd() - 1
+    )
+    budget_usd = budget_microusd / 1_000_000
+    owner = "budget-seed-owner"
+    claimed = repository.claim_due(owner, 60)
+    assert repository.mark_submission_started(
+        seed["job_id"],
+        owner,
+        daily_limit=4,
+        daily_budget_usd=budget_usd,
+    ) == "started"
+    repository.complete(
+        seed["job_id"],
+        owner,
+        _earnings_result(),
+        {
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "output_tokens": 32_000,
+            "reasoning_tokens": 0,
+            "total_tokens": 32_000,
+        },
+    )
+    assert repository.get_job(seed["job_id"])["budget_charge_microusd"] == (
+        used_microusd
+    )
+
+    for index, job_type in enumerate(runtime.AI_TASK_MAX_OUTPUT_TOKENS, start=2):
+        suffix = f"B{index:07d}"
+        job, _ = _create_budget_job(repository, job_type, suffix)
+        owner = f"budget-owner-{job_type}"
+        claimed = repository.claim_due(owner, 60)
+        assert claimed is not None and claimed["job_id"] == job["job_id"]
+        assert used_microusd + runtime.budget_reservation_microusd(
+            job_type
+        ) > budget_microusd
+        assert repository.mark_submission_started(
+            job["job_id"],
+            owner,
+            daily_limit=4,
+            daily_budget_usd=budget_usd,
+        ) == "daily_budget"
+        assert repository.get_job(job["job_id"])["submission_started_at"] is None
+
+    snapshot = repository.budget_snapshot(
+        daily_limit=4,
+        daily_budget_usd=budget_usd,
+    )
+    assert snapshot["budget_used_usd"] == used_microusd / 1_000_000
+    assert snapshot["dollar_budget_available"] is False
+
+
+def test_cancel_requested_is_visible_while_provider_job_is_active(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    repository.initialize()
+    job, created = _create_earnings_job(repository)
+    assert created is True
+    claimed = repository.claim_due("cancel-owner", lease_seconds=60)
+    assert claimed is not None
+    assert repository.mark_submission_started(
+        job["job_id"], "cancel-owner", daily_limit=4
+    ) == "started"
+
+    cancelled = repository.request_cancel(job["job_id"])
+    assert cancelled is not None
+    public = repository.public(cancelled)
+    assert public["status"] == "in_progress"
+    assert public["cancel_requested"] is True
+    assert public["cancellable"] is False
+
+
 def test_terra_runtime_defaults_are_explicit(monkeypatch):
     for name in (
         "OPENAI_MODEL",
@@ -139,27 +678,43 @@ def test_terra_runtime_defaults_are_explicit(monkeypatch):
     assert settings.openai_execution_mode == "background"
 
 
-def test_custom_provider_requires_explicit_capability_attestation(tmp_path):
+def test_runtime_capability_rejects_non_official_configuration(tmp_path):
     settings = _settings(tmp_path / "ai-jobs.db")
-    settings.openai_base_url = "https://proxy.example/v1"
-    settings.openai_custom_capabilities_confirmed = False
+    settings.openai_model = "unsupported-model"
     status = runtime.capability_status(settings)
     assert status["supported"] is False
-    assert status["reason"] == "custom_base_url_not_attested"
+    assert status["status"] == "runtime_configuration_invalid"
 
 
-@pytest.mark.parametrize(
-    ("configured_base_url", "expected_base_url"),
-    [
-        ("", "https://api.openai.com/v1"),
-        ("https://proxy.example/v1", "https://proxy.example/v1"),
-    ],
-)
-def test_client_always_receives_an_explicit_validated_base_url(
+def test_worker_health_reports_official_responses_sdk_without_a_key(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    repository.initialize()
+    settings = _settings(repository.path)
+    settings.openai_api_key = SecretStr("")
+
+    status = health_payload(repository, settings)
+
+    assert status["status"] == "disabled"
+    assert status["sdk_capability_supported"] is True
+    assert all(
+        status["methods"].get(name) is True
+        for name in ("create", "retrieve", "cancel")
+    )
+
+
+def test_all_paid_job_prompt_versions_invalidate_legacy_english_cache():
+    assert ai._PROMPT_VERSIONS == {
+        "earnings_impact": "earnings-impact-zh-cn-v3",
+        "option_alerts": "option-alerts-zh-cn-v3",
+        "signal_analysis": "signal-analysis-zh-cn-v3",
+        "news_impact": "news-impact-zh-cn-v2",
+        "market_focus": "market-focus-zh-cn-v2",
+    }
+
+
+def test_client_is_fixed_to_the_official_openai_base_url(
     tmp_path,
     monkeypatch,
-    configured_base_url,
-    expected_base_url,
 ):
     captured: dict = {}
     sentinel = object()
@@ -176,11 +731,11 @@ def test_client_always_receives_an_explicit_validated_base_url(
     monkeypatch.setattr(runtime, "_CLIENT", None)
     monkeypatch.setattr(runtime, "_CLIENT_SIGNATURE", None)
     settings = _settings(tmp_path / "ai-jobs.db")
-    settings.openai_base_url = configured_base_url
 
     assert runtime._client(settings) is sentinel
-    assert captured["base_url"] == expected_base_url
+    assert captured["base_url"] == "https://api.openai.com/v1"
     assert captured["api_key"] == "test-key"
+    assert captured["max_retries"] == 0
 
 
 def test_job_dedupe_is_persistent_and_public_shape_hides_response_id(tmp_path):
@@ -196,25 +751,52 @@ def test_job_dedupe_is_persistent_and_public_shape_hides_response_id(tmp_path):
     assert public["reasoning"] == "max"
 
 
-def test_job_identity_separates_execution_modes_and_migrates_legacy_hash(tmp_path):
+def test_job_dedupe_precedes_saturated_queue_capacity_check(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    first, created = _create_earnings_job(repository)
+    version, digest = runtime.schema_identity("earnings_impact")
+
+    duplicate, created_again = repository.create_job(
+        job_type="earnings_impact",
+        payload={"ticker": "AAPL", "name": "Apple"},
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="earnings-impact-v2",
+        schema_version=version,
+        schema_sha256=digest,
+        max_queued=1,
+    )
+
+    assert created is True
+    assert created_again is False
+    assert duplicate["job_id"] == first["job_id"]
+    with repository._connect() as connection:
+        assert connection.execute(
+            """SELECT COUNT(*) FROM ai_jobs
+               WHERE status IN ('pending','queued','in_progress')"""
+        ).fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0] == 1
+
+
+def test_job_identity_rejects_sync_mode_and_migrates_legacy_hash(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     background, created = _create_earnings_job(repository)
     assert created is True
 
     version, digest = runtime.schema_identity("earnings_impact")
-    worker_sync, created = repository.create_job(
-        job_type="earnings_impact",
-        payload={"ticker": "AAPL", "name": "Apple"},
-        model="gpt-5.6-terra",
-        reasoning="max",
-        execution_mode="worker_sync",
-        prompt_version="earnings-impact-v2",
-        schema_version=version,
-        schema_sha256=digest,
-        max_queued=200,
-    )
-    assert created is True
-    assert worker_sync["job_id"] != background["job_id"]
+    with pytest.raises(ValueError, match="background_execution_required"):
+        repository.create_job(
+            job_type="earnings_impact",
+            payload={"ticker": "AAPL", "name": "Apple"},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="worker_sync",
+            prompt_version="earnings-impact-v2",
+            schema_version=version,
+            schema_sha256=digest,
+            max_queued=200,
+        )
 
     payload_json = repository._canonical_payload({"ticker": "AAPL", "name": "Apple"})
     legacy_hash = repository._request_hash_legacy(
@@ -235,6 +817,32 @@ def test_job_identity_separates_execution_modes_and_migrates_legacy_hash(tmp_pat
     assert created is False
     assert migrated["job_id"] == background["job_id"]
     assert migrated["request_hash"] != legacy_hash
+
+    source_legacy_hash = repository._request_hash_source_legacy(
+        "earnings_impact",
+        payload_json,
+        "manual",
+        "gpt-5.6-terra",
+        "max",
+        "background",
+        "earnings-impact-v2",
+        version,
+        digest,
+    )
+    with repository._connect() as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET request_hash=? WHERE job_id=?",
+            (source_legacy_hash, background["job_id"]),
+        )
+        connection.commit()
+    cross_source, created = _create_earnings_job(
+        repository,
+        submission_source="scheduled",
+    )
+    assert created is False
+    assert cross_source["job_id"] == background["job_id"]
+    assert cross_source["request_hash"] != source_legacy_hash
+    assert cross_source["submission_source"] == "manual"
 
 
 def test_structured_result_rejects_fences_and_unknown_fields():
@@ -379,6 +987,7 @@ def test_background_link_failure_is_not_retryable_as_a_known_submission(
         schema_version=runtime.schema_identity("earnings_impact")[0],
         schema_sha256=runtime.schema_identity("earnings_impact")[1],
         max_queued=200,
+        submission_source="scheduled",
         force_retry=True,
     )
     assert created is False
@@ -426,17 +1035,19 @@ def test_elapsed_poll_window_keeps_the_existing_background_response(
         return SimpleNamespace(status="in_progress", id="resp_existing")
 
     monkeypatch.setattr(runtime, "retrieve", fake_retrieve)
+    submitted_at = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
     with repository._connect() as connection:
         connection.execute(
             """
             UPDATE ai_jobs
             SET status='in_progress', openai_response_id='resp_existing',
-                submission_started_at='2020-01-01T00:00:00Z',
-                submitted_at='2020-01-01T00:00:00Z',
+                submission_started_at=?, submitted_at=?,
                 next_attempt_at='1970-01-01T00:00:00Z'
             WHERE job_id=?
             """,
-            (row["job_id"],),
+            (submitted_at, submitted_at, row["job_id"]),
         )
         connection.commit()
 
@@ -447,6 +1058,46 @@ def test_elapsed_poll_window_keeps_the_existing_background_response(
     assert deferred["status"] == "in_progress"
     assert deferred["openai_response_id"] == "resp_existing"
     assert deferred["error_code"] == "poll_window_elapsed"
+
+
+def test_response_expiry_uses_submission_time_not_queue_creation_time(
+    monkeypatch,
+    tmp_path,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    settings = _settings(tmp_path / "ai-jobs.db")
+    owner = "worker-old-queue"
+    retrieved = 0
+
+    async def fake_retrieve(*_args, **_kwargs):
+        nonlocal retrieved
+        retrieved += 1
+        return SimpleNamespace(status="in_progress", id="resp_recent")
+
+    monkeypatch.setattr(runtime, "retrieve", fake_retrieve)
+    submitted_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    with repository._connect() as connection:
+        connection.execute(
+            """
+            UPDATE ai_jobs
+            SET status='in_progress', openai_response_id='resp_recent',
+                created_at='2020-01-01T00:00:00Z',
+                submission_started_at=?, submitted_at=?,
+                next_attempt_at='1970-01-01T00:00:00Z'
+            WHERE job_id=?
+            """,
+            (submitted_at, submitted_at, row["job_id"]),
+        )
+        connection.commit()
+
+    claimed = repository.claim_due(owner, 60)
+    asyncio.run(process_job(repository, settings, claimed, owner))
+
+    waiting = repository.get_job(row["job_id"])
+    assert retrieved == 1
+    assert waiting["status"] == "in_progress"
+    assert waiting["error_code"] is None
 
 
 def test_legacy_get_never_creates_paid_analysis(monkeypatch, tmp_path):
@@ -463,6 +1114,27 @@ def test_legacy_get_never_creates_paid_analysis(monkeypatch, tmp_path):
     assert repository.health()["pending"] == 0
 
 
+def test_cached_get_hides_a_forged_zh_cn_legacy_result(monkeypatch, tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    owner = "legacy-cache-owner"
+    claimed = repository.claim_due(owner, 60)
+    legacy = _earnings_result()
+    legacy["summary"] = "Markets rally after strong earnings"
+    repository.complete(claimed["job_id"], owner, legacy, {})
+    monkeypatch.setattr(ai, "_job_repository", lambda: repository)
+    app = FastAPI()
+    app.include_router(ai.router)
+    client = TestClient(app, base_url="http://localhost")
+
+    response = client.get("/api/ai/earnings-impact/AAPL")
+
+    assert response.status_code == 409
+    assert response.json()["status"] == "analysis_required"
+    assert "Markets rally" not in response.text
+    assert repository.get_job(row["job_id"])["result_json"] is not None
+
+
 def test_job_post_is_fast_local_and_idempotent(monkeypatch, tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     settings = _settings(tmp_path / "ai-jobs.db")
@@ -472,7 +1144,6 @@ def test_job_post_is_fast_local_and_idempotent(monkeypatch, tmp_path):
 
     app = FastAPI()
     app.include_router(ai.router)
-    app.dependency_overrides[require_expensive_action] = lambda: None
     client = TestClient(app, base_url="http://localhost")
     body = {
         "ticker": "AAPL",
@@ -489,6 +1160,8 @@ def test_job_post_is_fast_local_and_idempotent(monkeypatch, tmp_path):
     assert first.json()["job_id"] == second.json()["job_id"]
     assert first.json()["status"] == "pending"
     assert second.json()["cached"] is False
+    stored = repository.get_job(first.json()["job_id"])
+    assert stored["prompt_version"] == "earnings-impact-zh-cn-v3"
 
 
 def test_option_alert_failed_job_requires_explicit_force_to_requeue(
@@ -503,7 +1176,6 @@ def test_option_alert_failed_job_requires_explicit_force_to_requeue(
 
     app = FastAPI()
     app.include_router(ai.router)
-    app.dependency_overrides[require_expensive_action] = lambda: None
     client = TestClient(app, base_url="http://localhost")
     body = {"ticker": "AAPL", "alerts": [], "underlying_price": 200}
 
@@ -521,8 +1193,11 @@ def test_option_alert_failed_job_requires_explicit_force_to_requeue(
     assert first.status_code == 202
     assert reused.json()["status"] == "failed"
     assert retried.status_code == 202
-    assert retried.json()["job_id"] == first.json()["job_id"]
+    assert retried.json()["job_id"] != first.json()["job_id"]
     assert retried.json()["status"] == "pending"
+    assert repository.get_job(first.json()["job_id"])["status"] == "failed"
+    retried_row = repository.get_job(retried.json()["job_id"])
+    assert retried_row["retry_of_job_id"] == first.json()["job_id"]
 
 
 def test_large_valid_signal_result_is_persisted_separately_from_request_limit(
@@ -563,10 +1238,10 @@ def test_large_valid_signal_result_is_persisted_separately_from_request_limit(
     assert completed["result"]["asset"] == "AAPL"
 
 
-def test_paid_job_creation_is_disabled_without_app_auth(monkeypatch, tmp_path):
-    monkeypatch.delenv("APP_AUTH_TOKEN", raising=False)
+def test_paid_job_route_has_no_extra_action_capability(monkeypatch, tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     monkeypatch.setattr(ai, "_job_repository", lambda: repository)
+    monkeypatch.setattr(ai, "_require_runtime_capability", lambda: None)
     app = FastAPI()
     app.include_router(ai.router)
     client = TestClient(app, base_url="http://localhost")
@@ -576,9 +1251,8 @@ def test_paid_job_creation_is_disabled_without_app_auth(monkeypatch, tmp_path):
         json={"ticker": "AAPL"},
     )
 
-    assert response.status_code == 503
-    assert response.json()["detail"]["code"] == "capability_disabled"
-    assert repository.health()["pending"] == 0
+    assert response.status_code == 202
+    assert repository.health()["pending"] == 1
 
 
 def test_pending_cancel_is_idempotent(tmp_path):
@@ -622,6 +1296,133 @@ def test_claimed_pending_cancel_cannot_be_resurrected_or_submitted(
     assert calls == 0
 
 
+def test_daily_job_limit_is_reserved_atomically_before_provider_submission(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    version, digest = runtime.schema_identity("earnings_impact")
+
+    def create(ticker: str):
+        return repository.create_job(
+            job_type="earnings_impact",
+            payload={"ticker": ticker, "name": ticker},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="background",
+            prompt_version="earnings-impact-v2",
+            schema_version=version,
+            schema_sha256=digest,
+            max_queued=200,
+        )[0]
+
+    for index in range(4):
+        row = create(f"T{index}")
+        owner = f"worker-{index}"
+        claimed = repository.claim_due(owner, 60)
+        assert claimed is not None and claimed["job_id"] == row["job_id"]
+        assert repository.mark_submission_started(
+            row["job_id"],
+            owner,
+            daily_limit=4,
+            daily_budget_usd=10.0,
+        ) == "started"
+        repository.fail(row["job_id"], owner, "fixture_terminal")
+
+    blocked = create("LIMIT")
+    owner = "worker-limit"
+    claimed = repository.claim_due(owner, 60)
+    assert claimed is not None and claimed["job_id"] == blocked["job_id"]
+    calls = 0
+
+    async def forbidden_submit(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        raise AssertionError("daily limit reached the provider")
+
+    monkeypatch.setattr(runtime, "submit_background", forbidden_submit)
+    asyncio.run(process_job(repository, _settings(tmp_path / "ai-jobs.db"), claimed, owner))
+
+    final = repository.get_job(blocked["job_id"])
+    assert final["status"] == "budget_blocked"
+    assert final["error_code"] == "daily_job_limit_reached"
+    assert final["submission_started_at"] is None
+    assert calls == 0
+
+
+def test_concurrent_daily_reservations_cannot_cross_the_limit(tmp_path) -> None:
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    version, digest = runtime.schema_identity("earnings_impact")
+
+    def create(ticker: str) -> dict:
+        return repository.create_job(
+            job_type="earnings_impact",
+            payload={"ticker": ticker, "name": ticker},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="background",
+            prompt_version="earnings-impact-v2",
+            schema_version=version,
+            schema_sha256=digest,
+            max_queued=200,
+        )[0]
+
+    for index in range(3):
+        row = create(f"USED{index}")
+        owner = f"used-{index}"
+        claimed = repository.claim_due(owner, 60)
+        assert claimed is not None
+        assert repository.mark_submission_started(
+            row["job_id"],
+            owner,
+            daily_limit=4,
+            daily_budget_usd=10.0,
+        )
+        repository.fail(row["job_id"], owner, "fixture_terminal")
+
+    rows = [create("RACE1"), create("RACE2")]
+    owners = ["race-owner-1", "race-owner-2"]
+    claimed_rows = [repository.claim_due(owner, 60) for owner in owners]
+    assert all(row is not None for row in claimed_rows)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        decisions = list(
+            executor.map(
+                lambda pair: repository.mark_submission_started(
+                    pair[0]["job_id"],
+                    pair[1],
+                    daily_limit=4,
+                    daily_budget_usd=10.0,
+                ),
+                zip(claimed_rows, owners, strict=True),
+            )
+        )
+
+    assert sorted(decisions) == ["concurrency_limit", "started"]
+    started_index = decisions.index("started")
+    deferred_index = decisions.index("concurrency_limit")
+    repository.fail(
+        rows[started_index]["job_id"],
+        owners[started_index],
+        "fixture_terminal",
+    )
+    with repository._connect() as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET next_attempt_at=NULL WHERE job_id=?",
+            (rows[deferred_index]["job_id"],),
+        )
+        connection.commit()
+    deferred = repository.claim_due(owners[deferred_index], 60)
+    assert deferred is not None
+    assert repository.mark_submission_started(
+        deferred["job_id"],
+        owners[deferred_index],
+        daily_limit=4,
+        daily_budget_usd=10.0,
+    ) == "daily_limit"
+    assert repository.get_job(deferred["job_id"])["status"] == "budget_blocked"
+
+
 def test_explicit_retry_requeues_safe_terminal_job_but_not_unknown_submission(
     tmp_path,
 ):
@@ -644,11 +1445,13 @@ def test_explicit_retry_requeues_safe_terminal_job_but_not_unknown_submission(
         force_retry=True,
     )
     assert created is True
-    assert retried["job_id"] == row["job_id"]
+    assert retried["job_id"] != row["job_id"]
+    assert retried["retry_of_job_id"] == row["job_id"]
+    assert retried["execution_number"] == 2
     assert retried["status"] == "pending"
 
     claimed = repository.claim_due(owner, 60)
-    repository.fail(row["job_id"], owner, "submission_outcome_unknown")
+    repository.fail(retried["job_id"], owner, "submission_outcome_unknown")
     blocked, created = repository.create_job(
         job_type="earnings_impact",
         payload={"ticker": "AAPL", "name": "Apple"},
@@ -666,58 +1469,55 @@ def test_explicit_retry_requeues_safe_terminal_job_but_not_unknown_submission(
     assert blocked["error_code"] == "submission_outcome_unknown"
 
 
-def test_interrupted_worker_sync_job_can_be_explicitly_retried(tmp_path):
+def test_explicit_retry_respects_the_queue_capacity_limit(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     version, digest = runtime.schema_identity("earnings_impact")
-    row, _ = repository.create_job(
-        job_type="earnings_impact",
-        payload={"ticker": "AAPL", "name": "Apple"},
-        model="gpt-5.6-terra",
-        reasoning="max",
-        execution_mode="worker_sync",
-        prompt_version="earnings-impact-v2",
-        schema_version=version,
-        schema_sha256=digest,
-        max_queued=200,
-    )
-    with repository._connect() as connection:
-        connection.execute(
-            """
-            UPDATE ai_jobs
-            SET status='in_progress', submission_started_at=created_at,
-                submitted_at=created_at, lease_owner=NULL,
-                lease_expires_at='1970-01-01T00:00:00Z',
-                next_attempt_at='1970-01-01T00:00:00Z'
-            WHERE job_id=?
-            """,
-            (row["job_id"],),
+
+    def create(ticker: str, *, force_retry: bool = False):
+        return repository.create_job(
+            job_type="earnings_impact",
+            payload={"ticker": ticker, "name": ticker},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="background",
+            prompt_version="earnings-impact-v2",
+            schema_version=version,
+            schema_sha256=digest,
+            max_queued=1,
+            force_retry=force_retry,
         )
-        connection.commit()
 
-    owner = "worker-sync-recovery"
+    terminal, _ = create("AAPL")
+    owner = "worker-queue-capacity"
     claimed = repository.claim_due(owner, 60)
-    settings = _settings(tmp_path / "ai-jobs.db")
-    settings.openai_execution_mode = "worker_sync"
-    asyncio.run(process_job(repository, settings, claimed, owner))
-    interrupted = repository.get_job(row["job_id"])
-    assert interrupted["status"] == "failed"
-    assert interrupted["error_code"] == "worker_interrupted"
+    assert claimed is not None and claimed["job_id"] == terminal["job_id"]
+    repository.fail(terminal["job_id"], owner, "provider_failed")
+    active, _ = create("MSFT")
 
-    retried, created = repository.create_job(
-        job_type="earnings_impact",
-        payload={"ticker": "AAPL", "name": "Apple"},
-        model="gpt-5.6-terra",
-        reasoning="max",
-        execution_mode="worker_sync",
-        prompt_version="earnings-impact-v2",
-        schema_version=version,
-        schema_sha256=digest,
-        max_queued=200,
-        force_retry=True,
-    )
-    assert created is True
-    assert retried["job_id"] == row["job_id"]
-    assert retried["status"] == "pending"
+    with pytest.raises(RuntimeError, match="ai_job_queue_full"):
+        create("AAPL", force_retry=True)
+
+    assert repository.get_job(terminal["job_id"])["status"] == "failed"
+    assert repository.get_job(active["job_id"])["status"] == "pending"
+    with repository._connect() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0] == 2
+
+
+def test_worker_sync_job_creation_is_sealed(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    version, digest = runtime.schema_identity("earnings_impact")
+    with pytest.raises(ValueError, match="background_execution_required"):
+        repository.create_job(
+            job_type="earnings_impact",
+            payload={"ticker": "AAPL", "name": "Apple"},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="worker_sync",
+            prompt_version="earnings-impact-v2",
+            schema_version=version,
+            schema_sha256=digest,
+            max_queued=200,
+        )
 
 
 def test_background_cancel_waits_for_provider_terminal_state(

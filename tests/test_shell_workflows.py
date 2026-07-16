@@ -1,407 +1,241 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
+import stat
 import subprocess
-import time
+import sys
 from pathlib import Path
 
 import pytest
+from dotenv import dotenv_values
+
+from app.api import stocks
+from app.tools import personal_secrets
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
+WORKER_HEALTH = (
+    '{"healthy":true,"schema_version":"optix-worker-v2","tasks":['
+    '{"task_name":"breakout"},{"task_name":"catalyst_sync"},'
+    '{"task_name":"focus"},{"task_name":"ai_jobs"},'
+    '{"task_name":"maintenance"},{"task_name":"focus_refresh"},'
+    '{"task_name":"strength_refresh"},{"task_name":"breakout_refresh"},'
+    '{"task_name":"retention"}]}'
+)
+REMOVED_RUNTIME_KEYS = (
+    "ACCESS_MODE",
+    "APP_AUTH_TOKEN",
+    "PUBLIC_READ_API_ENABLED",
+    "ALLOW_INSECURE_PUBLIC_BIND",
+    "MACROLENS_BASE_URL",
+    "MACROLENS_INTERNAL_TOKEN",
+    "OPENAI_JOB_DB_PATH",
+    "MACROLENS_CACHE_DB_PATH",
+    "BREAKOUT_DB_PATH",
+    "OPTIX_WORKER_DB_PATH",
+    "OPTIX_WORKER_LOCK_PATH",
+    "WATCHLIST_SNAPSHOT_PATH",
+    "OPTION_PRO_RUNTIME_SETTINGS_PATH",
+)
+
+
+def _template_keys(path: str) -> set[str]:
+    keys: set[str] = set()
+    for raw_line in (ROOT / path).read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            keys.add(line.split("=", 1)[0])
+    return keys
+
 
 def _isolated_environment() -> dict[str, str]:
-    """Return a host environment that cannot override the fixture dotenv."""
     environment = os.environ.copy()
-    for raw_line in (ROOT / ".env.example").read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key = line.split("=", 1)[0].strip()
-        if key:
+    for key in (
+        _template_keys(".env.example")
+        | _template_keys("machine.env.example")
+        | _template_keys("secrets.env.example")
+        | set(REMOVED_RUNTIME_KEYS)
+    ):
+        environment.pop(key, None)
+    for key in tuple(environment):
+        if key.startswith("COMPOSE_") or key.startswith("FAKE_"):
             environment.pop(key, None)
     environment.pop("APP_COMMIT", None)
     environment.pop("APP_VERSION", None)
-    for key in tuple(environment):
-        if key.startswith("COMPOSE_"):
-            environment.pop(key, None)
     return environment
 
 
-def _fake_docker(bin_dir: Path) -> None:
+def _fake_tools(bin_dir: Path) -> None:
     docker = bin_dir / "docker"
     docker.write_text(
-        """#!/usr/bin/env bash
+        f"""#!/usr/bin/env bash
 set -Eeuo pipefail
-if [ "${1:-}" = "info" ]; then
-    exit 0
-fi
-if [ "${1:-}" != "compose" ]; then
-    exit 2
-fi
+
+log() {{ printf '%s\n' "$1" >> .fake-order; }}
+
+if [ "${{1:-}}" = "info" ] || [ "${{1:-}}" = "ps" ]; then exit 0; fi
+if [ "${{1:-}}" != "compose" ]; then exit 2; fi
 shift
-if [ "${1:-}" = "version" ]; then
-    printf '2.24.0\\n'
-    exit 0
+if [ "${{1:-}}" != version ] && [ -n "${{FAKE_COMPOSE_ENV_LOG:-}}" ]; then
+    printf '%s\n' "${{COMPOSE_ENV_FILES:-}}" >> "$FAKE_COMPOSE_ENV_LOG"
 fi
-if [ "${1:-}" = "build" ]; then
-    printf '%s\\n' "$*" >> .fake-build-log
-    touch .fake-backend-image-built
-    printf '%s\\n' 'build' >> .fake-deploy-order-log
-    exit 0
-fi
-if [ "${1:-}" = "up" ]; then
-    printf '%s\\n' 'up' >> .fake-deploy-order-log
-    exit 0
-fi
-if [ "${1:-}" = "exec" ] && [[ " $* " == *" focus-context-producer "*" --healthcheck "* ]]; then
-    sequence_file=".fake-focus-health-sequence"
-    count_file=".fake-focus-health-count"
-    if [ -f "$sequence_file" ]; then
-        count=0
-        if [ -f "$count_file" ]; then
-            count="$(cat "$count_file")"
+
+case "${{1:-}}" in
+    version)
+        printf '2.24.0\n'
+        ;;
+    config)
+        if [[ " $* " == *" --format json "* ]]; then
+            printf '{{"name":"option-pro"}}\n'
         fi
-        count=$((count + 1))
-        printf '%s\\n' "$count" > "$count_file"
-        payload="$(sed -n "${count}p" "$sequence_file")"
-        if [ -z "$payload" ]; then
-            payload="$(tail -n 1 "$sequence_file")"
-        fi
-        if [ "${FAKE_FOCUS_HEALTH_HANG:-false}" = "true" ]; then
-            exec /bin/sleep 60
-        fi
-        printf '%s\\n' "$payload"
-    else
-        printf '{"healthy":true,"status":"disabled","enabled":false,"ready_dependency":false}\\n'
-    fi
-    exit 0
-fi
-if [ "${1:-}" = "exec" ] && [[ " $* " == *" catalyst-sync-worker "*" --request-refresh "* ]]; then
-    printf '%s\\n' 'requested' >> .fake-catalyst-refresh-log
-    printf '{"status":"refresh_requested","streams":["health","feed"],"remote_checked":false}\\n'
-    exit 0
-fi
-if [ "${1:-}" = "exec" ] && [[ " $* " == *" catalyst-sync-worker "*" --healthcheck "* ]]; then
-    enabled="$(awk -F= '$1 == "MACROLENS_ENABLED" {print $2}' .env | tail -n 1)"
-    case "$enabled" in
-        1|true|TRUE|yes|YES)
-            printf '{"healthy":true,"status":"ok","enabled":true,"contract":{"valid":true}}\\n'
-            ;;
-        *)
-            printf '{"healthy":true,"status":"disabled","enabled":false,"contract":{"valid":null}}\\n'
-            ;;
-    esac
-    exit 0
-fi
-if [ "${1:-}" = "exec" ] && [[ " $* " == *" backend python -c "* ]] && [[ " $* " == *"deployment_access_probe"* ]]; then
-    printf '%s\n' "$*" > .fake-deployment-access-probe-log
-    exit "${FAKE_DEPLOYMENT_ACCESS_PROBE_EXIT:-0}"
-fi
-if { [ "${1:-}" = "exec" ] || [ "${1:-}" = "run" ]; } && \
-   { [[ " $* " == *" backend python - seed"* ]] || \
-     [[ " $* " == *" backend python - validate"* ]] || \
-     [[ " $* " == *" backend python - wait"* ]]; }; then
-    container_mode="$1"
-    shift
-    while [ "$#" -gt 0 ]; do
-        case "$1" in
-            -T|--rm|--no-deps)
-                shift
-                ;;
-            -e)
-                export "$2"
-                shift 2
-                ;;
-            backend)
-                shift
-                break
-                ;;
-            *)
-                shift
-                ;;
-        esac
-    done
-    if [ "${1:-}" != "python" ] || [ "${2:-}" != "-" ] || [ "$#" -lt 3 ]; then
-        exit 2
-    fi
-    shift 2
-    watchlist_action="${1:-}"
-    case "$watchlist_action" in
-        seed|validate|wait)
-            ;;
-        *)
+        ;;
+    build)
+        log build
+        ;;
+    run)
+        if [[ " $* " == *" --rm --no-deps -T backend python -m app.tools.validate_personal_deployment "* ]]; then
+            log validate
+            PYTHONPATH="$PWD/backend${{PYTHONPATH:+:${{PYTHONPATH}}}}" \
+                "$FAKE_CONTAINER_PYTHON" -m app.tools.validate_personal_deployment
+        else
             exit 2
-            ;;
-    esac
-    if [ -n "${WATCHLIST_SNAPSHOT_ACTION:-}" ] && [ "$WATCHLIST_SNAPSHOT_ACTION" != "$watchlist_action" ]; then
+        fi
+        ;;
+    up)
+        log up
+        ;;
+    exec)
+        if [[ " $* " == *" backend python -"* ]]; then
+            log verify-backend
+            printf '{{"status":"ready","app_commit":"unknown","frontend":{{"ready":true}}}}\n'
+        elif [[ " $* " == *" worker python -m app.worker --healthcheck"* ]]; then
+            log verify-worker
+            worker_health='{WORKER_HEALTH}'
+            printf '%s\n' "${{FAKE_WORKER_HEALTH:-$worker_health}}"
+        else
+            exit 2
+        fi
+        ;;
+    port)
+        printf '127.0.0.1:2000\n'
+        ;;
+    ps|logs|down|restart)
+        ;;
+    *)
         exit 2
-    fi
-    if [ "$container_mode" = "exec" ] && [ "$watchlist_action" = "seed" ] && [ "${FAKE_WATCHLIST_EXEC_UNAVAILABLE:-false}" = "true" ]; then
-        printf '%s\n' "exec:${watchlist_action}:unavailable" >> .fake-watchlist-container-log
-        printf '%s\n' "exec:${watchlist_action}:unavailable" >> .fake-deploy-order-log
-        exit 1
-    fi
-    if [ "$container_mode" = "run" ] && [ ! -f .fake-backend-image-built ]; then
-        printf '%s\n' "run:${watchlist_action}:before-build" >> .fake-watchlist-container-log
-        printf '%s\n' "run:${watchlist_action}:before-build" >> .fake-deploy-order-log
-        exit 1
-    fi
-    if [ -n "${FAKE_WATCHLIST_SNAPSHOT_PATH:-}" ]; then
-        export WATCHLIST_SNAPSHOT_PATH="$FAKE_WATCHLIST_SNAPSHOT_PATH"
-    fi
-    printf '%s\n' "${container_mode}:${watchlist_action}" >> .fake-watchlist-container-log
-    printf '%s\n' "${container_mode}:${watchlist_action}" >> .fake-deploy-order-log
-    PYTHONPATH="${FAKE_CATALYST_PYTHONPATH:?}" python3 - "$@"
-    exit $?
-fi
-if [ "${1:-}" = "exec" ] && [[ " $* " == *" backend python -c "* ]] && [[ " $* " == *"deployment_status_ready"* ]]; then
-    shift
-    while [ "$#" -gt 0 ]; do
-        case "$1" in
-            -T)
-                shift
-                ;;
-            -e)
-                export "$2"
-                shift 2
-                ;;
-            backend)
-                shift
-                break
-                ;;
-            *)
-                shift
-                ;;
-        esac
-    done
-    if [ "${1:-}" != "python" ] || [ "${2:-}" != "-c" ] || [ "$#" -ne 3 ]; then
-        exit 2
-    fi
-    if [ -z "${FAKE_CATALYST_PYTHONPATH:-}" ]; then
-        exit 0
-    fi
-    PYTHONPATH="${FAKE_CATALYST_PYTHONPATH:?}" python3 -c "$3"
-    exit $?
-fi
-if [ "${1:-}" = "exec" ] && [[ " $* " == *" breakout-worker "*" --healthcheck "* ]]; then
-    enabled="$(awk -F= '$1 == "BREAKOUT_RADAR_ENABLED" {print $2}' .env | tail -n 1)"
-    enabled="${enabled%\\\"}"; enabled="${enabled#\\\"}"
-    enabled="${enabled%\\'}"; enabled="${enabled#\\'}"
-    case "$enabled" in
-        1|true|TRUE|yes|YES) printf '{"healthy":true,"status":"active"}\\n' ;;
-        *) printf '{"healthy":true,"status":"disabled"}\\n' ;;
-    esac
-fi
-exit 0
+        ;;
+esac
 """,
         encoding="utf-8",
     )
     docker.chmod(0o755)
+    sleep = bin_dir / "sleep"
+    sleep.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    sleep.chmod(0o755)
 
 
-def _deployment_root(tmp_path: Path, env_text: str) -> tuple[Path, dict[str, str]]:
+def _replace(text: str, key: str, value: str) -> str:
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if line.startswith(f"{key}="):
+            lines[index] = f"{key}={value}"
+            return "\n".join(lines) + "\n"
+    raise AssertionError(key)
+
+
+def _personal_config(mode: str = "private_network") -> str:
+    source = (ROOT / "config" / "personal.toml").read_text(encoding="utf-8")
+    lines = source.splitlines()
+    in_access = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == "[access]":
+            in_access = True
+            continue
+        if stripped.startswith("["):
+            in_access = False
+        if in_access and stripped.startswith("mode ="):
+            lines[index] = f'mode = "{mode}"'
+            return "\n".join(lines) + "\n"
+    raise AssertionError("[access].mode")
+
+
+def _copy_deployment_validator(root: Path) -> None:
+    backend = root / "backend" / "app"
+    (backend / "tools").mkdir(parents=True)
+    (backend / "services").mkdir()
+    for relative in (
+        "__init__.py",
+        "access.py",
+        "config.py",
+        "data_paths.py",
+        "deployment_boundary.py",
+        "legacy_env_adapter.py",
+        "personal_config.py",
+        "runtime_environment.py",
+        "services/__init__.py",
+        "services/request_security.py",
+        "tools/__init__.py",
+        "tools/migrate_legacy_machine_environment.py",
+        "tools/validate_personal_deployment.py",
+    ):
+        shutil.copy2(ROOT / "backend" / "app" / relative, backend / relative)
+
+
+def _deployment_root(
+    tmp_path: Path,
+    machine_text: str | None = None,
+    secrets_text: str | None = None,
+    *,
+    access_mode: str = "private_network",
+) -> tuple[Path, dict[str, str]]:
     root = tmp_path / "option-pro"
     scripts = root / "scripts"
+    config = root / "config"
     scripts.mkdir(parents=True)
+    config.mkdir()
     shutil.copy2(ROOT / "scripts" / "deploy.sh", scripts / "deploy.sh")
-    shutil.copy2(
-        ROOT / "scripts" / "watchlist_snapshot.py",
-        scripts / "watchlist_snapshot.py",
-    )
-    contracts = root / "contracts"
-    contracts.mkdir()
-    shutil.copy2(
-        ROOT / "contracts" / "macrolens-option-pro-v2.json",
-        contracts / "macrolens-option-pro-v2.json",
-    )
-    (root / ".env").write_text(env_text, encoding="utf-8")
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    _fake_docker(bin_dir)
-    environment = _isolated_environment()
-    environment["PATH"] = f"{bin_dir}{os.pathsep}{environment['PATH']}"
-    fake_python = tmp_path / "fake-python"
-    fake_python.mkdir()
-    (fake_python / "sitecustomize.py").write_text(
-        """from __future__ import annotations
-
-import io
-import os
-import time
-import urllib.error
-import urllib.request
-from datetime import datetime, timezone
-from pathlib import Path
-
-
-_real_urlopen = urllib.request.urlopen
-
-
-def _timestamp(offset_seconds: float) -> str:
-    cutoff = float(os.environ.get("CATALYST_DEPLOY_NOT_BEFORE_EPOCH", "0"))
-    value = datetime.fromtimestamp(cutoff + offset_seconds, tz=timezone.utc)
-    return value.isoformat().replace("+00:00", "Z")
-
-
-def _active_payload(state: str) -> str:
-    health_at = _timestamp(1 if state in {"health_only", "ready"} else -1)
-    feed_at = _timestamp(1 if state == "ready" else -1)
-    return __import__("json").dumps(
-        {
-            "enabled": True,
-            "status": "active",
-            "remote_status": "ok",
-            "last_sync_at": feed_at,
-            "snapshot_id": "snapshot-current",
-            "resync_required": False,
-            "analysis_trigger_enabled": True,
-            "model": "gpt-5.6-terra",
-            "reasoning": "max",
-            "execution_mode": "background",
-            "expected_model": "gpt-5.6-terra",
-            "expected_reasoning": "max",
-            "schema_version": "macrolens-option-pro-v2",
-            "streams": {
-                "health": {"last_success_at": health_at},
-                "feed": {"last_success_at": feed_at},
-            },
-        },
-        separators=(",", ":"),
-    )
-
-
-def _disabled_payload() -> str:
-    return __import__("json").dumps(
-        {
-            "enabled": False,
-            "status": "disabled",
-            "remote_status": None,
-            "last_sync_at": None,
-            "snapshot_id": None,
-            "resync_required": False,
-            "analysis_trigger_enabled": False,
-            "model": None,
-            "reasoning": None,
-            "execution_mode": None,
-            "expected_model": "gpt-5.6-terra",
-            "expected_reasoning": "max",
-            "schema_version": "macrolens-option-pro-v2",
-            "streams": {},
-        },
-        separators=(",", ":"),
-    )
-
-
-def _next_status() -> str:
-    sequence_path = os.environ.get("FAKE_CATALYST_STATUS_SEQUENCE", "")
-    if not sequence_path:
-        enabled = os.environ.get("EXPECTED_CATALYST_ENABLED", "false") == "true"
-        return _active_payload("ready") if enabled else _disabled_payload()
-
-    states = [
-        line.strip()
-        for line in Path(sequence_path).read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
-    if not states:
-        raise RuntimeError("fake Catalyst status sequence is empty")
-    count_path = Path(
-        os.environ.get(
-            "FAKE_CATALYST_STATUS_COUNT_FILE",
-            str(Path(sequence_path).with_suffix(".count")),
-        )
-    )
-    count = int(count_path.read_text(encoding="utf-8")) if count_path.exists() else 0
-    count += 1
-    count_path.write_text(str(count), encoding="utf-8")
-    return _active_payload(states[min(count - 1, len(states) - 1)])
-
-
-def _next_watchlist() -> str:
-    sequence_path = os.environ.get("FAKE_WATCHLIST_SEQUENCE", "")
-    states = ["fresh"]
-    if sequence_path:
-        states = [
-            line.strip()
-            for line in Path(sequence_path).read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
-        if not states:
-            raise RuntimeError("fake watchlist sequence is empty")
-    count_path = Path(
-        os.environ.get(
-            "FAKE_WATCHLIST_COUNT_FILE",
-            str(Path(sequence_path).with_suffix(".count"))
-            if sequence_path
-            else ".fake-watchlist-count",
-        )
-    )
-    count = int(count_path.read_text(encoding="utf-8")) if count_path.exists() else 0
-    count += 1
-    count_path.write_text(str(count), encoding="utf-8")
-    state = states[min(count - 1, len(states) - 1)]
-    if state == "error":
-        raise urllib.error.URLError("watchlist unavailable")
-    if state == "invalid":
-        return __import__("json").dumps(
-            {"groups": [], "attempted": 1, "succeeded": 0, "_stale": False}
-        )
-    if state not in {"fresh", "stale"}:
-        raise RuntimeError(f"unknown fake watchlist state: {state}")
-    return __import__("json").dumps(
-        {
-            "groups": [
-                {
-                    "id": "tech",
-                    "name": "科技",
-                    "stocks": [
-                        {
-                            "ticker": "AAPL",
-                            "name": "苹果",
-                            "price": 200.0,
-                            "change_percent": 1.0,
-                            "spark": [198.0, 200.0],
-                        }
-                    ],
-                }
-            ],
-            "attempted": 1,
-            "succeeded": 1,
-            "failed": 0,
-            "_stale": state == "stale",
-            "as_of": datetime.now(timezone.utc).isoformat(),
-        },
-        separators=(",", ":"),
-    )
-
-
-def _urlopen(request, *args, **kwargs):
-    url = getattr(request, "full_url", str(request))
-    if url == "http://127.0.0.1:8000/api/catalysts/status":
-        return io.StringIO(_next_status())
-    if url == "http://127.0.0.1:8000/api/stocks/watchlist":
-        return io.StringIO(_next_watchlist())
-    return _real_urlopen(request, *args, **kwargs)
-
-
-urllib.request.urlopen = _urlopen
-if os.environ.get("FAKE_CATALYST_NO_SLEEP") == "true":
-    time.sleep = lambda _seconds: None
-""",
+    shutil.copy2(ROOT / "scripts" / "compose.sh", scripts / "compose.sh")
+    shutil.copy2(ROOT / "docker-compose.yml", root / "docker-compose.yml")
+    shutil.copy2(ROOT / ".gitignore", root / ".gitignore")
+    (root / ".env").write_text(
+        (ROOT / ".env.example").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
-    environment["FAKE_CATALYST_PYTHONPATH"] = os.pathsep.join(
-        (str(fake_python), str(ROOT / "backend"))
+    (root / "machine.env").write_text(
+        machine_text
+        if machine_text is not None
+        else (ROOT / "machine.env.example").read_text(encoding="utf-8"),
+        encoding="utf-8",
     )
-    environment["FAKE_CATALYST_NO_SLEEP"] = "true"
+    (root / "secrets.env").write_text(
+        secrets_text
+        if secrets_text is not None
+        else (ROOT / "secrets.env.example").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (config / "personal.toml").write_text(
+        _personal_config(access_mode),
+        encoding="utf-8",
+    )
+    _copy_deployment_validator(root)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _fake_tools(bin_dir)
+    environment = _isolated_environment()
+    environment["PATH"] = f"{bin_dir}{os.pathsep}{environment['PATH']}"
+    environment["FAKE_CONTAINER_PYTHON"] = sys.executable
     return root, environment
 
 
-def _run_deploy(root: Path, environment: dict[str, str]) -> subprocess.CompletedProcess[str]:
+def _run_deploy(
+    root: Path,
+    environment: dict[str, str],
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["bash", "scripts/deploy.sh"],
         cwd=root,
@@ -413,964 +247,1371 @@ def _run_deploy(root: Path, environment: dict[str, str]) -> subprocess.Completed
     )
 
 
-def _required_focus_environment(grace_seconds: int = 30) -> str:
-    return (
-        (ROOT / ".env.example")
-        .read_text(encoding="utf-8")
-        .replace("FOCUS_PRODUCER_ENABLED=false", "FOCUS_PRODUCER_ENABLED=true")
-        .replace(
-            "FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS=120",
-            f"FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS={grace_seconds}",
-        )
-        .replace(
-            "DEPLOY_REQUIRE_FOCUS_PRODUCER=false",
-            "DEPLOY_REQUIRE_FOCUS_PRODUCER=true",
-        )
-    )
-
-
-def _required_catalyst_read_environment(
-    base_url: str = "https://macro.example",
-) -> str:
-    return (
-        (ROOT / ".env.example")
-        .read_text(encoding="utf-8")
-        .replace("MACROLENS_ENABLED=false", "MACROLENS_ENABLED=true")
-        .replace("MACROLENS_BASE_URL=", f"MACROLENS_BASE_URL={base_url}", 1)
-        .replace("MACROLENS_READ_KEY_ID=", "MACROLENS_READ_KEY_ID=read-key", 1)
-        .replace("MACROLENS_READ_SECRET=", "MACROLENS_READ_SECRET=read-secret", 1)
-        .replace("DEPLOY_REQUIRE_CATALYST=false", "DEPLOY_REQUIRE_CATALYST=true", 1)
-    )
-
-
-def _focus_health_payload(*, state: str) -> str:
-    startup = state == "startup"
-    ready = state == "ready"
-    healthy = startup or ready
-    return json.dumps(
-        {
-            "healthy": healthy,
-            "status": "degraded" if startup else "ok" if ready else "unhealthy",
-            "enabled": True,
-            "ready_dependency": False,
-            "contract": {"valid": True},
-            "database": {
-                "heartbeat_fresh": healthy,
-                "lock_live": healthy,
-                "startup_in_progress": startup,
-                "latest_snapshot": {"revision": 1} if ready else None,
-                "snapshot_fresh": ready,
-            },
-        },
-        separators=(",", ":"),
-    )
-
-
-def _install_recording_sleep(root: Path, environment: dict[str, str]) -> Path:
-    bin_dir = Path(environment["PATH"].split(os.pathsep, 1)[0])
-    sleep_log = root / ".fake-sleep-log"
-    fake_sleep = bin_dir / "sleep"
-    fake_sleep.write_text(
-        "#!/usr/bin/env bash\n"
-        "set -Eeuo pipefail\n"
-        "printf '%s\\n' \"$*\" >> \"${FAKE_SLEEP_LOG:?}\"\n",
-        encoding="utf-8",
-    )
-    fake_sleep.chmod(0o755)
-    environment["FAKE_SLEEP_LOG"] = str(sleep_log)
-    return sleep_log
-
-
-def test_default_and_quoted_safe_breakout_config_pass_deployment_gate(tmp_path: Path) -> None:
-    template = (ROOT / ".env.example").read_text(encoding="utf-8")
-    root, environment = _deployment_root(tmp_path, template)
-    result = _run_deploy(root, environment)
-    assert result.returncode == 0, result.stderr
-
-    quoted = (
-        template.replace("BREAKOUT_RADAR_ENABLED=false", 'BREAKOUT_RADAR_ENABLED="false"')
-        .replace("DEPLOY_REQUIRE_BREAKOUT=false", "DEPLOY_REQUIRE_BREAKOUT='false'")
-        .replace("RANGE_PERSISTENCE_MODE=shadow", 'RANGE_PERSISTENCE_MODE="shadow"')
-    )
-    (root / ".env").write_text(quoted, encoding="utf-8")
-    result = _run_deploy(root, environment)
-    assert result.returncode == 0, result.stderr
-
-
-@pytest.mark.parametrize("configured_value", ["treu", "on", "off", "enabled"])
-def test_unknown_public_read_boolean_fails_closed(
-    tmp_path: Path,
-    configured_value: str,
-) -> None:
-    template = (ROOT / ".env.example").read_text(encoding="utf-8")
-    invalid = template.replace(
-        "PUBLIC_READ_API_ENABLED=false",
-        f"PUBLIC_READ_API_ENABLED={configured_value}",
-        1,
-    )
-    root, environment = _deployment_root(tmp_path, invalid)
-
-    result = _run_deploy(root, environment)
-
-    assert result.returncode != 0
-    assert (
-        "PUBLIC_READ_API_ENABLED must be a recognized boolean value" in result.stderr
-    )
-
-
-@pytest.mark.parametrize("app_auth_token", ["", '"   "'])
-def test_public_read_requires_an_app_token(
-    tmp_path: Path,
-    app_auth_token: str,
-) -> None:
-    template = (ROOT / ".env.example").read_text(encoding="utf-8")
-    public_without_token = (
-        template.replace(
-            "PUBLIC_READ_API_ENABLED=false",
-            "PUBLIC_READ_API_ENABLED=true",
-            1,
-        ).replace("APP_AUTH_TOKEN=", f"APP_AUTH_TOKEN={app_auth_token}", 1)
-    )
-    root, environment = _deployment_root(tmp_path, public_without_token)
-
-    result = _run_deploy(root, environment)
-
-    assert result.returncode != 0
-    assert "PUBLIC_READ_API_ENABLED=true requires APP_AUTH_TOKEN" in result.stderr
-    assert not (root / ".fake-deployment-access-probe-log").exists()
-
-
-@pytest.mark.parametrize(
-    ("public_value", "expected_public"),
-    [("true", "true"), ('"YES"', "true"), ("false", "false")],
-)
-def test_deployment_runs_anonymous_access_probes_for_public_and_private_routes(
-    tmp_path: Path,
-    public_value: str,
-    expected_public: str,
-) -> None:
-    template = (ROOT / ".env.example").read_text(encoding="utf-8")
-    configured = template.replace(
-        "PUBLIC_READ_API_ENABLED=false",
-        f"PUBLIC_READ_API_ENABLED={public_value}",
-        1,
-    ).replace("APP_AUTH_TOKEN=", "APP_AUTH_TOKEN=deployment-token", 1)
-    root, environment = _deployment_root(tmp_path, configured)
-
-    result = _run_deploy(root, environment)
-
-    assert result.returncode == 0, result.stderr
-    probe = (root / ".fake-deployment-access-probe-log").read_text(encoding="utf-8")
-    assert f"EXPECTED_PUBLIC_READ_ENABLED={expected_public}" in probe
-    assert "EXPECTED_AUTH_CONFIGURED=true" in probe
-    for path in (
-        "/api/market/status",
-        "/api/breakouts/status",
-        "/api/catalysts/status",
-        "/api/ai/jobs/earnings-impact",
-        "/api/ai/jobs/deployment_probe_missing_job",
-        "/api/catalysts/refresh",
-    ):
-        assert path in probe
-    assert '("POST", "/api/ai/jobs/earnings-impact", b"{}")' in probe
-    assert '"POST", "/api/catalysts/refresh", b"{}"' in probe
-
-
-def test_deployment_fails_when_anonymous_access_probe_fails(tmp_path: Path) -> None:
-    template = (ROOT / ".env.example").read_text(encoding="utf-8")
-    configured = template.replace(
-        "PUBLIC_READ_API_ENABLED=false",
-        "PUBLIC_READ_API_ENABLED=true",
-        1,
-    ).replace("APP_AUTH_TOKEN=", "APP_AUTH_TOKEN=deployment-token", 1)
-    root, environment = _deployment_root(tmp_path, configured)
-    environment["FAKE_DEPLOYMENT_ACCESS_PROBE_EXIT"] = "9"
-
-    result = _run_deploy(root, environment)
-
-    assert result.returncode != 0
-    assert (root / ".fake-deployment-access-probe-log").exists()
-
-
-@pytest.mark.parametrize(
-    ("enabled_value", "interaction_value", "expected_enabled", "expected_interaction"),
-    [
-        ('"true"', "'false'", "true", "false"),
-        ("'false'", '"true"', "false", "true"),
-    ],
-)
-def test_real_compose_preserves_quoted_boolean_values(
-    tmp_path: Path,
-    enabled_value: str,
-    interaction_value: str,
-    expected_enabled: str,
-    expected_interaction: str,
-) -> None:
-    docker = shutil.which("docker")
-    if docker is None:
-        pytest.skip("Docker Compose is unavailable")
-
-    template = (ROOT / ".env.example").read_text(encoding="utf-8")
-    env_file = tmp_path / "quoted.env"
-    env_file.write_text(
-        template.replace(
-            "BREAKOUT_RADAR_ENABLED=false",
-            f"BREAKOUT_RADAR_ENABLED={enabled_value}",
-        ).replace(
-            "RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED=false",
-            f"RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED={interaction_value}",
-        ),
-        encoding="utf-8",
-    )
-    compose_environment = _isolated_environment()
-    rendered = subprocess.run(
+def _commit_deployment_root(root: Path) -> None:
+    commands = (
+        ["git", "init", "--quiet"],
+        ["git", "add", "."],
         [
-            docker,
-            "compose",
-            "--env-file",
-            str(env_file),
-            "-f",
-            str(ROOT / "docker-compose.yml"),
-            "config",
-            "--format",
-            "json",
+            "git",
+            "-c",
+            "user.name=Optix Test",
+            "-c",
+            "user.email=optix-test@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "test fixture",
         ],
-        cwd=ROOT,
-        env=compose_environment,
+    )
+    for command in commands:
+        completed = subprocess.run(
+            command,
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert completed.returncode == 0, completed.stderr
+
+
+def test_deploy_builds_only_current_services_and_verifies_both(tmp_path: Path) -> None:
+    root, environment = _deployment_root(tmp_path)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode == 0, result.stderr
+    assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
+        "build",
+        "validate",
+        "up",
+        "verify-backend",
+        "verify-worker",
+    ]
+    script = (root / "scripts" / "deploy.sh").read_text(encoding="utf-8")
+    assert "compose build --pull backend" in script
+    assert "compose up -d --no-build --force-recreate" in script
+    assert '"$ROOT_DIR/scripts/compose.sh" "$@"' in script
+    assert "Stopping legacy workers before the unified worker starts." in script
+
+
+def test_deploy_validates_with_built_runtime_when_host_python_lacks_dependencies(
+    tmp_path: Path,
+) -> None:
+    root, environment = _deployment_root(tmp_path)
+    unavailable_host_python = tmp_path / "host-python"
+    unavailable_host_python.write_text(
+        "#!/usr/bin/env bash\n"
+        "echo \"ModuleNotFoundError: No module named 'pydantic'\" >&2\n"
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    unavailable_host_python.chmod(0o755)
+    environment["PYTHON_BIN"] = str(unavailable_host_python)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode == 0, result.stderr
+    assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
+        "build",
+        "validate",
+        "up",
+        "verify-backend",
+        "verify-worker",
+    ]
+    assert "ModuleNotFoundError" not in result.stdout + result.stderr
+
+
+def test_deploy_and_personal_commands_share_one_operation_lock(tmp_path: Path) -> None:
+    root, environment = _deployment_root(tmp_path)
+    shutil.copy2(ROOT / "personal.sh", root / "personal.sh")
+    (root / ".personal-operation.lock").mkdir(mode=0o700)
+
+    deploy_result = _run_deploy(root, environment)
+    personal_result = subprocess.run(
+        ["bash", "personal.sh", "doctor"],
+        cwd=root,
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
-        timeout=20,
+        timeout=10,
     )
-    assert rendered.returncode == 0, rendered.stderr
-    payload = json.loads(rendered.stdout)
-    for service_name in ("backend", "breakout-worker"):
-        environment = payload["services"][service_name]["environment"]
-        assert environment["BREAKOUT_RADAR_ENABLED"] == expected_enabled
-        assert (
-            environment["RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED"]
-            == expected_interaction
-        )
+
+    assert deploy_result.returncode != 0
+    assert personal_result.returncode != 0
+    for result in (deploy_result, personal_result):
+        assert "Another deployment or Personal command is running" in result.stderr
+    assert not (root / ".fake-order").exists()
 
 
-def test_required_breakout_gate_rejects_disabled_but_allows_interaction_off(
+@pytest.mark.parametrize("staged", (False, True))
+def test_deploy_allows_only_personal_config_content_changes(
     tmp_path: Path,
+    staged: bool,
 ) -> None:
-    template = (ROOT / ".env.example").read_text(encoding="utf-8")
-    required_disabled = template.replace(
-        "DEPLOY_REQUIRE_BREAKOUT=false", "DEPLOY_REQUIRE_BREAKOUT=true"
-    )
-    root, environment = _deployment_root(tmp_path, required_disabled)
-    rejected = _run_deploy(root, environment)
-    assert rejected.returncode != 0
-    assert "requires BREAKOUT_RADAR_ENABLED=true" in rejected.stderr
-
-    required_enabled = required_disabled.replace(
-        "BREAKOUT_RADAR_ENABLED=false", "BREAKOUT_RADAR_ENABLED=true"
-    )
-    assert "RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED=false" in required_enabled
-    (root / ".env").write_text(required_enabled, encoding="utf-8")
-    accepted = _run_deploy(root, environment)
-    assert accepted.returncode == 0, accepted.stderr
-
-
-def test_required_focus_gate_waits_for_first_fresh_snapshot(tmp_path: Path) -> None:
-    root, environment = _deployment_root(
-        tmp_path, _required_focus_environment(grace_seconds=30)
-    )
-    sleep_log = _install_recording_sleep(root, environment)
-    (root / ".fake-focus-health-sequence").write_text(
-        "\n".join(
-            [
-                _focus_health_payload(state="startup"),
-                _focus_health_payload(state="ready"),
-            ]
-        )
-        + "\n",
+    root, environment = _deployment_root(tmp_path)
+    _commit_deployment_root(root)
+    personal_config = root / "config" / "personal.toml"
+    personal_config.write_text(
+        personal_config.read_text(encoding="utf-8")
+        + "\n# Local owner configuration.\n",
         encoding="utf-8",
     )
+    if staged:
+        completed = subprocess.run(
+            ["git", "add", "config/personal.toml"],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert completed.returncode == 0, completed.stderr
 
     result = _run_deploy(root, environment)
 
     assert result.returncode == 0, result.stderr
-    health_count = (root / ".fake-focus-health-count").read_text(encoding="utf-8")
-    assert health_count.strip() == "2"
-    assert sleep_log.read_text(encoding="utf-8").splitlines() == ["2"]
 
 
-def test_required_focus_gate_times_out_at_the_configured_grace(tmp_path: Path) -> None:
-    root, environment = _deployment_root(
-        tmp_path, _required_focus_environment(grace_seconds=31)
-    )
-    sleep_log = _install_recording_sleep(root, environment)
-    (root / ".fake-focus-health-sequence").write_text(
-        _focus_health_payload(state="startup") + "\n",
-        encoding="utf-8",
-    )
-
-    result = _run_deploy(root, environment)
-
-    assert result.returncode != 0
-    assert "did not publish a fresh snapshot within 31s" in result.stderr
-    health_count = (root / ".fake-focus-health-count").read_text(encoding="utf-8")
-    assert health_count.strip() == "16"
-    assert sleep_log.read_text(encoding="utf-8").splitlines() == ["2"] * 15 + ["1"]
-
-
-def test_required_focus_gate_rejects_non_startup_state_without_waiting(
+@pytest.mark.parametrize("state", ("tracked", "staged", "untracked"))
+def test_deploy_rejects_every_other_worktree_change(
     tmp_path: Path,
+    state: str,
 ) -> None:
-    root, environment = _deployment_root(
-        tmp_path, _required_focus_environment(grace_seconds=30)
-    )
-    sleep_log = _install_recording_sleep(root, environment)
-    (root / ".fake-focus-health-sequence").write_text(
-        _focus_health_payload(state="unhealthy") + "\n",
-        encoding="utf-8",
-    )
-
-    result = _run_deploy(root, environment)
-
-    assert result.returncode != 0
-    assert "reported a non-startup state" in result.stderr
-    health_count = (root / ".fake-focus-health-count").read_text(encoding="utf-8")
-    assert health_count.strip() == "1"
-    assert not sleep_log.exists()
-
-
-def test_required_focus_gate_times_out_a_hung_healthcheck(tmp_path: Path) -> None:
-    root, environment = _deployment_root(
-        tmp_path, _required_focus_environment(grace_seconds=30)
-    )
-    sleep_log = _install_recording_sleep(root, environment)
-    environment["FAKE_FOCUS_HEALTH_HANG"] = "true"
-    (root / ".fake-focus-health-sequence").write_text(
-        _focus_health_payload(state="startup") + "\n",
-        encoding="utf-8",
-    )
-
-    result = _run_deploy(root, environment)
-
-    assert result.returncode != 0
-    assert "healthcheck failed before the first fresh snapshot" in result.stderr
-    health_count = (root / ".fake-focus-health-count").read_text(encoding="utf-8")
-    assert health_count.strip() == "1"
-    assert not sleep_log.exists()
-
-
-@pytest.mark.parametrize(
-    "base_url",
-    [
-        "https://localhost",
-        "https://LOCALHOST.",
-        "https://news.localhost",
-        "https://127.0.0.1:8443",
-        "https://127.255.255.254",
-        "https://[::1]:8443",
-        "https://[0:0:0:0:0:0:0:1]",
-        "https://[::ffff:127.0.0.1]",
-    ],
-)
-def test_required_catalyst_gate_rejects_loopback_remote_urls(
-    tmp_path: Path, base_url: str
-) -> None:
-    required = _required_catalyst_read_environment(base_url)
-    root, environment = _deployment_root(tmp_path, required)
-    result = _run_deploy(root, environment)
-    assert result.returncode != 0
-    assert "requires a non-loopback MACROLENS_BASE_URL" in result.stderr
-
-
-def test_required_catalyst_read_gate_does_not_require_action_config(
-    tmp_path: Path,
-) -> None:
-    required = _required_catalyst_read_environment()
-    assert "MACROLENS_ACTION_KEY_ID=\n" in required
-    assert "MACROLENS_ACTION_SECRET=\n" in required
-    assert "APP_AUTH_TOKEN=\n" in required
-    assert "DEPLOY_REQUIRE_CATALYST_ACTIONS=false" in required
-
-    root, environment = _deployment_root(tmp_path, required)
-    accepted = _run_deploy(root, environment)
-    assert accepted.returncode == 0, accepted.stderr
-    refresh_log = root / ".fake-catalyst-refresh-log"
-    assert refresh_log.read_text(encoding="utf-8").splitlines() == ["requested"]
-
-
-@pytest.mark.parametrize(
-    "configured_value",
-    ["True", "YES", "1", "true # required for production"],
-)
-def test_catalyst_read_gate_accepts_compose_boolean_forms_without_silent_disable(
-    tmp_path: Path,
-    configured_value: str,
-) -> None:
-    template = (ROOT / ".env.example").read_text(encoding="utf-8")
-    required_but_disabled = template.replace(
-        "DEPLOY_REQUIRE_CATALYST=false",
-        f"DEPLOY_REQUIRE_CATALYST={configured_value}",
-        1,
-    )
-    root, environment = _deployment_root(tmp_path, required_but_disabled)
-
-    result = _run_deploy(root, environment)
-
-    assert result.returncode != 0
-    assert "requires MACROLENS_ENABLED=true" in result.stderr
-
-
-@pytest.mark.parametrize(
-    "key",
-    [
-        "DEPLOY_REQUIRE_CATALYST",
-        "DEPLOY_REQUIRE_CATALYST_ACTIONS",
-        "MACROLENS_ENABLED",
-    ],
-)
-def test_unknown_catalyst_boolean_fails_closed(
-    tmp_path: Path,
-    key: str,
-) -> None:
-    template = (ROOT / ".env.example").read_text(encoding="utf-8")
-    invalid = template.replace(f"{key}=false", f"{key}=treu", 1)
-    root, environment = _deployment_root(tmp_path, invalid)
-
-    result = _run_deploy(root, environment)
-
-    assert result.returncode != 0
-    assert f"{key} must be a recognized boolean value" in result.stderr
-
-
-@pytest.mark.parametrize("configured_value", ["on", "off"])
-def test_runtime_unsupported_boolean_forms_fail_closed(
-    tmp_path: Path,
-    configured_value: str,
-) -> None:
-    template = (ROOT / ".env.example").read_text(encoding="utf-8")
-    invalid = template.replace(
-        "TRUST_PROXY_HEADERS=false",
-        f"TRUST_PROXY_HEADERS={configured_value}",
-        1,
-    )
-    root, environment = _deployment_root(tmp_path, invalid)
-
-    result = _run_deploy(root, environment)
-
-    assert result.returncode != 0
-    assert "TRUST_PROXY_HEADERS must be a recognized boolean value" in result.stderr
-
-
-def test_required_catalyst_actions_gate_requires_read_gate(tmp_path: Path) -> None:
-    actions_only = (ROOT / ".env.example").read_text(encoding="utf-8").replace(
-        "DEPLOY_REQUIRE_CATALYST_ACTIONS=false",
-        "DEPLOY_REQUIRE_CATALYST_ACTIONS=true",
-        1,
-    )
-    root, environment = _deployment_root(tmp_path, actions_only)
-    rejected = _run_deploy(root, environment)
-    assert rejected.returncode != 0
-    assert (
-        "DEPLOY_REQUIRE_CATALYST_ACTIONS=true requires "
-        "DEPLOY_REQUIRE_CATALYST=true"
-    ) in rejected.stderr
-
-
-def test_required_catalyst_actions_gate_is_case_insensitive(tmp_path: Path) -> None:
-    actions_only = (ROOT / ".env.example").read_text(encoding="utf-8").replace(
-        "DEPLOY_REQUIRE_CATALYST_ACTIONS=false",
-        "DEPLOY_REQUIRE_CATALYST_ACTIONS=True # explicit action rollout",
-        1,
-    )
-    root, environment = _deployment_root(tmp_path, actions_only)
-    rejected = _run_deploy(root, environment)
-    assert rejected.returncode != 0
-    assert (
-        "DEPLOY_REQUIRE_CATALYST_ACTIONS=true requires "
-        "DEPLOY_REQUIRE_CATALYST=true"
-    ) in rejected.stderr
-
-
-def test_required_catalyst_read_gate_requires_explicit_action_decision(
-    tmp_path: Path,
-) -> None:
-    legacy = "\n".join(
-        line
-        for line in _required_catalyst_read_environment().splitlines()
-        if not line.startswith("DEPLOY_REQUIRE_CATALYST_ACTIONS=")
-    )
-    root, environment = _deployment_root(tmp_path, legacy + "\n")
-    rejected = _run_deploy(root, environment)
-    assert rejected.returncode != 0
-    assert "predates the explicit Catalyst action deployment gate" in rejected.stderr
-
-
-@pytest.mark.parametrize(
-    ("action_key_id", "action_secret", "app_auth_token", "expected_error"),
-    [
-        ("", "action-secret", "app-token", "requires MacroLens action credentials"),
-        ("action-key", "", "app-token", "requires MacroLens action credentials"),
-        ("action-key", "action-secret", "", "requires APP_AUTH_TOKEN"),
-        ("action-key", "action-secret", "app-token", None),
-    ],
-)
-def test_required_catalyst_actions_gate_validates_action_config(
-    tmp_path: Path,
-    action_key_id: str,
-    action_secret: str,
-    app_auth_token: str,
-    expected_error: str | None,
-) -> None:
-    required = (
-        _required_catalyst_read_environment()
-        .replace(
-            "DEPLOY_REQUIRE_CATALYST_ACTIONS=false",
-            "DEPLOY_REQUIRE_CATALYST_ACTIONS=true",
-            1,
-        )
-        .replace(
-            "MACROLENS_ACTION_KEY_ID=",
-            f"MACROLENS_ACTION_KEY_ID={action_key_id}",
-            1,
-        )
-        .replace(
-            "MACROLENS_ACTION_SECRET=",
-            f"MACROLENS_ACTION_SECRET={action_secret}",
-            1,
-        )
-        .replace("APP_AUTH_TOKEN=", f"APP_AUTH_TOKEN={app_auth_token}", 1)
-    )
-    root, environment = _deployment_root(tmp_path, required)
-    result = _run_deploy(root, environment)
-    if expected_error is None:
-        assert result.returncode == 0, result.stderr
+    root, environment = _deployment_root(tmp_path)
+    _commit_deployment_root(root)
+    if state == "untracked":
+        (root / "local-note.txt").write_text("not part of release\n", encoding="utf-8")
     else:
-        assert result.returncode != 0
-        assert expected_error in result.stderr
+        compose = root / "docker-compose.yml"
+        compose.write_text(
+            compose.read_text(encoding="utf-8") + "\n# unexpected change\n",
+            encoding="utf-8",
+        )
+        if state == "staged":
+            completed = subprocess.run(
+                ["git", "add", "docker-compose.yml"],
+                cwd=root,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            assert completed.returncode == 0, completed.stderr
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "Refusing to deploy a dirty working tree." in result.stderr
+    assert not (root / ".fake-order").exists()
 
 
-def test_required_catalyst_gate_uses_the_committed_contract_digest(
+@pytest.mark.parametrize("replacement", ("missing", "symlink"))
+def test_deploy_requires_personal_config_to_remain_a_regular_file(
+    tmp_path: Path,
+    replacement: str,
+) -> None:
+    root, environment = _deployment_root(tmp_path)
+    _commit_deployment_root(root)
+    personal_config = root / "config" / "personal.toml"
+    personal_config.unlink()
+    if replacement == "symlink":
+        personal_config.symlink_to(root / ".env")
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "config/personal.toml must remain a regular file." in result.stderr
+    assert not (root / ".fake-order").exists()
+
+
+def test_deploy_fails_closed_when_worktree_status_cannot_be_read(
     tmp_path: Path,
 ) -> None:
-    required = _required_catalyst_read_environment()
-    root, environment = _deployment_root(tmp_path, required)
-    accepted = _run_deploy(root, environment)
-    assert accepted.returncode == 0, accepted.stderr
-
-    mismatched = "\n".join(
-        "MACROLENS_SCHEMA_SHA256=" + "0" * 64
-        if line.startswith("MACROLENS_SCHEMA_SHA256=")
-        else line
-        for line in required.splitlines()
+    root, environment = _deployment_root(tmp_path)
+    _commit_deployment_root(root)
+    real_git = shutil.which("git")
+    assert real_git is not None
+    fake_git = Path(environment["PATH"].split(os.pathsep, maxsplit=1)[0]) / "git"
+    fake_git.write_text(
+        "#!/usr/bin/env bash\n"
+        "for argument in \"$@\"; do\n"
+        "    if [ \"$argument\" = \":(top,exclude)config/personal.toml\" ]; then\n"
+        "        exit 42\n"
+        "    fi\n"
+        "done\n"
+        f'exec "{real_git}" "$@"\n',
+        encoding="utf-8",
     )
-    (root / ".env").write_text(mismatched + "\n", encoding="utf-8")
-    rejected = _run_deploy(root, environment)
-    assert rejected.returncode != 0
-    assert "does not match the reviewed integration contract" in rejected.stderr
+    fake_git.chmod(0o755)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "Unable to inspect the working tree." in result.stderr
+    assert not (root / ".fake-order").exists()
 
 
-def test_required_catalyst_runtime_gate_requires_fresh_active_snapshot() -> None:
-    script = (ROOT / "scripts" / "deploy.sh").read_text(encoding="utf-8")
-    assert "--request-refresh" in script
-    assert "CATALYST_DEPLOY_NOT_BEFORE_EPOCH" in script
-    assert "deployment_status_ready" in script
-    assert "required_after_epoch=required_after_epoch" in script
-
-
-def _warm_watchlist_environment(tmp_path: Path) -> tuple[str, Path]:
-    snapshot = tmp_path / "watchlist-snapshot-v1.json"
-    configured = (ROOT / ".env.example").read_text(encoding="utf-8").replace(
-        "DEPLOY_WARM_WATCHLIST=false",
-        "DEPLOY_WARM_WATCHLIST=true",
-        1,
-    )
-    return configured, snapshot
-
-
-def test_optional_watchlist_warmup_is_bounded_and_validates_real_quotes() -> None:
-    script = (ROOT / "scripts" / "deploy.sh").read_text(encoding="utf-8")
-    helper = (ROOT / "scripts" / "watchlist_snapshot.py").read_text(
-        encoding="utf-8"
-    )
-    example = (ROOT / ".env.example").read_text(encoding="utf-8")
-    assert "DEPLOY_WARM_WATCHLIST=false" in example
-    assert "WATCHLIST_SNAPSHOT_PATH=/data/watchlist-snapshot-v1.json" in example
-    assert 'configuration_boolean DEPLOY_WARM_WATCHLIST false' in script
-    assert 'if is_truthy "$deploy_warm_watchlist"' in script
-    assert 'snapshot_script="${SCRIPT_DIR}/watchlist_snapshot.py"' in script
-    assert "backend python - seed" in script
-    assert "backend python - validate" in script
-    assert "backend python - wait --timeout 120" in script
-    assert "docker compose run --rm --no-deps -T" in script
-    assert "backend_image_built=false" in script
-    assert "build_backend_image()" in script
-    assert 'if [ "$backend_image_built" = "true" ]' in script
-    assert "inside the shared /data volume" in script
-    assert 'WATCHLIST_URL = "http://127.0.0.1:8000/api/stocks/watchlist"' in helper
-    assert "fetch_watchlist(timeout=120)" in helper
-    assert "succeeded <= 0" in helper
-    assert '"watchlist_seed_snapshot": True' in helper
-    assert "deadline = time.monotonic() + timeout_seconds" in helper
-    assert "attempts = max(1, timeout_seconds // 5 + 1)" in helper
-    assert "the bounded snapshot remains active" in helper
-
-
-def test_watchlist_warm_deploy_seeds_before_build_then_waits_for_fresh_data(
-    tmp_path: Path,
-) -> None:
-    configured, snapshot = _warm_watchlist_environment(tmp_path)
-    root, environment = _deployment_root(tmp_path, configured)
-    sequence = tmp_path / "watchlist-sequence"
-    sequence.write_text("fresh\nstale\nfresh\n", encoding="utf-8")
-    count = tmp_path / "watchlist-count"
-    environment["FAKE_WATCHLIST_SEQUENCE"] = str(sequence)
-    environment["FAKE_WATCHLIST_COUNT_FILE"] = str(count)
-    environment["FAKE_WATCHLIST_SNAPSHOT_PATH"] = str(snapshot)
+def test_deploy_selects_machine_file_without_caller_exports(tmp_path: Path) -> None:
+    root, environment = _deployment_root(tmp_path)
+    capture = tmp_path / "compose-env-files"
+    environment["FAKE_COMPOSE_ENV_LOG"] = str(capture)
+    assert "COMPOSE_ENV_FILES" not in environment
+    assert "HOST_BIND" not in environment
+    assert "PORT" not in environment
 
     result = _run_deploy(root, environment)
 
     assert result.returncode == 0, result.stderr
-    assert snapshot.is_file()
-    saved = json.loads(snapshot.read_text(encoding="utf-8"))
-    assert saved["version"] == 1
-    assert saved["payload"]["succeeded"] == 1
-    assert count.read_text(encoding="utf-8") == "3"
-    assert '"watchlist_warm":true' in result.stdout
-    assert (root / ".fake-build-log").read_text(encoding="utf-8").splitlines() == [
-        "build --pull backend"
-    ]
-    assert (root / ".fake-deploy-order-log").read_text(
-        encoding="utf-8"
-    ).splitlines() == [
-        "exec:seed",
+    selected = capture.read_text(encoding="utf-8").splitlines()
+    assert selected
+    assert set(selected) == {".env,machine.env"}
+
+
+def test_deploy_requires_all_nine_unified_task_types(tmp_path: Path) -> None:
+    root, environment = _deployment_root(tmp_path)
+    environment["FAKE_WORKER_HEALTH"] = (
+        '{"healthy":true,"schema_version":"optix-worker-v2",'
+        '"tasks":[{"task_name":"breakout"}]}'
+    )
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "all nine task types" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "host_bind",
+    ("127.0.0.1", "10.7.0.8", "192.168.50.20", "100.64.12.4", "::1"),
+)
+def test_private_network_accepts_only_explicit_allowed_bindings(
+    tmp_path: Path,
+    host_bind: str,
+) -> None:
+    configured = _replace(
+        (ROOT / "machine.env.example").read_text(encoding="utf-8"),
+        "HOST_BIND",
+        host_bind,
+    )
+    root, environment = _deployment_root(tmp_path, configured)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode == 0, result.stderr
+    assert '"access_mode": "private_network"' in result.stdout
+
+
+@pytest.mark.parametrize("host_bind", ("0.0.0.0", "8.8.8.8", "example.com"))
+def test_private_network_rejects_wildcard_public_and_hostname_bindings(
+    tmp_path: Path,
+    host_bind: str,
+) -> None:
+    configured = _replace(
+        (ROOT / "machine.env.example").read_text(encoding="utf-8"),
+        "HOST_BIND",
+        host_bind,
+    )
+    root, environment = _deployment_root(tmp_path, configured)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "private_network" in result.stderr
+    assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
         "build",
-        "up",
-        "exec:wait",
+        "validate",
     ]
 
 
-def test_watchlist_warm_deploy_uses_shared_snapshot_when_old_backend_is_unavailable(
+def test_stale_secret_file_cannot_mask_the_machine_access_boundary(
     tmp_path: Path,
 ) -> None:
-    configured, snapshot = _warm_watchlist_environment(tmp_path)
+    configured = _replace(
+        (ROOT / "machine.env.example").read_text(encoding="utf-8"),
+        "HOST_BIND",
+        "0.0.0.0",
+    )
+    secrets = (
+        (ROOT / "secrets.env.example").read_text(encoding="utf-8")
+        + "HOST_BIND=127.0.0.1\n"
+        + "DATA_DIR=/outside-volume\n"
+    )
+    root, environment = _deployment_root(tmp_path, configured, secrets)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "private_network" in result.stderr
+    assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
+        "build",
+        "validate",
+    ]
+
+
+def test_private_network_rejects_a_public_cidr_even_when_explicitly_listed(
+    tmp_path: Path,
+) -> None:
+    configured = _replace(
+        (ROOT / "machine.env.example").read_text(encoding="utf-8"),
+        "HOST_BIND",
+        "8.8.8.8",
+    )
     root, environment = _deployment_root(tmp_path, configured)
-    snapshot.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "saved_at": time.time(),
-                "payload": {
-                    "groups": [
-                        {
-                            "id": "tech",
-                            "name": "科技",
-                            "stocks": [
-                                {
-                                    "ticker": "AAPL",
-                                    "name": "苹果",
-                                    "price": 200.0,
-                                    "change_percent": 1.0,
-                                    "spark": [198.0, 200.0],
-                                }
-                            ],
-                        }
-                    ],
-                    "attempted": 1,
-                    "succeeded": 1,
-                    "failed": 0,
-                },
-            }
+    personal_config = root / "config" / "personal.toml"
+    personal_config.write_text(
+        personal_config.read_text(encoding="utf-8").replace(
+            'allowed_private_cidrs = ["127.0.0.0/8", "::1/128", '
+            '"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", '
+            '"100.64.0.0/10"]',
+            'allowed_private_cidrs = ["8.8.8.0/24"]',
         ),
         encoding="utf-8",
     )
-    sequence = tmp_path / "watchlist-sequence"
-    sequence.write_text("fresh\n", encoding="utf-8")
-    count = tmp_path / "watchlist-count"
-    environment["FAKE_WATCHLIST_SEQUENCE"] = str(sequence)
-    environment["FAKE_WATCHLIST_COUNT_FILE"] = str(count)
-    environment["FAKE_WATCHLIST_SNAPSHOT_PATH"] = str(snapshot)
-    environment["FAKE_WATCHLIST_EXEC_UNAVAILABLE"] = "true"
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "private access networks" in result.stderr
+    assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
+        "build",
+        "validate",
+    ]
+
+
+def test_password_mode_requires_only_configured_password_hash(tmp_path: Path) -> None:
+    configured = _replace(
+        (ROOT / "machine.env.example").read_text(encoding="utf-8"),
+        "HOST_BIND",
+        "0.0.0.0",
+    )
+    root, environment = _deployment_root(
+        tmp_path,
+        configured,
+        access_mode="password",
+    )
+
+    missing = _run_deploy(root, environment)
+    assert missing.returncode != 0
+    assert "requires a valid APP_PASSWORD_HASH" in missing.stderr
+    assert "APP_PASSWORD_HASH=" not in missing.stdout + missing.stderr
+
+    password_hash = personal_secrets.hash_owner_password(
+        "owner-password-for-deployment-test"
+    )
+    secrets = _replace(
+        (ROOT / "secrets.env.example").read_text(encoding="utf-8"),
+        "APP_PASSWORD_HASH",
+        password_hash,
+    )
+    (root / "secrets.env").write_text(secrets, encoding="utf-8")
+    configured_result = _run_deploy(root, environment)
+    assert configured_result.returncode == 0, configured_result.stderr
+    assert password_hash not in (
+        configured_result.stdout + configured_result.stderr
+    )
+    assert '"access_mode": "password"' in configured_result.stdout
+
+
+def test_access_mode_environment_cannot_override_personal_toml(tmp_path: Path) -> None:
+    root, environment = _deployment_root(tmp_path)
+    environment["ACCESS_MODE"] = "password"
 
     result = _run_deploy(root, environment)
 
     assert result.returncode == 0, result.stderr
-    assert snapshot.is_file()
-    assert count.read_text(encoding="utf-8") == "1"
-    assert (root / ".fake-build-log").read_text(encoding="utf-8").splitlines() == [
-        "build --pull backend"
-    ]
-    assert (root / ".fake-watchlist-container-log").read_text(
-        encoding="utf-8"
-    ).splitlines() == [
-        "exec:seed:unavailable",
-        "run:validate",
-        "exec:wait",
-    ]
-    assert (root / ".fake-deploy-order-log").read_text(
-        encoding="utf-8"
-    ).splitlines() == [
-        "exec:seed:unavailable",
-        "build",
-        "run:validate",
-        "up",
-        "exec:wait",
-    ]
-    assert '"source": "existing"' in result.stdout
-    assert '"watchlist_warm":true' in result.stdout
+    assert '"access_mode": "private_network"' in result.stdout
 
 
-def test_watchlist_warm_deploy_stops_before_traffic_switch_without_a_safe_snapshot(
-    tmp_path: Path,
-) -> None:
-    configured, snapshot = _warm_watchlist_environment(tmp_path)
-    root, environment = _deployment_root(tmp_path, configured)
-    sequence = tmp_path / "watchlist-sequence"
-    sequence.write_text("error\n", encoding="utf-8")
-    environment["FAKE_WATCHLIST_SEQUENCE"] = str(sequence)
-    environment["FAKE_WATCHLIST_SNAPSHOT_PATH"] = str(snapshot)
-
-    result = _run_deploy(root, environment)
-
-    assert result.returncode != 0
-    assert not snapshot.exists()
-    assert "traffic has not switched" in result.stderr
-    assert (root / ".fake-build-log").read_text(encoding="utf-8").splitlines() == [
-        "build --pull backend"
-    ]
-    assert (root / ".fake-deploy-order-log").read_text(
-        encoding="utf-8"
-    ).splitlines() == [
-        "exec:seed",
-        "build",
-        "run:validate",
-    ]
-
-
-def test_watchlist_warm_deploy_requires_a_shared_volume_snapshot_path(
-    tmp_path: Path,
-) -> None:
-    configured, _snapshot = _warm_watchlist_environment(tmp_path)
-    configured = configured.replace(
-        "WATCHLIST_SNAPSHOT_PATH=/data/watchlist-snapshot-v1.json",
-        "WATCHLIST_SNAPSHOT_PATH=/tmp/watchlist-snapshot-v1.json",
-        1,
-    )
-    root, environment = _deployment_root(tmp_path, configured)
-
-    result = _run_deploy(root, environment)
-
-    assert result.returncode != 0
-    assert "inside the shared /data volume" in result.stderr
-    assert not (root / ".fake-build-log").exists()
-
-
-def test_watchlist_warm_deploy_rejects_boolean_snapshot_before_traffic_switch(
-    tmp_path: Path,
-) -> None:
-    configured, snapshot = _warm_watchlist_environment(tmp_path)
-    root, environment = _deployment_root(tmp_path, configured)
-    snapshot.write_text(
-        json.dumps(
-            {
-                "version": True,
-                "saved_at": time.time(),
-                "payload": {
-                    "groups": [
-                        {
-                            "id": "tech",
-                            "name": "科技",
-                            "stocks": [
-                                {
-                                    "ticker": "AAPL",
-                                    "name": "苹果",
-                                    "price": 200.0,
-                                    "change_percent": 1.0,
-                                    "spark": [198.0, 200.0],
-                                }
-                            ],
-                        }
-                    ],
-                    "attempted": 1,
-                    "succeeded": 1,
-                },
-            }
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        (
+            {"TRUST_PROXY_HEADERS": "true", "TRUSTED_PROXY_CIDRS": ""},
+            "proxied deployments must use password mode",
         ),
+        (
+            {
+                "TRUST_PROXY_HEADERS": "true",
+                "TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
+                "ALLOWED_HOSTS": "",
+            },
+            "proxied deployments must use password mode",
+        ),
+    ],
+)
+def test_deploy_rejects_incomplete_proxy_boundary(
+    tmp_path: Path,
+    changes: dict[str, str],
+    message: str,
+) -> None:
+    configured = (ROOT / "machine.env.example").read_text(encoding="utf-8")
+    for key, value in changes.items():
+        configured = _replace(configured, key, value)
+    root, environment = _deployment_root(tmp_path, configured)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert message in result.stderr
+    assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
+        "build",
+        "validate",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("url", "token", "message"),
+    [
+        ("https://news.example", "", "MACROLENS_URL requires INTERNAL_API_TOKEN"),
+        ("", "internal-token", "INTERNAL_API_TOKEN requires MACROLENS_URL"),
+        (
+            "http://127.0.0.1:9000",
+            "internal-token",
+            "MACROLENS_URL must be an absolute HTTPS origin",
+        ),
+    ],
+)
+def test_deploy_validates_the_single_macrolens_pair(
+    tmp_path: Path,
+    url: str,
+    token: str,
+    message: str,
+) -> None:
+    configured = _replace(
+        (ROOT / "machine.env.example").read_text(encoding="utf-8"),
+        "MACROLENS_URL",
+        url,
+    )
+    secrets = _replace(
+        (ROOT / "secrets.env.example").read_text(encoding="utf-8"),
+        "INTERNAL_API_TOKEN",
+        token,
+    )
+    root, environment = _deployment_root(tmp_path, configured, secrets)
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert message in result.stderr
+    if token:
+        assert token not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    ("url", "token", "message"),
+    [
+        (
+            "https://news.example:not-a-port",
+            "valid-internal-token",
+            "MACROLENS_URL contains an invalid port",
+        ),
+        (
+            "https://news.example:70000",
+            "valid-internal-token",
+            "MACROLENS_URL contains an invalid port",
+        ),
+        (
+            "https://news.example:0",
+            "valid-internal-token",
+            "MACROLENS_URL contains an invalid port",
+        ),
+        (
+            "https://news.example:",
+            "valid-internal-token",
+            "MACROLENS_URL contains an invalid port",
+        ),
+        (
+            " https://news.example",
+            "valid-internal-token",
+            "MACROLENS_URL must not contain whitespace",
+        ),
+        (
+            "https://news.example\n",
+            "valid-internal-token",
+            "MACROLENS_URL must not contain whitespace",
+        ),
+        (
+            "https://owner:password@news.example",
+            "valid-internal-token",
+            "MACROLENS_URL must not contain credentials",
+        ),
+        (
+            "https://news.example/internal/v1",
+            "valid-internal-token",
+            "MACROLENS_URL must contain only scheme, host, and port",
+        ),
+        (
+            "https://news.example?target=other",
+            "valid-internal-token",
+            "MACROLENS_URL must contain only scheme, host, and port",
+        ),
+        (
+            "https://news.example#fragment",
+            "valid-internal-token",
+            "MACROLENS_URL must contain only scheme, host, and port",
+        ),
+        (
+            "https://" + "a" * 493,
+            "valid-internal-token",
+            "at most 500 characters",
+        ),
+        (
+            "https://news.example",
+            " token-with-leading-space",
+            "INTERNAL_API_TOKEN contains unsupported whitespace",
+        ),
+        (
+            "https://news.example",
+            "t" * 4097,
+            "INTERNAL_API_TOKEN is too long",
+        ),
+    ],
+)
+def test_deploy_rejects_invalid_macrolens_values_without_echo(
+    tmp_path: Path,
+    url: str,
+    token: str,
+    message: str,
+) -> None:
+    root, environment = _deployment_root(tmp_path)
+    environment["MACROLENS_URL"] = url
+    environment["INTERNAL_API_TOKEN"] = token
+
+    result = _run_deploy(root, environment)
+
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert message in output
+    assert url not in output
+    assert token not in output
+    assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
+        "build",
+        "validate",
+    ]
+
+
+@pytest.mark.parametrize(
+    "data_directory",
+    ("relative/data", "/srv/optix-data", "/data/../etc"),
+)
+def test_deploy_rejects_data_directory_outside_the_container_volume(
+    tmp_path: Path,
+    data_directory: str,
+) -> None:
+    root, environment = _deployment_root(tmp_path)
+    environment["DATA_DIR"] = data_directory
+
+    result = _run_deploy(root, environment)
+
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "DATA_DIR must be" in output
+    assert data_directory not in output
+    assert (root / ".fake-order").read_text(encoding="utf-8").splitlines() == [
+        "build",
+        "validate",
+    ]
+
+
+def test_deploy_accepts_a_nested_directory_inside_the_container_volume(
+    tmp_path: Path,
+) -> None:
+    root, environment = _deployment_root(tmp_path)
+    environment["DATA_DIR"] = "/data/option-pro"
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_secret_health_url_uses_machine_file_over_stale_dotenv(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".env").write_text(
+        "MACROLENS_URL=https://stale.example\n",
         encoding="utf-8",
     )
-    sequence = tmp_path / "watchlist-sequence"
-    sequence.write_text("error\n", encoding="utf-8")
-    environment["FAKE_WATCHLIST_SEQUENCE"] = str(sequence)
-    environment["FAKE_WATCHLIST_SNAPSHOT_PATH"] = str(snapshot)
-
-    result = _run_deploy(root, environment)
-
-    assert result.returncode != 0
-    assert "traffic has not switched" in result.stderr
-    assert (root / ".fake-build-log").read_text(encoding="utf-8").splitlines() == [
-        "build --pull backend"
-    ]
-    assert (root / ".fake-deploy-order-log").read_text(
-        encoding="utf-8"
-    ).splitlines() == [
-        "exec:seed",
-        "build",
-        "run:validate",
-    ]
-
-
-def test_watchlist_post_switch_refresh_failure_keeps_the_seeded_snapshot(
-    tmp_path: Path,
-) -> None:
-    configured, snapshot = _warm_watchlist_environment(tmp_path)
-    root, environment = _deployment_root(tmp_path, configured)
-    sequence = tmp_path / "watchlist-sequence"
-    sequence.write_text("fresh\nerror\n", encoding="utf-8")
-    count = tmp_path / "watchlist-count"
-    environment["FAKE_WATCHLIST_SEQUENCE"] = str(sequence)
-    environment["FAKE_WATCHLIST_COUNT_FILE"] = str(count)
-    environment["FAKE_WATCHLIST_SNAPSHOT_PATH"] = str(snapshot)
-
-    result = _run_deploy(root, environment)
-
-    assert result.returncode == 0, result.stderr
-    assert snapshot.is_file()
-    assert count.read_text(encoding="utf-8") == "26"
-    assert "bounded snapshot remains active" in result.stderr
-    assert (root / ".fake-build-log").read_text(encoding="utf-8").splitlines() == [
-        "build --pull backend"
-    ]
-
-
-def test_catalyst_runtime_gate_waits_for_current_health_and_feed(
-    tmp_path: Path,
-) -> None:
-    root, environment = _deployment_root(
-        tmp_path,
-        _required_catalyst_read_environment(),
+    (tmp_path / "machine.env").write_text(
+        "MACROLENS_URL=https://machine.example:9443/\n",
+        encoding="utf-8",
     )
-    sequence = root / ".fake-catalyst-status-sequence"
-    sequence.write_text("old\nhealth_only\nready\n", encoding="utf-8")
-    count_file = root / ".fake-catalyst-status-count"
-    environment["FAKE_CATALYST_STATUS_SEQUENCE"] = str(sequence)
-    environment["FAKE_CATALYST_STATUS_COUNT_FILE"] = str(count_file)
+    monkeypatch.setattr(personal_secrets, "REPOSITORY_ROOT", tmp_path)
+    monkeypatch.delenv("MACROLENS_URL", raising=False)
 
-    result = _run_deploy(root, environment)
-
-    assert result.returncode == 0, result.stderr
-    assert count_file.read_text(encoding="utf-8") == "3"
-
-
-def test_catalyst_runtime_gate_fails_after_sixty_stale_statuses(
-    tmp_path: Path,
-) -> None:
-    root, environment = _deployment_root(
-        tmp_path,
-        _required_catalyst_read_environment(),
+    assert personal_secrets._macrolens_health_url() == (
+        "https://machine.example:9443/internal/v1/health",
+        None,
     )
-    sequence = root / ".fake-catalyst-status-sequence"
-    sequence.write_text("old\n", encoding="utf-8")
-    count_file = root / ".fake-catalyst-status-count"
-    environment["FAKE_CATALYST_STATUS_SEQUENCE"] = str(sequence)
-    environment["FAKE_CATALYST_STATUS_COUNT_FILE"] = str(count_file)
-
-    result = _run_deploy(root, environment)
-
-    assert result.returncode != 0
-    assert count_file.read_text(encoding="utf-8") == "60"
-
-
-def test_legacy_env_and_incomplete_trusted_proxy_config_fail_before_build(
-    tmp_path: Path,
-) -> None:
-    template = (ROOT / ".env.example").read_text(encoding="utf-8")
-    legacy = "\n".join(
-        line for line in template.splitlines() if not line.startswith("ALLOWED_HOSTS=")
+    monkeypatch.setenv("MACROLENS_URL", "")
+    assert personal_secrets._macrolens_health_url() == (
+        None,
+        "macrolens_url_missing",
     )
-    root, environment = _deployment_root(tmp_path, legacy)
-    result = _run_deploy(root, environment)
-    assert result.returncode != 0
-    assert "predates the ALLOWED_HOSTS security setting" in result.stderr
-
-    legacy_public_read = "\n".join(
-        line
-        for line in template.splitlines()
-        if not line.startswith("PUBLIC_READ_API_ENABLED=")
-    )
-    (root / ".env").write_text(legacy_public_read, encoding="utf-8")
-    result = _run_deploy(root, environment)
-    assert result.returncode != 0
-    assert "predates the PUBLIC_READ_API_ENABLED security setting" in result.stderr
-
-    incomplete_proxy = template.replace(
-        "TRUST_PROXY_HEADERS=false", "TRUST_PROXY_HEADERS=true"
-    )
-    (root / ".env").write_text(incomplete_proxy, encoding="utf-8")
-    result = _run_deploy(root, environment)
-    assert result.returncode != 0
-    assert "requires TRUSTED_PROXY_CIDRS" in result.stderr
 
 
-def test_setup_copies_full_template_and_writes_secrets_as_literal_data(
-    tmp_path: Path,
-) -> None:
+def _setup_root(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     root = tmp_path / "option-pro"
-    scripts = root / "scripts"
-    scripts.mkdir(parents=True)
-    shutil.copy2(ROOT / "setup.sh", root / "setup.sh")
-    shutil.copy2(ROOT / ".env.example", root / ".env.example")
-    shutil.copy2(ROOT / "scripts" / "deploy.sh", scripts / "deploy.sh")
+    (root / "scripts").mkdir(parents=True)
+    (root / "config").mkdir()
+    for source, destination in (
+        (ROOT / "setup.sh", root / "setup.sh"),
+        (ROOT / "personal.sh", root / "personal.sh"),
+        (ROOT / ".env.example", root / ".env.example"),
+        (ROOT / "machine.env.example", root / "machine.env.example"),
+        (ROOT / "secrets.env.example", root / "secrets.env.example"),
+        (ROOT / "docker-compose.yml", root / "docker-compose.yml"),
+        (ROOT / "scripts" / "deploy.sh", root / "scripts" / "deploy.sh"),
+        (ROOT / "scripts" / "compose.sh", root / "scripts" / "compose.sh"),
+        (ROOT / "config" / "personal.toml", root / "config" / "personal.toml"),
+    ):
+        shutil.copy2(source, destination)
+    _copy_deployment_validator(root)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    _fake_docker(bin_dir)
+    _fake_tools(bin_dir)
     environment = _isolated_environment()
     environment["PATH"] = f"{bin_dir}{os.pathsep}{environment['PATH']}"
-    secret = "proxy-${HOME} # 'quoted' \\ tail"
-    answers = f"\n{secret}\n\n\n"
+    environment["FAKE_CONTAINER_PYTHON"] = sys.executable
+    return root, environment
+
+
+def test_setup_rejects_unsafe_secret_without_expansion_or_echo(tmp_path: Path) -> None:
+    root, environment = _setup_root(tmp_path)
+    secret = "proxy-${HOME} $ # 'quoted' \"double\" \\ tail"
+
     result = subprocess.run(
         ["bash", "setup.sh"],
         cwd=root,
         env=environment,
-        input=answers,
+        input=f"{secret}\n\n",
         check=False,
         capture_output=True,
         text=True,
         timeout=15,
     )
-    assert result.returncode == 0, result.stderr
-    generated = (root / ".env").read_text(encoding="utf-8")
-    assert "OPENAI_API_KEY='" in generated
-    assert "BREAKOUT_RADAR_ENABLED=false" in generated
-    assert "DEPLOY_REQUIRE_BREAKOUT=false" in generated
-    assert "DEPLOY_REQUIRE_CATALYST=false" in generated
-    assert "DEPLOY_REQUIRE_CATALYST_ACTIONS=false" in generated
-    assert "RANGE_PERSISTENCE_MODE=shadow" in generated
-    assert "RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED=false" in generated
-    assert secret not in result.stdout
-    assert secret not in result.stderr
 
-    docker = shutil.which("docker")
-    if docker is None:
-        pytest.skip("Docker Compose is unavailable")
-    probe = root / "compose-probe.yml"
-    probe.write_text(
-        """services:
-  probe:
-    image: scratch
-    environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-""",
-        encoding="utf-8",
-    )
-    rendered = subprocess.run(
-        [docker, "compose", "--env-file", ".env", "-f", str(probe), "config", "--format", "json"],
+    assert result.returncode != 0
+    assert secret not in result.stdout + result.stderr
+    assert "接口密钥包含不支持的字符" in result.stderr
+    assert dotenv_values(root / "secrets.env")["OPENAI_API_KEY"] in {None, ""}
+    assert not (root / ".fake-order").exists()
+
+
+def test_setup_separates_and_preserves_a_safe_service_secret(
+    tmp_path: Path,
+) -> None:
+    root, environment = _setup_root(tmp_path)
+    secret = "sk-safe_token-1234567890"
+
+    result = subprocess.run(
+        ["bash", "setup.sh"],
         cwd=root,
         env=environment,
-        check=True,
+        input=f"{secret}\n\n",
+        check=False,
         capture_output=True,
         text=True,
         timeout=15,
     )
-    payload = json.loads(rendered.stdout)
-    rendered_value = payload["services"]["probe"]["environment"]["OPENAI_API_KEY"]
-    # Compose renders a literal dollar as ``$$`` in the canonical model; the
-    # container receives one dollar rather than expanding the host variable.
-    assert rendered_value.replace("$$", "$") == secret
+
+    assert result.returncode == 0, result.stderr
+    deployment = (root / ".env").read_text(encoding="utf-8")
+    assert "OPENAI_API_KEY" not in deployment
+    assert "INTERNAL_API_TOKEN" not in deployment
+    assert "APP_PASSWORD_HASH=" not in deployment
+    machine = dotenv_values(root / "machine.env")
+    assert machine["MACROLENS_URL"] in {None, ""}
+    assert dotenv_values(root / "secrets.env")["OPENAI_API_KEY"] == secret
+    assert secret not in result.stdout + result.stderr
+    assert stat.S_IMODE((root / ".env").stat().st_mode) == 0o600
+    assert stat.S_IMODE((root / "machine.env").stat().st_mode) == 0o600
+    assert stat.S_IMODE((root / "secrets.env").stat().st_mode) == 0o600
+
+
+def test_setup_migrates_legacy_machine_values_without_template_overrides(
+    tmp_path: Path,
+) -> None:
+    root, environment = _setup_root(tmp_path)
+    token = "legacy-internal-token-never-printed"
+    legacy_values = {
+        "HOST_BIND": "10.24.5.6",
+        "PORT": "3201",
+        "MACROLENS_URL": "https://macrolens.example:9443",
+        "ALLOWED_HOSTS": "10.24.5.6",
+        "TRUST_PROXY_HEADERS": "false",
+        "TRUSTED_PROXY_CIDRS": "",
+        "DATA_DIR": "/data/legacy-option-pro",
+    }
+    (root / ".env").write_text(
+        "HOST_BIND='10.24.5.6'\n"
+        'PORT="3201"\n'
+        "MACROLENS_URL='https://macrolens.example:9443'\n"
+        "ALLOWED_HOSTS=10.24.5.6\n"
+        "TRUST_PROXY_HEADERS=false\n"
+        "TRUSTED_PROXY_CIDRS=\n",
+        encoding="utf-8",
+    )
+    (root / "secrets.env").write_text(
+        f"INTERNAL_API_TOKEN={token}\n"
+        "DATA_DIR=/data/legacy-option-pro\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", "setup.sh"],
+        cwd=root,
+        env=environment,
+        input="",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert dotenv_values(root / "machine.env") == legacy_values
+    assert "旧运行配置中的主机设置已迁移" in result.stdout
+    assert "沿用原配置" not in result.stdout
+    assert token not in result.stdout + result.stderr
+    for name in (".env", "machine.env", "secrets.env"):
+        assert stat.S_IMODE((root / name).stat().st_mode) == 0o600
+
+
+def test_setup_migrates_legacy_url_alias_and_secret_data_directory(
+    tmp_path: Path,
+) -> None:
+    root, environment = _setup_root(tmp_path)
+    token = "legacy-owner-token-never-printed"
+    (root / ".env").write_text(
+        "MACROLENS_BASE_URL=https://legacy-macrolens.example\n",
+        encoding="utf-8",
+    )
+    (root / "secrets.env").write_text(
+        f"INTERNAL_API_TOKEN={token}\n"
+        "DATA_DIR=/data/legacy-database\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", "setup.sh"],
+        cwd=root,
+        env=environment,
+        input="",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    assert result.returncode == 0, result.stderr
+    machine = dotenv_values(root / "machine.env")
+    assert list(machine) == [
+        "HOST_BIND",
+        "PORT",
+        "MACROLENS_URL",
+        "ALLOWED_HOSTS",
+        "TRUST_PROXY_HEADERS",
+        "TRUSTED_PROXY_CIDRS",
+        "DATA_DIR",
+    ]
+    assert machine["HOST_BIND"] == "127.0.0.1"
+    assert machine["MACROLENS_URL"] == "https://legacy-macrolens.example"
+    assert machine["DATA_DIR"] == "/data/legacy-database"
+    assert token not in result.stdout + result.stderr
+
+
+def test_setup_rejects_conflicting_legacy_macrolens_aliases(
+    tmp_path: Path,
+) -> None:
+    root, environment = _setup_root(tmp_path)
+    (root / ".env").write_text(
+        "MACROLENS_URL=https://canonical.example\n"
+        "MACROLENS_BASE_URL=https://legacy.example\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", "setup.sh"],
+        cwd=root,
+        env=environment,
+        input="",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    assert result.returncode != 0
+    assert "无法安全迁移旧 .env 中的 MACROLENS_URL" in result.stderr
+    assert "canonical.example" not in result.stdout + result.stderr
+    assert "legacy.example" not in result.stdout + result.stderr
+    assert not (root / "machine.env").exists()
+
+
+def test_setup_fails_closed_when_a_legacy_machine_value_cannot_be_preserved(
+    tmp_path: Path,
+) -> None:
+    root, environment = _setup_root(tmp_path)
+    unsafe = "${UNTRUSTED_HOST_BIND}"
+    (root / ".env").write_text(
+        f"HOST_BIND={unsafe}\nPORT=3201\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", "setup.sh"],
+        cwd=root,
+        env=environment,
+        input="",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    assert result.returncode != 0
+    assert "无法安全迁移旧 .env 中的 HOST_BIND" in result.stderr
+    assert unsafe not in result.stdout + result.stderr
+    assert not (root / "machine.env").exists()
+    assert not (root / ".fake-order").exists()
+
+
+@pytest.mark.parametrize(
+    ("key", "expected_services"),
+    [
+        ("OPENAI_API_KEY", "backend worker"),
+        ("FINNHUB_API_KEY", "backend worker"),
+        ("MARKETDATA_TOKEN", "backend worker"),
+        ("INTERNAL_API_TOKEN", "backend worker"),
+        ("APP_PASSWORD_HASH", "backend"),
+    ],
+)
+def test_secret_cli_recreates_only_affected_running_services(
+    tmp_path: Path,
+    key: str,
+    expected_services: str,
+) -> None:
+    root = tmp_path / "option-pro"
+    root.mkdir()
+    (root / "scripts").mkdir()
+    shutil.copy2(ROOT / "personal.sh", root / "personal.sh")
+    shutil.copy2(ROOT / "docker-compose.yml", root / "docker-compose.yml")
+    shutil.copy2(ROOT / "scripts" / "compose.sh", root / "scripts" / "compose.sh")
+    (root / ".env").write_text("", encoding="utf-8")
+    (root / "machine.env").write_text("", encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    host_python = tmp_path / "host-python"
+    host_python.write_text(
+        "#!/usr/bin/env bash\nprintf 'called\\n' > \"$FAKE_HOST_PYTHON_LOG\"\nexit 1\n",
+        encoding="utf-8",
+    )
+    host_python.chmod(0o755)
+    docker = bin_dir / "docker"
+    docker.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1" = info ]; then printf '[]\n'; exit 0; fi
+if [ "$1" = inspect ]; then
+    case "$*" in
+        *'{{.Config.Image}}'*) printf 'option-pro:runtime-commit\n' ;;
+        *'{{.Image}}'*) printf 'sha256:runtime-image\n' ;;
+        *) exit 2 ;;
+    esac
+    exit 0
+fi
+if [ "$1" = image ] && [ "${2:-}" = inspect ]; then
+    case "$*" in
+        *org.opencontainers.image.revision*) printf 'runtime-commit\n' ;;
+        *org.opencontainers.image.version*) printf 'runtime-version\n' ;;
+        *'{{.Id}}'*) printf 'sha256:runtime-image\n' ;;
+        *) exit 2 ;;
+    esac
+    exit 0
+fi
+[ "$1" = compose ] || exit 2
+shift
+printf '%s\n' "$*" >> "$FAKE_DOCKER_ARGS"
+printf '%s|%s|%s\n' "${APP_COMMIT:-}" "${APP_VERSION:-}" "$*" >> "$FAKE_COMPOSE_IDENTITIES"
+case "${1:-}" in
+    build)
+        if IFS= read -r _unexpected; then
+            printf 'build-read-stdin\n' > "$FAKE_BUILD_STDIN_LOG"
+            exit 9
+        fi
+        ;;
+    run)
+        byte_count="$(wc -c | tr -d '[:space:]')"
+        printf 'run-stdin-bytes=%s\n' "$byte_count" > "$FAKE_RUN_STDIN_LOG"
+        ;;
+    ps) printf 'running-container\n' ;;
+    up) shift; printf '%s\n' "$*" > "$FAKE_RECREATE_LOG" ;;
+    *) exit 2 ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    docker.chmod(0o755)
+    environment = _isolated_environment()
+    environment.update(
+        {
+            "PATH": f"{bin_dir}{os.pathsep}{environment['PATH']}",
+            "PYTHON_BIN": str(host_python),
+            "FAKE_HOST_PYTHON_LOG": str(tmp_path / "host-python-log"),
+            "FAKE_DOCKER_ARGS": str(tmp_path / "docker-args"),
+            "FAKE_COMPOSE_IDENTITIES": str(tmp_path / "compose-identities"),
+            "FAKE_BUILD_STDIN_LOG": str(tmp_path / "build-stdin-log"),
+            "FAKE_RUN_STDIN_LOG": str(tmp_path / "run-stdin-log"),
+            "FAKE_RECREATE_LOG": str(tmp_path / "recreate-log"),
+        }
+    )
+    secret = "secret-value-never-in-arguments"
+
+    result = subprocess.run(
+        ["bash", "personal.sh", "secrets", "set", key],
+        cwd=root,
+        env=environment,
+        input=f"{secret}\n",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "recreate-log").read_text(encoding="utf-8").strip() == (
+        "-d --no-deps --no-build --pull never --force-recreate "
+        f"--wait --wait-timeout 180 {expected_services}"
+    )
+    docker_args = (tmp_path / "docker-args").read_text(encoding="utf-8")
+    assert "build --quiet backend" in docker_args
+    assert f"--volume {root}:/app:rw" in docker_args
+    assert "--workdir /app/backend" in docker_args
+    assert f"app.tools.personal_secrets set {key}" in docker_args
+    secret_run = next(
+        line for line in docker_args.splitlines() if "app.tools.personal_secrets" in line
+    )
+    assert " -T " not in f" {secret_run} "
+    assert secret not in docker_args
+    compose_identities = (tmp_path / "compose-identities").read_text(
+        encoding="utf-8"
+    )
+    assert "personal-cli|personal-cli|build --quiet backend" in compose_identities
+    assert "personal-cli|personal-cli|run --pull never" in compose_identities
+    assert "runtime-commit|runtime-version|up -d" in compose_identities
+    assert not (tmp_path / "build-stdin-log").exists()
+    assert (tmp_path / "run-stdin-log").read_text(encoding="utf-8").strip() == (
+        f"run-stdin-bytes={len(secret) + 1}"
+    )
+    assert not (tmp_path / "host-python-log").exists()
+    assert secret not in result.stdout + result.stderr
+
+
+def test_secret_cli_fails_before_container_when_machine_file_is_missing(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "option-pro"
+    (root / "scripts").mkdir(parents=True)
+    shutil.copy2(ROOT / "personal.sh", root / "personal.sh")
+    shutil.copy2(ROOT / "docker-compose.yml", root / "docker-compose.yml")
+    shutil.copy2(
+        ROOT / "scripts" / "compose.sh",
+        root / "scripts" / "compose.sh",
+    )
+    (root / ".env").write_text("", encoding="utf-8")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(
+        "#!/usr/bin/env bash\nprintf 'called\\n' > \"$FAKE_DOCKER_LOG\"\n",
+        encoding="utf-8",
+    )
+    docker.chmod(0o755)
+    environment = _isolated_environment()
+    environment.update(
+        {
+            "PATH": f"{bin_dir}{os.pathsep}{environment['PATH']}",
+            "FAKE_DOCKER_LOG": str(tmp_path / "docker-log"),
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", "personal.sh", "secrets", "set", "OPENAI_API_KEY"],
+        cwd=root,
+        env=environment,
+        input="secret-value-never-in-arguments\n",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode != 0
+    assert "machine.env is missing" in result.stderr
+    assert not (tmp_path / "docker-log").exists()
+
+
+@pytest.mark.parametrize(
+    (
+        "arguments",
+        "module_arguments",
+        "security_options",
+        "expected_user",
+        "expected_returncode",
+    ),
+    [
+        (["doctor"], "app.tools.validate_personal_deployment", "[]", None, 0),
+        (
+            ["secrets", "status"],
+            "app.tools.personal_secrets status",
+            "[]",
+            f"{os.getuid()}:{os.getgid()}",
+            0,
+        ),
+        (
+            ["secrets", "validate"],
+            "app.tools.personal_secrets validate",
+            "[]",
+            f"{os.getuid()}:{os.getgid()}",
+            0,
+        ),
+        (
+            ["secrets", "status"],
+            "app.tools.personal_secrets status",
+            '["name=rootless"]',
+            "0:0",
+            0,
+        ),
+        (
+            ["secrets", "status"],
+            "app.tools.personal_secrets status",
+            '["name=userns"]',
+            None,
+            1,
+        ),
+    ],
+)
+def test_personal_read_commands_use_the_container_runtime_without_host_packages(
+    tmp_path: Path,
+    arguments: list[str],
+    module_arguments: str,
+    security_options: str,
+    expected_user: str | None,
+    expected_returncode: int,
+) -> None:
+    root = tmp_path / "option-pro"
+    (root / "scripts").mkdir(parents=True)
+    for source, destination in (
+        (ROOT / "personal.sh", root / "personal.sh"),
+        (ROOT / "docker-compose.yml", root / "docker-compose.yml"),
+        (ROOT / "scripts" / "compose.sh", root / "scripts" / "compose.sh"),
+    ):
+        shutil.copy2(source, destination)
+    (root / ".env").write_text("", encoding="utf-8")
+    (root / "machine.env").write_text("", encoding="utf-8")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    host_python = tmp_path / "host-python"
+    host_python.write_text(
+        "#!/usr/bin/env bash\nprintf 'called\\n' > \"$FAKE_HOST_PYTHON_LOG\"\nexit 1\n",
+        encoding="utf-8",
+    )
+    host_python.chmod(0o755)
+    docker = bin_dir / "docker"
+    docker.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1" = info ]; then printf '%s\n' "$FAKE_SECURITY_OPTIONS"; exit 0; fi
+[ "$1" = compose ] || exit 2
+shift
+printf '%s\n' "$*" >> "$FAKE_DOCKER_ARGS"
+case "${1:-}" in
+    build)
+        if IFS= read -r _unexpected; then exit 9; fi
+        ;;
+    run)
+        cat >/dev/null
+        printf '{"container_cli":true}\n'
+        ;;
+    *) exit 2 ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    docker.chmod(0o755)
+    environment = _isolated_environment()
+    environment.update(
+        {
+            "PATH": f"{bin_dir}{os.pathsep}{environment['PATH']}",
+            "PYTHON_BIN": str(host_python),
+            "FAKE_HOST_PYTHON_LOG": str(tmp_path / "host-python-log"),
+            "FAKE_DOCKER_ARGS": str(tmp_path / "docker-args"),
+            "FAKE_SECURITY_OPTIONS": security_options,
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", "personal.sh", *arguments],
+        cwd=root,
+        env=environment,
+        input="",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == expected_returncode, result.stderr
+    docker_args = (tmp_path / "docker-args").read_text(encoding="utf-8")
+    assert "build --quiet backend" in docker_args
+    if expected_returncode != 0:
+        assert "Docker user namespace remapping" in result.stderr
+        assert module_arguments not in docker_args
+        assert result.stdout == ""
+        return
+    if arguments == ["doctor"]:
+        assert ":/app:ro" not in docker_args
+    else:
+        assert f"--volume {root}:/app:ro" in docker_args
+        assert "--workdir /app/backend" in docker_args
+        assert f"--user {expected_user}" in docker_args
+    assert module_arguments in docker_args
+    assert " -T " in f" {docker_args.splitlines()[-1]} "
+    assert not (tmp_path / "host-python-log").exists()
+    assert result.stdout.strip() == '{"container_cli":true}'
+
+
+def test_secret_cli_does_not_recreate_services_after_container_failure(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "option-pro"
+    (root / "scripts").mkdir(parents=True)
+    for source, destination in (
+        (ROOT / "personal.sh", root / "personal.sh"),
+        (ROOT / "docker-compose.yml", root / "docker-compose.yml"),
+        (ROOT / "scripts" / "compose.sh", root / "scripts" / "compose.sh"),
+    ):
+        shutil.copy2(source, destination)
+    (root / ".env").write_text("", encoding="utf-8")
+    (root / "machine.env").write_text("", encoding="utf-8")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1" = info ]; then printf '[]\n'; exit 0; fi
+[ "$1" = compose ] || exit 2
+shift
+case "${1:-}" in
+    build) if IFS= read -r _unexpected; then exit 9; fi ;;
+    run) cat >/dev/null; exit 7 ;;
+    ps) : ;;
+    up) printf 'unexpected-recreate\n' > "$FAKE_RECREATE_LOG" ;;
+    *) exit 2 ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    docker.chmod(0o755)
+    environment = _isolated_environment()
+    environment.update(
+        {
+            "PATH": f"{bin_dir}{os.pathsep}{environment['PATH']}",
+            "FAKE_RECREATE_LOG": str(tmp_path / "recreate-log"),
+        }
+    )
+    secret = "secret-value-never-printed"
+
+    result = subprocess.run(
+        ["bash", "personal.sh", "secrets", "set", "OPENAI_API_KEY"],
+        cwd=root,
+        env=environment,
+        input=f"{secret}\n",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 7
+    assert not (tmp_path / "recreate-log").exists()
+    assert secret not in result.stdout + result.stderr
+
+
+def test_secret_cli_checks_running_image_identity_before_mutating(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "option-pro"
+    (root / "scripts").mkdir(parents=True)
+    for source, destination in (
+        (ROOT / "personal.sh", root / "personal.sh"),
+        (ROOT / "docker-compose.yml", root / "docker-compose.yml"),
+        (ROOT / "scripts" / "compose.sh", root / "scripts" / "compose.sh"),
+    ):
+        shutil.copy2(source, destination)
+    (root / ".env").write_text("", encoding="utf-8")
+    (root / "machine.env").write_text("", encoding="utf-8")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1" = info ]; then printf '[]\n'; exit 0; fi
+if [ "$1" = inspect ]; then
+    case "$*" in
+        *'{{.Config.Image}}'*) printf 'option-pro:moved-tag\n' ;;
+        *'{{.Image}}'*) printf 'sha256:runtime-image\n' ;;
+        *) exit 2 ;;
+    esac
+    exit 0
+fi
+if [ "$1" = image ] && [ "${2:-}" = inspect ]; then
+    case "$*" in
+        *org.opencontainers.image.revision*) printf 'runtime-commit\n' ;;
+        *org.opencontainers.image.version*) printf 'runtime-version\n' ;;
+        *'{{.Id}}'*) printf 'sha256:runtime-image\n' ;;
+        *) exit 2 ;;
+    esac
+    exit 0
+fi
+[ "$1" = compose ] || exit 2
+shift
+case "${1:-}" in
+    build) if IFS= read -r _unexpected; then exit 9; fi ;;
+    ps) printf 'running-container\n' ;;
+    run) printf 'unexpected-run\n' > "$FAKE_RUN_LOG" ;;
+    *) exit 2 ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    docker.chmod(0o755)
+    environment = _isolated_environment()
+    environment.update(
+        {
+            "PATH": f"{bin_dir}{os.pathsep}{environment['PATH']}",
+            "FAKE_RUN_LOG": str(tmp_path / "run-log"),
+        }
+    )
+    secret = "secret-never-reaches-container"
+
+    result = subprocess.run(
+        ["bash", "personal.sh", "secrets", "set", "OPENAI_API_KEY"],
+        cwd=root,
+        env=environment,
+        input=f"{secret}\n",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode != 0
+    assert "no longer matches its immutable local image" in result.stderr
+    assert not (tmp_path / "run-log").exists()
+    assert secret not in result.stdout + result.stderr
+
+
+def test_watchlist_snapshot_uses_the_shared_data_directory_without_auth_tokens(
+    tmp_path: Path,
+) -> None:
+    script = ROOT / "scripts" / "watchlist_snapshot.py"
+    source = script.read_text(encoding="utf-8")
+    assert "APP_AUTH_TOKEN" not in source
+    assert "Authorization" not in source
+    assert "WATCHLIST_SNAPSHOT_PATH" not in source
+    assert 'os.environ.get("DATA_DIR"' in source
+    assert 'data_dir / "watchlist-snapshot-v1.json"' in source
+
+    result = subprocess.run(
+        [sys.executable, str(script), "validate"],
+        env={**_isolated_environment(), "DATA_DIR": "relative/data"},
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 2
+    assert "DATA_DIR must be an absolute path" in result.stderr
+
+
+def test_watchlist_snapshot_helper_writes_the_backend_contract(tmp_path: Path) -> None:
+    script = ROOT / "scripts" / "watchlist_snapshot.py"
+    specification = importlib.util.spec_from_file_location(
+        "watchlist_snapshot_helper",
+        script,
+    )
+    assert specification is not None and specification.loader is not None
+    helper = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(helper)
+
+    snapshot = tmp_path / "watchlist-snapshot-v1.json"
+    payload = {
+        "groups": [
+            {
+                "id": "core",
+                "name": "Core",
+                "stocks": [
+                    {
+                        "ticker": "AAPL",
+                        "name": "Apple",
+                        "price": 100.0,
+                        "change_percent": 1.0,
+                        "spark": [99.0, 100.0],
+                    }
+                ],
+            }
+        ],
+        "succeeded": 1,
+    }
+    helper.write_snapshot(snapshot, payload=payload, saved_at=100_000.0)
+
+    document = json.loads(snapshot.read_text(encoding="utf-8"))
+    assert document["parameters"] == {"tickers": None}
+    assert stocks._read_watchlist_snapshot(snapshot, now=100_001.0) is not None
+
+    for invalid_parameters in (None, {"tickers": ["AAPL"]}):
+        invalid_document = dict(document)
+        if invalid_parameters is None:
+            invalid_document.pop("parameters")
+        else:
+            invalid_document["parameters"] = invalid_parameters
+        snapshot.write_text(json.dumps(invalid_document), encoding="utf-8")
+        assert helper.read_existing_snapshot(snapshot, now=100_001.0) is None
+        result = subprocess.run(
+            [sys.executable, str(script), "validate"],
+            env={**_isolated_environment(), "DATA_DIR": str(tmp_path)},
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 1
+        assert "shared watchlist snapshot is missing or invalid" in result.stderr
+
+
+def test_shell_entrypoints_stay_small_and_syntax_is_valid() -> None:
+    for relative in (
+        "setup.sh",
+        "scripts/compose.sh",
+        "scripts/deploy.sh",
+        "personal.sh",
+    ):
+        path = ROOT / relative
+        assert len(path.read_text(encoding="utf-8").splitlines()) <= 320
+        completed = subprocess.run(
+            ["bash", "-n", str(path)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode == 0, completed.stderr

@@ -39,6 +39,23 @@
 .cat-command__model { min-width: 0; }
 .cat-command__model p { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.65; }
 
+.cat-runtime-settings { margin-top: clamp(16px, 2.4vw, 28px); overflow: visible; }
+.cat-runtime-settings summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; }
+.cat-runtime-settings summary strong { font-size: 15px; }
+.cat-runtime-settings summary .mono { color: var(--amber); font-size: 9px; }
+.cat-runtime-settings > p { margin: 10px 0 16px; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.cat-runtime-settings input:disabled { cursor: not-allowed; opacity: .62; }
+
+.cat-owner-operations { margin-top: clamp(16px, 2.4vw, 28px); overflow: visible; }
+.cat-operation-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 18px; border: 1px solid var(--line-soft); border-radius: 10px; overflow: hidden; background: var(--line-soft); }
+.cat-operation-facts > span { min-width: 0; padding: 10px 12px; background: var(--surface); }
+.cat-operation-facts small, .cat-operation-facts b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-operation-facts small { color: var(--faint); font-family: var(--font-mono); font-size: 8px; letter-spacing: .08em; }
+.cat-operation-facts b { margin-top: 4px; color: var(--ink-soft); font-family: var(--font-mono); font-size: 10px; }
+.cat-operation-actions { display: flex; gap: 9px; margin-top: 14px; flex-wrap: wrap; }
+.cat-operation-actions .btn { min-width: 140px; justify-content: center; }
+#cat-operation-state { margin-top: 14px; }
+
 .cat-focus-cycle { margin-top: clamp(16px, 2.4vw, 28px); overflow: visible; }
 .cat-focus-cycle__head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; }
 .cat-focus-cycle__head > div { min-width: 0; }
@@ -237,6 +254,8 @@
   .cat-command__facts { grid-template-columns: 1fr 1fr; }
   .cat-command__facts > span:nth-child(2) { border-right: 0; }
   .cat-command__facts > span:nth-child(-n+2) { border-bottom: 1px solid var(--line-soft); }
+  .cat-operation-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cat-operation-actions .btn { flex: 1 1 calc(50% - 9px); min-width: 0; }
   .cat-summary { grid-template-columns: repeat(2, 1fr); }
   .cat-summary__item:nth-child(3n) { border-right: 1px solid var(--line-soft); }
   .cat-summary__item:nth-child(2n) { border-right: 0; }

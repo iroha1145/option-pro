@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import re
 from datetime import date, datetime, timedelta, timezone
-from typing import Annotated, Any, Literal, Optional
+from typing import Annotated, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from fastapi.routing import APIRoute
@@ -19,13 +19,12 @@ from pydantic import (
 
 from app.services.catalysts.config import CatalystSettings, get_catalyst_settings
 from app.services.catalysts.errors import CatalystError, InvalidCursorError
-from app.services.catalysts.models import TICKER_PATTERN
-from app.services.catalysts.service import CatalystService
-from app.services.ai_jobs.security import require_expensive_action
+from app.services.catalysts.personal_service import PersonalCatalystService
 
 
 _MAX_CATALYST_BODY_BYTES = 32 * 1024
 _BODY_METHODS = frozenset({"POST", "PUT", "PATCH"})
+_TICKER_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,19}$")
 
 
 class _BoundedCatalystBodyRoute(APIRoute):
@@ -78,197 +77,6 @@ router = APIRouter(
 )
 
 
-_HOTSPOT_STATUS_PUBLIC_FIELDS = frozenset(
-    {
-        "prepared_revision",
-        "last_consumed_revision",
-        "prepared_hot_count",
-        "prepared_since",
-        "last_cycle_at",
-        "next_scheduled_at",
-        "model",
-        "reasoning",
-        "data_through",
-        "status",
-        "as_of",
-        "last_sync_at",
-        "warnings",
-    }
-)
-_CATALYST_STATUS_PUBLIC_FIELDS = frozenset(
-    {
-        "enabled",
-        "status",
-        "as_of",
-        "data_through",
-        "last_sync_at",
-        "remote_status",
-        "model",
-        "reasoning",
-        "expected_model",
-        "expected_reasoning",
-        "schema_version",
-        "resync_required",
-        "resync_generation",
-        "last_resync_at",
-        "sources",
-        "streams",
-        "warnings",
-    }
-)
-_CATALYST_STREAM_PUBLIC_FIELDS = frozenset(
-    {
-        "last_success_at",
-        "data_through",
-        "consecutive_failures",
-        "last_error_code",
-        "remote_status",
-        "resync_required",
-        "resync_generation",
-        "last_resync_at",
-    }
-)
-_CATALYST_SOURCE_PUBLIC_FIELDS = frozenset(
-    {
-        "source",
-        "status",
-        "last_success_at",
-        "data_through",
-        "consecutive_failures",
-        "raw_count",
-        "inserted_count",
-        "duplicates_count",
-        "source_fetch_status",
-        "news_persistence_status",
-        "event_projection_status",
-    }
-)
-_HOTSPOT_ITEM_PUBLIC_FIELDS = frozenset(
-    {
-        "prepared_revision",
-        "event_group_id",
-        "event_group_version",
-        "gate_version",
-        "hot_score",
-        "component_scores",
-        "reasons",
-        "status",
-        "prepared_at",
-        "representative_title",
-        "event_type",
-        "available_at",
-        "first_published_at",
-        "last_published_at",
-        "source_count",
-        "source_names",
-        "validated_tickers",
-    }
-)
-_MARKET_FOCUS_CYCLE_PUBLIC_FIELDS = frozenset(
-    {
-        "cycle_id",
-        "status",
-        "no_new_hot_events",
-        "prepared_revision",
-        "focus_revision",
-        "snapshot_as_of",
-        "event_group_count",
-        "focus_symbol_count",
-        "model",
-        "reasoning_effort",
-        "result",
-        "error_code",
-        "created_at",
-        "completed_at",
-        "updated_at",
-    }
-)
-_MARKET_FOCUS_ENVELOPE_PUBLIC_FIELDS = frozenset(
-    {"status", "as_of", "data_through", "warnings"}
-)
-
-
-def _anonymous_public_read(request: Request) -> bool:
-    """Only crop requests admitted by the public-read gateway without a token."""
-
-    return bool(
-        getattr(request.state, "public_read_authenticated", False)
-    ) and not bool(
-        getattr(request.state, "app_authenticated", False),
-    )
-
-
-def _select_fields(
-    payload: Mapping[str, Any], fields: frozenset[str]
-) -> dict[str, Any]:
-    return {key: payload[key] for key in fields if key in payload}
-
-
-def _public_hotspot_status(payload: Mapping[str, Any]) -> dict[str, Any]:
-    projected = _select_fields(payload, _HOTSPOT_STATUS_PUBLIC_FIELDS)
-    # Anonymous display requests never gain action capability from remote state.
-    projected.update(
-        {
-            "manual_enabled": False,
-            "action_enabled": False,
-            "capability": "disabled",
-        }
-    )
-    return projected
-
-
-def _public_catalyst_status(payload: Mapping[str, Any]) -> dict[str, Any]:
-    projected = _select_fields(payload, _CATALYST_STATUS_PUBLIC_FIELDS)
-    raw_sources = payload.get("sources")
-    projected["sources"] = (
-        [
-            _select_fields(source, _CATALYST_SOURCE_PUBLIC_FIELDS)
-            for source in raw_sources
-            if isinstance(source, Mapping)
-        ]
-        if isinstance(raw_sources, list)
-        else []
-    )
-    raw_streams = payload.get("streams")
-    projected["streams"] = {}
-    if isinstance(raw_streams, Mapping):
-        projected["streams"] = {
-            str(stream): _select_fields(state, _CATALYST_STREAM_PUBLIC_FIELDS)
-            for stream, state in raw_streams.items()
-            if isinstance(state, Mapping)
-        }
-    projected["analysis_trigger_enabled"] = False
-    return projected
-
-
-def _public_hotspots(payload: Mapping[str, Any]) -> dict[str, Any]:
-    projected = _select_fields(payload, _MARKET_FOCUS_ENVELOPE_PUBLIC_FIELDS)
-    items = payload.get("items")
-    projected["items"] = (
-        [
-            _select_fields(item, _HOTSPOT_ITEM_PUBLIC_FIELDS)
-            for item in items
-            if isinstance(item, Mapping)
-        ]
-        if isinstance(items, list)
-        else []
-    )
-    return projected
-
-
-def _public_market_focus_cycle(payload: Mapping[str, Any]) -> dict[str, Any]:
-    return _select_fields(payload, _MARKET_FOCUS_CYCLE_PUBLIC_FIELDS)
-
-
-def _public_market_focus_envelope(payload: Mapping[str, Any]) -> dict[str, Any]:
-    projected = _select_fields(payload, _MARKET_FOCUS_ENVELOPE_PUBLIC_FIELDS)
-    cycle = payload.get("cycle")
-    projected["cycle"] = (
-        _public_market_focus_cycle(cycle) if isinstance(cycle, Mapping) else None
-    )
-    return projected
-
-
 class _RequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
@@ -289,7 +97,7 @@ class BatchRequest(_RequestModel):
         seen: set[str] = set()
         for value in values:
             ticker = value.strip().upper()
-            if not TICKER_PATTERN.fullmatch(ticker):
+            if not _TICKER_PATTERN.fullmatch(ticker):
                 raise ValueError("invalid ticker")
             if ticker not in seen:
                 seen.add(ticker)
@@ -301,12 +109,23 @@ class AnalysisRequest(_RequestModel):
     force: bool = False
 
 
+class RefreshRequest(_RequestModel):
+    operation_type: Literal["news", "calendar", "source_health"] = "news"
+    idempotency_key: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
+
+
 class MarketFocusCycleRequest(_RequestModel):
     trigger: Literal["manual"] = "manual"
     expected_prepared_revision: Optional[int] = Field(default=None, ge=0)
     retry_cycle_id: Optional[str] = Field(
         default=None, pattern=r"^mfc_[0-9a-f]{32}$"
     )
+    force: bool = False
 
     @model_validator(mode="after")
     def validate_creation_mode(self) -> "MarketFocusCycleRequest":
@@ -314,13 +133,15 @@ class MarketFocusCycleRequest(_RequestModel):
             raise ValueError(
                 "exactly one of expected_prepared_revision or retry_cycle_id is required"
             )
+        if self.retry_cycle_id is not None and self.force:
+            raise ValueError("retry_cycle_id cannot be combined with force")
         return self
 
 
 def _service(
     settings: CatalystSettings = Depends(get_catalyst_settings),
-) -> CatalystService:
-    return CatalystService(settings)
+) -> PersonalCatalystService:
+    return PersonalCatalystService(settings)
 
 
 def _now() -> datetime:
@@ -329,7 +150,7 @@ def _now() -> datetime:
 
 def _ticker(value: str) -> str:
     normalized = value.strip().upper()
-    if not TICKER_PATTERN.fullmatch(normalized):
+    if not _TICKER_PATTERN.fullmatch(normalized):
         raise HTTPException(status_code=422, detail="invalid ticker")
     return normalized
 
@@ -345,10 +166,25 @@ def _raise_safe(error: CatalystError) -> None:
         "market_focus_retry_snapshot_unavailable": 409,
         "market_focus_retry_outcome_unknown": 409,
         "invalid_market_focus_request": 422,
+        "invalid_refresh_type": 422,
+        "invalid_idempotency_key": 422,
+        "ai_job_queue_full": 429,
         "daily_job_limit_reached": 429,
+        "daily_budget_usd_reached": 429,
         "daily_output_token_limit_reached": 429,
+        "analysis_cooldown_active": 429,
+        "analysis_in_progress": 409,
+        "read_only_mode": 409,
+        "manual_analysis_disabled": 409,
+        "manual_refresh_disabled": 409,
+        "force_reanalysis_disabled": 409,
+        "catalyst_disabled": 409,
+        "catalyst_sync_disabled": 409,
+        "ai_not_configured": 503,
+        "worker_unavailable": 503,
+        "runtime_settings_unavailable": 503,
         "cache_unavailable": 503,
-        "capability_disabled": 503,
+        "analysis_unavailable": 503,
     }.get(error.code, 503)
     headers = (
         {"Retry-After": str(error.retry_after_seconds)}
@@ -369,15 +205,9 @@ def _raise_safe(error: CatalystError) -> None:
 
 @router.get("/status")
 def catalyst_status(
-    request: Request,
-    service: CatalystService = Depends(_service),
+    service: PersonalCatalystService = Depends(_service),
 ) -> dict:
-    payload = service.status()
-    return (
-        _public_catalyst_status(payload)
-        if _anonymous_public_read(request)
-        else payload
-    )
+    return service.status()
 
 
 @router.get("/feed")
@@ -406,7 +236,7 @@ def catalyst_feed(
         "other",
     ]] = Query(default=None),
     multi_source_only: bool = Query(default=False),
-    service: CatalystService = Depends(_service),
+    service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     try:
         return service.feed(
@@ -432,10 +262,9 @@ def catalyst_feed(
 
 @router.get("/news/{news_id}")
 def catalyst_news(
-    request: Request,
     news_id: int = Path(ge=1),
     as_of: Optional[AwareDatetime] = Query(default=None),
-    service: CatalystService = Depends(_service),
+    service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     observed = as_of or _now()
     try:
@@ -444,10 +273,6 @@ def catalyst_news(
         _raise_safe(error)
     if detail is None:
         raise HTTPException(status_code=404, detail="catalyst news item not found")
-    if _anonymous_public_read(request):
-        detail = dict(detail)
-        detail["analysis_job"] = None
-        detail["analysis_trigger_enabled"] = False
     return detail
 
 
@@ -461,7 +286,7 @@ def ticker_catalysts(
     min_confidence: int = Query(default=0, ge=0, le=100),
     include_unanalyzed: bool = Query(default=True),
     include_neutral: bool = Query(default=False),
-    service: CatalystService = Depends(_service),
+    service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     try:
         return service.ticker(
@@ -481,7 +306,7 @@ def ticker_catalysts(
 @router.post("/tickers/batch")
 def ticker_catalyst_batch(
     request: BatchRequest,
-    service: CatalystService = Depends(_service),
+    service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     try:
         return service.batch(
@@ -504,7 +329,7 @@ def catalyst_calendar(
     as_of: Optional[AwareDatetime] = Query(default=None),
     currencies: Optional[str] = Query(default=None, max_length=200),
     min_impact: Optional[Literal["low", "medium", "high"]] = Query(default=None),
-    service: CatalystService = Depends(_service),
+    service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     start_date = date_from or _now().date()
     end_date = date_to or (start_date + timedelta(days=14))
@@ -529,53 +354,39 @@ def catalyst_calendar(
 
 @router.get("/hotspots/status")
 def catalyst_hotspot_status(
-    request: Request,
-    service: CatalystService = Depends(_service),
+    service: PersonalCatalystService = Depends(_service),
 ) -> dict:
-    payload = service.hotspot_status()
-    return (
-        _public_hotspot_status(payload)
-        if _anonymous_public_read(request)
-        else payload
-    )
+    return service.hotspot_status()
 
 
 @router.get("/hotspots")
 def catalyst_hotspots(
-    request: Request,
     limit: int = Query(default=20, ge=1, le=100),
-    service: CatalystService = Depends(_service),
+    service: PersonalCatalystService = Depends(_service),
 ) -> dict:
-    payload = service.hotspots(limit=limit)
-    return _public_hotspots(payload) if _anonymous_public_read(request) else payload
+    return service.hotspots(limit=limit)
 
 
 @router.get("/market-focus-cycles/latest")
 def latest_market_focus_cycle(
-    request: Request,
-    service: CatalystService = Depends(_service),
+    service: PersonalCatalystService = Depends(_service),
 ) -> dict:
-    payload = service.latest_market_focus_cycle()
-    return (
-        _public_market_focus_envelope(payload)
-        if _anonymous_public_read(request)
-        else payload
-    )
+    return service.latest_market_focus_cycle()
 
 
 @router.post(
     "/market-focus-cycles",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require_expensive_action)],
 )
 def request_market_focus_cycle(
     request: MarketFocusCycleRequest,
-    service: CatalystService = Depends(_service),
+    service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     try:
         return service.request_market_focus_cycle(
             expected_prepared_revision=request.expected_prepared_revision,
             retry_cycle_id=request.retry_cycle_id,
+            force=request.force,
         )
     except CatalystError as error:
         _raise_safe(error)
@@ -583,11 +394,10 @@ def request_market_focus_cycle(
 
 @router.get("/market-focus-cycles/{cycle_id}")
 def market_focus_cycle(
-    request: Request,
     cycle_id: Annotated[
         str, Path(pattern=r"^mfc_[0-9a-f]{32}$")
     ],
-    service: CatalystService = Depends(_service),
+    service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     try:
         cycle = service.market_focus_cycle(cycle_id)
@@ -595,23 +405,18 @@ def market_focus_cycle(
         _raise_safe(error)
     if cycle is None:
         raise HTTPException(status_code=404, detail="market focus cycle not found")
-    return (
-        _public_market_focus_cycle(cycle)
-        if _anonymous_public_read(request)
-        else cycle
-    )
+    return cycle
 
 
 @router.post(
     "/market-focus-cycles/{cycle_id}/cancel",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require_expensive_action)],
 )
 def cancel_market_focus_cycle(
     cycle_id: Annotated[
         str, Path(pattern=r"^mfc_[0-9a-f]{32}$")
     ],
-    service: CatalystService = Depends(_service),
+    service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     try:
         cycle = service.cancel_market_focus_cycle(cycle_id)
@@ -625,24 +430,46 @@ def cancel_market_focus_cycle(
 @router.post(
     "/refresh",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require_expensive_action)],
 )
-def refresh_catalysts(service: CatalystService = Depends(_service)) -> dict:
+def refresh_catalysts(
+    request: Optional[RefreshRequest] = None,
+    service: PersonalCatalystService = Depends(_service),
+) -> dict:
     try:
-        return service.request_refresh()
+        payload = request or RefreshRequest()
+        return service.request_refresh(
+            payload.operation_type,
+            idempotency_key=payload.idempotency_key,
+        )
     except CatalystError as error:
         _raise_safe(error)
+
+
+@router.get("/refresh/{request_id}")
+def catalyst_refresh_status(
+    request_id: Annotated[
+        str,
+        Path(pattern=r"^refresh_[0-9a-f]{32}$"),
+    ],
+    service: PersonalCatalystService = Depends(_service),
+) -> dict:
+    try:
+        operation = service.manual_operation(request_id)
+    except CatalystError as error:
+        _raise_safe(error)
+    if operation is None:
+        raise HTTPException(status_code=404, detail="refresh request not found")
+    return operation
 
 
 @router.post(
     "/news/{news_id}/analysis",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require_expensive_action)],
 )
 def request_news_analysis(
     request: AnalysisRequest,
     news_id: int = Path(ge=1),
-    service: CatalystService = Depends(_service),
+    service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     try:
         return service.request_analysis(news_id, force=request.force)
@@ -653,7 +480,7 @@ def request_news_analysis(
 @router.get("/analysis-jobs/{job_id}")
 def analysis_job(
     job_id: Annotated[str, Path(min_length=16, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")],
-    service: CatalystService = Depends(_service),
+    service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     try:
         job = service.analysis_job(job_id)
@@ -667,11 +494,10 @@ def analysis_job(
 @router.post(
     "/analysis-jobs/{job_id}/cancel",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require_expensive_action)],
 )
 def cancel_analysis_job(
     job_id: Annotated[str, Path(min_length=16, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")],
-    service: CatalystService = Depends(_service),
+    service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     try:
         job = service.cancel_analysis_job(job_id)

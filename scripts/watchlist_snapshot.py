@@ -18,6 +18,7 @@ import urllib.request
 
 
 SNAPSHOT_VERSION = 1
+SNAPSHOT_PARAMETERS = {"tickers": None}
 SNAPSHOT_MAX_BYTES = 2 * 1024 * 1024
 SNAPSHOT_MAX_AGE_SECONDS = 24 * 60 * 60
 WATCHLIST_URL = "http://127.0.0.1:8000/api/stocks/watchlist"
@@ -159,6 +160,7 @@ def read_existing_snapshot(path: Path, *, now: float) -> dict[str, Any] | None:
             isinstance(version, bool)
             or not isinstance(version, int)
             or version != SNAPSHOT_VERSION
+            or document.get("parameters") != SNAPSHOT_PARAMETERS
             or isinstance(saved_at, bool)
             or not isinstance(saved_at, (int, float))
             or not math.isfinite(float(saved_at))
@@ -184,7 +186,12 @@ def write_snapshot(path: Path, *, payload: Any, saved_at: float) -> None:
     if path.is_symlink():
         raise ValueError("watchlist snapshot path must not be a symlink")
     encoded = json.dumps(
-        {"version": SNAPSHOT_VERSION, "saved_at": saved_at, "payload": cleaned},
+        {
+            "version": SNAPSHOT_VERSION,
+            "saved_at": saved_at,
+            "parameters": SNAPSHOT_PARAMETERS,
+            "payload": cleaned,
+        },
         allow_nan=False,
         ensure_ascii=False,
         separators=(",", ":"),
@@ -212,13 +219,8 @@ def write_snapshot(path: Path, *, payload: Any, saved_at: float) -> None:
         raise
 
 
-def request_headers() -> dict[str, str]:
-    token = os.environ.get("APP_AUTH_TOKEN", "").strip()
-    return {"Authorization": f"Bearer {token}"} if token else {}
-
-
 def fetch_watchlist(*, timeout: float) -> dict[str, Any]:
-    request = urllib.request.Request(WATCHLIST_URL, headers=request_headers())
+    request = urllib.request.Request(WATCHLIST_URL)
     with urllib.request.urlopen(request, timeout=timeout) as response:
         payload = json.load(response)
     if clean_payload(payload) is None:
@@ -307,10 +309,10 @@ def main() -> int:
     parser.add_argument("action", choices=("seed", "validate", "wait"))
     parser.add_argument("--timeout", type=int, default=120)
     args = parser.parse_args()
-    path = Path(
-        os.environ.get("WATCHLIST_SNAPSHOT_PATH", "").strip()
-        or "/data/watchlist-snapshot-v1.json"
-    )
+    data_dir = Path(os.environ.get("DATA_DIR", "").strip() or "/data")
+    if not data_dir.is_absolute() or ".." in data_dir.parts:
+        parser.error("DATA_DIR must be an absolute path without parent traversal")
+    path = data_dir / "watchlist-snapshot-v1.json"
     if args.action == "seed":
         return seed(path)
     if args.action == "validate":

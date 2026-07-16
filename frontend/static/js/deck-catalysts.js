@@ -7,7 +7,6 @@
   const Jobs = window.OPTIX_AI_JOBS;
   const $ = (selector, root) => (root || document).querySelector(selector);
   const $$ = (selector, root) => Array.from((root || document).querySelectorAll(selector));
-  const privateActionsAvailable = () => !!(N && N.hasAppToken && N.hasAppToken());
   const esc = value => String(value == null ? "" : value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
   const finite = value => typeof value === "number" && Number.isFinite(value);
   const list = (payload, keys) => {
@@ -66,8 +65,23 @@
     prepared: "准备完成", leased: "分析占用中", consumed: "已消费", resync_required: "需要重新同步",
     incomplete_output: "输出不完整", submission_outcome_unknown: "提交结果待确认", worker_interrupted: "任务中断",
   };
+  const ANALYSIS_ERROR_CN = Object.freeze({
+    ai_job_queue_full: "分析队列已满，请稍后重试",
+    daily_job_limit_reached: "今日任务次数已用完",
+    daily_budget_usd_reached: "今日分析预算已用完",
+    analysis_cooldown_active: "分析正在冷却中",
+    cache_unavailable: "本地缓存暂不可用",
+  });
   const LOW_CONTEXT_RULE_MODEL = "low-context-neutral-v2";
   const className = value => String(value || "").toLowerCase();
+  const analysisErrorMessage = value => ANALYSIS_ERROR_CN[className(value)] || "分析任务暂未完成，请稍后重试";
+  const analysisErrorDetail = payload => {
+    const message = analysisErrorMessage(payload && (payload.error_code || payload.code));
+    const retryAfter = Number(payload && (payload.retry_after_seconds || payload.retry_after));
+    return Number.isFinite(retryAfter) && retryAfter > 0
+      ? `${message} · ${Math.ceil(retryAfter)} 秒后可重试`
+      : message;
+  };
   const classLabel = value => CLASS_CN[className(value)] || String(value || "—");
   const horizonLabel = value => HORIZON_CN[className(value)] || String(value || "—");
   const mechanismLabel = value => MECHANISM_CN[className(value)] || String(value || "—");
@@ -97,22 +111,81 @@
   }
   function analysisRetryForce(item, job) {
     const status = Jobs.normalizeStatus(job && job.status || analysisStatus(item));
-    return status === "failed" || status === "cancelled";
+    return !!analysisOf(item) || ["completed", "insufficient_context", "failed", "cancelled"].includes(status);
   }
-  function analysisActionDecision(triggerEnabled, privateAccess) {
-    const authMissing = !privateAccess;
-    const actionMissing = !!privateAccess && !triggerEnabled;
-    return {
-      authMissing,
-      actionMissing,
-      canTrigger: !authMissing && !actionMissing,
-      title: authMissing ? "管理会话未解锁" : actionMissing ? "分析功能未启用" : "尚未生成模型分析",
-      detail: authMissing
-        ? "当前标签页没有管理令牌；原始新闻与已有分析仍可查看，付费分析操作不会显示。"
-        : actionMissing
-          ? "当前管理会话中，单篇新闻分析已关闭；原始新闻仍可阅读。"
-          : "原始新闻仍可阅读；未分析状态不会补成中性方向。",
+  function analysisAvailabilityOf(item) {
+    return item && item.analysis_availability
+      || page.feed && page.feed.analysis_availability
+      || (metaStatus(page.status) || {}).analysis_availability
+      || {};
+  }
+  function analysisTriggerEnabledOf(item) {
+    if (item && item.analysis_trigger_enabled != null) return !!item.analysis_trigger_enabled;
+    const status = metaStatus(page.status) || {};
+    if (status.analysis_trigger_enabled != null) return !!status.analysis_trigger_enabled;
+    const availability = analysisAvailabilityOf(item);
+    return typeof availability.enabled === "boolean" ? !!availability.enabled : false;
+  }
+  function analysisActionDecision(triggerEnabled, availability) {
+    const state = availability && typeof availability === "object" ? availability : {};
+    const hasRuntimeState = typeof state.enabled === "boolean" || !!state.reason;
+    const enabled = hasRuntimeState ? !!state.enabled : !!triggerEnabled;
+    const statedReason = className(state.reason || "");
+    const reason = className(
+      !triggerEnabled && (!statedReason || statedReason === "available")
+        ? "read_only_mode"
+        : (statedReason || "available"),
+    );
+    const modeUnavailable = !triggerEnabled || [
+      "read_only_mode", "manual_analysis_disabled", "settings_unavailable",
+      "not_configured", "catalyst_disabled",
+    ].includes(reason);
+    const showAction = ![
+      "read_only_mode", "manual_analysis_disabled", "settings_unavailable",
+      "catalyst_disabled",
+    ].includes(reason);
+    const titles = {
+      settings_unavailable: "运行设置暂不可用",
+      read_only_mode: "当前为只读模式",
+      manual_analysis_disabled: "手动分析已关闭",
+      catalyst_disabled: "催化剂功能已关闭",
+      not_configured: "模型服务尚未配置",
+      worker_unavailable: "服务暂不可用",
+      budget_exhausted: "今日预算已用完",
+      analysis_in_progress: "分析任务正在运行",
+      cooldown_active: "分析冷却中",
     };
+    const details = {
+      settings_unavailable: "为避免意外产生费用，运行设置恢复前不会创建模型任务。",
+      read_only_mode: "当前运行模式关闭了手动分析，已有中文结果仍可查看。",
+      manual_analysis_disabled: "运行设置关闭了手动分析，已有中文结果仍可查看。",
+      catalyst_disabled: "催化剂功能恢复后才能创建新的模型任务。",
+      not_configured: "模型服务配置完成后才能生成新的分析。",
+      worker_unavailable: "后台工作进程恢复后才能接收新的分析任务。",
+      budget_exhausted: `${budgetPolicyText()}；今日额度已达到上限。`,
+      analysis_in_progress: "同一时间只运行一项模型分析，请等待当前任务结束。",
+      cooldown_active: "请等待冷却结束，按钮会在状态刷新后恢复。",
+    };
+    return {
+      modeUnavailable,
+      showAction,
+      reason,
+      canTrigger: !!triggerEnabled && enabled,
+      title: titles[reason] || "尚未生成模型分析",
+      detail: details[reason] || "来源信息仍可查看；未分析状态不会补成中性方向。",
+    };
+  }
+
+  function budgetPolicyText() {
+    const status = page.focusStatus || metaStatus(page.status) || {};
+    const availability = status.analysis_availability && typeof status.analysis_availability === "object"
+      ? status.analysis_availability
+      : {};
+    const jobs = Number(availability.daily_max_jobs);
+    const dollars = Number(availability.daily_budget_usd);
+    const jobText = Number.isFinite(jobs) ? `每日最多 ${Math.max(1, Math.floor(jobs))} 次` : "每日任务次数受限";
+    const budgetText = Number.isFinite(dollars) ? `总预算 ${dollars.toFixed(2)} 美元` : "美元预算受限";
+    return `${jobText}，${budgetText}`;
   }
   function classificationOf(item) {
     const analysis = analysisOf(item);
@@ -171,10 +244,22 @@
     return value > 0 ? "bullish" : value < 0 ? "bearish" : "neutral";
   }
   function itemId(item) { return String(item && (item.news_id || item.id) || ""); }
-  function itemTitle(item) { return item && (item.title_zh || item.title || item.headline) || "未命名新闻"; }
+  function itemTitle(item) {
+    const analysis = analysisOf(item);
+    return plainText(
+      (analysis && analysis.title_zh)
+      || (item && item.title_zh)
+      || "中文标题等待生成",
+    );
+  }
   function itemSummary(item) {
     const analysis = analysisOf(item);
-    return plainText(item && (item.summary || item.description) || (analysis && (analysis.headline_summary || analysis.title_zh)) || "");
+    return plainText(
+      (item && item.summary_zh)
+      || (analysis && (analysis.summary_zh || analysis.headline_summary))
+      || (item && item.headline_summary)
+      || "中文摘要等待生成",
+    );
   }
   function feedItems(payload) { return list(payload, ["items", "news", "results", "feed"]); }
   function newsItemFromPayload(payload) {
@@ -182,6 +267,7 @@
     return Object.assign({}, item, {
       analysis_job: payload && payload.analysis_job || item.analysis_job || null,
       analysis_trigger_enabled: payload && payload.analysis_trigger_enabled != null ? payload.analysis_trigger_enabled : item.analysis_trigger_enabled,
+      analysis_availability: payload && payload.analysis_availability || item.analysis_availability || null,
     });
   }
   function visibleFeedItems(payload) { return feedItems(payload); }
@@ -232,17 +318,26 @@
     tab: "feed",
     controller: null,
     timer: null,
+    refreshStateTimer: null,
     generation: 0,
     statusRequest: 0,
     feedRequest: 0,
     calendarRequest: 0,
     focusRequest: 0,
+    runtimeSettingsRequest: 0,
+    workerStatusRequest: 0,
     status: null,
     feed: null,
     calendar: null,
     focusStatus: null,
     hotspots: null,
     marketCycle: null,
+    successfulMarketCycle: null,
+    runtimeSettings: null,
+    runtimeHistory: [],
+    runtimeDirty: false,
+    workerStatus: null,
+    workerStateTimer: null,
     openStock: null,
     postRender: null,
   };
@@ -284,7 +379,6 @@
   }
 
   function pageShell() {
-    const privateAccess = privateActionsAvailable();
     page.view.innerHTML = `
       <div class="cat-desk">
         <div class="view-head" data-reveal style="--reveal-i:0">
@@ -308,24 +402,61 @@
           </div>
         </section>
 
-        <section class="cat-focus-cycle panel panel--pad" id="cat-focus-cycle" data-reveal style="--reveal-i:2" aria-labelledby="cat-focus-title">
+        <details class="panel panel--pad cat-runtime-settings" id="cat-runtime-settings" data-reveal style="--reveal-i:2">
+          <summary><strong>运行设置</strong><span class="mono" id="cat-runtime-version">正在读取</span></summary>
+          <p>这里只调整任务次数、费用额度和运行时段，不会读取或显示任何密钥。</p>
+          <form id="cat-runtime-form" autocomplete="off">
+            <div class="cat-filter-grid">
+              <label><span>每日分析次数</span><input name="daily_max_jobs" type="number" min="1" max="4" step="1" disabled /></label>
+              <label><span>每日系统预算（美元）</span><input name="daily_budget_usd" type="number" min="0.01" max="100" step="0.01" disabled /></label>
+              <label><span>分析冷却（秒）</span><input name="manual_analysis_cooldown_seconds" type="number" min="0" max="86400" step="1" disabled /></label>
+              <label><span>固定分析时刻（美东）</span><input name="scheduled_times_et" placeholder="08:00, 12:00, 16:00" disabled /></label>
+              <label class="cat-check"><input name="manual_analysis_enabled" type="checkbox" disabled /><span>允许手动分析</span></label>
+              <label class="cat-check"><input name="scheduled_analysis_enabled" type="checkbox" disabled /><span>启用固定时刻分析</span></label>
+            </div>
+            <div class="cat-filter-actions">
+              <span class="mono" id="cat-runtime-state">运行设置尚未载入</span>
+              <button class="btn btn--ghost btn--sm" type="button" id="cat-runtime-rollback" disabled>回滚上一版</button>
+              <button class="btn btn--amber btn--sm" type="submit" id="cat-runtime-save" disabled>保存设置</button>
+            </div>
+          </form>
+        </details>
+
+        <section class="panel panel--pad cat-owner-operations" id="cat-owner-operations" data-reveal style="--reveal-i:3" aria-labelledby="cat-operations-title">
+          <header class="cat-focus-cycle__head">
+            <div>
+              <span class="mono">OWNER OPERATIONS · UNIFIED WORKER</span>
+              <h2 id="cat-operations-title">日常维护</h2>
+              <p>操作进入同一个后台队列；重复点击会复用现有任务，普通刷新不占用模型预算。</p>
+            </div>
+            <span class="chip chip--mute" id="cat-worker-health">工作进程状态读取中</span>
+          </header>
+          <div class="cat-operation-facts" id="cat-operation-facts" aria-live="polite"></div>
+          <div class="cat-operation-actions">
+            <button class="btn btn--sm" type="button" data-worker-action="focus_refresh" disabled>刷新焦点股票池</button>
+            <button class="btn btn--sm" type="button" data-worker-action="strength_refresh" disabled>刷新强势雷达</button>
+            <button class="btn btn--sm" type="button" data-worker-action="breakout_refresh" disabled>刷新突破雷达</button>
+            <button class="btn btn--ghost btn--sm" type="button" data-worker-action="retention" disabled>执行数据清理</button>
+          </div>
+          <div id="cat-operation-state">${stateBlock("loading", "正在读取后台状态", "不会触发刷新或模型任务。")}</div>
+        </section>
+
+        <section class="cat-focus-cycle panel panel--pad" id="cat-focus-cycle" data-reveal style="--reveal-i:4" aria-labelledby="cat-focus-title">
           <header class="cat-focus-cycle__head">
             <div>
               <span class="mono">MARKET FOCUS · DISPLAY ONLY</span>
               <h2 id="cat-focus-title">市场与焦点股综合分析</h2>
               <p>事件组先通过确定性热点门控，再按需进入一次有界综合分析；结果不改变正式评分。</p>
             </div>
-            ${privateAccess
-              ? `<button class="btn btn--amber" type="button" id="cat-focus-run" disabled>读取准备状态</button>`
-              : `<span class="mono" data-private-focus-note>管理会话未解锁</span>`}
+            <span id="cat-focus-action"></span>
           </header>
           <div class="cat-focus-cycle__meta" id="cat-focus-meta" aria-live="polite"></div>
           <div class="cat-focus-cycle__body" id="cat-focus-body">${stateBlock("loading", "正在读取热点准备区", "普通页面刷新不会创建模型任务。")}</div>
         </section>
 
-        <section class="cat-summary" id="cat-summary" data-reveal style="--reveal-i:3" aria-label="催化剂摘要"></section>
+        <section class="cat-summary" id="cat-summary" data-reveal style="--reveal-i:4" aria-label="催化剂摘要"></section>
 
-        <section class="cat-workspace sect" data-reveal style="--reveal-i:4">
+        <section class="cat-workspace sect" data-reveal style="--reveal-i:5">
           <div class="cat-tabs" role="tablist" aria-label="催化剂数据视图">
             ${[["feed", "新闻流"], ["stocks", "股票影响"], ["calendar", "经济日历"], ["sources", "数据源"]].map(([key, label]) => `
               <button type="button" role="tab" id="cat-tab-${key}" aria-controls="cat-panel" aria-selected="${page.tab === key}" tabindex="${page.tab === key ? "0" : "-1"}" data-cat-tab="${key}">${label}</button>`).join("")}
@@ -347,9 +478,9 @@
             <div class="cat-filter-actions">
               <span class="mono" id="cat-filter-note">编辑中的条件不会被自动刷新覆盖</span>
               <button class="btn btn--ghost btn--sm" type="button" id="cat-clear">清除</button>
-              ${privateAccess
-                ? `<button class="btn btn--sm" type="button" id="cat-refresh">请求后台同步</button>`
-                : `<span class="mono" data-private-action-note>后台同步需管理授权</span>`}
+              <button class="btn btn--sm" type="button" data-cat-refresh="news" disabled>正在读取</button>
+              <button class="btn btn--sm" type="button" data-cat-refresh="calendar" disabled>正在读取</button>
+              <button class="btn btn--sm" type="button" data-cat-refresh="source_health" disabled>正在读取</button>
               <button class="btn btn--amber btn--sm" type="submit">应用筛选</button>
             </div>
           </form>
@@ -433,21 +564,400 @@
       writeDraftToForm();
       $("#cat-filter-note", page.view).textContent = "筛选草稿已清除；点“应用筛选”后生效";
     });
-    const refreshButton = $("#cat-refresh", page.view);
-    if (refreshButton) refreshButton.addEventListener("click", async buttonEvent => {
+    const runtimeForm = $("#cat-runtime-form", page.view);
+    runtimeForm.addEventListener("input", () => {
+      page.runtimeDirty = true;
+      $("#cat-runtime-state", page.view).textContent = "有尚未保存的运行设置";
+      $("#cat-runtime-save", page.view).disabled = false;
+    });
+    runtimeForm.addEventListener("submit", event => {
+      event.preventDefault();
+      saveRuntimeSettings();
+    });
+    $("#cat-runtime-rollback", page.view).addEventListener("click", rollbackRuntimeSettings);
+    $$('[data-worker-action]', page.view).forEach(button => button.addEventListener("click", () => {
+      requestWorkerOperation(button.dataset.workerAction);
+    }));
+    $$('[data-cat-refresh]', page.view).forEach(refreshButton => refreshButton.addEventListener("click", async buttonEvent => {
       const button = buttonEvent.currentTarget;
-      button.disabled = true; button.textContent = "已提交刷新";
+      const operationType = button.dataset.catRefresh;
+      button.disabled = true; button.textContent = "正在提交";
       try {
-        await N.catalystRefresh({ signal: page.controller && page.controller.signal });
-        $("#cat-read-state", page.view).innerHTML = stateBlock("queued", "刷新请求已进入后台队列", "当前快照继续显示；同步完成后由下一次刷新读取新数据。 ");
+        const operation = await N.catalystRefresh(operationType, { signal: page.controller && page.controller.signal });
+        rememberManualRefresh(operationType, operation);
+        renderRefreshButtons();
+        const status = className(operation && operation.status);
+        if (status === "cooldown") {
+          $("#cat-read-state", page.view).innerHTML = stateBlock("queued", "刷新仍在冷却中", `${Math.max(1, Number(operation.retry_after_seconds) || 1)} 秒后可再次请求。`);
+        } else {
+          $("#cat-read-state", page.view).innerHTML = stateBlock(status || "queued", "刷新请求已进入后台队列", "当前快照继续显示；后台只执行所选的数据刷新，不占用模型预算。 ");
+          watchManualRefresh(operation, operationType);
+        }
       } catch (error) {
         if (error.name !== "AbortError") $("#cat-read-state", page.view).innerHTML = stateBlock("degraded", "刷新请求未完成", error.message);
       } finally {
-        if (page.active) { button.disabled = false; button.textContent = "请求后台同步"; }
+        if (page.active) renderRefreshButtons();
+      }
+    }));
+  }
+
+  function runtimePreviousVersion() {
+    const current = Number(page.runtimeSettings && page.runtimeSettings.version);
+    return page.runtimeHistory
+      .map(item => Number(item && item.version))
+      .filter(version => Number.isFinite(version) && version < current)
+      .sort((left, right) => right - left)[0] || null;
+  }
+
+  function renderRuntimeSettings() {
+    if (!page.active || !page.view) return;
+    const form = $("#cat-runtime-form", page.view);
+    const documentState = page.runtimeSettings;
+    const settings = documentState && documentState.settings;
+    const available = !!(settings && settings.ai && settings.catalyst);
+    for (const input of Array.from(form.elements)) input.disabled = !available;
+    if (!available) {
+      $("#cat-runtime-version", page.view).textContent = "暂不可用";
+      $("#cat-runtime-state", page.view).textContent = "运行设置暂时无法读取";
+      $("#cat-runtime-save", page.view).disabled = true;
+      $("#cat-runtime-rollback", page.view).disabled = true;
+      return;
+    }
+    if (!page.runtimeDirty) {
+      form.elements.daily_max_jobs.value = String(settings.ai.daily_max_jobs);
+      form.elements.daily_budget_usd.value = Number(settings.ai.daily_budget_usd).toFixed(2);
+      form.elements.manual_analysis_cooldown_seconds.value = String(settings.ai.manual_analysis_cooldown_seconds);
+      form.elements.manual_analysis_enabled.checked = !!settings.ai.manual_analysis_enabled;
+      form.elements.scheduled_analysis_enabled.checked = !!settings.catalyst.scheduled_analysis_enabled;
+      form.elements.scheduled_times_et.value = Array.isArray(settings.catalyst.scheduled_times_et)
+        ? settings.catalyst.scheduled_times_et.join(", ")
+        : "";
+      $("#cat-runtime-state", page.view).textContent = `已载入版本 ${documentState.version}`;
+    }
+    $("#cat-runtime-version", page.view).textContent = `版本 ${documentState.version}`;
+    $("#cat-runtime-save", page.view).disabled = !page.runtimeDirty;
+    const previous = runtimePreviousVersion();
+    const rollback = $("#cat-runtime-rollback", page.view);
+    rollback.disabled = !previous;
+    rollback.textContent = previous ? `回滚到版本 ${previous}` : "没有可回滚版本";
+  }
+
+  function runtimeSettingsPatch() {
+    const form = $("#cat-runtime-form", page.view);
+    const times = String(form.elements.scheduled_times_et.value || "")
+      .split(",")
+      .map(value => value.trim())
+      .filter(Boolean);
+    if (!times.length || times.some(value => !/^([01]\d|2[0-3]):[0-5]\d$/.test(value))) {
+      throw new Error("固定分析时刻须使用 24 小时制，例如 08:00, 12:00, 16:00");
+    }
+    const dailyJobs = Number(form.elements.daily_max_jobs.value);
+    const dailyBudget = Number(form.elements.daily_budget_usd.value);
+    const cooldown = Number(form.elements.manual_analysis_cooldown_seconds.value);
+    if (!Number.isInteger(dailyJobs) || dailyJobs < 1 || dailyJobs > 4) throw new Error("每日分析次数须为 1 至 4");
+    if (!Number.isFinite(dailyBudget) || dailyBudget < 0.01 || dailyBudget > 100) throw new Error("每日系统预算须在 0.01 至 100 美元之间");
+    if (!Number.isInteger(cooldown) || cooldown < 0 || cooldown > 86400) throw new Error("分析冷却须为 0 至 86400 秒");
+    return {
+      ai: {
+        daily_max_jobs: dailyJobs,
+        daily_budget_usd: Math.round(dailyBudget * 100) / 100,
+        manual_analysis_enabled: !!form.elements.manual_analysis_enabled.checked,
+        manual_analysis_cooldown_seconds: cooldown,
+      },
+      catalyst: {
+        scheduled_analysis_enabled: !!form.elements.scheduled_analysis_enabled.checked,
+        scheduled_times_et: times,
+      },
+    };
+  }
+
+  async function loadRuntimeSettings() {
+    const request = ++page.runtimeSettingsRequest;
+    try {
+      const [documentState, history] = await Promise.all([
+        N.runtimeSettings({ signal: page.controller.signal }),
+        N.runtimeSettingsHistory({ signal: page.controller.signal }).catch(() => ({ revisions: [] })),
+      ]);
+      if (!page.active || request !== page.runtimeSettingsRequest) return;
+      page.runtimeSettings = documentState;
+      page.runtimeHistory = Array.isArray(history && history.revisions) ? history.revisions : [];
+    } catch (error) {
+      if (error.name === "AbortError" || !page.active || request !== page.runtimeSettingsRequest) return;
+      page.runtimeSettings = null;
+      page.runtimeHistory = [];
+    }
+    renderRuntimeSettings();
+  }
+
+  async function saveRuntimeSettings() {
+    if (!page.runtimeSettings || !page.runtimeDirty) return;
+    let settings;
+    try {
+      settings = runtimeSettingsPatch();
+    } catch (error) {
+      $("#cat-runtime-state", page.view).textContent = error.message;
+      return;
+    }
+    if (!window.confirm("保存后会立即影响新的分析任务和固定分析时刻；已提交任务不会被删除。确定保存吗？")) return;
+    const save = $("#cat-runtime-save", page.view);
+    save.disabled = true;
+    save.textContent = "正在保存";
+    try {
+      page.runtimeSettings = await N.updateRuntimeSettings({
+        expected_version: Number(page.runtimeSettings.version),
+        settings,
+      }, { signal: page.controller.signal });
+      page.runtimeDirty = false;
+      $("#cat-runtime-state", page.view).textContent = "运行设置已保存并立即生效";
+      await Promise.all([loadRuntimeSettings(), loadStatus(true), loadMarketFocus(true, false)]);
+    } catch (error) {
+      if (error.name !== "AbortError") $("#cat-runtime-state", page.view).textContent = error.message;
+    } finally {
+      if (page.active) {
+        save.textContent = "保存设置";
+        renderRuntimeSettings();
+      }
+    }
+  }
+
+  async function rollbackRuntimeSettings() {
+    const targetVersion = runtimePreviousVersion();
+    if (!page.runtimeSettings || !targetVersion) return;
+    if (!window.confirm(`将运行设置回滚到版本 ${targetVersion}，并生成一个新的当前版本。确定继续吗？`)) return;
+    const button = $("#cat-runtime-rollback", page.view);
+    button.disabled = true;
+    button.textContent = "正在回滚";
+    try {
+      page.runtimeSettings = await N.rollbackRuntimeSettings({
+        expected_version: Number(page.runtimeSettings.version),
+        target_version: targetVersion,
+      }, { signal: page.controller.signal });
+      page.runtimeDirty = false;
+      await Promise.all([loadRuntimeSettings(), loadStatus(true), loadMarketFocus(true, false)]);
+    } catch (error) {
+      if (error.name !== "AbortError") $("#cat-runtime-state", page.view).textContent = error.message;
+    } finally {
+      if (page.active) renderRuntimeSettings();
+    }
+  }
+
+  const WORKER_ACTION_LABELS = Object.freeze({
+    focus_refresh: "刷新焦点股票池",
+    strength_refresh: "刷新强势雷达",
+    breakout_refresh: "刷新突破雷达",
+    retention: "执行数据清理",
+  });
+
+  function workerTaskFor(actionType) {
+    return actionType;
+  }
+
+  function workerTaskAvailable(worker, actionType) {
+    if (!worker || worker.healthy !== true) return false;
+    const tasks = Array.isArray(worker.tasks) ? worker.tasks : [];
+    const taskName = workerTaskFor(actionType);
+    const task = tasks.find(item => item && item.task_name === taskName);
+    return !!task && task.enabled !== false;
+  }
+
+  function latestWorkerAction(actionType) {
+    const actions = page.workerStatus && Array.isArray(page.workerStatus.actions)
+      ? page.workerStatus.actions
+      : [];
+    return actions.find(item => item && item.action_type === actionType) || null;
+  }
+
+  function renderWorkerOperations() {
+    if (!page.active || !page.view) return;
+    clearTimeout(page.workerStateTimer);
+    page.workerStateTimer = null;
+    const worker = page.workerStatus || {};
+    const healthy = worker.healthy === true;
+    const workerStatus = className(worker.status || "unavailable");
+    const health = $("#cat-worker-health", page.view);
+    health.className = `chip ${healthy ? "chip--up" : "chip--down"}`;
+    health.textContent = healthy ? "工作进程正常" : "工作进程暂不可用";
+
+    const availability = (metaStatus(page.status) || {}).analysis_availability || {};
+    const used = Number(availability.budget_used_usd);
+    const limit = Number(availability.daily_budget_usd);
+    const submitted = Number(availability.submitted_jobs);
+    const maxJobs = Number(availability.daily_max_jobs);
+    const tokens = Number(availability.usage_total_tokens);
+    $("#cat-operation-facts", page.view).innerHTML = [
+      ["后台心跳", worker.heartbeat_at ? N.ago(worker.heartbeat_at) : "尚无记录"],
+      ["今日分析任务", Number.isFinite(submitted) && Number.isFinite(maxJobs) ? `${submitted} / ${maxJobs}` : "—"],
+      ["今日模型用量", Number.isFinite(tokens) ? `${Math.max(0, Math.round(tokens)).toLocaleString("zh-CN")} Token` : "—"],
+      ["今日费用额度", Number.isFinite(used) && Number.isFinite(limit) ? `${used.toFixed(2)} / ${limit.toFixed(2)} 美元` : "—"],
+    ].map(([label, value]) => `<span><small>${esc(label)}</small><b>${esc(value)}</b></span>`).join("");
+
+    let needsPoll = false;
+    let needsTick = false;
+    $$('[data-worker-action]', page.view).forEach(button => {
+      const actionType = button.dataset.workerAction;
+      const label = WORKER_ACTION_LABELS[actionType] || "执行操作";
+      const operation = latestWorkerAction(actionType) || {};
+      const status = className(operation.status);
+      const remaining = remainingSeconds(operation);
+      const taskEnabled = workerTaskAvailable(worker, actionType);
+      if (["queued", "running"].includes(status)) {
+        button.disabled = true;
+        button.textContent = status === "running" ? `执行中 · ${elapsedSeconds(operation)}秒` : "已进入队列";
+        needsPoll = true;
+        needsTick = true;
+      } else if (remaining > 0 || operation.reason === "cooldown") {
+        button.disabled = true;
+        button.textContent = `稍后可执行 · ${Math.max(1, remaining)}秒`;
+        needsTick = true;
+      } else if (!healthy || !taskEnabled) {
+        button.disabled = true;
+        button.textContent = `${label} · 暂不可用`;
+      } else {
+        button.disabled = false;
+        button.textContent = label;
       }
     });
-    const focusButton = $("#cat-focus-run", page.view);
-    if (focusButton) focusButton.addEventListener("click", () => startMarketFocusCycle());
+
+    const state = $("#cat-operation-state", page.view);
+    if (!page.workerStatus) {
+      state.innerHTML = stateBlock("unavailable", "后台状态暂不可用", "旧数据仍可读取，恢复后按钮会重新启用。");
+    } else if (!healthy) {
+      state.innerHTML = stateBlock("unavailable", "后台工作进程暂不可用", `状态：${workerStatus || "unavailable"}；不会创建重复任务。`);
+    } else {
+      const active = (worker.actions || []).find(item => ["queued", "running"].includes(className(item && item.status)));
+      state.innerHTML = active
+        ? stateBlock(className(active.status), WORKER_ACTION_LABELS[active.action_type] || "后台操作", active.status === "running" ? "正在执行，现有页面数据继续保留。" : "任务已排队，重复点击会复用此任务。")
+        : stateBlock("active", "后台工作进程正常", "四项日常操作均由运行状态、冷却与幂等控制。 ");
+    }
+    if (needsPoll) page.workerStateTimer = window.setTimeout(() => loadWorkerStatus(true), 2000);
+    else if (needsTick) page.workerStateTimer = window.setTimeout(renderWorkerOperations, 1000);
+  }
+
+  async function loadWorkerStatus(force) {
+    const request = ++page.workerStatusRequest;
+    try {
+      const worker = await N.workerStatus({ force: !!force, signal: page.controller.signal });
+      if (!page.active || request !== page.workerStatusRequest) return;
+      page.workerStatus = worker;
+    } catch (error) {
+      if (error.name === "AbortError" || !page.active || request !== page.workerStatusRequest) return;
+      page.workerStatus = null;
+    }
+    renderWorkerOperations();
+  }
+
+  async function requestWorkerOperation(actionType) {
+    const label = WORKER_ACTION_LABELS[actionType];
+    if (!label || !page.active) return;
+    if (actionType === "retention" && !window.confirm("数据清理只处理已到保留期限的数据，并先遵守数据库备份策略。确定继续吗？")) return;
+    const button = $(`[data-worker-action="${actionType}"]`, page.view);
+    button.disabled = true;
+    button.textContent = "正在提交";
+    try {
+      const operation = await N.requestWorkerAction(actionType, {}, { signal: page.controller.signal });
+      const worker = page.workerStatus || { healthy: true, status: "ok", tasks: [], actions: [] };
+      worker.actions = [operation].concat((worker.actions || []).filter(item => item.request_id !== operation.request_id));
+      page.workerStatus = worker;
+      renderWorkerOperations();
+    } catch (error) {
+      if (error.name !== "AbortError") {
+        $("#cat-operation-state", page.view).innerHTML = stateBlock("failed", `${label}未提交`, error.message);
+      }
+      renderWorkerOperations();
+    }
+  }
+
+  const REFRESH_LABELS = Object.freeze({
+    news: "刷新新闻",
+    calendar: "刷新日历",
+    source_health: "检查来源",
+  });
+
+  function rememberManualRefresh(operationType, operation) {
+    if (!operation || typeof operation !== "object") return;
+    const raw = metaStatus(page.status) || {};
+    if (!raw.manual_refreshes || typeof raw.manual_refreshes !== "object") raw.manual_refreshes = {};
+    raw.manual_refreshes[operationType] = operation;
+  }
+
+  function remainingSeconds(operation) {
+    const until = Date.parse(operation && operation.cooldown_until || "");
+    if (Number.isFinite(until)) return Math.max(0, Math.ceil((until - Date.now()) / 1000));
+    const explicit = Number(operation && operation.retry_after_seconds);
+    return Number.isFinite(explicit) && explicit > 0 ? Math.ceil(explicit) : 0;
+  }
+
+  function elapsedSeconds(operation) {
+    const since = Date.parse(operation && (operation.started_at || operation.requested_at) || "");
+    return Number.isFinite(since) ? Math.max(0, Math.floor((Date.now() - since) / 1000)) : 0;
+  }
+
+  function renderRefreshButtons() {
+    if (!page.active || !page.view) return;
+    clearTimeout(page.refreshStateTimer);
+    page.refreshStateTimer = null;
+    const raw = metaStatus(page.status) || {};
+    const availability = raw.analysis_availability && typeof raw.analysis_availability === "object"
+      ? raw.analysis_availability
+      : {};
+    const workerUnavailable = !page.status
+      || availability.worker_healthy === false
+      || ["unavailable", "disabled"].includes(className(raw.status));
+    const operations = raw.manual_refreshes && typeof raw.manual_refreshes === "object"
+      ? raw.manual_refreshes
+      : {};
+    let needsTick = false;
+    $$('[data-cat-refresh]', page.view).forEach(button => {
+      const type = button.dataset.catRefresh;
+      const operation = operations[type] || {};
+      const status = className(operation.status);
+      const remaining = remainingSeconds(operation);
+      if (["queued", "running"].includes(status)) {
+        const elapsed = elapsedSeconds(operation);
+        button.disabled = true;
+        button.textContent = status === "running" ? `刷新中 · ${elapsed}秒` : "刷新排队中";
+        needsTick = true;
+      } else if (remaining > 0 || status === "cooldown") {
+        button.disabled = true;
+        button.textContent = `稍后可刷新 · ${Math.max(1, remaining)}秒`;
+        needsTick = true;
+      } else if (workerUnavailable) {
+        button.disabled = true;
+        button.textContent = "刷新服务暂不可用";
+      } else {
+        button.disabled = false;
+        button.textContent = REFRESH_LABELS[type] || "立即刷新";
+      }
+    });
+    if (needsTick) page.refreshStateTimer = window.setTimeout(renderRefreshButtons, 1000);
+  }
+
+  function watchManualRefresh(operation, operationType) {
+    const requestId = operation && operation.request_id;
+    if (!requestId || !page.active) return;
+    window.setTimeout(async () => {
+      if (!page.active) return;
+      try {
+        const next = await N.catalystRefreshStatus(requestId, { signal: page.controller && page.controller.signal });
+        rememberManualRefresh(operationType, next);
+        renderRefreshButtons();
+        const status = className(next && next.status);
+        if (["queued", "running"].includes(status)) {
+          $("#cat-read-state", page.view).innerHTML = stateBlock(status, status === "running" ? "正在刷新数据" : "刷新任务排队中", "这项普通刷新不会占用模型预算。 ");
+          watchManualRefresh(next, operationType);
+          return;
+        }
+        if (status === "failed") {
+          $("#cat-read-state", page.view).innerHTML = stateBlock("failed", "刷新失败", next.error_code ? `错误码：${next.error_code}` : "后台没有完成这项刷新。 ");
+          return;
+        }
+        $("#cat-read-state", page.view).innerHTML = stateBlock("completed", "刷新完成", "正在读取最新的本地快照。 ");
+        if (operationType === "calendar") await loadCalendar(true);
+        else await Promise.all([loadStatus(true), loadFeed(true)]);
+      } catch (error) {
+        if (error.name !== "AbortError" && page.active) $("#cat-read-state", page.view).innerHTML = stateBlock("degraded", "刷新状态暂时无法读取", error.message);
+      }
+    }, 2000);
   }
 
   function renderHeader() {
@@ -477,6 +987,7 @@
       <span><small>降级来源</small><b>${sources.length ? (fallback ? `<span>兜底源</span> · ${fallback}` : degraded) : "—"}</b></span>
       <span><small>远程状态</small><b>${esc(resyncRequired ? `Resync · 第 ${feedStream.resync_generation ?? raw.resync_generation ?? "—"} 代` : statusLabel(raw.remote_status || raw.remote_state || status))}</b></span>
       <span><small>Schema</small><b>${esc(raw.schema_version || "—")}</b></span>`;
+    renderRefreshButtons();
   }
 
   function hotspotItems(payload) {
@@ -492,7 +1003,7 @@
     });
   }
 
-  function focusCycleDecision(rawStatus, cycleState, preparedCountValue, privateAccess) {
+  function focusCycleDecision(rawStatus, cycleState, preparedCountValue) {
     const raw = rawStatus || {};
     const cycle = cycleState || {};
     const preparedRevision = Number(raw.prepared_revision || 0);
@@ -502,13 +1013,22 @@
     const cyclePreparedRevision = cycleHasPreparedRevision ? rawCyclePreparedRevision : 0;
     const preparedCount = finite(preparedCountValue) ? preparedCountValue : 0;
     const active = !!((cycle.cycle_id || raw.active_cycle_id) && Jobs.isActive(cycle.status));
-    const capability = className(raw.capability || "disabled");
-    const authMissing = !privateAccess;
-    const budgetMissing = capability === "budget_configuration_required";
-    const actionMissing = raw.action_enabled === false || capability === "action_disabled" || capability === "disabled";
+    const availability = raw.analysis_availability && typeof raw.analysis_availability === "object"
+      ? raw.analysis_availability
+      : {};
+    const availabilityReason = className(availability.reason || "available");
+    const readOnly = availabilityReason === "read_only_mode";
+    const budgetMissing = availability.budget_available === false || availabilityReason === "budget_exhausted";
+    const workerMissing = availability.worker_healthy === false || availabilityReason === "worker_unavailable";
+    const concurrencyMissing = availability.concurrency_available === false || availabilityReason === "analysis_in_progress";
+    const notConfigured = availability.configured === false || availabilityReason === "not_configured";
+    const analysisUnavailable = raw.manual_enabled !== true || [
+      "read_only_mode", "manual_analysis_disabled", "settings_unavailable", "catalyst_disabled",
+    ].includes(availabilityReason);
     const snapshotUnavailable = ["stale", "unavailable", "disabled"].includes(className(raw.status));
     const hasNew = preparedRevision > consumedRevision && preparedCount > 0;
-    const cooldown = !!(raw.cooldown_until && new Date(raw.cooldown_until).getTime() > Date.now());
+    const cooldownUntil = availability.cooldown_until || raw.cooldown_until;
+    const cooldown = availability.cooldown_complete === false || !!(cooldownUntil && new Date(cooldownUntil).getTime() > Date.now());
     const unknownSubmission = className(cycle.error_code) === "submission_outcome_unknown";
     const newPreparationAfterUnknown = unknownSubmission
       && cycleHasPreparedRevision
@@ -518,19 +1038,27 @@
       && !unknownSubmission
       && ["failed", "cancelled", "incomplete_output"].includes(className(cycle.status))
     );
-    const commonAllowed = !authMissing && !active && !budgetMissing && !actionMissing && !snapshotUnavailable && !cooldown;
+    const commonAllowed = !active && !budgetMissing && !workerMissing && !concurrencyMissing && !notConfigured && !analysisUnavailable && !snapshotUnavailable && !cooldown;
     const canRetry = commonAllowed && retryable;
     const canCreate = commonAllowed
       && !retryable
-      && capability === "enabled"
       && !!raw.manual_enabled
       && hasNew
       && (!unknownSubmission || newPreparationAfterUnknown);
-    const canRun = canRetry || canCreate;
-    const buttonText = active ? "正在分析"
-      : authMissing ? "需要管理令牌"
-        : budgetMissing ? "分析预算未配置"
-        : actionMissing ? "分析功能未启用"
+    const canForce = commonAllowed
+      && !retryable
+      && !!raw.manual_enabled
+      && !hasNew
+      && preparedRevision > 0
+      && !unknownSubmission;
+    const canRun = canRetry || canCreate || canForce;
+    const showAction = !analysisUnavailable;
+    const buttonText = active ? "分析任务正在运行"
+      : budgetMissing ? "今日预算已用完"
+        : workerMissing ? "服务暂不可用"
+        : concurrencyMissing ? "分析任务正在运行"
+        : notConfigured ? "尚未配置OpenAI"
+        : analysisUnavailable ? "分析功能未启用"
           : snapshotUnavailable ? "热点快照暂不可用"
             : unknownSubmission && !newPreparationAfterUnknown ? "提交结果待核对"
               : cooldown ? "分析冷却中"
@@ -539,14 +1067,15 @@
                 : `基于 ${Math.round(preparedCount)} 个新热点重新分析`)
                   : retryable ? "重试同一不可变快照"
                     : hasNew ? `基于 ${Math.round(preparedCount)} 个新热点重新分析`
-                      : "暂无新热点";
+                      : canForce ? "重新分析当前上下文" : "暂无可分析的热点上下文";
     return {
       preparedRevision, consumedRevision, cyclePreparedRevision, cycleHasPreparedRevision, preparedCount,
-      active, capability, authMissing, budgetMissing, actionMissing, snapshotUnavailable,
+      active, budgetMissing, workerMissing, concurrencyMissing, notConfigured, readOnly, analysisUnavailable, snapshotUnavailable,
       hasNew, cooldown, unknownSubmission, newPreparationAfterUnknown,
-      retryable, canRetry, canCreate, canRun, buttonText,
+      retryable, canRetry, canCreate, canForce, canRun, buttonText,
+      showAction,
       showHistoricalUnknown: unknownSubmission && (
-        newPreparationAfterUnknown || authMissing || actionMissing || budgetMissing || snapshotUnavailable
+        newPreparationAfterUnknown || notConfigured || analysisUnavailable || budgetMissing || snapshotUnavailable
       ),
     };
   }
@@ -556,6 +1085,7 @@
     if (!decision || !decision.canRun) return null;
     if (decision.canRetry && cycle.cycle_id) return { retry_cycle_id: cycle.cycle_id };
     if (decision.canCreate) return { expected_prepared_revision: decision.preparedRevision };
+    if (decision.canForce) return { expected_prepared_revision: decision.preparedRevision, force: true };
     return null;
   }
 
@@ -570,9 +1100,7 @@
     const nextStep = decision.canCreate
       ? "当前的新准备版本可另行创建全新周期。"
       : decision.newPreparationAfterUnknown
-        ? decision.authMissing
-          ? "新的准备版本不属于该历史周期，解锁管理会话后可另建周期。"
-          : "新的准备版本不属于该历史周期，需待分析功能可用后另建周期。"
+        ? "新的准备版本不属于该历史周期，需待分析功能可用后另建周期。"
         : "需等待服务端完成核对。";
     return stateBlock(
       "degraded",
@@ -598,7 +1126,7 @@
       : null;
     return `<article class="cat-hotspot">
       <header><span class="chip ${hotScore != null && hotScore >= 75 ? "chip--down" : "chip--amber"}">热点 ${score(hotScore)}</span><span class="chip chip--mute">${esc(statusLabel(item.status || "prepared"))}</span></header>
-      <h3>${esc(item.representative_title || item.title || "未命名事件组")}</h3>
+      <h3>${esc(item.representative_title || "热点标题等待中文分析")}</h3>
       <p class="cat-hotspot__meta">${esc(item.event_type || "other")} · 独立来源 ${finite(item.source_count) ? Math.round(item.source_count) : sources.length || "—"} · 市场确认 ${confirmation == null ? "缺失并重算权重" : score(confirmation)}</p>
       <p class="cat-hotspot__meta">首次 ${timeHtml(item.first_published_at || item.available_at)} · 最近 ${timeHtml(item.last_published_at || item.available_at)}</p>
       ${reasons.length ? `<p>${esc(reasons.join(" · "))}</p>` : ""}
@@ -635,10 +1163,23 @@
   function renderFocusPanel() {
     const raw = page.focusStatus || {};
     const cycle = cyclePayload(page.marketCycle || {});
+    const successfulCycle = cyclePayload(page.successfulMarketCycle || {});
+    const displayedCycle = cycleResultHtml(cycle) ? cycle : successfulCycle;
     const events = hotspotItems(page.hotspots);
-    const preparedCount = finite(raw.prepared_hot_count) ? raw.prepared_hot_count : events.filter(item => className(item.status) === "prepared").length;
-    const decision = focusCycleDecision(raw, cycle, preparedCount, privateActionsAvailable());
-    const button = $("#cat-focus-run", page.view);
+    const preparedCount = finite(raw.prepared_hot_count) && raw.prepared_hot_count > 0
+      ? raw.prepared_hot_count
+      : events.length;
+    const decision = focusCycleDecision(raw, cycle, preparedCount);
+    const actionHost = $("#cat-focus-action", page.view);
+    let button = actionHost && $("#cat-focus-run", actionHost);
+    if (actionHost && !decision.showAction) {
+      actionHost.replaceChildren();
+      button = null;
+    } else if (actionHost && !button) {
+      actionHost.innerHTML = '<button class="btn btn--amber" type="button" id="cat-focus-run" disabled>读取准备状态</button>';
+      button = $("#cat-focus-run", actionHost);
+      button.addEventListener("click", () => startMarketFocusCycle());
+    }
     if (button) {
       button.disabled = !decision.canRun;
       button.textContent = decision.buttonText;
@@ -653,23 +1194,26 @@
     ].map(([label, value]) => `<span><small>${esc(label)}</small><b>${esc(value)}</b></span>`).join("");
 
     const terminalFailure = !decision.unknownSubmission
-      && (cycle.status === "failed" || cycle.status === "incomplete_output");
+      && ["failed", "incomplete_output", "budget_blocked"].includes(cycle.status);
     const unknownNeedsReview = decision.unknownSubmission && !decision.newPreparationAfterUnknown;
     let state = "";
-    if (decision.active) state = stateBlock(cycle.status, statusLabel(cycle.status), "新热点仍会进入下一准备版本，不会混入当前不可变快照。 ");
+    if (decision.active) state = stateBlock(cycle.status, "分析任务正在运行", "新热点仍会进入下一准备版本，不会混入当前不可变快照。 ");
     else if (unknownNeedsReview) state = stateBlock("degraded", "提交结果待核对", "无法确认远端是否已经受理。为避免重复计费，本周期禁止重试，需等待服务端核对结果。 ");
-    else if (terminalFailure) state = stateBlock("failed", statusLabel(cycle.status), cycle.error_code ? `安全错误码：${cycle.error_code}；准备版本尚未消费。` : "准备版本尚未消费，可在冷却结束后显式重试。 ");
-    else if (decision.authMissing) state = stateBlock("disabled", "管理会话未解锁", "当前标签页没有管理令牌；历史结果仍可查看，付费分析操作不会显示。 ");
-    else if (decision.budgetMissing) state = stateBlock("disabled", "分析预算尚未配置", "每日任务和每日输出 Token 两项预算齐全后，自动周期才允许启用。 ");
-    else if (decision.actionMissing) state = stateBlock("disabled", "分析功能未启用", "当前只显示历史结果和热点准备状态，不会创建新的模型任务。 ");
+    else if (terminalFailure) state = stateBlock("failed", statusLabel(cycle.status), cycle.error_code ? `${analysisErrorDetail(cycle)}；准备版本尚未消费。` : "准备版本尚未消费，可在冷却结束后显式重试。 ");
+    else if (decision.budgetMissing) state = stateBlock("disabled", "今日分析预算已用完", `${budgetPolicyText()}；额度恢复前不会提交新的模型任务。`);
+    else if (decision.workerMissing) state = stateBlock("disabled", "后台工作进程暂不可用", "工作进程恢复后才能创建新的综合分析周期。 ");
+    else if (decision.concurrencyMissing) state = stateBlock("disabled", "已有分析正在运行", "同一时间只运行一项模型分析。 ");
+    else if (decision.notConfigured) state = stateBlock("disabled", "模型服务尚未配置", "配置完成前只显示历史结果和热点准备状态，不会创建新的模型任务。 ");
+    else if (decision.readOnly) state = stateBlock("disabled", "当前为只读模式", "当前只显示历史结果和热点准备状态，不会创建新的模型任务。 ");
+    else if (decision.analysisUnavailable) state = stateBlock("disabled", "分析功能未启用", "当前只显示历史结果和热点准备状态，不会创建新的模型任务。 ");
     else if (decision.snapshotUnavailable) state = stateBlock("unavailable", "热点快照暂不可用", "当前快照恢复后才能创建新的综合分析周期。 ");
-    else if (!decision.hasNew && !cycleResultHtml(cycle)) state = stateBlock("empty", "暂无新热点", "普通新闻仍会保存；没有合格热点时不会创建手动综合分析。 ");
-    const accessNotice = decision.authMissing && (terminalFailure || unknownNeedsReview)
-      ? stateBlock("disabled", "管理会话未解锁", "当前标签页没有管理令牌；只读任务状态仍会显示，付费分析操作不会显示。 ")
-      : "";
+    else if (!decision.hasNew && !cycleResultHtml(displayedCycle)) state = stateBlock("empty", "当前没有新热点", "可重新分析现有新闻、焦点股票和市场数据；会创建新周期并可能产生模型费用。 ");
     const history = focusUnknownHistoryHtml(cycle, decision);
     const cards = events.length ? `<div class="cat-hotspot-list">${events.slice(0, 8).map(hotspotCard).join("")}</div>` : "";
-    $("#cat-focus-body", page.view).innerHTML = `${state}${accessNotice}${history}${cycleResultHtml(cycle)}${cards}` || stateBlock("empty", "暂无热点准备记录", "确定性门控不会用中性分填充缺失证据。 ");
+    const preservedResult = displayedCycle.cycle_id && displayedCycle.cycle_id !== cycle.cycle_id
+      ? stateBlock("active", "保留最近成功结果", "最新重跑未完成，旧周期结果继续显示且未被覆盖。")
+      : "";
+    $("#cat-focus-body", page.view).innerHTML = `${state}${history}${preservedResult}${cycleResultHtml(displayedCycle)}${cards}` || stateBlock("empty", "暂无热点准备记录", "确定性门控不会用中性分填充缺失证据。 ");
   }
 
   function summaryValue(summary, keys) {
@@ -723,6 +1267,11 @@
     const sentiment = sentimentOf(item);
     const impacts = impactsOf(item);
     const ruleOnly = isRuleOnlyAnalysis(item);
+    const job = item.analysis_job || item.job || null;
+    const triggerEnabled = analysisTriggerEnabledOf(item);
+    const access = analysisActionDecision(triggerEnabled, analysisAvailabilityOf(item));
+    const activeJob = !!(job && job.job_id && Jobs.isActive(job.status));
+    const force = analysisRetryForce(item, job);
     const url = item.url || item.source_url;
     return `<article class="cat-news ${item.is_stale ? "is-stale" : ""}">
       <div class="cat-news__rail" aria-hidden="true"><i></i></div>
@@ -744,7 +1293,7 @@
         ${analysis && !ruleOnly && impacts.length ? `<div class="cat-news__tickers">${impacts.slice(0, 5).map(impact => `<span><b>${esc(upperTicker(impact.ticker || impact.symbol) || "—")}</b><em class="${(impactValue(impact) || 0) > 0 ? "u" : (impactValue(impact) || 0) < 0 ? "d" : "dim"}">${signedScore(impactValue(impact))}</em><small>${esc(mechanismLabel(impact.mechanism || impact.impact_mechanism || ""))}</small></span>`).join("")}</div>` : ""}
       <footer class="cat-news__foot">
         <span class="mono">${ruleOnly ? "上下文不足，确定性规则未生成方向，也未调用模型" : analysis ? "模型影响分仅作新闻展示，不进入正式评分" : "尚无模型方向、影响分或置信度"}</span>
-        <span>${externalLink(url, "原文")}<button type="button" class="cat-link" data-catalyst-news="${esc(itemId(item))}">查看分析 →</button></span>
+        <span>${externalLink(url, "原文")}<button type="button" class="cat-link" data-catalyst-news="${esc(itemId(item))}">查看分析 →</button>${access.showAction ? `<button type="button" class="btn btn--amber btn--sm" data-catalyst-analyze="${esc(itemId(item))}" ${access.canTrigger && !activeJob ? "" : `disabled title="${esc(activeJob ? "分析任务正在运行" : access.detail)}"`}>${activeJob ? "分析处理中" : force ? "重新分析" : "生成分析"}</button>` : ""}</span>
       </footer>
     </article>`;
   }
@@ -821,6 +1370,13 @@
 
   function bindPanelActions() {
     $$('[data-catalyst-news]', page.view).forEach(button => button.addEventListener("click", () => openNews(button.dataset.catalystNews)));
+    $$('[data-catalyst-analyze]', page.view).forEach(button => button.addEventListener("click", async () => {
+      const id = button.dataset.catalystAnalyze;
+      const item = visibleFeedItems(page.feed).find(candidate => itemId(candidate) === id);
+      if (!item) return;
+      await openNews(id);
+      startAnalysis(item, analysisRetryForce(item, item.analysis_job || item.job || null));
+    }));
     $$('[data-cat-stock]', page.view).forEach(button => button.addEventListener("click", () => page.openStock && page.openStock(button.dataset.catStock)));
     const more = $("[data-cat-more]", page.view);
     if (more) more.addEventListener("click", () => loadMore(more));
@@ -868,6 +1424,7 @@
     if (!page.active || request !== page.statusRequest) return;
     page.status = payload;
     renderHeader(); renderSummary(); renderReadState();
+    if (page.feed) renderPanel();
   }
 
   async function loadFeed(force) {
@@ -920,22 +1477,29 @@
       },
       onError: error => {
         if (!page.active) return;
-        page.marketCycle = Object.assign({}, cycle, { status: "failed", error_code: error.code || "market_focus_poll_failed" });
+        page.marketCycle = Object.assign({}, cycle, { status: "failed", error_code: error.code || "market_focus_poll_failed", retry_after_seconds: error.retryAfter });
         renderFocusPanel();
       },
     });
   }
 
   function startMarketFocusCycle() {
-    if (!privateActionsAvailable()) return;
     const raw = page.focusStatus || {};
     const cycle = cyclePayload(page.marketCycle || {});
-    const preparedCount = finite(raw.prepared_hot_count)
+    const hotspotCount = hotspotItems(page.hotspots).length;
+    const preparedCount = finite(raw.prepared_hot_count) && raw.prepared_hot_count > 0
       ? raw.prepared_hot_count
-      : hotspotItems(page.hotspots).filter(item => className(item.status) === "prepared").length;
-    const decision = focusCycleDecision(raw, cycle, preparedCount, true);
+      : hotspotCount;
+    const decision = focusCycleDecision(raw, cycle, preparedCount);
     const request = focusCycleRequest(decision, cycle);
     if (!request) return;
+    const budget = budgetPolicyText();
+    const confirmation = request.force
+      ? `当前没有新热点，将重新分析同一准备版本并创建新周期，旧结果会保留。该操作可能产生模型费用；${budget}。确定继续吗？`
+      : request.retry_cycle_id
+        ? `重试会再次提交同一份不可变快照，可能产生模型费用；${budget}。确定继续吗？`
+        : `将根据当前新热点创建综合分析周期。该操作可能产生模型费用；${budget}。确定继续吗？`;
+    if (!window.confirm(confirmation)) return;
     Jobs.start({
       scope: "catalyst-page:market-focus",
       create: signal => N.createCatalystMarketCycle(
@@ -952,7 +1516,7 @@
       },
       onError: error => {
         if (!page.active) return;
-        page.marketCycle = { status: "failed", error_code: error.code || "market_focus_create_failed" };
+        page.marketCycle = { status: "failed", error_code: error.code || "market_focus_create_failed", retry_after_seconds: error.retryAfter };
         renderFocusPanel();
       },
     });
@@ -967,7 +1531,7 @@
     });
     try {
       const [status, hotspots, latest] = await Promise.all([
-        safe(N.catalystHotspotStatus(force, page.controller.signal), { capability: "disabled", manual_enabled: false }),
+        safe(N.catalystHotspotStatus(force, page.controller.signal), { manual_enabled: false, analysis_availability: { enabled: false, reason: "unavailable" } }),
         safe(N.catalystHotspots({ limit: 8, include_consumed: true }, options), { items: [] }),
         safe(N.catalystMarketCycleLatest(options), null),
       ]);
@@ -975,11 +1539,14 @@
       page.focusStatus = status;
       page.hotspots = hotspots;
       page.marketCycle = latest ? cyclePayload(latest) : null;
+      page.successfulMarketCycle = latest && latest.latest_successful_cycle
+        ? cyclePayload(latest.latest_successful_cycle)
+        : null;
       renderFocusPanel();
       if (shouldWatch && page.marketCycle) watchMarketFocusCycle(page.marketCycle);
     } catch (error) {
       if (error.name === "AbortError" || !page.active || request !== page.focusRequest) return;
-      if (!page.focusStatus) page.focusStatus = { capability: "disabled", manual_enabled: false };
+      if (!page.focusStatus) page.focusStatus = { manual_enabled: false, analysis_availability: { enabled: false, reason: "unavailable" } };
       renderFocusPanel();
     }
   }
@@ -989,6 +1556,8 @@
       loadStatus(force),
       loadFeed(force),
       loadMarketFocus(force),
+      loadRuntimeSettings(),
+      loadWorkerStatus(force),
       page.tab === "calendar" ? loadCalendar(force) : Promise.resolve(),
     ]);
   }
@@ -1017,6 +1586,11 @@
     page.focusStatus = null;
     page.hotspots = null;
     page.marketCycle = null;
+    page.successfulMarketCycle = null;
+    page.runtimeSettings = null;
+    page.runtimeHistory = [];
+    page.runtimeDirty = false;
+    page.workerStatus = null;
     page.openStock = options.openStock;
     page.postRender = options.postRender;
     page.tab = ["feed", "stocks", "calendar", "sources"].includes(page.params.get("tab")) ? page.params.get("tab") : "feed";
@@ -1032,7 +1606,11 @@
   function leaveRoute() {
     page.active = false;
     clearTimeout(page.timer);
+    clearTimeout(page.refreshStateTimer);
+    clearTimeout(page.workerStateTimer);
     page.timer = null;
+    page.refreshStateTimer = null;
+    page.workerStateTimer = null;
     if (page.controller) page.controller.abort();
     page.controller = null;
     Jobs.stopPrefix("catalyst-page:");
@@ -1045,43 +1623,47 @@
     const displayItem = persistedAnalysis || !analysis ? item : Object.assign({}, item, { analysis });
     const status = statusPayload ? Jobs.normalizeStatus(statusPayload.status) : analysisStatus(item);
     const ruleOnly = isRuleOnlyAnalysis(displayItem, statusPayload);
-    const triggerEnabled = item.analysis_trigger_enabled != null
-      ? !!item.analysis_trigger_enabled
-      : !!((metaStatus(page.status) || {}).analysis_trigger_enabled);
-    const access = analysisActionDecision(triggerEnabled, privateActionsAvailable());
+    const triggerEnabled = analysisTriggerEnabledOf(item);
+    const access = analysisActionDecision(triggerEnabled, analysisAvailabilityOf(item));
     const canTrigger = access.canTrigger;
     const isActive = ["pending", "queued", "in_progress", "cancel_requested"].includes(status) && statusPayload && statusPayload.job_id;
     const model = statusPayload && statusPayload.model || (analysis && analysis.model) || item.model || "gpt-5.6-terra";
     const reasoning = statusPayload && statusPayload.reasoning || (analysis && analysis.reasoning) || item.reasoning || "max";
     if (!analysis) {
       const elapsed = statusPayload && Jobs.elapsed(statusPayload);
-      const accessNotice = (isActive || status === "failed") && (access.authMissing || access.actionMissing)
+      const accessNotice = (isActive || status === "failed") && access.modeUnavailable
         ? stateBlock("disabled", access.title, access.detail)
+        : "";
+      const runAction = !isActive && access.showAction
+        ? `<button class="btn btn--amber btn--sm" id="cat-analysis-run" type="button" data-cat-analyze="${esc(itemId(item))}" ${canTrigger ? "" : `disabled title="${esc(access.detail)}"`}>${status === "failed" || status === "cancelled" ? "重试分析" : "生成分析"}</button>`
+        : "";
+      const cancelAction = isActive
+        ? `<button class="btn btn--sm" id="cat-analysis-cancel" type="button" data-cat-cancel-job ${status === "cancel_requested" ? "disabled" : ""}>${status === "cancel_requested" ? "正在取消" : "取消任务"}</button>`
         : "";
       return `<div class="cat-analysis-state">
         <span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span>
-        <h3>${isActive ? status === "in_progress" ? "模型正在分析" : "分析任务已排队" : status === "failed" ? "分析任务失败" : esc(access.title)}</h3>
-        <p>${isActive ? `${statusPayload.submitted_at || statusPayload.created_at ? "提交 " + N.fmtDateTime(statusPayload.submitted_at || statusPayload.created_at) : ""}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · ${esc(model)} · ${esc(reasoning)}；不显示估算进度。` : status === "failed" ? "原始新闻仍可阅读；失败状态不会补成中性方向。" : esc(access.detail)}</p>
-        ${statusPayload && statusPayload.error_code ? `<p class="d">安全错误码：${esc(statusPayload.error_code)}${statusPayload.retry_after_seconds || statusPayload.retry_after ? ` · ${Math.ceil(statusPayload.retry_after_seconds || statusPayload.retry_after)} 秒后可重试` : ""}</p>` : ""}
+        <h3>${isActive ? "分析任务正在运行" : status === "failed" ? "分析任务失败" : esc(access.title)}</h3>
+        <p>${isActive ? `${statusPayload.submitted_at || statusPayload.created_at ? "提交 " + N.fmtDateTime(statusPayload.submitted_at || statusPayload.created_at) : ""}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · ${esc(model)} · ${esc(reasoning)}；不显示估算进度。` : status === "failed" ? "来源信息仍可查看；失败状态不会补成中性方向。" : esc(access.detail)}</p>
+        ${statusPayload && statusPayload.error_code ? `<p class="d">${esc(analysisErrorDetail(statusPayload))}</p>` : ""}
         ${accessNotice}
-        <div class="cat-analysis-actions">
-          ${canTrigger && !isActive ? `<button class="btn btn--amber btn--sm" id="cat-analysis-run" type="button" data-cat-analyze="${esc(itemId(item))}" ${status === "budget_blocked" ? "disabled" : ""}>${status === "failed" || status === "cancelled" ? "显式重试分析" : "请求分析"}</button>` : ""}
-          ${canTrigger && isActive ? `<button class="btn btn--sm" id="cat-analysis-cancel" type="button" data-cat-cancel-job>取消任务</button>` : ""}
-        </div>
+        ${runAction || cancelAction ? `<div class="cat-analysis-actions">${runAction}${cancelAction}</div>` : ""}
       </div>`;
     }
     const impacts = rawImpactsOf(displayItem);
     const validations = validationMapOf(displayItem);
-    const retryableTerminal = !!(statusPayload && statusPayload.job_id && (status === "failed" || status === "cancelled"));
-    const accessNotice = access.authMissing || access.actionMissing
+    const retryableTerminal = !!(statusPayload && statusPayload.job_id && ["failed", "cancelled", "budget_blocked"].includes(status));
+    const accessNotice = access.modeUnavailable
       ? stateBlock("disabled", access.title, access.detail)
       : "";
     const jobNotice = isActive
-      ? `<div class="cat-analysis-state" style="margin-bottom:14px"><span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span><p>${statusPayload && (statusPayload.submitted_at || statusPayload.created_at) ? "提交 " + N.fmtDateTime(statusPayload.submitted_at || statusPayload.created_at) : "新的分析版本正在后台处理"} · ${esc(model)} · ${esc(reasoning)} · 现有已完成版本继续显示 · 不显示估算进度</p>${canTrigger ? `<div class="cat-analysis-actions"><button class="btn btn--sm" id="cat-analysis-cancel" type="button" data-cat-cancel-job>取消新任务</button></div>` : ""}</div>`
+      ? `<div class="cat-analysis-state" style="margin-bottom:14px"><span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span><p>分析任务正在运行 · ${statusPayload && (statusPayload.submitted_at || statusPayload.created_at) ? "提交 " + N.fmtDateTime(statusPayload.submitted_at || statusPayload.created_at) : "新的分析版本正在后台处理"} · ${esc(model)} · ${esc(reasoning)} · 现有已完成版本继续显示 · 不显示估算进度</p><div class="cat-analysis-actions"><button class="btn btn--sm" id="cat-analysis-cancel" type="button" data-cat-cancel-job ${status === "cancel_requested" ? "disabled" : ""}>${status === "cancel_requested" ? "正在取消" : "取消新任务"}</button></div></div>`
       : retryableTerminal
-        ? `<div class="cat-analysis-state" style="margin-bottom:14px"><span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span><p>新版本任务未完成；现有已完成版本继续显示。</p>${statusPayload.error_code ? `<p class="d">安全错误码：${esc(statusPayload.error_code)}</p>` : ""}${canTrigger ? `<div class="cat-analysis-actions"><button class="btn btn--amber btn--sm" id="cat-analysis-run" type="button" data-cat-analyze="${esc(itemId(item))}">显式重试分析</button></div>` : ""}</div>`
+        ? `<div class="cat-analysis-state" style="margin-bottom:14px"><span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span><p>新版本任务未完成；现有已完成版本继续显示。</p>${statusPayload.error_code ? `<p class="d">${esc(analysisErrorDetail(statusPayload))}</p>` : ""}</div>`
         : "";
-    return `${accessNotice}${jobNotice}<div class="cat-analysis-result">
+    const reanalysisAction = !isActive && access.showAction
+      ? `<div class="cat-analysis-actions"><button class="btn btn--amber btn--sm" id="cat-analysis-run" type="button" data-cat-analyze="${esc(itemId(item))}" ${canTrigger ? "" : `disabled title="${esc(access.detail)}"`}>重新分析</button></div>`
+      : "";
+    return `${accessNotice}${jobNotice}${reanalysisAction}<div class="cat-analysis-result">
       <div class="cat-news__signals">
         <span class="chip ${ruleOnly ? "chip--mute" : "chip--amber"}"><i></i>${esc(analysisOriginLabel(displayItem))}</span>
         ${!ruleOnly && classificationOf(displayItem) ? `<span class="chip ${chipTone(classificationOf(displayItem))}">新闻整体 · ${esc(classLabel(classificationOf(displayItem)))}</span>` : ""}
@@ -1150,6 +1732,11 @@
 
   function startAnalysis(item, force, asOf) {
     const id = itemId(item);
+    const budget = budgetPolicyText();
+    const confirmation = force
+      ? `重新分析会创建新的分析版本，旧结果会保留。该操作可能产生模型费用；${budget}。确定继续吗？`
+      : `生成分析可能产生模型费用；${budget}。确定继续吗？`;
+    if (!window.confirm(confirmation)) return;
     Jobs.start({
       scope: "catalyst-drawer:" + id,
       create: signal => N.createCatalystAnalysis(id, force, { signal }),
@@ -1336,7 +1923,10 @@
     renderPage, leaveRoute, openNews, mountTickerPanel, mountScreenerBatch, abortPageEnhancements, onDrawerClosed,
     labels: { statusLabel, classLabel },
     formatConfidence: pct,
+    analysisErrorMessage, analysisErrorDetail,
     impactsOf, impactDirection, sentimentOf, isRuleOnlyAnalysis, analysisOriginLabel, analysisRetryForce, compactNews, plainText,
+    itemTitle, itemSummary,
     analysisActionDecision, focusCycleDecision, focusCycleRequest, focusUnknownHistoryHtml,
+    workerTaskAvailable,
   };
 })();

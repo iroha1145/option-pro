@@ -101,8 +101,8 @@ def test_explicit_refresh_is_bounded_and_replaces_the_cached_snapshot(
     monkeypatch.setattr(earnings.time, "monotonic", lambda: clock[0])
 
     initial = asyncio.run(earnings.upcoming_earnings())
-    refreshed = asyncio.run(earnings.upcoming_earnings(refresh=True))
-    cooled = asyncio.run(earnings.upcoming_earnings(refresh=True))
+    refreshed = asyncio.run(earnings.refresh_upcoming_earnings())
+    cooled = asyncio.run(earnings.refresh_upcoming_earnings())
 
     assert initial["earnings"] == [{"ticker": "T1"}]
     assert refreshed["earnings"] == [{"ticker": "T2"}]
@@ -134,7 +134,7 @@ def test_failed_explicit_refresh_preserves_cached_data(
     monkeypatch.setattr(earnings.time, "monotonic", lambda: 200.0)
 
     initial = asyncio.run(earnings.upcoming_earnings())
-    stale = asyncio.run(earnings.upcoming_earnings(refresh=True))
+    stale = asyncio.run(earnings.refresh_upcoming_earnings())
 
     assert initial["earnings"] == [{"ticker": "SAFE"}]
     assert stale["earnings"] == [{"ticker": "SAFE"}]

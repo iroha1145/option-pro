@@ -1,0 +1,197 @@
+import { expect, test } from "@playwright/test";
+
+
+const PASSWORD_BASE_URL = process.env.OPTIX_PASSWORD_BASE_URL || "https://127.0.0.1:8768";
+const OWNER_PASSWORD = "optix-browser-test-password-2026";
+const NOW = "2026-07-16T12:00:00Z";
+
+
+function catalystNews() {
+  return {
+    news_id: "password-e2e-news",
+    source: "Local Fixture",
+    title_zh: "登录后的单篇分析入口保持可见",
+    summary_zh: "这条本地记录只用于检查密码模式下的操作入口，不会调用外部服务。",
+    published_at: NOW,
+    fetched_at: NOW,
+    analysis_status: "not_requested",
+    analysis_trigger_enabled: true,
+    analysis_availability: { enabled: true, reason: "available" },
+  };
+}
+
+
+function responseFor(pathname) {
+  if (pathname === "/api/market/indices") {
+    return { indices: [], as_of: NOW, source_status: "active", data_limited: false };
+  }
+  if (pathname === "/api/market/status") {
+    return { market: "closed", phase: "weekend", is_open: false, exchange_timezone: "America/New_York", as_of: NOW };
+  }
+  if (pathname === "/api/stocks/watchlist") {
+    return {
+      groups: [{
+        id: "core",
+        name: "本地验收",
+        stocks: [{ ticker: "NVDA", name: "英伟达", price: 142.35, change: 1.2, change_percent: 0.85, spark: [140, 141, 142.35] }],
+      }],
+      as_of: NOW,
+      data_through: NOW,
+      oldest_quote_at: NOW,
+      latest_quote_at: NOW,
+      source_status: "active",
+      attempted: 1,
+      succeeded: 1,
+      failed: 0,
+      failed_tickers: [],
+      delayed: 0,
+      delayed_tickers: [],
+    };
+  }
+  if (pathname === "/api/earnings/upcoming") return { earnings: [] };
+  if (pathname === "/api/options/unusual") return { results: [], attempted: 0, as_of: NOW };
+  if (pathname === "/api/stocks/NVDA") return { ticker: "NVDA", price: 142.35, change_percent: 0.85, volume: 48_000_000, market_cap: 3_500_000_000_000 };
+  if (pathname === "/api/stocks/NVDA/chart") return { bars: [{ t: NOW, o: 140, h: 143, l: 139, c: 142.35, v: 48_000_000 }], as_of: NOW, last_bar_at: NOW, exchange_timezone: "America/New_York" };
+  if (pathname === "/api/stocks/NVDA/signals") return { score: 68, overall: "bullish", signals: { rsi: { value: 58 } } };
+  if (pathname === "/api/catalysts/status") {
+    return {
+      status: "active",
+      enabled: true,
+      remote_status: "ok",
+      data_through: NOW,
+      last_sync_at: NOW,
+      model: "gpt-5.6-terra",
+      reasoning: "max",
+      analysis_trigger_enabled: true,
+      analysis_availability: { enabled: true, reason: "available" },
+      sources: [{ name: "Local Fixture", status: "active", last_success_at: NOW, consecutive_failures: 0 }],
+    };
+  }
+  if (pathname === "/api/catalysts/feed") {
+    return { status: "active", items: [catalystNews()], summary: { news_6h: 1, analyzed_24h: 0, bullish: 0, bearish: 0, pending: 1, high_impact_calendar: 0 } };
+  }
+  if (pathname === "/api/catalysts/news/password-e2e-news") return catalystNews();
+  if (pathname === "/api/catalysts/hotspots/status") {
+    return {
+      status: "active",
+      manual_enabled: true,
+      analysis_availability: { enabled: true, reason: "available", budget_available: true, worker_healthy: true, concurrency_available: true },
+      prepared_hot_count: 1,
+      prepared_revision: 2,
+      last_consumed_revision: 1,
+      data_through: NOW,
+    };
+  }
+  if (pathname === "/api/catalysts/hotspots") {
+    return {
+      status: "active",
+      items: [{
+        event_group_id: "password-e2e-hotspot",
+        status: "prepared",
+        representative_title: "本地密码模式验收热点",
+        event_type: "company_update",
+        source_count: 1,
+        source_names: ["Local Fixture"],
+        validated_tickers: ["NVDA"],
+        hot_score: 70,
+        hot_reasons: ["本地验收数据"],
+        first_published_at: NOW,
+        last_published_at: NOW,
+      }],
+    };
+  }
+  if (pathname === "/api/catalysts/market-focus-cycles/latest") return null;
+  if (pathname === "/api/catalysts/calendar") return { status: "active", events: [] };
+  if (pathname === "/api/runtime-settings") {
+    return {
+      revision: 1,
+      settings: {
+        ai: { manual_analysis_enabled: true, daily_max_jobs: 4, daily_budget_usd: 2 },
+        catalyst: { mode: "manual", manual_refresh_cooldown_seconds: 30 },
+      },
+    };
+  }
+  if (pathname === "/api/runtime-settings/history") return { items: [] };
+  if (pathname === "/api/worker/status") {
+    return {
+      healthy: true,
+      tasks: ["focus_refresh", "strength_refresh", "breakout_refresh", "retention"].map(task_name => ({ task_name, enabled: true })),
+    };
+  }
+  if (pathname === "/api/worker/actions") return { items: [] };
+  return {};
+}
+
+
+async function installLocalDataFixtures(page) {
+  await page.route("**/api/**", async route => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (pathname.startsWith("/api/access/")) {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(responseFor(pathname)),
+    });
+  });
+}
+
+
+test("real password mode logs in with a strict cookie, exposes controls, and locks again after logout", async ({ page, context }) => {
+  await installLocalDataFixtures(page);
+  await page.goto(`${PASSWORD_BASE_URL}/`, { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/login.html`);
+
+  const password = page.locator("#owner-password");
+  await expect(password).toHaveValue("");
+  expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 0, session: 0 });
+
+  const loginResponsePromise = page.waitForResponse(response => (
+    new URL(response.url()).pathname === "/api/access/login"
+    && response.request().method() === "POST"
+  ));
+  await password.fill(OWNER_PASSWORD);
+  await page.locator("#owner-login-submit").click();
+  const loginResponse = await loginResponsePromise;
+  expect(loginResponse.status()).toBe(200);
+  const setCookie = await loginResponse.headerValue("set-cookie");
+  expect(setCookie).toMatch(/optix_owner_session=/i);
+  expect(setCookie).toMatch(/HttpOnly/i);
+  expect(setCookie).toMatch(/Secure/i);
+  expect(setCookie).toMatch(/SameSite=Strict/i);
+  expect(setCookie).toMatch(/Path=\//i);
+  await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/`);
+
+  const ownerCookie = (await context.cookies(PASSWORD_BASE_URL)).find(cookie => cookie.name === "optix_owner_session");
+  expect(ownerCookie).toMatchObject({ httpOnly: true, secure: true, sameSite: "Strict", path: "/" });
+  expect(await page.evaluate(() => document.cookie)).toBe("");
+  expect(await page.evaluate(testPassword => ({
+    local: JSON.stringify(localStorage),
+    session: JSON.stringify(sessionStorage),
+    leaked: [...Object.values(localStorage), ...Object.values(sessionStorage)].some(value => String(value).includes(testPassword)),
+  }), OWNER_PASSWORD)).toEqual({ local: "{}", session: "{}", leaked: false });
+
+  await page.goto(`${PASSWORD_BASE_URL}/#catalysts`, { waitUntil: "networkidle" });
+  await expect(page.locator("#owner-logout")).toBeVisible();
+  await expect(page.locator('[data-cat-refresh="news"]')).toBeVisible();
+  await expect(page.locator('[data-cat-refresh="calendar"]')).toBeVisible();
+  await expect(page.locator('[data-cat-refresh="source_health"]')).toBeVisible();
+  await expect(page.locator("[data-catalyst-analyze]")).toBeVisible();
+  await expect(page.locator("#cat-focus-run")).toBeVisible();
+  await expect(page.locator("#cat-focus-run")).toBeEnabled();
+
+  const logoutResponsePromise = page.waitForResponse(response => (
+    new URL(response.url()).pathname === "/api/access/logout"
+    && response.request().method() === "POST"
+  ));
+  await page.locator("#owner-logout").click();
+  expect((await logoutResponsePromise).status()).toBe(200);
+  await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/login.html`);
+  expect((await context.cookies(PASSWORD_BASE_URL)).some(cookie => cookie.name === "optix_owner_session")).toBe(false);
+
+  await page.goto(`${PASSWORD_BASE_URL}/`, { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/login.html`);
+});

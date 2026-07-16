@@ -1,250 +1,200 @@
 # Optix Pro
 
-Optix Pro 是一个面向个人使用的美股行情、期权链和信号观察工具。后端使用 FastAPI，前端是无构建步骤的 Vanilla JavaScript SPA；行情主要来自 Yahoo Finance / yfinance，并可选接入 OpenAI Responses API。
+Optix Pro 是面向个人使用的美股期权、突破信号与新闻分析工作台。正式运行只有两个常驻容器：
 
-> 本项目不是实时行情终端，也不构成投资建议。Yahoo 数据可能延迟、缺失或临时不可用；下单前请用券商行情确认价格、交易时段和合约信息。
+- `backend`：提供网页、接口和查询，也接收所有者明确发起的任务。
+- `worker`：统一管理突破扫描、新闻同步、焦点快照、模型任务、刷新、备份与清理。
 
-## 当前能力
+两个容器共用同一镜像和数据卷。模型固定为 GPT-5.6 Terra，推理等级固定为 `max`，最大并发数固定为 1。新闻标题、摘要、等待提示和分析内容必须通过简体中文校验；来源原文只作为内部证据保留。
 
-- 自选总览、股票搜索、价格走势和公司详情
-- 指定到期日的期权链、成交量/持仓量和异动提示
-- 板块内当前 ATM IV 对比和热力图
-- 顶部/底部程序化信号、强势股雷达
-- 突破雷达：全市场粗筛、点时复核、生命周期跟踪和可解释评分
-- 预设美股列表的财报日历
-- 可选 AI 分析：
-  - 期权异动和顶部/底部信号只分析应用提供的结构化数据，不联网补行情或事件
-  - 财报关联/影响分析会启用模型的 web search 工具
+本项目不是实时行情终端，也不构成投资建议。Yahoo 等公开数据可能延迟、缺失或临时不可用，下单前仍需用券商行情核对。
 
-### “期权异动扫描”的准确范围
+## 运行条件
 
-`GET /api/options/unusual` 不是全市场实时扫描。它会扫描以下 10 个热门标的：
+- Docker Desktop，或带有容器编排（Docker Compose）2.24 以上版本的 Docker Engine
+- 建议至少 4 GB 可用内存
+- 默认端口 `2000`
 
-`NVDA, TSLA, AAPL, AMD, AMZN, META, MSFT, SPY, QQQ, GOOGL`
+## 安装
 
-每个标的只检查 Yahoo 返回的前两个到期日，结果缓存 120 秒并最多返回 50 条。数据频率、延迟和可用性由 Yahoo/yfinance 决定；接口会在部分标的失败时返回降级状态。
-
-## Docker 快速开始
-
-要求 Docker Engine / Docker Desktop，以及 Docker Compose 2.24 或更高版本。
-
-```bash
-git clone https://github.com/iroha1145/option-pro.git
-cd option-pro
-cp .env.example .env
-chmod 600 .env
-./scripts/deploy.sh
-```
-
-部署脚本会读取当前 Git 提交号，将它写入镜像标签和运行环境；为避免版本标记失真，Git 工作区存在未提交源码时会拒绝部署。镜像完整构建后才一次性重建容器，并核对 `/ready` 返回的提交号和前端文件完整性。前端已经打入同一个镜像，不会出现“新前端配旧后端”的混合版本。这个过程会有短暂的容器重启窗口，不是双机零停机切换。
-
-访问 <http://localhost:2000>。进程健康信息位于 <http://localhost:2000/health>，部署就绪检查位于 <http://localhost:2000/ready>，两者都会返回 `app_version`、`app_commit` 和前端完整性摘要。
-
-也可以运行交互式安装脚本：
+交互式安装：
 
 ```bash
 ./setup.sh
 ```
 
-脚本会在仓库根目录创建权限为 `0600` 的 `.env`，等待容器通过健康检查后才报告启动成功。
-
-焦点快照生产器默认关闭。只有完成 MacroLens 对接配置并确认需要发布焦点数据时，才在 `.env` 中显式设置：
-
-```dotenv
-FOCUS_PRODUCER_ENABLED=true
-FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS=120
-FOCUS_DAILY_STRENGTH_SETTLEMENT_DELAY_SECONDS=1800
-FOCUS_DAILY_STRENGTH_MIN_COVERAGE=0.9
-```
-
-未设置启用变量、使用环境模板或运行交互式安装脚本时，焦点快照生产器均保持关闭。显式开启后，日线缓存会等待收盘数据结算 30 分钟，并且只有预期股票覆盖率达到 90% 才会写入全天缓存；覆盖不足或数据仍落后时只使用短时降级缓存。每日强度缓存保留 30 天；焦点快照最近 30 天保留全部半小时版本，30 至 90 天每个交易日保留代表版本，同时保留市场焦点周期和任务引用的完整输入。
-
-`FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS` 是焦点快照刷新时的健康宽限，默认 120 秒，可设置为 30 至 900 秒。旧快照刚超过正常刷新周期时，只要生产器仍在刷新且心跳正常，服务会在宽限期内保持可用并标记为降级；宽限结束后仍未发布新快照，健康检查才会判定失败。部署脚本会在启动前校验该范围。
-
-从 GitHub 更新已经部署的服务器时，使用：
+手动安装：
 
 ```bash
-git pull --ff-only
+cp .env.example .env
+cp machine.env.example machine.env
+cp secrets.env.example secrets.env
+chmod 600 .env machine.env secrets.env
+./personal.sh doctor
 ./scripts/deploy.sh
 ```
 
-不要在拉取代码后只运行 `docker compose restart`；重启不会构建新的后端镜像。
+完成后访问 <http://localhost:2000>。进程健康信息位于 `/health`，部署就绪检查位于 `/ready`。
 
-### OpenAI 配置（可选）
+`./personal.sh doctor` 与密钥管理命令会使用一次性后台容器中的锁定依赖，主机不需要另建 Python 虚拟环境。首次执行会构建该容器，后续使用构建缓存。
 
-默认不启用 AI。使用 OpenAI 官方服务时只填写 key，`OPENAI_BASE_URL` 保持为空：
+部署脚本会校验配置、构建当前提交，停止同一编排项目中的旧工作容器，确认旧写入者已经退出，再启动 `backend` 与统一的 `worker`。它不会刷新新闻、运行扫描或创建模型任务，也不能用单纯重启容器代替新版本构建。
 
-```dotenv
-OPENAI_API_KEY=
-OPENAI_BASE_URL=
-ALLOW_CUSTOM_OPENAI_BASE_URL=false
-OPENAI_MODEL=gpt-5.6-terra
-OPENAI_REASONING=max
-```
+日常容器命令统一通过 `./scripts/compose.sh` 执行。这个入口会让 `.env` 与 `machine.env` 同时参与编排插值；直接运行原始 `docker compose` 会停止并提示使用安全入口，避免静默采用错误的监听地址、端口或 MacroLens 配置。
 
-如果使用 OpenAI-compatible 代理，`OPENAI_BASE_URL` 才填写代理地址，同时必须显式设置 `ALLOW_CUSTOM_OPENAI_BASE_URL=true`，并且只能使用该代理签发的专属 key。自定义公网地址必须是 HTTPS（本机回环地址除外）。不要把 OpenAI 官方 key 交给第三方代理。兼容服务还需要支持 Responses API；财报联网分析需要支持 `web_search_preview` 工具。
+## 配置边界
 
-从旧版升级且 `.env` 中已有非空 `OPENAI_BASE_URL` 时，部署前必须完成上述 key 确认并补上 `ALLOW_CUSTOM_OPENAI_BASE_URL=true`，否则应用会拒绝启动 AI 配置。
+`config/personal.toml` 管理访问模式、功能行为、任务频率、模型限制、预算、冷却与数据保留期。正式运行参数不能通过环境变量改成其他模型或更高并发。
 
-Option Pro 的 AI 任务默认最多输出 32768 Token，不自动重试，允许范围为 256—128000，整个进程最多同时访问模型 2 次。联网检索会与最终 JSON 共用输出预算，因此过低的上限可能截断结构化结果。可通过以下变量调整：
+`machine.env` 只保存七项机器配置：
 
-```dotenv
-OPENAI_TIMEOUT_SECONDS=900
-OPENAI_MAX_RETRIES=0
-OPTION_PRO_AI_MAX_OUTPUT_TOKENS=32768
-OPENAI_MAX_CONCURRENCY=2
-```
+- `HOST_BIND`
+- `PORT`
+- `MACROLENS_URL`
+- `ALLOWED_HOSTS`
+- `TRUST_PROXY_HEADERS`
+- `TRUSTED_PROXY_CIDRS`
+- `DATA_DIR`
 
-旧变量 `OPENAI_MAX_OUTPUT_TOKENS` 只用于兼容已有部署；新配置应使用 `OPTION_PRO_AI_MAX_OUTPUT_TOKENS`。两个变量同时存在时，专用变量优先。
+`secrets.env` 只保存五项服务端密钥：
 
-## 安全的远程访问
+- `OPENAI_API_KEY`
+- `FINNHUB_API_KEY`
+- `MARKETDATA_TOKEN`
+- `INTERNAL_API_TOKEN`
+- `APP_PASSWORD_HASH`
 
-Compose 默认只发布到 `127.0.0.1:2000`。推荐保持这个默认值，并选择以下方式之一：
+进程已经导出的值优先级最高；`.env` 只保留一个版本迁移期的兼容用途，`machine.env` 只接收七个机器字段，`secrets.env` 只接收五个密钥。错放到其他文件的字段不会覆盖正式来源。
 
-1. SSH 隧道：
+旧名称 `MARKETDATA_API_TOKEN`、`MACROLENS_BASE_URL` 和 `MACROLENS_INTERNAL_TOKEN` 只供迁移工具识别。旧名与新名同时存在且值不一致时，迁移会停止，不会猜测采用哪一项。旧签名密钥、请求随机数（Nonce）、密钥编号（Key ID）、前一把密钥和浏览器令牌不会进入最终运行配置。
 
-   ```bash
-   ssh -L 2000:127.0.0.1:2000 user@your-server
-   ```
+## 模型分析
 
-   然后在本机打开 <http://localhost:2000>。
-
-2. 通过可信 VPN（例如 WireGuard/Tailscale）访问服务器内网。
-3. 放在配置了 HTTPS 的反向代理后，并设置强随机 `APP_AUTH_TOKEN`。
-
-不要把 `HOST_BIND` 改成 `0.0.0.0` 后直接通过公网 HTTP 暴露服务。HTTP 不加密浏览器 token；内置 token 也只是个人部署的轻量保护，不是多用户权限系统。应用默认会拒绝“非本机监听且 `APP_AUTH_TOKEN` 为空”的组合。
-
-只有服务位于外部防火墙或 VPN 保护的私有网络、并且确实需要无 token 访问时，才可显式设置 `ALLOW_INSECURE_PUBLIC_BIND=true`。它只是解除启动保护，不会自动提供加密或访问控制，不能用于普通公网 HTTP。
-
-设置 `APP_AUTH_TOKEN` 后，在同源页面的浏览器控制台保存同一个 token：
-
-```js
-sessionStorage.setItem('optix.app.token', 'same-strong-random-token');
-location.reload();
-```
-
-只有部署在可信 HTTPS/SSH/VPN 链路上时才这样使用。反向代理部署必须把每个公开域名写入 `ALLOWED_HOSTS`，部署脚本会使用这些域名的 `Host` 请求再次检查就绪状态：
-
-```dotenv
-ALLOWED_HOSTS=option.example.com
-```
-
-若 HTTPS 页面需要无需手工令牌即可展示行情，可同时设置：
-
-```dotenv
-PUBLIC_READ_API_ENABLED=true
-DEPLOY_WARM_WATCHLIST=true
-```
-
-该开关必须与非空的 `APP_AUTH_TOKEN` 同时配置，只放行后端明确列出的行情、强势、突破、板块、财报、期权和 Catalyst 本地缓存读取接口，以及有 50 个代码上限的 Catalyst 批量查询。匿名 Catalyst 响应只保留页面展示字段；模型任务、任务详情、重试、取消、刷新和其他写入操作仍要求 `APP_AUTH_TOKEN`，长期令牌不会写入网页。公开读取仍受原有按来源地址限流约束。
-
-`DEPLOY_WARM_WATCHLIST=true` 会在切换容器前，把当前服务最后一份有效自选行情原子保存到共享数据卷；`WATCHLIST_SNAPSHOT_PATH` 必须位于 `/data`。若既读不到当前行情，也没有 24 小时内的有效快照，部署会在流量切换前停止。新容器先用这份快照即时显示页面，并在后台更新；切换后脚本最多等待两分钟确认新行情。行情源暂时不可用时，部署会明确告警并继续保留有时限的旧快照，不会把已经运行的新容器误报成已回滚。
-
-若反向代理与前端跨域，再精确设置 `ALLOWED_ORIGINS`。只有在可信代理已经覆盖并清洗转发头时才设置 `TRUST_PROXY_HEADERS=true`，并同时填写代理直连来源网段；不能填写访客网段：
-
-```dotenv
-TRUST_PROXY_HEADERS=true
-TRUSTED_PROXY_CIDRS=127.0.0.1/32,10.0.0.0/24
-```
-
-从缺少 `ALLOWED_HOSTS` 的旧版 `.env` 升级时，部署脚本会先停止并要求补上这一行。仅通过本机、SSH 隧道或虚拟专用网络（VPN）访问时可保留空值；使用公开域名时必须明确列出域名，避免容器健康但网页被主机校验拒绝。
-
-## 本地开发
-
-本地开发使用 Python 3.12。根目录 `.env` 会按绝对路径加载，因此从 `backend/` 启动时也能可靠读取配置：
+默认没有模型密钥，因此不会提交付费任务。需要启用时，在服务器上执行：
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --require-hashes -r backend/requirements.txt
-cp .env.example .env
-cd backend
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+./personal.sh secrets set OPENAI_API_KEY
 ```
 
-访问 <http://localhost:8000>，API 文档位于 <http://localhost:8000/docs>。
+个人版只连接 OpenAI 官方响应接口（Responses API），不接受自定义模型代理。固定参数为：
 
-### 依赖锁定
+```toml
+[ai]
+model = "gpt-5.6-terra"
+reasoning = "max"
+max_concurrency = 1
+execution_mode = "background"
+```
 
-- `backend/requirements.in` 保存直接运行依赖。
-- `backend/requirements.txt` 保存完整间接依赖和 PyPI 发行文件哈希，Docker 使用它安装。
-- `backend/requirements-ci.in` 与 `backend/requirements-ci.txt` 另外锁定测试和依赖审计工具。
+供应商提交失败后的自动重试固定为零，不通过环境变量更改。
 
-修改 `.in` 文件后，安装 `uv` 并重新生成锁文件：
+模型任务保留严格结构化输出、每日任务次数、每日美元预算与冷却限制。相同输入会先复用原任务，即使队列已满也不会重复计费；只有新任务在队列饱和时返回 429 和 `Retry-After: 60`。
+
+每日美元预算是提交前的本地保守预留，不是供应商的实时账单，最终费用仍以供应商后台为准。
+
+## 访问安全
+
+访问模式只在 `config/personal.toml` 中设置：
+
+```toml
+[access]
+mode = "private_network"
+```
+
+`private_network` 只用于本机、安全外壳（SSH）转发、可信虚拟专用网络（VPN）或直接私网连接。该模式必须保持 `TRUST_PROXY_HEADERS=false`，不能放在 Nginx、Caddy、Cloudflare Tunnel 或公网负载均衡器后；监听地址和允许主机也只能使用本机或许可私网地址。
+
+任何反向代理、公开域名或公网入口都必须使用 `password` 模式，并满足以下条件：
+
+- `secrets.env` 中存在有效的 `APP_PASSWORD_HASH`；
+- `machine.env` 明确列出允许访问的域名；
+- 外层代理提供有效的超文本传输安全协议（HTTPS）；
+- 允许主机中只要含有域名，就必须设置 `TRUST_PROXY_HEADERS=true`；
+- `TRUSTED_PROXY_CIDRS` 只包含实际代理来源网段，不得使用公网全网段。
+
+例如 `option.openweb-ui.xyz` 一类公开域名必须使用密码模式和 HTTPS。应用启动、`./personal.sh doctor` 与部署脚本共用同一校验器，配置不完整时都会停止。
+
+密码模式只有一个所有者（Owner）密码，不提供用户、角色、注册或找回密码。密码会话使用有时效的 `HttpOnly`、`Secure`、`SameSite=Strict` Cookie；`/health` 与 `/ready` 无需登录，其余页面和接口共用同一所有者边界。
+
+## 密钥管理
 
 ```bash
-./scripts/lock-dependencies.sh
+./personal.sh secrets status
+./personal.sh secrets set OPENAI_API_KEY
+./personal.sh secrets set FINNHUB_API_KEY
+./personal.sh secrets set MARKETDATA_TOKEN
+./personal.sh secrets set INTERNAL_API_TOKEN
+./personal.sh secrets set APP_PASSWORD_HASH
+./personal.sh secrets remove OPENAI_API_KEY
+./personal.sh secrets validate
 ```
 
-持续集成会以 Python 3.12.13 安装哈希锁定文件，运行依赖漏洞审计、测试、镜像构建、容器就绪检查，以及首页和压缩响应的冒烟测试。
+`status` 只显示是否配置，不回显值。`validate` 只做格式、安全权限和免计费连通性检查，不创建模型任务。密钥写入使用锁、私有临时文件和原子替换，避免并发修改相互覆盖。
 
-## 常用接口
+部署与个人管理命令共用同一个主机操作锁，不能并行执行。密钥变化只会重建原本正在运行的受影响服务，并保留其正式提交镜像；脚本会等待服务恢复健康。无根模式（Rootless Mode）可用，开启用户命名空间重映射（User Namespace Remapping）的 Docker 主机不支持这些密钥管理命令。
 
-| 接口 | 说明 |
-| --- | --- |
-| `GET /health` | 进程健康、版本和前端完整性信息 |
-| `GET /ready` | 容器部署就绪检查；前端文件不完整时返回 503 |
-| `GET /api/stocks/watchlist` | 预设自选行情 |
-| `GET /api/stocks/search?q=nvidia` | 搜索股票 |
-| `GET /api/stocks/{ticker}` | 股票概况 |
-| `GET /api/stocks/{ticker}/chart?range=1d` | 日 K 线数据 |
-| `GET /api/options/{ticker}/expirations` | 可用到期日 |
-| `GET /api/options/{ticker}/chain?expiration=2026-07-17` | 指定期权链 |
-| `GET /api/options/unusual` | 10 个热门标的的有限异动扫描 |
-| `GET /api/earnings/upcoming` | 预设列表财报日历 |
-| `GET /api/sectors/{id}/iv-ranking` | 板块当前 IV 对比 |
-| `GET /api/stocks/{ticker}/signals` | 单标的 RSI、MACD、均线与成交量技术状态 |
-| `GET /api/signals/market` | 大盘十五项顶部/底部技术分析 |
-| `GET /api/signals/stock/{ticker}` | 程序化顶部/底部信号 |
-| `GET /api/strength/scan` | 强势股扫描，含价格/成交额门槛与区间持续性影子结果 |
-| `GET /api/strength/market` | 六维市场环境与六态大盘形态 |
-| `GET /api/breakouts/current` | 最近一次完整突破快照 |
-| `GET /api/breakouts/events` | 可筛选、可游标分页的突破事件 |
-| `GET /api/breakouts/events/{event_id}` | 突破结构、评分和状态变化证据 |
-| `GET /api/breakouts/tickers/{ticker}` | 单只股票的近期突破轨迹 |
-| `GET /api/breakouts/status` | 雷达工作进程、数据源和数据库状态 |
-
-## 运维
+## 健康检查
 
 ```bash
-docker compose ps
-docker compose logs -f backend
-docker compose restart backend
-docker compose down
+curl --fail http://127.0.0.1:2000/ready
+./scripts/compose.sh exec -T worker python -m app.worker --healthcheck
 ```
 
-`restart` 只适合重启当前镜像；部署新提交应运行 `./scripts/deploy.sh`。
+统一工作进程应且只应报告九项任务：
 
-容器以非 root 用户运行，应用源码由 root 所有且根文件系统只读；运行时缓存限制在 `/tmp` 内存文件系统。Docker 日志使用轮转，健康检查访问 `/ready`。镜像构建上下文通过 `.dockerignore` 排除 `.env`、Git 历史、缓存和本地虚拟环境。
+- `breakout`
+- `catalyst_sync`
+- `focus`
+- `ai_jobs`
+- `maintenance`
+- `focus_refresh`
+- `strength_refresh`
+- `breakout_refresh`
+- `retention`
 
-当前仓库没有绑定某台服务器的自动部署任务。持续集成通过只能证明该提交通过测试与容器冒烟检查；服务器是否已经更新，应以服务器 `/ready` 返回的 `app_commit` 为准。
+健康检查只读取本地进程锁、心跳和任务状态，不会运行扫描、请求真实新闻源或创建模型任务，也不会消耗付费额度。
 
-## 项目结构
+## 数据与迁移
 
-```text
-option-pro/
-├── backend/
-│   ├── app/
-│   │   ├── api/          # FastAPI 路由
-│   │   ├── services/     # 行情、评分和 AI 服务
-│   │   ├── models/       # Pydantic 模型
-│   │   └── main.py
-│   ├── requirements.in
-│   ├── requirements.txt
-│   ├── requirements-ci.in
-│   ├── requirements-ci.txt
-│   └── Dockerfile
-├── frontend/
-│   ├── index.html
-│   └── static/
-├── docker-compose.yml
-├── scripts/
-│   ├── deploy.sh
-│   └── lock-dependencies.sh
-├── setup.sh
-└── .env.example
+所有运行数据保存在 `optix-data` 命名卷，并从统一的 `DATA_DIR` 派生：
+
+- `optix.db`
+- `catalyst-cache.db`
+- `ai-jobs.db`
+- `optix-worker.db`
+- `runtime-settings.json`
+- `watchlist-snapshot-v1.json`
+- `backups/`
+
+升级和回滚时不要附加 `--volumes` 或 `-v`。迁移工具会生成 `personal.toml`、`machine.env`、`secrets.env` 和不含任何值的 `migration-report.json`。详细边界见[个人版迁移说明](docs/personal-edition/migration.md)。
+
+## 期权异动范围
+
+`GET /api/options/unusual` 不是全市场实时扫描。它只扫描 `NVDA`、`TSLA`、`AAPL`、`AMD`、`AMZN`、`META`、`MSFT`、`SPY`、`QQQ`、`GOOGL`，每个标的检查 Yahoo 返回的前两个到期日，结果缓存 120 秒并最多返回 50 条。
+
+## 本地验证
+
+```bash
+bash -n setup.sh personal.sh scripts/compose.sh scripts/deploy.sh scripts/lock-dependencies.sh
+./scripts/compose.sh config -q
+PYTHONPATH=backend python -m pytest -q
+node --test frontend/tests/*.test.mjs
+node frontend/tests/static_assertions.mjs
+npm --prefix frontend run test:visual
 ```
 
-## License
+持续集成（CI）只使用本地夹具和模拟连接，不访问真实 OpenAI、新闻源、行情源或生产数据库。检查通过只说明该提交通过测试与容器验证，不代表生产服务器已经更新。
+
+## 日常管理
+
+```bash
+./scripts/compose.sh ps
+./scripts/compose.sh logs -f backend worker
+./scripts/compose.sh restart backend worker
+./scripts/compose.sh down
+```
+
+工作进程的停止宽限期为 2100 秒，避免把正在保存响应身份的模型任务留在未知状态。
+
+## 许可证
 
 [MIT](LICENSE)

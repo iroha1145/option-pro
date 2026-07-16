@@ -626,6 +626,7 @@ def test_watchlist_restart_snapshot_loads_immediately_and_is_replaced(monkeypatc
                 {
                     "version": 1,
                     "saved_at": saved_at,
+                    "parameters": {"tickers": None},
                     "payload": old_payload,
                 }
             ),
@@ -682,6 +683,52 @@ def test_watchlist_restart_snapshot_loads_immediately_and_is_replaced(monkeypatc
     asyncio.run(scenario())
 
 
+def test_watchlist_reloads_newer_worker_snapshot_after_process_start(
+    monkeypatch,
+    tmp_path,
+):
+    async def scenario():
+        now = 45_000.0
+        snapshot_path = tmp_path / "watchlist.json"
+        stocks._write_watchlist_snapshot(
+            snapshot_path,
+            payload=_watchlist_payload("initial"),
+            saved_at=44_000.0,
+        )
+        monkeypatch.setattr(stocks.time, "time", lambda: now)
+        monkeypatch.setattr(stocks, "_WATCHLIST_SNAPSHOT_PATH", snapshot_path)
+        monkeypatch.setattr(stocks, "_watchlist_snapshot_load_attempted", False)
+        monkeypatch.setattr(stocks, "_watchlist_snapshot_observed", None)
+        stocks._endpoint_cache.clear()
+        stocks._endpoint_locks.clear()
+        stocks._endpoint_lock_users.clear()
+        stocks._endpoint_refresh_tasks.clear()
+        stocks._endpoint_refresh_retry_after.clear()
+
+        stocks._load_watchlist_snapshot_once(now)
+        assert stocks._endpoint_cache["watchlist"].value["groups"][0]["id"] == "initial"
+
+        stocks._write_watchlist_snapshot(
+            snapshot_path,
+            payload=_watchlist_payload("worker"),
+            saved_at=44_990.0,
+        )
+
+        async def no_network():
+            raise RuntimeError("network is disabled in this test")
+
+        monkeypatch.setattr(stocks, "_build_watchlist", no_network)
+        refreshed = await stocks.watchlist(None)
+        assert refreshed["groups"][0]["id"] == "worker"
+        assert refreshed["as_of"].startswith("1970-")
+        refresh_task = stocks._endpoint_refresh_tasks["watchlist"]
+        await asyncio.gather(refresh_task, return_exceptions=True)
+        await asyncio.sleep(0)
+        assert stocks._endpoint_cache["watchlist"].fetched_at == 44_990.0
+
+    asyncio.run(scenario())
+
+
 def test_watchlist_snapshot_write_failure_does_not_fail_refresh(monkeypatch, tmp_path):
     async def scenario():
         clock = [50_000.0]
@@ -689,6 +736,7 @@ def test_watchlist_snapshot_write_failure_does_not_fail_refresh(monkeypatch, tmp
         original_document = {
             "version": 1,
             "saved_at": clock[0] - 300,
+            "parameters": {"tickers": None},
             "payload": _watchlist_payload("persisted"),
         }
         snapshot_path.write_text(json.dumps(original_document), encoding="utf-8")
@@ -742,6 +790,7 @@ def test_watchlist_snapshot_rejects_expired_corrupt_and_oversized_files(tmp_path
             {
                 "version": 1,
                 "saved_at": now - 24 * 60 * 60,
+                "parameters": {"tickers": None},
                 "payload": _watchlist_payload("expired"),
             }
         ),
@@ -766,6 +815,7 @@ def test_watchlist_snapshot_rejects_expired_corrupt_and_oversized_files(tmp_path
                 {
                     "version": 1,
                     "saved_at": now - 1,
+                    "parameters": {"tickers": None},
                     "payload": invalid_payload,
                 }
             ),
@@ -777,6 +827,7 @@ def test_watchlist_snapshot_rejects_expired_corrupt_and_oversized_files(tmp_path
         {
             "version": 1,
             "saved_at": now - 1,
+            "parameters": {"tickers": None},
             "payload": _watchlist_payload("overflow"),
         }
     ).replace('"price": 100.0', '"price": 1e309', 1)
@@ -785,6 +836,16 @@ def test_watchlist_snapshot_rejects_expired_corrupt_and_oversized_files(tmp_path
     assert stocks._read_watchlist_snapshot(snapshot_path, now=now) is None
 
     snapshot_path.write_bytes(b"x" * (stocks._WATCHLIST_SNAPSHOT_MAX_BYTES + 1))
+    assert stocks._read_watchlist_snapshot(snapshot_path, now=now) is None
+
+    stocks._write_watchlist_snapshot(
+        snapshot_path,
+        payload=_watchlist_payload("mismatched"),
+        saved_at=now - 1,
+    )
+    document = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    document["parameters"] = {"tickers": ["AAPL"]}
+    snapshot_path.write_text(json.dumps(document), encoding="utf-8")
     assert stocks._read_watchlist_snapshot(snapshot_path, now=now) is None
 
 
@@ -853,9 +914,9 @@ def test_targeted_watchlist_uses_normalized_tickers_and_isolated_cache_keys(monk
         unexpected_background_cache,
     )
 
-    first = asyncio.run(stocks.watchlist(None, " msft,AAPL,msft "))
-    second = asyncio.run(stocks.watchlist(None, "AAPL,MSFT"))
-    third = asyncio.run(stocks.watchlist(None, "AAPL,NVDA"))
+    first = asyncio.run(stocks.watchlist(" msft,AAPL,msft "))
+    second = asyncio.run(stocks.watchlist("AAPL,MSFT"))
+    third = asyncio.run(stocks.watchlist("AAPL,NVDA"))
 
     assert first["attempted"] == 2
     assert second["attempted"] == 2

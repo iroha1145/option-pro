@@ -8,8 +8,8 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.api.ai import AlertsRequest, _MAX_AI_BODY_BYTES, router
-from app.config import Settings, _ROOT_ENV_FILE
-from app.services import ai_analysis
+from app.config import Settings
+from app.runtime_environment import ROOT_ENV_FILE, RUNTIME_ENV_FILES
 from app.services.ai_jobs import runtime
 
 
@@ -40,9 +40,14 @@ def _valid_alert(**overrides):
 
 
 def test_root_env_path_is_independent_of_working_directory():
-    expected = Path(__file__).resolve().parents[1] / ".env"
-    assert _ROOT_ENV_FILE == expected
-    assert Path(Settings.model_config["env_file"]) == expected
+    root = Path(__file__).resolve().parents[1]
+    assert ROOT_ENV_FILE == root / ".env"
+    assert RUNTIME_ENV_FILES == (
+        root / ".env",
+        root / "machine.env",
+        root / "secrets.env",
+    )
+    assert Settings.model_config.get("env_file") is None
 
 
 def test_terra_defaults_and_runtime_bounds(monkeypatch):
@@ -79,35 +84,23 @@ def test_terra_defaults_and_runtime_bounds(monkeypatch):
     )
     with pytest.raises(ValidationError):
         Settings(_env_file=None, OPTION_PRO_AI_MAX_OUTPUT_TOKENS=128001)
-    with pytest.raises(ValidationError, match="worker_sync"):
-        Settings(
-            _env_file=None,
-            OPENAI_REQUIRE_ZDR=True,
-            OPENAI_EXECUTION_MODE="background",
-        )
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, OPENAI_REQUIRE_ZDR=True)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, OPENAI_EXECUTION_MODE="worker_sync")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, OPENAI_MAX_CONCURRENCY=2)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, OPENAI_DAILY_MAX_JOBS=5)
 
 
-def test_custom_openai_base_url_requires_explicit_opt_in():
-    with pytest.raises(ValidationError, match="ALLOW_CUSTOM_OPENAI_BASE_URL"):
+def test_custom_openai_base_url_switches_are_rejected():
+    with pytest.raises(ValidationError):
         Settings(_env_file=None, OPENAI_BASE_URL="https://proxy.example/v1")
-    settings = Settings(
-        _env_file=None,
-        OPENAI_BASE_URL="https://proxy.example/v1/",
-        ALLOW_CUSTOM_OPENAI_BASE_URL=True,
-    )
-    assert settings.openai_base_url == "https://proxy.example/v1"
-    with pytest.raises(ValidationError, match="must use HTTPS"):
-        Settings(
-            _env_file=None,
-            OPENAI_BASE_URL="http://proxy.example/v1",
-            ALLOW_CUSTOM_OPENAI_BASE_URL=True,
-        )
-    with pytest.raises(ValidationError, match="must be empty or start with"):
-        Settings(
-            _env_file=None,
-            OPENAI_BASE_URL="proxy.example/v1",
-            ALLOW_CUSTOM_OPENAI_BASE_URL=True,
-        )
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, ALLOW_CUSTOM_OPENAI_BASE_URL=True)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, OPENAI_CUSTOM_CAPABILITIES_CONFIRMED=True)
 
 
 def test_alert_request_rejects_unbounded_or_unexpected_input():
@@ -141,7 +134,7 @@ def test_legacy_paid_route_validates_body_but_never_runs_model(monkeypatch):
         calls += 1
         raise AssertionError("legacy model function must not run")
 
-    monkeypatch.setattr(ai_analysis, "analyze_option_alerts", forbidden)
+    monkeypatch.setattr(runtime, "submit_background", forbidden)
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app, base_url="http://localhost")
@@ -206,6 +199,6 @@ def test_untrusted_prompt_data_cannot_close_boundary():
     assert "\\u003c/untrusted_option_alert_data\\u003e" in request.input_text
 
 
-def test_compatibility_functions_refuse_untracked_model_calls():
-    with pytest.raises(RuntimeError, match="ai_job_required"):
-        ai_analysis.analyze_single_earnings_impact({"ticker": "AAPL"})
+def test_legacy_direct_model_module_is_removed():
+    module = Path(__file__).resolve().parents[1] / "backend/app/services/ai_analysis.py"
+    assert not module.exists()

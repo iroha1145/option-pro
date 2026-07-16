@@ -17,6 +17,19 @@ from app.services.ai_jobs.repository import AIJobRepository
 
 logger = logging.getLogger(__name__)
 
+_NEW_SUBMISSION_RETRY_SECONDS = 30.0
+
+
+def _personal_analysis_permissions(config: Any) -> tuple[bool, bool]:
+    features = getattr(config, "features", None)
+    mode = getattr(features, "catalyst_mode", None)
+    if mode is not None:
+        return mode in {"manual", "scheduled"}, mode == "scheduled"
+    return (
+        bool(getattr(config, "catalyst_manual_enabled", False)),
+        bool(getattr(config, "catalyst_scheduled_enabled", False)),
+    )
+
 
 def _poll_delay(settings: Any, poll_count: int) -> float:
     initial = float(settings.openai_background_initial_poll_seconds)
@@ -24,28 +37,20 @@ def _poll_delay(settings: Any, poll_count: int) -> float:
     return min(maximum, initial * (2 ** min(max(0, poll_count), 4)))
 
 
-def _job_age_seconds(job: dict[str, Any]) -> float:
-    created = str(job.get("created_at") or "")
-    try:
-        created_at = datetime.fromisoformat(created.replace("Z", "+00:00"))
-    except ValueError:
-        return 0.0
-    return max(
-        0.0,
-        (datetime.now(timezone.utc) - created_at).total_seconds(),
-    )
-
-
 def _submitted_age_seconds(job: dict[str, Any]) -> float:
-    submitted = str(job.get("submitted_at") or "")
-    try:
-        submitted_at = datetime.fromisoformat(submitted.replace("Z", "+00:00"))
-    except ValueError:
-        return 0.0
-    return max(
-        0.0,
-        (datetime.now(timezone.utc) - submitted_at).total_seconds(),
-    )
+    for field in ("submitted_at", "submission_started_at", "created_at"):
+        submitted = str(job.get(field) or "")
+        if not submitted:
+            continue
+        try:
+            submitted_at = datetime.fromisoformat(submitted.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        return max(
+            0.0,
+            (datetime.now(timezone.utc) - submitted_at).total_seconds(),
+        )
+    return 0.0
 
 
 def _public_error(
@@ -53,20 +58,32 @@ def _public_error(
     *,
     submitted: bool,
     response_id: str | None,
-    execution_mode: str,
 ) -> str:
-    if submitted and not response_id:
-        return (
-            "submission_outcome_unknown"
-            if execution_mode == "background"
-            else "worker_interrupted"
-        )
+    status_code = getattr(exc, "status_code", None)
+    if submitted and not response_id and not isinstance(status_code, int):
+        return "submission_outcome_unknown"
+    if isinstance(status_code, int):
+        if status_code in {401, 403}:
+            return "provider_auth_failed"
+        if status_code == 429:
+            return "provider_rate_limited"
+        if status_code >= 500:
+            return "provider_server_error"
+        return "provider_request_rejected"
     if isinstance(exc, ValueError):
         code = str(exc)
         if code in {
+            "ai_input_too_large",
             "ai_empty_response",
             "earnings_ticker_mismatch",
             "earnings_impacted_count_invalid",
+            "news_identity_mismatch",
+            "news_ticker_binding_mismatch",
+            "market_focus_cycle_mismatch",
+            "market_focus_as_of_mismatch",
+            "market_focus_input_hash_mismatch",
+            "market_focus_event_binding_mismatch",
+            "market_focus_ticker_binding_mismatch",
         }:
             return code
         return "schema_validation_failed"
@@ -75,7 +92,7 @@ def _public_error(
         if code in {
             "ai_not_configured",
             "ai_sdk_unavailable",
-            "unsupported_provider_capability",
+            "runtime_configuration_invalid",
         }:
             return code
     return "provider_unavailable"
@@ -131,23 +148,56 @@ async def _finish_response(
             ),
         )
         return
+    usage = runtime.response_usage(response)
+    terminal_error = runtime.response_terminal_error(response)
     if status == "completed":
+        if terminal_error:
+            repository.fail(
+                job["job_id"],
+                owner,
+                terminal_error,
+                usage=usage,
+            )
+            return
         payload = json.loads(job["payload_json"])
-        result = runtime.response_result(response, job["job_type"], payload)
+        try:
+            result = runtime.response_result(response, job["job_type"], payload)
+        except Exception as exc:
+            repository.fail(
+                job["job_id"],
+                owner,
+                _public_error(
+                    exc,
+                    submitted=True,
+                    response_id=response_id or None,
+                ),
+                usage=usage,
+            )
+            return
         repository.complete(
             job["job_id"],
             owner,
             result,
-            runtime.response_usage(response),
+            usage,
         )
         return
     if status == "cancelled":
-        repository.mark_cancelled(job["job_id"], owner)
+        repository.mark_cancelled(job["job_id"], owner, usage=usage)
         return
     if status in {"failed", "incomplete"}:
-        repository.fail(job["job_id"], owner, f"provider_{status}")
+        repository.fail(
+            job["job_id"],
+            owner,
+            terminal_error or f"provider_{status}",
+            usage=usage,
+        )
         return
-    repository.fail(job["job_id"], owner, "provider_status_unsupported")
+    repository.fail(
+        job["job_id"],
+        owner,
+        "provider_status_unsupported",
+        usage=usage,
+    )
 
 
 async def process_job(
@@ -155,6 +205,11 @@ async def process_job(
     settings: Any,
     job: dict[str, Any],
     owner: str,
+    *,
+    allow_new_submissions: bool = True,
+    new_submission_block_reason: str = "analysis_disabled",
+    manual_analysis_enabled: bool = True,
+    scheduled_analysis_enabled: bool = True,
 ) -> None:
     stop = asyncio.Event()
     heartbeat = asyncio.create_task(
@@ -170,8 +225,10 @@ async def process_job(
     response_id = job.get("openai_response_id")
     try:
         if job.get("cancel_requested_at"):
-            if response_id and job["execution_mode"] == "background":
-                if _job_age_seconds(job) > int(settings.openai_job_max_age_seconds):
+            if response_id:
+                if _submitted_age_seconds(job) > int(
+                    settings.openai_job_max_age_seconds
+                ):
                     repository.fail(job["job_id"], owner, "provider_response_expired")
                     return
                 try:
@@ -203,7 +260,9 @@ async def process_job(
             return
 
         if response_id:
-            if _job_age_seconds(job) > int(settings.openai_job_max_age_seconds):
+            if _submitted_age_seconds(job) > int(
+                settings.openai_job_max_age_seconds
+            ):
                 repository.fail(job["job_id"], owner, "provider_response_expired")
                 return
             try:
@@ -230,21 +289,46 @@ async def process_job(
             repository.fail(
                 job["job_id"],
                 owner,
-                (
-                    "submission_outcome_unknown"
-                    if job["execution_mode"] == "background"
-                    else "worker_interrupted"
-                ),
+                "submission_outcome_unknown",
             )
+            return
+
+        if not allow_new_submissions:
+            repository.defer(
+                job["job_id"],
+                owner,
+                delay_seconds=_NEW_SUBMISSION_RETRY_SECONDS,
+                error_code=new_submission_block_reason,
+            )
+            return
+
+        submission_source = (
+            str(job.get("submission_source"))
+            if job.get("submission_source") in {"manual", "scheduled"}
+            else "manual"
+        )
+        source_disabled_error = (
+            "manual_analysis_disabled"
+            if submission_source == "manual" and not manual_analysis_enabled
+            else "scheduled_analysis_disabled"
+            if submission_source == "scheduled" and not scheduled_analysis_enabled
+            else None
+        )
+        if source_disabled_error is not None:
+            # This task has never reached the provider. Make the disabled
+            # decision terminal so a later switch change cannot revive old
+            # queue entries and unexpectedly spend money.
+            repository.fail(job["job_id"], owner, source_disabled_error)
             return
 
         current_schema_version, current_schema_sha256 = runtime.schema_identity(
             job["job_type"]
         )
         if (
-            job["model"] != settings.openai_model
-            or job["reasoning"] != settings.openai_reasoning
-            or job["execution_mode"] != settings.openai_execution_mode
+            job["model"] != runtime.OFFICIAL_OPENAI_MODEL
+            or job["reasoning"] != runtime.OFFICIAL_REASONING_EFFORT
+            or job["execution_mode"] != runtime.OFFICIAL_EXECUTION_MODE
+            or not runtime.runtime_configuration_valid(settings)
             or job["schema_version"] != current_schema_version
             or job["schema_sha256"] != current_schema_sha256
         ):
@@ -255,52 +339,64 @@ async def process_job(
             )
             return
 
+        payload = json.loads(job["payload_json"])
+        prepared = runtime.prepare_background(
+            settings,
+            job["job_type"],
+            payload,
+        )
         try:
-            repository.mark_submission_started(job["job_id"], owner)
+            submission_state = repository.mark_submission_started(
+                job["job_id"],
+                owner,
+                daily_limit=int(settings.openai_daily_max_jobs),
+                daily_budget_usd=float(
+                    getattr(settings, "openai_daily_budget_usd", 2.0)
+                ),
+                cooldown_seconds=int(
+                    getattr(settings, "openai_manual_cooldown_seconds", 30)
+                ),
+            )
         except RuntimeError as exc:
             if str(exc) == "ai_job_not_submittable":
                 return
             raise
+        if submission_state != "started":
+            return
+        # Every local validation and SDK construction step has completed. From
+        # this point an exception can represent a request whose upstream
+        # outcome is unknown, so it must consume both budget and concurrency.
         submitted = True
-        payload = json.loads(job["payload_json"])
-        if job["execution_mode"] == "background":
-            response = await runtime.submit_background(
-                settings,
-                job["job_type"],
-                payload,
-            )
-            submitted_response_id = str(getattr(response, "id", "") or "") or None
-            if not submitted_response_id:
-                repository.fail(
-                    job["job_id"],
-                    owner,
-                    "provider_response_id_missing",
-                )
-                return
-            repository.link_background_response(
+        response = await runtime.submit_background(
+            settings,
+            job["job_type"],
+            payload,
+            prepared=prepared,
+        )
+        submitted_response_id = str(getattr(response, "id", "") or "") or None
+        if not submitted_response_id:
+            repository.fail(
                 job["job_id"],
                 owner,
-                submitted_response_id,
+                "submission_outcome_unknown",
             )
-            # Treat the upstream identity as recoverable only after it is
-            # durably linked. A failed link otherwise makes an untracked paid
-            # response look retryable and can submit the same job twice.
-            response_id = submitted_response_id
-            job["openai_response_id"] = response_id
-        else:
-            response = await runtime.run_worker_sync(
-                settings,
-                job["job_type"],
-                payload,
-            )
-            response_id = str(getattr(response, "id", "") or "") or None
+            return
+        repository.link_background_response(
+            job["job_id"],
+            owner,
+            submitted_response_id,
+        )
+        # Treat the upstream identity as recoverable only after it is
+        # durably linked. A failed link otherwise makes an untracked paid
+        # response look retryable and can submit the same job twice.
+        response_id = submitted_response_id
+        job["openai_response_id"] = response_id
         await _finish_response(repository, settings, job, owner, response)
     except Exception as exc:
         code = _public_error(
             exc,
             submitted=submitted,
             response_id=response_id,
-            execution_mode=job["execution_mode"],
         )
         logger.warning("AI job failed (%s, %s)", code, type(exc).__name__)
         with suppress(Exception):
@@ -316,25 +412,106 @@ async def run_once(
     repository: AIJobRepository,
     settings: Any,
     owner: str,
+    *,
+    allow_new_submissions: bool = True,
+    new_submission_block_reason: str = "analysis_disabled",
+    manual_analysis_enabled: bool = True,
+    scheduled_analysis_enabled: bool = True,
 ) -> int:
-    claimed: list[dict[str, Any]] = []
-    for _ in range(int(settings.openai_max_concurrency)):
-        job = await asyncio.to_thread(
-            repository.claim_due,
+    job = await asyncio.to_thread(
+        repository.claim_due,
+        owner,
+        int(settings.openai_job_lease_seconds),
+    )
+    if not job:
+        return 0
+    await process_job(
+        repository,
+        settings,
+        job,
+        owner,
+        allow_new_submissions=allow_new_submissions,
+        new_submission_block_reason=new_submission_block_reason,
+        manual_analysis_enabled=manual_analysis_enabled,
+        scheduled_analysis_enabled=scheduled_analysis_enabled,
+    )
+    return 1
+
+
+async def run_configured_once(
+    repository: AIJobRepository,
+    settings: Any,
+    owner: str,
+    *,
+    personal_config: Any | None = None,
+) -> tuple[int, str]:
+    """Run one due job using the latest non-secret runtime controls.
+
+    Invalid runtime settings pause only new provider submissions. Jobs that
+    already have an upstream response, an uncertain submission outcome, or a
+    cancellation request still pass through ``process_job`` and can finish.
+    """
+
+    from app.services.runtime_settings import (
+        RuntimeSettingsStorageError,
+        get_effective_runtime_settings,
+    )
+
+    try:
+        effective = get_effective_runtime_settings()
+    except RuntimeSettingsStorageError:
+        processed = await run_once(
+            repository,
+            settings,
             owner,
-            int(settings.openai_job_lease_seconds),
+            allow_new_submissions=False,
+            new_submission_block_reason="runtime_settings_unavailable",
         )
-        if not job:
-            break
-        claimed.append(job)
-    if claimed:
-        await asyncio.gather(
-            *[
-                process_job(repository, settings, job, owner)
-                for job in claimed
-            ]
-        )
-    return len(claimed)
+        return processed, "runtime_settings_unavailable"
+
+    if personal_config is None:
+        from app.personal_config import get_personal_config
+
+        personal_config = get_personal_config()
+    mode_allows_manual, mode_allows_scheduled = _personal_analysis_permissions(
+        personal_config
+    )
+
+    effective_settings = settings.model_copy(
+        update={
+            "openai_daily_max_jobs": effective.ai.daily_max_jobs,
+            "openai_daily_budget_usd": effective.ai.daily_budget_usd,
+            "openai_manual_cooldown_seconds": (
+                effective.ai.manual_analysis_cooldown_seconds
+            ),
+        }
+    )
+    manual_analysis_enabled = bool(
+        mode_allows_manual and effective.ai.manual_analysis_enabled
+    )
+    scheduled_analysis_enabled = bool(
+        mode_allows_scheduled and effective.catalyst.scheduled_analysis_enabled
+    )
+    analysis_enabled = bool(manual_analysis_enabled or scheduled_analysis_enabled)
+    processed = await run_once(
+        repository,
+        effective_settings,
+        owner,
+        # The source-specific switches below decide whether an unsubmitted
+        # task may proceed. The global flag remains reserved for an unreadable
+        # runtime document, which is retryable rather than terminal.
+        allow_new_submissions=True,
+        new_submission_block_reason="analysis_disabled",
+        manual_analysis_enabled=manual_analysis_enabled,
+        scheduled_analysis_enabled=scheduled_analysis_enabled,
+    )
+    return processed, "enabled" if analysis_enabled else "analysis_disabled"
+
+
+def _next_iteration_delay(processed: int, runtime_state: str) -> float:
+    if processed:
+        return 0.5
+    return 2.0 if runtime_state == "enabled" else 30.0
 
 
 def health_payload(repository: AIJobRepository, settings: Any) -> dict[str, Any]:
@@ -354,9 +531,9 @@ def health_payload(repository: AIJobRepository, settings: Any) -> dict[str, Any]
             "provider_capability_supported": bool(capability.get("supported")),
             "sdk_capability_supported": bool(capability.get("sdk_supported")),
             "methods": capability.get("methods", {}),
-            "model": settings.openai_model,
-            "reasoning": settings.openai_reasoning,
-            "execution_mode": settings.openai_execution_mode,
+            "model": runtime.OFFICIAL_OPENAI_MODEL,
+            "reasoning": runtime.OFFICIAL_REASONING_EFFORT,
+            "execution_mode": runtime.OFFICIAL_EXECUTION_MODE,
         }
     )
     if not configured and payload["healthy"]:
@@ -373,8 +550,12 @@ async def run_forever() -> None:
         if not settings.openai_api_key.get_secret_value().strip():
             await asyncio.sleep(30)
             continue
-        processed = await run_once(repository, settings, owner)
-        await asyncio.sleep(0.5 if processed else 2.0)
+        processed, runtime_state = await run_configured_once(
+            repository,
+            settings,
+            owner,
+        )
+        await asyncio.sleep(_next_iteration_delay(processed, runtime_state))
 
 
 def main() -> None:
@@ -402,10 +583,23 @@ def main() -> None:
             )
             return
         owner = f"once-{os.getpid()}-{uuid.uuid4().hex[:8]}"
-        processed = asyncio.run(run_once(repository, settings, owner))
+        processed, runtime_state = asyncio.run(
+            run_configured_once(repository, settings, owner)
+        )
+        worker_status = (
+            "degraded"
+            if runtime_state == "runtime_settings_unavailable"
+            else "disabled"
+            if runtime_state == "analysis_disabled"
+            else "completed"
+        )
         print(
             json.dumps(
-                {"status": "completed", "processed": processed},
+                {
+                    "status": worker_status,
+                    "processed": processed,
+                    "runtime_state": runtime_state,
+                },
                 separators=(",", ":"),
             )
         )

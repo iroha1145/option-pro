@@ -657,7 +657,7 @@ def test_real_worker_service_repository_chain_publishes_and_preserves_first_seen
         _env_file=None,
         BREAKOUT_RADAR_ENABLED=True,
         BREAKOUT_DISCOVERY_PROVIDER="tradingview",
-        BREAKOUT_DB_PATH=tmp_path / "worker.db",
+        db_path=tmp_path / "worker.db",
     )
 
     def run(at: datetime, owner: str):

@@ -1,487 +1,313 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date
+from typing import Any
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.catalysts import _MAX_CATALYST_BODY_BYTES, router
-from app.services.catalysts.config import CatalystSettings, get_catalyst_settings
-from app.services.catalysts.models import ComponentHealth
-from app.services.catalysts.repository import CatalystRepository
-from app.services.ai_jobs.security import require_expensive_action
-from catalyst_support import catalyst_item, utc
+from app.api import catalysts as catalyst_api
+from app.services.catalysts.errors import CatalystError, InvalidCursorError
 
 
-READ_SECRET = "read-secret-0123456789abcdef-0001"
-ACTION_SECRET = "action-secret-0123456789abcdef-01"
+NOW = "2026-07-15T04:00:00Z"
+CYCLE_ID = "mfc_" + "a" * 32
+JOB_ID = "aij_" + "b" * 32
+REFRESH_ID = "refresh_" + "d" * 32
 
 
-def configured(path, *, enabled: bool = True, action: bool = True) -> CatalystSettings:
-    values = {
-        "MACROLENS_ENABLED": enabled,
-        "MACROLENS_CACHE_DB_PATH": path,
-    }
-    if enabled:
-        values.update(
-            {
-                "MACROLENS_BASE_URL": "http://localhost:9876",
-                "MACROLENS_ALLOW_LOCAL_HTTP": True,
-                "MACROLENS_READ_KEY_ID": "read-key",
-                "MACROLENS_READ_SECRET": READ_SECRET,
-                "MACROLENS_STALE_TTL_SECONDS": 2_592_000,
-            }
+class StubPersonalService:
+    def __init__(self) -> None:
+        self.calls: list[tuple[Any, ...]] = []
+        self.invalid_cursor = False
+        self.refresh_error: CatalystError | None = None
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "enabled": True,
+            "status": "ok",
+            "as_of": NOW,
+            "data_through": NOW,
+            "last_sync_at": NOW,
+            "model": "gpt-5.6-terra",
+            "reasoning": "max",
+            "analysis_trigger_enabled": True,
+            "snapshot_id": "private-snapshot",
+            "sources": [
+                {
+                    "source": "wire",
+                    "status": "ok",
+                    "last_success_at": NOW,
+                    "data_through": NOW,
+                    "consecutive_failures": 0,
+                    "raw_count": 1,
+                    "inserted_count": 1,
+                    "duplicates_count": 0,
+                    "detail": "private-detail",
+                }
+            ],
+            "streams": {},
+            "warnings": [],
+        }
+
+    def feed(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("feed", kwargs))
+        if self.invalid_cursor:
+            raise InvalidCursorError()
+        return {
+            "status": "ok",
+            "as_of": NOW,
+            "items": [
+                {
+                    "news_id": 101,
+                    "title_zh": "芯片企业发布最新业绩",
+                    "summary_zh": "收入增长，但需求仍有波动。",
+                }
+            ],
+        }
+
+    def news(self, news_id: int, *, as_of: Any) -> dict[str, Any] | None:
+        self.calls.append(("news", news_id, as_of))
+        if news_id != 101:
+            return None
+        return {
+            "status": "ok",
+            "as_of": NOW,
+            "item": {"news_id": news_id, "title_zh": "中文标题"},
+            "analysis_job": {"job_id": JOB_ID, "status": "pending"},
+            "analysis_trigger_enabled": True,
+        }
+
+    def ticker(self, ticker: str, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("ticker", ticker, kwargs))
+        return {"status": "ok", "ticker": ticker, "items": []}
+
+    def batch(self, tickers: list[str], **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("batch", tuple(tickers), kwargs))
+        return {
+            "status": "ok",
+            "results": {
+                ticker: {"status": "empty", "ticker": ticker, "items": []}
+                for ticker in tickers
+            },
+        }
+
+    def calendar(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("calendar", kwargs))
+        return {"status": "ok", "items": []}
+
+    def hotspot_status(self) -> dict[str, Any]:
+        return {
+            "status": "ok",
+            "prepared_revision": 3,
+            "manual_enabled": True,
+            "private_state": "hidden",
+        }
+
+    def hotspots(self, *, limit: int) -> dict[str, Any]:
+        return {
+            "status": "ok",
+            "as_of": NOW,
+            "items": [
+                {
+                    "event_group_id": "event-1",
+                    "representative_title": "中文热点标题",
+                    "private_state": "hidden",
+                }
+            ][:limit],
+        }
+
+    def latest_market_focus_cycle(self) -> dict[str, Any]:
+        return {"status": "ok", "as_of": NOW, "cycle": self._cycle()}
+
+    def request_market_focus_cycle(
+        self,
+        *,
+        expected_prepared_revision: int | None,
+        retry_cycle_id: str | None,
+        force: bool,
+    ) -> dict[str, Any]:
+        self.calls.append(
+            ("request_focus", expected_prepared_revision, retry_cycle_id, force)
         )
-    if action:
-        values.update(
-            {
-                "MACROLENS_ACTION_KEY_ID": "action-key",
-                "MACROLENS_ACTION_SECRET": ACTION_SECRET,
-            }
+        return self._cycle(status="pending")
+
+    def market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
+        return self._cycle() if cycle_id == CYCLE_ID else None
+
+    def cancel_market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
+        self.calls.append(("cancel_focus", cycle_id))
+        return self._cycle(status="cancelled") if cycle_id == CYCLE_ID else None
+
+    def request_refresh(
+        self,
+        operation_type: str,
+        *,
+        idempotency_key: str | None,
+    ) -> dict[str, Any]:
+        if self.refresh_error is not None:
+            raise self.refresh_error
+        self.calls.append(("refresh", operation_type, idempotency_key))
+        return {"request_id": REFRESH_ID, "status": "queued"}
+
+    def manual_operation(self, request_id: str) -> dict[str, Any] | None:
+        return (
+            {"request_id": REFRESH_ID, "operation_type": "news", "status": "queued"}
+            if request_id == REFRESH_ID
+            else None
         )
-    return CatalystSettings(_env_file=None, **values)
+
+    def request_analysis(self, news_id: int, *, force: bool) -> dict[str, Any]:
+        self.calls.append(("analysis", news_id, force))
+        return {"job_id": JOB_ID, "status": "pending"}
+
+    def analysis_job(self, job_id: str) -> dict[str, Any] | None:
+        return {"job_id": JOB_ID, "status": "pending"} if job_id == JOB_ID else None
+
+    def cancel_analysis_job(self, job_id: str) -> dict[str, Any] | None:
+        self.calls.append(("cancel_analysis", job_id))
+        return {"job_id": JOB_ID, "status": "cancelled"} if job_id == JOB_ID else None
+
+    @staticmethod
+    def _cycle(*, status: str = "completed") -> dict[str, Any]:
+        return {
+            "cycle_id": CYCLE_ID,
+            "status": status,
+            "created_at": NOW,
+            "updated_at": NOW,
+            "private_state": "hidden",
+        }
 
 
-def client_for(
-    settings: CatalystSettings,
-    *,
-    authorize_actions: bool = True,
-    public_read: bool = False,
-    app_authenticated: bool = False,
-) -> TestClient:
+def client_for(service: StubPersonalService) -> TestClient:
     app = FastAPI()
-    app.include_router(router)
-    app.dependency_overrides[get_catalyst_settings] = lambda: settings
-    if authorize_actions:
-        app.dependency_overrides[require_expensive_action] = lambda: None
-    if public_read:
-        async def mark_public_read(request, call_next):
-            request.state.public_read_authenticated = True
-            request.state.app_authenticated = app_authenticated
-            return await call_next(request)
-
-        app.middleware("http")(mark_public_read)
+    app.include_router(catalyst_api.router)
+    app.dependency_overrides[catalyst_api._service] = lambda: service
     return TestClient(app, base_url="http://localhost")
 
 
-def seed(path) -> CatalystRepository:
-    repository = CatalystRepository(path)
-    repository.initialize(now=utc(9))
-    run_id = repository.begin_sync_run(
-        "feed", snapshot_token="snapshot-api", now=utc(10, 6)
-    )
-    repository.stage_latest_page(
-        run_id, [catalyst_item(sequence=2, updated_at=utc(10, 6), analysis=True)]
-    )
-    repository.publish_latest(
-        run_id,
-        snapshot_token="snapshot-api",
-        data_through=utc(10, 6),
-        next_updated_after=utc(10, 6),
-        watermark_sequence=2,
-        now=utc(10, 6),
-    )
-    repository.publish_health(
-        status="ok",
-        data_through=utc(10, 6),
-        sources={},
-        model="gpt-5.6-terra",
-        reasoning="max",
-        execution_mode="background",
-        analysis_trigger_enabled=True,
-        observed_at=utc(10, 6),
-    )
-    return repository
+def test_read_routes_use_only_the_personal_service() -> None:
+    service = StubPersonalService()
+    client = client_for(service)
 
-
-def test_disabled_status_and_feed_do_not_create_database(tmp_path) -> None:
-    path = tmp_path / "must-not-exist.db"
-    client = client_for(configured(path, enabled=False, action=False))
-    status_response = client.get("/api/catalysts/status")
-    feed_response = client.get("/api/catalysts/feed")
-    assert status_response.status_code == 200
-    assert status_response.json()["status"] == "disabled"
-    assert feed_response.status_code == 200
-    assert feed_response.json()["status"] == "disabled"
-    assert feed_response.json()["summary"]["news_6h"] is None
-    assert not path.exists()
-
-
-def test_all_get_routes_read_local_cache_without_remote_side_effect(tmp_path) -> None:
-    path = tmp_path / "catalysts.db"
-    seed(path)
-    client = client_for(configured(path))
-    as_of = "2026-07-11T10:07:00Z"
-
-    status_response = client.get("/api/catalysts/status")
-    feed = client.get(f"/api/catalysts/feed?as_of={as_of}")
-    news = client.get(f"/api/catalysts/news/101?as_of={as_of}")
-    ticker = client.get(f"/api/catalysts/tickers/NVDA?as_of={as_of}")
-    batch = client.post(
-        "/api/catalysts/tickers/batch",
-        json={"tickers": ["NVDA", "AMD"], "as_of": as_of},
+    responses = (
+        client.get("/api/catalysts/status"),
+        client.get("/api/catalysts/feed"),
+        client.get("/api/catalysts/news/101"),
+        client.get("/api/catalysts/tickers/nvda"),
+        client.post("/api/catalysts/tickers/batch", json={"tickers": ["nvda", "NVDA", "AMD"]}),
+        client.get("/api/catalysts/calendar"),
+        client.get("/api/catalysts/hotspots/status"),
+        client.get("/api/catalysts/hotspots"),
+        client.get("/api/catalysts/market-focus-cycles/latest"),
+        client.get(f"/api/catalysts/market-focus-cycles/{CYCLE_ID}"),
+        client.get(f"/api/catalysts/analysis-jobs/{JOB_ID}"),
+        client.get(f"/api/catalysts/refresh/{REFRESH_ID}"),
     )
 
-    assert status_response.status_code == 200
-    assert feed.status_code == 200
-    assert feed.json()["items"][0]["analysis"]["classification"] == "bullish"
-    assert feed.json()["summary"]["bullish"] == 1
-    assert feed.json()["stock_impacts"][0]["ticker"] == "NVDA"
-    assert feed.json()["stock_impacts"][0]["display_sort_only"] is True
-    assert news.status_code == 200
-    assert news.json()["analysis_job"] is None
-    assert news.json()["analysis_trigger_enabled"] is True
-    assert ticker.status_code == 200
-    assert ticker.json()["ticker"] == "NVDA"
-    assert batch.status_code == 200
-    assert batch.json()["results"]["NVDA"]["items"]
-    assert batch.json()["results"]["AMD"]["status"] == "empty"
+    assert all(response.status_code == 200 for response in responses)
+    assert responses[1].json()["items"][0]["title_zh"] == "芯片企业发布最新业绩"
+    assert responses[3].json()["ticker"] == "NVDA"
+    assert list(responses[4].json()["results"]) == ["NVDA", "AMD"]
+    assert any(call[0] == "feed" for call in service.calls)
 
 
-def test_anonymous_news_detail_hides_job_but_authenticated_detail_keeps_it(
-    tmp_path,
+@pytest.mark.parametrize("chunked", [False, True])
+def test_catalyst_routes_reject_oversized_body_before_json_parsing(
+    chunked: bool,
 ) -> None:
-    path = tmp_path / "catalysts.db"
-    repository = seed(path)
-    queued = repository.enqueue_analysis(
-        101,
-        content_hash="content-hash-101",
-        change_sequence=2,
-        contract_schema_version="macrolens-option-pro-v2",
-        force=False,
-        model="gpt-5.6-terra",
-        reasoning="max",
-        now=utc(10, 7),
-    )
+    client = client_for(StubPersonalService())
+    if chunked:
+        half = catalyst_api._MAX_CATALYST_BODY_BYTES // 2
 
-    anonymous = client_for(configured(path), public_read=True)
-    authenticated = client_for(
-        configured(path), public_read=True, app_authenticated=True
-    )
-    anonymous_payload = anonymous.get("/api/catalysts/news/101").json()
-    authenticated_payload = authenticated.get("/api/catalysts/news/101").json()
+        def content():
+            yield b"x" * half
+            yield b"x" * (half + 1)
+        body = content()
+    else:
+        body = b"x" * (catalyst_api._MAX_CATALYST_BODY_BYTES + 1)
 
-    assert anonymous_payload["item"]["news_id"] == 101
-    assert anonymous_payload["analysis_job"] is None
-    assert anonymous_payload["analysis_trigger_enabled"] is False
-    assert authenticated_payload["analysis_job"]["job_id"] == queued["job_id"]
-    assert authenticated_payload["analysis_trigger_enabled"] is True
-
-
-def test_anonymous_status_disables_actions_and_crops_internal_state(tmp_path) -> None:
-    path = tmp_path / "catalysts.db"
-    repository = seed(path)
-    repository.publish_health(
-        status="ok",
-        data_through=utc(10, 8),
-        sources={
-            "wire": ComponentHealth(
-                status="degraded",
-                last_attempt_at=utc(10, 7),
-                last_success_at=utc(10, 6),
-                data_through=utc(10, 6),
-                consecutive_failures=2,
-                next_attempt_at=utc(10, 9),
-                raw_count=20,
-                inserted_count=18,
-                duplicates_count=2,
-                detail="upstream http://internal.example failed",
-            )
-        },
-        model="gpt-5.6-terra",
-        reasoning="max",
-        execution_mode="background",
-        analysis_trigger_enabled=True,
-        observed_at=utc(10, 8),
-    )
-    anonymous = client_for(configured(path), public_read=True)
-    authenticated = client_for(
-        configured(path), public_read=True, app_authenticated=True
-    )
-
-    anonymous_payload = anonymous.get("/api/catalysts/status").json()
-    authenticated_payload = authenticated.get("/api/catalysts/status").json()
-
-    assert anonymous_payload["status"] == authenticated_payload["status"]
-    assert anonymous_payload["analysis_trigger_enabled"] is False
-    assert anonymous_payload["model"] == "gpt-5.6-terra"
-    assert anonymous_payload["sources"] == [
-        {
-            "source": "wire",
-            "status": "degraded",
-            "last_success_at": "2026-07-11T10:06:00Z",
-            "data_through": "2026-07-11T10:06:00Z",
-            "consecutive_failures": 2,
-            "raw_count": 20,
-            "inserted_count": 18,
-            "duplicates_count": 2,
-            "source_fetch_status": None,
-            "news_persistence_status": None,
-            "event_projection_status": None,
-        }
-    ]
-    assert "detail" not in anonymous_payload["sources"][0]
-    assert "last_attempt_at" not in anonymous_payload["sources"][0]
-    assert "next_attempt_at" not in anonymous_payload["sources"][0]
-    assert "streams" in anonymous_payload
-    assert "snapshot_id" not in anonymous_payload
-    assert "worker" not in anonymous_payload
-    assert "execution_mode" not in anonymous_payload
-    assert authenticated_payload["analysis_trigger_enabled"] is True
-    assert "snapshot_id" in authenticated_payload
-    assert authenticated_payload["execution_mode"] == "background"
-    assert authenticated_payload["sources"][0]["detail"].startswith("upstream")
-    assert "last_attempt_at" in authenticated_payload["sources"][0]
-
-
-def test_catalyst_routes_reject_oversized_content_length_before_json_parsing(
-    tmp_path,
-) -> None:
-    client = client_for(configured(tmp_path / "catalysts.db"))
     response = client.post(
         "/api/catalysts/tickers/batch",
-        content=b"x" * (_MAX_CATALYST_BODY_BYTES + 1),
+        content=body,
         headers={"content-type": "application/json"},
     )
+
     assert response.status_code == 413
     assert response.json()["detail"] == "Catalyst request body exceeds 32 KiB"
 
 
-def test_catalyst_routes_reject_oversized_chunked_body_before_json_parsing(
-    tmp_path,
-) -> None:
-    client = client_for(configured(tmp_path / "catalysts.db"))
+def test_invalid_cursor_is_a_safe_client_error() -> None:
+    service = StubPersonalService()
+    service.invalid_cursor = True
 
-    def chunks():
-        yield b"x" * (_MAX_CATALYST_BODY_BYTES // 2)
-        yield b"x" * (_MAX_CATALYST_BODY_BYTES // 2 + 1)
+    response = client_for(service).get("/api/catalysts/feed?cursor=bad")
 
-    response = client.post(
-        "/api/catalysts/tickers/batch",
-        content=chunks(),
-        headers={"content-type": "application/json"},
-    )
-    assert response.status_code == 413
-
-
-def test_post_only_enqueues_refresh_and_opaque_analysis_job(tmp_path) -> None:
-    path = tmp_path / "catalysts.db"
-    repository = seed(path)
-    client = client_for(configured(path))
-
-    refresh = client.post("/api/catalysts/refresh")
-    analysis = client.post("/api/catalysts/news/101/analysis", json={"force": False})
-    assert refresh.status_code == 202
-    assert refresh.json()["status"] == "queued"
-    assert analysis.status_code == 202
-    local_job_id = analysis.json()["job_id"]
-    assert len(local_job_id) == 32
-    assert "remote" not in analysis.text.lower()
-    assert "openai" not in analysis.text.lower()
-
-    job = client.get(f"/api/catalysts/analysis-jobs/{local_job_id}")
-    historical_news = client.get(
-        "/api/catalysts/news/101?as_of=2026-07-11T10:07:00Z"
-    )
-    current_news = client.get("/api/catalysts/news/101")
-    assert job.status_code == 200
-    assert job.json()["status"] == "pending"
-    assert historical_news.json()["analysis_job"] is None
-    assert current_news.json()["analysis_job"]["job_id"] == local_job_id
-
-    run_id = repository.begin_sync_run(
-        "feed", snapshot_token="snapshot-api-analysis-update", now=utc(10, 8)
-    )
-    repository.stage_latest_page(
-        run_id, [catalyst_item(sequence=3, updated_at=utc(10, 8), analysis=True)]
-    )
-    repository.publish_latest(
-        run_id,
-        snapshot_token="snapshot-api-analysis-update",
-        data_through=utc(10, 8),
-        next_updated_after=utc(10, 8),
-        watermark_sequence=3,
-        now=utc(10, 8),
-    )
-
-    after_analysis_update = client.get("/api/catalysts/news/101")
-    duplicate = client.post("/api/catalysts/news/101/analysis", json={"force": False})
-    assert after_analysis_update.json()["item"]["change_sequence"] == 3
-    assert after_analysis_update.json()["analysis_job"]["job_id"] == local_job_id
-    assert duplicate.json()["job_id"] == local_job_id
-    with repository.open_read_connection() as connection:
-        assert connection.execute(
-            "SELECT count(*) FROM catalyst_refresh_outbox WHERE status='pending'"
-        ).fetchone()[0] == 1
-        assert connection.execute(
-            "SELECT count(*) FROM catalyst_analysis_jobs"
-        ).fetchone()[0] == 1
-
-
-def test_news_detail_does_not_attach_a_job_from_an_older_revision(tmp_path) -> None:
-    path = tmp_path / "catalysts.db"
-    repository = seed(path)
-    repository.enqueue_analysis(
-        101,
-        content_hash="content-hash-101",
-        change_sequence=2,
-        contract_schema_version="macrolens-option-pro-v2",
-        force=False,
-        model="gpt-5.6-terra",
-        reasoning="max",
-        now=utc(10, 7),
-    )
-    revised = catalyst_item(
-        sequence=3, updated_at=utc(10, 8), analysis=False
-    ).model_copy(update={"content_hash": "content-hash-101-corrected"})
-    run_id = repository.begin_sync_run(
-        "feed", snapshot_token="snapshot-corrected", now=utc(10, 8)
-    )
-    repository.stage_latest_page(run_id, [revised])
-    repository.publish_latest(
-        run_id,
-        snapshot_token="snapshot-corrected",
-        data_through=utc(10, 8),
-        next_updated_after=utc(10, 8),
-        watermark_sequence=3,
-        now=utc(10, 8),
-    )
-
-    client = client_for(configured(path))
-    historical = client.get("/api/catalysts/news/101?as_of=2026-07-11T10:07:00Z")
-    current = client.get("/api/catalysts/news/101?as_of=2026-07-11T10:09:00Z")
-    assert historical.status_code == 200
-    assert historical.json()["analysis_job"] is not None
-    assert current.status_code == 200
-    assert current.json()["item"]["content_hash"] == "content-hash-101-corrected"
-    assert current.json()["analysis_job"] is None
-
-
-def test_feed_cursor_freezes_as_of_when_next_page_omits_it(tmp_path) -> None:
-    path = tmp_path / "catalysts.db"
-    repository = CatalystRepository(path)
-    repository.initialize(now=utc(9))
-    run_id = repository.begin_sync_run(
-        "feed", snapshot_token="snapshot-pagination", now=utc(10, 6)
-    )
-    repository.stage_latest_page(
-        run_id,
-        [
-            catalyst_item(
-                sequence=1,
-                updated_at=utc(10, 5),
-                analysis=False,
-                news_id=101,
-            ),
-            catalyst_item(
-                sequence=2,
-                updated_at=utc(10, 6),
-                analysis=False,
-                news_id=102,
-                ticker="AMD",
-            ),
-        ],
-    )
-    repository.publish_latest(
-        run_id,
-        snapshot_token="snapshot-pagination",
-        data_through=utc(10, 6),
-        next_updated_after=utc(10, 6),
-        watermark_sequence=2,
-        now=utc(10, 6),
-    )
-    repository.publish_health(
-        status="ok",
-        data_through=utc(10, 6),
-        sources={},
-        model="gpt-5.6-terra",
-        reasoning="max",
-        execution_mode="background",
-        analysis_trigger_enabled=True,
-        observed_at=utc(10, 6),
-    )
-    client = client_for(configured(path))
-    first = client.get(
-        "/api/catalysts/feed?as_of=2026-07-11T10:07:00Z&limit=1"
-    )
-    assert first.status_code == 200
-    assert first.json()["has_more"] is True
-
-    second = client.get(
-        "/api/catalysts/feed",
-        params={"limit": 1, "cursor": first.json()["next_cursor"]},
-    )
-    assert second.status_code == 200
-    assert second.json()["as_of"] == first.json()["as_of"]
-    assert second.json()["items"][0]["news_id"] != first.json()["items"][0]["news_id"]
-
-
-def test_feed_rejects_malformed_cursor_as_a_safe_client_error(tmp_path) -> None:
-    path = tmp_path / "catalysts.db"
-    seed(path)
-    response = client_for(configured(path)).get(
-        "/api/catalysts/feed?cursor=not-valid-base64!"
-    )
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "invalid_cursor"
 
 
-def test_action_capability_missing_keeps_reads_but_rejects_analysis(tmp_path) -> None:
-    path = tmp_path / "catalysts.db"
-    seed(path)
-    client = client_for(configured(path, action=False))
-    feed = client.get("/api/catalysts/feed?as_of=2026-07-11T10:07:00Z")
-    analysis = client.post("/api/catalysts/news/101/analysis", json={})
-    assert feed.status_code == 200
-    assert analysis.status_code == 503
-    assert analysis.json()["detail"]["code"] == "capability_disabled"
+def test_actions_delegate_to_personal_service_after_authentication() -> None:
+    service = StubPersonalService()
+    client = client_for(service)
 
-
-def test_expensive_catalyst_posts_fail_closed_without_app_auth_token(monkeypatch, tmp_path) -> None:
-    monkeypatch.delenv("APP_AUTH_TOKEN", raising=False)
-    path = tmp_path / "catalysts.db"
-    repository = seed(path)
-    queued = repository.enqueue_analysis(
-        101,
-        content_hash="content-hash-101",
-        change_sequence=2,
-        contract_schema_version="macrolens-option-pro-v2",
-        force=False,
-        model="gpt-5.6-terra",
-        reasoning="max",
+    responses = (
+        client.post(
+            "/api/catalysts/refresh",
+            json={"operation_type": "news", "idempotency_key": "refresh-news"},
+        ),
+        client.post("/api/catalysts/news/101/analysis", json={"force": True}),
+        client.post(f"/api/catalysts/analysis-jobs/{JOB_ID}/cancel"),
+        client.post(
+            "/api/catalysts/market-focus-cycles",
+            json={"expected_prepared_revision": 3, "force": True},
+        ),
+        client.post(f"/api/catalysts/market-focus-cycles/{CYCLE_ID}/cancel"),
     )
-    client = client_for(configured(path), authorize_actions=False)
 
-    refresh = client.post("/api/catalysts/refresh")
-    analysis = client.post("/api/catalysts/news/101/analysis", json={})
-    cancel = client.post(f"/api/catalysts/analysis-jobs/{queued['job_id']}/cancel")
-    assert refresh.status_code == 503
-    assert analysis.status_code == 503
-    assert cancel.status_code == 503
-    assert refresh.json()["detail"]["code"] == "capability_disabled"
-    with repository.open_read_connection() as connection:
-        assert connection.execute("SELECT count(*) FROM catalyst_refresh_outbox").fetchone()[0] == 0
-        assert connection.execute("SELECT status FROM catalyst_analysis_jobs").fetchone()[0] == "pending"
+    assert all(response.status_code == 202 for response in responses)
+    assert ("refresh", "news", "refresh-news") in service.calls
+    assert ("analysis", 101, True) in service.calls
+    assert ("request_focus", 3, None, True) in service.calls
 
 
-def test_expensive_catalyst_posts_require_authenticated_gateway_state(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("APP_AUTH_TOKEN", "configured-test-token")
-    path = tmp_path / "catalysts.db"
-    repository = seed(path)
-    queued = repository.enqueue_analysis(
-        101,
-        content_hash="content-hash-101",
-        change_sequence=2,
-        contract_schema_version="macrolens-option-pro-v2",
-        force=False,
-        model="gpt-5.6-terra",
-        reasoning="max",
+def test_disabled_catalyst_sync_rejects_refresh_as_a_conflict() -> None:
+    service = StubPersonalService()
+    service.refresh_error = CatalystError(
+        "catalyst_sync_disabled",
+        "Catalyst refresh is disabled until MacroLens sync is configured",
+        retryable=False,
+        counts_for_circuit=False,
     )
-    client = client_for(configured(path), authorize_actions=False)
 
-    refresh = client.post("/api/catalysts/refresh")
-    analysis = client.post("/api/catalysts/news/101/analysis", json={})
-    cancel = client.post(f"/api/catalysts/analysis-jobs/{queued['job_id']}/cancel")
-    assert refresh.status_code == 401
-    assert analysis.status_code == 401
-    assert cancel.status_code == 401
+    response = client_for(service).post(
+        "/api/catalysts/refresh",
+        json={"operation_type": "news"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "catalyst_sync_disabled",
+        "message": "Catalyst refresh is disabled until MacroLens sync is configured",
+        "retryable": False,
+        "retry_after": None,
+    }
+    assert service.calls == []
+
+
+def test_route_validation_and_missing_local_rows_fail_safely() -> None:
+    client = client_for(StubPersonalService())
+
+    invalid_ticker = client.get("/api/catalysts/tickers/AAPL%2FBAD")
+    invalid_calendar = client.get(
+        "/api/catalysts/calendar",
+        params={"date_from": date(2026, 7, 15), "date_to": date(2027, 1, 1)},
+    )
+    missing_news = client.get("/api/catalysts/news/999")
+    missing_job = client.get("/api/catalysts/analysis-jobs/aij_" + "c" * 32)
+
+    assert invalid_ticker.status_code == 404
+    assert invalid_calendar.status_code == 422
+    assert missing_news.status_code == 404
+    assert missing_job.status_code == 404

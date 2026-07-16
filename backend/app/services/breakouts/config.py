@@ -6,21 +6,35 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, PrivateAttr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.data_paths import explicit_data_path, get_data_paths
+from app.personal_config import get_personal_config
+from app.runtime_environment import load_runtime_environment
 
 
 _ROOT_ENV_FILE = Path(__file__).resolve().parents[4] / ".env"
+load_runtime_environment()
+_PERSONAL_CONFIG = get_personal_config()
+_PERSONAL_RANGE_PERSISTENCE_MODE = {
+    "off": "disabled",
+    "shadow": "shadow",
+    "active": "enabled",
+}[_PERSONAL_CONFIG.breakout.range_persistence_mode]
 
 
 class BreakoutSettings(BaseSettings):
-    enabled: bool = Field(default=False, alias="BREAKOUT_RADAR_ENABLED")
+    _db_path_override: Path | None = PrivateAttr(default=None)
+
+    enabled: bool = Field(
+        default=_PERSONAL_CONFIG.features.breakout_enabled,
+        alias="BREAKOUT_RADAR_ENABLED",
+    )
     discovery_provider: Literal["tradingview"] = Field(
         default="tradingview",
         alias="BREAKOUT_DISCOVERY_PROVIDER",
     )
-    db_path: Path = Field(default=Path("/data/optix.db"), alias="BREAKOUT_DB_PATH")
-
     provider_timeout_seconds: float = Field(
         default=10.0, ge=1.0, le=30.0, alias="BREAKOUT_PROVIDER_TIMEOUT_SECONDS"
     )
@@ -80,13 +94,22 @@ class BreakoutSettings(BaseSettings):
         default=40, ge=1, le=40, alias="BREAKOUT_EXPIRED_DUE_LIMIT"
     )
     scan_interval_premarket_seconds: int = Field(
-        default=600, ge=60, le=3600, alias="BREAKOUT_SCAN_INTERVAL_PREMARKET_SECONDS"
+        default=_PERSONAL_CONFIG.breakout.premarket_seconds,
+        ge=60,
+        le=3600,
+        alias="BREAKOUT_SCAN_INTERVAL_PREMARKET_SECONDS",
     )
     scan_interval_regular_seconds: int = Field(
-        default=300, ge=60, le=1800, alias="BREAKOUT_SCAN_INTERVAL_REGULAR_SECONDS"
+        default=_PERSONAL_CONFIG.breakout.regular_seconds,
+        ge=60,
+        le=1800,
+        alias="BREAKOUT_SCAN_INTERVAL_REGULAR_SECONDS",
     )
     scan_interval_closed_seconds: int = Field(
-        default=1800, ge=300, le=7200, alias="BREAKOUT_SCAN_INTERVAL_CLOSED_SECONDS"
+        default=_PERSONAL_CONFIG.breakout.closed_seconds,
+        ge=300,
+        le=7200,
+        alias="BREAKOUT_SCAN_INTERVAL_CLOSED_SECONDS",
     )
     worker_lease_ttl_seconds: int = Field(
         default=90, ge=15, le=900, alias="BREAKOUT_WORKER_LEASE_TTL_SECONDS"
@@ -98,7 +121,10 @@ class BreakoutSettings(BaseSettings):
         default=24, ge=1, le=168, alias="BREAKOUT_RAW_PAYLOAD_RETENTION_HOURS"
     )
     scan_retention_days: int = Field(
-        default=30, ge=1, le=365, alias="BREAKOUT_SCAN_RETENTION_DAYS"
+        default=_PERSONAL_CONFIG.storage.retention_days,
+        ge=1,
+        le=365,
+        alias="BREAKOUT_SCAN_RETENTION_DAYS",
     )
     retention_batch_size: int = Field(
         default=500, ge=10, le=5000, alias="BREAKOUT_RETENTION_BATCH_SIZE"
@@ -165,7 +191,8 @@ class BreakoutSettings(BaseSettings):
     )
 
     range_persistence_mode: Literal["disabled", "shadow", "enabled"] = Field(
-        default="shadow", alias="RANGE_PERSISTENCE_MODE"
+        default=_PERSONAL_RANGE_PERSISTENCE_MODE,
+        alias="RANGE_PERSISTENCE_MODE",
     )
     range_persistence_validation_version: str = Field(
         default="", max_length=80, alias="RANGE_PERSISTENCE_VALIDATION_VERSION"
@@ -224,6 +251,7 @@ class BreakoutSettings(BaseSettings):
         """
 
         normalized = dict(values)
+        path_override = normalized.pop("db_path", None)
         for field_name, field in type(self).model_fields.items():
             alias = field.alias
             if field_name not in normalized or not isinstance(alias, str):
@@ -233,17 +261,37 @@ class BreakoutSettings(BaseSettings):
                     f"conflicting explicit settings: {field_name!r} and {alias!r}"
                 )
             normalized[alias] = normalized.pop(field_name)
+        personal_runtime = {
+            "enabled": _PERSONAL_CONFIG.features.breakout_enabled,
+            "scan_interval_premarket_seconds": (
+                _PERSONAL_CONFIG.breakout.premarket_seconds
+            ),
+            "scan_interval_regular_seconds": (
+                _PERSONAL_CONFIG.breakout.regular_seconds
+            ),
+            "scan_interval_closed_seconds": (
+                _PERSONAL_CONFIG.breakout.closed_seconds
+            ),
+            "scan_retention_days": _PERSONAL_CONFIG.storage.retention_days,
+            "range_persistence_mode": _PERSONAL_RANGE_PERSISTENCE_MODE,
+        }
+        # Personal Edition owns these fields in personal.toml.  Legacy
+        # BREAKOUT_* names are still understood by the offline migration tool,
+        # but an exported old value must not override the running service.
+        for field_name, value in personal_runtime.items():
+            alias = type(self).model_fields[field_name].alias
+            if isinstance(alias, str) and alias not in normalized:
+                normalized[alias] = value
         super().__init__(**normalized)
+        if path_override is not None:
+            self._db_path_override = explicit_data_path(
+                path_override,
+                name="db_path",
+            )
 
-    @field_validator("db_path")
-    @classmethod
-    def validate_db_path(cls, value: Path) -> Path:
-        text = str(value)
-        if text.startswith("file:") or not value.is_absolute():
-            raise ValueError("BREAKOUT_DB_PATH must be an absolute filesystem path")
-        if ".." in value.parts:
-            raise ValueError("BREAKOUT_DB_PATH must not contain parent traversal")
-        return value
+    @property
+    def db_path(self) -> Path:
+        return self._db_path_override or get_data_paths().optix_db
 
     @model_validator(mode="after")
     def validate_limits(self) -> "BreakoutSettings":

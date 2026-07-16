@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 import hashlib
-import logging
 import math
 from bisect import bisect_left, bisect_right
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
@@ -66,9 +65,6 @@ _NEW_YORK = ZoneInfo("America/New_York")
 _FALLBACK_MAX_WORKERS = 8
 _FALLBACK_TOTAL_BUDGET_SECONDS = 20.0
 _FALLBACK_FAILURE_LIMIT = 8
-_LOGGER = logging.getLogger(__name__)
-_FOCUS_PUBLISH_WARNING_INTERVAL_SECONDS = 300.0
-_focus_publish_warning_deadline = 0.0
 
 PROFILE_TILT = {
     "conservative": {"trend": 1.12, "risk": 1.22, "volume": .88, "breakout": .90},
@@ -349,7 +345,7 @@ def _finnhub_candle_frame(symbol: str, payload: dict[str, Any]) -> pd.DataFrame:
 
 def _download_marketdata_history(tickers: list[str], period: str) -> tuple[pd.DataFrame, list[str], list[str]]:
     settings = get_settings()
-    token = (settings.marketdata_token or settings.marketdata_api_token or "").strip()
+    token = settings.marketdata_token.strip()
     if not token or not settings.marketdata_stock_candle_fallback_enabled:
         return pd.DataFrame(), [], tickers
 
@@ -1564,37 +1560,6 @@ def _scan_sync(
             "legacy_score_delta": score_delta,
         }
 
-    # Freeze a complete, view-independent input for the Catalyst focus sidecar.
-    # The shared strength_top set uses the canonical intrinsic rank, never the
-    # requesting user's profile or timeframe. Only minimum market-reaction
-    # fields are copied; formal scores and factor contributions never enter the
-    # focus snapshot or its contract.
-    focus_ranked = sorted(
-        intrinsic_rows,
-        key=lambda item: (
-            item.get("intrinsic_score") is not None,
-            _safe_float(item.get("intrinsic_score"), 4) or 0.0,
-            item.get("ticker") or "",
-        ),
-        reverse=True,
-    )
-    focus_rows = [
-        {
-            "ticker": item.get("ticker"),
-            "sector_id": item.get("sector_id"),
-            "primary_sector_id": item.get("primary_sector_id"),
-            "session_change_pct": item.get("change_pct"),
-            "avg_dollar_volume_20d": item.get("avg_dollar_volume_20d"),
-            "data_quality": item.get("data_quality"),
-            "universe_member": True,
-            "universe_version": universe_version,
-            "universe_as_of": universe_as_of,
-            "daily_data_through": item.get("daily_data_through"),
-        }
-        for item in focus_ranked
-        if item.get("ticker")
-    ]
-
     view_rows: list[dict[str, Any]] = []
     for item in scored:
         if sector_id and sector_id not in set(item.get("theme_ids") or []):
@@ -1668,9 +1633,6 @@ def _scan_sync(
         "skipped": skipped,
         "results": limited,
         "rows": limited,
-        # Private cache field consumed and removed by ``scan_strength`` before
-        # returning the public API response.
-        "_focus_rows": focus_rows,
         "sectors": _sector_strength(scored),
         "data_sources": {
             "prices": {
@@ -1705,13 +1667,12 @@ async def scan_strength(
     universe: str = "themes",
     timeframe: str = "all",
     profile: str = "balanced",
-    top: int = 30,
+    top: int = 20,
     sector_id: str | None = None,
     min_price: float = 5.0,
     min_avg_dollar_volume: float = 10_000_000,
     include_options: bool = True,
-    _include_focus_rows: bool = False,
-    _publish_focus: bool = False,
+    force_refresh: bool = False,
 ) -> dict[str, Any]:
     settings = get_settings()
     from app.services.breakouts.config import get_breakout_settings
@@ -1766,11 +1727,15 @@ async def scan_strength(
                     raise RuntimeError("strength_price_history_unavailable")
                 return history
 
-            raw_history, _, _ = await cache.get_or_set_with_meta(
-                history_key,
-                STRENGTH_CACHE_TTL_SECONDS,
-                load_history,
-            )
+            if force_refresh:
+                raw_history = await load_history()
+                cache.set(history_key, raw_history, STRENGTH_CACHE_TTL_SECONDS)
+            else:
+                raw_history, _, _ = await cache.get_or_set_with_meta(
+                    history_key,
+                    STRENGTH_CACHE_TTL_SECONDS,
+                    load_history,
+                )
 
         return await asyncio.to_thread(
             _scan_sync,
@@ -1785,40 +1750,22 @@ async def scan_strength(
             raw_history=raw_history,
         )
 
-    payload, was_cached, expires_at = await cache.get_or_set_with_meta(
-        key,
-        STRENGTH_CACHE_TTL_SECONDS,
-        produce,
-    )
-    if _publish_focus:
-        try:
-            from app.services.catalysts.focus_publisher import (
-                publish_focus_from_strength_payload,
-            )
-
-            await asyncio.to_thread(publish_focus_from_strength_payload, payload)
-        except Exception as error:
-            # Focus context is a display-only sidecar. A local cache/schema
-            # issue must never change the existing strength response/scores.
-            global _focus_publish_warning_deadline
-            observed = monotonic()
-            if observed >= _focus_publish_warning_deadline:
-                _focus_publish_warning_deadline = (
-                    observed + _FOCUS_PUBLISH_WARNING_INTERVAL_SECONDS
-                )
-                _LOGGER.warning(
-                    "focus_context_publish_failed error_type=%s",
-                    type(error).__name__,
-                )
-    public_payload = {
-        key: value for key, value in payload.items() if key != "_focus_rows"
-    }
-    if _include_focus_rows:
-        # Server-side focus production needs the view-independent canonical
-        # rows. The HTTP route never enables this private return field.
-        public_payload["_focus_rows"] = list(payload.get("_focus_rows") or [])
+    if force_refresh:
+        payload = await produce()
+        cache.set(key, payload, STRENGTH_CACHE_TTL_SECONDS)
+        cached = cache.get_with_expiry(key)
+        if cached is None:  # pragma: no cover - set() guarantees this branch
+            raise RuntimeError("strength_cache_write_failed")
+        expires_at = cached[0]
+        was_cached = False
+    else:
+        payload, was_cached, expires_at = await cache.get_or_set_with_meta(
+            key,
+            STRENGTH_CACHE_TTL_SECONDS,
+            produce,
+        )
     return {
-        **public_payload,
+        **payload,
         "_cached": was_cached,
         "cache_ttl_seconds": STRENGTH_CACHE_TTL_SECONDS,
         "cache_expires_at": datetime.fromtimestamp(expires_at, timezone.utc).isoformat(),

@@ -35,6 +35,16 @@ FIXTURE = json.loads(
 )
 
 
+class _LocalPeerAddress:
+    def __init__(self, application) -> None:
+        self.application = application
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http":
+            scope["client"] = ("127.0.0.1", 50000)
+        await self.application(scope, receive, send)
+
+
 def _daily(offset: float = 0) -> pd.DataFrame:
     index = pd.bdate_range(end="2026-07-09", periods=420)
     close = 120 + offset + np.arange(len(index)) * 0.15 + np.sin(np.arange(len(index)) / 6)
@@ -79,7 +89,7 @@ def test_offline_provider_to_worker_to_sqlite_to_api_chain(tmp_path, monkeypatch
     settings = BreakoutSettings(
         _env_file=None,
         BREAKOUT_RADAR_ENABLED=True,
-        BREAKOUT_DB_PATH=tmp_path / "breakouts.db",
+        db_path=tmp_path / "breakouts.db",
     )
     provider = TradingViewDiscoveryProvider(settings, client=client)
     worker = BreakoutWorker(
@@ -97,7 +107,9 @@ def test_offline_provider_to_worker_to_sqlite_to_api_chain(tmp_path, monkeypatch
 
     monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: settings)
     monkeypatch.setattr(breakout_api, "_now", lambda: AS_OF.astimezone(timezone.utc))
-    payload = TestClient(app, base_url="http://localhost").get(
+    payload = TestClient(
+        _LocalPeerAddress(app), base_url="http://localhost"
+    ).get(
         "/api/breakouts/current"
     ).json()
     assert payload["status"] == "active"

@@ -7,31 +7,14 @@
   const cache = new Map();     // key → { at, ttl, data }
   const inflight = new Map();  // key → Promise
 
-  function appToken() {
-    let token = "";
-    try {
-      token = sessionStorage.getItem("optix.app.token") || "";
-    } catch (error) { /* 某些隐私模式禁用会话存储 */ }
-    if (token) return token;
-    try {
-      const legacy = localStorage.getItem("optix.app.token") || "";
-      if (legacy) {
-        try { sessionStorage.setItem("optix.app.token", legacy); } catch (error) { /* 仅本标签页使用 */ }
-        localStorage.removeItem("optix.app.token");
-      }
-      return legacy;
-    } catch (error) { return ""; }
-  }
-
   function requestHeaders(hasBody) {
     const headers = { Accept: "application/json" };
-    if (hasBody) headers["Content-Type"] = "application/json";
-    const token = appToken();
-    if (token) headers.Authorization = "Bearer " + token;
+    if (hasBody) {
+      headers["Content-Type"] = "application/json";
+      headers["X-Optix-Action"] = "1";
+    }
     return headers;
   }
-
-  const hasAppToken = () => !!appToken();
 
   /*
    * 普通数据和任务轮询使用不同的并发闸。长任务状态查询只能占用低优先级
@@ -96,6 +79,8 @@
     [/^\/api\/catalysts\/hotspots/, 120e3],
     [/^\/api\/catalysts\/market-focus-cycles\/latest/, 120e3],
     [/^\/api\/catalysts\/news\//, 120e3],
+    [/^\/api\/worker\/status/, 5e3],
+    [/^\/api\/worker\/actions/, 5e3],
     [/^\/api\/options\//, 120e3],
   ];
   const ttlFor = p => { for (const [re, t] of TTL) if (re.test(p)) return t; return 60e3; };
@@ -183,6 +168,15 @@
     }));
   }
 
+  async function jput(path, payload, opts) {
+    opts = opts || {};
+    return fetchJSON(path, Object.assign({}, opts, {
+      method: "PUT",
+      body: JSON.stringify(payload || {}),
+      retry5xx: opts.retry5xx === true,
+    }));
+  }
+
   function invalidateCache(prefix) {
     for (const key of cache.keys()) if (!prefix || key.startsWith(prefix)) cache.delete(key);
   }
@@ -243,6 +237,8 @@
   }
 
   const marketStatus = () => jget("/api/market/status");
+  const accessStatus = () => jget("/api/access/status", { force: true, noCache: true });
+  const logoutOwner = () => jpost("/api/access/logout", {}, { retry5xx: false });
 
   async function watchlist(force) {
     const d = await jget("/api/stocks/watchlist", { force });
@@ -288,7 +284,7 @@
     return { bars: shown, all: bars.length, asOf: d.as_of, lastBarAt: d.last_bar_at, stale: !!d._stale, tz: d.exchange_timezone };
   }
 
-  const scan = (params, force) => jget("/api/strength/scan" + qs(params), { force });
+  const scan = (params, force) => jget("/api/strength/scan" + qs(params), { force, retry5xx: false });
   const breakoutsCurrent = force => jget("/api/breakouts/current", { force });
   const breakoutsStatus = force => jget("/api/breakouts/status", { force });
   const breakoutsEvents = (filters, force) => jget("/api/breakouts/events" + qs(filters), { force });
@@ -296,7 +292,12 @@
   const breakoutTicker = t => jget("/api/breakouts/tickers/" + enc(t));
   const sectors = () => jget("/api/sectors");
   const sectorIV = id => jget("/api/sectors/" + enc(id) + "/iv-ranking");
-  const earnings = force => jget("/api/earnings/upcoming", { force });
+  const earnings = force => force
+    ? jpost("/api/earnings/upcoming/refresh", {}, { retry5xx: false }).then(body => {
+        invalidateCache("/api/earnings/upcoming");
+        return body;
+      })
+    : jget("/api/earnings/upcoming");
   const earningsImpact = t => jget("/api/ai/earnings-impact/" + enc(t));
   const catalystStatus = (force, signal) => jget("/api/catalysts/status", { force, signal });
   const catalystFeed = (params, options) => jget("/api/catalysts/feed" + qs(params), options || {});
@@ -315,15 +316,65 @@
     const input = request || {};
     const payload = input.retry_cycle_id
       ? { trigger: "manual", retry_cycle_id: input.retry_cycle_id }
-      : { trigger: "manual", expected_prepared_revision: input.expected_prepared_revision };
+      : {
+          trigger: "manual",
+          expected_prepared_revision: input.expected_prepared_revision,
+          force: !!input.force,
+        };
     return jpost(
       "/api/catalysts/market-focus-cycles",
       payload,
       Object.assign({ lowPriority: true }, options || {}),
     );
   };
-  const catalystRefresh = options => jpost("/api/catalysts/refresh", {}, options || {}).then(body => {
+  const catalystRefresh = (operationType, options) => jpost(
+    "/api/catalysts/refresh",
+    { operation_type: operationType || "news" },
+    options || {},
+  ).then(body => {
     invalidateCache("/api/catalysts/");
+    return body;
+  });
+  const catalystRefreshStatus = (id, options) => jget(
+    "/api/catalysts/refresh/" + enc(id),
+    Object.assign({ noCache: true, lowPriority: true, retry5xx: false }, options || {}),
+  );
+  const runtimeSettings = options => jget(
+    "/api/runtime-settings",
+    Object.assign({ noCache: true, retry5xx: false }, options || {}),
+  );
+  const runtimeSettingsHistory = options => jget(
+    "/api/runtime-settings/history",
+    Object.assign({ noCache: true, retry5xx: false }, options || {}),
+  );
+  const updateRuntimeSettings = (payload, options) => jput(
+    "/api/runtime-settings",
+    payload,
+    Object.assign({ retry5xx: false }, options || {}),
+  );
+  const rollbackRuntimeSettings = (payload, options) => jpost(
+    "/api/runtime-settings/rollback",
+    payload,
+    Object.assign({ retry5xx: false }, options || {}),
+  );
+  const workerStatus = options => jget(
+    "/api/worker/status",
+    Object.assign({ noCache: true, retry5xx: false }, options || {}),
+  );
+  const workerActions = (actionType, options) => jget(
+    "/api/worker/actions" + qs({ action_type: actionType, limit: 30 }),
+    Object.assign({ noCache: true, retry5xx: false }, options || {}),
+  );
+  const workerAction = (requestId, options) => jget(
+    "/api/worker/actions/" + enc(requestId),
+    Object.assign({ noCache: true, lowPriority: true, retry5xx: false }, options || {}),
+  );
+  const requestWorkerAction = (actionType, payload, options) => jpost(
+    "/api/worker/actions/" + enc(actionType),
+    payload || {},
+    Object.assign({ retry5xx: false }, options || {}),
+  ).then(body => {
+    invalidateCache("/api/worker/");
     return body;
   });
   const createCatalystAnalysis = (id, force, options) => jpost("/api/catalysts/news/" + enc(id) + "/analysis", { force: !!force }, options || {});
@@ -466,13 +517,15 @@
   }
 
   window.OPTIX_NET = {
-    jget, jpost, invalidateCache, hasAppToken, cnAmount, indexInfo, INDEX_NAMES, CHART_RANGES,
+    jget, jpost, jput, invalidateCache, accessStatus, logoutOwner, cnAmount, indexInfo, INDEX_NAMES, CHART_RANGES,
     indices, marketStatus, watchlist, stock, stockSignals, signalDeep, signalsMarket, strengthMarket,
     profiles, chart, scan, breakoutsCurrent, breakoutsStatus, breakoutsEvents, breakoutEventDetail, breakoutTicker,
     sectors, sectorIV, earnings, earningsImpact, unusual, expirations, chain, search, aiStock,
     catalystStatus, catalystFeed, catalystNews, tickerCatalysts, catalystBatch, catalystCalendar,
     catalystHotspotStatus, catalystHotspots, catalystMarketCycleLatest, catalystMarketCycle,
-    createCatalystMarketCycle, catalystRefresh,
+    createCatalystMarketCycle, catalystRefresh, catalystRefreshStatus,
+    runtimeSettings, runtimeSettingsHistory, updateRuntimeSettings, rollbackRuntimeSettings,
+    workerStatus, workerActions, workerAction, requestWorkerAction,
     createCatalystAnalysis, catalystAnalysisJob, cancelCatalystAnalysisJob,
     createEarningsImpactJob, createOptionAlertsJob, aiJob, cancelAiJob,
     buildWeek, etToday,

@@ -329,7 +329,10 @@ class BreakoutWorker:
     ) -> Any:
         """Keep the fencing lease alive while Provider/enrichment is running."""
         task = asyncio.create_task(operation)
-        interval = max(0.05, min(30.0, self.lease_ttl_seconds / 3.0))
+        # Renew with a wider safety margin than the lease's one-third point.
+        # Busy shared runners and short test leases can otherwise consume the
+        # whole remaining window before SQLite records the heartbeat.
+        interval = max(0.01, min(30.0, self.lease_ttl_seconds / 4.0))
         try:
             while True:
                 done, _ = await asyncio.wait({task}, timeout=interval)
@@ -689,6 +692,17 @@ async def _async_main(args: argparse.Namespace) -> int:
         health = check_breakout_health(settings)
         print(json.dumps(health.as_dict(), allow_nan=False, separators=(",", ":")))
         return health.exit_code
+
+    if not settings.enabled and not args.once:
+        stop = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            try:
+                loop.add_signal_handler(signum, stop.set)
+            except (NotImplementedError, RuntimeError):
+                pass
+        await stop.wait()
+        return 0
 
     repository = BreakoutRepository(settings.db_path)
     from app.services.breakouts.service import BreakoutRadarService

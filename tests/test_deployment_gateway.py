@@ -1,543 +1,852 @@
 from __future__ import annotations
 
-from collections import deque
+import asyncio
+import ipaddress
+import re
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 
 import pytest
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from app import main
-from app.services.catalysts.focus_config import (
-    FocusContextSettings,
-    get_focus_context_settings,
+from app.access import (
+    OWNER_COOKIE_NAME,
+    OWNER_SESSION_SECONDS,
+    LoginRejected,
+    OwnerAccessRuntime,
+    hash_owner_password,
+    require_owner_access,
+    require_same_origin_action,
 )
-from app.services.catalysts.repository import CatalystRepository
-from app.services.request_security import (
-    client_ip_from_scope,
-    parse_trusted_proxy_cidrs,
-)
+import app.access as access_module
+from app.api import access as access_api
+import app.main as main
+from app.main import _GatewayMiddleware, _configured_allowed_hosts
+from app.personal_config import AccessConfig
 
 
-def _client() -> TestClient:
-    return TestClient(main.app, base_url="http://localhost")
+PASSWORD = "owner-password-for-tests"
 
 
-async def _empty_api(scope, receive, send) -> None:
-    """Small downstream app for exercising the real ASGI gateway only."""
+class _PeerAddress:
+    def __init__(self, app, address: str) -> None:
+        self.app = app
+        self.address = address
 
-    await send(
-        {
-            "type": "http.response.start",
-            "status": 204,
-            "headers": [],
-        }
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http":
+            scope["client"] = (self.address, 50000)
+        await self.app(scope, receive, send)
+
+
+def _runtime(mode: str, *, clock=None) -> OwnerAccessRuntime:
+    config = AccessConfig(mode=mode)
+    kwargs = {
+        "password_hash": hash_owner_password(PASSWORD)
+        if mode == "password"
+        else "",
+    }
+    if clock is not None:
+        kwargs["clock"] = clock
+    return OwnerAccessRuntime(config, **kwargs)
+
+
+def _test_app(runtime: OwnerAccessRuntime) -> FastAPI:
+    app = FastAPI()
+    app.state.access_runtime = runtime
+
+    @app.get("/health")
+    def health() -> dict[str, bool]:
+        return {"ok": True}
+
+    @app.get("/ready")
+    def ready() -> dict[str, bool]:
+        return {"ready": True}
+
+    @app.get("/")
+    def index() -> dict[str, str]:
+        return {"page": "owner"}
+
+    @app.get("/login.html")
+    def login_page() -> dict[str, str]:
+        return {"page": "login"}
+
+    @app.get(
+        "/api/value",
+        dependencies=[
+            Depends(require_owner_access),
+            Depends(require_same_origin_action),
+        ],
     )
-    await send({"type": "http.response.body", "body": b""})
+    def value() -> dict[str, bool]:
+        return {"owner": True}
+
+    @app.post(
+        "/api/action",
+        dependencies=[
+            Depends(require_owner_access),
+            Depends(require_same_origin_action),
+        ],
+    )
+    def action() -> dict[str, bool]:
+        return {"changed": True}
+
+    app.include_router(access_api.router)
+    app.add_middleware(_GatewayMiddleware, access_runtime=runtime)
+    return app
 
 
-def _gateway_client() -> TestClient:
-    return TestClient(
-        main._GatewayMiddleware(_empty_api),
+def _action_headers(origin: str = "https://testserver") -> dict[str, str]:
+    return {
+        "Origin": origin,
+        "X-Optix-Action": "1",
+    }
+
+
+def _login(client: TestClient) -> str:
+    response = client.post(
+        "/api/access/login",
+        json={"password": PASSWORD},
+        headers=_action_headers(),
+    )
+    assert response.status_code == 200
+    return response.headers["set-cookie"]
+
+
+def test_private_network_startup_is_fail_closed_for_public_bindings() -> None:
+    runtime = _runtime("private_network")
+    runtime.validate_startup("localhost")
+    runtime.validate_startup("127.0.0.1")
+    runtime.validate_startup("100.64.10.20")
+
+    for host in ("0.0.0.0", "::", "8.8.8.8", "203.0.113.8", "example.com"):
+        with pytest.raises(RuntimeError):
+            runtime.validate_startup(host)
+
+    with pytest.raises(RuntimeError, match="TRUST_PROXY_HEADERS=false"):
+        runtime.validate_startup(
+            "127.0.0.1",
+            trust_proxy_headers=True,
+            trusted_proxy_cidrs="127.0.0.1/32",
+        )
+
+    with pytest.raises(RuntimeError, match="IP literals"):
+        runtime.validate_startup(
+            "127.0.0.1",
+            allowed_hosts="option.example.com",
+        )
+
+
+def test_password_startup_requires_a_valid_password_hash() -> None:
+    with pytest.raises(RuntimeError, match="APP_PASSWORD_HASH"):
+        OwnerAccessRuntime(
+            AccessConfig(mode="password"),
+            password_hash="",
+        ).validate_startup("0.0.0.0")
+
+    boundary = _runtime("password").validate_startup(
+        "127.0.0.1",
+        allowed_hosts="option.example.com",
+        trust_proxy_headers=True,
+        trusted_proxy_cidrs="127.0.0.1/32,172.18.0.0/16",
+    )
+    assert "option.example.com" in boundary.allowed_hosts
+
+
+def test_password_proxy_boundary_rejects_missing_or_public_trust_ranges() -> None:
+    runtime = _runtime("password")
+    with pytest.raises(RuntimeError, match="DNS ALLOWED_HOSTS"):
+        runtime.validate_startup(
+            "0.0.0.0",
+            allowed_hosts="option.example.com",
+            trust_proxy_headers=False,
+        )
+    with pytest.raises(RuntimeError, match="TRUSTED_PROXY_CIDRS"):
+        runtime.validate_startup(
+            "127.0.0.1",
+            allowed_hosts="option.example.com",
+            trust_proxy_headers=True,
+        )
+    with pytest.raises(RuntimeError, match="actual private"):
+        runtime.validate_startup(
+            "127.0.0.1",
+            allowed_hosts="option.example.com",
+            trust_proxy_headers=True,
+            trusted_proxy_cidrs="0.0.0.0/0",
+        )
+
+
+def test_password_local_or_ip_hosts_can_use_direct_https_without_proxy_headers() -> None:
+    runtime = _runtime("password")
+    for host_bind, allowed_hosts in (
+        ("127.0.0.1", "localhost,127.0.0.1"),
+        ("10.20.30.40", "10.20.30.40"),
+    ):
+        boundary = runtime.validate_startup(
+            host_bind,
+            allowed_hosts=allowed_hosts,
+            trust_proxy_headers=False,
+        )
+        assert boundary.access_mode == "password"
+        assert boundary.trusted_proxy_cidrs == ()
+
+
+def test_private_network_uses_request_source_and_never_needs_a_browser_token() -> None:
+    app = _test_app(_runtime("private_network"))
+    with TestClient(_PeerAddress(app, "10.20.30.40")) as private_client:
+        assert private_client.get("/api/value").status_code == 200
+        response = private_client.post(
+            "/api/action",
+            json={},
+            headers={
+                "Origin": "http://testserver",
+                "X-Optix-Action": "1",
+            },
+        )
+        assert response.status_code == 200
+
+    with TestClient(_PeerAddress(app, "8.8.8.8")) as public_client:
+        assert public_client.get("/api/value").status_code == 403
+        assert public_client.get("/").status_code == 403
+
+
+def test_health_and_ready_are_public_in_both_access_modes() -> None:
+    for mode in ("private_network", "password"):
+        with TestClient(
+            _PeerAddress(_test_app(_runtime(mode)), "8.8.8.8"),
+            base_url="https://testserver",
+        ) as client:
+            assert client.get("/health").status_code == 200
+            assert client.get("/ready").status_code == 200
+            assert client.get("/api/value").status_code in {401, 403}
+
+
+def test_password_mode_redirects_pages_and_protects_all_other_apis() -> None:
+    with TestClient(
+        _test_app(_runtime("password")),
+        base_url="https://testserver",
+        follow_redirects=False,
+    ) as client:
+        page = client.get("/")
+        assert page.status_code == 303
+        assert page.headers["location"] == "/login.html"
+        assert client.get("/api/value").status_code == 401
+        assert client.get("/api/access/status").status_code == 401
+        assert client.get("/login.html").status_code == 200
+
+
+def test_password_login_sets_strict_server_only_cookie_and_unlocks_owner_routes() -> None:
+    with TestClient(
+        _test_app(_runtime("password")),
+        base_url="https://testserver",
+    ) as client:
+        set_cookie = _login(client).lower()
+        assert "httponly" in set_cookie
+        assert "secure" in set_cookie
+        assert "samesite=strict" in set_cookie
+        assert "path=/" in set_cookie
+        assert f"max-age={OWNER_SESSION_SECONDS}" in set_cookie
+        assert client.get("/api/value").status_code == 200
+        status = client.get("/api/access/status")
+        assert status.status_code == 200
+        assert status.json() == {"access_mode": "password", "logged_in": True}
+
+
+def test_a_new_owner_login_invalidates_the_previous_session() -> None:
+    app = _test_app(_runtime("password"))
+    with (
+        TestClient(app, base_url="https://testserver") as first,
+        TestClient(app, base_url="https://testserver") as second,
+    ):
+        _login(first)
+        assert first.get("/api/value").status_code == 200
+        _login(second)
+        assert second.get("/api/value").status_code == 200
+        assert first.get("/api/value").status_code == 401
+
+
+def test_logout_invalidates_the_owner_session() -> None:
+    with TestClient(
+        _test_app(_runtime("password")),
+        base_url="https://testserver",
+    ) as client:
+        _login(client)
+        response = client.post(
+            "/api/access/logout",
+            json={},
+            headers=_action_headers(),
+        )
+        assert response.status_code == 200
+        assert "max-age=0" in response.headers["set-cookie"].lower()
+        assert client.get("/api/value").status_code == 401
+
+
+def test_owner_session_expires_in_memory() -> None:
+    now = [1_000.0]
+    runtime = _runtime("password", clock=lambda: now[0])
+    result = runtime.login(PASSWORD, client_key="127.0.0.1")
+    assert runtime.session_valid(result.session_token)
+
+    now[0] += OWNER_SESSION_SECONDS + 1
+    assert not runtime.session_valid(result.session_token)
+
+
+def test_repeated_login_failures_enter_a_bounded_cooldown() -> None:
+    runtime = _runtime("password")
+    for _ in range(5):
+        with pytest.raises(LoginRejected, match="invalid_owner_password"):
+            runtime.login("wrong-password", client_key="127.0.0.1")
+
+    with pytest.raises(LoginRejected) as rejected:
+        runtime.login(PASSWORD, client_key="127.0.0.1")
+    assert rejected.value.code == "login_cooldown"
+    assert rejected.value.retry_after is not None
+
+
+def test_parallel_login_from_one_source_runs_only_one_password_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _runtime("password")
+    entered = Event()
+    release = Event()
+    calls = 0
+
+    def slow_rejection(_password: str, _encoded_hash: str) -> bool:
+        nonlocal calls
+        calls += 1
+        entered.set()
+        assert release.wait(timeout=2)
+        return False
+
+    monkeypatch.setattr(access_module, "verify_owner_password", slow_rejection)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        first = executor.submit(
+            runtime.login,
+            "wrong-password",
+            client_key="127.0.0.1",
+        )
+        assert entered.wait(timeout=2)
+        with pytest.raises(LoginRejected) as concurrent_rejection:
+            runtime.login("wrong-password", client_key="127.0.0.1")
+        assert concurrent_rejection.value.code == "login_cooldown"
+        assert concurrent_rejection.value.retry_after == 1
+        release.set()
+        with pytest.raises(LoginRejected) as first_rejection:
+            first.result(timeout=2)
+        assert first_rejection.value.code == "invalid_owner_password"
+    assert calls == 1
+
+
+@pytest.mark.parametrize(
+    ("headers", "use_json", "expected"),
+    [
+        ({"Origin": "https://evil.example", "X-Optix-Action": "1"}, True, 403),
+        ({"Origin": "https://testserver"}, True, 403),
+        ({"Origin": "https://testserver", "X-Optix-Action": "0"}, True, 403),
+        ({"Origin": "https://testserver", "X-Optix-Action": "1"}, False, 415),
+    ],
+)
+def test_state_changes_require_origin_host_json_and_custom_header(
+    headers: dict[str, str],
+    use_json: bool,
+    expected: int,
+) -> None:
+    with TestClient(
+        _test_app(_runtime("password")),
+        base_url="https://testserver",
+    ) as client:
+        _login(client)
+        response = client.post(
+            "/api/action",
+            headers=headers,
+            **({"json": {}} if use_json else {"content": "value=1"}),
+        )
+        assert response.status_code == expected
+
+
+def test_password_proxy_accepts_default_https_port_for_login_and_actions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(access_module, "TRUST_PROXY_HEADERS", True)
+    monkeypatch.setattr(
+        access_module,
+        "TRUSTED_PROXY_NETWORKS",
+        (ipaddress.ip_network("127.0.0.1/32"),),
+    )
+    app = _PeerAddress(_test_app(_runtime("password")), "127.0.0.1")
+    headers = {
+        "Host": "option.example.com:443",
+        "Origin": "https://option.example.com",
+        "X-Forwarded-Proto": "https",
+        "X-Optix-Action": "1",
+    }
+    with TestClient(app, base_url="http://option.example.com") as client:
+        login = client.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers=headers,
+        )
+        assert login.status_code == 200
+        session = login.cookies.get(OWNER_COOKIE_NAME)
+        assert session
+        action = client.post(
+            "/api/action",
+            json={},
+            headers={
+                **headers,
+                "Cookie": f"{OWNER_COOKIE_NAME}={session}",
+            },
+        )
+        assert action.status_code == 200
+
+
+def test_private_http_action_accepts_the_explicit_default_port() -> None:
+    app = _PeerAddress(_test_app(_runtime("private_network")), "10.20.30.40")
+    with TestClient(app, base_url="http://testserver") as client:
+        response = client.post(
+            "/api/action",
+            json={},
+            headers={
+                "Host": "testserver:80",
+                "Origin": "http://testserver",
+                "X-Optix-Action": "1",
+            },
+        )
+    assert response.status_code == 200
+
+
+def test_same_origin_keeps_non_default_ports_distinct() -> None:
+    app = _test_app(_runtime("password"))
+    with TestClient(app, base_url="https://testserver:8443") as client:
+        accepted = client.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers={
+                "Host": "testserver:8443",
+                "Origin": "https://testserver:8443",
+                "X-Optix-Action": "1",
+            },
+        )
+        rejected = client.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers={
+                "Host": "testserver:8443",
+                "Origin": "https://testserver",
+                "X-Optix-Action": "1",
+            },
+        )
+    assert accepted.status_code == 200
+    assert rejected.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "authority",
+    [
+        "testserver:",
+        "testserver:99999",
+        "user@testserver",
+        "testserver/path",
+        "testserver\\path",
+        "testserver?query",
+        "testserver#fragment",
+        "testserver,evil.example",
+        "2001:db8::1",
+        "[2001:db8::1",
+        "[v1.foo]:443",
+    ],
+)
+def test_same_origin_rejects_malformed_host_authorities(authority: str) -> None:
+    with TestClient(
+        _test_app(_runtime("password")),
+        base_url="https://testserver",
+    ) as client:
+        response = client.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers={
+                "Host": authority,
+                "Origin": "https://testserver",
+                "X-Optix-Action": "1",
+            },
+        )
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "https://testserver?",
+        "https://testserver#",
+        "https://testserver:",
+        "https://testserver:99999",
+        "https://user@testserver",
+        "https://testserver/path",
+        "https://testserver\\path",
+        "https://[v1.foo]",
+    ],
+)
+def test_same_origin_rejects_malformed_origins(origin: str) -> None:
+    with TestClient(
+        _test_app(_runtime("password")),
+        base_url="https://testserver",
+    ) as client:
+        response = client.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers={
+                "Host": "testserver",
+                "Origin": origin,
+                "X-Optix-Action": "1",
+            },
+        )
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize("duplicate", ["host", "origin"])
+def test_same_origin_rejects_duplicate_authority_headers(duplicate: str) -> None:
+    headers = [
+        ("Host", "testserver"),
+        ("Origin", "https://testserver"),
+        ("X-Optix-Action", "1"),
+    ]
+    if duplicate == "host":
+        headers.insert(1, ("Host", "testserver"))
+    else:
+        headers.insert(2, ("Origin", "https://testserver"))
+    with TestClient(
+        _test_app(_runtime("password")),
+        base_url="https://testserver",
+    ) as client:
+        response = client.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers=headers,
+        )
+    assert response.status_code == 403
+
+
+def test_proxy_scheme_and_forwarded_host_remain_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(access_module, "TRUST_PROXY_HEADERS", True)
+    monkeypatch.setattr(
+        access_module,
+        "TRUSTED_PROXY_NETWORKS",
+        (ipaddress.ip_network("127.0.0.1/32"),),
+    )
+    headers = {
+        "Host": "backend:2000",
+        "Origin": "https://option.example.com",
+        "X-Forwarded-Host": "option.example.com",
+        "X-Forwarded-Proto": "https",
+        "X-Optix-Action": "1",
+    }
+    trusted = TestClient(
+        _PeerAddress(_test_app(_runtime("password")), "127.0.0.1"),
+        base_url="http://backend:2000",
+    )
+    untrusted = TestClient(
+        _PeerAddress(_test_app(_runtime("password")), "8.8.8.8"),
+        base_url="http://option.example.com",
+    )
+    try:
+        assert trusted.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers=headers,
+        ).status_code == 403
+        assert untrusted.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers={**headers, "Host": "option.example.com:443"},
+        ).status_code == 403
+    finally:
+        trusted.close()
+        untrusted.close()
+
+
+def test_origin_helpers_normalize_default_ports_dns_and_ipv6() -> None:
+    assert access_module._canonical_origin("https://OPTION.example") == (
+        "https",
+        "option.example",
+        443,
+    )
+    assert access_module._canonical_request_origin(
+        "https",
+        "option.example:443",
+    ) == ("https", "option.example", 443)
+    assert access_module._canonical_origin(
+        "https://option.example:443"
+    ) == access_module._canonical_request_origin("https", "option.example")
+    assert access_module._canonical_origin("https://[2001:0db8::1]") == (
+        "https",
+        "2001:db8::1",
+        443,
+    )
+    assert access_module._canonical_request_origin(
+        "https",
+        "[2001:db8::1]:443",
+    ) == ("https", "2001:db8::1", 443)
+    assert access_module._canonical_origin(
+        "https://bücher.example"
+    ) == access_module._canonical_request_origin(
+        "https",
+        "xn--bcher-kva.example:443",
+    )
+    assert access_module._canonical_origin(
+        "https://faß.de"
+    ) == access_module._canonical_request_origin(
+        "https",
+        "xn--fa-hia.de:443",
+    )
+    assert access_module._canonical_origin("https://faß.de") != (
+        "https",
+        "fass.de",
+        443,
+    )
+    assert access_module._canonical_request_origin(
+        "https",
+        "option.example\x00:443",
+    ) is None
+
+
+def test_production_host_validation_accepts_bracketed_ipv6_loopback() -> None:
+    assert "::1" in main._ALLOWED_HOSTS
+
+    async def request(application, host: str) -> tuple[int, bytes]:
+        sent: list[dict] = []
+        received = False
+
+        async def receive() -> dict:
+            nonlocal received
+            if not received:
+                received = True
+                return {"type": "http.request", "body": b"", "more_body": False}
+            return {"type": "http.disconnect"}
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        await application(
+            {
+                "type": "http",
+                "asgi": {"version": "3.0"},
+                "http_version": "1.1",
+                "method": "GET",
+                "scheme": "http",
+                "path": "/health",
+                "raw_path": b"/health",
+                "query_string": b"",
+                "root_path": "",
+                "headers": [(b"host", host.encode("ascii"))],
+                "client": ("::1", 50000),
+                "server": ("::1", 2000),
+            },
+            receive,
+            send,
+        )
+        status_code = next(
+            message["status"]
+            for message in sent
+            if message["type"] == "http.response.start"
+        )
+        body = b"".join(
+            message.get("body", b"")
+            for message in sent
+            if message["type"] == "http.response.body"
+        )
+        return status_code, body
+
+    accepted_status, _accepted_body = asyncio.run(
+        request(main.app, "[::1]:2000")
+    )
+    rejected_status, rejected_body = asyncio.run(
+        request(main.app, "[::2]:2000")
+    )
+    assert accepted_status == 200
+    assert rejected_status == 400
+    assert rejected_body == b"Invalid host header"
+
+    async def accepted_app(_scope, _receive, send) -> None:
+        await send({"type": "http.response.start", "status": 204, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    middleware = main._ExactTrustedHostMiddleware(
+        accepted_app,
+        allowed_hosts=["2001:0db8:0:0:0:0:0:1", "faß.de"],
+    )
+    assert middleware.allowed_hosts == frozenset(
+        {"2001:db8::1", "xn--fa-hia.de"}
+    )
+    assert asyncio.run(request(middleware, "[2001:db8::1]:443"))[0] == 204
+    assert asyncio.run(request(middleware, "xn--fa-hia.de:443"))[0] == 204
+    assert asyncio.run(request(middleware, "fass.de:443"))[0] == 400
+
+
+def test_password_login_itself_requires_https_and_same_origin_json() -> None:
+    app = _test_app(_runtime("password"))
+    with TestClient(app, base_url="http://testserver") as insecure:
+        response = insecure.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers={"Origin": "http://testserver", "X-Optix-Action": "1"},
+        )
+        assert response.status_code == 426
+
+    with TestClient(app, base_url="https://testserver") as secure:
+        assert secure.post(
+            "/api/access/login",
+            json={"password": PASSWORD},
+            headers={"Origin": "https://evil.example", "X-Optix-Action": "1"},
+        ).status_code == 403
+
+
+def test_password_login_rejects_large_body_before_json_parsing() -> None:
+    sentinel = "oversized-login-body-sentinel"
+    body = (f'{{"password":"{sentinel}' + ("x" * 5000) + '"}').encode()
+    with TestClient(
+        _test_app(_runtime("password")),
+        base_url="https://testserver",
+    ) as client:
+        response = client.post(
+            "/api/access/login",
+            content=body,
+            headers={
+                **_action_headers(),
+                "Content-Type": "application/json",
+            },
+        )
+    assert response.status_code == 413
+    assert sentinel not in response.text
+
+
+def test_production_validation_errors_never_echo_submitted_password() -> None:
+    submitted_password = "password-response-sentinel-" + ("x" * 1024)
+    client = TestClient(
+        _PeerAddress(main.app, "127.0.0.1"),
         base_url="http://localhost",
     )
-
-
-def test_public_bind_requires_auth_or_explicit_private_network_opt_in():
-    with pytest.raises(RuntimeError, match="non-loopback HOST_BIND"):
-        main._validate_public_bind("0.0.0.0", "", False)
-
-    main._validate_public_bind("127.0.0.1", "", False)
-    main._validate_public_bind("::1", "", False)
-    main._validate_public_bind("0.0.0.0", "strong-token", False)
-    main._validate_public_bind("0.0.0.0", "", True)
-
-
-def test_public_read_requires_private_routes_to_have_an_auth_token():
-    main._validate_public_read_auth(False, "")
-    main._validate_public_read_auth(True, "strong-token")
-
-    with pytest.raises(RuntimeError, match="requires APP_AUTH_TOKEN"):
-        main._validate_public_read_auth(True, "")
-
-
-def test_health_and_ready_expose_build_and_frontend_integrity():
-    client = _client()
-
-    health = client.get("/health")
-    assert health.status_code == 200
-    payload = health.json()
-    assert payload["status"] == "ok"
-    assert payload["app_version"] == main._APP_VERSION
-    assert payload["app_commit"] == main._APP_COMMIT
-    assert payload["frontend"]["ready"] is True
-    assert len(payload["frontend"]["sha256"]) == 64
-    assert health.headers["cache-control"] == "private, no-store"
-
-    ready = client.get("/ready")
-    assert ready.status_code == 200
-    assert ready.json()["status"] == "ready"
-
-
-def test_ready_fails_when_required_frontend_files_are_missing(monkeypatch, tmp_path):
-    monkeypatch.setattr(main, "FRONTEND_DIR", tmp_path)
-    client = _client()
-
-    response = client.get("/ready")
-
-    assert response.status_code == 503
-    assert response.json()["status"] == "not_ready"
-    assert response.json()["frontend"]["ready"] is False
-    assert set(response.json()["frontend"]["missing"]) == set(main._FRONTEND_REQUIRED_FILES)
-
-
-def test_frontend_manifest_checks_every_baked_asset(monkeypatch, tmp_path):
-    (tmp_path / "index.html").write_text("ok", encoding="utf-8")
-    (tmp_path / main._FRONTEND_MANIFEST_NAME).write_text(
-        "./index.html\n./static/js/missing.js\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(main, "FRONTEND_DIR", tmp_path)
-    monkeypatch.setattr(main, "_FRONTEND_MANIFEST_REQUIRED", True)
-
-    integrity = main._frontend_integrity()
-
-    assert integrity["ready"] is False
-    assert integrity["manifest"] is True
-    assert integrity["required_files"] == 2
-    assert integrity["missing"] == ["static/js/missing.js"]
-
-
-def test_gateway_adds_security_cache_and_compression_headers():
-    client = _client()
-
-    root = client.get("/", headers={"accept-encoding": "gzip"})
-    assert root.status_code == 200
-    assert "no-store" in root.headers["cache-control"]
-    assert "frame-ancestors 'none'" in root.headers["content-security-policy"]
-    assert "fonts.googleapis.com" not in root.headers["content-security-policy"]
-    assert "financialmodelingprep.com" not in root.headers["content-security-policy"]
-    assert root.headers["x-content-type-options"] == "nosniff"
-    assert root.headers["x-frame-options"] == "DENY"
-    assert root.headers["x-app-commit"] == main._APP_COMMIT
-    assert root.headers["content-encoding"] == "gzip"
-
-    static = client.get("/static/css/styles.css", headers={"accept-encoding": "gzip"})
-    assert static.status_code == 200
-    assert "max-age=300" in static.headers["cache-control"]
-    assert static.headers["content-encoding"] == "gzip"
-
-
-def test_gateway_auth_errors_keep_security_headers(monkeypatch):
-    monkeypatch.setattr(main, "_APP_AUTH_TOKEN", "test-secret")
-    monkeypatch.setattr(main, "_PUBLIC_READ_API_ENABLED", False)
-    client = _client()
-
-    response = client.get("/api/market/status")
-
-    assert response.status_code == 401
-    assert response.json()["error"] == "unauthorized"
-    assert response.headers["x-content-type-options"] == "nosniff"
-    assert response.headers["cache-control"] == "private, no-store"
-
-
-def test_public_read_mode_serves_display_data_without_exposing_actions(monkeypatch):
-    monkeypatch.setattr(main, "_APP_AUTH_TOKEN", "test-secret")
-    monkeypatch.setattr(main, "_PUBLIC_READ_API_ENABLED", True)
-    main._auth_fail_buckets.clear()
-    client = _client()
-
-    public = client.get("/api/market/status")
-
-    assert public.status_code == 200
-    assert main._is_public_read_api("GET", "/api/stocks/watchlist")
-    assert main._is_public_read_api("GET", "/api/breakouts/events/evt_123")
-    assert main._is_public_read_api("GET", "/api/catalysts/market-focus-cycles/latest")
-    assert main._is_public_read_api("POST", "/api/catalysts/tickers/batch")
-
-    assert not main._is_public_read_api("GET", "/api/ai/jobs/job_123456")
-    assert not main._is_public_read_api(
-        "GET", "/api/catalysts/analysis-jobs/job_123456"
-    )
-    assert not main._is_public_read_api("POST", "/api/ai/jobs/earnings-impact")
-    assert not main._is_public_read_api("POST", "/api/catalysts/refresh")
-    assert not main._is_public_read_api("GET", "/api/stocks/future-private-route")
-    assert not main._is_public_read_api("GET", "/api/catalysts/future-private-route")
-
-    paid = client.post("/api/ai/jobs/earnings-impact", json={})
-    refresh = client.post("/api/catalysts/refresh", json={})
-    job = client.get("/api/ai/jobs/job_123456")
-
-    assert paid.status_code == 401
-    assert refresh.status_code == 401
-    assert job.status_code == 401
-
-
-@pytest.mark.parametrize(
-    ("method", "path"),
-    [
-        ("GET", "/api/market/indices"),
-        ("GET", "/api/stocks/AAPL/chart"),
-        ("GET", "/api/stocks/^GSPC"),
-        ("GET", "/api/stocks/^GSPC/chart"),
-        ("GET", "/api/stocks/^GSPC/signals"),
-        ("GET", "/api/signals/stock/BRK.B"),
-        ("GET", "/api/signals/stock/^GSPC"),
-        ("GET", "/api/breakouts/events/evt_123"),
-        ("GET", "/api/breakouts/tickers/AMD"),
-        ("GET", "/api/breakouts/tickers/ABCDEFGHIJKLMNO"),
-        ("GET", "/api/sectors/technology/iv-ranking"),
-        ("GET", "/api/options/AAPL/chain"),
-        ("GET", "/api/catalysts/news/133996"),
-        ("GET", "/api/catalysts/tickers/TSLA"),
-        (
-            "GET",
-            "/api/catalysts/market-focus-cycles/"
-            "mfc_0123456789abcdef0123456789abcdef",
-        ),
-        ("POST", "/api/catalysts/tickers/batch"),
-    ],
-)
-def test_public_read_allowlist_uses_exact_route_shapes(method, path):
-    assert main._is_public_read_api(method, path)
-
-
-@pytest.mark.parametrize(
-    ("method", "path"),
-    [
-        ("GET", "/api/market/future-admin"),
-        ("GET", "/api/stocks/AAPL/chart/extra"),
-        ("GET", "/api/stocks/AAPL%2Fchart"),
-        ("GET", "/api/stocks/aapl/chart"),
-        ("GET", "/api/stocks/future-private-route"),
-        ("GET", "/api/breakouts/tickers/ABCDEFGHIJKLMNOP"),
-        ("GET", "/api/stocks//watchlist"),
-        ("GET", "/api/stocks/watchlist/"),
-        ("GET", "/API/stocks/watchlist"),
-        ("GET", "/api/strength/stocks/NVDA"),
-        ("GET", "/api/sectors/technology/heatmap"),
-        ("GET", "/api/ai/status"),
-        ("GET", "/api/ai/earnings-impact/META"),
-        ("GET", "/api/ai/jobs/job_123456"),
-        ("GET", "/api/catalysts/feed/extra"),
-        ("GET", "/api/catalysts/analysis-jobs/job_123456"),
-        ("GET", "/api/integrations/macrolens/v1/focus-context"),
-        ("POST", "/api/catalysts/refresh"),
-        ("PUT", "/api/stocks/watchlist"),
-        ("PATCH", "/api/catalysts/news/133996"),
-        ("DELETE", "/api/catalysts/news/133996"),
-    ],
-)
-def test_public_read_allowlist_fails_closed(method, path):
-    assert not main._is_public_read_api(method, path)
-
-
-def test_public_read_still_uses_normal_rate_limit_without_auth_failures(monkeypatch):
-    monkeypatch.setattr(main, "_APP_AUTH_TOKEN", "test-secret")
-    monkeypatch.setattr(main, "_PUBLIC_READ_API_ENABLED", True)
-    monkeypatch.setattr(main, "_RL_LIGHT_LIMIT", 1)
-    monkeypatch.setattr(main, "_RL_WINDOW", 60)
-    main._auth_fail_buckets.clear()
-    main._rl_buckets.clear()
-    client = _client()
-
-    first = client.get("/api/market/status")
-    limited = client.get("/api/market/status")
-
-    assert first.status_code == 200
-    assert limited.status_code == 429
-    assert limited.json()["error"] == "rate_limited"
-    assert main._auth_fail_buckets == {}
-    main._rl_buckets.clear()
-
-
-def test_public_watchlist_disallows_custom_provider_batches_without_token(
-    monkeypatch,
-):
-    monkeypatch.setattr(main, "_APP_AUTH_TOKEN", "test-secret")
-    monkeypatch.setattr(main, "_PUBLIC_READ_API_ENABLED", True)
-    main._auth_fail_buckets.clear()
-    main._rl_buckets.clear()
-    client = _client()
-
-    anonymous = client.get("/api/stocks/watchlist?tickers=AAPL")
-    authenticated = client.get(
-        "/api/stocks/watchlist?tickers=",
-        headers={"authorization": "Bearer test-secret"},
-    )
-
-    assert anonymous.status_code == 403
-    assert anonymous.json()["detail"] == (
-        "Custom watchlist queries require app authentication"
-    )
-    assert authenticated.status_code == 400
-    main._rl_buckets.clear()
-
-
-@pytest.mark.parametrize(
-    ("path", "detail"),
-    [
-        (
-            "/api/earnings/upcoming?refresh=true",
-            "Earnings refresh requires app authentication",
-        ),
-        (
-            "/api/options/unusual?type=call",
-            "Custom unusual-options scans require app authentication",
-        ),
-        (
-            "/api/options/unusual?min_vol_oi=1.01",
-            "Custom unusual-options scans require app authentication",
-        ),
-    ],
-)
-def test_public_read_disallows_provider_cache_bypass_parameters(
-    monkeypatch,
-    path,
-    detail,
-):
-    monkeypatch.setattr(main, "_APP_AUTH_TOKEN", "test-secret")
-    monkeypatch.setattr(main, "_PUBLIC_READ_API_ENABLED", True)
-    main._auth_fail_buckets.clear()
-    main._rl_buckets.clear()
-
-    response = _client().get(path)
-
-    assert response.status_code == 403
-    assert response.json()["detail"] == detail
-    main._rl_buckets.clear()
-
-
-def test_public_index_route_works_with_literal_and_encoded_caret(monkeypatch):
-    monkeypatch.setattr(main, "_APP_AUTH_TOKEN", "test-secret")
-    monkeypatch.setattr(main, "_PUBLIC_READ_API_ENABLED", True)
-    main._auth_fail_buckets.clear()
-    main._rl_buckets.clear()
-    client = _gateway_client()
-
-    literal = client.get("/api/signals/stock/^GSPC")
-    encoded = client.get("/api/signals/stock/%5EGSPC")
-
-    assert literal.status_code == 204
-    assert encoded.status_code == 204
-    assert main._auth_fail_buckets == {}
-    main._rl_buckets.clear()
-
-
-@pytest.mark.parametrize(
-    "path",
-    [
-        "/api/stocks/AAPL%2Fchart",
-        "/api/stocks/AAPL%2fchart",
-        "/api/stocks/AAPL%252Fchart",
-        "/api/stocks/AAPL%5Cchart",
-        "/api/stocks/AAPL\\chart",
-    ],
-)
-def test_public_read_rejects_ambiguous_encoded_route_separators(
-    monkeypatch,
-    path,
-):
-    monkeypatch.setattr(main, "_APP_AUTH_TOKEN", "test-secret")
-    monkeypatch.setattr(main, "_PUBLIC_READ_API_ENABLED", True)
-    main._auth_fail_buckets.clear()
-    main._rl_buckets.clear()
-
-    response = _gateway_client().get(path)
-
-    assert response.status_code == 401
-    assert response.json()["error"] == "unauthorized"
-    main._auth_fail_buckets.clear()
-    main._rl_buckets.clear()
-
-
-@pytest.mark.parametrize(
-    ("method", "path", "expected_status"),
-    [
-        ("GET", "/api/market/status", 204),
-        ("POST", "/api/market/status", 401),
-        ("PUT", "/api/market/status", 401),
-        ("PATCH", "/api/market/status", 401),
-        ("DELETE", "/api/market/status", 401),
-        ("HEAD", "/api/market/status", 401),
-        ("POST", "/api/catalysts/tickers/batch", 204),
-        ("GET", "/api/catalysts/tickers/batch", 401),
-    ],
-)
-def test_public_read_gateway_keeps_method_boundaries(
-    monkeypatch,
-    method,
-    path,
-    expected_status,
-):
-    monkeypatch.setattr(main, "_APP_AUTH_TOKEN", "test-secret")
-    monkeypatch.setattr(main, "_PUBLIC_READ_API_ENABLED", True)
-    main._auth_fail_buckets.clear()
-    main._rl_buckets.clear()
-
-    response = _gateway_client().request(method, path)
-
-    assert response.status_code == expected_status
-    main._auth_fail_buckets.clear()
-    main._rl_buckets.clear()
-
-
-def test_public_heavy_route_still_uses_heavy_rate_limit(monkeypatch):
-    monkeypatch.setattr(main, "_APP_AUTH_TOKEN", "test-secret")
-    monkeypatch.setattr(main, "_PUBLIC_READ_API_ENABLED", True)
-    monkeypatch.setattr(main, "_RL_HEAVY_LIMIT", 1)
-    monkeypatch.setattr(main, "_RL_LIGHT_LIMIT", 100)
-    monkeypatch.setattr(main, "_RL_WINDOW", 60)
-    main._auth_fail_buckets.clear()
-    main._rl_buckets.clear()
-    client = _gateway_client()
-
-    first = client.get("/api/signals/stock/%5EGSPC")
-    limited = client.get("/api/signals/stock/%5EGSPC")
-
-    assert first.status_code == 204
-    assert limited.status_code == 429
-    assert limited.json()["error"] == "rate_limited"
-    assert main._auth_fail_buckets == {}
-    main._rl_buckets.clear()
-
-
-def test_public_mode_does_not_replace_macrolens_focus_hmac(
-    monkeypatch,
-    tmp_path,
-):
-    cache_path = tmp_path / "focus.db"
-    CatalystRepository(cache_path).initialize()
-    settings = FocusContextSettings(
-        _env_file=None,
-        MACROLENS_CACHE_DB_PATH=cache_path,
-        MACROLENS_FOCUS_KEY_ID="focus-read",
-        MACROLENS_FOCUS_SECRET="focus-secret-0123456789abcdef-0001",
-        MACROLENS_FOCUS_ALLOWED_CIDRS="127.0.0.0/8",
-    )
-    monkeypatch.setattr(main, "_APP_AUTH_TOKEN", "test-secret")
-    monkeypatch.setattr(main, "_PUBLIC_READ_API_ENABLED", True)
-    main._auth_fail_buckets.clear()
-    main._rl_buckets.clear()
-    main.app.dependency_overrides[get_focus_context_settings] = lambda: settings
     try:
-        client = TestClient(
-            main.app,
-            base_url="https://localhost",
-            client=("127.0.0.1", 50000),
+        main._rl_buckets.clear()
+        response = client.post(
+            "/api/access/login",
+            json={"password": submitted_password},
+            headers={
+                "Origin": "http://localhost",
+                "X-Optix-Action": "1",
+            },
         )
-        unsigned = client.get(
-            "/api/integrations/macrolens/v1/focus-context"
+        assert response.status_code == 422
+        assert submitted_password not in response.text
+        assert "password-response-sentinel" not in response.text
+        assert all(
+            set(error) == {"type", "loc", "msg"}
+            for error in response.json()["detail"]
         )
-        browser_token_only = client.get(
-            "/api/integrations/macrolens/v1/focus-context",
-            headers={"authorization": "Bearer test-secret"},
+
+        field_sentinel = "owner-password-as-extra-field-sentinel"
+        main._rl_buckets.clear()
+        extra_field = client.post(
+            "/api/access/login",
+            json={"password": "x", field_sentinel: 1},
+            headers={
+                "Origin": "http://localhost",
+                "X-Optix-Action": "1",
+            },
         )
+        assert extra_field.status_code == 422
+        assert field_sentinel not in extra_field.text
+        assert extra_field.json()["detail"] == [
+            {
+                "type": "request_validation_failed",
+                "loc": ["request"],
+                "msg": "Invalid request",
+            }
+        ]
     finally:
-        main.app.dependency_overrides.pop(get_focus_context_settings, None)
-
-    for response in (unsigned, browser_token_only):
-        assert response.status_code == 401
-        assert response.json()["detail"]["code"] == "focus_invalid_signature"
-    main._rl_buckets.clear()
+        client.close()
 
 
-def test_expensive_provider_routes_use_heavy_rate_limit_bucket():
-    assert main._is_heavy_api_path("/api/ai/analyze-alerts")
-    assert main._is_heavy_api_path("/api/market/indices")
-    assert main._is_heavy_api_path("/api/options/AAPL/chain")
-    assert main._is_heavy_api_path("/api/sectors/technology/iv-ranking")
-    assert main._is_heavy_api_path("/api/signals/stock/AAPL")
-    assert main._is_heavy_api_path("/api/stocks/AAPL/chart")
-    assert main._is_heavy_api_path("/api/strength/scan")
-    assert not main._is_heavy_api_path("/api/market/status")
-    assert main._is_heavy_api_path("/api/stocks/search")
-    assert not main._is_heavy_api_path("/api/strength/profiles")
-
-
-def test_rate_limit_bucket_map_has_a_hard_capacity(monkeypatch):
-    monkeypatch.setattr(main, "_RL_MAX_KEYS", 3)
-    monkeypatch.setattr(main, "_RL_WINDOW", 60)
-    monkeypatch.setattr(main, "_rl_last_prune", 0.0)
-    main._rl_buckets.clear()
-    now = 1_000.0
-    main._rl_buckets.update({
-        "oldest": deque([now - 3]),
-        "middle": deque([now - 2]),
-        "newest": deque([now - 1]),
-    })
-
-    main._prune_rl_buckets(now)
-
-    assert len(main._rl_buckets) == 2
-    assert "oldest" not in main._rl_buckets
-
-
-def test_proxy_headers_are_used_only_from_trusted_peers() -> None:
-    networks = parse_trusted_proxy_cidrs("10.0.0.0/8,2001:db8::/32")
-    direct_scope = {
-        "client": ("198.51.100.7", 443),
-        "headers": [(b"x-forwarded-for", b"203.0.113.9")],
-    }
-    trusted_scope = {
-        "client": ("10.0.0.5", 443),
-        "headers": [
-            (b"x-forwarded-for", b"203.0.113.9, 10.0.0.4"),
-        ],
-    }
-
-    assert (
-        client_ip_from_scope(direct_scope, enabled=True, networks=networks)
-        == "198.51.100.7"
+def test_every_real_mutating_route_rejects_cross_site_and_form_requests() -> None:
+    schema = main.app.openapi()
+    mutations = [
+        (method.upper(), path)
+        for path, operations in schema["paths"].items()
+        for method in operations
+        if method in {"post", "put", "patch", "delete"}
+    ]
+    assert len(mutations) >= 17
+    client = TestClient(
+        _PeerAddress(main.app, "127.0.0.1"),
+        base_url="http://localhost",
     )
-    assert (
-        client_ip_from_scope(trusted_scope, enabled=True, networks=networks)
-        == "203.0.113.9"
+    try:
+        for method, template in mutations:
+            path = re.sub(r"\{[^}]+\}", "boundary-test", template)
+            main._rl_buckets.clear()
+            cross_site = client.request(
+                method,
+                path,
+                json={},
+                headers={
+                    "Origin": "http://evil.example",
+                    "X-Optix-Action": "1",
+                },
+            )
+            assert cross_site.status_code == 403, (method, template, cross_site.text)
+
+            main._rl_buckets.clear()
+            missing_header = client.request(
+                method,
+                path,
+                json={},
+                headers={"Origin": "http://localhost"},
+            )
+            assert missing_header.status_code == 403, (
+                method,
+                template,
+                missing_header.text,
+            )
+
+            main._rl_buckets.clear()
+            form = client.request(
+                method,
+                path,
+                data={"value": "1"},
+                headers={
+                    "Origin": "http://localhost",
+                    "X-Optix-Action": "1",
+                },
+            )
+            assert form.status_code == 415, (method, template, form.text)
+    finally:
+        client.close()
+
+
+def test_frontend_integrity_and_host_validation_remain_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    monkeypatch.setattr(main, "FRONTEND_DIR", frontend)
+    integrity = main._frontend_integrity()
+    assert integrity["ready"] is False
+    assert integrity["missing"]
+
+    assert "example.com" in _configured_allowed_hosts(
+        "127.0.0.1", "example.com"
     )
-
-
-def test_generic_trusted_proxy_does_not_accept_a_spoofed_cloudflare_header() -> None:
-    networks = parse_trusted_proxy_cidrs("10.0.0.0/8")
-    scope = {
-        "client": ("10.0.0.5", 443),
-        "headers": [
-            (b"cf-connecting-ip", b"192.0.2.77"),
-            (b"x-forwarded-for", b"203.0.113.9, 10.0.0.4"),
-        ],
-    }
-
-    assert (
-        client_ip_from_scope(scope, enabled=True, networks=networks)
-        == "203.0.113.9"
+    internationalized = _configured_allowed_hosts("127.0.0.1", "faß.de")
+    assert "xn--fa-hia.de" in internationalized
+    assert "fass.de" not in internationalized
+    assert "2001:db8::1" in _configured_allowed_hosts(
+        "127.0.0.1",
+        "2001:0db8:0:0:0:0:0:1",
     )
-
-
-def test_invalid_host_is_rejected() -> None:
-    response = _client().get("/health", headers={"host": "evil.example"})
-    assert response.status_code == 400
-
-
-def test_allowed_hosts_accept_explicit_domains_and_reject_wildcards() -> None:
-    assert "option.example.com" in main._configured_allowed_hosts(
-        "127.0.0.1", "option.example.com"
-    )
-    with pytest.raises(RuntimeError, match="explicit host names"):
-        main._configured_allowed_hosts("127.0.0.1", "*.example.com")
-
-
-def test_failed_authentication_has_an_independent_rate_limit(monkeypatch) -> None:
-    monkeypatch.setattr(main, "_APP_AUTH_TOKEN", "valid-secret")
-    monkeypatch.setattr(main, "_AUTH_FAIL_LIMIT", 2)
-    monkeypatch.setattr(main, "_auth_fail_last_prune", 0.0)
-    main._auth_fail_buckets.clear()
-    client = _client()
-
-    assert client.get("/api/market/status").status_code == 401
-    assert client.get("/api/market/status").status_code == 401
-    limited = client.get("/api/market/status")
-    assert limited.status_code == 429
-    assert limited.json()["error"] == "auth_rate_limited"
-
-    valid = client.get(
-        "/api/market/status",
-        headers={"authorization": "Bearer valid-secret"},
-    )
-    assert valid.status_code == 200
+    with pytest.raises(RuntimeError):
+        _configured_allowed_hosts("127.0.0.1", "*.example.com")
+    with pytest.raises(RuntimeError):
+        _configured_allowed_hosts("127.0.0.1", "[[::1]]")

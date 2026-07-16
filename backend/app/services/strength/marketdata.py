@@ -19,7 +19,7 @@ def marketdata_is_enabled(settings: Settings | None = None) -> bool:
 
 
 def _token(settings: Settings) -> str:
-    return (settings.marketdata_token or settings.marketdata_api_token or "").strip()
+    return settings.marketdata_token.strip()
 
 
 def _safe_float(value: Any, ndigits: int = 4) -> float | None:
@@ -87,17 +87,8 @@ def _first_number(payload: dict[str, Any], key: str) -> float | None:
 def _request_error_message(exc: Exception) -> str:
     if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
         status_code = exc.response.status_code
-        detail = ""
-        try:
-            payload = exc.response.json()
-            if isinstance(payload, dict):
-                detail = str(payload.get("errmsg") or payload.get("message") or payload.get("error") or "").strip()
-        except Exception:
-            detail = exc.response.text[:120].strip()
-        if status_code == 402 and "feed not available" in detail.lower():
-            detail = "当前 MarketData.app 套餐不包含该期权 feed"
-        if detail:
-            return f"HTTP {status_code}: {detail}"
+        if status_code == 402:
+            return "HTTP 402: 当前 MarketData.app 套餐不包含该期权 feed"
         return f"HTTP {status_code}"
     return exc.__class__.__name__
 

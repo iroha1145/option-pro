@@ -47,23 +47,54 @@ test('Catalyst data remains same-origin, abortable, cached by endpoint family, a
   assert.match(api, /credentials: "same-origin"/);
   assert.match(api, /redirect: "error"/);
   assert.match(api, /noCache: true, lowPriority: true/);
-  assert.match(api, /sessionStorage\.getItem\("optix\.app\.token"\)/);
-  assert.match(api, /headers\.Authorization = "Bearer " \+ token/);
+  assert.doesNotMatch(api, /(?:sessionStorage|localStorage).*optix\.app\.token/);
+  assert.doesNotMatch(api, /Authorization|Bearer/);
+  assert.match(api, /headers\["X-Optix-Action"\] = "1"/);
   assert.doesNotMatch(api, /https?:\/\//);
 });
 
 test('paid analysis is explicit and earnings no longer uses the synchronous GET trigger', () => {
-  assert.match(api, /const hasAppToken = \(\) => !!appToken\(\)/);
-  assert.match(api, /jget, jpost, invalidateCache, hasAppToken/);
-  assert.match(catalysts, /privateActionsAvailable\(\)[\s\S]*后台同步需管理授权/);
-  assert.match(catalysts, /data-private-focus-note>管理会话未解锁/);
-  assert.match(catalysts, /当前标签页没有管理令牌；历史结果仍可查看，付费分析操作不会显示/);
-  assert.match(catalysts, /当前标签页没有管理令牌；原始新闻与已有分析仍可查看，付费分析操作不会显示/);
-  assert.match(catalysts, /const access = analysisActionDecision\(triggerEnabled, privateActionsAvailable\(\)\)[\s\S]*const canTrigger = access\.canTrigger/);
-  assert.match(app, /privateActionsAvailable\(\)[\s\S]*公开页面仅供查看；模型分析需要管理授权/);
-  assert.match(app, /公开页面不会创建付费任务/);
+  assert.doesNotMatch(api, /hasAppToken|appToken/);
+  assert.doesNotMatch(catalysts, /privateActionsAvailable|管理令牌|管理会话未解锁/);
+  assert.doesNotMatch(app, /privateActionsAvailable|管理授权|公开页面不会创建付费任务/);
+  assert.match(api, /jget, jpost, jput, invalidateCache, accessStatus, logoutOwner/);
+  assert.match(catalysts, /data-cat-refresh="news"/);
+  assert.match(catalysts, /data-cat-refresh="calendar"/);
+  assert.match(catalysts, /data-cat-refresh="source_health"/);
+  assert.match(catalysts, /analysisAvailabilityOf\(item\)/);
+  assert.match(catalysts, /analysisActionDecision\(triggerEnabled, analysisAvailabilityOf\(item\)\)/);
+  assert.doesNotMatch(catalysts, /analysisActionDecision\(triggerEnabled, true,/);
+  assert.match(catalysts, /access\.showAction \? `<button type="button" class="btn btn--amber btn--sm" data-catalyst-analyze/);
+  assert.equal((catalysts.match(/!isActive && access\.showAction/g) || []).length, 2);
+  assert.match(catalysts, /运行设置恢复前不会创建模型任务/);
+  assert.match(catalysts, /id="cat-focus-action"/);
+  assert.match(catalysts, /actionHost\.innerHTML = '<button class="btn btn--amber" type="button" id="cat-focus-run" disabled/);
   assert.match(catalysts, /data-cat-analyze/);
   assert.match(catalysts, /createCatalystAnalysis/);
+  assert.match(catalysts, /重新分析会创建新的分析版本/);
+  assert.match(catalysts, /budgetPolicyText\(\)/);
+  assert.match(catalysts, /manual_refreshes/);
+  assert.match(catalysts, /刷新中 · \$\{elapsed\}秒/);
+  assert.match(catalysts, /稍后可刷新 · \$\{Math\.max\(1, remaining\)\}秒/);
+  assert.match(catalysts, /刷新服务暂不可用/);
+  assert.match(api, /runtimeSettingsHistory/);
+  assert.match(api, /updateRuntimeSettings/);
+  assert.match(api, /rollbackRuntimeSettings/);
+  assert.match(api, /workerStatus/);
+  assert.match(api, /workerActions/);
+  assert.match(api, /requestWorkerAction/);
+  assert.match(catalysts, /每日系统预算（美元）/);
+  assert.match(catalysts, /固定分析时刻（美东）/);
+  assert.match(catalysts, /运行设置已保存并立即生效/);
+  for (const actionType of ['focus_refresh', 'strength_refresh', 'breakout_refresh', 'retention']) {
+    assert.match(catalysts, new RegExp(`data-worker-action="${actionType}"`));
+  }
+  assert.match(catalysts, /function workerTaskFor\(actionType\) \{\s*return actionType;/);
+  assert.match(catalysts, /return !!task && task\.enabled !== false;/);
+  assert.match(catalysts, /今日模型用量/);
+  assert.match(catalysts, /今日费用额度/);
+  assert.match(catalysts, /后台工作进程暂不可用/);
+  assert.doesNotMatch(catalysts, /\b(?:capability|action_enabled)\b/);
   assert.match(app, /data-impact-run/);
   assert.match(app, /createEarningsImpactJob/);
   assert.match(api, /createOptionAlertsJob/);
@@ -74,6 +105,77 @@ test('paid analysis is explicit and earnings no longer uses the synchronous GET 
   assert.match(app, /选择行只会切换研究对象，不会调用模型/);
   assert.doesNotMatch(catalysts, /progress_percent|data-progress|aria-valuenow|进度\s*\d+%/i);
   assert.match(catalysts, /不显示估算进度/);
+});
+
+test('Strength Radar refresh runs through the unified worker and keeps old results on failure', () => {
+  assert.match(api, /const workerAction = \(requestId, options\) => jget\(/);
+  assert.match(api, /"\/api\/worker\/actions\/" \+ enc\(requestId\)/);
+  assert.match(api, /workerStatus, workerActions, workerAction, requestWorkerAction/);
+  assert.match(app, /N\.requestWorkerAction\(\s*"strength_refresh",\s*\{ parameters: requestedParameters \}/);
+  assert.match(app, /N\.workerAction\(current\.request_id\)/);
+  assert.match(app, /N\.invalidateCache\("\/api\/strength\/scan"\)/);
+  assert.match(app, /const snapshot = await N\.scan\(strengthQueryParams\(actualParameters\), true\)/);
+  assert.match(app, /operation\.details && operation\.details\.parameters/);
+  assert.match(app, /另一组条件的任务已被复用/);
+  assert.match(app, /仍在冷却期，本次未重复扫描/);
+  for (const field of ['universe', 'timeframe', 'profile', 'top', 'sector_id', 'min_price', 'min_avg_dollar_volume', 'include_options']) {
+    assert.match(app, new RegExp(`${field}:`));
+  }
+  assert.match(app, /button\.disabled = busy/);
+  assert.match(app, /data-strength-refresh-state aria-live="polite"/);
+  assert.match(app, /scanR\.e\.code === "strength_snapshot_unavailable"/);
+  assert.match(app, /页面不会自行发起全市场扫描/);
+  assert.match(app, /原有结果继续保留/);
+  assert.doesNotMatch(app, /renderScreener\(true\)/);
+  assert.doesNotMatch(app, /N\.scan\(scanParams\(\), forceScan\)/);
+
+  const submitAt = app.indexOf('N.requestWorkerAction(\n        "strength_refresh"');
+  const pollAt = app.indexOf('operation = await pollStrengthRefresh(operation, generation)');
+  const readAt = app.indexOf('const snapshot = await N.scan(strengthQueryParams(actualParameters), true)');
+  assert.ok(submitAt >= 0 && pollAt > submitAt && readAt > pollAt);
+});
+
+test('worker action transport sends the complete Strength parameters as same-origin JSON', async () => {
+  const requests = [];
+  const window = {};
+  const context = vm.createContext({
+    window,
+    fetch: async (path, options) => {
+      requests.push({ path, options });
+      return {
+        ok: true,
+        status: 202,
+        headers: { get: () => null },
+        json: async () => ({ request_id: 'act_test', status: 'queued' }),
+      };
+    },
+    setTimeout,
+    clearTimeout,
+    DOMException,
+    Date,
+    Intl,
+    Map,
+    Math,
+    Promise,
+    encodeURIComponent,
+    isFinite,
+  });
+  vm.runInContext(api, context, { filename: 'deck-api.js' });
+  const parameters = {
+    universe: 'themes', timeframe: 'mid', profile: 'aggressive', top: 30,
+    sector_id: 'semiconductors', min_price: 10, min_avg_dollar_volume: 25000000,
+    include_options: true,
+  };
+
+  await window.OPTIX_NET.requestWorkerAction('strength_refresh', { parameters });
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].path, '/api/worker/actions/strength_refresh');
+  assert.equal(requests[0].options.method, 'POST');
+  assert.equal(requests[0].options.credentials, 'same-origin');
+  assert.equal(requests[0].options.headers['Content-Type'], 'application/json');
+  assert.equal(requests[0].options.headers['X-Optix-Action'], '1');
+  assert.deepEqual(JSON.parse(requests[0].options.body), { parameters });
 });
 
 test('market-focus cycles are explicit, revision-bound, and never triggered by page refresh', () => {
@@ -90,12 +192,53 @@ test('market-focus cycles are explicit, revision-bound, and never triggered by p
   assert.match(catalysts, /preparedRevision > consumedRevision/);
   assert.match(catalysts, /新热点仍会进入下一准备版本，不会混入当前不可变快照/);
   assert.match(catalysts, /准备版本尚未消费/);
-  assert.match(catalysts, /分析预算未配置/);
+  assert.match(catalysts, /今日预算已用完/);
+  assert.match(catalysts, /重新分析当前上下文/);
+  assert.match(catalysts, /force: true/);
   assert.match(catalysts, /普通页面刷新不会创建模型任务/);
   assert.match(catalysts, /不进入正式股票排名、突破评分或市场形态/);
   assert.match(catalysts, /signedScore\(item\.weighted_catalyst_context\)/);
   assert.doesNotMatch(catalysts, /weighted_catalyst_context\s*\?\?/);
   assert.doesNotMatch(catalysts, /胜率\s*[:：]?\s*\d|收益概率\s*[:：]?\s*\d/);
+});
+
+test('Catalyst analysis errors use the required Simplified Chinese copy', () => {
+  const context = vm.createContext({
+    window: {
+      location: { origin: 'https://option.example' },
+      OPTIX_NET: {},
+      OPTIX_AI_JOBS: { normalizeStatus: value => String(value || 'pending').toLowerCase() },
+    },
+    document: { querySelector: () => null, querySelectorAll: () => [] },
+    URL,
+    URLSearchParams,
+    Date,
+    history: { replaceState: () => {} },
+  });
+  vm.runInContext(catalysts, context, { filename: 'deck-catalysts.js' });
+  const desk = context.window.OPTIX_CATALYSTS;
+  assert.deepEqual(
+    [
+      'ai_job_queue_full',
+      'daily_job_limit_reached',
+      'daily_budget_usd_reached',
+      'analysis_cooldown_active',
+      'cache_unavailable',
+    ].map(code => desk.analysisErrorMessage(code)),
+    [
+      '分析队列已满，请稍后重试',
+      '今日任务次数已用完',
+      '今日分析预算已用完',
+      '分析正在冷却中',
+      '本地缓存暂不可用',
+    ],
+  );
+  assert.equal(
+    desk.analysisErrorDetail({ error_code: 'ai_job_queue_full', retry_after_seconds: 60 }),
+    '分析队列已满，请稍后重试 · 60 秒后可重试',
+  );
+  assert.match(catalysts, /analysisErrorDetail\(cycle\)/);
+  assert.match(catalysts, /analysisErrorDetail\(statusPayload\)/);
 });
 
 test('an old unknown market-focus cycle stays immutable while a newer prepared revision can start separately', () => {
@@ -104,7 +247,6 @@ test('an old unknown market-focus cycle stays immutable while a newer prepared r
       location: { origin: 'https://option.example' },
       OPTIX_NET: {
         fmtDateTime: value => `DATE:${value}`,
-        hasAppToken: () => true,
       },
       OPTIX_AI_JOBS: {
         normalizeStatus: value => String(value || 'pending').toLowerCase(),
@@ -119,22 +261,43 @@ test('an old unknown market-focus cycle stays immutable while a newer prepared r
   });
   vm.runInContext(catalysts, context, { filename: 'deck-catalysts.js' });
   const desk = context.window.OPTIX_CATALYSTS;
-  const anonymousAnalysis = desk.analysisActionDecision(false, false);
-  assert.equal(anonymousAnalysis.authMissing, true);
-  assert.equal(anonymousAnalysis.actionMissing, false);
-  assert.equal(anonymousAnalysis.canTrigger, false);
-  assert.equal(anonymousAnalysis.title, '管理会话未解锁');
-  assert.match(anonymousAnalysis.detail, /当前标签页没有管理令牌/);
+  const workerActions = ['focus_refresh', 'strength_refresh', 'breakout_refresh', 'retention'];
+  for (const actionType of workerActions) {
+    assert.equal(
+      desk.workerTaskAvailable({ healthy: true, tasks: [] }, actionType),
+      false,
+    );
+    assert.equal(
+      desk.workerTaskAvailable({
+        healthy: true,
+        tasks: [{ task_name: actionType, enabled: false }],
+      }, actionType),
+      false,
+    );
+    assert.equal(
+      desk.workerTaskAvailable({
+        healthy: true,
+        tasks: [{ task_name: actionType, enabled: true }],
+      }, actionType),
+      true,
+    );
+  }
+  const disabledAnalysis = desk.analysisActionDecision(false, { enabled: false, reason: 'read_only_mode' });
+  assert.equal(disabledAnalysis.modeUnavailable, true);
+  assert.equal(disabledAnalysis.showAction, false);
+  assert.equal(disabledAnalysis.canTrigger, false);
+  assert.equal(disabledAnalysis.title, '当前为只读模式');
+  assert.match(disabledAnalysis.detail, /手动分析/);
 
-  const authenticatedDisabledAnalysis = desk.analysisActionDecision(false, true);
-  assert.equal(authenticatedDisabledAnalysis.authMissing, false);
-  assert.equal(authenticatedDisabledAnalysis.actionMissing, true);
-  assert.equal(authenticatedDisabledAnalysis.canTrigger, false);
-  assert.equal(authenticatedDisabledAnalysis.title, '分析功能未启用');
+  const enabledAnalysis = desk.analysisActionDecision(true, { enabled: true, reason: 'available' });
+  assert.equal(enabledAnalysis.showAction, true);
+  assert.equal(enabledAnalysis.canTrigger, true);
+  assert.equal(enabledAnalysis.title, '尚未生成模型分析');
 
-  const authenticatedEnabledAnalysis = desk.analysisActionDecision(true, true);
-  assert.equal(authenticatedEnabledAnalysis.canTrigger, true);
-  assert.equal(authenticatedEnabledAnalysis.title, '尚未生成模型分析');
+  const switchedOffAnalysis = desk.analysisActionDecision(false, { enabled: false, reason: 'manual_analysis_disabled' });
+  assert.equal(switchedOffAnalysis.modeUnavailable, true);
+  assert.equal(switchedOffAnalysis.showAction, false);
+  assert.equal(switchedOffAnalysis.title, '手动分析已关闭');
 
   const oldCycle = {
     cycle_id: 'mfc_old_unknown',
@@ -145,14 +308,14 @@ test('an old unknown market-focus cycle stays immutable while a newer prepared r
   };
   const disabled = desk.focusCycleDecision({
     status: 'active',
-    capability: 'disabled',
-    action_enabled: false,
     manual_enabled: false,
+    analysis_availability: { enabled: false, reason: 'read_only_mode' },
     prepared_revision: 54331,
     last_consumed_revision: 0,
   }, oldCycle, 1055, true);
 
-  assert.equal(disabled.actionMissing, true);
+  assert.equal(disabled.analysisUnavailable, true);
+  assert.equal(disabled.showAction, false);
   assert.equal(disabled.buttonText, '分析功能未启用');
   assert.equal(disabled.canRun, false);
   assert.equal(disabled.canRetry, false);
@@ -162,42 +325,40 @@ test('an old unknown market-focus cycle stays immutable while a newer prepared r
   assert.match(historyHtml, /准备版本 31669/);
   assert.match(historyHtml, /仍禁止重试同一周期/);
 
-  const anonymous = desk.focusCycleDecision({
+  const disabledUnknown = desk.focusCycleDecision({
     status: 'active',
-    capability: 'disabled',
-    action_enabled: false,
     manual_enabled: false,
+    analysis_availability: { enabled: false, reason: 'read_only_mode' },
     prepared_revision: 54331,
     last_consumed_revision: 0,
-  }, {}, 1055, false);
-  assert.equal(anonymous.authMissing, true);
-  assert.equal(anonymous.actionMissing, true);
-  assert.equal(anonymous.canRun, false);
-  assert.equal(anonymous.buttonText, '需要管理令牌');
-
-  const anonymousUnknown = desk.focusCycleDecision({
-    status: 'active',
-    capability: 'disabled',
-    action_enabled: false,
-    manual_enabled: false,
-    prepared_revision: 54331,
-    last_consumed_revision: 0,
-  }, oldCycle, 1055, false);
-  assert.equal(anonymousUnknown.newPreparationAfterUnknown, true);
+  }, oldCycle, 1055);
+  assert.equal(disabledUnknown.newPreparationAfterUnknown, true);
   assert.match(
-    desk.focusUnknownHistoryHtml(oldCycle, anonymousUnknown),
-    /解锁管理会话后可另建周期/,
+    desk.focusUnknownHistoryHtml(oldCycle, disabledUnknown),
+    /需待分析功能可用后另建周期/,
   );
+
+  const notConfigured = desk.focusCycleDecision({
+    status: 'active',
+    manual_enabled: true,
+    analysis_availability: { enabled: false, configured: false, reason: 'not_configured' },
+    prepared_revision: 54331,
+    last_consumed_revision: 0,
+  }, oldCycle, 1055, true);
+  assert.equal(notConfigured.notConfigured, true);
+  assert.equal(notConfigured.showAction, true);
+  assert.equal(notConfigured.canRun, false);
+  assert.equal(notConfigured.buttonText, '尚未配置OpenAI');
 
   const enabled = desk.focusCycleDecision({
     status: 'active',
-    capability: 'enabled',
-    action_enabled: true,
     manual_enabled: true,
+    analysis_availability: { enabled: true, reason: 'available' },
     prepared_revision: 54331,
     last_consumed_revision: 0,
   }, oldCycle, 1055, true);
   assert.equal(enabled.newPreparationAfterUnknown, true);
+  assert.equal(enabled.showAction, true);
   assert.equal(enabled.canCreate, true);
   assert.equal(enabled.canRetry, false);
   assert.equal(enabled.buttonText, '基于 1055 个新热点创建新周期');
@@ -208,9 +369,8 @@ test('an old unknown market-focus cycle stays immutable while a newer prepared r
 
   const sameRevision = desk.focusCycleDecision({
     status: 'active',
-    capability: 'enabled',
-    action_enabled: true,
     manual_enabled: true,
+    analysis_availability: { enabled: true, reason: 'available' },
     prepared_revision: 31669,
     last_consumed_revision: 0,
   }, oldCycle, 1, true);
@@ -220,9 +380,8 @@ test('an old unknown market-focus cycle stays immutable while a newer prepared r
 
   const sameRevisionDuringCooldown = desk.focusCycleDecision({
     status: 'active',
-    capability: 'enabled',
-    action_enabled: true,
     manual_enabled: true,
+    analysis_availability: { enabled: true, reason: 'available' },
     prepared_revision: 31669,
     last_consumed_revision: 0,
     cooldown_until: '2999-01-01T00:00:00Z',
@@ -232,9 +391,8 @@ test('an old unknown market-focus cycle stays immutable while a newer prepared r
 
   const missingCycleRevision = desk.focusCycleDecision({
     status: 'active',
-    capability: 'enabled',
-    action_enabled: true,
     manual_enabled: true,
+    analysis_availability: { enabled: true, reason: 'available' },
     prepared_revision: 54331,
     last_consumed_revision: 0,
   }, { ...oldCycle, prepared_revision: undefined }, 1055, true);
@@ -249,9 +407,8 @@ test('an old unknown market-focus cycle stays immutable while a newer prepared r
   };
   const retryBeforeNewBatch = desk.focusCycleDecision({
     status: 'active',
-    capability: 'enabled',
-    action_enabled: true,
     manual_enabled: true,
+    analysis_availability: { enabled: true, reason: 'available' },
     prepared_revision: 54331,
     last_consumed_revision: 0,
   }, ordinaryFailedCycle, 1055, true);
@@ -399,6 +556,37 @@ test('Catalyst confidence uses the contract 0..100 scale and ticker projections 
   vm.runInContext(catalysts, context, { filename: 'deck-catalysts.js' });
   const desk = context.window.OPTIX_CATALYSTS;
   assert.equal(desk.formatConfidence(1), '1%');
+  assert.equal(
+    desk.itemTitle({
+      title: 'English source title',
+      title_zh: '顶层中文标题',
+      analysis: { title_zh: '分析生成的中文标题' },
+    }),
+    '分析生成的中文标题',
+  );
+  assert.equal(
+    desk.itemTitle({ title: 'English source title', headline: 'English fallback' }),
+    '中文标题等待生成',
+  );
+  assert.equal(
+    desk.itemSummary({
+      summary: 'English source summary',
+      summary_zh: '<p>顶层中文摘要</p>',
+      analysis: { headline_summary: '分析生成的中文摘要' },
+    }),
+    '顶层中文摘要',
+  );
+  assert.equal(
+    desk.itemSummary({
+      summary: 'English source summary',
+      analysis: { headline_summary: '<p>分析生成的中文摘要</p>' },
+    }),
+    '分析生成的中文摘要',
+  );
+  assert.equal(
+    desk.itemSummary({ summary: 'English source summary', description: 'English fallback' }),
+    '中文摘要等待生成',
+  );
   const own = [{ ticker: 'NVDA', impact_score: 40 }];
   const all = [...own, { ticker: 'AMD', impact_score: -30 }];
   assert.deepEqual(
@@ -428,7 +616,7 @@ test('Catalyst confidence uses the contract 0..100 scale and ticker projections 
   assert.equal(desk.analysisOriginLabel({ analysis: { insufficient_context: false, model: 'gpt-5.6-terra' } }), '模型推断');
   assert.equal(desk.analysisRetryForce({ analysis_status: 'completed' }, { status: 'failed' }), true);
   assert.equal(desk.analysisRetryForce({ analysis_status: 'failed' }, { status: 'cancelled' }), true);
-  assert.equal(desk.analysisRetryForce({ analysis_status: 'failed' }, { status: 'completed' }), false);
+  assert.equal(desk.analysisRetryForce({ analysis_status: 'failed' }, { status: 'completed' }), true);
   assert.equal(
     desk.plainText('<p class="lead">US CPI &amp; rates</p><p>Second paragraph.</p>'),
     'US CPI & rates Second paragraph.',
@@ -503,8 +691,8 @@ test('a completed local job can render its validated result before feed publicat
 test('drawer retry follows the current job state and keeps that job bound after rerender', () => {
   assert.match(catalysts, /analysisRetryForce\(item, job\)/);
   assert.match(catalysts, /bindAnalysisActions\(item, job, false, asOf\)/);
-  assert.match(catalysts, /status === "failed" \|\| status === "cancelled"/);
-  assert.match(catalysts, /显式重试分析/);
+  assert.match(catalysts, /\["completed", "insufficient_context", "failed", "cancelled"\]/);
+  assert.match(catalysts, />重新分析<\/button>/);
 });
 
 test('source health uses the v1 counters and treats ok as a healthy state', () => {
@@ -522,7 +710,9 @@ test('long stock-impact reasons are accessible without crowding the drawer', () 
 
 test('feed summaries remove source markup and stay visually bounded', () => {
   assert.match(catalysts, /const plainText = value/);
-  assert.match(catalysts, /return plainText\(item && \(item\.summary \|\| item\.description\)/);
+  assert.match(catalysts, /item && item\.summary_zh/);
+  assert.match(catalysts, /analysis\.summary_zh \|\| analysis\.headline_summary/);
+  assert.doesNotMatch(catalysts, /item\.summary \|\| item\.description/);
   assert.match(catalystCss, /\.cat-news__summary[^}]*-webkit-line-clamp:\s*3/);
 });
 
