@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.api.ai import AlertsRequest, _MAX_AI_BODY_BYTES, router
-from app.config import Settings, _ROOT_ENV_FILE
+from app.config import Settings
+from app.runtime_environment import ROOT_ENV_FILE, RUNTIME_ENV_FILES
 from app.services import ai_analysis
 from app.services.ai_jobs import runtime
 
@@ -41,11 +42,9 @@ def _valid_alert(**overrides):
 
 def test_root_env_path_is_independent_of_working_directory():
     root = Path(__file__).resolve().parents[1]
-    assert _ROOT_ENV_FILE == root / ".env"
-    assert tuple(Path(value) for value in Settings.model_config["env_file"]) == (
-        root / ".env",
-        root / "machine.env",
-        root / "secrets.env",
+    assert ROOT_ENV_FILE == root / ".env"
+    assert tuple(Path(value) for value in Settings.model_config["env_file"]) == tuple(
+        RUNTIME_ENV_FILES
     )
 
 
