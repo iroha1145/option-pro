@@ -7,6 +7,11 @@ import time as _time
 from collections import deque as _deque
 from pathlib import Path
 
+from app.runtime_environment import load_runtime_environment
+
+# This must run before request-security and service modules inspect os.environ.
+load_runtime_environment()
+
 # Import yahoo.py first — it monkey-patches yf.Ticker to use curl_cffi session
 # so all downstream yfinance usage dodges Yahoo's rate limiter.
 from app.services import yahoo  # noqa: F401
@@ -25,6 +30,7 @@ from app.access import (
     require_owner_access,
     require_same_origin_action,
 )
+from app.deployment_boundary import normalize_allowed_hosts
 from app.api import access, ai, breakouts, catalysts, earnings, integrations, market, options, sectors, settings, signals, stocks, strength
 from app.services.request_security import (
     TRUSTED_PROXY_NETWORKS as _TRUSTED_PROXY_NETWORKS,
@@ -45,26 +51,17 @@ _FRONTEND_MANIFEST_PATH = _os.environ.get("FRONTEND_MANIFEST_PATH", "").strip()
 
 
 def _configured_allowed_hosts(host_bind: str, raw: str) -> list[str]:
-    hosts = {"localhost", "127.0.0.1", "::1"}
-    normalized_bind = host_bind.strip().strip("[]")
-    if normalized_bind and normalized_bind not in {"0.0.0.0", "::"}:
-        hosts.add(normalized_bind)
-    for item in raw.split(","):
-        host = item.strip().lower().rstrip(".")
-        if not host:
-            continue
-        if "*" in host or "/" in host or "://" in host:
-            raise RuntimeError("ALLOWED_HOSTS must contain explicit host names")
-        hosts.add(host.strip("[]"))
-    return sorted(hosts)
+    return list(normalize_allowed_hosts(host_bind, raw))
 
 
-_ALLOWED_HOSTS = _configured_allowed_hosts(
-    _HOST_BIND,
-    _os.environ.get("ALLOWED_HOSTS", ""),
-)
 _ACCESS_RUNTIME = get_access_runtime()
-_ACCESS_RUNTIME.validate_startup(_HOST_BIND)
+_DEPLOYMENT_BOUNDARY = _ACCESS_RUNTIME.validate_startup(
+    _HOST_BIND,
+    allowed_hosts=_os.environ.get("ALLOWED_HOSTS", ""),
+    trust_proxy_headers=_os.environ.get("TRUST_PROXY_HEADERS", "false"),
+    trusted_proxy_cidrs=_os.environ.get("TRUSTED_PROXY_CIDRS", ""),
+)
+_ALLOWED_HOSTS = list(_DEPLOYMENT_BOUNDARY.allowed_hosts)
 
 
 app = FastAPI(

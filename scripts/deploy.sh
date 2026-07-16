@@ -29,17 +29,44 @@ if [ ! -f .env ]; then
     exit 1
 fi
 chmod 600 .env
+if [ -f machine.env ]; then
+    chmod 600 machine.env
+    export COMPOSE_ENV_FILES=".env,machine.env"
+else
+    export COMPOSE_ENV_FILES=".env"
+fi
+if [ -f secrets.env ]; then
+    chmod 600 secrets.env
+fi
 
 if ! grep -q '^ALLOWED_HOSTS=' .env && [ -z "${ALLOWED_HOSTS+x}" ]; then
     echo "This .env predates the ALLOWED_HOSTS security setting." >&2
     echo "Add ALLOWED_HOSTS= for local-only access, or list every public reverse-proxy domain before deploying." >&2
     exit 1
 fi
-if ! grep -q '^PUBLIC_READ_API_ENABLED=' .env && [ -z "${PUBLIC_READ_API_ENABLED+x}" ]; then
-    echo "This .env predates the PUBLIC_READ_API_ENABLED security setting." >&2
-    echo "Add PUBLIC_READ_API_ENABLED=false, or explicitly enable the reviewed public read allowlist." >&2
+
+python_bin="${PYTHON_BIN:-${ROOT_DIR}/.venv/bin/python}"
+if [ ! -x "$python_bin" ]; then
+    python_bin="python3"
+fi
+deployment_boundary_json=""
+if ! deployment_boundary_json="$(
+    PYTHONPATH="${ROOT_DIR}/backend${PYTHONPATH:+:${PYTHONPATH}}" \
+        "$python_bin" -m app.tools.validate_personal_deployment
+)"; then
+    printf '%s\n' "$deployment_boundary_json" >&2
     exit 1
 fi
+deployment_access_mode="$(
+    DEPLOYMENT_BOUNDARY_JSON="$deployment_boundary_json" python3 -c '
+import json
+import os
+payload = json.loads(os.environ["DEPLOYMENT_BOUNDARY_JSON"])
+if payload.get("valid") is not True:
+    raise SystemExit(1)
+print(payload["access_mode"])
+'
+)"
 
 env_value() {
     local key="$1"
@@ -274,17 +301,17 @@ PY
 
 host_bind="${HOST_BIND:-$(env_value HOST_BIND)}"
 host_bind="${host_bind:-127.0.0.1}"
-auth_token="${APP_AUTH_TOKEN:-$(env_value APP_AUTH_TOKEN)}"
-auth_token="$(printf '%s' "$auth_token" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-public_read_enabled="$(configuration_boolean PUBLIC_READ_API_ENABLED false)"
 deploy_warm_watchlist="$(configuration_boolean DEPLOY_WARM_WATCHLIST false)"
 watchlist_snapshot_path="${WATCHLIST_SNAPSHOT_PATH:-$(env_value WATCHLIST_SNAPSHOT_PATH)}"
 watchlist_snapshot_path="${watchlist_snapshot_path:-/data/watchlist-snapshot-v1.json}"
-allow_insecure="$(configuration_boolean ALLOW_INSECURE_PUBLIC_BIND false)"
 trust_proxy_headers="$(configuration_boolean TRUST_PROXY_HEADERS false)"
 trusted_proxy_cidrs="${TRUSTED_PROXY_CIDRS:-$(env_value TRUSTED_PROXY_CIDRS)}"
 allowed_hosts="${ALLOWED_HOSTS:-$(env_value ALLOWED_HOSTS)}"
-breakout_enabled="$(configuration_boolean BREAKOUT_RADAR_ENABLED false)"
+breakout_enabled="$(
+    PYTHONPATH="${ROOT_DIR}/backend${PYTHONPATH:+:${PYTHONPATH}}" \
+        "$python_bin" -c \
+        'from app.personal_config import get_personal_config; print(str(get_personal_config().features.breakout_enabled).lower())'
+)"
 deploy_require_breakout="$(configuration_boolean DEPLOY_REQUIRE_BREAKOUT false)"
 openai_api_key="${OPENAI_API_KEY:-$(env_value OPENAI_API_KEY)}"
 deploy_require_ai="$(configuration_boolean DEPLOY_REQUIRE_AI false)"
@@ -292,7 +319,15 @@ range_mode="${RANGE_PERSISTENCE_MODE:-$(env_value RANGE_PERSISTENCE_MODE)}"
 catalyst_mode="${CATALYST_MODE:-$(env_value CATALYST_MODE)}"
 catalyst_mode="${catalyst_mode:-display}"
 macrolens_enabled="$(configuration_boolean MACROLENS_ENABLED false)"
-macrolens_base_url="${MACROLENS_BASE_URL:-$(env_value MACROLENS_BASE_URL)}"
+macrolens_base_url="$(
+    PYTHONPATH="${ROOT_DIR}/backend${PYTHONPATH:+:${PYTHONPATH}}" \
+        "$python_bin" -c '
+import os
+from app.runtime_environment import load_runtime_environment
+load_runtime_environment()
+print(os.environ.get("MACROLENS_URL", "") or os.environ.get("MACROLENS_BASE_URL", ""))
+'
+)"
 macrolens_verify_tls="$(configuration_boolean MACROLENS_VERIFY_TLS true)"
 macrolens_read_key_id="${MACROLENS_READ_KEY_ID:-$(env_value MACROLENS_READ_KEY_ID)}"
 macrolens_read_secret="${MACROLENS_READ_SECRET:-$(env_value MACROLENS_READ_SECRET)}"
@@ -306,35 +341,12 @@ focus_producer_snapshot_grace_seconds="${FOCUS_PRODUCER_SNAPSHOT_GRACE_SECONDS:-
 focus_producer_snapshot_grace_seconds="${focus_producer_snapshot_grace_seconds:-120}"
 deploy_require_focus="$(configuration_boolean DEPLOY_REQUIRE_FOCUS_PRODUCER false)"
 
-if ! is_loopback_bind "$host_bind" && [ -z "$auth_token" ] && ! is_truthy "$allow_insecure"; then
-    echo "Refusing non-loopback HOST_BIND without APP_AUTH_TOKEN." >&2
-    echo "Use localhost, set a strong token, or explicitly set ALLOW_INSECURE_PUBLIC_BIND=true for a protected private network." >&2
-    exit 1
-fi
-if is_truthy "$public_read_enabled" && [ -z "$auth_token" ]; then
-    echo "PUBLIC_READ_API_ENABLED=true requires APP_AUTH_TOKEN." >&2
-    echo "Public read access may bypass the token only for reviewed display routes; paid and mutating routes must remain protected." >&2
-    exit 1
-fi
-if is_truthy "$trust_proxy_headers" && [ -z "$trusted_proxy_cidrs" ]; then
-    echo "TRUST_PROXY_HEADERS=true requires TRUSTED_PROXY_CIDRS." >&2
-    exit 1
-fi
-if is_truthy "$trust_proxy_headers" && [ -z "$allowed_hosts" ]; then
-    echo "TRUST_PROXY_HEADERS=true requires explicit ALLOWED_HOSTS." >&2
-    exit 1
-fi
-
 if is_truthy "$deploy_require_breakout" && ! is_truthy "$breakout_enabled"; then
     echo "DEPLOY_REQUIRE_BREAKOUT=true requires BREAKOUT_RADAR_ENABLED=true." >&2
     exit 1
 fi
 if is_truthy "$deploy_require_ai" && [ -z "$openai_api_key" ]; then
     echo "DEPLOY_REQUIRE_AI=true requires OPENAI_API_KEY." >&2
-    exit 1
-fi
-if is_truthy "$deploy_require_ai" && [ -z "$auth_token" ]; then
-    echo "DEPLOY_REQUIRE_AI=true requires APP_AUTH_TOKEN for paid-action authentication." >&2
     exit 1
 fi
 if [ "$range_mode" != "disabled" ] && [ "$range_mode" != "shadow" ] && [ "$range_mode" != "enabled" ]; then
@@ -397,10 +409,6 @@ fi
 if is_truthy "$deploy_require_catalyst_actions"; then
     if [ -z "$macrolens_action_key_id" ] || [ -z "$macrolens_action_secret" ]; then
         echo "DEPLOY_REQUIRE_CATALYST_ACTIONS=true requires MacroLens action credentials." >&2
-        exit 1
-    fi
-    if [ -z "$auth_token" ]; then
-        echo "DEPLOY_REQUIRE_CATALYST_ACTIONS=true requires APP_AUTH_TOKEN for analysis actions." >&2
         exit 1
     fi
 fi
@@ -536,13 +544,8 @@ if is_truthy "$deploy_warm_watchlist"; then
         -e "WATCHLIST_SNAPSHOT_ACTION=wait" \
         backend python - wait --timeout 120 < "$snapshot_script"
 fi
-expected_auth_configured=false
-if [ -n "$auth_token" ]; then
-    expected_auth_configured=true
-fi
 docker compose exec -T \
-    -e "EXPECTED_PUBLIC_READ_ENABLED=${public_read_enabled}" \
-    -e "EXPECTED_AUTH_CONFIGURED=${expected_auth_configured}" \
+    -e "EXPECTED_ACCESS_MODE=${deployment_access_mode}" \
     backend python -c '
 import http.client
 import json
@@ -563,9 +566,8 @@ def deployment_access_probe(method, path, body=None):
         connection.close()
 
 
-public_read_enabled = os.environ["EXPECTED_PUBLIC_READ_ENABLED"] == "true"
-auth_configured = os.environ["EXPECTED_AUTH_CONFIGURED"] == "true"
-public_expected = 200 if public_read_enabled or not auth_configured else 401
+access_mode = os.environ["EXPECTED_ACCESS_MODE"]
+public_expected = 200 if access_mode == "private_network" else 401
 checked = []
 for path in (
     "/api/market/status",
@@ -580,10 +582,9 @@ for path in (
         )
     checked.append({"method": "GET", "path": path, "status": status})
 
-# A deployment without APP_AUTH_TOKEN is permitted only for loopback-only local
-# use. Do not send mutating probes in that mode because there is deliberately no
-# authentication barrier to stop the handlers from running.
-if auth_configured:
+# Password mode must reject every anonymous owner route. Private-network mode
+# deliberately avoids mutating probes because loopback is the owner boundary.
+if access_mode == "password":
     private_probes = (
         ("POST", "/api/ai/jobs/earnings-impact", b"{}"),
         ("GET", "/api/ai/jobs/deployment_probe_missing_job", None),
@@ -624,6 +625,7 @@ ai_worker_health="$(
 docker compose exec -T \
     -e "AI_WORKER_HEALTH=${ai_worker_health}" \
     -e "DEPLOY_REQUIRE_AI=${deploy_require_ai}" \
+    -e "EXPECTED_ACCESS_MODE=${deployment_access_mode}" \
     backend python -c '
 import json, os, urllib.request
 p = json.loads(os.environ["AI_WORKER_HEALTH"])
@@ -633,25 +635,23 @@ assert p["reasoning"] == "max"
 assert p["execution_mode"] in {"background", "worker_sync"}
 assert p["sdk_capability_supported"] is True
 assert all(p["methods"].get(name) is True for name in ("create", "retrieve", "cancel"))
-headers = {}
-token = os.environ.get("APP_AUTH_TOKEN", "").strip()
-if token:
-    headers["Authorization"] = f"Bearer {token}"
-request = urllib.request.Request("http://127.0.0.1:8000/api/ai/status", headers=headers)
-with urllib.request.urlopen(request, timeout=5) as response:
-    status = json.load(response)
-assert status["model"] == "gpt-5.6-terra"
-assert status["reasoning"] == "max"
-assert status["execution_mode"] in {"background", "worker_sync"}
-assert status["sdk_capability_supported"] is True
 required = os.environ["DEPLOY_REQUIRE_AI"].lower() in {"1", "true", "yes"}
 if required:
     assert p["configured"] is True
     assert p["provider_capability_supported"] is True
     assert p["status"] == "supported"
-    assert status["enabled"] is True
-    assert status["status"] == "supported"
-    assert status["provider_capability_supported"] is True
+if os.environ["EXPECTED_ACCESS_MODE"] == "private_network":
+    request = urllib.request.Request("http://127.0.0.1:8000/api/ai/status")
+    with urllib.request.urlopen(request, timeout=5) as response:
+        status = json.load(response)
+    assert status["model"] == "gpt-5.6-terra"
+    assert status["reasoning"] == "max"
+    assert status["execution_mode"] in {"background", "worker_sync"}
+    assert status["sdk_capability_supported"] is True
+    if required:
+        assert status["enabled"] is True
+        assert status["status"] == "supported"
+        assert status["provider_capability_supported"] is True
 '
 
 expected_breakout_enabled="$breakout_enabled"
@@ -659,34 +659,31 @@ expected_range_mode="$range_mode"
 docker compose exec -T \
     -e "EXPECTED_BREAKOUT_ENABLED=${expected_breakout_enabled}" \
     -e "EXPECTED_RANGE_MODE=${expected_range_mode}" \
+    -e "EXPECTED_ACCESS_MODE=${deployment_access_mode}" \
     backend python -c '
 import json
 import os
 import urllib.request
 from app.services.strength.market_shape import MARKET_SHAPE_VERSION
 
-headers = {}
-token = os.environ.get("APP_AUTH_TOKEN", "").strip()
-if token:
-    headers["Authorization"] = f"Bearer {token}"
-request = urllib.request.Request(
-    "http://127.0.0.1:8000/api/breakouts/status",
-    headers=headers,
-)
-with urllib.request.urlopen(request, timeout=5) as response:
-    payload = json.load(response)
 expected_enabled = os.environ["EXPECTED_BREAKOUT_ENABLED"].lower() in {
     "1", "true", "yes"
 }
-if bool(payload.get("enabled")) is not expected_enabled:
-    raise SystemExit("breakout enabled state does not match deployment config")
-if payload.get("range_persistence_mode") != os.environ["EXPECTED_RANGE_MODE"]:
-    raise SystemExit("range persistence mode does not match deployment config")
-if payload.get("versions", {}).get("market_shape_version") != MARKET_SHAPE_VERSION:
-    raise SystemExit(f"{MARKET_SHAPE_VERSION} is not active")
-if payload.get("market_shape_adapter", {}).get("status") != "available":
-    raise SystemExit("market shape adapter is unavailable")
-print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+if os.environ["EXPECTED_ACCESS_MODE"] == "private_network":
+    request = urllib.request.Request(
+        "http://127.0.0.1:8000/api/breakouts/status"
+    )
+    with urllib.request.urlopen(request, timeout=5) as response:
+        payload = json.load(response)
+    if bool(payload.get("enabled")) is not expected_enabled:
+        raise SystemExit("breakout enabled state does not match deployment config")
+    if payload.get("range_persistence_mode") != os.environ["EXPECTED_RANGE_MODE"]:
+        raise SystemExit("range persistence mode does not match deployment config")
+    if payload.get("versions", {}).get("market_shape_version") != MARKET_SHAPE_VERSION:
+        raise SystemExit(f"{MARKET_SHAPE_VERSION} is not active")
+    if payload.get("market_shape_adapter", {}).get("status") != "available":
+        raise SystemExit("market shape adapter is unavailable")
+    print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 '
 
 worker_health="$(
@@ -728,6 +725,7 @@ docker compose exec -T \
     -e "DEPLOY_REQUIRE_CATALYST_ACTIONS=${deploy_require_catalyst_actions}" \
     -e "EXPECTED_CATALYST_ENABLED=${macrolens_enabled}" \
     -e "CATALYST_DEPLOY_NOT_BEFORE_EPOCH=${catalyst_deploy_not_before_epoch}" \
+    -e "EXPECTED_ACCESS_MODE=${deployment_access_mode}" \
     backend python -c '
 import json
 import os
@@ -750,53 +748,49 @@ if read_required:
 elif not enabled:
     assert worker["status"] == "disabled"
 
-headers = {}
-token = os.environ.get("APP_AUTH_TOKEN", "").strip()
-if token:
-    headers["Authorization"] = f"Bearer {token}"
 payload = None
 required_after_epoch = float(os.environ["CATALYST_DEPLOY_NOT_BEFORE_EPOCH"])
-attempts = 60 if read_required else 1
-for attempt in range(attempts):
-    request = urllib.request.Request(
-        "http://127.0.0.1:8000/api/catalysts/status",
-        headers=headers,
-    )
-    with urllib.request.urlopen(request, timeout=5) as response:
-        payload = json.load(response)
-    if not read_required or deployment_status_ready(
-        payload,
-        required_after_epoch=required_after_epoch,
-        actions_required=actions_required,
-    ):
-        break
-    if attempt + 1 < attempts:
-        time.sleep(2)
+if os.environ["EXPECTED_ACCESS_MODE"] == "private_network":
+    attempts = 60 if read_required else 1
+    for attempt in range(attempts):
+        request = urllib.request.Request(
+            "http://127.0.0.1:8000/api/catalysts/status"
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.load(response)
+        if not read_required or deployment_status_ready(
+            payload,
+            required_after_epoch=required_after_epoch,
+            actions_required=actions_required,
+        ):
+            break
+        if attempt + 1 < attempts:
+            time.sleep(2)
 
-assert payload is not None
-assert payload["schema_version"] == "macrolens-option-pro-v2"
-assert payload["expected_model"] == "gpt-5.6-terra"
-assert payload["expected_reasoning"] == "max"
-if read_required:
-    assert deployment_status_ready(
-        payload,
-        required_after_epoch=required_after_epoch,
-        actions_required=actions_required,
-    )
-    assert payload["enabled"] is True
-    assert payload["status"] == "active"
-    assert payload["remote_status"] in {"ok", "active"}
-    assert payload["last_sync_at"] is not None
-    assert payload["snapshot_id"] is not None
-    assert payload["resync_required"] is False
-if actions_required:
-    assert payload["analysis_trigger_enabled"] is True
-    assert payload["model"] == "gpt-5.6-terra"
-    assert payload["reasoning"] == "max"
-    assert payload["execution_mode"] in {"background", "worker_sync"}
-if not enabled:
-    assert payload["status"] == "disabled"
-    assert payload["enabled"] is False
+    assert payload is not None
+    assert payload["schema_version"] == "macrolens-option-pro-v2"
+    assert payload["expected_model"] == "gpt-5.6-terra"
+    assert payload["expected_reasoning"] == "max"
+    if read_required:
+        assert deployment_status_ready(
+            payload,
+            required_after_epoch=required_after_epoch,
+            actions_required=actions_required,
+        )
+        assert payload["enabled"] is True
+        assert payload["status"] == "active"
+        assert payload["remote_status"] in {"ok", "active"}
+        assert payload["last_sync_at"] is not None
+        assert payload["snapshot_id"] is not None
+        assert payload["resync_required"] is False
+    if actions_required:
+        assert payload["analysis_trigger_enabled"] is True
+        assert payload["model"] == "gpt-5.6-terra"
+        assert payload["reasoning"] == "max"
+        assert payload["execution_mode"] in {"background", "worker_sync"}
+    if not enabled:
+        assert payload["status"] == "disabled"
+        assert payload["enabled"] is False
 '
 
 focus_worker_health=""

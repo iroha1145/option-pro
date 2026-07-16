@@ -116,6 +116,19 @@ def test_private_network_startup_is_fail_closed_for_public_bindings() -> None:
         with pytest.raises(RuntimeError):
             runtime.validate_startup(host)
 
+    with pytest.raises(RuntimeError, match="TRUST_PROXY_HEADERS=false"):
+        runtime.validate_startup(
+            "127.0.0.1",
+            trust_proxy_headers=True,
+            trusted_proxy_cidrs="127.0.0.1/32",
+        )
+
+    with pytest.raises(RuntimeError, match="IP literals"):
+        runtime.validate_startup(
+            "127.0.0.1",
+            allowed_hosts="option.example.com",
+        )
+
 
 def test_password_startup_requires_a_valid_password_hash() -> None:
     with pytest.raises(RuntimeError, match="APP_PASSWORD_HASH"):
@@ -124,7 +137,30 @@ def test_password_startup_requires_a_valid_password_hash() -> None:
             password_hash="",
         ).validate_startup("0.0.0.0")
 
-    _runtime("password").validate_startup("0.0.0.0")
+    boundary = _runtime("password").validate_startup(
+        "127.0.0.1",
+        allowed_hosts="option.example.com",
+        trust_proxy_headers=True,
+        trusted_proxy_cidrs="127.0.0.1/32,172.18.0.0/16",
+    )
+    assert "option.example.com" in boundary.allowed_hosts
+
+
+def test_password_proxy_boundary_rejects_missing_or_public_trust_ranges() -> None:
+    runtime = _runtime("password")
+    with pytest.raises(RuntimeError, match="TRUSTED_PROXY_CIDRS"):
+        runtime.validate_startup(
+            "127.0.0.1",
+            allowed_hosts="option.example.com",
+            trust_proxy_headers=True,
+        )
+    with pytest.raises(RuntimeError, match="actual private"):
+        runtime.validate_startup(
+            "127.0.0.1",
+            allowed_hosts="option.example.com",
+            trust_proxy_headers=True,
+            trusted_proxy_cidrs="0.0.0.0/0",
+        )
 
 
 def test_private_network_uses_request_source_and_never_needs_a_browser_token() -> None:

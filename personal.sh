@@ -2,16 +2,32 @@
 set -euo pipefail
 
 root="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+cd "$root"
+if [ -f "$root/machine.env" ]; then
+    export COMPOSE_ENV_FILES=".env,machine.env"
+else
+    export COMPOSE_ENV_FILES=".env"
+fi
 python_bin="${PYTHON_BIN:-$root/.venv/bin/python}"
 if [ ! -x "$python_bin" ]; then
     python_bin="python3"
 fi
 
-if [ "${1:-}" != "secrets" ]; then
-    echo "Usage: ./personal.sh secrets {status|set KEY|remove KEY|validate}" >&2
-    exit 2
-fi
-shift
+case "${1:-}" in
+    doctor)
+        [ "$#" -eq 1 ] || { echo "Usage: ./personal.sh doctor" >&2; exit 2; }
+        PYTHONPATH="$root/backend${PYTHONPATH:+:$PYTHONPATH}" \
+            "$python_bin" -m app.tools.validate_personal_deployment
+        exit $?
+        ;;
+    secrets)
+        shift
+        ;;
+    *)
+        echo "Usage: ./personal.sh {doctor|secrets {status|set KEY|remove KEY|validate}}" >&2
+        exit 2
+        ;;
+esac
 
 command_name="${1:-}"
 key="${2:-}"
@@ -41,7 +57,7 @@ fi
 
 case "$key" in
     OPENAI_API_KEY) services=(backend ai-worker) ;;
-    FINNHUB_API_KEY|INTERNAL_API_TOKEN|DATA_DIR) services=(backend) ;;
+    FINNHUB_API_KEY|MARKETDATA_TOKEN|INTERNAL_API_TOKEN) services=(backend) ;;
     APP_PASSWORD_HASH) services=(backend) ;;
     *) services=() ;;
 esac
@@ -53,5 +69,6 @@ for service in "${services[@]}"; do
     fi
 done
 if [ "${#running[@]}" -gt 0 ]; then
-    docker compose -f "$root/docker-compose.yml" restart "${running[@]}"
+    docker compose -f "$root/docker-compose.yml" up -d --no-deps \
+        --force-recreate "${running[@]}"
 fi

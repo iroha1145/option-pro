@@ -13,6 +13,25 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _copy_personal_validator(root: Path) -> None:
+    for relative in (
+        "backend/app/__init__.py",
+        "backend/app/access.py",
+        "backend/app/deployment_boundary.py",
+        "backend/app/personal_config.py",
+        "backend/app/runtime_environment.py",
+        "backend/app/services/__init__.py",
+        "backend/app/services/request_security.py",
+        "backend/app/tools/__init__.py",
+        "backend/app/tools/validate_personal_deployment.py",
+        "config/personal.toml",
+    ):
+        source = ROOT / relative
+        destination = root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+
+
 def _isolated_environment() -> dict[str, str]:
     """Return a host environment that cannot override the fixture dotenv."""
     environment = os.environ.copy()
@@ -208,6 +227,7 @@ def _deployment_root(tmp_path: Path, env_text: str) -> tuple[Path, dict[str, str
     scripts = root / "scripts"
     scripts.mkdir(parents=True)
     shutil.copy2(ROOT / "scripts" / "deploy.sh", scripts / "deploy.sh")
+    _copy_personal_validator(root)
     shutil.copy2(
         ROOT / "scripts" / "watchlist_snapshot.py",
         scripts / "watchlist_snapshot.py",
@@ -498,28 +518,25 @@ def test_default_and_quoted_safe_breakout_config_pass_deployment_gate(tmp_path: 
 
 
 @pytest.mark.parametrize("configured_value", ["treu", "on", "off", "enabled"])
-def test_unknown_public_read_boolean_fails_closed(
+def test_removed_public_read_switch_no_longer_changes_owner_access(
     tmp_path: Path,
     configured_value: str,
 ) -> None:
     template = (ROOT / ".env.example").read_text(encoding="utf-8")
-    invalid = template.replace(
+    legacy = template.replace(
         "PUBLIC_READ_API_ENABLED=false",
         f"PUBLIC_READ_API_ENABLED={configured_value}",
         1,
     )
-    root, environment = _deployment_root(tmp_path, invalid)
+    root, environment = _deployment_root(tmp_path, legacy)
 
     result = _run_deploy(root, environment)
 
-    assert result.returncode != 0
-    assert (
-        "PUBLIC_READ_API_ENABLED must be a recognized boolean value" in result.stderr
-    )
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.parametrize("app_auth_token", ["", '"   "'])
-def test_public_read_requires_an_app_token(
+def test_removed_browser_token_is_not_a_deployment_gate(
     tmp_path: Path,
     app_auth_token: str,
 ) -> None:
@@ -535,19 +552,17 @@ def test_public_read_requires_an_app_token(
 
     result = _run_deploy(root, environment)
 
-    assert result.returncode != 0
-    assert "PUBLIC_READ_API_ENABLED=true requires APP_AUTH_TOKEN" in result.stderr
-    assert not (root / ".fake-deployment-access-probe-log").exists()
+    assert result.returncode == 0, result.stderr
+    assert (root / ".fake-deployment-access-probe-log").exists()
 
 
 @pytest.mark.parametrize(
-    ("public_value", "expected_public"),
-    [("true", "true"), ('"YES"', "true"), ("false", "false")],
+    "public_value",
+    ["true", '"YES"', "false"],
 )
 def test_deployment_runs_anonymous_access_probes_for_public_and_private_routes(
     tmp_path: Path,
     public_value: str,
-    expected_public: str,
 ) -> None:
     template = (ROOT / ".env.example").read_text(encoding="utf-8")
     configured = template.replace(
@@ -561,19 +576,17 @@ def test_deployment_runs_anonymous_access_probes_for_public_and_private_routes(
 
     assert result.returncode == 0, result.stderr
     probe = (root / ".fake-deployment-access-probe-log").read_text(encoding="utf-8")
-    assert f"EXPECTED_PUBLIC_READ_ENABLED={expected_public}" in probe
-    assert "EXPECTED_AUTH_CONFIGURED=true" in probe
+    assert "EXPECTED_ACCESS_MODE=private_network" in probe
+    assert "EXPECTED_PUBLIC_READ_ENABLED" not in probe
+    assert "EXPECTED_AUTH_CONFIGURED" not in probe
     for path in (
         "/api/market/status",
         "/api/breakouts/status",
         "/api/catalysts/status",
-        "/api/ai/jobs/earnings-impact",
-        "/api/ai/jobs/deployment_probe_missing_job",
-        "/api/catalysts/refresh",
     ):
         assert path in probe
     assert '("POST", "/api/ai/jobs/earnings-impact", b"{}")' in probe
-    assert '"POST", "/api/catalysts/refresh", b"{}"' in probe
+    assert 'if access_mode == "password"' in probe
 
 
 def test_deployment_fails_when_anonymous_access_probe_fails(tmp_path: Path) -> None:
@@ -646,14 +659,14 @@ def test_real_compose_preserves_quoted_boolean_values(
     payload = json.loads(rendered.stdout)
     for service_name in ("backend", "breakout-worker"):
         environment = payload["services"][service_name]["environment"]
-        assert environment["BREAKOUT_RADAR_ENABLED"] == expected_enabled
+        assert "BREAKOUT_RADAR_ENABLED" not in environment
         assert (
             environment["RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED"]
             == expected_interaction
         )
 
 
-def test_required_breakout_gate_rejects_disabled_but_allows_interaction_off(
+def test_required_breakout_gate_uses_personal_config_and_allows_interaction_off(
     tmp_path: Path,
 ) -> None:
     template = (ROOT / ".env.example").read_text(encoding="utf-8")
@@ -661,9 +674,8 @@ def test_required_breakout_gate_rejects_disabled_but_allows_interaction_off(
         "DEPLOY_REQUIRE_BREAKOUT=false", "DEPLOY_REQUIRE_BREAKOUT=true"
     )
     root, environment = _deployment_root(tmp_path, required_disabled)
-    rejected = _run_deploy(root, environment)
-    assert rejected.returncode != 0
-    assert "requires BREAKOUT_RADAR_ENABLED=true" in rejected.stderr
+    accepted_with_legacy_false = _run_deploy(root, environment)
+    assert accepted_with_legacy_false.returncode == 0, accepted_with_legacy_false.stderr
 
     required_enabled = required_disabled.replace(
         "BREAKOUT_RADAR_ENABLED=false", "BREAKOUT_RADAR_ENABLED=true"
@@ -909,7 +921,7 @@ def test_required_catalyst_read_gate_requires_explicit_action_decision(
     [
         ("", "action-secret", "app-token", "requires MacroLens action credentials"),
         ("action-key", "", "app-token", "requires MacroLens action credentials"),
-        ("action-key", "action-secret", "", "requires APP_AUTH_TOKEN"),
+        ("action-key", "action-secret", "", None),
         ("action-key", "action-secret", "app-token", None),
     ],
 )
@@ -1297,8 +1309,7 @@ def test_legacy_env_and_incomplete_trusted_proxy_config_fail_before_build(
     )
     (root / ".env").write_text(legacy_public_read, encoding="utf-8")
     result = _run_deploy(root, environment)
-    assert result.returncode != 0
-    assert "predates the PUBLIC_READ_API_ENABLED security setting" in result.stderr
+    assert result.returncode == 0, result.stderr
 
     incomplete_proxy = template.replace(
         "TRUST_PROXY_HEADERS=false", "TRUST_PROXY_HEADERS=true"
@@ -1306,7 +1317,7 @@ def test_legacy_env_and_incomplete_trusted_proxy_config_fail_before_build(
     (root / ".env").write_text(incomplete_proxy, encoding="utf-8")
     result = _run_deploy(root, environment)
     assert result.returncode != 0
-    assert "requires TRUSTED_PROXY_CIDRS" in result.stderr
+    assert "private_network requires TRUST_PROXY_HEADERS=false" in result.stderr
 
 
 def test_setup_copies_full_template_and_writes_secrets_as_literal_data(
@@ -1318,6 +1329,7 @@ def test_setup_copies_full_template_and_writes_secrets_as_literal_data(
     shutil.copy2(ROOT / "setup.sh", root / "setup.sh")
     shutil.copy2(ROOT / ".env.example", root / ".env.example")
     shutil.copy2(ROOT / "scripts" / "deploy.sh", scripts / "deploy.sh")
+    _copy_personal_validator(root)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _fake_docker(bin_dir)

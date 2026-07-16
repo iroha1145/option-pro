@@ -32,7 +32,11 @@ Optix Pro 是一个面向个人使用的美股行情、期权链和信号观察�
 git clone https://github.com/iroha1145/option-pro.git
 cd option-pro
 cp .env.example .env
+cp machine.env.example machine.env
+cp secrets.env.example secrets.env
 chmod 600 .env
+chmod 600 machine.env secrets.env
+./personal.sh doctor
 ./scripts/deploy.sh
 ```
 
@@ -110,44 +114,39 @@ Compose 默认只发布到 `127.0.0.1:2000`。推荐保持这个默认值，并�
    然后在本机打开 <http://localhost:2000>。
 
 2. 通过可信 VPN（例如 WireGuard/Tailscale）访问服务器内网。
-3. 放在配置了 HTTPS 的反向代理后，并设置强随机 `APP_AUTH_TOKEN`。
+3. 放在配置了 HTTPS 的反向代理后，并启用个人密码登录。
 
-不要把 `HOST_BIND` 改成 `0.0.0.0` 后直接通过公网 HTTP 暴露服务。HTTP 不加密浏览器 token；内置 token 也只是个人部署的轻量保护，不是多用户权限系统。应用默认会拒绝“非本机监听且 `APP_AUTH_TOKEN` 为空”的组合。
+`private_network` 只允许直接的本机或私网连接，并且必须保持 `TRUST_PROXY_HEADERS=false`。它不能放在 Nginx、Caddy、Cloudflare Tunnel 或公网负载均衡器后，因为代理会遮住访客的真实来源。该模式的 `HOST_BIND` 和 `ALLOWED_HOSTS` 只能使用 localhost 或个人配置允许范围内的私网 IP 字面量。
 
-只有服务位于外部防火墙或 VPN 保护的私有网络、并且确实需要无 token 访问时，才可显式设置 `ALLOW_INSECURE_PUBLIC_BIND=true`。它只是解除启动保护，不会自动提供加密或访问控制，不能用于普通公网 HTTP。
+任何公开域名或 HTTP 反向代理都必须在 `config/personal.toml` 中使用 `password` 模式，并设置有效的 `APP_PASSWORD_HASH`：
 
-设置 `APP_AUTH_TOKEN` 后，在同源页面的浏览器控制台保存同一个 token：
-
-```js
-sessionStorage.setItem('optix.app.token', 'same-strong-random-token');
-location.reload();
+```toml
+[access]
+mode = "password"
 ```
 
-只有部署在可信 HTTPS/SSH/VPN 链路上时才这样使用。反向代理部署必须把每个公开域名写入 `ALLOWED_HOSTS`，部署脚本会使用这些域名的 `Host` 请求再次检查就绪状态：
+```bash
+./personal.sh secrets set APP_PASSWORD_HASH
+```
+
+反向代理部署还要把每个公开域名写入 `machine.env` 的 `ALLOWED_HOSTS`：
 
 ```dotenv
 ALLOWED_HOSTS=option.example.com
 ```
 
-若 HTTPS 页面需要无需手工令牌即可展示行情，可同时设置：
-
-```dotenv
-PUBLIC_READ_API_ENABLED=true
-DEPLOY_WARM_WATCHLIST=true
-```
-
-该开关必须与非空的 `APP_AUTH_TOKEN` 同时配置，只放行后端明确列出的行情、强势、突破、板块、财报、期权和 Catalyst 本地缓存读取接口，以及有 50 个代码上限的 Catalyst 批量查询。匿名 Catalyst 响应只保留页面展示字段；模型任务、任务详情、重试、取消、刷新和其他写入操作仍要求 `APP_AUTH_TOKEN`，长期令牌不会写入网页。公开读取仍受原有按来源地址限流约束。
+浏览器只保存短期、仅存内存的所有者会话，不保存服务端密钥或旧 `APP_AUTH_TOKEN`。`/health` 和 `/ready` 保持公开，其他页面与接口均要求所有者访问。
 
 `DEPLOY_WARM_WATCHLIST=true` 会在切换容器前，把当前服务最后一份有效自选行情原子保存到共享数据卷；`WATCHLIST_SNAPSHOT_PATH` 必须位于 `/data`。若既读不到当前行情，也没有 24 小时内的有效快照，部署会在流量切换前停止。新容器先用这份快照即时显示页面，并在后台更新；切换后脚本最多等待两分钟确认新行情。行情源暂时不可用时，部署会明确告警并继续保留有时限的旧快照，不会把已经运行的新容器误报成已回滚。
 
-若反向代理与前端跨域，再精确设置 `ALLOWED_ORIGINS`。只有在可信代理已经覆盖并清洗转发头时才设置 `TRUST_PROXY_HEADERS=true`，并同时填写代理直连来源网段；不能填写访客网段：
+只有在代理已经覆盖并清洗转发头时才设置 `TRUST_PROXY_HEADERS=true`，并同时填写代理直连来源网段；不能填写访客网段或公网全网段：
 
 ```dotenv
 TRUST_PROXY_HEADERS=true
 TRUSTED_PROXY_CIDRS=127.0.0.1/32,10.0.0.0/24
 ```
 
-从缺少 `ALLOWED_HOSTS` 的旧版 `.env` 升级时，部署脚本会先停止并要求补上这一行。仅通过本机、SSH 隧道或虚拟专用网络（VPN）访问时可保留空值；使用公开域名时必须明确列出域名，避免容器健康但网页被主机校验拒绝。
+`option.openweb-ui.xyz` 一类公网域名必须使用密码模式和有效 HTTPS。部署脚本、应用启动和 `./personal.sh doctor` 共用同一校验；任一边界配置不完整都会停止。
 
 ## 本地开发
 

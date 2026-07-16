@@ -44,4 +44,6 @@ There are three long-lived business processes. MacroLens cannot call Option Pro.
 
 ## Configuration ownership
 
-`config/personal.toml` owns behavior. Environment files contain only secrets and machine addresses. Domain modules receive typed configuration instead of interpreting unrelated environment switches.
+`config/personal.toml` owns behavior. `machine.env` owns host-specific addresses and paths. `secrets.env` owns the five canonical server-only secrets. Exported process values have highest priority; otherwise loading order is `.env`, `machine.env`, then `secrets.env`. Domain modules receive typed configuration instead of interpreting unrelated environment switches.
+
+The application, `scripts/deploy.sh` and `./personal.sh doctor` call the same Python deployment validator. Direct private-network access never trusts forwarded headers. Any reverse-proxy or public-domain route uses password mode, explicit host names and narrowly scoped proxy source ranges.

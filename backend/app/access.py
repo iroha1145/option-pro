@@ -11,13 +11,12 @@ import threading
 import time
 from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path
 from typing import Callable, Literal
 from urllib.parse import urlsplit
 
-from dotenv import load_dotenv
 from fastapi import HTTPException, Request, status
 
+from app.deployment_boundary import DeploymentBoundary, validate_deployment_boundary
 from app.personal_config import AccessConfig, get_personal_config
 from app.services.request_security import (
     TRUSTED_PROXY_NETWORKS,
@@ -27,8 +26,6 @@ from app.services.request_security import (
 )
 
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-SECRETS_FILE = REPOSITORY_ROOT / "secrets.env"
 OWNER_COOKIE_NAME = "optix_owner_session"
 OWNER_SESSION_SECONDS = 12 * 60 * 60
 _PBKDF2_ITERATIONS = 600_000
@@ -37,9 +34,6 @@ _LOGIN_FAILURE_LIMIT = 5
 _LOGIN_FAILURE_WINDOW_SECONDS = 5 * 60
 _LOGIN_COOLDOWN_SECONDS = 30
 _LOGIN_FAILURE_BUCKET_LIMIT = 256
-
-load_dotenv(dotenv_path=SECRETS_FILE, override=False)
-
 
 def _b64encode(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
@@ -147,26 +141,27 @@ class OwnerAccessRuntime:
     def password_configured(self) -> bool:
         return bool(self._password_hash)
 
-    def validate_startup(self, host_bind: str) -> None:
-        normalized = host_bind.strip().strip("[]").split("%", 1)[0]
+    def validate_startup(
+        self,
+        host_bind: str,
+        *,
+        allowed_hosts: str = "",
+        trust_proxy_headers: str | bool = False,
+        trusted_proxy_cidrs: str = "",
+    ) -> DeploymentBoundary:
         if self.mode == "password":
             if not self._password_hash or not self._valid_password_hash_shape():
                 raise RuntimeError(
                     "ACCESS_MODE=password requires a valid APP_PASSWORD_HASH"
                 )
-            return
-        if normalized.lower() == "localhost":
-            return
-        try:
-            address = ipaddress.ip_address(normalized)
-        except ValueError as exc:
-            raise RuntimeError(
-                "private_network HOST_BIND must be localhost or an explicit IP address"
-            ) from exc
-        if address.is_unspecified or not self._address_allowed(address):
-            raise RuntimeError(
-                "private_network refuses wildcard, public, or unapproved HOST_BIND"
-            )
+        return validate_deployment_boundary(
+            self.mode,
+            host_bind,
+            allowed_hosts,
+            trust_proxy_headers,
+            trusted_proxy_cidrs,
+            allowed_private_cidrs=(str(network) for network in self._networks),
+        )
 
     def _valid_password_hash_shape(self) -> bool:
         return owner_password_hash_is_valid(self._password_hash)

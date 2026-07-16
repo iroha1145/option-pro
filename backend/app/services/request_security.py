@@ -6,6 +6,10 @@ import ipaddress
 import os
 from typing import Any, Iterable
 
+from app.runtime_environment import load_runtime_environment
+
+
+load_runtime_environment()
 
 _TRUTHY = {"1", "true", "yes"}
 TRUST_PROXY_HEADERS = (
