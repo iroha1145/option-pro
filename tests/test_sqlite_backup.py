@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from app.tools.sqlite_backup import BackupError, backup_database, main
+from app.tools.sqlite_backup import BackupError, backup_database, main, prune_backups
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,6 +60,7 @@ def test_backup_uses_consistent_copy_and_writes_verified_metadata(tmp_path: Path
     assert backup_path.stat().st_mode & 0o777 == 0o600
 
     manifest = json.loads(Path(result.manifest).read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == 1
     assert manifest["sha256"] == expected_digest
     assert manifest["backup"] == backup_path.name
     assert manifest["integrity_check"] == "ok"
@@ -119,14 +120,12 @@ def test_retention_deletes_incomplete_groups_without_counting_them(
         source, destination, label="optix", keep=1, created_at=start
     )
 
-    missing_manifest = destination / "optix-99999999T999999.999999Z-a.sqlite3"
+    missing_manifest = destination / "optix-20260715T001500.000000Z-aaaaaaaa.sqlite3"
     missing_manifest.write_bytes(b"incomplete")
     missing_manifest.with_suffix(".sqlite3.sha256").write_text(
         "invalid  incomplete\n", encoding="utf-8"
     )
-    orphan_manifest = destination / "optix-99999999T999999.999999Z-b.sqlite3.json"
-    orphan_manifest.write_text("{}\n", encoding="utf-8")
-    abandoned_temporary = destination / ".optix-crashed.sqlite3.tmp"
+    abandoned_temporary = destination / ".optix.backup-v1.crashed.sqlite3.tmp"
     abandoned_temporary.write_bytes(b"partial backup")
 
     latest = backup_database(
@@ -139,11 +138,201 @@ def test_retention_deletes_incomplete_groups_without_counting_them(
 
     assert not missing_manifest.exists()
     assert not missing_manifest.with_suffix(".sqlite3.sha256").exists()
-    assert not orphan_manifest.exists()
     assert not abandoned_temporary.exists()
     assert not Path(complete.backup).exists()
     assert Path(latest.backup).exists()
     assert set(destination.glob("optix-*.sqlite3")) == {Path(latest.backup)}
+
+
+def _backup_names_by_label(destination: Path) -> dict[str, set[str]]:
+    grouped: dict[str, set[str]] = {}
+    for manifest_path in destination.glob("*.sqlite3.json"):
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        grouped.setdefault(str(manifest["label"]), set()).add(str(manifest["backup"]))
+    return grouped
+
+
+def test_prefix_labels_each_keep_only_their_three_newest_backups(tmp_path: Path) -> None:
+    source = tmp_path / "source.db"
+    destination = tmp_path / "backups"
+    _create_database(source)
+    start = datetime(2026, 7, 15, tzinfo=UTC)
+    labels = ("optix", "optix-worker", "optix-worker-state")
+
+    for minute in range(10):
+        for label in labels:
+            backup_database(
+                source,
+                destination,
+                label=label,
+                keep=10,
+                created_at=start + timedelta(minutes=minute),
+            )
+
+    before = _backup_names_by_label(destination)
+    assert {label: len(names) for label, names in before.items()} == {
+        label: 10 for label in labels
+    }
+    for label in labels:
+        other_before = {
+            other: set(names) for other, names in _backup_names_by_label(destination).items()
+            if other != label
+        }
+        prune_backups(destination, label, keep=3)
+        after = _backup_names_by_label(destination)
+        assert len(after[label]) == 3
+        assert {other: after[other] for other in other_before} == other_before
+
+    assert {label: len(names) for label, names in _backup_names_by_label(destination).items()} == {
+        label: 3 for label in labels
+    }
+
+
+@pytest.mark.parametrize("damage", ["invalid_json", "wrong_label"])
+def test_invalid_manifest_fails_before_any_backup_is_deleted(
+    tmp_path: Path,
+    damage: str,
+) -> None:
+    source = tmp_path / "source.db"
+    destination = tmp_path / "backups"
+    _create_database(source)
+    start = datetime(2026, 7, 15, tzinfo=UTC)
+    first = backup_database(source, destination, label="optix", keep=2, created_at=start)
+    second = backup_database(
+        source,
+        destination,
+        label="optix",
+        keep=2,
+        created_at=start + timedelta(minutes=1),
+    )
+    manifest_path = Path(first.manifest)
+    if damage == "invalid_json":
+        manifest_path.write_text("{not-json\n", encoding="utf-8")
+    else:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        payload["label"] = "optix-worker"
+        manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    files_before = {path.name for path in destination.iterdir() if not path.name.startswith(".")}
+    with pytest.raises(BackupError, match="manifest"):
+        backup_database(
+            source,
+            destination,
+            label="optix",
+            keep=1,
+            created_at=start + timedelta(minutes=2),
+        )
+    files_after = {path.name for path in destination.iterdir() if not path.name.startswith(".")}
+
+    assert files_after == files_before
+    assert Path(first.backup).exists()
+    assert Path(second.backup).exists()
+
+
+def test_incomplete_exact_label_and_temporary_cleanup_do_not_touch_prefix_label(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.db"
+    destination = tmp_path / "backups"
+    _create_database(source)
+    worker = backup_database(source, destination, label="optix-worker", keep=2)
+    incomplete_optix = destination / "optix-20260715T001500.000000Z-aaaaaaaa.sqlite3"
+    incomplete_optix.write_bytes(b"partial")
+    worker_temporary = destination / ".optix-worker.backup-v1.active.sqlite3.tmp"
+    worker_temporary.write_bytes(b"active")
+    optix_temporary = destination / ".optix.backup-v1.abandoned.sqlite3.tmp"
+    optix_temporary.write_bytes(b"abandoned")
+
+    backup_database(source, destination, label="optix", keep=1)
+
+    assert not incomplete_optix.exists()
+    assert not optix_temporary.exists()
+    assert worker_temporary.exists()
+    assert Path(worker.backup).exists()
+    assert Path(worker.manifest).exists()
+    assert Path(worker.checksum_file).exists()
+
+
+def test_different_labels_share_the_directory_retention_lock(tmp_path: Path) -> None:
+    source = tmp_path / "source.db"
+    destination = tmp_path / "backups"
+    first_marker = tmp_path / "first-retention"
+    second_marker = tmp_path / "second-retention"
+    _create_database(source)
+
+    script = """
+import sys
+import time
+from pathlib import Path
+
+import app.tools.sqlite_backup as backup_module
+
+source, destination, label, marker = sys.argv[1:]
+original = backup_module._prune_backups_locked
+
+def delayed_prune(*args, **kwargs):
+    Path(marker).write_text("entered", encoding="utf-8")
+    time.sleep(0.4)
+    return original(*args, **kwargs)
+
+backup_module._prune_backups_locked = delayed_prune
+backup_module.backup_database(Path(source), Path(destination), label=label, keep=2)
+"""
+    processes: list[subprocess.Popen[str]] = []
+    try:
+        first = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                script,
+                str(source),
+                str(destination),
+                "optix",
+                str(first_marker),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=_subprocess_environment(),
+        )
+        processes.append(first)
+        deadline = time.monotonic() + 5
+        while not first_marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert first_marker.exists(), "first retention pass did not start"
+
+        second = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                script,
+                str(source),
+                str(destination),
+                "optix-worker",
+                str(second_marker),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=_subprocess_environment(),
+        )
+        processes.append(second)
+        time.sleep(0.15)
+        assert not second_marker.exists()
+
+        first_stdout, first_stderr = first.communicate(timeout=10)
+        second_stdout, second_stderr = second.communicate(timeout=10)
+        assert first.returncode == 0, first_stdout + first_stderr
+        assert second.returncode == 0, second_stdout + second_stderr
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.terminate()
+                process.wait(timeout=5)
+
+    grouped = _backup_names_by_label(destination)
+    assert len(grouped["optix"]) == 1
+    assert len(grouped["optix-worker"]) == 1
 
 
 def test_backup_rejects_missing_or_invalid_database(tmp_path: Path) -> None:

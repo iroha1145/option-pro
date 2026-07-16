@@ -20,6 +20,9 @@ from typing import Iterator, Sequence
 
 _SAFE_LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _HASH_CHUNK_BYTES = 1024 * 1024
+_MANIFEST_SCHEMA_VERSION = 1
+_MAX_MANIFEST_BYTES = 64 * 1024
+_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 class BackupError(RuntimeError):
@@ -40,6 +43,14 @@ class BackupResult:
     integrity_check: str
     foreign_key_violations: int
     removed_backups: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _CompleteBackup:
+    backup_path: Path
+    manifest_path: Path
+    checksum_path: Path
+    created_at: datetime
 
 
 def _validate_label(label: str) -> str:
@@ -112,15 +123,9 @@ def _atomic_write_text(path: Path, content: str) -> None:
 
 
 @contextmanager
-def _exclusive_backup_lock(
-    destination: Path,
-    label: str,
-    *,
-    timeout_seconds: float,
-) -> Iterator[None]:
+def _exclusive_file_lock(lock_path: Path, *, timeout_seconds: float) -> Iterator[None]:
     if timeout_seconds < 0:
         raise BackupError("lock timeout must not be negative")
-    lock_path = destination / f".{label}.backup.lock"
     flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_CLOEXEC", 0)
     try:
         descriptor = os.open(lock_path, flags, 0o600)
@@ -154,56 +159,192 @@ def _exclusive_backup_lock(
         os.close(descriptor)
 
 
-def prune_backups(destination: Path, label: str, keep: int) -> tuple[str, ...]:
-    """Remove incomplete groups and keep the newest complete backup groups."""
+@contextmanager
+def _exclusive_backup_lock(
+    destination: Path,
+    label: str,
+    *,
+    timeout_seconds: float,
+) -> Iterator[None]:
+    with _exclusive_file_lock(
+        destination / f".{label}.backup.lock",
+        timeout_seconds=timeout_seconds,
+    ):
+        yield
 
-    _validate_label(label)
-    if keep < 1:
-        raise BackupError("keep must be at least 1")
 
-    database_paths = {
-        path.name: path for path in destination.glob(f"{label}-*.sqlite3")
+def _backup_name_pattern(label: str) -> re.Pattern[str]:
+    return re.compile(
+        rf"^{re.escape(label)}-(?P<timestamp>\d{{8}}T\d{{6}}\.\d{{6}}Z)-"
+        r"[0-9a-f]{8}\.sqlite3$"
+    )
+
+
+def _filename_created_at(name_pattern: re.Pattern[str], backup_name: str) -> datetime | None:
+    match = name_pattern.fullmatch(backup_name)
+    if match is None:
+        return None
+    try:
+        return datetime.strptime(
+            match.group("timestamp"),
+            "%Y%m%dT%H%M%S.%fZ",
+        ).replace(tzinfo=UTC)
+    except ValueError:
+        return None
+
+
+def _parse_created_at(raw_value: object, manifest_path: Path) -> datetime:
+    if not isinstance(raw_value, str) or not raw_value.endswith("Z"):
+        raise BackupError(f"invalid created_at in backup manifest {manifest_path}")
+    try:
+        parsed = datetime.fromisoformat(raw_value.removesuffix("Z") + "+00:00")
+    except ValueError as exc:
+        raise BackupError(
+            f"invalid created_at in backup manifest {manifest_path}"
+        ) from exc
+    return parsed.astimezone(UTC)
+
+
+def _load_complete_backup(
+    destination: Path,
+    manifest_path: Path,
+    *,
+    label: str,
+    expected_backup_name: str,
+    filename_created_at: datetime,
+) -> _CompleteBackup:
+    try:
+        manifest_size = manifest_path.stat().st_size
+    except OSError as exc:
+        raise BackupError(f"cannot inspect backup manifest {manifest_path}: {exc}") from exc
+    if manifest_size > _MAX_MANIFEST_BYTES:
+        raise BackupError(f"backup manifest is too large: {manifest_path}")
+
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise BackupError(f"invalid backup manifest {manifest_path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise BackupError(f"invalid backup manifest object: {manifest_path}")
+
+    required_fields = {
+        "schema_version",
+        "label",
+        "created_at",
+        "source",
+        "backup",
+        "size_bytes",
+        "sha256",
     }
-    manifest_paths = {
-        path.name.removesuffix(".json"): path
-        for path in destination.glob(f"{label}-*.sqlite3.json")
-    }
-    checksum_paths = {
-        path.name.removesuffix(".sha256"): path
-        for path in destination.glob(f"{label}-*.sqlite3.sha256")
-    }
-    group_names = set(database_paths) | set(manifest_paths) | set(checksum_paths)
-    removed: list[str] = []
-    completed: list[Path] = []
-    for group_name in group_names:
-        group = (
-            database_paths.get(group_name),
-            manifest_paths.get(group_name),
-            checksum_paths.get(group_name),
-        )
-        if all(path is not None and path.is_file() for path in group):
-            completed.append(database_paths[group_name])
+    if not required_fields.issubset(payload):
+        raise BackupError(f"backup manifest is missing required fields: {manifest_path}")
+    if payload["schema_version"] != _MANIFEST_SCHEMA_VERSION:
+        raise BackupError(f"unsupported backup manifest version: {manifest_path}")
+    if payload["label"] != label:
+        raise BackupError(f"backup manifest label does not match its filename: {manifest_path}")
+    if payload["backup"] != expected_backup_name:
+        raise BackupError(f"backup manifest filename does not match: {manifest_path}")
+    if not isinstance(payload["source"], str) or not payload["source"]:
+        raise BackupError(f"backup manifest source is invalid: {manifest_path}")
+    if (
+        not isinstance(payload["size_bytes"], int)
+        or isinstance(payload["size_bytes"], bool)
+        or payload["size_bytes"] < 0
+    ):
+        raise BackupError(f"backup manifest size is invalid: {manifest_path}")
+    digest = payload["sha256"]
+    if not isinstance(digest, str) or not _SHA256_PATTERN.fullmatch(digest):
+        raise BackupError(f"backup manifest checksum is invalid: {manifest_path}")
+
+    backup_path = destination / expected_backup_name
+    checksum_path = destination / f"{expected_backup_name}.sha256"
+    if not backup_path.is_file() or not checksum_path.is_file():
+        raise BackupError(f"backup manifest does not have a complete file set: {manifest_path}")
+    try:
+        actual_size = backup_path.stat().st_size
+        checksum_text = checksum_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise BackupError(f"cannot validate backup file set {backup_path}: {exc}") from exc
+    if actual_size != payload["size_bytes"]:
+        raise BackupError(f"backup size does not match its manifest: {backup_path}")
+    if checksum_text != f"{digest}  {expected_backup_name}\n":
+        raise BackupError(f"backup checksum file does not match its manifest: {checksum_path}")
+
+    created_at = _parse_created_at(payload["created_at"], manifest_path)
+    if created_at != filename_created_at:
+        raise BackupError(f"backup timestamp does not match its manifest: {manifest_path}")
+    return _CompleteBackup(
+        backup_path=backup_path,
+        manifest_path=manifest_path,
+        checksum_path=checksum_path,
+        created_at=created_at,
+    )
+
+
+def _prune_backups_locked(destination: Path, label: str, keep: int) -> tuple[str, ...]:
+    """Validate the complete target-label inventory before deleting any files."""
+
+    name_pattern = _backup_name_pattern(label)
+    related_paths: dict[str, dict[str, Path]] = {}
+    for path in destination.iterdir():
+        if not path.is_file():
             continue
+        if path.name.endswith(".sqlite3.json"):
+            backup_name = path.name.removesuffix(".json")
+            kind = "manifest"
+        elif path.name.endswith(".sqlite3.sha256"):
+            backup_name = path.name.removesuffix(".sha256")
+            kind = "checksum"
+        elif path.name.endswith(".sqlite3"):
+            backup_name = path.name
+            kind = "backup"
+        else:
+            continue
+        filename_created_at = _filename_created_at(name_pattern, backup_name)
+        if filename_created_at is None:
+            continue
+        related_paths.setdefault(backup_name, {})[kind] = path
 
-        for related_path in group:
-            if related_path is None:
-                continue
-            try:
-                related_path.unlink()
-            except FileNotFoundError:
-                continue
-            except OSError as exc:
-                raise BackupError(
-                    f"cannot remove incomplete backup file {related_path}: {exc}"
-                ) from exc
-        if group_name in database_paths:
-            removed.append(group_name)
+    completed: list[_CompleteBackup] = []
+    incomplete_paths: list[Path] = []
+    for backup_name, group in related_paths.items():
+        filename_created_at = _filename_created_at(name_pattern, backup_name)
+        if filename_created_at is None:
+            continue
+        manifest_path = group.get("manifest")
+        if manifest_path is None:
+            incomplete_paths.extend(group.values())
+            continue
+        complete_backup = _load_complete_backup(
+            destination,
+            manifest_path,
+            label=label,
+            expected_backup_name=backup_name,
+            filename_created_at=filename_created_at,
+        )
+        completed.append(complete_backup)
 
-    for backup_path in sorted(completed, reverse=True)[keep:]:
+    expired = sorted(
+        completed,
+        key=lambda item: (item.created_at, item.backup_path.name),
+        reverse=True,
+    )[keep:]
+    removed: list[str] = []
+    for path in incomplete_paths:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise BackupError(f"cannot remove incomplete backup file {path}: {exc}") from exc
+        if path.name.endswith(".sqlite3"):
+            removed.append(path.name)
+
+    for group in expired:
         for related_path in (
-            backup_path,
-            backup_path.with_suffix(backup_path.suffix + ".json"),
-            backup_path.with_suffix(backup_path.suffix + ".sha256"),
+            group.backup_path,
+            group.manifest_path,
+            group.checksum_path,
         ):
             try:
                 related_path.unlink()
@@ -213,25 +354,42 @@ def prune_backups(destination: Path, label: str, keep: int) -> tuple[str, ...]:
                 raise BackupError(
                     f"cannot remove expired backup file {related_path}: {exc}"
                 ) from exc
-        removed.append(backup_path.name)
+        removed.append(group.backup_path.name)
     return tuple(sorted(removed))
 
 
+def prune_backups(
+    destination: Path,
+    label: str,
+    keep: int,
+    *,
+    lock_timeout_seconds: float = 30.0,
+) -> tuple[str, ...]:
+    """Keep exact-label groups under a directory-wide retention lock."""
+
+    _validate_label(label)
+    if keep < 1:
+        raise BackupError("keep must be at least 1")
+    with _exclusive_file_lock(
+        destination / ".sqlite-backup-retention.lock",
+        timeout_seconds=lock_timeout_seconds,
+    ):
+        return _prune_backups_locked(destination, label, keep)
+
+
 def _remove_abandoned_temporary_files(destination: Path, label: str) -> None:
-    patterns = (
-        f".{label}-*.sqlite3.tmp",
-        f".{label}-*.sqlite3.*.tmp",
+    pattern = re.compile(
+        rf"^\.{re.escape(label)}\.backup-v1\.[A-Za-z0-9_-]+\.sqlite3\.tmp$"
     )
-    for pattern in patterns:
-        for path in destination.glob(pattern):
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                continue
-            except OSError as exc:
-                raise BackupError(
-                    f"cannot remove abandoned backup file {path}: {exc}"
-                ) from exc
+    for path in destination.glob(f".{label}.backup-v1.*.sqlite3.tmp"):
+        if not pattern.fullmatch(path.name):
+            continue
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise BackupError(f"cannot remove abandoned backup file {path}: {exc}") from exc
 
 
 def _backup_database_locked(
@@ -275,7 +433,7 @@ def _backup_database_locked(
     try:
         with tempfile.NamedTemporaryFile(
             dir=destination,
-            prefix=f".{backup_label}-",
+            prefix=f".{backup_label}.backup-v1.",
             suffix=".sqlite3.tmp",
             delete=False,
         ) as handle:
@@ -304,6 +462,7 @@ def _backup_database_locked(
         published_paths.append(backup_path)
 
         manifest_payload = {
+            "schema_version": _MANIFEST_SCHEMA_VERSION,
             "label": backup_label,
             "source": str(source),
             "backup": backup_path.name,
