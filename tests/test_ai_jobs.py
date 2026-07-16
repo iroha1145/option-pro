@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import json
 import sys
 from types import SimpleNamespace
@@ -38,6 +39,7 @@ def _settings(path):
         openai_job_lease_seconds=60,
         openai_job_max_age_seconds=86400,
         openai_job_max_queued=200,
+        openai_daily_max_jobs=4,
     )
 
 
@@ -631,6 +633,104 @@ def test_claimed_pending_cancel_cannot_be_resurrected_or_submitted(
     assert final["submission_started_at"] is None
     assert final["lease_owner"] is None
     assert calls == 0
+
+
+def test_daily_job_limit_is_reserved_atomically_before_provider_submission(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    version, digest = runtime.schema_identity("earnings_impact")
+
+    def create(ticker: str):
+        return repository.create_job(
+            job_type="earnings_impact",
+            payload={"ticker": ticker, "name": ticker},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="background",
+            prompt_version="earnings-impact-v2",
+            schema_version=version,
+            schema_sha256=digest,
+            max_queued=200,
+        )[0]
+
+    for index in range(4):
+        row = create(f"T{index}")
+        owner = f"worker-{index}"
+        claimed = repository.claim_due(owner, 60)
+        assert claimed is not None and claimed["job_id"] == row["job_id"]
+        assert repository.mark_submission_started(
+            row["job_id"], owner, daily_limit=4
+        ) is True
+        repository.fail(row["job_id"], owner, "fixture_terminal")
+
+    blocked = create("LIMIT")
+    owner = "worker-limit"
+    claimed = repository.claim_due(owner, 60)
+    assert claimed is not None and claimed["job_id"] == blocked["job_id"]
+    calls = 0
+
+    async def forbidden_submit(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        raise AssertionError("daily limit reached the provider")
+
+    monkeypatch.setattr(runtime, "submit_background", forbidden_submit)
+    asyncio.run(process_job(repository, _settings(tmp_path / "ai-jobs.db"), claimed, owner))
+
+    final = repository.get_job(blocked["job_id"])
+    assert final["status"] == "budget_blocked"
+    assert final["error_code"] == "daily_job_limit_reached"
+    assert final["submission_started_at"] is None
+    assert calls == 0
+
+
+def test_concurrent_daily_reservations_cannot_cross_the_limit(tmp_path) -> None:
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    version, digest = runtime.schema_identity("earnings_impact")
+
+    def create(ticker: str) -> dict:
+        return repository.create_job(
+            job_type="earnings_impact",
+            payload={"ticker": ticker, "name": ticker},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="background",
+            prompt_version="earnings-impact-v2",
+            schema_version=version,
+            schema_sha256=digest,
+            max_queued=200,
+        )[0]
+
+    for index in range(3):
+        row = create(f"USED{index}")
+        owner = f"used-{index}"
+        claimed = repository.claim_due(owner, 60)
+        assert claimed is not None
+        assert repository.mark_submission_started(
+            row["job_id"], owner, daily_limit=4
+        )
+        repository.fail(row["job_id"], owner, "fixture_terminal")
+
+    rows = [create("RACE1"), create("RACE2")]
+    owners = ["race-owner-1", "race-owner-2"]
+    claimed_rows = [repository.claim_due(owner, 60) for owner in owners]
+    assert all(row is not None for row in claimed_rows)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        decisions = list(
+            executor.map(
+                lambda pair: repository.mark_submission_started(
+                    pair[0]["job_id"], pair[1], daily_limit=4
+                ),
+                zip(claimed_rows, owners, strict=True),
+            )
+        )
+
+    assert sorted(decisions) == [False, True]
+    statuses = sorted(repository.get_job(row["job_id"])["status"] for row in rows)
+    assert statuses == ["budget_blocked", "in_progress"]
 
 
 def test_explicit_retry_requeues_safe_terminal_job_but_not_unknown_submission(

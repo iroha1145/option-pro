@@ -415,9 +415,48 @@ class AIJobRepository:
             connection.commit()
             return dict(claimed)
 
-    def mark_submission_started(self, job_id: str, owner: str) -> None:
-        now = _iso()
+    def mark_submission_started(
+        self,
+        job_id: str,
+        owner: str,
+        *,
+        daily_limit: int = 4,
+    ) -> bool:
+        if daily_limit < 1:
+            raise ValueError("daily_limit must be positive")
+        now_dt = _utcnow()
+        now = _iso(now_dt)
+        day_start = _iso(now_dt.replace(hour=0, minute=0, second=0, microsecond=0))
+        day_end = _iso(
+            now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            + timedelta(days=1)
+        )
         with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            submitted_today = connection.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM ai_jobs
+                WHERE submission_started_at>=? AND submission_started_at<?
+                """,
+                (day_start, day_end),
+            ).fetchone()["count"]
+            if submitted_today >= daily_limit:
+                blocked = connection.execute(
+                    """
+                    UPDATE ai_jobs
+                    SET status='budget_blocked', error_code='daily_job_limit_reached',
+                        completed_at=?, next_attempt_at=NULL,
+                        lease_owner=NULL, lease_expires_at=NULL, updated_at=?
+                    WHERE job_id=? AND lease_owner=? AND openai_response_id IS NULL
+                      AND status='pending' AND cancel_requested_at IS NULL
+                    """,
+                    (now, now, job_id, owner),
+                ).rowcount
+                connection.commit()
+                if blocked != 1:
+                    raise RuntimeError("ai_job_not_submittable")
+                return False
             updated = connection.execute(
                 """
                 UPDATE ai_jobs
@@ -434,6 +473,7 @@ class AIJobRepository:
             connection.commit()
             if updated != 1:
                 raise RuntimeError("ai_job_not_submittable")
+            return True
 
     def link_background_response(
         self,

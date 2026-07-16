@@ -256,11 +256,17 @@ async def process_job(
             return
 
         try:
-            repository.mark_submission_started(job["job_id"], owner)
+            submission_started = repository.mark_submission_started(
+                job["job_id"],
+                owner,
+                daily_limit=settings.openai_daily_max_jobs,
+            )
         except RuntimeError as exc:
             if str(exc) == "ai_job_not_submittable":
                 return
             raise
+        if not submission_started:
+            return
         submitted = True
         payload = json.loads(job["payload_json"])
         if job["execution_mode"] == "background":
