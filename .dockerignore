@@ -6,6 +6,7 @@
 .env.bak.*
 secrets.env
 secrets.env.bak.*
+.personal-operation.lock
 machine.env
 machine.env.bak.*
 migration-report.json

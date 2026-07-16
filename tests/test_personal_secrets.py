@@ -78,6 +78,20 @@ def test_option_pro_secret_allowlist_is_exact() -> None:
     assert legacy_env_adapter.SECRET_KEYS == expected
 
 
+def test_interactive_secret_input_uses_hidden_terminal_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _InteractiveInput(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    sentinel = "secret-read-through-getpass"
+    monkeypatch.setattr(personal_secrets.sys, "stdin", _InteractiveInput("echoed"))
+    monkeypatch.setattr(personal_secrets.getpass, "getpass", lambda _prompt: sentinel)
+
+    assert personal_secrets._read_secret() == sentinel
+
+
 def test_browser_settings_expose_only_option_pro_configuration_booleans(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -883,14 +897,27 @@ def test_shell_interface_never_passes_a_secret_value_to_python() -> None:
     script = (personal_secrets.REPOSITORY_ROOT / "personal.sh").read_text(
         encoding="utf-8"
     )
-    assert '"$python_bin" -m app.tools.personal_secrets "$@"' not in script
-    assert '"$python_bin" -m app.tools.personal_secrets "$command_name" "$key"' in script
+    assert "PYTHON_BIN" not in script
+    assert 'python_bin="python3"' not in script
+    assert "build --quiet backend </dev/null >/dev/null" in script
+    assert "APP_COMMIT=\"$cli_identity\" APP_VERSION=\"$cli_identity\"" in script
+    assert 'run_secret_python rw auto app.tools.personal_secrets "$command_name" "$key"' in script
+    assert 'run_secret_python ro disabled app.tools.personal_secrets "$command_name"' in script
+    assert "run_doctor" in script
+    assert '--volume "$root:/app:$mount_mode"' in script
+    assert '--user "$secret_container_user"' in script
+    assert '*name=rootless*) secret_container_user="0:0"' in script
+    assert "Docker user namespace remapping" in script
     assert "Secret values must be entered through standard input." in script
     assert "FINNHUB_API_KEY|MARKETDATA_TOKEN|INTERNAL_API_TOKEN" in script
     assert "--force-recreate" in script
     assert ' restart "${running[@]}"' not in script
     assert '"$root/scripts/compose.sh" ps' in script
     assert '"$root/scripts/compose.sh" up' in script
+    assert "--no-build --pull never" in script
+    assert "--wait --wait-timeout 180" in script
+    assert ".personal-operation.lock" in script
+    assert 'image_reference" != "option-pro:$image_commit' in script
     assert "docker compose" not in script
     assert 'export COMPOSE_ENV_FILES=".env"' not in script
     assert "app.tools.validate_personal_deployment" in script

@@ -5,8 +5,27 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 cd "$ROOT_DIR"
 umask 077
+operation_lock_dir="$ROOT_DIR/.personal-operation.lock"
+operation_lock_owned=false
 
 trap 'echo "Deployment failed at line ${LINENO}." >&2' ERR
+
+release_operation_lock() {
+    if [ "$operation_lock_owned" = true ]; then
+        rmdir "$operation_lock_dir" 2>/dev/null || true
+        operation_lock_owned=false
+    fi
+}
+
+acquire_operation_lock() {
+    if ! mkdir -m 700 "$operation_lock_dir" 2>/dev/null; then
+        echo "Another deployment or Personal command is running. If none is active, remove the stale .personal-operation.lock directory." >&2
+        return 1
+    fi
+    operation_lock_owned=true
+}
+
+trap release_operation_lock EXIT
 
 fail() {
     echo "$1" >&2
@@ -180,6 +199,7 @@ verify_worker() {
 }
 
 main() {
+    acquire_operation_lock
     require_tools
     prepare_runtime_files
     release_identity

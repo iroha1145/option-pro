@@ -140,6 +140,26 @@ jobs:
           ./scripts/compose.sh run --rm --no-deps -T backend
           python -m app.tools.validate_personal_deployment
 
+      - name: Exercise container-backed Personal CLI
+        shell: bash
+        run: |
+          ./personal.sh doctor
+          test_value="ci-personal-cli-token-not-a-secret"
+          printf '%s\n' "$test_value" |
+            ./personal.sh secrets set MARKETDATA_TOKEN >/tmp/personal-set.json
+          report="$(./personal.sh secrets status)"
+          case "$report" in *"$test_value"*) exit 1 ;; esac
+          REPORT="$report" python - <<'PY'
+          import json
+          import os
+
+          report = json.loads(os.environ["REPORT"])
+          assert report["MARKETDATA_TOKEN"] == {"configured": True}
+          PY
+          test "$(stat -c '%a' secrets.env)" = "600"
+          ./personal.sh secrets remove MARKETDATA_TOKEN >/tmp/personal-remove.json
+          rm -f secrets.env secrets.env.bak.* .secrets.env.lock
+
       - name: Start backend and unified worker
         run: ./scripts/compose.sh up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180
 

@@ -18,6 +18,7 @@ import urllib.request
 
 
 SNAPSHOT_VERSION = 1
+SNAPSHOT_PARAMETERS = {"tickers": None}
 SNAPSHOT_MAX_BYTES = 2 * 1024 * 1024
 SNAPSHOT_MAX_AGE_SECONDS = 24 * 60 * 60
 WATCHLIST_URL = "http://127.0.0.1:8000/api/stocks/watchlist"
@@ -159,6 +160,7 @@ def read_existing_snapshot(path: Path, *, now: float) -> dict[str, Any] | None:
             isinstance(version, bool)
             or not isinstance(version, int)
             or version != SNAPSHOT_VERSION
+            or document.get("parameters") != SNAPSHOT_PARAMETERS
             or isinstance(saved_at, bool)
             or not isinstance(saved_at, (int, float))
             or not math.isfinite(float(saved_at))
@@ -184,7 +186,12 @@ def write_snapshot(path: Path, *, payload: Any, saved_at: float) -> None:
     if path.is_symlink():
         raise ValueError("watchlist snapshot path must not be a symlink")
     encoded = json.dumps(
-        {"version": SNAPSHOT_VERSION, "saved_at": saved_at, "payload": cleaned},
+        {
+            "version": SNAPSHOT_VERSION,
+            "saved_at": saved_at,
+            "parameters": SNAPSHOT_PARAMETERS,
+            "payload": cleaned,
+        },
         allow_nan=False,
         ensure_ascii=False,
         separators=(",", ":"),

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib.util
+import json
 import os
 import shutil
 import stat
@@ -10,6 +12,7 @@ from pathlib import Path
 import pytest
 from dotenv import dotenv_values
 
+from app.api import stocks
 from app.tools import personal_secrets
 
 
@@ -198,6 +201,7 @@ def _deployment_root(
     shutil.copy2(ROOT / "scripts" / "deploy.sh", scripts / "deploy.sh")
     shutil.copy2(ROOT / "scripts" / "compose.sh", scripts / "compose.sh")
     shutil.copy2(ROOT / "docker-compose.yml", root / "docker-compose.yml")
+    shutil.copy2(ROOT / ".gitignore", root / ".gitignore")
     (root / ".env").write_text(
         (ROOT / ".env.example").read_text(encoding="utf-8"),
         encoding="utf-8",
@@ -316,6 +320,29 @@ def test_deploy_validates_with_built_runtime_when_host_python_lacks_dependencies
         "verify-worker",
     ]
     assert "ModuleNotFoundError" not in result.stdout + result.stderr
+
+
+def test_deploy_and_personal_commands_share_one_operation_lock(tmp_path: Path) -> None:
+    root, environment = _deployment_root(tmp_path)
+    shutil.copy2(ROOT / "personal.sh", root / "personal.sh")
+    (root / ".personal-operation.lock").mkdir(mode=0o700)
+
+    deploy_result = _run_deploy(root, environment)
+    personal_result = subprocess.run(
+        ["bash", "personal.sh", "doctor"],
+        cwd=root,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert deploy_result.returncode != 0
+    assert personal_result.returncode != 0
+    for result in (deploy_result, personal_result):
+        assert "Another deployment or Personal command is running" in result.stderr
+    assert not (root / ".fake-order").exists()
 
 
 @pytest.mark.parametrize("staged", (False, True))
@@ -1077,20 +1104,49 @@ def test_secret_cli_recreates_only_affected_running_services(
     (root / "machine.env").write_text("", encoding="utf-8")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    python = bin_dir / "python"
-    python.write_text(
-        "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$FAKE_PYTHON_ARGS\"\ncat >/dev/null\n",
+    host_python = tmp_path / "host-python"
+    host_python.write_text(
+        "#!/usr/bin/env bash\nprintf 'called\\n' > \"$FAKE_HOST_PYTHON_LOG\"\nexit 1\n",
         encoding="utf-8",
     )
-    python.chmod(0o755)
+    host_python.chmod(0o755)
     docker = bin_dir / "docker"
     docker.write_text(
         """#!/usr/bin/env bash
 set -euo pipefail
+if [ "$1" = info ]; then printf '[]\n'; exit 0; fi
+if [ "$1" = inspect ]; then
+    case "$*" in
+        *'{{.Config.Image}}'*) printf 'option-pro:runtime-commit\n' ;;
+        *'{{.Image}}'*) printf 'sha256:runtime-image\n' ;;
+        *) exit 2 ;;
+    esac
+    exit 0
+fi
+if [ "$1" = image ] && [ "${2:-}" = inspect ]; then
+    case "$*" in
+        *org.opencontainers.image.revision*) printf 'runtime-commit\n' ;;
+        *org.opencontainers.image.version*) printf 'runtime-version\n' ;;
+        *'{{.Id}}'*) printf 'sha256:runtime-image\n' ;;
+        *) exit 2 ;;
+    esac
+    exit 0
+fi
 [ "$1" = compose ] || exit 2
 shift
-if [ "${1:-}" = -f ]; then shift 2; fi
+printf '%s\n' "$*" >> "$FAKE_DOCKER_ARGS"
+printf '%s|%s|%s\n' "${APP_COMMIT:-}" "${APP_VERSION:-}" "$*" >> "$FAKE_COMPOSE_IDENTITIES"
 case "${1:-}" in
+    build)
+        if IFS= read -r _unexpected; then
+            printf 'build-read-stdin\n' > "$FAKE_BUILD_STDIN_LOG"
+            exit 9
+        fi
+        ;;
+    run)
+        byte_count="$(wc -c | tr -d '[:space:]')"
+        printf 'run-stdin-bytes=%s\n' "$byte_count" > "$FAKE_RUN_STDIN_LOG"
+        ;;
     ps) printf 'running-container\n' ;;
     up) shift; printf '%s\n' "$*" > "$FAKE_RECREATE_LOG" ;;
     *) exit 2 ;;
@@ -1103,8 +1159,12 @@ esac
     environment.update(
         {
             "PATH": f"{bin_dir}{os.pathsep}{environment['PATH']}",
-            "PYTHON_BIN": str(python),
-            "FAKE_PYTHON_ARGS": str(tmp_path / "python-args"),
+            "PYTHON_BIN": str(host_python),
+            "FAKE_HOST_PYTHON_LOG": str(tmp_path / "host-python-log"),
+            "FAKE_DOCKER_ARGS": str(tmp_path / "docker-args"),
+            "FAKE_COMPOSE_IDENTITIES": str(tmp_path / "compose-identities"),
+            "FAKE_BUILD_STDIN_LOG": str(tmp_path / "build-stdin-log"),
+            "FAKE_RUN_STDIN_LOG": str(tmp_path / "run-stdin-log"),
             "FAKE_RECREATE_LOG": str(tmp_path / "recreate-log"),
         }
     )
@@ -1123,13 +1183,34 @@ esac
 
     assert result.returncode == 0, result.stderr
     assert (tmp_path / "recreate-log").read_text(encoding="utf-8").strip() == (
-        f"-d --no-deps --force-recreate {expected_services}"
+        "-d --no-deps --no-build --pull never --force-recreate "
+        f"--wait --wait-timeout 180 {expected_services}"
     )
-    assert secret not in (tmp_path / "python-args").read_text(encoding="utf-8")
+    docker_args = (tmp_path / "docker-args").read_text(encoding="utf-8")
+    assert "build --quiet backend" in docker_args
+    assert f"--volume {root}:/app:rw" in docker_args
+    assert "--workdir /app/backend" in docker_args
+    assert f"app.tools.personal_secrets set {key}" in docker_args
+    secret_run = next(
+        line for line in docker_args.splitlines() if "app.tools.personal_secrets" in line
+    )
+    assert " -T " not in f" {secret_run} "
+    assert secret not in docker_args
+    compose_identities = (tmp_path / "compose-identities").read_text(
+        encoding="utf-8"
+    )
+    assert "personal-cli|personal-cli|build --quiet backend" in compose_identities
+    assert "personal-cli|personal-cli|run --pull never" in compose_identities
+    assert "runtime-commit|runtime-version|up -d" in compose_identities
+    assert not (tmp_path / "build-stdin-log").exists()
+    assert (tmp_path / "run-stdin-log").read_text(encoding="utf-8").strip() == (
+        f"run-stdin-bytes={len(secret) + 1}"
+    )
+    assert not (tmp_path / "host-python-log").exists()
     assert secret not in result.stdout + result.stderr
 
 
-def test_secret_cli_skips_container_restart_when_machine_file_is_missing(
+def test_secret_cli_fails_before_container_when_machine_file_is_missing(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "option-pro"
@@ -1144,12 +1225,6 @@ def test_secret_cli_skips_container_restart_when_machine_file_is_missing(
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    python = bin_dir / "python"
-    python.write_text(
-        "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$FAKE_PYTHON_ARGS\"\ncat >/dev/null\n",
-        encoding="utf-8",
-    )
-    python.chmod(0o755)
     docker = bin_dir / "docker"
     docker.write_text(
         "#!/usr/bin/env bash\nprintf 'called\\n' > \"$FAKE_DOCKER_LOG\"\n",
@@ -1160,8 +1235,6 @@ def test_secret_cli_skips_container_restart_when_machine_file_is_missing(
     environment.update(
         {
             "PATH": f"{bin_dir}{os.pathsep}{environment['PATH']}",
-            "PYTHON_BIN": str(python),
-            "FAKE_PYTHON_ARGS": str(tmp_path / "python-args"),
             "FAKE_DOCKER_LOG": str(tmp_path / "docker-log"),
         }
     )
@@ -1177,9 +1250,275 @@ def test_secret_cli_skips_container_restart_when_machine_file_is_missing(
         timeout=10,
     )
 
-    assert result.returncode == 0, result.stderr
-    assert (tmp_path / "python-args").exists()
+    assert result.returncode != 0
+    assert "machine.env is missing" in result.stderr
     assert not (tmp_path / "docker-log").exists()
+
+
+@pytest.mark.parametrize(
+    (
+        "arguments",
+        "module_arguments",
+        "security_options",
+        "expected_user",
+        "expected_returncode",
+    ),
+    [
+        (["doctor"], "app.tools.validate_personal_deployment", "[]", None, 0),
+        (
+            ["secrets", "status"],
+            "app.tools.personal_secrets status",
+            "[]",
+            f"{os.getuid()}:{os.getgid()}",
+            0,
+        ),
+        (
+            ["secrets", "validate"],
+            "app.tools.personal_secrets validate",
+            "[]",
+            f"{os.getuid()}:{os.getgid()}",
+            0,
+        ),
+        (
+            ["secrets", "status"],
+            "app.tools.personal_secrets status",
+            '["name=rootless"]',
+            "0:0",
+            0,
+        ),
+        (
+            ["secrets", "status"],
+            "app.tools.personal_secrets status",
+            '["name=userns"]',
+            None,
+            1,
+        ),
+    ],
+)
+def test_personal_read_commands_use_the_container_runtime_without_host_packages(
+    tmp_path: Path,
+    arguments: list[str],
+    module_arguments: str,
+    security_options: str,
+    expected_user: str | None,
+    expected_returncode: int,
+) -> None:
+    root = tmp_path / "option-pro"
+    (root / "scripts").mkdir(parents=True)
+    for source, destination in (
+        (ROOT / "personal.sh", root / "personal.sh"),
+        (ROOT / "docker-compose.yml", root / "docker-compose.yml"),
+        (ROOT / "scripts" / "compose.sh", root / "scripts" / "compose.sh"),
+    ):
+        shutil.copy2(source, destination)
+    (root / ".env").write_text("", encoding="utf-8")
+    (root / "machine.env").write_text("", encoding="utf-8")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    host_python = tmp_path / "host-python"
+    host_python.write_text(
+        "#!/usr/bin/env bash\nprintf 'called\\n' > \"$FAKE_HOST_PYTHON_LOG\"\nexit 1\n",
+        encoding="utf-8",
+    )
+    host_python.chmod(0o755)
+    docker = bin_dir / "docker"
+    docker.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1" = info ]; then printf '%s\n' "$FAKE_SECURITY_OPTIONS"; exit 0; fi
+[ "$1" = compose ] || exit 2
+shift
+printf '%s\n' "$*" >> "$FAKE_DOCKER_ARGS"
+case "${1:-}" in
+    build)
+        if IFS= read -r _unexpected; then exit 9; fi
+        ;;
+    run)
+        cat >/dev/null
+        printf '{"container_cli":true}\n'
+        ;;
+    *) exit 2 ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    docker.chmod(0o755)
+    environment = _isolated_environment()
+    environment.update(
+        {
+            "PATH": f"{bin_dir}{os.pathsep}{environment['PATH']}",
+            "PYTHON_BIN": str(host_python),
+            "FAKE_HOST_PYTHON_LOG": str(tmp_path / "host-python-log"),
+            "FAKE_DOCKER_ARGS": str(tmp_path / "docker-args"),
+            "FAKE_SECURITY_OPTIONS": security_options,
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", "personal.sh", *arguments],
+        cwd=root,
+        env=environment,
+        input="",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == expected_returncode, result.stderr
+    docker_args = (tmp_path / "docker-args").read_text(encoding="utf-8")
+    assert "build --quiet backend" in docker_args
+    if expected_returncode != 0:
+        assert "Docker user namespace remapping" in result.stderr
+        assert module_arguments not in docker_args
+        assert result.stdout == ""
+        return
+    if arguments == ["doctor"]:
+        assert ":/app:ro" not in docker_args
+    else:
+        assert f"--volume {root}:/app:ro" in docker_args
+        assert "--workdir /app/backend" in docker_args
+        assert f"--user {expected_user}" in docker_args
+    assert module_arguments in docker_args
+    assert " -T " in f" {docker_args.splitlines()[-1]} "
+    assert not (tmp_path / "host-python-log").exists()
+    assert result.stdout.strip() == '{"container_cli":true}'
+
+
+def test_secret_cli_does_not_recreate_services_after_container_failure(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "option-pro"
+    (root / "scripts").mkdir(parents=True)
+    for source, destination in (
+        (ROOT / "personal.sh", root / "personal.sh"),
+        (ROOT / "docker-compose.yml", root / "docker-compose.yml"),
+        (ROOT / "scripts" / "compose.sh", root / "scripts" / "compose.sh"),
+    ):
+        shutil.copy2(source, destination)
+    (root / ".env").write_text("", encoding="utf-8")
+    (root / "machine.env").write_text("", encoding="utf-8")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1" = info ]; then printf '[]\n'; exit 0; fi
+[ "$1" = compose ] || exit 2
+shift
+case "${1:-}" in
+    build) if IFS= read -r _unexpected; then exit 9; fi ;;
+    run) cat >/dev/null; exit 7 ;;
+    ps) : ;;
+    up) printf 'unexpected-recreate\n' > "$FAKE_RECREATE_LOG" ;;
+    *) exit 2 ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    docker.chmod(0o755)
+    environment = _isolated_environment()
+    environment.update(
+        {
+            "PATH": f"{bin_dir}{os.pathsep}{environment['PATH']}",
+            "FAKE_RECREATE_LOG": str(tmp_path / "recreate-log"),
+        }
+    )
+    secret = "secret-value-never-printed"
+
+    result = subprocess.run(
+        ["bash", "personal.sh", "secrets", "set", "OPENAI_API_KEY"],
+        cwd=root,
+        env=environment,
+        input=f"{secret}\n",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 7
+    assert not (tmp_path / "recreate-log").exists()
+    assert secret not in result.stdout + result.stderr
+
+
+def test_secret_cli_checks_running_image_identity_before_mutating(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "option-pro"
+    (root / "scripts").mkdir(parents=True)
+    for source, destination in (
+        (ROOT / "personal.sh", root / "personal.sh"),
+        (ROOT / "docker-compose.yml", root / "docker-compose.yml"),
+        (ROOT / "scripts" / "compose.sh", root / "scripts" / "compose.sh"),
+    ):
+        shutil.copy2(source, destination)
+    (root / ".env").write_text("", encoding="utf-8")
+    (root / "machine.env").write_text("", encoding="utf-8")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1" = info ]; then printf '[]\n'; exit 0; fi
+if [ "$1" = inspect ]; then
+    case "$*" in
+        *'{{.Config.Image}}'*) printf 'option-pro:moved-tag\n' ;;
+        *'{{.Image}}'*) printf 'sha256:runtime-image\n' ;;
+        *) exit 2 ;;
+    esac
+    exit 0
+fi
+if [ "$1" = image ] && [ "${2:-}" = inspect ]; then
+    case "$*" in
+        *org.opencontainers.image.revision*) printf 'runtime-commit\n' ;;
+        *org.opencontainers.image.version*) printf 'runtime-version\n' ;;
+        *'{{.Id}}'*) printf 'sha256:runtime-image\n' ;;
+        *) exit 2 ;;
+    esac
+    exit 0
+fi
+[ "$1" = compose ] || exit 2
+shift
+case "${1:-}" in
+    build) if IFS= read -r _unexpected; then exit 9; fi ;;
+    ps) printf 'running-container\n' ;;
+    run) printf 'unexpected-run\n' > "$FAKE_RUN_LOG" ;;
+    *) exit 2 ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    docker.chmod(0o755)
+    environment = _isolated_environment()
+    environment.update(
+        {
+            "PATH": f"{bin_dir}{os.pathsep}{environment['PATH']}",
+            "FAKE_RUN_LOG": str(tmp_path / "run-log"),
+        }
+    )
+    secret = "secret-never-reaches-container"
+
+    result = subprocess.run(
+        ["bash", "personal.sh", "secrets", "set", "OPENAI_API_KEY"],
+        cwd=root,
+        env=environment,
+        input=f"{secret}\n",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode != 0
+    assert "no longer matches its immutable local image" in result.stderr
+    assert not (tmp_path / "run-log").exists()
+    assert secret not in result.stdout + result.stderr
 
 
 def test_watchlist_snapshot_uses_the_shared_data_directory_without_auth_tokens(
@@ -1203,6 +1542,61 @@ def test_watchlist_snapshot_uses_the_shared_data_directory_without_auth_tokens(
     )
     assert result.returncode == 2
     assert "DATA_DIR must be an absolute path" in result.stderr
+
+
+def test_watchlist_snapshot_helper_writes_the_backend_contract(tmp_path: Path) -> None:
+    script = ROOT / "scripts" / "watchlist_snapshot.py"
+    specification = importlib.util.spec_from_file_location(
+        "watchlist_snapshot_helper",
+        script,
+    )
+    assert specification is not None and specification.loader is not None
+    helper = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(helper)
+
+    snapshot = tmp_path / "watchlist-snapshot-v1.json"
+    payload = {
+        "groups": [
+            {
+                "id": "core",
+                "name": "Core",
+                "stocks": [
+                    {
+                        "ticker": "AAPL",
+                        "name": "Apple",
+                        "price": 100.0,
+                        "change_percent": 1.0,
+                        "spark": [99.0, 100.0],
+                    }
+                ],
+            }
+        ],
+        "succeeded": 1,
+    }
+    helper.write_snapshot(snapshot, payload=payload, saved_at=100_000.0)
+
+    document = json.loads(snapshot.read_text(encoding="utf-8"))
+    assert document["parameters"] == {"tickers": None}
+    assert stocks._read_watchlist_snapshot(snapshot, now=100_001.0) is not None
+
+    for invalid_parameters in (None, {"tickers": ["AAPL"]}):
+        invalid_document = dict(document)
+        if invalid_parameters is None:
+            invalid_document.pop("parameters")
+        else:
+            invalid_document["parameters"] = invalid_parameters
+        snapshot.write_text(json.dumps(invalid_document), encoding="utf-8")
+        assert helper.read_existing_snapshot(snapshot, now=100_001.0) is None
+        result = subprocess.run(
+            [sys.executable, str(script), "validate"],
+            env={**_isolated_environment(), "DATA_DIR": str(tmp_path)},
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 1
+        assert "shared watchlist snapshot is missing or invalid" in result.stderr
 
 
 def test_shell_entrypoints_stay_small_and_syntax_is_valid() -> None:
