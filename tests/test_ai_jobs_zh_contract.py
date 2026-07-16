@@ -217,6 +217,10 @@ def test_market_focus_requires_a_timezone_aware_as_of():
     [
         "US stocks rally after earnings beat expectations",
         "美國科技股上漲",
+        "蘋果公司推出新品",
+        "市場關注聯準會利率與企業財報",
+        "臺灣供應鏈營運與庫存壓力升高",
+        "該公司預計擴大產能並調整價格",
     ],
 )
 def test_news_title_rejects_english_prose_and_traditional_chinese(title):
@@ -242,8 +246,33 @@ def test_chinese_text_allows_tickers_and_necessary_foreign_proper_names():
 
 
 @pytest.mark.parametrize(
+    "title",
+    [
+        "著名公司发布新品",
+        "乾照光电发布业绩公告",
+        "覆盘显示芯片需求回升",
+        "研究覆盖主要半导体公司",
+    ],
+)
+def test_unihan_self_mapped_characters_remain_valid_in_simplified_contexts(title):
+    result = _news_result()
+    result["title_zh"] = title
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        _news_payload(),
+    )
+    assert validated["title_zh"] == title
+
+
+@pytest.mark.parametrize(
     "mixed_prose",
     [
+        "Breaking 苹果公司发布新品",
+        "Breaking苹果公司发布新品",
+        "Update 苹果公司发布新品",
+        "苹果公司 reports 新品",
+        "英伟达launches新品",
         "新闻称 shares rose after earnings",
         "英伟达 reports strong growth now",
         "NVIDIA launches new chip 新品",

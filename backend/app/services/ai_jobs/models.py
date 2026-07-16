@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Annotated, Any, Literal, Optional
 
 from pydantic import (
@@ -46,30 +48,74 @@ Ticker = Annotated[
 BoundedText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
 
 
-# This is intentionally a deterministic gate, not a language guesser. It
-# catches common Traditional Chinese output and prose that is wholly English,
-# while still allowing tickers and foreign proper names inside Chinese text.
-_TRADITIONAL_ONLY = frozenset(
+# This is intentionally a deterministic gate, not a language guesser. Unicode
+# supplies the broad character conflicts, while this short supplement covers
+# common regional orthography that Unihan does not model as simplification.
+_UNIHAN_CONFLICT_PATH = (
+    Path(__file__).with_name("data") / "unihan_17_traditional_conflicts.txt"
+)
+_UNIHAN_CONFLICT_COUNT = 6498
+_UNIHAN_CONFLICT_SHA256 = (
+    "a158ff7730d734ebfe0f11d3062ac1921ab4831c6adf348943b1001d4642f80f"
+)
+
+
+def _load_unihan_traditional_conflicts() -> frozenset[str]:
+    try:
+        lines = _UNIHAN_CONFLICT_PATH.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise RuntimeError("unihan_traditional_conflicts_unavailable") from exc
+    payload = "".join(
+        line.strip() for line in lines if line.strip() and not line.startswith("#")
+    )
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    conflicts = frozenset(payload)
+    if (
+        len(payload) != _UNIHAN_CONFLICT_COUNT
+        or len(conflicts) != _UNIHAN_CONFLICT_COUNT
+        or digest != _UNIHAN_CONFLICT_SHA256
+    ):
+        raise RuntimeError("unihan_traditional_conflicts_invalid")
+    return conflicts
+
+
+_COMMON_TRADITIONAL_ORTHOGRAPHY = frozenset(
     "國體門學會發現後裡這個為與從將時點對於還來說們種過經產業機構"
     "標題聞報導總結風險關係響應該買賣價倉損獲臺萬億區網絡據礎緩趨"
     "勢優壓調查變動預測資訊財務貨幣聯儲聲稱達較啟動釋義參與並專業"
     "實確層級類別開閉觀強週數術語態處輸備註認證權錯誤歷紀錄單雙長"
     "線選擇債證監則總廣穩顯導衝擊隱憂競爭併購營運減擴張訊號圖錶檔"
-    "雲軟記憶頁鏈轉換維護"
+    "雲軟記憶頁鏈轉換維護佔佈週祕"
+)
+_TRADITIONAL_ONLY = (
+    _load_unihan_traditional_conflicts() | _COMMON_TRADITIONAL_ORTHOGRAPHY
 )
 _SENTENCE_SPLIT = re.compile(r"[。！？!?；;\n]+")
 _LATIN_WORD = re.compile(r"[A-Za-z][A-Za-z'-]*")
 _TICKER_OR_CODE_WORD = re.compile(r"(?:[A-Z]{1,12}|[A-Za-z]*\d[A-Za-z0-9-]*)")
+_NECESSARY_FOREIGN_PROPER_NAMES = frozenset({"Blackwell"})
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+
+_CJK_RANGES = (
+    (0x3400, 0x4DBF),
+    (0x4E00, 0x9FFF),
+    (0xF900, 0xFAFF),
+    (0x20000, 0x2A6DF),
+    (0x2A700, 0x2B73F),
+    (0x2B740, 0x2B81F),
+    (0x2B820, 0x2CEAF),
+    (0x2CEB0, 0x2EBEF),
+    (0x2EBF0, 0x2EE5F),
+    (0x2F800, 0x2FA1F),
+    (0x30000, 0x3134F),
+    (0x31350, 0x323AF),
+    (0x323B0, 0x3347F),
+)
 
 
 def _is_cjk(char: str) -> bool:
     codepoint = ord(char)
-    return (
-        0x3400 <= codepoint <= 0x4DBF
-        or 0x4E00 <= codepoint <= 0x9FFF
-        or 0xF900 <= codepoint <= 0xFAFF
-    )
+    return any(start <= codepoint <= end for start, end in _CJK_RANGES)
 
 
 def validate_simplified_chinese_text(value: str) -> str:
@@ -88,16 +134,12 @@ def validate_simplified_chinese_text(value: str) -> str:
     if latin_count > max(32, cjk_count * 4):
         raise ValueError("english_prose_not_allowed")
     for sentence in _SENTENCE_SPLIT.split(text):
-        latin_words = _LATIN_WORD.findall(sentence)
-        prose_words = [
-            word
-            for word in latin_words
-            if _TICKER_OR_CODE_WORD.fullmatch(word) is None
-        ]
-        # One foreign product or company name can be necessary inside Chinese
-        # prose. Two or more ordinary Latin words are treated as an English
-        # fragment, even when a few Chinese characters were appended to it.
-        if len(prose_words) >= 2:
+        for match in _LATIN_WORD.finditer(sentence):
+            word = match.group(0)
+            if _TICKER_OR_CODE_WORD.fullmatch(word) is not None:
+                continue
+            if word in _NECESSARY_FOREIGN_PROPER_NAMES:
+                continue
             raise ValueError("english_prose_not_allowed")
         sentence_latin = sum(
             1 for char in sentence if char.isascii() and char.isalpha()
