@@ -10,6 +10,7 @@ from typing import Any, Iterable
 
 import pytest
 
+from app.services.ai_jobs import repository as ai_jobs_repository_module
 from app.services.ai_jobs.repository import AIJobRepository
 from app.services.catalysts import local_intelligence as local_module
 from app.services.catalysts.errors import CatalystError
@@ -1546,8 +1547,10 @@ def test_completed_news_force_creates_immutable_minute_revisions(
     monkeypatch,
 ):
     etl, ai, intelligence = _stack(tmp_path)
-    first_now = datetime(2026, 7, 16, 12, 0, tzinfo=timezone.utc)
-    monkeypatch.setattr(local_module, "_utc_now", lambda: first_now)
+    clock = {"now": datetime(2026, 7, 16, 12, 0, tzinfo=timezone.utc)}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    monkeypatch.setattr(ai_jobs_repository_module, "_utcnow", lambda: clock["now"])
+    first_now = clock["now"]
     _apply_news(
         etl,
         [_news_change(1, 181, available_at=first_now - timedelta(minutes=10))],
@@ -1563,7 +1566,7 @@ def test_completed_news_force_creates_immutable_minute_revisions(
     intelligence.reconcile()
 
     force_now = first_now + timedelta(minutes=1)
-    monkeypatch.setattr(local_module, "_utc_now", lambda: force_now)
+    clock["now"] = force_now
     forced = intelligence.request_analysis(181, force=True)
     duplicate = intelligence.request_analysis(181, force=True)
     assert duplicate["job_id"] == forced["job_id"]
@@ -1575,11 +1578,7 @@ def test_completed_news_force_creates_immutable_minute_revisions(
     )
     intelligence.reconcile()
 
-    monkeypatch.setattr(
-        local_module,
-        "_utc_now",
-        lambda: force_now + timedelta(minutes=1),
-    )
+    clock["now"] = force_now + timedelta(minutes=1)
     next_revision = intelligence.request_analysis(181, force=True)
     assert next_revision["job_id"] != forced["job_id"]
     assert _job_payload(ai, next_revision["job_id"])["analysis_revision"] == 3
