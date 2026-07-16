@@ -463,6 +463,34 @@ def test_job_dedupe_is_persistent_and_public_shape_hides_response_id(tmp_path):
     assert public["reasoning"] == "max"
 
 
+def test_job_dedupe_precedes_saturated_queue_capacity_check(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    first, created = _create_earnings_job(repository)
+    version, digest = runtime.schema_identity("earnings_impact")
+
+    duplicate, created_again = repository.create_job(
+        job_type="earnings_impact",
+        payload={"ticker": "AAPL", "name": "Apple"},
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="earnings-impact-v2",
+        schema_version=version,
+        schema_sha256=digest,
+        max_queued=1,
+    )
+
+    assert created is True
+    assert created_again is False
+    assert duplicate["job_id"] == first["job_id"]
+    with repository._connect() as connection:
+        assert connection.execute(
+            """SELECT COUNT(*) FROM ai_jobs
+               WHERE status IN ('pending','queued','in_progress')"""
+        ).fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0] == 1
+
+
 def test_job_identity_rejects_sync_mode_and_migrates_legacy_hash(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     background, created = _create_earnings_job(repository)

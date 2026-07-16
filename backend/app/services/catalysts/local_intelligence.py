@@ -2031,7 +2031,12 @@ class LocalCatalystIntelligence:
                            ORDER BY created_at LIMIT 1"""
                     ).fetchone()
                     if active is not None:
-                        resume_cycle_id = str(active["cycle_id"])
+                        raise CatalystError(
+                            "analysis_in_progress",
+                            "已有市场焦点分析正在运行",
+                            retryable=True,
+                            counts_for_circuit=False,
+                        )
                     else:
                         revision_count = int(
                             connection.execute(

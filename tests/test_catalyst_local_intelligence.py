@@ -778,7 +778,7 @@ def test_scheduled_mode_uses_eastern_slots_once_and_queues_focus(tmp_path, monke
 
 
 def test_hotspot_and_latest_focus_reads_respect_historical_as_of(tmp_path, monkeypatch):
-    etl, _ai, intelligence = _stack(tmp_path)
+    etl, ai, intelligence = _stack(tmp_path)
     first_now = datetime(2026, 7, 15, 12, 0, tzinfo=timezone.utc)
     monkeypatch.setattr(local_module, "_utc_now", lambda: first_now)
     _apply_news(
@@ -790,6 +790,8 @@ def test_hotspot_and_latest_focus_reads_respect_historical_as_of(tmp_path, monke
     first_cycle = intelligence.request_market_focus_cycle(
         expected_prepared_revision=first_revision
     )
+    _finish_job(ai, first_cycle["job_id"], _focus_result(ai, first_cycle))
+    intelligence.reconcile()
 
     second_now = first_now + timedelta(hours=2)
     monkeypatch.setattr(local_module, "_utc_now", lambda: second_now)
@@ -815,6 +817,79 @@ def test_hotspot_and_latest_focus_reads_respect_historical_as_of(tmp_path, monke
     assert intelligence.latest_market_focus_cycle(now=second_now + timedelta(minutes=1))[
         "cycle"
     ]["cycle_id"] == second_cycle["cycle_id"]
+
+
+def test_active_focus_cycle_only_reuses_the_same_prepared_revision(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    first_now = datetime(2026, 7, 15, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: first_now)
+    _apply_news(
+        etl,
+        [_news_change(1, 93, available_at=first_now - timedelta(minutes=10))],
+        as_of=first_now - timedelta(minutes=9),
+    )
+    first_revision = intelligence.reconcile()["prepared_revision"]
+    first_cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=first_revision
+    )
+
+    duplicate = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=first_revision
+    )
+
+    assert duplicate["cycle_id"] == first_cycle["cycle_id"]
+    assert duplicate["job_id"] == first_cycle["job_id"]
+
+    second_now = first_now + timedelta(hours=2)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: second_now)
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                2,
+                94,
+                available_at=second_now - timedelta(minutes=1),
+                tickers=("AMD",),
+            )
+        ],
+        as_of=second_now,
+    )
+    second_revision = intelligence.reconcile()["prepared_revision"]
+    assert second_revision != first_revision
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        focus_count_before = connection.execute(
+            "SELECT COUNT(*) FROM catalyst_local_focus_cycles"
+        ).fetchone()[0]
+    with sqlite3.connect(ai.path) as connection:
+        job_count_before = connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs"
+        ).fetchone()[0]
+
+    with pytest.raises(CatalystError) as caught:
+        intelligence.request_market_focus_cycle(
+            expected_prepared_revision=second_revision
+        )
+
+    assert caught.value.code == "analysis_in_progress"
+    assert caught.value.message == "已有市场焦点分析正在运行"
+    assert caught.value.retryable is True
+    with sqlite3.connect(intelligence.db_path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM catalyst_local_focus_cycles"
+        ).fetchone()[0] == focus_count_before
+        assert connection.execute(
+            "SELECT COUNT(*) FROM catalyst_local_focus_cycles WHERE prepared_revision=?",
+            (second_revision,),
+        ).fetchone()[0] == 0
+    with sqlite3.connect(ai.path) as connection:
+        assert (
+            connection.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0]
+            == job_count_before
+        )
 
 
 def test_reconcile_audits_same_database_legacy_rows_and_requires_current_identity(

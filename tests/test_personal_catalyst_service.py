@@ -638,6 +638,42 @@ def test_analysis_queue_full_returns_429_with_retry_after(
     }
 
 
+def test_active_market_focus_cycle_returns_409_with_safe_chinese_message() -> None:
+    class ActiveFocusIntelligence(FakeIntelligence):
+        def request_market_focus_cycle(
+            self,
+            *,
+            expected_prepared_revision,
+            retry_cycle_id=None,
+        ):
+            raise CatalystError(
+                "analysis_in_progress",
+                "已有市场焦点分析正在运行",
+                retryable=True,
+                counts_for_circuit=False,
+            )
+
+    service = _service("manual", engine=ActiveFocusIntelligence())
+    app = FastAPI()
+    app.include_router(catalyst_api.router)
+    app.dependency_overrides[catalyst_api._service] = lambda: service
+    app.dependency_overrides[catalyst_api.require_expensive_action] = lambda: None
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/catalysts/market-focus-cycles",
+        json={"expected_prepared_revision": 3},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "analysis_in_progress",
+        "message": "已有市场焦点分析正在运行",
+        "retryable": True,
+        "retry_after": None,
+    }
+
+
 @pytest.mark.parametrize(
     "path",
     (
