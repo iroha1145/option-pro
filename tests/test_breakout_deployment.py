@@ -160,8 +160,8 @@ def test_worker_is_isolated_and_has_an_independent_healthcheck() -> None:
     assert "OPENAI_API_KEY" not in worker
     assert "APP_AUTH_TOKEN" not in worker
     assert "build:" not in worker
-    assert "BREAKOUT_RADAR_ENABLED=${BREAKOUT_RADAR_ENABLED:-false}" in worker
-    assert "python -m app.services.breakouts.worker" in worker
+    assert "BREAKOUT_RADAR_ENABLED=" not in worker
+    assert "- python\n      - -m\n      - app.services.breakouts.worker" in worker
     assert '"--healthcheck"' in worker
     assert "healthcheck:" in worker
 

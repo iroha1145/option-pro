@@ -134,7 +134,7 @@ jobs:
           grep -qi '^content-encoding: gzip' /tmp/optix-static.headers
           grep -qi '^cache-control:.*max-age=300' /tmp/optix-static.headers
           curl --fail --silent --show-error http://127.0.0.1:2000/api/breakouts/status |
-            python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "disabled"; assert p["enabled"] is False; assert p["range_persistence_mode"] == "shadow"'
+            python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] != "disabled"; assert p["enabled"] is True; assert p["range_persistence_mode"] == "shadow"'
           curl --fail --silent --show-error http://127.0.0.1:2000/api/ai/status |
             python -c 'import json, sys; p=json.load(sys.stdin); assert p["status"] == "not_configured"; assert p["model"] == "gpt-5.6-terra"; assert p["reasoning"] == "max"; assert p["execution_mode"] == "background"; assert p["sdk_capability_supported"] is True; assert all(p["methods"].get(x) is True for x in ("create","retrieve","cancel"))'
           curl --fail --silent --show-error http://127.0.0.1:2000/api/catalysts/status |
@@ -168,7 +168,7 @@ jobs:
               raise SystemExit(0)
           assert code == 200, (name, code, payload)
           if name == "breakouts-current":
-              assert payload.get("status") == "disabled"
+              assert payload.get("status") != "disabled"
               assert isinstance(payload.get("events"), list)
           elif name == "strength-market":
               assert isinstance(payload.get("market_regime"), dict)

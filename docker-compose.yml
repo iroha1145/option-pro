@@ -11,6 +11,8 @@ services:
     env_file:
       - path: .env
         required: false
+      - path: machine.env
+        required: false
       - path: secrets.env
         required: false
     environment:
@@ -73,7 +75,6 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
       - HOST_BIND=${HOST_BIND:-127.0.0.1}
       - ALLOW_INSECURE_PUBLIC_BIND=${ALLOW_INSECURE_PUBLIC_BIND:-false}
-      - BREAKOUT_RADAR_ENABLED=${BREAKOUT_RADAR_ENABLED:-false}
       - BREAKOUT_DB_PATH=${BREAKOUT_DB_PATH:-/data/optix.db}
       - MARKET_SHAPE_ENTER_CONFIRM_DAYS=${MARKET_SHAPE_ENTER_CONFIRM_DAYS:-2}
       - MARKET_SHAPE_EXIT_CONFIRM_DAYS=${MARKET_SHAPE_EXIT_CONFIRM_DAYS:-2}
@@ -118,6 +119,8 @@ services:
     init: true
     image: "option-pro:${APP_COMMIT:-local}"
     env_file:
+      - path: machine.env
+        required: false
       - path: secrets.env
         required: false
     environment:
@@ -173,6 +176,9 @@ services:
   catalyst-sync-worker:
     init: true
     image: "option-pro:${APP_COMMIT:-local}"
+    env_file:
+      - path: machine.env
+        required: false
     environment:
       - APP_VERSION=${APP_VERSION:-dev}
       - APP_COMMIT=${APP_COMMIT:-unknown}
@@ -339,7 +345,6 @@ services:
     environment:
       - APP_VERSION=${APP_VERSION:-dev}
       - APP_COMMIT=${APP_COMMIT:-unknown}
-      - BREAKOUT_RADAR_ENABLED=${BREAKOUT_RADAR_ENABLED:-false}
       - BREAKOUT_DISCOVERY_PROVIDER=${BREAKOUT_DISCOVERY_PROVIDER:-tradingview}
       - BREAKOUT_DB_PATH=${BREAKOUT_DB_PATH:-/data/optix.db}
       - BREAKOUT_PROVIDER_TIMEOUT_SECONDS=${BREAKOUT_PROVIDER_TIMEOUT_SECONDS:-10}
@@ -406,13 +411,9 @@ services:
       - RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED=${RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED:-false}
       - RANGE_PERSISTENCE_BREAKOUT_INTERACTION_CAP=${RANGE_PERSISTENCE_BREAKOUT_INTERACTION_CAP:-4.0}
     command:
-      - /bin/sh
-      - -ec
-      - |
-        case "$${BREAKOUT_RADAR_ENABLED}" in
-          1|true|TRUE|yes|YES|on|ON) exec python -m app.services.breakouts.worker ;;
-          *) exec python -c 'import signal; signal.pause()' ;;
-        esac
+      - python
+      - -m
+      - app.services.breakouts.worker
     volumes:
       - optix-data:/data
     read_only: true

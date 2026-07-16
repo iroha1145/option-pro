@@ -690,6 +690,17 @@ async def _async_main(args: argparse.Namespace) -> int:
         print(json.dumps(health.as_dict(), allow_nan=False, separators=(",", ":")))
         return health.exit_code
 
+    if not settings.enabled and not args.once:
+        stop = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            try:
+                loop.add_signal_handler(signum, stop.set)
+            except (NotImplementedError, RuntimeError):
+                pass
+        await stop.wait()
+        return 0
+
     repository = BreakoutRepository(settings.db_path)
     from app.services.breakouts.service import BreakoutRadarService
 

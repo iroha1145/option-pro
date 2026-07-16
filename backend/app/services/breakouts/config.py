@@ -3,22 +3,29 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import os
 from pathlib import Path
+import threading
 from typing import Any, Literal
+import warnings
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.personal_config import get_personal_config
+from app.runtime_environment import load_runtime_environment
 
 
 _ROOT_ENV_FILE = Path(__file__).resolve().parents[4] / ".env"
+load_runtime_environment()
 _PERSONAL_CONFIG = get_personal_config()
 _PERSONAL_RANGE_PERSISTENCE_MODE = {
     "off": "disabled",
     "shadow": "shadow",
     "active": "enabled",
 }[_PERSONAL_CONFIG.breakout.range_persistence_mode]
+_LEGACY_BREAKOUT_WARNING_LOCK = threading.Lock()
+_LEGACY_BREAKOUT_WARNING_EMITTED = False
 
 
 class BreakoutSettings(BaseSettings):
@@ -247,7 +254,29 @@ class BreakoutSettings(BaseSettings):
         merges sources so all supported dependency versions behave alike.
         """
 
+        global _LEGACY_BREAKOUT_WARNING_EMITTED
         normalized = dict(values)
+        if "enabled" not in normalized and "BREAKOUT_RADAR_ENABLED" not in normalized:
+            legacy = os.environ.get("BREAKOUT_RADAR_ENABLED", "").strip().lower()
+            personal_value = _PERSONAL_CONFIG.features.breakout_enabled
+            legacy_value = (
+                True
+                if legacy in {"1", "true", "yes", "on"}
+                else False
+                if legacy in {"0", "false", "no", "off"}
+                else None
+            )
+            if legacy and legacy_value is not personal_value:
+                with _LEGACY_BREAKOUT_WARNING_LOCK:
+                    if not _LEGACY_BREAKOUT_WARNING_EMITTED:
+                        warnings.warn(
+                            "BREAKOUT_RADAR_ENABLED is deprecated; "
+                            "config/personal.toml takes precedence.",
+                            DeprecationWarning,
+                            stacklevel=2,
+                        )
+                        _LEGACY_BREAKOUT_WARNING_EMITTED = True
+            normalized["BREAKOUT_RADAR_ENABLED"] = personal_value
         for field_name, field in type(self).model_fields.items():
             alias = field.alias
             if field_name not in normalized or not isinstance(alias, str):
