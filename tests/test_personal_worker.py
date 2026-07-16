@@ -280,6 +280,7 @@ def test_manual_only_task_waits_for_action_and_never_runs_at_startup(
             return TaskResult(status="idle", details={"result": "refreshed"})
 
         repository = WorkerStateRepository(tmp_path / "manual-only.db")
+        repository.initialize()
         supervisor = WorkerSupervisor(
             repository,
             (
@@ -346,6 +347,7 @@ def test_manual_runner_receives_claimed_actions_and_completion_keeps_request_and
                 )
 
         repository = WorkerStateRepository(tmp_path / "manual-parameters.db")
+        repository.initialize()
         supervisor = WorkerSupervisor(
             repository,
             (
@@ -427,6 +429,7 @@ def test_manual_only_failure_is_terminal_and_timestamped(tmp_path: Path) -> None
             raise RuntimeError("private provider detail")
 
         repository = WorkerStateRepository(tmp_path / "manual-failure.db")
+        repository.initialize()
         supervisor = WorkerSupervisor(
             repository,
             (
