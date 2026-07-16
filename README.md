@@ -76,30 +76,23 @@ git pull --ff-only
 
 ### OpenAI 配置（可选）
 
-默认不启用 AI。使用 OpenAI 官方服务时只填写 key，`OPENAI_BASE_URL` 保持为空：
+默认不启用模型分析。启用时，通过服务端密钥命令写入 OpenAI 密钥：
+
+```bash
+./personal.sh secrets set OPENAI_API_KEY
+```
+
+个人版只连接 OpenAI 官方响应接口（Responses API），不接受自定义模型代理。运行参数固定为：
 
 ```dotenv
-OPENAI_API_KEY=
-OPENAI_BASE_URL=
-ALLOW_CUSTOM_OPENAI_BASE_URL=false
 OPENAI_MODEL=gpt-5.6-terra
 OPENAI_REASONING=max
-```
-
-如果使用 OpenAI-compatible 代理，`OPENAI_BASE_URL` 才填写代理地址，同时必须显式设置 `ALLOW_CUSTOM_OPENAI_BASE_URL=true`，并且只能使用该代理签发的专属 key。自定义公网地址必须是 HTTPS（本机回环地址除外）。不要把 OpenAI 官方 key 交给第三方代理。兼容服务还需要支持 Responses API；财报联网分析需要支持 `web_search_preview` 工具。
-
-从旧版升级且 `.env` 中已有非空 `OPENAI_BASE_URL` 时，部署前必须完成上述 key 确认并补上 `ALLOW_CUSTOM_OPENAI_BASE_URL=true`，否则应用会拒绝启动 AI 配置。
-
-Option Pro 的 AI 任务默认最多输出 32768 Token，不自动重试，允许范围为 256—128000，整个进程最多同时访问模型 2 次。联网检索会与最终 JSON 共用输出预算，因此过低的上限可能截断结构化结果。可通过以下变量调整：
-
-```dotenv
-OPENAI_TIMEOUT_SECONDS=900
+OPENAI_EXECUTION_MODE=background
 OPENAI_MAX_RETRIES=0
-OPTION_PRO_AI_MAX_OUTPUT_TOKENS=32768
-OPENAI_MAX_CONCURRENCY=2
+OPENAI_MAX_CONCURRENCY=1
 ```
 
-旧变量 `OPENAI_MAX_OUTPUT_TOKENS` 只用于兼容已有部署；新配置应使用 `OPTION_PRO_AI_MAX_OUTPUT_TOKENS`。两个变量同时存在时，专用变量优先。
+模型调用保留后台模式、严格结构化输出、每日任务次数和美元预算门禁。同一输入复用同一任务，不会因重复点击再次计费。新闻标题、新闻摘要、等待提示和分析结果都经过本地简体中文校验；来源原文只用于内部分析，不会回退到网页展示。
 
 ## 安全的远程访问
 
