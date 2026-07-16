@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import tempfile
 from pathlib import Path
 
 from dotenv import dotenv_values
 
-from app.legacy_env_adapter import migrate_legacy_environment
+from app.legacy_env_adapter import LegacyMigrationConflict, migrate_legacy_environment
 from app.personal_config import PersonalConfig
 from app.tools.personal_secrets import atomic_write
 
@@ -33,6 +35,7 @@ model = {_toml_string(config.ai.model)}
 reasoning = "max"
 max_concurrency = 1
 daily_max_jobs = {config.ai.daily_max_jobs}
+daily_budget_usd = {config.ai.daily_budget_usd}
 execution_mode = "background"
 
 [catalyst]
@@ -52,7 +55,72 @@ backup_keep = {config.storage.backup_keep}
 '''
 
 
-def migrate(source: Path, output_directory: Path) -> tuple[Path, Path, Path]:
+def _atomic_private_text(path: Path, payload: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        dir=path.parent,
+    )
+    temporary = Path(temporary_name)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8", closefd=True) as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    except Exception:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def _environment_text(values: dict[str, str], order: tuple[str, ...]) -> str:
+    return "".join(
+        f"{key}={json.dumps(values[key], ensure_ascii=False)}\n"
+        for key in order
+        if values.get(key)
+    )
+
+
+def _report_payload(result: object) -> dict[str, object]:
+    warning_messages = getattr(result, "warnings", None)
+    if warning_messages is None:
+        warning_messages = getattr(result, "warning_messages", ())
+    return {
+        "mapped_keys": list(getattr(result, "mapped_keys", ())),
+        "deprecated_keys": list(getattr(result, "deprecated_keys", ())),
+        "removed_keys": [
+            {"key": key, "status": "removed_by_personal_edition"}
+            for key in getattr(result, "removed_keys", ())
+        ],
+        "conflicting_keys": list(getattr(result, "conflicting_keys", ())),
+        "unmapped_keys": list(getattr(result, "unmapped_keys", ())),
+        "requires_owner_password": bool(
+            getattr(result, "requires_owner_password", False)
+        ),
+        "warnings": list(warning_messages),
+    }
+
+
+def _write_report(path: Path, result: object) -> None:
+    _atomic_private_text(
+        path,
+        json.dumps(
+            _report_payload(result),
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+    )
+
+
+def migrate(source: Path, output_directory: Path) -> tuple[Path, Path, Path, Path]:
     if not source.is_file():
         raise FileNotFoundError(f"legacy environment file not found: {source}")
     parsed = {
@@ -60,27 +128,35 @@ def migrate(source: Path, output_directory: Path) -> tuple[Path, Path, Path]:
         for key, value in dotenv_values(source).items()
         if key
     }
-    result = migrate_legacy_environment(parsed)
     output_directory.mkdir(parents=True, exist_ok=True)
     config_path = output_directory / "personal.toml"
     secrets_path = output_directory / "secrets.env"
-    report_path = output_directory / "unmapped-env.json"
+    machine_path = output_directory / "machine.env"
+    report_path = output_directory / "migration-report.json"
+    try:
+        result = migrate_legacy_environment(parsed)
+    except LegacyMigrationConflict as exc:
+        _write_report(report_path, exc)
+        raise
     config_path.write_text(_toml(result.config), encoding="utf-8")
     atomic_write(result.secrets, secrets_path)
-    report_path.write_text(
-        json.dumps(
-            {
-                "deprecated_keys": list(result.deprecated_keys),
-                "unmapped_keys": list(result.unmapped_keys),
-                "requires_owner_password": result.requires_owner_password,
-            },
-            ensure_ascii=False,
-            indent=2,
-            sort_keys=True,
-        ) + "\n",
-        encoding="utf-8",
+    _atomic_private_text(
+        machine_path,
+        _environment_text(
+            result.machine,
+            (
+                "HOST_BIND",
+                "PORT",
+                "MACROLENS_URL",
+                "ALLOWED_HOSTS",
+                "TRUST_PROXY_HEADERS",
+                "TRUSTED_PROXY_CIDRS",
+                "DATA_DIR",
+            ),
+        ),
     )
-    return config_path, secrets_path, report_path
+    _write_report(report_path, result)
+    return config_path, secrets_path, machine_path, report_path
 
 
 def main() -> None:

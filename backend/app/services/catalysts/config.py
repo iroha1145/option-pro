@@ -7,13 +7,14 @@ from pathlib import Path
 from typing import Literal, Union
 from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.personal_config import get_personal_config
+from app.runtime_environment import RUNTIME_ENV_FILES, load_runtime_environment
 
 
-_ROOT_ENV_FILE = Path(__file__).resolve().parents[4] / ".env"
+load_runtime_environment()
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 _KEY_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 _PERSONAL_CONFIG = get_personal_config()
@@ -39,7 +40,12 @@ class CatalystSettings(BaseSettings):
     catalyst_mode: Literal["disabled", "display", "shadow", "enabled"] = Field(
         default=_PERSONAL_CATALYST_MODE, alias="CATALYST_MODE"
     )
-    base_url: str = Field(default="", alias="MACROLENS_BASE_URL", max_length=500)
+    base_url: str = Field(
+        default="",
+        alias="MACROLENS_URL",
+        validation_alias=AliasChoices("MACROLENS_URL", "MACROLENS_BASE_URL"),
+        max_length=500,
+    )
     allow_local_http: bool = Field(
         default=False, alias="MACROLENS_ALLOW_LOCAL_HTTP"
     )
@@ -142,7 +148,7 @@ class CatalystSettings(BaseSettings):
     )
 
     model_config = SettingsConfigDict(
-        env_file=str(_ROOT_ENV_FILE),
+        env_file=tuple(str(path) for path in RUNTIME_ENV_FILES),
         env_file_encoding="utf-8",
         env_ignore_empty=True,
         extra="ignore",
@@ -156,14 +162,14 @@ class CatalystSettings(BaseSettings):
         if not value:
             return value
         if any(character.isspace() for character in value):
-            raise ValueError("MACROLENS_BASE_URL must not contain whitespace")
+            raise ValueError("MACROLENS_URL must not contain whitespace")
         parsed = urlsplit(value)
         if parsed.scheme not in {"https", "http"} or not parsed.hostname:
-            raise ValueError("MACROLENS_BASE_URL must be an absolute HTTP(S) origin")
+            raise ValueError("MACROLENS_URL must be an absolute HTTP(S) origin")
         if parsed.username or parsed.password:
-            raise ValueError("MACROLENS_BASE_URL must not contain credentials")
+            raise ValueError("MACROLENS_URL must not contain credentials")
         if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
-            raise ValueError("MACROLENS_BASE_URL must contain only scheme, host, and port")
+            raise ValueError("MACROLENS_URL must contain only scheme, host, and port")
         return value
 
     @field_validator("ca_bundle")
@@ -211,7 +217,7 @@ class CatalystSettings(BaseSettings):
         if not self.enabled:
             return self
         if not self.base_url:
-            raise ValueError("MACROLENS_BASE_URL is required when MACROLENS_ENABLED=true")
+            raise ValueError("MACROLENS_URL is required when MACROLENS_ENABLED=true")
         parsed = urlsplit(self.base_url)
         hostname = (parsed.hostname or "").lower()
         is_local = hostname in _LOCAL_HOSTS

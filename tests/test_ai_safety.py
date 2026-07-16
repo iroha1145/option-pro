@@ -40,9 +40,13 @@ def _valid_alert(**overrides):
 
 
 def test_root_env_path_is_independent_of_working_directory():
-    expected = Path(__file__).resolve().parents[1] / ".env"
-    assert _ROOT_ENV_FILE == expected
-    assert Path(Settings.model_config["env_file"]) == expected
+    root = Path(__file__).resolve().parents[1]
+    assert _ROOT_ENV_FILE == root / ".env"
+    assert tuple(Path(value) for value in Settings.model_config["env_file"]) == (
+        root / ".env",
+        root / "machine.env",
+        root / "secrets.env",
+    )
 
 
 def test_terra_defaults_and_runtime_bounds(monkeypatch):

@@ -25,9 +25,9 @@ DEFAULT_SECRETS_PATH = REPOSITORY_ROOT / "secrets.env"
 SECRET_KEYS = (
     "OPENAI_API_KEY",
     "FINNHUB_API_KEY",
+    "MARKETDATA_TOKEN",
     "INTERNAL_API_TOKEN",
     "APP_PASSWORD_HASH",
-    "DATA_DIR",
 )
 _SAFE_VALUE = re.compile(r"^[!-~]+$")
 _UNSAFE_ENV_CHARACTERS = frozenset("#'\"\\")
@@ -115,17 +115,6 @@ def _normalized_value(key: str, value: str) -> str:
         if owner_password_hash_is_valid(value):
             return value
         return hash_owner_password(value)
-    if key == "DATA_DIR":
-        if len(value) > 4096 or not Path(value).is_absolute():
-            raise ValueError("DATA_DIR must be an absolute directory path")
-        if (
-            "\x00" in value
-            or "\r" in value
-            or "\n" in value
-            or any(character in value for character in _UNSAFE_ENV_CHARACTERS)
-        ):
-            raise ValueError("DATA_DIR contains unsupported control characters")
-        return value
     if len(value) > 8192 or not _SAFE_VALUE.fullmatch(value):
         raise ValueError("secret value must use non-whitespace printable characters")
     if any(character in value for character in _UNSAFE_ENV_CHARACTERS):
@@ -136,17 +125,6 @@ def _normalized_value(key: str, value: str) -> str:
 def _format_valid(key: str, value: str) -> bool:
     if key == "APP_PASSWORD_HASH":
         return owner_password_hash_is_valid(value)
-    if key == "DATA_DIR":
-        return bool(
-            len(value) <= 4096
-            and Path(value).is_absolute()
-            and "\x00" not in value
-            and "\r" not in value
-            and "\n" not in value
-            and not any(
-                character in value for character in _UNSAFE_ENV_CHARACTERS
-            )
-        )
     if not (8 <= len(value) <= 8192) or not _SAFE_VALUE.fullmatch(value):
         return False
     if any(character in value for character in _UNSAFE_ENV_CHARACTERS):

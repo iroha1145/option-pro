@@ -349,7 +349,7 @@ def _finnhub_candle_frame(symbol: str, payload: dict[str, Any]) -> pd.DataFrame:
 
 def _download_marketdata_history(tickers: list[str], period: str) -> tuple[pd.DataFrame, list[str], list[str]]:
     settings = get_settings()
-    token = (settings.marketdata_token or settings.marketdata_api_token or "").strip()
+    token = settings.marketdata_token.strip()
     if not token or not settings.marketdata_stock_candle_fallback_enabled:
         return pd.DataFrame(), [], tickers
 

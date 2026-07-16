@@ -83,6 +83,7 @@ class AIConfig(StrictConfigModel):
     reasoning: Literal["max"] = "max"
     max_concurrency: Literal[1] = 1
     daily_max_jobs: int = Field(default=4, ge=1, le=100)
+    daily_budget_usd: float = Field(default=2.0, ge=0.01, le=100.0)
     execution_mode: Literal["background"] = "background"
 
 

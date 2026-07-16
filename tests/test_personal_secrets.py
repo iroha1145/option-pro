@@ -24,7 +24,7 @@ def test_option_pro_secret_allowlist_is_exact() -> None:
         "APP_PASSWORD_HASH",
         "INTERNAL_API_TOKEN",
         "FINNHUB_API_KEY",
-        "DATA_DIR",
+        "MARKETDATA_TOKEN",
     }
     assert set(personal_secrets.SECRET_KEYS) == expected
     assert legacy_env_adapter.SECRET_KEYS == expected
@@ -36,6 +36,7 @@ def test_browser_settings_expose_only_option_pro_configuration_booleans(
     values = {
         "OPENAI_API_KEY": "sk-never-return-this",
         "FINNHUB_API_KEY": "finnhub-never-return-this",
+        "MARKETDATA_TOKEN": "market-never-return-this",
         "INTERNAL_API_TOKEN": "internal-never-return-this",
         "MASSIVE_API_KEY": "not-an-option-pro-setting",
     }
@@ -46,6 +47,7 @@ def test_browser_settings_expose_only_option_pro_configuration_booleans(
     assert report == {
         "openai": {"configured": True},
         "finnhub": {"configured": True},
+        "marketdata": {"configured": True},
         "internal_api": {"configured": True},
     }
     serialized = json.dumps(report)
@@ -148,11 +150,13 @@ def test_owner_password_is_hashed_before_it_reaches_secrets_file(
     assert owner_password_hash_is_valid(written)
 
 
-def test_data_directory_uses_absolute_path_validation() -> None:
-    assert personal_secrets._normalized_value("DATA_DIR", "/data") == "/data"
-    assert personal_secrets._format_valid("DATA_DIR", "/data") is True
-    with pytest.raises(ValueError, match="absolute"):
-        personal_secrets._normalized_value("DATA_DIR", "relative/data")
+def test_marketdata_token_is_managed_as_a_server_only_secret() -> None:
+    assert personal_secrets._normalized_value(
+        "MARKETDATA_TOKEN", "market-token-value"
+    ) == "market-token-value"
+    assert personal_secrets._format_valid(
+        "MARKETDATA_TOKEN", "market-token-value"
+    ) is True
 
 
 def test_shell_interface_never_passes_a_secret_value_to_python() -> None:
@@ -162,3 +166,7 @@ def test_shell_interface_never_passes_a_secret_value_to_python() -> None:
     assert '"$python_bin" -m app.tools.personal_secrets "$@"' not in script
     assert '"$python_bin" -m app.tools.personal_secrets "$command_name" "$key"' in script
     assert "Secret values must be entered through standard input." in script
+    assert "FINNHUB_API_KEY|MARKETDATA_TOKEN|INTERNAL_API_TOKEN" in script
+    assert "--force-recreate" in script
+    assert ' restart "${running[@]}"' not in script
+    assert "app.tools.validate_personal_deployment" in script

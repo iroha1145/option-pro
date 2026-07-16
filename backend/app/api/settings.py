@@ -23,5 +23,6 @@ def settings_status() -> dict[str, object]:
     return {
         "openai": _configured("OPENAI_API_KEY"),
         "finnhub": _configured("FINNHUB_API_KEY"),
+        "marketdata": _configured("MARKETDATA_TOKEN"),
         "internal_api": _configured("INTERNAL_API_TOKEN"),
     }

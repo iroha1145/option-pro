@@ -6,6 +6,9 @@
 .env.bak.*
 secrets.env
 secrets.env.bak.*
+machine.env
+machine.env.bak.*
+migration-report.json
 .DS_Store
 ._*
 **/._*

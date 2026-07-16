@@ -28,4 +28,7 @@ config/migrated/
 config/secrets.env
 secrets.env
 secrets.env.bak.*
+machine.env
+machine.env.bak.*
+migration-report.json
 config/unmapped-env.json

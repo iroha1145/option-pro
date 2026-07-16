@@ -5,23 +5,19 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from dotenv import load_dotenv
 from pydantic import AliasChoices, AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.personal_config import get_personal_config
+from app.runtime_environment import (
+    ROOT_ENV_FILE as _ROOT_ENV_FILE,
+    RUNTIME_ENV_FILES,
+    load_runtime_environment,
+)
 
 
-# Resolve the repository-level .env independently of the process working
-# directory. This keeps `uvicorn app.main:app` reliable when run from backend/.
-_ROOT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
-_ROOT_SECRETS_FILE = Path(__file__).resolve().parents[2] / "secrets.env"
 _PERSONAL_CONFIG = get_personal_config()
-# Several existing middleware settings are read directly from os.environ.
-# Load the same root file once (without overriding exported variables) so local
-# uvicorn runs and BaseSettings observe one consistent configuration source.
-load_dotenv(dotenv_path=_ROOT_ENV_FILE, override=False)
-load_dotenv(dotenv_path=_ROOT_SECRETS_FILE, override=False)
+load_runtime_environment()
 
 
 class Settings(BaseSettings):
@@ -74,6 +70,12 @@ class Settings(BaseSettings):
         ge=1,
         le=100,
         alias="OPENAI_DAILY_MAX_JOBS",
+    )
+    openai_daily_budget_usd: float = Field(
+        default=_PERSONAL_CONFIG.ai.daily_budget_usd,
+        ge=0.01,
+        le=100.0,
+        alias="OPENAI_DAILY_BUDGET_USD",
     )
     openai_execution_mode: Literal["background", "worker_sync"] = Field(
         default=_PERSONAL_CONFIG.ai.execution_mode,
@@ -144,7 +146,6 @@ class Settings(BaseSettings):
     yahoo_option_strike_window_pct: float = Field(default=0.16, alias="YAHOO_OPTION_STRIKE_WINDOW_PCT")
     yahoo_options_failure_limit: int = Field(default=8, alias="YAHOO_OPTIONS_FAILURE_LIMIT")
     marketdata_token: str = Field(default="", alias="MARKETDATA_TOKEN")
-    marketdata_api_token: str = Field(default="", alias="MARKETDATA_API_TOKEN")
     marketdata_base_url: AnyHttpUrl = Field(default="https://api.marketdata.app", alias="MARKETDATA_BASE_URL")
     marketdata_stock_candle_fallback_enabled: bool = Field(default=True, alias="MARKETDATA_STOCK_CANDLE_FALLBACK_ENABLED")
     marketdata_stock_candle_fallback_limit: int = Field(default=260, alias="MARKETDATA_STOCK_CANDLE_FALLBACK_LIMIT")
@@ -156,7 +157,7 @@ class Settings(BaseSettings):
     request_timeout: float = Field(default=20.0, alias="REQUEST_TIMEOUT")
 
     model_config = SettingsConfigDict(
-        env_file=str(_ROOT_ENV_FILE),
+        env_file=tuple(str(path) for path in RUNTIME_ENV_FILES),
         env_file_encoding="utf-8",
         env_ignore_empty=True,
         extra="ignore",

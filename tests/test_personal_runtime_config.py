@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app.config import Settings
 from app.services.breakouts.config import BreakoutSettings
 from app.services.catalysts.config import CatalystSettings
@@ -37,6 +39,7 @@ def test_personal_toml_supplies_runtime_defaults(monkeypatch) -> None:
     assert settings.openai_reasoning == "max"
     assert settings.openai_max_concurrency == 1
     assert settings.openai_daily_max_jobs == 4
+    assert settings.openai_daily_budget_usd == 2.0
     assert settings.openai_execution_mode == "background"
 
     breakout = BreakoutSettings(_env_file=None)
@@ -67,7 +70,7 @@ def test_personal_toml_supplies_runtime_defaults(monkeypatch) -> None:
     assert focus.snapshot_retention_days == 90
 
 
-def test_legacy_environment_overrides_personal_defaults(monkeypatch) -> None:
+def test_legacy_environment_cannot_disable_personal_breakout(monkeypatch) -> None:
     overrides = {
         "OPENAI_MODEL": "legacy-model",
         "OPENAI_REASONING": "high",
@@ -98,8 +101,9 @@ def test_legacy_environment_overrides_personal_defaults(monkeypatch) -> None:
     assert settings.openai_daily_max_jobs == 9
     assert settings.openai_execution_mode == "worker_sync"
 
-    breakout = BreakoutSettings(_env_file=None)
-    assert breakout.enabled is False
+    with pytest.warns(DeprecationWarning, match="personal.toml takes precedence"):
+        breakout = BreakoutSettings(_env_file=None)
+    assert breakout.enabled is True
     assert breakout.scan_interval_regular_seconds == 420
     assert breakout.scan_interval_premarket_seconds == 720
     assert breakout.scan_interval_closed_seconds == 2400

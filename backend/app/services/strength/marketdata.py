@@ -19,7 +19,7 @@ def marketdata_is_enabled(settings: Settings | None = None) -> bool:
 
 
 def _token(settings: Settings) -> str:
-    return (settings.marketdata_token or settings.marketdata_api_token or "").strip()
+    return settings.marketdata_token.strip()
 
 
 def _safe_float(value: Any, ndigits: int = 4) -> float | None:
