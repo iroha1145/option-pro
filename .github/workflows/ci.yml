@@ -133,6 +133,11 @@ jobs:
       - name: Build production image
         run: docker compose build backend
 
+      - name: Validate deployment boundary in production image
+        run: >-
+          docker compose run --rm --no-deps -T backend
+          python -m app.tools.validate_personal_deployment
+
       - name: Start backend and unified worker
         run: docker compose up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180
 
