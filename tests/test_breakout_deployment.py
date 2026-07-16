@@ -44,7 +44,7 @@ def test_breakout_runs_inside_the_unified_worker() -> None:
 def test_deployment_checks_only_the_unified_worker_inventory() -> None:
     script = (ROOT / "scripts" / "deploy.sh").read_text(encoding="utf-8")
 
-    assert 'docker compose exec -T worker python -m app.worker --healthcheck' in script
+    assert 'compose exec -T worker python -m app.worker --healthcheck' in script
     for task_name in (
         "breakout",
         "catalyst_sync",

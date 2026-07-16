@@ -1,3 +1,6 @@
+x-optix-compose-entrypoint: "${OPTIX_COMPOSE_ENTRYPOINT:?Use ./scripts/compose.sh to run the formal Compose project.}"
+x-optix-compose-env-files: "${COMPOSE_ENV_FILES:?Use ./scripts/compose.sh so machine.env participates in Compose interpolation.}"
+
 x-optix-image: &optix-image
   image: "option-pro:${APP_COMMIT:-local}"
   build:

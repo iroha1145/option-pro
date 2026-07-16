@@ -196,6 +196,7 @@ def _deployment_root(
     scripts.mkdir(parents=True)
     config.mkdir()
     shutil.copy2(ROOT / "scripts" / "deploy.sh", scripts / "deploy.sh")
+    shutil.copy2(ROOT / "scripts" / "compose.sh", scripts / "compose.sh")
     shutil.copy2(ROOT / "docker-compose.yml", root / "docker-compose.yml")
     (root / ".env").write_text(
         (ROOT / ".env.example").read_text(encoding="utf-8"),
@@ -284,8 +285,9 @@ def test_deploy_builds_only_current_services_and_verifies_both(tmp_path: Path) -
         "verify-worker",
     ]
     script = (root / "scripts" / "deploy.sh").read_text(encoding="utf-8")
-    assert "docker compose build --pull backend" in script
-    assert "docker compose up -d --no-build --force-recreate" in script
+    assert "compose build --pull backend" in script
+    assert "compose up -d --no-build --force-recreate" in script
+    assert '"$ROOT_DIR/scripts/compose.sh" "$@"' in script
     assert "Stopping legacy workers before the unified worker starts." in script
 
 
@@ -835,6 +837,7 @@ def _setup_root(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         (ROOT / "secrets.env.example", root / "secrets.env.example"),
         (ROOT / "docker-compose.yml", root / "docker-compose.yml"),
         (ROOT / "scripts" / "deploy.sh", root / "scripts" / "deploy.sh"),
+        (ROOT / "scripts" / "compose.sh", root / "scripts" / "compose.sh"),
         (ROOT / "config" / "personal.toml", root / "config" / "personal.toml"),
     ):
         shutil.copy2(source, destination)
@@ -1066,8 +1069,12 @@ def test_secret_cli_recreates_only_affected_running_services(
 ) -> None:
     root = tmp_path / "option-pro"
     root.mkdir()
+    (root / "scripts").mkdir()
     shutil.copy2(ROOT / "personal.sh", root / "personal.sh")
     shutil.copy2(ROOT / "docker-compose.yml", root / "docker-compose.yml")
+    shutil.copy2(ROOT / "scripts" / "compose.sh", root / "scripts" / "compose.sh")
+    (root / ".env").write_text("", encoding="utf-8")
+    (root / "machine.env").write_text("", encoding="utf-8")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     python = bin_dir / "python"
@@ -1122,6 +1129,59 @@ esac
     assert secret not in result.stdout + result.stderr
 
 
+def test_secret_cli_skips_container_restart_when_machine_file_is_missing(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "option-pro"
+    (root / "scripts").mkdir(parents=True)
+    shutil.copy2(ROOT / "personal.sh", root / "personal.sh")
+    shutil.copy2(ROOT / "docker-compose.yml", root / "docker-compose.yml")
+    shutil.copy2(
+        ROOT / "scripts" / "compose.sh",
+        root / "scripts" / "compose.sh",
+    )
+    (root / ".env").write_text("", encoding="utf-8")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    python = bin_dir / "python"
+    python.write_text(
+        "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$FAKE_PYTHON_ARGS\"\ncat >/dev/null\n",
+        encoding="utf-8",
+    )
+    python.chmod(0o755)
+    docker = bin_dir / "docker"
+    docker.write_text(
+        "#!/usr/bin/env bash\nprintf 'called\\n' > \"$FAKE_DOCKER_LOG\"\n",
+        encoding="utf-8",
+    )
+    docker.chmod(0o755)
+    environment = _isolated_environment()
+    environment.update(
+        {
+            "PATH": f"{bin_dir}{os.pathsep}{environment['PATH']}",
+            "PYTHON_BIN": str(python),
+            "FAKE_PYTHON_ARGS": str(tmp_path / "python-args"),
+            "FAKE_DOCKER_LOG": str(tmp_path / "docker-log"),
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", "personal.sh", "secrets", "set", "OPENAI_API_KEY"],
+        cwd=root,
+        env=environment,
+        input="secret-value-never-in-arguments\n",
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "python-args").exists()
+    assert not (tmp_path / "docker-log").exists()
+
+
 def test_watchlist_snapshot_uses_the_shared_data_directory_without_auth_tokens(
     tmp_path: Path,
 ) -> None:
@@ -1146,7 +1206,12 @@ def test_watchlist_snapshot_uses_the_shared_data_directory_without_auth_tokens(
 
 
 def test_shell_entrypoints_stay_small_and_syntax_is_valid() -> None:
-    for relative in ("setup.sh", "scripts/deploy.sh", "personal.sh"):
+    for relative in (
+        "setup.sh",
+        "scripts/compose.sh",
+        "scripts/deploy.sh",
+        "personal.sh",
+    ):
         path = ROOT / relative
         assert len(path.read_text(encoding="utf-8").splitlines()) <= 320
         completed = subprocess.run(

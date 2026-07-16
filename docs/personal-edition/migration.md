@@ -87,16 +87,16 @@ chmod 600 .env machine.env secrets.env
 ## 发布与核对
 
 ```bash
-docker compose config -q
+./scripts/compose.sh config -q
 bash ./scripts/deploy.sh
 ```
 
 启动后核对：
 
 ```bash
-docker compose ps
+./scripts/compose.sh ps
 curl --fail http://127.0.0.1:${PORT:-2000}/ready
-docker compose exec -T worker python -m app.worker --healthcheck
+./scripts/compose.sh exec -T worker python -m app.worker --healthcheck
 ```
 
 工作进程结果应且只应包含 `breakout`、`catalyst_sync`、`focus`、`ai_jobs`、`maintenance`、`focus_refresh`、`strength_refresh`、`breakout_refresh` 和 `retention`。

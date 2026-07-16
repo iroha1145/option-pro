@@ -37,6 +37,14 @@ def _environment_keys(path: str = ".env.example") -> list[str]:
 def test_formal_compose_has_only_backend_worker_and_one_volume() -> None:
     compose = _compose()
 
+    assert compose["x-optix-compose-entrypoint"] == (
+        "${OPTIX_COMPOSE_ENTRYPOINT:?Use ./scripts/compose.sh to run the "
+        "formal Compose project.}"
+    )
+    assert compose["x-optix-compose-env-files"] == (
+        "${COMPOSE_ENV_FILES:?Use ./scripts/compose.sh so machine.env "
+        "participates in Compose interpolation.}"
+    )
     assert set(compose["services"]) == {"backend", "worker"}
     assert set(compose["volumes"]) == {"optix-data"}
     assert not (ROOT / "docker-compose.personal.yml").exists()
@@ -150,6 +158,10 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
         "text.replace('catalyst_mode = \"manual\"', "
         "'catalyst_mode = \"off\"', 1)"
     ) in workflow
+    assert 'COMPOSE_ENV_FILES: ".env,machine.env"' in workflow
+    assert "cp machine.env.example machine.env" in workflow
+    assert "docker compose" not in workflow
+    assert workflow.count("./scripts/compose.sh") >= 10
     health_line = next(
         line
         for line in workflow.splitlines()
@@ -227,6 +239,11 @@ def test_data_directory_cannot_split_across_exports_or_runtime_files(
         pytest.skip("Docker Compose is unavailable")
 
     shutil.copy2(ROOT / "docker-compose.yml", tmp_path / "docker-compose.yml")
+    (tmp_path / "scripts").mkdir()
+    shutil.copy2(
+        ROOT / "scripts" / "compose.sh",
+        tmp_path / "scripts" / "compose.sh",
+    )
     (tmp_path / ".env").write_text(
         "HOST_BIND=127.0.0.9\nPORT=2999\nDATA_DIR=/stale-data\n",
         encoding="utf-8",
@@ -261,11 +278,12 @@ def test_data_directory_cannot_split_across_exports_or_runtime_files(
         environment.pop(key, None)
     if exported_data_dir is not None:
         environment["DATA_DIR"] = exported_data_dir
-    environment["COMPOSE_ENV_FILES"] = ".env,machine.env"
+    environment["COMPOSE_ENV_FILES"] = ".env"
+    environment.pop("OPTIX_COMPOSE_ENTRYPOINT", None)
     environment["COMPOSE_PROJECT_NAME"] = "optix-config-contract"
 
     result = subprocess.run(
-        [docker, "compose", "config", "--format", "json"],
+        ["bash", "scripts/compose.sh", "config", "--format", "json"],
         cwd=tmp_path,
         env=environment,
         check=False,
@@ -294,6 +312,116 @@ def test_data_directory_cannot_split_across_exports_or_runtime_files(
         )
 
 
+@pytest.mark.parametrize("compose_env_files", [None, ".env"])
+def test_raw_compose_fails_closed_without_machine_interpolation_contract(
+    tmp_path: Path,
+    compose_env_files: str | None,
+) -> None:
+    docker = shutil.which("docker")
+    if docker is None:
+        pytest.skip("Docker Compose is unavailable")
+
+    shutil.copy2(ROOT / "docker-compose.yml", tmp_path / "docker-compose.yml")
+    (tmp_path / ".env").write_text("", encoding="utf-8")
+    (tmp_path / "machine.env").write_text(
+        "MACROLENS_URL=https://macrolens.example\n",
+        encoding="utf-8",
+    )
+    environment = os.environ.copy()
+    environment.pop("OPTIX_COMPOSE_ENTRYPOINT", None)
+    if compose_env_files is None:
+        environment.pop("COMPOSE_ENV_FILES", None)
+    else:
+        environment["COMPOSE_ENV_FILES"] = compose_env_files
+
+    result = subprocess.run(
+        [docker, "compose", "config", "-q"],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode != 0
+    assert "scripts/compose.sh" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--env-file", ".env", "config"],
+        ["--env-file=.env", "config"],
+        ["-f", "docker-compose.yml", "config"],
+        ["-f=docker-compose.yml", "config"],
+        ["-fdocker-compose.yml", "config"],
+        ["--project-directory=.", "config"],
+    ],
+)
+def test_compose_wrapper_rejects_file_and_environment_overrides(
+    tmp_path: Path,
+    arguments: list[str],
+) -> None:
+    (tmp_path / "scripts").mkdir()
+    shutil.copy2(
+        ROOT / "scripts" / "compose.sh",
+        tmp_path / "scripts" / "compose.sh",
+    )
+    (tmp_path / ".env").write_text("", encoding="utf-8")
+    (tmp_path / "machine.env").write_text("", encoding="utf-8")
+
+    result = subprocess.run(
+        ["bash", "scripts/compose.sh", *arguments],
+        cwd=tmp_path,
+        env=os.environ.copy(),
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 2
+    assert "overrides are not supported" in result.stderr
+
+
+def test_compose_wrapper_preserves_subcommand_flags(tmp_path: Path) -> None:
+    (tmp_path / "scripts").mkdir()
+    shutil.copy2(
+        ROOT / "scripts" / "compose.sh",
+        tmp_path / "scripts" / "compose.sh",
+    )
+    (tmp_path / ".env").write_text("", encoding="utf-8")
+    (tmp_path / "machine.env").write_text("", encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker_log = tmp_path / "docker-arguments"
+    fake_docker = bin_dir / "docker"
+    fake_docker.write_text(
+        "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$FAKE_DOCKER_LOG\"\n",
+        encoding="utf-8",
+    )
+    fake_docker.chmod(0o755)
+    environment = os.environ.copy()
+    environment["PATH"] = f"{bin_dir}{os.pathsep}{environment['PATH']}"
+    environment["FAKE_DOCKER_LOG"] = str(docker_log)
+
+    result = subprocess.run(
+        ["bash", "scripts/compose.sh", "logs", "-f", "backend"],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert docker_log.read_text(encoding="utf-8").strip() == (
+        "compose logs -f backend"
+    )
+
+
 def test_deploy_uses_the_unified_runtime_loader_and_validator() -> None:
     script = (ROOT / "scripts" / "deploy.sh").read_text(encoding="utf-8")
 
@@ -301,7 +429,7 @@ def test_deploy_uses_the_unified_runtime_loader_and_validator() -> None:
     assert "dotenv_values" not in script
     assert "    validate_runtime_boundary\n" in script
     assert (
-        "docker compose run --rm --no-deps -T backend \\\n"
+        "compose run --rm --no-deps -T backend \\\n"
         "            python -m app.tools.validate_personal_deployment"
     ) in script
     assert 'PYTHONPATH="${ROOT_DIR}/backend' not in script

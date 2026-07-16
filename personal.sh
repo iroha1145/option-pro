@@ -4,11 +4,6 @@ umask 077
 
 root="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 cd "$root"
-if [ -f "$root/machine.env" ]; then
-    export COMPOSE_ENV_FILES=".env,machine.env"
-else
-    export COMPOSE_ENV_FILES=".env"
-fi
 python_bin="${PYTHON_BIN:-$root/.venv/bin/python}"
 if [ ! -x "$python_bin" ]; then
     python_bin="python3"
@@ -52,7 +47,11 @@ esac
 if [ "$command_name" != "set" ] && [ "$command_name" != "remove" ]; then
     exit 0
 fi
-if ! command -v docker >/dev/null 2>&1 || [ ! -f "$root/docker-compose.yml" ]; then
+if ! command -v docker >/dev/null 2>&1 || \
+    [ ! -f "$root/docker-compose.yml" ] || \
+    [ ! -f "$root/.env" ] || \
+    [ ! -f "$root/machine.env" ] || \
+    [ ! -x "$root/scripts/compose.sh" ]; then
     exit 0
 fi
 
@@ -66,11 +65,11 @@ esac
 
 running=()
 for service in "${services[@]}"; do
-    if [ -n "$(docker compose -f "$root/docker-compose.yml" ps --status running -q "$service" 2>/dev/null)" ]; then
+    if [ -n "$("$root/scripts/compose.sh" ps --status running -q "$service" 2>/dev/null)" ]; then
         running+=("$service")
     fi
 done
 if [ "${#running[@]}" -gt 0 ]; then
-    docker compose -f "$root/docker-compose.yml" up -d --no-deps \
+    "$root/scripts/compose.sh" up -d --no-deps \
         --force-recreate "${running[@]}"
 fi

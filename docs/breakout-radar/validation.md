@@ -110,7 +110,7 @@ range-persistence.md 的启用门槛时始终保持 shadow。
 - dependency source-hash verification
 - pip check
 - pip-audit
-- docker compose config
+- `./scripts/compose.sh config`
 - docker image build
 - worker --once
 - worker single-instance tests

@@ -36,7 +36,9 @@ chmod 600 .env machine.env secrets.env
 
 完成后访问 <http://localhost:2000>。进程健康信息位于 `/health`，部署就绪检查位于 `/ready`。
 
-部署脚本会校验配置、构建当前提交，停止同一编排项目中的旧工作容器，确认旧写入者已经退出，再启动 `backend` 与统一的 `worker`。它不会刷新新闻、运行扫描或创建模型任务，也不能用 `docker compose restart` 代替新版本构建。
+部署脚本会校验配置、构建当前提交，停止同一编排项目中的旧工作容器，确认旧写入者已经退出，再启动 `backend` 与统一的 `worker`。它不会刷新新闻、运行扫描或创建模型任务，也不能用单纯重启容器代替新版本构建。
+
+日常容器命令统一通过 `./scripts/compose.sh` 执行。这个入口会让 `.env` 与 `machine.env` 同时参与编排插值；直接运行原始 `docker compose` 会停止并提示使用安全入口，避免静默采用错误的监听地址、端口或 MacroLens 配置。
 
 ## 配置边界
 
@@ -130,7 +132,7 @@ mode = "private_network"
 
 ```bash
 curl --fail http://127.0.0.1:2000/ready
-docker compose exec -T worker python -m app.worker --healthcheck
+./scripts/compose.sh exec -T worker python -m app.worker --healthcheck
 ```
 
 统一工作进程应且只应报告九项任务：
@@ -168,8 +170,8 @@ docker compose exec -T worker python -m app.worker --healthcheck
 ## 本地验证
 
 ```bash
-bash -n setup.sh personal.sh scripts/deploy.sh scripts/lock-dependencies.sh
-docker compose config -q
+bash -n setup.sh personal.sh scripts/compose.sh scripts/deploy.sh scripts/lock-dependencies.sh
+./scripts/compose.sh config -q
 PYTHONPATH=backend python -m pytest -q
 node --test frontend/tests/*.test.mjs
 node frontend/tests/static_assertions.mjs
@@ -181,10 +183,10 @@ npm --prefix frontend run test:visual
 ## 日常管理
 
 ```bash
-docker compose ps
-docker compose logs -f backend worker
-docker compose restart backend worker
-docker compose down
+./scripts/compose.sh ps
+./scripts/compose.sh logs -f backend worker
+./scripts/compose.sh restart backend worker
+./scripts/compose.sh down
 ```
 
 工作进程的停止宽限期为 2100 秒，避免把正在保存响应身份的模型任务留在未知状态。

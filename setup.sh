@@ -213,7 +213,7 @@ configure_environment
 echo -e "${BOLD}构建并启动后台与统一工作进程……${NC}"
 bash ./scripts/deploy.sh
 
-published_address="$(docker compose port backend 8000 2>/dev/null || true)"
+published_address="$(./scripts/compose.sh port backend 8000 2>/dev/null || true)"
 published_port="${published_address##*:}"
 published_port="${published_port:-2000}"
 echo -e "${GREEN}${BOLD}Optix Pro 已启动。${NC}"
@@ -222,6 +222,6 @@ if [ "$(personal_access_mode)" = password ]; then
 else
     echo -e "访问地址：${CYAN}http://localhost:${published_port}${NC}"
 fi
-echo "查看状态：docker compose ps"
-echo "查看日志：docker compose logs -f backend worker"
-echo "停止服务：docker compose down"
+echo "查看状态：./scripts/compose.sh ps"
+echo "查看日志：./scripts/compose.sh logs -f backend worker"
+echo "停止服务：./scripts/compose.sh down"

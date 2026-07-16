@@ -18,7 +18,7 @@ range_persistence_mode = "shadow"
 查看统一工作进程：
 
 ```bash
-docker compose exec -T worker python -m app.worker --healthcheck
+./scripts/compose.sh exec -T worker python -m app.worker --healthcheck
 ```
 
 健康结果中的`breakout`条目记录定时扫描的运行、暂停、禁用或降级状态；`breakout_refresh`单独记录 Owner 手动扫描。统一健康清单共九项，部署检查只读取记录，不启动扫描。

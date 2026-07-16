@@ -9,7 +9,7 @@ cp .env.example .env
 cp machine.env.example machine.env
 cp secrets.env.example secrets.env
 chmod 600 .env machine.env secrets.env
-docker compose config -q
+./scripts/compose.sh config -q
 ```
 
 核对`.env`只保留迁移兼容说明；`machine.env`只含监听地址、端口、MacroLens 地址、反向代理边界和`DATA_DIR`；`secrets.env`只含五个服务端密钥。访问模式、模型、推理等级、运行频率和预算以`config/personal.toml`为准。
@@ -28,7 +28,7 @@ docker compose config -q
 
 ```bash
 mkdir -p backups/personal
-docker compose run --rm --no-deps \
+./scripts/compose.sh run --rm --no-deps \
   --volume "$PWD/backups/personal:/backups" \
   worker python -m app.tools.sqlite_backup \
   --database optix=/data/optix.db \
@@ -52,9 +52,9 @@ bash ./scripts/deploy.sh
 启动后检查：
 
 ```bash
-docker compose ps
+./scripts/compose.sh ps
 curl --fail http://127.0.0.1:${PORT:-2000}/ready
-docker compose exec -T worker python -m app.worker --healthcheck
+./scripts/compose.sh exec -T worker python -m app.worker --healthcheck
 ```
 
 工作进程健康结果应且只应包含`breakout`、`catalyst_sync`、`focus`、`ai_jobs`、`maintenance`、`focus_refresh`、`strength_refresh`、`breakout_refresh`和`retention`。
@@ -66,9 +66,9 @@ docker compose exec -T worker python -m app.worker --healthcheck
 ## 回滚
 
 ```bash
-docker compose down
+./scripts/compose.sh down
 git switch --detach <previous-verified-tag>
-docker compose up -d --build
+bash ./scripts/deploy.sh
 ```
 
 回滚继续使用同一数据卷，不附加`--volumes`。若需恢复备份，必须先停止所有写入者，核对摘要、清单、完整性检查和外键检查，再替换损坏文件。

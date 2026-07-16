@@ -13,6 +13,10 @@ fail() {
     exit 1
 }
 
+compose() {
+    "$ROOT_DIR/scripts/compose.sh" "$@"
+}
+
 require_tools() {
     command -v docker >/dev/null 2>&1 || fail "Docker is not installed."
     command -v python3 >/dev/null 2>&1 || fail "Python 3 is not installed."
@@ -33,7 +37,6 @@ prepare_runtime_files() {
         fail "machine.env is missing. Copy machine.env.example to machine.env first."
     chmod 600 .env
     chmod 600 machine.env
-    export COMPOSE_ENV_FILES=".env,machine.env"
     if [ -f secrets.env ]; then
         chmod 600 secrets.env
     fi
@@ -43,7 +46,7 @@ validate_runtime_boundary() {
     local report
     report=""
     if ! report="$(
-        docker compose run --rm --no-deps -T backend \
+        compose run --rm --no-deps -T backend \
             python -m app.tools.validate_personal_deployment
     )"; then
         printf '%s\n' "$report" >&2
@@ -90,7 +93,7 @@ stop_legacy_workers() {
     local -a legacy_services legacy_ids
     legacy_services=(ai-worker catalyst-sync-worker focus-context-producer breakout-worker)
     project_name="$(
-        docker compose config --format json |
+        compose config --format json |
             python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])'
     )"
     legacy_ids=()
@@ -118,7 +121,7 @@ stop_legacy_workers() {
 }
 
 verify_backend() {
-    docker compose exec -T -e "EXPECTED_APP_COMMIT=${APP_COMMIT}" backend python - <<'PY'
+    compose exec -T -e "EXPECTED_APP_COMMIT=${APP_COMMIT}" backend python - <<'PY'
 import json
 import os
 import urllib.request
@@ -164,7 +167,7 @@ verify_worker() {
     local attempt payload=""
     for attempt in $(seq 1 60); do
         if payload="$(
-            docker compose exec -T worker python -m app.worker --healthcheck \
+            compose exec -T worker python -m app.worker --healthcheck \
                 2>/dev/null
         )" && worker_payload_is_ready "$payload"; then
             printf '%s\n' "$payload"
@@ -180,16 +183,16 @@ main() {
     require_tools
     prepare_runtime_files
     release_identity
-    docker compose config -q
+    compose config -q
 
     echo "Building Optix Pro ${APP_VERSION} (${APP_COMMIT})."
-    docker compose build --pull backend
+    compose build --pull backend
     validate_runtime_boundary
     stop_legacy_workers
 
-    if ! docker compose up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180; then
-        docker compose ps >&2 || true
-        docker compose logs --tail=200 backend worker >&2 || true
+    if ! compose up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180; then
+        compose ps >&2 || true
+        compose logs --tail=200 backend worker >&2 || true
         exit 1
     fi
 

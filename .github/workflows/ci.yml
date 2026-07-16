@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
+      COMPOSE_ENV_FILES: ".env,machine.env"
       PYTHONPATH: backend
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
@@ -45,6 +46,7 @@ jobs:
         shell: bash
         run: |
           cp .env.example .env
+          cp machine.env.example machine.env
           echo "APP_COMMIT=${GITHUB_SHA}" >> "$GITHUB_ENV"
           echo "APP_VERSION=${GITHUB_SHA:0:12}" >> "$GITHUB_ENV"
 
@@ -92,7 +94,7 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Check shell script syntax
-        run: bash -n setup.sh personal.sh scripts/deploy.sh scripts/lock-dependencies.sh
+        run: bash -n setup.sh personal.sh scripts/compose.sh scripts/deploy.sh scripts/lock-dependencies.sh
 
       - name: Check changed lines for whitespace errors
         shell: bash
@@ -125,21 +127,21 @@ jobs:
       - name: Validate formal Docker Compose configuration
         shell: bash
         run: |
-          docker compose config -q
-          test "$(docker compose config --services | sort | tr '\n' ' ')" = "backend worker "
-          docker compose config --format json |
+          ./scripts/compose.sh config -q
+          test "$(./scripts/compose.sh config --services | sort | tr '\n' ' ')" = "backend worker "
+          ./scripts/compose.sh config --format json |
             python -c 'import json,sys; p=json.load(sys.stdin); s=p["services"]; assert set(s)=={"backend","worker"}; assert s["backend"]["image"]==s["worker"]["image"]; assert all(x.get("read_only") is True for x in s.values()); assert all(any(v.get("target")=="/data" for v in x.get("volumes",[])) for x in s.values()); assert set(p.get("volumes",{}))=={"optix-data"}'
 
       - name: Build production image
-        run: docker compose build backend
+        run: ./scripts/compose.sh build backend
 
       - name: Validate deployment boundary in production image
         run: >-
-          docker compose run --rm --no-deps -T backend
+          ./scripts/compose.sh run --rm --no-deps -T backend
           python -m app.tools.validate_personal_deployment
 
       - name: Start backend and unified worker
-        run: docker compose up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180
+        run: ./scripts/compose.sh up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180
 
       - name: Capture Catalyst Desk visual evidence
         env:
@@ -174,7 +176,7 @@ jobs:
           grep -qi '^cache-control:.*max-age=300' /tmp/optix-static.headers
           worker_ready=false
           for attempt in {1..30}; do
-            if docker compose exec -T worker python -m app.worker --healthcheck |
+            if ./scripts/compose.sh exec -T worker python -m app.worker --healthcheck |
               python -c 'import json,sys; p=json.load(sys.stdin); expected={"breakout","catalyst_sync","focus","ai_jobs","maintenance","focus_refresh","strength_refresh","breakout_refresh","retention"}; actual={x.get("task_name") for x in p.get("tasks",[])}; assert p.get("healthy") is True; assert p.get("schema_version")=="optix-worker-v2"; assert actual==expected'; then
               worker_ready=true
               break
@@ -186,7 +188,7 @@ jobs:
       - name: Exercise Breakout Radar with offline fixtures
         shell: bash
         run: |
-          docker compose run --rm --no-deps \
+          ./scripts/compose.sh run --rm --no-deps \
             --env PYTHONPATH=/app/backend \
             --volume "${GITHUB_WORKSPACE}/tests:/ci-tests:ro" \
             worker \
@@ -197,7 +199,7 @@ jobs:
       - name: Exercise Catalyst ETL with offline fixtures
         shell: bash
         run: |
-          docker compose run --rm --no-deps \
+          ./scripts/compose.sh run --rm --no-deps \
             --env INTERNAL_API_TOKEN=container-fixture-owner \
             --env MACROLENS_URL=https://macrolens.fixture \
             --env DATA_DIR=/data/container-catalyst-fixture \
@@ -209,27 +211,27 @@ jobs:
       - name: Verify non-root read-only runtime and shared SQLite WAL volume
         shell: bash
         run: |
-          docker compose exec -T backend python -c 'import os; assert os.geteuid()!=0'
-          docker compose exec -T worker python -c 'import os; assert os.geteuid()!=0'
-          docker compose exec -T backend test -r /licenses/THIRD_PARTY_NOTICES.md
-          docker compose exec -T worker test -r /licenses/BreakoutAnalysis-LICENSE
-          if docker compose exec -T backend touch /home/app/.rootfs-write-probe; then exit 1; fi
-          if docker compose exec -T worker touch /home/app/.rootfs-write-probe; then exit 1; fi
-          docker compose exec -T worker python -c 'import sqlite3,time; from pathlib import Path; from app.services.breakouts.repository import BreakoutRepository; p=Path("/data/optix.db"); BreakoutRepository(p).initialize(); c=sqlite3.connect(p); assert c.execute("PRAGMA journal_mode").fetchone()[0].lower()=="wal"; c.execute("CREATE TABLE IF NOT EXISTS deployment_wal_probe(value TEXT NOT NULL)"); c.commit(); c.execute("BEGIN IMMEDIATE"); c.execute("INSERT INTO deployment_wal_probe(value) VALUES (?)",("shared",)); Path("/data/.wal-probe-ready").write_text("ready",encoding="utf-8"); time.sleep(15); c.commit(); c.close()' &
+          ./scripts/compose.sh exec -T backend python -c 'import os; assert os.geteuid()!=0'
+          ./scripts/compose.sh exec -T worker python -c 'import os; assert os.geteuid()!=0'
+          ./scripts/compose.sh exec -T backend test -r /licenses/THIRD_PARTY_NOTICES.md
+          ./scripts/compose.sh exec -T worker test -r /licenses/BreakoutAnalysis-LICENSE
+          if ./scripts/compose.sh exec -T backend touch /home/app/.rootfs-write-probe; then exit 1; fi
+          if ./scripts/compose.sh exec -T worker touch /home/app/.rootfs-write-probe; then exit 1; fi
+          ./scripts/compose.sh exec -T worker python -c 'import sqlite3,time; from pathlib import Path; from app.services.breakouts.repository import BreakoutRepository; p=Path("/data/optix.db"); BreakoutRepository(p).initialize(); c=sqlite3.connect(p); assert c.execute("PRAGMA journal_mode").fetchone()[0].lower()=="wal"; c.execute("CREATE TABLE IF NOT EXISTS deployment_wal_probe(value TEXT NOT NULL)"); c.commit(); c.execute("BEGIN IMMEDIATE"); c.execute("INSERT INTO deployment_wal_probe(value) VALUES (?)",("shared",)); Path("/data/.wal-probe-ready").write_text("ready",encoding="utf-8"); time.sleep(15); c.commit(); c.close()' &
           probe_pid=$!
           for attempt in {1..30}; do
-            if docker compose exec -T backend test -f /data/.wal-probe-ready; then break; fi
+            if ./scripts/compose.sh exec -T backend test -f /data/.wal-probe-ready; then break; fi
             sleep 0.5
           done
-          docker compose exec -T backend test -f /data/.wal-probe-ready
-          docker compose exec -T backend python -c 'import sqlite3; from pathlib import Path; p=Path("/data/optix.db"); assert p.exists(); assert Path(str(p)+"-wal").exists(); assert Path(str(p)+"-shm").exists(); c=sqlite3.connect(f"file:{p}?mode=ro",uri=True); assert c.execute("PRAGMA journal_mode").fetchone()[0].lower()=="wal"; assert c.execute("SELECT COUNT(*) FROM deployment_wal_probe").fetchone()[0]==0; c.close()'
+          ./scripts/compose.sh exec -T backend test -f /data/.wal-probe-ready
+          ./scripts/compose.sh exec -T backend python -c 'import sqlite3; from pathlib import Path; p=Path("/data/optix.db"); assert p.exists(); assert Path(str(p)+"-wal").exists(); assert Path(str(p)+"-shm").exists(); c=sqlite3.connect(f"file:{p}?mode=ro",uri=True); assert c.execute("PRAGMA journal_mode").fetchone()[0].lower()=="wal"; assert c.execute("SELECT COUNT(*) FROM deployment_wal_probe").fetchone()[0]==0; c.close()'
           wait "$probe_pid"
-          docker compose exec -T backend python -c 'import sqlite3; from pathlib import Path; p=Path("/data/optix.db"); c=sqlite3.connect(f"file:{p}?mode=ro",uri=True); assert c.execute("SELECT COUNT(*) FROM deployment_wal_probe").fetchone()[0]==1; c.close()'
+          ./scripts/compose.sh exec -T backend python -c 'import sqlite3; from pathlib import Path; p=Path("/data/optix.db"); c=sqlite3.connect(f"file:{p}?mode=ro",uri=True); assert c.execute("SELECT COUNT(*) FROM deployment_wal_probe").fetchone()[0]==1; c.close()'
 
       - name: Show container logs after failure
         if: failure()
-        run: docker compose logs --tail=200 backend worker
+        run: ./scripts/compose.sh logs --tail=200 backend worker
 
       - name: Clean up containers
         if: always()
-        run: docker compose down --remove-orphans --volumes
+        run: ./scripts/compose.sh down --remove-orphans --volumes
