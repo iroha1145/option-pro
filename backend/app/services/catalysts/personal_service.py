@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import sqlite3
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timezone
@@ -32,6 +31,13 @@ _WAITING_SUMMARY = "中文摘要等待生成"
 _WAITING_HOTSPOT_TITLE = "热点标题等待中文分析"
 _ACTION_MODES = frozenset({"manual", "scheduled"})
 _NEWS_PROMPT_VERSION = "news-impact-zh-cn-v2"
+_LOCAL_STORE_RUNTIME_CODES = frozenset(
+    {
+        "ai_job_insert_failed",
+        "ai_job_schema_checksum_mismatch",
+        "local_catalyst_schema_checksum_mismatch",
+    }
+)
 _REQUIRED_LOCAL_TABLES = frozenset(
     {
         "macrolens_etl_state",
@@ -185,7 +191,13 @@ class PersonalCatalystService:
     def _worker_healthy(self) -> bool:
         if self._ai_repository_injected or self._intelligence_injected:
             return True
-        path = Path(os.environ.get("OPTIX_WORKER_DB_PATH", "/data/optix-worker.db"))
+        path = Path(
+            getattr(
+                self.ai_settings,
+                "optix_worker_db_path",
+                Path("/data/optix-worker.db"),
+            )
+        )
         try:
             health = WorkerStateRepository(path).health()
             return bool(
@@ -263,8 +275,10 @@ class PersonalCatalystService:
             reason = "not_configured"
         elif not worker_healthy:
             reason = "worker_unavailable"
-        elif not capacity["budget_available"]:
-            reason = "budget_exhausted"
+        elif not capacity["job_limit_available"]:
+            reason = "daily_job_limit"
+        elif not capacity["dollar_budget_available"]:
+            reason = "daily_budget_exhausted"
         elif not capacity["concurrency_available"]:
             reason = "analysis_in_progress"
         elif not capacity["cooldown_complete"]:
@@ -285,11 +299,10 @@ class PersonalCatalystService:
         availability = self.analysis_availability()
         if availability["enabled"] or availability["reason"] in {
             # The durable queue performs the final atomic check. Allowing these
-            # states through preserves duplicate-request idempotency and lets a
-            # task become budget_blocked without a second submission attempt.
-            "budget_exhausted",
+            # active states through preserves duplicate-request idempotency.
+            # Daily and cooldown gates can be reported immediately because they
+            # do not describe queue capacity.
             "analysis_in_progress",
-            "cooldown_active",
         }:
             return
         reason = str(availability["reason"])
@@ -300,16 +313,24 @@ class PersonalCatalystService:
             until = _parse_utc(availability.get("cooldown_until"))
             if until is not None:
                 retry_after = max(1, int((until - _utc_now()).total_seconds()) + 1)
+        code = {
+            "not_configured": "ai_not_configured",
+            "worker_unavailable": "worker_unavailable",
+            "daily_job_limit": "daily_job_limit_reached",
+            "daily_budget_exhausted": "daily_budget_usd_reached",
+            "analysis_in_progress": "analysis_in_progress",
+            "cooldown_active": "analysis_cooldown_active",
+            "settings_unavailable": "runtime_settings_unavailable",
+        }.get(reason, "capability_disabled")
+        message = {
+            "daily_job_limit_reached": "今日任务次数已用完",
+            "daily_budget_usd_reached": "今日分析预算已用完",
+            "analysis_cooldown_active": "分析正在冷却中",
+            "worker_unavailable": "后台工作进程暂不可用",
+        }.get(code, "当前无法开始新闻分析")
         raise CatalystError(
-            {
-                "not_configured": "ai_not_configured",
-                "worker_unavailable": "worker_unavailable",
-                "budget_exhausted": "daily_budget_usd_reached",
-                "analysis_in_progress": "analysis_in_progress",
-                "cooldown_active": "analysis_cooldown_active",
-                "settings_unavailable": "runtime_settings_unavailable",
-            }.get(reason, "capability_disabled"),
-            "Catalyst analysis is not currently available",
+            code,
+            message,
             retryable=reason in {
                 "worker_unavailable",
                 "analysis_in_progress",
@@ -380,7 +401,27 @@ class PersonalCatalystService:
 
     @staticmethod
     def _is_local_store_error(error: BaseException) -> bool:
-        return isinstance(error, (sqlite3.Error, OSError, RuntimeError))
+        return isinstance(error, (sqlite3.Error, OSError)) or (
+            isinstance(error, RuntimeError)
+            and str(error) in _LOCAL_STORE_RUNTIME_CODES
+        )
+
+    @classmethod
+    def _analysis_request_error(
+        cls,
+        error: BaseException,
+    ) -> CatalystError | None:
+        if isinstance(error, RuntimeError) and str(error) == "ai_job_queue_full":
+            return CatalystError(
+                "ai_job_queue_full",
+                "分析队列已满，请稍后重试",
+                retryable=True,
+                retry_after_seconds=60,
+                counts_for_circuit=False,
+            )
+        if cls._is_local_store_error(error):
+            return cls._cache_unavailable()
+        return None
 
     def _verified_news_job_row(
         self, job_id: str
@@ -1145,8 +1186,9 @@ class PersonalCatalystService:
                 arguments["force"] = True
             return self.intelligence.request_market_focus_cycle(**arguments)
         except Exception as error:
-            if self._is_local_store_error(error):
-                raise self._cache_unavailable() from error
+            classified = self._analysis_request_error(error)
+            if classified is not None:
+                raise classified from error
             raise
 
     def market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
@@ -1179,8 +1221,9 @@ class PersonalCatalystService:
         try:
             return self.intelligence.request_analysis(news_id, force=force)
         except Exception as error:
-            if self._is_local_store_error(error):
-                raise self._cache_unavailable() from error
+            classified = self._analysis_request_error(error)
+            if classified is not None:
+                raise classified from error
             raise
 
     def analysis_job(self, job_id: str) -> dict[str, Any] | None:

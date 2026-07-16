@@ -115,6 +115,45 @@ test('market-focus cycles are explicit, revision-bound, and never triggered by p
   assert.doesNotMatch(catalysts, /胜率\s*[:：]?\s*\d|收益概率\s*[:：]?\s*\d/);
 });
 
+test('Catalyst analysis errors use the required Simplified Chinese copy', () => {
+  const context = vm.createContext({
+    window: {
+      location: { origin: 'https://option.example' },
+      OPTIX_NET: {},
+      OPTIX_AI_JOBS: { normalizeStatus: value => String(value || 'pending').toLowerCase() },
+    },
+    document: { querySelector: () => null, querySelectorAll: () => [] },
+    URL,
+    URLSearchParams,
+    Date,
+    history: { replaceState: () => {} },
+  });
+  vm.runInContext(catalysts, context, { filename: 'deck-catalysts.js' });
+  const desk = context.window.OPTIX_CATALYSTS;
+  assert.deepEqual(
+    [
+      'ai_job_queue_full',
+      'daily_job_limit_reached',
+      'daily_budget_usd_reached',
+      'analysis_cooldown_active',
+      'cache_unavailable',
+    ].map(code => desk.analysisErrorMessage(code)),
+    [
+      '分析队列已满，请稍后重试',
+      '今日任务次数已用完',
+      '今日分析预算已用完',
+      '分析正在冷却中',
+      '本地缓存暂不可用',
+    ],
+  );
+  assert.equal(
+    desk.analysisErrorDetail({ error_code: 'ai_job_queue_full', retry_after_seconds: 60 }),
+    '分析队列已满，请稍后重试 · 60 秒后可重试',
+  );
+  assert.match(catalysts, /analysisErrorDetail\(cycle\)/);
+  assert.match(catalysts, /analysisErrorDetail\(statusPayload\)/);
+});
+
 test('an old unknown market-focus cycle stays immutable while a newer prepared revision can start separately', () => {
   const context = vm.createContext({
     window: {

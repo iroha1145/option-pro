@@ -65,8 +65,23 @@
     prepared: "准备完成", leased: "分析占用中", consumed: "已消费", resync_required: "需要重新同步",
     incomplete_output: "输出不完整", submission_outcome_unknown: "提交结果待确认", worker_interrupted: "任务中断",
   };
+  const ANALYSIS_ERROR_CN = Object.freeze({
+    ai_job_queue_full: "分析队列已满，请稍后重试",
+    daily_job_limit_reached: "今日任务次数已用完",
+    daily_budget_usd_reached: "今日分析预算已用完",
+    analysis_cooldown_active: "分析正在冷却中",
+    cache_unavailable: "本地缓存暂不可用",
+  });
   const LOW_CONTEXT_RULE_MODEL = "low-context-neutral-v2";
   const className = value => String(value || "").toLowerCase();
+  const analysisErrorMessage = value => ANALYSIS_ERROR_CN[className(value)] || "分析任务暂未完成，请稍后重试";
+  const analysisErrorDetail = payload => {
+    const message = analysisErrorMessage(payload && (payload.error_code || payload.code));
+    const retryAfter = Number(payload && (payload.retry_after_seconds || payload.retry_after));
+    return Number.isFinite(retryAfter) && retryAfter > 0
+      ? `${message} · ${Math.ceil(retryAfter)} 秒后可重试`
+      : message;
+  };
   const classLabel = value => CLASS_CN[className(value)] || String(value || "—");
   const horizonLabel = value => HORIZON_CN[className(value)] || String(value || "—");
   const mechanismLabel = value => MECHANISM_CN[className(value)] || String(value || "—");
@@ -1000,12 +1015,12 @@
     ].map(([label, value]) => `<span><small>${esc(label)}</small><b>${esc(value)}</b></span>`).join("");
 
     const terminalFailure = !decision.unknownSubmission
-      && (cycle.status === "failed" || cycle.status === "incomplete_output");
+      && ["failed", "incomplete_output", "budget_blocked"].includes(cycle.status);
     const unknownNeedsReview = decision.unknownSubmission && !decision.newPreparationAfterUnknown;
     let state = "";
     if (decision.active) state = stateBlock(cycle.status, statusLabel(cycle.status), "新热点仍会进入下一准备版本，不会混入当前不可变快照。 ");
     else if (unknownNeedsReview) state = stateBlock("degraded", "提交结果待核对", "无法确认远端是否已经受理。为避免重复计费，本周期禁止重试，需等待服务端核对结果。 ");
-    else if (terminalFailure) state = stateBlock("failed", statusLabel(cycle.status), cycle.error_code ? `安全错误码：${cycle.error_code}；准备版本尚未消费。` : "准备版本尚未消费，可在冷却结束后显式重试。 ");
+    else if (terminalFailure) state = stateBlock("failed", statusLabel(cycle.status), cycle.error_code ? `${analysisErrorDetail(cycle)}；准备版本尚未消费。` : "准备版本尚未消费，可在冷却结束后显式重试。 ");
     else if (decision.budgetMissing) state = stateBlock("disabled", "今日分析预算已用完", `${budgetPolicyText()}；额度恢复前不会提交新的模型任务。`);
     else if (decision.workerMissing) state = stateBlock("disabled", "后台工作进程暂不可用", "工作进程恢复后才能创建新的综合分析周期。 ");
     else if (decision.concurrencyMissing) state = stateBlock("disabled", "已有分析正在运行", "同一时间只运行一项模型分析。 ");
@@ -1281,7 +1296,7 @@
       },
       onError: error => {
         if (!page.active) return;
-        page.marketCycle = Object.assign({}, cycle, { status: "failed", error_code: error.code || "market_focus_poll_failed" });
+        page.marketCycle = Object.assign({}, cycle, { status: "failed", error_code: error.code || "market_focus_poll_failed", retry_after_seconds: error.retryAfter });
         renderFocusPanel();
       },
     });
@@ -1320,7 +1335,7 @@
       },
       onError: error => {
         if (!page.active) return;
-        page.marketCycle = { status: "failed", error_code: error.code || "market_focus_create_failed" };
+        page.marketCycle = { status: "failed", error_code: error.code || "market_focus_create_failed", retry_after_seconds: error.retryAfter };
         renderFocusPanel();
       },
     });
@@ -1438,7 +1453,7 @@
         <span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span>
         <h3>${isActive ? status === "in_progress" ? "模型正在分析" : "分析任务已排队" : status === "failed" ? "分析任务失败" : esc(access.title)}</h3>
         <p>${isActive ? `${statusPayload.submitted_at || statusPayload.created_at ? "提交 " + N.fmtDateTime(statusPayload.submitted_at || statusPayload.created_at) : ""}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · ${esc(model)} · ${esc(reasoning)}；不显示估算进度。` : status === "failed" ? "来源信息仍可查看；失败状态不会补成中性方向。" : esc(access.detail)}</p>
-        ${statusPayload && statusPayload.error_code ? `<p class="d">安全错误码：${esc(statusPayload.error_code)}${statusPayload.retry_after_seconds || statusPayload.retry_after ? ` · ${Math.ceil(statusPayload.retry_after_seconds || statusPayload.retry_after)} 秒后可重试` : ""}</p>` : ""}
+        ${statusPayload && statusPayload.error_code ? `<p class="d">${esc(analysisErrorDetail(statusPayload))}</p>` : ""}
         ${accessNotice}
         <div class="cat-analysis-actions">
           ${!isActive ? `<button class="btn btn--amber btn--sm" id="cat-analysis-run" type="button" data-cat-analyze="${esc(itemId(item))}" ${canTrigger ? "" : `disabled title="${esc(access.detail)}"`}>${status === "failed" || status === "cancelled" ? "重试分析" : "生成分析"}</button>` : ""}
@@ -1448,14 +1463,14 @@
     }
     const impacts = rawImpactsOf(displayItem);
     const validations = validationMapOf(displayItem);
-    const retryableTerminal = !!(statusPayload && statusPayload.job_id && (status === "failed" || status === "cancelled"));
+    const retryableTerminal = !!(statusPayload && statusPayload.job_id && ["failed", "cancelled", "budget_blocked"].includes(status));
     const accessNotice = access.actionMissing
       ? stateBlock("disabled", access.title, access.detail)
       : "";
     const jobNotice = isActive
       ? `<div class="cat-analysis-state" style="margin-bottom:14px"><span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span><p>${statusPayload && (statusPayload.submitted_at || statusPayload.created_at) ? "提交 " + N.fmtDateTime(statusPayload.submitted_at || statusPayload.created_at) : "新的分析版本正在后台处理"} · ${esc(model)} · ${esc(reasoning)} · 现有已完成版本继续显示 · 不显示估算进度</p><div class="cat-analysis-actions"><button class="btn btn--sm" id="cat-analysis-cancel" type="button" data-cat-cancel-job ${status === "cancel_requested" ? "disabled" : ""}>${status === "cancel_requested" ? "正在取消" : "取消新任务"}</button></div></div>`
       : retryableTerminal
-        ? `<div class="cat-analysis-state" style="margin-bottom:14px"><span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span><p>新版本任务未完成；现有已完成版本继续显示。</p>${statusPayload.error_code ? `<p class="d">安全错误码：${esc(statusPayload.error_code)}</p>` : ""}</div>`
+        ? `<div class="cat-analysis-state" style="margin-bottom:14px"><span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span><p>新版本任务未完成；现有已完成版本继续显示。</p>${statusPayload.error_code ? `<p class="d">${esc(analysisErrorDetail(statusPayload))}</p>` : ""}</div>`
         : "";
     const reanalysisAction = !isActive
       ? `<div class="cat-analysis-actions"><button class="btn btn--amber btn--sm" id="cat-analysis-run" type="button" data-cat-analyze="${esc(itemId(item))}" ${canTrigger ? "" : `disabled title="${esc(access.detail)}"`}>重新分析</button></div>`
@@ -1720,6 +1735,7 @@
     renderPage, leaveRoute, openNews, mountTickerPanel, mountScreenerBatch, abortPageEnhancements, onDrawerClosed,
     labels: { statusLabel, classLabel },
     formatConfidence: pct,
+    analysisErrorMessage, analysisErrorDetail,
     impactsOf, impactDirection, sentimentOf, isRuleOnlyAnalysis, analysisOriginLabel, analysisRetryForce, compactNews, plainText,
     itemTitle, itemSummary,
     analysisActionDecision, focusCycleDecision, focusCycleRequest, focusUnknownHistoryHtml,

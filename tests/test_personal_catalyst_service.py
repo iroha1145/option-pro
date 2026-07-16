@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -586,6 +587,155 @@ def test_api_read_mode_rejects_explicit_analysis_without_creating_a_job() -> Non
     assert create.status_code == 503
     assert create.json()["detail"]["code"] == "capability_disabled"
     assert engine.actions == []
+
+
+@pytest.mark.parametrize(
+    ("path", "payload"),
+    (
+        ("/api/catalysts/news/101/analysis", {}),
+        (
+            "/api/catalysts/market-focus-cycles",
+            {"expected_prepared_revision": 3},
+        ),
+    ),
+)
+def test_analysis_queue_full_returns_429_with_retry_after(
+    path: str,
+    payload: dict[str, Any],
+) -> None:
+    class QueueFullIntelligence(FakeIntelligence):
+        @staticmethod
+        def _raise_queue_full() -> None:
+            raise RuntimeError("ai_job_queue_full")
+
+        def request_analysis(self, news_id, *, force):
+            self._raise_queue_full()
+
+        def request_market_focus_cycle(
+            self,
+            *,
+            expected_prepared_revision,
+            retry_cycle_id=None,
+        ):
+            self._raise_queue_full()
+
+    service = _service("manual", engine=QueueFullIntelligence())
+    app = FastAPI()
+    app.include_router(catalyst_api.router)
+    app.dependency_overrides[catalyst_api._service] = lambda: service
+    app.dependency_overrides[catalyst_api.require_expensive_action] = lambda: None
+    client = TestClient(app)
+
+    response = client.post(path, json=payload)
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "60"
+    assert response.json()["detail"] == {
+        "code": "ai_job_queue_full",
+        "message": "分析队列已满，请稍后重试",
+        "retryable": True,
+        "retry_after": 60,
+    }
+
+
+@pytest.mark.parametrize(
+    "path",
+    (
+        "/api/catalysts/news/101/analysis",
+        "/api/catalysts/market-focus-cycles",
+    ),
+)
+@pytest.mark.parametrize(
+    ("capacity", "code", "message", "retry_after"),
+    (
+        (
+            {
+                "budget_available": False,
+                "job_limit_available": False,
+                "dollar_budget_available": True,
+            },
+            "daily_job_limit_reached",
+            "今日任务次数已用完",
+            None,
+        ),
+        (
+            {
+                "budget_available": False,
+                "job_limit_available": True,
+                "dollar_budget_available": False,
+            },
+            "daily_budget_usd_reached",
+            "今日分析预算已用完",
+            None,
+        ),
+        (
+            {
+                "budget_available": True,
+                "job_limit_available": True,
+                "dollar_budget_available": True,
+                "cooldown_complete": False,
+                "cooldown_until": (NOW + timedelta(seconds=44)).isoformat(),
+            },
+            "analysis_cooldown_active",
+            "分析正在冷却中",
+            45,
+        ),
+    ),
+)
+def test_analysis_capacity_errors_keep_their_http_and_retry_semantics(
+    path: str,
+    capacity: dict[str, Any],
+    code: str,
+    message: str,
+    retry_after: int | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class CapacityRepository(FakeAIRepository):
+        def budget_snapshot(self, **_kwargs):
+            return {
+                "concurrency_available": True,
+                "cooldown_complete": True,
+                **capacity,
+            }
+
+    runtime_settings = SimpleNamespace(
+        ai=SimpleNamespace(
+            manual_analysis_enabled=True,
+            daily_max_jobs=4,
+            daily_budget_usd=2.0,
+            manual_analysis_cooldown_seconds=30,
+        ),
+        catalyst=SimpleNamespace(manual_force_reanalysis=True),
+    )
+    monkeypatch.setattr(
+        "app.services.catalysts.personal_service.get_effective_runtime_settings",
+        lambda: runtime_settings,
+    )
+    monkeypatch.setattr(
+        "app.services.catalysts.personal_service._utc_now",
+        lambda: NOW,
+    )
+    service = _service("manual", repository=CapacityRepository())
+    app = FastAPI()
+    app.include_router(catalyst_api.router)
+    app.dependency_overrides[catalyst_api._service] = lambda: service
+    app.dependency_overrides[catalyst_api.require_expensive_action] = lambda: None
+    client = TestClient(app)
+    payload = {} if "/news/" in path else {"expected_prepared_revision": 3}
+
+    response = client.post(path, json=payload)
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": code,
+        "message": message,
+        "retryable": retry_after is not None,
+        "retry_after": retry_after,
+    }
+    if retry_after is None:
+        assert "Retry-After" not in response.headers
+    else:
+        assert response.headers["Retry-After"] == str(retry_after)
 
 
 def test_real_local_intelligence_keeps_unanalyzed_news_visible_without_english(

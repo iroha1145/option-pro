@@ -400,6 +400,7 @@ def _raise_safe(error: CatalystError) -> None:
         "invalid_market_focus_request": 422,
         "invalid_refresh_type": 422,
         "invalid_idempotency_key": 422,
+        "ai_job_queue_full": 429,
         "daily_job_limit_reached": 429,
         "daily_budget_usd_reached": 429,
         "daily_output_token_limit_reached": 429,

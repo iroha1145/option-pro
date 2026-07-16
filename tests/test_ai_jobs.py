@@ -32,7 +32,6 @@ def _settings(path):
         openai_max_retries=0,
         openai_max_output_tokens=16384,
         openai_max_concurrency=1,
-        openai_daily_max_jobs=4,
         openai_background_initial_poll_seconds=2,
         openai_background_max_poll_seconds=15,
         openai_background_poll_timeout_seconds=1800,
@@ -41,6 +40,8 @@ def _settings(path):
         openai_job_max_age_seconds=86400,
         openai_job_max_queued=200,
         openai_daily_max_jobs=4,
+        openai_daily_budget_usd=2.0,
+        openai_manual_cooldown_seconds=0,
     )
 
 
@@ -993,7 +994,7 @@ def test_daily_job_limit_is_reserved_atomically_before_provider_submission(
         assert claimed is not None and claimed["job_id"] == row["job_id"]
         assert repository.mark_submission_started(
             row["job_id"], owner, daily_limit=4
-        ) is True
+        ) == "started"
         repository.fail(row["job_id"], owner, "fixture_terminal")
 
     blocked = create("LIMIT")
@@ -1059,9 +1060,26 @@ def test_concurrent_daily_reservations_cannot_cross_the_limit(tmp_path) -> None:
             )
         )
 
-    assert sorted(decisions) == [False, True]
-    statuses = sorted(repository.get_job(row["job_id"])["status"] for row in rows)
-    assert statuses == ["budget_blocked", "in_progress"]
+    assert sorted(decisions) == ["concurrency_limit", "started"]
+    started_index = decisions.index("started")
+    deferred_index = decisions.index("concurrency_limit")
+    repository.fail(
+        rows[started_index]["job_id"],
+        owners[started_index],
+        "fixture_terminal",
+    )
+    with repository._connect() as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET next_attempt_at=NULL WHERE job_id=?",
+            (rows[deferred_index]["job_id"],),
+        )
+        connection.commit()
+    deferred = repository.claim_due(owners[deferred_index], 60)
+    assert deferred is not None
+    assert repository.mark_submission_started(
+        deferred["job_id"], owners[deferred_index], daily_limit=4
+    ) == "daily_limit"
+    assert repository.get_job(deferred["job_id"])["status"] == "budget_blocked"
 
 
 def test_explicit_retry_requeues_safe_terminal_job_but_not_unknown_submission(
@@ -1108,6 +1126,40 @@ def test_explicit_retry_requeues_safe_terminal_job_but_not_unknown_submission(
     assert created is False
     assert blocked["status"] == "failed"
     assert blocked["error_code"] == "submission_outcome_unknown"
+
+
+def test_explicit_retry_respects_the_queue_capacity_limit(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    version, digest = runtime.schema_identity("earnings_impact")
+
+    def create(ticker: str, *, force_retry: bool = False):
+        return repository.create_job(
+            job_type="earnings_impact",
+            payload={"ticker": ticker, "name": ticker},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="background",
+            prompt_version="earnings-impact-v2",
+            schema_version=version,
+            schema_sha256=digest,
+            max_queued=1,
+            force_retry=force_retry,
+        )
+
+    terminal, _ = create("AAPL")
+    owner = "worker-queue-capacity"
+    claimed = repository.claim_due(owner, 60)
+    assert claimed is not None and claimed["job_id"] == terminal["job_id"]
+    repository.fail(terminal["job_id"], owner, "provider_failed")
+    active, _ = create("MSFT")
+
+    with pytest.raises(RuntimeError, match="ai_job_queue_full"):
+        create("AAPL", force_retry=True)
+
+    assert repository.get_job(terminal["job_id"])["status"] == "failed"
+    assert repository.get_job(active["job_id"])["status"] == "pending"
+    with repository._connect() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0] == 2
 
 
 def test_worker_sync_job_creation_is_sealed(tmp_path):

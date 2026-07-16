@@ -391,32 +391,15 @@ class AIJobRepository:
                         "SELECT * FROM ai_jobs WHERE job_id=?",
                         (existing["job_id"],),
                     ).fetchone()
-                if (
+                retryable_terminal = (
                     force_retry
                     and existing["status"]
                     in {"failed", "cancelled", "budget_blocked"}
                     and existing["error_code"] != "submission_outcome_unknown"
-                ):
-                    row = self._insert_job(
-                        connection,
-                        job_type=job_type,
-                        request_hash=request_hash,
-                        payload_json=payload_json,
-                        model=model,
-                        reasoning=reasoning,
-                        execution_mode=execution_mode,
-                        prompt_version=prompt_version,
-                        schema_version=schema_version,
-                        schema_sha256=schema_sha256,
-                        priority=priority,
-                        now=now,
-                        retry_of_job_id=str(existing["job_id"]),
-                        execution_number=int(existing["execution_number"]) + 1,
-                    )
+                )
+                if not retryable_terminal:
                     connection.commit()
-                    return row, True
-                connection.commit()
-                return dict(existing), False
+                    return dict(existing), False
             active = connection.execute(
                 """
                 SELECT COUNT(*) AS count FROM ai_jobs
@@ -426,6 +409,10 @@ class AIJobRepository:
             if active >= max_queued:
                 connection.rollback()
                 raise RuntimeError("ai_job_queue_full")
+            retry_of_job_id = str(existing["job_id"]) if existing else None
+            execution_number = (
+                int(existing["execution_number"]) + 1 if existing else 1
+            )
             row = self._insert_job(
                 connection,
                 job_type=job_type,
@@ -439,8 +426,8 @@ class AIJobRepository:
                 schema_sha256=schema_sha256,
                 priority=priority,
                 now=now,
-                retry_of_job_id=None,
-                execution_number=1,
+                retry_of_job_id=retry_of_job_id,
+                execution_number=execution_number,
             )
             connection.commit()
             return row, True
