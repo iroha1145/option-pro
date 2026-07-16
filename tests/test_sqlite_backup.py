@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+import app.tools.sqlite_backup as backup_module
 from app.tools.sqlite_backup import BackupError, backup_database, main, prune_backups
 
 
@@ -142,6 +143,118 @@ def test_retention_deletes_incomplete_groups_without_counting_them(
     assert not Path(complete.backup).exists()
     assert Path(latest.backup).exists()
     assert set(destination.glob("optix-*.sqlite3")) == {Path(latest.backup)}
+
+
+def test_retention_rebuilds_a_missing_checksum_from_a_valid_manifest(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.db"
+    destination = tmp_path / "backups"
+    _create_database(source)
+    result = backup_database(source, destination, label="optix", keep=1)
+    checksum_path = Path(result.checksum_file)
+    checksum_path.unlink()
+
+    removed = prune_backups(destination, "optix", keep=1)
+
+    assert removed == ()
+    assert checksum_path.read_text(encoding="utf-8") == (
+        f"{result.sha256}  {Path(result.backup).name}\n"
+    )
+    assert Path(result.backup).exists()
+    assert Path(result.manifest).exists()
+
+
+def test_retention_fails_closed_when_checksum_repair_detects_changed_data(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.db"
+    destination = tmp_path / "backups"
+    _create_database(source)
+    result = backup_database(source, destination, label="optix", keep=1)
+    backup_path = Path(result.backup)
+    checksum_path = Path(result.checksum_file)
+    checksum_path.unlink()
+    backup_path.write_bytes(b"x" * backup_path.stat().st_size)
+    files_before = {path.name for path in destination.iterdir()}
+
+    with pytest.raises(BackupError, match="does not match its manifest"):
+        prune_backups(destination, "optix", keep=1)
+
+    assert {path.name for path in destination.iterdir()} == files_before
+    assert backup_path.exists()
+    assert Path(result.manifest).exists()
+    assert not checksum_path.exists()
+
+
+def test_post_commit_retention_failure_preserves_the_new_complete_backup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.db"
+    destination = tmp_path / "backups"
+    _create_database(source)
+    start = datetime(2026, 7, 15, tzinfo=UTC)
+    old = backup_database(
+        source,
+        destination,
+        label="optix",
+        keep=1,
+        created_at=start,
+    )
+    old_checksum = Path(old.checksum_file)
+    original_unlink = Path.unlink
+
+    def fail_old_checksum_unlink(path: Path, *args: object, **kwargs: object) -> None:
+        if path == old_checksum:
+            raise OSError("injected retention failure")
+        original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_old_checksum_unlink)
+
+    with pytest.raises(BackupError, match="cannot remove expired backup file"):
+        backup_database(
+            source,
+            destination,
+            label="optix",
+            keep=1,
+            created_at=start + timedelta(minutes=1),
+        )
+
+    manifests = list(destination.glob("optix-*.sqlite3.json"))
+    assert len(manifests) == 1
+    payload = json.loads(manifests[0].read_text(encoding="utf-8"))
+    new_backup = destination / str(payload["backup"])
+    new_checksum = destination / f"{payload['backup']}.sha256"
+    assert new_backup.exists()
+    assert new_checksum.exists()
+    assert Path(old.backup).exists()
+    assert old_checksum.exists()
+    assert not Path(old.manifest).exists()
+
+
+def test_backup_publishes_manifest_as_the_final_commit_marker(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.db"
+    destination = tmp_path / "backups"
+    _create_database(source)
+    published_metadata: list[str] = []
+    original_write = backup_module._atomic_write_text
+
+    def record_write(path: Path, content: str) -> None:
+        published_metadata.append(path.name)
+        original_write(path, content)
+
+    monkeypatch.setattr(backup_module, "_atomic_write_text", record_write)
+
+    result = backup_database(source, destination, label="optix", keep=1)
+
+    assert published_metadata == [
+        Path(result.checksum_file).name,
+        Path(result.manifest).name,
+    ]
 
 
 def _backup_names_by_label(destination: Path) -> dict[str, set[str]]:

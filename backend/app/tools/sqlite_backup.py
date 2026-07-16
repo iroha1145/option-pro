@@ -53,6 +53,15 @@ class _CompleteBackup:
     created_at: datetime
 
 
+@dataclass(frozen=True)
+class _ManifestBackup:
+    backup_path: Path
+    manifest_path: Path
+    checksum_path: Path
+    created_at: datetime
+    expected_sha256: str
+
+
 def _validate_label(label: str) -> str:
     if not _SAFE_LABEL.fullmatch(label):
         raise BackupError(
@@ -205,14 +214,14 @@ def _parse_created_at(raw_value: object, manifest_path: Path) -> datetime:
     return parsed.astimezone(UTC)
 
 
-def _load_complete_backup(
+def _load_manifest_backup(
     destination: Path,
     manifest_path: Path,
     *,
     label: str,
     expected_backup_name: str,
     filename_created_at: datetime,
-) -> _CompleteBackup:
+) -> _ManifestBackup:
     try:
         manifest_size = manifest_path.stat().st_size
     except OSError as exc:
@@ -258,26 +267,64 @@ def _load_complete_backup(
 
     backup_path = destination / expected_backup_name
     checksum_path = destination / f"{expected_backup_name}.sha256"
-    if not backup_path.is_file() or not checksum_path.is_file():
-        raise BackupError(f"backup manifest does not have a complete file set: {manifest_path}")
+    if not backup_path.is_file():
+        raise BackupError(f"backup manifest does not have its database file: {manifest_path}")
     try:
         actual_size = backup_path.stat().st_size
-        checksum_text = checksum_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as exc:
-        raise BackupError(f"cannot validate backup file set {backup_path}: {exc}") from exc
+    except OSError as exc:
+        raise BackupError(f"cannot validate backup file {backup_path}: {exc}") from exc
     if actual_size != payload["size_bytes"]:
         raise BackupError(f"backup size does not match its manifest: {backup_path}")
-    if checksum_text != f"{digest}  {expected_backup_name}\n":
-        raise BackupError(f"backup checksum file does not match its manifest: {checksum_path}")
 
     created_at = _parse_created_at(payload["created_at"], manifest_path)
     if created_at != filename_created_at:
         raise BackupError(f"backup timestamp does not match its manifest: {manifest_path}")
-    return _CompleteBackup(
+    return _ManifestBackup(
         backup_path=backup_path,
         manifest_path=manifest_path,
         checksum_path=checksum_path,
         created_at=created_at,
+        expected_sha256=digest,
+    )
+
+
+def _load_complete_backup(
+    destination: Path,
+    manifest_path: Path,
+    *,
+    label: str,
+    expected_backup_name: str,
+    filename_created_at: datetime,
+) -> _CompleteBackup:
+    manifest_backup = _load_manifest_backup(
+        destination,
+        manifest_path,
+        label=label,
+        expected_backup_name=expected_backup_name,
+        filename_created_at=filename_created_at,
+    )
+    if not manifest_backup.checksum_path.is_file():
+        raise BackupError(
+            f"backup manifest does not have its checksum file: {manifest_path}"
+        )
+    try:
+        checksum_text = manifest_backup.checksum_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise BackupError(
+            f"cannot validate backup checksum {manifest_backup.checksum_path}: {exc}"
+        ) from exc
+    if checksum_text != (
+        f"{manifest_backup.expected_sha256}  {expected_backup_name}\n"
+    ):
+        raise BackupError(
+            "backup checksum file does not match its manifest: "
+            f"{manifest_backup.checksum_path}"
+        )
+    return _CompleteBackup(
+        backup_path=manifest_backup.backup_path,
+        manifest_path=manifest_backup.manifest_path,
+        checksum_path=manifest_backup.checksum_path,
+        created_at=manifest_backup.created_at,
     )
 
 
@@ -306,23 +353,67 @@ def _prune_backups_locked(destination: Path, label: str, keep: int) -> tuple[str
         related_paths.setdefault(backup_name, {})[kind] = path
 
     completed: list[_CompleteBackup] = []
+    missing_checksums: list[_ManifestBackup] = []
     incomplete_paths: list[Path] = []
     for backup_name, group in related_paths.items():
         filename_created_at = _filename_created_at(name_pattern, backup_name)
         if filename_created_at is None:
             continue
-        manifest_path = group.get("manifest")
-        if manifest_path is None:
+        if "manifest" not in group:
             incomplete_paths.extend(group.values())
             continue
-        complete_backup = _load_complete_backup(
+        manifest_path = group.get("manifest")
+        assert manifest_path is not None
+        if "checksum" in group:
+            complete_backup = _load_complete_backup(
+                destination,
+                manifest_path,
+                label=label,
+                expected_backup_name=backup_name,
+                filename_created_at=filename_created_at,
+            )
+            completed.append(complete_backup)
+            continue
+
+        manifest_backup = _load_manifest_backup(
             destination,
             manifest_path,
             label=label,
             expected_backup_name=backup_name,
             filename_created_at=filename_created_at,
         )
-        completed.append(complete_backup)
+        try:
+            actual_digest = _sha256(manifest_backup.backup_path)
+        except OSError as exc:
+            raise BackupError(
+                f"cannot verify backup without checksum {manifest_backup.backup_path}: {exc}"
+            ) from exc
+        if actual_digest != manifest_backup.expected_sha256:
+            raise BackupError(
+                "backup without checksum does not match its manifest: "
+                f"{manifest_backup.backup_path}"
+            )
+        missing_checksums.append(manifest_backup)
+        completed.append(
+            _CompleteBackup(
+                backup_path=manifest_backup.backup_path,
+                manifest_path=manifest_backup.manifest_path,
+                checksum_path=manifest_backup.checksum_path,
+                created_at=manifest_backup.created_at,
+            )
+        )
+
+    for manifest_backup in missing_checksums:
+        try:
+            _atomic_write_text(
+                manifest_backup.checksum_path,
+                f"{manifest_backup.expected_sha256}  "
+                f"{manifest_backup.backup_path.name}\n",
+            )
+        except OSError as exc:
+            raise BackupError(
+                f"cannot restore backup checksum {manifest_backup.checksum_path}: {exc}"
+            ) from exc
 
     expired = sorted(
         completed,
@@ -342,9 +433,9 @@ def _prune_backups_locked(destination: Path, label: str, keep: int) -> tuple[str
 
     for group in expired:
         for related_path in (
-            group.backup_path,
             group.manifest_path,
             group.checksum_path,
+            group.backup_path,
         ):
             try:
                 related_path.unlink()
@@ -399,6 +490,7 @@ def _backup_database_locked(
     label: str | None = None,
     keep: int = 7,
     created_at: datetime | None = None,
+    lock_timeout_seconds: float = 30.0,
 ) -> BackupResult:
     """Create and verify one online SQLite backup, then apply retention."""
 
@@ -430,6 +522,7 @@ def _backup_database_locked(
 
     temporary_path: Path | None = None
     published_paths: list[Path] = []
+    committed = False
     try:
         with tempfile.NamedTemporaryFile(
             dir=destination,
@@ -457,10 +550,6 @@ def _backup_database_locked(
         digest = _sha256(temporary_path)
         size_bytes = temporary_path.stat().st_size
 
-        os.replace(temporary_path, backup_path)
-        temporary_path = None
-        published_paths.append(backup_path)
-
         manifest_payload = {
             "schema_version": _MANIFEST_SCHEMA_VERSION,
             "label": backup_label,
@@ -473,16 +562,40 @@ def _backup_database_locked(
             "integrity_check": integrity_check,
             "foreign_key_violations": foreign_key_violations,
         }
-        _atomic_write_text(
-            manifest_path,
-            json.dumps(manifest_payload, ensure_ascii=False, indent=2, sort_keys=True)
-            + "\n",
-        )
-        published_paths.append(manifest_path)
-        _atomic_write_text(checksum_path, f"{digest}  {backup_path.name}\n")
-        published_paths.append(checksum_path)
-
-        removed = prune_backups(destination, backup_label, keep)
+        with _exclusive_file_lock(
+            destination / ".sqlite-backup-retention.lock",
+            timeout_seconds=lock_timeout_seconds,
+        ):
+            removed_before_publish = _prune_backups_locked(
+                destination,
+                backup_label,
+                keep,
+            )
+            os.replace(temporary_path, backup_path)
+            temporary_path = None
+            published_paths.append(backup_path)
+            _atomic_write_text(checksum_path, f"{digest}  {backup_path.name}\n")
+            published_paths.append(checksum_path)
+            _atomic_write_text(
+                manifest_path,
+                json.dumps(
+                    manifest_payload,
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+            )
+            published_paths.append(manifest_path)
+            committed = True
+            removed_after_publish = _prune_backups_locked(
+                destination,
+                backup_label,
+                keep,
+            )
+            removed = tuple(
+                sorted(set(removed_before_publish + removed_after_publish))
+            )
         return BackupResult(
             label=backup_label,
             source=str(source),
@@ -498,8 +611,9 @@ def _backup_database_locked(
             removed_backups=removed,
         )
     except (OSError, BackupError) as exc:
-        for path in reversed(published_paths):
-            path.unlink(missing_ok=True)
+        if not committed:
+            for path in reversed(published_paths):
+                path.unlink(missing_ok=True)
         if isinstance(exc, BackupError):
             raise
         raise BackupError(f"cannot create backup for {source}: {exc}") from exc
@@ -547,6 +661,7 @@ def backup_database(
             label=backup_label,
             keep=keep,
             created_at=created_at,
+            lock_timeout_seconds=lock_timeout_seconds,
         )
 
 
