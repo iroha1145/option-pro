@@ -424,6 +424,54 @@ def test_compose_wrapper_preserves_subcommand_flags(tmp_path: Path) -> None:
     )
 
 
+def test_compose_wrapper_ignores_legacy_compose_file_controls(
+    tmp_path: Path,
+) -> None:
+    docker = shutil.which("docker")
+    if docker is None:
+        pytest.skip("Docker Compose is unavailable")
+
+    shutil.copy2(ROOT / "docker-compose.yml", tmp_path / "docker-compose.yml")
+    (tmp_path / "scripts").mkdir()
+    shutil.copy2(
+        ROOT / "scripts" / "compose.sh",
+        tmp_path / "scripts" / "compose.sh",
+    )
+    (tmp_path / "alternate.yml").write_text(
+        "services:\n  bypass:\n    image: busybox:latest\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".env").write_text(
+        "COMPOSE_FILE=alternate.yml\n"
+        "COMPOSE_PATH_SEPARATOR=;\n"
+        "COMPOSE_DISABLE_ENV_FILE=1\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "machine.env").write_text("", encoding="utf-8")
+    environment = os.environ.copy()
+    for key in (
+        "COMPOSE_FILE",
+        "COMPOSE_PATH_SEPARATOR",
+        "COMPOSE_DISABLE_ENV_FILE",
+        "COMPOSE_ENV_FILES",
+        "OPTIX_COMPOSE_ENTRYPOINT",
+    ):
+        environment.pop(key, None)
+
+    result = subprocess.run(
+        ["bash", "scripts/compose.sh", "config", "--services"],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert set(result.stdout.splitlines()) == {"backend", "worker"}
+
+
 def test_deploy_uses_the_unified_runtime_loader_and_validator() -> None:
     script = (ROOT / "scripts" / "deploy.sh").read_text(encoding="utf-8")
 

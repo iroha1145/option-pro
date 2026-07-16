@@ -35,7 +35,9 @@ for argument in "$@"; do
     esac
 done
 
-unset COMPOSE_FILE COMPOSE_PATH_SEPARATOR COMPOSE_DISABLE_ENV_FILE
+export COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
+export COMPOSE_PATH_SEPARATOR=":"
+export COMPOSE_DISABLE_ENV_FILE="0"
 export COMPOSE_ENV_FILES=".env,machine.env"
 export OPTIX_COMPOSE_ENTRYPOINT="scripts/compose.sh"
 exec docker compose "$@"
