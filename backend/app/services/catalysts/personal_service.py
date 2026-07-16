@@ -203,6 +203,15 @@ class PersonalCatalystService:
         except (OSError, sqlite3.Error, TypeError, ValueError):
             return False
 
+    def _personal_etl_enabled(self) -> bool:
+        return bool(
+            getattr(
+                self.ai_settings,
+                "personal_etl_enabled",
+                False,
+            )
+        )
+
     def analysis_availability(
         self,
         *,
@@ -986,6 +995,13 @@ class PersonalCatalystService:
             raise CatalystError(
                 "catalyst_disabled",
                 "Catalyst refresh is disabled while the feature is off",
+                retryable=False,
+                counts_for_circuit=False,
+            )
+        if not self._personal_etl_enabled():
+            raise CatalystError(
+                "catalyst_sync_disabled",
+                "Catalyst refresh is disabled until MacroLens sync is configured",
                 retryable=False,
                 counts_for_circuit=False,
             )

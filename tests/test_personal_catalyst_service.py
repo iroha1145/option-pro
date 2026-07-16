@@ -199,6 +199,7 @@ def _service(
     repository=None,
     *,
     cache_path=None,
+    personal_etl_enabled: bool = True,
 ) -> PersonalCatalystService:
     settings = type(
         "SettingsStub",
@@ -215,7 +216,11 @@ def _service(
         intelligence=engine or FakeIntelligence(),
         ai_repository=repository or FakeAIRepository(),
         personal_config=personal,
-        ai_settings=type("AISettingsStub", (), {})(),
+        ai_settings=type(
+            "AISettingsStub",
+            (),
+            {"personal_etl_enabled": personal_etl_enabled},
+        )(),
     )
 
 
@@ -455,7 +460,7 @@ def test_removed_legacy_false_switches_do_not_gate_owner_actions() -> None:
 
 
 def test_off_mode_is_the_only_feature_mode_that_rejects_refresh() -> None:
-    service = _service("off")
+    service = _service("off", personal_etl_enabled=False)
 
     with pytest.raises(CatalystError) as captured:
         service.request_refresh()
@@ -514,6 +519,45 @@ def test_manual_refresh_fails_closed_when_worker_is_unavailable(monkeypatch) -> 
     assert engine.actions == []
 
 
+@pytest.mark.parametrize("operation_type", ["news", "calendar", "source_health"])
+@pytest.mark.parametrize("mode", ["read", "manual", "scheduled"])
+def test_refresh_fails_closed_when_personal_etl_is_disabled(
+    monkeypatch,
+    mode,
+    operation_type,
+) -> None:
+    engine = FakeIntelligence()
+    service = _service(
+        mode,
+        engine=engine,
+        personal_etl_enabled=False,
+    )
+    monkeypatch.setattr(
+        service,
+        "_worker_healthy",
+        lambda: pytest.fail("disabled ETL must be rejected before worker health"),
+    )
+
+    with pytest.raises(CatalystError) as captured:
+        service.request_refresh(operation_type)
+
+    assert captured.value.code == "catalyst_sync_disabled"
+    assert captured.value.retryable is False
+    assert engine.actions == []
+
+
+def test_refresh_fails_closed_when_etl_capability_is_not_declared() -> None:
+    engine = FakeIntelligence()
+    service = _service("manual", engine=engine)
+    service.ai_settings = SimpleNamespace()
+
+    with pytest.raises(CatalystError) as captured:
+        service.request_refresh()
+
+    assert captured.value.code == "catalyst_sync_disabled"
+    assert engine.actions == []
+
+
 def test_unrelated_worker_degradation_does_not_block_catalyst(
     monkeypatch,
     tmp_path,
@@ -523,6 +567,7 @@ def test_unrelated_worker_degradation_does_not_block_catalyst(
     service._intelligence_injected = False
     service.ai_settings = SimpleNamespace(
         optix_worker_db_path=tmp_path / "worker.db",
+        personal_etl_enabled=True,
     )
     service._cache_file_ready = lambda: True
     monkeypatch.setattr(

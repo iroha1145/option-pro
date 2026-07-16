@@ -179,6 +179,7 @@ def _raise_safe(error: CatalystError) -> None:
         "manual_refresh_disabled": 409,
         "force_reanalysis_disabled": 409,
         "catalyst_disabled": 409,
+        "catalyst_sync_disabled": 409,
         "ai_not_configured": 503,
         "worker_unavailable": 503,
         "runtime_settings_unavailable": 503,

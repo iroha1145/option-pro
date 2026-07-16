@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api import catalysts as catalyst_api
-from app.services.catalysts.errors import InvalidCursorError
+from app.services.catalysts.errors import CatalystError, InvalidCursorError
 
 
 NOW = "2026-07-15T04:00:00Z"
@@ -21,6 +21,7 @@ class StubPersonalService:
     def __init__(self) -> None:
         self.calls: list[tuple[Any, ...]] = []
         self.invalid_cursor = False
+        self.refresh_error: CatalystError | None = None
 
     def status(self) -> dict[str, Any]:
         return {
@@ -145,6 +146,8 @@ class StubPersonalService:
         *,
         idempotency_key: str | None,
     ) -> dict[str, Any]:
+        if self.refresh_error is not None:
+            raise self.refresh_error
         self.calls.append(("refresh", operation_type, idempotency_key))
         return {"request_id": REFRESH_ID, "status": "queued"}
 
@@ -267,6 +270,30 @@ def test_actions_delegate_to_personal_service_after_authentication() -> None:
     assert ("refresh", "news", "refresh-news") in service.calls
     assert ("analysis", 101, True) in service.calls
     assert ("request_focus", 3, None, True) in service.calls
+
+
+def test_disabled_catalyst_sync_rejects_refresh_as_a_conflict() -> None:
+    service = StubPersonalService()
+    service.refresh_error = CatalystError(
+        "catalyst_sync_disabled",
+        "Catalyst refresh is disabled until MacroLens sync is configured",
+        retryable=False,
+        counts_for_circuit=False,
+    )
+
+    response = client_for(service).post(
+        "/api/catalysts/refresh",
+        json={"operation_type": "news"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "catalyst_sync_disabled",
+        "message": "Catalyst refresh is disabled until MacroLens sync is configured",
+        "retryable": False,
+        "retry_after": None,
+    }
+    assert service.calls == []
 
 
 def test_route_validation_and_missing_local_rows_fail_safely() -> None:
