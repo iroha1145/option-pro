@@ -171,13 +171,17 @@ def test_ci_smoke_matches_personal_breakout_runtime() -> None:
         encoding="utf-8"
     )
 
+    assert "Prepare offline container configuration" in workflow
+    assert '"breakout_enabled = true", "breakout_enabled = false", 1' in workflow
     assert (
-        'assert p["status"] != "disabled"; assert p["healthy"] is True; '
-        'assert p["enabled"] is True'
+        'assert p["status"] == "disabled"; assert p["healthy"] is True; '
+        'assert p["enabled"] is False'
     ) in workflow
     assert (
-        'assert p["status"] == "locked"; assert p["scan_run_id"] is None'
+        'assert p["status"] == "disabled"; assert p["scan_run_id"] is None'
     ) in workflow
+    assert "container_breakout_runtime_smoke.py" in workflow
+    assert 'p["active"]["status"] == "completed"' in workflow
 
 
 def test_both_runtime_services_keep_the_container_security_baseline() -> None:
