@@ -199,10 +199,7 @@ class PersonalCatalystService:
         )
         try:
             health = WorkerStateRepository(path).health()
-            return bool(
-                health.get("healthy")
-                and str(health.get("status") or "").lower() == "ok"
-            )
+            return bool(health.get("healthy"))
         except (OSError, sqlite3.Error, TypeError, ValueError):
             return False
 

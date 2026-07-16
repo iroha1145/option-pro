@@ -20,6 +20,7 @@ from app.services.catalysts.etl_client import NewsChangesPage
 from app.services.catalysts.etl_repository import CatalystEtlRepository
 from app.services.catalysts.personal_service import PersonalCatalystService
 from app.services.catalysts.config import CatalystSettings
+from app.worker.state import WorkerStateRepository
 from app.worker.tasks import CatalystSyncTask, FocusTask
 
 
@@ -511,6 +512,29 @@ def test_manual_refresh_fails_closed_when_worker_is_unavailable(monkeypatch) -> 
         service.request_refresh()
 
     assert engine.actions == []
+
+
+def test_unrelated_worker_degradation_does_not_block_catalyst(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    service = _service("manual")
+    service._ai_repository_injected = False
+    service._intelligence_injected = False
+    service.ai_settings = SimpleNamespace(
+        optix_worker_db_path=tmp_path / "worker.db",
+    )
+    service._cache_file_ready = lambda: True
+    monkeypatch.setattr(
+        WorkerStateRepository,
+        "health",
+        lambda _repository: {"healthy": True, "status": "degraded"},
+    )
+
+    assert service.request_refresh() == {
+        "request_id": "refresh-1",
+        "status": "queued",
+    }
 
 
 def test_analysis_job_endpoint_is_limited_to_news_jobs() -> None:
