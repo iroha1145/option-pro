@@ -16,15 +16,17 @@ cd "$ROOT_DIR"
 
 skip_global_value=false
 for argument in "$@"; do
-    if [ "$skip_global_value" = true ]; then
-        skip_global_value=false
-        continue
-    fi
     case "$argument" in
         --env-file|--env-file=*|-f|-f?*|--file|--file=*|--project-directory|--project-directory=*)
             echo "Compose file and environment overrides are not supported; edit .env or machine.env instead." >&2
             exit 2
             ;;
+    esac
+    if [ "$skip_global_value" = true ]; then
+        skip_global_value=false
+        continue
+    fi
+    case "$argument" in
         --ansi|--parallel|--profile|--progress|-p|--project-name)
             skip_global_value=true
             ;;

@@ -357,6 +357,8 @@ def test_raw_compose_fails_closed_without_machine_interpolation_contract(
         ["-f=docker-compose.yml", "config"],
         ["-fdocker-compose.yml", "config"],
         ["--project-directory=.", "config"],
+        ["--ansi", "--env-file", ".env", "config"],
+        ["--ansi", "-f=docker-compose.yml", "config"],
     ],
 )
 def test_compose_wrapper_rejects_file_and_environment_overrides(
