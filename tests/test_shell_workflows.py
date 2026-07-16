@@ -659,7 +659,7 @@ def test_real_compose_preserves_quoted_boolean_values(
     payload = json.loads(rendered.stdout)
     for service_name in ("backend", "breakout-worker"):
         environment = payload["services"][service_name]["environment"]
-        assert "BREAKOUT_RADAR_ENABLED" not in environment
+        assert environment["BREAKOUT_RADAR_ENABLED"] == expected_enabled
         assert (
             environment["RANGE_PERSISTENCE_BREAKOUT_INTERACTION_ENABLED"]
             == expected_interaction

@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.config import Settings
+from app.services.breakouts import config as breakout_config
 from app.services.breakouts.config import BreakoutSettings
 from app.services.catalysts.config import CatalystSettings
 from app.services.catalysts.focus_config import FocusContextSettings
@@ -101,6 +102,7 @@ def test_legacy_environment_cannot_disable_personal_breakout(monkeypatch) -> Non
     assert settings.openai_daily_max_jobs == 9
     assert settings.openai_execution_mode == "worker_sync"
 
+    monkeypatch.setattr(breakout_config, "_LEGACY_BREAKOUT_WARNING_EMITTED", False)
     with pytest.warns(DeprecationWarning, match="personal.toml takes precedence"):
         breakout = BreakoutSettings(_env_file=None)
     assert breakout.enabled is True
