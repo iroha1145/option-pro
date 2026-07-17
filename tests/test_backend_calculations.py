@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import time
 from datetime import datetime
@@ -635,6 +636,93 @@ def test_finnhub_fallback_keeps_token_out_of_url_query(monkeypatch: pytest.Monke
     assert missing == []
     assert captured["headers"] == {"X-Finnhub-Token": "secret-token"}
     assert "token" not in captured["params"]
+
+
+def test_marketdata_fallback_keeps_token_out_of_url_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+    settings = SimpleNamespace(
+        marketdata_token="secret-token",
+        marketdata_stock_candle_fallback_enabled=True,
+        marketdata_stock_candle_fallback_limit=1,
+        marketdata_base_url="https://marketdata.example",
+        request_timeout=2.0,
+    )
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"s": "ok", "t": [1], "o": [1], "h": [2], "l": [0.5], "c": [1.5], "v": [100]}
+
+    class FakeClient:
+        def __init__(self, *, timeout, headers):
+            captured["timeout"] = timeout
+            captured["headers"] = headers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def get(self, url, *, params):
+            captured["url"] = url
+            captured["params"] = dict(params)
+            return FakeResponse()
+
+    monkeypatch.setattr(scanner, "get_settings", lambda: settings)
+    monkeypatch.setattr(scanner.httpx, "Client", FakeClient)
+
+    frame, loaded, missing = scanner._download_marketdata_history(["AAA"], "1mo")
+
+    assert not frame.empty
+    assert loaded == ["AAA"]
+    assert missing == []
+    assert captured["headers"] == {"Authorization": "Bearer secret-token"}
+    assert "token" not in captured["params"]
+
+
+def test_marketdata_fallback_httpx_logs_omit_token(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    sentinel = "marketdata-log-sentinel"
+    settings = SimpleNamespace(
+        marketdata_token=sentinel,
+        marketdata_stock_candle_fallback_enabled=True,
+        marketdata_stock_candle_fallback_limit=1,
+        marketdata_base_url="https://marketdata.example",
+        request_timeout=2.0,
+    )
+    real_client = httpx.Client
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == f"Bearer {sentinel}"
+        assert "token" not in request.url.params
+        return httpx.Response(
+            200,
+            json={"s": "ok", "t": [1], "o": [1], "h": [2], "l": [0.5], "c": [1.5], "v": [100]},
+        )
+
+    def client_factory(*, timeout, headers):
+        return real_client(
+            timeout=timeout,
+            headers=headers,
+            transport=httpx.MockTransport(handle_request),
+        )
+
+    monkeypatch.setattr(scanner, "get_settings", lambda: settings)
+    monkeypatch.setattr(scanner.httpx, "Client", client_factory)
+    caplog.set_level(logging.INFO, logger="httpx")
+
+    frame, loaded, missing = scanner._download_marketdata_history(["AAA"], "1mo")
+
+    assert not frame.empty
+    assert loaded == ["AAA"]
+    assert missing == []
+    assert "HTTP Request:" in caplog.text
+    assert sentinel not in caplog.text
 
 
 def test_price_action_dimension_survives_feature_and_scoring_pipeline() -> None:
