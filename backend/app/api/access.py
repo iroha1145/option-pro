@@ -14,6 +14,7 @@ from app.access import (
     OwnerAccessRuntime,
     get_access_runtime,
     request_uses_https,
+    require_public_read_or_owner_access,
     require_same_origin_action,
     require_same_origin_json,
 )
@@ -84,7 +85,10 @@ def _client_key(request: Request, runtime: OwnerAccessRuntime) -> str:
     return str(address) if address is not None else "unknown"
 
 
-@router.get("/status", dependencies=[Depends(require_same_origin_action)])
+@router.get(
+    "/status",
+    dependencies=[Depends(require_public_read_or_owner_access)],
+)
 def access_status(request: Request) -> dict[str, object]:
     runtime = _runtime(request)
     return {
@@ -146,9 +150,8 @@ def login(
     return response
 
 
-@router.post("/logout")
+@router.post("/logout", dependencies=[Depends(require_same_origin_action)])
 def logout(request: Request) -> Response:
-    require_same_origin_action(request)
     runtime = _runtime(request)
     runtime.logout(request.cookies.get(OWNER_COOKIE_NAME, ""))
     response = JSONResponse(

@@ -9,9 +9,11 @@ import os
 import secrets
 import threading
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Callable, Literal
+from typing import AsyncIterator, Callable, Iterator, Literal
 from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request, status
@@ -39,6 +41,40 @@ _LOGIN_FAILURE_WINDOW_SECONDS = 5 * 60
 _LOGIN_COOLDOWN_SECONDS = 30
 _LOGIN_FAILURE_BUCKET_LIMIT = 256
 _DEFAULT_ORIGIN_PORTS = {"http": 80, "https": 443}
+_REQUEST_OWNER_ACCESS: ContextVar[bool | None] = ContextVar(
+    "optix_request_owner_access",
+    default=None,
+)
+
+
+@contextmanager
+def request_owner_access_context(owner_access: bool) -> Iterator[None]:
+    """Bind the gateway's owner decision to the current request task."""
+
+    token: Token[bool | None] = _REQUEST_OWNER_ACCESS.set(bool(owner_access))
+    try:
+        yield
+    finally:
+        _REQUEST_OWNER_ACCESS.reset(token)
+
+
+def current_request_is_owner() -> bool:
+    """Return the gateway decision, preserving direct-call test behavior."""
+
+    owner_access = _REQUEST_OWNER_ACCESS.get()
+    return True if owner_access is None else owner_access
+
+
+def public_snapshot_unavailable(resource: str) -> HTTPException:
+    """Build the stable response used when a visitor has no saved snapshot."""
+
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "code": "public_snapshot_unavailable",
+            "message": f"Saved public snapshot is unavailable for {resource}",
+        },
+    )
 
 
 def _canonical_origin_host(
@@ -425,6 +461,8 @@ def _runtime(request: Request) -> OwnerAccessRuntime:
 
 
 def require_owner_access(request: Request) -> None:
+    if getattr(request.state, "owner_access", False) is True:
+        return
     runtime = _runtime(request)
     if runtime.request_is_owner(request):
         request.state.owner_access = True
@@ -442,6 +480,30 @@ def require_owner_access(request: Request) -> None:
         ),
         detail={"code": code, "message": "Owner access is required"},
     )
+
+
+async def require_public_read_or_owner_access(
+    request: Request,
+) -> AsyncIterator[None]:
+    """Allow password-mode reads while keeping every other request owner-only."""
+
+    runtime = _runtime(request)
+    method = request.method.upper()
+    public_batch_query = (
+        method == "POST"
+        and request.url.path == "/api/catalysts/tickers/batch"
+    )
+    if runtime.mode == "password" and (
+        method in {"GET", "HEAD"} or public_batch_query
+    ):
+        owner_access = runtime.request_is_owner(request)
+        request.state.owner_access = owner_access
+        with request_owner_access_context(owner_access):
+            yield
+        return
+    require_owner_access(request)
+    with request_owner_access_context(True):
+        yield
 
 
 def request_uses_https(request: Request) -> bool:

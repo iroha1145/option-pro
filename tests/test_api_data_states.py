@@ -144,7 +144,8 @@ def test_logo_not_found_uses_a_short_negative_cache(monkeypatch):
 
 
 def test_logo_response_sandboxes_svg_and_rejects_private_redirect_targets(monkeypatch):
-    async def svg(_symbol):
+    async def svg(_symbol, *, allow_refresh=True):
+        assert allow_refresh is True
         return {
             "content": b"<svg xmlns='http://www.w3.org/2000/svg'></svg>" * 2,
             "media_type": "image/svg+xml",
@@ -898,7 +899,15 @@ def test_targeted_watchlist_uses_normalized_tickers_and_isolated_cache_keys(monk
         requested_calls.append(requested)
         return {"groups": [], "attempted": len(requested)}
 
-    async def uncached(key, _ttl, loader, *, stale_ttl=None):
+    async def uncached(
+        key,
+        _ttl,
+        loader,
+        *,
+        stale_ttl=None,
+        allow_refresh=True,
+    ):
+        assert allow_refresh is True
         cache_keys.append((key, stale_ttl))
         return await loader()
 

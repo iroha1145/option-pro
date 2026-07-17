@@ -51,18 +51,100 @@ test('Catalyst data remains same-origin, abortable, cached by endpoint family, a
   assert.doesNotMatch(api, /Authorization|Bearer/);
   assert.match(api, /headers\["X-Optix-Action"\] = "1"/);
   assert.doesNotMatch(api, /https?:\/\//);
+  assert.match(api, /const alreadyLoggedOut = !!\([\s\S]*if \(!alreadyLoggedOut\)/);
+  assert.match(api, /const accessStatus = \(\) => \{[\s\S]*if \(accessStatusPromise\) return accessStatusPromise[\s\S]*requestEpoch === accessStateEpoch[\s\S]*accessStateEpoch \+= 1;\s*accessState = null/);
+});
+
+test('concurrent expired-session responses emit one logout event and access failures clear shared state', async () => {
+  const events = [];
+  let mode = 'logged-in';
+  let releaseDelayedStatus;
+  let markDelayedStatusStarted;
+  const delayedStatusStarted = new Promise(resolve => { markDelayedStatusStarted = resolve; });
+  const response = loggedIn => ({
+    ok: loggedIn,
+    status: loggedIn ? 200 : 401,
+    headers: { get: () => null },
+    json: async () => loggedIn
+      ? { access_mode: 'password', logged_in: true }
+      : { code: 'owner_login_required' },
+  });
+  class TestCustomEvent {
+    constructor(type, options) {
+      this.type = type;
+      this.detail = options && options.detail;
+    }
+  }
+  const window = { dispatchEvent: event => events.push(event) };
+  const context = vm.createContext({
+    window,
+    fetch: async requestPath => {
+      if (mode === 'network-error') throw new Error('offline');
+      if (mode === 'delayed-status' && requestPath === '/api/access/status') {
+        markDelayedStatusStarted();
+        return new Promise(resolve => { releaseDelayedStatus = () => resolve(response(true)); });
+      }
+      const loggedIn = mode === 'logged-in';
+      return response(loggedIn);
+    },
+    CustomEvent: TestCustomEvent,
+    setTimeout,
+    clearTimeout,
+    DOMException,
+    Date,
+    Intl,
+    Map,
+    Math,
+    Promise,
+    encodeURIComponent,
+    isFinite,
+  });
+  vm.runInContext(api, context, { filename: 'deck-api.js' });
+  const net = window.OPTIX_NET;
+
+  await net.accessStatus();
+  assert.equal(net.currentAccessStatus().logged_in, true);
+  mode = 'network-error';
+  await assert.rejects(net.accessStatus(), /offline/);
+  assert.equal(net.currentAccessStatus(), null);
+
+  mode = 'logged-in';
+  await net.accessStatus();
+  mode = 'unauthorized';
+  const results = await Promise.allSettled([
+    net.runtimeSettings(),
+    net.workerStatus(),
+    net.runtimeSettingsHistory(),
+  ]);
+  assert.ok(results.every(result => result.status === 'rejected'));
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'optix:owner-session-changed');
+  assert.equal(net.currentAccessStatus().logged_in, false);
+
+  mode = 'logged-in';
+  await net.accessStatus();
+  mode = 'delayed-status';
+  const staleStatus = net.accessStatus();
+  await delayedStatusStarted;
+  mode = 'unauthorized';
+  await assert.rejects(net.runtimeSettings(), /HTTP 401/);
+  releaseDelayedStatus();
+  const staleResult = await staleStatus;
+  assert.equal(staleResult.logged_in, false);
+  assert.equal(net.currentAccessStatus().logged_in, false);
+  assert.equal(events.length, 2);
 });
 
 test('paid analysis is explicit and earnings no longer uses the synchronous GET trigger', () => {
   assert.doesNotMatch(api, /hasAppToken|appToken/);
   assert.doesNotMatch(catalysts, /privateActionsAvailable|管理令牌|管理会话未解锁/);
   assert.doesNotMatch(app, /privateActionsAvailable|管理授权|公开页面不会创建付费任务/);
-  assert.match(api, /jget, jpost, jput, invalidateCache, accessStatus, logoutOwner/);
+  assert.match(api, /jget, jpost, jput, invalidateCache, accessStatus, currentAccessStatus, logoutOwner/);
   assert.match(catalysts, /data-cat-refresh="news"/);
   assert.match(catalysts, /data-cat-refresh="calendar"/);
   assert.match(catalysts, /data-cat-refresh="source_health"/);
   assert.match(catalysts, /analysisAvailabilityOf\(item\)/);
-  assert.match(catalysts, /analysisActionDecision\(triggerEnabled, analysisAvailabilityOf\(item\)\)/);
+  assert.match(catalysts, /analysisActionDecision\([\s\S]*triggerEnabled,[\s\S]*analysisAvailabilityOf\(item\),[\s\S]*page\.ownerAccess/);
   assert.doesNotMatch(catalysts, /analysisActionDecision\(triggerEnabled, true,/);
   assert.match(catalysts, /access\.showAction \? `<button type="button" class="btn btn--amber btn--sm" data-catalyst-analyze/);
   assert.equal((catalysts.match(/!isActive && access\.showAction/g) || []).length, 2);
@@ -86,6 +168,17 @@ test('paid analysis is explicit and earnings no longer uses the synchronous GET 
   assert.match(catalysts, /每日系统预算（美元）/);
   assert.match(catalysts, /固定分析时刻（美东）/);
   assert.match(catalysts, /运行设置已保存并立即生效/);
+  assert.ok((catalysts.match(/"optix:runtime-settings-changed"/g) || []).length >= 3);
+  assert.match(catalysts, /if \(!page\.ownerAccess\) return;/);
+  assert.match(catalysts, /const batchSize = page\.ownerAccess \? 50 : 20/);
+  assert.match(catalysts, /Promise\.all\(batches\.map\(batch => N\.catalystBatch/);
+  assert.match(catalysts, /async function resolveOwnerAccess\(\)[\s\S]*accessStatus\.logged_in === true/);
+  assert.match(catalysts, /page\.ownerAccess = ownerAccess/);
+  assert.match(catalysts, /page\.ownerAccess = await resolveOwnerAccess\(\)/);
+  assert.match(catalysts, /focusCycleDecision\(raw, cycle, preparedCount, page\.ownerAccess\)/);
+  assert.match(catalysts, /const generation = page\.generation;\s*const controller = page\.controller;/);
+  assert.match(catalysts, /generation !== page\.generation[\s\S]*controller !== page\.controller/);
+  assert.match(catalysts, /function leaveRoute\(\) \{[\s\S]*page\.runtimeSettingsRequest \+= 1/);
   for (const actionType of ['focus_refresh', 'strength_refresh', 'breakout_refresh', 'retention']) {
     assert.match(catalysts, new RegExp(`data-worker-action="${actionType}"`));
   }
@@ -108,6 +201,8 @@ test('paid analysis is explicit and earnings no longer uses the synchronous GET 
 });
 
 test('Strength Radar refresh runs through the unified worker and keeps old results on failure', () => {
+  assert.match(app, /async function refreshStrengthSnapshot\(\) \{\s*if \(!ownerAccessEnabled\(St\.ownerStatus\)\) return;/);
+  assert.match(app, /button\.addEventListener\("click", refreshStrengthSnapshot\)/);
   assert.match(api, /const workerAction = \(requestId, options\) => jget\(/);
   assert.match(api, /"\/api\/worker\/actions\/" \+ enc\(requestId\)/);
   assert.match(api, /workerStatus, workerActions, workerAction, requestWorkerAction/);
@@ -289,6 +384,18 @@ test('an old unknown market-focus cycle stays immutable while a newer prepared r
   assert.equal(disabledAnalysis.title, '当前为只读模式');
   assert.match(disabledAnalysis.detail, /手动分析/);
 
+  const visitorAnalysis = desk.analysisActionDecision(
+    true,
+    { enabled: true, reason: 'available' },
+    false,
+  );
+  assert.equal(visitorAnalysis.modeUnavailable, true);
+  assert.equal(visitorAnalysis.showAction, false);
+  assert.equal(visitorAnalysis.canTrigger, false);
+  assert.equal(visitorAnalysis.reason, 'owner_login_required');
+  assert.equal(visitorAnalysis.title, '登录后可使用模型分析');
+  assert.match(visitorAnalysis.detail, /公开浏览只显示已有结果/);
+
   const enabledAnalysis = desk.analysisActionDecision(true, { enabled: true, reason: 'available' });
   assert.equal(enabledAnalysis.showAction, true);
   assert.equal(enabledAnalysis.canTrigger, true);
@@ -298,6 +405,21 @@ test('an old unknown market-focus cycle stays immutable while a newer prepared r
   assert.equal(switchedOffAnalysis.modeUnavailable, true);
   assert.equal(switchedOffAnalysis.showAction, false);
   assert.equal(switchedOffAnalysis.title, '手动分析已关闭');
+
+  const visitorFocus = desk.focusCycleDecision({
+    status: 'active',
+    manual_enabled: true,
+    analysis_availability: { enabled: true, reason: 'available' },
+    prepared_revision: 54331,
+    last_consumed_revision: 0,
+  }, null, 1055, false);
+  assert.equal(visitorFocus.readOnly, true);
+  assert.equal(visitorFocus.analysisUnavailable, true);
+  assert.equal(visitorFocus.showAction, false);
+  assert.equal(visitorFocus.canRun, false);
+  assert.equal(visitorFocus.canCreate, false);
+  assert.equal(visitorFocus.buttonText, '分析功能未启用');
+  assert.equal(desk.focusCycleRequest(visitorFocus, null), null);
 
   const oldCycle = {
     cycle_id: 'mfc_old_unknown',
@@ -454,7 +576,7 @@ test('filters, time semantics, uncertainty labels, and context isolation stay vi
 test('historical ticker panels keep their point-in-time cutoff in news details and completion refreshes', () => {
   assert.match(api, /catalystNews = \(id, params, options\)[\s\S]*qs\(params\)/);
   assert.match(catalysts, /openNews\(button\.dataset\.catalystNews, \{ asOf: opts\.asOf \|\| null \}\)/);
-  assert.match(catalysts, /N\.catalystNews\(id, \{ as_of: asOf \|\| undefined \}, \{ signal: drawerController\.signal \}\)/);
+  assert.match(catalysts, /N\.catalystNews\(id, \{ as_of: asOf \|\| undefined \}, \{ signal: controller\.signal \}\)/);
   assert.equal((catalysts.match(/N\.catalystNews\(id, \{ as_of: asOf \|\| undefined \}, \{ force: true/g) || []).length, 2);
   assert.match(catalysts, /if \(asOf\) item\.analysis_trigger_enabled = false/);
   assert.match(catalysts, /bindAnalysisActions\(item, item\.analysis_job \|\| item\.job \|\| null, !asOf, asOf\)/);

@@ -7,12 +7,17 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from app.access import (
+    OwnerAccessRuntime,
+    request_owner_access_context,
+    require_public_read_or_owner_access,
+)
 from app.api import catalysts as catalyst_api
-from app.personal_config import FeatureConfig, PersonalConfig
+from app.personal_config import AccessConfig, FeatureConfig, PersonalConfig
 from app.services.ai_jobs import runtime as ai_runtime
 from app.services.ai_jobs.repository import AIJobRepository
 from app.services.catalysts.errors import CatalystError
@@ -25,6 +30,21 @@ from app.worker.tasks import CatalystSyncTask, FocusTask
 
 
 NOW = datetime(2026, 7, 15, 4, 0, tzinfo=timezone.utc)
+_OWNER_ACTION_HEADERS = {
+    "Content-Type": "application/json",
+    "Origin": "http://localhost",
+    "X-Optix-Action": "1",
+}
+
+
+class _OwnerAccessState:
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http":
+            scope.setdefault("state", {})["owner_access"] = True
+        await self.app(scope, receive, send)
 
 
 def _news_result(*, news_id: int = 101, change_sequence: int = 7) -> dict[str, Any]:
@@ -89,7 +109,7 @@ class FakeIntelligence:
             "analysis": _news_result(),
         }
 
-    def status(self, *, now=None):
+    def status(self, *, now=None, include_manual_refreshes=None):
         return {
             "enabled": True,
             "status": "ok",
@@ -193,6 +213,61 @@ class FakeAIRepository:
         return row
 
 
+class PublicReadGuardRepository(FakeAIRepository):
+    def __init__(self) -> None:
+        super().__init__()
+        self.owner_state_calls: list[str] = []
+
+    def initialize(self) -> None:
+        self.owner_state_calls.append("initialize")
+        raise AssertionError("public reads must not initialize the AI job store")
+
+    def budget_snapshot(self, **_kwargs):
+        self.owner_state_calls.append("budget_snapshot")
+        raise AssertionError("public reads must not query owner AI usage")
+
+
+class SensitivePublicIntelligence(FakeIntelligence):
+    def news(self, news_id, *, as_of):
+        payload = super().news(news_id, as_of=as_of)
+        if payload is not None:
+            sensitive_job = {
+                "job_id": "aij_" + "b" * 32,
+                "status": "completed",
+                "budget_charge_usd": 1.25,
+                "usage": {"total_tokens": 1234},
+                "submission_source": "manual",
+            }
+            payload["analysis_job"] = sensitive_job
+            payload["analysis_revisions"] = [sensitive_job]
+        return payload
+
+    def latest_market_focus_cycle(self, *, now=None):
+        cycle_id = "mfc_" + "a" * 32
+        input_hash = "b" * 64
+        cycle = {
+            "cycle_id": cycle_id,
+            "job_id": "aij_" + "c" * 32,
+            "status": "completed",
+            "prepared_revision": 3,
+            "snapshot_as_of": "2026-07-15T04:00:00Z",
+            "input_hash": input_hash,
+            "created_at": "2026-07-15T04:00:00Z",
+            "completed_at": "2026-07-15T04:01:00Z",
+            "cancel_requested": False,
+            "budget_charge_usd": 2.5,
+            "usage": {"total_tokens": 4321},
+            "submission_source": "manual",
+            "result": _focus_result(input_hash=input_hash),
+        }
+        return {
+            "status": "active",
+            "as_of": (now or NOW).isoformat(),
+            "cycle": cycle,
+            "latest_successful_cycle": cycle,
+        }
+
+
 def _service(
     mode: str,
     engine=None,
@@ -224,6 +299,27 @@ def _service(
     )
 
 
+def _api_client(service: PersonalCatalystService) -> TestClient:
+    app = FastAPI()
+    app.include_router(catalyst_api.router)
+    app.dependency_overrides[catalyst_api._service] = lambda: service
+    return TestClient(_OwnerAccessState(app), base_url="http://localhost")
+
+
+def _public_api_client(service: PersonalCatalystService) -> TestClient:
+    app = FastAPI()
+    app.state.access_runtime = OwnerAccessRuntime(
+        AccessConfig(mode="password"),
+        password_hash="test-only-password-hash",
+    )
+    app.include_router(
+        catalyst_api.router,
+        dependencies=[Depends(require_public_read_or_owner_access)],
+    )
+    app.dependency_overrides[catalyst_api._service] = lambda: service
+    return TestClient(app, base_url="https://testserver")
+
+
 def test_personal_feed_never_projects_source_language_title_or_summary() -> None:
     service = _service("read")
 
@@ -237,6 +333,106 @@ def test_personal_feed_never_projects_source_language_title_or_summary() -> None
     assert "raw" not in item
     assert "source_observations" not in item
     assert "English" not in str(item)
+
+
+def test_public_catalyst_reads_skip_owner_ai_store_and_metadata() -> None:
+    repository = PublicReadGuardRepository()
+    service = _service(
+        "manual",
+        engine=SensitivePublicIntelligence(),
+        repository=repository,
+    )
+
+    with request_owner_access_context(False):
+        status = service.status(now=NOW)
+        feed = service.feed(as_of=NOW)
+        detail = service.news(101, as_of=NOW)
+        ticker = service.ticker("AAPL", as_of=NOW)
+        batch = service.batch(["AAPL"], as_of=NOW)
+        calendar = service.calendar(
+            date_from=NOW.date(),
+            date_to=NOW.date(),
+            as_of=NOW,
+            currencies=None,
+            min_impact=None,
+        )
+        hotspot_status = service.hotspot_status(now=NOW)
+        hotspots = service.hotspots(limit=5, now=NOW)
+        latest = service.latest_market_focus_cycle(now=NOW)
+
+    public_gate = {"enabled": False, "reason": "owner_login_required"}
+    assert status["analysis_availability"] == public_gate
+    assert feed["analysis_availability"] == public_gate
+    assert detail is not None
+    assert detail["analysis_availability"] == public_gate
+    assert detail["analysis_trigger_enabled"] is False
+    assert "analysis_job" not in detail
+    assert "analysis_revisions" not in detail
+    assert ticker["analysis_availability"] == public_gate
+    assert hotspot_status["analysis_availability"] == public_gate
+    assert hotspot_status["manual_enabled"] is False
+    assert batch["status"] == "ok"
+    assert calendar["status"] == "ok"
+    assert hotspots["status"] == "ok"
+    assert latest["status"] == "active"
+    assert latest["cycle"]["status"] == "completed"
+    assert latest["latest_successful_cycle"]["status"] == "completed"
+    for cycle in (latest["cycle"], latest["latest_successful_cycle"]):
+        assert "job_id" not in cycle
+        assert "budget_charge_usd" not in cycle
+        assert "usage" not in cycle
+        assert "submission_source" not in cycle
+        assert "cancel_requested" not in cycle
+    assert repository.owner_state_calls == []
+
+
+def test_public_catalyst_router_propagates_visitor_state_and_bounds_queries() -> None:
+    repository = PublicReadGuardRepository()
+    service = _service(
+        "manual",
+        engine=SensitivePublicIntelligence(),
+        repository=repository,
+    )
+
+    with _public_api_client(service) as client:
+        status = client.get("/api/catalysts/status")
+        wide_feed = client.get("/api/catalysts/feed?window_hours=169")
+        wide_ticker = client.get("/api/catalysts/tickers/NVDA?window_hours=169")
+        too_many_tickers = client.post(
+            "/api/catalysts/tickers/batch",
+            json={"tickers": [f"T{index:02d}" for index in range(21)]},
+            headers={
+                "Origin": "https://testserver",
+                "X-Optix-Action": "1",
+            },
+        )
+        too_many_items = client.post(
+            "/api/catalysts/tickers/batch",
+            json={"tickers": ["NVDA"], "limit": 6},
+            headers={
+                "Origin": "https://testserver",
+                "X-Optix-Action": "1",
+            },
+        )
+
+    assert status.status_code == 200
+    assert status.json()["analysis_availability"] == {
+        "enabled": False,
+        "reason": "owner_login_required",
+    }
+    for response, field, maximum in (
+        (wide_feed, "window_hours", 168),
+        (wide_ticker, "window_hours", 168),
+        (too_many_tickers, "tickers", 20),
+        (too_many_items, "limit", 5),
+    ):
+        assert response.status_code == 422
+        assert response.json()["detail"] == {
+            "code": "public_query_too_large",
+            "field": field,
+            "maximum": maximum,
+        }
+    assert repository.owner_state_calls == []
 
 
 def test_invalid_or_revision_mismatched_analysis_fails_closed() -> None:
@@ -763,13 +959,14 @@ def test_unconfigured_default_read_view_is_safe_and_does_not_create_cache(
 def test_api_read_mode_rejects_explicit_analysis_without_creating_a_job() -> None:
     engine = FakeIntelligence()
     service = _service("read", engine=engine)
-    app = FastAPI()
-    app.include_router(catalyst_api.router)
-    app.dependency_overrides[catalyst_api._service] = lambda: service
-    client = TestClient(app)
+    client = _api_client(service)
 
     read = client.get("/api/catalysts/feed")
-    create = client.post("/api/catalysts/news/101/analysis", json={})
+    create = client.post(
+        "/api/catalysts/news/101/analysis",
+        json={},
+        headers=_OWNER_ACTION_HEADERS,
+    )
 
     assert read.status_code == 200
     assert read.json()["items"][0]["title_zh"] == "芯片企业发布最新业绩"
@@ -809,12 +1006,9 @@ def test_analysis_queue_full_returns_429_with_retry_after(
             self._raise_queue_full()
 
     service = _service("manual", engine=QueueFullIntelligence())
-    app = FastAPI()
-    app.include_router(catalyst_api.router)
-    app.dependency_overrides[catalyst_api._service] = lambda: service
-    client = TestClient(app)
+    client = _api_client(service)
 
-    response = client.post(path, json=payload)
+    response = client.post(path, json=payload, headers=_OWNER_ACTION_HEADERS)
 
     assert response.status_code == 429
     assert response.headers["Retry-After"] == "60"
@@ -842,14 +1036,12 @@ def test_active_market_focus_cycle_returns_409_with_safe_chinese_message() -> No
             )
 
     service = _service("manual", engine=ActiveFocusIntelligence())
-    app = FastAPI()
-    app.include_router(catalyst_api.router)
-    app.dependency_overrides[catalyst_api._service] = lambda: service
-    client = TestClient(app)
+    client = _api_client(service)
 
     response = client.post(
         "/api/catalysts/market-focus-cycles",
         json={"expected_prepared_revision": 3},
+        headers=_OWNER_ACTION_HEADERS,
     )
 
     assert response.status_code == 409
@@ -939,13 +1131,10 @@ def test_analysis_capacity_errors_keep_their_http_and_retry_semantics(
         lambda: NOW,
     )
     service = _service("manual", repository=CapacityRepository())
-    app = FastAPI()
-    app.include_router(catalyst_api.router)
-    app.dependency_overrides[catalyst_api._service] = lambda: service
-    client = TestClient(app)
+    client = _api_client(service)
     payload = {} if "/news/" in path else {"expected_prepared_revision": 3}
 
-    response = client.post(path, json=payload)
+    response = client.post(path, json=payload, headers=_OWNER_ACTION_HEADERS)
 
     assert response.status_code == 429
     assert response.json()["detail"] == {

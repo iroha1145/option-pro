@@ -24,7 +24,7 @@
 
 | 已删除项 | 原问题 | 现行替代 |
 |---|---|---|
-| `APP_AUTH_TOKEN`、`PUBLIC_READ_API_ENABLED`、`ALLOW_INSECURE_PUBLIC_BIND` | 页面读取、浏览器令牌和动作权限分属不同路径，状态组合过多 | `config/personal.toml` 中的`private_network`或`password`，共用一条 Owner 边界 |
+| `APP_AUTH_TOKEN`、`PUBLIC_READ_API_ENABLED`、`ALLOW_INSECURE_PUBLIC_BIND` | 页面读取、浏览器令牌和动作权限分属多个可组合开关 | `config/personal.toml` 中的`private_network`或`password`；密码模式固定提供公开只读研究面，所有写入与模型动作统一使用 Owner 会话 |
 | 前端`sessionStorage`令牌和`Authorization`请求头 | 密钥需进入浏览器 | 密码模式的服务端会话 Cookie；私有网络模式不传递浏览器密钥 |
 | `MACROLENS_BASE_URL`、`MACROLENS_INTERNAL_TOKEN` 及旧式读取、动作、焦点凭据 | MacroLens 连接名称与方向不统一 | `machine.env` 中的`MACROLENS_URL`与`secrets.env`中的`INTERNAL_API_TOKEN`，仅限 Option Pro 读取 MacroLens |
 | `OPENAI_JOB_DB_PATH`、`MACROLENS_CACHE_DB_PATH`、`BREAKOUT_DB_PATH`、`WATCHLIST_SNAPSHOT_PATH` | 同一数据卷内的文件路径可分别漂移 | 只配置`DATA_DIR`，数据库、锁、快照与备份均由程序派生 |

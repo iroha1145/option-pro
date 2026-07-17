@@ -8,7 +8,7 @@ import math
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import StrictBool
 
@@ -19,9 +19,19 @@ from app.api.ai import (
     _require_runtime_capability,
 )
 from app.api.stocks import _sanitize
+from app.access import (
+    current_request_is_owner,
+    public_snapshot_unavailable,
+    require_same_origin_action,
+)
 from app.services.ai_jobs.models import StrictModel
 from app.services.scoring import compute_market_scores, compute_stock_scores
-from app.services.signals import compute_market_signals, compute_stock_signals
+from app.services.signals import (
+    cached_market_signals,
+    cached_stock_signals,
+    compute_market_signals,
+    compute_stock_signals,
+)
 
 router = APIRouter(prefix="/api/signals", tags=["signals"])
 logger = logging.getLogger(__name__)
@@ -121,7 +131,13 @@ def _trend_bias(signals: dict) -> dict:
 async def market_signals():
     """Full market top/bottom analysis with market-level indicators."""
     try:
-        signals = await asyncio.to_thread(compute_market_signals)
+        signals = (
+            await asyncio.to_thread(compute_market_signals)
+            if current_request_is_owner()
+            else cached_market_signals()
+        )
+        if signals is None:
+            raise public_snapshot_unavailable("signals:market")
         cached = bool(isinstance(signals, dict) and signals.pop("_cached", False))
         scores = compute_market_scores(signals)
         return _sanitize({"signals": signals, "scores": scores, "as_of": today_str(), "_cached": cached})
@@ -137,7 +153,13 @@ async def stock_signals(ticker: str):
     """Full stock top/bottom analysis with stock-level indicators."""
     try:
         symbol = _normalize_ticker(ticker)
-        signals = await asyncio.to_thread(compute_stock_signals, symbol)
+        signals = (
+            await asyncio.to_thread(compute_stock_signals, symbol)
+            if current_request_is_owner()
+            else cached_stock_signals(symbol)
+        )
+        if signals is None:
+            raise public_snapshot_unavailable(f"signals:stock:{symbol}")
         cached = bool(isinstance(signals, dict) and signals.pop("_cached", False))
         scores = compute_stock_scores(signals)
         trend = _trend_bias(signals)
@@ -160,7 +182,10 @@ async def stock_signals(ticker: str):
         raise HTTPException(503, "Stock signals are currently unavailable") from exc
 
 
-@router.post("/stock/{ticker}/ai-analysis")
+@router.post(
+    "/stock/{ticker}/ai-analysis",
+    dependencies=[Depends(require_same_origin_action)],
+)
 async def stock_ai_analysis(
     ticker: str,
     request: SignalAnalysisJobCreateRequest = Body(

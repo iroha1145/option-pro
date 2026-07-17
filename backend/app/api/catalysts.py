@@ -17,6 +17,12 @@ from pydantic import (
     model_validator,
 )
 
+from app.access import (
+    current_request_is_owner,
+    require_owner_access,
+    require_same_origin_action,
+    require_same_origin_json,
+)
 from app.services.catalysts.config import CatalystSettings, get_catalyst_settings
 from app.services.catalysts.errors import CatalystError, InvalidCursorError
 from app.services.catalysts.personal_service import PersonalCatalystService
@@ -75,6 +81,27 @@ router = APIRouter(
     tags=["catalysts"],
     route_class=_BoundedCatalystBodyRoute,
 )
+
+_PUBLIC_MAX_WINDOW_HOURS = 7 * 24
+_PUBLIC_MAX_FEED_LIMIT = 50
+_PUBLIC_MAX_BATCH_TICKERS = 20
+_PUBLIC_MAX_BATCH_LIMIT = 5
+
+
+def _require_public_query_bound(
+    name: str,
+    value: int,
+    maximum: int,
+) -> None:
+    if not current_request_is_owner() and value > maximum:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "public_query_too_large",
+                "field": name,
+                "maximum": maximum,
+            },
+        )
 
 
 class _RequestModel(BaseModel):
@@ -238,6 +265,12 @@ def catalyst_feed(
     multi_source_only: bool = Query(default=False),
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
+    _require_public_query_bound(
+        "window_hours",
+        window_hours,
+        _PUBLIC_MAX_WINDOW_HOURS,
+    )
+    _require_public_query_bound("limit", limit, _PUBLIC_MAX_FEED_LIMIT)
     try:
         return service.feed(
             as_of=as_of or _now(),
@@ -288,6 +321,12 @@ def ticker_catalysts(
     include_neutral: bool = Query(default=False),
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
+    _require_public_query_bound(
+        "window_hours",
+        window_hours,
+        _PUBLIC_MAX_WINDOW_HOURS,
+    )
+    _require_public_query_bound("limit", limit, _PUBLIC_MAX_FEED_LIMIT)
     try:
         return service.ticker(
             _ticker(ticker),
@@ -303,11 +342,29 @@ def ticker_catalysts(
         _raise_safe(error)
 
 
-@router.post("/tickers/batch")
+@router.post(
+    "/tickers/batch",
+    dependencies=[Depends(require_same_origin_json)],
+)
 def ticker_catalyst_batch(
     request: BatchRequest,
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
+    _require_public_query_bound(
+        "tickers",
+        len(request.tickers),
+        _PUBLIC_MAX_BATCH_TICKERS,
+    )
+    _require_public_query_bound(
+        "window_hours",
+        request.window_hours,
+        _PUBLIC_MAX_WINDOW_HOURS,
+    )
+    _require_public_query_bound(
+        "limit",
+        request.limit,
+        _PUBLIC_MAX_BATCH_LIMIT,
+    )
     try:
         return service.batch(
             request.tickers,
@@ -377,6 +434,7 @@ def latest_market_focus_cycle(
 @router.post(
     "/market-focus-cycles",
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_same_origin_action)],
 )
 def request_market_focus_cycle(
     request: MarketFocusCycleRequest,
@@ -411,6 +469,7 @@ def market_focus_cycle(
 @router.post(
     "/market-focus-cycles/{cycle_id}/cancel",
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_same_origin_action)],
 )
 def cancel_market_focus_cycle(
     cycle_id: Annotated[
@@ -430,6 +489,7 @@ def cancel_market_focus_cycle(
 @router.post(
     "/refresh",
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_same_origin_action)],
 )
 def refresh_catalysts(
     request: Optional[RefreshRequest] = None,
@@ -445,7 +505,10 @@ def refresh_catalysts(
         _raise_safe(error)
 
 
-@router.get("/refresh/{request_id}")
+@router.get(
+    "/refresh/{request_id}",
+    dependencies=[Depends(require_owner_access)],
+)
 def catalyst_refresh_status(
     request_id: Annotated[
         str,
@@ -465,6 +528,7 @@ def catalyst_refresh_status(
 @router.post(
     "/news/{news_id}/analysis",
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_same_origin_action)],
 )
 def request_news_analysis(
     request: AnalysisRequest,
@@ -477,7 +541,10 @@ def request_news_analysis(
         _raise_safe(error)
 
 
-@router.get("/analysis-jobs/{job_id}")
+@router.get(
+    "/analysis-jobs/{job_id}",
+    dependencies=[Depends(require_owner_access)],
+)
 def analysis_job(
     job_id: Annotated[str, Path(min_length=16, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")],
     service: PersonalCatalystService = Depends(_service),
@@ -494,6 +561,7 @@ def analysis_job(
 @router.post(
     "/analysis-jobs/{job_id}/cancel",
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_same_origin_action)],
 )
 def cancel_analysis_job(
     job_id: Annotated[str, Path(min_length=16, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")],

@@ -7,24 +7,24 @@ const SCREENSHOT_DIR = join(process.cwd(), "test-results", "visual-evidence");
 const SECRET_RESPONSE_PATTERN = /(?:sk-proj-[A-Za-z0-9_-]{20,}|OPENAI_API_KEY|FINNHUB_API_KEY|INTERNAL_API_TOKEN|APP_PASSWORD_HASH|APP_AUTH_TOKEN|MACROLENS_INTERNAL_TOKEN|authorization["']?\s*:\s*["']?bearer)/i;
 
 const SCENARIOS = [
-  { name: "1440x900-dark-active", width: 1440, height: 900, theme: "dark", state: "active" },
-  { name: "1280x800-light-active", width: 1280, height: 800, theme: "light", state: "active" },
-  { name: "1024x768-dark-active", width: 1024, height: 768, theme: "dark", state: "active" },
+  { name: "1440x900-dark-active", width: 1440, height: 900, theme: "dark", state: "active", authenticated: true },
+  { name: "1280x800-light-public-visitor", width: 1280, height: 800, theme: "light", state: "active", authenticated: false },
+  { name: "1024x768-dark-active", width: 1024, height: 768, theme: "dark", state: "active", authenticated: true },
   { name: "390x844-light-stale-menu-closed", width: 390, height: 844, theme: "light", state: "stale", mobile: true, authenticated: true },
-  { name: "1280x800-dark-empty", width: 1280, height: 800, theme: "dark", state: "empty" },
-  { name: "1280x800-dark-degraded", width: 1280, height: 800, theme: "dark", state: "degraded" },
-  { name: "1280x800-dark-focus-fallback", width: 1280, height: 800, theme: "dark", state: "focus_fallback" },
+  { name: "1280x800-dark-empty", width: 1280, height: 800, theme: "dark", state: "empty", authenticated: true },
+  { name: "1280x800-dark-degraded", width: 1280, height: 800, theme: "dark", state: "degraded", authenticated: true },
+  { name: "1280x800-dark-focus-fallback", width: 1280, height: 800, theme: "dark", state: "focus_fallback", authenticated: true },
   { name: "1280x800-dark-unavailable", width: 1280, height: 800, theme: "dark", state: "unavailable", authenticated: true },
   { name: "1280x800-light-disabled", width: 1280, height: 800, theme: "light", state: "disabled", authenticated: true },
-  { name: "1280x800-light-read-only-analysis", width: 1280, height: 800, theme: "light", state: "read_only" },
-  { name: "390x844-light-read-only-analysis", width: 390, height: 844, theme: "light", state: "read_only", mobile: true },
-  { name: "1280x800-dark-manual-analysis", width: 1280, height: 800, theme: "dark", state: "manual_analysis" },
+  { name: "1280x800-light-read-only-analysis", width: 1280, height: 800, theme: "light", state: "read_only", authenticated: true },
+  { name: "390x844-light-read-only-analysis", width: 390, height: 844, theme: "light", state: "read_only", mobile: true, authenticated: true },
+  { name: "1280x800-dark-manual-analysis", width: 1280, height: 800, theme: "dark", state: "manual_analysis", authenticated: true },
   { name: "1280x800-dark-prepared", width: 1280, height: 800, theme: "dark", state: "prepared", authenticated: true },
-  { name: "1280x800-dark-queued", width: 1280, height: 800, theme: "dark", state: "queued" },
-  { name: "1280x800-dark-in-progress", width: 1280, height: 800, theme: "dark", state: "in_progress" },
-  { name: "1280x800-dark-completed", width: 1280, height: 800, theme: "dark", state: "completed" },
-  { name: "1280x800-dark-failed", width: 1280, height: 800, theme: "dark", state: "failed" },
-  { name: "1280x800-dark-incomplete-output", width: 1280, height: 800, theme: "dark", state: "incomplete_output" },
+  { name: "1280x800-dark-queued", width: 1280, height: 800, theme: "dark", state: "queued", authenticated: true },
+  { name: "1280x800-dark-in-progress", width: 1280, height: 800, theme: "dark", state: "in_progress", authenticated: true },
+  { name: "1280x800-dark-completed", width: 1280, height: 800, theme: "dark", state: "completed", authenticated: true },
+  { name: "1280x800-dark-failed", width: 1280, height: 800, theme: "dark", state: "failed", authenticated: true },
+  { name: "1280x800-dark-incomplete-output", width: 1280, height: 800, theme: "dark", state: "incomplete_output", authenticated: true },
   { name: "1280x800-light-budget-blocked", width: 1280, height: 800, theme: "light", state: "budget_blocked", authenticated: true },
 ];
 
@@ -237,7 +237,7 @@ function jsonFor(pathname, state) {
   return {};
 }
 
-async function installApiFixtures(page, state, mutationRequests) {
+async function installApiFixtures(page, state, mutationRequests, authenticated = false) {
   await page.route("**/api/**", async route => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -270,6 +270,14 @@ async function installApiFixtures(page, state, mutationRequests) {
         return;
       }
       await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ detail: "visual_fixture_read_only" }) });
+      return;
+    }
+    if (pathname === "/api/access/status") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ access_mode: "password", logged_in: authenticated }),
+      });
       return;
     }
     const body = jsonFor(pathname, state);
@@ -353,8 +361,28 @@ function installSecretResponseScanner(page, pendingScans, leaks) {
 async function assertStableViewport(page, errors) {
   await expect(page.locator("#cat-connection")).not.toHaveText("读取中");
   await expect(page.locator(".cat-desk")).toBeVisible();
-  const fits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
-  expect(fits).toBe(true);
+  const viewport = await page.evaluate(() => ({
+    innerWidth: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    overflowingElements: [...document.querySelectorAll("body *")]
+      .map(element => {
+        const rect = element.getBoundingClientRect();
+        return {
+          selector: element.id ? `#${element.id}` : element.classList.length
+            ? `${element.tagName.toLowerCase()}.${[...element.classList].join(".")}`
+            : element.tagName.toLowerCase(),
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          width: Math.round(rect.width),
+        };
+      })
+      .filter(({ left, right }) => left < -1 || right > window.innerWidth + 1)
+      .slice(0, 12),
+  }));
+  expect(
+    viewport.scrollWidth,
+    `the document must not overflow the viewport horizontally: ${JSON.stringify(viewport.overflowingElements)}`,
+  ).toBeLessThanOrEqual(viewport.innerWidth + 1);
   const browserState = await page.evaluate(() => ({
     localKeys: Object.keys(localStorage).sort(),
     sessionKeys: Object.keys(sessionStorage).sort(),
@@ -381,11 +409,29 @@ for (const scenario of SCENARIOS) {
     installSecretResponseScanner(page, responseScans, responseLeaks);
     await page.setViewportSize({ width: scenario.width, height: scenario.height });
     await page.addInitScript(theme => localStorage.setItem("optix.theme", theme), scenario.theme);
-    await installApiFixtures(page, scenario.state, mutationRequests);
+    await installApiFixtures(page, scenario.state, mutationRequests, scenario.authenticated);
     await page.goto("/#catalysts", { waitUntil: "networkidle" });
     await assertStableViewport(page, errors);
 
-    if (["stale", "unavailable"].includes(scenario.state)) {
+    if (scenario.authenticated) {
+      await expect(page.locator("#owner-login")).toBeHidden();
+      await expect(page.locator("#owner-ai-toggle")).toBeVisible();
+      await expect(page.locator("#owner-logout")).toBeVisible();
+      await expect(page.locator("#cat-runtime-settings")).toBeVisible();
+      await expect(page.locator("#cat-owner-operations")).toBeVisible();
+    } else {
+      await expect(page.locator("#owner-login")).toBeVisible();
+      await expect(page.locator("#owner-ai-toggle")).toBeHidden();
+      await expect(page.locator("#owner-logout")).toBeHidden();
+      await expect(page.locator("[data-catalyst-news]").first()).toBeVisible();
+      await expect(page.locator("#cat-runtime-settings")).toBeHidden();
+      await expect(page.locator("#cat-owner-operations")).toBeHidden();
+      await expect(page.locator("[data-worker-action]").first()).toBeHidden();
+      await expect(page.locator("[data-catalyst-analyze]")).toHaveCount(0);
+      await expect(page.locator("#cat-focus-run")).toHaveCount(0);
+    }
+
+    if (scenario.authenticated && ["stale", "unavailable"].includes(scenario.state)) {
       const focusAction = page.locator("#cat-focus-run");
       await expect(focusAction).toBeDisabled();
       await expect(focusAction).toHaveText("热点快照暂不可用");
@@ -403,16 +449,25 @@ for (const scenario of SCENARIOS) {
       await expect(page.locator("#cat-focus-run")).toContainText("重新分析");
     }
     for (const operationType of ["news", "calendar", "source_health"]) {
-      await expect(page.locator(`[data-cat-refresh="${operationType}"]`)).toHaveCount(1);
+      const refresh = page.locator(`[data-cat-refresh="${operationType}"]`);
+      await expect(refresh).toHaveCount(1);
+      if (scenario.authenticated) await expect(refresh).toBeVisible();
+      else await expect(refresh).toBeHidden();
     }
-    await expect(page.locator("#cat-focus-run")).toHaveCount(["disabled", "read_only"].includes(scenario.state) ? 0 : 1);
+    const expectedFocusActions = scenario.authenticated
+      && !["disabled", "read_only"].includes(scenario.state)
+      ? 1
+      : 0;
+    await expect(page.locator("#cat-focus-run")).toHaveCount(expectedFocusActions);
     if (scenario.state === "read_only") {
       await expect(page.locator("#cat-focus-body")).toContainText("当前为只读模式");
       await expect(page.locator("[data-catalyst-analyze]")).toHaveCount(0);
       await page.locator("[data-catalyst-news]").first().click();
       await expect(page.locator("#cat-analysis-body")).toContainText("当前为只读模式");
       await expect(page.locator("#cat-analysis-body [data-cat-analyze]")).toHaveCount(0);
-      await expect(page.locator("#cat-analysis-body [data-cat-cancel-job]")).toBeVisible();
+      const cancelJob = page.locator("#cat-analysis-body [data-cat-cancel-job]");
+      if (scenario.authenticated) await expect(cancelJob).toBeVisible();
+      else await expect(cancelJob).toHaveCount(0);
     }
     if (scenario.state === "manual_analysis") {
       await page.locator("[data-catalyst-news]").first().click();

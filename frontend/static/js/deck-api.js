@@ -103,7 +103,11 @@
         : "HTTP " + resp.status;
     const err = new Error(message);
     err.status = resp.status;
-    err.code = body && (body.code || (body.error && body.error.code) || (body.detail && body.detail.code)) || null;
+    err.code = body && (
+      body.code
+      || (typeof body.error === "string" ? body.error : body.error && body.error.code)
+      || (body.detail && body.detail.code)
+    ) || null;
     err.retryable = !!(body && (body.retryable || (body.error && body.error.retryable) || (body.detail && body.detail.retryable)));
     err.retryAfter = Number(body && (
       body.retry_after_seconds || body.retry_after ||
@@ -137,7 +141,25 @@
         }
         break;
       }
-      if (!resp.ok) throw responseError(resp, body);
+      if (!resp.ok) {
+        const error = responseError(resp, body);
+        if (resp.status === 401 && error.code === "owner_login_required") {
+          const alreadyLoggedOut = !!(
+            accessState
+            && accessState.access_mode === "password"
+            && accessState.logged_in === false
+          );
+          accessState = { access_mode: "password", logged_in: false };
+          if (!alreadyLoggedOut) {
+            accessStateEpoch += 1;
+            window.dispatchEvent(new CustomEvent(
+              "optix:owner-session-changed",
+              { detail: accessState },
+            ));
+          }
+        }
+        throw error;
+      }
       return body;
     } finally {
       gate.release();
@@ -237,8 +259,44 @@
   }
 
   const marketStatus = () => jget("/api/market/status");
-  const accessStatus = () => jget("/api/access/status", { force: true, noCache: true });
-  const logoutOwner = () => jpost("/api/access/logout", {}, { retry5xx: false });
+  let accessState = null;
+  let accessStateEpoch = 0;
+  let accessStatusPromise = null;
+  const accessStatus = () => {
+    if (accessStatusPromise) return accessStatusPromise;
+    const requestEpoch = accessStateEpoch;
+    const request = jget(
+      "/api/access/status",
+      { force: true, noCache: true },
+    ).then(status => {
+      if (requestEpoch === accessStateEpoch) {
+        accessState = status;
+        return status;
+      }
+      return accessState;
+    }).catch(error => {
+      if (requestEpoch === accessStateEpoch) {
+        accessStateEpoch += 1;
+        accessState = null;
+      }
+      throw error;
+    }).finally(() => {
+      if (accessStatusPromise === request) accessStatusPromise = null;
+    });
+    accessStatusPromise = request;
+    return request;
+  };
+  const currentAccessStatus = () => accessState;
+  const logoutOwner = () => jpost(
+    "/api/access/logout",
+    {},
+    { retry5xx: false },
+  ).then(status => {
+    accessStateEpoch += 1;
+    accessStatusPromise = null;
+    accessState = status;
+    return status;
+  });
 
   async function watchlist(force) {
     const d = await jget("/api/stocks/watchlist", { force });
@@ -517,7 +575,7 @@
   }
 
   window.OPTIX_NET = {
-    jget, jpost, jput, invalidateCache, accessStatus, logoutOwner, cnAmount, indexInfo, INDEX_NAMES, CHART_RANGES,
+    jget, jpost, jput, invalidateCache, accessStatus, currentAccessStatus, logoutOwner, cnAmount, indexInfo, INDEX_NAMES, CHART_RANGES,
     indices, marketStatus, watchlist, stock, stockSignals, signalDeep, signalsMarket, strengthMarket,
     profiles, chart, scan, breakoutsCurrent, breakoutsStatus, breakoutsEvents, breakoutEventDetail, breakoutTicker,
     sectors, sectorIV, earnings, earningsImpact, unusual, expirations, chain, search, aiStock,

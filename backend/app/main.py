@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json as _json_mod
 import os as _os
+import re as _re
 import time as _time
 from collections import deque as _deque
 from pathlib import Path
@@ -29,7 +30,8 @@ from app.access import (
     OwnerAccessRuntime,
     canonical_request_host,
     get_access_runtime,
-    require_owner_access,
+    request_owner_access_context,
+    require_public_read_or_owner_access,
     require_same_origin_action,
 )
 from app.deployment_boundary import canonicalize_hostname, normalize_allowed_hosts
@@ -148,6 +150,7 @@ _HEAVY_API_PREFIXES = (
     "/api/options/",
     "/api/sectors/",
     "/api/signals/",
+    "/api/catalysts/",
     "/api/strength/",
     "/api/breakouts/",
 )
@@ -167,12 +170,81 @@ _PUBLIC_ACCESS_PATHS = {
     "/health",
     "/ready",
 }
+_PUBLIC_DOCUMENT_PATHS = {
+    "/",
+    "/index.html",
+    "/login.html",
+}
+_PUBLIC_READ_API_PATHS = {
+    "/api/access/status",
+    "/api/stocks/watchlist",
+    "/api/stocks/search",
+    "/api/options/unusual",
+    "/api/earnings/upcoming",
+    "/api/sectors",
+    "/api/market/indices",
+    "/api/market/status",
+    "/api/signals/market",
+    "/api/catalysts/status",
+    "/api/catalysts/feed",
+    "/api/catalysts/calendar",
+    "/api/catalysts/hotspots/status",
+    "/api/catalysts/hotspots",
+    "/api/catalysts/market-focus-cycles/latest",
+    "/api/strength/scan",
+    "/api/strength/sectors",
+    "/api/strength/market",
+    "/api/strength/profiles",
+    "/api/breakouts/current",
+    "/api/breakouts/events",
+    "/api/breakouts/status",
+}
+_PUBLIC_READ_API_PATTERNS = tuple(
+    _re.compile(pattern, _re.IGNORECASE)
+    for pattern in (
+        r"^/api/stocks/[^/]+$",
+        r"^/api/stocks/[^/]+/(?:signals|logo|chart)$",
+        r"^/api/options/[^/]+/(?:expirations|chain)$",
+        r"^/api/sectors/[^/]+/(?:iv-ranking|heatmap)$",
+        r"^/api/signals/stock/[^/]+$",
+        r"^/api/catalysts/news/[1-9][0-9]*$",
+        r"^/api/catalysts/tickers/(?!batch$)[A-Z0-9][A-Z0-9.-]{0,19}$",
+        r"^/api/strength/stocks/[^/]+$",
+        r"^/api/breakouts/events/[^/]+$",
+        r"^/api/breakouts/tickers/[^/]+$",
+    )
+)
+_PUBLIC_READ_POST_PATHS = {
+    # This endpoint is a bounded, same-origin batch query. It does not refresh
+    # providers, write application state, or enqueue model work.
+    "/api/catalysts/tickers/batch",
+}
 _PASSWORD_ENTRY_PATHS = {
     "/login.html",
     "/api/access/login",
     "/static/js/login.js",
     "/static/favicon.svg",
 }
+
+
+def _is_public_read_api_path(path: str) -> bool:
+    return path in _PUBLIC_READ_API_PATHS or any(
+        pattern.fullmatch(path) is not None
+        for pattern in _PUBLIC_READ_API_PATTERNS
+    )
+
+
+def _is_public_read_request(path: str, method: str) -> bool:
+    """Return whether password-mode visitors may use this read-only surface."""
+
+    normalized_method = method.upper()
+    if normalized_method in {"GET", "HEAD"}:
+        return bool(
+            path in _PUBLIC_DOCUMENT_PATHS
+            or path.startswith("/static/")
+            or _is_public_read_api_path(path)
+        )
+    return normalized_method == "POST" and path in _PUBLIC_READ_POST_PATHS
 
 
 def _scope_header(scope, name: bytes) -> str:
@@ -205,10 +277,8 @@ def _is_heavy_api_path(path: str, method: str = "GET") -> bool:
     normalized_method = method.upper()
     if normalized_method == "GET" and (
         path.startswith("/api/ai/jobs/")
-        or path.startswith("/api/catalysts/")
         or path == "/api/catalysts/status"
-        or path == "/api/catalysts/feed"
-        or path == "/api/catalysts/calendar"
+        or path == "/api/catalysts/hotspots/status"
     ):
         return False
     if normalized_method in {"POST", "PUT", "PATCH", "DELETE"} and (
@@ -318,7 +388,10 @@ class _GatewayMiddleware:
             path in _PUBLIC_ACCESS_PATHS
             or (
                 self.access_runtime.mode == "password"
-                and path in _PASSWORD_ENTRY_PATHS
+                and (
+                    path in _PASSWORD_ENTRY_PATHS
+                    or _is_public_read_request(path, method)
+                )
             )
         )
         owner_request = StarletteRequest(scope, receive=receive)
@@ -365,30 +438,34 @@ class _GatewayMiddleware:
                 )
             bucket.append(now)
 
-        return await self.app(scope, receive, send_with_response_headers)
+        with request_owner_access_context(owner_access):
+            return await self.app(scope, receive, send_with_response_headers)
 
 
 app.add_middleware(_GatewayMiddleware, access_runtime=_ACCESS_RUNTIME)
 app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 app.add_middleware(_ExactTrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS)
 
-# The gateway gives HTML requests a friendly redirect. Router dependencies are
-# the single API boundary and remain in force when routers are mounted by tools
-# that do not use the production gateway.
+# The gateway gives protected HTML requests a friendly redirect. Public-data
+# routers keep their GET endpoints anonymous in password mode and put owner
+# guards directly on every state-changing route. Operational and AI routers
+# retain a router-wide owner boundary.
 _OWNER_DEPENDENCIES = [
-    Depends(require_owner_access),
     Depends(require_same_origin_action),
 ]
-app.include_router(stocks.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(options.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(earnings.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(sectors.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(market.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(signals.router, dependencies=_OWNER_DEPENDENCIES)
+_PUBLIC_READ_DEPENDENCIES = [
+    Depends(require_public_read_or_owner_access),
+]
+app.include_router(stocks.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+app.include_router(options.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+app.include_router(earnings.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+app.include_router(sectors.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+app.include_router(market.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+app.include_router(signals.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(ai.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(catalysts.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(strength.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(breakouts.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(catalysts.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+app.include_router(strength.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+app.include_router(breakouts.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(worker_actions.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(runtime_settings.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(access.router)

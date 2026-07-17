@@ -62,6 +62,24 @@ def _cached_value(value: Any) -> Any:
     return value
 
 
+def _read_cached(key: str) -> Any | None:
+    """Read one fresh process-local signal result without invoking a loader."""
+
+    with _cache_lock:
+        hit = _fresh_cache_hit(key, datetime.now(timezone.utc))
+    return _cached_value(hit[1]) if hit is not None else None
+
+
+def cached_market_signals() -> dict[str, Any] | None:
+    value = _read_cached("market_signals")
+    return value if isinstance(value, dict) else None
+
+
+def cached_stock_signals(ticker: str) -> dict[str, Any] | None:
+    value = _read_cached(f"stock_signals:{ticker.upper().strip()}")
+    return value if isinstance(value, dict) else None
+
+
 def _cached(key: str, ttl_seconds: int, loader: Callable[[], Any]) -> Any:
     with _cache_lock:
         hit = _fresh_cache_hit(key, datetime.now(timezone.utc))
