@@ -148,6 +148,41 @@ def test_download_batches_keep_partial_results_and_stably_deduplicate_tickers():
     ]
 
 
+def test_download_batches_keep_successes_around_a_failed_chunk():
+    calls: list[list[str]] = []
+
+    def fake_download(*, tickers: str, **_kwargs: Any) -> pd.DataFrame:
+        symbols = tickers.split()
+        calls.append(symbols)
+        if symbols[0] == "T02":
+            raise TimeoutError("middle batch timed out")
+        columns = pd.MultiIndex.from_product([symbols, ["Close"]])
+        return pd.DataFrame([[1.0] * len(symbols)], columns=columns)
+
+    result = download_in_bounded_batches(
+        fake_download,
+        tickers=[f"T{number:02d}" for number in range(5)],
+        batch_size=2,
+        group_by="ticker",
+    )
+
+    assert calls == [["T00", "T01"], ["T02", "T03"], ["T04"]]
+    assert list(result.columns.get_level_values(0)) == ["T00", "T01", "T04"]
+
+
+def test_download_batches_raise_when_every_chunk_fails():
+    def fake_download(*, tickers: str, **_kwargs: Any) -> pd.DataFrame:
+        raise TimeoutError(f"failed {tickers}")
+
+    with pytest.raises(TimeoutError, match="failed T00 T01"):
+        download_in_bounded_batches(
+            fake_download,
+            tickers=["T00", "T01", "T02"],
+            batch_size=2,
+            group_by="ticker",
+        )
+
+
 def test_download_gate_fails_fast_and_bounds_overlapping_batches():
     state_lock = threading.Lock()
     all_active = threading.Event()

@@ -75,14 +75,20 @@ def download_in_bounded_batches(
         raise YFinanceBatchBusy("yfinance batch capacity is busy")
     try:
         frames: list[pd.DataFrame] = []
+        first_error: Exception | None = None
         for offset in range(0, len(symbols), batch_size):
             batch = symbols[offset : offset + batch_size]
-            frame = download(
-                tickers=" ".join(batch),
-                threads=len(batch),
-                multi_level_index=True,
-                **kwargs,
-            )
+            try:
+                frame = download(
+                    tickers=" ".join(batch),
+                    threads=len(batch),
+                    multi_level_index=True,
+                    **kwargs,
+                )
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+                continue
             if not isinstance(frame, pd.DataFrame) or frame.empty:
                 continue
             if not isinstance(frame.columns, pd.MultiIndex):
@@ -100,6 +106,8 @@ def download_in_bounded_batches(
         _download_gate.release()
 
     if not frames:
+        if first_error is not None:
+            raise first_error
         return pd.DataFrame()
     if len(frames) == 1:
         return frames[0]
