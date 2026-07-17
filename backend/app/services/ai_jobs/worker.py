@@ -5,14 +5,15 @@ import asyncio
 import json
 import logging
 import os
+import threading
+import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from datetime import datetime, timezone
-from functools import partial
 from typing import Any
 
 from app.config import get_settings
+from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
 from app.services.ai_jobs import runtime
 from app.services.ai_jobs.repository import AIJobRepository
 
@@ -20,6 +21,7 @@ from app.services.ai_jobs.repository import AIJobRepository
 logger = logging.getLogger(__name__)
 
 _NEW_SUBMISSION_RETRY_SECONDS = 30.0
+_MIN_LEASE_HEARTBEAT_INTERVAL_SECONDS = 5.0
 
 
 def _personal_analysis_permissions(config: Any) -> tuple[bool, bool]:
@@ -61,6 +63,15 @@ def _public_error(
     submitted: bool,
     response_id: str | None,
 ) -> str:
+    if isinstance(exc, RuntimeError):
+        code = str(exc)
+        if code in {
+            "ai_job_heartbeat_unavailable",
+            "ai_job_lease_lost",
+        }:
+            if submitted and not response_id:
+                return "submission_outcome_unknown"
+            return code
     status_code = getattr(exc, "status_code", None)
     if submitted and not response_id and not isinstance(status_code, int):
         return "submission_outcome_unknown"
@@ -106,31 +117,85 @@ async def _lease_heartbeat(
     owner: str,
     lease_seconds: int,
     stop: asyncio.Event,
+    started: asyncio.Event | None = None,
+    maximum_loop_stall_seconds: float | None = None,
+    lease_lost: threading.Event | None = None,
 ) -> None:
-    interval = max(5.0, lease_seconds / 3)
-    loop = asyncio.get_running_loop()
-    # Provider calls and local analysis use the default executor. Keep paid-job
-    # lease renewal independent so a saturated worker cannot duplicate work.
-    with ThreadPoolExecutor(
-        max_workers=1,
-        thread_name_prefix="ai-job-heartbeat",
-    ) as executor:
-        while not stop.is_set():
-            try:
-                await asyncio.wait_for(stop.wait(), timeout=interval)
-                return
-            except asyncio.TimeoutError:
-                renewed = await loop.run_in_executor(
-                    executor,
-                    partial(
-                        repository.renew_lease,
+    interval = max(_MIN_LEASE_HEARTBEAT_INTERVAL_SECONDS, lease_seconds / 3)
+    thread_stop = threading.Event()
+    thread_finished = threading.Event()
+    errors: list[Exception] = []
+    last_loop_pulse = time.monotonic()
+    last_successful_renewal = time.monotonic()
+    maximum_loop_stall = float(
+        maximum_loop_stall_seconds
+        if maximum_loop_stall_seconds is not None
+        else lease_seconds * 3.0
+    )
+    if maximum_loop_stall < lease_seconds:
+        if started is not None:
+            started.set()
+        raise ValueError("maximum_loop_stall_seconds cannot be shorter than the lease")
+
+    def record_lease_loss() -> None:
+        errors.append(RuntimeError("ai_job_lease_lost"))
+        if lease_lost is not None:
+            lease_lost.set()
+
+    def heartbeat() -> None:
+        nonlocal last_successful_renewal
+        next_delay = interval
+        try:
+            while not thread_stop.wait(next_delay):
+                if time.monotonic() - last_loop_pulse > maximum_loop_stall:
+                    record_lease_loss()
+                    return
+                try:
+                    renewed = repository.renew_lease(
                         job_id,
                         owner,
                         lease_seconds,
-                    ),
-                )
+                    )
+                except Exception:
+                    if time.monotonic() - last_successful_renewal >= lease_seconds:
+                        record_lease_loss()
+                        return
+                    next_delay = min(1.0, max(0.01, interval / 4.0))
+                    continue
                 if not renewed:
+                    record_lease_loss()
                     return
+                last_successful_renewal = time.monotonic()
+                next_delay = interval
+        finally:
+            if not thread_stop.is_set() and not errors:
+                record_lease_loss()
+            thread_finished.set()
+
+    heartbeat_thread = threading.Thread(
+        target=heartbeat,
+        name="ai-job-heartbeat",
+    )
+    try:
+        heartbeat_thread.start()
+    except Exception as exc:
+        if lease_lost is not None:
+            lease_lost.set()
+        if started is not None:
+            started.set()
+        raise RuntimeError("ai_job_heartbeat_unavailable") from exc
+    if started is not None:
+        started.set()
+    try:
+        while not stop.is_set() and not thread_finished.is_set():
+            last_loop_pulse = time.monotonic()
+            await asyncio.sleep(min(0.05, interval))
+    finally:
+        thread_stop.set()
+        while heartbeat_thread.is_alive():
+            await asyncio.sleep(0.01)
+    if errors:
+        raise errors[0]
 
 
 async def _finish_response(
@@ -224,18 +289,68 @@ async def process_job(
     scheduled_analysis_enabled: bool = True,
 ) -> None:
     stop = asyncio.Event()
+    heartbeat_started = asyncio.Event()
+    lease_lost = threading.Event()
+    lease_seconds = int(settings.openai_job_lease_seconds)
     heartbeat = asyncio.create_task(
         _lease_heartbeat(
             repository,
             job["job_id"],
             owner,
-            int(settings.openai_job_lease_seconds),
+            lease_seconds,
             stop,
+            heartbeat_started,
+            max(
+                lease_seconds * 3.0,
+                float(getattr(settings, "openai_timeout_seconds", 900.0))
+                + lease_seconds,
+                BREAKOUT_TASK_TIMEOUT_SECONDS + lease_seconds,
+            ),
+            lease_lost,
         )
     )
     submitted = bool(job.get("submission_started_at"))
     response_id = job.get("openai_response_id")
+    heartbeat_failures: list[Exception] = []
+    owner_task = asyncio.current_task()
+
+    def stop_on_heartbeat_failure(task: asyncio.Task[None]) -> None:
+        if stop.is_set() or task.cancelled():
+            return
+        error = task.exception()
+        if error is None:
+            return
+        heartbeat_failures.append(error)
+        if owner_task is not None and not owner_task.done():
+            owner_task.cancel()
+
+    def require_live_lease() -> None:
+        if lease_lost.is_set():
+            raise RuntimeError("ai_job_lease_lost")
+
+    def persist_failure(code: str) -> None:
+        if response_id and code in {
+            "ai_job_heartbeat_unavailable",
+            "ai_job_lease_lost",
+        }:
+            repository.defer(
+                job["job_id"],
+                owner,
+                delay_seconds=_poll_delay(
+                    settings,
+                    int(job.get("poll_count") or 0),
+                ),
+                error_code=code,
+            )
+            return
+        repository.fail(job["job_id"], owner, code)
+
+    heartbeat.add_done_callback(stop_on_heartbeat_failure)
     try:
+        await heartbeat_started.wait()
+        if heartbeat.done():
+            await heartbeat
+        require_live_lease()
         if job.get("cancel_requested_at"):
             if response_id:
                 if _submitted_age_seconds(job) > int(
@@ -272,6 +387,7 @@ async def process_job(
             return
 
         if response_id:
+            require_live_lease()
             if _submitted_age_seconds(job) > int(
                 settings.openai_job_max_age_seconds
             ):
@@ -351,12 +467,14 @@ async def process_job(
             )
             return
 
+        require_live_lease()
         payload = json.loads(job["payload_json"])
         prepared = runtime.prepare_background(
             settings,
             job["job_type"],
             payload,
         )
+        require_live_lease()
         try:
             submission_state = repository.mark_submission_started(
                 job["job_id"],
@@ -378,6 +496,7 @@ async def process_job(
         # Every local validation and SDK construction step has completed. From
         # this point an exception can represent a request whose upstream
         # outcome is unknown, so it must consume both budget and concurrency.
+        require_live_lease()
         submitted = True
         response = await runtime.submit_background(
             settings,
@@ -404,6 +523,18 @@ async def process_job(
         response_id = submitted_response_id
         job["openai_response_id"] = response_id
         await _finish_response(repository, settings, job, owner, response)
+    except asyncio.CancelledError:
+        if not heartbeat_failures:
+            raise
+        exc = heartbeat_failures[0]
+        code = _public_error(
+            exc,
+            submitted=submitted,
+            response_id=response_id,
+        )
+        logger.warning("AI job stopped after heartbeat failure (%s)", code)
+        with suppress(Exception):
+            persist_failure(code)
     except Exception as exc:
         code = _public_error(
             exc,
@@ -412,11 +543,23 @@ async def process_job(
         )
         logger.warning("AI job failed (%s, %s)", code, type(exc).__name__)
         with suppress(Exception):
-            repository.fail(job["job_id"], owner, code)
+            persist_failure(code)
     finally:
+        heartbeat.remove_done_callback(stop_on_heartbeat_failure)
         stop.set()
-        with suppress(asyncio.CancelledError):
+        try:
             await heartbeat
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            code = _public_error(
+                exc,
+                submitted=submitted,
+                response_id=response_id,
+            )
+            logger.warning("AI job heartbeat failed (%s)", code)
+            with suppress(Exception):
+                persist_failure(code)
 
 
 async def run_once(

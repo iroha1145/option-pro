@@ -22,7 +22,7 @@ from app.worker import tasks as worker_tasks
 from app.worker.__main__ import _load_worker_settings, main
 from app.worker.lock import ProcessFileLock
 from app.worker.runtime import TaskResult, TaskSpec, WorkerSupervisor
-from app.worker.state import WorkerStateRepository
+from app.worker.state import WorkerLeaseLost, WorkerStateRepository
 from app.worker.tasks import (
     AIJobsTask,
     BreakoutTask,
@@ -812,6 +812,122 @@ def test_worker_heartbeat_survives_a_saturated_default_executor(
             task_release.set()
             supervisor.request_stop()
             await asyncio.wait_for(running, timeout=2)
+
+    asyncio.run(scenario())
+
+
+def test_worker_heartbeat_survives_a_blocked_event_loop(tmp_path: Path) -> None:
+    renewal_threads: list[str] = []
+    repository = WorkerStateRepository(tmp_path / "heartbeat-blocked-loop.db")
+    original_renew = repository.renew
+
+    def observed_renew(*args, **kwargs):
+        renewal_threads.append(threading.current_thread().name)
+        return original_renew(*args, **kwargs)
+
+    repository.renew = observed_renew  # type: ignore[method-assign]
+
+    async def blocking_task() -> TaskResult:
+        threading.Event().wait(0.7)
+        return TaskResult(status="idle")
+
+    supervisor = WorkerSupervisor(
+        repository,
+        (
+            TaskSpec(
+                "breakout",
+                blocking_task,
+                3600,
+                timeout_seconds=0.8,
+                may_block_event_loop=True,
+            ),
+        ),
+        owner_id="heartbeat-blocked-loop-worker",
+        lease_seconds=0.1,
+        process_lock=ProcessFileLock(tmp_path / "heartbeat-blocked-loop.lock"),
+    )
+
+    async def scenario():
+        return await asyncio.wait_for(supervisor.run_once(), timeout=2)
+
+    result = asyncio.run(scenario())
+    assert result["status"] == "completed"
+    assert len(renewal_threads) >= 4
+    assert all(name.startswith("worker-heartbeat") for name in renewal_threads)
+
+
+def test_worker_heartbeat_start_failure_stops_before_tasks(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = 0
+
+    async def runner() -> TaskResult:
+        nonlocal calls
+        calls += 1
+        return TaskResult(status="idle")
+
+    original_start = threading.Thread.start
+
+    def fail_heartbeat_start(thread):
+        if thread.name == "worker-heartbeat":
+            raise RuntimeError("simulated heartbeat thread failure")
+        return original_start(thread)
+
+    monkeypatch.setattr(threading.Thread, "start", fail_heartbeat_start)
+    repository = WorkerStateRepository(tmp_path / "heartbeat-start-failure.db")
+    supervisor = WorkerSupervisor(
+        repository,
+        (TaskSpec("breakout", runner, 60),),
+        owner_id="heartbeat-start-failure-worker",
+        lease_seconds=0.2,
+        process_lock=ProcessFileLock(tmp_path / "heartbeat-start-failure.lock"),
+    )
+
+    with pytest.raises(WorkerLeaseLost, match="heartbeat could not start"):
+        asyncio.run(supervisor.run_once())
+    assert calls == 0
+
+
+@pytest.mark.parametrize("fail_after_release", [False, True])
+def test_call_local_waits_through_repeated_cancellation(
+    fail_after_release: bool,
+) -> None:
+    async def scenario() -> None:
+        started = threading.Event()
+        release = threading.Event()
+        finished = threading.Event()
+
+        def local_transaction() -> str:
+            started.set()
+            release.wait(timeout=1)
+            try:
+                if fail_after_release:
+                    raise sqlite3.OperationalError("simulated local write failure")
+                return "completed"
+            finally:
+                finished.set()
+
+        operation = asyncio.create_task(
+            worker_tasks._call_local(local_transaction)
+        )
+        for _ in range(100):
+            if started.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert started.is_set()
+
+        operation.cancel()
+        await asyncio.sleep(0)
+        operation.cancel()
+        await asyncio.sleep(0)
+        assert not operation.done()
+        assert not finished.is_set()
+
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await operation
+        assert finished.is_set()
 
     asyncio.run(scenario())
 

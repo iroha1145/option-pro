@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from app.data_paths import get_data_paths
+from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
 from app.personal_config import get_personal_config
 
 from .runtime import TaskResult, TaskSpec
@@ -44,7 +45,25 @@ def _canonical_sector_tickers() -> tuple[str, ...]:
 async def _call_local(method: Any, *args: Any, **kwargs: Any) -> Any:
     if inspect.iscoroutinefunction(method):
         return await method(*args, **kwargs)
-    return await asyncio.to_thread(method, *args, **kwargs)
+    task = asyncio.create_task(asyncio.to_thread(method, *args, **kwargs))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError as cancelled:
+        # A cancelled asyncio wrapper cannot stop a thread already inside a
+        # SQLite transaction. Keep the worker lease and process lock until the
+        # local operation has really left its transaction boundary.
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                break
+        try:
+            task.result()
+        except BaseException:
+            pass
+        raise cancelled
 
 
 async def _close_optional(resource: Any) -> None:
@@ -95,7 +114,7 @@ async def _build_local_intelligence(
         factory = LocalCatalystIntelligence
     database_path = settings.macrolens_cache_db_path
     ai_repository = AIJobRepository(settings.openai_job_db_path)
-    await asyncio.to_thread(ai_repository.initialize)
+    await _call_local(ai_repository.initialize)
     try:
         runtime_settings = get_effective_runtime_settings()
     except RuntimeSettingsStorageError:
@@ -760,6 +779,10 @@ class BreakoutTask:
             self._repository,
             scan_service=self._service,
             owner_id=self.owner_id,
+            maximum_loop_stall_seconds=(
+                BREAKOUT_TASK_TIMEOUT_SECONDS
+                + float(self._settings.worker_lease_ttl_seconds)
+            ),
         )
         payload = await worker.run_once()
         status = str(payload.get("status") or "degraded")
@@ -1002,7 +1025,8 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             breakout,
             interval_seconds=float(config.breakout.regular_seconds),
             enabled=config.features.breakout_enabled,
-            timeout_seconds=900.0,
+            timeout_seconds=BREAKOUT_TASK_TIMEOUT_SECONDS,
+            may_block_event_loop=True,
         ),
         TaskSpec(
             "catalyst_sync",
@@ -1056,7 +1080,8 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             manual_breakout,
             interval_seconds=86_400.0,
             enabled=config.features.breakout_enabled,
-            timeout_seconds=900.0,
+            timeout_seconds=BREAKOUT_TASK_TIMEOUT_SECONDS,
+            may_block_event_loop=True,
             manual_only=True,
         ),
         TaskSpec(

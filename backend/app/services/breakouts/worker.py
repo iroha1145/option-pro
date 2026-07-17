@@ -12,6 +12,7 @@ import random
 import signal
 import socket
 import sqlite3
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -116,6 +117,7 @@ class BreakoutWorker:
         *,
         owner_id: str | None = None,
         lease_ttl_seconds: float | None = None,
+        maximum_loop_stall_seconds: float | None = None,
         jitter: Callable[[float], float] | None = None,
     ) -> None:
         self.settings = settings
@@ -135,6 +137,15 @@ class BreakoutWorker:
         )
         if self.lease_ttl_seconds <= 0:
             raise ValueError("lease_ttl_seconds must be positive")
+        self.maximum_loop_stall_seconds = float(
+            maximum_loop_stall_seconds
+            if maximum_loop_stall_seconds is not None
+            else self.lease_ttl_seconds * 3.0
+        )
+        if self.maximum_loop_stall_seconds < self.lease_ttl_seconds:
+            raise ValueError(
+                "maximum_loop_stall_seconds cannot be shorter than the lease"
+            )
         self._jitter = jitter or (lambda bound: random.uniform(0.0, bound))
         self._stop_requested = False
         self._owns_provider = False
@@ -333,28 +344,97 @@ class BreakoutWorker:
         # Busy shared runners and short test leases can otherwise consume the
         # whole remaining window before SQLite records the heartbeat.
         interval = max(0.01, min(30.0, self.lease_ttl_seconds / 4.0))
+        loop = asyncio.get_running_loop()
+        heartbeat_stop = threading.Event()
+        lease_lost = threading.Event()
+        last_loop_pulse = time.monotonic()
+        last_successful_renewal = time.monotonic()
+        maximum_loop_stall = self.maximum_loop_stall_seconds
+
+        def heartbeat() -> None:
+            nonlocal last_successful_renewal
+            next_delay = interval
+            try:
+                while not heartbeat_stop.wait(next_delay):
+                    if time.monotonic() - last_loop_pulse > maximum_loop_stall:
+                        lease_lost.set()
+                        loop.call_soon_threadsafe(task.cancel)
+                        return
+                    try:
+                        renewed = self.repository.heartbeat_lock(
+                            DEFAULT_LOCK_NAME,
+                            self.owner_id,
+                            lease_token,
+                            self.lease_ttl_seconds,
+                            self.clock.now(),
+                        )
+                    except Exception:
+                        if (
+                            time.monotonic() - last_successful_renewal
+                            >= self.lease_ttl_seconds
+                        ):
+                            lease_lost.set()
+                            loop.call_soon_threadsafe(task.cancel)
+                            return
+                        next_delay = min(1.0, max(0.01, interval / 4.0))
+                        continue
+                    if not renewed:
+                        lease_lost.set()
+                        loop.call_soon_threadsafe(task.cancel)
+                        return
+                    last_successful_renewal = time.monotonic()
+                    next_delay = interval
+                    try:
+                        self._status("running", current_scan_id=scan_id)
+                    except Exception:
+                        # The fencing lease is authoritative. A best-effort status
+                        # refresh must not turn a successful renewal into lease loss.
+                        pass
+            finally:
+                if not heartbeat_stop.is_set() and not lease_lost.is_set():
+                    lease_lost.set()
+                    loop.call_soon_threadsafe(task.cancel)
+
+        heartbeat_thread = threading.Thread(
+            target=heartbeat,
+            name="breakout-lease-heartbeat",
+        )
+        try:
+            heartbeat_thread.start()
+        except Exception:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            raise
         try:
             while True:
-                done, _ = await asyncio.wait({task}, timeout=interval)
+                done, _ = await asyncio.wait({task}, timeout=min(0.05, interval))
+                last_loop_pulse = time.monotonic()
                 if task in done:
                     return await task
-                if not self.repository.heartbeat_lock(
-                    DEFAULT_LOCK_NAME,
-                    self.owner_id,
-                    lease_token,
-                    self.lease_ttl_seconds,
-                    self.clock.now(),
-                ):
-                    task.cancel()
-                    try:
-                        await task
-                    except asyncio.CancelledError:
-                        pass
-                    raise LeaseLostError("worker lost its lease while scanning")
-                self._status("running", current_scan_id=scan_id)
+        except asyncio.CancelledError:
+            if lease_lost.is_set():
+                raise LeaseLostError("worker lost its lease while scanning") from None
+            raise
         finally:
-            if not task.done():
-                task.cancel()
+            async def cleanup() -> None:
+                heartbeat_stop.set()
+                while heartbeat_thread.is_alive():
+                    await asyncio.sleep(0.01)
+                if not task.done():
+                    task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+            cleanup_task = asyncio.create_task(cleanup())
+            cleanup_cancelled: asyncio.CancelledError | None = None
+            while not cleanup_task.done():
+                try:
+                    await asyncio.shield(cleanup_task)
+                except asyncio.CancelledError as exc:
+                    cleanup_cancelled = cleanup_cancelled or exc
+                    continue
+            await cleanup_task
+            if cleanup_cancelled is not None:
+                raise cleanup_cancelled
 
     async def _run_cycle(
         self,
