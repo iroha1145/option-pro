@@ -13,6 +13,7 @@ from typing import Any, Iterable, Iterator, Literal, Sequence
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
+from app.access import current_request_is_owner
 from app.services.ai_jobs import runtime as ai_runtime
 from app.services.ai_jobs.models import validate_simplified_chinese_text
 from app.services.ai_jobs.repository import AIJobRepository
@@ -410,11 +411,18 @@ class LocalCatalystIntelligence:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.db_path, timeout=5.0)
+        owner_access = current_request_is_owner()
+        if owner_access:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            connection = sqlite3.connect(self.db_path, timeout=5.0)
+        else:
+            uri = f"file:{quote(self.db_path.resolve().as_posix(), safe='/')}?mode=ro"
+            connection = sqlite3.connect(uri, uri=True, timeout=5.0)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA busy_timeout=5000")
+        if not owner_access:
+            connection.execute("PRAGMA query_only=ON")
         try:
             yield connection
         finally:
@@ -778,6 +786,42 @@ class LocalCatalystIntelligence:
             output.append(item)
         return output
 
+    def _active_revision(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        news_id: int,
+        as_of: datetime,
+    ) -> dict[str, Any] | None:
+        """Read one visible revision without scanning every active news item."""
+
+        cutoff = _iso(as_of)
+        try:
+            row = connection.execute(
+                """WITH latest AS (
+                       SELECT MAX(change_sequence) AS change_sequence
+                       FROM macrolens_etl_news_changes
+                       WHERE news_id=? AND available_at<=?
+                   )
+                   SELECT r.* FROM latest l
+                   JOIN macrolens_etl_news_changes c
+                     ON c.news_id=? AND c.change_sequence=l.change_sequence
+                   JOIN catalyst_local_news_revisions r
+                     ON r.news_id=c.news_id
+                    AND r.change_sequence=c.change_sequence
+                   WHERE c.operation='upsert' AND c.available_at<=?
+                   LIMIT 1""",
+                (news_id, cutoff, news_id, cutoff),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            return None
+        if row is None:
+            return None
+        item = dict(row)
+        item["canonical_tickers"] = _loads(item["canonical_tickers_json"], [])
+        item["source_names"] = _loads(item["source_names_json"], [])
+        return item
+
     @staticmethod
     def _hot_score(row: dict[str, Any], result: dict[str, Any] | None, now: datetime) -> tuple[float, dict[str, float], list[str]]:
         components: dict[str, tuple[float, float, str]] = {}
@@ -980,12 +1024,19 @@ class LocalCatalystIntelligence:
 
     def _item(self, connection: sqlite3.Connection, row: dict[str, Any], *, as_of: datetime) -> dict[str, Any]:
         result, available = self._analysis_for_revision(connection, row, as_of=as_of)
-        job_public, _detail_job = self._linked_news_job_at(
-            connection,
-            row,
-            as_of=as_of,
-        )
-        status = str(job_public.get("status") if job_public else "not_requested")
+        if current_request_is_owner():
+            job_public, _detail_job = self._linked_news_job_at(
+                connection,
+                row,
+                as_of=as_of,
+            )
+            status = str(
+                job_public.get("status") if job_public else "not_requested"
+            )
+        else:
+            # Published local analysis is enough for the visitor view. Do not
+            # read the mutable AI job store merely to expose queue state.
+            status = "not_requested"
         if result is not None:
             status = "completed"
         item = {
@@ -1021,8 +1072,15 @@ class LocalCatalystIntelligence:
             )
         return item
 
-    def status(self, *, now: datetime | None = None) -> dict[str, Any]:
+    def status(
+        self,
+        *,
+        now: datetime | None = None,
+        include_manual_refreshes: bool | None = None,
+    ) -> dict[str, Any]:
         observed = now or _utc_now()
+        if include_manual_refreshes is None:
+            include_manual_refreshes = current_request_is_owner()
         if self.mode == "off":
             return {
                 "enabled": False,
@@ -1040,7 +1098,11 @@ class LocalCatalystIntelligence:
                 "schema_version": SCHEMA_VERSION,
                 "sources": [],
                 "streams": {},
-                "manual_refreshes": self._empty_manual_refreshes("disabled"),
+                "manual_refreshes": (
+                    self._empty_manual_refreshes("disabled")
+                    if include_manual_refreshes
+                    else {}
+                ),
                 "warnings": [],
             }
         if not self.db_path.is_file():
@@ -1060,7 +1122,11 @@ class LocalCatalystIntelligence:
                 "schema_version": SCHEMA_VERSION,
                 "sources": [],
                 "streams": {},
-                "manual_refreshes": self._empty_manual_refreshes("unavailable"),
+                "manual_refreshes": (
+                    self._empty_manual_refreshes("unavailable")
+                    if include_manual_refreshes
+                    else {}
+                ),
                 "warnings": ["cache_unavailable"],
             }
         try:
@@ -1083,10 +1149,15 @@ class LocalCatalystIntelligence:
         successes = [str(row["last_success_at"]) for row in states if row["last_success_at"]]
         through = [str(row["completed_as_of"]) for row in states if row["completed_as_of"]]
         ready = bool(states) and all(row["last_success_at"] for row in states)
-        try:
-            manual_refreshes = self.manual_refresh_statuses(now=observed)
-        except sqlite3.Error:
-            manual_refreshes = self._empty_manual_refreshes("unavailable")
+        if include_manual_refreshes:
+            try:
+                manual_refreshes = self.manual_refresh_statuses(now=observed)
+            except sqlite3.Error:
+                manual_refreshes = self._empty_manual_refreshes("unavailable")
+        else:
+            # Visitor reads must not recover stale operations or expose Owner
+            # request identifiers. This helper opens a write transaction.
+            manual_refreshes = {}
         return {
             "enabled": True,
             "status": "active" if ready else "degraded",
@@ -1150,6 +1221,10 @@ class LocalCatalystIntelligence:
         horizon = kwargs.get("horizon")
         mechanism = kwargs.get("mechanism")
         multi_source_only = bool(kwargs.get("multi_source_only"))
+        rows_by_news_id = {
+            int(row["news_id"]): row
+            for row in rows
+        }
         filtered: list[dict[str, Any]] = []
         for item in items:
             result = item.get("analysis") or {}
@@ -1176,7 +1251,7 @@ class LocalCatalystIntelligence:
             if mechanism and not any(value.get("mechanism") == mechanism for value in impacts):
                 continue
             if multi_source_only:
-                row = next((value for value in rows if value["news_id"] == item["news_id"]), None)
+                row = rows_by_news_id.get(int(item["news_id"]))
                 if not row or int(row.get("source_count") or 0) < 2:
                     continue
             filtered.append(item)
@@ -1205,29 +1280,37 @@ class LocalCatalystIntelligence:
         }
 
     def news(self, news_id: int, *, as_of: datetime) -> dict[str, Any] | None:
+        include_owner_state = current_request_is_owner()
         with self._connect() as connection:
-            rows = self._active_revisions(connection, as_of=as_of)
-            row = next((item for item in rows if int(item["news_id"]) == news_id), None)
+            row = self._active_revision(
+                connection,
+                news_id=news_id,
+                as_of=as_of,
+            )
             if row is None:
                 return None
             item = self._item(connection, row, as_of=as_of)
-            _job_at_time, detail_job = self._linked_news_job_at(
-                connection,
-                row,
-                as_of=as_of,
-            )
-            history_links = connection.execute(
-                """SELECT job_id FROM catalyst_local_analysis_links
-                   WHERE news_id=? AND change_sequence=? AND content_hash=?
-                     AND created_at<=?
-                   ORDER BY created_at DESC,job_id DESC""",
-                (
-                    row["news_id"],
-                    row["change_sequence"],
-                    row["content_hash"],
-                    _iso(as_of),
-                ),
-            ).fetchall()
+            if include_owner_state:
+                _job_at_time, detail_job = self._linked_news_job_at(
+                    connection,
+                    row,
+                    as_of=as_of,
+                )
+                history_links = connection.execute(
+                    """SELECT job_id FROM catalyst_local_analysis_links
+                       WHERE news_id=? AND change_sequence=? AND content_hash=?
+                         AND created_at<=?
+                       ORDER BY created_at DESC,job_id DESC""",
+                    (
+                        row["news_id"],
+                        row["change_sequence"],
+                        row["content_hash"],
+                        _iso(as_of),
+                    ),
+                ).fetchall()
+            else:
+                detail_job = None
+                history_links = []
         analysis_revisions: list[dict[str, Any]] = []
         for link in history_links:
             job = self._read_ai_job(str(link["job_id"]))
@@ -1255,12 +1338,81 @@ class LocalCatalystIntelligence:
 
     def batch(self, tickers: Sequence[str], **kwargs: Any) -> dict[str, Any]:
         as_of = kwargs.get("as_of") or _utc_now()
+        if not isinstance(as_of, datetime) or as_of.tzinfo is None:
+            raise ValueError("as_of must be timezone-aware")
+        window_hours = int(kwargs.get("window_hours") or 72)
+        limit = min(100, max(1, int(kwargs.get("limit") or 20)))
+        min_confidence = int(kwargs.get("min_confidence") or 0)
+        include_unanalyzed = bool(kwargs.get("include_unanalyzed", True))
+        include_neutral = bool(kwargs.get("include_neutral", False))
+        with self._connect() as connection:
+            rows = self._active_revisions(
+                connection,
+                as_of=as_of,
+                window_hours=window_hours,
+            )
+            items = [self._item(connection, row, as_of=as_of) for row in rows]
+        data_through = self.status(now=as_of).get("data_through")
+        results: dict[str, dict[str, Any]] = {}
+        for raw_ticker in tickers:
+            ticker = raw_ticker.strip().upper()
+            filtered: list[dict[str, Any]] = []
+            for item in items:
+                result = item.get("analysis") or {}
+                affected = result.get("affected_stocks") or []
+                if ticker not in item.get("source_tickers", []) and not any(
+                    stock.get("ticker") == ticker
+                    for stock in affected
+                    if isinstance(stock, dict)
+                ):
+                    continue
+                if not include_unanalyzed and not result:
+                    continue
+                if result and int(result.get("confidence") or 0) < min_confidence:
+                    continue
+                if not include_neutral and result.get("classification") == "neutral":
+                    continue
+                filtered.append(item)
+            page = filtered[:limit]
+            analyzed = [item for item in filtered if item.get("analysis")]
+            results[ticker] = {
+                "ticker": ticker,
+                "status": "active" if page else "empty",
+                "as_of": _iso(as_of),
+                "data_through": data_through,
+                "items": page,
+                "summary": {
+                    "news_6h": sum(
+                        1
+                        for item in filtered
+                        if (_parse_time(item.get("published_at")) or as_of)
+                        >= as_of - timedelta(hours=6)
+                    ),
+                    "analyzed_24h": len(analyzed),
+                    "bullish": sum(
+                        1
+                        for item in analyzed
+                        if item.get("classification") == "bullish"
+                    ),
+                    "bearish": sum(
+                        1
+                        for item in analyzed
+                        if item.get("classification") == "bearish"
+                    ),
+                    "pending": sum(
+                        1 for item in filtered if not item.get("analysis")
+                    ),
+                    "high_impact_macro": None,
+                },
+                "stock_impacts": [],
+                "next_cursor": None,
+                "has_more": len(filtered) > limit,
+                "warnings": [],
+            }
         return {
             "as_of": _iso(as_of),
             "status": "active",
-            "results": {
-                ticker: self.ticker(ticker, **kwargs) for ticker in tickers
-            },
+            "results": results,
             "warnings": [],
         }
 
@@ -2219,6 +2371,60 @@ class LocalCatalystIntelligence:
             submission_source=submission_source,
         )
 
+    def _focus_cycle_from_row(
+        self,
+        row: sqlite3.Row | dict[str, Any],
+        *,
+        include_owner_state: bool,
+    ) -> dict[str, Any] | None:
+        payload = dict(row)
+        result = _loads(payload.pop("result_json"), None)
+        cycle_payload = _loads(payload.pop("payload_json", None), {})
+        if not include_owner_state and (
+            payload.get("status") != "completed" or result is None
+        ):
+            return None
+        cancel_requested = False
+        if include_owner_state:
+            linked_job = self.ai_repository.get_job(str(payload["job_id"]))
+            public_job = self._identity_public_job(
+                linked_job,
+                expected_type="market_focus",
+            )
+            cancel_requested = bool(
+                public_job and public_job.get("cancel_requested")
+            )
+        payload.update(
+            {
+                "status": (
+                    "cancel_requested" if cancel_requested else payload["status"]
+                ),
+                "cancel_requested": cancel_requested,
+                "no_new_hot_events": False,
+                "focus_revision": payload["prepared_revision"],
+                "cycle_revision": int(cycle_payload.get("cycle_revision") or 1),
+                "force": bool(cycle_payload.get("force")),
+                "consumes_prepared_revision": not bool(cycle_payload.get("force")),
+                "event_group_count": len(
+                    cycle_payload.get("allowed_event_group_ids", [])
+                ),
+                "focus_symbol_count": len(cycle_payload.get("allowed_tickers", [])),
+                "model": self.model,
+                "reasoning_effort": self.reasoning,
+                "result": result,
+            }
+        )
+        if not include_owner_state:
+            for field in (
+                "job_id",
+                "error_code",
+                "retry_of_cycle_id",
+                "updated_at",
+                "cancel_requested",
+            ):
+                payload.pop(field, None)
+        return payload
+
     def market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
         with self._connect() as connection:
             row = connection.execute(
@@ -2226,37 +2432,14 @@ class LocalCatalystIntelligence:
             ).fetchone()
         if row is None:
             return None
-        payload = dict(row)
-        result = _loads(payload.pop("result_json"), None)
-        cycle_payload = _loads(payload.pop("payload_json", None), {})
-        linked_job = self.ai_repository.get_job(str(payload["job_id"]))
-        public_job = self._identity_public_job(
-            linked_job,
-            expected_type="market_focus",
+        return self._focus_cycle_from_row(
+            row,
+            include_owner_state=current_request_is_owner(),
         )
-        cancel_requested = bool(
-            public_job and public_job.get("cancel_requested")
-        )
-        payload.update(
-            {
-                "status": "cancel_requested" if cancel_requested else payload["status"],
-                "cancel_requested": cancel_requested,
-                "no_new_hot_events": False,
-                "focus_revision": payload["prepared_revision"],
-                "cycle_revision": int(cycle_payload.get("cycle_revision") or 1),
-                "force": bool(cycle_payload.get("force")),
-                "consumes_prepared_revision": not bool(cycle_payload.get("force")),
-                "event_group_count": len(cycle_payload.get("allowed_event_group_ids", [])),
-                "focus_symbol_count": len(cycle_payload.get("allowed_tickers", [])),
-                "model": self.model,
-                "reasoning_effort": self.reasoning,
-                "result": result,
-            }
-        )
-        return payload
 
     def latest_market_focus_cycle(self, *, now: datetime | None = None) -> dict[str, Any]:
         observed = now or _utc_now()
+        include_owner_state = current_request_is_owner()
         with self._connect() as connection:
             row = connection.execute(
                 """SELECT cycle_id FROM catalyst_local_focus_cycles
@@ -2270,12 +2453,18 @@ class LocalCatalystIntelligence:
                    ORDER BY completed_at DESC,created_at DESC LIMIT 1""",
                 (_iso(observed),),
             ).fetchone()
-        cycle = self.market_focus_cycle(str(row["cycle_id"])) if row else None
+        cycle = (
+            self.market_focus_cycle(str(row["cycle_id"]))
+            if row and include_owner_state
+            else None
+        )
         latest_successful_cycle = (
             self.market_focus_cycle(str(successful_row["cycle_id"]))
             if successful_row is not None
             else None
         )
+        if not include_owner_state:
+            cycle = latest_successful_cycle
         if (
             cycle is not None
             and cycle.get("completed_at")

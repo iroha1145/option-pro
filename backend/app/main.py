@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json as _json_mod
 import os as _os
+import re as _re
 import time as _time
 from collections import deque as _deque
 from pathlib import Path
@@ -29,6 +30,7 @@ from app.access import (
     OwnerAccessRuntime,
     canonical_request_host,
     get_access_runtime,
+    request_owner_access_context,
     require_public_read_or_owner_access,
     require_same_origin_action,
 )
@@ -148,6 +150,7 @@ _HEAVY_API_PREFIXES = (
     "/api/options/",
     "/api/sectors/",
     "/api/signals/",
+    "/api/catalysts/",
     "/api/strength/",
     "/api/breakouts/",
 )
@@ -172,20 +175,45 @@ _PUBLIC_DOCUMENT_PATHS = {
     "/index.html",
     "/login.html",
 }
-_PUBLIC_READ_API_PREFIXES = (
-    "/api/stocks",
-    "/api/options",
-    "/api/earnings",
-    "/api/sectors",
-    "/api/market",
-    "/api/signals",
-    "/api/catalysts",
-    "/api/strength",
-    "/api/breakouts",
-)
 _PUBLIC_READ_API_PATHS = {
     "/api/access/status",
+    "/api/stocks/watchlist",
+    "/api/stocks/search",
+    "/api/options/unusual",
+    "/api/earnings/upcoming",
+    "/api/sectors",
+    "/api/market/indices",
+    "/api/market/status",
+    "/api/signals/market",
+    "/api/catalysts/status",
+    "/api/catalysts/feed",
+    "/api/catalysts/calendar",
+    "/api/catalysts/hotspots/status",
+    "/api/catalysts/hotspots",
+    "/api/catalysts/market-focus-cycles/latest",
+    "/api/strength/scan",
+    "/api/strength/sectors",
+    "/api/strength/market",
+    "/api/strength/profiles",
+    "/api/breakouts/current",
+    "/api/breakouts/events",
+    "/api/breakouts/status",
 }
+_PUBLIC_READ_API_PATTERNS = tuple(
+    _re.compile(pattern, _re.IGNORECASE)
+    for pattern in (
+        r"^/api/stocks/[^/]+$",
+        r"^/api/stocks/[^/]+/(?:signals|logo|chart)$",
+        r"^/api/options/[^/]+/(?:expirations|chain)$",
+        r"^/api/sectors/[^/]+/(?:iv-ranking|heatmap)$",
+        r"^/api/signals/stock/[^/]+$",
+        r"^/api/catalysts/news/[1-9][0-9]*$",
+        r"^/api/catalysts/tickers/(?!batch$)[A-Z0-9][A-Z0-9.-]{0,19}$",
+        r"^/api/strength/stocks/[^/]+$",
+        r"^/api/breakouts/events/[^/]+$",
+        r"^/api/breakouts/tickers/[^/]+$",
+    )
+)
 _PUBLIC_READ_POST_PATHS = {
     # This endpoint is a bounded, same-origin batch query. It does not refresh
     # providers, write application state, or enqueue model work.
@@ -199,8 +227,11 @@ _PASSWORD_ENTRY_PATHS = {
 }
 
 
-def _has_path_prefix(path: str, prefix: str) -> bool:
-    return path == prefix or path.startswith(f"{prefix}/")
+def _is_public_read_api_path(path: str) -> bool:
+    return path in _PUBLIC_READ_API_PATHS or any(
+        pattern.fullmatch(path) is not None
+        for pattern in _PUBLIC_READ_API_PATTERNS
+    )
 
 
 def _is_public_read_request(path: str, method: str) -> bool:
@@ -211,11 +242,7 @@ def _is_public_read_request(path: str, method: str) -> bool:
         return bool(
             path in _PUBLIC_DOCUMENT_PATHS
             or path.startswith("/static/")
-            or path in _PUBLIC_READ_API_PATHS
-            or any(
-                _has_path_prefix(path, prefix)
-                for prefix in _PUBLIC_READ_API_PREFIXES
-            )
+            or _is_public_read_api_path(path)
         )
     return normalized_method == "POST" and path in _PUBLIC_READ_POST_PATHS
 
@@ -250,10 +277,8 @@ def _is_heavy_api_path(path: str, method: str = "GET") -> bool:
     normalized_method = method.upper()
     if normalized_method == "GET" and (
         path.startswith("/api/ai/jobs/")
-        or path.startswith("/api/catalysts/")
         or path == "/api/catalysts/status"
-        or path == "/api/catalysts/feed"
-        or path == "/api/catalysts/calendar"
+        or path == "/api/catalysts/hotspots/status"
     ):
         return False
     if normalized_method in {"POST", "PUT", "PATCH", "DELETE"} and (
@@ -413,7 +438,8 @@ class _GatewayMiddleware:
                 )
             bucket.append(now)
 
-        return await self.app(scope, receive, send_with_response_headers)
+        with request_owner_access_context(owner_access):
+            return await self.app(scope, receive, send_with_response_headers)
 
 
 app.add_middleware(_GatewayMiddleware, access_runtime=_ACCESS_RUNTIME)

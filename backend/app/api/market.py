@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import yfinance as yf
 from fastapi import APIRouter, HTTPException
 
+from app.access import current_request_is_owner, public_snapshot_unavailable
 from app.services.cache import cache as _shared_cache
 from app.services.market_calendar import (
     ET,
@@ -31,7 +32,13 @@ async def market_indices():
     frontend call /api/stocks/{ticker} five times, each triggering yfinance's
     slow full `.info` scrape.
     """
-    return await _shared_cache.get_or_set("market:indices", 60, _build_indices)
+    key = "market:indices"
+    if not current_request_is_owner():
+        cached = _shared_cache.get(key)
+        if cached is None:
+            raise public_snapshot_unavailable(key)
+        return cached
+    return await _shared_cache.get_or_set(key, 60, _build_indices)
 
 
 async def _build_indices():

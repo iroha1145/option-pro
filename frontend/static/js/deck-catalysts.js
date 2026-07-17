@@ -1940,9 +1940,21 @@
     pageEnhancementControllers.add(controller);
     const tickers = rows.map(row => upperTicker(row.ticker)).filter(Boolean).slice(0, 50);
     try {
-      const payload = await N.catalystBatch(tickers, { window_hours: 72, limit: 3, include_neutral: true }, { signal: controller.signal });
+      const batchSize = page.ownerAccess ? 50 : 20;
+      const batches = [];
+      for (let offset = 0; offset < tickers.length; offset += batchSize) {
+        batches.push(tickers.slice(offset, offset + batchSize));
+      }
+      const payloads = await Promise.all(batches.map(batch => N.catalystBatch(
+        batch,
+        { window_hours: 72, limit: 3, include_neutral: true },
+        { signal: controller.signal },
+      )));
       if (!root.isConnected) return;
-      const results = batchResults(payload);
+      const results = new Map();
+      payloads.forEach(payload => {
+        batchResults(payload).forEach((value, key) => results.set(key, value));
+      });
       const metrics = new Map();
       $$('[data-catalyst-summary]', root).forEach(box => {
         const ticker = upperTicker(box.dataset.catalystSummary);

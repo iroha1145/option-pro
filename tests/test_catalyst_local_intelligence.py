@@ -10,6 +10,7 @@ from typing import Any, Iterable
 
 import pytest
 
+from app.access import request_owner_access_context
 from app.services.ai_jobs import repository as ai_jobs_repository_module
 from app.services.ai_jobs.repository import AIJobRepository
 from app.services.catalysts import local_intelligence as local_module
@@ -1824,6 +1825,148 @@ def test_status_exposes_each_manual_refresh_state_and_cooldown(
     assert refreshes["calendar"]["error_code"] == "calendar_upstream_failed"
     assert refreshes["source_health"]["status"] == "idle"
     assert all("idempotency_key" not in item for item in refreshes.values())
+
+
+def test_public_reads_never_recover_or_expose_manual_refresh_state(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _etl, _ai, intelligence = _stack(tmp_path)
+    observed = datetime(2030, 7, 16, 18, 30, tzinfo=timezone.utc)
+
+    def unexpected_manual_refresh_statuses(*_args, **_kwargs):
+        pytest.fail("public reads must not open the manual-refresh write transaction")
+
+    monkeypatch.setattr(
+        intelligence,
+        "manual_refresh_statuses",
+        unexpected_manual_refresh_statuses,
+    )
+
+    with request_owner_access_context(False):
+        status = intelligence.status(now=observed)
+        feed = intelligence.feed(as_of=observed)
+        hotspot_status = intelligence.hotspot_status(now=observed)
+        latest = intelligence.latest_market_focus_cycle(now=observed)
+
+    assert status["manual_refreshes"] == {}
+    assert feed["status"] in {"active", "empty"}
+    assert hotspot_status["status"] in {"active", "empty"}
+    assert latest["status"] in {"active", "empty"}
+
+
+def test_public_catalyst_database_connection_is_enforced_read_only(
+    tmp_path,
+) -> None:
+    _etl, _ai, intelligence = _stack(tmp_path)
+
+    with request_owner_access_context(False):
+        with intelligence._connect() as connection:
+            assert connection.execute("PRAGMA query_only").fetchone()[0] == 1
+            with pytest.raises(sqlite3.OperationalError):
+                connection.execute("CREATE TABLE visitor_write(value TEXT)")
+
+    intelligence.db_path.unlink()
+    with request_owner_access_context(False):
+        with pytest.raises(sqlite3.OperationalError):
+            with intelligence._connect():
+                pass
+    assert not intelligence.db_path.exists()
+
+
+def test_public_ticker_batch_scans_the_news_window_once(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _etl, _ai, intelligence = _stack(tmp_path)
+    observed = datetime(2030, 7, 16, 18, 35, tzinfo=timezone.utc)
+    original = intelligence._active_revisions
+    calls = 0
+
+    def counted_active_revisions(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        intelligence,
+        "_active_revisions",
+        counted_active_revisions,
+    )
+
+    with request_owner_access_context(False):
+        result = intelligence.batch(
+            [f"T{index:02d}" for index in range(20)],
+            as_of=observed,
+            window_hours=72,
+            limit=3,
+        )
+
+    assert calls == 1
+    assert len(result["results"]) == 20
+
+
+def test_public_completed_news_and_focus_never_open_the_ai_job_store(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    etl, ai, intelligence = _stack(tmp_path)
+    observed = datetime(2030, 7, 16, 18, 40, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: observed)
+    monkeypatch.setattr(ai_jobs_repository_module, "_utcnow", lambda: observed)
+    _apply_news(
+        etl,
+        [_news_change(1, 220, available_at=observed - timedelta(minutes=10))],
+        as_of=observed - timedelta(minutes=9),
+    )
+    intelligence.reconcile()
+    news_job = intelligence.request_analysis(220, force=False)
+    _finish_job(
+        ai,
+        news_job["job_id"],
+        _news_result(
+            news_id=220,
+            change_sequence=1,
+            content_hash="hash-220-1",
+        ),
+    )
+    prepared_revision = intelligence.reconcile()["prepared_revision"]
+    focus = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared_revision,
+        as_of=observed,
+    )
+    _finish_job(ai, focus["job_id"], _focus_result(ai, focus))
+    intelligence.reconcile()
+
+    def unexpected_ai_store_call(*_args, **_kwargs):
+        pytest.fail("public reads must not initialize or query the AI job store")
+
+    monkeypatch.setattr(ai, "initialize", unexpected_ai_store_call)
+    monkeypatch.setattr(ai, "get_job", unexpected_ai_store_call)
+    monkeypatch.setattr(ai, "budget_snapshot", unexpected_ai_store_call)
+    monkeypatch.setattr(
+        intelligence,
+        "manual_refresh_statuses",
+        unexpected_ai_store_call,
+    )
+
+    with request_owner_access_context(False):
+        feed = intelligence.feed(as_of=observed, limit=10)
+        detail = intelligence.news(220, as_of=observed)
+        latest = intelligence.latest_market_focus_cycle(now=observed)
+        exact = intelligence.market_focus_cycle(focus["cycle_id"])
+
+    assert feed["items"][0]["analysis"]["output_language"] == "zh-CN"
+    assert detail is not None
+    assert detail["item"]["analysis"]["output_language"] == "zh-CN"
+    assert detail["analysis_job"] is None
+    assert detail["analysis_revisions"] == []
+    assert latest["cycle"]["result"]["output_language"] == "zh-CN"
+    assert latest["latest_successful_cycle"]["result"]["output_language"] == "zh-CN"
+    assert exact is not None and exact["result"]["output_language"] == "zh-CN"
+    for cycle in (latest["cycle"], latest["latest_successful_cycle"], exact):
+        assert "job_id" not in cycle
+        assert "cancel_requested" not in cycle
 
 
 def test_failed_forced_focus_keeps_latest_successful_cycle_visible(

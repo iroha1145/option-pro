@@ -9,6 +9,7 @@ from typing import Literal
 import yfinance as yf
 from fastapi import APIRouter, HTTPException, Query
 
+from app.access import current_request_is_owner, public_snapshot_unavailable
 from app.services import yahoo
 from app.services.cache import cache
 from app.services.utils import sanitize
@@ -99,6 +100,11 @@ async def unusual_activity(
     10 tickers x (expirations + 2 chains) against Yahoo with no cache at all.
     """
     key = _unusual_key(type, min_vol_oi)
+    if not current_request_is_owner():
+        cached = cache.get(key)
+        if cached is None:
+            raise public_snapshot_unavailable(key)
+        return cached
     retry_after = _failure_cooldown(key)
     if retry_after > 0:
         raise _cooldown_error(retry_after)
@@ -261,6 +267,11 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
 
 @router.get("/{ticker}/expirations")
 async def expirations(ticker: str):
+    if not current_request_is_owner():
+        cached = yahoo.get_cached_expirations_snapshot(ticker)
+        if cached is None:
+            raise public_snapshot_unavailable(f"options:expirations:{ticker.upper()}")
+        return {"ticker": ticker.upper(), **cached}
     try:
         snapshot = await asyncio.to_thread(yahoo.get_expirations_snapshot, ticker)
         return {"ticker": ticker.upper(), **snapshot}
@@ -270,6 +281,14 @@ async def expirations(ticker: str):
 
 @router.get("/{ticker}/chain")
 async def option_chain(ticker: str, expiration: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$")):
+    if not current_request_is_owner():
+        cached = yahoo.get_cached_option_chain(ticker, expiration)
+        if cached is None:
+            raise public_snapshot_unavailable(
+                f"options:chain:{ticker.upper()}:{expiration}"
+            )
+        from app.api.stocks import _sanitize
+        return _sanitize(cached)
     try:
         from app.api.stocks import _sanitize
         return _sanitize(await asyncio.to_thread(yahoo.get_option_chain, ticker, expiration))

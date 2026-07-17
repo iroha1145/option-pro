@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.access import current_request_is_owner, public_snapshot_unavailable
 from app.data_paths import get_data_paths
 from app.services.sectors import SECTORS
 from app.services.strength.scanner import (
@@ -99,6 +100,22 @@ def normalize_strength_scan_parameters(value: Any) -> dict[str, Any]:
         ),
         "include_options": include_options,
     }
+
+
+async def _public_strength_snapshot() -> dict[str, Any]:
+    """Read the worker-produced default snapshot without running a scan."""
+
+    parameters = DEFAULT_STRENGTH_SCAN_PARAMETERS
+    return await scan(
+        universe=str(parameters["universe"]),
+        timeframe=str(parameters["timeframe"]),
+        profile=str(parameters["profile"]),
+        top=int(parameters["top"]),
+        sector_id=parameters["sector_id"],
+        min_price=float(parameters["min_price"]),
+        min_avg_dollar_volume=float(parameters["min_avg_dollar_volume"]),
+        include_options=bool(parameters["include_options"]),
+    )
 
 
 def strength_scan_parameters_hash(parameters: dict[str, Any]) -> str:
@@ -500,6 +517,25 @@ async def scan(
 
 @router.get("/stocks/{ticker}")
 async def stock(ticker: str, profile: str = Query("balanced", pattern="^(conservative|balanced|aggressive)$")) -> dict[str, Any]:
+    if not current_request_is_owner():
+        if profile != DEFAULT_STRENGTH_SCAN_PARAMETERS["profile"]:
+            raise public_snapshot_unavailable(f"strength:stock:{ticker}:{profile}")
+        payload = await _public_strength_snapshot()
+        symbol = ticker.upper().strip()
+        for row in payload.get("rows") or payload.get("results") or []:
+            if isinstance(row, dict) and row.get("ticker") == symbol:
+                return sanitize({
+                    "as_of": payload.get("as_of"),
+                    "ticker": symbol,
+                    "row": row,
+                    "market_regime": payload.get("market_regime"),
+                    "_cached": True,
+                    "snapshot_source": "worker",
+                })
+        raise HTTPException(
+            status_code=404,
+            detail=f"Ticker not found in public snapshot: {ticker}",
+        )
     try:
         return sanitize(await stock_strength(ticker, profile=profile))
     except KeyError as exc:
@@ -510,6 +546,38 @@ async def stock(ticker: str, profile: str = Query("balanced", pattern="^(conserv
 
 @router.get("/sectors")
 async def sectors(period: str = Query("3mo", pattern="^(1mo|3mo|6mo)$")) -> dict[str, Any]:
+    if not current_request_is_owner():
+        payload = await _public_strength_snapshot()
+        selected_key = f"avg_return_{period}"
+        rows = []
+        for raw in payload.get("sectors") or []:
+            if not isinstance(raw, dict):
+                continue
+            selected_return = raw.get(selected_key)
+            rows.append({
+                **raw,
+                "period": period,
+                "avg_return": selected_return,
+                "avg_return_period": selected_return,
+            })
+        rows.sort(
+            key=lambda row: (
+                row.get("avg_return") is not None,
+                row.get("avg_return")
+                if row.get("avg_return") is not None
+                else float("-inf"),
+                row.get("avg_strength") or 0,
+            ),
+            reverse=True,
+        )
+        return sanitize({
+            "as_of": payload.get("as_of"),
+            "period": period,
+            "sectors": rows,
+            "count": len(rows),
+            "_cached": True,
+            "snapshot_source": "worker",
+        })
     try:
         return sanitize(await sector_strength(period=period))
     except ValueError as exc:
@@ -520,6 +588,19 @@ async def sectors(period: str = Query("3mo", pattern="^(1mo|3mo|6mo)$")) -> dict
 
 @router.get("/market")
 async def market() -> dict[str, Any]:
+    if not current_request_is_owner():
+        payload = await _public_strength_snapshot()
+        regime = payload.get("market_regime")
+        if not isinstance(regime, dict):
+            raise public_snapshot_unavailable("strength:market")
+        return sanitize({
+            "as_of": payload.get("as_of"),
+            "market_regime": regime,
+            "_cached": True,
+            "snapshot_source": "worker",
+            "cache_ttl_seconds": payload.get("cache_ttl_seconds"),
+            "cache_expires_at": payload.get("cache_expires_at"),
+        })
     try:
         return sanitize(await market_strength())
     except Exception as exc:

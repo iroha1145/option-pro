@@ -10,7 +10,11 @@ from zoneinfo import ZoneInfo
 import yfinance as yf
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.access import require_same_origin_action
+from app.access import (
+    current_request_is_owner,
+    public_snapshot_unavailable,
+    require_same_origin_action,
+)
 from app.services.cache import cache
 
 router = APIRouter(prefix="/api/earnings", tags=["earnings"])
@@ -173,6 +177,11 @@ async def upcoming_earnings():
     """
     today = _market_today()
     key = f"earnings:upcoming:{today.isoformat()}"
+    if not current_request_is_owner():
+        cached = cache.get(key)
+        if cached is None:
+            raise public_snapshot_unavailable(key)
+        return cached
     return await cache.get_or_set(
         key,
         3600,

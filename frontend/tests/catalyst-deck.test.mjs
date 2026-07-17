@@ -170,6 +170,8 @@ test('paid analysis is explicit and earnings no longer uses the synchronous GET 
   assert.match(catalysts, /运行设置已保存并立即生效/);
   assert.ok((catalysts.match(/"optix:runtime-settings-changed"/g) || []).length >= 3);
   assert.match(catalysts, /if \(!page\.ownerAccess\) return;/);
+  assert.match(catalysts, /const batchSize = page\.ownerAccess \? 50 : 20/);
+  assert.match(catalysts, /Promise\.all\(batches\.map\(batch => N\.catalystBatch/);
   assert.match(catalysts, /async function resolveOwnerAccess\(\)[\s\S]*accessStatus\.logged_in === true/);
   assert.match(catalysts, /page\.ownerAccess = ownerAccess/);
   assert.match(catalysts, /page\.ownerAccess = await resolveOwnerAccess\(\)/);

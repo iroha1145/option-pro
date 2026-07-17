@@ -856,7 +856,9 @@ def test_production_validation_errors_never_echo_submitted_password() -> None:
         ("HEAD", "/index.html", True),
         ("GET", "/static/js/deck-app.js", True),
         ("GET", "/api/access/status", True),
-        ("GET", "/api/stocks", True),
+        ("GET", "/api/stocks", False),
+        ("GET", "/api/stocks/watchlist", True),
+        ("GET", "/api/stocks/NVDA", True),
         ("HEAD", "/api/stocks/NVDA/chart", True),
         ("GET", "/api/options/NVDA/chain", True),
         ("GET", "/api/earnings/upcoming", True),
@@ -864,6 +866,11 @@ def test_production_validation_errors_never_echo_submitted_password() -> None:
         ("GET", "/api/market/status", True),
         ("GET", "/api/signals/market", True),
         ("GET", "/api/catalysts/feed", True),
+        ("GET", "/api/catalysts/news/101", True),
+        ("GET", "/api/catalysts/market-focus-cycles/latest", True),
+        ("GET", "/api/catalysts/market-focus-cycles/mfc_" + "a" * 32, False),
+        ("GET", "/api/catalysts/analysis-jobs/aij_test", False),
+        ("GET", "/api/catalysts/refresh/refresh_test", False),
         ("GET", "/api/strength/scan", True),
         ("GET", "/api/breakouts/current", True),
         ("POST", "/api/catalysts/tickers/batch", True),
@@ -892,6 +899,26 @@ def test_public_read_paths_match_only_exact_paths_or_path_segments(
     expected: bool,
 ) -> None:
     assert main._is_public_read_request(path, method) is expected
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "expected"),
+    [
+        ("GET", "/api/catalysts/status", False),
+        ("GET", "/api/catalysts/hotspots/status", False),
+        ("GET", "/api/catalysts/feed", True),
+        ("GET", "/api/catalysts/news/101", True),
+        ("GET", "/api/catalysts/calendar", True),
+        ("GET", "/api/catalysts/market-focus-cycles/latest", True),
+        ("POST", "/api/catalysts/tickers/batch", True),
+    ],
+)
+def test_expensive_catalyst_reads_use_the_heavy_rate_limit(
+    method: str,
+    path: str,
+    expected: bool,
+) -> None:
+    assert main._is_heavy_api_path(path, method) is expected
 
 
 @pytest.mark.parametrize(
@@ -984,13 +1011,21 @@ def test_every_real_body_route_declares_the_required_same_origin_dependency() ->
 
 
 def test_every_public_data_route_keeps_the_mode_aware_router_boundary() -> None:
+    public_router_prefixes = (
+        "/api/stocks",
+        "/api/options",
+        "/api/earnings",
+        "/api/sectors",
+        "/api/market",
+        "/api/signals",
+        "/api/catalysts",
+        "/api/strength",
+        "/api/breakouts",
+    )
     public_routes = [
         route
         for route in _effective_fastapi_routes(main.app)
-        if any(
-            main._has_path_prefix(route.path, prefix)
-            for prefix in main._PUBLIC_READ_API_PREFIXES
-        )
+        if route.path.startswith(public_router_prefixes)
     ]
     assert public_routes
 

@@ -6,6 +6,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Protocol, cast
 
+from app.access import current_request_is_owner
 from app.config import Settings, get_settings
 from app.data_paths import get_data_paths
 from app.personal_config import PersonalConfig, get_personal_config
@@ -88,7 +89,12 @@ def _valid_zh_text(value: Any) -> str | None:
 
 class _LocalIntelligence(Protocol):
     def initialize(self) -> None: ...
-    def status(self, *, now: datetime | None = None) -> dict[str, Any]: ...
+    def status(
+        self,
+        *,
+        now: datetime | None = None,
+        include_manual_refreshes: bool | None = None,
+    ) -> dict[str, Any]: ...
     def feed(self, **kwargs: Any) -> dict[str, Any]: ...
     def news(self, news_id: int, *, as_of: datetime) -> dict[str, Any] | None: ...
     def ticker(self, ticker: str, **kwargs: Any) -> dict[str, Any]: ...
@@ -302,6 +308,29 @@ class PersonalCatalystService:
             "reason": reason,
             **capacity,
         }
+
+    @staticmethod
+    def public_analysis_availability() -> dict[str, Any]:
+        """Expose the visitor gate without owner budget or queue metadata."""
+
+        return {
+            "enabled": False,
+            "reason": "owner_login_required",
+        }
+
+    def _analysis_availability_for_access(
+        self,
+        *,
+        include_owner_state: bool,
+        now: datetime,
+    ) -> dict[str, Any]:
+        if include_owner_state:
+            return self.analysis_availability(now=now)
+        return self.public_analysis_availability()
+
+    @staticmethod
+    def _resolve_owner_state(value: bool | None) -> bool:
+        return current_request_is_owner() if value is None else bool(value)
 
     def _require_analysis_available(self) -> None:
         availability = self.analysis_availability()
@@ -625,8 +654,12 @@ class PersonalCatalystService:
         payload: Mapping[str, Any],
         *,
         as_of: datetime | None = None,
+        include_job_state: bool = True,
     ) -> dict[str, Any]:
         projected = dict(payload)
+        if not include_job_state:
+            projected.pop("analysis_job", None)
+            projected.pop("analysis_revisions", None)
         observed = as_of
         if observed is None:
             observed = _parse_utc(projected.get("as_of"))
@@ -669,7 +702,7 @@ class PersonalCatalystService:
         detail_item = projected.get("item")
         if isinstance(detail_item, dict):
             projected_items.append(detail_item)
-        if observed is not None and projected_items:
+        if include_job_state and observed is not None and projected_items:
             links = self._analysis_links_as_of(projected_items, as_of=observed)
             snapshots: dict[
                 tuple[int, int, str], dict[str, Any] | None
@@ -756,7 +789,49 @@ class PersonalCatalystService:
         projected["result"] = result_data
         return projected
 
-    def status(self, *, now: datetime | None = None) -> dict[str, Any]:
+    def _project_focus_cycle_for_access(
+        self,
+        cycle: Any,
+        *,
+        include_owner_state: bool,
+    ) -> dict[str, Any] | None:
+        projected = self._project_focus_cycle(cycle)
+        if include_owner_state or projected is None:
+            return projected
+        if projected.get("status") != "completed" or projected.get("result") is None:
+            return None
+        public_fields = (
+            "cycle_id",
+            "status",
+            "prepared_revision",
+            "snapshot_as_of",
+            "input_hash",
+            "created_at",
+            "completed_at",
+            "no_new_hot_events",
+            "focus_revision",
+            "cycle_revision",
+            "force",
+            "consumes_prepared_revision",
+            "event_group_count",
+            "focus_symbol_count",
+            "model",
+            "reasoning_effort",
+            "result",
+        )
+        return {
+            field: projected[field]
+            for field in public_fields
+            if field in projected
+        }
+
+    def status(
+        self,
+        *,
+        now: datetime | None = None,
+        include_owner_state: bool | None = None,
+    ) -> dict[str, Any]:
+        include_owner_state = self._resolve_owner_state(include_owner_state)
         observed = now or _utc_now()
         if self.mode == "off":
             payload = {
@@ -772,7 +847,12 @@ class PersonalCatalystService:
                 "manual_refreshes": {},
                 "warnings": [],
             }
-            payload["analysis_availability"] = self.analysis_availability(now=observed)
+            payload["analysis_availability"] = self._analysis_availability_for_access(
+                include_owner_state=include_owner_state,
+                now=observed,
+            )
+            if not include_owner_state:
+                payload.pop("manual_refreshes", None)
             return payload
         if not self._cache_file_ready():
             payload = {
@@ -789,10 +869,20 @@ class PersonalCatalystService:
                 "manual_refreshes": {},
                 "warnings": ["cache_unavailable"],
             }
-            payload["analysis_availability"] = self.analysis_availability(now=observed)
+            payload["analysis_availability"] = self._analysis_availability_for_access(
+                include_owner_state=include_owner_state,
+                now=observed,
+            )
+            if not include_owner_state:
+                payload.pop("manual_refreshes", None)
             return payload
         try:
-            payload = dict(self.intelligence.status(now=observed))
+            payload = dict(
+                self.intelligence.status(
+                    now=observed,
+                    include_manual_refreshes=include_owner_state,
+                )
+            )
         except Exception as error:
             if not self._is_local_store_error(error):
                 raise
@@ -810,18 +900,38 @@ class PersonalCatalystService:
                 "manual_refreshes": {},
                 "warnings": ["cache_unavailable"],
             }
-            payload["analysis_availability"] = self.analysis_availability(now=observed)
+            payload["analysis_availability"] = self._analysis_availability_for_access(
+                include_owner_state=include_owner_state,
+                now=observed,
+            )
+            if not include_owner_state:
+                payload.pop("manual_refreshes", None)
             return payload
         payload["analysis_trigger_enabled"] = bool(
-            self._manual_analysis_enabled()
+            include_owner_state
+            and self._manual_analysis_enabled()
             and payload.get("analysis_trigger_enabled", True)
         )
-        payload["analysis_availability"] = self.analysis_availability(now=observed)
+        payload["analysis_availability"] = self._analysis_availability_for_access(
+            include_owner_state=include_owner_state,
+            now=observed,
+        )
+        if not include_owner_state:
+            payload.pop("manual_refreshes", None)
         return payload
 
-    def feed(self, **kwargs: Any) -> dict[str, Any]:
+    def feed(
+        self,
+        *,
+        include_owner_state: bool | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        include_owner_state = self._resolve_owner_state(include_owner_state)
         observed = kwargs.get("as_of") or _utc_now()
-        status = self.status(now=observed)
+        status = self.status(
+            now=observed,
+            include_owner_state=include_owner_state,
+        )
         if status["status"] in {"disabled", "unavailable"}:
             payload = {
                 "status": status["status"],
@@ -841,10 +951,7 @@ class PersonalCatalystService:
                 "has_more": False,
                 "warnings": status.get("warnings", []),
             }
-            payload["analysis_availability"] = status.get(
-                "analysis_availability",
-                self.analysis_availability(now=observed),
-            )
+            payload["analysis_availability"] = status["analysis_availability"]
             return payload
         try:
             payload = self.intelligence.feed(**kwargs)
@@ -869,9 +976,22 @@ class PersonalCatalystService:
                 "has_more": False,
                 "warnings": ["cache_unavailable"],
             }
-        return self._project_news_envelope(payload, as_of=kwargs.get("as_of"))
+        projected = self._project_news_envelope(
+            payload,
+            as_of=kwargs.get("as_of"),
+            include_job_state=include_owner_state,
+        )
+        projected["analysis_availability"] = status["analysis_availability"]
+        return projected
 
-    def news(self, news_id: int, *, as_of: datetime) -> dict[str, Any] | None:
+    def news(
+        self,
+        news_id: int,
+        *,
+        as_of: datetime,
+        include_owner_state: bool | None = None,
+    ) -> dict[str, Any] | None:
+        include_owner_state = self._resolve_owner_state(include_owner_state)
         if self.mode == "off":
             return None
         self._require_cache_ready()
@@ -883,23 +1003,52 @@ class PersonalCatalystService:
             raise
         if payload is None:
             return None
-        projected = self._project_news_envelope(payload, as_of=as_of)
+        projected = self._project_news_envelope(
+            payload,
+            as_of=as_of,
+            include_job_state=include_owner_state,
+        )
         if projected.get("item") is None:
             return None
         projected["analysis_trigger_enabled"] = bool(
-            self._manual_analysis_enabled()
+            include_owner_state
+            and self._manual_analysis_enabled()
             and projected.get("analysis_trigger_enabled", True)
         )
-        projected["analysis_availability"] = self.analysis_availability(now=as_of)
+        projected["analysis_availability"] = self._analysis_availability_for_access(
+            include_owner_state=include_owner_state,
+            now=as_of,
+        )
         return projected
 
-    def ticker(self, ticker: str, **kwargs: Any) -> dict[str, Any]:
-        payload = self.feed(ticker=ticker, **kwargs)
+    def ticker(
+        self,
+        ticker: str,
+        *,
+        include_owner_state: bool | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        include_owner_state = self._resolve_owner_state(include_owner_state)
+        payload = self.feed(
+            ticker=ticker,
+            include_owner_state=include_owner_state,
+            **kwargs,
+        )
         payload["ticker"] = ticker.strip().upper()
         return payload
 
-    def batch(self, tickers: Sequence[str], **kwargs: Any) -> dict[str, Any]:
-        status = self.status(now=kwargs.get("as_of"))
+    def batch(
+        self,
+        tickers: Sequence[str],
+        *,
+        include_owner_state: bool | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        include_owner_state = self._resolve_owner_state(include_owner_state)
+        status = self.status(
+            now=kwargs.get("as_of"),
+            include_owner_state=include_owner_state,
+        )
         if status["status"] in {"disabled", "unavailable"}:
             return {
                 "as_of": status["as_of"],
@@ -942,6 +1091,7 @@ class PersonalCatalystService:
                 str(ticker): self._project_news_envelope(
                     result,
                     as_of=kwargs.get("as_of"),
+                    include_job_state=include_owner_state,
                 )
                 for ticker, result in results.items()
                 if isinstance(result, Mapping)
@@ -956,8 +1106,13 @@ class PersonalCatalystService:
         as_of: datetime,
         currencies: Sequence[str] | None,
         min_impact: str | None,
+        include_owner_state: bool | None = None,
     ) -> dict[str, Any]:
-        status = self.status(now=as_of)
+        include_owner_state = self._resolve_owner_state(include_owner_state)
+        status = self.status(
+            now=as_of,
+            include_owner_state=include_owner_state,
+        )
         if status["status"] in {"disabled", "unavailable"}:
             return {
                 "status": status["status"],
@@ -1043,9 +1198,18 @@ class PersonalCatalystService:
                 raise self._cache_unavailable() from error
             raise
 
-    def hotspot_status(self, *, now: datetime | None = None) -> dict[str, Any]:
+    def hotspot_status(
+        self,
+        *,
+        now: datetime | None = None,
+        include_owner_state: bool | None = None,
+    ) -> dict[str, Any]:
+        include_owner_state = self._resolve_owner_state(include_owner_state)
         observed = now or _utc_now()
-        status = self.status(now=observed)
+        status = self.status(
+            now=observed,
+            include_owner_state=include_owner_state,
+        )
         if status["status"] in {"disabled", "unavailable"}:
             payload = {
                 "prepared_revision": 0,
@@ -1063,10 +1227,7 @@ class PersonalCatalystService:
                 "manual_enabled": False,
                 "warnings": status.get("warnings", []),
             }
-            payload["analysis_availability"] = status.get(
-                "analysis_availability",
-                self.analysis_availability(now=observed),
-            )
+            payload["analysis_availability"] = status["analysis_availability"]
             return payload
         try:
             payload = dict(self.intelligence.hotspot_status(now=observed))
@@ -1088,16 +1249,21 @@ class PersonalCatalystService:
                     "manual_enabled": False,
                     "warnings": ["cache_unavailable"],
                 }
-                payload["analysis_availability"] = self.analysis_availability(
-                    now=observed
+                payload["analysis_availability"] = self._analysis_availability_for_access(
+                    include_owner_state=include_owner_state,
+                    now=observed,
                 )
                 return payload
             raise
         payload["manual_enabled"] = bool(
-            self._manual_analysis_enabled()
+            include_owner_state
+            and self._manual_analysis_enabled()
             and payload.get("manual_enabled", True)
         )
-        payload["analysis_availability"] = self.analysis_availability(now=observed)
+        payload["analysis_availability"] = self._analysis_availability_for_access(
+            include_owner_state=include_owner_state,
+            now=observed,
+        )
         return payload
 
     def hotspots(
@@ -1105,8 +1271,13 @@ class PersonalCatalystService:
         *,
         limit: int,
         now: datetime | None = None,
+        include_owner_state: bool | None = None,
     ) -> dict[str, Any]:
-        status = self.status(now=now)
+        include_owner_state = self._resolve_owner_state(include_owner_state)
+        status = self.status(
+            now=now,
+            include_owner_state=include_owner_state,
+        )
         if status["status"] in {"disabled", "unavailable"}:
             return {
                 "status": status["status"],
@@ -1130,9 +1301,16 @@ class PersonalCatalystService:
         return self._project_hotspots(payload)
 
     def latest_market_focus_cycle(
-        self, *, now: datetime | None = None
+        self,
+        *,
+        now: datetime | None = None,
+        include_owner_state: bool | None = None,
     ) -> dict[str, Any]:
-        status = self.status(now=now)
+        include_owner_state = self._resolve_owner_state(include_owner_state)
+        status = self.status(
+            now=now,
+            include_owner_state=include_owner_state,
+        )
         if status["status"] in {"disabled", "unavailable"}:
             return {
                 "status": status["status"],
@@ -1153,7 +1331,14 @@ class PersonalCatalystService:
                 "cycle": None,
                 "warnings": ["cache_unavailable"],
             }
-        payload["cycle"] = self._project_focus_cycle(payload.get("cycle"))
+        payload["cycle"] = self._project_focus_cycle_for_access(
+            payload.get("cycle"),
+            include_owner_state=include_owner_state,
+        )
+        payload["latest_successful_cycle"] = self._project_focus_cycle_for_access(
+            payload.get("latest_successful_cycle"),
+            include_owner_state=include_owner_state,
+        )
         return payload
 
     def request_market_focus_cycle(
@@ -1180,6 +1365,7 @@ class PersonalCatalystService:
             raise
 
     def market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
+        include_owner_state = self._resolve_owner_state(None)
         if self.mode == "off":
             return None
         self._require_cache_ready()
@@ -1189,7 +1375,10 @@ class PersonalCatalystService:
             if self._is_local_store_error(error):
                 raise self._cache_unavailable() from error
             raise
-        return self._project_focus_cycle(cycle)
+        return self._project_focus_cycle_for_access(
+            cycle,
+            include_owner_state=include_owner_state,
+        )
 
     def cancel_market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
         self._require_cache_ready()

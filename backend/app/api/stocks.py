@@ -23,6 +23,7 @@ import httpx
 import yfinance as yf
 from fastapi import APIRouter, HTTPException, Query, Response
 
+from app.access import current_request_is_owner, public_snapshot_unavailable
 from app.data_paths import get_data_paths
 
 
@@ -118,12 +119,23 @@ def _usable_hit(key: str, now: float) -> _EndpointCacheEntry | None:
     return hit
 
 
-async def _cached_endpoint(key: str, ttl: int, loader, *, stale_ttl: int | None = None):
+async def _cached_endpoint(
+    key: str,
+    ttl: int,
+    loader,
+    *,
+    stale_ttl: int | None = None,
+    allow_refresh: bool = True,
+):
     stale_ttl = ttl if stale_ttl is None else max(0, stale_ttl)
     now = time.time()
     hit = _usable_hit(key, now)
     if hit and hit.expires_at > now:
         return _cache_result(hit, stale=False)
+    if not allow_refresh:
+        if hit is not None:
+            return _cache_result(hit, stale=True)
+        raise public_snapshot_unavailable(key)
     # Serialize cold-cache fills per key
     lock = _lock_for(key)
     try:
@@ -278,6 +290,8 @@ async def _stale_while_revalidate_endpoint(
     max_age: int,
     loader,
     on_success=None,
+    *,
+    allow_refresh: bool = True,
 ):
     """Return bounded stale data immediately while a single refresh runs."""
     max_age = max(ttl, max(0, max_age))
@@ -286,6 +300,15 @@ async def _stale_while_revalidate_endpoint(
     if hit is not None and hit.expires_at > now:
         return _cache_result(hit, stale=False)
     if hit is not None:
+        if not allow_refresh:
+            result = _cache_result(hit, stale=True)
+            if isinstance(result, dict):
+                result["stale_reason"] = "public_snapshot_only"
+                result["stale_age_seconds"] = round(
+                    max(now - hit.fetched_at, 0.0),
+                    1,
+                )
+            return result
         refreshing = _schedule_endpoint_refresh(
             key,
             ttl,
@@ -302,6 +325,9 @@ async def _stale_while_revalidate_endpoint(
             )
             result["stale_age_seconds"] = round(max(now - hit.fetched_at, 0.0), 1)
         return result
+
+    if not allow_refresh:
+        raise public_snapshot_unavailable(key)
 
     # A cold request has no safe snapshot to serve, so it must wait for one
     # initial fill. Completion time starts both the fresh and bounded-stale
@@ -459,7 +485,11 @@ def _safe_logo_url(value: str) -> bool:
         return False
 
 
-async def _cached_company_logo(symbol: str) -> dict[str, Any]:
+async def _cached_company_logo(
+    symbol: str,
+    *,
+    allow_refresh: bool = True,
+) -> dict[str, Any]:
     variants = _logo_symbol_variants(symbol)
     if not variants:
         raise HTTPException(status_code=404, detail="Invalid ticker")
@@ -471,6 +501,8 @@ async def _cached_company_logo(symbol: str) -> dict[str, Any]:
         if hit.value == _LOGO_NOT_FOUND:
             raise HTTPException(status_code=404, detail="Company logo not found")
         return hit.value
+    if not allow_refresh:
+        raise public_snapshot_unavailable(key)
 
     lock = _lock_for(key)
     try:
@@ -1113,6 +1145,7 @@ async def watchlist(
 ):
     requested_tickers = _parse_watchlist_tickers(tickers)
     cache_key = _watchlist_cache_key(requested_tickers)
+    allow_refresh = current_request_is_owner()
     # Keep the zero-argument loader for the original endpoint. Besides
     # preserving behavior, this remains compatible with tests and callers
     # that replace ``_build_watchlist`` with a zero-argument function.
@@ -1130,13 +1163,17 @@ async def watchlist(
                 _WATCHLIST_MAX_SNAPSHOT_AGE_SECONDS,
                 loader,
                 _persist_watchlist_snapshot,
+                allow_refresh=allow_refresh,
             )
         return await _cached_endpoint(
             cache_key,
             _WATCHLIST_FRESH_TTL_SECONDS,
             loader,
             stale_ttl=_WATCHLIST_TARGETED_STALE_TTL_SECONDS,
+            allow_refresh=allow_refresh,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Yahoo watchlist data is currently unavailable") from exc
 
@@ -1439,6 +1476,9 @@ async def search_stocks(q: str = Query(..., min_length=1, max_length=50)):
     if results:
         return _sanitize(results[:12])
 
+    if not current_request_is_owner():
+        return []
+
     # 2) Fallback: try yfinance for completely unknown tickers
     def _yf_search():
         try:
@@ -1606,6 +1646,7 @@ async def stock_signals(ticker: str):
             300,
             _load,
             stale_ttl=900,
+            allow_refresh=current_request_is_owner(),
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -1618,7 +1659,10 @@ async def stock_logo(ticker: str):
     variants = _logo_symbol_variants(symbol)
     if not variants:
         raise HTTPException(status_code=404, detail="Invalid ticker")
-    logo = await _cached_company_logo(variants[0])
+    logo = await _cached_company_logo(
+        variants[0],
+        allow_refresh=current_request_is_owner(),
+    )
     return Response(
         content=logo["content"],
         media_type=logo["media_type"],
@@ -1634,7 +1678,14 @@ async def stock_logo(ticker: str):
 @router.get("/{ticker}")
 async def stock_overview(ticker: str):
     try:
-        return await _cached_endpoint(f"stock:{ticker.upper()}", 300, lambda: _stock_overview_impl(ticker))
+        return await _cached_endpoint(
+            f"stock:{ticker.upper()}",
+            300,
+            lambda: _stock_overview_impl(ticker),
+            allow_refresh=current_request_is_owner(),
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Yahoo stock data is currently unavailable") from exc
 
@@ -1776,7 +1827,10 @@ async def stock_chart(
             f"chart:{ticker.upper()}:{range}:{adjustment}",
             _CHART_TTL.get(range, 600),
             lambda: _stock_chart_impl(ticker, range, adjustment),
+            allow_refresh=current_request_is_owner(),
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Yahoo chart data is currently unavailable") from exc
 

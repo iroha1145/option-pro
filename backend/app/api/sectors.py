@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from app.access import current_request_is_owner, public_snapshot_unavailable
 from app.services import yahoo
 from app.services.sectors import SECTORS
 from app.services.zh_names import get_zh_name
@@ -44,11 +45,26 @@ def _with_cache_status(value: Any, *, fetched_at: float, cache_stale: bool) -> A
     return result
 
 
-async def _cached(key: str, ttl: int, loader, *, max_stale_seconds: int = _MAX_STALE_SECONDS):
+async def _cached(
+    key: str,
+    ttl: int,
+    loader,
+    *,
+    max_stale_seconds: int = _MAX_STALE_SECONDS,
+    allow_refresh: bool = True,
+):
     now = time.time()
     hit = _cache.get(key)
     if hit and hit[0] > now:
         return _with_cache_status(hit[2], fetched_at=hit[1], cache_stale=False)
+    if not allow_refresh:
+        if hit and now - hit[1] <= max(0, max_stale_seconds):
+            return _with_cache_status(
+                hit[2],
+                fetched_at=hit[1],
+                cache_stale=True,
+            )
+        raise public_snapshot_unavailable(key)
     async with _lock_for(key):
         now = time.time()
         hit = _cache.get(key)
@@ -184,7 +200,14 @@ async def _iv_ranking_payload(sector_id: str) -> dict:
 async def iv_ranking(sector_id: str):
     ensure_sector(sector_id)
     try:
-        return await _cached(f"iv:{sector_id}", 600, lambda: _iv_ranking_payload(sector_id))
+        return await _cached(
+            f"iv:{sector_id}",
+            600,
+            lambda: _iv_ranking_payload(sector_id),
+            allow_refresh=current_request_is_owner(),
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Sector options data is currently unavailable") from exc
 
@@ -195,7 +218,14 @@ async def heatmap(sector_id: str):
     # Reuse the iv-ranking cache — the heatmap is a projection of the same
     # data, so visiting both views costs one scan instead of two.
     try:
-        payload = await _cached(f"iv:{sector_id}", 600, lambda: _iv_ranking_payload(sector_id))
+        payload = await _cached(
+            f"iv:{sector_id}",
+            600,
+            lambda: _iv_ranking_payload(sector_id),
+            allow_refresh=current_request_is_owner(),
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Sector options data is currently unavailable") from exc
     data = [
