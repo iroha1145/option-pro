@@ -249,6 +249,77 @@ def test_ai_job_heartbeat_survives_a_saturated_default_executor():
     asyncio.run(scenario())
 
 
+def test_ai_job_heartbeat_stops_without_blocking_the_event_loop_during_renewal(
+    monkeypatch,
+):
+    async def scenario() -> None:
+        renewal_started = threading.Event()
+        renewal_release = threading.Event()
+        stop_holder: list[asyncio.Event] = []
+        cancellation_observed = False
+
+        async def heartbeat_during_renewal(
+            repository,
+            job_id,
+            owner,
+            lease_seconds,
+            stop,
+        ) -> None:
+            nonlocal cancellation_observed
+            assert (job_id, owner, lease_seconds) == ("job-1", "owner-1", 60)
+            stop_holder.append(stop)
+            loop = asyncio.get_running_loop()
+
+            def renew_lease() -> None:
+                renewal_started.set()
+                renewal_release.wait(timeout=0.5)
+
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                try:
+                    await loop.run_in_executor(executor, renew_lease)
+                except asyncio.CancelledError:
+                    cancellation_observed = True
+                    raise
+
+        async def cancel_after_renewal_starts(settings, response_id):
+            assert response_id == "response-1"
+            while not renewal_started.is_set():
+                await asyncio.sleep(0)
+            return object()
+
+        async def finish_response(*args, **kwargs) -> None:
+            return None
+
+        monkeypatch.setattr(ai_worker, "_lease_heartbeat", heartbeat_during_renewal)
+        monkeypatch.setattr(ai_worker.runtime, "cancel", cancel_after_renewal_starts)
+        monkeypatch.setattr(ai_worker, "_finish_response", finish_response)
+
+        process = asyncio.create_task(
+            ai_worker.process_job(
+                object(),  # type: ignore[arg-type]
+                SimpleNamespace(
+                    openai_job_lease_seconds=60,
+                    openai_job_max_age_seconds=900,
+                ),
+                {
+                    "job_id": "job-1",
+                    "cancel_requested_at": "2026-07-18T00:00:00Z",
+                    "openai_response_id": "response-1",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                },
+                "owner-1",
+            )
+        )
+
+        while not stop_holder or not stop_holder[0].is_set():
+            await asyncio.sleep(0)
+        renewal_release.set()
+        await asyncio.wait_for(process, timeout=1)
+        assert not cancellation_observed
+
+    asyncio.run(scenario())
+
+
 def test_standalone_worker_reads_fresh_runtime_controls_each_iteration(
     tmp_path,
     monkeypatch,

@@ -415,7 +415,6 @@ async def process_job(
             repository.fail(job["job_id"], owner, code)
     finally:
         stop.set()
-        heartbeat.cancel()
         with suppress(asyncio.CancelledError):
             await heartbeat
 
