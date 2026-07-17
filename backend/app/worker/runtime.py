@@ -5,11 +5,11 @@ import inspect
 import logging
 import math
 import re
+import threading
+import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import timedelta
-from functools import partial
 from pathlib import Path
 from typing import Any, Literal
 
@@ -59,6 +59,7 @@ class TaskSpec:
     max_backoff_seconds: float = 900.0
     drain_on_shutdown: bool = False
     manual_only: bool = False
+    may_block_event_loop: bool = False
     close: Callable[[], Awaitable[None] | None] | None = None
 
     def __post_init__(self) -> None:
@@ -77,6 +78,8 @@ class TaskSpec:
             not math.isfinite(self.timeout_seconds) or self.timeout_seconds <= 0
         ):
             raise ValueError("task timeout must be positive")
+        if self.may_block_event_loop and self.timeout_seconds is None:
+            raise ValueError("an event-loop-blocking task requires a timeout")
 
 
 def _public_error_code(error: Exception) -> str:
@@ -146,44 +149,90 @@ class WorkerSupervisor:
             **values,
         )
 
-    async def _heartbeat(self) -> None:
+    async def _heartbeat(self, started: asyncio.Event | None = None) -> None:
         interval = max(0.05, min(30.0, self.lease_seconds / 3.0))
-        loop = asyncio.get_running_loop()
-        # Scheduled scans and reconciliation share asyncio's default executor.
-        # Lease renewal must remain runnable even when every general-purpose
-        # worker thread is occupied by a long provider or SQLite operation.
-        with ThreadPoolExecutor(
-            max_workers=1,
-            thread_name_prefix="worker-heartbeat",
-        ) as executor:
-            while not self._heartbeat_stop.is_set():
-                try:
-                    await asyncio.wait_for(
-                        self._heartbeat_stop.wait(),
-                        timeout=interval,
-                    )
-                    return
-                except asyncio.TimeoutError:
-                    pass
-                token = self._token
-                if token is None:
-                    return
-                try:
-                    renewed = await loop.run_in_executor(
-                        executor,
-                        partial(
-                            self.repository.renew,
+        thread_stop = threading.Event()
+        thread_finished = threading.Event()
+        lease_lost = threading.Event()
+        last_loop_pulse = time.monotonic()
+        last_successful_renewal = time.monotonic()
+        blocking_timeouts = [
+            float(task.timeout_seconds)
+            for task in self.tasks
+            if task.enabled
+            and task.may_block_event_loop
+            and task.timeout_seconds is not None
+        ]
+        maximum_loop_stall = max(
+            self.lease_seconds * 3.0,
+            max(blocking_timeouts, default=0.0) + self.lease_seconds,
+        )
+
+        def heartbeat() -> None:
+            nonlocal last_successful_renewal
+            next_delay = interval
+            try:
+                while not thread_stop.wait(next_delay):
+                    if time.monotonic() - last_loop_pulse > maximum_loop_stall:
+                        lease_lost.set()
+                        return
+                    token = self._token
+                    if token is None:
+                        lease_lost.set()
+                        return
+                    try:
+                        renewed = self.repository.renew(
                             self.owner_id,
                             token,
                             lease_seconds=self.lease_seconds,
-                        ),
-                    )
-                except Exception:
-                    renewed = False
-                if not renewed:
-                    self._lease_lost.set()
-                    self.stop.set()
-                    return
+                        )
+                    except Exception:
+                        if (
+                            time.monotonic() - last_successful_renewal
+                            >= self.lease_seconds
+                        ):
+                            lease_lost.set()
+                            return
+                        next_delay = min(1.0, max(0.01, interval / 4.0))
+                        continue
+                    if not renewed:
+                        lease_lost.set()
+                        return
+                    last_successful_renewal = time.monotonic()
+                    next_delay = interval
+            finally:
+                if not thread_stop.is_set() and not lease_lost.is_set():
+                    lease_lost.set()
+                thread_finished.set()
+
+        heartbeat_thread = threading.Thread(
+            target=heartbeat,
+            name="worker-heartbeat",
+        )
+        try:
+            heartbeat_thread.start()
+        except Exception as exc:
+            if started is not None:
+                started.set()
+            self._lease_lost.set()
+            self.stop.set()
+            raise WorkerLeaseLost("unified worker heartbeat could not start") from exc
+        if started is not None:
+            started.set()
+        try:
+            while (
+                not self._heartbeat_stop.is_set()
+                and not thread_finished.is_set()
+            ):
+                last_loop_pulse = time.monotonic()
+                await asyncio.sleep(min(0.05, interval))
+            if lease_lost.is_set():
+                self._lease_lost.set()
+                self.stop.set()
+        finally:
+            thread_stop.set()
+            while heartbeat_thread.is_alive():
+                await asyncio.sleep(0.01)
 
     def _backoff(self, task: TaskSpec, failures: int) -> float:
         return min(
@@ -537,7 +586,14 @@ class WorkerSupervisor:
                 self.owner_id,
                 token,
             )
-            heartbeat = asyncio.create_task(self._heartbeat(), name="worker-heartbeat")
+            heartbeat_started = asyncio.Event()
+            heartbeat = asyncio.create_task(
+                self._heartbeat(heartbeat_started),
+                name="worker-heartbeat",
+            )
+            await heartbeat_started.wait()
+            if heartbeat.done():
+                await heartbeat
             if once:
                 for task in self.tasks:
                     if not task.enabled:

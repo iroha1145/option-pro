@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import sqlite3
+import threading
 
 import httpx
 import pytest
@@ -93,6 +95,104 @@ def _second_news_page() -> dict:
         "next_updated_after": AS_OF,
         "next_after_sequence": 2,
     }
+
+
+class _SingleNewsPageClient:
+    async def news_changes(self, **kwargs):
+        return NewsChangesPage.model_validate(_second_news_page())
+
+
+class _BlockingApplyRepository(CatalystEtlRepository):
+    def __init__(
+        self,
+        path,
+        *,
+        started: threading.Event,
+        release: threading.Event,
+        fail_after_release: bool = False,
+    ):
+        super().__init__(path)
+        self.started = started
+        self.release = release
+        self.fail_after_release = fail_after_release
+        self.apply_threads: list[str] = []
+
+    def apply_news_page(self, *args, **kwargs):
+        self.apply_threads.append(threading.current_thread().name)
+        self.started.set()
+        self.release.wait(timeout=1.0)
+        if self.fail_after_release:
+            raise RuntimeError("simulated transaction failure")
+        return super().apply_news_page(*args, **kwargs)
+
+
+@pytest.mark.anyio
+async def test_news_repository_apply_does_not_block_the_event_loop(tmp_path):
+    started = threading.Event()
+    release = threading.Event()
+    repository = _BlockingApplyRepository(
+        tmp_path / "catalyst.db",
+        started=started,
+        release=release,
+    )
+    sync = MacroLensIncrementalSync(
+        _SingleNewsPageClient(),  # type: ignore[arg-type]
+        repository,
+    )
+    operation = asyncio.create_task(sync.sync_news(max_pages=1))
+    try:
+        for _ in range(100):
+            if started.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert started.is_set()
+
+        progressed = asyncio.Event()
+        asyncio.get_running_loop().call_soon(progressed.set)
+        await asyncio.wait_for(progressed.wait(), timeout=0.2)
+        assert not operation.done()
+    finally:
+        release.set()
+
+    result = await asyncio.wait_for(operation, timeout=1)
+    assert result.complete is True
+    assert repository.apply_threads
+    assert repository.apply_threads[0] != threading.current_thread().name
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("fail_after_release", [False, True])
+async def test_cancelled_news_sync_waits_for_the_inflight_transaction(
+    tmp_path,
+    fail_after_release,
+):
+    started = threading.Event()
+    release = threading.Event()
+    repository = _BlockingApplyRepository(
+        tmp_path / "catalyst.db",
+        started=started,
+        release=release,
+        fail_after_release=fail_after_release,
+    )
+    sync = MacroLensIncrementalSync(
+        _SingleNewsPageClient(),  # type: ignore[arg-type]
+        repository,
+    )
+    operation = asyncio.create_task(sync.sync_news(max_pages=1))
+    for _ in range(100):
+        if started.is_set():
+            break
+        await asyncio.sleep(0.01)
+    assert started.is_set()
+
+    operation.cancel()
+    await asyncio.sleep(0)
+    operation.cancel()
+    await asyncio.sleep(0)
+    assert not operation.done()
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await operation
 
 
 @pytest.mark.anyio

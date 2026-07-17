@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 from app.services.breakouts.clock import MarketClock
 from app.services.breakouts.health import check_breakout_health
-from app.services.breakouts.repository import BreakoutRepository
+from app.services.breakouts.repository import DEFAULT_LOCK_NAME, BreakoutRepository
 from app.services.breakouts.worker import BreakoutWorker
 
 
@@ -173,6 +177,263 @@ class CarryoverRecordingService:
         self.expired_due_event_ids = expired_due_event_ids
         self.carryover_has_more = carryover_has_more
         return {"events": []}
+
+
+def test_scan_lease_heartbeat_survives_a_blocked_scan_event_loop(tmp_path):
+    settings = Settings(tmp_path / "breakouts.db")
+    repository = BreakoutRepository(settings.db_path)
+    repository.initialize()
+    worker = BreakoutWorker(
+        settings,
+        repository,
+        clock=MarketClock(),
+        owner_id="blocked-scan-worker",
+        lease_ttl_seconds=0.2,
+    )
+    lease_token = repository.acquire_lock(
+        DEFAULT_LOCK_NAME,
+        worker.owner_id,
+        worker.lease_ttl_seconds,
+        worker.clock.now(),
+    )
+    assert lease_token is not None
+    heartbeat_threads: list[str] = []
+    original_heartbeat = repository.heartbeat_lock
+
+    def observed_heartbeat(*args, **kwargs):
+        heartbeat_threads.append(threading.current_thread().name)
+        return original_heartbeat(*args, **kwargs)
+
+    repository.heartbeat_lock = observed_heartbeat  # type: ignore[method-assign]
+
+    async def blocked_operation():
+        threading.Event().wait(0.55)
+        return "completed"
+
+    async def scenario():
+        return await worker._run_with_lease_heartbeat(
+            blocked_operation(),
+            int(lease_token),
+            "scan-blocked-loop",
+        )
+
+    assert asyncio.run(scenario()) == "completed"
+    assert len(heartbeat_threads) >= 2
+    assert all(name.startswith("breakout-lease-heartbeat") for name in heartbeat_threads)
+    assert original_heartbeat(
+        DEFAULT_LOCK_NAME,
+        worker.owner_id,
+        int(lease_token),
+        worker.lease_ttl_seconds,
+        worker.clock.now(),
+    )
+
+
+def test_scan_lease_heartbeat_retries_a_transient_database_error(tmp_path):
+    settings = Settings(tmp_path / "breakouts.db")
+    repository = BreakoutRepository(settings.db_path)
+    repository.initialize()
+    worker = BreakoutWorker(
+        settings,
+        repository,
+        clock=MarketClock(),
+        owner_id="transient-renew-worker",
+        lease_ttl_seconds=0.2,
+    )
+    lease_token = repository.acquire_lock(
+        DEFAULT_LOCK_NAME,
+        worker.owner_id,
+        worker.lease_ttl_seconds,
+        worker.clock.now(),
+    )
+    assert lease_token is not None
+    original_heartbeat = repository.heartbeat_lock
+    attempts = 0
+
+    def transient_heartbeat(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise sqlite3.OperationalError("simulated busy database")
+        return original_heartbeat(*args, **kwargs)
+
+    repository.heartbeat_lock = transient_heartbeat  # type: ignore[method-assign]
+
+    async def blocked_operation():
+        threading.Event().wait(0.3)
+        return "completed"
+
+    result = asyncio.run(
+        worker._run_with_lease_heartbeat(
+            blocked_operation(),
+            int(lease_token),
+            "scan-transient-renewal",
+        )
+    )
+    assert result == "completed"
+    assert attempts >= 2
+
+
+def test_scan_heartbeat_start_failure_cancels_the_operation(tmp_path, monkeypatch):
+    settings = Settings(tmp_path / "breakouts.db")
+    repository = BreakoutRepository(settings.db_path)
+    repository.initialize()
+    worker = BreakoutWorker(
+        settings,
+        repository,
+        clock=MarketClock(),
+        owner_id="heartbeat-start-failure-worker",
+        lease_ttl_seconds=0.2,
+    )
+    lease_token = repository.acquire_lock(
+        DEFAULT_LOCK_NAME,
+        worker.owner_id,
+        worker.lease_ttl_seconds,
+        worker.clock.now(),
+    )
+    assert lease_token is not None
+    original_start = threading.Thread.start
+
+    def fail_heartbeat_start(thread):
+        if thread.name == "breakout-lease-heartbeat":
+            raise RuntimeError("simulated heartbeat thread failure")
+        return original_start(thread)
+
+    monkeypatch.setattr(threading.Thread, "start", fail_heartbeat_start)
+
+    async def operation():
+        await asyncio.Future()
+
+    async def scenario():
+        with pytest.raises(RuntimeError, match="simulated heartbeat thread failure"):
+            await worker._run_with_lease_heartbeat(
+                operation(),
+                int(lease_token),
+                "scan-heartbeat-start-failure",
+            )
+        assert not any(
+            task is not asyncio.current_task() and not task.done()
+            for task in asyncio.all_tasks()
+        )
+
+    asyncio.run(scenario())
+
+
+def test_scan_heartbeat_waits_for_operation_cleanup_on_external_cancel(tmp_path):
+    settings = Settings(tmp_path / "breakouts.db")
+    repository = BreakoutRepository(settings.db_path)
+    repository.initialize()
+    worker = BreakoutWorker(
+        settings,
+        repository,
+        clock=MarketClock(),
+        owner_id="external-cancel-worker",
+        lease_ttl_seconds=0.2,
+    )
+    lease_token = repository.acquire_lock(
+        DEFAULT_LOCK_NAME,
+        worker.owner_id,
+        worker.lease_ttl_seconds,
+        worker.clock.now(),
+    )
+    assert lease_token is not None
+
+    async def scenario():
+        started = asyncio.Event()
+        cleaned = asyncio.Event()
+
+        async def operation():
+            started.set()
+            try:
+                await asyncio.Future()
+            finally:
+                cleaned.set()
+
+        running = asyncio.create_task(
+            worker._run_with_lease_heartbeat(
+                operation(),
+                int(lease_token),
+                "scan-external-cancel",
+            )
+        )
+        await asyncio.wait_for(started.wait(), timeout=1)
+        running.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+        assert cleaned.is_set()
+
+    asyncio.run(scenario())
+
+
+def test_scan_cleanup_survives_repeated_external_cancellation(tmp_path):
+    settings = Settings(tmp_path / "breakouts.db")
+    repository = BreakoutRepository(settings.db_path)
+    repository.initialize()
+    worker = BreakoutWorker(
+        settings,
+        repository,
+        clock=MarketClock(),
+        owner_id="repeated-cancel-worker",
+        lease_ttl_seconds=0.2,
+    )
+    lease_token = repository.acquire_lock(
+        DEFAULT_LOCK_NAME,
+        worker.owner_id,
+        worker.lease_ttl_seconds,
+        worker.clock.now(),
+    )
+    assert lease_token is not None
+    renewal_started = threading.Event()
+    renewal_release = threading.Event()
+    original_heartbeat = repository.heartbeat_lock
+
+    def blocked_heartbeat(*args, **kwargs):
+        renewal_started.set()
+        renewal_release.wait(timeout=1)
+        return original_heartbeat(*args, **kwargs)
+
+    repository.heartbeat_lock = blocked_heartbeat  # type: ignore[method-assign]
+
+    async def scenario():
+        started = asyncio.Event()
+        cleaned = asyncio.Event()
+
+        async def operation():
+            started.set()
+            try:
+                await asyncio.Future()
+            finally:
+                cleaned.set()
+
+        running = asyncio.create_task(
+            worker._run_with_lease_heartbeat(
+                operation(),
+                int(lease_token),
+                "scan-repeated-cancel",
+            )
+        )
+        await asyncio.wait_for(started.wait(), timeout=1)
+        for _ in range(100):
+            if renewal_started.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert renewal_started.is_set()
+
+        running.cancel()
+        await asyncio.sleep(0)
+        running.cancel()
+        await asyncio.sleep(0)
+        assert not running.done()
+        renewal_release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+        assert cleaned.is_set()
+        assert not any(
+            thread.name == "breakout-lease-heartbeat" and thread.is_alive()
+            for thread in threading.enumerate()
+        )
+
+    asyncio.run(scenario())
 
 
 def test_once_disabled_does_not_create_database_or_call_provider(tmp_path):

@@ -180,7 +180,13 @@ def _large_signal_result():
     }
 
 
-def test_ai_job_heartbeat_survives_a_saturated_default_executor():
+def test_ai_job_heartbeat_survives_a_saturated_default_executor(monkeypatch):
+    monkeypatch.setattr(
+        ai_worker,
+        "_MIN_LEASE_HEARTBEAT_INTERVAL_SECONDS",
+        0.01,
+    )
+
     async def scenario() -> None:
         loop = asyncio.get_running_loop()
         loop.set_default_executor(
@@ -221,9 +227,9 @@ def test_ai_job_heartbeat_survives_a_saturated_default_executor():
                 self,
                 job_id: str,
                 owner: str,
-                lease_seconds: int,
+                lease_seconds: float,
             ) -> bool:
-                assert (job_id, owner, lease_seconds) == ("job-1", "owner-1", 60)
+                assert (job_id, owner, lease_seconds) == ("job-1", "owner-1", 0.06)
                 renewed_on.append(threading.current_thread().name)
                 stop.stopped = True
                 return True
@@ -234,7 +240,7 @@ def test_ai_job_heartbeat_survives_a_saturated_default_executor():
                     Repository(),  # type: ignore[arg-type]
                     "job-1",
                     "owner-1",
-                    60,
+                    0.06,  # type: ignore[arg-type]
                     stop,  # type: ignore[arg-type]
                 ),
                 timeout=1,
@@ -247,6 +253,87 @@ def test_ai_job_heartbeat_survives_a_saturated_default_executor():
         assert renewed_on[0].startswith("ai-job-heartbeat")
 
     asyncio.run(scenario())
+
+
+def test_ai_job_heartbeat_survives_a_blocked_event_loop(monkeypatch):
+    monkeypatch.setattr(
+        ai_worker,
+        "_MIN_LEASE_HEARTBEAT_INTERVAL_SECONDS",
+        0.01,
+    )
+
+    async def scenario() -> None:
+        stop = asyncio.Event()
+        renewed_on: list[str] = []
+
+        class Repository:
+            def renew_lease(
+                self,
+                job_id: str,
+                owner: str,
+                lease_seconds: float,
+            ) -> bool:
+                assert (job_id, owner, lease_seconds) == ("job-1", "owner-1", 0.06)
+                renewed_on.append(threading.current_thread().name)
+                return True
+
+        heartbeat = asyncio.create_task(
+            ai_worker._lease_heartbeat(
+                Repository(),  # type: ignore[arg-type]
+                "job-1",
+                "owner-1",
+                0.06,  # type: ignore[arg-type]
+                stop,
+                maximum_loop_stall_seconds=0.3,
+            )
+        )
+        for _ in range(100):
+            if renewed_on:
+                break
+            await asyncio.sleep(0.01)
+        assert renewed_on
+
+        threading.Event().wait(0.2)
+        stop.set()
+        await asyncio.wait_for(heartbeat, timeout=1)
+
+        assert len(renewed_on) >= 5
+        assert all(name.startswith("ai-job-heartbeat") for name in renewed_on)
+
+    asyncio.run(scenario())
+
+
+def test_ai_job_heartbeat_start_failure_blocks_provider_submission(
+    tmp_path,
+    monkeypatch,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    repository.initialize()
+    row, created = _create_earnings_job(repository)
+    assert created is True
+    owner = "heartbeat-start-failure"
+    job = repository.claim_due(owner, lease_seconds=60)
+    assert job is not None and job["job_id"] == row["job_id"]
+
+    original_start = threading.Thread.start
+
+    def fail_heartbeat_start(thread):
+        if thread.name == "ai-job-heartbeat":
+            raise RuntimeError("simulated heartbeat thread failure")
+        return original_start(thread)
+
+    def provider_must_not_start(*_args, **_kwargs):
+        raise AssertionError("provider preparation ran without a heartbeat")
+
+    monkeypatch.setattr(threading.Thread, "start", fail_heartbeat_start)
+    monkeypatch.setattr(ai_worker.runtime, "prepare_background", provider_must_not_start)
+
+    asyncio.run(process_job(repository, _settings(repository.path), job, owner))
+
+    stored = repository.get_job(row["job_id"])
+    assert stored is not None
+    assert stored["status"] == "failed"
+    assert stored["error_code"] == "ai_job_heartbeat_unavailable"
 
 
 def test_ai_job_heartbeat_stops_without_blocking_the_event_loop_during_renewal(
@@ -264,10 +351,18 @@ def test_ai_job_heartbeat_stops_without_blocking_the_event_loop_during_renewal(
             owner,
             lease_seconds,
             stop,
+            started=None,
+            maximum_loop_stall_seconds=None,
+            lease_lost=None,
         ) -> None:
             nonlocal cancellation_observed
             assert (job_id, owner, lease_seconds) == ("job-1", "owner-1", 60)
+            assert maximum_loop_stall_seconds == (
+                ai_worker.BREAKOUT_TASK_TIMEOUT_SECONDS + lease_seconds
+            )
             stop_holder.append(stop)
+            if started is not None:
+                started.set()
             loop = asyncio.get_running_loop()
 
             def renew_lease() -> None:
@@ -318,6 +413,119 @@ def test_ai_job_heartbeat_stops_without_blocking_the_event_loop_during_renewal(
         assert not cancellation_observed
 
     asyncio.run(scenario())
+
+
+def test_ai_job_midflight_lease_loss_cancels_unknown_submission(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        ai_worker,
+        "_MIN_LEASE_HEARTBEAT_INTERVAL_SECONDS",
+        0.01,
+    )
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    repository.initialize()
+    row, created = _create_earnings_job(repository)
+    assert created is True
+    owner = "midflight-lease-loss"
+    job = repository.claim_due(owner, lease_seconds=60)
+    assert job is not None and job["job_id"] == row["job_id"]
+    provider_started = threading.Event()
+    provider_cancelled = asyncio.Event()
+
+    def renew_lease(*_args, **_kwargs):
+        return not provider_started.is_set()
+
+    async def submit_background(*_args, **_kwargs):
+        provider_started.set()
+        try:
+            await asyncio.Future()
+        finally:
+            provider_cancelled.set()
+
+    monkeypatch.setattr(repository, "renew_lease", renew_lease)
+    monkeypatch.setattr(runtime, "runtime_configuration_valid", lambda _settings: True)
+    monkeypatch.setattr(runtime, "prepare_background", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(runtime, "submit_background", submit_background)
+    settings = _settings(repository.path)
+    settings.openai_job_lease_seconds = 1
+
+    async def scenario():
+        await asyncio.wait_for(
+            process_job(repository, settings, job, owner),
+            timeout=2,
+        )
+        await asyncio.wait_for(provider_cancelled.wait(), timeout=1)
+
+    asyncio.run(scenario())
+
+    stored = repository.get_job(row["job_id"])
+    assert stored is not None
+    assert stored["status"] == "failed"
+    assert stored["error_code"] == "submission_outcome_unknown"
+
+
+def test_existing_ai_response_is_deferred_when_heartbeat_cannot_start(
+    tmp_path,
+    monkeypatch,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    repository.initialize()
+    row, created = _create_earnings_job(repository)
+    assert created is True
+    setup_owner = "heartbeat-existing-setup"
+    claimed = repository.claim_due(setup_owner, lease_seconds=60)
+    assert claimed is not None
+    assert repository.mark_submission_started(
+        row["job_id"],
+        setup_owner,
+        daily_limit=4,
+    ) == "started"
+    repository.link_background_response(
+        row["job_id"],
+        setup_owner,
+        "resp_heartbeat_existing",
+    )
+    repository.record_background_response(
+        row["job_id"],
+        setup_owner,
+        "resp_heartbeat_existing",
+        "queued",
+        delay_seconds=1,
+    )
+    with repository._connect() as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET next_attempt_at='1970-01-01T00:00:00Z' "
+            "WHERE job_id=?",
+            (row["job_id"],),
+        )
+        connection.commit()
+    owner = "heartbeat-existing-owner"
+    job = repository.claim_due(owner, lease_seconds=60)
+    assert job is not None
+
+    original_start = threading.Thread.start
+
+    def fail_heartbeat_start(thread):
+        if thread.name == "ai-job-heartbeat":
+            raise RuntimeError("simulated heartbeat thread failure")
+        return original_start(thread)
+
+    async def retrieve_must_not_run(*_args, **_kwargs):
+        raise AssertionError("provider polling ran without a heartbeat")
+
+    monkeypatch.setattr(threading.Thread, "start", fail_heartbeat_start)
+    monkeypatch.setattr(runtime, "retrieve", retrieve_must_not_run)
+
+    asyncio.run(process_job(repository, _settings(repository.path), job, owner))
+
+    stored = repository.get_job(row["job_id"])
+    assert stored is not None
+    assert stored["status"] in {"queued", "in_progress"}
+    assert stored["openai_response_id"] == "resp_heartbeat_existing"
+    assert stored["error_code"] == "ai_job_heartbeat_unavailable"
+    assert stored["lease_owner"] is None
 
 
 def test_standalone_worker_reads_fresh_runtime_controls_each_iteration(
