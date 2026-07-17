@@ -56,7 +56,7 @@ def _news(news_id: int = 1) -> dict:
 
 
 @pytest.mark.anyio
-async def test_client_uses_one_bearer_header_and_caps_pages_at_fifty():
+async def test_client_uses_one_bearer_header_and_caps_news_pages_at_five_hundred():
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -79,16 +79,16 @@ async def test_client_uses_one_bearer_header_and_caps_pages_at_fifty():
         page = await client.news_changes(
             updated_after="1970-01-01T00:00:00Z",
             after_sequence=0,
-            limit=50,
+            limit=500,
         )
-        with pytest.raises(ValueError, match="between 1 and 50"):
-            await client.news_changes(limit=51)
+        with pytest.raises(ValueError, match="between 1 and 500"):
+            await client.news_changes(limit=501)
 
     assert page.items == []
     assert len(requests) == 1
     request = requests[0]
     assert request.url.path == "/internal/v1/news/changes"
-    assert request.url.params["limit"] == "50"
+    assert request.url.params["limit"] == "500"
     assert request.url.params["after_sequence"] == "0"
     assert request.headers.get_list("authorization") == ["Bearer owner-secret"]
     assert "owner-secret" not in str(request.url)
