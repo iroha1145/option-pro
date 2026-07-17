@@ -71,7 +71,17 @@ def _read_values(path: Path) -> dict[str, str]:
 
 
 def _serialize(values: dict[str, str]) -> bytes:
-    lines = [f"{key}={values[key]}\n" for key in SECRET_KEYS if values.get(key)]
+    lines: list[str] = []
+    for key in SECRET_KEYS:
+        value = values.get(key, "")
+        if not value:
+            continue
+        # Compose interpolates unquoted dollar signs in env_file values. Owner
+        # password hashes use dollar-delimited fields, so keep this value
+        # single-quoted. python-dotenv and Compose both remove the quotes while
+        # preserving the hash byte for byte.
+        serialized = f"'{value}'" if key == "APP_PASSWORD_HASH" else value
+        lines.append(f"{key}={serialized}\n")
     return "".join(lines).encode("utf-8")
 
 
