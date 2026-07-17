@@ -6,8 +6,10 @@ import json
 import logging
 import os
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from datetime import datetime, timezone
+from functools import partial
 from typing import Any
 
 from app.config import get_settings
@@ -106,19 +108,29 @@ async def _lease_heartbeat(
     stop: asyncio.Event,
 ) -> None:
     interval = max(5.0, lease_seconds / 3)
-    while not stop.is_set():
-        try:
-            await asyncio.wait_for(stop.wait(), timeout=interval)
-            return
-        except asyncio.TimeoutError:
-            renewed = await asyncio.to_thread(
-                repository.renew_lease,
-                job_id,
-                owner,
-                lease_seconds,
-            )
-            if not renewed:
+    loop = asyncio.get_running_loop()
+    # Provider calls and local analysis use the default executor. Keep paid-job
+    # lease renewal independent so a saturated worker cannot duplicate work.
+    with ThreadPoolExecutor(
+        max_workers=1,
+        thread_name_prefix="ai-job-heartbeat",
+    ) as executor:
+        while not stop.is_set():
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=interval)
                 return
+            except asyncio.TimeoutError:
+                renewed = await loop.run_in_executor(
+                    executor,
+                    partial(
+                        repository.renew_lease,
+                        job_id,
+                        owner,
+                        lease_seconds,
+                    ),
+                )
+                if not renewed:
+                    return
 
 
 async def _finish_response(
@@ -403,7 +415,6 @@ async def process_job(
             repository.fail(job["job_id"], owner, code)
     finally:
         stop.set()
-        heartbeat.cancel()
         with suppress(asyncio.CancelledError):
             await heartbeat
 

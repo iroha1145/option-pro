@@ -7,6 +7,8 @@ import sqlite3
 import subprocess
 import sys
 import textwrap
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -751,6 +753,67 @@ def test_each_task_has_independent_backoff(tmp_path: Path) -> None:
     assert healthy_count >= 4
     assert healthy_count > failing_count
     assert 2 <= failing_count <= 3
+
+
+def test_worker_heartbeat_survives_a_saturated_default_executor(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(
+            ThreadPoolExecutor(
+                max_workers=1,
+                thread_name_prefix="saturated-default",
+            )
+        )
+        task_started = asyncio.Event()
+        task_release = asyncio.Event()
+        blocker_started = threading.Event()
+        blocker_release = threading.Event()
+
+        async def long_task() -> TaskResult:
+            task_started.set()
+            await task_release.wait()
+            return TaskResult(status="idle")
+
+        repository = WorkerStateRepository(tmp_path / "heartbeat-executor.db")
+        supervisor = WorkerSupervisor(
+            repository,
+            (TaskSpec("catalyst_sync", long_task, 3600),),
+            owner_id="heartbeat-executor-worker",
+            lease_seconds=0.3,
+            process_lock=ProcessFileLock(tmp_path / "heartbeat-executor.lock"),
+        )
+        running = asyncio.create_task(supervisor.run_forever())
+        await asyncio.wait_for(task_started.wait(), timeout=1)
+
+        def occupy_default_executor() -> None:
+            blocker_started.set()
+            blocker_release.wait()
+
+        blocked = loop.run_in_executor(None, occupy_default_executor)
+        for _ in range(100):
+            if blocker_started.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert blocker_started.is_set()
+
+        try:
+            await asyncio.sleep(0.65)
+            health = repository.health(
+                heartbeat_stale_seconds=0.25,
+                expected_tasks=("catalyst_sync",),
+            )
+            assert health["healthy"] is True
+            assert health["lock_live"] is True
+        finally:
+            blocker_release.set()
+            await blocked
+            task_release.set()
+            supervisor.request_stop()
+            await asyncio.wait_for(running, timeout=2)
+
+    asyncio.run(scenario())
 
 
 def test_unexpected_task_loop_exit_terminates_supervisor_and_releases_lock(

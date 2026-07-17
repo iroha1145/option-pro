@@ -6,8 +6,10 @@ import logging
 import math
 import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 from typing import Any, Literal
 
@@ -146,28 +148,42 @@ class WorkerSupervisor:
 
     async def _heartbeat(self) -> None:
         interval = max(0.05, min(30.0, self.lease_seconds / 3.0))
-        while not self._heartbeat_stop.is_set():
-            try:
-                await asyncio.wait_for(self._heartbeat_stop.wait(), timeout=interval)
-                return
-            except asyncio.TimeoutError:
-                pass
-            token = self._token
-            if token is None:
-                return
-            try:
-                renewed = await asyncio.to_thread(
-                    self.repository.renew,
-                    self.owner_id,
-                    token,
-                    lease_seconds=self.lease_seconds,
-                )
-            except Exception:
-                renewed = False
-            if not renewed:
-                self._lease_lost.set()
-                self.stop.set()
-                return
+        loop = asyncio.get_running_loop()
+        # Scheduled scans and reconciliation share asyncio's default executor.
+        # Lease renewal must remain runnable even when every general-purpose
+        # worker thread is occupied by a long provider or SQLite operation.
+        with ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="worker-heartbeat",
+        ) as executor:
+            while not self._heartbeat_stop.is_set():
+                try:
+                    await asyncio.wait_for(
+                        self._heartbeat_stop.wait(),
+                        timeout=interval,
+                    )
+                    return
+                except asyncio.TimeoutError:
+                    pass
+                token = self._token
+                if token is None:
+                    return
+                try:
+                    renewed = await loop.run_in_executor(
+                        executor,
+                        partial(
+                            self.repository.renew,
+                            self.owner_id,
+                            token,
+                            lease_seconds=self.lease_seconds,
+                        ),
+                    )
+                except Exception:
+                    renewed = False
+                if not renewed:
+                    self._lease_lost.set()
+                    self.stop.set()
+                    return
 
     def _backoff(self, task: TaskSpec, failures: int) -> float:
         return min(
