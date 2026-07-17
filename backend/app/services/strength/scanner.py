@@ -360,14 +360,16 @@ def _download_marketdata_history(tickers: list[str], period: str) -> tuple[pd.Da
     timeout = min(float(settings.request_timeout or 20.0), 6.0)
 
     try:
-        with httpx.Client(timeout=timeout) as client:
+        with httpx.Client(
+            timeout=timeout,
+            headers={"Authorization": f"Bearer {token}"},
+        ) as client:
             def fetch_one(symbol: str) -> pd.DataFrame:
                 response = client.get(
                     f"{base_url}/v1/stocks/candles/D/{symbol}/",
                     params={
                         "from": start_date.isoformat(),
                         "to": end_date.isoformat(),
-                        "token": token,
                     },
                 )
                 response.raise_for_status()
