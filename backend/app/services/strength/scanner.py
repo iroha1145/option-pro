@@ -44,6 +44,7 @@ from app.services.strength.yahoo_options import (
     enrich_rows_with_yahoo_options,
     yahoo_options_is_enabled,
 )
+from app.services.yfinance_batch import download_in_bounded_batches
 from app.services.technical.range_persistence import (
     RANGE_PERSISTENCE_VERSION,
     compute_range_persistence,
@@ -525,13 +526,9 @@ def _has_usable_history(df: pd.DataFrame, tickers: list[str] | tuple[str, ...]) 
 def _download_history(tickers: list[str], period: str = "1y") -> pd.DataFrame:
     session = getattr(yahoo, "_yf_session", None)
     kwargs: dict[str, Any] = {
-        "tickers": " ".join(tickers),
         "period": period,
         "interval": "1d",
         "group_by": "ticker",
-        # Bounded workers: threads=True spawns one thread per ticker, which
-        # breaches the container pids_limit on full-universe downloads.
-        "threads": 8,
         "progress": False,
         "auto_adjust": True,
     }
@@ -543,7 +540,11 @@ def _download_history(tickers: list[str], period: str = "1y") -> pd.DataFrame:
     # transient shape once before falling back or reporting unavailability.
     for _attempt in range(_YAHOO_HISTORY_DOWNLOAD_ATTEMPTS):
         try:
-            candidate = yf.download(**kwargs)
+            candidate = download_in_bounded_batches(
+                yf.download,
+                tickers=tickers,
+                **kwargs,
+            )
         except Exception:
             candidate = pd.DataFrame()
         if isinstance(candidate, pd.DataFrame) and _has_usable_history(candidate, tickers):

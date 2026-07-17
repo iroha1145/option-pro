@@ -21,6 +21,7 @@ from app.services.breakouts.feature_engine import (
 from app.services.breakouts.models import normalize_ticker
 from app.services.breakouts.protocols import PriceDataSnapshot
 from app.services.strength import scanner
+from app.services.yfinance_batch import download_in_bounded_batches
 
 
 NEW_YORK = ZoneInfo("America/New_York")
@@ -164,13 +165,9 @@ class YahooPriceDataAdapter:
 
         def download() -> pd.DataFrame:
             kwargs = {
-                "tickers": " ".join(symbols),
                 "period": "20d",
                 "interval": interval,
                 "group_by": "ticker",
-                # Bounded workers so concurrent worker tasks stay inside the
-                # container pids_limit.
-                "threads": 8,
                 "progress": False,
                 "auto_adjust": False,
                 "prepost": True,
@@ -179,7 +176,11 @@ class YahooPriceDataAdapter:
             if session is not None:
                 kwargs["session"] = session
             try:
-                return yf.download(**kwargs)
+                return download_in_bounded_batches(
+                    yf.download,
+                    tickers=symbols,
+                    **kwargs,
+                )
             except Exception:
                 return pd.DataFrame()
 

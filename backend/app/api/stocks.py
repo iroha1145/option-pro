@@ -25,6 +25,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 
 from app.access import current_request_is_owner, public_snapshot_unavailable
 from app.data_paths import get_data_paths
+from app.services.yfinance_batch import download_in_bounded_batches
 
 
 router = APIRouter(prefix="/api/stocks", tags=["stocks"])
@@ -1202,25 +1203,23 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
                 "_yf_session",
                 None,
             )
-            # Bounded workers: threads=True spawns one thread per ticker,
-            # which breaches the container pids_limit on 200+ ticker batches.
-            daily_df = yf_mod.download(
-                tickers=" ".join(all_tickers),
+            daily_df = download_in_bounded_batches(
+                yf_mod.download,
+                tickers=all_tickers,
                 period="7d",
                 interval="1d",
                 group_by="ticker",
-                threads=8,
                 progress=False,
                 auto_adjust=False,
                 session=session,
             )
-            latest_df = yf_mod.download(
-                tickers=" ".join(all_tickers),
+            latest_df = download_in_bounded_batches(
+                yf_mod.download,
+                tickers=all_tickers,
                 period="1d",
                 interval=_WATCHLIST_LATEST_INTERVAL,
                 prepost=True,
                 group_by="ticker",
-                threads=8,
                 progress=False,
                 auto_adjust=False,
                 session=session,
