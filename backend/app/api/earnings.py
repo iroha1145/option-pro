@@ -8,8 +8,9 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import yfinance as yf
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.access import require_same_origin_action
 from app.services.cache import cache
 
 router = APIRouter(prefix="/api/earnings", tags=["earnings"])
@@ -179,7 +180,10 @@ async def upcoming_earnings():
     )
 
 
-@router.post("/upcoming/refresh")
+@router.post(
+    "/upcoming/refresh",
+    dependencies=[Depends(require_same_origin_action)],
+)
 async def refresh_upcoming_earnings():
     """Explicitly refresh the cached earnings snapshot.
 

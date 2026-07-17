@@ -15,6 +15,21 @@ NOW = "2026-07-15T04:00:00Z"
 CYCLE_ID = "mfc_" + "a" * 32
 JOB_ID = "aij_" + "b" * 32
 REFRESH_ID = "refresh_" + "d" * 32
+_SAME_ORIGIN_JSON_HEADERS = {
+    "Content-Type": "application/json",
+    "Origin": "http://localhost",
+    "X-Optix-Action": "1",
+}
+
+
+class _OwnerAccessState:
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http":
+            scope.setdefault("state", {})["owner_access"] = True
+        await self.app(scope, receive, send)
 
 
 class StubPersonalService:
@@ -184,7 +199,7 @@ def client_for(service: StubPersonalService) -> TestClient:
     app = FastAPI()
     app.include_router(catalyst_api.router)
     app.dependency_overrides[catalyst_api._service] = lambda: service
-    return TestClient(app, base_url="http://localhost")
+    return TestClient(_OwnerAccessState(app), base_url="http://localhost")
 
 
 def test_read_routes_use_only_the_personal_service() -> None:
@@ -196,7 +211,11 @@ def test_read_routes_use_only_the_personal_service() -> None:
         client.get("/api/catalysts/feed"),
         client.get("/api/catalysts/news/101"),
         client.get("/api/catalysts/tickers/nvda"),
-        client.post("/api/catalysts/tickers/batch", json={"tickers": ["nvda", "NVDA", "AMD"]}),
+        client.post(
+            "/api/catalysts/tickers/batch",
+            json={"tickers": ["nvda", "NVDA", "AMD"]},
+            headers=_SAME_ORIGIN_JSON_HEADERS,
+        ),
         client.get("/api/catalysts/calendar"),
         client.get("/api/catalysts/hotspots/status"),
         client.get("/api/catalysts/hotspots"),
@@ -231,7 +250,7 @@ def test_catalyst_routes_reject_oversized_body_before_json_parsing(
     response = client.post(
         "/api/catalysts/tickers/batch",
         content=body,
-        headers={"content-type": "application/json"},
+        headers=_SAME_ORIGIN_JSON_HEADERS,
     )
 
     assert response.status_code == 413
@@ -256,14 +275,28 @@ def test_actions_delegate_to_personal_service_after_authentication() -> None:
         client.post(
             "/api/catalysts/refresh",
             json={"operation_type": "news", "idempotency_key": "refresh-news"},
+            headers=_SAME_ORIGIN_JSON_HEADERS,
         ),
-        client.post("/api/catalysts/news/101/analysis", json={"force": True}),
-        client.post(f"/api/catalysts/analysis-jobs/{JOB_ID}/cancel"),
+        client.post(
+            "/api/catalysts/news/101/analysis",
+            json={"force": True},
+            headers=_SAME_ORIGIN_JSON_HEADERS,
+        ),
+        client.post(
+            f"/api/catalysts/analysis-jobs/{JOB_ID}/cancel",
+            json={},
+            headers=_SAME_ORIGIN_JSON_HEADERS,
+        ),
         client.post(
             "/api/catalysts/market-focus-cycles",
             json={"expected_prepared_revision": 3, "force": True},
+            headers=_SAME_ORIGIN_JSON_HEADERS,
         ),
-        client.post(f"/api/catalysts/market-focus-cycles/{CYCLE_ID}/cancel"),
+        client.post(
+            f"/api/catalysts/market-focus-cycles/{CYCLE_ID}/cancel",
+            json={},
+            headers=_SAME_ORIGIN_JSON_HEADERS,
+        ),
     )
 
     assert all(response.status_code == 202 for response in responses)
@@ -284,6 +317,7 @@ def test_disabled_catalyst_sync_rejects_refresh_as_a_conflict() -> None:
     response = client_for(service).post(
         "/api/catalysts/refresh",
         json={"operation_type": "news"},
+        headers=_SAME_ORIGIN_JSON_HEADERS,
     )
 
     assert response.status_code == 409

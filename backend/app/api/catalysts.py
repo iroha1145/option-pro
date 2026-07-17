@@ -17,6 +17,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.access import require_same_origin_action, require_same_origin_json
 from app.services.catalysts.config import CatalystSettings, get_catalyst_settings
 from app.services.catalysts.errors import CatalystError, InvalidCursorError
 from app.services.catalysts.personal_service import PersonalCatalystService
@@ -303,7 +304,10 @@ def ticker_catalysts(
         _raise_safe(error)
 
 
-@router.post("/tickers/batch")
+@router.post(
+    "/tickers/batch",
+    dependencies=[Depends(require_same_origin_json)],
+)
 def ticker_catalyst_batch(
     request: BatchRequest,
     service: PersonalCatalystService = Depends(_service),
@@ -377,6 +381,7 @@ def latest_market_focus_cycle(
 @router.post(
     "/market-focus-cycles",
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_same_origin_action)],
 )
 def request_market_focus_cycle(
     request: MarketFocusCycleRequest,
@@ -411,6 +416,7 @@ def market_focus_cycle(
 @router.post(
     "/market-focus-cycles/{cycle_id}/cancel",
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_same_origin_action)],
 )
 def cancel_market_focus_cycle(
     cycle_id: Annotated[
@@ -430,6 +436,7 @@ def cancel_market_focus_cycle(
 @router.post(
     "/refresh",
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_same_origin_action)],
 )
 def refresh_catalysts(
     request: Optional[RefreshRequest] = None,
@@ -465,6 +472,7 @@ def catalyst_refresh_status(
 @router.post(
     "/news/{news_id}/analysis",
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_same_origin_action)],
 )
 def request_news_analysis(
     request: AnalysisRequest,
@@ -494,6 +502,7 @@ def analysis_job(
 @router.post(
     "/analysis-jobs/{job_id}/cancel",
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_same_origin_action)],
 )
 def cancel_analysis_job(
     job_id: Annotated[str, Path(min_length=16, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")],

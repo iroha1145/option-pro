@@ -25,6 +25,21 @@ from app.worker.tasks import CatalystSyncTask, FocusTask
 
 
 NOW = datetime(2026, 7, 15, 4, 0, tzinfo=timezone.utc)
+_OWNER_ACTION_HEADERS = {
+    "Content-Type": "application/json",
+    "Origin": "http://localhost",
+    "X-Optix-Action": "1",
+}
+
+
+class _OwnerAccessState:
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http":
+            scope.setdefault("state", {})["owner_access"] = True
+        await self.app(scope, receive, send)
 
 
 def _news_result(*, news_id: int = 101, change_sequence: int = 7) -> dict[str, Any]:
@@ -222,6 +237,13 @@ def _service(
             {"personal_etl_enabled": personal_etl_enabled},
         )(),
     )
+
+
+def _api_client(service: PersonalCatalystService) -> TestClient:
+    app = FastAPI()
+    app.include_router(catalyst_api.router)
+    app.dependency_overrides[catalyst_api._service] = lambda: service
+    return TestClient(_OwnerAccessState(app), base_url="http://localhost")
 
 
 def test_personal_feed_never_projects_source_language_title_or_summary() -> None:
@@ -763,13 +785,14 @@ def test_unconfigured_default_read_view_is_safe_and_does_not_create_cache(
 def test_api_read_mode_rejects_explicit_analysis_without_creating_a_job() -> None:
     engine = FakeIntelligence()
     service = _service("read", engine=engine)
-    app = FastAPI()
-    app.include_router(catalyst_api.router)
-    app.dependency_overrides[catalyst_api._service] = lambda: service
-    client = TestClient(app)
+    client = _api_client(service)
 
     read = client.get("/api/catalysts/feed")
-    create = client.post("/api/catalysts/news/101/analysis", json={})
+    create = client.post(
+        "/api/catalysts/news/101/analysis",
+        json={},
+        headers=_OWNER_ACTION_HEADERS,
+    )
 
     assert read.status_code == 200
     assert read.json()["items"][0]["title_zh"] == "芯片企业发布最新业绩"
@@ -809,12 +832,9 @@ def test_analysis_queue_full_returns_429_with_retry_after(
             self._raise_queue_full()
 
     service = _service("manual", engine=QueueFullIntelligence())
-    app = FastAPI()
-    app.include_router(catalyst_api.router)
-    app.dependency_overrides[catalyst_api._service] = lambda: service
-    client = TestClient(app)
+    client = _api_client(service)
 
-    response = client.post(path, json=payload)
+    response = client.post(path, json=payload, headers=_OWNER_ACTION_HEADERS)
 
     assert response.status_code == 429
     assert response.headers["Retry-After"] == "60"
@@ -842,14 +862,12 @@ def test_active_market_focus_cycle_returns_409_with_safe_chinese_message() -> No
             )
 
     service = _service("manual", engine=ActiveFocusIntelligence())
-    app = FastAPI()
-    app.include_router(catalyst_api.router)
-    app.dependency_overrides[catalyst_api._service] = lambda: service
-    client = TestClient(app)
+    client = _api_client(service)
 
     response = client.post(
         "/api/catalysts/market-focus-cycles",
         json={"expected_prepared_revision": 3},
+        headers=_OWNER_ACTION_HEADERS,
     )
 
     assert response.status_code == 409
@@ -939,13 +957,10 @@ def test_analysis_capacity_errors_keep_their_http_and_retry_semantics(
         lambda: NOW,
     )
     service = _service("manual", repository=CapacityRepository())
-    app = FastAPI()
-    app.include_router(catalyst_api.router)
-    app.dependency_overrides[catalyst_api._service] = lambda: service
-    client = TestClient(app)
+    client = _api_client(service)
     payload = {} if "/news/" in path else {"expected_prepared_revision": 3}
 
-    response = client.post(path, json=payload)
+    response = client.post(path, json=payload, headers=_OWNER_ACTION_HEADERS)
 
     assert response.status_code == 429
     assert response.json()["detail"] == {

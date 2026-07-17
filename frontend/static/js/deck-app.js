@@ -128,10 +128,48 @@
     sectors: null, sectorIV: {},
     impacts: {},           // ticker → result | {error} | "loading"
     runtimeSettings: null,
+    ownerStatus: null,
   };
   let gen = 0; // 路由代际,防陈旧渲染
 
-  function manualAnalysisDecision(documentState) {
+  const ownerAccessEnabled = status => !!(status && status.logged_in === true);
+
+  let ownerStatusPromise = null;
+  let ownerSessionEpoch = 0;
+  let ownerStatusRequest = 0;
+  async function loadOwnerStatus(force) {
+    if (!force && St.ownerStatus) return St.ownerStatus;
+    if (ownerStatusPromise) return ownerStatusPromise;
+    const statusRequest = ++ownerStatusRequest;
+    const requestOwnerSessionEpoch = ownerSessionEpoch;
+    const request = N.accessStatus()
+      .then(status => {
+        if (
+          statusRequest === ownerStatusRequest
+          && requestOwnerSessionEpoch === ownerSessionEpoch
+        ) St.ownerStatus = status;
+        return St.ownerStatus;
+      })
+      .catch(() => {
+        if (
+          statusRequest === ownerStatusRequest
+          && requestOwnerSessionEpoch === ownerSessionEpoch
+        ) St.ownerStatus = null;
+        return St.ownerStatus;
+      })
+      .finally(() => {
+        if (ownerStatusPromise === request) ownerStatusPromise = null;
+      });
+    ownerStatusPromise = request;
+    return request;
+  }
+
+  function manualAnalysisDecision(documentState, ownerAccess = true) {
+    if (!ownerAccess) return {
+      enabled: false,
+      title: "登录后可使用模型分析",
+      detail: "公开浏览不会创建、重试或取消模型任务。",
+    };
     const value = documentState && documentState.settings
       && documentState.settings.ai
       && documentState.settings.ai.manual_analysis_enabled;
@@ -149,16 +187,68 @@
   }
 
   let runtimeSettingsPromise = null;
+  let runtimeSettingsEpoch = 0;
+
+  function runtimeSettingsVersion(documentState) {
+    const raw = documentState && documentState.version;
+    if (raw == null || raw === "") return null;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  function runtimeSettingsDocumentDecision(current, candidate) {
+    if (!candidate || !candidate.settings) return "reject";
+    const currentVersion = runtimeSettingsVersion(current);
+    const candidateVersion = runtimeSettingsVersion(candidate);
+    if (currentVersion !== null) {
+      if (candidateVersion === null || candidateVersion < currentVersion) return "reject";
+      if (candidateVersion === currentVersion) return "current";
+    }
+    return "newer";
+  }
+
+  function recordRuntimeSettingsResponse(requestOwnerSessionEpoch, documentState) {
+    if (
+      requestOwnerSessionEpoch !== ownerSessionEpoch
+      || !ownerAccessEnabled(St.ownerStatus)
+    ) return false;
+    const decision = runtimeSettingsDocumentDecision(St.runtimeSettings, documentState);
+    if (decision === "reject") return false;
+    const changed = decision === "newer";
+    if (changed) St.runtimeSettings = documentState;
+    runtimeSettingsEpoch += 1;
+    runtimeSettingsPromise = null;
+    return changed;
+  }
+
   async function loadManualAnalysisControl() {
+    const ownerStatus = await loadOwnerStatus(false);
+    if (!ownerAccessEnabled(ownerStatus)) {
+      runtimeSettingsEpoch += 1;
+      runtimeSettingsPromise = null;
+      St.runtimeSettings = null;
+      return manualAnalysisDecision(null, false);
+    }
     if (runtimeSettingsPromise) return runtimeSettingsPromise;
+    const requestEpoch = runtimeSettingsEpoch;
+    const requestOwnerSessionEpoch = ownerSessionEpoch;
     const request = N.runtimeSettings()
       .then(documentState => {
-        St.runtimeSettings = documentState;
-        return manualAnalysisDecision(documentState);
+        recordRuntimeSettingsResponse(requestOwnerSessionEpoch, documentState);
+        return manualAnalysisDecision(
+          St.runtimeSettings,
+          ownerAccessEnabled(St.ownerStatus),
+        );
       })
       .catch(() => {
-        St.runtimeSettings = null;
-        return manualAnalysisDecision(null);
+        if (
+          requestOwnerSessionEpoch === ownerSessionEpoch
+          && requestEpoch === runtimeSettingsEpoch
+        ) St.runtimeSettings = null;
+        return manualAnalysisDecision(
+          St.runtimeSettings,
+          ownerAccessEnabled(St.ownerStatus),
+        );
       })
       .finally(() => {
         if (runtimeSettingsPromise === request) runtimeSettingsPromise = null;
@@ -168,7 +258,20 @@
   }
 
   function rememberManualAnalysisDisabled() {
-    St.runtimeSettings = { settings: { ai: { manual_analysis_enabled: false } } };
+    runtimeSettingsEpoch += 1;
+    runtimeSettingsPromise = null;
+    const current = St.runtimeSettings || {};
+    const settings = current.settings || {};
+    St.runtimeSettings = {
+      ...current,
+      settings: {
+        ...settings,
+        ai: {
+          ...(settings.ai || {}),
+          manual_analysis_enabled: false,
+        },
+      },
+    };
   }
 
   /* ---------- 通用状态块 ---------- */
@@ -756,6 +859,7 @@
       loading: "正在读取快照",
     };
     $$('[data-strength-refresh]', view).forEach(button => {
+      button.hidden = !ownerAccessEnabled(St.ownerStatus);
       if (!button.dataset.idleLabel) button.dataset.idleLabel = button.textContent.trim() || "重新扫描";
       button.disabled = busy;
       button.setAttribute("aria-busy", busy ? "true" : "false");
@@ -818,6 +922,7 @@
   }
 
   async function refreshStrengthSnapshot() {
+    if (!ownerAccessEnabled(St.ownerStatus)) return;
     const generation = gen;
     if (strengthRefreshPromise && strengthRefreshGeneration === generation) return strengthRefreshPromise;
     const requestedParameters = strengthScanParameters();
@@ -906,9 +1011,15 @@
 
   function bindStrengthRefresh() {
     $$('[data-strength-refresh]', view).forEach(button => {
+      button.hidden = !ownerAccessEnabled(St.ownerStatus);
       button.dataset.idleLabel = button.textContent.trim() || "重新扫描";
       button.addEventListener("click", refreshStrengthSnapshot);
     });
+    if (!ownerAccessEnabled(St.ownerStatus)) {
+      $$('[data-strength-refresh-state]', view).forEach(state => {
+        state.textContent = "公开浏览显示已有后台快照；登录后可提交新扫描。";
+      });
+    }
   }
 
   function renderStrengthUnavailable(error) {
@@ -924,7 +1035,7 @@
         <div class="empty-note" role="status" style="padding:34px 20px">
           <p>尚无可用的强势雷达后台快照</p>
           <small>${esc(error && error.message || "后台快照暂不可用")}。页面不会自行发起全市场扫描。</small>
-          <button class="btn btn--amber btn--sm" id="rescan" data-strength-refresh>开始后台扫描</button>
+          <button class="btn btn--amber btn--sm" id="rescan" data-strength-refresh data-owner-only hidden>开始后台扫描</button>
           <span class="mono" data-strength-refresh-state aria-live="polite" style="display:block;margin-top:10px;font-size:10.5px;color:var(--faint)">暂不可用</span>
         </div>
       </section>`;
@@ -1024,7 +1135,7 @@
         <span class="mono" id="plan-line" style="font-size:11px;color:var(--faint)">${esc(planText(secName))}</span>
         <span style="flex:1"></span>
         <span class="mono" data-strength-refresh-state aria-live="polite" style="font-size:10.5px;color:var(--faint)">${D2._stale ? "当前快照已过期，可提交后台扫描更新。" : "页面只读取后台快照，不会即时扫描全市场。"}</span>
-        <button class="btn btn--amber btn--sm" id="rescan" data-strength-refresh>重新扫描</button>
+        <button class="btn btn--amber btn--sm" id="rescan" data-strength-refresh data-owner-only hidden>重新扫描</button>
       </div>
     </section>
 
@@ -1123,7 +1234,7 @@
         <div class="empty-note" style="padding:34px 20px">
           <p>${degraded ? "数据源降级,本轮扫描没有产出候选" : "当前条件下没有候选"}</p>
           <small>${degraded ? esc((dsrc.prices && dsrc.prices.message) || "") + " · 可点重新扫描提交后台任务" : "试试放宽最低股价 / 成交额,或切换板块范围"}</small>
-          <button class="btn btn--sm" id="rescan-empty" data-strength-refresh>重新扫描</button>
+          <button class="btn btn--sm" id="rescan-empty" data-strength-refresh data-owner-only hidden>重新扫描</button>
           <span class="mono" data-strength-refresh-state aria-live="polite" style="display:block;margin-top:10px;font-size:10.5px;color:var(--faint)">${D2._stale ? "当前快照已过期。" : "后台快照已读取。"}</span>
         </div>`}
       </div>
@@ -1489,7 +1600,9 @@
     const manualControlRequest = loadManualAnalysisControl();
     if (!St.earnWeek || !St.earnMeta || forceReload) {
       view.innerHTML = loadingView("正在读取财报日历…");
-      const r = await settle(N.earnings(forceReload).then(d => ({ week: N.buildWeek(d.earnings || []), meta: d })));
+      const ownerStatus = await loadOwnerStatus(false);
+      const ownerRefresh = !!forceReload && ownerAccessEnabled(ownerStatus);
+      const r = await settle(N.earnings(ownerRefresh).then(d => ({ week: N.buildWeek(d.earnings || []), meta: d })));
       if (g0 !== gen) return;
       if (!r.ok) { view.innerHTML = errorView("财报日历读取失败", r.e.message); bindRetry(() => renderEarnings(true)); return; }
       St.earnWeek = r.v.week; St.earnMeta = r.v.meta;
@@ -1603,7 +1716,10 @@
     const elapsed = Jobs && active ? Jobs.elapsed(impact) : null;
     const statusTone = status === "completed" ? "chip--up" : status === "failed" ? "chip--down" : active ? "chip--amber" : "chip--mute";
     const retryBlocked = status === "failed" && impact && impact.error_code === "submission_outcome_unknown";
-    const manualControl = manualAnalysisDecision(St.runtimeSettings);
+    const manualControl = manualAnalysisDecision(
+      St.runtimeSettings,
+      ownerAccessEnabled(St.ownerStatus),
+    );
     const head = `<div class="sect-head" style="margin-bottom:12px"><span class="sect-head__no">IMPACT</span><h2 style="font-size:14.5px">关联影响 · ${esc(sel)}</h2><span class="sect-head__rule"></span><span class="chip ${statusTone}">${esc(statusCN[status] || status)}</span></div>`;
     if (status === "idle" || status === "cancelled" || status === "failed" || status === "budget_blocked") return `${head}
       <div class="empty-note" style="padding:22px 8px">
@@ -1613,7 +1729,7 @@
         ${status !== "budget_blocked" && !retryBlocked && !manualControl.enabled ? `<small class="mono">${esc(manualControl.title)} · ${esc(manualControl.detail)}</small>` : ""}
         ${retryBlocked ? `<small>上游是否已接受请求无法确认，为避免重复计费，本次不能自动重提。</small>` : ""}
       </div>`;
-    if (active) return `${head}<div class="empty-note" style="padding:22px 8px"><p>分析任务正在运行</p><small>${impact && (impact.submitted_at || impact.created_at) ? "提交 " + N.fmtDateTime(impact.submitted_at || impact.created_at) : "已交给后台任务"}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · 不显示估算进度</small><button class="btn btn--sm" id="impact-cancel" type="button" data-impact-cancel>取消任务</button></div>`;
+    if (active) return `${head}<div class="empty-note" style="padding:22px 8px"><p>分析任务正在运行</p><small>${impact && (impact.submitted_at || impact.created_at) ? "提交 " + N.fmtDateTime(impact.submitted_at || impact.created_at) : "已交给后台任务"}${elapsed != null && status === "in_progress" ? " · 已运行 " + elapsed + " 秒" : ""} · 不显示估算进度</small>${ownerAccessEnabled(St.ownerStatus) ? '<button class="btn btn--sm" id="impact-cancel" type="button" data-impact-cancel>取消任务</button>' : ""}</div>`;
     if (status === "insufficient_context") return `${head}<div class="empty-note" style="padding:22px 8px"><p>信息不足，未生成方向性分析</p><small>服务端没有为缺失信息补造结论，也不会显示假结果。</small></div>`;
     const impacted = Array.isArray(result && result.impacted) ? result.impacted : Array.isArray(result && result.affected_stocks) ? result.affected_stocks : [];
     const groups = new Map();
@@ -2726,30 +2842,188 @@
   });
 
   /* ---------- 主人会话 ---------- */
-  async function bindOwnerSession() {
+  function runtimeAIEnabled(documentState) {
+    const settings = documentState && documentState.settings;
+    return !!(
+      settings
+      && (
+        settings.ai && settings.ai.manual_analysis_enabled
+        || settings.catalyst && settings.catalyst.scheduled_analysis_enabled
+      )
+    );
+  }
+
+  function syncOwnerControls(documentState) {
+    const status = St.ownerStatus;
+    const owner = ownerAccessEnabled(status);
+    const login = $("#owner-login");
     const logout = $("#owner-logout");
-    if (!logout || !N.accessStatus || !N.logoutOwner) return;
-    try {
-      const status = await N.accessStatus();
-      logout.hidden = status.access_mode !== "password" || status.logged_in !== true;
-    } catch (error) {
+    const aiToggle = $("#owner-ai-toggle");
+    document.documentElement.classList.toggle("owner-controls-visible", owner);
+    if (login) login.hidden = owner || (status && status.access_mode === "private_network");
+    if (logout) logout.hidden = !owner || !status || status.access_mode !== "password";
+    $$('[data-strength-refresh]').forEach(element => { element.hidden = !owner; });
+    if (!aiToggle) return;
+    aiToggle.hidden = !owner;
+    if (!owner) {
+      aiToggle.disabled = true;
+      aiToggle.setAttribute("aria-pressed", "false");
+      aiToggle.textContent = "分析：关闭";
       return;
     }
-    logout.addEventListener("click", async () => {
-      logout.disabled = true;
-      try {
-        await N.logoutOwner();
-        location.replace("/login.html");
-      } catch (error) {
-        logout.disabled = false;
+    if (!documentState || !documentState.settings) {
+      aiToggle.disabled = true;
+      aiToggle.setAttribute("aria-pressed", "false");
+      aiToggle.textContent = "分析：不可用";
+      aiToggle.title = "运行设置暂时无法读取";
+      return;
+    }
+    const enabled = runtimeAIEnabled(documentState);
+    aiToggle.disabled = false;
+    aiToggle.setAttribute("aria-pressed", String(enabled));
+    aiToggle.textContent = enabled ? "分析：开启" : "分析：关闭";
+    aiToggle.title = enabled
+      ? "关闭新的手动与定时模型分析"
+      : "开启手动模型分析；不会自动创建任务";
+  }
+
+  async function toggleOwnerAI() {
+    const aiToggle = $("#owner-ai-toggle");
+    if (!aiToggle || !ownerAccessEnabled(St.ownerStatus)) return;
+    aiToggle.disabled = true;
+    aiToggle.textContent = "分析：保存中";
+    const requestOwnerSessionEpoch = ownerSessionEpoch;
+    runtimeSettingsEpoch += 1;
+    runtimeSettingsPromise = null;
+    try {
+      const current = await N.runtimeSettings();
+      const enabled = runtimeAIEnabled(current);
+      const settings = enabled
+        ? {
+            ai: { manual_analysis_enabled: false },
+            catalyst: { scheduled_analysis_enabled: false },
+          }
+        : { ai: { manual_analysis_enabled: true } };
+      const updated = await N.updateRuntimeSettings({
+        expected_version: Number(current.version),
+        settings,
+      });
+      if (
+        requestOwnerSessionEpoch !== ownerSessionEpoch
+        || !ownerAccessEnabled(St.ownerStatus)
+      ) return;
+      recordRuntimeSettingsResponse(requestOwnerSessionEpoch, updated);
+      syncOwnerControls(St.runtimeSettings);
+      window.dispatchEvent(new CustomEvent(
+        "optix:runtime-settings-changed",
+        { detail: St.runtimeSettings },
+      ));
+      route();
+    } catch (error) {
+      syncOwnerControls(St.runtimeSettings);
+      aiToggle.title = error && error.message ? error.message : "运行设置保存失败";
+      void refreshOwnerSessionState();
+    }
+  }
+
+  const OWNER_SESSION_REFRESH_MS = 60e3;
+  let ownerSessionRefreshPromise = null;
+
+  async function refreshOwnerSessionState() {
+    if (ownerSessionRefreshPromise) return ownerSessionRefreshPromise;
+    const previousOwner = ownerAccessEnabled(St.ownerStatus);
+    const requestOwnerSessionEpoch = ownerSessionEpoch;
+    const request = (async () => {
+      await loadOwnerStatus(true);
+      if (requestOwnerSessionEpoch !== ownerSessionEpoch) return St.ownerStatus;
+      let owner = ownerAccessEnabled(St.ownerStatus);
+      let settingsChanged = false;
+      if (!owner) {
+        runtimeSettingsEpoch += 1;
+        runtimeSettingsPromise = null;
+        St.runtimeSettings = null;
+      } else {
+        try {
+          const documentState = await N.runtimeSettings();
+          settingsChanged = recordRuntimeSettingsResponse(
+            requestOwnerSessionEpoch,
+            documentState,
+          );
+        } catch (error) { /* 保留最近一次成功设置；401 会由统一请求层撤下所有者会话 */ }
+        if (requestOwnerSessionEpoch !== ownerSessionEpoch) return St.ownerStatus;
+        owner = ownerAccessEnabled(St.ownerStatus);
+        if (!owner) {
+          runtimeSettingsEpoch += 1;
+          runtimeSettingsPromise = null;
+          St.runtimeSettings = null;
+        }
       }
+      syncOwnerControls(St.runtimeSettings);
+      if (
+        requestOwnerSessionEpoch === ownerSessionEpoch
+        && (previousOwner !== owner || settingsChanged)
+      ) route();
+      return St.ownerStatus;
+    })().finally(() => {
+      if (ownerSessionRefreshPromise === request) ownerSessionRefreshPromise = null;
     });
+    ownerSessionRefreshPromise = request;
+    return request;
+  }
+
+  async function bindOwnerSession() {
+    const login = $("#owner-login");
+    const logout = $("#owner-logout");
+    const aiToggle = $("#owner-ai-toggle");
+    if (!login || !logout || !aiToggle || !N.accessStatus || !N.logoutOwner) return;
+    window.addEventListener("optix:owner-session-changed", event => {
+      const previousOwner = ownerAccessEnabled(St.ownerStatus);
+      St.ownerStatus = event.detail || null;
+      const owner = ownerAccessEnabled(St.ownerStatus);
+      ownerSessionEpoch += 1;
+      ownerStatusRequest += 1;
+      runtimeSettingsEpoch += 1;
+      St.runtimeSettings = null;
+      runtimeSettingsPromise = null;
+      syncOwnerControls(null);
+      if (previousOwner !== owner) route();
+    });
+    window.addEventListener("optix:runtime-settings-changed", event => {
+      if (event.detail) {
+        recordRuntimeSettingsResponse(ownerSessionEpoch, event.detail);
+      } else {
+        runtimeSettingsEpoch += 1;
+        runtimeSettingsPromise = null;
+        St.runtimeSettings = null;
+      }
+      syncOwnerControls(St.runtimeSettings);
+    });
+    aiToggle.addEventListener("click", toggleOwnerAI);
+    logout.addEventListener("click", async () => {
+        logout.disabled = true;
+        try {
+          St.ownerStatus = await N.logoutOwner();
+          St.runtimeSettings = null;
+          location.replace("/");
+        } catch (error) {
+          logout.disabled = false;
+        }
+      });
+    await loadOwnerStatus(true);
+    if (ownerAccessEnabled(St.ownerStatus)) await loadManualAnalysisControl();
+    syncOwnerControls(St.runtimeSettings);
   }
 
   /* ---------- 启动 ---------- */
   syncThemeColor(); tape(); clock(); bindOwnerSession();
   setInterval(clock, 1000);
   setInterval(tape, 60e3);
+  setInterval(() => {
+    if (document.visibilityState === "visible") void refreshOwnerSessionState();
+  }, OWNER_SESSION_REFRESH_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void refreshOwnerSessionState();
+  });
 
   /* 自选行情在后台保持热缓存；切页只恢复最近快照，不让用户承担冷拉等待。 */
   const onWatchRoute = () => (location.hash.slice(1) || "watchlist").split("/")[0] === "watchlist";

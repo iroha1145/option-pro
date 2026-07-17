@@ -10,7 +10,7 @@
   <title>Optix Pro · 个人投资研究</title>
   <script src="./static/js/theme-init.js?v=20260713b"></script>
   <link rel="icon" href="./static/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="./static/css/optix-deck.css?v=20260715b" />
+  <link rel="stylesheet" href="./static/css/optix-deck.css?v=20260717a" />
   <link rel="stylesheet" href="./static/css/optix-catalysts.css?v=20260715b" />
 </head>
 <body>
@@ -44,12 +44,14 @@
       </nav>
 
       <div class="deck-tools">
+        <a class="btn btn--sm" id="owner-login" href="/login.html" hidden>登录</a>
+        <button class="btn btn--sm" type="button" id="owner-ai-toggle" aria-pressed="false" hidden>分析：读取中</button>
         <button class="btn btn--sm" type="button" id="owner-logout" hidden>退出</button>
         <button class="theme-toggle" type="button" id="theme-toggle" aria-label="切换白天 / 夜间主题">
           <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z"/></svg>
           <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.4"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.2 5.2l1.7 1.7M17.1 17.1l1.7 1.7M18.8 5.2l-1.7 1.7M6.9 17.1l-1.7 1.7"/></svg>
         </button>
-        <button class="deck-search" type="button" id="search-toggle" aria-haspopup="dialog">
+        <button class="deck-search" type="button" id="search-toggle" aria-label="搜索股票" aria-haspopup="dialog">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
           <span>搜索</span>
           <kbd class="mono">⌘K</kbd>
@@ -105,9 +107,9 @@
     </div>
   </div>
 
-  <script src="./static/js/deck-api.js?v=20260715d"></script>
-  <script src="./static/js/deck-ai-jobs.js?v=20260715d"></script>
-  <script src="./static/js/deck-catalysts.js?v=20260715d"></script>
-  <script src="./static/js/deck-app.js?v=20260715d"></script>
+  <script src="./static/js/deck-api.js?v=20260717a"></script>
+  <script src="./static/js/deck-ai-jobs.js?v=20260717a"></script>
+  <script src="./static/js/deck-catalysts.js?v=20260717a"></script>
+  <script src="./static/js/deck-app.js?v=20260717a"></script>
 </body>
 </html>

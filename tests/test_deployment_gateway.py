@@ -8,6 +8,7 @@ from threading import Event
 
 import pytest
 from fastapi import Depends, FastAPI
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from app.access import (
@@ -16,8 +17,10 @@ from app.access import (
     LoginRejected,
     OwnerAccessRuntime,
     hash_owner_password,
+    require_public_read_or_owner_access,
     require_owner_access,
     require_same_origin_action,
+    require_same_origin_json,
 )
 import app.access as access_module
 from app.api import access as access_api
@@ -66,7 +69,26 @@ def _test_app(runtime: OwnerAccessRuntime) -> FastAPI:
 
     @app.get("/")
     def index() -> dict[str, str]:
+        return {"page": "public"}
+
+    @app.get("/owner.html")
+    def owner_page() -> dict[str, str]:
         return {"page": "owner"}
+
+    @app.get("/static/app.js")
+    def public_script() -> dict[str, bool]:
+        return {"public": True}
+
+    @app.get("/api/market/status")
+    def public_market_status() -> dict[str, bool]:
+        return {"public": True}
+
+    @app.post(
+        "/api/catalysts/tickers/batch",
+        dependencies=[Depends(require_same_origin_json)],
+    )
+    def public_batch_query() -> dict[str, bool]:
+        return {"public": True}
 
     @app.get("/login.html")
     def login_page() -> dict[str, str]:
@@ -112,6 +134,41 @@ def _login(client: TestClient) -> str:
     )
     assert response.status_code == 200
     return response.headers["set-cookie"]
+
+
+_BODY_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+# Login is the anonymous authentication bootstrap and the ticker batch is a
+# bounded read query. They still require same-origin JSON, but not an owner
+# action header or an existing owner session.
+_SAME_ORIGIN_JSON_ONLY_OPERATIONS = {
+    ("POST", "/api/access/login"),
+    ("POST", "/api/catalysts/tickers/batch"),
+}
+
+
+def _effective_fastapi_routes(app: FastAPI):
+    """Yield routes after FastAPI's lazy router includes are applied."""
+
+    for route in app.routes:
+        effective_contexts = getattr(route, "effective_route_contexts", None)
+        if callable(effective_contexts):
+            yield from effective_contexts()
+        elif isinstance(route, APIRoute):
+            yield route
+
+
+def _dependency_calls(dependant):
+    for dependency in dependant.dependencies:
+        yield dependency.call
+        yield from _dependency_calls(dependency)
+
+
+def _real_body_operations():
+    return [
+        (method, route.path, route)
+        for route in _effective_fastapi_routes(main.app)
+        for method in sorted(set(route.methods or ()) & _BODY_METHODS)
+    ]
 
 
 def test_private_network_startup_is_fail_closed_for_public_bindings() -> None:
@@ -222,18 +279,41 @@ def test_health_and_ready_are_public_in_both_access_modes() -> None:
             assert client.get("/api/value").status_code in {401, 403}
 
 
-def test_password_mode_redirects_pages_and_protects_all_other_apis() -> None:
+def test_password_mode_serves_public_reads_and_protects_owner_surfaces() -> None:
     with TestClient(
         _test_app(_runtime("password")),
         base_url="https://testserver",
         follow_redirects=False,
     ) as client:
-        page = client.get("/")
-        assert page.status_code == 303
-        assert page.headers["location"] == "/login.html"
+        assert client.get("/").status_code == 200
+        assert client.get("/static/app.js").status_code == 200
+        assert client.get("/api/market/status").status_code == 200
+        status = client.get("/api/access/status")
+        assert status.status_code == 200
+        assert status.json() == {"access_mode": "password", "logged_in": False}
+
+        owner_page = client.get("/owner.html")
+        assert owner_page.status_code == 303
+        assert owner_page.headers["location"] == "/login.html"
         assert client.get("/api/value").status_code == 401
-        assert client.get("/api/access/status").status_code == 401
+        assert client.get("/api/ai/status").status_code == 401
+        assert client.get("/api/runtime-settings").status_code == 401
+        assert client.get("/api/worker/status").status_code == 401
+        assert client.post("/api/market/status", json={}).status_code == 401
         assert client.get("/login.html").status_code == 200
+
+        public_batch = client.post(
+            "/api/catalysts/tickers/batch",
+            json={"tickers": ["NVDA"]},
+            headers=_action_headers(),
+        )
+        assert public_batch.status_code == 200
+        cross_site_batch = client.post(
+            "/api/catalysts/tickers/batch",
+            json={"tickers": ["NVDA"]},
+            headers=_action_headers("https://evil.example"),
+        )
+        assert cross_site_batch.status_code == 403
 
 
 def test_password_login_sets_strict_server_only_cookie_and_unlocks_owner_routes() -> None:
@@ -767,6 +847,160 @@ def test_production_validation_errors_never_echo_submitted_password() -> None:
         ]
     finally:
         client.close()
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "expected"),
+    [
+        ("GET", "/", True),
+        ("HEAD", "/index.html", True),
+        ("GET", "/static/js/deck-app.js", True),
+        ("GET", "/api/access/status", True),
+        ("GET", "/api/stocks", True),
+        ("HEAD", "/api/stocks/NVDA/chart", True),
+        ("GET", "/api/options/NVDA/chain", True),
+        ("GET", "/api/earnings/upcoming", True),
+        ("GET", "/api/sectors/technology/heatmap", True),
+        ("GET", "/api/market/status", True),
+        ("GET", "/api/signals/market", True),
+        ("GET", "/api/catalysts/feed", True),
+        ("GET", "/api/strength/scan", True),
+        ("GET", "/api/breakouts/current", True),
+        ("POST", "/api/catalysts/tickers/batch", True),
+        ("GET", "/index.html/extra", False),
+        ("GET", "/staticity/js/deck-app.js", False),
+        ("GET", "/api/access/status/extra", False),
+        ("GET", "/api/stocks-private", False),
+        ("GET", "/api/options2/NVDA", False),
+        ("GET", "/api/earnings-private", False),
+        ("GET", "/api/sectors2", False),
+        ("GET", "/api/marketplace", False),
+        ("GET", "/api/signals-private", False),
+        ("GET", "/api/catalysts-admin", False),
+        ("GET", "/api/strengthened", False),
+        ("GET", "/api/breakouts2", False),
+        ("GET", "/api/ai/status", False),
+        ("GET", "/api/runtime-settings", False),
+        ("POST", "/api/stocks", False),
+        ("POST", "/api/catalysts/tickers/batch/", False),
+        ("POST", "/api/catalysts/tickers/batch/extra", False),
+    ],
+)
+def test_public_read_paths_match_only_exact_paths_or_path_segments(
+    method: str,
+    path: str,
+    expected: bool,
+) -> None:
+    assert main._is_public_read_request(path, method) is expected
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/staticity/js/deck-app.js"),
+        ("GET", "/api/access/status/extra"),
+        ("GET", "/api/stocks-private"),
+        ("GET", "/api/ai/status"),
+        ("POST", "/api/catalysts/tickers/batch/"),
+    ],
+)
+def test_password_gateway_rejects_public_path_lookalikes(
+    method: str,
+    path: str,
+) -> None:
+    with TestClient(
+        _test_app(_runtime("password")),
+        base_url="https://testserver",
+    ) as client:
+        response = client.request(
+            method,
+            path,
+            json={} if method == "POST" else None,
+        )
+    assert response.status_code == 401
+    assert response.json()["error"] == "owner_login_required"
+
+
+def test_anonymous_requests_cannot_reach_any_owner_state_changing_route() -> None:
+    operations = [
+        (method, template)
+        for method, template, _route in _real_body_operations()
+        if (method, template) not in _SAME_ORIGIN_JSON_ONLY_OPERATIONS
+    ]
+    assert len(operations) >= 15
+    assert ("PUT", "/api/runtime-settings") in operations
+    assert ("POST", "/api/ai/jobs/earnings-impact") in operations
+    assert ("POST", "/api/catalysts/refresh") in operations
+
+    for mode, address, expected_status, expected_error in (
+        ("password", "8.8.8.8", 401, "owner_login_required"),
+        ("private_network", "8.8.8.8", 403, "private_network_required"),
+    ):
+        gateway = _GatewayMiddleware(FastAPI(), access_runtime=_runtime(mode))
+        with TestClient(
+            _PeerAddress(gateway, address),
+            base_url="https://testserver",
+        ) as client:
+            for method, template in operations:
+                path = re.sub(r"\{[^}]+\}", "anonymous-test", template)
+                for headers in ({}, _action_headers()):
+                    response = client.request(
+                        method,
+                        path,
+                        json={},
+                        headers=headers,
+                    )
+                    assert response.status_code == expected_status, (
+                        mode,
+                        method,
+                        template,
+                        headers,
+                        response.text,
+                    )
+                    assert response.json()["error"] == expected_error
+
+
+def test_every_real_body_route_declares_the_required_same_origin_dependency() -> None:
+    operations = _real_body_operations()
+    assert len(operations) >= 17
+    assert {
+        (method, path)
+        for method, path, _route in operations
+        if (method, path) in _SAME_ORIGIN_JSON_ONLY_OPERATIONS
+    } == _SAME_ORIGIN_JSON_ONLY_OPERATIONS
+
+    missing: list[tuple[str, str, str]] = []
+    for method, path, route in operations:
+        calls = set(_dependency_calls(route.dependant))
+        expected_dependency = (
+            require_same_origin_json
+            if (method, path) in _SAME_ORIGIN_JSON_ONLY_OPERATIONS
+            else require_same_origin_action
+        )
+        if expected_dependency not in calls:
+            missing.append((method, path, expected_dependency.__name__))
+
+    assert missing == []
+
+
+def test_every_public_data_route_keeps_the_mode_aware_router_boundary() -> None:
+    public_routes = [
+        route
+        for route in _effective_fastapi_routes(main.app)
+        if any(
+            main._has_path_prefix(route.path, prefix)
+            for prefix in main._PUBLIC_READ_API_PREFIXES
+        )
+    ]
+    assert public_routes
+
+    missing = [
+        route.path
+        for route in public_routes
+        if require_public_read_or_owner_access
+        not in set(_dependency_calls(route.dependant))
+    ]
+    assert missing == []
 
 
 def test_every_real_mutating_route_rejects_cross_site_and_form_requests() -> None:

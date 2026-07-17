@@ -71,6 +71,17 @@ assert.match(index, /rel="icon" href="\.\/static\/favicon\.svg"/, 'the local fav
 assert.match(index, /<main id="view"[^>]+tabindex="-1"/, 'route changes need a focusable main region');
 assert.match(index, /id="drawer"[^>]*role="dialog"[^>]*aria-modal="true"/, 'research drawers need dialog semantics');
 assert.match(index, /id="theme-toggle"/, 'the theme control must remain in the production shell');
+assert.match(
+  index,
+  /<a\b[^>]*id="owner-login"[^>]*href="\/login\.html"[^>]*hidden[^>]*>登录<\/a>/,
+  'the public shell must expose a hidden-by-default Owner login entry',
+);
+assert.match(
+  index,
+  /<button\b[^>]*id="owner-ai-toggle"[^>]*aria-pressed="false"[^>]*hidden[^>]*>/,
+  'the shell must keep an accessible hidden-by-default Owner analysis switch',
+);
+assert.match(app, /aiToggle\.addEventListener\("click", toggleOwnerAI\)/, 'the Owner analysis switch must remain wired');
 
 const passwordInput = login.match(/<input\b[^>]*id="owner-password"[^>]*>/)?.[0] || '';
 assert.ok(passwordInput, 'the Owner login page must keep its password field');

@@ -444,6 +444,22 @@ def require_owner_access(request: Request) -> None:
     )
 
 
+def require_public_read_or_owner_access(request: Request) -> None:
+    """Allow password-mode reads while keeping every other request owner-only."""
+
+    runtime = _runtime(request)
+    method = request.method.upper()
+    public_batch_query = (
+        method == "POST"
+        and request.url.path == "/api/catalysts/tickers/batch"
+    )
+    if runtime.mode == "password" and (
+        method in {"GET", "HEAD"} or public_batch_query
+    ):
+        return
+    require_owner_access(request)
+
+
 def request_uses_https(request: Request) -> bool:
     return request_is_https(
         request.scope,

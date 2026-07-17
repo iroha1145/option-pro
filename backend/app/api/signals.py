@@ -8,7 +8,7 @@ import math
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import StrictBool
 
@@ -19,6 +19,7 @@ from app.api.ai import (
     _require_runtime_capability,
 )
 from app.api.stocks import _sanitize
+from app.access import require_same_origin_action
 from app.services.ai_jobs.models import StrictModel
 from app.services.scoring import compute_market_scores, compute_stock_scores
 from app.services.signals import compute_market_signals, compute_stock_signals
@@ -160,7 +161,10 @@ async def stock_signals(ticker: str):
         raise HTTPException(503, "Stock signals are currently unavailable") from exc
 
 
-@router.post("/stock/{ticker}/ai-analysis")
+@router.post(
+    "/stock/{ticker}/ai-analysis",
+    dependencies=[Depends(require_same_origin_action)],
+)
 async def stock_ai_analysis(
     ticker: str,
     request: SignalAnalysisJobCreateRequest = Body(

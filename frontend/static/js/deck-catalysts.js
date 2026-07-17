@@ -126,7 +126,15 @@
     const availability = analysisAvailabilityOf(item);
     return typeof availability.enabled === "boolean" ? !!availability.enabled : false;
   }
-  function analysisActionDecision(triggerEnabled, availability) {
+  function analysisActionDecision(triggerEnabled, availability, ownerAccess = true) {
+    if (!ownerAccess) return {
+      modeUnavailable: true,
+      showAction: false,
+      reason: "owner_login_required",
+      canTrigger: false,
+      title: "登录后可使用模型分析",
+      detail: "公开浏览只显示已有结果，不会创建、重试或取消模型任务。",
+    };
     const state = availability && typeof availability === "object" ? availability : {};
     const hasRuntimeState = typeof state.enabled === "boolean" || !!state.reason;
     const enabled = hasRuntimeState ? !!state.enabled : !!triggerEnabled;
@@ -338,6 +346,7 @@
     runtimeDirty: false,
     workerStatus: null,
     workerStateTimer: null,
+    ownerAccess: false,
     openStock: null,
     postRender: null,
   };
@@ -402,7 +411,7 @@
           </div>
         </section>
 
-        <details class="panel panel--pad cat-runtime-settings" id="cat-runtime-settings" data-reveal style="--reveal-i:2">
+        <details class="panel panel--pad cat-runtime-settings" id="cat-runtime-settings" data-owner-only data-reveal style="--reveal-i:2" ${page.ownerAccess ? "" : "hidden"}>
           <summary><strong>运行设置</strong><span class="mono" id="cat-runtime-version">正在读取</span></summary>
           <p>这里只调整任务次数、费用额度和运行时段，不会读取或显示任何密钥。</p>
           <form id="cat-runtime-form" autocomplete="off">
@@ -422,7 +431,7 @@
           </form>
         </details>
 
-        <section class="panel panel--pad cat-owner-operations" id="cat-owner-operations" data-reveal style="--reveal-i:3" aria-labelledby="cat-operations-title">
+        <section class="panel panel--pad cat-owner-operations" id="cat-owner-operations" data-owner-only data-reveal style="--reveal-i:3" aria-labelledby="cat-operations-title" ${page.ownerAccess ? "" : "hidden"}>
           <header class="cat-focus-cycle__head">
             <div>
               <span class="mono">OWNER OPERATIONS · UNIFIED WORKER</span>
@@ -478,9 +487,9 @@
             <div class="cat-filter-actions">
               <span class="mono" id="cat-filter-note">编辑中的条件不会被自动刷新覆盖</span>
               <button class="btn btn--ghost btn--sm" type="button" id="cat-clear">清除</button>
-              <button class="btn btn--sm" type="button" data-cat-refresh="news" disabled>正在读取</button>
-              <button class="btn btn--sm" type="button" data-cat-refresh="calendar" disabled>正在读取</button>
-              <button class="btn btn--sm" type="button" data-cat-refresh="source_health" disabled>正在读取</button>
+              <button class="btn btn--sm" type="button" data-cat-refresh="news" data-owner-only ${page.ownerAccess ? "disabled" : "hidden"}>正在读取</button>
+              <button class="btn btn--sm" type="button" data-cat-refresh="calendar" data-owner-only ${page.ownerAccess ? "disabled" : "hidden"}>正在读取</button>
+              <button class="btn btn--sm" type="button" data-cat-refresh="source_health" data-owner-only ${page.ownerAccess ? "disabled" : "hidden"}>正在读取</button>
               <button class="btn btn--amber btn--sm" type="submit">应用筛选</button>
             </div>
           </form>
@@ -673,16 +682,33 @@
 
   async function loadRuntimeSettings() {
     const request = ++page.runtimeSettingsRequest;
+    const generation = page.generation;
+    const controller = page.controller;
     try {
       const [documentState, history] = await Promise.all([
-        N.runtimeSettings({ signal: page.controller.signal }),
-        N.runtimeSettingsHistory({ signal: page.controller.signal }).catch(() => ({ revisions: [] })),
+        N.runtimeSettings({ signal: controller.signal }),
+        N.runtimeSettingsHistory({ signal: controller.signal }).catch(() => ({ revisions: [] })),
       ]);
-      if (!page.active || request !== page.runtimeSettingsRequest) return;
+      if (
+        !page.active
+        || request !== page.runtimeSettingsRequest
+        || generation !== page.generation
+        || controller !== page.controller
+      ) return;
       page.runtimeSettings = documentState;
       page.runtimeHistory = Array.isArray(history && history.revisions) ? history.revisions : [];
+      window.dispatchEvent(new CustomEvent(
+        "optix:runtime-settings-changed",
+        { detail: documentState },
+      ));
     } catch (error) {
-      if (error.name === "AbortError" || !page.active || request !== page.runtimeSettingsRequest) return;
+      if (
+        error.name === "AbortError"
+        || !page.active
+        || request !== page.runtimeSettingsRequest
+        || generation !== page.generation
+        || controller !== page.controller
+      ) return;
       page.runtimeSettings = null;
       page.runtimeHistory = [];
     }
@@ -710,6 +736,10 @@
       page.runtimeDirty = false;
       $("#cat-runtime-state", page.view).textContent = "运行设置已保存并立即生效";
       await Promise.all([loadRuntimeSettings(), loadStatus(true), loadMarketFocus(true, false)]);
+      window.dispatchEvent(new CustomEvent(
+        "optix:runtime-settings-changed",
+        { detail: page.runtimeSettings },
+      ));
     } catch (error) {
       if (error.name !== "AbortError") $("#cat-runtime-state", page.view).textContent = error.message;
     } finally {
@@ -734,6 +764,10 @@
       }, { signal: page.controller.signal });
       page.runtimeDirty = false;
       await Promise.all([loadRuntimeSettings(), loadStatus(true), loadMarketFocus(true, false)]);
+      window.dispatchEvent(new CustomEvent(
+        "optix:runtime-settings-changed",
+        { detail: page.runtimeSettings },
+      ));
     } catch (error) {
       if (error.name !== "AbortError") $("#cat-runtime-state", page.view).textContent = error.message;
     } finally {
@@ -1003,7 +1037,7 @@
     });
   }
 
-  function focusCycleDecision(rawStatus, cycleState, preparedCountValue) {
+  function focusCycleDecision(rawStatus, cycleState, preparedCountValue, ownerAccess = true) {
     const raw = rawStatus || {};
     const cycle = cycleState || {};
     const preparedRevision = Number(raw.prepared_revision || 0);
@@ -1017,12 +1051,12 @@
       ? raw.analysis_availability
       : {};
     const availabilityReason = className(availability.reason || "available");
-    const readOnly = availabilityReason === "read_only_mode";
+    const readOnly = availabilityReason === "read_only_mode" || !ownerAccess;
     const budgetMissing = availability.budget_available === false || availabilityReason === "budget_exhausted";
     const workerMissing = availability.worker_healthy === false || availabilityReason === "worker_unavailable";
     const concurrencyMissing = availability.concurrency_available === false || availabilityReason === "analysis_in_progress";
     const notConfigured = availability.configured === false || availabilityReason === "not_configured";
-    const analysisUnavailable = raw.manual_enabled !== true || [
+    const analysisUnavailable = !ownerAccess || raw.manual_enabled !== true || [
       "read_only_mode", "manual_analysis_disabled", "settings_unavailable", "catalyst_disabled",
     ].includes(availabilityReason);
     const snapshotUnavailable = ["stale", "unavailable", "disabled"].includes(className(raw.status));
@@ -1169,7 +1203,7 @@
     const preparedCount = finite(raw.prepared_hot_count) && raw.prepared_hot_count > 0
       ? raw.prepared_hot_count
       : events.length;
-    const decision = focusCycleDecision(raw, cycle, preparedCount);
+    const decision = focusCycleDecision(raw, cycle, preparedCount, page.ownerAccess);
     const actionHost = $("#cat-focus-action", page.view);
     let button = actionHost && $("#cat-focus-run", actionHost);
     if (actionHost && !decision.showAction) {
@@ -1269,7 +1303,11 @@
     const ruleOnly = isRuleOnlyAnalysis(item);
     const job = item.analysis_job || item.job || null;
     const triggerEnabled = analysisTriggerEnabledOf(item);
-    const access = analysisActionDecision(triggerEnabled, analysisAvailabilityOf(item));
+    const access = analysisActionDecision(
+      triggerEnabled,
+      analysisAvailabilityOf(item),
+      page.ownerAccess,
+    );
     const activeJob = !!(job && job.job_id && Jobs.isActive(job.status));
     const force = analysisRetryForce(item, job);
     const url = item.url || item.source_url;
@@ -1484,13 +1522,14 @@
   }
 
   function startMarketFocusCycle() {
+    if (!page.ownerAccess) return;
     const raw = page.focusStatus || {};
     const cycle = cyclePayload(page.marketCycle || {});
     const hotspotCount = hotspotItems(page.hotspots).length;
     const preparedCount = finite(raw.prepared_hot_count) && raw.prepared_hot_count > 0
       ? raw.prepared_hot_count
       : hotspotCount;
-    const decision = focusCycleDecision(raw, cycle, preparedCount);
+    const decision = focusCycleDecision(raw, cycle, preparedCount, page.ownerAccess);
     const request = focusCycleRequest(decision, cycle);
     if (!request) return;
     const budget = budgetPolicyText();
@@ -1556,8 +1595,8 @@
       loadStatus(force),
       loadFeed(force),
       loadMarketFocus(force),
-      loadRuntimeSettings(),
-      loadWorkerStatus(force),
+      page.ownerAccess ? loadRuntimeSettings() : Promise.resolve(),
+      page.ownerAccess ? loadWorkerStatus(force) : Promise.resolve(),
       page.tab === "calendar" ? loadCalendar(force) : Promise.resolve(),
     ]);
   }
@@ -1573,12 +1612,25 @@
     }, 120e3);
   }
 
-  function renderPage(options) {
+  async function resolveOwnerAccess() {
+    let accessStatus = N.currentAccessStatus ? N.currentAccessStatus() : null;
+    if (!accessStatus) {
+      try {
+        accessStatus = await N.accessStatus();
+      } catch (error) {
+        accessStatus = null;
+      }
+    }
+    return !!(accessStatus && accessStatus.logged_in === true);
+  }
+
+  async function renderPage(options) {
     leaveRoute();
     page.active = true;
     page.view = options.view;
     page.params = options.params || new URLSearchParams();
     page.generation += 1;
+    const generation = page.generation;
     page.controller = new AbortController();
     page.status = null;
     page.feed = null;
@@ -1591,11 +1643,16 @@
     page.runtimeHistory = [];
     page.runtimeDirty = false;
     page.workerStatus = null;
+    page.ownerAccess = false;
     page.openStock = options.openStock;
     page.postRender = options.postRender;
     page.tab = ["feed", "stocks", "calendar", "sources"].includes(page.params.get("tab")) ? page.params.get("tab") : "feed";
     page.draft = routeFilters(page.params);
     page.applied = Object.assign({}, page.draft);
+    page.view.innerHTML = stateBlock("loading", "正在打开公开研究页面", "只读取行情、新闻和已有分析。 ");
+    const ownerAccess = await resolveOwnerAccess();
+    if (!page.active || generation !== page.generation) return;
+    page.ownerAccess = ownerAccess;
     pageShell();
     loadAll(false).then(() => {
       if (page.active && page.params.get("news")) openNews(page.params.get("news"));
@@ -1605,6 +1662,12 @@
 
   function leaveRoute() {
     page.active = false;
+    page.statusRequest += 1;
+    page.feedRequest += 1;
+    page.calendarRequest += 1;
+    page.focusRequest += 1;
+    page.runtimeSettingsRequest += 1;
+    page.workerStatusRequest += 1;
     clearTimeout(page.timer);
     clearTimeout(page.refreshStateTimer);
     clearTimeout(page.workerStateTimer);
@@ -1624,7 +1687,11 @@
     const status = statusPayload ? Jobs.normalizeStatus(statusPayload.status) : analysisStatus(item);
     const ruleOnly = isRuleOnlyAnalysis(displayItem, statusPayload);
     const triggerEnabled = analysisTriggerEnabledOf(item);
-    const access = analysisActionDecision(triggerEnabled, analysisAvailabilityOf(item));
+    const access = analysisActionDecision(
+      triggerEnabled,
+      analysisAvailabilityOf(item),
+      page.ownerAccess,
+    );
     const canTrigger = access.canTrigger;
     const isActive = ["pending", "queued", "in_progress", "cancel_requested"].includes(status) && statusPayload && statusPayload.job_id;
     const model = statusPayload && statusPayload.model || (analysis && analysis.model) || item.model || "gpt-5.6-terra";
@@ -1637,7 +1704,7 @@
       const runAction = !isActive && access.showAction
         ? `<button class="btn btn--amber btn--sm" id="cat-analysis-run" type="button" data-cat-analyze="${esc(itemId(item))}" ${canTrigger ? "" : `disabled title="${esc(access.detail)}"`}>${status === "failed" || status === "cancelled" ? "重试分析" : "生成分析"}</button>`
         : "";
-      const cancelAction = isActive
+      const cancelAction = isActive && page.ownerAccess
         ? `<button class="btn btn--sm" id="cat-analysis-cancel" type="button" data-cat-cancel-job ${status === "cancel_requested" ? "disabled" : ""}>${status === "cancel_requested" ? "正在取消" : "取消任务"}</button>`
         : "";
       return `<div class="cat-analysis-state">
@@ -1656,7 +1723,7 @@
       ? stateBlock("disabled", access.title, access.detail)
       : "";
     const jobNotice = isActive
-      ? `<div class="cat-analysis-state" style="margin-bottom:14px"><span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span><p>分析任务正在运行 · ${statusPayload && (statusPayload.submitted_at || statusPayload.created_at) ? "提交 " + N.fmtDateTime(statusPayload.submitted_at || statusPayload.created_at) : "新的分析版本正在后台处理"} · ${esc(model)} · ${esc(reasoning)} · 现有已完成版本继续显示 · 不显示估算进度</p><div class="cat-analysis-actions"><button class="btn btn--sm" id="cat-analysis-cancel" type="button" data-cat-cancel-job ${status === "cancel_requested" ? "disabled" : ""}>${status === "cancel_requested" ? "正在取消" : "取消新任务"}</button></div></div>`
+      ? `<div class="cat-analysis-state" style="margin-bottom:14px"><span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span><p>分析任务正在运行 · ${statusPayload && (statusPayload.submitted_at || statusPayload.created_at) ? "提交 " + N.fmtDateTime(statusPayload.submitted_at || statusPayload.created_at) : "新的分析版本正在后台处理"} · ${esc(model)} · ${esc(reasoning)} · 现有已完成版本继续显示 · 不显示估算进度</p>${page.ownerAccess ? `<div class="cat-analysis-actions"><button class="btn btn--sm" id="cat-analysis-cancel" type="button" data-cat-cancel-job ${status === "cancel_requested" ? "disabled" : ""}>${status === "cancel_requested" ? "正在取消" : "取消新任务"}</button></div>` : ""}</div>`
       : retryableTerminal
         ? `<div class="cat-analysis-state" style="margin-bottom:14px"><span class="chip ${chipTone(status)}">${esc(statusLabel(status))}</span><p>新版本任务未完成；现有已完成版本继续显示。</p>${statusPayload.error_code ? `<p class="d">${esc(analysisErrorDetail(statusPayload))}</p>` : ""}</div>`
         : "";
@@ -1687,7 +1754,7 @@
     const run = $("[data-cat-analyze]", box);
     if (run) run.addEventListener("click", () => startAnalysis(item, analysisRetryForce(item, job), asOf));
     const cancel = $("[data-cat-cancel-job]", box);
-    if (cancel) cancel.addEventListener("click", async () => {
+    if (cancel && page.ownerAccess) cancel.addEventListener("click", async () => {
       if (!window.confirm("确认取消这项分析任务？已完成的结果不会被删除。")) return;
       cancel.disabled = true;
       await Jobs.cancel("catalyst-drawer:" + itemId(item));
@@ -1731,6 +1798,7 @@
   }
 
   function startAnalysis(item, force, asOf) {
+    if (!page.ownerAccess) return;
     const id = itemId(item);
     const budget = budgetPolicyText();
     const confirmation = force
@@ -1774,10 +1842,13 @@
     if (!id || !window.OPTIX_DECK || !window.OPTIX_DECK.drawer) return;
     const asOf = options && options.asOf || null;
     onDrawerClosed();
-    drawerController = new AbortController();
+    const controller = new AbortController();
+    drawerController = controller;
     window.OPTIX_DECK.drawer.open(`<div class="cat-drawer-loading">${stateBlock("loading", "正在读取新闻详情", "只读 Option Pro 本地缓存。 ")}</div>`, { title: "新闻详情" });
     try {
-      const payload = await N.catalystNews(id, { as_of: asOf || undefined }, { signal: drawerController.signal });
+      page.ownerAccess = await resolveOwnerAccess();
+      if (controller.signal.aborted || drawerController !== controller) return;
+      const payload = await N.catalystNews(id, { as_of: asOf || undefined }, { signal: controller.signal });
       const item = newsItemFromPayload(payload);
       if (asOf) item.analysis_trigger_enabled = false;
       window.OPTIX_DECK.drawer.open(newsDrawerHtml(item), { preserveScroll: true, title: itemTitle(item) });

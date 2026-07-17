@@ -29,7 +29,7 @@ from app.access import (
     OwnerAccessRuntime,
     canonical_request_host,
     get_access_runtime,
-    require_owner_access,
+    require_public_read_or_owner_access,
     require_same_origin_action,
 )
 from app.deployment_boundary import canonicalize_hostname, normalize_allowed_hosts
@@ -167,12 +167,57 @@ _PUBLIC_ACCESS_PATHS = {
     "/health",
     "/ready",
 }
+_PUBLIC_DOCUMENT_PATHS = {
+    "/",
+    "/index.html",
+    "/login.html",
+}
+_PUBLIC_READ_API_PREFIXES = (
+    "/api/stocks",
+    "/api/options",
+    "/api/earnings",
+    "/api/sectors",
+    "/api/market",
+    "/api/signals",
+    "/api/catalysts",
+    "/api/strength",
+    "/api/breakouts",
+)
+_PUBLIC_READ_API_PATHS = {
+    "/api/access/status",
+}
+_PUBLIC_READ_POST_PATHS = {
+    # This endpoint is a bounded, same-origin batch query. It does not refresh
+    # providers, write application state, or enqueue model work.
+    "/api/catalysts/tickers/batch",
+}
 _PASSWORD_ENTRY_PATHS = {
     "/login.html",
     "/api/access/login",
     "/static/js/login.js",
     "/static/favicon.svg",
 }
+
+
+def _has_path_prefix(path: str, prefix: str) -> bool:
+    return path == prefix or path.startswith(f"{prefix}/")
+
+
+def _is_public_read_request(path: str, method: str) -> bool:
+    """Return whether password-mode visitors may use this read-only surface."""
+
+    normalized_method = method.upper()
+    if normalized_method in {"GET", "HEAD"}:
+        return bool(
+            path in _PUBLIC_DOCUMENT_PATHS
+            or path.startswith("/static/")
+            or path in _PUBLIC_READ_API_PATHS
+            or any(
+                _has_path_prefix(path, prefix)
+                for prefix in _PUBLIC_READ_API_PREFIXES
+            )
+        )
+    return normalized_method == "POST" and path in _PUBLIC_READ_POST_PATHS
 
 
 def _scope_header(scope, name: bytes) -> str:
@@ -318,7 +363,10 @@ class _GatewayMiddleware:
             path in _PUBLIC_ACCESS_PATHS
             or (
                 self.access_runtime.mode == "password"
-                and path in _PASSWORD_ENTRY_PATHS
+                and (
+                    path in _PASSWORD_ENTRY_PATHS
+                    or _is_public_read_request(path, method)
+                )
             )
         )
         owner_request = StarletteRequest(scope, receive=receive)
@@ -372,23 +420,26 @@ app.add_middleware(_GatewayMiddleware, access_runtime=_ACCESS_RUNTIME)
 app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 app.add_middleware(_ExactTrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS)
 
-# The gateway gives HTML requests a friendly redirect. Router dependencies are
-# the single API boundary and remain in force when routers are mounted by tools
-# that do not use the production gateway.
+# The gateway gives protected HTML requests a friendly redirect. Public-data
+# routers keep their GET endpoints anonymous in password mode and put owner
+# guards directly on every state-changing route. Operational and AI routers
+# retain a router-wide owner boundary.
 _OWNER_DEPENDENCIES = [
-    Depends(require_owner_access),
     Depends(require_same_origin_action),
 ]
-app.include_router(stocks.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(options.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(earnings.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(sectors.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(market.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(signals.router, dependencies=_OWNER_DEPENDENCIES)
+_PUBLIC_READ_DEPENDENCIES = [
+    Depends(require_public_read_or_owner_access),
+]
+app.include_router(stocks.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+app.include_router(options.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+app.include_router(earnings.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+app.include_router(sectors.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+app.include_router(market.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+app.include_router(signals.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(ai.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(catalysts.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(strength.router, dependencies=_OWNER_DEPENDENCIES)
-app.include_router(breakouts.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(catalysts.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+app.include_router(strength.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+app.include_router(breakouts.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(worker_actions.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(runtime_settings.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(access.router)

@@ -673,7 +673,18 @@ svg { display: block; }
   .brand__mark { width: 30px; height: 30px; }
   .brand__word small { display: none; }
   .deck-tools { margin-left: auto; gap: 6px; }
+  .deck-search { width: 38px; height: 38px; padding: 0; justify-content: center; }
+  .deck-search kbd { display: none; }
+  .owner-controls-visible .brand__word { display: none; }
+  .owner-controls-visible .deck-tools { gap: 4px; }
+  .owner-controls-visible .deck-tools .btn--sm { min-height: 38px; padding-inline: 8px; font-size: 12px; }
   .deck-menu-toggle { flex: 0 0 32px; }
+}
+
+@media (max-width: 360px) {
+  .deck-header__row { padding-inline: 8px; }
+  .owner-controls-visible .deck-tools { gap: 3px; }
+  .owner-controls-visible .deck-tools .btn--sm { padding-inline: 7px; }
 }
 
 @media (max-width: 860px) {
