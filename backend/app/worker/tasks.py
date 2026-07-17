@@ -1009,7 +1009,9 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             catalyst,
             interval_seconds=float(config.catalyst.sync_seconds),
             enabled=config.catalyst_sync_enabled,
-            timeout_seconds=120.0,
+            # The first news backfill walks up to 100 checkpointed pages and
+            # cannot finish inside 120s; incremental rounds stay far below.
+            timeout_seconds=600.0,
             close=catalyst.aclose,
         ),
         TaskSpec(

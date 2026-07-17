@@ -168,7 +168,9 @@ class YahooPriceDataAdapter:
                 "period": "20d",
                 "interval": interval,
                 "group_by": "ticker",
-                "threads": True,
+                # Bounded workers so concurrent worker tasks stay inside the
+                # container pids_limit.
+                "threads": 8,
                 "progress": False,
                 "auto_adjust": False,
                 "prepost": True,

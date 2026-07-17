@@ -1202,12 +1202,14 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
                 "_yf_session",
                 None,
             )
+            # Bounded workers: threads=True spawns one thread per ticker,
+            # which breaches the container pids_limit on 200+ ticker batches.
             daily_df = yf_mod.download(
                 tickers=" ".join(all_tickers),
                 period="7d",
                 interval="1d",
                 group_by="ticker",
-                threads=True,
+                threads=8,
                 progress=False,
                 auto_adjust=False,
                 session=session,
@@ -1218,7 +1220,7 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
                 interval=_WATCHLIST_LATEST_INTERVAL,
                 prepost=True,
                 group_by="ticker",
-                threads=True,
+                threads=8,
                 progress=False,
                 auto_adjust=False,
                 session=session,

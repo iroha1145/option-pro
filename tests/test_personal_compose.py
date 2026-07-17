@@ -220,7 +220,7 @@ def test_runtime_services_keep_the_container_security_baseline() -> None:
         assert service["read_only"] is True
         assert service["security_opt"] == ["no-new-privileges:true"]
         assert service["cap_drop"] == ["ALL"]
-        assert service["pids_limit"] == 256
+        assert service["pids_limit"] == 512
         assert "/tmp:rw,noexec,nosuid,size=134217728,mode=1777" in service["tmpfs"]
 
 

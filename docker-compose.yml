@@ -44,7 +44,7 @@ x-optix-runtime: &optix-runtime
     - no-new-privileges:true
   cap_drop:
     - ALL
-  pids_limit: 256
+  pids_limit: 512
   stop_grace_period: 60s
   logging:
     driver: local

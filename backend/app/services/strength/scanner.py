@@ -529,7 +529,9 @@ def _download_history(tickers: list[str], period: str = "1y") -> pd.DataFrame:
         "period": period,
         "interval": "1d",
         "group_by": "ticker",
-        "threads": True,
+        # Bounded workers: threads=True spawns one thread per ticker, which
+        # breaches the container pids_limit on full-universe downloads.
+        "threads": 8,
         "progress": False,
         "auto_adjust": True,
     }
