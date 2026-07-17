@@ -30,6 +30,7 @@ from app.worker.tasks import (
     FocusRefreshTask,
     FocusTask,
     MaintenanceTask,
+    PublicHomeTask,
     RetentionTask,
     StrengthRefreshTask,
     build_default_tasks,
@@ -42,6 +43,7 @@ SCHEDULED_TASK_NAMES = {
     "catalyst_sync",
     "ai_jobs",
     "maintenance",
+    "public_home",
 }
 MANUAL_TASK_NAMES = {
     "focus_refresh",
@@ -659,7 +661,9 @@ def test_process_file_lock_excludes_two_descriptors_and_processes(tmp_path: Path
     second.release()
 
 
-def test_worker_once_records_five_tasks_and_isolates_failure(tmp_path: Path) -> None:
+def test_worker_once_records_six_scheduled_tasks_and_isolates_failure(
+    tmp_path: Path,
+) -> None:
     calls: list[str] = []
 
     async def success(name: str) -> TaskResult:
@@ -676,6 +680,7 @@ def test_worker_once_records_five_tasks_and_isolates_failure(tmp_path: Path) -> 
         TaskSpec("catalyst_sync", failure, 60),
         TaskSpec("ai_jobs", lambda: success("ai_jobs"), 60, drain_on_shutdown=True),
         TaskSpec("maintenance", lambda: success("maintenance"), 60),
+        TaskSpec("public_home", lambda: success("public_home"), 60),
     )
     repository = WorkerStateRepository(tmp_path / "worker.db")
     supervisor = WorkerSupervisor(
@@ -700,6 +705,68 @@ def test_worker_once_records_five_tasks_and_isolates_failure(tmp_path: Path) -> 
             "SELECT name FROM sqlite_master WHERE type='table' AND name='worker_task_status'"
         ).fetchone()
     assert table == ("worker_task_status",)
+
+
+def test_new_worker_inventory_removes_old_status_rows_after_acquire(
+    tmp_path: Path,
+) -> None:
+    repository = WorkerStateRepository(tmp_path / "inventory.db")
+    repository.initialize()
+    old_token = repository.acquire("old-worker", lease_seconds=60)
+    assert old_token is not None
+    repository.record_task(
+        "old-worker",
+        old_token,
+        "removed_task",
+        enabled=True,
+        status="idle",
+    )
+    assert repository.release("old-worker", old_token) is True
+
+    supervisor = WorkerSupervisor(
+        repository,
+        (TaskSpec("breakout", lambda: TaskResult(), 60),),
+        owner_id="new-worker",
+        process_lock=ProcessFileLock(tmp_path / "inventory.lock"),
+    )
+    result = asyncio.run(supervisor.run_once())
+
+    assert result["status"] == "completed"
+    assert [item["task_name"] for item in repository.task_states()] == [
+        "breakout"
+    ]
+
+
+def test_graceful_forever_shutdown_clears_current_task_status(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        started = asyncio.Event()
+
+        async def runner() -> TaskResult:
+            started.set()
+            return TaskResult(next_delay_seconds=3600)
+
+        repository = WorkerStateRepository(tmp_path / "graceful-clear.db")
+        supervisor = WorkerSupervisor(
+            repository,
+            (TaskSpec("breakout", runner, 3600),),
+            owner_id="graceful-clear-worker",
+            process_lock=ProcessFileLock(tmp_path / "graceful-clear.lock"),
+        )
+        running = asyncio.create_task(supervisor.run_forever())
+        await asyncio.wait_for(started.wait(), timeout=1)
+        for _ in range(100):
+            if repository.task_states():
+                break
+            await asyncio.sleep(0.01)
+        assert repository.task_states()
+        supervisor.request_stop()
+        result = await asyncio.wait_for(running, timeout=2)
+        assert result["status"] == "stopped"
+        assert repository.task_states() == []
+
+    asyncio.run(scenario())
 
 
 def test_each_task_has_independent_backoff(tmp_path: Path) -> None:
@@ -1020,9 +1087,7 @@ def test_shutdown_drains_paid_task_and_cancels_other_long_task(tmp_path: Path) -
         assert paid_calls == 1
         assert contender.acquire("contender") is True
         contender.release()
-        states = {item["task_name"]: item for item in repository.task_states()}
-        assert states["ai_jobs"]["status"] == "idle"
-        assert states["breakout"]["status"] == "interrupted"
+        assert repository.task_states() == []
 
     asyncio.run(scenario())
 
@@ -1152,6 +1217,13 @@ def test_worker_once_selects_personal_etl_from_repository_files_offline(
         # import, so importing it earlier would let a checked-out repository
         # .env shadow this subprocess fixture.
         from app.services.catalysts import etl_client
+        from app.worker import tasks as worker_tasks
+        from app.worker.runtime import TaskResult
+
+        async def offline_public_home(_self):
+            return TaskResult(status="idle", details={{"result": "offline-test"}})
+
+        worker_tasks.PublicHomeTask.__call__ = offline_public_home
 
         def handle(request):
             assert request.url.host == "macrolens.invalid"
@@ -2264,6 +2336,12 @@ def test_default_task_inventory_and_maintenance_backup(
     assert catalyst_spec.interval_seconds == 120
     maintenance_spec = next(spec for spec in specs if spec.name == "maintenance")
     assert isinstance(maintenance_spec.runner, MaintenanceTask)
+    public_home_spec = next(spec for spec in specs if spec.name == "public_home")
+    assert isinstance(public_home_spec.runner, PublicHomeTask)
+    assert public_home_spec.interval_seconds == 30
+    assert public_home_spec.enabled is False
+    assert public_home_spec.manual_only is False
+    assert public_home_spec.may_block_event_loop is False
     manual_specs = {spec.name: spec for spec in specs if spec.manual_only}
     assert set(manual_specs) == MANUAL_TASK_NAMES
     assert isinstance(manual_specs["focus_refresh"].runner, FocusRefreshTask)
@@ -2279,3 +2357,22 @@ def test_default_task_inventory_and_maintenance_backup(
         "optix-worker",
     }
     assert len(list((tmp_path / "backups").glob("*.sqlite3"))) == 4
+
+    private_config = worker_tasks.get_personal_config()
+    password_config = private_config.model_copy(
+        update={
+            "access": private_config.access.model_copy(
+                update={"mode": "password"}
+            )
+        }
+    )
+    monkeypatch.setattr(
+        worker_tasks,
+        "get_personal_config",
+        lambda: password_config,
+    )
+    password_specs = build_default_tasks("inventory", settings=worker_settings)
+    password_public_home = next(
+        spec for spec in password_specs if spec.name == "public_home"
+    )
+    assert password_public_home.enabled is True

@@ -179,6 +179,7 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
         "focus",
         "ai_jobs",
         "maintenance",
+        "public_home",
         "focus_refresh",
         "strength_refresh",
         "breakout_refresh",

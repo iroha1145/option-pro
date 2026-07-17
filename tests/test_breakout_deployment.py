@@ -51,13 +51,17 @@ def test_deployment_checks_only_the_unified_worker_inventory() -> None:
         "focus",
         "ai_jobs",
         "maintenance",
+        "public_home",
         "focus_refresh",
         "strength_refresh",
         "breakout_refresh",
         "retention",
     ):
         assert f'"{task_name}"' in script
-    assert "all nine task types" in script
+    assert "all ten task types" in script
+    assert "verify_public_snapshots" in script
+    assert '"watchlist": True' in script
+    assert "PUBLIC_HOME_RESOURCE_ORDER" in script
     assert "app.services.breakouts.worker --healthcheck" not in script
     assert "app.services.ai_jobs.worker --healthcheck" not in script
     assert "app.services.catalysts.worker --healthcheck" not in script

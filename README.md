@@ -143,13 +143,14 @@ curl --fail http://127.0.0.1:2000/ready
 ./scripts/compose.sh exec -T worker python -m app.worker --healthcheck
 ```
 
-统一工作进程应且只应报告九项任务：
+统一工作进程应且只应报告十项任务：
 
 - `breakout`
 - `catalyst_sync`
 - `focus`
 - `ai_jobs`
 - `maintenance`
+- `public_home`
 - `focus_refresh`
 - `strength_refresh`
 - `breakout_refresh`
@@ -163,6 +164,7 @@ curl --fail http://127.0.0.1:2000/ready
 
 - `optix.db`
 - `catalyst-cache.db`
+- `public-home-snapshot-v1.json`
 - `ai-jobs.db`
 - `optix-worker.db`
 - `runtime-settings.json`

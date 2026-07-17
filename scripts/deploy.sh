@@ -167,6 +167,7 @@ expected = {
     "focus",
     "ai_jobs",
     "maintenance",
+    "public_home",
     "focus_refresh",
     "strength_refresh",
     "breakout_refresh",
@@ -195,7 +196,85 @@ verify_worker() {
         sleep 2
     done
     printf '%s\n' "$payload" >&2
-    fail "Unified worker did not report all nine task types."
+    fail "Unified worker did not report all ten task types."
+}
+
+verify_public_snapshots() {
+    local attempt report=""
+    for attempt in $(seq 1 450); do
+        if report="$(compose exec -T worker python - <<'PY' 2>/dev/null
+import json
+import time
+
+from app.personal_config import get_personal_config
+
+if get_personal_config().access.mode != "password":
+    print(
+        json.dumps(
+            {
+                "required": False,
+                "reason": "private_network",
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    )
+    raise SystemExit(0)
+
+from app.api.stocks import _read_watchlist_snapshot
+from app.data_paths import get_data_paths
+from app.public_home_snapshot import (
+    PUBLIC_HOME_RESOURCE_ORDER,
+    public_home_entry_is_servable,
+    public_home_resource_parameters,
+    read_public_home_entries,
+)
+
+now = time.time()
+paths = get_data_paths()
+entries = read_public_home_entries(paths.public_home_snapshot, now=now)
+unavailable = [
+    resource
+    for resource in PUBLIC_HOME_RESOURCE_ORDER
+    if not public_home_entry_is_servable(
+        resource,
+        entries.get(resource),
+        parameters=public_home_resource_parameters(resource, now=now),
+        now=now,
+    )
+]
+watchlist = _read_watchlist_snapshot(paths.watchlist_snapshot, now=now)
+if watchlist is None or unavailable:
+    print(
+        json.dumps(
+            {
+                "watchlist": watchlist is not None,
+                "unavailable": unavailable,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    )
+    raise SystemExit(1)
+print(
+    json.dumps(
+        {
+            "watchlist": True,
+            "available": ["watchlist", *PUBLIC_HOME_RESOURCE_ORDER],
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+)
+PY
+)"; then
+            printf '%s\n' "$report"
+            return
+        fi
+        sleep 2
+    done
+    printf '%s\n' "$report" >&2
+    fail "Public home snapshots were not generated and servable before the deployment deadline."
 }
 
 main() {
@@ -218,7 +297,8 @@ main() {
 
     verify_backend
     verify_worker
-    echo "Deployment verified: backend and unified worker are ready."
+    verify_public_snapshots
+    echo "Deployment verified: backend, unified worker, and access-mode data gates are ready."
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then

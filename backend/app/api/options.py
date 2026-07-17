@@ -13,6 +13,11 @@ from app.access import current_request_is_owner, public_snapshot_unavailable
 from app.services import yahoo
 from app.services.cache import cache
 from app.services.utils import sanitize
+from app.public_home_snapshot import (
+    read_owner_public_home_entry_async,
+    read_public_home_resource_async,
+)
+from app.personal_config import get_personal_config
 
 router = APIRouter(prefix="/api/options", tags=["options"])
 POPULAR_TICKERS = ["NVDA", "TSLA", "AAPL", "AMD", "AMZN", "META", "MSFT", "SPY", "QQQ", "GOOGL"]
@@ -100,11 +105,42 @@ async def unusual_activity(
     10 tickers x (expirations + 2 chains) against Yahoo with no cache at all.
     """
     key = _unusual_key(type, min_vol_oi)
-    if not current_request_is_owner():
+    owner = current_request_is_owner()
+    if not owner:
         cached = cache.get(key)
+        if cached is None:
+            now = time.time()
+            cached = await read_public_home_resource_async(
+                "unusual",
+                parameters={"type": type, "min_vol_oi": float(min_vol_oi)},
+                now=now,
+            )
         if cached is None:
             raise public_snapshot_unavailable(key)
         return cached
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    config = get_personal_config()
+    if (
+        config.access.mode == "password"
+        and type == "all"
+        and float(min_vol_oi) == 1.0
+    ):
+        now = time.time()
+        interval = float(config.public_home.unusual_seconds)
+        disk_entry = await read_owner_public_home_entry_async(
+            "unusual",
+            parameters={"type": "all", "min_vol_oi": 1.0},
+            fresh_for_seconds=interval,
+            now=now,
+        )
+        if disk_entry is not None:
+            remaining = max(
+                1,
+                int(float(disk_entry["saved_at"]) + interval - now),
+            )
+            return cache.set(key, disk_entry["payload"], remaining)
     retry_after = _failure_cooldown(key)
     if retry_after > 0:
         raise _cooldown_error(retry_after)

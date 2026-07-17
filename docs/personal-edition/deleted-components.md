@@ -15,7 +15,7 @@
 
 | 删除范围 | 原用途 | 替代路径 | 数据处理 |
 |---|---|---|---|
-| 四个独立工作容器与逐进程健康门禁 | 分别运行模型、新闻同步、焦点和突破任务 | 单一`worker`服务及九类任务清单 | 原数据库继续挂载，不改写历史行 |
+| 四个独立工作容器与逐进程健康门禁 | 分别运行模型、新闻同步、焦点和突破任务 | 单一`worker`服务及十类任务清单 | 原数据库继续挂载，不改写历史行 |
 | `docker-compose.personal.yml` | 个人版试运行入口 | 正式`docker-compose.yml` | 继续使用同名`optix-data`卷 |
 | 多组签名、随机数和反向焦点凭据 | 双向服务认证 | 超文本传输安全协议（HTTPS）与`INTERNAL_API_TOKEN` | 旧审计数据至少只读保留 90 天 |
 | 环境文件中的行为开关 | 分散控制模型、频率和功能 | `config/personal.toml` | 转换报告只用于人工核对 |
@@ -28,7 +28,7 @@
 | 前端`sessionStorage`令牌和`Authorization`请求头 | 密钥需进入浏览器 | 密码模式的服务端会话 Cookie；私有网络模式不传递浏览器密钥 |
 | `MACROLENS_BASE_URL`、`MACROLENS_INTERNAL_TOKEN` 及旧式读取、动作、焦点凭据 | MacroLens 连接名称与方向不统一 | `machine.env` 中的`MACROLENS_URL`与`secrets.env`中的`INTERNAL_API_TOKEN`，仅限 Option Pro 读取 MacroLens |
 | `OPENAI_JOB_DB_PATH`、`MACROLENS_CACHE_DB_PATH`、`BREAKOUT_DB_PATH`、`WATCHLIST_SNAPSHOT_PATH` | 同一数据卷内的文件路径可分别漂移 | 只配置`DATA_DIR`，数据库、锁、快照与备份均由程序派生 |
-| `ai-worker`等旧工作服务的独立部署、检查和停止逻辑 | 发布脚本需同时理解多套工作进程 | `backend`+`worker`的两服务发布，统一核对九类任务 |
+| `ai-worker`等旧工作服务的独立部署、检查和停止逻辑 | 发布脚本需同时理解多套工作进程 | `backend`+`worker`的两服务发布，统一核对十类任务 |
 | 旧变量的运行时兼容读取层 | 迁移后仍可能被旧配置影响 | 运行时只读新配置；旧名称只留在迁移说明与回归断言中 |
 
 本阶段不删除业务数据。数据卷、数据库文件和历史任务保留原位；删除的是运行时入口、变量别名与重复权限链。

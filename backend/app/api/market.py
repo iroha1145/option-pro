@@ -2,12 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import math
+import time
 from datetime import datetime, timezone
 
 import yfinance as yf
 from fastapi import APIRouter, HTTPException
 
 from app.access import current_request_is_owner, public_snapshot_unavailable
+from app.public_home_snapshot import (
+    PUBLIC_HOME_INDEX_SYMBOLS,
+    public_home_resource_parameters,
+    read_owner_public_home_entry_async,
+    read_public_home_resource_async,
+)
+from app.personal_config import get_personal_config
 from app.services.cache import cache as _shared_cache
 from app.services.market_calendar import (
     ET,
@@ -21,7 +29,7 @@ from app.services.market_calendar import (
 router = APIRouter(prefix="/api/market", tags=["market"])
 
 # Symbols served by the lightweight /indices batch endpoint (ticker bar).
-INDEX_SYMBOLS = ["^GSPC", "^IXIC", "^DJI", "^N225", "000001.SS"]
+INDEX_SYMBOLS = list(PUBLIC_HOME_INDEX_SYMBOLS)
 
 
 @router.get("/indices")
@@ -33,11 +41,38 @@ async def market_indices():
     slow full `.info` scrape.
     """
     key = "market:indices"
-    if not current_request_is_owner():
+    owner = current_request_is_owner()
+    if not owner:
         cached = _shared_cache.get(key)
+        if cached is None:
+            now = time.time()
+            cached = await read_public_home_resource_async(
+                "indices",
+                parameters=public_home_resource_parameters("indices", now=now),
+                now=now,
+            )
         if cached is None:
             raise public_snapshot_unavailable(key)
         return cached
+    cached = _shared_cache.get(key)
+    if cached is not None:
+        return cached
+    config = get_personal_config()
+    if config.access.mode == "password":
+        now = time.time()
+        interval = float(config.public_home.indices_seconds)
+        disk_entry = await read_owner_public_home_entry_async(
+            "indices",
+            parameters=public_home_resource_parameters("indices", now=now),
+            fresh_for_seconds=interval,
+            now=now,
+        )
+        if disk_entry is not None:
+            remaining = max(
+                1,
+                int(float(disk_entry["saved_at"]) + interval - now),
+            )
+            return _shared_cache.set(key, disk_entry["payload"], remaining)
     return await _shared_cache.get_or_set(key, 60, _build_indices)
 
 

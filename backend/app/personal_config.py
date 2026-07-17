@@ -122,6 +122,18 @@ class BreakoutConfig(StrictConfigModel):
     range_persistence_mode: Literal["off", "shadow", "active"] = "shadow"
 
 
+class PublicHomeConfig(StrictConfigModel):
+    poll_seconds: int = Field(default=30, ge=10, le=300)
+    watchlist_seconds: int = Field(default=1800, ge=300, le=86_400)
+    indices_seconds: int = Field(default=300, ge=300, le=86_400)
+    overview_seconds: int = Field(default=300, ge=300, le=86_400)
+    chart_seconds: int = Field(default=300, ge=300, le=86_400)
+    signals_seconds: int = Field(default=900, ge=900, le=86_400)
+    earnings_seconds: int = Field(default=21_600, ge=21_600, le=172_800)
+    unusual_seconds: int = Field(default=1800, ge=1800, le=86_400)
+    failure_retry_seconds: int = Field(default=300, ge=60, le=3600)
+
+
 class StorageConfig(StrictConfigModel):
     retention_days: int = Field(default=90, ge=1, le=3650)
     backup_keep: int = Field(default=7, ge=1, le=100)
@@ -133,6 +145,7 @@ class PersonalConfig(StrictConfigModel):
     ai: AIConfig = Field(default_factory=AIConfig)
     catalyst: CatalystConfig = Field(default_factory=CatalystConfig)
     breakout: BreakoutConfig = Field(default_factory=BreakoutConfig)
+    public_home: PublicHomeConfig = Field(default_factory=PublicHomeConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
 
     @property

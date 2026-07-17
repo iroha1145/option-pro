@@ -22,7 +22,8 @@ WORKER_HEALTH = (
     '{"healthy":true,"schema_version":"optix-worker-v2","tasks":['
     '{"task_name":"breakout"},{"task_name":"catalyst_sync"},'
     '{"task_name":"focus"},{"task_name":"ai_jobs"},'
-    '{"task_name":"maintenance"},{"task_name":"focus_refresh"},'
+    '{"task_name":"maintenance"},{"task_name":"public_home"},'
+    '{"task_name":"focus_refresh"},'
     '{"task_name":"strength_refresh"},{"task_name":"breakout_refresh"},'
     '{"task_name":"retention"}]}'
 )
@@ -116,6 +117,8 @@ case "${{1:-}}" in
             log verify-worker
             worker_health='{WORKER_HEALTH}'
             printf '%s\n' "${{FAKE_WORKER_HEALTH:-$worker_health}}"
+        elif [[ " $* " == *" worker python - "* ]]; then
+            printf '{{"watchlist":true,"available":["watchlist","indices","focus_overview","focus_chart","focus_signals","earnings","unusual"]}}\n'
         else
             exit 2
         fi
@@ -293,6 +296,11 @@ def test_deploy_builds_only_current_services_and_verifies_both(tmp_path: Path) -
     assert "compose up -d --no-build --force-recreate" in script
     assert '"$ROOT_DIR/scripts/compose.sh" "$@"' in script
     assert "Stopping legacy workers before the unified worker starts." in script
+    assert "verify_public_snapshots" in script
+    assert 'get_personal_config().access.mode != "password"' in script
+    assert '"reason": "private_network"' in script
+    assert "public_home_entry_is_servable" in script
+    assert "_read_watchlist_snapshot" in script
 
 
 def test_deploy_validates_with_built_runtime_when_host_python_lacks_dependencies(
@@ -469,7 +477,7 @@ def test_deploy_selects_machine_file_without_caller_exports(tmp_path: Path) -> N
     assert set(selected) == {".env,machine.env"}
 
 
-def test_deploy_requires_all_nine_unified_task_types(tmp_path: Path) -> None:
+def test_deploy_requires_all_ten_unified_task_types(tmp_path: Path) -> None:
     root, environment = _deployment_root(tmp_path)
     environment["FAKE_WORKER_HEALTH"] = (
         '{"healthy":true,"schema_version":"optix-worker-v2",'
@@ -479,7 +487,7 @@ def test_deploy_requires_all_nine_unified_task_types(tmp_path: Path) -> None:
     result = _run_deploy(root, environment)
 
     assert result.returncode != 0
-    assert "all nine task types" in result.stderr
+    assert "all ten task types" in result.stderr
 
 
 @pytest.mark.parametrize(

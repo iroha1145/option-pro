@@ -44,6 +44,7 @@ class DataPaths:
     worker_lock: Path
     watchlist_snapshot: Path
     strength_snapshot: Path
+    public_home_snapshot: Path
     backups_dir: Path
     runtime_settings: Path
 
@@ -59,6 +60,7 @@ def get_data_paths(value: str | Path | None = None) -> DataPaths:
         worker_lock=root / "optix-worker.lock",
         watchlist_snapshot=root / "watchlist-snapshot-v1.json",
         strength_snapshot=root / "strength-snapshot-v1.json",
+        public_home_snapshot=root / "public-home-snapshot-v1.json",
         backups_dir=root / "backups",
         runtime_settings=root / "runtime-settings.json",
     )

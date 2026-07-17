@@ -609,7 +609,18 @@ def test_full_watchlist_refresh_failure_cools_down_then_retries(monkeypatch, tmp
     asyncio.run(scenario())
 
 
-def test_watchlist_restart_snapshot_loads_immediately_and_is_replaced(monkeypatch, tmp_path):
+def test_owner_watchlist_restart_snapshot_reuses_fresh_generation_without_provider(
+    monkeypatch,
+    tmp_path,
+):
+    config = stocks.get_personal_config()
+    password_config = config.model_copy(
+        update={
+            "access": config.access.model_copy(update={"mode": "password"})
+        }
+    )
+    monkeypatch.setattr(stocks, "get_personal_config", lambda: password_config)
+
     async def scenario():
         clock = [40_000.0]
         saved_at = clock[0] - 300
@@ -642,49 +653,34 @@ def test_watchlist_restart_snapshot_loads_immediately_and_is_replaced(monkeypatc
         stocks._endpoint_lock_users.clear()
         stocks._endpoint_refresh_tasks.clear()
         stocks._endpoint_refresh_retry_after.clear()
-        started = asyncio.Event()
-        release = asyncio.Event()
+        original = snapshot_path.read_bytes()
+        calls = 0
 
         async def refreshed_watchlist():
-            started.set()
-            await release.wait()
-            return _watchlist_payload("live")
+            nonlocal calls
+            calls += 1
+            raise AssertionError("fresh worker snapshot must suppress provider")
 
         monkeypatch.setattr(stocks, "_build_watchlist", refreshed_watchlist)
 
         restored = await asyncio.wait_for(stocks.watchlist(None), timeout=0.5)
         assert restored["groups"][0]["id"] == "persisted"
-        assert restored["_stale"] is True
-        assert restored["source_status"] == "degraded"
-        assert restored["stale_reason"] == "background_refresh_pending"
-        assert restored["stale_age_seconds"] == 300.0
+        assert restored["_stale"] is False
+        assert restored["source_status"] == "active"
         assert restored["as_of"] != "not-the-saved-time"
 
         restored_entry = stocks._endpoint_cache["watchlist"]
         assert restored_entry.fetched_at == saved_at
         assert restored_entry.stale_until == saved_at + 24 * 60 * 60
-
-        await asyncio.wait_for(started.wait(), timeout=0.5)
-        refresh_task = stocks._endpoint_refresh_tasks["watchlist"]
-        clock[0] += 10
-        release.set()
-        await refresh_task
-        await asyncio.sleep(0)
-
-        assert stocks._endpoint_cache["watchlist"].value["groups"][0]["id"] == "live"
-        persisted = json.loads(snapshot_path.read_text(encoding="utf-8"))
-        assert persisted["version"] == 1
-        assert persisted["saved_at"] == 40_010.0
-        assert persisted["payload"]["groups"][0]["id"] == "live"
-        assert not (
-            stocks._WATCHLIST_SNAPSHOT_TRANSPORT_FIELDS
-            & persisted["payload"].keys()
-        )
+        assert restored_entry.expires_at == saved_at + 1800
+        assert stocks._endpoint_refresh_tasks == {}
+        assert calls == 0
+        assert snapshot_path.read_bytes() == original
 
     asyncio.run(scenario())
 
 
-def test_watchlist_reloads_newer_worker_snapshot_after_process_start(
+def test_private_watchlist_reloads_newer_snapshot_but_keeps_live_refresh_semantics(
     monkeypatch,
     tmp_path,
 ):
@@ -720,11 +716,15 @@ def test_watchlist_reloads_newer_worker_snapshot_after_process_start(
 
         monkeypatch.setattr(stocks, "_build_watchlist", no_network)
         refreshed = await stocks.watchlist(None)
+        refresh_task = stocks._endpoint_refresh_tasks["watchlist"]
+        with pytest.raises(RuntimeError, match="network is disabled"):
+            await refresh_task
+        await asyncio.sleep(0)
         assert refreshed["groups"][0]["id"] == "worker"
         assert refreshed["as_of"].startswith("1970-")
-        refresh_task = stocks._endpoint_refresh_tasks["watchlist"]
-        await asyncio.gather(refresh_task, return_exceptions=True)
-        await asyncio.sleep(0)
+        assert refreshed["_stale"] is True
+        assert refreshed["source_status"] == "degraded"
+        assert "watchlist" not in stocks._endpoint_refresh_tasks
         assert stocks._endpoint_cache["watchlist"].fetched_at == 44_990.0
 
     asyncio.run(scenario())
@@ -736,7 +736,7 @@ def test_watchlist_snapshot_write_failure_does_not_fail_refresh(monkeypatch, tmp
         snapshot_path = tmp_path / "watchlist.json"
         original_document = {
             "version": 1,
-            "saved_at": clock[0] - 300,
+            "saved_at": clock[0] - 24 * 60 * 60 - 1,
             "parameters": {"tickers": None},
             "payload": _watchlist_payload("persisted"),
         }

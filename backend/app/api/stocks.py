@@ -25,6 +25,12 @@ from fastapi import APIRouter, HTTPException, Query, Response
 
 from app.access import current_request_is_owner, public_snapshot_unavailable
 from app.data_paths import get_data_paths
+from app.personal_config import get_personal_config
+from app.public_home_snapshot import (
+    PUBLIC_HOME_RESOURCE_SPECS,
+    read_owner_public_home_entry_async,
+    read_public_home_resource_async,
+)
 from app.services.yfinance_batch import download_in_bounded_batches
 
 
@@ -58,6 +64,15 @@ _endpoint_refresh_retry_after: dict[str, float] = {}
 _ENDPOINT_PURGE_THRESHOLD = 2048
 _ENDPOINT_MAX_ENTRIES = 2048
 _ENDPOINT_REFRESH_FAILURE_COOLDOWN_SECONDS = 60
+
+
+def _is_public_snapshot_unavailable(error: HTTPException) -> bool:
+    detail = error.detail
+    return bool(
+        error.status_code == 503
+        and isinstance(detail, dict)
+        and detail.get("code") == "public_snapshot_unavailable"
+    )
 
 def _lock_for(key: str) -> asyncio.Lock:
     lock = _endpoint_locks.get(key)
@@ -118,6 +133,43 @@ def _usable_hit(key: str, now: float) -> _EndpointCacheEntry | None:
         _endpoint_cache.pop(key, None)
         return None
     return hit
+
+
+async def _reuse_fresh_public_home_entry(
+    key: str,
+    resource: str,
+    parameters: dict[str, Any],
+    *,
+    fresh_for_seconds: float,
+) -> Any | None:
+    """Hydrate an owner cold cache from a newer exact worker snapshot."""
+
+    if get_personal_config().access.mode != "password":
+        return None
+    now = time.time()
+    current = _usable_hit(key, now)
+    if current is not None and current.expires_at > now:
+        return _cache_result(current, stale=False)
+    disk_entry = await read_owner_public_home_entry_async(
+        resource,
+        parameters=parameters,
+        fresh_for_seconds=fresh_for_seconds,
+        now=now,
+    )
+    if disk_entry is None:
+        return _cache_result(current, stale=True) if current is not None else None
+    saved_at = float(disk_entry["saved_at"])
+    if current is not None and current.fetched_at > saved_at:
+        return _cache_result(current, stale=True)
+    spec = PUBLIC_HOME_RESOURCE_SPECS[resource]
+    hydrated = _EndpointCacheEntry(
+        expires_at=saved_at + fresh_for_seconds,
+        stale_until=saved_at + spec.max_age,
+        fetched_at=saved_at,
+        value=disk_entry["payload"],
+    )
+    _endpoint_cache[key] = hydrated
+    return _cache_result(hydrated, stale=not bool(disk_entry["fresh"]))
 
 
 async def _cached_endpoint(
@@ -1098,6 +1150,26 @@ def _load_watchlist_snapshot_once(now: float) -> None:
         _endpoint_cache["watchlist"] = entry
 
 
+def _load_watchlist_snapshot_for_owner(now: float) -> _EndpointCacheEntry | None:
+    """Reuse a worker generation without launching the same Yahoo batch."""
+
+    config = get_personal_config()
+    if config.access.mode != "password":
+        return None
+    interval = float(config.public_home.watchlist_seconds)
+    current = _usable_hit("watchlist", now)
+    entry = _read_watchlist_snapshot(_WATCHLIST_SNAPSHOT_PATH, now=now)
+    if entry is None:
+        return None
+    entry.expires_at = entry.fetched_at + interval
+    if current is None or entry.fetched_at > current.fetched_at or (
+        entry.fetched_at == current.fetched_at and current.expires_at <= now
+    ):
+        _endpoint_cache["watchlist"] = entry
+        return entry
+    return current
+
+
 def _parse_watchlist_tickers(raw: str | None) -> list[str] | None:
     """Normalize an optional comma-separated watchlist query.
 
@@ -1157,7 +1229,32 @@ async def watchlist(
     )
     try:
         if requested_tickers is None:
-            _load_watchlist_snapshot_once(time.time())
+            now = time.time()
+            password_snapshot_reuse = (
+                allow_refresh
+                and get_personal_config().access.mode == "password"
+            )
+            if password_snapshot_reuse:
+                owner_entry = _load_watchlist_snapshot_for_owner(now)
+                if owner_entry is not None:
+                    result = _cache_result(
+                        owner_entry,
+                        stale=owner_entry.expires_at <= now,
+                    )
+                    if (
+                        isinstance(result, dict)
+                        and owner_entry.expires_at <= now
+                    ):
+                        result["stale_reason"] = (
+                            "worker_snapshot_awaiting_refresh"
+                        )
+                        result["stale_age_seconds"] = round(
+                            max(now - owner_entry.fetched_at, 0.0),
+                            1,
+                        )
+                    return result
+            else:
+                _load_watchlist_snapshot_once(now)
             return await _stale_while_revalidate_endpoint(
                 cache_key,
                 _WATCHLIST_FRESH_TTL_SECONDS,
@@ -1495,13 +1592,12 @@ async def search_stocks(q: str = Query(..., min_length=1, max_length=50)):
     return _sanitize(yf_results[:10])
 
 
-@router.get("/{ticker}/signals")
-async def stock_signals(ticker: str):
-    """Compute RSI, MACD, EMA/SMA signals from 100d daily data."""
+async def _build_stock_signals(ticker: str) -> dict[str, Any]:
+    """Compute live technical signals without consulting either cache layer."""
 
     symbol = ticker.upper().strip()
     if not _WATCHLIST_TICKER_PATTERN.fullmatch(symbol):
-        raise HTTPException(status_code=400, detail="Invalid ticker symbol")
+        raise ValueError("Invalid ticker symbol")
 
     def _safe_number(value: Any) -> float | None:
         try:
@@ -1638,17 +1734,49 @@ async def stock_signals(ticker: str):
         except Exception as exc:
             raise RuntimeError(f"Price provider unavailable for {symbol}") from exc
 
-    async def _load():
-        return await asyncio.to_thread(_compute)
+    return await asyncio.to_thread(_compute)
 
+
+@router.get("/{ticker}/signals")
+async def stock_signals(ticker: str):
+    """Compute RSI, MACD, EMA/SMA signals from 100d daily data."""
+
+    symbol = ticker.upper().strip()
+    if not _WATCHLIST_TICKER_PATTERN.fullmatch(symbol):
+        raise HTTPException(status_code=400, detail="Invalid ticker symbol")
+
+    owner = current_request_is_owner()
+    key = f"technical-signals:{symbol}"
+    if owner and symbol == "NVDA":
+        disk_result = await _reuse_fresh_public_home_entry(
+            key,
+            "focus_signals",
+            {"ticker": symbol, "period": "100d"},
+            fresh_for_seconds=float(
+                get_personal_config().public_home.signals_seconds
+            ),
+        )
+        if disk_result is not None:
+            return _sanitize(disk_result)
     try:
         result = await _cached_endpoint(
-            f"technical-signals:{symbol}",
+            key,
             300,
-            _load,
+            lambda: _build_stock_signals(symbol),
             stale_ttl=900,
-            allow_refresh=current_request_is_owner(),
+            allow_refresh=owner,
         )
+    except HTTPException as exc:
+        if owner or not _is_public_snapshot_unavailable(exc):
+            raise
+        now = time.time()
+        result = await read_public_home_resource_async(
+            "focus_signals",
+            parameters={"ticker": symbol, "period": "100d"},
+            now=now,
+        )
+        if result is None:
+            raise exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return _sanitize(result)
@@ -1678,15 +1806,39 @@ async def stock_logo(ticker: str):
 
 @router.get("/{ticker}")
 async def stock_overview(ticker: str):
+    owner = current_request_is_owner()
+    symbol = ticker.upper().strip()
+    key = f"stock:{symbol}"
+    if owner and symbol == "NVDA":
+        disk_result = await _reuse_fresh_public_home_entry(
+            key,
+            "focus_overview",
+            {"ticker": symbol},
+            fresh_for_seconds=float(
+                get_personal_config().public_home.overview_seconds
+            ),
+        )
+        if disk_result is not None:
+            return _sanitize(disk_result)
     try:
         return await _cached_endpoint(
-            f"stock:{ticker.upper()}",
+            key,
             300,
             lambda: _stock_overview_impl(ticker),
-            allow_refresh=current_request_is_owner(),
+            allow_refresh=owner,
         )
-    except HTTPException:
-        raise
+    except HTTPException as exc:
+        if owner or not _is_public_snapshot_unavailable(exc):
+            raise
+        now = time.time()
+        result = await read_public_home_resource_async(
+            "focus_overview",
+            parameters={"ticker": symbol},
+            now=now,
+        )
+        if result is None:
+            raise exc
+        return _sanitize(result)
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Yahoo stock data is currently unavailable") from exc
 
@@ -1823,15 +1975,43 @@ async def stock_chart(
     range: str = Query("1d", pattern="^(5m|15m|1h|1d|1w)$"),
     adjustment: str = Query("raw", pattern="^(raw|adjusted)$"),
 ):
+    owner = current_request_is_owner()
+    symbol = ticker.upper().strip()
+    key = f"chart:{symbol}:{range}:{adjustment}"
+    if owner and symbol == "NVDA" and range == "1d" and adjustment == "raw":
+        disk_result = await _reuse_fresh_public_home_entry(
+            key,
+            "focus_chart",
+            {"ticker": symbol, "range": range, "adjustment": adjustment},
+            fresh_for_seconds=float(
+                get_personal_config().public_home.chart_seconds
+            ),
+        )
+        if disk_result is not None:
+            return _sanitize(disk_result)
     try:
         return await _cached_endpoint(
-            f"chart:{ticker.upper()}:{range}:{adjustment}",
+            key,
             _CHART_TTL.get(range, 600),
             lambda: _stock_chart_impl(ticker, range, adjustment),
-            allow_refresh=current_request_is_owner(),
+            allow_refresh=owner,
         )
-    except HTTPException:
-        raise
+    except HTTPException as exc:
+        if owner or not _is_public_snapshot_unavailable(exc):
+            raise
+        now = time.time()
+        result = await read_public_home_resource_async(
+            "focus_chart",
+            parameters={
+                "ticker": symbol,
+                "range": range,
+                "adjustment": adjustment,
+            },
+            now=now,
+        )
+        if result is None:
+            raise exc
+        return _sanitize(result)
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Yahoo chart data is currently unavailable") from exc
 
