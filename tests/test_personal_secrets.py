@@ -884,6 +884,27 @@ def test_owner_password_is_hashed_before_it_reaches_secrets_file(
     assert owner_password_hash_is_valid(written)
 
 
+def test_owner_password_hash_is_a_compose_literal_and_round_trips(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "secrets.env"
+    password_hash = personal_secrets._normalized_value(
+        "APP_PASSWORD_HASH",
+        "compose-literal-owner-password",
+    )
+
+    personal_secrets.atomic_write(
+        {"APP_PASSWORD_HASH": password_hash},
+        path,
+    )
+
+    assert path.read_text(encoding="utf-8") == (
+        f"APP_PASSWORD_HASH='{password_hash}'\n"
+    )
+    assert personal_secrets._read_values(path)["APP_PASSWORD_HASH"] == password_hash
+    assert owner_password_hash_is_valid(password_hash)
+
+
 def test_marketdata_token_is_managed_as_a_server_only_secret() -> None:
     assert personal_secrets._normalized_value(
         "MARKETDATA_TOKEN", "market-token-value"

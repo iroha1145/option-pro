@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from app.tools import personal_secrets
+
 try:
     import tomllib
 except ModuleNotFoundError:  # Python 3.10 and older local verification.
@@ -311,6 +313,50 @@ def test_data_directory_cannot_split_across_exports_or_runtime_files(
             and volume["target"] == "/data"
             for volume in service["volumes"]
         )
+
+
+def test_compose_preserves_the_serialized_owner_password_hash(
+    tmp_path: Path,
+) -> None:
+    docker = shutil.which("docker")
+    if docker is None:
+        pytest.skip("Docker Compose is unavailable")
+
+    password_hash = personal_secrets._normalized_value(
+        "APP_PASSWORD_HASH",
+        "compose-config-owner-password",
+    )
+    personal_secrets.atomic_write(
+        {"APP_PASSWORD_HASH": password_hash},
+        tmp_path / "secrets.env",
+    )
+    (tmp_path / "docker-compose.yml").write_text(
+        "services:\n"
+        "  probe:\n"
+        "    image: busybox:latest\n"
+        "    env_file:\n"
+        "      - path: secrets.env\n",
+        encoding="utf-8",
+    )
+    compose_env = os.environ.copy()
+    compose_env.pop("COMPOSE_ENV_FILES", None)
+
+    result = subprocess.run(
+        [docker, "compose", "config", "--format", "json"],
+        cwd=tmp_path,
+        env=compose_env,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "variable is not set" not in result.stderr
+    rendered = json.loads(result.stdout)["services"]["probe"]["environment"][
+        "APP_PASSWORD_HASH"
+    ]
+    assert rendered.replace("$$", "$") == password_hash
 
 
 @pytest.mark.parametrize("compose_env_files", [None, ".env"])
