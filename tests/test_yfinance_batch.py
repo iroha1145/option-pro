@@ -12,6 +12,11 @@ from app.services.yfinance_batch import download_in_bounded_batches
 from app.services.yfinance_batch import YFinanceBatchBusy
 
 
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
 def test_download_batches_bound_created_threads_and_preserve_ticker_columns():
     calls: list[tuple[list[str], int]] = []
     state_lock = threading.Lock()
