@@ -51,6 +51,17 @@ premarket_seconds = {config.breakout.premarket_seconds}
 closed_seconds = {config.breakout.closed_seconds}
 range_persistence_mode = {_toml_string(config.breakout.range_persistence_mode)}
 
+[public_home]
+poll_seconds = {config.public_home.poll_seconds}
+watchlist_seconds = {config.public_home.watchlist_seconds}
+indices_seconds = {config.public_home.indices_seconds}
+overview_seconds = {config.public_home.overview_seconds}
+chart_seconds = {config.public_home.chart_seconds}
+signals_seconds = {config.public_home.signals_seconds}
+earnings_seconds = {config.public_home.earnings_seconds}
+unusual_seconds = {config.public_home.unusual_seconds}
+failure_retry_seconds = {config.public_home.failure_retry_seconds}
+
 [storage]
 retention_days = {config.storage.retention_days}
 backup_keep = {config.storage.backup_keep}

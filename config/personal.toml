@@ -27,6 +27,17 @@ premarket_seconds = 600
 closed_seconds = 1800
 range_persistence_mode = "shadow"
 
+[public_home]
+poll_seconds = 30
+watchlist_seconds = 1800
+indices_seconds = 300
+overview_seconds = 300
+chart_seconds = 300
+signals_seconds = 900
+earnings_seconds = 21600
+unusual_seconds = 1800
+failure_retry_seconds = 300
+
 [storage]
 retention_days = 90
 backup_keep = 7

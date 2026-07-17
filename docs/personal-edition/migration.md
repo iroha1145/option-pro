@@ -9,10 +9,10 @@
 3. 构建新镜像。构建期间旧后端仍可提供页面。
 4. 停止同一容器编排项目中的旧工作容器，等待已提交的模型任务到达安全边界，并确认所有旧进程已经退出。
 5. 启动 `backend` 与统一的 `worker`，不得让新旧写入者同时连接同一数据卷。
-6. 核对后端提交、前端完整性、统一工作进程锁和九类任务清单。
+6. 核对后端提交、前端完整性、统一工作进程锁和包含`public_home`的十类任务清单。
 7. 观察一个完整的美国交易周，再清理旧运行代码与兼容入口。
 
-`scripts/deploy.sh` 负责校验配置、构建镜像、停止旧写入者、启动两个服务并完成就绪核对。它不会运行一次性任务，不请求新闻刷新，不扫描行情，也不创建模型任务。发布脚本会拒绝未提交的工作树，避免服务运行内容与记录的提交不一致。
+`scripts/deploy.sh` 负责校验配置、构建镜像、停止旧写入者、启动两个服务并完成就绪核对。私有网络模式不会启动或等待公共行情快照；密码模式会启动`public_home`首次生成匿名首页所需数据，并等待七项公共资源均可读取。它不会请求新闻刷新，也不创建模型任务。发布脚本会拒绝未提交的工作树，避免服务运行内容与记录的提交不一致。
 
 ## 环境文件迁移
 
@@ -78,7 +78,8 @@ chmod 600 .env machine.env secrets.env
 - `ai-jobs.db`；
 - `optix-worker.db`；
 - `runtime-settings.json`；
-- `watchlist-snapshot-v1.json`。
+- `watchlist-snapshot-v1.json`；
+- `public-home-snapshot-v1.json`。
 
 备份清单应记录创建时间、源路径、结构版本和 SHA-256 摘要。备份必须放在 `optix-data` 之外，防止数据卷或磁盘故障同时损坏正本与备份。
 
@@ -99,10 +100,12 @@ curl --fail http://127.0.0.1:${PORT:-2000}/ready
 ./scripts/compose.sh exec -T worker python -m app.worker --healthcheck
 ```
 
-工作进程结果应且只应包含 `breakout`、`catalyst_sync`、`focus`、`ai_jobs`、`maintenance`、`focus_refresh`、`strength_refresh`、`breakout_refresh` 和 `retention`。
+工作进程结果应且只应包含 `breakout`、`catalyst_sync`、`focus`、`ai_jobs`、`maintenance`、`public_home`、`focus_refresh`、`strength_refresh`、`breakout_refresh` 和 `retention`。
 
 ## 回滚
 
 回滚时先停止现行编排，再切换到上一个经过验证的发布标签与镜像。继续使用当前数据卷，只有数据库损坏或完整性检查失败时，才从已核验的备份恢复。
 
 停止服务时不得附加 `--volumes` 或 `-v`。统一工作进程的停止宽限期为 2100 秒，强制终止可能使正在保存响应身份的付费任务留在不确定状态。
+
+若新统一工作进程被强制终止后需要回滚旧版本，应在所有写入者停止后恢复发布前单独保存的 `optix-worker.db` 备份，再启动旧工作进程。不要用这份状态库备份覆盖业务数据库，也不要在新旧工作进程仍运行时替换文件。

@@ -347,6 +347,37 @@ class WorkerStateRepository:
             connection.commit()
             return cursor.rowcount
 
+    def reconcile_task_status(
+        self,
+        owner_id: str,
+        fencing_token: int,
+        task_names: Sequence[str],
+        *,
+        now: datetime | None = None,
+    ) -> int:
+        """Remove status rows not owned by the current worker inventory."""
+
+        provided = tuple(task_names)
+        names = tuple(dict.fromkeys(provided))
+        if len(names) != len(provided) or any(
+            not _ACTION_NAME.fullmatch(name) for name in names
+        ):
+            raise ValueError("worker task inventory is invalid")
+        observed = _as_utc(now or utc_now())
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._assert_fence(connection, owner_id, fencing_token, observed)
+            if names:
+                placeholders = ",".join("?" for _ in names)
+                cursor = connection.execute(
+                    f"DELETE FROM worker_task_status WHERE task_name NOT IN ({placeholders})",
+                    names,
+                )
+            else:
+                cursor = connection.execute("DELETE FROM worker_task_status")
+            connection.commit()
+            return cursor.rowcount
+
     @staticmethod
     def _action_item(row: sqlite3.Row) -> dict[str, Any]:
         item = dict(row)

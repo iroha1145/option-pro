@@ -23,6 +23,7 @@ def test_data_dir_owns_the_complete_runtime_layout(tmp_path, monkeypatch) -> Non
     assert paths.worker_lock == tmp_path / "optix-worker.lock"
     assert paths.watchlist_snapshot == tmp_path / "watchlist-snapshot-v1.json"
     assert paths.strength_snapshot == tmp_path / "strength-snapshot-v1.json"
+    assert paths.public_home_snapshot == tmp_path / "public-home-snapshot-v1.json"
     assert paths.backups_dir == tmp_path / "backups"
     assert paths.runtime_settings == tmp_path / "runtime-settings.json"
 

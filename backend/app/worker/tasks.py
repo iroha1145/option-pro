@@ -4,9 +4,10 @@ import asyncio
 import inspect
 import sqlite3
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from app.data_paths import get_data_paths
 from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
@@ -21,6 +22,7 @@ DEFAULT_TASK_NAMES = (
     "catalyst_sync",
     "ai_jobs",
     "maintenance",
+    "public_home",
     "focus_refresh",
     "strength_refresh",
     "breakout_refresh",
@@ -650,6 +652,648 @@ class FocusRefreshTask:
         )
 
 
+@dataclass
+class _PublicHomeFailure:
+    attempts: int
+    retry_after: float
+    baseline_saved_at: float | None
+
+
+@dataclass
+class _PublicHomeInflight:
+    task: asyncio.Task[dict[str, Any]]
+    parameters: dict[str, Any]
+    baseline_saved_at: float | None
+    started_at: float
+    superseded: bool = False
+
+
+class PublicHomeTask:
+    """Refresh restart-safe anonymous home-page data without model work."""
+
+    _INTERVAL_FIELDS = {
+        "watchlist": "watchlist_seconds",
+        "indices": "indices_seconds",
+        "focus_overview": "overview_seconds",
+        "focus_chart": "chart_seconds",
+        "focus_signals": "signals_seconds",
+        "earnings": "earnings_seconds",
+        "unusual": "unusual_seconds",
+    }
+    _HEAVY_RESOURCES = ("earnings", "unusual")
+
+    def __init__(
+        self,
+        config: Any,
+        *,
+        builders: Mapping[str, Callable[..., Any]] | None = None,
+        reader: Callable[..., Any] | None = None,
+        writer: Callable[..., Any] | None = None,
+        snapshot_path: Path | None = None,
+        watchlist_reader: Callable[..., Any] | None = None,
+        watchlist_writer: Callable[..., Any] | None = None,
+        watchlist_path: Path | None = None,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        self._config = config
+        self._builders = dict(builders or {})
+        self._reader = reader
+        self._writer = writer
+        self._snapshot_path = snapshot_path
+        self._watchlist_reader = watchlist_reader
+        self._watchlist_writer = watchlist_writer
+        self._watchlist_path = watchlist_path
+        self._clock = clock
+        self._failures: dict[str, _PublicHomeFailure] = {}
+        self._inflight: dict[str, _PublicHomeInflight] = {}
+        self._next_heavy = "earnings"
+
+    async def _default_build(
+        self,
+        resource: str,
+        parameters: Mapping[str, Any],
+    ) -> Any:
+        from app.api import earnings, market, options, stocks
+
+        if resource == "watchlist":
+            return await stocks._build_watchlist()
+        if resource == "indices":
+            return await market._build_indices()
+        if resource == "focus_overview":
+            return await stocks._stock_overview_impl(str(parameters["ticker"]))
+        if resource == "focus_chart":
+            return await stocks._stock_chart_impl(
+                str(parameters["ticker"]),
+                str(parameters["range"]),
+                str(parameters["adjustment"]),
+            )
+        if resource == "focus_signals":
+            return await stocks._build_stock_signals(str(parameters["ticker"]))
+        if resource == "earnings":
+            market_date = datetime.fromisoformat(
+                str(parameters["market_date"])
+            ).date()
+            return await earnings._build_upcoming_earnings(market_date)
+        if resource == "unusual":
+            return await options._unusual_activity_impl(
+                str(parameters["type"]),
+                float(parameters["min_vol_oi"]),
+            )
+        raise ValueError("unknown public home resource")
+
+    async def _build(
+        self,
+        resource: str,
+        parameters: Mapping[str, Any],
+    ) -> Any:
+        builder = self._builders.get(resource)
+        if builder is None:
+            return await self._default_build(resource, parameters)
+        return await _call_local(builder, dict(parameters))
+
+    def _interval(self, resource: str) -> float:
+        return float(getattr(self._config, self._INTERVAL_FIELDS[resource]))
+
+    @staticmethod
+    def _saved_at(entry: Any) -> float | None:
+        if not isinstance(entry, Mapping):
+            return None
+        value = entry.get("saved_at")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return float(value)
+
+    def _is_due(
+        self,
+        resource: str,
+        entry: Any,
+        parameters: Mapping[str, Any],
+        observed: float,
+        *,
+        interval_seconds: float | None = None,
+    ) -> bool:
+        saved_at = self._saved_at(entry)
+        interval = (
+            self._interval(resource)
+            if interval_seconds is None
+            else float(interval_seconds)
+        )
+        return bool(
+            not isinstance(entry, Mapping)
+            or entry.get("parameters") != dict(parameters)
+            or saved_at is None
+            or observed - saved_at >= interval
+        )
+
+    @staticmethod
+    def _market_phase(observed: float, *, resource: str | None = None) -> str:
+        from app.services.market_calendar import (
+            ET,
+            early_close_minutes,
+            is_trading_day,
+            options_close_minutes,
+        )
+
+        local = datetime.fromtimestamp(observed, ET)
+        if not is_trading_day(local.date()):
+            return "closed"
+        minutes = local.hour * 60 + local.minute
+        close = (
+            options_close_minutes(local.date())
+            if resource == "unusual"
+            else early_close_minutes(local.date()) or 16 * 60
+        )
+        close = close or 16 * 60
+        if 9 * 60 + 30 <= minutes < close:
+            return "regular"
+        if 4 * 60 <= minutes < 9 * 60 + 30:
+            return "premarket"
+        if close <= minutes < 20 * 60:
+            return "afterhours"
+        return "closed"
+
+    def _effective_interval(self, resource: str, phase: str) -> float:
+        interval = self._interval(resource)
+        if phase != "closed":
+            return interval
+        if resource == "earnings":
+            return max(interval, 12 * 60 * 60)
+        if resource == "unusual":
+            return max(interval, 6 * 60 * 60)
+        return max(interval, 6 * 60 * 60)
+
+    @staticmethod
+    def _is_hard_servable(
+        resource: str,
+        entry: Any,
+        parameters: Mapping[str, Any],
+        observed: float,
+    ) -> bool:
+        if resource == "watchlist":
+            return isinstance(entry, Mapping)
+        from app.public_home_snapshot import public_home_entry_is_servable
+
+        return public_home_entry_is_servable(
+            resource,
+            entry,
+            parameters=parameters,
+            now=observed,
+        )
+
+    def _external_fresh(
+        self,
+        resource: str,
+        entry: Any,
+        parameters: Mapping[str, Any],
+        observed: float,
+        baseline_saved_at: float | None,
+    ) -> bool:
+        saved_at = self._saved_at(entry)
+        return bool(
+            saved_at is not None
+            and (baseline_saved_at is None or saved_at > baseline_saved_at)
+            and isinstance(entry, Mapping)
+            and entry.get("parameters") == dict(parameters)
+            and not self._is_due(resource, entry, parameters, observed)
+        )
+
+    def _record_failure(
+        self,
+        resource: str,
+        *,
+        baseline_saved_at: float | None,
+    ) -> _PublicHomeFailure:
+        previous = self._failures.get(resource)
+        attempts = (previous.attempts if previous is not None else 0) + 1
+        base = float(self._config.failure_retry_seconds)
+        delay = min(self._interval(resource), base * (2 ** min(attempts - 1, 10)))
+        phase = self._market_phase(float(self._clock()), resource=resource)
+        if phase == "closed":
+            delay = max(delay, self._effective_interval(resource, phase))
+        state = _PublicHomeFailure(
+            attempts=attempts,
+            retry_after=float(self._clock()) + delay,
+            baseline_saved_at=baseline_saved_at,
+        )
+        self._failures[resource] = state
+        return state
+
+    async def _produce_entry(
+        self,
+        resource: str,
+        parameters: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        payload = await self._build(resource, parameters)
+        if resource == "watchlist":
+            return {
+                "payload": payload,
+                "saved_at": float(self._clock()),
+                "parameters": dict(parameters),
+            }
+        from app.public_home_snapshot import create_public_home_entry
+
+        return create_public_home_entry(
+            resource,
+            payload,
+            saved_at=float(self._clock()),
+            parameters=parameters,
+        )
+
+    async def _read_entries(
+        self,
+        path: Path,
+        watchlist_path: Path,
+        *,
+        now: float,
+    ) -> dict[str, dict[str, Any]]:
+        from app.public_home_snapshot import read_public_home_entries
+
+        reader = self._reader or read_public_home_entries
+        entries = await _call_local(reader, path, now=now)
+        result = dict(entries) if isinstance(entries, dict) else {}
+        from app.api import stocks
+
+        watchlist_reader = self._watchlist_reader or stocks._read_watchlist_snapshot
+        watchlist = await _call_local(watchlist_reader, watchlist_path, now=now)
+        if watchlist is not None:
+            fetched_at = getattr(watchlist, "fetched_at", None)
+            payload = getattr(watchlist, "value", None)
+            if isinstance(fetched_at, (int, float)) and isinstance(payload, dict):
+                result["watchlist"] = {
+                    "payload": payload,
+                    "saved_at": float(fetched_at),
+                    "parameters": {"tickers": None},
+                }
+        return result
+
+    async def _publish_entry(
+        self,
+        resource: str,
+        entry: dict[str, Any],
+        *,
+        path: Path,
+        watchlist_path: Path,
+    ) -> dict[str, dict[str, Any]]:
+        from app.public_home_snapshot import write_public_home_snapshot
+
+        if resource == "watchlist":
+            from app.api import stocks
+
+            watchlist_writer = self._watchlist_writer or stocks._write_watchlist_snapshot
+            await _call_local(
+                watchlist_writer,
+                watchlist_path,
+                payload=entry["payload"],
+                saved_at=float(entry["saved_at"]),
+            )
+            return await self._read_entries(
+                path,
+                watchlist_path,
+                now=float(self._clock()),
+            )
+        latest = await self._read_entries(
+            path,
+            watchlist_path,
+            now=float(self._clock()),
+        )
+        bundle = {key: value for key, value in latest.items() if key != "watchlist"}
+        candidate = {**bundle, resource: entry}
+        writer = self._writer or write_public_home_snapshot
+        await _call_local(
+            writer,
+            path,
+            candidate,
+            now=float(self._clock()),
+        )
+        return await self._read_entries(
+            path,
+            watchlist_path,
+            now=float(self._clock()),
+        )
+
+    async def _harvest(
+        self,
+        resource: str,
+        attempt: _PublicHomeInflight,
+        *,
+        path: Path,
+        watchlist_path: Path,
+        entries: dict[str, dict[str, Any]],
+        failed: list[str],
+        refreshed: list[str],
+    ) -> dict[str, dict[str, Any]]:
+        current = entries.get(resource)
+        if attempt.superseded or self._external_fresh(
+            resource,
+            current,
+            attempt.parameters,
+            float(self._clock()),
+            attempt.baseline_saved_at,
+        ):
+            try:
+                attempt.task.result()
+            except BaseException:
+                pass
+            self._inflight.pop(resource, None)
+            self._failures.pop(resource, None)
+            return entries
+        try:
+            produced = attempt.task.result()
+        except asyncio.CancelledError:
+            self._inflight.pop(resource, None)
+            raise
+        except Exception:
+            self._inflight.pop(resource, None)
+            self._record_failure(
+                resource,
+                baseline_saved_at=attempt.baseline_saved_at,
+            )
+            failed.append(resource)
+            return entries
+        try:
+            entries = await self._publish_entry(
+                resource,
+                produced,
+                path=path,
+                watchlist_path=watchlist_path,
+            )
+        except Exception:
+            self._record_failure(
+                resource,
+                baseline_saved_at=attempt.baseline_saved_at,
+            )
+            failed.append(resource)
+            # Keep the completed single-flight result. Once the persistence
+            # cooldown expires, a later leased round retries only the write.
+            return entries
+        self._inflight.pop(resource, None)
+        self._failures.pop(resource, None)
+        refreshed.append(resource)
+        return entries
+
+    def _result(
+        self,
+        *,
+        path: Path,
+        watchlist_path: Path,
+        resource_order: tuple[str, ...],
+        parameters: Mapping[str, Mapping[str, Any]],
+        entries: Mapping[str, Any],
+        refreshed: list[str],
+        failed: list[str],
+        deferred: list[str],
+        in_flight: list[str],
+        cooling: list[str],
+    ) -> TaskResult:
+        retry_after = {
+            resource: max(
+                0,
+                int(round(state.retry_after - float(self._clock()))),
+            )
+            for resource, state in self._failures.items()
+        }
+        observed = float(self._clock())
+        available = [
+            resource
+            for resource in resource_order
+            if self._is_hard_servable(
+                resource,
+                entries.get(resource),
+                parameters[resource],
+                observed,
+            )
+        ]
+        unavailable = [
+            resource for resource in resource_order if resource not in available
+        ]
+        details = {
+            "snapshot": path.name,
+            "watchlist_snapshot": watchlist_path.name,
+            "refreshed": refreshed,
+            "failed": failed,
+            "deferred": deferred,
+            "in_flight": sorted(set(in_flight)),
+            "cooling": sorted(set(cooling)),
+            "retry_after_seconds": retry_after,
+            "available": available,
+            "unavailable": unavailable,
+            "completed_at": _timestamp_text(float(self._clock())),
+        }
+        degraded = bool(self._failures or in_flight or failed or unavailable)
+        if failed:
+            error_code = "public_home_refresh_failed"
+        elif in_flight:
+            error_code = "public_home_refresh_in_flight"
+        elif degraded:
+            error_code = (
+                "public_home_snapshot_unavailable"
+                if unavailable
+                else "public_home_refresh_cooling"
+            )
+        else:
+            error_code = None
+        return TaskResult(
+            status="degraded" if degraded else "idle",
+            error_code=error_code,
+            details=details,
+            next_delay_seconds=float(self._config.poll_seconds),
+        )
+
+    async def __call__(self) -> TaskResult:
+        from app.public_home_snapshot import (
+            PUBLIC_HOME_RESOURCE_ORDER,
+            public_home_resource_parameters,
+        )
+
+        resource_order = ("watchlist", *tuple(PUBLIC_HOME_RESOURCE_ORDER))
+        path = self._snapshot_path or get_data_paths().public_home_snapshot
+        watchlist_path = self._watchlist_path or (
+            path.parent / "watchlist-snapshot-v1.json"
+            if self._snapshot_path is not None
+            else get_data_paths().watchlist_snapshot
+        )
+        observed = float(self._clock())
+        market_phases = {
+            resource: self._market_phase(observed, resource=resource)
+            for resource in resource_order
+        }
+        entries = await self._read_entries(path, watchlist_path, now=observed)
+        parameters = {
+            resource: (
+                {"tickers": None}
+                if resource == "watchlist"
+                else public_home_resource_parameters(resource, now=observed)
+            )
+            for resource in resource_order
+        }
+        refreshed: list[str] = []
+        failed: list[str] = []
+        deferred: list[str] = []
+        in_flight: list[str] = []
+        cooling: list[str] = []
+
+        # A separate process or an administrative refresh can repair a failed
+        # resource. Observe that newer fresh generation before applying local
+        # cooldown state or harvesting an older child task.
+        for resource in resource_order:
+            entry = entries.get(resource)
+            failure = self._failures.get(resource)
+            if failure is not None and self._external_fresh(
+                resource,
+                entry,
+                parameters[resource],
+                observed,
+                failure.baseline_saved_at,
+            ):
+                self._failures.pop(resource, None)
+            attempt = self._inflight.get(resource)
+            if attempt is not None and self._external_fresh(
+                resource,
+                entry,
+                attempt.parameters,
+                observed,
+                attempt.baseline_saved_at,
+            ):
+                attempt.superseded = True
+
+        # Harvest completed children first. An unfinished child survives the
+        # supervisor timeout and blocks a duplicate provider batch.
+        for resource in resource_order:
+            attempt = self._inflight.get(resource)
+            if attempt is None:
+                continue
+            if not attempt.task.done():
+                in_flight.append(resource)
+                continue
+            failure = self._failures.get(resource)
+            if failure is not None and observed < failure.retry_after:
+                cooling.append(resource)
+                continue
+            entries = await self._harvest(
+                resource,
+                attempt,
+                path=path,
+                watchlist_path=watchlist_path,
+                entries=entries,
+                failed=failed,
+                refreshed=refreshed,
+            )
+
+        due: list[str] = []
+        for resource in resource_order:
+            if resource in self._inflight:
+                continue
+            if (
+                resource == "unusual"
+                and market_phases[resource] != "regular"
+                and (
+                    resource in self._failures
+                    or self._is_hard_servable(
+                        resource,
+                        entries.get(resource),
+                        parameters[resource],
+                        observed,
+                    )
+                )
+            ):
+                deferred.append(resource)
+                continue
+            if not self._is_due(
+                resource,
+                entries.get(resource),
+                parameters[resource],
+                observed,
+                interval_seconds=self._effective_interval(
+                    resource,
+                    market_phases[resource],
+                ),
+            ):
+                self._failures.pop(resource, None)
+                continue
+            failure = self._failures.get(resource)
+            if failure is not None and observed < failure.retry_after:
+                cooling.append(resource)
+                continue
+            due.append(resource)
+
+        heavy_due = [item for item in self._HEAVY_RESOURCES if item in due]
+        heavy_in_flight = any(
+            resource in self._HEAVY_RESOURCES
+            and not attempt.task.done()
+            for resource, attempt in self._inflight.items()
+        )
+        if heavy_in_flight:
+            deferred.extend(heavy_due)
+            due = [item for item in due if item not in self._HEAVY_RESOURCES]
+        elif len(heavy_due) > 1:
+            selected = (
+                self._next_heavy
+                if self._next_heavy in heavy_due
+                else heavy_due[0]
+            )
+            self._next_heavy = (
+                "unusual" if selected == "earnings" else "earnings"
+            )
+            deferred = [item for item in heavy_due if item != selected]
+            due = [item for item in due if item not in deferred]
+
+        for resource in due:
+            baseline = self._saved_at(entries.get(resource))
+            child = asyncio.create_task(
+                self._produce_entry(resource, parameters[resource]),
+                name=f"public-home-{resource}",
+            )
+            attempt = _PublicHomeInflight(
+                task=child,
+                parameters=dict(parameters[resource]),
+                baseline_saved_at=baseline,
+                started_at=float(self._clock()),
+            )
+            self._inflight[resource] = attempt
+            try:
+                await asyncio.shield(child)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+            entries = await self._harvest(
+                resource,
+                attempt,
+                path=path,
+                watchlist_path=watchlist_path,
+                entries=entries,
+                failed=failed,
+                refreshed=refreshed,
+            )
+
+        cooling.extend(
+            resource
+            for resource, state in self._failures.items()
+            if observed < state.retry_after
+        )
+        return self._result(
+            path=path,
+            watchlist_path=watchlist_path,
+            resource_order=resource_order,
+            parameters=parameters,
+            entries=entries,
+            refreshed=refreshed,
+            failed=failed,
+            deferred=deferred,
+            in_flight=in_flight,
+            cooling=cooling,
+        )
+
+    async def aclose(self) -> None:
+        tasks = [attempt.task for attempt in self._inflight.values()]
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._inflight.clear()
+
+
 class StrengthRefreshTask:
     """Run and persist the default Strength Radar scan on demand."""
 
@@ -1019,6 +1663,7 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         keep=maintenance.keep,
     )
     retention = RetentionTask(owner_id, retention_backup)
+    public_home = PublicHomeTask(config.public_home)
     return (
         TaskSpec(
             "breakout",
@@ -1060,6 +1705,17 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             timeout_seconds=1800.0,
             failure_backoff_seconds=300.0,
             max_backoff_seconds=3600.0,
+        ),
+        TaskSpec(
+            "public_home",
+            public_home,
+            interval_seconds=float(config.public_home.poll_seconds),
+            enabled=config.access.mode == "password",
+            timeout_seconds=1800.0,
+            failure_backoff_seconds=float(config.public_home.poll_seconds),
+            max_backoff_seconds=float(config.public_home.poll_seconds),
+            may_block_event_loop=False,
+            close=public_home.aclose,
         ),
         TaskSpec(
             "focus_refresh",
@@ -1104,6 +1760,7 @@ __all__ = [
     "FocusRefreshTask",
     "MaintenanceTask",
     "DEFAULT_TASK_NAMES",
+    "PublicHomeTask",
     "RetentionTask",
     "StrengthRefreshTask",
     "build_default_tasks",

@@ -22,6 +22,14 @@ def test_repository_personal_config_freezes_paid_runtime() -> None:
     assert config.ai.daily_budget_usd == 2.0
     assert config.ai.execution_mode == "background"
     assert config.access.mode == "private_network"
+    assert config.public_home.poll_seconds == 30
+    assert config.public_home.watchlist_seconds == 1800
+    assert config.public_home.indices_seconds == 300
+    assert config.public_home.overview_seconds == 300
+    assert config.public_home.chart_seconds == 300
+    assert config.public_home.signals_seconds == 900
+    assert config.public_home.earnings_seconds == 21_600
+    assert config.public_home.unusual_seconds == 1800
 
 
 @pytest.mark.parametrize(

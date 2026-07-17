@@ -16,6 +16,12 @@ from app.access import (
     require_same_origin_action,
 )
 from app.services.cache import cache
+from app.public_home_snapshot import (
+    public_home_resource_parameters,
+    read_owner_public_home_entry_async,
+    read_public_home_resource_async,
+)
+from app.personal_config import get_personal_config
 
 router = APIRouter(prefix="/api/earnings", tags=["earnings"])
 
@@ -177,11 +183,38 @@ async def upcoming_earnings():
     """
     today = _market_today()
     key = f"earnings:upcoming:{today.isoformat()}"
-    if not current_request_is_owner():
+    owner = current_request_is_owner()
+    if not owner:
         cached = cache.get(key)
+        if cached is None:
+            now = time.time()
+            cached = await read_public_home_resource_async(
+                "earnings",
+                parameters=public_home_resource_parameters("earnings", now=now),
+                now=now,
+            )
         if cached is None:
             raise public_snapshot_unavailable(key)
         return cached
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    config = get_personal_config()
+    if config.access.mode == "password":
+        now = time.time()
+        interval = float(config.public_home.earnings_seconds)
+        disk_entry = await read_owner_public_home_entry_async(
+            "earnings",
+            parameters=public_home_resource_parameters("earnings", now=now),
+            fresh_for_seconds=interval,
+            now=now,
+        )
+        if disk_entry is not None:
+            remaining = max(
+                1,
+                int(float(disk_entry["saved_at"]) + interval - now),
+            )
+            return cache.set(key, disk_entry["payload"], remaining)
     return await cache.get_or_set(
         key,
         3600,

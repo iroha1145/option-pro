@@ -568,6 +568,7 @@ class WorkerSupervisor:
             raise WorkerAlreadyRunning("another unified worker holds the process file lock")
         heartbeat: asyncio.Task[None] | None = None
         loops: dict[TaskSpec, asyncio.Task[None]] = {}
+        completed_normally = False
         try:
             await asyncio.to_thread(self.repository.initialize)
             token = await asyncio.to_thread(
@@ -585,6 +586,12 @@ class WorkerSupervisor:
                 self.repository.recover_interrupted,
                 self.owner_id,
                 token,
+            )
+            await asyncio.to_thread(
+                self.repository.reconcile_task_status,
+                self.owner_id,
+                token,
+                tuple(task.name for task in self.tasks),
             )
             heartbeat_started = asyncio.Event()
             heartbeat = asyncio.create_task(
@@ -654,6 +661,7 @@ class WorkerSupervisor:
                 await self._drain(loops)
             if self._lease_lost.is_set():
                 raise WorkerLeaseLost("unified worker lease was lost")
+            completed_normally = True
             return {
                 "status": "completed" if once else "stopped",
                 "tasks": dict(self._results),
@@ -669,6 +677,13 @@ class WorkerSupervisor:
             if heartbeat is not None:
                 await asyncio.gather(heartbeat, return_exceptions=True)
             if self._token is not None:
+                if not once and completed_normally and not self._lease_lost.is_set():
+                    await asyncio.to_thread(
+                        self.repository.reconcile_task_status,
+                        self.owner_id,
+                        self._token,
+                        (),
+                    )
                 await asyncio.to_thread(
                     self.repository.release,
                     self.owner_id,
