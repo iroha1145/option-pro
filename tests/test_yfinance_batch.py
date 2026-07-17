@@ -95,6 +95,29 @@ def test_download_batches_promote_single_ticker_flat_columns():
     assert list(result.columns) == [("AAPL", "Close")]
 
 
+def test_download_batches_normalize_intraday_timezones_before_merging():
+    def fake_download(*, tickers: str, **_kwargs: Any) -> pd.DataFrame:
+        symbol = tickers.split()[0]
+        market_timezone = (
+            "America/New_York" if symbol == "AAPL" else "Asia/Tokyo"
+        )
+        index = pd.DatetimeIndex(["2026-07-17 09:30"], tz=market_timezone)
+        columns = pd.MultiIndex.from_product([[symbol], ["Close"]])
+        return pd.DataFrame([[1.0]], index=index, columns=columns)
+
+    result = download_in_bounded_batches(
+        fake_download,
+        tickers=["AAPL", "7203.T"],
+        batch_size=1,
+        group_by="ticker",
+    )
+
+    assert isinstance(result.index, pd.DatetimeIndex)
+    assert str(result.index.tz) == "UTC"
+    assert str(result["AAPL"].index.tz) == "UTC"
+    assert str(result["7203.T"].index.tz) == "UTC"
+
+
 def test_download_batches_keep_partial_results_and_stably_deduplicate_tickers():
     calls: list[list[str]] = []
 

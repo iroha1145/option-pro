@@ -31,6 +31,16 @@ def _ticker_list(tickers: str | Iterable[str]) -> list[str]:
     return symbols
 
 
+def _normalize_batch_index(frame: pd.DataFrame) -> pd.DataFrame:
+    """Give timezone-aware batches one shared index timezone before merging."""
+
+    if not isinstance(frame.index, pd.DatetimeIndex) or frame.index.tz is None:
+        return frame
+    normalized = frame.copy()
+    normalized.index = frame.index.tz_convert("UTC")
+    return normalized
+
+
 def download_in_bounded_batches(
     download: Callable[..., pd.DataFrame | None],
     *,
@@ -85,7 +95,7 @@ def download_in_bounded_batches(
                     [batch, frame.columns],
                     names=["Ticker", frame.columns.name or "Price"],
                 )
-            frames.append(frame)
+            frames.append(_normalize_batch_index(frame))
     finally:
         _download_gate.release()
 
