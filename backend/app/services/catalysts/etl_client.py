@@ -15,7 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 
 INTERNAL_API_PREFIX = "/internal/v1"
-MAX_PAGE_LIMIT = 50
+NEWS_PAGE_LIMIT = 500
+CALENDAR_PAGE_LIMIT = 50
+MAX_PAGE_LIMIT = NEWS_PAGE_LIMIT
 DEFAULT_MAX_RESPONSE_BYTES = 5 * 1024 * 1024
 _Sleep = Callable[[float], Awaitable[None]]
 
@@ -216,7 +218,7 @@ class NewsChange(_WireModel):
 
 
 class NewsChangesPage(_WireModel):
-    items: list[NewsChange] = Field(max_length=MAX_PAGE_LIMIT)
+    items: list[NewsChange] = Field(max_length=NEWS_PAGE_LIMIT)
     has_more: bool
     next_cursor: str | None = Field(default=None, max_length=2_048)
     watermark: NewsWatermark
@@ -298,7 +300,7 @@ class CalendarEvent(_WireModel):
 
 
 class CalendarPage(_WireModel):
-    items: list[CalendarEvent] = Field(max_length=MAX_PAGE_LIMIT)
+    items: list[CalendarEvent] = Field(max_length=CALENDAR_PAGE_LIMIT)
     has_more: bool
     next_cursor: str | None = Field(default=None, max_length=2_048)
     watermark: CalendarWatermark
@@ -468,9 +470,9 @@ class MacroLensEtlClient:
         await self._client.aclose()
 
     @staticmethod
-    def _validate_limit(limit: int) -> int:
-        if isinstance(limit, bool) or not 1 <= limit <= MAX_PAGE_LIMIT:
-            raise ValueError(f"page limit must be between 1 and {MAX_PAGE_LIMIT}")
+    def _validate_limit(limit: int, *, maximum: int) -> int:
+        if isinstance(limit, bool) or not 1 <= limit <= maximum:
+            raise ValueError(f"page limit must be between 1 and {maximum}")
         return limit
 
     @staticmethod
@@ -508,7 +510,7 @@ class MacroLensEtlClient:
         updated_after: str | None = None,
         as_of: str | None = None,
         after_sequence: int | None = None,
-        limit: int = MAX_PAGE_LIMIT,
+        limit: int = NEWS_PAGE_LIMIT,
     ) -> NewsChangesPage:
         if cursor and (
             updated_after is not None
@@ -516,7 +518,9 @@ class MacroLensEtlClient:
             or after_sequence is not None
         ):
             raise ValueError("cursor cannot be combined with explicit checkpoints")
-        params: dict[str, Any] = {"limit": self._validate_limit(limit)}
+        params: dict[str, Any] = {
+            "limit": self._validate_limit(limit, maximum=NEWS_PAGE_LIMIT)
+        }
         if cursor:
             if len(cursor) > 2_048:
                 raise ValueError("cursor is too long")
@@ -550,7 +554,7 @@ class MacroLensEtlClient:
         updated_after: str | None = None,
         as_of: str | None = None,
         after_sequence: int | None = None,
-        limit: int = MAX_PAGE_LIMIT,
+        limit: int = CALENDAR_PAGE_LIMIT,
     ) -> CalendarPage:
         if cursor and (
             updated_after is not None
@@ -558,7 +562,9 @@ class MacroLensEtlClient:
             or after_sequence is not None
         ):
             raise ValueError("cursor cannot be combined with explicit checkpoints")
-        params: dict[str, Any] = {"limit": self._validate_limit(limit)}
+        params: dict[str, Any] = {
+            "limit": self._validate_limit(limit, maximum=CALENDAR_PAGE_LIMIT)
+        }
         if cursor:
             if len(cursor) > 2_048:
                 raise ValueError("cursor is too long")

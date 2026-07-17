@@ -4,13 +4,18 @@ from dataclasses import dataclass
 from typing import Literal
 
 from .etl_client import (
-    MAX_PAGE_LIMIT,
+    CALENDAR_PAGE_LIMIT,
+    NEWS_PAGE_LIMIT,
     EtlClientError,
     EtlCursorResetRequired,
+    EtlResponseTooLarge,
     HealthProbe,
     MacroLensEtlClient,
 )
 from .etl_repository import CatalystEtlRepository, StreamName
+
+
+MIN_NEWS_PAGE_LIMIT = 50
 
 
 @dataclass(frozen=True)
@@ -35,13 +40,27 @@ class MacroLensIncrementalSync:
         client: MacroLensEtlClient,
         repository: CatalystEtlRepository,
         *,
-        page_limit: int = MAX_PAGE_LIMIT,
+        news_page_limit: int = NEWS_PAGE_LIMIT,
+        calendar_page_limit: int = CALENDAR_PAGE_LIMIT,
     ) -> None:
-        if isinstance(page_limit, bool) or not 1 <= page_limit <= MAX_PAGE_LIMIT:
-            raise ValueError(f"page_limit must be between 1 and {MAX_PAGE_LIMIT}")
+        if (
+            isinstance(news_page_limit, bool)
+            or not 1 <= news_page_limit <= NEWS_PAGE_LIMIT
+        ):
+            raise ValueError(
+                f"news_page_limit must be between 1 and {NEWS_PAGE_LIMIT}"
+            )
+        if (
+            isinstance(calendar_page_limit, bool)
+            or not 1 <= calendar_page_limit <= CALENDAR_PAGE_LIMIT
+        ):
+            raise ValueError(
+                f"calendar_page_limit must be between 1 and {CALENDAR_PAGE_LIMIT}"
+            )
         self.client = client
         self.repository = repository
-        self.page_limit = page_limit
+        self.news_page_limit = news_page_limit
+        self.calendar_page_limit = calendar_page_limit
 
     async def probe_health(self) -> HealthProbe:
         return await self.client.probe_health()
@@ -62,6 +81,10 @@ class MacroLensIncrementalSync:
         replayed = 0
         resets = 0
         complete = False
+        request_limit = (
+            self.news_page_limit if stream == "news" else self.calendar_page_limit
+        )
+        minimum_news_limit = min(MIN_NEWS_PAGE_LIMIT, self.news_page_limit)
 
         while pages < max_pages:
             state = self.repository.state(stream)
@@ -70,13 +93,13 @@ class MacroLensIncrementalSync:
                     if state.cursor:
                         page = await self.client.news_changes(
                             cursor=state.cursor,
-                            limit=self.page_limit,
+                            limit=request_limit,
                         )
                     else:
                         page = await self.client.news_changes(
                             updated_after=state.updated_after,
                             after_sequence=state.completed_watermark_sequence,
-                            limit=self.page_limit,
+                            limit=request_limit,
                         )
                     applied = self.repository.apply_news_page(
                         page,
@@ -91,13 +114,13 @@ class MacroLensIncrementalSync:
                     if state.cursor:
                         calendar_page = await self.client.calendar(
                             cursor=state.cursor,
-                            limit=self.page_limit,
+                            limit=request_limit,
                         )
                     else:
                         calendar_page = await self.client.calendar(
                             updated_after=state.updated_after,
                             after_sequence=state.completed_watermark_sequence,
-                            limit=self.page_limit,
+                            limit=request_limit,
                         )
                     applied = self.repository.apply_calendar_page(
                         calendar_page,
@@ -107,6 +130,12 @@ class MacroLensIncrementalSync:
                     records += int(applied["items"])
                     replayed += int(applied["replayed"])
                     complete = bool(applied["complete"])
+            except EtlResponseTooLarge as exc:
+                if stream != "news" or request_limit <= minimum_news_limit:
+                    self.repository.record_error(stream, exc.code)
+                    raise
+                request_limit = max(minimum_news_limit, request_limit // 2)
+                continue
             except EtlCursorResetRequired as exc:
                 if state.cursor is None or resets >= 1:
                     self.repository.record_error(stream, exc.code)

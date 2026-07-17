@@ -1229,7 +1229,7 @@ def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
         "/internal/v1/calendar",
     ]
     assert all(request.url.params["after_sequence"] == "0" for request in requests)
-    assert all(request.url.params["limit"] == "50" for request in requests)
+    assert [request.url.params["limit"] for request in requests] == ["500", "50"]
     assert getattr(client, "_client").is_closed is True
     assert task._client is None
     assert cache_path.is_file()

@@ -8,6 +8,7 @@ import pytest
 from app.services.catalysts.etl_client import (
     CalendarPage,
     EtlClientConfig,
+    EtlResponseTooLarge,
     MacroLensEtlClient,
     NewsChangesPage,
 )
@@ -128,7 +129,7 @@ async def test_news_sync_resumes_at_page_cursor_and_persists_delete_tombstone(tm
     assert requests[1].url.params["cursor"] == "news-page-2"
     assert "updated_after" not in requests[1].url.params
     assert "after_sequence" not in requests[1].url.params
-    assert all(request.url.params["limit"] == "50" for request in requests)
+    assert all(request.url.params["limit"] == "500" for request in requests)
 
     deleted = repository.get_news(7, include_deleted=True)
     assert deleted is not None
@@ -140,6 +141,128 @@ async def test_news_sync_resumes_at_page_cursor_and_persists_delete_tombstone(tm
     assert deleted["raw"]["sources"] == ["finnhub", "massive"]
     assert repository.get_news(7) is None
     assert [row["change_sequence"] for row in repository.tombstones(7)] == [2]
+
+
+@pytest.mark.anyio
+async def test_oversized_news_page_retries_same_cursor_with_smaller_batch(tmp_path):
+    requests: list[httpx.Request] = []
+    retry_states: list[tuple[str | None, int, int]] = []
+    repository = CatalystEtlRepository(tmp_path / "catalyst.db")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.params.get("cursor") is None:
+            return httpx.Response(200, json=_first_news_page())
+        state = repository.state("news")
+        retry_states.append(
+            (state.cursor, state.generation, state.completed_watermark_sequence)
+        )
+        if request.url.params["limit"] != "50":
+            return httpx.Response(
+                200,
+                content=b'{"padding":"' + (b"x" * 5_000) + b'"}',
+                headers={"content-type": "application/json"},
+            )
+        return httpx.Response(200, json=_second_news_page())
+
+    async with MacroLensEtlClient(
+        EtlClientConfig(
+            "https://macrolens.example",
+            "owner-token",
+            max_response_bytes=4_096,
+        ),
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        sync = MacroLensIncrementalSync(client, repository)
+        partial = await sync.sync_news(max_pages=1)
+        resumed = await sync.sync_news()
+
+    assert partial.complete is False
+    assert resumed.complete is True
+    assert [request.url.params["limit"] for request in requests] == [
+        "500",
+        "500",
+        "250",
+        "125",
+        "62",
+        "50",
+    ]
+    assert all(
+        request.url.params["cursor"] == "news-page-2" for request in requests[1:]
+    )
+    assert retry_states
+    assert all(snapshot == retry_states[0] for snapshot in retry_states)
+    assert retry_states[0][0] == "news-page-2"
+    assert retry_states[0][2] == 0
+    state = repository.state("news")
+    assert state.cursor is None
+    assert state.completed_watermark_sequence == 2
+    assert state.last_error_code is None
+
+
+@pytest.mark.anyio
+async def test_minimum_news_batch_records_terminal_response_size_error(tmp_path):
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            content=b'{"padding":"' + (b"x" * 5_000) + b'"}',
+            headers={"content-type": "application/json"},
+        )
+
+    repository = CatalystEtlRepository(tmp_path / "catalyst.db")
+    async with MacroLensEtlClient(
+        EtlClientConfig(
+            "https://macrolens.example",
+            "owner-token",
+            max_response_bytes=4_096,
+        ),
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        sync = MacroLensIncrementalSync(client, repository, news_page_limit=50)
+        with pytest.raises(EtlResponseTooLarge):
+            await sync.sync_news()
+
+    assert len(requests) == 1
+    assert requests[0].url.params["limit"] == "50"
+    state = repository.state("news")
+    assert state.cursor is None
+    assert state.generation == 0
+    assert state.last_error_code == "response_too_large"
+
+
+@pytest.mark.anyio
+async def test_calendar_response_size_error_does_not_use_news_batch_fallback(tmp_path):
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            content=b'{"padding":"' + (b"x" * 5_000) + b'"}',
+            headers={"content-type": "application/json"},
+        )
+
+    repository = CatalystEtlRepository(tmp_path / "catalyst.db")
+    async with MacroLensEtlClient(
+        EtlClientConfig(
+            "https://macrolens.example",
+            "owner-token",
+            max_response_bytes=4_096,
+        ),
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        with pytest.raises(EtlResponseTooLarge):
+            await MacroLensIncrementalSync(client, repository).sync_calendar()
+
+    assert len(requests) == 1
+    assert requests[0].url.params["limit"] == "50"
+    state = repository.state("calendar")
+    assert state.cursor is None
+    assert state.generation == 0
+    assert state.last_error_code == "response_too_large"
 
 
 @pytest.mark.anyio
@@ -193,10 +316,10 @@ async def test_expired_cursor_replays_from_last_completed_time_without_losing_la
     assert repository.state("news").reset_count == 1
     assert repository.state("news").updated_after == NEXT_AS_OF
     assert repository.get_news(8)["source_updated_at"] == "2020-01-01T00:00:00Z"
-    assert seen_queries[1] == {"cursor": "news-page-2", "limit": "50"}
+    assert seen_queries[1] == {"cursor": "news-page-2", "limit": "500"}
     assert seen_queries[2] == {
         "after_sequence": "0",
-        "limit": "50",
+        "limit": "500",
         "updated_after": EPOCH,
     }
 
@@ -261,6 +384,7 @@ async def test_calendar_sync_keeps_frozen_snapshot_across_pages(tmp_path):
     ]
     assert requests[0].url.params["after_sequence"] == "0"
     assert requests[1].url.params["cursor"] == "calendar-page-2"
+    assert all(request.url.params["limit"] == "50" for request in requests)
     assert "after_sequence" not in requests[1].url.params
 
 
