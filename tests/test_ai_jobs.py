@@ -4,6 +4,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import json
 import sys
+import threading
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -177,6 +178,75 @@ def _large_signal_result():
         "data_quality_notes": twelve,
         "summary": "结" * 1200,
     }
+
+
+def test_ai_job_heartbeat_survives_a_saturated_default_executor():
+    async def scenario() -> None:
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(
+            ThreadPoolExecutor(
+                max_workers=1,
+                thread_name_prefix="saturated-ai-default",
+            )
+        )
+        blocker_started = threading.Event()
+        blocker_release = threading.Event()
+
+        def occupy_default_executor() -> None:
+            blocker_started.set()
+            blocker_release.wait()
+
+        blocked = loop.run_in_executor(None, occupy_default_executor)
+        for _ in range(100):
+            if blocker_started.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert blocker_started.is_set()
+
+        class ImmediateHeartbeatStop:
+            def __init__(self) -> None:
+                self.stopped = False
+
+            def is_set(self) -> bool:
+                return self.stopped
+
+            async def wait(self) -> None:
+                raise asyncio.TimeoutError
+
+        stop = ImmediateHeartbeatStop()
+        renewed_on: list[str] = []
+
+        class Repository:
+            def renew_lease(
+                self,
+                job_id: str,
+                owner: str,
+                lease_seconds: int,
+            ) -> bool:
+                assert (job_id, owner, lease_seconds) == ("job-1", "owner-1", 60)
+                renewed_on.append(threading.current_thread().name)
+                stop.stopped = True
+                return True
+
+        try:
+            await asyncio.wait_for(
+                ai_worker._lease_heartbeat(
+                    Repository(),  # type: ignore[arg-type]
+                    "job-1",
+                    "owner-1",
+                    60,
+                    stop,  # type: ignore[arg-type]
+                ),
+                timeout=1,
+            )
+        finally:
+            blocker_release.set()
+            await blocked
+
+        assert len(renewed_on) == 1
+        assert renewed_on[0].startswith("ai-job-heartbeat")
+
+    asyncio.run(scenario())
 
 
 def test_standalone_worker_reads_fresh_runtime_controls_each_iteration(

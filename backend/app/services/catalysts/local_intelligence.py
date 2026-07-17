@@ -3,10 +3,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import re
 import sqlite3
 import uuid
+from collections import Counter
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Literal, Sequence
@@ -304,42 +307,179 @@ def _title_tokens(value: str) -> frozenset[str]:
     return frozenset(tokens)
 
 
-def _similar_titles(left: dict[str, Any], right: dict[str, Any]) -> bool:
-    left_tokens = _title_tokens(str(left.get("raw_title") or ""))
-    right_tokens = _title_tokens(str(right.get("raw_title") or ""))
-    if not left_tokens or not right_tokens:
+@dataclass(frozen=True, slots=True)
+class _ClusterFeatures:
+    kind: str
+    tokens: frozenset[str]
+    tickers: frozenset[str]
+
+
+def _cluster_features(row: dict[str, Any]) -> _ClusterFeatures:
+    return _ClusterFeatures(
+        kind=_event_type(
+            str(row.get("raw_title") or ""),
+            row.get("raw_summary"),
+        ),
+        tokens=_title_tokens(str(row.get("raw_title") or "")),
+        tickers=frozenset(row.get("canonical_tickers") or []),
+    )
+
+
+def _cluster_features_similar(
+    left: _ClusterFeatures,
+    right: _ClusterFeatures,
+) -> bool:
+    if not left.tokens or not right.tokens:
         return False
-    left_tickers = set(left.get("canonical_tickers") or [])
-    right_tickers = set(right.get("canonical_tickers") or [])
-    if left_tickers or right_tickers:
-        if not left_tickers.intersection(right_tickers):
+    if left.tickers or right.tickers:
+        if not left.tickers.intersection(right.tickers):
             return False
         threshold = 0.55
     else:
         threshold = 0.72
-    union = left_tokens | right_tokens
-    return bool(union) and len(left_tokens & right_tokens) / len(union) >= threshold
+    union = left.tokens | right.tokens
+    return bool(union) and len(left.tokens & right.tokens) / len(union) >= threshold
+
+
+def _similar_titles(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    return _cluster_features_similar(
+        _cluster_features(left),
+        _cluster_features(right),
+    )
+
+
+def _required_token_overlap(
+    left_size: int,
+    right_size: int,
+    threshold: float,
+) -> int | None:
+    """Return the smallest token intersection that can satisfy Jaccard."""
+
+    maximum = min(left_size, right_size)
+    if maximum <= 0:
+        return None
+    # Starting from the closed-form lower bound keeps this loop constant-time
+    # for normal headlines. The explicit ratio check preserves the exact
+    # floating-point comparison used by _cluster_features_similar.
+    estimate = math.ceil(
+        threshold * (left_size + right_size) / (1.0 + threshold)
+    )
+    for overlap in range(max(1, estimate - 1), maximum + 1):
+        if overlap / (left_size + right_size - overlap) >= threshold:
+            return overlap
+    return None
 
 
 def _cluster_rows(rows: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
-    clusters: list[list[dict[str, Any]]] = []
     ordered = sorted(
         rows,
         key=lambda row: (str(row.get("source_available_at") or ""), int(row["news_id"])),
     )
-    for row in ordered:
-        kind = _event_type(str(row.get("raw_title") or ""), row.get("raw_summary"))
-        for cluster in clusters:
-            representative = cluster[0]
-            other_kind = _event_type(
-                str(representative.get("raw_title") or ""),
-                representative.get("raw_summary"),
-            )
-            if kind == other_kind and any(_similar_titles(row, member) for member in cluster):
-                cluster.append(row)
+    features = [_cluster_features(row) for row in ordered]
+    token_frequency = Counter(
+        token for item in features for token in item.tokens
+    )
+    ordered_tokens = [
+        tuple(sorted(item.tokens, key=lambda token: (token_frequency[token], token)))
+        for item in features
+    ]
+
+    clusters: list[list[dict[str, Any]]] = []
+    cluster_features: list[list[_ClusterFeatures]] = []
+    # Each posting records clusters, not individual rows. Repeated syndicated
+    # headlines therefore keep the candidate set bounded even when a cluster
+    # contains thousands of source revisions.
+    postings: dict[tuple[str, bool, int, str, str | None], set[int]] = {}
+    indexed_lengths: dict[tuple[str, bool], set[int]] = {}
+
+    for row, item, tokens_by_rarity in zip(
+        ordered,
+        features,
+        ordered_tokens,
+        strict=True,
+    ):
+        has_tickers = bool(item.tickers)
+        category = (item.kind, has_tickers)
+        threshold = 0.55 if has_tickers else 0.72
+        candidates: set[int] = set()
+        left_size = len(item.tokens)
+
+        if left_size:
+            for right_size in indexed_lengths.get(category, ()):
+                required = _required_token_overlap(
+                    left_size,
+                    right_size,
+                    threshold,
+                )
+                if required is None:
+                    continue
+                # If a prior title shares `required` tokens, at least one must
+                # appear in this rarity-ordered prefix. Indexing all tokens on
+                # prior rows makes this an exact filter, not an approximation.
+                prefix_length = left_size - required + 1
+                for token in tokens_by_rarity[:prefix_length]:
+                    if has_tickers:
+                        for ticker in item.tickers:
+                            candidates.update(
+                                postings.get(
+                                    (
+                                        item.kind,
+                                        True,
+                                        right_size,
+                                        token,
+                                        ticker,
+                                    ),
+                                    (),
+                                )
+                            )
+                    else:
+                        candidates.update(
+                            postings.get(
+                                (
+                                    item.kind,
+                                    False,
+                                    right_size,
+                                    token,
+                                    None,
+                                ),
+                                (),
+                            )
+                        )
+
+        selected: int | None = None
+        for cluster_index in sorted(candidates):
+            if any(
+                _cluster_features_similar(item, member)
+                for member in cluster_features[cluster_index]
+            ):
+                selected = cluster_index
                 break
-        else:
+
+        if selected is None:
+            selected = len(clusters)
             clusters.append([row])
+            cluster_features.append([item])
+        else:
+            clusters[selected].append(row)
+            cluster_features[selected].append(item)
+
+        if left_size:
+            indexed_lengths.setdefault(category, set()).add(left_size)
+            ticker_keys: tuple[str | None, ...] = (
+                tuple(sorted(item.tickers)) if has_tickers else (None,)
+            )
+            for token in item.tokens:
+                for ticker in ticker_keys:
+                    postings.setdefault(
+                        (
+                            item.kind,
+                            has_tickers,
+                            left_size,
+                            token,
+                            ticker,
+                        ),
+                        set(),
+                    ).add(selected)
     return clusters
 
 

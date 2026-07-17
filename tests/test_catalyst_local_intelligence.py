@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -553,6 +554,173 @@ def test_clustering_requires_approximate_title_and_intersecting_validated_ticker
     clustered = next(item for item in hotspots if item["representative_news_id"] in {51, 52})
     assert clustered["source_count"] == 1
     assert [name.casefold() for name in clustered["source_names"]] == ["reuters"]
+
+
+def test_indexed_clustering_matches_the_original_greedy_semantics():
+    rng = random.Random(90210)
+    vocabulary = (
+        "alpha",
+        "beta",
+        "cloud",
+        "chip",
+        "data",
+        "center",
+        "launch",
+        "market",
+        "revenue",
+        "earnings",
+        "guidance",
+        "product",
+        "update",
+        "growth",
+    )
+    ticker_sets = ((), ("NVDA",), ("AMD",), ("NVDA", "AMD"))
+    rows: list[dict[str, Any]] = []
+    for news_id in range(1, 501):
+        tokens = rng.sample(vocabulary, rng.randint(1, 8))
+        rows.append(
+            {
+                "news_id": news_id,
+                "source_available_at": f"{rng.randrange(80):04d}",
+                "raw_title": " ".join(tokens),
+                "raw_summary": "quarterly market update",
+                "canonical_tickers": list(rng.choice(ticker_sets)),
+            }
+        )
+
+    def legacy_cluster_rows(
+        values: list[dict[str, Any]],
+    ) -> list[list[dict[str, Any]]]:
+        clusters: list[list[dict[str, Any]]] = []
+        ordered = sorted(
+            values,
+            key=lambda row: (
+                str(row.get("source_available_at") or ""),
+                int(row["news_id"]),
+            ),
+        )
+        for row in ordered:
+            kind = local_module._event_type(
+                str(row.get("raw_title") or ""),
+                row.get("raw_summary"),
+            )
+            for cluster in clusters:
+                representative = cluster[0]
+                other_kind = local_module._event_type(
+                    str(representative.get("raw_title") or ""),
+                    representative.get("raw_summary"),
+                )
+                if kind == other_kind and any(
+                    local_module._similar_titles(row, member)
+                    for member in cluster
+                ):
+                    cluster.append(row)
+                    break
+            else:
+                clusters.append([row])
+        return clusters
+
+    expected = [
+        [int(row["news_id"]) for row in cluster]
+        for cluster in legacy_cluster_rows(rows)
+    ]
+    actual = [
+        [int(row["news_id"]) for row in cluster]
+        for cluster in local_module._cluster_rows(rows)
+    ]
+
+    assert actual == expected
+
+
+def test_indexed_clustering_keeps_the_first_matching_transitive_cluster():
+    rows = [
+        {
+            "news_id": 1,
+            "source_available_at": "0001",
+            "raw_title": "alpha beta cloud",
+            "raw_summary": None,
+            "canonical_tickers": ["NVDA"],
+        },
+        {
+            "news_id": 2,
+            "source_available_at": "0002",
+            "raw_title": "data edge fabric",
+            "raw_summary": None,
+            "canonical_tickers": ["NVDA"],
+        },
+        {
+            "news_id": 3,
+            "source_available_at": "0003",
+            "raw_title": "alpha beta cloud data edge",
+            "raw_summary": None,
+            "canonical_tickers": ["NVDA"],
+        },
+        {
+            "news_id": 4,
+            "source_available_at": "0004",
+            "raw_title": "alpha beta data edge fabric",
+            "raw_summary": None,
+            "canonical_tickers": ["NVDA"],
+        },
+    ]
+
+    clusters = local_module._cluster_rows(rows)
+
+    assert [
+        [int(row["news_id"]) for row in cluster]
+        for cluster in clusters
+    ] == [[1, 3, 4], [2]]
+
+
+def test_indexed_clustering_avoids_quadratic_unique_headline_comparisons(
+    monkeypatch,
+):
+    rows = [
+        {
+            "news_id": news_id,
+            "source_available_at": f"{news_id:08d}",
+            "raw_title": f"Company product market update {news_id}",
+            "raw_summary": None,
+            "canonical_tickers": [],
+        }
+        for news_id in range(1, 10_001)
+    ]
+    comparisons = 0
+    event_type_calls = 0
+    title_token_calls = 0
+    original_similarity = local_module._cluster_features_similar
+    original_event_type = local_module._event_type
+    original_title_tokens = local_module._title_tokens
+
+    def counting_similarity(left, right):
+        nonlocal comparisons
+        comparisons += 1
+        return original_similarity(left, right)
+
+    def counting_event_type(title, summary):
+        nonlocal event_type_calls
+        event_type_calls += 1
+        return original_event_type(title, summary)
+
+    def counting_title_tokens(value):
+        nonlocal title_token_calls
+        title_token_calls += 1
+        return original_title_tokens(value)
+
+    monkeypatch.setattr(
+        local_module,
+        "_cluster_features_similar",
+        counting_similarity,
+    )
+    monkeypatch.setattr(local_module, "_event_type", counting_event_type)
+    monkeypatch.setattr(local_module, "_title_tokens", counting_title_tokens)
+
+    clusters = local_module._cluster_rows(rows)
+
+    assert len(clusters) == len(rows)
+    assert comparisons == 0
+    assert event_type_calls == len(rows)
+    assert title_token_calls == len(rows)
 
 
 def test_market_focus_payload_is_hash_bound_and_stays_immutable(tmp_path):
