@@ -905,6 +905,57 @@ class LocalCatalystIntelligence:
                 linked.add(job_id)
         return recovered
 
+    def _focus_job_matches_intent(
+        self,
+        job: Mapping[str, Any],
+        intent: Mapping[str, Any] | sqlite3.Row,
+    ) -> bool:
+        """Verify that an existing paid job belongs to one durable intent."""
+
+        if job.get("job_type") != "market_focus":
+            return False
+        try:
+            public = self._identity_public_job(
+                dict(job),
+                expected_type="market_focus",
+            )
+        except (KeyError, TypeError, ValueError):
+            return False
+        payload = self._job_payload(dict(job))
+        stored_payload = _loads(intent["payload_json"], None)
+        cycle_id = str(intent["cycle_id"])
+        return bool(
+            public is not None
+            and isinstance(payload, dict)
+            and isinstance(stored_payload, dict)
+            and payload.get("cycle_id") == cycle_id
+            and str(intent["job_id"]) == f"intent:{cycle_id}"
+            and _json(stored_payload) == _json(payload)
+        )
+
+    def _existing_focus_job_for_intent(
+        self,
+        intent: Mapping[str, Any] | sqlite3.Row,
+    ) -> dict[str, Any] | None:
+        """Find an already-created exact job without creating work on GET."""
+
+        jobs = self._ai_job_snapshot()
+        candidates = sorted(
+            jobs.values(),
+            key=lambda row: (
+                str(row.get("created_at") or ""),
+                str(row.get("job_id") or ""),
+            ),
+        )
+        return next(
+            (
+                job
+                for job in candidates
+                if self._focus_job_matches_intent(job, intent)
+            ),
+            None,
+        )
+
     def _recover_unlinked_focus_jobs(
         self,
         connection: sqlite3.Connection,
@@ -939,33 +990,20 @@ class LocalCatalystIntelligence:
         )
         for job in candidates:
             job_id = str(job.get("job_id") or "")
-            if (
-                not job_id
-                or job_id in linked_job_ids
-                or job.get("job_type") != "market_focus"
-            ):
-                continue
-            try:
-                public = self._identity_public_job(
-                    job,
-                    expected_type="market_focus",
-                )
-            except (KeyError, TypeError, ValueError):
+            if not job_id or job_id in linked_job_ids:
                 continue
             payload = self._job_payload(job)
             cycle_id = payload.get("cycle_id") if payload is not None else None
             if not isinstance(cycle_id, str):
                 continue
             intent = intents.get(cycle_id)
-            stored_payload = _loads(intent["payload_json"], None) if intent else None
-            if (
-                public is None
-                or intent is None
-                or str(intent["job_id"]) != f"intent:{cycle_id}"
-                or not isinstance(stored_payload, dict)
-                or _json(stored_payload) != _json(payload)
-            ):
+            if intent is None or not self._focus_job_matches_intent(job, intent):
                 continue
+            public = self._identity_public_job(
+                job,
+                expected_type="market_focus",
+            )
+            assert public is not None
             updated = connection.execute(
                 """UPDATE catalyst_local_focus_cycles SET
                        status=?,job_id=?,updated_at=?
@@ -2681,6 +2719,7 @@ class LocalCatalystIntelligence:
         cycle_id: str,
         *,
         submission_source: SubmissionSource = "manual",
+        existing_job: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create or relink the paid job for one durable local intent.
 
@@ -2702,10 +2741,15 @@ class LocalCatalystIntelligence:
         if not isinstance(payload, dict):
             raise RuntimeError("market_focus_intent_payload_invalid")
 
-        job, created = self._create_focus_job(
-            payload,
-            submission_source=submission_source,
-        )
+        if existing_job is None:
+            job, created = self._create_focus_job(
+                payload,
+                submission_source=submission_source,
+            )
+        else:
+            if not self._focus_job_matches_intent(existing_job, intent):
+                raise RuntimeError("market_focus_intent_job_mismatch")
+            job, created = existing_job, False
         try:
             with self._connect() as connection:
                 connection.execute("BEGIN IMMEDIATE")
@@ -2748,9 +2792,18 @@ class LocalCatalystIntelligence:
             public_job["cached"] = bool(
                 not created and public_job["status"] == "completed"
             )
+            projected_status = str(public_job["status"])
+            if projected_status in {
+                "completed",
+                "failed",
+                "cancelled",
+                "budget_blocked",
+            }:
+                projected_status = "in_progress"
+            public_job["status"] = projected_status
             cycle.update(
                 {
-                    "status": public_job["status"],
+                    "status": projected_status,
                     "job_id": public_job["job_id"],
                     "updated_at": public_job["updated_at"],
                     "local_link_pending": True,
@@ -2902,6 +2955,29 @@ class LocalCatalystIntelligence:
         *,
         submission_source: SubmissionSource = "manual",
     ) -> dict[str, Any]:
+        with self._connect() as connection:
+            preparing = connection.execute(
+                "SELECT * FROM catalyst_local_focus_cycles WHERE cycle_id=?",
+                (cycle_id,),
+            ).fetchone()
+        if preparing is not None and str(preparing["status"]) == "preparing":
+            payload = _loads(preparing["payload_json"], None)
+            if (
+                str(preparing["job_id"]) != f"intent:{cycle_id}"
+                or not isinstance(payload, dict)
+            ):
+                raise CatalystError(
+                    "market_focus_cycle_not_retryable",
+                    "Focus cycle intent cannot be safely resumed",
+                    counts_for_circuit=False,
+                )
+            # This is an explicit owner action. It may create the previously
+            # unpaid immutable job even if newer hotspot revisions now exist.
+            return self._resume_focus_intent(
+                cycle_id,
+                submission_source=submission_source,
+            )
+
         schema_version, schema_hash = ai_runtime.schema_identity("market_focus")
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -3087,8 +3163,20 @@ class LocalCatalystIntelligence:
         if include_owner_state and str(row["status"]) == "preparing":
             # A confirmed POST may have created the idempotent paid job before
             # the local link commit met a transient SQLite writer. Owner polling
-            # resumes that durable intent instead of waiting for scheduled ETL.
-            return self._resume_focus_intent(cycle_id)
+            # may relink that exact job, but must never create unpaid work.
+            existing_job = self._existing_focus_job_for_intent(row)
+            if existing_job is None:
+                awaiting_submission = self._focus_cycle_from_row(
+                    row,
+                    include_owner_state=True,
+                )
+                assert awaiting_submission is not None
+                awaiting_submission["awaiting_submission"] = True
+                return awaiting_submission
+            return self._resume_focus_intent(
+                cycle_id,
+                existing_job=existing_job,
+            )
         if (
             include_owner_state
             and row["result_json"] is None

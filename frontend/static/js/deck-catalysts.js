@@ -1033,13 +1033,23 @@
     const job = raw.job && typeof raw.job === "object" ? raw.job : null;
     const cycle = Object.assign({}, raw);
     const cycleId = raw.cycle_id || raw.id || null;
-    const analysisJobId = (job && (job.job_id || job.id)) || raw.job_id || null;
+    const storedJobId = (job && (job.job_id || job.id)) || raw.job_id || null;
+    const awaitingSubmission = raw.awaiting_submission === true
+      || String(storedJobId || "").startsWith("intent:");
+    const analysisJobId = awaitingSubmission ? null : storedJobId;
+    const localTransitionPending = raw.local_link_pending === true
+      || raw.local_publish_pending === true;
+    const rawStatus = raw.status || raw.state;
+    const preferredStatus = localTransitionPending && rawStatus
+      ? rawStatus
+      : (job && (job.status || job.state)) || rawStatus || "pending";
     delete cycle.job;
     return Object.assign(cycle, {
       cycle_id: cycleId,
       job_id: cycleId,
       analysis_job_id: analysisJobId,
-      status: Jobs.normalizeStatus((job && (job.status || job.state)) || raw.status || raw.state || "pending"),
+      awaiting_submission: awaitingSubmission,
+      status: Jobs.normalizeStatus(preferredStatus),
     });
   }
 
@@ -1052,7 +1062,12 @@
     const cycleHasPreparedRevision = Number.isFinite(rawCyclePreparedRevision) && rawCyclePreparedRevision >= 0;
     const cyclePreparedRevision = cycleHasPreparedRevision ? rawCyclePreparedRevision : 0;
     const preparedCount = finite(preparedCountValue) ? preparedCountValue : 0;
-    const active = !!((cycle.cycle_id || raw.active_cycle_id) && Jobs.isActive(cycle.status));
+    const awaitingSubmission = cycle.awaiting_submission === true;
+    const active = !!(
+      !awaitingSubmission
+      && (cycle.cycle_id || raw.active_cycle_id)
+      && Jobs.isActive(cycle.status)
+    );
     const availability = raw.analysis_availability && typeof raw.analysis_availability === "object"
       ? raw.analysis_availability
       : {};
@@ -1076,7 +1091,10 @@
     const retryable = !!(
       cycle.cycle_id
       && !unknownSubmission
-      && ["failed", "cancelled", "incomplete_output"].includes(className(cycle.status))
+      && (
+        awaitingSubmission
+        || ["failed", "cancelled", "incomplete_output"].includes(className(cycle.status))
+      )
     );
     const commonAllowed = !active && !budgetMissing && !workerMissing && !concurrencyMissing && !notConfigured && !analysisUnavailable && !snapshotUnavailable && !cooldown;
     const canRetry = commonAllowed && retryable;
@@ -1110,6 +1128,7 @@
                       : canForce ? "重新分析当前上下文" : "暂无可分析的热点上下文";
     return {
       preparedRevision, consumedRevision, cyclePreparedRevision, cycleHasPreparedRevision, preparedCount,
+      awaitingSubmission,
       active, budgetMissing, workerMissing, concurrencyMissing, notConfigured, readOnly, analysisUnavailable, snapshotUnavailable,
       hasNew, cooldown, unknownSubmission, newPreparationAfterUnknown,
       retryable, canRetry, canCreate, canForce, canRun, buttonText,
@@ -1508,7 +1527,11 @@
 
   function watchMarketFocusCycle(initial) {
     const cycle = cyclePayload(initial);
-    if (!cycle.cycle_id || !Jobs.isActive(cycle.status)) return;
+    if (
+      !cycle.cycle_id
+      || cycle.awaiting_submission
+      || !Jobs.isActive(cycle.status)
+    ) return;
     Jobs.watch(cycle, {
       scope: "catalyst-page:market-focus",
       poll: (id, signal) => N.catalystMarketCycle(id, { signal }).then(cyclePayload),
