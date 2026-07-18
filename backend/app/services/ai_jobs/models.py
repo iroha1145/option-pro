@@ -290,6 +290,8 @@ _NUMERIC_SECURITY_CODE = re.compile(
 _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
     {
         "5G",
+        "10B5-1",
+        "10b5-1",
         "ADP",
         "AI",
         "APDS",
@@ -534,6 +536,8 @@ _GENERIC_NON_REFERENCE_SECURITY_COMPOUNDS = (
     "股份公司",
 )
 _NON_REFERENCE_SECURITY_COMPOUNDS = {
+    "10B5-1": ("股票交易计划", "证券交易计划"),
+    "10b5-1": ("股票交易计划", "证券交易计划"),
     "S&P 500": ("股票指数",),
     "SEC": ("证券监管",),
     "iShares": ("股票基金",),

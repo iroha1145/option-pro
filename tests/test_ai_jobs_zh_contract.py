@@ -199,6 +199,63 @@ def test_news_and_market_focus_results_accept_simplified_chinese():
     assert focus["cycle_id"] == "cycle-20260715-01"
 
 
+def test_news_result_accepts_rule_10b5_1_identifier_in_real_fields():
+    result = _news_result()
+    result["summary_zh"] = (
+        "首席财务官依据预先安排的10b5-1交易计划出售股份，"
+        "交易规模和计划设立时间仍需结合监管文件核对。"
+    )
+    result["affected_stocks"][0]["reason"] = (
+        "减持可能带来短期关注，但10b5-1交易计划削弱了自主看空信号。"
+    )
+    result["key_factors"] = ["交易按10b5-1计划执行。"]
+    result["uncertainty_notes"] = ["未说明10b5-1计划的设立日期。"]
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        _news_payload(),
+    )
+
+    assert "10b5-1" in validated["summary_zh"]
+
+
+@pytest.mark.parametrize("identifier", ["10b5-1", "10B5-1"])
+@pytest.mark.parametrize("plan_name", ["交易计划", "股票交易计划", "证券交易计划"])
+def test_rule_10b5_1_identifier_is_allowed_in_chinese_plan_context(
+    identifier,
+    plan_name,
+):
+    text = f"该交易依据预先安排的{identifier}{plan_name}执行。"
+
+    assert validate_simplified_chinese_text(text, None) == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "该交易依据10b5-2计划执行。",
+        "该交易依据11b5-1计划执行。",
+        "该交易依据Rule 10b5-1 trading plan执行。",
+        "10b5-1",
+        "10b5-1股价上涨。",
+        "10b5-1股票上涨。",
+        "10b5-1证券代码受到关注。",
+    ],
+)
+def test_rule_10b5_1_exception_remains_narrow(text):
+    with pytest.raises(ValueError):
+        validate_simplified_chinese_text(text, None)
+
+
+def test_news_prompt_requires_chinese_names_before_submission():
+    request = runtime.build_runtime_request("news_impact", _news_payload())
+
+    assert request.schema_name == "news_impact_zh_cn_v5"
+    assert "禁止原样保留拉丁字母拼写的人名、机构名、品牌名和英文普通词" in request.instructions
+    assert "输出前逐字段检查" in request.instructions
+
+
 def test_market_focus_rejects_a_model_rewritten_snapshot_time():
     with pytest.raises(ValueError, match="market_focus_as_of_mismatch"):
         validate_result(

@@ -139,10 +139,16 @@ def build_runtime_request(job_type: str, payload: dict[str, Any]) -> RuntimeRequ
             "不猜测未提供的事件；affected_stocks.ticker以及所有自然语言字段中的股票代码"
             "只能使用输入allowed_tickers中的代码；"
             "affected_stocks.company必须使用简体中文公司名；"
+            "title_zh、summary_zh、headline_summary、company、reason、"
+            "causal_summary、key_factors、uncertainty_notes以及行业和商品名称等"
+            "所有自然语言字段，禁止原样保留拉丁字母拼写的人名、机构名、品牌名和英文普通词；"
+            "必须改用简体中文译名、中文音译、职务或类别描述，无法可靠转换时删去；"
+            "股票代码只放在ticker结构字段中。监管交易计划编号10b5-1可以保留。"
+            "输出前逐字段检查，不得把输入中的英文名称复制到自然语言字段。"
             "信息不足时将insufficient_context设为true。"
         )
         use_web_search = False
-        schema_name = "news_impact_zh_cn_v4"
+        schema_name = "news_impact_zh_cn_v5"
         boundary = "untrusted_news_data"
     elif job_type == "market_focus":
         instructions = common + (

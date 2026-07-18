@@ -290,7 +290,7 @@ def _legacy_metadata() -> dict[str, str]:
     return {
         "model": "gpt-5.6-terra",
         "reasoning": "max",
-        "prompt_version": "news-impact-zh-cn-v4",
+        "prompt_version": "news-impact-zh-cn-v5",
         "schema_version": schema_version,
     }
 
@@ -1490,6 +1490,350 @@ def test_projection_requires_exact_identity_and_simplified_chinese(tmp_path):
     assert items[22]["analysis"] is None
     assert items[23]["analysis"]["output_language"] == "zh-CN"
     assert items[23]["title"] == "英伟达发布新一代芯片平台"
+
+
+@pytest.mark.parametrize(
+    ("prompt_version", "schema_version", "schema_sha256"),
+    tuple(sorted(local_module.RECOVERABLE_COMPLETED_NEWS_IDENTITIES)),
+)
+def test_reconcile_recovers_known_completed_legacy_news_without_second_job(
+    tmp_path,
+    prompt_version,
+    schema_version,
+    schema_sha256,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [_news_change(1, 27, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    intelligence.reconcile()
+    job = intelligence.request_analysis(27, force=False)
+    _finish_job(
+        ai,
+        job["job_id"],
+        _news_result(news_id=27, change_sequence=1, content_hash="hash-27-1"),
+    )
+    with sqlite3.connect(ai.path) as connection:
+        connection.execute(
+            """UPDATE ai_jobs SET prompt_version=?,schema_version=?,schema_sha256=?
+               WHERE job_id=?""",
+            (prompt_version, schema_version, schema_sha256, job["job_id"]),
+        )
+        connection.commit()
+
+    reconciled = intelligence.reconcile()
+
+    assert reconciled["analyses_published"] == 1
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='news_impact'"
+        ).fetchone()[0] == 1
+    detail = intelligence.news(27, as_of=now + timedelta(minutes=1))
+    assert detail is not None
+    assert detail["item"]["title"] == "英伟达发布新一代芯片平台"
+    assert detail["item"]["analysis"]["output_language"] == "zh-CN"
+
+
+def test_reconcile_does_not_recover_unknown_completed_legacy_news_identity(tmp_path):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [_news_change(1, 28, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    intelligence.reconcile()
+    job = intelligence.request_analysis(28, force=False)
+    _finish_job(
+        ai,
+        job["job_id"],
+        _news_result(news_id=28, change_sequence=1, content_hash="hash-28-1"),
+    )
+    with sqlite3.connect(ai.path) as connection:
+        connection.execute(
+            """UPDATE ai_jobs SET prompt_version='news-impact-zh-cn-v4',
+                   schema_version='news_impact_zh_cn_v4',schema_sha256='wrong'
+               WHERE job_id=?""",
+            (job["job_id"],),
+        )
+        connection.commit()
+
+    reconciled = intelligence.reconcile()
+
+    assert reconciled["analyses_published"] == 0
+    with sqlite3.connect(intelligence.db_path) as connection:
+        assert connection.execute(
+            """SELECT result_json FROM catalyst_local_analysis_links
+               WHERE job_id=?""",
+            (job["job_id"],),
+        ).fetchone()[0] is None
+
+
+def test_reconcile_audits_invalid_completed_legacy_news_without_publishing(tmp_path):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [_news_change(1, 29, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    intelligence.reconcile()
+    job = intelligence.request_analysis(29, force=False)
+    result = _news_result(news_id=29, change_sequence=1, content_hash="hash-29-1")
+    _finish_job(ai, job["job_id"], result)
+    invalid = dict(result, title_zh="Markets rally after earnings")
+    raw_invalid = local_module._json(invalid)
+    prompt_version, schema_version, schema_sha256 = next(
+        iter(local_module.RECOVERABLE_COMPLETED_NEWS_IDENTITIES)
+    )
+    with sqlite3.connect(ai.path) as connection:
+        connection.execute(
+            """UPDATE ai_jobs SET prompt_version=?,schema_version=?,schema_sha256=?,
+                   result_json=? WHERE job_id=?""",
+            (
+                prompt_version,
+                schema_version,
+                schema_sha256,
+                raw_invalid,
+                job["job_id"],
+            ),
+        )
+        connection.commit()
+
+    reconciled = intelligence.reconcile()
+
+    assert reconciled["analyses_published"] == 0
+    with sqlite3.connect(intelligence.db_path) as connection:
+        link_result = connection.execute(
+            """SELECT result_json FROM catalyst_local_analysis_links
+               WHERE job_id=?""",
+            (job["job_id"],),
+        ).fetchone()[0]
+        audit = connection.execute(
+            """SELECT outcome,result_json FROM catalyst_local_analysis_result_audit
+               WHERE job_id=?""",
+            (job["job_id"],),
+        ).fetchone()
+    assert link_result is None
+    assert audit == ("rejected", raw_invalid)
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='news_impact'"
+        ).fetchone()[0] == 1
+
+
+def test_manual_request_recovers_completed_legacy_news_and_reaudits_old_rejection(
+    tmp_path,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [_news_change(1, 30, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    intelligence.reconcile()
+    job = intelligence.request_analysis(30, force=False)
+    result = _news_result(news_id=30, change_sequence=1, content_hash="hash-30-1")
+    result["summary_zh"] = "高管依据10b5-1股票交易计划出售股份，后续影响仍需观察。"
+    _finish_job(ai, job["job_id"], result)
+    raw_result = local_module._json(result)
+    digest = hashlib.sha256(raw_result.encode("utf-8")).hexdigest()
+    legacy_identity = next(
+        identity
+        for identity in local_module.RECOVERABLE_COMPLETED_NEWS_IDENTITIES
+        if identity[0] == "news-impact-zh-cn-v4"
+    )
+    old_contract_id = (
+        f"{local_module.NEWS_PROMPT_VERSION}:"
+        f"{local_module.ai_runtime.RESULT_VALIDATION_CONTRACT_VERSION}"
+    )
+    assert old_contract_id != local_module.NEWS_RESULT_CONTRACT_ID
+    completed_at = ai.get_job(job["job_id"])["completed_at"]
+    with sqlite3.connect(ai.path) as connection:
+        connection.execute(
+            """UPDATE ai_jobs SET prompt_version=?,schema_version=?,schema_sha256=?
+               WHERE job_id=?""",
+            (*legacy_identity, job["job_id"]),
+        )
+        connection.commit()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """INSERT INTO catalyst_local_analysis_result_audit(
+                   job_id,contract_id,result_sha256,outcome,reason,result_json,
+                   result_available_at,verified_at,observed_at
+               ) VALUES(?,?,?,?,?,?,?,?,?)""",
+            (
+                job["job_id"],
+                old_contract_id,
+                digest,
+                "rejected",
+                "old_contract_rejected",
+                raw_result,
+                completed_at,
+                None,
+                _iso(now),
+            ),
+        )
+        connection.commit()
+
+    recovered = intelligence.request_analysis(30, force=False)
+    intelligence.reconcile()
+
+    assert recovered["job_id"] == job["job_id"]
+    assert recovered["cached"] is True
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='news_impact'"
+        ).fetchone()[0] == 1
+    with sqlite3.connect(intelligence.db_path) as connection:
+        audits = connection.execute(
+            """SELECT contract_id,outcome
+               FROM catalyst_local_analysis_result_audit
+               WHERE job_id=? ORDER BY contract_id""",
+            (job["job_id"],),
+        ).fetchall()
+    assert (old_contract_id, "rejected") in audits
+    assert (local_module.NEWS_RESULT_CONTRACT_ID, "accepted") in audits
+    detail = intelligence.news(30, as_of=now + timedelta(minutes=1))
+    assert detail is not None
+    assert "10b5-1股票交易计划" in detail["item"]["analysis"]["summary_zh"]
+
+
+def test_legacy_completion_never_overrides_a_current_v5_job_for_same_revision(
+    tmp_path,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [_news_change(1, 32, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    intelligence.reconcile()
+    legacy_job = intelligence.request_analysis(32, force=False)
+    legacy_result = _news_result(
+        news_id=32,
+        change_sequence=1,
+        content_hash="hash-32-1",
+    )
+    legacy_result["title_zh"] = "旧版分析标题"
+    _finish_job(ai, legacy_job["job_id"], legacy_result)
+    legacy_identity = next(
+        identity
+        for identity in local_module.RECOVERABLE_COMPLETED_NEWS_IDENTITIES
+        if identity[0] == "news-impact-zh-cn-v4"
+    )
+    with sqlite3.connect(ai.path) as connection:
+        connection.execute(
+            """UPDATE ai_jobs SET prompt_version=?,schema_version=?,schema_sha256=?
+               WHERE job_id=?""",
+            (*legacy_identity, legacy_job["job_id"]),
+        )
+        connection.commit()
+
+    current_job = intelligence.request_analysis(32, force=True, as_of=now)
+    current_result = _news_result(
+        news_id=32,
+        change_sequence=1,
+        content_hash="hash-32-1",
+    )
+    current_result["title_zh"] = "新版分析标题"
+    _finish_job(ai, current_job["job_id"], current_result)
+    with sqlite3.connect(ai.path) as connection:
+        connection.execute(
+            """UPDATE ai_jobs SET completed_at=?,updated_at=? WHERE job_id=?""",
+            (
+                _iso(now + timedelta(minutes=5)),
+                _iso(now + timedelta(minutes=5)),
+                legacy_job["job_id"],
+            ),
+        )
+        connection.commit()
+
+    reconciled = intelligence.reconcile()
+
+    assert reconciled["analyses_published"] == 1
+    with sqlite3.connect(intelligence.db_path) as connection:
+        links = {
+            row[0]: row[1]
+            for row in connection.execute(
+                """SELECT job_id,result_json FROM catalyst_local_analysis_links
+                   WHERE news_id=32"""
+            ).fetchall()
+        }
+    assert links[legacy_job["job_id"]] is None
+    assert links[current_job["job_id"]] is not None
+    detail = intelligence.news(32, as_of=now + timedelta(minutes=10))
+    assert detail is not None
+    assert detail["item"]["title"] == "新版分析标题"
+
+
+def test_scheduled_batch_uses_one_snapshot_for_recoverable_legacy_news(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    monkeypatch.setattr(ai_jobs_repository_module, "_utcnow", lambda: now)
+    _apply_news(
+        etl,
+        [
+            _news_change(1, 33, available_at=now - timedelta(minutes=10)),
+            _news_change(2, 34, available_at=now - timedelta(minutes=9)),
+        ],
+        as_of=now - timedelta(minutes=8),
+    )
+    intelligence.reconcile()
+    jobs = [
+        intelligence.request_analysis(news_id, force=False)
+        for news_id in (33, 34)
+    ]
+    for news_id, sequence, job in ((33, 1, jobs[0]), (34, 2, jobs[1])):
+        _finish_job(
+            ai,
+            job["job_id"],
+            _news_result(
+                news_id=news_id,
+                change_sequence=sequence,
+                content_hash=f"hash-{news_id}-{sequence}",
+            ),
+        )
+    legacy_identity = next(
+        identity
+        for identity in local_module.RECOVERABLE_COMPLETED_NEWS_IDENTITIES
+        if identity[0] == "news-impact-zh-cn-v4"
+    )
+    with sqlite3.connect(ai.path) as connection:
+        connection.executemany(
+            """UPDATE ai_jobs SET prompt_version=?,schema_version=?,schema_sha256=?
+               WHERE job_id=?""",
+            [(*legacy_identity, job["job_id"]) for job in jobs],
+        )
+        connection.commit()
+    original_snapshot = intelligence._ai_job_snapshot
+    snapshot_news_ids: list[set[int]] = []
+
+    def counted_snapshot(**kwargs):
+        requested = kwargs.get("news_ids")
+        if requested is not None:
+            snapshot_news_ids.append(set(requested))
+        return original_snapshot(**kwargs)
+
+    monkeypatch.setattr(intelligence, "_ai_job_snapshot", counted_snapshot)
+
+    scheduled = intelligence.run_scheduled(now=now)
+
+    assert scheduled == {"queued": 0, "skipped": 2}
+    assert snapshot_news_ids == [{33, 34}]
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='news_impact'"
+        ).fetchone()[0] == 2
 
 
 def test_content_update_never_attaches_the_old_completed_analysis(tmp_path):
