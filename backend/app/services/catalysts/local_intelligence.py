@@ -1609,13 +1609,20 @@ class LocalCatalystIntelligence:
             if outcome == "accepted":
                 accepted += int(inserted)
                 continue
-            connection.execute(
+            retired = connection.execute(
                 """UPDATE catalyst_local_focus_cycles SET
                        status='failed',error_code='legacy_output_hidden',
-                       updated_at=?
-                   WHERE cycle_id=? AND result_json=?""",
-                (observed_at, row["cycle_id"], raw_result),
-            )
+                       result_json=NULL,completed_at=NULL,updated_at=?
+                   WHERE cycle_id=? AND job_id=? AND result_json=?""",
+                (
+                    observed_at,
+                    row["cycle_id"],
+                    row["job_id"],
+                    raw_result,
+                ),
+            ).rowcount
+            if retired != 1:
+                raise RuntimeError("focus_result_retirement_conflict")
             rejected += int(inserted)
         return accepted, rejected
 

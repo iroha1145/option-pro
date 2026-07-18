@@ -588,7 +588,8 @@ def test_focus_audit_is_scoped_to_each_retry_job_even_for_identical_output(
     retry_job_id = "aij_" + "f" * 32
     with sqlite3.connect(intelligence.db_path) as connection:
         first = connection.execute(
-            """SELECT status,result_json FROM catalyst_local_focus_cycles
+            """SELECT status,result_json,completed_at
+               FROM catalyst_local_focus_cycles
                WHERE cycle_id=?""",
             (cycle["cycle_id"],),
         ).fetchone()
@@ -599,19 +600,25 @@ def test_focus_audit_is_scoped_to_each_retry_job_even_for_identical_output(
         ).fetchone()[0]
         connection.execute(
             """UPDATE catalyst_local_focus_cycles SET
-                   job_id=?,status='completed',error_code=NULL,result_json=?
+                   job_id=?,status='completed',error_code=NULL,result_json=?,
+                   completed_at=?
                WHERE cycle_id=?""",
-            (retry_job_id, invalid_raw, cycle["cycle_id"]),
+            (retry_job_id, invalid_raw, _iso(now), cycle["cycle_id"]),
         )
         connection.commit()
-    assert first == ("failed", invalid_raw)
+    assert first == ("failed", None, None)
     assert first_rejected == 1
+    owner_view = intelligence.market_focus_cycle(cycle["cycle_id"])
+    assert owner_view is not None
+    assert owner_view["status"] == "completed"
+    assert owner_view["result"] == invalid
 
     intelligence.reconcile()
 
     with sqlite3.connect(intelligence.db_path) as connection:
         retried = connection.execute(
-            """SELECT status,result_json FROM catalyst_local_focus_cycles
+            """SELECT status,result_json,completed_at
+               FROM catalyst_local_focus_cycles
                WHERE cycle_id=?""",
             (cycle["cycle_id"],),
         ).fetchone()
@@ -620,10 +627,15 @@ def test_focus_audit_is_scoped_to_each_retry_job_even_for_identical_output(
                WHERE cycle_id=? AND outcome='rejected' ORDER BY job_id""",
             (cycle["cycle_id"],),
         ).fetchall()
-    assert retried == ("failed", invalid_raw)
+    assert retried == ("failed", None, None)
     assert rejected_jobs == sorted(
         [(cycle["job_id"],), (retry_job_id,)]
     )
+    retired_owner_view = intelligence.market_focus_cycle(cycle["cycle_id"])
+    assert retired_owner_view is not None
+    assert retired_owner_view["status"] == "failed"
+    assert retired_owner_view["result"] is None
+    assert retired_owner_view["completed_at"] is None
 
 
 def test_read_mode_never_creates_paid_jobs_and_never_exposes_raw_english(tmp_path):
