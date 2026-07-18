@@ -905,6 +905,84 @@ class LocalCatalystIntelligence:
                 linked.add(job_id)
         return recovered
 
+    def _recover_unlinked_focus_jobs(
+        self,
+        connection: sqlite3.Connection,
+        jobs: Mapping[str, dict[str, Any]],
+    ) -> int:
+        """Relink a paid focus job after its local commit was interrupted."""
+
+        intents = {
+            str(row["cycle_id"]): row
+            for row in connection.execute(
+                """SELECT cycle_id,job_id,payload_json
+                   FROM catalyst_local_focus_cycles
+                   WHERE status='preparing'"""
+            ).fetchall()
+        }
+        if not intents:
+            return 0
+        linked_job_ids = {
+            str(row["job_id"])
+            for row in connection.execute(
+                """SELECT job_id FROM catalyst_local_focus_cycles
+                   WHERE job_id NOT LIKE 'intent:%'"""
+            ).fetchall()
+        }
+        recovered = 0
+        candidates = sorted(
+            jobs.values(),
+            key=lambda row: (
+                str(row.get("created_at") or ""),
+                str(row.get("job_id") or ""),
+            ),
+        )
+        for job in candidates:
+            job_id = str(job.get("job_id") or "")
+            if (
+                not job_id
+                or job_id in linked_job_ids
+                or job.get("job_type") != "market_focus"
+            ):
+                continue
+            try:
+                public = self._identity_public_job(
+                    job,
+                    expected_type="market_focus",
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+            payload = self._job_payload(job)
+            cycle_id = payload.get("cycle_id") if payload is not None else None
+            if not isinstance(cycle_id, str):
+                continue
+            intent = intents.get(cycle_id)
+            stored_payload = _loads(intent["payload_json"], None) if intent else None
+            if (
+                public is None
+                or intent is None
+                or str(intent["job_id"]) != f"intent:{cycle_id}"
+                or not isinstance(stored_payload, dict)
+                or _json(stored_payload) != _json(payload)
+            ):
+                continue
+            updated = connection.execute(
+                """UPDATE catalyst_local_focus_cycles SET
+                       status=?,job_id=?,updated_at=?
+                   WHERE cycle_id=? AND status='preparing' AND job_id=?""",
+                (
+                    str(public["status"]),
+                    job_id,
+                    str(public.get("updated_at") or _iso()),
+                    cycle_id,
+                    f"intent:{cycle_id}",
+                ),
+            ).rowcount
+            recovered += int(updated)
+            if updated:
+                linked_job_ids.add(job_id)
+        return recovered
+
     @staticmethod
     def _news_payload_matches_revision(
         payload: Mapping[str, Any],
@@ -1196,9 +1274,16 @@ class LocalCatalystIntelligence:
         result = _loads(link["result_json"], None)
         return (result if isinstance(result, dict) else None), str(link["result_available_at"])
 
-    def _prepare_hotspots(self, connection: sqlite3.Connection, *, now: datetime) -> tuple[int, int]:
+    def _plan_hotspots(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        now: datetime,
+    ) -> list[dict[str, Any]]:
+        """Build the next hotspot snapshot without holding a SQLite write lock."""
+
         rows = self._active_revisions(connection, as_of=now, window_hours=72)
-        prepared: list[dict[str, Any]] = []
+        planned: list[dict[str, Any]] = []
         for members in _cluster_rows(rows):
             key = _cluster_key(members)
             members.sort(key=lambda item: (item.get("source_available_at") or "", item["news_id"]), reverse=True)
@@ -1227,23 +1312,84 @@ class LocalCatalystIntelligence:
             }
             input_hash = _sha(group_input)
             group_id = "evt_" + hashlib.sha256(key.encode()).hexdigest()[:32]
-            previous = connection.execute(
-                """SELECT event_group_version,input_hash FROM catalyst_local_event_groups
-                   WHERE event_group_id=? ORDER BY event_group_version DESC LIMIT 1""",
-                (group_id,),
+            score, components, reasons = self._hot_score(representative, result, now)
+            title_zh = str(result.get("title_zh") if result else HOTSPOT_WAITING)
+            summary_zh = str(result.get("headline_summary") if result else SUMMARY_WAITING)
+            published_values = [item.get("published_at") or item.get("fetched_at") for item in members]
+            available = max(
+                [str(item["source_available_at"]) for item in members]
+                + ([str(result_available)] if result_available else [])
+            )
+            planned.append(
+                {
+                    "event_group_id": group_id,
+                    "input_hash": input_hash,
+                    "event_type": _event_type(
+                        str(representative["raw_title"]),
+                        representative.get("raw_summary"),
+                    ),
+                    "representative_news_id": representative["news_id"],
+                    "representative_change_sequence": representative[
+                        "change_sequence"
+                    ],
+                    "representative_content_hash": representative["content_hash"],
+                    "representative_title_zh": title_zh,
+                    "representative_summary_zh": summary_zh,
+                    "first_published_at": min(published_values),
+                    "last_published_at": max(published_values),
+                    "available_at": available,
+                    "source_count": max(1, len(sources)),
+                    "source_names_json": _json(sources),
+                    "validated_tickers_json": _json(tickers),
+                    "news_identities_json": _json(identity),
+                    "hot_score": score,
+                    "component_scores_json": _json(components),
+                    "reasons_json": _json(reasons),
+                    "created_at": _iso(now),
+                }
+            )
+        return planned
+
+    def _commit_hotspots(
+        self,
+        connection: sqlite3.Connection,
+        planned: Sequence[Mapping[str, Any]],
+        *,
+        expected_base_revision: int,
+        now: datetime,
+    ) -> tuple[int, int, bool]:
+        """Persist a prepared plan in one short, caller-owned transaction."""
+
+        current_snapshot = connection.execute(
+            """SELECT prepared_revision,item_count
+               FROM catalyst_local_hotspot_revisions
+               ORDER BY prepared_revision DESC LIMIT 1"""
+        ).fetchone()
+        current_revision = int(
+            current_snapshot["prepared_revision"] if current_snapshot else 0
+        )
+        if current_revision != expected_base_revision:
+            return (
+                current_revision,
+                int(current_snapshot["item_count"] if current_snapshot else 0),
+                False,
+            )
+
+        prepared: list[dict[str, Any]] = []
+        for proposal in planned:
+            event = connection.execute(
+                """SELECT * FROM catalyst_local_event_groups
+                   WHERE event_group_id=? AND input_hash=? LIMIT 1""",
+                (proposal["event_group_id"], proposal["input_hash"]),
             ).fetchone()
-            if previous is not None and str(previous["input_hash"]) == input_hash:
-                version = int(previous["event_group_version"])
-            else:
+            if event is None:
+                previous = connection.execute(
+                    """SELECT event_group_version FROM catalyst_local_event_groups
+                       WHERE event_group_id=?
+                       ORDER BY event_group_version DESC LIMIT 1""",
+                    (proposal["event_group_id"],),
+                ).fetchone()
                 version = int(previous["event_group_version"] if previous else 0) + 1
-                score, components, reasons = self._hot_score(representative, result, now)
-                title_zh = str(result.get("title_zh") if result else HOTSPOT_WAITING)
-                summary_zh = str(result.get("headline_summary") if result else SUMMARY_WAITING)
-                published_values = [item.get("published_at") or item.get("fetched_at") for item in members]
-                available = max(
-                    [str(item["source_available_at"]) for item in members]
-                    + ([str(result_available)] if result_available else [])
-                )
                 connection.execute(
                     """INSERT INTO catalyst_local_event_groups(
                            event_group_id,event_group_version,input_hash,event_type,
@@ -1255,33 +1401,33 @@ class LocalCatalystIntelligence:
                            component_scores_json,reasons_json,created_at
                        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
-                        group_id,
+                        proposal["event_group_id"],
                         version,
-                        input_hash,
-                        _event_type(str(representative["raw_title"]), representative.get("raw_summary")),
-                        representative["news_id"],
-                        representative["change_sequence"],
-                        representative["content_hash"],
-                        title_zh,
-                        summary_zh,
-                        min(published_values),
-                        max(published_values),
-                        available,
-                        max(1, len(sources)),
-                        _json(sources),
-                        _json(tickers),
-                        _json(identity),
-                        score,
-                        _json(components),
-                        _json(reasons),
-                        _iso(now),
+                        proposal["input_hash"],
+                        proposal["event_type"],
+                        proposal["representative_news_id"],
+                        proposal["representative_change_sequence"],
+                        proposal["representative_content_hash"],
+                        proposal["representative_title_zh"],
+                        proposal["representative_summary_zh"],
+                        proposal["first_published_at"],
+                        proposal["last_published_at"],
+                        proposal["available_at"],
+                        proposal["source_count"],
+                        proposal["source_names_json"],
+                        proposal["validated_tickers_json"],
+                        proposal["news_identities_json"],
+                        proposal["hot_score"],
+                        proposal["component_scores_json"],
+                        proposal["reasons_json"],
+                        proposal["created_at"],
                     ),
                 )
-            event = connection.execute(
-                """SELECT * FROM catalyst_local_event_groups
-                   WHERE event_group_id=? AND event_group_version=?""",
-                (group_id, version),
-            ).fetchone()
+                event = connection.execute(
+                    """SELECT * FROM catalyst_local_event_groups
+                       WHERE event_group_id=? AND event_group_version=?""",
+                    (proposal["event_group_id"], version),
+                ).fetchone()
             assert event is not None
             prepared.append(dict(event))
         prepared.sort(key=lambda item: (-float(item["hot_score"]), str(item["event_group_id"])))
@@ -1295,7 +1441,7 @@ class LocalCatalystIntelligence:
                ORDER BY prepared_revision DESC LIMIT 1"""
         ).fetchone()
         if previous_snapshot is not None and str(previous_snapshot["input_hash"]) == input_hash:
-            return int(previous_snapshot["prepared_revision"]), len(prepared)
+            return int(previous_snapshot["prepared_revision"]), len(prepared), True
         revision = int(previous_snapshot["prepared_revision"] if previous_snapshot else 0) + 1
         data_through = max((str(item["available_at"]) for item in prepared), default=None)
         connection.execute(
@@ -1304,14 +1450,21 @@ class LocalCatalystIntelligence:
                ) VALUES(?,?,?,?,?)""",
             (revision, input_hash, _iso(now), data_through, len(prepared)),
         )
-        for ordinal, item in enumerate(prepared, start=1):
-            connection.execute(
-                """INSERT INTO catalyst_local_hotspot_items(
-                       prepared_revision,ordinal,event_group_id,event_group_version
-                   ) VALUES(?,?,?,?)""",
-                (revision, ordinal, item["event_group_id"], item["event_group_version"]),
-            )
-        return revision, len(prepared)
+        connection.executemany(
+            """INSERT INTO catalyst_local_hotspot_items(
+                   prepared_revision,ordinal,event_group_id,event_group_version
+               ) VALUES(?,?,?,?)""",
+            [
+                (
+                    revision,
+                    ordinal,
+                    item["event_group_id"],
+                    item["event_group_version"],
+                )
+                for ordinal, item in enumerate(prepared, start=1)
+            ],
+        )
+        return revision, len(prepared), True
 
     def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict[str, int]:
         self.initialize()
@@ -1325,6 +1478,10 @@ class LocalCatalystIntelligence:
                     connection,
                     ai_jobs,
                 )
+                recovered_focus_links = self._recover_unlinked_focus_jobs(
+                    connection,
+                    ai_jobs,
+                )
                 analyses = self._publish_completed_news(connection, ai_jobs)
                 focus_results = self._publish_completed_focus(connection, ai_jobs)
                 connection.commit()
@@ -1332,20 +1489,48 @@ class LocalCatalystIntelligence:
                 connection.rollback()
                 raise
         legacy = self._import_legacy_from_database()
-        with self._connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            try:
-                revision, hotspots = self._prepare_hotspots(connection, now=now)
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
+        for _plan_attempt in range(3):
+            plan_now = max(now, _utc_now())
+            with self._connect() as connection:
+                connection.execute("BEGIN")
+                try:
+                    base_snapshot = connection.execute(
+                        """SELECT prepared_revision
+                           FROM catalyst_local_hotspot_revisions
+                           ORDER BY prepared_revision DESC LIMIT 1"""
+                    ).fetchone()
+                    base_revision = int(
+                        base_snapshot["prepared_revision"] if base_snapshot else 0
+                    )
+                    hotspot_plan = self._plan_hotspots(connection, now=plan_now)
+                    connection.commit()
+                except Exception:
+                    connection.rollback()
+                    raise
+            with self._connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                try:
+                    revision, hotspots, plan_committed = self._commit_hotspots(
+                        connection,
+                        hotspot_plan,
+                        expected_base_revision=base_revision,
+                        now=plan_now,
+                    )
+                    connection.commit()
+                except Exception:
+                    connection.rollback()
+                    raise
+            if plan_committed:
+                break
+        else:
+            raise RuntimeError("hotspot_plan_contention")
         queued = 0
         if allow_scheduled_jobs and self.mode == "scheduled":
             queued = int(self.run_scheduled()["queued"])
         return {
             "ingested": ingested,
             "analysis_links_recovered": recovered_links,
+            "focus_links_recovered": recovered_focus_links,
             "analyses_published": analyses,
             "focus_results_published": focus_results,
             "legacy_imported": int(legacy["imported"]),
@@ -2521,31 +2706,58 @@ class LocalCatalystIntelligence:
             payload,
             submission_source=submission_source,
         )
-        with self._connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            try:
-                current = connection.execute(
-                    "SELECT status,payload_json FROM catalyst_local_focus_cycles WHERE cycle_id=?",
-                    (cycle_id,),
-                ).fetchone()
-                if current is None:
-                    raise RuntimeError("market_focus_intent_missing")
-                if str(current["status"]) == "preparing":
-                    current_payload = _loads(current["payload_json"], None)
-                    if not isinstance(current_payload, dict) or _json(
-                        current_payload
-                    ) != _json(payload):
-                        raise RuntimeError("market_focus_intent_payload_changed")
-                    connection.execute(
-                        """UPDATE catalyst_local_focus_cycles SET
-                               status=?,job_id=?,updated_at=?
-                           WHERE cycle_id=? AND status='preparing'""",
-                        (job["status"], job["job_id"], _iso(), cycle_id),
-                    )
-                connection.commit()
-            except Exception:
-                connection.rollback()
+        try:
+            with self._connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                try:
+                    current = connection.execute(
+                        "SELECT status,payload_json FROM catalyst_local_focus_cycles WHERE cycle_id=?",
+                        (cycle_id,),
+                    ).fetchone()
+                    if current is None:
+                        raise RuntimeError("market_focus_intent_missing")
+                    if str(current["status"]) == "preparing":
+                        current_payload = _loads(current["payload_json"], None)
+                        if not isinstance(current_payload, dict) or _json(
+                            current_payload
+                        ) != _json(payload):
+                            raise RuntimeError("market_focus_intent_payload_changed")
+                        connection.execute(
+                            """UPDATE catalyst_local_focus_cycles SET
+                                   status=?,job_id=?,updated_at=?
+                               WHERE cycle_id=? AND status='preparing'""",
+                            (job["status"], job["job_id"], _iso(), cycle_id),
+                        )
+                    connection.commit()
+                except Exception:
+                    connection.rollback()
+                    raise
+        except Exception as error:
+            if not _is_sqlite_write_contention(error):
                 raise
+            cycle = self._focus_cycle_from_row(
+                intent,
+                include_owner_state=current_request_is_owner(),
+            )
+            assert cycle is not None
+            public_job = self._identity_public_job(
+                job,
+                expected_type="market_focus",
+            )
+            assert public_job is not None
+            public_job["cached"] = bool(
+                not created and public_job["status"] == "completed"
+            )
+            cycle.update(
+                {
+                    "status": public_job["status"],
+                    "job_id": public_job["job_id"],
+                    "updated_at": public_job["updated_at"],
+                    "local_link_pending": True,
+                    "job": public_job,
+                }
+            )
+            return cycle
         return self._cycle_with_job(cycle_id, job=job, created=created)
 
     def _enqueue_focus(
@@ -2614,6 +2826,14 @@ class LocalCatalystIntelligence:
                            ORDER BY created_at DESC LIMIT 1""",
                         (revision, force_bucket),
                     ).fetchone()
+                    if existing is None:
+                        existing = connection.execute(
+                            """SELECT cycle_id FROM catalyst_local_focus_cycles
+                               WHERE prepared_revision=? AND status='preparing'
+                                 AND COALESCE(json_extract(payload_json,'$.force'),0)=1
+                               ORDER BY created_at DESC LIMIT 1""",
+                            (revision,),
+                        ).fetchone()
                 else:
                     existing = connection.execute(
                         """SELECT cycle_id FROM catalyst_local_focus_cycles

@@ -8,7 +8,7 @@
     "completed", "failed", "cancelled", "insufficient_context", "budget_blocked",
     "incomplete_output", "submission_outcome_unknown", "worker_interrupted",
   ]);
-  const ACTIVE = new Set(["pending", "queued", "in_progress", "processing", "running", "cancel_requested"]);
+  const ACTIVE = new Set(["preparing", "pending", "queued", "in_progress", "processing", "running", "cancel_requested"]);
   const tasks = new Map();
 
   const unwrap = payload => payload && typeof payload === "object"

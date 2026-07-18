@@ -1029,11 +1029,17 @@
   }
 
   function cyclePayload(payload) {
-    const raw = payload && (payload.cycle || payload.item || payload.job) || payload || {};
-    return Object.assign({}, raw, {
-      cycle_id: raw.cycle_id || raw.job_id || raw.id || null,
-      job_id: raw.job_id || raw.cycle_id || raw.id || null,
-      status: Jobs.normalizeStatus(raw.status || raw.state || "pending"),
+    const raw = payload && (payload.cycle || payload.item) || payload || {};
+    const job = raw.job && typeof raw.job === "object" ? raw.job : null;
+    const cycle = Object.assign({}, raw);
+    const cycleId = raw.cycle_id || raw.id || null;
+    const analysisJobId = (job && (job.job_id || job.id)) || raw.job_id || null;
+    delete cycle.job;
+    return Object.assign(cycle, {
+      cycle_id: cycleId,
+      job_id: cycleId,
+      analysis_job_id: analysisJobId,
+      status: Jobs.normalizeStatus((job && (job.status || job.state)) || raw.status || raw.state || "pending"),
     });
   }
 
@@ -2009,7 +2015,7 @@
     analysisErrorMessage, analysisErrorDetail,
     impactsOf, impactDirection, sentimentOf, isRuleOnlyAnalysis, analysisOriginLabel, analysisRetryForce, compactNews, plainText,
     itemTitle, itemSummary,
-    analysisActionDecision, focusCycleDecision, focusCycleRequest, focusUnknownHistoryHtml,
+    analysisActionDecision, cyclePayload, focusCycleDecision, focusCycleRequest, focusUnknownHistoryHtml,
     workerTaskAvailable,
   };
 })();
