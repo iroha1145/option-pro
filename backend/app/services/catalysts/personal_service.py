@@ -32,7 +32,7 @@ _WAITING_TITLE = "中文标题等待生成"
 _WAITING_SUMMARY = "中文摘要等待生成"
 _WAITING_HOTSPOT_TITLE = "热点标题等待中文分析"
 _INTERACTIVE_MODES = frozenset({"manual", "scheduled"})
-_NEWS_PROMPT_VERSION = "news-impact-zh-cn-v4"
+_NEWS_PROMPT_VERSION = "news-impact-zh-cn-v5"
 _LOCAL_STORE_RUNTIME_CODES = frozenset(
     {
         "ai_job_insert_failed",

@@ -32,8 +32,23 @@ SubmissionSource = Literal["manual", "scheduled"]
 MODEL = "gpt-5.6-terra"
 REASONING = "max"
 EXECUTION_MODE = "background"
-NEWS_PROMPT_VERSION = "news-impact-zh-cn-v4"
+NEWS_PROMPT_VERSION = "news-impact-zh-cn-v5"
 FOCUS_PROMPT_VERSION = "market-focus-zh-cn-v4"
+NEWS_RESULT_AUDIT_VERSION = "news-result-validation-v2"
+RECOVERABLE_COMPLETED_NEWS_IDENTITIES = frozenset(
+    {
+        (
+            "news-impact-zh-cn-v2",
+            "news_impact_zh_cn_v2",
+            "372a96dba442b1e58979812c2cff37000a3180670714475b276bfcbbd395aac6",
+        ),
+        (
+            "news-impact-zh-cn-v4",
+            "news_impact_zh_cn_v4",
+            "917ef29ae71ef62a5dc000d78b347dfe004eb98c527815550ff3a3709d126463",
+        ),
+    }
+)
 TITLE_WAITING = "中文标题等待生成"
 SUMMARY_WAITING = "中文摘要等待生成"
 HOTSPOT_WAITING = "热点标题等待中文分析"
@@ -42,7 +57,8 @@ TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-^]{0,11}$")
 SCHEMA_VERSION = "optix-local-catalyst-v3"
 NEWS_RESULT_CONTRACT_ID = (
     f"{NEWS_PROMPT_VERSION}:"
-    f"{ai_runtime.RESULT_VALIDATION_CONTRACT_VERSION}"
+    f"{ai_runtime.RESULT_VALIDATION_CONTRACT_VERSION}:"
+    f"{NEWS_RESULT_AUDIT_VERSION}"
 )
 FOCUS_RESULT_CONTRACT_ID = (
     f"{FOCUS_PROMPT_VERSION}:"
@@ -922,27 +938,46 @@ class LocalCatalystIntelligence:
                 connection.close()
         return {str(row["job_id"]): dict(row) for row in rows}
 
-    def _identity_public_job(
+    def _has_current_job_identity(
         self,
         row: dict[str, Any] | None,
         *,
         expected_type: Literal["news_impact", "market_focus"],
-    ) -> dict[str, Any] | None:
+        expected_schema: tuple[str, str] | None = None,
+    ) -> bool:
         if row is None or row.get("job_type") != expected_type:
-            return None
-        schema_version, schema_hash = ai_runtime.schema_identity(expected_type)
+            return False
+        schema_version, schema_hash = (
+            expected_schema
+            if expected_schema is not None
+            else ai_runtime.schema_identity(expected_type)
+        )
         prompt = (
             NEWS_PROMPT_VERSION if expected_type == "news_impact" else FOCUS_PROMPT_VERSION
         )
-        if (
+        return not (
             row.get("model") != self.model
             or row.get("reasoning") != self.reasoning
             or row.get("execution_mode") != EXECUTION_MODE
             or row.get("prompt_version") != prompt
             or row.get("schema_version") != schema_version
             or row.get("schema_sha256") != schema_hash
+        )
+
+    def _identity_public_job(
+        self,
+        row: dict[str, Any] | None,
+        *,
+        expected_type: Literal["news_impact", "market_focus"],
+        expected_schema: tuple[str, str] | None = None,
+    ) -> dict[str, Any] | None:
+        if not self._has_current_job_identity(
+            row,
+            expected_type=expected_type,
+            expected_schema=expected_schema,
         ):
             return None
+        assert row is not None
         return AIJobRepository.public(row)
 
     def _verified_public_job(
@@ -953,6 +988,69 @@ class LocalCatalystIntelligence:
     ) -> dict[str, Any] | None:
         public = self._identity_public_job(row, expected_type=expected_type)
         return public if public is not None and public.get("result") is not None else None
+
+    def _recoverable_completed_legacy_news_public_job(
+        self,
+        row: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if (
+            row is None
+            or row.get("job_type") != "news_impact"
+            or row.get("status") != "completed"
+            or row.get("model") != self.model
+            or row.get("reasoning") != self.reasoning
+            or row.get("execution_mode") != EXECUTION_MODE
+            or (
+                row.get("prompt_version"),
+                row.get("schema_version"),
+                row.get("schema_sha256"),
+            )
+            not in RECOVERABLE_COMPLETED_NEWS_IDENTITIES
+        ):
+            return None
+        return AIJobRepository.public(row)
+
+    def _news_job_revision_key(
+        self,
+        row: Mapping[str, Any],
+    ) -> tuple[int, int, str] | None:
+        payload = self._job_payload(row)
+        if payload is None:
+            return None
+        news_id = payload.get("news_id")
+        change_sequence = payload.get("change_sequence")
+        content_hash = payload.get("content_hash")
+        if (
+            type(news_id) is not int
+            or news_id <= 0
+            or type(change_sequence) is not int
+            or change_sequence <= 0
+            or not isinstance(content_hash, str)
+            or not content_hash
+        ):
+            return None
+        return news_id, change_sequence, content_hash
+
+    def _current_news_job_revision_keys(
+        self,
+        jobs: Iterable[Mapping[str, Any]],
+        *,
+        expected_schema: tuple[str, str] | None = None,
+    ) -> set[tuple[int, int, str]]:
+        current_schema = expected_schema or ai_runtime.schema_identity("news_impact")
+        keys: set[tuple[int, int, str]] = set()
+        for job in jobs:
+            candidate = dict(job)
+            if not self._has_current_job_identity(
+                candidate,
+                expected_type="news_impact",
+                expected_schema=current_schema,
+            ):
+                continue
+            key = self._news_job_revision_key(candidate)
+            if key is not None:
+                keys.add(key)
+        return keys
 
     def _linked_news_job_at(
         self,
@@ -1630,18 +1728,42 @@ class LocalCatalystIntelligence:
         self,
         connection: sqlite3.Connection,
         jobs: Mapping[str, dict[str, Any]],
+        *,
+        target_job_id: str | None = None,
     ) -> int:
-        rows = connection.execute(
-            """SELECT * FROM catalyst_local_analysis_links
-               WHERE result_json IS NULL ORDER BY created_at"""
-        ).fetchall()
+        if target_job_id is None:
+            rows = connection.execute(
+                """SELECT * FROM catalyst_local_analysis_links
+                   WHERE result_json IS NULL ORDER BY created_at"""
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                """SELECT * FROM catalyst_local_analysis_links
+                   WHERE result_json IS NULL AND job_id=? ORDER BY created_at""",
+                (target_job_id,),
+            ).fetchall()
+        current_schema = ai_runtime.schema_identity("news_impact")
+        current_revision_keys = self._current_news_job_revision_keys(
+            jobs.values(),
+            expected_schema=current_schema,
+        )
         published = 0
         for link in rows:
             job = jobs.get(str(link["job_id"]))
             public = self._identity_public_job(
                 job,
                 expected_type="news_impact",
+                expected_schema=current_schema,
             )
+            if public is None:
+                revision_key = (
+                    int(link["news_id"]),
+                    int(link["change_sequence"]),
+                    str(link["content_hash"]),
+                )
+                if revision_key in current_revision_keys:
+                    continue
+                public = self._recoverable_completed_legacy_news_public_job(job)
             if public is None or public.get("status") != "completed":
                 continue
             assert job is not None
@@ -1947,7 +2069,14 @@ class LocalCatalystIntelligence:
                        FROM macrolens_etl_news_changes
                        WHERE news_id=? AND available_at<=?
                    )
-                   SELECT r.* FROM latest l
+                   SELECT r.*,
+                          EXISTS(
+                              SELECT 1 FROM catalyst_local_analysis_links link
+                              WHERE link.news_id=r.news_id
+                                AND link.change_sequence=r.change_sequence
+                                AND link.content_hash=r.content_hash
+                          ) AS has_analysis_links
+                   FROM latest l
                    JOIN macrolens_etl_news_changes c
                      ON c.news_id=? AND c.change_sequence=l.change_sequence
                    JOIN catalyst_local_news_revisions r
@@ -3076,6 +3205,7 @@ class LocalCatalystIntelligence:
                         self._publish_completed_news(
                             connection,
                             {str(job["job_id"]): job},
+                            target_job_id=str(job["job_id"]),
                         )
                     exact = connection.execute(
                         """SELECT 1 FROM catalyst_local_analysis_links
@@ -3100,6 +3230,65 @@ class LocalCatalystIntelligence:
             return False
         return True
 
+    def _linked_recoverable_completed_legacy_news_job(
+        self,
+        row: Mapping[str, Any],
+        *,
+        jobs: Mapping[str, dict[str, Any]] | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        available_jobs = (
+            jobs
+            if jobs is not None
+            else self._ai_job_snapshot(
+                allow_write_contention=False,
+                news_ids=(int(row["news_id"]),),
+            )
+        )
+        target_key = (
+            int(row["news_id"]),
+            int(row["change_sequence"]),
+            str(row["content_hash"]),
+        )
+        if target_key in self._current_news_job_revision_keys(
+            available_jobs.values()
+        ):
+            return None
+        with self._connect() as connection:
+            linked_job_ids = {
+                str(link["job_id"])
+                for link in connection.execute(
+                    """SELECT job_id FROM catalyst_local_analysis_links
+                       WHERE news_id=? AND change_sequence=? AND content_hash=?""",
+                    target_key,
+                ).fetchall()
+            }
+        candidates: list[tuple[str, str, dict[str, Any], dict[str, Any]]] = []
+        for job_id in linked_job_ids:
+            job = available_jobs.get(job_id)
+            public = self._recoverable_completed_legacy_news_public_job(job)
+            if (
+                job is None
+                or public is None
+                or public.get("result") is None
+                or not self._news_payload_matches_revision(
+                    self._job_payload(job) or {},
+                    row,
+                )
+            ):
+                continue
+            candidates.append(
+                (
+                    str(job.get("completed_at") or job.get("updated_at") or ""),
+                    job_id,
+                    job,
+                    public,
+                )
+            )
+        if not candidates:
+            return None
+        _completed_at, _job_id, job, public = max(candidates)
+        return job, public
+
     def request_analysis(
         self,
         news_id: int,
@@ -3109,6 +3298,7 @@ class LocalCatalystIntelligence:
         expected_change_sequence: int | None = None,
         expected_content_hash: str | None = None,
         submission_source: SubmissionSource = "manual",
+        _job_snapshot: Mapping[str, dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         if self.mode not in {"manual", "scheduled"}:
             raise CatalystError(
@@ -3199,6 +3389,18 @@ class LocalCatalystIntelligence:
                 return public
             payload["analysis_revision"] = highest_revision + 1
             payload["manual_force_bucket"] = bucket
+        if not force and bool(row.get("has_analysis_links")):
+            legacy = self._linked_recoverable_completed_legacy_news_job(
+                row,
+                jobs=_job_snapshot,
+            )
+            if legacy is not None:
+                legacy_job, legacy_public = legacy
+                public = dict(legacy_public)
+                public["cached"] = True
+                if not self._link_analysis_job(row, legacy_job):
+                    public["local_link_pending"] = True
+                return public
         schema_version, schema_hash = ai_runtime.schema_identity("news_impact")
         job, created = self.ai_repository.create_job(
             job_type="news_impact",
@@ -3294,7 +3496,15 @@ class LocalCatalystIntelligence:
                             AND c.change_sequence=l.change_sequence
                            WHERE c.operation='upsert' AND c.available_at<=?
                        )
-                       SELECT r.* FROM active a
+                       SELECT r.*,
+                              EXISTS(
+                                  SELECT 1
+                                  FROM catalyst_local_analysis_links existing
+                                  WHERE existing.news_id=r.news_id
+                                    AND existing.change_sequence=r.change_sequence
+                                    AND existing.content_hash=r.content_hash
+                              ) AS has_analysis_links
+                       FROM active a
                        JOIN catalyst_local_news_revisions r
                          ON r.news_id=a.news_id
                         AND r.change_sequence=a.change_sequence
@@ -3367,30 +3577,46 @@ class LocalCatalystIntelligence:
             }
         if revision_row is None:
             return None
+        revision_key = (
+            int(revision_row["news_id"]),
+            int(revision_row["change_sequence"]),
+            str(revision_row["content_hash"]),
+        )
+        current_revision_exists = revision_key in self._current_news_job_revision_keys(
+            jobs.values()
+        )
         matching: list[
             tuple[datetime, int, str, dict[str, Any], dict[str, Any]]
         ] = []
         for job in jobs.values():
             if job.get("job_type") != "news_impact":
                 continue
-            try:
-                public = self._identity_public_job(
-                    job,
-                    expected_type="news_impact",
-                )
-            except (KeyError, TypeError, ValueError):
-                continue
             payload = self._job_payload(job)
             created_at = _parse_time(str(job.get("created_at") or ""))
             if (
-                public is None
-                or payload is None
+                payload is None
                 or created_at is None
                 or created_at > now
                 or not self._news_payload_matches_revision(
                     payload,
                     revision_row,
                 )
+            ):
+                continue
+            try:
+                public = self._identity_public_job(
+                    job,
+                    expected_type="news_impact",
+                )
+                legacy_public = False
+                if public is None and not current_revision_exists:
+                    public = self._recoverable_completed_legacy_news_public_job(job)
+                    legacy_public = public is not None
+            except (KeyError, TypeError, ValueError):
+                continue
+            if (
+                public is None
+                or (legacy_public and public.get("result") is None)
             ):
                 continue
             matching.append(
@@ -3655,6 +3881,7 @@ class LocalCatalystIntelligence:
                     expected_change_sequence=int(row["change_sequence"]),
                     expected_content_hash=str(row["content_hash"]),
                     submission_source="scheduled",
+                    _job_snapshot=scheduled_job_snapshot,
                 )
             except CatalystError as error:
                 if error.code == "news_revision_changed":
