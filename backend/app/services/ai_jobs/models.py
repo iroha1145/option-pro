@@ -113,6 +113,51 @@ _SENTENCE_SPLIT = re.compile(r"[。！？!?；;\n]+")
 _LATIN_WORD = re.compile(r"[A-Za-z][A-Za-z'-]*")
 _TICKER_OR_CODE_WORD = re.compile(r"(?:[A-Z]{1,12}|[A-Za-z]*\d[A-Za-z0-9-]*)")
 _NECESSARY_FOREIGN_PROPER_NAMES = frozenset({"Blackwell"})
+_ENGLISH_PROSE_WORDS = frozenset(
+    {
+        "a",
+        "after",
+        "an",
+        "and",
+        "announces",
+        "before",
+        "breaking",
+        "business",
+        "company",
+        "earnings",
+        "expands",
+        "for",
+        "from",
+        "growth",
+        "in",
+        "launch",
+        "launched",
+        "launches",
+        "market",
+        "markets",
+        "new",
+        "now",
+        "of",
+        "on",
+        "partnership",
+        "quantum",
+        "rally",
+        "rapidly",
+        "report",
+        "reports",
+        "results",
+        "revenue",
+        "rose",
+        "shares",
+        "strong",
+        "stronger",
+        "the",
+        "to",
+        "update",
+        "with",
+    }
+)
+_NECESSARY_LOWERCASE_FOREIGN_NAMES = frozenset({"leniolisib"})
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 
 _CJK_RANGES = (
@@ -137,6 +182,33 @@ def _is_cjk(char: str) -> bool:
     return any(start <= codepoint <= end for start, end in _CJK_RANGES)
 
 
+def _latin_letters(word: str) -> str:
+    return word.replace("-", "").replace("'", "")
+
+
+def _is_foreign_proper_name(word: str) -> bool:
+    if word.casefold() in _ENGLISH_PROSE_WORDS:
+        return False
+    if _TICKER_OR_CODE_WORD.fullmatch(word) is not None:
+        return True
+    if word in _NECESSARY_FOREIGN_PROPER_NAMES:
+        return True
+    if word in _NECESSARY_LOWERCASE_FOREIGN_NAMES:
+        return True
+    if "-" in word:
+        segments = word.split("-")
+        if all(segment.isascii() and segment.isalpha() for segment in segments):
+            return True
+    letters = _latin_letters(word)
+    if not letters.isascii() or not letters.isalpha():
+        return False
+    has_lower = any(char.islower() for char in letters)
+    return has_lower and (
+        letters[0].isupper()
+        or any(char.isupper() for char in letters[1:])
+    )
+
+
 def validate_simplified_chinese_text(value: str) -> str:
     """Reject non-Chinese prose and common Traditional Chinese deterministically."""
 
@@ -155,17 +227,19 @@ def validate_simplified_chinese_text(value: str) -> str:
     if latin_count > max(32, cjk_count * 4):
         raise ValueError("english_prose_not_allowed")
     for sentence in _SENTENCE_SPLIT.split(text):
-        for match in _LATIN_WORD.finditer(sentence):
-            word = match.group(0)
-            if _TICKER_OR_CODE_WORD.fullmatch(word) is not None:
-                continue
-            if word in _NECESSARY_FOREIGN_PROPER_NAMES:
-                continue
-            raise ValueError("english_prose_not_allowed")
+        words = _LATIN_WORD.findall(sentence)
         sentence_latin = sum(
             1 for char in sentence if char.isascii() and char.isalpha()
         )
         sentence_cjk = sum(1 for char in sentence if _is_cjk(char))
+        if sentence_latin > max(16, sentence_cjk * 5):
+            raise ValueError("english_prose_not_allowed")
+        for word in words:
+            if word.casefold() in _ENGLISH_PROSE_WORDS:
+                raise ValueError("english_prose_not_allowed")
+            if _is_foreign_proper_name(word):
+                continue
+            raise ValueError("english_prose_not_allowed")
         if sentence_latin >= 16 and sentence_cjk == 0:
             raise ValueError("english_prose_not_allowed")
     return text

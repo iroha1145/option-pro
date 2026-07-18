@@ -272,6 +272,15 @@ def test_common_traditional_and_variant_prose_is_rejected(traditional_text):
         "乾照光电发布业绩。",
         "英伟达（NVIDIA）发布Blackwell芯片",
         "NVIDIA、AMD与TSM关注Blackwell供货",
+        "IonQ量子计算订单增长",
+        "RSA Conference期间Varonis AI发布新研究",
+        "Varonis Systems首席执行官Yaki Faitelson介绍AI战略",
+        "Atlas Global InfoSec Awards公布获奖名单",
+        "NASCAR与Goodyear继续推进DEI合作",
+        "Kalshi市场预测显示交易活跃度上升",
+        "Axios报道称Kalshi正在扩大事件合约覆盖范围",
+        "nookplot-runtime与Nookplot Python SDK在Base平台完成运行时升级",
+        "Pharming Group的Joenja（leniolisib）用于APDS治疗并改善患者症状",
     ],
 )
 def test_simplified_prose_and_necessary_foreign_names_are_allowed(simplified_text):
@@ -283,6 +292,20 @@ def test_wholly_english_sentence_is_rejected():
         validate_simplified_chinese_text(
             "Markets rally after companies report stronger earnings"
         )
+
+
+@pytest.mark.parametrize(
+    "english_text",
+    [
+        "IonQ reports stronger revenue",
+        "RSA Conference Varonis AI",
+        "Varonis Systems Yaki Faitelson AI Atlas Global InfoSec Awards",
+        "NASCAR and Goodyear expand DEI partnership",
+    ],
+)
+def test_wholly_english_names_and_prose_are_rejected(english_text):
+    with pytest.raises(ValueError, match="simplified_chinese_text_required"):
+        validate_simplified_chinese_text(english_text)
 
 
 def _replace_nested_value(document: dict, path: tuple[str | int, ...], value: str):
@@ -394,6 +417,21 @@ def test_unihan_self_mapped_characters_remain_valid_in_simplified_contexts(title
         "英伟达 reports strong growth now",
         "NVIDIA launches new chip 新品",
         "英伟达 launches chip",
+        "IonQ reports stronger revenue，市场关注",
+        "Varonis Systems shares rose after earnings，市场关注",
+        "NASCAR and Goodyear expand DEI partnership，市场关注",
+        "Markets Rally After Earnings 苹果",
+        "Company Reports Strong Growth 苹果",
+        "Report 苹果发布新品",
+        "Breaking NVIDIA新品",
+        "NVIDIA Reports Stronger Revenue，苹果公司表示需求改善",
+        "苹果Launches New Chip",
+        "REPORTS 苹果发布新品",
+        "LAUNCHES NVIDIA新品",
+        "AI Business Expands Rapidly 苹果",
+        "RALLY 苹果",
+        "RESULTS 苹果",
+        "IonQ Announces Quantum Partnership 苹果",
     ],
 )
 def test_chinese_text_rejects_english_fragments(mixed_prose):

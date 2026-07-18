@@ -715,6 +715,7 @@ def test_worker_rebuilds_missing_watchlist_and_anonymous_reads_it_without_provid
     monkeypatch.setattr(stocks, "_watchlist_snapshot_load_attempted", False)
     monkeypatch.setattr(stocks, "_watchlist_snapshot_observed", None)
     monkeypatch.setattr(stocks, "_build_watchlist", unexpected)
+    monkeypatch.setattr(stocks.time, "time", lambda: now)
     stocks._endpoint_cache.clear()
 
     async def scenario() -> dict:
