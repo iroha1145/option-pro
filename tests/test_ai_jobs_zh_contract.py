@@ -394,6 +394,30 @@ def test_common_traditional_and_variant_prose_is_rejected(traditional_text):
         "09时30分公布数据",
         "2026年07月19日发布财报",
         "编号007的提案获得通过",
+        "S&P 500股票指数出现波动",
+        "SEC证券监管文件已经发布",
+        "iShares股票基金公布持仓",
+        "Apple股票应用完成升级",
+        "软件代码：Python完成更新",
+        "软件代码：2026完成更新",
+        "源代码（Python）完成升级",
+        "项目代码：Atlas完成更新",
+        "产品代码：Apple已经更新",
+        "S&P 500（股票指数）出现波动",
+        "SEC（证券监管机构）发布文件",
+        "iShares（股票基金）公布持仓",
+        "iShares（股／票基金）公布持仓",
+        "Apple（股票应用）完成升级",
+        "Apple股份公司发布公告",
+        "Apple股份有限公司发布公告",
+        "公司采用Python。股票市场随后上涨",
+        "新系统使用Windows。证券市场随后上涨",
+        "开发团队使用GitHub。普通股随后上涨",
+        "公司使用CUDA。股票市场随后上涨",
+        "Python。股票市场随后上涨",
+        "Windows。证券市场随后上涨",
+        "GitHub。普通股随后上涨",
+        "CUDA。股票市场随后上涨",
     ],
 )
 def test_simplified_prose_and_necessary_foreign_names_are_allowed(simplified_text):
@@ -417,6 +441,15 @@ def test_simplified_prose_and_necessary_foreign_names_are_allowed(simplified_tex
         )
         == simplified_text
     )
+
+
+@pytest.mark.parametrize("annotation_length", [64, 100, 300])
+def test_long_balanced_annotation_after_approved_name_is_allowed(
+    annotation_length,
+):
+    annotation = ("新产品说明" * 100)[:annotation_length]
+    text = f"Apple（{annotation}）发布更新"
+    assert validate_simplified_chinese_text(text, None) == text
 
 
 def test_wholly_english_sentence_is_rejected():
@@ -758,6 +791,145 @@ def test_chinese_text_rejects_a_ticker_not_bound_to_the_job_payload():
 
 
 @pytest.mark.parametrize(
+    "unbound_reference",
+    [
+        "NVIDIA股价出现波动",
+        "Apple股票受到市场关注",
+        "Apple的股票受到市场关注",
+        "NVIDIA（英伟达）的今日股价出现波动",
+        "Apple （苹果）股票受到市场关注",
+        "NVIDIA公司股价出现波动",
+        "Apple（苹果）这只股票受到市场关注",
+        "股票代码：Apple受到关注",
+        "证券代码：NVIDIA受到关注",
+        "股票代码（Apple）受到关注",
+        "证券编号为Apple受到关注",
+        "Apple/股票受到市场关注",
+        "NVIDIA·股价出现波动",
+        "Apple【苹果】股票受到市场关注",
+        "Apple​股票受到市场关注",
+        "Apple／股票受到市场关注",
+        "股票代码／Apple受到关注",
+        "Apple〔苹果〕股票受到市场关注",
+        "Apple（ 苹果）股票受到市场关注",
+        "Apple⁣股票受到市场关注",
+        "NVIDIA股票市场表现强劲",
+        "Apple股票策略获得关注",
+        "NVIDIA证券披露文件显示风险",
+        "Apple股票基金出现上涨",
+        "Apple公司（苹果）股价出现波动",
+        "Apple（股票上涨）受到市场关注",
+        "Apple（股价上涨）受到市场关注",
+        "Apple（苹果股票上涨）受到市场关注",
+        "Apple股／票受到市场关注",
+        "股／票代码：Apple受到关注",
+        "Apple公／司股／价出现波动",
+        "Apple（股／票上涨）受到市场关注",
+        "Apple\u034f股票受到市场关注",
+        "Apple\ufe0f股票受到市场关注",
+        "Apple\x00股票受到市场关注",
+        "Apple\ue000股票受到市场关注",
+        "Apple（苹果）\ufe0f股票受到市场关注",
+        'Apple"苹果"股票受到市场关注',
+        "Apple＂苹果＂股票受到市场关注",
+        "Apple'苹果'股票受到市场关注",
+        "Apple`苹果`股票受到市场关注",
+        "Apple的股份上涨",
+        "Apple公司股份上涨",
+        "Apple普通股上涨",
+        "Apple\n股票受到市场关注",
+        "Apple。股票受到市场关注",
+        "Apple\u0660股票受到市场关注",
+        "Microsoft。股票受到市场关注",
+    ],
+)
+def test_news_result_rejects_stock_context_for_an_unbound_approved_brand(
+    unbound_reference,
+):
+    result = _news_result()
+    result["affected_stocks"] = []
+    result["headline_summary"] = unbound_reference
+    payload = _news_payload()
+    payload["allowed_tickers"] = []
+
+    with pytest.raises(ValidationError):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+@pytest.mark.parametrize(
+    "unbound_reference",
+    [
+        "NVIDIA股价出现波动",
+        "Apple股票受到市场关注",
+        "Apple的股票受到市场关注",
+        "NVIDIA（英伟达）的今日股价出现波动",
+        "Apple （苹果）股票受到市场关注",
+        "NVIDIA公司股价出现波动",
+        "Apple（苹果）这只股票受到市场关注",
+        "股票代码：Apple受到关注",
+        "证券代码：NVIDIA受到关注",
+        "股票代码（Apple）受到关注",
+        "证券编号为Apple受到关注",
+        "Apple/股票受到市场关注",
+        "NVIDIA·股价出现波动",
+        "Apple【苹果】股票受到市场关注",
+        "Apple​股票受到市场关注",
+        "Apple／股票受到市场关注",
+        "股票代码／Apple受到关注",
+        "Apple〔苹果〕股票受到市场关注",
+        "Apple（ 苹果）股票受到市场关注",
+        "Apple⁣股票受到市场关注",
+        "NVIDIA股票市场表现强劲",
+        "Apple股票策略获得关注",
+        "NVIDIA证券披露文件显示风险",
+        "Apple股票基金出现上涨",
+        "Apple公司（苹果）股价出现波动",
+        "Apple（股票上涨）受到市场关注",
+        "Apple（股价上涨）受到市场关注",
+        "Apple（苹果股票上涨）受到市场关注",
+        "Apple股／票受到市场关注",
+        "股／票代码：Apple受到关注",
+        "Apple公／司股／价出现波动",
+        "Apple（股／票上涨）受到市场关注",
+        "Apple\u034f股票受到市场关注",
+        "Apple\ufe0f股票受到市场关注",
+        "Apple\x00股票受到市场关注",
+        "Apple\ue000股票受到市场关注",
+        "Apple（苹果）\ufe0f股票受到市场关注",
+        'Apple"苹果"股票受到市场关注',
+        "Apple＂苹果＂股票受到市场关注",
+        "Apple'苹果'股票受到市场关注",
+        "Apple`苹果`股票受到市场关注",
+        "Apple的股份上涨",
+        "Apple公司股份上涨",
+        "Apple普通股上涨",
+        "Apple\n股票受到市场关注",
+        "Apple。股票受到市场关注",
+        "Apple\u0660股票受到市场关注",
+        "Microsoft。股票受到市场关注",
+    ],
+)
+def test_market_focus_rejects_stock_context_for_an_unbound_approved_brand(
+    unbound_reference,
+):
+    result = _market_focus_result()
+    result["focus_ticker_assessments"] = []
+    result["headline_summary"] = unbound_reference
+    payload = _market_focus_payload(allowed_tickers=[])
+
+    with pytest.raises(ValidationError):
+        validate_result(
+            "market_focus",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+@pytest.mark.parametrize(
     "title",
     [
         "CRM股价上涨",
@@ -827,6 +999,8 @@ def test_project_security_code_can_be_used_when_bound_to_the_job():
         "６００５１９走强",
         "A股价上涨",
         "A股票上涨",
+        "股票代码／1234受到关注",
+        "股／票代码：1234受到关注",
     ],
 )
 def test_numeric_and_single_letter_security_codes_require_job_binding(title):

@@ -434,6 +434,50 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         "scikit-learn",
     }
 )
+_CROSS_SENTENCE_SECURITY_ISSUERS = frozenset(
+    {
+        "Adobe",
+        "Amazon",
+        "Amazon.com",
+        "Apple",
+        "Axios",
+        "Block",
+        "Cloudflare",
+        "CrowdStrike",
+        "Facebook",
+        "GitLab",
+        "Goodyear",
+        "Google",
+        "Instagram",
+        "IonQ",
+        "Kalshi",
+        "LinkedIn",
+        "McDonald's",
+        "Meta",
+        "Microsoft",
+        "Moderna",
+        "NVIDIA",
+        "OpenAI",
+        "Palantir",
+        "PayPal",
+        "Pharming",
+        "Qualcomm",
+        "Salesforce",
+        "ServiceNow",
+        "Skydance",
+        "Snowflake",
+        "Square",
+        "TSMC",
+        "Temu",
+        "TeraWulf",
+        "TikTok",
+        "Varonis",
+        "Visa",
+        "WhatsApp",
+        "YouTube",
+        "eBay",
+    }
+)
 _ALLOWED_LOWERCASE_FOREIGN_NAMES = frozenset(
     {
         "leniolisib",
@@ -441,13 +485,20 @@ _ALLOWED_LOWERCASE_FOREIGN_NAMES = frozenset(
         "semaglutide",
     }
 )
-_UPPERCASE_BRAND_SPANS = frozenset({"NASCAR", "NVIDIA", "TSMC"})
 _CJK_CONTEXT_SEPARATORS = frozenset(
     " \t，、：；,:“”‘’「」『』《》【】—–-"
 )
-_SECURITY_CONTEXT_SEPARATORS = _CJK_CONTEXT_SEPARATORS.union("（）()")
-_SECURITY_CODE_SUFFIXES = ("股价", "股票", "公司", "个股", "证券")
-_SECURITY_CODE_PREFIXES = ("股票", "个股", "代码", "证券")
+_SECURITY_ALIAS_OPENERS = frozenset("（(【[{<《“「『〔〖〘〚\"'`＂＇｀")
+_SECURITY_ALIAS_CLOSERS = frozenset("）)】]}>》”」』〕〗〙〛\"'`＂＇｀")
+_SECURITY_CODE_SUFFIXES = (
+    "股价",
+    "股票",
+    "普通股",
+    "股份",
+    "公司",
+    "个股",
+    "证券",
+)
 _SECURITY_PRICE_MOVEMENTS = (
     "上涨",
     "下跌",
@@ -458,13 +509,36 @@ _SECURITY_PRICE_MOVEMENTS = (
     "收涨",
     "收跌",
 )
-_PARENTHETICAL_ALIAS_BEFORE_STOCK_PRICE = re.compile(
-    r"^[（(][\u3400-\u9fff]{1,30}[）)]"
-    r"(?:的)?(?:当前|最新|今日|昨日|本周|盘前|盘后)?股价"
-)
 _STOCK_PRICE_SUFFIX = re.compile(
     r"^(?:的)?(?:当前|最新|今日|昨日|本周|盘前|盘后)?股价"
 )
+_SECURITY_NOUN_SUFFIX = re.compile(
+    r"^(?:的)?(?P<noun>这只普通股|这只股票|这只个股|"
+    r"普通股|股票|个股|股份|证券)(?P<tail>.*)$"
+)
+_SECURITY_REFERENCE_PREFIX = re.compile(
+    r"(?:股票代码|普通股代码|股份代码|证券代码|证券编号|"
+    r"股票|普通股|股份|个股|证券)(?:为|是)?$"
+)
+_SECURITY_REFERENCE_MARKERS = (
+    "股价",
+    "股票",
+    "普通股",
+    "股份",
+    "个股",
+    "证券",
+)
+_SECURITY_COMPANY_BRIDGES = ("公司", "集团", "企业")
+_GENERIC_NON_REFERENCE_SECURITY_COMPOUNDS = (
+    "股份有限公司",
+    "股份公司",
+)
+_NON_REFERENCE_SECURITY_COMPOUNDS = {
+    "S&P 500": ("股票指数",),
+    "SEC": ("证券监管",),
+    "iShares": ("股票基金",),
+    "Apple": ("股票应用",),
+}
 _JAPANESE_COMPANY_MARKERS = (
     "株式会社",
     "有限会社",
@@ -500,6 +574,126 @@ def _is_cjk(char: str) -> bool:
     return any(start <= codepoint <= end for start, end in _CJK_RANGES)
 
 
+def _is_security_reference_separator(char: str) -> bool:
+    category = unicodedata.category(char)
+    return (
+        char.isspace()
+        or category[0] in {"C", "M", "N", "P", "S", "Z"}
+    )
+
+
+def _is_security_alias_opener(char: str) -> bool:
+    return char in _SECURITY_ALIAS_OPENERS or unicodedata.category(char) in {
+        "Pi",
+        "Ps",
+    }
+
+
+def _is_security_alias_closer(char: str) -> bool:
+    return char in _SECURITY_ALIAS_CLOSERS or unicodedata.category(char) in {
+        "Pe",
+        "Pf",
+    }
+
+
+def _strip_security_reference_separators(
+    value: str,
+    *,
+    preserve_alias_opener: bool = False,
+) -> str:
+    index = 0
+    while index < len(value) and _is_security_reference_separator(value[index]):
+        if preserve_alias_opener and _is_security_alias_opener(value[index]):
+            break
+        index += 1
+    return value[index:]
+
+
+def _normalize_security_reference_phrase(value: str) -> str:
+    return "".join(
+        char
+        for char in value
+        if not _is_security_reference_separator(char)
+    )
+
+
+def _consume_security_alias(value: str) -> tuple[str, str] | None:
+    if not value or not _is_security_alias_opener(value[0]):
+        return "", value
+
+    for index, char in enumerate(value[1:], start=1):
+        if char in "\r\n":
+            break
+        if not _is_security_alias_closer(char):
+            continue
+        return value[1:index], value[index + 1 :]
+    return None
+
+
+def _security_phrase_requires_ticker_binding(span: str, phrase: str) -> bool:
+    phrase = _normalize_security_reference_phrase(phrase)
+    while True:
+        bridge = next(
+            (
+                item
+                for item in _SECURITY_COMPANY_BRIDGES
+                if phrase.startswith(item)
+            ),
+            None,
+        )
+        if bridge is None:
+            break
+        phrase = phrase[len(bridge) :]
+
+    if _STOCK_PRICE_SUFFIX.match(phrase) is not None:
+        return True
+
+    noun_match = _SECURITY_NOUN_SUFFIX.match(phrase)
+    if noun_match is None:
+        return False
+
+    noun = noun_match.group("noun")
+    if noun.startswith("这只"):
+        return True
+
+    tail = noun_match.group("tail")
+    if not tail:
+        return True
+
+    reference = f"{noun}{tail}"
+    compounds = (
+        *_GENERIC_NON_REFERENCE_SECURITY_COMPOUNDS,
+        *_NON_REFERENCE_SECURITY_COMPOUNDS.get(span, ()),
+    )
+    for compound in compounds:
+        if not reference.startswith(compound):
+            continue
+        remainder = _strip_security_reference_separators(
+            reference[len(compound) :]
+        )
+        if _STOCK_PRICE_SUFFIX.match(remainder) is None and (
+            _SECURITY_NOUN_SUFFIX.match(remainder) is None
+        ):
+            return False
+    return True
+
+
+def _security_alias_requires_ticker_binding(span: str, alias: str) -> bool:
+    alias = _normalize_security_reference_phrase(alias)
+    marker_positions = (
+        (index, marker)
+        for marker in _SECURITY_REFERENCE_MARKERS
+        if (index := alias.find(marker)) >= 0
+    )
+    first_marker = min(marker_positions, default=None)
+    if first_marker is None:
+        return False
+    return _security_phrase_requires_ticker_binding(
+        span,
+        alias[first_marker[0] :],
+    )
+
+
 def _is_ticker_span(span: str, allowed_codes: frozenset[str]) -> bool:
     if span.upper() == span and span in allowed_codes:
         return True
@@ -523,38 +717,58 @@ def _approved_span_requires_ticker_binding(
     start: int,
     end: int,
 ) -> bool:
-    if span.upper() != span or span in _UPPERCASE_BRAND_SPANS:
-        return False
     before_index = start - 1
     while (
         before_index >= 0
-        and sentence[before_index] in _SECURITY_CONTEXT_SEPARATORS
+        and _is_security_reference_separator(sentence[before_index])
     ):
         before_index -= 1
     prefix = sentence[: before_index + 1]
-    after_index = end
-    while (
-        after_index < len(sentence)
-        and sentence[after_index] in _SECURITY_CONTEXT_SEPARATORS
-    ):
-        after_index += 1
-    suffix = sentence[after_index:]
-    return (
-        prefix.endswith(
-            (
-                "股票",
-                "个股",
-                "股票代码为",
-                "股票代码是",
-                "证券代码为",
-                "证券代码是",
-            )
+
+    if (
+        _SECURITY_REFERENCE_PREFIX.search(
+            _normalize_security_reference_phrase(prefix)
         )
-        or _STOCK_PRICE_SUFFIX.match(suffix) is not None
-        or suffix.startswith(("这只股票", "这只个股"))
-        or _PARENTHETICAL_ALIAS_BEFORE_STOCK_PRICE.match(sentence[end:])
         is not None
+    ):
+        return True
+
+    suffix = _strip_security_reference_separators(
+        sentence[end:],
+        preserve_alias_opener=True,
     )
+    while suffix:
+        if _is_security_alias_opener(suffix[0]):
+            alias_parts = _consume_security_alias(suffix)
+            if alias_parts is None:
+                return True
+            alias, suffix_after_alias = alias_parts
+            if _security_alias_requires_ticker_binding(span, alias):
+                return True
+            suffix = _strip_security_reference_separators(
+                suffix_after_alias,
+                preserve_alias_opener=True,
+            )
+            continue
+
+        bridge = next(
+            (
+                item
+                for item in _SECURITY_COMPANY_BRIDGES
+                if suffix.startswith(item)
+            ),
+            None,
+        )
+        if bridge is None:
+            break
+        suffix = _strip_security_reference_separators(
+            suffix[len(bridge) :],
+            preserve_alias_opener=True,
+        )
+
+    suffix = _strip_security_reference_separators(suffix)
+
+    return _security_phrase_requires_ticker_binding(span, suffix)
 
 
 def _foreign_span_context(
@@ -677,35 +891,37 @@ def _numeric_code_is_in_security_context(
     start: int,
     end: int,
 ) -> bool:
+    for foreign_match in _FOREIGN_SPAN.finditer(sentence):
+        if foreign_match.start() > start:
+            break
+        if (
+            foreign_match.start() <= start
+            and end <= foreign_match.end()
+            and foreign_match.group(0) in _ALLOWED_EXACT_FOREIGN_SPANS
+        ):
+            return False
+
     span = sentence[start:end]
     if len(span) == 5 and span.startswith("0"):
         return True
     before_index = start - 1
     while (
         before_index >= 0
-        and sentence[before_index] in _SECURITY_CONTEXT_SEPARATORS
+        and _is_security_reference_separator(sentence[before_index])
     ):
         before_index -= 1
     after_index = end
     while (
         after_index < len(sentence)
-        and sentence[after_index] in _SECURITY_CONTEXT_SEPARATORS
+        and _is_security_reference_separator(sentence[after_index])
     ):
         after_index += 1
-    prefix = sentence[: before_index + 1]
-    suffix = sentence[after_index:]
+    prefix = _normalize_security_reference_phrase(
+        sentence[: before_index + 1]
+    )
+    suffix = _normalize_security_reference_phrase(sentence[after_index:])
     return (
-        prefix.endswith(_SECURITY_CODE_PREFIXES)
-        or prefix.endswith(
-            (
-                "股票代码为",
-                "股票代码是",
-                "证券代码为",
-                "证券代码是",
-                "证券编号为",
-                "证券编号是",
-            )
-        )
+        _SECURITY_REFERENCE_PREFIX.search(prefix) is not None
         or suffix.startswith(_SECURITY_CODE_SUFFIXES)
         or suffix.startswith("这只股票")
         or (
@@ -713,6 +929,28 @@ def _numeric_code_is_in_security_context(
             and suffix.startswith(_SECURITY_PRICE_MOVEMENTS)
         )
     )
+
+
+def _foreign_span_stands_alone_before_sentence_break(
+    text: str,
+    *,
+    start: int,
+    end: int,
+) -> bool:
+    next_boundary = _SENTENCE_SPLIT.search(text, end)
+    if next_boundary is None:
+        return False
+    previous_boundary = max(
+        (text.rfind(marker, 0, start) for marker in "。！？!?\n"),
+        default=-1,
+    )
+    before = _normalize_security_reference_phrase(
+        text[previous_boundary + 1 : start]
+    )
+    after = _normalize_security_reference_phrase(
+        text[end : next_boundary.start()]
+    )
+    return not before and not after
 
 
 def validate_simplified_chinese_text(
@@ -790,6 +1028,26 @@ def validate_simplified_chinese_text(
                 continue
             raise ValueError("english_prose_not_allowed")
         if sentence_latin >= 16 and sentence_cjk == 0:
+            raise ValueError("english_prose_not_allowed")
+
+    for match in _FOREIGN_SPAN.finditer(scan_text):
+        span = match.group(0)
+        if span not in _CROSS_SENTENCE_SECURITY_ISSUERS:
+            continue
+        if not _foreign_span_stands_alone_before_sentence_break(
+            scan_text,
+            start=match.start(),
+            end=match.end(),
+        ):
+            continue
+        if not _approved_span_requires_ticker_binding(
+            span,
+            sentence=scan_text,
+            start=match.start(),
+            end=match.end(),
+        ):
+            continue
+        if span not in normalized_codes:
             raise ValueError("english_prose_not_allowed")
     return scan_text
 
