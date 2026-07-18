@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -606,14 +607,17 @@ def test_expired_unknown_submission_releases_other_jobs_without_retrying_it(
         "owner-one",
         "submission_outcome_unknown",
     )
+    recorded_after_restart = datetime.now(timezone.utc).isoformat().replace(
+        "+00:00", "Z"
+    )
     with sqlite3.connect(repository.path) as connection:
         connection.execute(
             """UPDATE ai_jobs
                SET submission_started_at='2026-01-01T00:00:00Z',
-                   completed_at='2026-01-01T00:00:01Z',
-                   updated_at='2026-01-01T00:00:01Z'
+                   completed_at=?,
+                   updated_at=?
                WHERE job_id=?""",
-            (first["job_id"],),
+            (recorded_after_restart, recorded_after_restart, first["job_id"]),
         )
 
     snapshot = repository.budget_snapshot(

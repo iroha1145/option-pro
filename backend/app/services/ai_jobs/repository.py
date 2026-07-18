@@ -1162,9 +1162,7 @@ class AIJobRepository:
                         status IN ('queued','in_progress')
                         OR (
                           error_code='submission_outcome_unknown'
-                          AND COALESCE(
-                            completed_at,updated_at,submission_started_at
-                          )>=?
+                          AND submission_started_at>=?
                         )
                       )
                     """,
@@ -1741,9 +1739,7 @@ class AIJobRepository:
                 WHERE j.status IN ('pending','queued','in_progress')
                    OR (j.submission_started_at IS NOT NULL
                        AND j.error_code='submission_outcome_unknown'
-                       AND COALESCE(
-                         j.completed_at,j.updated_at,j.submission_started_at
-                       )>=?)
+                       AND j.submission_started_at>=?)
                 ORDER BY j.created_at LIMIT 1
                 """,
                 (unknown_submission_cutoff,),
