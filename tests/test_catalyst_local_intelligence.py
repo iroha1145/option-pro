@@ -2162,6 +2162,84 @@ def test_scheduled_hour_queues_at_most_twenty_recent_news(tmp_path, monkeypatch)
         ).fetchone()[0] == 0
 
 
+def test_scheduled_skips_changed_revision_and_continues(tmp_path, monkeypatch):
+    etl, ai, intelligence = _stack(
+        tmp_path,
+        mode="scheduled",
+        canonical_tickers=("NVDA", "AMD"),
+    )
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                1,
+                560,
+                available_at=now - timedelta(minutes=2),
+                tickers=("NVDA",),
+            ),
+            _news_change(
+                2,
+                561,
+                available_at=now - timedelta(minutes=1),
+                tickers=("AMD",),
+            ),
+        ],
+        as_of=now - timedelta(seconds=1),
+    )
+    intelligence.reconcile()
+    original_request_analysis = intelligence.request_analysis
+    requested_news_ids: list[int] = []
+
+    def request_analysis(news_id: int, **kwargs):
+        requested_news_ids.append(news_id)
+        if len(requested_news_ids) == 1:
+            raise CatalystError(
+                code="news_revision_changed",
+                message="The news revision changed before submission",
+                counts_for_circuit=False,
+            )
+        return original_request_analysis(news_id, **kwargs)
+
+    monkeypatch.setattr(intelligence, "request_analysis", request_analysis)
+
+    assert intelligence.run_scheduled(now=now) == {
+        "queued": 1,
+        "skipped": 1,
+    }
+    assert len(requested_news_ids) == 2
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='news_impact'"
+        ).fetchone()[0] == 1
+
+
+def test_scheduled_does_not_swallow_other_catalyst_errors(tmp_path, monkeypatch):
+    etl, _ai, intelligence = _stack(tmp_path, mode="scheduled")
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(
+        etl,
+        [_news_change(1, 570, available_at=now - timedelta(minutes=1))],
+        as_of=now - timedelta(seconds=1),
+    )
+    intelligence.reconcile()
+
+    def request_analysis(_news_id: int, **_kwargs):
+        raise CatalystError(
+            code="news_not_found",
+            message="The requested news item does not exist",
+            counts_for_circuit=False,
+        )
+
+    monkeypatch.setattr(intelligence, "request_analysis", request_analysis)
+
+    with pytest.raises(CatalystError) as captured:
+        intelligence.run_scheduled(now=now)
+    assert captured.value.code == "news_not_found"
+
+
 def test_scheduled_focus_waits_for_published_chinese_news(tmp_path, monkeypatch):
     etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
     first_now = datetime.now(timezone.utc).replace(microsecond=0)

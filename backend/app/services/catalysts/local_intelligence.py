@@ -2780,6 +2780,11 @@ class LocalCatalystIntelligence:
                     expected_content_hash=str(row["content_hash"]),
                     submission_source="scheduled",
                 )
+            except CatalystError as error:
+                if error.code == "news_revision_changed":
+                    skipped += 1
+                    continue
+                raise
             except RuntimeError as error:
                 if str(error) == "ai_job_queue_full":
                     skipped += 1
