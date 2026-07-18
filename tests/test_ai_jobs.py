@@ -128,13 +128,89 @@ def _earnings_result():
                 "reason": "公开业务关系可能形成传导。",
             }
             for ticker, name, relation in [
-                ("MSFT", "Microsoft", "competitor"),
-                ("QCOM", "Qualcomm", "supplier"),
-                ("TSM", "TSMC", "supplier"),
-                ("XLK", "Technology ETF", "etf"),
+                ("MSFT", "微软", "competitor"),
+                ("QCOM", "高通", "supplier"),
+                ("TSM", "台积电", "supplier"),
+                ("XLK", "科技类交易所交易基金", "etf"),
             ]
         ],
     }
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["Microsoft公司", "微软（Microsoft）", "Technology ETF"],
+)
+def test_earnings_company_names_must_be_simplified_chinese(name):
+    result = _earnings_result()
+    result["impacted"][0]["name"] = name
+    with pytest.raises(ValidationError):
+        validate_result(
+            "earnings_impact",
+            json.dumps(result, ensure_ascii=False),
+            {"ticker": "AAPL"},
+        )
+
+
+def test_earnings_reason_can_reference_its_structured_impacted_ticker():
+    result = _earnings_result()
+    result["impacted"][0]["reason"] = (
+        "MSFT作为竞争对手，其产品进展可能影响行业定价。"
+    )
+
+    validated = validate_result(
+        "earnings_impact",
+        json.dumps(result, ensure_ascii=False),
+        {"ticker": "AAPL"},
+    )
+
+    assert validated["impacted"][0]["reason"].startswith("MSFT作为")
+
+
+def test_earnings_reason_rejects_unbound_uppercase_word():
+    result = _earnings_result()
+    result["impacted"][0]["reason"] = (
+        "PANIC作为竞争对手，其产品进展可能影响行业定价。"
+    )
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "earnings_impact",
+            json.dumps(result, ensure_ascii=False),
+            {"ticker": "AAPL"},
+        )
+
+
+def test_earnings_reason_cannot_borrow_another_impacted_ticker():
+    result = _earnings_result()
+    result["impacted"][0]["reason"] = (
+        "QCOM作为供应商，其产品进展可能影响行业定价。"
+    )
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "earnings_impact",
+            json.dumps(result, ensure_ascii=False),
+            {"ticker": "AAPL"},
+        )
+
+
+def test_earnings_tickers_cannot_form_an_english_sentence():
+    result = _earnings_result()
+    result["impacted"].append({**result["impacted"][0]})
+    fake_tickers = ("MARKETS", "RALLY", "AFTER", "STRONG", "EARNINGS")
+    for item, ticker in zip(result["impacted"], fake_tickers, strict=True):
+        item["ticker"] = ticker
+    result["impacted"][0]["reason"] = (
+        "MARKETS RALLY AFTER STRONG EARNINGS，行业表现需要继续观察。"
+    )
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "earnings_impact",
+            json.dumps(result, ensure_ascii=False),
+            {"ticker": "AAPL"},
+        )
 
 
 def _large_signal_result():
@@ -1064,11 +1140,11 @@ def test_worker_health_reports_official_responses_sdk_without_a_key(tmp_path):
 
 def test_all_paid_job_prompt_versions_invalidate_legacy_english_cache():
     assert ai._PROMPT_VERSIONS == {
-        "earnings_impact": "earnings-impact-zh-cn-v3",
-        "option_alerts": "option-alerts-zh-cn-v3",
-        "signal_analysis": "signal-analysis-zh-cn-v3",
-        "news_impact": "news-impact-zh-cn-v2",
-        "market_focus": "market-focus-zh-cn-v2",
+        "earnings_impact": "earnings-impact-zh-cn-v4",
+        "option_alerts": "option-alerts-zh-cn-v4",
+        "signal_analysis": "signal-analysis-zh-cn-v4",
+        "news_impact": "news-impact-zh-cn-v4",
+        "market_focus": "market-focus-zh-cn-v4",
     }
 
 
@@ -1528,7 +1604,7 @@ def test_job_post_is_fast_local_and_idempotent(monkeypatch, tmp_path):
     assert first.json()["status"] == "pending"
     assert second.json()["cached"] is False
     stored = repository.get_job(first.json()["job_id"])
-    assert stored["prompt_version"] == "earnings-impact-zh-cn-v3"
+    assert stored["prompt_version"] == "earnings-impact-zh-cn-v4"
 
 
 def test_option_alert_failed_job_requires_explicit_force_to_requeue(
@@ -1829,6 +1905,60 @@ def test_explicit_retry_requeues_safe_terminal_job_but_not_unknown_submission(
     assert created is False
     assert blocked["status"] == "failed"
     assert blocked["error_code"] == "submission_outcome_unknown"
+
+
+def test_explicit_retry_requeues_completed_job_with_hidden_invalid_result(
+    tmp_path,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    owner = "worker-invalid-completed-retry"
+    claimed = repository.claim_due(owner, 60)
+    assert claimed is not None and claimed["job_id"] == row["job_id"]
+    assert repository.mark_submission_started(
+        row["job_id"],
+        owner,
+        daily_limit=4,
+    ) == "started"
+    invalid = _earnings_result()
+    invalid["summary"] = "Markets rally after stronger earnings"
+    repository.complete(row["job_id"], owner, invalid, {})
+
+    hidden = repository.public(repository.get_job(row["job_id"]))
+    assert hidden["status"] == "completed"
+    assert hidden["result"] is None
+    assert hidden["error_code"] == "legacy_output_hidden"
+
+    retried, created = _create_earnings_job(
+        repository,
+        force_retry=True,
+    )
+    assert created is True
+    assert retried["status"] == "pending"
+    assert retried["retry_of_job_id"] == row["job_id"]
+    assert retried["execution_number"] == 2
+
+
+def test_explicit_retry_keeps_a_valid_completed_result_settled(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    owner = "worker-valid-completed-retry"
+    claimed = repository.claim_due(owner, 60)
+    assert claimed is not None and claimed["job_id"] == row["job_id"]
+    assert repository.mark_submission_started(
+        row["job_id"],
+        owner,
+        daily_limit=4,
+    ) == "started"
+    repository.complete(row["job_id"], owner, _earnings_result(), {})
+
+    settled, created = _create_earnings_job(
+        repository,
+        force_retry=True,
+    )
+    assert created is False
+    assert settled["job_id"] == row["job_id"]
+    assert settled["status"] == "completed"
 
 
 def test_explicit_retry_respects_the_queue_capacity_limit(tmp_path):

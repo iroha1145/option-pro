@@ -667,6 +667,23 @@ class AIJobRepository:
             ),
         )
 
+    @classmethod
+    def _completed_result_state(cls, row: dict[str, Any]) -> str:
+        if row.get("status") != "completed":
+            return "not_completed"
+        raw_result = row.get("result_json")
+        if not isinstance(raw_result, str) or not raw_result:
+            return "unknown"
+        try:
+            public = cls.public(row)
+        except (KeyError, TypeError, ValueError):
+            return "unknown"
+        if public.get("result") is not None:
+            return "valid"
+        if public.get("error_code") == "legacy_output_hidden":
+            return "invalid"
+        return "unknown"
+
     def create_job(
         self,
         *,
@@ -810,8 +827,21 @@ class AIJobRepository:
                     row.get("error_code") == "submission_outcome_unknown"
                     for row in matches
                 )
+                completed_result_states = {
+                    str(row["job_id"]): self._completed_result_state(row)
+                    for row in matches
+                    if row["status"] == "completed"
+                }
                 settled_result_exists = any(
-                    row["status"] in {"completed", "insufficient_context"}
+                    row["status"] == "insufficient_context"
+                    or (
+                        row["status"] == "completed"
+                        and completed_result_states.get(
+                            str(row["job_id"]),
+                            "unknown",
+                        )
+                        != "invalid"
+                    )
                     for row in matches
                 )
                 unresolved_submission_exists = any(
@@ -823,9 +853,23 @@ class AIJobRepository:
                     for row in matches
                 )
                 retryable_latest = bool(meaningful_latest) and all(
-                    row["status"] in {"failed", "cancelled", "budget_blocked"}
-                    and row.get("error_code")
-                    not in {"submission_outcome_unknown", _DUPLICATE_MIGRATION_ERROR}
+                    (
+                        row["status"]
+                        in {"failed", "cancelled", "budget_blocked"}
+                        and row.get("error_code")
+                        not in {
+                            "submission_outcome_unknown",
+                            _DUPLICATE_MIGRATION_ERROR,
+                        }
+                    )
+                    or (
+                        row["status"] == "completed"
+                        and completed_result_states.get(
+                            str(row["job_id"]),
+                            "unknown",
+                        )
+                        == "invalid"
+                    )
                     for row in meaningful_latest
                 )
                 if (

@@ -45,7 +45,7 @@ def _create_job(repository: AIJobRepository, ticker: str):
         model="gpt-5.6-terra",
         reasoning="max",
         execution_mode="background",
-        prompt_version="earnings-impact-zh-cn-v3",
+        prompt_version="earnings-impact-zh-cn-v4",
         schema_version=version,
         schema_sha256=digest,
         max_queued=200,
@@ -68,7 +68,7 @@ def _news_result() -> dict:
         "affected_stocks": [
             {
                 "ticker": "NVDA",
-                "company": "NVIDIA",
+                "company": "英伟达",
                 "impact_score": 25,
                 "confidence": 70,
                 "horizon": "weeks",
@@ -177,6 +177,9 @@ def test_every_model_schema_is_strict_and_declares_simplified_chinese(job_type):
     assert "目标价" in request.instructions
     assert "仓位" in request.instructions
     assert "止损" in request.instructions
+    assert "外文公司名、品牌名" in request.instructions
+    assert "不得原样输出外文公司或品牌名称" in request.instructions
+    assert "中文译名或中文音译" in request.instructions
     assert "untrusted_" in request.input_text
 
 
@@ -192,7 +195,7 @@ def test_news_and_market_focus_results_accept_simplified_chinese():
         _market_focus_payload(),
     )
     assert news["title_zh"].startswith("英伟达")
-    assert news["affected_stocks"][0]["company"] == "NVIDIA"
+    assert news["affected_stocks"][0]["company"] == "英伟达"
     assert focus["cycle_id"] == "cycle-20260715-01"
 
 
@@ -256,7 +259,7 @@ def test_news_title_rejects_english_prose_and_traditional_chinese(title):
 )
 def test_common_traditional_and_variant_prose_is_rejected(traditional_text):
     with pytest.raises(ValueError, match="traditional_chinese_not_allowed"):
-        validate_simplified_chinese_text(traditional_text)
+        validate_simplified_chinese_text(traditional_text, None)
 
 
 @pytest.mark.parametrize(
@@ -272,17 +275,203 @@ def test_common_traditional_and_variant_prose_is_rejected(traditional_text):
         "乾照光电发布业绩。",
         "英伟达（NVIDIA）发布Blackwell芯片",
         "NVIDIA、AMD与TSM关注Blackwell供货",
+        "IonQ量子计算订单增长",
+        "RSA大会期间Varonis发布人工智能研究",
+        "Varonis公司首席执行官亚基·法伊特尔松介绍AI战略",
+        "Atlas人工智能项目获得全球信息安全奖",
+        "NASCAR与Goodyear继续推进DEI合作",
+        "Kalshi市场预测显示交易活跃度上升",
+        "Axios报道称Kalshi正在扩大事件合约覆盖范围",
+        "nookplot-runtime与Nookplot的Python软件开发工具包在Base平台完成升级",
+        "Nookplot Python SDK在Base平台完成升级",
+        "公司发布Python SDK更新",
+        "Pharming集团的Joenja（leniolisib）用于APDS治疗并改善患者症状",
+        "A股市场回暖",
+        "公司完成A轮融资",
+        "A股科技板块走强",
+        "AN与ON公司受到市场关注",
+        "NOW上调全年收入指引",
+        "ON半导体上调全年收入指引",
+        "通用汽车公司发布最新业绩",
+        "苹果公司（Apple）发布最新产品",
+        "iPhone销量继续增长",
+        "iOS系统完成升级",
+        "eBay平台发布最新业绩",
+        "macOS系统发布更新",
+        "iShares基金公布持仓",
+        "McDonald's公司发布最新业绩",
+        "强生公司发布最新业绩",
+        "宝洁公司发布最新业绩",
+        "美国银行发布最新研究",
+        "渣打银行发布最新研究",
+        "贸易台公司发布最新业绩",
+        "全球支付公司发布最新业绩",
+        "台积电发布最新业绩",
+        "remdesivir用于治疗相关疾病",
+        "semaglutide治疗相关疾病的需求增长",
+        "iPhone 17销量继续增长",
+        "Claude 4.5模型完成升级",
+        "Windows 11系统发布更新",
+        "BRK.B股价上涨",
+        "US.AAPL股价上涨",
+        "BRK-B股价上涨",
+        "HK.00700股价上涨",
+        "RMS.PA股价上涨",
+        "MSFT、GOOG与META股价上涨",
+        "BTC/USD价格出现波动",
+        "S&P 500指数上涨",
+        "COVID-19病例数量下降",
+        "F-35订单增加",
+        "Amazon.com发布最新业绩",
+        "Joenja（leniolisib）用于APDS治疗",
+        "Apple 公司发布最新产品",
+        "Axios 报道称Kalshi交易活跃",
+        "英伟达发布 Blackwell 芯片",
+        "Kalshi，市场交易活跃度上升",
+        "Apple：公司发布最新产品",
+        "“Apple”公司发布最新产品",
+        "【Apple】公司发布最新产品",
+        "《Apple》品牌发布新品",
+        "Apple—公司发布最新产品",
+        "Apple、Google与Amazon合作",
+        "Apple，Google与Amazon合作",
+        "Apple；发布最新产品",
+        "scikit-learn完成版本升级",
+        "PyTorch-Lightning完成版本升级",
+        "gpt-oss完成版本升级",
+        "美国CPI同比上涨百分之三",
+        "核心PCE通胀放缓",
+        "GDP增长低于市场预期",
+        "FOMC会议维持利率不变",
+        "ETF资金流入增加",
+        "IPO市场活跃度回升",
+        "SEC发布最新监管文件",
+        "FDA批准新药上市",
+        "OPEC维持产量政策",
+        "PMI数据出现改善",
+        "HBM需求继续增长",
+        "DRAM与NAND价格上涨",
+        "GPU与CPU供应趋紧",
+        "API与SDK完成升级",
+        "H100与B200出货增加",
+        "H100 GPU需求增长",
+        "CPI PCE数据受到关注",
+        "AWS Azure需求增长",
+        "MI300X与GB200受到市场关注",
+        "RTX 5090发布后需求增长",
+        "Gemini 2.5完成升级",
+        "Llama 4模型发布",
+        "F-35A订单增加",
+        "BTC/USDT价格出现波动",
+        "XAU/USD价格出现波动",
+        "每股收益EPS高于市场预期",
+        "ROE与ROIC继续改善",
+        "FCF增长支持公司估值",
+        "收入CAGR保持稳定",
+        "GAAP利润率有所改善",
+        "VIX指数明显回落",
+        "WTI原油与LNG价格出现波动",
+        "EV估值仍处于较高水平",
+        "P/E与PEG估值倍数下降",
+        "DCF估值显示价格偏高",
+        "NAV与AUM继续增长",
+        "ISM、ADP与JOLTS数据受到关注",
+        "ECB、BOJ与PBOC政策出现分化",
+        "CFTC、FTC与DOJ发布最新文件",
+        "客户关系管理与CDN需求保持增长",
+        "CRM系统需求保持增长",
+        "HIV治疗需求保持稳定",
+        "GLP-1药物需求继续增长",
+        "5G网络投资出现回升",
+        "AWS、Azure与Copilot需求增长",
+        "YoY、QoQ与MoM增速均有改善",
+        "SaaS订阅收入继续增长",
+        "mRNA疫苗研发取得进展",
+        "2026年收入继续增长",
+        "500指数成分股表现分化",
+        "08月数据好于预期",
+        "01号文件正式发布",
+        "09时30分公布数据",
+        "2026年07月19日发布财报",
+        "编号007的提案获得通过",
+        "S&P 500股票指数出现波动",
+        "SEC证券监管文件已经发布",
+        "iShares股票基金公布持仓",
+        "Apple股票应用完成升级",
+        "软件代码：Python完成更新",
+        "软件代码：2026完成更新",
+        "源代码（Python）完成升级",
+        "项目代码：Atlas完成更新",
+        "产品代码：Apple已经更新",
+        "S&P 500（股票指数）出现波动",
+        "SEC（证券监管机构）发布文件",
+        "iShares（股票基金）公布持仓",
+        "iShares（股／票基金）公布持仓",
+        "Apple（股票应用）完成升级",
+        "Apple股份公司发布公告",
+        "Apple股份有限公司发布公告",
+        "公司采用Python。股票市场随后上涨",
+        "新系统使用Windows。证券市场随后上涨",
+        "开发团队使用GitHub。普通股随后上涨",
+        "公司使用CUDA。股票市场随后上涨",
+        "Python。股票市场随后上涨",
+        "Windows。证券市场随后上涨",
+        "GitHub。普通股随后上涨",
+        "CUDA。股票市场随后上涨",
     ],
 )
 def test_simplified_prose_and_necessary_foreign_names_are_allowed(simplified_text):
-    assert validate_simplified_chinese_text(simplified_text) == simplified_text
+    allowed_codes = {
+        "NVIDIA、AMD与TSM关注Blackwell供货": {"AMD", "NVIDIA", "TSM"},
+        "AN与ON公司受到市场关注": {"AN", "ON"},
+        "NOW上调全年收入指引": {"NOW"},
+        "ON半导体上调全年收入指引": {"ON"},
+        "BRK.B股价上涨": {"BRK.B"},
+        "US.AAPL股价上涨": {"US.AAPL"},
+        "BRK-B股价上涨": {"BRK-B"},
+        "HK.00700股价上涨": {"HK.00700"},
+        "RMS.PA股价上涨": {"RMS.PA"},
+        "MSFT、GOOG与META股价上涨": {"MSFT", "GOOG", "META"},
+    }.get(simplified_text, set())
+    assert (
+        validate_simplified_chinese_text(
+            simplified_text,
+            None,
+            allowed_codes=allowed_codes,
+        )
+        == simplified_text
+    )
+
+
+@pytest.mark.parametrize("annotation_length", [64, 100, 300])
+def test_long_balanced_annotation_after_approved_name_is_allowed(
+    annotation_length,
+):
+    annotation = ("新产品说明" * 100)[:annotation_length]
+    text = f"Apple（{annotation}）发布更新"
+    assert validate_simplified_chinese_text(text, None) == text
 
 
 def test_wholly_english_sentence_is_rejected():
     with pytest.raises(ValueError, match="simplified_chinese_text_required"):
         validate_simplified_chinese_text(
-            "Markets rally after companies report stronger earnings"
+            "Markets rally after companies report stronger earnings",
+            None,
         )
+
+
+@pytest.mark.parametrize(
+    "english_text",
+    [
+        "IonQ reports stronger revenue",
+        "RSA Conference Varonis AI",
+        "Varonis Systems Yaki Faitelson AI Atlas Global InfoSec Awards",
+        "NASCAR and Goodyear expand DEI partnership",
+    ],
+)
+def test_wholly_english_names_and_prose_are_rejected(english_text):
+    with pytest.raises(ValueError, match="simplified_chinese_text_required"):
+        validate_simplified_chinese_text(english_text, None)
 
 
 def _replace_nested_value(document: dict, path: tuple[str | int, ...], value: str):
@@ -298,6 +487,7 @@ def _replace_nested_value(document: dict, path: tuple[str | int, ...], value: st
         ("title_zh",),
         ("summary_zh",),
         ("headline_summary",),
+        ("affected_stocks", 0, "company"),
         ("affected_stocks", 0, "reason"),
         ("affected_sectors", 0),
         ("affected_commodities", 0, "name"),
@@ -318,6 +508,33 @@ def test_every_news_natural_language_field_uses_the_simplified_gate(path):
     ]
     _replace_nested_value(result, path, "市場消息彙整")
     with pytest.raises(ValidationError, match="traditional_chinese_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            _news_payload(),
+        )
+
+
+@pytest.mark.parametrize(
+    "company",
+    [
+        "US stocks rally after earnings beat expectations",
+        "市場關注聯準會利率",
+        "<script>alert(1)</script>",
+        "NVIDIA公司",
+        "Microsoft公司",
+        "微软（Microsoft）",
+        "株式会社任天堂",
+        "任天堂株式会社",
+        "㍿任天堂",
+        "㈱任天堂",
+        "（株）任天堂",
+    ],
+)
+def test_news_company_name_is_also_bound_to_the_chinese_contract(company):
+    result = _news_result()
+    result["affected_stocks"][0]["company"] = company
+    with pytest.raises(ValidationError):
         validate_result(
             "news_impact",
             json.dumps(result, ensure_ascii=False),
@@ -394,12 +611,154 @@ def test_unihan_self_mapped_characters_remain_valid_in_simplified_contexts(title
         "英伟达 reports strong growth now",
         "NVIDIA launches new chip 新品",
         "英伟达 launches chip",
+        "IonQ reports stronger revenue，市场关注",
+        "Varonis Systems shares rose after earnings，市场关注",
+        "NASCAR and Goodyear expand DEI partnership，市场关注",
+        "Markets Rally After Earnings 苹果",
+        "Company Reports Strong Growth 苹果",
+        "Report 苹果发布新品",
+        "Breaking NVIDIA新品",
+        "NVIDIA Reports Stronger Revenue，苹果公司表示需求改善",
+        "苹果Launches New Chip",
+        "REPORTS 苹果发布新品",
+        "LAUNCHES NVIDIA新品",
+        "AI Business Expands Rapidly 苹果",
+        "RALLY 苹果",
+        "RESULTS 苹果",
+        "IonQ Announces Quantum Partnership 苹果",
+        "Apple Raises Guidance，市场持续关注",
+        "Stocks Fall Hard 苹果",
+        "President Orders Military Attack 全球市场显著震荡",
+        "market-rally 苹果",
+        "strong-growth 苹果",
+        "Apple Beats Estimates，市场持续关注",
+        "Apple Cuts Outlook，市场持续关注",
+        "General Motors Reports Results，市场持续关注",
+        "ON Reports Results，市场持续关注",
+        "Crypto Crash市场恐慌",
+        "Trade War风险升温",
+        "Bank Crisis持续蔓延",
+        "Rate Shock冲击市场",
+        "Dollar Soars市场承压",
+        "Oil Spikes市场震荡",
+        "Bonds Sink市场承压",
+        "Tech Slumps科技股承压",
+        "Jobs Miss降息预期升温",
+        "Tariffs Loom市场担忧",
+        "Fed Pauses市场上涨",
+        "Trump Strikes伊朗局势升级",
+        "China Retaliates市场震荡",
+        "Bitcoin Crashes市场恐慌",
+        "Equities Tumble市场承压",
+        "CRASH ALERT市场恐慌",
+        "WAR FEAR市场震荡",
+        "BONDS SINK市场承压",
+        "RATE SHOCK市场震荡",
+        "BANK CRISIS风险升温",
+        "Credit Stress继续加剧",
+        "市场（investors flee quickly）持续下跌",
+        "Market-Crash公司发布预警",
+        "RSA Conference期间发布新研究",
+        "Varonis Systems发布新研究",
+        "Yaki Faitelson介绍公司战略",
+        "Johnson & Johnson公司发布最新业绩",
+        "Procter & Gamble公司发布最新业绩",
+        "Bank of America发布最新研究",
+        "Standard Chartered Bank发布最新研究",
+        "The Trade Desk发布最新业绩",
+        "Global Payments公司发布最新业绩",
+        "Taiwan Semiconductor Manufacturing公司发布最新业绩",
+        "Market's发布最新消息",
+        "Company's发布公告",
+        "Stock's推动股价上涨",
+        "Report's发布最新消息",
+        "Apple Inc.发布最新业绩",
+        "Foo Corp发布最新业绩",
+        "Market Inc.发布最新消息",
+        "Report LLC发布最新消息",
+        "Company Corp发布最新消息",
+        "MARKET/RALLY市场关注度上升",
+        "WAR/FEAR市场震荡",
+        "BANK.CRISIS风险升温",
+        "foobar用于治疗相关疾病",
+        "investors治疗相关疾病",
+        "Yaki-Faitelson介绍公司战略",
+        "Johnson-Johnson公司发布最新业绩",
+        "Procter-Gamble公司发布最新业绩",
+        "Credit-Stress继续加剧",
+        "Investors-Flee市场下跌",
+        "PANIC/SELL市场恐慌",
+        "BANK.RUN引发担忧",
+        "RATE.CUT推动股市上涨",
+        "JOB.LOSS拖累消费",
+        "RISK.SHIFT改变资金流向",
+        "CASH/CRUNCH冲击企业",
+        "BULL/BEAR分歧扩大",
+        "risk-off交易升温",
+        "credit-crunch持续加剧",
+        "investor-panic继续蔓延",
+        "dollar-strength压制黄金",
+        "rate-cut推动股市上涨",
+        "bond-yields继续攀升",
+        "economic-slowdown正在恶化",
+        "Apple-Inc公司发布最新业绩",
+        "Foo-Corp发布最新业绩",
+        "Acme-LLC发布最新业绩",
+        "PANIC-2026市场恐慌",
+        "RISK 2026市场关注",
+        "BOOM-2026推动股价上涨",
+        "Investor 2026继续影响市场",
+        "SELL-2026信号出现",
+        "Market.rally市场上涨",
+        "Investors.flee市场下跌",
+        "Company.reports公司发布业绩",
+        "GPT-5-market-rally市场上涨",
+        "F-35-crash市场恐慌",
+        "COVID-19-investors-flee市场下跌",
+        "Python-3-market-rally市场上涨",
+        "iPhone17crash2026推动市场上涨",
+        "Aapl股价上涨",
+        "Panic股价上涨",
+        "Investors市场恐慌",
+        "Bonds市场承压",
+        "Inflation推动利率上升",
+        "Recession风险升温",
+        "Investors、Flee与Quickly推动市场下跌",
+        "Officials、Analysts与Investors表示市场下跌",
+        "ＰＡＮＩＣ股价上涨",
+        "ᴾᴬᴺᴵᶜ股价上涨",
+        "𝐏𝐀𝐍𝐈𝐂股价上涨",
+        "Ｍａｒｋｅｔｓ ｒａｌｌｙ市场上涨",
+        "𝐌𝐚𝐫𝐤𝐞𝐭𝐬 𝐫𝐚𝐥𝐥𝐲市场上涨",
+        "ＭＡＲＫＥＴ／ＲＡＬＬＹ市场上涨",
+        "NvDa股价上涨",
+        "PaNic股价上涨",
+        "PANic股价上涨",
+        "RateCut推动股市上涨",
+        "InVestOrs市场恐慌",
+        "InFlation推动利率上升",
+        "ⓅⒶⓃⒾⒸ股价上涨",
+        "РЫНОК РАСТЕТ市场上涨",
+        "マーケット上昇，市场上涨",
+        "株式会社任天堂发布财报",
+        "任天堂株式会社发布财报",
+        "㈱任天堂发布财报",
+        "㍿任天堂发布财报",
+        "任天堂売上高增长",
+        "株価上昇，市场关注",
+        "Tesla发布最新业绩",
+        "Broadcom发布最新业绩",
+        "Intel发布最新业绩",
+        "H100 Markets需求增长",
     ],
 )
 def test_chinese_text_rejects_english_fragments(mixed_prose):
     result = _news_result()
     result["title_zh"] = mixed_prose
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+    with pytest.raises(
+        ValidationError,
+        match="english_prose_not_allowed|non_chinese_script_not_allowed",
+    ):
         validate_result(
             "news_impact",
             json.dumps(result, ensure_ascii=False),
@@ -409,13 +768,277 @@ def test_chinese_text_rejects_english_fragments(mixed_prose):
 
 def test_chinese_text_allows_multiple_tickers_and_a_short_proper_name():
     result = _news_result()
-    result["title_zh"] = "NVIDIA、AMD与TSM关注Blackwell供货"
+    result["title_zh"] = "NVDA、AMD与TSM关注Blackwell供货"
+    payload = _news_payload()
+    payload["allowed_tickers"] = ["NVDA", "AMD", "TSM"]
     validated = validate_result(
         "news_impact",
         json.dumps(result, ensure_ascii=False),
-        _news_payload(),
+        payload,
     )
-    assert validated["title_zh"].startswith("NVIDIA")
+    assert validated["title_zh"].startswith("NVDA")
+
+
+def test_chinese_text_rejects_a_ticker_not_bound_to_the_job_payload():
+    result = _news_result()
+    result["title_zh"] = "PANIC股价出现明显波动"
+    with pytest.raises(ValidationError):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            _news_payload(),
+        )
+
+
+@pytest.mark.parametrize(
+    "unbound_reference",
+    [
+        "NVIDIA股价出现波动",
+        "Apple股票受到市场关注",
+        "Apple的股票受到市场关注",
+        "NVIDIA（英伟达）的今日股价出现波动",
+        "Apple （苹果）股票受到市场关注",
+        "NVIDIA公司股价出现波动",
+        "Apple（苹果）这只股票受到市场关注",
+        "股票代码：Apple受到关注",
+        "证券代码：NVIDIA受到关注",
+        "股票代码（Apple）受到关注",
+        "证券编号为Apple受到关注",
+        "Apple/股票受到市场关注",
+        "NVIDIA·股价出现波动",
+        "Apple【苹果】股票受到市场关注",
+        "Apple​股票受到市场关注",
+        "Apple／股票受到市场关注",
+        "股票代码／Apple受到关注",
+        "Apple〔苹果〕股票受到市场关注",
+        "Apple（ 苹果）股票受到市场关注",
+        "Apple⁣股票受到市场关注",
+        "NVIDIA股票市场表现强劲",
+        "Apple股票策略获得关注",
+        "NVIDIA证券披露文件显示风险",
+        "Apple股票基金出现上涨",
+        "Apple公司（苹果）股价出现波动",
+        "Apple（股票上涨）受到市场关注",
+        "Apple（股价上涨）受到市场关注",
+        "Apple（苹果股票上涨）受到市场关注",
+        "Apple股／票受到市场关注",
+        "股／票代码：Apple受到关注",
+        "Apple公／司股／价出现波动",
+        "Apple（股／票上涨）受到市场关注",
+        "Apple\u034f股票受到市场关注",
+        "Apple\ufe0f股票受到市场关注",
+        "Apple\x00股票受到市场关注",
+        "Apple\ue000股票受到市场关注",
+        "Apple（苹果）\ufe0f股票受到市场关注",
+        'Apple"苹果"股票受到市场关注',
+        "Apple＂苹果＂股票受到市场关注",
+        "Apple'苹果'股票受到市场关注",
+        "Apple`苹果`股票受到市场关注",
+        "Apple的股份上涨",
+        "Apple公司股份上涨",
+        "Apple普通股上涨",
+        "Apple\n股票受到市场关注",
+        "Apple。股票受到市场关注",
+        "Apple\u0660股票受到市场关注",
+        "Microsoft。股票受到市场关注",
+    ],
+)
+def test_news_result_rejects_stock_context_for_an_unbound_approved_brand(
+    unbound_reference,
+):
+    result = _news_result()
+    result["affected_stocks"] = []
+    result["headline_summary"] = unbound_reference
+    payload = _news_payload()
+    payload["allowed_tickers"] = []
+
+    with pytest.raises(ValidationError):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+@pytest.mark.parametrize(
+    "unbound_reference",
+    [
+        "NVIDIA股价出现波动",
+        "Apple股票受到市场关注",
+        "Apple的股票受到市场关注",
+        "NVIDIA（英伟达）的今日股价出现波动",
+        "Apple （苹果）股票受到市场关注",
+        "NVIDIA公司股价出现波动",
+        "Apple（苹果）这只股票受到市场关注",
+        "股票代码：Apple受到关注",
+        "证券代码：NVIDIA受到关注",
+        "股票代码（Apple）受到关注",
+        "证券编号为Apple受到关注",
+        "Apple/股票受到市场关注",
+        "NVIDIA·股价出现波动",
+        "Apple【苹果】股票受到市场关注",
+        "Apple​股票受到市场关注",
+        "Apple／股票受到市场关注",
+        "股票代码／Apple受到关注",
+        "Apple〔苹果〕股票受到市场关注",
+        "Apple（ 苹果）股票受到市场关注",
+        "Apple⁣股票受到市场关注",
+        "NVIDIA股票市场表现强劲",
+        "Apple股票策略获得关注",
+        "NVIDIA证券披露文件显示风险",
+        "Apple股票基金出现上涨",
+        "Apple公司（苹果）股价出现波动",
+        "Apple（股票上涨）受到市场关注",
+        "Apple（股价上涨）受到市场关注",
+        "Apple（苹果股票上涨）受到市场关注",
+        "Apple股／票受到市场关注",
+        "股／票代码：Apple受到关注",
+        "Apple公／司股／价出现波动",
+        "Apple（股／票上涨）受到市场关注",
+        "Apple\u034f股票受到市场关注",
+        "Apple\ufe0f股票受到市场关注",
+        "Apple\x00股票受到市场关注",
+        "Apple\ue000股票受到市场关注",
+        "Apple（苹果）\ufe0f股票受到市场关注",
+        'Apple"苹果"股票受到市场关注',
+        "Apple＂苹果＂股票受到市场关注",
+        "Apple'苹果'股票受到市场关注",
+        "Apple`苹果`股票受到市场关注",
+        "Apple的股份上涨",
+        "Apple公司股份上涨",
+        "Apple普通股上涨",
+        "Apple\n股票受到市场关注",
+        "Apple。股票受到市场关注",
+        "Apple\u0660股票受到市场关注",
+        "Microsoft。股票受到市场关注",
+    ],
+)
+def test_market_focus_rejects_stock_context_for_an_unbound_approved_brand(
+    unbound_reference,
+):
+    result = _market_focus_result()
+    result["focus_ticker_assessments"] = []
+    result["headline_summary"] = unbound_reference
+    payload = _market_focus_payload(allowed_tickers=[])
+
+    with pytest.raises(ValidationError):
+        validate_result(
+            "market_focus",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "CRM股价上涨",
+        "AI股价上涨",
+        "API股价上涨",
+        "IPO股价上涨",
+        "VIX股价上涨",
+        "LNG股价上涨",
+        "ADP股价上涨",
+        "股票CRM上涨",
+        "赛富时（CRM）股价上涨",
+        "CRM（赛富时）股价上涨",
+        "市场关注CRM这只股票",
+        "CRM的今日股价上涨",
+        "CRM当前股价上涨",
+        "CRM最新股价上涨",
+        "CRM盘前股价上涨",
+        "CRM这只个股上涨",
+        "赛富时（CRM）的今日股价上涨",
+    ],
+)
+def test_common_abbreviation_in_security_context_still_requires_job_binding(
+    title,
+):
+    result = _news_result()
+    result["title_zh"] = title
+    with pytest.raises(ValidationError):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            _news_payload(),
+        )
+
+
+def test_project_security_code_can_be_used_when_bound_to_the_job():
+    result = _news_result()
+    result["title_zh"] = "CRM股价上涨"
+    payload = _news_payload()
+    payload["allowed_tickers"] = ["CRM", "NVDA"]
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+    assert validated["title_zh"] == "CRM股价上涨"
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "00700股价上涨",
+        "1234股票上涨",
+        "2026公司发布业绩",
+        "9999个股走强",
+        "123证券受到关注",
+        "００７００股价上涨",
+        "𝟘𝟘𝟟𝟘𝟘股价上涨",
+        "腾讯（00700）股价上涨",
+        "股票代码为00700",
+        "腾讯的股票代码是00700",
+        "市场关注00700这只股票",
+        "腾讯证券编号为00700",
+        "00700上涨",
+        "００７００上涨",
+        "𝟘𝟘𝟟𝟘𝟘受到关注",
+        "600519上涨",
+        "６００５１９走强",
+        "A股价上涨",
+        "A股票上涨",
+        "股票代码／1234受到关注",
+        "股／票代码：1234受到关注",
+    ],
+)
+def test_numeric_and_single_letter_security_codes_require_job_binding(title):
+    result = _news_result()
+    result["title_zh"] = title
+    with pytest.raises(ValidationError):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            _news_payload(),
+        )
+
+
+@pytest.mark.parametrize("ticker", ["00700", "A"])
+def test_numeric_and_single_letter_security_codes_are_allowed_when_bound(ticker):
+    result = _news_result()
+    result["title_zh"] = f"{ticker}股价上涨"
+    payload = _news_payload()
+    payload["allowed_tickers"] = ["NVDA", ticker]
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+    assert validated["title_zh"] == f"{ticker}股价上涨"
+
+
+def test_six_digit_security_code_is_allowed_when_bound():
+    result = _news_result()
+    result["title_zh"] = "600519上涨"
+    payload = _news_payload()
+    payload["allowed_tickers"] = ["NVDA", "600519"]
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+    assert validated["title_zh"] == "600519上涨"
 
 
 @pytest.mark.parametrize(
@@ -761,7 +1384,7 @@ def test_oversized_runtime_input_fails_before_paid_capacity_is_reserved(tmp_path
         model="gpt-5.6-terra",
         reasoning="max",
         execution_mode="background",
-        prompt_version="earnings-impact-zh-cn-v3",
+        prompt_version="earnings-impact-zh-cn-v4",
         schema_version=version,
         schema_sha256=digest,
         max_queued=200,
