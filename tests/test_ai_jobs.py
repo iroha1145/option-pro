@@ -1067,8 +1067,8 @@ def test_all_paid_job_prompt_versions_invalidate_legacy_english_cache():
         "earnings_impact": "earnings-impact-zh-cn-v3",
         "option_alerts": "option-alerts-zh-cn-v3",
         "signal_analysis": "signal-analysis-zh-cn-v3",
-        "news_impact": "news-impact-zh-cn-v2",
-        "market_focus": "market-focus-zh-cn-v2",
+        "news_impact": "news-impact-zh-cn-v3",
+        "market_focus": "market-focus-zh-cn-v3",
     }
 
 

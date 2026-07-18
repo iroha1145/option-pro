@@ -29,8 +29,8 @@ SubmissionSource = Literal["manual", "scheduled"]
 MODEL = "gpt-5.6-terra"
 REASONING = "max"
 EXECUTION_MODE = "background"
-NEWS_PROMPT_VERSION = "news-impact-zh-cn-v2"
-FOCUS_PROMPT_VERSION = "market-focus-zh-cn-v2"
+NEWS_PROMPT_VERSION = "news-impact-zh-cn-v3"
+FOCUS_PROMPT_VERSION = "market-focus-zh-cn-v3"
 TITLE_WAITING = "中文标题等待生成"
 SUMMARY_WAITING = "中文摘要等待生成"
 HOTSPOT_WAITING = "热点标题等待中文分析"
@@ -2813,9 +2813,16 @@ class LocalCatalystIntelligence:
                     (prepared_revision,),
                 ).fetchone()
             if existing_focus is None:
+                retry_cycle_id = self._scheduled_focus_retry_cycle(
+                    prepared_revision,
+                    observed=observed,
+                )
                 try:
                     focus = self.request_market_focus_cycle(
-                        expected_prepared_revision=prepared_revision,
+                        expected_prepared_revision=(
+                            None if retry_cycle_id is not None else prepared_revision
+                        ),
+                        retry_cycle_id=retry_cycle_id,
                         as_of=observed,
                         submission_source="scheduled",
                     )
@@ -2838,6 +2845,62 @@ class LocalCatalystIntelligence:
                 )
                 connection.commit()
         return {"queued": queued, "skipped": skipped}
+
+    def _scheduled_focus_retry_cycle(
+        self,
+        prepared_revision: int,
+        *,
+        observed: datetime,
+    ) -> str | None:
+        """Return one failed focus cycle that is due for scheduled recovery.
+
+        A cycle created under an older prompt or schema is retried immediately
+        so a deployment can repair stale failures without waiting for another
+        slot. A failure under the current identity is retried at most once per
+        hour when ``run_scheduled`` is invoked without an explicit slot claim.
+        Daily budget blocks wait until the next UTC date because the allowance
+        cannot recover within the same day.
+        """
+
+        with self._connect() as connection:
+            candidates = connection.execute(
+                """SELECT cycle_id,job_id,status,updated_at
+                   FROM catalyst_local_focus_cycles
+                   WHERE prepared_revision=?
+                     AND status IN ('failed','budget_blocked')
+                   ORDER BY updated_at DESC,created_at DESC""",
+                (prepared_revision,),
+            ).fetchall()
+        observed_hour = _hour_bucket(observed)
+        for candidate in candidates:
+            job = self.ai_repository.get_job(str(candidate["job_id"]))
+            if job is None or job.get("error_code") == "submission_outcome_unknown":
+                continue
+            try:
+                current_identity = self._identity_public_job(
+                    job,
+                    expected_type="market_focus",
+                )
+            except (KeyError, TypeError, ValueError):
+                current_identity = None
+            updated_at = _parse_time(
+                str(job.get("updated_at") or candidate["updated_at"] or "")
+            )
+            if str(candidate["status"]) == "budget_blocked":
+                if (
+                    updated_at is not None
+                    and updated_at.astimezone(timezone.utc).date()
+                    < observed.astimezone(timezone.utc).date()
+                ):
+                    return str(candidate["cycle_id"])
+                continue
+            if (
+                current_identity is None
+                or updated_at is None
+                or _hour_bucket(updated_at) < observed_hour
+            ):
+                return str(candidate["cycle_id"])
+        return None
 
     def _focus_calendar_events(
         self,

@@ -36,13 +36,15 @@ AIJobType = Literal[
     "news_impact",
     "market_focus",
 ]
+_TICKER_PATTERN_TEXT = r"^[A-Za-z0-9][A-Za-z0-9.\-^]*$"
+_TICKER_PATTERN = re.compile(_TICKER_PATTERN_TEXT)
 Ticker = Annotated[
     str,
     StringConstraints(
         strip_whitespace=True,
         min_length=1,
         max_length=12,
-        pattern=r"^[A-Za-z0-9][A-Za-z0-9.\-^]*$",
+        pattern=_TICKER_PATTERN_TEXT,
     ),
 ]
 BoundedText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
@@ -110,9 +112,7 @@ _TRADITIONAL_CONFLICT_PHRASES = frozenset(
     }
 )
 _SENTENCE_SPLIT = re.compile(r"[。！？!?；;\n]+")
-_LATIN_WORD = re.compile(r"[A-Za-z][A-Za-z'-]*")
-_TICKER_OR_CODE_WORD = re.compile(r"(?:[A-Z]{1,12}|[A-Za-z]*\d[A-Za-z0-9-]*)")
-_NECESSARY_FOREIGN_PROPER_NAMES = frozenset({"Blackwell"})
+_AMBIGUOUS_FINANCE_CODES = frozenset({"A", "AN", "ON", "NOW"})
 _ENGLISH_PROSE_WORDS = frozenset(
     {
         "a",
@@ -120,44 +120,151 @@ _ENGLISH_PROSE_WORDS = frozenset(
         "an",
         "and",
         "announces",
+        "alert",
+        "attack",
+        "attacks",
+        "awards",
         "before",
+        "beats",
         "breaking",
         "business",
+        "climb",
+        "climbs",
+        "crash",
+        "crashes",
+        "crisis",
+        "cuts",
         "company",
+        "conference",
+        "demand",
+        "deal",
+        "drops",
         "earnings",
+        "equities",
+        "estimates",
         "expands",
+        "expects",
+        "fall",
+        "falls",
+        "fell",
         "for",
         "from",
+        "gains",
+        "group",
         "growth",
+        "guidance",
+        "hard",
         "in",
+        "jumps",
         "launch",
         "launched",
         "launches",
         "market",
         "markets",
+        "meltdown",
+        "military",
+        "miss",
+        "misses",
         "new",
         "now",
         "of",
         "on",
+        "order",
+        "ordered",
+        "orders",
+        "outlook",
+        "pause",
+        "paused",
+        "pauses",
         "partnership",
+        "plans",
+        "president",
+        "price",
+        "prices",
+        "profit",
+        "profits",
+        "plunges",
         "quantum",
+        "raises",
+        "raised",
         "rally",
         "rapidly",
         "report",
         "reports",
         "results",
+        "retaliates",
+        "retreats",
         "revenue",
+        "rises",
         "rose",
+        "sales",
+        "says",
+        "sees",
+        "sells",
         "shares",
+        "stock",
+        "stocks",
         "strong",
         "stronger",
+        "supply",
+        "surges",
+        "sink",
+        "sinks",
+        "slumps",
+        "soars",
+        "spikes",
+        "strikes",
+        "systems",
+        "tariff",
+        "tariffs",
         "the",
         "to",
+        "tumble",
+        "tumbles",
+        "unveils",
         "update",
+        "war",
+        "warns",
+        "fear",
+        "loom",
+        "looms",
         "with",
     }
 )
-_NECESSARY_LOWERCASE_FOREIGN_NAMES = frozenset({"leniolisib"})
+_FOREIGN_SPAN = re.compile(
+    r"[A-Za-z][A-Za-z0-9]*"
+    r"(?:(?:[.'/-][A-Za-z0-9]+)"
+    r"|(?:[ \t]+[A-Za-z0-9][A-Za-z0-9.]*)"
+    r"|(?:[ \t]*&[ \t]*[A-Za-z0-9][A-Za-z0-9.]*))*"
+)
+_CURRENCY_PAIR = re.compile(r"[A-Z]{2,6}/[A-Z]{2,6}")
+_VERSIONED_PRODUCT = re.compile(
+    r"(?:[A-Za-z][A-Za-z0-9]*[ -]?\d+(?:\.\d+)*"
+    r"|[A-Za-z]+-\d+[A-Za-z0-9-]*)"
+)
+_CORPORATE_NAME = re.compile(
+    r"[A-Z][A-Za-z0-9']+ (?:Inc|Corp|Ltd|LLC)\.?"
+)
+_DOMAIN_STYLE_NAME = re.compile(r"[A-Z][A-Za-z0-9]*\.[a-z]{2,}")
+_SINGLE_FOREIGN_TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9']*")
+_ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
+    {
+        "Nookplot Python SDK",
+        "Python SDK",
+        "S&P 500",
+        "nookplot-runtime",
+    }
+)
+_MEDICAL_FOREIGN_SUFFIXES = (
+    "用于",
+    "治疗",
+    "试验",
+    "获批",
+    "药物",
+    "疗法",
+    "患者",
+    "剂量",
+)
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 
 _CJK_RANGES = (
@@ -182,31 +289,78 @@ def _is_cjk(char: str) -> bool:
     return any(start <= codepoint <= end for start, end in _CJK_RANGES)
 
 
-def _latin_letters(word: str) -> str:
-    return word.replace("-", "").replace("'", "")
+def _is_ticker_span(span: str) -> bool:
+    if _CURRENCY_PAIR.fullmatch(span) is not None:
+        return True
+    if len(span) > 12 or _TICKER_PATTERN.fullmatch(span) is None:
+        return False
+    if span.upper() != span:
+        return False
+    if "." in span or "^" in span:
+        return True
+    if "-" in span:
+        suffix = span.rsplit("-", 1)[-1]
+        return len(suffix) <= 2 or any(char.isdigit() for char in suffix)
+    return len(span) <= 6
 
 
-def _is_foreign_proper_name(word: str) -> bool:
-    if word.casefold() in _ENGLISH_PROSE_WORDS:
+def _foreign_span_context(
+    span: str,
+    *,
+    sentence: str,
+    start: int,
+    end: int,
+) -> bool:
+    if span in _ALLOWED_EXACT_FOREIGN_SPANS:
+        return True
+    if span in _AMBIGUOUS_FINANCE_CODES:
+        return True
+    folded = span.casefold().rstrip(".")
+    prose_form = folded[:-2] if folded.endswith("'s") else folded
+    if prose_form in _ENGLISH_PROSE_WORDS:
         return False
-    if _TICKER_OR_CODE_WORD.fullmatch(word) is not None:
+    if _is_ticker_span(span):
         return True
-    if word in _NECESSARY_FOREIGN_PROPER_NAMES:
+    if _VERSIONED_PRODUCT.fullmatch(span) is not None:
+        product = re.split(r"[ -]?\d", span, maxsplit=1)[0].casefold()
+        return product not in _ENGLISH_PROSE_WORDS
+    if _CORPORATE_NAME.fullmatch(span) is not None:
         return True
-    if word in _NECESSARY_LOWERCASE_FOREIGN_NAMES:
+    if _DOMAIN_STYLE_NAME.fullmatch(span) is not None:
         return True
-    if "-" in word:
-        segments = word.split("-")
-        if all(segment.isascii() and segment.isalpha() for segment in segments):
-            return True
-    letters = _latin_letters(word)
-    if not letters.isascii() or not letters.isalpha():
+    if _SINGLE_FOREIGN_TOKEN.fullmatch(span) is None:
         return False
-    has_lower = any(char.islower() for char in letters)
-    return has_lower and (
-        letters[0].isupper()
-        or any(char.isupper() for char in letters[1:])
+
+    before = sentence[start - 1] if start > 0 else ""
+    after = sentence[end] if end < len(sentence) else ""
+    parenthetical = (
+        start > 1
+        and before in "（("
+        and _is_cjk(sentence[start - 2])
+    ) or (
+        end + 1 < len(sentence)
+        and after in "）)"
+        and _is_cjk(sentence[end + 1])
     )
+    alias_parenthetical = False
+    if after in "（(":
+        closing = "）" if after == "（" else ")"
+        closing_index = sentence.find(closing, end + 1)
+        alias_parenthetical = (
+            closing_index >= 0
+            and closing_index + 1 < len(sentence)
+            and _is_cjk(sentence[closing_index + 1])
+        )
+    direct_cjk = (bool(before) and _is_cjk(before)) or (
+        bool(after) and _is_cjk(after)
+    )
+    letters = span.replace("'", "")
+    if letters.islower():
+        suffix = sentence[end:]
+        return parenthetical or alias_parenthetical or any(
+            suffix.startswith(item) for item in _MEDICAL_FOREIGN_SUFFIXES
+        )
+    return parenthetical or alias_parenthetical or direct_cjk
 
 
 def validate_simplified_chinese_text(value: str) -> str:
@@ -227,17 +381,19 @@ def validate_simplified_chinese_text(value: str) -> str:
     if latin_count > max(32, cjk_count * 4):
         raise ValueError("english_prose_not_allowed")
     for sentence in _SENTENCE_SPLIT.split(text):
-        words = _LATIN_WORD.findall(sentence)
         sentence_latin = sum(
             1 for char in sentence if char.isascii() and char.isalpha()
         )
         sentence_cjk = sum(1 for char in sentence if _is_cjk(char))
         if sentence_latin > max(16, sentence_cjk * 5):
             raise ValueError("english_prose_not_allowed")
-        for word in words:
-            if word.casefold() in _ENGLISH_PROSE_WORDS:
-                raise ValueError("english_prose_not_allowed")
-            if _is_foreign_proper_name(word):
+        for match in _FOREIGN_SPAN.finditer(sentence):
+            if _foreign_span_context(
+                match.group(0),
+                sentence=sentence,
+                start=match.start(),
+                end=match.end(),
+            ):
                 continue
             raise ValueError("english_prose_not_allowed")
         if sentence_latin >= 16 and sentence_cjk == 0:
@@ -704,10 +860,7 @@ def validate_job_payload(job_type: str, payload: dict) -> None:
             max_items=200,
             max_length=12,
         )
-        if any(
-            re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.\-^]*", ticker) is None
-            for ticker in tickers
-        ):
+        if any(_TICKER_PATTERN.fullmatch(ticker) is None for ticker in tickers):
             raise ValueError("allowed_tickers_invalid")
         return
     if job_type == "market_focus":
@@ -729,10 +882,7 @@ def validate_job_payload(job_type: str, payload: dict) -> None:
             max_items=200,
             max_length=12,
         )
-        if any(
-            re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.\-^]*", ticker) is None
-            for ticker in tickers
-        ):
+        if any(_TICKER_PATTERN.fullmatch(ticker) is None for ticker in tickers):
             raise ValueError("allowed_tickers_invalid")
         return
     if job_type not in {"earnings_impact", "option_alerts", "signal_analysis"}:

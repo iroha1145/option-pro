@@ -35,8 +35,8 @@ _PROMPT_VERSIONS = {
     "earnings_impact": "earnings-impact-zh-cn-v3",
     "option_alerts": "option-alerts-zh-cn-v3",
     "signal_analysis": "signal-analysis-zh-cn-v3",
-    "news_impact": "news-impact-zh-cn-v2",
-    "market_focus": "market-focus-zh-cn-v2",
+    "news_impact": "news-impact-zh-cn-v3",
+    "market_focus": "market-focus-zh-cn-v3",
 }
 
 

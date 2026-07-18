@@ -290,7 +290,7 @@ def _legacy_metadata() -> dict[str, str]:
     return {
         "model": "gpt-5.6-terra",
         "reasoning": "max",
-        "prompt_version": "news-impact-zh-cn-v2",
+        "prompt_version": "news-impact-zh-cn-v3",
         "schema_version": schema_version,
     }
 
@@ -2292,6 +2292,150 @@ def test_scheduled_focus_waits_for_published_chinese_news(tmp_path, monkeypatch)
     assert payload["events"][0]["summary_zh"] == (
         "新品发布可能影响半导体供应链预期，实际影响仍需观察。"
     )
+
+
+def test_scheduled_focus_retries_failed_previous_prompt_with_current_identity(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
+    first_now = datetime(2026, 7, 15, 12, 5, tzinfo=timezone.utc)
+    clock = {"now": first_now}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    monkeypatch.setattr(
+        ai_jobs_repository_module,
+        "_utcnow",
+        lambda: clock["now"],
+    )
+    _apply_news(
+        etl,
+        [_news_change(1, 595, available_at=first_now - timedelta(minutes=2))],
+        as_of=first_now - timedelta(minutes=1),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    news_job = intelligence.request_analysis(
+        595,
+        force=False,
+        expected_change_sequence=1,
+        expected_content_hash="hash-595-1",
+        submission_source="scheduled",
+    )
+    _finish_job(
+        ai,
+        news_job["job_id"],
+        _news_result(
+            news_id=595,
+            change_sequence=1,
+            content_hash="hash-595-1",
+        ),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    failed_cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+        submission_source="scheduled",
+    )
+    _fail_job(ai, failed_cycle["job_id"], "schema_validation_failed")
+    intelligence.reconcile()
+    with sqlite3.connect(ai.path) as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET prompt_version=? WHERE job_id=?",
+            ("market-focus-zh-cn-v2", failed_cycle["job_id"]),
+        )
+        connection.commit()
+
+    clock["now"] = first_now + timedelta(hours=1)
+    assert intelligence.run_scheduled(now=clock["now"]) == {
+        "queued": 1,
+        "skipped": 0,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        jobs = connection.execute(
+            """SELECT job_id,status,prompt_version
+               FROM ai_jobs WHERE job_type='market_focus'
+               ORDER BY created_at,job_id"""
+        ).fetchall()
+    assert len(jobs) == 2
+    assert jobs[0] == (
+        failed_cycle["job_id"],
+        "failed",
+        "market-focus-zh-cn-v2",
+    )
+    assert jobs[1][1:] == ("pending", local_module.FOCUS_PROMPT_VERSION)
+    with sqlite3.connect(intelligence.db_path) as connection:
+        relinked = connection.execute(
+            """SELECT status,job_id FROM catalyst_local_focus_cycles
+               WHERE cycle_id=?""",
+            (failed_cycle["cycle_id"],),
+        ).fetchone()
+    assert relinked == ("pending", jobs[1][0])
+
+    current_job_id = jobs[1][0]
+    _fail_job(ai, current_job_id, "schema_validation_failed")
+    intelligence.reconcile()
+    clock["now"] = first_now + timedelta(hours=1, minutes=10)
+    assert intelligence.run_scheduled(now=clock["now"]) == {
+        "queued": 0,
+        "skipped": 1,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 2
+
+    clock["now"] = first_now + timedelta(hours=2)
+    assert intelligence.run_scheduled(now=clock["now"]) == {
+        "queued": 1,
+        "skipped": 0,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        latest_retry = connection.execute(
+            """SELECT job_id,status,prompt_version,retry_of_job_id,execution_number
+               FROM ai_jobs WHERE job_type='market_focus'
+               ORDER BY created_at DESC,job_id DESC LIMIT 1"""
+        ).fetchone()
+    assert latest_retry[1:] == (
+        "pending",
+        local_module.FOCUS_PROMPT_VERSION,
+        current_job_id,
+        2,
+    )
+
+    budget_job_id = latest_retry[0]
+    with sqlite3.connect(ai.path) as connection:
+        connection.execute(
+            """UPDATE ai_jobs SET status='budget_blocked',error_code=?,
+                   completed_at=?,updated_at=? WHERE job_id=?""",
+            (
+                "daily_token_limit_reached",
+                _iso(clock["now"]),
+                _iso(clock["now"]),
+                budget_job_id,
+            ),
+        )
+        connection.commit()
+    intelligence.reconcile()
+    clock["now"] = first_now + timedelta(hours=3)
+    assert intelligence.run_scheduled(now=clock["now"]) == {
+        "queued": 0,
+        "skipped": 1,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 3
+
+    clock["now"] = first_now + timedelta(days=1)
+    assert intelligence.run_scheduled(now=clock["now"]) == {
+        "queued": 1,
+        "skipped": 0,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        next_day_retry = connection.execute(
+            """SELECT status,retry_of_job_id,execution_number
+               FROM ai_jobs WHERE job_type='market_focus'
+               ORDER BY created_at DESC,job_id DESC LIMIT 1"""
+        ).fetchone()
+    assert next_day_retry == ("pending", budget_job_id, 3)
 
 
 def test_scheduled_focus_waits_for_every_news_item_in_its_payload(
