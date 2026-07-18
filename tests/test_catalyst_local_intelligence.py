@@ -354,6 +354,7 @@ def test_v2_local_database_adds_v3_result_audit_tables_without_rewriting_history
 
 def test_reconcile_archives_invalid_published_news_and_makes_it_due_again(
     tmp_path,
+    monkeypatch,
 ):
     etl, ai, intelligence = _stack(tmp_path)
     now = datetime.now(timezone.utc).replace(microsecond=0)
@@ -386,9 +387,27 @@ def test_reconcile_archives_invalid_published_news_and_makes_it_due_again(
     assert accepted == [("accepted",)]
     assert link_times is not None
 
+    validation_calls = 0
+    original_validate_result = local_module.validate_result
+
+    def counted_validate_result(*args, **kwargs):
+        nonlocal validation_calls
+        validation_calls += 1
+        return original_validate_result(*args, **kwargs)
+
+    monkeypatch.setattr(
+        local_module,
+        "validate_result",
+        counted_validate_result,
+    )
+    assert intelligence.feed(as_of=now + timedelta(minutes=1))["items"][0][
+        "analysis"
+    ] is not None
+    assert validation_calls == 0
+
     invalid = dict(result)
     invalid["affected_stocks"] = [dict(result["affected_stocks"][0])]
-    invalid["affected_stocks"][0]["company"] = "NVIDIA"
+    invalid["affected_stocks"][0]["ticker"] = "PANIC"
     invalid_raw = local_module._json(invalid)
     with sqlite3.connect(intelligence.db_path) as connection:
         connection.execute(
@@ -403,6 +422,32 @@ def test_reconcile_archives_invalid_published_news_and_makes_it_due_again(
                BEGIN SELECT RAISE(ABORT,'forced retirement failure'); END"""
         )
         connection.commit()
+
+    observed = now + timedelta(minutes=1)
+    invalid_feed = intelligence.feed(as_of=observed)
+    assert invalid_feed["items"][0]["analysis"] is None
+    assert invalid_feed["items"][0]["analysis_status"] == "pending"
+    assert invalid_feed["items"][0]["analyzed_at"] is None
+    assert invalid_feed["items"][0]["available_at"] is None
+    assert invalid_feed["summary"]["analyzed_24h"] == 0
+    assert invalid_feed["summary"]["bullish"] == 0
+    assert invalid_feed["summary"]["bearish"] == 0
+    assert invalid_feed["summary"]["pending"] == 1
+    assert intelligence.feed(as_of=observed, ticker="PANIC")["items"] == []
+    assert intelligence.feed(
+        as_of=observed,
+        analysis_status="completed",
+    )["items"] == []
+    assert len(
+        intelligence.feed(
+            as_of=observed,
+            analysis_status="pending",
+        )["items"]
+    ) == 1
+    assert intelligence.batch(["PANIC"], as_of=observed)["results"]["PANIC"][
+        "items"
+    ] == []
+    assert validation_calls > 0
 
     with pytest.raises(sqlite3.IntegrityError, match="forced retirement failure"):
         intelligence.reconcile()
@@ -457,6 +502,44 @@ def test_reconcile_archives_invalid_published_news_and_makes_it_due_again(
                WHERE job_id=?""",
             (job["job_id"],),
         ).fetchone()[0] == 2
+
+
+def test_analyzed_24h_uses_the_result_completion_time(tmp_path) -> None:
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [_news_change(1, 93, available_at=now - timedelta(hours=30))],
+        as_of=now - timedelta(hours=30),
+    )
+    intelligence.reconcile()
+    job = intelligence.request_analysis(93, force=False)
+    _finish_job(
+        ai,
+        job["job_id"],
+        _news_result(
+            news_id=93,
+            change_sequence=1,
+            content_hash="hash-93-1",
+        ),
+    )
+    intelligence.reconcile()
+
+    old_completion = _iso(now - timedelta(hours=25))
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """UPDATE catalyst_local_analysis_links
+               SET result_available_at=? WHERE job_id=?""",
+            (old_completion, job["job_id"]),
+        )
+        connection.commit()
+
+    feed = intelligence.feed(as_of=now, window_hours=72)
+    batch = intelligence.batch(["NVDA"], as_of=now, window_hours=72)
+
+    assert feed["items"][0]["analysis"] is not None
+    assert feed["summary"]["analyzed_24h"] == 0
+    assert batch["results"]["NVDA"]["summary"]["analyzed_24h"] == 0
 
 
 def test_focus_audit_is_scoped_to_each_retry_job_even_for_identical_output(
@@ -1563,6 +1646,10 @@ def test_market_focus_payload_is_hash_bound_and_stays_immutable(tmp_path):
     )
     assert payload["allowed_event_group_ids"]
     assert payload["allowed_tickers"] == ["NVDA"]
+    assert cycle["validation_allowed_event_group_ids"] == payload[
+        "allowed_event_group_ids"
+    ]
+    assert cycle["validation_allowed_tickers"] == payload["allowed_tickers"]
 
     with sqlite3.connect(intelligence.db_path) as connection:
         stored_before = connection.execute(
@@ -3963,6 +4050,86 @@ def test_public_ticker_batch_scans_the_news_window_once(
 
     assert calls == 1
     assert len(result["results"]) == 20
+
+
+def test_owner_feed_and_batch_reuse_one_ai_job_snapshot(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    observed = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                1,
+                221,
+                available_at=observed - timedelta(minutes=10),
+            ),
+            _news_change(
+                2,
+                222,
+                available_at=observed - timedelta(minutes=9),
+                tickers=("AMD",),
+            ),
+        ],
+        as_of=observed - timedelta(minutes=8),
+    )
+    intelligence.reconcile()
+    first_job = intelligence.request_analysis(221, force=False)
+    second_job = intelligence.request_analysis(222, force=False)
+    expected_job_ids = {first_job["job_id"], second_job["job_id"]}
+
+    original_snapshot = intelligence._ai_job_snapshot
+    original_linked = intelligence._linked_news_job_at
+    snapshot_calls = 0
+    linked_calls = 0
+    requested_job_ids: list[set[str]] = []
+
+    def counted_snapshot(*args, **kwargs):
+        nonlocal snapshot_calls
+        snapshot_calls += 1
+        captured = set(kwargs["job_ids"])
+        requested_job_ids.append(captured)
+        kwargs["job_ids"] = captured
+        return original_snapshot(*args, **kwargs)
+
+    def checked_linked(connection, row, *, as_of, jobs=None):
+        nonlocal linked_calls
+        linked_calls += 1
+        assert "analysis_job_id" in row
+        assert "analysis_job_created_at" in row
+        assert jobs is not None
+        return original_linked(
+            connection,
+            row,
+            as_of=as_of,
+            jobs=jobs,
+        )
+
+    def unexpected_individual_read(*_args, **_kwargs):
+        pytest.fail("owner list reads must reuse the AI job snapshot")
+
+    monkeypatch.setattr(intelligence, "_ai_job_snapshot", counted_snapshot)
+    monkeypatch.setattr(intelligence, "_linked_news_job_at", checked_linked)
+    monkeypatch.setattr(intelligence, "_read_ai_job", unexpected_individual_read)
+
+    viewed_at = observed + timedelta(minutes=1)
+    feed = intelligence.feed(as_of=viewed_at)
+    batch = intelligence.batch(["NVDA", "AMD"], as_of=viewed_at)
+
+    assert snapshot_calls == 2
+    assert requested_job_ids == [expected_job_ids, expected_job_ids]
+    assert linked_calls == 4
+    assert len(feed["items"]) == 2
+    assert {item["analysis_status"] for item in feed["items"]} == {"pending"}
+    assert len(batch["results"]["NVDA"]["items"]) == 1
+    assert len(batch["results"]["AMD"]["items"]) == 1
+    assert {
+        item["analysis_status"]
+        for result in batch["results"].values()
+        for item in result["items"]
+    } == {"pending"}
 
 
 def test_public_completed_news_and_focus_never_open_the_ai_job_store(

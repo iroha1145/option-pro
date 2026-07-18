@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timezone
@@ -12,8 +13,7 @@ from app.data_paths import get_data_paths
 from app.personal_config import PersonalConfig, get_personal_config
 from app.services.ai_jobs import runtime as ai_runtime
 from app.services.ai_jobs.models import (
-    MarketFocusResult,
-    NewsImpactResult,
+    validate_result,
     validate_simplified_chinese_text,
 )
 from app.services.ai_jobs.repository import AIJobRepository
@@ -609,27 +609,27 @@ class PersonalCatalystService:
     ) -> dict[str, Any] | None:
         if not isinstance(analysis, Mapping):
             return None
-        allowed_codes = item.get("source_tickers")
-        if not isinstance(allowed_codes, list):
-            allowed_codes = []
+        allowed_tickers = item.get("source_tickers")
+        if not isinstance(allowed_tickers, list):
+            allowed_tickers = []
         try:
-            validated = NewsImpactResult.model_validate(
-                dict(analysis),
-                context={"allowed_codes": allowed_codes},
+            return validate_result(
+                "news_impact",
+                json.dumps(
+                    dict(analysis),
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ),
+                {
+                    "news_id": item.get("news_id"),
+                    "change_sequence": item.get("change_sequence"),
+                    "content_hash": item.get("content_hash"),
+                    "allowed_tickers": allowed_tickers,
+                },
             )
-        except (TypeError, ValueError):
-            return None
-        data = validated.model_dump(mode="json")
-        try:
-            if (
-                data["news_id"] != int(item["news_id"])
-                or data["change_sequence"] != int(item["change_sequence"])
-                or data["content_hash"] != str(item["content_hash"])
-            ):
-                return None
         except (KeyError, TypeError, ValueError):
             return None
-        return data
 
     @classmethod
     def _project_news_item(
@@ -662,23 +662,37 @@ class PersonalCatalystService:
             ):
                 analysis = None
         item["analysis"] = analysis
+        for field in (
+            "classification",
+            "confidence",
+            "market_relevance",
+            "overall_sentiment",
+            "trusted_stock_impacts",
+            "headline_summary",
+            "causal_summary",
+        ):
+            item.pop(field, None)
+        if analysis is not None:
+            for field in (
+                "classification",
+                "confidence",
+                "market_relevance",
+                "overall_sentiment",
+                "headline_summary",
+                "causal_summary",
+            ):
+                item[field] = analysis[field]
+            item["trusted_stock_impacts"] = analysis["affected_stocks"]
         title = analysis["title_zh"] if analysis is not None else None
         summary = analysis["summary_zh"] if analysis is not None else None
         item["title_zh"] = title or _WAITING_TITLE
         item["summary_zh"] = summary or _WAITING_SUMMARY
-
-        for field in ("headline_summary", "causal_summary"):
-            value = _valid_zh_text(
-                item.get(field),
-                allowed_codes=item.get("source_tickers") or [],
-            )
-            if value is None:
-                item.pop(field, None)
-            else:
-                item[field] = value
-        if analysis is None and str(item.get("analysis_status")) == "completed":
-            item["analysis_status"] = "pending"
-            item["analysis_error_code"] = "legacy_output_hidden"
+        if analysis is None:
+            item.pop("analyzed_at", None)
+            item.pop("available_at", None)
+            if str(item.get("analysis_status")) == "completed":
+                item["analysis_status"] = "pending"
+                item["analysis_error_code"] = "legacy_output_hidden"
         return item
 
     def _project_news_envelope(
@@ -797,41 +811,40 @@ class PersonalCatalystService:
         if not isinstance(cycle, Mapping):
             return None
         projected = dict(cycle)
-        allowed_codes = projected.pop("validation_allowed_tickers", [])
-        if not isinstance(allowed_codes, list):
-            allowed_codes = []
+        allowed_tickers = projected.pop("validation_allowed_tickers", [])
+        if not isinstance(allowed_tickers, list):
+            allowed_tickers = []
+        allowed_event_group_ids = projected.pop(
+            "validation_allowed_event_group_ids",
+            [],
+        )
+        if not isinstance(allowed_event_group_ids, list):
+            allowed_event_group_ids = []
         result = projected.get("result")
         if result is None:
             return projected
         try:
-            validated = MarketFocusResult.model_validate(
-                result,
-                context={"allowed_codes": allowed_codes},
+            result_data = validate_result(
+                "market_focus",
+                json.dumps(
+                    result,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ),
+                {
+                    "cycle_id": projected.get("cycle_id"),
+                    "as_of": projected.get("snapshot_as_of"),
+                    "input_hash": projected.get("input_hash"),
+                    "allowed_event_group_ids": allowed_event_group_ids,
+                    "allowed_tickers": allowed_tickers,
+                },
             )
         except (TypeError, ValueError):
             projected["result"] = None
             projected["error_code"] = (
                 projected.get("error_code") or "legacy_output_hidden"
             )
-            return projected
-        result_data = validated.model_dump(mode="json")
-        cycle_id = str(projected.get("cycle_id") or "")
-        snapshot_as_of = projected.get("snapshot_as_of")
-        input_hash = projected.get("input_hash")
-        if (
-            not cycle_id
-            or not isinstance(input_hash, str)
-            or result_data["cycle_id"] != cycle_id
-            or result_data["input_hash"] != input_hash
-        ):
-            projected["result"] = None
-            projected["error_code"] = "legacy_output_hidden"
-            return projected
-        expected = _parse_utc(snapshot_as_of)
-        actual = _parse_utc(result_data["as_of"])
-        if expected is None or actual is None or actual != expected:
-            projected["result"] = None
-            projected["error_code"] = "legacy_output_hidden"
             return projected
         projected["result"] = result_data
         return projected

@@ -89,6 +89,32 @@ def _focus_result(*, input_hash: str) -> dict[str, Any]:
     }
 
 
+def _focus_result_with_bindings(*, input_hash: str) -> dict[str, Any]:
+    result = _focus_result(input_hash=input_hash)
+    result["dominant_events"] = [
+        {
+            "event_group_id": "event-01",
+            "summary": "芯片新品带来新的订单预期。",
+            "affected_sectors": ["半导体"],
+        }
+    ]
+    result["focus_ticker_assessments"] = [
+        {
+            "ticker": "NVDA",
+            "catalyst_bias": 25,
+            "confidence": 70,
+            "horizon": "days",
+            "supporting_event_ids": ["event-01"],
+            "conflicting_event_ids": [],
+            "summary": "新品进展可能改善订单预期。",
+            "risks": ["实际出货仍待确认"],
+            "insufficient_evidence": False,
+        }
+    ]
+    result["no_new_material_catalyst"] = False
+    return result
+
+
 class FakeIntelligence:
     def __init__(self) -> None:
         self.actions: list[tuple[str, Any]] = []
@@ -440,6 +466,7 @@ def test_invalid_or_revision_mismatched_analysis_fails_closed() -> None:
     engine.item = {
         **engine.item,
         "analysis": _news_result(change_sequence=6),
+        "analyzed_at": "2026-07-15T03:59:00Z",
         "title_zh": "English only",
         "summary_zh": "English only",
     }
@@ -450,6 +477,8 @@ def test_invalid_or_revision_mismatched_analysis_fails_closed() -> None:
     assert item["analysis_status"] == "pending"
     assert item["title_zh"] == "中文标题等待生成"
     assert item["summary_zh"] == "中文摘要等待生成"
+    assert "analyzed_at" not in item
+    assert "available_at" not in item
 
 
 def test_deleted_news_and_english_hotspot_titles_fail_closed() -> None:
@@ -475,6 +504,16 @@ def test_news_available_after_as_of_is_not_projected() -> None:
 
 def test_analysis_available_after_as_of_is_hidden_but_news_remains_visible() -> None:
     engine = FakeIntelligence()
+    engine.item.update(
+        {
+            "classification": "bullish",
+            "confidence": 70,
+            "market_relevance": 80,
+            "overall_sentiment": 20,
+            "trusted_stock_impacts": _news_result()["affected_stocks"],
+            "analyzed_at": "2026-07-15T03:59:00Z",
+        }
+    )
     service = _service("read", engine=engine)
     historical = datetime(2026, 7, 15, 3, 58, 30, tzinfo=timezone.utc)
 
@@ -483,6 +522,16 @@ def test_analysis_available_after_as_of_is_hidden_but_news_remains_visible() -> 
     assert item["analysis"] is None
     assert item["title_zh"] == "中文标题等待生成"
     assert item["summary_zh"] == "中文摘要等待生成"
+    assert "analyzed_at" not in item
+    assert "available_at" not in item
+    for field in (
+        "classification",
+        "confidence",
+        "market_relevance",
+        "overall_sentiment",
+        "trusted_stock_impacts",
+    ):
+        assert field not in item
 
 
 @pytest.mark.parametrize(
@@ -867,6 +916,17 @@ def test_projection_preserves_results_with_their_task_ticker_context() -> None:
     analysis = _news_result()
     analysis["title_zh"] = "NVDA发布新一代芯片"
     analysis["summary_zh"] = "NVDA新品进展受到市场关注。"
+    analysis["affected_stocks"] = [
+        {
+            "ticker": "NVDA",
+            "company": "英伟达",
+            "impact_score": 25,
+            "confidence": 70,
+            "horizon": "days",
+            "mechanism": "direct_company",
+            "reason": "新品进展可能改善订单预期。",
+        }
+    ]
     item = {
         "news_id": 101,
         "change_sequence": 7,
@@ -879,9 +939,18 @@ def test_projection_preserves_results_with_their_task_ticker_context() -> None:
     )
     assert projected_news is not None
     assert projected_news["title_zh"].startswith("NVDA")
+    projected_news_item = PersonalCatalystService._project_news_item(
+        {
+            **item,
+            "analysis_status": "completed",
+            "analysis": analysis,
+            "trusted_stock_impacts": analysis["affected_stocks"],
+        }
+    )
+    assert projected_news_item["trusted_stock_impacts"][0]["ticker"] == "NVDA"
 
     expected_hash = "a" * 64
-    focus = _focus_result(input_hash=expected_hash)
+    focus = _focus_result_with_bindings(input_hash=expected_hash)
     focus["title_zh"] = "NVDA成为当前市场焦点"
     cycle = {
         "cycle_id": "mfc_" + "a" * 32,
@@ -889,12 +958,99 @@ def test_projection_preserves_results_with_their_task_ticker_context() -> None:
         "input_hash": expected_hash,
         "status": "completed",
         "validation_allowed_tickers": ["NVDA"],
+        "validation_allowed_event_group_ids": ["event-01"],
         "result": focus,
     }
     projected_focus = PersonalCatalystService._project_focus_cycle(cycle)
     assert projected_focus is not None
     assert projected_focus["result"]["title_zh"].startswith("NVDA")
     assert "validation_allowed_tickers" not in projected_focus
+    assert "validation_allowed_event_group_ids" not in projected_focus
+
+
+def test_news_projection_hides_structured_ticker_outside_source_context() -> None:
+    analysis = _news_result()
+    analysis["affected_stocks"] = [
+        {
+            "ticker": "PANIC",
+            "company": "示例公司",
+            "impact_score": -25,
+            "confidence": 70,
+            "horizon": "days",
+            "mechanism": "direct_company",
+            "reason": "相关消息可能压低市场预期。",
+        }
+    ]
+    item = {
+        "news_id": 101,
+        "change_sequence": 7,
+        "content_hash": "hash-101",
+        "source_tickers": ["NVDA"],
+    }
+
+    projected = PersonalCatalystService._project_news_item(
+        {
+            **item,
+            "analysis_status": "completed",
+            "analysis": analysis,
+            "analyzed_at": "2026-07-15T03:59:00Z",
+            "available_at": "2026-07-15T03:59:00Z",
+            "classification": analysis["classification"],
+            "confidence": analysis["confidence"],
+            "market_relevance": analysis["market_relevance"],
+            "overall_sentiment": analysis["overall_sentiment"],
+            "trusted_stock_impacts": analysis["affected_stocks"],
+        }
+    )
+
+    assert projected["analysis"] is None
+    assert projected["title_zh"] == "中文标题等待生成"
+    assert projected["summary_zh"] == "中文摘要等待生成"
+    assert projected["analysis_status"] == "pending"
+    assert projected["analysis_error_code"] == "legacy_output_hidden"
+    assert "analyzed_at" not in projected
+    assert "available_at" not in projected
+    for field in (
+        "classification",
+        "confidence",
+        "market_relevance",
+        "overall_sentiment",
+        "trusted_stock_impacts",
+    ):
+        assert field not in projected
+
+
+@pytest.mark.parametrize("field", ["ticker", "dominant_event", "assessment_event"])
+def test_focus_projection_hides_structured_identity_outside_cycle_context(
+    field,
+) -> None:
+    expected_hash = "a" * 64
+    focus = _focus_result_with_bindings(input_hash=expected_hash)
+    if field == "ticker":
+        focus["focus_ticker_assessments"][0]["ticker"] = "PANIC"
+    elif field == "dominant_event":
+        focus["dominant_events"][0]["event_group_id"] = "event-outside-cycle"
+    else:
+        focus["focus_ticker_assessments"][0]["supporting_event_ids"] = [
+            "event-outside-cycle"
+        ]
+    cycle = {
+        "cycle_id": "mfc_" + "a" * 32,
+        "snapshot_as_of": "2026-07-15T04:00:00Z",
+        "input_hash": expected_hash,
+        "status": "completed",
+        "validation_allowed_tickers": ["NVDA"],
+        "validation_allowed_event_group_ids": ["event-01"],
+        "result": focus,
+    }
+
+    projected = PersonalCatalystService._project_focus_cycle(cycle)
+
+    assert projected is not None
+    assert projected["result"] is None
+    assert projected["error_code"] == "legacy_output_hidden"
+    assert "validation_allowed_tickers" not in projected
+    assert "validation_allowed_event_group_ids" not in projected
 
 
 def test_focus_request_removes_internal_validation_context_while_pending() -> None:
@@ -910,6 +1066,7 @@ def test_focus_request_removes_internal_validation_context_while_pending() -> No
                 "cycle_id": "mfc_" + "a" * 32,
                 "status": "pending",
                 "validation_allowed_tickers": ["NVDA"],
+                "validation_allowed_event_group_ids": ["event-01"],
                 "result": None,
             }
 
@@ -920,6 +1077,7 @@ def test_focus_request_removes_internal_validation_context_while_pending() -> No
 
     assert projected["status"] == "pending"
     assert "validation_allowed_tickers" not in projected
+    assert "validation_allowed_event_group_ids" not in projected
 
 
 @pytest.mark.parametrize(
@@ -951,6 +1109,7 @@ def test_focus_request_revalidates_completed_result_with_payload_context(
                 "snapshot_as_of": "2026-07-15T04:00:00Z",
                 "input_hash": expected_hash,
                 "validation_allowed_tickers": ["NVDA"],
+                "validation_allowed_event_group_ids": [],
                 "result": result,
             }
 
@@ -961,6 +1120,7 @@ def test_focus_request_revalidates_completed_result_with_payload_context(
 
     assert (projected["result"] is not None) is result_is_visible
     assert "validation_allowed_tickers" not in projected
+    assert "validation_allowed_event_group_ids" not in projected
     if result_is_visible:
         assert projected["result"]["title_zh"].startswith("NVDA")
     else:

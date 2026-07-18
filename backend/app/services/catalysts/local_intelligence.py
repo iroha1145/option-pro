@@ -276,6 +276,20 @@ def _parse_time(value: str | None) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def _recent_analysis_count(
+    items: Sequence[Mapping[str, Any]],
+    *,
+    as_of: datetime,
+) -> int:
+    cutoff = as_of - timedelta(hours=24)
+    return sum(
+        1
+        for item in items
+        if (completed_at := _parse_time(item.get("analyzed_at"))) is not None
+        and cutoff <= completed_at <= as_of
+    )
+
+
 def _is_sqlite_write_contention(error: BaseException) -> bool:
     if not isinstance(error, sqlite3.OperationalError):
         return False
@@ -784,9 +798,17 @@ class LocalCatalystIntelligence:
         self,
         *,
         allow_write_contention: bool = True,
+        job_ids: Iterable[str] | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Read current Catalyst AI rows before taking the Catalyst write lock."""
 
+        requested_ids = (
+            sorted({str(job_id) for job_id in job_ids if str(job_id)})
+            if job_ids is not None
+            else None
+        )
+        if requested_ids == []:
+            return {}
         path = Path(self.ai_repository.path)
         if not path.is_file():
             return {}
@@ -796,13 +818,35 @@ class LocalCatalystIntelligence:
             connection = sqlite3.connect(uri, uri=True, timeout=2.0)
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA query_only=ON")
-            rows = connection.execute(
-                """SELECT j.*,COALESCE(s.submission_source,'manual') AS submission_source
-                   FROM ai_jobs j
-                   LEFT JOIN ai_job_sources s ON s.job_id=j.job_id
-                   WHERE j.job_type IN ('news_impact','market_focus')
-                   ORDER BY j.created_at DESC"""
-            ).fetchall()
+            if requested_ids is None:
+                rows = connection.execute(
+                    """SELECT j.*,COALESCE(s.submission_source,'manual')
+                              AS submission_source
+                       FROM ai_jobs j
+                       LEFT JOIN ai_job_sources s ON s.job_id=j.job_id
+                       WHERE j.job_type IN ('news_impact','market_focus')
+                       ORDER BY j.created_at DESC"""
+                ).fetchall()
+            else:
+                rows = []
+                for offset in range(0, len(requested_ids), 500):
+                    chunk = requested_ids[offset : offset + 500]
+                    placeholders = ",".join("?" for _item in chunk)
+                    rows.extend(
+                        connection.execute(
+                            f"""SELECT j.*,COALESCE(
+                                        s.submission_source,'manual'
+                                    ) AS submission_source
+                                FROM ai_jobs j
+                                LEFT JOIN ai_job_sources s
+                                  ON s.job_id=j.job_id
+                                WHERE j.job_id IN ({placeholders})
+                                  AND j.job_type IN (
+                                      'news_impact','market_focus'
+                                  )""",
+                            tuple(chunk),
+                        ).fetchall()
+                    )
         except sqlite3.OperationalError as error:
             if allow_write_contention and _is_sqlite_write_contention(error):
                 return {}
@@ -850,6 +894,7 @@ class LocalCatalystIntelligence:
         row: dict[str, Any],
         *,
         as_of: datetime,
+        jobs: Mapping[str, dict[str, Any]] | None = None,
     ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
         """Return the job state visible then, plus a safe detail projection.
 
@@ -858,25 +903,37 @@ class LocalCatalystIntelligence:
         future terminal state through ``analysis_job``.
         """
 
-        link = connection.execute(
-            """SELECT job_id,created_at FROM catalyst_local_analysis_links
-               WHERE news_id=? AND change_sequence=? AND content_hash=?
-                 AND created_at<=?
-               ORDER BY created_at DESC,job_id DESC LIMIT 1""",
-            (
-                row["news_id"],
-                row["change_sequence"],
-                row["content_hash"],
-                _iso(as_of),
-            ),
-        ).fetchone()
-        if link is None:
-            return None, None
-        job = self._read_ai_job(str(link["job_id"]))
+        if "analysis_job_id" in row:
+            job_id = row.get("analysis_job_id")
+            link_created_at = row.get("analysis_job_created_at")
+            if job_id is None or link_created_at is None:
+                return None, None
+        else:
+            link = connection.execute(
+                """SELECT job_id,created_at FROM catalyst_local_analysis_links
+                   WHERE news_id=? AND change_sequence=? AND content_hash=?
+                     AND created_at<=?
+                   ORDER BY created_at DESC,job_id DESC LIMIT 1""",
+                (
+                    row["news_id"],
+                    row["change_sequence"],
+                    row["content_hash"],
+                    _iso(as_of),
+                ),
+            ).fetchone()
+            if link is None:
+                return None, None
+            job_id = link["job_id"]
+            link_created_at = link["created_at"]
+        job = (
+            jobs.get(str(job_id))
+            if jobs is not None
+            else self._read_ai_job(str(job_id))
+        )
         public = self._identity_public_job(job, expected_type="news_impact")
         if job is None or public is None:
             return None, None
-        created_at = _parse_time(str(job.get("created_at") or link["created_at"]))
+        created_at = _parse_time(str(job.get("created_at") or link_created_at))
         if created_at is None or created_at > as_of:
             return None, None
         updated_at = _parse_time(str(job.get("updated_at") or ""))
@@ -1416,6 +1473,13 @@ class LocalCatalystIntelligence:
         if window_hours is not None:
             time_clause = " AND r.source_available_at>=?"
             params.append(_iso(as_of - timedelta(hours=window_hours)))
+        params.extend(
+            [
+                cutoff,
+                cutoff,
+                NEWS_RESULT_CONTRACT_ID,
+            ]
+        )
         try:
             rows = connection.execute(
                 f"""WITH latest AS (
@@ -1428,12 +1492,65 @@ class LocalCatalystIntelligence:
                            ON c.news_id=l.news_id
                           AND c.change_sequence=l.change_sequence
                          WHERE c.operation='upsert' AND c.available_at<=?
+                     ), active_revisions AS (
+                         SELECT r.* FROM active a
+                         JOIN catalyst_local_news_revisions r
+                           ON r.news_id=a.news_id
+                          AND r.change_sequence=a.change_sequence
+                         WHERE 1=1 {time_clause}
+                     ), latest_link AS (
+                         SELECT l.*,
+                                ROW_NUMBER() OVER (
+                                    PARTITION BY l.news_id,l.change_sequence,
+                                                 l.content_hash
+                                    ORDER BY l.created_at DESC,l.job_id DESC
+                                ) AS rank
+                         FROM catalyst_local_analysis_links l
+                         JOIN active_revisions r
+                           ON r.news_id=l.news_id
+                          AND r.change_sequence=l.change_sequence
+                          AND r.content_hash=l.content_hash
+                         WHERE l.created_at<=?
+                     ), latest_analysis AS (
+                         SELECT l.*,
+                                ROW_NUMBER() OVER (
+                                    PARTITION BY l.news_id,l.change_sequence,
+                                                 l.content_hash
+                                    ORDER BY l.result_available_at DESC,
+                                             l.created_at DESC,l.job_id DESC
+                                ) AS rank
+                         FROM catalyst_local_analysis_links l
+                         JOIN active_revisions r
+                           ON r.news_id=l.news_id
+                          AND r.change_sequence=l.change_sequence
+                          AND r.content_hash=l.content_hash
+                         WHERE l.result_json IS NOT NULL
+                           AND l.result_available_at<=?
                      )
-                     SELECT r.* FROM active a
-                     JOIN catalyst_local_news_revisions r
-                       ON r.news_id=a.news_id
-                      AND r.change_sequence=a.change_sequence
-                     WHERE 1=1 {time_clause}
+                     SELECT r.*,
+                            analysis.result_json AS analysis_result_json,
+                            analysis.result_available_at
+                                AS analysis_result_available_at,
+                            job_link.job_id AS analysis_job_id,
+                            job_link.created_at AS analysis_job_created_at,
+                            CASE WHEN audit.job_id IS NULL THEN 0 ELSE 1 END
+                                AS analysis_result_audited
+                     FROM active_revisions r
+                     LEFT JOIN latest_analysis analysis
+                       ON analysis.news_id=r.news_id
+                      AND analysis.change_sequence=r.change_sequence
+                      AND analysis.content_hash=r.content_hash
+                      AND analysis.rank=1
+                     LEFT JOIN latest_link job_link
+                       ON job_link.news_id=r.news_id
+                      AND job_link.change_sequence=r.change_sequence
+                      AND job_link.content_hash=r.content_hash
+                      AND job_link.rank=1
+                     LEFT JOIN catalyst_local_analysis_result_audit audit
+                       ON audit.job_id=analysis.job_id
+                      AND audit.contract_id=?
+                      AND audit.outcome='accepted'
+                      AND audit.result_json=analysis.result_json
                      ORDER BY COALESCE(r.published_at,r.fetched_at) DESC,
                               r.news_id DESC""",
                 tuple(params),
@@ -1514,22 +1631,58 @@ class LocalCatalystIntelligence:
         *,
         as_of: datetime,
     ) -> tuple[dict[str, Any] | None, str | None]:
-        link = connection.execute(
-            """SELECT result_json,result_available_at FROM catalyst_local_analysis_links
-               WHERE news_id=? AND change_sequence=? AND content_hash=?
-                 AND result_json IS NOT NULL AND result_available_at<=?
-               ORDER BY result_available_at DESC LIMIT 1""",
-            (
-                row["news_id"],
-                row["change_sequence"],
-                row["content_hash"],
-                _iso(as_of),
-            ),
-        ).fetchone()
-        if link is None:
+        if "analysis_result_json" in row:
+            raw_value = row.get("analysis_result_json")
+            result_available_at = row.get("analysis_result_available_at")
+            audited = bool(row.get("analysis_result_audited"))
+            if raw_value is None or result_available_at is None:
+                return None, None
+        else:
+            link = connection.execute(
+                """SELECT link.result_json,link.result_available_at,
+                          EXISTS(
+                              SELECT 1
+                              FROM catalyst_local_analysis_result_audit audit
+                              WHERE audit.job_id=link.job_id
+                                AND audit.contract_id=?
+                                AND audit.outcome='accepted'
+                                AND audit.result_json=link.result_json
+                          ) AS result_audited
+                   FROM catalyst_local_analysis_links link
+                   WHERE link.news_id=? AND link.change_sequence=?
+                     AND link.content_hash=? AND link.result_json IS NOT NULL
+                     AND link.result_available_at<=?
+                   ORDER BY link.result_available_at DESC,
+                            link.created_at DESC,link.job_id DESC LIMIT 1""",
+                (
+                    NEWS_RESULT_CONTRACT_ID,
+                    row["news_id"],
+                    row["change_sequence"],
+                    row["content_hash"],
+                    _iso(as_of),
+                ),
+            ).fetchone()
+            if link is None:
+                return None, None
+            raw_value = link["result_json"]
+            result_available_at = link["result_available_at"]
+            audited = bool(link["result_audited"])
+        raw_result = str(raw_value)
+        if audited:
+            result = _loads(raw_result, None)
+            if isinstance(result, dict):
+                return result, str(result_available_at)
+        payload = {
+            "news_id": row.get("news_id"),
+            "change_sequence": row.get("change_sequence"),
+            "content_hash": row.get("content_hash"),
+            "allowed_tickers": list(row.get("canonical_tickers") or []),
+        }
+        try:
+            result = validate_result("news_impact", raw_result, payload)
+        except (TypeError, ValueError):
             return None, None
-        result = _loads(link["result_json"], None)
-        return (result if isinstance(result, dict) else None), str(link["result_available_at"])
+        return result, str(result_available_at)
 
     def _plan_hotspots(
         self,
@@ -1814,13 +1967,21 @@ class LocalCatalystIntelligence:
             "queued": queued,
         }
 
-    def _item(self, connection: sqlite3.Connection, row: dict[str, Any], *, as_of: datetime) -> dict[str, Any]:
+    def _item(
+        self,
+        connection: sqlite3.Connection,
+        row: dict[str, Any],
+        *,
+        as_of: datetime,
+        jobs: Mapping[str, dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         result, available = self._analysis_for_revision(connection, row, as_of=as_of)
         if current_request_is_owner():
             job_public, _detail_job = self._linked_news_job_at(
                 connection,
                 row,
                 as_of=as_of,
+                jobs=jobs,
             )
             status = str(
                 job_public.get("status") if job_public else "not_requested"
@@ -1831,6 +1992,8 @@ class LocalCatalystIntelligence:
             status = "not_requested"
         if result is not None:
             status = "completed"
+        elif status == "completed":
+            status = "pending"
         item = {
             "news_id": int(row["news_id"]),
             "change_sequence": int(row["change_sequence"]),
@@ -2003,7 +2166,21 @@ class LocalCatalystIntelligence:
         anchor = _iso(as_of)
         with self._connect() as connection:
             rows = self._active_revisions(connection, as_of=as_of, window_hours=window_hours)
-            items = [self._item(connection, row, as_of=as_of) for row in rows]
+            jobs = (
+                self._ai_job_snapshot(
+                    job_ids=(
+                        str(row["analysis_job_id"])
+                        for row in rows
+                        if row.get("analysis_job_id") is not None
+                    )
+                )
+                if current_request_is_owner()
+                else None
+            )
+            items = [
+                self._item(connection, row, as_of=as_of, jobs=jobs)
+                for row in rows
+            ]
         ticker = str(kwargs.get("ticker") or "").upper()
         source = str(kwargs.get("source") or "").casefold()
         classification = kwargs.get("classification")
@@ -2057,7 +2234,7 @@ class LocalCatalystIntelligence:
             "items": page,
             "summary": {
                 "news_6h": sum(1 for item in filtered if (_parse_time(item.get("published_at")) or as_of) >= as_of - timedelta(hours=6)),
-                "analyzed_24h": len(analyzed),
+                "analyzed_24h": _recent_analysis_count(analyzed, as_of=as_of),
                 "bullish": sum(1 for item in analyzed if item.get("classification") == "bullish"),
                 "bearish": sum(1 for item in analyzed if item.get("classification") == "bearish"),
                 "pending": sum(1 for item in filtered if not item.get("analysis")),
@@ -2143,7 +2320,21 @@ class LocalCatalystIntelligence:
                 as_of=as_of,
                 window_hours=window_hours,
             )
-            items = [self._item(connection, row, as_of=as_of) for row in rows]
+            jobs = (
+                self._ai_job_snapshot(
+                    job_ids=(
+                        str(row["analysis_job_id"])
+                        for row in rows
+                        if row.get("analysis_job_id") is not None
+                    )
+                )
+                if current_request_is_owner()
+                else None
+            )
+            items = [
+                self._item(connection, row, as_of=as_of, jobs=jobs)
+                for row in rows
+            ]
         data_through = self.status(now=as_of).get("data_through")
         results: dict[str, dict[str, Any]] = {}
         for raw_ticker in tickers:
@@ -2180,7 +2371,10 @@ class LocalCatalystIntelligence:
                         if (_parse_time(item.get("published_at")) or as_of)
                         >= as_of - timedelta(hours=6)
                     ),
-                    "analyzed_24h": len(analyzed),
+                    "analyzed_24h": _recent_analysis_count(
+                        analyzed,
+                        as_of=as_of,
+                    ),
                     "bullish": sum(
                         1
                         for item in analyzed
@@ -3646,6 +3840,9 @@ class LocalCatalystIntelligence:
                 "focus_symbol_count": len(cycle_payload.get("allowed_tickers", [])),
                 "validation_allowed_tickers": list(
                     cycle_payload.get("allowed_tickers", [])
+                ),
+                "validation_allowed_event_group_ids": list(
+                    cycle_payload.get("allowed_event_group_ids", [])
                 ),
                 "model": self.model,
                 "reasoning_effort": self.reasoning,
