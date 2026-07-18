@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Literal, Sequence
+from typing import Any, Iterable, Iterator, Literal, Mapping, Sequence
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -40,6 +40,7 @@ SCHEMA_VERSION = "optix-local-catalyst-v2"
 SCHEDULE_CLAIM_TTL_SECONDS = 10 * 60
 MANUAL_REFRESH_CLAIM_TTL_SECONDS = 10 * 60
 MANUAL_REFRESH_TYPES = ("news", "calendar", "source_health")
+ANALYSIS_LINK_BUSY_TIMEOUT_MS = 250
 
 
 _SCHEMA = """
@@ -212,6 +213,19 @@ def _parse_time(value: str | None) -> datetime | None:
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         return None
     return parsed.astimezone(timezone.utc)
+
+
+def _is_sqlite_write_contention(error: BaseException) -> bool:
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    code = getattr(error, "sqlite_errorcode", None)
+    if isinstance(code, int) and (code & 0xFF) in {
+        sqlite3.SQLITE_BUSY,
+        sqlite3.SQLITE_LOCKED,
+    }:
+        return True
+    message = str(error).casefold()
+    return "database is locked" in message or "database table is locked" in message
 
 
 def _minute_bucket(value: datetime) -> str:
@@ -611,9 +625,15 @@ class LocalCatalystIntelligence:
     def _ingest_revisions(self, connection: sqlite3.Connection) -> int:
         try:
             rows = connection.execute(
-                """SELECT change_sequence,news_id,available_at,raw_json
-                   FROM macrolens_etl_news_changes
-                   WHERE operation='upsert' ORDER BY change_sequence"""
+                """SELECT c.change_sequence,c.news_id,c.available_at,c.raw_json
+                   FROM macrolens_etl_news_changes c
+                   WHERE c.operation='upsert'
+                     AND NOT EXISTS (
+                         SELECT 1 FROM catalyst_local_news_revisions r
+                         WHERE r.news_id=c.news_id
+                           AND r.change_sequence=c.change_sequence
+                     )
+                   ORDER BY c.change_sequence"""
             ).fetchall()
         except sqlite3.OperationalError:
             return 0
@@ -689,6 +709,38 @@ class LocalCatalystIntelligence:
             if "connection" in locals():
                 connection.close()
         return dict(row) if row is not None else None
+
+    def _ai_job_snapshot(
+        self,
+        *,
+        allow_write_contention: bool = True,
+    ) -> dict[str, dict[str, Any]]:
+        """Read current Catalyst AI rows before taking the Catalyst write lock."""
+
+        path = Path(self.ai_repository.path)
+        if not path.is_file():
+            return {}
+        uri = f"file:{quote(path.resolve().as_posix(), safe='/')}?mode=ro"
+        connection: sqlite3.Connection | None = None
+        try:
+            connection = sqlite3.connect(uri, uri=True, timeout=2.0)
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA query_only=ON")
+            rows = connection.execute(
+                """SELECT j.*,COALESCE(s.submission_source,'manual') AS submission_source
+                   FROM ai_jobs j
+                   LEFT JOIN ai_job_sources s ON s.job_id=j.job_id
+                   WHERE j.job_type IN ('news_impact','market_focus')
+                   ORDER BY j.created_at DESC"""
+            ).fetchall()
+        except sqlite3.OperationalError as error:
+            if allow_write_contention and _is_sqlite_write_contention(error):
+                return {}
+            raise
+        finally:
+            if connection is not None:
+                connection.close()
+        return {str(row["job_id"]): dict(row) for row in rows}
 
     def _identity_public_job(
         self,
@@ -778,21 +830,153 @@ class LocalCatalystIntelligence:
             return projected, None
         return public, public
 
-    def _publish_completed_news(self, connection: sqlite3.Connection) -> int:
+    def _recover_unlinked_news_jobs(
+        self,
+        connection: sqlite3.Connection,
+        jobs: Mapping[str, dict[str, Any]],
+    ) -> int:
+        linked = {
+            str(row["job_id"])
+            for row in connection.execute(
+                "SELECT job_id FROM catalyst_local_analysis_links"
+            ).fetchall()
+        }
+        recovered = 0
+        candidates = sorted(
+            jobs.values(),
+            key=lambda row: (
+                str(row.get("created_at") or ""),
+                str(row.get("job_id") or ""),
+            ),
+        )
+        for job in candidates:
+            job_id = str(job.get("job_id") or "")
+            if not job_id or job_id in linked or job.get("job_type") != "news_impact":
+                continue
+            try:
+                public = self._identity_public_job(job, expected_type="news_impact")
+            except (KeyError, TypeError, ValueError):
+                continue
+            payload = self._job_payload(job)
+            if public is None or payload is None:
+                continue
+            news_id = payload.get("news_id")
+            change_sequence = payload.get("change_sequence")
+            content_hash = payload.get("content_hash")
+            created_at = str(job.get("created_at") or "")
+            parsed_created_at = _parse_time(created_at)
+            if (
+                type(news_id) is not int
+                or type(change_sequence) is not int
+                or news_id < 1
+                or change_sequence < 1
+                or not isinstance(content_hash, str)
+                or not content_hash
+                or parsed_created_at is None
+            ):
+                continue
+            revision = connection.execute(
+                """SELECT news_id,change_sequence,content_hash,source,raw_title,
+                          raw_summary,url,published_at,fetched_at,source_names_json,
+                          source_count,source_tickers_json,canonical_tickers_json
+                   FROM catalyst_local_news_revisions
+                   WHERE news_id=? AND change_sequence=? AND content_hash=?""",
+                (news_id, change_sequence, content_hash),
+            ).fetchone()
+            if revision is None or not self._news_payload_matches_revision(
+                payload,
+                revision,
+            ):
+                continue
+            inserted = connection.execute(
+                """INSERT OR IGNORE INTO catalyst_local_analysis_links(
+                       news_id,change_sequence,content_hash,job_id,created_at
+                   ) VALUES(?,?,?,?,?)""",
+                (
+                    news_id,
+                    change_sequence,
+                    content_hash,
+                    job_id,
+                    _iso(parsed_created_at),
+                ),
+            ).rowcount
+            recovered += int(inserted)
+            if inserted:
+                linked.add(job_id)
+        return recovered
+
+    @staticmethod
+    def _news_payload_matches_revision(
+        payload: Mapping[str, Any],
+        revision: Mapping[str, Any] | sqlite3.Row,
+    ) -> bool:
+        required_keys = {
+            "news_id",
+            "change_sequence",
+            "content_hash",
+            "source",
+            "title",
+            "summary",
+            "url",
+            "published_at",
+            "fetched_at",
+            "sources",
+            "source_count",
+            "source_ticker_hints",
+            "allowed_tickers",
+            "analysis_revision",
+        }
+        allowed_keys = required_keys | {"manual_force_bucket"}
+        if set(payload) - allowed_keys or not required_keys <= set(payload):
+            return False
+        analysis_revision = payload.get("analysis_revision")
+        if type(analysis_revision) is not int or analysis_revision < 1:
+            return False
+        if "manual_force_bucket" in payload:
+            force_bucket = payload["manual_force_bucket"]
+            if not isinstance(force_bucket, str):
+                return False
+            parsed_bucket = _parse_time(force_bucket)
+            if parsed_bucket is None or _minute_bucket(parsed_bucket) != force_bucket:
+                return False
+        expected = {
+            "news_id": int(revision["news_id"]),
+            "change_sequence": int(revision["change_sequence"]),
+            "content_hash": str(revision["content_hash"]),
+            "source": str(revision["source"]),
+            "title": str(revision["raw_title"]),
+            "summary": revision["raw_summary"],
+            "url": str(revision["url"]),
+            "published_at": revision["published_at"],
+            "fetched_at": revision["fetched_at"],
+            "sources": _loads(revision["source_names_json"], []),
+            "source_count": int(revision["source_count"]),
+            "source_ticker_hints": _loads(revision["source_tickers_json"], []),
+            "allowed_tickers": _loads(revision["canonical_tickers_json"], []),
+        }
+        return all(payload.get(key) == value for key, value in expected.items())
+
+    def _publish_completed_news(
+        self,
+        connection: sqlite3.Connection,
+        jobs: Mapping[str, dict[str, Any]],
+    ) -> int:
         rows = connection.execute(
             """SELECT * FROM catalyst_local_analysis_links
                WHERE result_json IS NULL ORDER BY created_at"""
         ).fetchall()
         published = 0
         for link in rows:
-            job = self.ai_repository.get_job(str(link["job_id"]))
+            job = jobs.get(str(link["job_id"]))
             public = self._verified_public_job(job, expected_type="news_impact")
             if public is None or public.get("status") != "completed":
                 continue
             assert job is not None
             payload = self._job_payload(job)
             revision = connection.execute(
-                """SELECT canonical_tickers_json
+                """SELECT news_id,change_sequence,content_hash,source,raw_title,
+                          raw_summary,url,published_at,fetched_at,source_names_json,
+                          source_count,source_tickers_json,canonical_tickers_json
                    FROM catalyst_local_news_revisions
                    WHERE news_id=? AND change_sequence=? AND content_hash=?""",
                 (
@@ -801,12 +985,11 @@ class LocalCatalystIntelligence:
                     link["content_hash"],
                 ),
             ).fetchone()
-            if payload is None or revision is None:
-                continue
-            expected_tickers = self.validate_tickers(
-                _loads(revision["canonical_tickers_json"], [])
-            )
-            if self.validate_tickers(payload.get("allowed_tickers") or []) != expected_tickers:
+            if (
+                payload is None
+                or revision is None
+                or not self._news_payload_matches_revision(payload, revision)
+            ):
                 continue
             result = public["result"]
             if (
@@ -827,7 +1010,11 @@ class LocalCatalystIntelligence:
             published += 1
         return published
 
-    def _publish_completed_focus(self, connection: sqlite3.Connection) -> int:
+    def _publish_completed_focus(
+        self,
+        connection: sqlite3.Connection,
+        jobs: Mapping[str, dict[str, Any]],
+    ) -> int:
         cycles = connection.execute(
             """SELECT * FROM catalyst_local_focus_cycles
                WHERE result_json IS NULL AND status NOT IN ('cancelled')
@@ -835,7 +1022,7 @@ class LocalCatalystIntelligence:
         ).fetchall()
         published = 0
         for cycle in cycles:
-            job = self.ai_repository.get_job(str(cycle["job_id"]))
+            job = jobs.get(str(cycle["job_id"]))
             public = self._verified_public_job(job, expected_type="market_focus")
             if public is None:
                 if job and job.get("status") in {"failed", "cancelled", "budget_blocked"}:
@@ -1129,12 +1316,17 @@ class LocalCatalystIntelligence:
     def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict[str, int]:
         self.initialize()
         now = _utc_now()
+        ai_jobs = self._ai_job_snapshot()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
                 ingested = self._ingest_revisions(connection)
-                analyses = self._publish_completed_news(connection)
-                focus_results = self._publish_completed_focus(connection)
+                recovered_links = self._recover_unlinked_news_jobs(
+                    connection,
+                    ai_jobs,
+                )
+                analyses = self._publish_completed_news(connection, ai_jobs)
+                focus_results = self._publish_completed_focus(connection, ai_jobs)
                 connection.commit()
             except Exception:
                 connection.rollback()
@@ -1153,6 +1345,7 @@ class LocalCatalystIntelligence:
             queued = int(self.run_scheduled()["queued"])
         return {
             "ingested": ingested,
+            "analysis_links_recovered": recovered_links,
             "analyses_published": analyses,
             "focus_results_published": focus_results,
             "legacy_imported": int(legacy["imported"]),
@@ -1781,8 +1974,105 @@ class LocalCatalystIntelligence:
     def _current_revision(self, news_id: int, *, now: datetime | None = None) -> dict[str, Any] | None:
         observed = now or _utc_now()
         with self._connect() as connection:
-            rows = self._active_revisions(connection, as_of=observed)
-        return next((row for row in rows if int(row["news_id"]) == news_id), None)
+            return self._active_revision(
+                connection,
+                news_id=news_id,
+                as_of=observed,
+            )
+
+    def _unlinked_manual_force_job(
+        self,
+        row: Mapping[str, Any],
+        *,
+        expected_analysis_revision: int,
+    ) -> dict[str, Any] | None:
+        jobs = self._ai_job_snapshot(allow_write_contention=False)
+        if not jobs:
+            return None
+        with self._connect() as connection:
+            linked = {
+                str(item["job_id"])
+                for item in connection.execute(
+                    "SELECT job_id FROM catalyst_local_analysis_links"
+                ).fetchall()
+            }
+        candidates = sorted(
+            jobs.values(),
+            key=lambda job: (
+                str(job.get("created_at") or ""),
+                str(job.get("job_id") or ""),
+            ),
+            reverse=True,
+        )
+        for job in candidates:
+            job_id = str(job.get("job_id") or "")
+            created_at = _parse_time(str(job.get("created_at") or ""))
+            if (
+                not job_id
+                or created_at is None
+                or job_id in linked
+                or job.get("job_type") != "news_impact"
+                or job.get("submission_source") != "manual"
+            ):
+                continue
+            payload = self._job_payload(job)
+            if (
+                payload is None
+                or "manual_force_bucket" not in payload
+                or not self._news_payload_matches_revision(payload, row)
+                or payload.get("analysis_revision") != expected_analysis_revision
+            ):
+                continue
+            try:
+                public = self._identity_public_job(
+                    job,
+                    expected_type="news_impact",
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+            if public is not None:
+                return job
+        return None
+
+    def _link_analysis_job(
+        self,
+        row: Mapping[str, Any],
+        job: dict[str, Any],
+    ) -> bool:
+        payload = self._job_payload(job)
+        if payload is None or not self._news_payload_matches_revision(payload, row):
+            raise RuntimeError("ai_job_payload_invalid")
+        created_at = _parse_time(str(job.get("created_at") or ""))
+        if created_at is None:
+            raise RuntimeError("ai_job_created_at_invalid")
+        try:
+            with self._connect() as connection:
+                connection.execute(
+                    f"PRAGMA busy_timeout={ANALYSIS_LINK_BUSY_TIMEOUT_MS}"
+                )
+                connection.execute(
+                    """INSERT OR IGNORE INTO catalyst_local_analysis_links(
+                           news_id,change_sequence,content_hash,job_id,created_at
+                       ) VALUES(?,?,?,?,?)""",
+                    (
+                        row["news_id"],
+                        row["change_sequence"],
+                        row["content_hash"],
+                        job["job_id"],
+                        _iso(created_at),
+                    ),
+                )
+                if job.get("status") == "completed":
+                    self._publish_completed_news(
+                        connection,
+                        {str(job["job_id"]): job},
+                    )
+                connection.commit()
+        except sqlite3.OperationalError as error:
+            if not _is_sqlite_write_contention(error):
+                raise
+            return False
+        return True
 
     def request_analysis(
         self,
@@ -1869,6 +2159,18 @@ class LocalCatalystIntelligence:
                     return public
                 if linked_payload.get("manual_force_bucket") == bucket:
                     return public
+            orphan = self._unlinked_manual_force_job(
+                row,
+                expected_analysis_revision=highest_revision + 1,
+            )
+            if orphan is not None:
+                public = AIJobRepository.public(
+                    orphan,
+                    cached=orphan.get("status") == "completed",
+                )
+                if not self._link_analysis_job(row, orphan):
+                    public["local_link_pending"] = True
+                return public
             payload["analysis_revision"] = highest_revision + 1
             payload["manual_force_bucket"] = bucket
         schema_version, schema_hash = ai_runtime.schema_identity("news_impact")
@@ -1888,24 +2190,13 @@ class LocalCatalystIntelligence:
             # minute bucket above keeps repeated confirmation clicks idempotent.
             force_retry=scheduled_retry,
         )
-        with self._connect() as connection:
-            connection.execute(
-                """INSERT OR IGNORE INTO catalyst_local_analysis_links(
-                       news_id,change_sequence,content_hash,job_id,created_at
-                   ) VALUES(?,?,?,?,?)""",
-                (
-                    row["news_id"],
-                    row["change_sequence"],
-                    row["content_hash"],
-                    job["job_id"],
-                    _iso(),
-                ),
-            )
-            connection.commit()
-        return AIJobRepository.public(
+        public = AIJobRepository.public(
             job,
             cached=(not created and job["status"] == "completed"),
         )
+        if not self._link_analysis_job(row, job):
+            public["local_link_pending"] = True
+        return public
 
     def analysis_job(self, job_id: str) -> dict[str, Any] | None:
         row = self._read_ai_job(job_id)

@@ -36,6 +36,8 @@ _NEWS_PROMPT_VERSION = "news-impact-zh-cn-v2"
 _LOCAL_STORE_RUNTIME_CODES = frozenset(
     {
         "ai_job_insert_failed",
+        "ai_job_created_at_invalid",
+        "ai_job_payload_invalid",
         "ai_job_schema_checksum_mismatch",
         "local_catalyst_schema_checksum_mismatch",
     }
