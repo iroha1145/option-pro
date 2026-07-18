@@ -486,6 +486,9 @@ async def process_job(
                 cooldown_seconds=int(
                     getattr(settings, "openai_manual_cooldown_seconds", 30)
                 ),
+                unknown_submission_hold_seconds=int(
+                    settings.openai_job_max_age_seconds
+                ),
             )
         except RuntimeError as exc:
             if str(exc) == "ai_job_not_submittable":

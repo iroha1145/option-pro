@@ -558,7 +558,7 @@ def test_global_concurrency_limit_defers_a_second_paid_submission(tmp_path):
     assert deferred["submission_started_at"] is None
 
 
-def test_unknown_submission_holds_the_global_concurrency_slot(tmp_path):
+def test_recent_unknown_submission_holds_the_global_concurrency_slot(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     first = _create_job(repository, "AAA")
     second = _create_job(repository, "BBB")
@@ -589,6 +589,55 @@ def test_unknown_submission_holds_the_global_concurrency_slot(tmp_path):
     assert repository.get_job(first["job_id"])["budget_charge_microusd"] == (
         runtime.budget_reservation_microusd("earnings_impact")
     )
+
+
+def test_expired_unknown_submission_releases_other_jobs_without_retrying_it(
+    tmp_path,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    first = _create_job(repository, "AAA")
+
+    first_claim = repository.claim_due("owner-one", 60)
+    assert repository.mark_submission_started(
+        first["job_id"], "owner-one", daily_limit=4
+    ) == "started"
+    repository.fail(
+        first_claim["job_id"],
+        "owner-one",
+        "submission_outcome_unknown",
+    )
+    with sqlite3.connect(repository.path) as connection:
+        connection.execute(
+            """UPDATE ai_jobs
+               SET submission_started_at='2026-01-01T00:00:00Z',
+                   completed_at='2026-01-01T00:00:01Z',
+                   updated_at='2026-01-01T00:00:01Z'
+               WHERE job_id=?""",
+            (first["job_id"],),
+        )
+
+    snapshot = repository.budget_snapshot(
+        daily_limit=4,
+        daily_budget_usd=2.0,
+        unknown_submission_hold_seconds=86400,
+    )
+    assert snapshot["concurrency_available"] is True
+    assert snapshot["active_job"] is None
+
+    second = _create_job(repository, "BBB")
+    second_claim = repository.claim_due("owner-two", 60)
+    assert second_claim["job_id"] == second["job_id"]
+    assert repository.mark_submission_started(
+        second["job_id"],
+        "owner-two",
+        daily_limit=4,
+        unknown_submission_hold_seconds=86400,
+    ) == "started"
+    preserved = repository.get_job(first["job_id"])
+    assert preserved["status"] == "failed"
+    assert preserved["error_code"] == "submission_outcome_unknown"
+    assert preserved["openai_response_id"] is None
+    assert preserved["attempt_count"] == 1
 
 
 def test_local_preflight_failure_does_not_consume_budget_or_become_unknown(

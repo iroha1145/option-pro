@@ -1111,13 +1111,25 @@ class AIJobRepository:
         daily_limit: int = 4,
         daily_budget_usd: float = 2.0,
         cooldown_seconds: int = 0,
+        unknown_submission_hold_seconds: int = 86400,
     ) -> str:
-        """Atomically enforce concurrency, daily count, and dollar budget."""
+        """Atomically enforce concurrency, daily count, and dollar budget.
+
+        An unknown submission remains terminal and is never retried. It reserves
+        the single paid slot only for the configured response recovery window so
+        an abandoned record cannot block every later analysis forever.
+        """
 
         if daily_limit < 1:
             raise ValueError("daily_limit must be positive")
         now_dt = _utcnow()
         now = _iso(now_dt)
+        unknown_submission_cutoff = _iso(
+            now_dt
+            - timedelta(
+                seconds=max(1, int(unknown_submission_hold_seconds))
+            )
+        )
         day_start = _iso(now_dt.replace(hour=0, minute=0, second=0, microsecond=0))
         day_end = _iso(
             now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1148,10 +1160,15 @@ class AIJobRepository:
                     WHERE job_id<>? AND submission_started_at IS NOT NULL
                       AND (
                         status IN ('queued','in_progress')
-                        OR error_code='submission_outcome_unknown'
+                        OR (
+                          error_code='submission_outcome_unknown'
+                          AND COALESCE(
+                            completed_at,updated_at,submission_started_at
+                          )>=?
+                        )
                       )
                     """,
-                    (job_id,),
+                    (job_id, unknown_submission_cutoff),
                 ).fetchone()[0]
             )
             if in_flight:
@@ -1687,12 +1704,23 @@ class AIJobRepository:
         daily_limit: int,
         daily_budget_usd: float,
         cooldown_seconds: int = 0,
+        unknown_submission_hold_seconds: int = 86400,
         now: datetime | None = None,
     ) -> dict[str, Any]:
-        """Return a secret-free, point-in-time view of paid task capacity."""
+        """Return a secret-free, point-in-time view of paid task capacity.
+
+        Use the same bounded quarantine as ``mark_submission_started`` so the
+        owner UI and the worker agree about whether the paid slot is available.
+        """
 
         self.initialize()
         observed = now or _utcnow()
+        unknown_submission_cutoff = _iso(
+            observed
+            - timedelta(
+                seconds=max(1, int(unknown_submission_hold_seconds))
+            )
+        )
         day_start_dt = observed.replace(hour=0, minute=0, second=0, microsecond=0)
         day_end_dt = day_start_dt + timedelta(days=1)
         with self._connect() as connection:
@@ -1712,9 +1740,13 @@ class AIJobRepository:
                 JOIN ai_job_sources AS s ON s.job_id=j.job_id
                 WHERE j.status IN ('pending','queued','in_progress')
                    OR (j.submission_started_at IS NOT NULL
-                       AND j.error_code='submission_outcome_unknown')
+                       AND j.error_code='submission_outcome_unknown'
+                       AND COALESCE(
+                         j.completed_at,j.updated_at,j.submission_started_at
+                       )>=?)
                 ORDER BY j.created_at LIMIT 1
-                """
+                """,
+                (unknown_submission_cutoff,),
             ).fetchone()
             latest_paid = connection.execute(
                 """

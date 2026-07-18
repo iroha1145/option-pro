@@ -265,6 +265,13 @@ class PersonalCatalystService:
                         daily_limit=daily_limit,
                         daily_budget_usd=daily_budget,
                         cooldown_seconds=cooldown_seconds,
+                        unknown_submission_hold_seconds=int(
+                            getattr(
+                                self.ai_settings,
+                                "openai_job_max_age_seconds",
+                                86400,
+                            )
+                        ),
                         now=observed,
                     )
                 )
