@@ -85,6 +85,18 @@ chmod 600 .env machine.env secrets.env
 
 旧 Catalyst 表、旧分析修订和旧任务记录在迁移后至少保留 90 天。保留期内不删除旧行、不重新提交状态不确定的模型任务，也不用旧备份覆盖已经产生新任务的数据库。
 
+### 运行设置 V2
+
+运行设置 V2 增加每日 Token 上限，并允许取消旧的次数和金额限制。V1 文档仍会被严格读取；迁移只把次数、金额策略改为不限并补入每日 1000 万 Token 上限，所有者原先的手动分析开关、定时分析开关和分析时段均保持不变。启用每小时分析属于发布后的显式设置操作，不由文档读取过程自动开启。
+
+从当前 V1 文档首次写入 V2 前，程序会在同一数据目录原样保存：
+
+```text
+runtime-settings.json.pre-v2
+```
+
+该文件与原 V1 文档逐字节一致，权限为 `0600`，后续写入不会覆盖它；若同名文件内容不同，迁移会停止。发布备份必须同时包含该文件。
+
 ## 发布与核对
 
 ```bash
@@ -109,3 +121,13 @@ curl --fail http://127.0.0.1:${PORT:-2000}/ready
 停止服务时不得附加 `--volumes` 或 `-v`。统一工作进程的停止宽限期为 2100 秒，强制终止可能使正在保存响应身份的付费任务留在不确定状态。
 
 若新统一工作进程被强制终止后需要回滚旧版本，应在所有写入者停止后恢复发布前单独保存的 `optix-worker.db` 备份，再启动旧工作进程。不要用这份状态库备份覆盖业务数据库，也不要在新旧工作进程仍运行时替换文件。
+
+若运行设置已经写成 V2，切换到只支持 V1 的旧版本前还必须恢复 V1 快照。先停止现行服务，再用现行镜像执行锁内恢复：
+
+```bash
+./scripts/compose.sh stop backend worker
+./scripts/compose.sh run --rm --no-deps backend python -c \
+  'from app.services.runtime_settings import get_runtime_settings_store; get_runtime_settings_store().restore_pre_v2_snapshot()'
+```
+
+恢复完成后，`runtime-settings.json` 会与 `runtime-settings.json.pre-v2` 完全一致，旧版本的严格模型可以读取。V2 历史仍保存在 `.runtime-settings.json.backups`；启动旧版本前应把该目录整体移到数据目录外保留，避免旧版历史接口读取 V2 文档。随后再切换旧发布标签并启动服务。若快照不存在、校验失败或发生内容碰撞，应停止回滚并从发布前备份恢复，不得手工拼接设置文件。

@@ -6,7 +6,12 @@ import pytest
 from pydantic import ValidationError
 
 from app.config import Settings
-from app.personal_config import AIConfig, PersonalConfig, load_personal_config
+from app.personal_config import (
+    HOURLY_ANALYSIS_TIMES_ET,
+    AIConfig,
+    PersonalConfig,
+    load_personal_config,
+)
 from app.services.breakouts.config import BreakoutSettings
 
 
@@ -17,23 +22,26 @@ def test_personal_runtime_loads_the_committed_toml() -> None:
     config = load_personal_config(ROOT / "config" / "personal.toml")
 
     assert config.features.breakout_enabled is True
-    assert config.features.catalyst_mode == "manual"
+    assert config.features.catalyst_mode == "scheduled"
     assert config.ai.model == "gpt-5.6-terra"
     assert config.ai.reasoning == "max"
     assert config.ai.max_concurrency == 1
-    assert config.ai.daily_max_jobs == 4
-    assert config.ai.daily_budget_usd == 2.0
+    assert config.ai.daily_max_jobs == 0
+    assert config.ai.daily_budget_usd == 0.0
+    assert config.ai.daily_token_limit == 10_000_000
     assert config.ai.execution_mode == "background"
     assert config.catalyst.sync_seconds == 120
     assert config.catalyst.focus_seconds == 1800
-    assert config.catalyst.scheduled_times_et == ["08:00", "12:00", "16:00"]
+    assert config.catalyst.scheduled_times_et == list(HOURLY_ANALYSIS_TIMES_ET)
     assert config.catalyst.manual_force_reanalysis is True
     assert config.catalyst.manual_refresh_cooldown_seconds == 30
     assert config.storage.retention_days == 90
 
 
-def test_personal_ai_limits_are_fixed() -> None:
-    assert AIConfig().daily_max_jobs == 4
+def test_personal_ai_uses_a_daily_token_safety_limit() -> None:
+    assert AIConfig().daily_max_jobs == 0
+    assert AIConfig().daily_budget_usd == 0
+    assert AIConfig().daily_token_limit == 10_000_000
     with pytest.raises(ValidationError):
         AIConfig(model="legacy-model")
     with pytest.raises(ValidationError):
@@ -41,7 +49,7 @@ def test_personal_ai_limits_are_fixed() -> None:
     with pytest.raises(ValidationError):
         AIConfig(max_concurrency=2)
     with pytest.raises(ValidationError):
-        AIConfig(daily_max_jobs=5)
+        AIConfig(daily_token_limit=102_399)
 
 
 def test_force_reanalysis_is_fixed_on_in_personal_configuration() -> None:
@@ -103,8 +111,9 @@ def test_legacy_environment_cannot_override_personal_runtime(
     assert settings.openai_model == "gpt-5.6-terra"
     assert settings.openai_reasoning == "max"
     assert settings.openai_max_concurrency == 1
-    assert settings.openai_daily_max_jobs == 4
-    assert settings.openai_daily_budget_usd == 2.0
+    assert settings.openai_daily_max_jobs == 0
+    assert settings.openai_daily_budget_usd == 0.0
+    assert settings.openai_daily_token_limit == 10_000_000
     assert settings.openai_manual_cooldown_seconds == 30
     assert settings.openai_execution_mode == "background"
     assert breakout.enabled is True

@@ -18,8 +18,9 @@ def test_repository_personal_config_freezes_paid_runtime() -> None:
     assert config.ai.model == "gpt-5.6-terra"
     assert config.ai.reasoning == "max"
     assert config.ai.max_concurrency == 1
-    assert config.ai.daily_max_jobs == 4
-    assert config.ai.daily_budget_usd == 2.0
+    assert config.ai.daily_max_jobs == 0
+    assert config.ai.daily_budget_usd == 0.0
+    assert config.ai.daily_token_limit == 10_000_000
     assert config.ai.execution_mode == "background"
     assert config.access.mode == "private_network"
     assert config.public_home.poll_seconds == 30

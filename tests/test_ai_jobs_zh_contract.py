@@ -513,7 +513,7 @@ def test_runtime_policy_changes_schema_identity(monkeypatch):
     assert after != before
 
 
-def test_daily_paid_submission_limit_is_atomic_and_capped_at_four(tmp_path):
+def test_daily_submission_count_is_not_capped_at_four(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     jobs = [_create_job(repository, ticker) for ticker in ("AAA", "BBB", "CCC", "DDD", "EEE")]
     for index, job in enumerate(jobs[:4]):
@@ -530,10 +530,38 @@ def test_daily_paid_submission_limit_is_atomic_and_capped_at_four(tmp_path):
     assert claimed["job_id"] == jobs[4]["job_id"]
     assert repository.mark_submission_started(
         jobs[4]["job_id"], owner, daily_limit=100, daily_budget_usd=100
-    ) == "daily_limit"
-    blocked = repository.get_job(jobs[4]["job_id"])
+    ) == "started"
+
+
+def test_daily_token_limit_is_atomic(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    first = _create_job(repository, "AAA")
+    second = _create_job(repository, "BBB")
+
+    first_owner = "token-owner-one"
+    assert repository.claim_due(first_owner, 60)["job_id"] == first["job_id"]
+    assert repository.mark_submission_started(
+        first["job_id"],
+        first_owner,
+        daily_token_limit=200_000,
+    ) == "started"
+    repository.link_background_response(
+        first["job_id"],
+        first_owner,
+        "resp_atomic_token_limit",
+    )
+    repository.fail(first["job_id"], first_owner, "provider_failed")
+
+    second_owner = "token-owner-two"
+    assert repository.claim_due(second_owner, 60)["job_id"] == second["job_id"]
+    assert repository.mark_submission_started(
+        second["job_id"],
+        second_owner,
+        daily_token_limit=200_000,
+    ) == "daily_token_limit"
+    blocked = repository.get_job(second["job_id"])
     assert blocked["status"] == "budget_blocked"
-    assert blocked["error_code"] == "daily_job_limit_reached"
+    assert blocked["error_code"] == "daily_token_limit_reached"
     assert blocked["submission_started_at"] is None
 
 
@@ -542,11 +570,24 @@ def test_global_concurrency_limit_defers_a_second_paid_submission(tmp_path):
     first = _create_job(repository, "AAA")
     second = _create_job(repository, "BBB")
 
+    pending_snapshot = repository.budget_snapshot(
+        daily_limit=0,
+        daily_budget_usd=0,
+    )
+    assert pending_snapshot["concurrency_available"] is True
+    assert pending_snapshot["active_job"] is None
+
     first_claim = repository.claim_due("owner-one", 60)
     assert first_claim["job_id"] == first["job_id"]
     assert repository.mark_submission_started(
         first["job_id"], "owner-one", daily_limit=4
     ) == "started"
+    active_snapshot = repository.budget_snapshot(
+        daily_limit=0,
+        daily_budget_usd=0,
+    )
+    assert active_snapshot["concurrency_available"] is False
+    assert active_snapshot["active_job"]["job_id"] == first["job_id"]
 
     second_claim = repository.claim_due("owner-two", 60)
     assert second_claim["job_id"] == second["job_id"]
@@ -587,6 +628,9 @@ def test_recent_unknown_submission_holds_the_global_concurrency_slot(tmp_path):
     )
     assert snapshot["concurrency_available"] is False
     assert snapshot["active_job"]["error_code"] == "submission_outcome_unknown"
+    assert snapshot["token_budget_used_tokens"] == runtime.token_reservation(
+        "earnings_impact"
+    )
     assert repository.get_job(first["job_id"])["budget_charge_microusd"] == (
         runtime.budget_reservation_microusd("earnings_impact")
     )
@@ -688,11 +732,23 @@ def test_explicit_provider_rejection_does_not_create_an_unknown_submission_lock(
 
     failed = repository.get_job(first["job_id"])
     assert failed["error_code"] == "provider_auth_failed"
+    assert failed["usage_total_tokens"] == 0
+    assert failed["budget_charge_microusd"] == 0
     assert repository.health()["submission_unknown"] == 0
+    snapshot = repository.budget_snapshot(
+        daily_limit=0,
+        daily_budget_usd=0,
+        daily_token_limit=runtime.token_reservation("earnings_impact"),
+    )
+    assert snapshot["token_budget_used_tokens"] == 0
+    assert snapshot["token_budget_available"] is True
     second_claim = repository.claim_due("second-owner", 60)
     assert second_claim["job_id"] == second["job_id"]
     assert repository.mark_submission_started(
-        second["job_id"], "second-owner", daily_limit=4
+        second["job_id"],
+        "second-owner",
+        daily_limit=4,
+        daily_token_limit=runtime.token_reservation("earnings_impact"),
     ) == "started"
 
 

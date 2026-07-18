@@ -89,6 +89,7 @@ def _runtime_settings(
     scheduled_times: tuple[str, ...] = ("08:00", "12:00", "16:00"),
     daily_max_jobs: int = 4,
     daily_budget_usd: float = 2.0,
+    daily_token_limit: int = 10_000_000,
     analysis_cooldown_seconds: int = 30,
 ) -> SimpleNamespace:
     return SimpleNamespace(
@@ -96,6 +97,7 @@ def _runtime_settings(
             manual_analysis_enabled=manual,
             daily_max_jobs=daily_max_jobs,
             daily_budget_usd=daily_budget_usd,
+            daily_token_limit=daily_token_limit,
             manual_analysis_cooldown_seconds=analysis_cooldown_seconds,
         ),
         catalyst=SimpleNamespace(
@@ -522,14 +524,16 @@ def test_ai_worker_uses_fresh_runtime_budget_without_restart(
         openai_api_key=SecretStr("test-only-key"),
         openai_daily_max_jobs=4,
         openai_daily_budget_usd=2.0,
+        openai_daily_token_limit=10_000_000,
         openai_manual_cooldown_seconds=30,
     )
     effective = _runtime_settings(
         daily_max_jobs=3,
         daily_budget_usd=1.25,
+        daily_token_limit=9_000_000,
         analysis_cooldown_seconds=45,
     )
-    seen: list[tuple[int, float, int]] = []
+    seen: list[tuple[int, float, int, int]] = []
 
     monkeypatch.setattr(
         "app.services.runtime_settings.get_effective_runtime_settings",
@@ -546,6 +550,7 @@ def test_ai_worker_uses_fresh_runtime_budget_without_restart(
             (
                 worker_settings.openai_daily_max_jobs,
                 worker_settings.openai_daily_budget_usd,
+                worker_settings.openai_daily_token_limit,
                 worker_settings.openai_manual_cooldown_seconds,
             )
         )
@@ -555,10 +560,14 @@ def test_ai_worker_uses_fresh_runtime_budget_without_restart(
     task = AIJobsTask("runtime-budget", settings=settings)
     first = asyncio.run(task())
     effective.ai.daily_budget_usd = 1.0
+    effective.ai.daily_token_limit = 8_000_000
     second = asyncio.run(task())
 
     assert first.status == second.status == "idle"
-    assert seen == [(3, 1.25, 45), (3, 1.0, 45)]
+    assert seen == [
+        (3, 1.25, 9_000_000, 45),
+        (3, 1.0, 8_000_000, 45),
+    ]
 
 
 @pytest.mark.parametrize("mode", ["read", "off"])

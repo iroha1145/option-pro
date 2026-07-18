@@ -10,6 +10,7 @@ from threading import Barrier
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app.api.runtime_settings import router
 from app.personal_config import load_personal_config
@@ -18,6 +19,7 @@ from app.services.runtime_settings import (
     RuntimeAISettingsPatch,
     RuntimeCatalystSettingsPatch,
     RuntimeSettingsPatch,
+    RuntimeSettingsDocumentV1,
     RuntimeSettingsRevisionNotFound,
     RuntimeSettingsStorageError,
     RuntimeSettingsStore,
@@ -54,12 +56,42 @@ def make_client(store: RuntimeSettingsStore) -> TestClient:
     return TestClient(app, base_url="http://localhost")
 
 
+def make_v1_payload(
+    *,
+    version: int = 4,
+    manual_enabled: bool = True,
+    scheduled_enabled: bool = False,
+    scheduled_times: tuple[str, ...] = ("08:00", "12:00", "16:00"),
+) -> dict:
+    return {
+        "schema_version": 1,
+        "version": version,
+        "updated_at": "2026-07-16T00:00:00Z",
+        "settings": {
+            "ai": {
+                "daily_max_jobs": 4,
+                "daily_budget_usd": 10.0,
+                "manual_analysis_enabled": manual_enabled,
+                "manual_analysis_cooldown_seconds": 30,
+            },
+            "catalyst": {
+                "sync_seconds": 120,
+                "focus_seconds": 1800,
+                "manual_refresh_cooldown_seconds": 30,
+                "scheduled_analysis_enabled": scheduled_enabled,
+                "scheduled_times_et": list(scheduled_times),
+            },
+        },
+    }
+
+
 def test_defaults_follow_non_secret_personal_configuration(tmp_path: Path) -> None:
     personal = load_personal_config()
     store = make_store(tmp_path / "runtime-settings.json")
 
     document = store.read()
 
+    assert document.schema_version == 2
     assert document.version == 1
     assert document.settings.ai.daily_max_jobs == personal.ai.daily_max_jobs
     assert document.settings.ai.daily_budget_usd == personal.ai.daily_budget_usd
@@ -381,6 +413,153 @@ def test_legacy_false_action_switches_in_backup_are_ignored_on_rollback(
     assert "manual_refresh_enabled" not in catalyst
 
 
+def test_v1_contract_keeps_the_previous_release_constraints() -> None:
+    payload = make_v1_payload()
+
+    assert RuntimeSettingsDocumentV1.model_validate(payload).schema_version == 1
+
+    payload["settings"]["ai"]["daily_max_jobs"] = 0
+    with pytest.raises(ValidationError):
+        RuntimeSettingsDocumentV1.model_validate(payload)
+
+    payload = make_v1_payload(
+        scheduled_times=tuple(f"{hour:02d}:00" for hour in range(9))
+    )
+    with pytest.raises(ValidationError):
+        RuntimeSettingsDocumentV1.model_validate(payload)
+
+    payload = make_v1_payload()
+    payload["settings"]["ai"]["daily_token_limit"] = 10_000_000
+    with pytest.raises(ValidationError):
+        RuntimeSettingsDocumentV1.model_validate(payload)
+
+
+def test_v1_read_migrates_limits_but_preserves_owner_switches_and_schedule(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "runtime-settings.json"
+    store = make_store(path)
+    payload = make_v1_payload(
+        manual_enabled=False,
+        scheduled_enabled=False,
+        scheduled_times=("07:15", "13:45"),
+    )
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    migrated = store.read()
+
+    assert migrated.schema_version == 2
+    assert migrated.version == 4
+    assert migrated.settings.ai.daily_max_jobs == 0
+    assert migrated.settings.ai.daily_budget_usd == 0.0
+    assert migrated.settings.ai.daily_token_limit == 10_000_000
+    assert migrated.settings.ai.manual_analysis_enabled is False
+    assert migrated.settings.catalyst.scheduled_analysis_enabled is False
+    assert migrated.settings.catalyst.scheduled_times_et == ("07:15", "13:45")
+    assert "daily_token_limit" not in json.loads(path.read_text(encoding="utf-8"))[
+        "settings"
+    ]["ai"]
+
+
+def test_first_v1_write_preserves_exact_pre_v2_snapshot_and_can_restore_it(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "runtime-settings.json"
+    store = make_store(path)
+    payload = make_v1_payload(
+        manual_enabled=False,
+        scheduled_enabled=False,
+        scheduled_times=("07:15", "13:45"),
+    )
+    original = (json.dumps(payload, indent=2, ensure_ascii=False) + "\n").encode()
+    path.write_bytes(original)
+
+    updated = store.update(
+        RuntimeSettingsPatch(
+            ai=RuntimeAISettingsPatch(manual_analysis_cooldown_seconds=45),
+        ),
+        expected_version=4,
+    )
+
+    assert updated.schema_version == 2
+    assert updated.version == 5
+    assert json.loads(path.read_text(encoding="utf-8"))["schema_version"] == 2
+    assert store.pre_v2_snapshot_path.read_bytes() == original
+    assert stat.S_IMODE(store.pre_v2_snapshot_path.stat().st_mode) == 0o600
+
+    old_release_document = RuntimeSettingsDocumentV1.model_validate(
+        json.loads(store.pre_v2_snapshot_path.read_bytes())
+    )
+    assert old_release_document.settings.ai.daily_max_jobs == 4
+    assert old_release_document.settings.catalyst.scheduled_times_et == (
+        "07:15",
+        "13:45",
+    )
+
+    restored = store.restore_pre_v2_snapshot()
+
+    assert restored == old_release_document
+    assert path.read_bytes() == original
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert RuntimeSettingsDocumentV1.model_validate(
+        json.loads(path.read_bytes())
+    ) == old_release_document
+
+
+def test_pre_v2_snapshot_collision_fails_closed_without_changing_v1_current(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "runtime-settings.json"
+    store = make_store(path)
+    original = (json.dumps(make_v1_payload(), indent=2) + "\n").encode()
+    path.write_bytes(original)
+    store.pre_v2_snapshot_path.write_bytes(
+        (json.dumps(make_v1_payload(version=3), indent=2) + "\n").encode()
+    )
+
+    with pytest.raises(RuntimeSettingsStorageError, match="snapshot collision"):
+        store.update(
+            RuntimeSettingsPatch(
+                ai=RuntimeAISettingsPatch(manual_analysis_cooldown_seconds=45),
+            ),
+            expected_version=4,
+        )
+
+    assert path.read_bytes() == original
+    assert not store._backup_path(4).exists()
+
+
+def test_v1_backup_is_migrated_on_rollback_without_enabling_scheduled_analysis(
+    tmp_path: Path,
+) -> None:
+    store = make_store(tmp_path / "runtime-settings.json")
+    current = store.update(
+        RuntimeSettingsPatch(
+            ai=RuntimeAISettingsPatch(manual_analysis_cooldown_seconds=45),
+        ),
+        expected_version=1,
+    )
+    backup_path = store._backup_path(1)
+    backup = make_v1_payload(
+        version=1,
+        manual_enabled=False,
+        scheduled_enabled=False,
+        scheduled_times=("07:15", "13:45"),
+    )
+    backup_path.write_text(json.dumps(backup), encoding="utf-8")
+
+    restored = store.rollback(1, expected_version=current.version)
+
+    assert restored.schema_version == 2
+    assert restored.version == 3
+    assert restored.settings.ai.daily_max_jobs == 0
+    assert restored.settings.ai.daily_budget_usd == 0.0
+    assert restored.settings.ai.daily_token_limit == 10_000_000
+    assert restored.settings.ai.manual_analysis_enabled is False
+    assert restored.settings.catalyst.scheduled_analysis_enabled is False
+    assert restored.settings.catalyst.scheduled_times_et == ("07:15", "13:45")
+
+
 def test_api_reads_updates_history_and_rolls_back_without_secret_fields(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -397,6 +576,7 @@ def test_api_reads_updates_history_and_rolls_back_without_secret_fields(
             "settings": {
                 "ai": {
                     "daily_budget_usd": 2.75,
+                    "daily_token_limit": 9_000_000,
                     "manual_analysis_enabled": True,
                     "manual_analysis_cooldown_seconds": 90,
                 },
@@ -418,6 +598,7 @@ def test_api_reads_updates_history_and_rolls_back_without_secret_fields(
     assert updated.status_code == 200
     assert updated.json()["version"] == 2
     assert updated.json()["settings"]["ai"]["daily_budget_usd"] == 2.75
+    assert updated.json()["settings"]["ai"]["daily_token_limit"] == 9_000_000
     assert updated.json()["settings"]["catalyst"]["scheduled_analysis_enabled"]
     assert updated.json()["settings"]["catalyst"]["scheduled_times_et"] == [
         "08:00",
@@ -435,7 +616,7 @@ def test_api_reads_updates_history_and_rolls_back_without_secret_fields(
     assert "environment-secret-marker" not in combined
     assert "api_key" not in combined
     assert "password" not in combined
-    assert "token" not in combined
+    assert "api_token" not in combined
     assert "manual_force_reanalysis" not in combined
     assert "manual_refresh_enabled" not in combined
 
@@ -557,6 +738,7 @@ def test_effective_settings_reader_observes_updates_without_process_restart(
     [
         {"api_key": "submitted-secret-marker"},
         {"Token": "submitted-secret-marker"},
+        {"daily_token_limit_key": "submitted-secret-marker"},
         {"nested": {"PASSWORD": "submitted-secret-marker"}},
         {"nested": [{"clientSecret": "submitted-secret-marker"}]},
     ],

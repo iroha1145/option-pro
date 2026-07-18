@@ -483,6 +483,9 @@ async def process_job(
                 daily_budget_usd=float(
                     getattr(settings, "openai_daily_budget_usd", 2.0)
                 ),
+                daily_token_limit=int(
+                    getattr(settings, "openai_daily_token_limit", 10_000_000)
+                ),
                 cooldown_seconds=int(
                     getattr(settings, "openai_manual_cooldown_seconds", 30)
                 ),
@@ -638,6 +641,9 @@ async def run_configured_once(
         update={
             "openai_daily_max_jobs": effective.ai.daily_max_jobs,
             "openai_daily_budget_usd": effective.ai.daily_budget_usd,
+            "openai_daily_token_limit": int(
+                getattr(effective.ai, "daily_token_limit", 10_000_000)
+            ),
             "openai_manual_cooldown_seconds": (
                 effective.ai.manual_analysis_cooldown_seconds
             ),

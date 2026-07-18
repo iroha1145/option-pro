@@ -760,7 +760,7 @@ def test_scheduled_switch_never_releases_a_manual_queue_entry(
     )
     blocked = repository.get_job(manual["job_id"])
 
-    assert (processed, state) == (1, "analysis_disabled")
+    assert (processed, state) == (1, "enabled")
     assert blocked["status"] == "failed"
     assert blocked["error_code"] == "manual_analysis_disabled"
     assert blocked["submission_started_at"] is None

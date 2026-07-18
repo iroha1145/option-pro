@@ -76,15 +76,21 @@ class Settings(BaseSettings):
     )
     openai_daily_max_jobs: int = Field(
         default=_PERSONAL_CONFIG.ai.daily_max_jobs,
-        ge=1,
-        le=4,
+        ge=0,
+        le=100_000,
         alias="OPENAI_DAILY_MAX_JOBS",
     )
     openai_daily_budget_usd: float = Field(
         default=_PERSONAL_CONFIG.ai.daily_budget_usd,
-        ge=0.01,
-        le=100.0,
+        ge=0.0,
+        le=10_000.0,
         alias="OPENAI_DAILY_BUDGET_USD",
+    )
+    openai_daily_token_limit: int = Field(
+        default=_PERSONAL_CONFIG.ai.daily_token_limit,
+        ge=102_400,
+        le=100_000_000,
+        alias="OPENAI_DAILY_TOKEN_LIMIT",
     )
     openai_manual_cooldown_seconds: int = Field(
         default=_PERSONAL_CONFIG.catalyst.manual_refresh_cooldown_seconds,
@@ -272,6 +278,7 @@ class Settings(BaseSettings):
             "openai_max_concurrency": _PERSONAL_CONFIG.ai.max_concurrency,
             "openai_daily_max_jobs": _PERSONAL_CONFIG.ai.daily_max_jobs,
             "openai_daily_budget_usd": _PERSONAL_CONFIG.ai.daily_budget_usd,
+            "openai_daily_token_limit": _PERSONAL_CONFIG.ai.daily_token_limit,
             "openai_manual_cooldown_seconds": (
                 _PERSONAL_CONFIG.catalyst.manual_refresh_cooldown_seconds
             ),

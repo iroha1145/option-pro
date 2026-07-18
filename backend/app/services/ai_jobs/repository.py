@@ -133,10 +133,16 @@ def _task_budget_reservation_microusd(job_type: str) -> int:
     return budget_reservation_microusd(job_type)
 
 
-def _minimum_task_budget_reservation_microusd() -> int:
-    from app.services.ai_jobs.runtime import minimum_budget_reservation_microusd
+def _task_token_reservation(job_type: str) -> int:
+    from app.services.ai_jobs.runtime import token_reservation
 
-    return minimum_budget_reservation_microusd()
+    return token_reservation(job_type)
+
+
+def _minimum_task_token_reservation() -> int:
+    from app.services.ai_jobs.runtime import minimum_token_reservation
+
+    return minimum_token_reservation()
 
 
 def _settled_budget_charge_microusd(
@@ -1110,18 +1116,21 @@ class AIJobRepository:
         *,
         daily_limit: int = 4,
         daily_budget_usd: float = 2.0,
+        daily_token_limit: int = 10_000_000,
         cooldown_seconds: int = 0,
         unknown_submission_hold_seconds: int = 86400,
     ) -> str:
-        """Atomically enforce concurrency, daily count, and dollar budget.
+        """Atomically enforce concurrency, cooldown, and daily Token usage.
 
         An unknown submission remains terminal and is never retried. It reserves
-        the single paid slot only for the configured response recovery window so
-        an abandoned record cannot block every later analysis forever.
+        the single paid slot only for the configured response recovery window.
+        The former count and dollar arguments remain API-compatible but no
+        longer block work; zero represents their disabled state.
         """
 
-        if daily_limit < 1:
-            raise ValueError("daily_limit must be positive")
+        del daily_limit, daily_budget_usd
+        if not 102_400 <= int(daily_token_limit) <= 100_000_000:
+            raise ValueError("daily_token_limit is invalid")
         now_dt = _utcnow()
         now = _iso(now_dt)
         unknown_submission_cutoff = _iso(
@@ -1135,8 +1144,7 @@ class AIJobRepository:
             now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
             + timedelta(days=1)
         )
-        paid_limit = min(4, max(1, int(daily_limit)))
-        budget_limit_microusd = max(1, round(float(daily_budget_usd) * 1_000_000))
+        token_limit = int(daily_token_limit)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
@@ -1153,6 +1161,7 @@ class AIJobRepository:
             reservation_microusd = _task_budget_reservation_microusd(
                 str(row["job_type"])
             )
+            token_reservation = _task_token_reservation(str(row["job_type"]))
             in_flight = int(
                 connection.execute(
                     """
@@ -1212,21 +1221,23 @@ class AIJobRepository:
                     )
                     connection.commit()
                     return "cooldown"
-            submitted_today = int(
-                connection.execute(
-                    """
-                    SELECT COUNT(*) FROM ai_jobs
-                    WHERE submission_started_at>=? AND submission_started_at<?
-                    """,
-                    (day_start, day_end),
-                ).fetchone()[0]
+            token_rows = connection.execute(
+                """SELECT job_type,usage_total_tokens FROM ai_jobs
+                   WHERE submission_started_at>=? AND submission_started_at<?""",
+                (day_start, day_end),
+            ).fetchall()
+            tokens_used = sum(
+                int(item["usage_total_tokens"])
+                if item["usage_total_tokens"] is not None
+                else _task_token_reservation(str(item["job_type"]))
+                for item in token_rows
             )
-            if submitted_today >= paid_limit:
+            if tokens_used + token_reservation > token_limit:
                 connection.execute(
                     """
                     UPDATE ai_jobs
                     SET status='budget_blocked',
-                        error_code='daily_job_limit_reached',completed_at=?,
+                        error_code='daily_token_limit_reached',completed_at=?,
                         next_attempt_at=NULL,lease_owner=NULL,
                         lease_expires_at=NULL,updated_at=?
                     WHERE job_id=? AND lease_owner=? AND status='pending'
@@ -1234,30 +1245,7 @@ class AIJobRepository:
                     (now, now, job_id, owner),
                 )
                 connection.commit()
-                return "daily_limit"
-            charged_today = int(
-                connection.execute(
-                    """
-                    SELECT COALESCE(SUM(budget_charge_microusd),0) FROM ai_jobs
-                    WHERE submission_started_at>=? AND submission_started_at<?
-                    """,
-                    (day_start, day_end),
-                ).fetchone()[0]
-            )
-            if charged_today + reservation_microusd > budget_limit_microusd:
-                connection.execute(
-                    """
-                    UPDATE ai_jobs
-                    SET status='budget_blocked',
-                        error_code='daily_budget_usd_reached',completed_at=?,
-                        next_attempt_at=NULL,lease_owner=NULL,
-                        lease_expires_at=NULL,updated_at=?
-                    WHERE job_id=? AND lease_owner=? AND status='pending'
-                    """,
-                    (now, now, job_id, owner),
-                )
-                connection.commit()
-                return "daily_budget"
+                return "daily_token_limit"
             updated = connection.execute(
                 """
                 UPDATE ai_jobs
@@ -1459,18 +1447,50 @@ class AIJobRepository:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             current = connection.execute(
-                """SELECT job_type,budget_charge_microusd FROM ai_jobs
+                """SELECT job_type,budget_charge_microusd,openai_response_id
+                   FROM ai_jobs
                    WHERE job_id=? AND lease_owner=?""",
                 (job_id, owner),
             ).fetchone()
             if current is None:
                 connection.rollback()
                 raise RuntimeError("ai_job_lease_lost")
-            usage_values = usage or {}
+            usage_values = dict(usage or {})
+            has_reported_usage = any(
+                usage_values.get(field) is not None
+                for field in (
+                    "input_tokens",
+                    "cached_input_tokens",
+                    "output_tokens",
+                    "reasoning_tokens",
+                    "total_tokens",
+                )
+            )
+            confirmed_without_usage = bool(
+                not has_reported_usage
+                and current["openai_response_id"] is None
+                and safe_code != "submission_outcome_unknown"
+            )
+            if confirmed_without_usage:
+                # A local failure or an explicit provider rejection without a
+                # durable response identity did not start recoverable model
+                # work. Record a settled zero instead of holding the task's
+                # worst-case Token reservation until the UTC day changes.
+                usage_values.update(
+                    {
+                        "input_tokens": 0,
+                        "cached_input_tokens": 0,
+                        "output_tokens": 0,
+                        "reasoning_tokens": 0,
+                        "total_tokens": 0,
+                    }
+                )
             budget_charge_microusd = int(
                 current["budget_charge_microusd"] or 0
             )
-            if usage is not None:
+            if confirmed_without_usage:
+                budget_charge_microusd = 0
+            elif usage is not None:
                 budget_charge_microusd = _settled_budget_charge_microusd(
                     str(current["job_type"]),
                     usage_values,
@@ -1701,6 +1721,7 @@ class AIJobRepository:
         *,
         daily_limit: int,
         daily_budget_usd: float,
+        daily_token_limit: int = 10_000_000,
         cooldown_seconds: int = 0,
         unknown_submission_hold_seconds: int = 86400,
         now: datetime | None = None,
@@ -1732,14 +1753,23 @@ class AIJobRepository:
                 """,
                 (_iso(day_start_dt), _iso(day_end_dt)),
             ).fetchone()
+            token_rows = connection.execute(
+                """SELECT job_type,usage_total_tokens FROM ai_jobs
+                   WHERE submission_started_at>=? AND submission_started_at<?""",
+                (_iso(day_start_dt), _iso(day_end_dt)),
+            ).fetchall()
             active = connection.execute(
                 """
                 SELECT j.*,s.submission_source FROM ai_jobs AS j
                 JOIN ai_job_sources AS s ON s.job_id=j.job_id
-                WHERE j.status IN ('pending','queued','in_progress')
-                   OR (j.submission_started_at IS NOT NULL
-                       AND j.error_code='submission_outcome_unknown'
-                       AND j.submission_started_at>=?)
+                WHERE j.submission_started_at IS NOT NULL
+                  AND (
+                    j.status IN ('queued','in_progress')
+                    OR (
+                      j.error_code='submission_outcome_unknown'
+                      AND j.submission_started_at>=?
+                    )
+                  )
                 ORDER BY j.created_at LIMIT 1
                 """,
                 (unknown_submission_cutoff,),
@@ -1757,8 +1787,16 @@ class AIJobRepository:
             ).fetchone()
         submitted_jobs = int(totals["submitted_jobs"] if totals else 0)
         charged_microusd = int(totals["charged"] if totals else 0)
-        daily_limit = min(4, max(1, int(daily_limit)))
-        budget_limit_microusd = max(1, round(float(daily_budget_usd) * 1_000_000))
+        del daily_limit, daily_budget_usd
+        token_limit = int(daily_token_limit)
+        if not 102_400 <= token_limit <= 100_000_000:
+            raise ValueError("daily_token_limit is invalid")
+        token_budget_used = sum(
+            int(item["usage_total_tokens"])
+            if item["usage_total_tokens"] is not None
+            else _task_token_reservation(str(item["job_type"]))
+            for item in token_rows
+        )
         cooldown_until: datetime | None = None
         if latest_paid is not None and int(cooldown_seconds) > 0:
             activity_at = _parse_time(latest_paid["activity_at"])
@@ -1767,23 +1805,27 @@ class AIJobRepository:
                 if candidate > observed:
                     cooldown_until = candidate
         active_public = self.public(dict(active)) if active is not None else None
-        jobs_available = submitted_jobs < daily_limit
-        dollars_available = (
-            charged_microusd + _minimum_task_budget_reservation_microusd()
-            <= budget_limit_microusd
+        token_budget_available = (
+            token_budget_used + _minimum_task_token_reservation()
+            <= token_limit
         )
         return {
-            "daily_max_jobs": daily_limit,
-            "daily_budget_usd": budget_limit_microusd / 1_000_000,
+            "daily_max_jobs": 0,
+            "daily_budget_usd": 0.0,
+            "daily_token_limit": token_limit,
             "submitted_jobs": submitted_jobs,
             "budget_used_usd": charged_microusd / 1_000_000,
-            "budget_remaining_usd": max(
-                0, budget_limit_microusd - charged_microusd
-            ) / 1_000_000,
+            "budget_remaining_usd": None,
             "usage_total_tokens": int(totals["total_tokens"] if totals else 0),
-            "budget_available": bool(jobs_available and dollars_available),
-            "job_limit_available": jobs_available,
-            "dollar_budget_available": dollars_available,
+            "token_budget_used_tokens": token_budget_used,
+            "token_budget_remaining_tokens": max(
+                0,
+                token_limit - token_budget_used,
+            ),
+            "token_budget_available": token_budget_available,
+            "budget_available": token_budget_available,
+            "job_limit_available": True,
+            "dollar_budget_available": True,
             "concurrency_available": active is None,
             "active_job": active_public,
             "cooldown_until": _iso(cooldown_until) if cooldown_until else None,

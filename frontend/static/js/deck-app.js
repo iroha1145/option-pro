@@ -2842,14 +2842,18 @@
   });
 
   /* ---------- 主人会话 ---------- */
+  const HOURLY_ANALYSIS_TIMES_ET = Object.freeze(
+    Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`),
+  );
+
   function runtimeAIEnabled(documentState) {
     const settings = documentState && documentState.settings;
     return !!(
       settings
-      && (
-        settings.ai && settings.ai.manual_analysis_enabled
-        || settings.catalyst && settings.catalyst.scheduled_analysis_enabled
-      )
+      && settings.ai
+      && settings.ai.manual_analysis_enabled
+      && settings.catalyst
+      && settings.catalyst.scheduled_analysis_enabled
     );
   }
 
@@ -2884,7 +2888,7 @@
     aiToggle.textContent = enabled ? "分析：开启" : "分析：关闭";
     aiToggle.title = enabled
       ? "关闭新的手动与定时模型分析"
-      : "开启手动模型分析；不会自动创建任务";
+      : "开启手动与每小时模型分析";
   }
 
   async function toggleOwnerAI() {
@@ -2903,7 +2907,13 @@
             ai: { manual_analysis_enabled: false },
             catalyst: { scheduled_analysis_enabled: false },
           }
-        : { ai: { manual_analysis_enabled: true } };
+        : {
+            ai: { manual_analysis_enabled: true },
+            catalyst: {
+              scheduled_analysis_enabled: true,
+              scheduled_times_et: HOURLY_ANALYSIS_TIMES_ET,
+            },
+          };
       const updated = await N.updateRuntimeSettings({
         expected_version: Number(current.version),
         settings,

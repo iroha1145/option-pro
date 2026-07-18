@@ -199,6 +199,7 @@ def _raise_safe(error: CatalystError) -> None:
         "daily_job_limit_reached": 429,
         "daily_budget_usd_reached": 429,
         "daily_output_token_limit_reached": 429,
+        "daily_token_limit_reached": 429,
         "analysis_cooldown_active": 429,
         "analysis_in_progress": 409,
         "read_only_mode": 409,

@@ -2094,7 +2094,7 @@ def test_legacy_import_accepts_only_exact_current_simplified_chinese_result(tmp_
     }
 
 
-def test_scheduled_mode_uses_eastern_slots_once_and_queues_focus(tmp_path, monkeypatch):
+def test_scheduled_mode_uses_eastern_slots_once_and_queues_news(tmp_path, monkeypatch):
     etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
     now = datetime(2026, 7, 15, 12, 5, tzinfo=timezone.utc)  # 08:05 ET
     monkeypatch.setattr(local_module, "_utc_now", lambda: now)
@@ -2114,24 +2114,318 @@ def test_scheduled_mode_uses_eastern_slots_once_and_queues_focus(tmp_path, monke
         now=now + timedelta(minutes=20),
     )
 
-    assert first == {"queued": 2, "skipped": 0}
+    assert first == {"queued": 1, "skipped": 0}
     assert second == {"queued": 0, "skipped": 0}
     with sqlite3.connect(ai.path) as connection:
         assert dict(
             connection.execute(
                 "SELECT job_type,COUNT(*) FROM ai_jobs GROUP BY job_type"
             ).fetchall()
-        ) == {"market_focus": 1, "news_impact": 1}
+        ) == {"news_impact": 1}
         assert connection.execute(
             """SELECT COUNT(*) FROM ai_job_sources
                WHERE submission_source='scheduled'"""
-        ).fetchone()[0] == 2
+        ).fetchone()[0] == 1
 
     outside = datetime(2026, 7, 15, 15, 30, tzinfo=timezone.utc)  # 11:30 ET
     assert LocalCatalystIntelligence._scheduled_slot(
         outside,
         ("08:00", "12:00", "16:00"),
     ) is None
+
+
+def test_scheduled_hour_queues_at_most_twenty_recent_news(tmp_path, monkeypatch):
+    etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    changes = [
+        _news_change(
+            index + 1,
+            500 + index,
+            available_at=now - timedelta(minutes=index + 1),
+        )
+        for index in range(25)
+    ]
+    _apply_news(etl, changes, as_of=now - timedelta(seconds=1))
+    intelligence.reconcile()
+
+    assert intelligence.run_scheduled(now=now) == {
+        "queued": 20,
+        "skipped": 0,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='news_impact'"
+        ).fetchone()[0] == 20
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 0
+
+
+def test_scheduled_focus_waits_for_published_chinese_news(tmp_path, monkeypatch):
+    etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
+    first_now = datetime.now(timezone.utc).replace(microsecond=0)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: first_now)
+    _apply_news(
+        etl,
+        [_news_change(1, 590, available_at=first_now - timedelta(minutes=2))],
+        as_of=first_now - timedelta(minutes=1),
+    )
+    intelligence.reconcile()
+
+    assert intelligence.run_scheduled(now=first_now) == {
+        "queued": 1,
+        "skipped": 0,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        news_job = connection.execute(
+            "SELECT job_id FROM ai_jobs WHERE job_type='news_impact'"
+        ).fetchone()[0]
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 0
+
+    _finish_job(
+        ai,
+        news_job,
+        _news_result(
+            news_id=590,
+            change_sequence=1,
+            content_hash="hash-590-1",
+        ),
+    )
+    second_now = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(
+        minutes=1
+    )
+    monkeypatch.setattr(local_module, "_utc_now", lambda: second_now)
+    intelligence.reconcile()
+
+    assert intelligence.run_scheduled(now=second_now) == {
+        "queued": 1,
+        "skipped": 0,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        focus_row = connection.execute(
+            "SELECT payload_json,priority FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()
+        payload = json.loads(focus_row[0])
+        assert focus_row[1] == 75
+    assert payload["events"][0]["title_zh"] == "英伟达发布新一代芯片平台"
+    assert payload["events"][0]["summary_zh"] == (
+        "新品发布可能影响半导体供应链预期，实际影响仍需观察。"
+    )
+
+
+def test_scheduled_focus_waits_for_every_news_item_in_its_payload(
+    tmp_path,
+    monkeypatch,
+):
+    tickers = ("NVDA", "AMD", "AAPL", "MSFT")
+    etl, ai, intelligence = _stack(
+        tmp_path,
+        mode="scheduled",
+        canonical_tickers=tickers,
+    )
+    first_now = datetime.now(timezone.utc).replace(microsecond=0)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: first_now)
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                index,
+                600 + index,
+                available_at=first_now - timedelta(minutes=index),
+                title=f"{ticker} announces distinct catalyst {index}",
+                tickers=(ticker,),
+            )
+            for index, ticker in enumerate(tickers, start=1)
+        ],
+        as_of=first_now - timedelta(seconds=1),
+    )
+    intelligence.reconcile()
+
+    assert intelligence.run_scheduled(now=first_now) == {
+        "queued": 4,
+        "skipped": 0,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        news_jobs = connection.execute(
+            """SELECT job_id,payload_json FROM ai_jobs
+               WHERE job_type='news_impact' ORDER BY rowid"""
+        ).fetchall()
+    for job_id, payload_json in news_jobs[:3]:
+        job_payload = json.loads(payload_json)
+        _finish_job(
+            ai,
+            job_id,
+            _news_result(
+                news_id=job_payload["news_id"],
+                change_sequence=job_payload["change_sequence"],
+                content_hash=job_payload["content_hash"],
+                ticker=job_payload["allowed_tickers"][0],
+            ),
+        )
+    intelligence.reconcile()
+
+    second_now = first_now + timedelta(minutes=1)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: second_now)
+    assert intelligence.run_scheduled(now=second_now) == {
+        "queued": 0,
+        "skipped": 1,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 0
+
+    final_job_id, final_payload_json = news_jobs[3]
+    final_payload = json.loads(final_payload_json)
+    _finish_job(
+        ai,
+        final_job_id,
+        _news_result(
+            news_id=final_payload["news_id"],
+            change_sequence=final_payload["change_sequence"],
+            content_hash=final_payload["content_hash"],
+            ticker=final_payload["allowed_tickers"][0],
+        ),
+    )
+    third_now = first_now + timedelta(minutes=2)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: third_now)
+    intelligence.reconcile()
+    assert intelligence.run_scheduled(now=third_now) == {
+        "queued": 1,
+        "skipped": 0,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        focus_payload = json.loads(
+            connection.execute(
+                "SELECT payload_json FROM ai_jobs WHERE job_type='market_focus'"
+            ).fetchone()[0]
+        )
+    news_events = [
+        event
+        for event in focus_payload["events"]
+        if event.get("event_type") != "calendar"
+    ]
+    assert len(news_events) == 4
+    assert all(
+        event["title_zh"] != local_module.HOTSPOT_WAITING
+        and event["summary_zh"] != SUMMARY_WAITING
+        for event in news_events
+    )
+
+
+def test_scheduled_news_failure_retries_once_per_hour_then_focus_excludes_it(
+    tmp_path,
+    monkeypatch,
+):
+    hourly_slots = tuple(f"{hour:02d}:00" for hour in range(24))
+    tickers = ("NVDA", "AMD")
+    etl, ai, intelligence = _stack(
+        tmp_path,
+        mode="scheduled",
+        canonical_tickers=tickers,
+    )
+    first_now = datetime(2026, 7, 15, 12, 5, tzinfo=timezone.utc)
+    clock = {"now": first_now}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    monkeypatch.setattr(
+        ai_jobs_repository_module,
+        "_utcnow",
+        lambda: clock["now"],
+    )
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                index,
+                700 + index,
+                available_at=first_now - timedelta(minutes=index),
+                title=f"{ticker} reports independent event {index}",
+                tickers=(ticker,),
+            )
+            for index, ticker in enumerate(tickers, start=1)
+        ],
+        as_of=first_now - timedelta(seconds=1),
+    )
+    intelligence.reconcile()
+    assert intelligence.run_scheduled(
+        scheduled_times_et=hourly_slots,
+        now=first_now,
+    ) == {"queued": 2, "skipped": 0}
+
+    with sqlite3.connect(ai.path) as connection:
+        first_jobs = connection.execute(
+            """SELECT job_id,payload_json FROM ai_jobs
+               WHERE job_type='news_impact' ORDER BY rowid"""
+        ).fetchall()
+    failed_job_id = first_jobs[0][0]
+    _fail_job(ai, failed_job_id, "provider_failed")
+    successful_payload = json.loads(first_jobs[1][1])
+    _finish_job(
+        ai,
+        first_jobs[1][0],
+        _news_result(
+            news_id=successful_payload["news_id"],
+            change_sequence=successful_payload["change_sequence"],
+            content_hash=successful_payload["content_hash"],
+            ticker=successful_payload["allowed_tickers"][0],
+        ),
+    )
+    intelligence.reconcile()
+
+    same_hour = first_now + timedelta(minutes=10)
+    clock["now"] = same_hour
+    assert intelligence.run_scheduled(now=same_hour) == {
+        "queued": 0,
+        "skipped": 1,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='news_impact'"
+        ).fetchone()[0] == 2
+
+    for hours_after_start, expected_execution in ((1, 2), (2, 3)):
+        observed = first_now + timedelta(hours=hours_after_start)
+        clock["now"] = observed
+        assert intelligence.run_scheduled(
+            scheduled_times_et=hourly_slots,
+            now=observed,
+        ) == {"queued": 1, "skipped": 0}
+        with sqlite3.connect(ai.path) as connection:
+            retry = connection.execute(
+                """SELECT job_id,execution_number,retry_of_job_id
+                   FROM ai_jobs WHERE job_type='news_impact'
+                   ORDER BY execution_number DESC,created_at DESC LIMIT 1"""
+            ).fetchone()
+        assert retry[1] == expected_execution
+        assert retry[2] is not None
+        _fail_job(ai, retry[0], "provider_failed")
+
+    final_hour = first_now + timedelta(hours=3)
+    clock["now"] = final_hour
+    assert intelligence.run_scheduled(
+        scheduled_times_et=hourly_slots,
+        now=final_hour,
+    ) == {"queued": 1, "skipped": 1}
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='news_impact'"
+        ).fetchone()[0] == 4
+        focus_payload = json.loads(
+            connection.execute(
+                "SELECT payload_json FROM ai_jobs WHERE job_type='market_focus'"
+            ).fetchone()[0]
+        )
+    news_events = [
+        event
+        for event in focus_payload["events"]
+        if event.get("event_type") != "calendar"
+    ]
+    assert len(news_events) == 1
+    assert news_events[0]["title_zh"] != local_module.HOTSPOT_WAITING
+    assert news_events[0]["summary_zh"] != SUMMARY_WAITING
 
 
 def test_hotspot_and_latest_focus_reads_respect_historical_as_of(tmp_path, monkeypatch):
@@ -2457,7 +2751,7 @@ def test_scheduled_run_binds_jobs_to_the_selected_hotspot_snapshot(
     result = intelligence.run_scheduled(now=first_now + timedelta(minutes=5))
 
     assert first_revision != second_revision
-    assert result == {"queued": 2, "skipped": 0}
+    assert result == {"queued": 1, "skipped": 0}
     with sqlite3.connect(ai.path) as connection:
         jobs = {
             job_type: json.loads(payload)
@@ -2467,7 +2761,7 @@ def test_scheduled_run_binds_jobs_to_the_selected_hotspot_snapshot(
         }
     assert jobs["news_impact"]["change_sequence"] == 1
     assert jobs["news_impact"]["content_hash"] == "scheduled-v1"
-    assert jobs["market_focus"]["prepared_revision"] == first_revision
+    assert "market_focus" not in jobs
 
 
 def test_scheduled_slot_is_claimed_before_work_under_concurrency(
@@ -2524,13 +2818,13 @@ def test_scheduled_slot_is_claimed_before_work_under_concurrency(
 
     assert not errors
     assert outputs["second"] == {"queued": 0, "skipped": 0}
-    assert outputs["first"] == {"queued": 2, "skipped": 0}
+    assert outputs["first"] == {"queued": 1, "skipped": 0}
     with sqlite3.connect(ai.path) as connection:
         assert dict(
             connection.execute(
                 "SELECT job_type,COUNT(*) FROM ai_jobs GROUP BY job_type"
             ).fetchall()
-        ) == {"market_focus": 1, "news_impact": 1}
+        ) == {"news_impact": 1}
     with sqlite3.connect(intelligence.db_path) as connection:
         assert connection.execute(
             "SELECT COUNT(*) FROM catalyst_local_schedule_runs"
@@ -2553,7 +2847,7 @@ def test_scheduled_news_recovers_from_previous_utc_day_budget_block(
     intelligence.reconcile()
 
     assert intelligence.run_scheduled(now=first_day) == {
-        "queued": 2,
+        "queued": 1,
         "skipped": 0,
     }
     with sqlite3.connect(ai.path) as connection:
@@ -2571,7 +2865,7 @@ def test_scheduled_news_recovers_from_previous_utc_day_budget_block(
     monkeypatch.setattr(local_module, "_utc_now", lambda: second_day)
     assert intelligence.run_scheduled(now=second_day) == {
         "queued": 1,
-        "skipped": 1,
+        "skipped": 0,
     }
     with sqlite3.connect(ai.path) as connection:
         jobs = connection.execute(
@@ -2611,9 +2905,9 @@ def test_scheduled_empty_slot_releases_claim_for_later_etl(tmp_path, monkeypatch
     assert intelligence.run_scheduled(
         scheduled_times_et=("08:00",),
         now=second_now,
-    ) == {"queued": 2, "skipped": 0}
+    ) == {"queued": 1, "skipped": 0}
     with sqlite3.connect(ai.path) as connection:
-        assert connection.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0] == 1
 
 
 def test_scheduled_stale_claim_is_recovered_without_duplicate_focus(
@@ -2648,13 +2942,13 @@ def test_scheduled_stale_claim_is_recovered_without_duplicate_focus(
     assert intelligence.run_scheduled(
         scheduled_times_et=("08:00",),
         now=now,
-    ) == {"queued": 2, "skipped": 0}
+    ) == {"queued": 1, "skipped": 0}
     with sqlite3.connect(ai.path) as connection:
         assert dict(
             connection.execute(
                 "SELECT job_type,COUNT(*) FROM ai_jobs GROUP BY job_type"
             ).fetchall()
-        ) == {"market_focus": 1, "news_impact": 1}
+        ) == {"news_impact": 1}
 
 
 def test_market_focus_retry_reuses_immutable_snapshot_and_ai_job_chain(
