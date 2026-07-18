@@ -3077,15 +3077,51 @@ class LocalCatalystIntelligence:
         return payload
 
     def market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
+        include_owner_state = current_request_is_owner()
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT * FROM catalyst_local_focus_cycles WHERE cycle_id=?", (cycle_id,)
             ).fetchone()
         if row is None:
             return None
+        if include_owner_state and str(row["status"]) == "preparing":
+            # A confirmed POST may have created the idempotent paid job before
+            # the local link commit met a transient SQLite writer. Owner polling
+            # resumes that durable intent instead of waiting for scheduled ETL.
+            return self._resume_focus_intent(cycle_id)
+        if (
+            include_owner_state
+            and row["result_json"] is None
+            and str(row["status"]) != "cancelled"
+        ):
+            job_id = str(row["job_id"])
+            current_job = self._read_ai_job(job_id)
+            if current_job is not None and current_job.get("status") in {
+                "completed",
+                "failed",
+                "cancelled",
+                "budget_blocked",
+            }:
+                with self._connect() as connection:
+                    connection.execute("BEGIN IMMEDIATE")
+                    try:
+                        self._publish_completed_focus(
+                            connection,
+                            {job_id: current_job},
+                        )
+                        refreshed = connection.execute(
+                            "SELECT * FROM catalyst_local_focus_cycles WHERE cycle_id=?",
+                            (cycle_id,),
+                        ).fetchone()
+                        connection.commit()
+                    except Exception:
+                        connection.rollback()
+                        raise
+                if refreshed is not None:
+                    row = refreshed
         return self._focus_cycle_from_row(
             row,
-            include_owner_state=current_request_is_owner(),
+            include_owner_state=include_owner_state,
         )
 
     def latest_market_focus_cycle(self, *, now: datetime | None = None) -> dict[str, Any]:

@@ -1349,7 +1349,7 @@ def test_market_focus_payload_is_hash_bound_and_stays_immutable(tmp_path):
     assert stored_after == stored_before
 
 
-def test_market_focus_returns_pending_and_reconciles_after_local_lock(
+def test_owner_poll_recovers_market_focus_after_local_lock(
     tmp_path,
     monkeypatch,
 ):
@@ -1394,9 +1394,18 @@ def test_market_focus_returns_pending_and_reconciles_after_local_lock(
     assert intent[1].startswith("intent:mfc_")
     assert intent[2] == paid_payload
 
-    repaired = intelligence.reconcile()
+    _finish_job(ai, paid_job_id, _focus_result(ai, pending))
+    latest = intelligence.latest_market_focus_cycle(now=now)
+    pollable = latest["cycle"]
 
-    assert repaired["focus_links_recovered"] == 1
+    assert pollable["cycle_id"] == pending["cycle_id"]
+    assert pollable["status"] == "completed"
+    assert pollable["job_id"] == paid_job_id
+    assert pollable["result"] is not None
+    assert (
+        intelligence.hotspot_status(now=now)["last_consumed_revision"]
+        == prepared
+    )
 
     retried = intelligence.request_market_focus_cycle(
         expected_prepared_revision=prepared,
@@ -1404,6 +1413,8 @@ def test_market_focus_returns_pending_and_reconciles_after_local_lock(
     )
 
     assert retried["job_id"] == paid_job_id
+    assert retried["status"] == "completed"
+    assert retried["result"] is not None
     with sqlite3.connect(ai.path) as connection:
         assert connection.execute(
             "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
@@ -1414,7 +1425,47 @@ def test_market_focus_returns_pending_and_reconciles_after_local_lock(
                WHERE cycle_id=?""",
             (retried["cycle_id"],),
         ).fetchone()
-    assert linked == ("pending", paid_job_id)
+    assert linked == ("completed", paid_job_id)
+
+
+def test_reconcile_recovers_market_focus_after_local_lock(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime(2030, 7, 16, 10, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(
+        etl,
+        [_news_change(1, 73, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    original_connect, failing_connect = _focus_relink_commit_failure(
+        intelligence,
+        "database is locked",
+    )
+    monkeypatch.setattr(intelligence, "_connect", failing_connect)
+    pending = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+        as_of=now,
+    )
+    monkeypatch.setattr(intelligence, "_connect", original_connect)
+
+    repaired = intelligence.reconcile()
+
+    assert repaired["focus_links_recovered"] == 1
+    with sqlite3.connect(intelligence.db_path) as connection:
+        linked = connection.execute(
+            """SELECT status,job_id FROM catalyst_local_focus_cycles
+               WHERE cycle_id=?""",
+            (pending["cycle_id"],),
+        ).fetchone()
+    assert linked == ("pending", pending["job_id"])
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 1
 
 
 def test_market_focus_non_lock_relink_error_is_not_hidden(
