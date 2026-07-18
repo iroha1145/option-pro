@@ -1468,6 +1468,72 @@ def test_reconcile_recovers_market_focus_after_local_lock(
         ).fetchone()[0] == 1
 
 
+def test_owner_poll_defers_terminal_publish_during_local_lock(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime(2030, 7, 16, 10, 45, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(
+        etl,
+        [_news_change(1, 74, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+        as_of=now,
+    )
+    _finish_job(ai, cycle["job_id"], _focus_result(ai, cycle))
+
+    original_connect = intelligence._connect
+    failure = {"armed": True}
+
+    class _FailTerminalPublishBegin:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def execute(self, statement, *args, **kwargs):
+            normalized = " ".join(str(statement).split())
+            if normalized == "BEGIN IMMEDIATE" and failure["armed"]:
+                failure["armed"] = False
+                raise sqlite3.OperationalError("database is locked")
+            return self.connection.execute(statement, *args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(self.connection, name)
+
+    @contextmanager
+    def failing_connect():
+        with original_connect() as connection:
+            yield _FailTerminalPublishBegin(connection)
+
+    monkeypatch.setattr(intelligence, "_connect", failing_connect)
+    deferred = intelligence.latest_market_focus_cycle(now=now)["cycle"]
+
+    assert deferred["cycle_id"] == cycle["cycle_id"]
+    assert deferred["status"] == "in_progress"
+    assert deferred["local_publish_pending"] is True
+    assert deferred["result"] is None
+    assert intelligence.hotspot_status(now=now)["last_consumed_revision"] == 0
+
+    monkeypatch.setattr(intelligence, "_connect", original_connect)
+    published = intelligence.latest_market_focus_cycle(now=now)["cycle"]
+
+    assert published["cycle_id"] == cycle["cycle_id"]
+    assert published["status"] == "completed"
+    assert published["result"] is not None
+    assert (
+        intelligence.hotspot_status(now=now)["last_consumed_revision"]
+        == prepared
+    )
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 1
+
+
 def test_market_focus_non_lock_relink_error_is_not_hidden(
     tmp_path,
     monkeypatch,

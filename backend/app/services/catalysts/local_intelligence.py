@@ -3102,21 +3102,40 @@ class LocalCatalystIntelligence:
                 "cancelled",
                 "budget_blocked",
             }:
-                with self._connect() as connection:
-                    connection.execute("BEGIN IMMEDIATE")
-                    try:
-                        self._publish_completed_focus(
-                            connection,
-                            {job_id: current_job},
-                        )
-                        refreshed = connection.execute(
-                            "SELECT * FROM catalyst_local_focus_cycles WHERE cycle_id=?",
-                            (cycle_id,),
-                        ).fetchone()
-                        connection.commit()
-                    except Exception:
-                        connection.rollback()
+                try:
+                    with self._connect() as connection:
+                        connection.execute("BEGIN IMMEDIATE")
+                        try:
+                            self._publish_completed_focus(
+                                connection,
+                                {job_id: current_job},
+                            )
+                            refreshed = connection.execute(
+                                "SELECT * FROM catalyst_local_focus_cycles WHERE cycle_id=?",
+                                (cycle_id,),
+                            ).fetchone()
+                            connection.commit()
+                        except Exception:
+                            connection.rollback()
+                            raise
+                except Exception as error:
+                    if not _is_sqlite_write_contention(error):
                         raise
+                    # The paid task is already terminal, so a transient local
+                    # writer must not turn polling into a false failed cycle.
+                    # Keep the client polling and publish on its next read.
+                    deferred = self._focus_cycle_from_row(
+                        row,
+                        include_owner_state=True,
+                    )
+                    assert deferred is not None
+                    deferred.update(
+                        {
+                            "status": "in_progress",
+                            "local_publish_pending": True,
+                        }
+                    )
+                    return deferred
                 if refreshed is not None:
                     row = refreshed
         return self._focus_cycle_from_row(
