@@ -117,10 +117,10 @@ jobs:
           text = path.read_text(encoding="utf-8")
           if text.count("breakout_enabled = true") != 1:
               raise SystemExit("offline breakout override no longer matches personal.toml")
-          if text.count('catalyst_mode = "manual"') != 1:
+          if text.count('catalyst_mode = "scheduled"') != 1:
               raise SystemExit("offline Catalyst override no longer matches personal.toml")
           text = text.replace("breakout_enabled = true", "breakout_enabled = false", 1)
-          text = text.replace('catalyst_mode = "manual"', 'catalyst_mode = "off"', 1)
+          text = text.replace('catalyst_mode = "scheduled"', 'catalyst_mode = "off"', 1)
           path.write_text(text, encoding="utf-8")
           PY
 

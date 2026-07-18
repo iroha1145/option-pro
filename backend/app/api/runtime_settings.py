@@ -25,6 +25,7 @@ from app.services.runtime_settings import (
 
 _MAX_RUNTIME_SETTINGS_BODY_BYTES = 16 * 1024
 _FORBIDDEN_FIELD_FRAGMENTS = ("secret", "token", "password", "key")
+_SAFE_TOKEN_FIELD_NAMES = frozenset({"daily_token_limit"})
 
 router = APIRouter(prefix="/api/runtime-settings", tags=["runtime-settings"])
 
@@ -53,7 +54,13 @@ def _contains_forbidden_field(value: Any) -> bool:
     if isinstance(value, Mapping):
         for key, nested in value.items():
             normalized = str(key).casefold()
-            if any(fragment in normalized for fragment in _FORBIDDEN_FIELD_FRAGMENTS):
+            if (
+                normalized not in _SAFE_TOKEN_FIELD_NAMES
+                and any(
+                    fragment in normalized
+                    for fragment in _FORBIDDEN_FIELD_FRAGMENTS
+                )
+            ):
                 return True
             if _contains_forbidden_field(nested):
                 return True

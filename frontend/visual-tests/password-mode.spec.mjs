@@ -120,11 +120,12 @@ function responseFor(pathname) {
           manual_analysis_enabled: manualAnalysisEnabled,
           daily_max_jobs: 4,
           daily_budget_usd: 2,
+          daily_token_limit: 10000000,
           manual_analysis_cooldown_seconds: 30,
         },
         catalyst: {
           scheduled_analysis_enabled: scheduledAnalysisEnabled,
-          scheduled_times_et: ["08:00", "12:00", "16:00"],
+          scheduled_times_et: Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`),
         },
       },
     };
@@ -275,7 +276,16 @@ test("password mode keeps public research readable and reserves analysis control
   await page.locator("#owner-ai-toggle").click();
   expect((await enableRequest).postDataJSON()).toEqual({
     expected_version: 2,
-    settings: { ai: { manual_analysis_enabled: true } },
+    settings: {
+      ai: { manual_analysis_enabled: true },
+      catalyst: {
+        scheduled_analysis_enabled: true,
+        scheduled_times_et: Array.from(
+          { length: 24 },
+          (_, hour) => `${String(hour).padStart(2, "0")}:00`,
+        ),
+      },
+    },
   });
   await expect(page.locator("#owner-ai-toggle")).toHaveText("分析：开启");
   await expect(page.locator("#owner-ai-toggle")).toHaveAttribute("aria-pressed", "true");

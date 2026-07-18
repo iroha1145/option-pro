@@ -38,6 +38,26 @@ AMBIGUOUS_TICKERS = frozenset({"AI", "ON", "CAT"})
 TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-^]{0,11}$")
 SCHEMA_VERSION = "optix-local-catalyst-v2"
 SCHEDULE_CLAIM_TTL_SECONDS = 10 * 60
+SCHEDULED_NEWS_BATCH_SIZE = 20
+SCHEDULED_QUEUE_SOFT_LIMIT = 40
+SCHEDULED_NEWS_WINDOW_HOURS = 72
+SCHEDULED_NEWS_MAX_ATTEMPTS = 3
+SCHEDULED_FOCUS_EVENT_LIMIT = 20
+SCHEDULED_NEWS_RETRYABLE_ERRORS = frozenset(
+    {
+        "ai_empty_response",
+        "news_identity_mismatch",
+        "news_ticker_binding_mismatch",
+        "provider_failed",
+        "provider_incomplete",
+        "provider_incomplete_max_output_tokens",
+        "provider_rate_limited",
+        "provider_response_expired",
+        "provider_server_error",
+        "provider_unavailable",
+        "schema_validation_failed",
+    }
+)
 MANUAL_REFRESH_CLAIM_TTL_SECONDS = 10 * 60
 MANUAL_REFRESH_TYPES = ("news", "calendar", "source_health")
 ANALYSIS_LINK_BUSY_TIMEOUT_MS = 250
@@ -230,6 +250,15 @@ def _is_sqlite_write_contention(error: BaseException) -> bool:
 
 def _minute_bucket(value: datetime) -> str:
     observed = value.astimezone(timezone.utc).replace(second=0, microsecond=0)
+    return _iso(observed)
+
+
+def _hour_bucket(value: datetime) -> str:
+    observed = value.astimezone(timezone.utc).replace(
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
     return _iso(observed)
 
 
@@ -2467,6 +2496,116 @@ class LocalCatalystIntelligence:
         scheduled_text = _iso(scheduled_utc)
         return scheduled_text, scheduled_text
 
+    def _scheduled_news_candidates(
+        self,
+        *,
+        now: datetime,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Select recent active revisions without a published Chinese result."""
+
+        if limit <= 0:
+            return []
+        with self._connect() as connection:
+            try:
+                rows = connection.execute(
+                    """WITH latest AS (
+                           SELECT news_id,MAX(change_sequence) AS change_sequence
+                           FROM macrolens_etl_news_changes
+                           WHERE available_at<=? GROUP BY news_id
+                       ), active AS (
+                           SELECT c.news_id,c.change_sequence
+                           FROM latest l JOIN macrolens_etl_news_changes c
+                             ON c.news_id=l.news_id
+                            AND c.change_sequence=l.change_sequence
+                           WHERE c.operation='upsert' AND c.available_at<=?
+                       )
+                       SELECT r.* FROM active a
+                       JOIN catalyst_local_news_revisions r
+                         ON r.news_id=a.news_id
+                        AND r.change_sequence=a.change_sequence
+                       WHERE COALESCE(r.published_at,r.fetched_at)>=?
+                         AND NOT EXISTS (
+                             SELECT 1 FROM catalyst_local_analysis_links link
+                             WHERE link.news_id=r.news_id
+                               AND link.change_sequence=r.change_sequence
+                               AND link.content_hash=r.content_hash
+                               AND link.result_json IS NOT NULL
+                         )
+                       ORDER BY COALESCE(r.published_at,r.fetched_at) DESC,
+                                r.news_id DESC
+                       LIMIT ?""",
+                    (
+                        _iso(now),
+                        _iso(now),
+                        _iso(now - timedelta(hours=SCHEDULED_NEWS_WINDOW_HOURS)),
+                        min(100, int(limit)),
+                    ),
+                ).fetchall()
+            except sqlite3.OperationalError:
+                return []
+        output: list[dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            item["canonical_tickers"] = _loads(
+                item["canonical_tickers_json"],
+                [],
+            )
+            item["source_names"] = _loads(item["source_names_json"], [])
+            output.append(item)
+        return output
+
+    def _scheduled_job_for_revision(
+        self,
+        row: dict[str, Any],
+        *,
+        now: datetime,
+    ) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            visible, _detail = self._linked_news_job_at(
+                connection,
+                row,
+                as_of=now,
+            )
+            linked_job_ids = [
+                str(link["job_id"])
+                for link in connection.execute(
+                    """SELECT job_id FROM catalyst_local_analysis_links
+                       WHERE news_id=? AND change_sequence=? AND content_hash=?
+                         AND created_at<=?
+                       ORDER BY created_at,job_id""",
+                    (
+                        row["news_id"],
+                        row["change_sequence"],
+                        row["content_hash"],
+                        _iso(now),
+                    ),
+                ).fetchall()
+            ]
+        if visible is None:
+            return None
+        scheduled_attempts = 0
+        for job_id in linked_job_ids:
+            linked_job = self.ai_repository.get_job(job_id)
+            if linked_job is None:
+                continue
+            try:
+                public = self._identity_public_job(
+                    linked_job,
+                    expected_type="news_impact",
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+            if (
+                public is not None
+                and linked_job.get("submission_source") == "scheduled"
+                and linked_job.get("status") != "budget_blocked"
+            ):
+                scheduled_attempts += 1
+        output = dict(visible)
+        output["_scheduled_attempts"] = scheduled_attempts
+        return output
+
     def run_scheduled(
         self,
         *,
@@ -2526,8 +2665,54 @@ class LocalCatalystIntelligence:
                 connection.commit()
             if claimed != 1:
                 return {"queued": 0, "skipped": 0}
-        snapshot = self.hotspots(limit=3, now=observed)
-        if not snapshot["items"]:
+        snapshot = self.hotspots(limit=SCHEDULED_FOCUS_EVENT_LIMIT, now=observed)
+        queue_health = self.ai_repository.health()
+        active_queue = queue_health.get("pending")
+        if not queue_health.get("healthy") or not isinstance(active_queue, int):
+            active_queue = SCHEDULED_QUEUE_SOFT_LIMIT
+        # Keep one queue position available for a ready market-focus cycle. A
+        # continuous news backlog must not fill the soft limit and starve the
+        # hourly aggregate indefinitely.
+        batch_capacity = max(
+            0,
+            min(
+                SCHEDULED_NEWS_BATCH_SIZE,
+                SCHEDULED_QUEUE_SOFT_LIMIT - 1 - active_queue,
+            ),
+        )
+        queued = 0
+        skipped = 0
+        seen: set[int] = set()
+        candidates: list[dict[str, Any]] = []
+        focus_pending_news_ids: set[int] = set()
+        for item in snapshot["items"]:
+            news_id = int(item["representative_news_id"])
+            if news_id in seen:
+                continue
+            seen.add(news_id)
+            detail = self.news(news_id, as_of=observed)
+            if detail is None:
+                skipped += 1
+                focus_pending_news_ids.add(news_id)
+                continue
+            if detail["item"].get("analysis") is not None:
+                continue
+            focus_pending_news_ids.add(news_id)
+            candidate = dict(detail["item"])
+            candidates.append(candidate)
+        recent = self._scheduled_news_candidates(
+            now=observed,
+            limit=SCHEDULED_NEWS_BATCH_SIZE + len(seen),
+        )
+        for row in recent:
+            if len(candidates) >= SCHEDULED_NEWS_BATCH_SIZE:
+                break
+            news_id = int(row["news_id"])
+            if news_id in seen:
+                continue
+            seen.add(news_id)
+            candidates.append(row)
+        if not candidates and not snapshot["items"]:
             if slot is not None and claim_marker is not None:
                 with self._connect() as connection:
                     connection.execute(
@@ -2537,19 +2722,9 @@ class LocalCatalystIntelligence:
                     )
                     connection.commit()
             return {"queued": 0, "skipped": 0}
-        queued = 0
-        skipped = 0
-        seen: set[int] = set()
-        for item in snapshot["items"]:
-            news_id = int(item["representative_news_id"])
-            if news_id in seen:
-                continue
-            seen.add(news_id)
-            detail = self.news(news_id, as_of=observed)
-            if detail is None or detail["item"].get("analysis") is not None:
-                skipped += 1
-                continue
-            previous_job = detail.get("analysis_job")
+        for row in candidates:
+            news_id = int(row["news_id"])
+            previous_job = self._scheduled_job_for_revision(row, now=observed)
             previous_updated = (
                 _parse_time(str(previous_job.get("updated_at") or ""))
                 if isinstance(previous_job, dict)
@@ -2562,14 +2737,59 @@ class LocalCatalystIntelligence:
                 and previous_updated.date()
                 < observed.astimezone(timezone.utc).date()
             )
-            job = self.request_analysis(
-                news_id,
-                force=retry_previous_budget,
-                as_of=observed,
-                expected_change_sequence=int(detail["item"]["change_sequence"]),
-                expected_content_hash=str(detail["item"]["content_hash"]),
-                submission_source="scheduled",
+            retry_previous_failure = bool(
+                isinstance(previous_job, dict)
+                and previous_job.get("status") == "failed"
+                and previous_job.get("error_code")
+                in SCHEDULED_NEWS_RETRYABLE_ERRORS
+                and int(previous_job.get("_scheduled_attempts") or 0)
+                < SCHEDULED_NEWS_MAX_ATTEMPTS
+                and previous_updated is not None
+                and _hour_bucket(previous_updated) < _hour_bucket(observed)
             )
+            retry_previous = bool(
+                retry_previous_budget or retry_previous_failure
+            )
+            if isinstance(previous_job, dict) and not retry_previous:
+                status = str(previous_job.get("status") or "")
+                error_code = str(previous_job.get("error_code") or "")
+                attempts = int(previous_job.get("_scheduled_attempts") or 0)
+                permanently_skipped = bool(
+                    status in {"cancelled", "insufficient_context"}
+                    or (
+                        status == "failed"
+                        and (
+                            error_code not in SCHEDULED_NEWS_RETRYABLE_ERRORS
+                            or attempts >= SCHEDULED_NEWS_MAX_ATTEMPTS
+                        )
+                    )
+                )
+                if permanently_skipped:
+                    focus_pending_news_ids.discard(news_id)
+                skipped += 1
+                continue
+            if queued >= batch_capacity:
+                skipped += 1
+                continue
+            try:
+                job = self.request_analysis(
+                    news_id,
+                    force=retry_previous,
+                    as_of=observed,
+                    expected_change_sequence=int(row["change_sequence"]),
+                    expected_content_hash=str(row["content_hash"]),
+                    submission_source="scheduled",
+                )
+            except CatalystError as error:
+                if error.code == "news_revision_changed":
+                    skipped += 1
+                    continue
+                raise
+            except RuntimeError as error:
+                if str(error) == "ai_job_queue_full":
+                    skipped += 1
+                    break
+                raise
             if job.get("status") in {"pending", "queued", "in_progress"}:
                 queued += 1
             else:
@@ -2579,7 +2799,11 @@ class LocalCatalystIntelligence:
             if snapshot["items"]
             else 0
         )
-        if prepared_revision:
+        if (
+            prepared_revision
+            and not focus_pending_news_ids
+            and active_queue + queued < SCHEDULED_QUEUE_SOFT_LIMIT
+        ):
             with self._connect() as connection:
                 existing_focus = connection.execute(
                     """SELECT 1 FROM catalyst_local_focus_cycles
@@ -2710,7 +2934,7 @@ class LocalCatalystIntelligence:
             schema_sha256=schema_hash,
             max_queued=self.max_queued,
             submission_source=submission_source,
-            priority=60,
+            priority=75 if submission_source == "scheduled" else 60,
             force_retry=False,
         )
 
@@ -2820,10 +3044,16 @@ class LocalCatalystIntelligence:
         force: bool = False,
         as_of: datetime | None = None,
         submission_source: SubmissionSource = "manual",
+        published_news_only: bool = False,
     ) -> dict[str, Any]:
         revision_row, items = self._hotspots_for_revision(revision, limit=20)
-        if not items:
-            raise CatalystError("no_new_hot_events", "No prepared hotspot events are available", counts_for_circuit=False)
+        if published_news_only:
+            items = [
+                item
+                for item in items
+                if item.get("representative_title") != HOTSPOT_WAITING
+                and item.get("summary_zh") != SUMMARY_WAITING
+            ]
         observed = as_of or _utc_now()
         prepared_at = (
             _parse_time(str(revision_row["prepared_at"]))
@@ -2838,6 +3068,13 @@ class LocalCatalystIntelligence:
             )
         cycle_id = "mfc_" + uuid.uuid4().hex
         snapshot_as_of = _iso(observed)
+        calendar_events = self._focus_calendar_events(as_of=observed, limit=20)
+        if not items and not calendar_events:
+            raise CatalystError(
+                "no_new_hot_events",
+                "No prepared hotspot events are available",
+                counts_for_circuit=False,
+            )
         event_snapshot = [
             {
                 "event_group_id": item["event_group_id"],
@@ -2850,7 +3087,7 @@ class LocalCatalystIntelligence:
             }
             for item in items
         ]
-        event_snapshot.extend(self._focus_calendar_events(as_of=observed, limit=20))
+        event_snapshot.extend(calendar_events)
         input_hash = _sha({"prepared_revision": revision, "events": event_snapshot})
         allowed_events = [str(item["event_group_id"]) for item in event_snapshot]
         allowed_tickers = sorted({ticker for item in items for ticker in item["validated_tickers"]})
@@ -3037,7 +3274,7 @@ class LocalCatalystIntelligence:
                     schema_sha256=schema_hash,
                     max_queued=self.max_queued,
                     submission_source=submission_source,
-                    priority=60,
+                    priority=75 if submission_source == "scheduled" else 60,
                     force_retry=True,
                 )
                 updated_at = _iso()
@@ -3096,6 +3333,7 @@ class LocalCatalystIntelligence:
             force=force,
             as_of=observed,
             submission_source=submission_source,
+            published_news_only=submission_source == "scheduled",
         )
 
     def _focus_cycle_from_row(

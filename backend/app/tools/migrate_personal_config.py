@@ -36,6 +36,7 @@ reasoning = "max"
 max_concurrency = 1
 daily_max_jobs = {config.ai.daily_max_jobs}
 daily_budget_usd = {config.ai.daily_budget_usd}
+daily_token_limit = {config.ai.daily_token_limit}
 execution_mode = "background"
 
 [catalyst]

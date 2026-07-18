@@ -4,20 +4,21 @@ allowed_private_cidrs = ["127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12"
 
 [features]
 breakout_enabled = true
-catalyst_mode = "manual"
+catalyst_mode = "scheduled"
 
 [ai]
 model = "gpt-5.6-terra"
 reasoning = "max"
 max_concurrency = 1
-daily_max_jobs = 4
-daily_budget_usd = 2.0
+daily_max_jobs = 0
+daily_budget_usd = 0.0
+daily_token_limit = 10000000
 execution_mode = "background"
 
 [catalyst]
 sync_seconds = 120
 focus_seconds = 1800
-scheduled_times_et = ["08:00", "12:00", "16:00"]
+scheduled_times_et = ["00:00", "01:00", "02:00", "03:00", "04:00", "05:00", "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00", "23:00"]
 manual_force_reanalysis = true
 manual_refresh_cooldown_seconds = 30
 

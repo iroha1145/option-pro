@@ -35,6 +35,14 @@ function runtimeSettingsOrdering() {
   })()`);
 }
 
+function runtimeAIEnabledFunction() {
+  const source = app.match(
+    /function runtimeAIEnabled\(documentState\) \{[\s\S]*?\n  \}/,
+  );
+  assert.ok(source, 'global analysis state helper must remain present');
+  return vm.runInNewContext(`(${source[0].replace(/^function /, 'function ')})`);
+}
+
 function runtimeSettingsRecorder() {
   const versionSource = app.match(
     /function runtimeSettingsVersion\(documentState\) \{[\s\S]*?\n  \}/,
@@ -141,11 +149,25 @@ test('earnings and stock research require both owner access and the runtime swit
 });
 
 test('only the owner sees and can operate the global analysis switch', () => {
+  const enabled = runtimeAIEnabledFunction();
+  assert.equal(enabled({ settings: {
+    ai: { manual_analysis_enabled: true },
+    catalyst: { scheduled_analysis_enabled: true },
+  } }), true);
+  assert.equal(enabled({ settings: {
+    ai: { manual_analysis_enabled: true },
+    catalyst: { scheduled_analysis_enabled: false },
+  } }), false);
+  assert.equal(enabled({ settings: {
+    ai: { manual_analysis_enabled: false },
+    catalyst: { scheduled_analysis_enabled: true },
+  } }), false);
   assert.match(app, /aiToggle\.hidden = !owner/);
   assert.match(app, /if \(!aiToggle \|\| !ownerAccessEnabled\(St\.ownerStatus\)\) return/);
   assert.match(app, /aiToggle\.addEventListener\("click", toggleOwnerAI\)/);
   assert.match(app, /ai: \{ manual_analysis_enabled: false \}[\s\S]*catalyst: \{ scheduled_analysis_enabled: false \}/);
-  assert.match(app, /: \{ ai: \{ manual_analysis_enabled: true \} \}/);
+  assert.match(app, /ai: \{ manual_analysis_enabled: true \}[\s\S]*scheduled_analysis_enabled: true[\s\S]*scheduled_times_et: HOURLY_ANALYSIS_TIMES_ET/);
+  assert.match(app, /Array\.from\(\{ length: 24 \}/);
   assert.match(app, /expected_version: Number\(current\.version\)/);
   assert.match(app, /N\.updateRuntimeSettings\(\{/);
   assert.match(app, /window\.addEventListener\("optix:runtime-settings-changed"[\s\S]*syncOwnerControls\(St\.runtimeSettings\)/);

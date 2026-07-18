@@ -165,8 +165,8 @@ test('paid analysis is explicit and earnings no longer uses the synchronous GET 
   assert.match(api, /workerStatus/);
   assert.match(api, /workerActions/);
   assert.match(api, /requestWorkerAction/);
-  assert.match(catalysts, /每日系统预算（美元）/);
-  assert.match(catalysts, /固定分析时刻（美东）/);
+  assert.match(catalysts, /每日 Token 上限/);
+  assert.match(catalysts, /每小时分析时刻（美东）/);
   assert.match(catalysts, /运行设置已保存并立即生效/);
   assert.ok((catalysts.match(/"optix:runtime-settings-changed"/g) || []).length >= 3);
   assert.match(catalysts, /if \(!page\.ownerAccess\) return;/);
@@ -184,8 +184,10 @@ test('paid analysis is explicit and earnings no longer uses the synchronous GET 
   }
   assert.match(catalysts, /function workerTaskFor\(actionType\) \{\s*return actionType;/);
   assert.match(catalysts, /return !!task && task\.enabled !== false;/);
-  assert.match(catalysts, /今日模型用量/);
-  assert.match(catalysts, /今日费用额度/);
+  assert.match(catalysts, /今日实际用量/);
+  assert.match(catalysts, /今日额度占用/);
+  assert.match(catalysts, /含运行中预留/);
+  assert.match(catalysts, /今日估算费用/);
   assert.match(catalysts, /后台工作进程暂不可用/);
   assert.doesNotMatch(catalysts, /\b(?:capability|action_enabled)\b/);
   assert.match(app, /data-impact-run/);

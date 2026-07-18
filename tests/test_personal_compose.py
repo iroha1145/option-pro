@@ -148,16 +148,17 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
     )
     assert config["ai"]["model"] == "gpt-5.6-terra"
     assert config["ai"]["reasoning"] == "max"
-    assert config["ai"]["daily_budget_usd"] == 2.0
-    assert config["features"]["catalyst_mode"] == "manual"
+    assert config["ai"]["daily_budget_usd"] == 0.0
+    assert config["ai"]["daily_token_limit"] == 10_000_000
+    assert config["features"]["catalyst_mode"] == "scheduled"
     assert config["access"]["mode"] in {"private_network", "password"}
 
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
         encoding="utf-8"
     )
-    assert "text.count('catalyst_mode = \"manual\"') != 1" in workflow
+    assert "text.count('catalyst_mode = \"scheduled\"') != 1" in workflow
     assert (
-        "text.replace('catalyst_mode = \"manual\"', "
+        "text.replace('catalyst_mode = \"scheduled\"', "
         "'catalyst_mode = \"off\"', 1)"
     ) in workflow
     assert 'COMPOSE_ENV_FILES: ".env,machine.env"' in workflow

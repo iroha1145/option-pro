@@ -91,7 +91,7 @@ def test_terra_defaults_and_runtime_bounds(monkeypatch):
     with pytest.raises(ValidationError):
         Settings(_env_file=None, OPENAI_MAX_CONCURRENCY=2)
     with pytest.raises(ValidationError):
-        Settings(_env_file=None, OPENAI_DAILY_MAX_JOBS=5)
+        Settings(_env_file=None, OPENAI_DAILY_TOKEN_LIMIT=102_399)
 
 
 def test_custom_openai_base_url_switches_are_rejected():

@@ -546,6 +546,7 @@ def test_standalone_worker_reads_fresh_runtime_controls_each_iteration(
         ai=SimpleNamespace(
             daily_max_jobs=3,
             daily_budget_usd=1.25,
+            daily_token_limit=9_000_000,
             manual_analysis_cooldown_seconds=45,
             manual_analysis_enabled=True,
         ),
@@ -572,6 +573,7 @@ def test_standalone_worker_reads_fresh_runtime_controls_each_iteration(
             (
                 worker_settings.openai_daily_max_jobs,
                 worker_settings.openai_daily_budget_usd,
+                worker_settings.openai_daily_token_limit,
                 worker_settings.openai_manual_cooldown_seconds,
                 allow_new_submissions,
                 new_submission_block_reason,
@@ -588,6 +590,7 @@ def test_standalone_worker_reads_fresh_runtime_controls_each_iteration(
         ai_worker.run_configured_once(repository, settings, "standalone")
     )
     effective.ai.daily_budget_usd = 1.0
+    effective.ai.daily_token_limit = 8_000_000
     second = asyncio.run(
         ai_worker.run_configured_once(repository, settings, "standalone")
     )
@@ -600,9 +603,9 @@ def test_standalone_worker_reads_fresh_runtime_controls_each_iteration(
     assert second == (0, "enabled")
     assert third == (0, "analysis_disabled")
     assert seen == [
-        (3, 1.25, 45, True, "analysis_disabled", True, False),
-        (3, 1.0, 45, True, "analysis_disabled", True, False),
-        (3, 1.0, 45, True, "analysis_disabled", False, False),
+        (3, 1.25, 9_000_000, 45, True, "analysis_disabled", True, False),
+        (3, 1.0, 8_000_000, 45, True, "analysis_disabled", True, False),
+        (3, 1.0, 8_000_000, 45, True, "analysis_disabled", False, False),
     ]
 
 
@@ -732,42 +735,46 @@ def test_runtime_settings_failure_finishes_submitted_and_cancelled_jobs(
         assert calls == {"submit": 0, "retrieve": 1, "cancel": 0}
 
 
-def test_dollar_budget_blocks_before_provider_submission(tmp_path):
+def test_token_budget_blocks_before_provider_submission(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     repository.initialize()
-    job, created = _create_earnings_job(repository)
+    job, created = _create_budget_job(repository, "market_focus", "T0000001")
     assert created is True
     claimed = repository.claim_due("budget-owner", lease_seconds=60)
     assert claimed is not None and claimed["job_id"] == job["job_id"]
 
-    reservation = runtime.budget_reservation_microusd("earnings_impact")
-    budget_usd = (reservation - 1) / 1_000_000
+    reservation = runtime.token_reservation("market_focus")
+    token_limit = reservation - 1
     outcome = repository.mark_submission_started(
         job["job_id"],
         "budget-owner",
         daily_limit=4,
-        daily_budget_usd=budget_usd,
+        daily_token_limit=token_limit,
     )
     stored = repository.get_job(job["job_id"])
     snapshot = repository.budget_snapshot(
         daily_limit=4,
-        daily_budget_usd=budget_usd,
+        daily_budget_usd=0,
+        daily_token_limit=token_limit,
     )
 
-    assert outcome == "daily_budget"
+    assert outcome == "daily_token_limit"
     assert stored is not None and stored["status"] == "budget_blocked"
-    assert stored["error_code"] == "daily_budget_usd_reached"
+    assert stored["error_code"] == "daily_token_limit_reached"
     assert stored["submission_started_at"] is None
-    assert snapshot["dollar_budget_available"] is False
-    assert snapshot["budget_available"] is False
+    # The remaining balance can still fit a smaller task even though this
+    # market-focus request is correctly blocked by its larger reservation.
+    assert snapshot["token_budget_available"] is True
+    assert snapshot["budget_available"] is True
+    assert snapshot["token_budget_remaining_tokens"] == token_limit
 
 
 def test_high_output_task_is_blocked_before_provider_call(tmp_path, monkeypatch):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     job, _ = _create_budget_job(repository, "market_focus", "A0000001")
     settings = _settings(repository.path)
-    reservation = runtime.budget_reservation_microusd("market_focus")
-    settings.openai_daily_budget_usd = (reservation - 1) / 1_000_000
+    reservation = runtime.token_reservation("market_focus")
+    settings.openai_daily_token_limit = reservation - 1
     settings.openai_manual_cooldown_seconds = 0
     calls = {"prepare": 0, "submit": 0}
 
@@ -789,7 +796,7 @@ def test_high_output_task_is_blocked_before_provider_call(tmp_path, monkeypatch)
     assert runtime.max_output_tokens_for("market_focus") == 49_152
     assert calls == {"prepare": 1, "submit": 0}
     assert stored["status"] == "budget_blocked"
-    assert stored["error_code"] == "daily_budget_usd_reached"
+    assert stored["error_code"] == "daily_token_limit_reached"
     assert stored["submission_started_at"] is None
     assert stored["budget_charge_microusd"] == 0
 
@@ -934,38 +941,41 @@ def test_terminal_response_without_usage_keeps_full_reservation(
     assert stored["budget_charge_microusd"] == (
         runtime.budget_reservation_microusd("earnings_impact")
     )
+    snapshot = repository.budget_snapshot(
+        daily_limit=0,
+        daily_budget_usd=0,
+    )
+    assert snapshot["token_budget_used_tokens"] == runtime.token_reservation(
+        "earnings_impact"
+    )
 
 
-def test_used_budget_plus_every_task_reservation_never_exceeds_cap(tmp_path):
+def test_used_tokens_plus_every_task_reservation_never_exceeds_cap(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     seed, _ = _create_budget_job(repository, "earnings_impact", "B0000001")
-    used_microusd = 480_000
-    budget_microusd = (
-        used_microusd + runtime.minimum_budget_reservation_microusd() - 1
+    used_tokens = 100_000
+    token_limit = (
+        used_tokens + runtime.minimum_token_reservation() - 1
     )
-    budget_usd = budget_microusd / 1_000_000
     owner = "budget-seed-owner"
     claimed = repository.claim_due(owner, 60)
     assert repository.mark_submission_started(
         seed["job_id"],
         owner,
         daily_limit=4,
-        daily_budget_usd=budget_usd,
+        daily_token_limit=token_limit,
     ) == "started"
     repository.complete(
         seed["job_id"],
         owner,
         _earnings_result(),
         {
-            "input_tokens": 0,
+            "input_tokens": 68_000,
             "cached_input_tokens": 0,
             "output_tokens": 32_000,
             "reasoning_tokens": 0,
-            "total_tokens": 32_000,
+            "total_tokens": used_tokens,
         },
-    )
-    assert repository.get_job(seed["job_id"])["budget_charge_microusd"] == (
-        used_microusd
     )
 
     for index, job_type in enumerate(runtime.AI_TASK_MAX_OUTPUT_TOKENS, start=2):
@@ -974,23 +984,21 @@ def test_used_budget_plus_every_task_reservation_never_exceeds_cap(tmp_path):
         owner = f"budget-owner-{job_type}"
         claimed = repository.claim_due(owner, 60)
         assert claimed is not None and claimed["job_id"] == job["job_id"]
-        assert used_microusd + runtime.budget_reservation_microusd(
-            job_type
-        ) > budget_microusd
+        assert used_tokens + runtime.token_reservation(job_type) > token_limit
         assert repository.mark_submission_started(
             job["job_id"],
             owner,
-            daily_limit=4,
-            daily_budget_usd=budget_usd,
-        ) == "daily_budget"
+            daily_token_limit=token_limit,
+        ) == "daily_token_limit"
         assert repository.get_job(job["job_id"])["submission_started_at"] is None
 
     snapshot = repository.budget_snapshot(
         daily_limit=4,
-        daily_budget_usd=budget_usd,
+        daily_budget_usd=0,
+        daily_token_limit=token_limit,
     )
-    assert snapshot["budget_used_usd"] == used_microusd / 1_000_000
-    assert snapshot["dollar_budget_available"] is False
+    assert snapshot["token_budget_used_tokens"] == used_tokens
+    assert snapshot["token_budget_available"] is False
 
 
 def test_cancel_requested_is_visible_while_provider_job_is_active(tmp_path):
@@ -1300,6 +1308,13 @@ def test_direct_background_completion_links_response_before_publish(
     assert public["result"]["ticker"] == "AAPL"
     assert public["cached"] is False
     assert repository.public(completed, cached=True)["cached"] is True
+    snapshot = repository.budget_snapshot(
+        daily_limit=0,
+        daily_budget_usd=0,
+    )
+    assert snapshot["token_budget_used_tokens"] == runtime.token_reservation(
+        "earnings_impact"
+    )
 
 
 def test_background_link_failure_is_not_retryable_as_a_known_submission(
@@ -1648,7 +1663,7 @@ def test_claimed_pending_cancel_cannot_be_resurrected_or_submitted(
     assert calls == 0
 
 
-def test_daily_job_limit_is_reserved_atomically_before_provider_submission(
+def test_daily_token_limit_is_reserved_before_provider_submission(
     monkeypatch,
     tmp_path,
 ) -> None:
@@ -1668,18 +1683,21 @@ def test_daily_job_limit_is_reserved_atomically_before_provider_submission(
             max_queued=200,
         )[0]
 
-    for index in range(4):
-        row = create(f"T{index}")
-        owner = f"worker-{index}"
-        claimed = repository.claim_due(owner, 60)
-        assert claimed is not None and claimed["job_id"] == row["job_id"]
-        assert repository.mark_submission_started(
-            row["job_id"],
-            owner,
-            daily_limit=4,
-            daily_budget_usd=10.0,
-        ) == "started"
-        repository.fail(row["job_id"], owner, "fixture_terminal")
+    row = create("USED")
+    seed_owner = "worker-seed"
+    claimed = repository.claim_due(seed_owner, 60)
+    assert claimed is not None and claimed["job_id"] == row["job_id"]
+    assert repository.mark_submission_started(
+        row["job_id"],
+        seed_owner,
+        daily_token_limit=200_000,
+    ) == "started"
+    repository.link_background_response(
+        row["job_id"],
+        seed_owner,
+        "resp_token_seed",
+    )
+    repository.fail(row["job_id"], seed_owner, "fixture_terminal")
 
     blocked = create("LIMIT")
     owner = "worker-limit"
@@ -1693,16 +1711,18 @@ def test_daily_job_limit_is_reserved_atomically_before_provider_submission(
         raise AssertionError("daily limit reached the provider")
 
     monkeypatch.setattr(runtime, "submit_background", forbidden_submit)
-    asyncio.run(process_job(repository, _settings(tmp_path / "ai-jobs.db"), claimed, owner))
+    settings = _settings(tmp_path / "ai-jobs.db")
+    settings.openai_daily_token_limit = 200_000
+    asyncio.run(process_job(repository, settings, claimed, owner))
 
     final = repository.get_job(blocked["job_id"])
     assert final["status"] == "budget_blocked"
-    assert final["error_code"] == "daily_job_limit_reached"
+    assert final["error_code"] == "daily_token_limit_reached"
     assert final["submission_started_at"] is None
     assert calls == 0
 
 
-def test_concurrent_daily_reservations_cannot_cross_the_limit(tmp_path) -> None:
+def test_concurrent_token_reservations_cannot_cross_the_limit(tmp_path) -> None:
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     version, digest = runtime.schema_identity("earnings_impact")
 
@@ -1719,19 +1739,6 @@ def test_concurrent_daily_reservations_cannot_cross_the_limit(tmp_path) -> None:
             max_queued=200,
         )[0]
 
-    for index in range(3):
-        row = create(f"USED{index}")
-        owner = f"used-{index}"
-        claimed = repository.claim_due(owner, 60)
-        assert claimed is not None
-        assert repository.mark_submission_started(
-            row["job_id"],
-            owner,
-            daily_limit=4,
-            daily_budget_usd=10.0,
-        )
-        repository.fail(row["job_id"], owner, "fixture_terminal")
-
     rows = [create("RACE1"), create("RACE2")]
     owners = ["race-owner-1", "race-owner-2"]
     claimed_rows = [repository.claim_due(owner, 60) for owner in owners]
@@ -1743,8 +1750,7 @@ def test_concurrent_daily_reservations_cannot_cross_the_limit(tmp_path) -> None:
                 lambda pair: repository.mark_submission_started(
                     pair[0]["job_id"],
                     pair[1],
-                    daily_limit=4,
-                    daily_budget_usd=10.0,
+                    daily_token_limit=204_799,
                 ),
                 zip(claimed_rows, owners, strict=True),
             )
@@ -1753,6 +1759,11 @@ def test_concurrent_daily_reservations_cannot_cross_the_limit(tmp_path) -> None:
     assert sorted(decisions) == ["concurrency_limit", "started"]
     started_index = decisions.index("started")
     deferred_index = decisions.index("concurrency_limit")
+    repository.link_background_response(
+        rows[started_index]["job_id"],
+        owners[started_index],
+        "resp_concurrent_token_reservation",
+    )
     repository.fail(
         rows[started_index]["job_id"],
         owners[started_index],
@@ -1769,9 +1780,8 @@ def test_concurrent_daily_reservations_cannot_cross_the_limit(tmp_path) -> None:
     assert repository.mark_submission_started(
         deferred["job_id"],
         owners[deferred_index],
-        daily_limit=4,
-        daily_budget_usd=10.0,
-    ) == "daily_limit"
+        daily_token_limit=204_799,
+    ) == "daily_token_limit"
     assert repository.get_job(deferred["job_id"])["status"] == "budget_blocked"
 
 

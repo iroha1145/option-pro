@@ -15,6 +15,7 @@ except ModuleNotFoundError:  # Python 3.10 compatibility for legacy deploy check
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PERSONAL_CONFIG_PATH = REPOSITORY_ROOT / "config" / "personal.toml"
+HOURLY_ANALYSIS_TIMES_ET = tuple(f"{hour:02d}:00" for hour in range(24))
 _PRIVATE_NETWORK_ENVELOPES = tuple(
     ipaddress.ip_network(value)
     for value in (
@@ -82,8 +83,15 @@ class AIConfig(StrictConfigModel):
     model: Literal["gpt-5.6-terra"] = "gpt-5.6-terra"
     reasoning: Literal["max"] = "max"
     max_concurrency: Literal[1] = 1
-    daily_max_jobs: int = Field(default=4, ge=1, le=4)
-    daily_budget_usd: float = Field(default=2.0, ge=0.01, le=100.0)
+    # Retained for one migration cycle so old personal.toml files remain
+    # readable. Zero means unlimited; the active safety boundary is Token use.
+    daily_max_jobs: int = Field(default=0, ge=0, le=100_000)
+    daily_budget_usd: float = Field(default=0.0, ge=0.0, le=10_000.0)
+    daily_token_limit: int = Field(
+        default=10_000_000,
+        ge=102_400,
+        le=100_000_000,
+    )
     execution_mode: Literal["background"] = "background"
 
 
@@ -93,9 +101,9 @@ class CatalystConfig(StrictConfigModel):
     manual_force_reanalysis: Literal[True] = True
     manual_refresh_cooldown_seconds: int = Field(default=30, ge=0, le=3600)
     scheduled_times_et: list[str] = Field(
-        default_factory=lambda: ["08:00", "12:00", "16:00"],
+        default_factory=lambda: list(HOURLY_ANALYSIS_TIMES_ET),
         min_length=1,
-        max_length=8,
+        max_length=24,
     )
 
     @field_validator("scheduled_times_et")

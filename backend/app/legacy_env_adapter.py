@@ -281,6 +281,7 @@ def migrate_legacy_environment(values: Mapping[str, str]) -> LegacyMigration:
                 "OPENAI_DAILY_BUDGET_USD",
                 defaults.ai.daily_budget_usd,
             ),
+            "daily_token_limit": defaults.ai.daily_token_limit,
             "execution_mode": "background",
         },
         "catalyst": {

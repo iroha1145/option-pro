@@ -237,6 +237,11 @@ class PersonalCatalystService:
             if runtime_settings is not None
             else self.personal_config.ai.daily_budget_usd
         )
+        daily_token_limit = int(
+            getattr(runtime_settings.ai, "daily_token_limit", 10_000_000)
+            if runtime_settings is not None
+            else self.personal_config.ai.daily_token_limit
+        )
         cooldown_seconds = int(
             runtime_settings.ai.manual_analysis_cooldown_seconds
             if runtime_settings is not None
@@ -245,10 +250,14 @@ class PersonalCatalystService:
         capacity = {
             "daily_max_jobs": daily_limit,
             "daily_budget_usd": daily_budget,
+            "daily_token_limit": daily_token_limit,
             "submitted_jobs": 0,
             "budget_used_usd": 0.0,
             "budget_remaining_usd": daily_budget,
             "usage_total_tokens": 0,
+            "token_budget_used_tokens": 0,
+            "token_budget_remaining_tokens": daily_token_limit,
+            "token_budget_available": True,
             "budget_available": True,
             "job_limit_available": True,
             "dollar_budget_available": True,
@@ -266,6 +275,7 @@ class PersonalCatalystService:
                     self.ai_repository.budget_snapshot(
                         daily_limit=daily_limit,
                         daily_budget_usd=daily_budget,
+                        daily_token_limit=daily_token_limit,
                         cooldown_seconds=cooldown_seconds,
                         unknown_submission_hold_seconds=int(
                             getattr(
@@ -298,10 +308,8 @@ class PersonalCatalystService:
             reason = "not_configured"
         elif not worker_healthy:
             reason = "worker_unavailable"
-        elif not capacity["job_limit_available"]:
-            reason = "daily_job_limit"
-        elif not capacity["dollar_budget_available"]:
-            reason = "daily_budget_exhausted"
+        elif not capacity["token_budget_available"]:
+            reason = "daily_token_limit"
         elif not capacity["concurrency_available"]:
             reason = "analysis_in_progress"
         elif not capacity["cooldown_complete"]:
@@ -360,8 +368,7 @@ class PersonalCatalystService:
         code = {
             "not_configured": "ai_not_configured",
             "worker_unavailable": "worker_unavailable",
-            "daily_job_limit": "daily_job_limit_reached",
-            "daily_budget_exhausted": "daily_budget_usd_reached",
+            "daily_token_limit": "daily_token_limit_reached",
             "analysis_in_progress": "analysis_in_progress",
             "cooldown_active": "analysis_cooldown_active",
             "settings_unavailable": "runtime_settings_unavailable",
@@ -369,8 +376,7 @@ class PersonalCatalystService:
             "manual_analysis_disabled": "manual_analysis_disabled",
         }.get(reason, "analysis_unavailable")
         message = {
-            "daily_job_limit_reached": "今日任务次数已用完",
-            "daily_budget_usd_reached": "今日分析预算已用完",
+            "daily_token_limit_reached": "今日 1000 万 Token 额度已用完",
             "analysis_cooldown_active": "分析正在冷却中",
             "worker_unavailable": "后台工作进程暂不可用",
             "read_only_mode": "当前模式只允许读取新闻",

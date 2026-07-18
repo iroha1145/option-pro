@@ -69,6 +69,7 @@
     ai_job_queue_full: "分析队列已满，请稍后重试",
     daily_job_limit_reached: "今日任务次数已用完",
     daily_budget_usd_reached: "今日分析预算已用完",
+    daily_token_limit_reached: "今日 1000 万 Token 额度已用完",
     analysis_cooldown_active: "分析正在冷却中",
     cache_unavailable: "本地缓存暂不可用",
   });
@@ -189,11 +190,11 @@
     const availability = status.analysis_availability && typeof status.analysis_availability === "object"
       ? status.analysis_availability
       : {};
-    const jobs = Number(availability.daily_max_jobs);
-    const dollars = Number(availability.daily_budget_usd);
-    const jobText = Number.isFinite(jobs) ? `每日最多 ${Math.max(1, Math.floor(jobs))} 次` : "每日任务次数受限";
-    const budgetText = Number.isFinite(dollars) ? `总预算 ${dollars.toFixed(2)} 美元` : "美元预算受限";
-    return `${jobText}，${budgetText}`;
+    const tokens = Number(availability.daily_token_limit);
+    const tokenText = Number.isFinite(tokens)
+      ? `每日 ${Math.max(0, Math.floor(tokens)).toLocaleString("zh-CN")} Token`
+      : "每日 Token 额度受限";
+    return `任务次数不限制，${tokenText}`;
   }
   function classificationOf(item) {
     const analysis = analysisOf(item);
@@ -413,15 +414,14 @@
 
         <details class="panel panel--pad cat-runtime-settings" id="cat-runtime-settings" data-owner-only data-reveal style="--reveal-i:2" ${page.ownerAccess ? "" : "hidden"}>
           <summary><strong>运行设置</strong><span class="mono" id="cat-runtime-version">正在读取</span></summary>
-          <p>这里只调整任务次数、费用额度和运行时段，不会读取或显示任何密钥。</p>
+          <p>这里只调整每日 Token 上限、分析冷却和运行时段，不会读取或显示任何密钥。</p>
           <form id="cat-runtime-form" autocomplete="off">
             <div class="cat-filter-grid">
-              <label><span>每日分析次数</span><input name="daily_max_jobs" type="number" min="1" max="4" step="1" disabled /></label>
-              <label><span>每日系统预算（美元）</span><input name="daily_budget_usd" type="number" min="0.01" max="100" step="0.01" disabled /></label>
+              <label><span>每日 Token 上限</span><input name="daily_token_limit" type="number" min="102400" max="100000000" step="1" disabled /></label>
               <label><span>分析冷却（秒）</span><input name="manual_analysis_cooldown_seconds" type="number" min="0" max="86400" step="1" disabled /></label>
-              <label><span>固定分析时刻（美东）</span><input name="scheduled_times_et" placeholder="08:00, 12:00, 16:00" disabled /></label>
+              <label><span>每小时分析时刻（美东）</span><input name="scheduled_times_et" placeholder="00:00, 01:00, …, 23:00" disabled /></label>
               <label class="cat-check"><input name="manual_analysis_enabled" type="checkbox" disabled /><span>允许手动分析</span></label>
-              <label class="cat-check"><input name="scheduled_analysis_enabled" type="checkbox" disabled /><span>启用固定时刻分析</span></label>
+              <label class="cat-check"><input name="scheduled_analysis_enabled" type="checkbox" disabled /><span>启用每小时分析</span></label>
             </div>
             <div class="cat-filter-actions">
               <span class="mono" id="cat-runtime-state">运行设置尚未载入</span>
@@ -633,8 +633,7 @@
       return;
     }
     if (!page.runtimeDirty) {
-      form.elements.daily_max_jobs.value = String(settings.ai.daily_max_jobs);
-      form.elements.daily_budget_usd.value = Number(settings.ai.daily_budget_usd).toFixed(2);
+      form.elements.daily_token_limit.value = String(settings.ai.daily_token_limit);
       form.elements.manual_analysis_cooldown_seconds.value = String(settings.ai.manual_analysis_cooldown_seconds);
       form.elements.manual_analysis_enabled.checked = !!settings.ai.manual_analysis_enabled;
       form.elements.scheduled_analysis_enabled.checked = !!settings.catalyst.scheduled_analysis_enabled;
@@ -658,18 +657,17 @@
       .map(value => value.trim())
       .filter(Boolean);
     if (!times.length || times.some(value => !/^([01]\d|2[0-3]):[0-5]\d$/.test(value))) {
-      throw new Error("固定分析时刻须使用 24 小时制，例如 08:00, 12:00, 16:00");
+      throw new Error("分析时刻须使用 24 小时制，例如 00:00, 01:00, 02:00");
     }
-    const dailyJobs = Number(form.elements.daily_max_jobs.value);
-    const dailyBudget = Number(form.elements.daily_budget_usd.value);
+    const dailyTokenLimit = Number(form.elements.daily_token_limit.value);
     const cooldown = Number(form.elements.manual_analysis_cooldown_seconds.value);
-    if (!Number.isInteger(dailyJobs) || dailyJobs < 1 || dailyJobs > 4) throw new Error("每日分析次数须为 1 至 4");
-    if (!Number.isFinite(dailyBudget) || dailyBudget < 0.01 || dailyBudget > 100) throw new Error("每日系统预算须在 0.01 至 100 美元之间");
+    if (!Number.isInteger(dailyTokenLimit) || dailyTokenLimit < 102400 || dailyTokenLimit > 100000000) throw new Error("每日 Token 上限须在 102400 至 1 亿之间");
     if (!Number.isInteger(cooldown) || cooldown < 0 || cooldown > 86400) throw new Error("分析冷却须为 0 至 86400 秒");
     return {
       ai: {
-        daily_max_jobs: dailyJobs,
-        daily_budget_usd: Math.round(dailyBudget * 100) / 100,
+        daily_max_jobs: 0,
+        daily_budget_usd: 0,
+        daily_token_limit: dailyTokenLimit,
         manual_analysis_enabled: !!form.elements.manual_analysis_enabled.checked,
         manual_analysis_cooldown_seconds: cooldown,
       },
@@ -814,15 +812,16 @@
 
     const availability = (metaStatus(page.status) || {}).analysis_availability || {};
     const used = Number(availability.budget_used_usd);
-    const limit = Number(availability.daily_budget_usd);
     const submitted = Number(availability.submitted_jobs);
-    const maxJobs = Number(availability.daily_max_jobs);
-    const tokens = Number(availability.usage_total_tokens);
+    const actualTokens = Number(availability.usage_total_tokens);
+    const reservedTokens = Number(availability.token_budget_used_tokens);
+    const tokenLimit = Number(availability.daily_token_limit);
     $("#cat-operation-facts", page.view).innerHTML = [
       ["后台心跳", worker.heartbeat_at ? N.ago(worker.heartbeat_at) : "尚无记录"],
-      ["今日分析任务", Number.isFinite(submitted) && Number.isFinite(maxJobs) ? `${submitted} / ${maxJobs}` : "—"],
-      ["今日模型用量", Number.isFinite(tokens) ? `${Math.max(0, Math.round(tokens)).toLocaleString("zh-CN")} Token` : "—"],
-      ["今日费用额度", Number.isFinite(used) && Number.isFinite(limit) ? `${used.toFixed(2)} / ${limit.toFixed(2)} 美元` : "—"],
+      ["今日分析任务", Number.isFinite(submitted) ? `${Math.max(0, Math.round(submitted)).toLocaleString("zh-CN")} 次 · 不限次数` : "—"],
+      ["今日实际用量", Number.isFinite(actualTokens) ? `${Math.max(0, Math.round(actualTokens)).toLocaleString("zh-CN")} Token` : "—"],
+      ["今日额度占用", Number.isFinite(reservedTokens) && Number.isFinite(tokenLimit) ? `${Math.max(0, Math.round(reservedTokens)).toLocaleString("zh-CN")} / ${Math.max(0, Math.round(tokenLimit)).toLocaleString("zh-CN")} Token · 含运行中预留` : "—"],
+      ["今日估算费用", Number.isFinite(used) ? `${used.toFixed(2)} 美元 · 仅记录` : "—"],
     ].map(([label, value]) => `<span><small>${esc(label)}</small><b>${esc(value)}</b></span>`).join("");
 
     let needsPoll = false;
