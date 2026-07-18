@@ -232,6 +232,46 @@ def _focus_result(
     }
 
 
+def _focus_relink_commit_failure(
+    intelligence: LocalCatalystIntelligence,
+    message: str,
+):
+    original_connect = intelligence._connect
+    failure = {"armed": True}
+
+    class _FailFocusRelinkCommit:
+        def __init__(self, connection):
+            self.connection = connection
+            self.fail_commit = False
+
+        def execute(self, statement, *args, **kwargs):
+            normalized = " ".join(str(statement).split())
+            result = self.connection.execute(statement, *args, **kwargs)
+            if (
+                normalized.startswith("UPDATE catalyst_local_focus_cycles SET")
+                and "job_id=?" in normalized
+            ):
+                self.fail_commit = True
+            return result
+
+        def commit(self):
+            if self.fail_commit and failure["armed"]:
+                failure["armed"] = False
+                self.connection.rollback()
+                raise sqlite3.OperationalError(message)
+            return self.connection.commit()
+
+        def __getattr__(self, name):
+            return getattr(self.connection, name)
+
+    @contextmanager
+    def failing_connect():
+        with original_connect() as connection:
+            yield _FailFocusRelinkCommit(connection)
+
+    return original_connect, failing_connect
+
+
 def _canonical_hash(value: Any) -> str:
     encoded = json.dumps(
         value,
@@ -1309,7 +1349,7 @@ def test_market_focus_payload_is_hash_bound_and_stays_immutable(tmp_path):
     assert stored_after == stored_before
 
 
-def test_market_focus_relinks_the_same_paid_job_after_local_commit_failure(
+def test_owner_poll_recovers_market_focus_after_local_lock(
     tmp_path,
     monkeypatch,
 ):
@@ -1322,49 +1362,20 @@ def test_market_focus_relinks_the_same_paid_job_after_local_commit_failure(
         as_of=now - timedelta(minutes=9),
     )
     prepared = intelligence.reconcile()["prepared_revision"]
-    original_connect = intelligence._connect
-    failure = {"armed": True}
-
-    class _FailFocusRelinkCommit:
-        def __init__(self, connection):
-            self.connection = connection
-            self.fail_commit = False
-
-        def execute(self, statement, *args, **kwargs):
-            normalized = " ".join(str(statement).split())
-            result = self.connection.execute(statement, *args, **kwargs)
-            if (
-                normalized.startswith("UPDATE catalyst_local_focus_cycles SET")
-                and "job_id=?" in normalized
-            ):
-                self.fail_commit = True
-            return result
-
-        def commit(self):
-            if self.fail_commit and failure["armed"]:
-                failure["armed"] = False
-                self.connection.rollback()
-                raise sqlite3.OperationalError("forced focus relink commit failure")
-            return self.connection.commit()
-
-        def __getattr__(self, name):
-            return getattr(self.connection, name)
-
-    @contextmanager
-    def failing_connect():
-        with original_connect() as connection:
-            yield _FailFocusRelinkCommit(connection)
-
+    original_connect, failing_connect = _focus_relink_commit_failure(
+        intelligence,
+        "database is locked",
+    )
     monkeypatch.setattr(intelligence, "_connect", failing_connect)
-    with pytest.raises(
-        sqlite3.OperationalError,
-        match="forced focus relink commit failure",
-    ):
-        intelligence.request_market_focus_cycle(
-            expected_prepared_revision=prepared,
-            as_of=now,
-        )
+    pending = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+        as_of=now,
+    )
     monkeypatch.setattr(intelligence, "_connect", original_connect)
+
+    assert pending["status"] == "pending"
+    assert pending["local_link_pending"] is True
+    assert pending["job_id"].startswith("aij_")
 
     with sqlite3.connect(ai.path) as connection:
         paid_rows = connection.execute(
@@ -1383,12 +1394,27 @@ def test_market_focus_relinks_the_same_paid_job_after_local_commit_failure(
     assert intent[1].startswith("intent:mfc_")
     assert intent[2] == paid_payload
 
+    _finish_job(ai, paid_job_id, _focus_result(ai, pending))
+    latest = intelligence.latest_market_focus_cycle(now=now)
+    pollable = latest["cycle"]
+
+    assert pollable["cycle_id"] == pending["cycle_id"]
+    assert pollable["status"] == "completed"
+    assert pollable["job_id"] == paid_job_id
+    assert pollable["result"] is not None
+    assert (
+        intelligence.hotspot_status(now=now)["last_consumed_revision"]
+        == prepared
+    )
+
     retried = intelligence.request_market_focus_cycle(
         expected_prepared_revision=prepared,
         as_of=now + timedelta(minutes=5),
     )
 
     assert retried["job_id"] == paid_job_id
+    assert retried["status"] == "completed"
+    assert retried["result"] is not None
     with sqlite3.connect(ai.path) as connection:
         assert connection.execute(
             "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
@@ -1399,7 +1425,575 @@ def test_market_focus_relinks_the_same_paid_job_after_local_commit_failure(
                WHERE cycle_id=?""",
             (retried["cycle_id"],),
         ).fetchone()
-    assert linked == ("pending", paid_job_id)
+    assert linked == ("completed", paid_job_id)
+
+
+def test_reconcile_recovers_market_focus_after_local_lock(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime(2030, 7, 16, 10, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(
+        etl,
+        [_news_change(1, 73, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    original_connect, failing_connect = _focus_relink_commit_failure(
+        intelligence,
+        "database is locked",
+    )
+    monkeypatch.setattr(intelligence, "_connect", failing_connect)
+    pending = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+        as_of=now,
+    )
+    monkeypatch.setattr(intelligence, "_connect", original_connect)
+
+    repaired = intelligence.reconcile()
+
+    assert repaired["focus_links_recovered"] == 1
+    with sqlite3.connect(intelligence.db_path) as connection:
+        linked = connection.execute(
+            """SELECT status,job_id FROM catalyst_local_focus_cycles
+               WHERE cycle_id=?""",
+            (pending["cycle_id"],),
+        ).fetchone()
+    assert linked == ("pending", pending["job_id"])
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 1
+
+
+def test_owner_poll_defers_terminal_intent_relink_during_local_lock(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime(2030, 7, 16, 10, 35, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(
+        etl,
+        [_news_change(1, 76, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    original_connect, failing_connect = _focus_relink_commit_failure(
+        intelligence,
+        "database is locked",
+    )
+    monkeypatch.setattr(intelligence, "_connect", failing_connect)
+    pending = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+        as_of=now,
+    )
+    monkeypatch.setattr(intelligence, "_connect", original_connect)
+    _finish_job(ai, pending["job_id"], _focus_result(ai, pending))
+
+    poll_connect, failing_poll_connect = _focus_relink_commit_failure(
+        intelligence,
+        "database is locked",
+    )
+    monkeypatch.setattr(intelligence, "_connect", failing_poll_connect)
+    deferred = intelligence.latest_market_focus_cycle(now=now)["cycle"]
+
+    assert deferred["cycle_id"] == pending["cycle_id"]
+    assert deferred["job_id"] == pending["job_id"]
+    assert deferred["status"] == "in_progress"
+    assert deferred["local_link_pending"] is True
+    assert deferred["job"]["status"] == "in_progress"
+    assert deferred["result"] is None
+    assert intelligence.hotspot_status(now=now)["last_consumed_revision"] == 0
+
+    monkeypatch.setattr(intelligence, "_connect", poll_connect)
+    published = intelligence.latest_market_focus_cycle(now=now)["cycle"]
+
+    assert published["status"] == "completed"
+    assert published["result"] is not None
+    assert (
+        intelligence.hotspot_status(now=now)["last_consumed_revision"]
+        == prepared
+    )
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 1
+
+
+def test_owner_poll_never_creates_job_for_unpaid_preparing_intent(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime(2030, 7, 16, 10, 40, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(
+        etl,
+        [_news_change(1, 75, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    original_create = intelligence._create_focus_job
+    attempts = {"count": 0}
+
+    def queue_full(*args, **kwargs):
+        attempts["count"] += 1
+        raise RuntimeError("ai_job_queue_full")
+
+    monkeypatch.setattr(intelligence, "_create_focus_job", queue_full)
+    with pytest.raises(RuntimeError, match="ai_job_queue_full"):
+        intelligence.request_market_focus_cycle(
+            expected_prepared_revision=prepared,
+            as_of=now,
+        )
+
+    assert attempts["count"] == 1
+    for _attempt in range(3):
+        latest = intelligence.latest_market_focus_cycle(now=now)["cycle"]
+        assert latest["status"] == "preparing"
+        assert latest["awaiting_submission"] is True
+        assert latest["result"] is None
+    assert attempts["count"] == 1
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 0
+
+    advanced_now = now + timedelta(minutes=5)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: advanced_now)
+    _apply_news(
+        etl,
+        [_news_change(2, 77, available_at=advanced_now - timedelta(minutes=1))],
+        as_of=advanced_now,
+    )
+    advanced_prepared = intelligence.reconcile()["prepared_revision"]
+    assert advanced_prepared > prepared
+    awaiting = intelligence.latest_market_focus_cycle(now=advanced_now)["cycle"]
+    assert awaiting["prepared_revision"] == prepared
+    assert awaiting["awaiting_submission"] is True
+
+    monkeypatch.setattr(intelligence, "_create_focus_job", original_create)
+    retried = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=None,
+        retry_cycle_id=awaiting["cycle_id"],
+        as_of=advanced_now,
+    )
+
+    assert retried["status"] == "pending"
+    assert retried["prepared_revision"] == prepared
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 1
+
+    _finish_job(ai, retried["job_id"], _focus_result(ai, retried))
+    intelligence.reconcile()
+    status = intelligence.hotspot_status(now=advanced_now)
+    assert status["prepared_revision"] == advanced_prepared
+    assert status["last_consumed_revision"] == prepared
+    assert status["has_new_hotspots"] is True
+
+
+def test_owner_poll_defers_terminal_publish_during_local_lock(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime(2030, 7, 16, 10, 45, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(
+        etl,
+        [_news_change(1, 74, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+        as_of=now,
+    )
+    _finish_job(ai, cycle["job_id"], _focus_result(ai, cycle))
+
+    original_connect = intelligence._connect
+    failure = {"armed": True}
+
+    class _FailTerminalPublishBegin:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def execute(self, statement, *args, **kwargs):
+            normalized = " ".join(str(statement).split())
+            if normalized == "BEGIN IMMEDIATE" and failure["armed"]:
+                failure["armed"] = False
+                raise sqlite3.OperationalError("database is locked")
+            return self.connection.execute(statement, *args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(self.connection, name)
+
+    @contextmanager
+    def failing_connect():
+        with original_connect() as connection:
+            yield _FailTerminalPublishBegin(connection)
+
+    monkeypatch.setattr(intelligence, "_connect", failing_connect)
+    deferred = intelligence.latest_market_focus_cycle(now=now)["cycle"]
+
+    assert deferred["cycle_id"] == cycle["cycle_id"]
+    assert deferred["status"] == "in_progress"
+    assert deferred["local_publish_pending"] is True
+    assert deferred["result"] is None
+    assert intelligence.hotspot_status(now=now)["last_consumed_revision"] == 0
+
+    monkeypatch.setattr(intelligence, "_connect", original_connect)
+    published = intelligence.latest_market_focus_cycle(now=now)["cycle"]
+
+    assert published["cycle_id"] == cycle["cycle_id"]
+    assert published["status"] == "completed"
+    assert published["result"] is not None
+    assert (
+        intelligence.hotspot_status(now=now)["last_consumed_revision"]
+        == prepared
+    )
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 1
+
+
+def test_market_focus_non_lock_relink_error_is_not_hidden(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime(2030, 7, 16, 11, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(
+        etl,
+        [_news_change(1, 64, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    original_connect, failing_connect = _focus_relink_commit_failure(
+        intelligence,
+        "disk I/O error",
+    )
+    monkeypatch.setattr(intelligence, "_connect", failing_connect)
+
+    with pytest.raises(sqlite3.OperationalError, match="disk I/O error"):
+        intelligence.request_market_focus_cycle(
+            expected_prepared_revision=prepared,
+            as_of=now,
+        )
+
+    monkeypatch.setattr(intelligence, "_connect", original_connect)
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 1
+
+
+def test_hotspot_planning_does_not_block_market_focus_intent(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(
+        etl,
+        [_news_change(1, 65, available_at=now - timedelta(minutes=20))],
+        as_of=now - timedelta(minutes=19),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    _apply_news(
+        etl,
+        [_news_change(2, 66, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+
+    entered = threading.Event()
+    release = threading.Event()
+    errors: list[BaseException] = []
+    original_cluster_rows = local_module._cluster_rows
+
+    def blocking_cluster_rows(rows):
+        entered.set()
+        if not release.wait(timeout=10):
+            raise TimeoutError("hotspot planning test release timed out")
+        return original_cluster_rows(rows)
+
+    def reconcile_in_background():
+        try:
+            intelligence.reconcile()
+        except BaseException as error:
+            errors.append(error)
+
+    monkeypatch.setattr(local_module, "_cluster_rows", blocking_cluster_rows)
+    thread = threading.Thread(target=reconcile_in_background, daemon=True)
+    thread.start()
+    assert entered.wait(timeout=5)
+
+    try:
+        cycle = intelligence.request_market_focus_cycle(
+            expected_prepared_revision=prepared,
+            as_of=now,
+        )
+    finally:
+        release.set()
+        thread.join(timeout=10)
+
+    assert not thread.is_alive()
+    assert errors == []
+    assert cycle["status"] == "pending"
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 1
+
+
+def test_stale_hotspot_plan_cannot_replace_a_newer_snapshot(
+    tmp_path,
+    monkeypatch,
+):
+    etl, _ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(
+        etl,
+        [_news_change(1, 68, available_at=now - timedelta(minutes=20))],
+        as_of=now - timedelta(minutes=19),
+    )
+    first_revision = intelligence.reconcile()["prepared_revision"]
+
+    old_plan_ready = threading.Event()
+    release_old_plan = threading.Event()
+    errors: list[BaseException] = []
+    old_results: list[dict[str, int]] = []
+    original_plan_hotspots = intelligence._plan_hotspots
+
+    def coordinated_plan(connection, *, now):
+        plan = original_plan_hotspots(connection, now=now)
+        if threading.current_thread().name == "old-hotspot-plan":
+            old_plan_ready.set()
+            if not release_old_plan.wait(timeout=10):
+                raise TimeoutError("stale hotspot plan release timed out")
+        return plan
+
+    def run_old_reconcile():
+        try:
+            old_results.append(intelligence.reconcile())
+        except BaseException as error:
+            errors.append(error)
+
+    monkeypatch.setattr(intelligence, "_plan_hotspots", coordinated_plan)
+    old_thread = threading.Thread(
+        target=run_old_reconcile,
+        name="old-hotspot-plan",
+        daemon=True,
+    )
+    old_thread.start()
+    assert old_plan_ready.wait(timeout=5)
+
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                2,
+                69,
+                available_at=now - timedelta(minutes=10),
+                title="Federal Reserve adjusts policy rate guidance",
+            )
+        ],
+        as_of=now - timedelta(minutes=9),
+    )
+    newer = intelligence.reconcile()
+    release_old_plan.set()
+    old_thread.join(timeout=10)
+
+    assert not old_thread.is_alive()
+    assert errors == []
+    assert newer["prepared_revision"] > first_revision
+    assert old_results[0]["prepared_revision"] == newer["prepared_revision"]
+    with sqlite3.connect(intelligence.db_path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM catalyst_local_hotspot_revisions"
+        ).fetchone()[0] == 2
+        latest_news_ids = {
+            int(row[0])
+            for row in connection.execute(
+                """SELECT g.representative_news_id
+                   FROM catalyst_local_hotspot_items i
+                   JOIN catalyst_local_event_groups g
+                     ON g.event_group_id=i.event_group_id
+                    AND g.event_group_version=i.event_group_version
+                   WHERE i.prepared_revision=?""",
+                (newer["prepared_revision"],),
+            ).fetchall()
+        }
+    assert latest_news_ids == {68, 69}
+
+
+def test_newer_hotspot_plan_retries_after_older_plan_commits_first(
+    tmp_path,
+    monkeypatch,
+):
+    etl, _ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(
+        etl,
+        [_news_change(1, 70, available_at=now - timedelta(minutes=30))],
+        as_of=now - timedelta(minutes=29),
+    )
+    first_revision = intelligence.reconcile()["prepared_revision"]
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                2,
+                71,
+                available_at=now - timedelta(minutes=20),
+                title="Federal Reserve adjusts policy rate guidance",
+            )
+        ],
+        as_of=now - timedelta(minutes=19),
+    )
+
+    old_plan_ready = threading.Event()
+    new_plan_ready = threading.Event()
+    release_old_plan = threading.Event()
+    release_new_plan = threading.Event()
+    errors: list[BaseException] = []
+    old_results: list[dict[str, int]] = []
+    new_results: list[dict[str, int]] = []
+    original_plan_hotspots = intelligence._plan_hotspots
+
+    def coordinated_plan(connection, *, now):
+        plan = original_plan_hotspots(connection, now=now)
+        thread_name = threading.current_thread().name
+        if thread_name == "older-hotspot-plan" and not old_plan_ready.is_set():
+            old_plan_ready.set()
+            if not release_old_plan.wait(timeout=10):
+                raise TimeoutError("older hotspot plan release timed out")
+        elif thread_name == "newer-hotspot-plan" and not new_plan_ready.is_set():
+            new_plan_ready.set()
+            if not release_new_plan.wait(timeout=10):
+                raise TimeoutError("newer hotspot plan release timed out")
+        return plan
+
+    def run_reconcile(results):
+        try:
+            results.append(intelligence.reconcile())
+        except BaseException as error:
+            errors.append(error)
+
+    monkeypatch.setattr(intelligence, "_plan_hotspots", coordinated_plan)
+    old_thread = threading.Thread(
+        target=run_reconcile,
+        args=(old_results,),
+        name="older-hotspot-plan",
+        daemon=True,
+    )
+    old_thread.start()
+    assert old_plan_ready.wait(timeout=5)
+
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                3,
+                72,
+                available_at=now - timedelta(minutes=10),
+                title="Gold prices rise after a supply disruption",
+            )
+        ],
+        as_of=now - timedelta(minutes=9),
+    )
+    new_thread = threading.Thread(
+        target=run_reconcile,
+        args=(new_results,),
+        name="newer-hotspot-plan",
+        daemon=True,
+    )
+    new_thread.start()
+    assert new_plan_ready.wait(timeout=5)
+
+    release_old_plan.set()
+    old_thread.join(timeout=10)
+    assert not old_thread.is_alive()
+    release_new_plan.set()
+    new_thread.join(timeout=10)
+
+    assert not new_thread.is_alive()
+    assert errors == []
+    assert old_results[0]["prepared_revision"] > first_revision
+    assert new_results[0]["prepared_revision"] > old_results[0]["prepared_revision"]
+    with sqlite3.connect(intelligence.db_path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM catalyst_local_hotspot_revisions"
+        ).fetchone()[0] == 3
+        latest_news_ids = {
+            int(row[0])
+            for row in connection.execute(
+                """SELECT g.representative_news_id
+                   FROM catalyst_local_hotspot_items i
+                   JOIN catalyst_local_event_groups g
+                     ON g.event_group_id=i.event_group_id
+                    AND g.event_group_version=i.event_group_version
+                   WHERE i.prepared_revision=?""",
+                (new_results[0]["prepared_revision"],),
+            ).fetchall()
+        }
+    assert latest_news_ids == {70, 71, 72}
+
+
+def test_forced_market_focus_recovers_same_job_across_minute_boundary(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime(2030, 7, 16, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(
+        etl,
+        [_news_change(1, 67, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    first = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+        as_of=now,
+    )
+    _finish_job(ai, first["job_id"], _focus_result(ai, first))
+    intelligence.reconcile()
+
+    original_connect, failing_connect = _focus_relink_commit_failure(
+        intelligence,
+        "database is locked",
+    )
+    monkeypatch.setattr(intelligence, "_connect", failing_connect)
+    forced_pending = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+        force=True,
+        as_of=now + timedelta(minutes=1),
+    )
+    monkeypatch.setattr(intelligence, "_connect", original_connect)
+
+    recovered = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+        force=True,
+        as_of=now + timedelta(minutes=3),
+    )
+
+    assert forced_pending["cycle_id"] == recovered["cycle_id"]
+    assert forced_pending["job_id"] == recovered["job_id"]
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 2
 
 
 def test_no_news_means_no_focus_paid_task(tmp_path):

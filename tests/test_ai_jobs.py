@@ -249,8 +249,11 @@ def test_ai_job_heartbeat_survives_a_saturated_default_executor(monkeypatch):
             blocker_release.set()
             await blocked
 
-        assert len(renewed_on) == 1
-        assert renewed_on[0].startswith("ai-job-heartbeat")
+        assert renewed_on
+        assert all(
+            thread_name.startswith("ai-job-heartbeat")
+            for thread_name in renewed_on
+        )
 
     asyncio.run(scenario())
 

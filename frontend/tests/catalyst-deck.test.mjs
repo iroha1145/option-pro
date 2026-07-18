@@ -297,6 +297,77 @@ test('market-focus cycles are explicit, revision-bound, and never triggered by p
   assert.doesNotMatch(catalysts, /胜率\s*[:：]?\s*\d|收益概率\s*[:：]?\s*\d/);
 });
 
+test('market-focus creation keeps the cycle id while adopting nested job state', () => {
+  const context = vm.createContext({
+    window: {
+      location: { origin: 'https://option.example' },
+      OPTIX_NET: {},
+      OPTIX_AI_JOBS: { normalizeStatus: value => String(value || 'pending').toLowerCase() },
+    },
+    document: { querySelector: () => null, querySelectorAll: () => [] },
+    URL,
+    URLSearchParams,
+    Date,
+    history: { replaceState: () => {} },
+  });
+  vm.runInContext(catalysts, context, { filename: 'deck-catalysts.js' });
+
+  const cycle = context.window.OPTIX_CATALYSTS.cyclePayload({
+    cycle_id: `mfc_${'a'.repeat(32)}`,
+    status: 'preparing',
+    job_id: `intent:mfc_${'a'.repeat(32)}`,
+    job: { job_id: `aij_${'b'.repeat(32)}`, status: 'queued' },
+  });
+
+  assert.equal(cycle.cycle_id, `mfc_${'a'.repeat(32)}`);
+  assert.equal(cycle.job_id, `mfc_${'a'.repeat(32)}`);
+  assert.equal(cycle.analysis_job_id, `aij_${'b'.repeat(32)}`);
+  assert.equal(cycle.status, 'queued');
+  assert.equal('job' in cycle, false);
+
+  const deferred = context.window.OPTIX_CATALYSTS.cyclePayload({
+    cycle_id: `mfc_${'c'.repeat(32)}`,
+    status: 'in_progress',
+    local_link_pending: true,
+    job: { job_id: `aij_${'d'.repeat(32)}`, status: 'completed' },
+  });
+
+  assert.equal(deferred.status, 'in_progress');
+  assert.equal(deferred.analysis_job_id, `aij_${'d'.repeat(32)}`);
+
+  const awaiting = context.window.OPTIX_CATALYSTS.cyclePayload({
+    cycle_id: `mfc_${'e'.repeat(32)}`,
+    status: 'preparing',
+    job_id: `intent:mfc_${'e'.repeat(32)}`,
+    awaiting_submission: true,
+    prepared_revision: 4,
+  });
+  const decision = context.window.OPTIX_CATALYSTS.focusCycleDecision({
+    status: 'active',
+    manual_enabled: true,
+    prepared_revision: 5,
+    last_consumed_revision: 3,
+    analysis_availability: {
+      reason: 'available',
+      budget_available: true,
+      worker_healthy: true,
+      concurrency_available: true,
+      configured: true,
+      cooldown_complete: true,
+    },
+  }, awaiting, 10, true);
+
+  assert.equal(awaiting.analysis_job_id, null);
+  assert.equal(decision.awaitingSubmission, true);
+  assert.equal(decision.active, false);
+  assert.equal(decision.canRetry, true);
+  assert.equal(decision.canCreate, false);
+  assert.equal(
+    JSON.stringify(context.window.OPTIX_CATALYSTS.focusCycleRequest(decision, awaiting)),
+    JSON.stringify({ retry_cycle_id: `mfc_${'e'.repeat(32)}` }),
+  );
+});
+
 test('Catalyst analysis errors use the required Simplified Chinese copy', () => {
   const context = vm.createContext({
     window: {
@@ -614,6 +685,7 @@ test('job coordinator uses the documented cadence and completes through its own 
   vm.runInContext(jobs, context, { filename: 'deck-ai-jobs.js' });
   const coordinator = context.window.OPTIX_AI_JOBS;
   assert.deepEqual(Array.from(coordinator.pollSchedule), [2, 3, 5, 8, 10]);
+  assert.equal(coordinator.isActive('preparing'), true);
   coordinator.start({
     scope: 'test:job',
     create: async () => ({ job_id: 'local-job-1', status: 'queued' }),
