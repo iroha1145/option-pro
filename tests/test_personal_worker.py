@@ -894,17 +894,25 @@ def test_worker_heartbeat_survives_a_saturated_default_executor(
 
 def test_worker_heartbeat_survives_a_blocked_event_loop(tmp_path: Path) -> None:
     renewal_threads: list[str] = []
+    successful_renewals = 0
+    renewals_observed = threading.Event()
     repository = WorkerStateRepository(tmp_path / "heartbeat-blocked-loop.db")
     original_renew = repository.renew
 
     def observed_renew(*args, **kwargs):
+        nonlocal successful_renewals
         renewal_threads.append(threading.current_thread().name)
-        return original_renew(*args, **kwargs)
+        renewed = original_renew(*args, **kwargs)
+        if renewed:
+            successful_renewals += 1
+            if successful_renewals >= 2:
+                renewals_observed.set()
+        return renewed
 
     repository.renew = observed_renew  # type: ignore[method-assign]
 
     async def blocking_task() -> TaskResult:
-        threading.Event().wait(0.7)
+        assert renewals_observed.wait(5)
         return TaskResult(status="idle")
 
     supervisor = WorkerSupervisor(
@@ -914,21 +922,21 @@ def test_worker_heartbeat_survives_a_blocked_event_loop(tmp_path: Path) -> None:
                 "breakout",
                 blocking_task,
                 3600,
-                timeout_seconds=0.8,
+                timeout_seconds=3.0,
                 may_block_event_loop=True,
             ),
         ),
         owner_id="heartbeat-blocked-loop-worker",
-        lease_seconds=0.1,
+        lease_seconds=2.0,
         process_lock=ProcessFileLock(tmp_path / "heartbeat-blocked-loop.lock"),
     )
 
     async def scenario():
-        return await asyncio.wait_for(supervisor.run_once(), timeout=2)
+        return await asyncio.wait_for(supervisor.run_once(), timeout=6)
 
     result = asyncio.run(scenario())
     assert result["status"] == "completed"
-    assert len(renewal_threads) >= 4
+    assert len(renewal_threads) >= 2
     assert all(name.startswith("worker-heartbeat") for name in renewal_threads)
 
 

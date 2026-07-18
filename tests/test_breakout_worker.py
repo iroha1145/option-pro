@@ -188,7 +188,7 @@ def test_scan_lease_heartbeat_survives_a_blocked_scan_event_loop(tmp_path):
         repository,
         clock=MarketClock(),
         owner_id="blocked-scan-worker",
-        lease_ttl_seconds=0.2,
+        lease_ttl_seconds=2.0,
     )
     lease_token = repository.acquire_lock(
         DEFAULT_LOCK_NAME,
@@ -198,16 +198,24 @@ def test_scan_lease_heartbeat_survives_a_blocked_scan_event_loop(tmp_path):
     )
     assert lease_token is not None
     heartbeat_threads: list[str] = []
+    successful_heartbeats = 0
+    heartbeat_observed = threading.Event()
     original_heartbeat = repository.heartbeat_lock
 
     def observed_heartbeat(*args, **kwargs):
+        nonlocal successful_heartbeats
         heartbeat_threads.append(threading.current_thread().name)
-        return original_heartbeat(*args, **kwargs)
+        renewed = original_heartbeat(*args, **kwargs)
+        if renewed:
+            successful_heartbeats += 1
+            if successful_heartbeats >= 2:
+                heartbeat_observed.set()
+        return renewed
 
     repository.heartbeat_lock = observed_heartbeat  # type: ignore[method-assign]
 
     async def blocked_operation():
-        threading.Event().wait(0.55)
+        assert heartbeat_observed.wait(5)
         return "completed"
 
     async def scenario():
