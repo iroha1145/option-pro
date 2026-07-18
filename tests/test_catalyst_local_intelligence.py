@@ -404,6 +404,8 @@ def test_reconcile_archives_invalid_published_news_and_makes_it_due_again(
         "analysis"
     ] is not None
     assert validation_calls == 0
+    intelligence.reconcile()
+    assert validation_calls == 0
 
     invalid = dict(result)
     invalid["affected_stocks"] = [dict(result["affected_stocks"][0])]
@@ -700,6 +702,50 @@ def test_jobs_can_be_cancelled_after_switching_to_read_mode(tmp_path):
     assert sources == {"manual"}
 
 
+def test_focus_cancel_follows_a_concurrent_retry_to_its_new_job(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path, mode="manual")
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [_news_change(1, 13, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    prepared_revision = intelligence.reconcile()["prepared_revision"]
+    cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared_revision,
+    )
+    first_job_id = cycle["job_id"]
+    _fail_job(ai, first_job_id, "provider_failed")
+    intelligence.reconcile()
+
+    original_request_cancel = ai.request_cancel
+    calls: list[str] = []
+    retry_job_id: str | None = None
+
+    def retry_before_first_cancel(job_id):
+        nonlocal retry_job_id
+        calls.append(job_id)
+        if len(calls) == 1:
+            retried = intelligence._retry_focus(cycle["cycle_id"])
+            retry_job_id = str(retried["job_id"])
+        return original_request_cancel(job_id)
+
+    monkeypatch.setattr(ai, "request_cancel", retry_before_first_cancel)
+
+    cancelled = intelligence.cancel_market_focus_cycle(cycle["cycle_id"])
+
+    assert retry_job_id is not None
+    assert calls == [first_job_id, retry_job_id]
+    assert cancelled is not None
+    assert cancelled["job_id"] == retry_job_id
+    assert cancelled["status"] == "cancelled"
+    assert ai.get_job(first_job_id)["status"] == "failed"
+    assert ai.get_job(retry_job_id)["status"] == "cancelled"
+
+
 def test_manual_job_payload_contains_only_locally_validated_allowed_tickers(tmp_path):
     etl, ai, intelligence = _stack(tmp_path)
     now = datetime.now(timezone.utc).replace(microsecond=0)
@@ -849,6 +895,126 @@ def test_completed_orphan_retry_publishes_immediately_without_second_job(
     detail = intelligence.news(17, as_of=now + timedelta(minutes=1))
     assert detail is not None
     assert detail["item"]["analysis"]["output_language"] == "zh-CN"
+
+
+def test_direct_link_repairs_misbound_news_job_atomically_without_audit_reuse(
+    tmp_path,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [
+            _news_change(1, 9910, available_at=now - timedelta(minutes=12)),
+            _news_change(2, 9911, available_at=now - timedelta(minutes=11)),
+        ],
+        as_of=now - timedelta(minutes=10),
+    )
+    intelligence.reconcile()
+    job = intelligence.request_analysis(
+        9911,
+        force=False,
+        expected_change_sequence=2,
+        expected_content_hash="hash-9911-2",
+    )
+    _finish_job(
+        ai,
+        job["job_id"],
+        _news_result(
+            news_id=9911,
+            change_sequence=2,
+            content_hash="hash-9911-2",
+        ),
+    )
+    intelligence.reconcile()
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """UPDATE catalyst_local_analysis_links SET
+                   news_id=9910,change_sequence=1,content_hash='hash-9910-1'
+               WHERE job_id=?""",
+            (job["job_id"],),
+        )
+        connection.commit()
+
+    wrong_detail = intelligence.news(
+        9910,
+        as_of=now + timedelta(minutes=1),
+    )
+    assert wrong_detail is not None
+    assert wrong_detail["item"]["analysis"] is None
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """CREATE TRIGGER fail_misbound_news_repair
+               BEFORE UPDATE OF news_id ON catalyst_local_analysis_links
+               BEGIN SELECT RAISE(ABORT,'forced news link repair'); END"""
+        )
+        connection.commit()
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="forced news link repair",
+    ):
+        intelligence.request_analysis(
+            9911,
+            force=False,
+            expected_change_sequence=2,
+            expected_content_hash="hash-9911-2",
+        )
+    with sqlite3.connect(intelligence.db_path) as connection:
+        assert connection.execute(
+            """SELECT news_id,change_sequence,content_hash
+               FROM catalyst_local_analysis_links WHERE job_id=?""",
+            (job["job_id"],),
+        ).fetchone() == (9910, 1, "hash-9910-1")
+        assert connection.execute(
+            """SELECT COUNT(*) FROM catalyst_local_analysis_result_audit
+               WHERE job_id=? AND contract_id=?""",
+            (job["job_id"], local_module.NEWS_LINK_AUDIT_CONTRACT_ID),
+        ).fetchone()[0] == 0
+        connection.execute("DROP TRIGGER fail_misbound_news_repair")
+        connection.commit()
+
+    repaired = intelligence.request_analysis(
+        9911,
+        force=False,
+        expected_change_sequence=2,
+        expected_content_hash="hash-9911-2",
+    )
+
+    assert repaired["job_id"] == job["job_id"]
+    assert repaired["cached"] is True
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            """SELECT COUNT(*) FROM ai_jobs
+               WHERE job_type='news_impact'"""
+        ).fetchone()[0] == 1
+    with sqlite3.connect(intelligence.db_path) as connection:
+        link = connection.execute(
+            """SELECT news_id,change_sequence,content_hash,result_json
+               FROM catalyst_local_analysis_links WHERE job_id=?""",
+            (job["job_id"],),
+        ).fetchone()
+        binding_audit = connection.execute(
+            """SELECT outcome,reason,result_json
+               FROM catalyst_local_analysis_result_audit
+               WHERE job_id=? AND contract_id=?""",
+            (job["job_id"], local_module.NEWS_LINK_AUDIT_CONTRACT_ID),
+        ).fetchone()
+    assert link[:3] == (9911, 2, "hash-9911-2")
+    assert link[3] is not None
+    assert binding_audit is not None
+    assert binding_audit[:2] == (
+        "rejected",
+        "news_job_link_identity_mismatch",
+    )
+    assert json.loads(binding_audit[2])["news_id"] == 9911
+    correct_detail = intelligence.news(
+        9911,
+        as_of=now + timedelta(minutes=1),
+    )
+    assert correct_detail is not None
+    assert correct_detail["item"]["analysis"]["news_id"] == 9911
 
 
 def test_reconcile_normalizes_recovered_job_created_at_to_utc(tmp_path):
@@ -2470,11 +2636,28 @@ def test_scheduled_hour_queues_at_most_twenty_recent_news(tmp_path, monkeypatch)
     ]
     _apply_news(etl, changes, as_of=now - timedelta(seconds=1))
     intelligence.reconcile()
+    original_snapshot = intelligence._ai_job_snapshot
+    snapshot_news_ids: list[set[int]] = []
+
+    def counted_snapshot(**kwargs):
+        requested = kwargs.get("news_ids")
+        if requested is not None:
+            snapshot_news_ids.append(set(requested))
+        return original_snapshot(**kwargs)
+
+    def forbid_single_job_read(_job_id):
+        raise AssertionError("scheduled batch must not read one AI job at a time")
+
+    monkeypatch.setattr(intelligence, "_ai_job_snapshot", counted_snapshot)
+    monkeypatch.setattr(intelligence, "_read_ai_job", forbid_single_job_read)
+    monkeypatch.setattr(ai, "get_job", forbid_single_job_read)
 
     assert intelligence.run_scheduled(now=now) == {
         "queued": 20,
         "skipped": 0,
     }
+    assert len(snapshot_news_ids) == 1
+    assert len(snapshot_news_ids[0]) == 20
     with sqlite3.connect(ai.path) as connection:
         assert connection.execute(
             "SELECT COUNT(*) FROM ai_jobs WHERE job_type='news_impact'"
@@ -2614,6 +2797,603 @@ def test_scheduled_focus_waits_for_published_chinese_news(tmp_path, monkeypatch)
     assert payload["events"][0]["summary_zh"] == (
         "新品发布可能影响半导体供应链预期，实际影响仍需观察。"
     )
+
+
+def test_scheduled_retries_completed_news_rejected_before_publish(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
+    first_now = datetime.now(timezone.utc).replace(microsecond=0)
+    clock = {"now": first_now}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    monkeypatch.setattr(
+        ai_jobs_repository_module,
+        "_utcnow",
+        lambda: clock["now"],
+    )
+    _apply_news(
+        etl,
+        [_news_change(1, 591, available_at=first_now - timedelta(minutes=2))],
+        as_of=first_now - timedelta(minutes=1),
+    )
+    intelligence.reconcile()
+    assert intelligence.run_scheduled(now=first_now) == {
+        "queued": 1,
+        "skipped": 0,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        first_job_id = connection.execute(
+            "SELECT job_id FROM ai_jobs WHERE job_type='news_impact'"
+        ).fetchone()[0]
+
+    invalid = _news_result(
+        news_id=591,
+        change_sequence=1,
+        content_hash="hash-591-1",
+    )
+    invalid["title_zh"] = "Markets rally after earnings"
+    invalid_raw = local_module._json(invalid)
+    _finish_job(ai, first_job_id, invalid)
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """CREATE TRIGGER fail_terminal_news_audit
+               BEFORE INSERT ON catalyst_local_analysis_result_audit
+               BEGIN SELECT RAISE(ABORT,'forced news audit failure'); END"""
+        )
+        connection.commit()
+    with pytest.raises(sqlite3.IntegrityError, match="forced news audit failure"):
+        intelligence.reconcile()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        assert connection.execute(
+            """SELECT COUNT(*) FROM catalyst_local_analysis_result_audit
+               WHERE job_id=?""",
+            (first_job_id,),
+        ).fetchone()[0] == 0
+
+    clock["now"] = first_now + timedelta(hours=1)
+    assert intelligence.run_scheduled(now=clock["now"]) == {
+        "queued": 0,
+        "skipped": 1,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='news_impact'"
+        ).fetchone()[0] == 1
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute("DROP TRIGGER fail_terminal_news_audit")
+        connection.commit()
+
+    intelligence.reconcile()
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        audit = connection.execute(
+            """SELECT outcome,result_json,result_sha256,result_available_at
+               FROM catalyst_local_analysis_result_audit WHERE job_id=?""",
+            (first_job_id,),
+        ).fetchone()
+        linked_result = connection.execute(
+            """SELECT result_json FROM catalyst_local_analysis_links
+               WHERE job_id=?""",
+            (first_job_id,),
+        ).fetchone()[0]
+    completed_at = ai.get_job(first_job_id)["completed_at"]
+    assert audit == (
+        "rejected",
+        invalid_raw,
+        hashlib.sha256(invalid_raw.encode("utf-8")).hexdigest(),
+        completed_at,
+    )
+    assert linked_result is None
+
+    intelligence.reconcile()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        assert connection.execute(
+            """SELECT COUNT(*) FROM catalyst_local_analysis_result_audit
+               WHERE job_id=?""",
+            (first_job_id,),
+        ).fetchone()[0] == 1
+
+    assert intelligence.run_scheduled(now=clock["now"]) == {
+        "queued": 1,
+        "skipped": 0,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        jobs = connection.execute(
+            """SELECT job_id,status,retry_of_job_id,execution_number
+               FROM ai_jobs WHERE job_type='news_impact'
+               ORDER BY execution_number"""
+        ).fetchall()
+    assert len(jobs) == 2
+    assert jobs[0] == (first_job_id, "completed", None, 1)
+    assert jobs[1][1:] == ("pending", first_job_id, 2)
+
+
+def test_unlinked_scheduled_news_job_cannot_bypass_retry_cap_or_batch_read(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
+    first_now = datetime(2026, 7, 18, 12, 5, tzinfo=timezone.utc)
+    clock = {"now": first_now}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    monkeypatch.setattr(
+        ai_jobs_repository_module,
+        "_utcnow",
+        lambda: clock["now"],
+    )
+    _apply_news(
+        etl,
+        [_news_change(1, 593, available_at=first_now - timedelta(minutes=2))],
+        as_of=first_now - timedelta(minutes=1),
+    )
+    intelligence.reconcile()
+    assert intelligence.run_scheduled(now=first_now)["queued"] == 1
+    with sqlite3.connect(ai.path) as connection:
+        first_job_id = connection.execute(
+            """SELECT job_id FROM ai_jobs
+               WHERE job_type='news_impact'"""
+        ).fetchone()[0]
+
+    def reject(job_id):
+        invalid = _news_result(
+            news_id=593,
+            change_sequence=1,
+            content_hash="hash-593-1",
+        )
+        invalid["title_zh"] = "Markets rally after earnings"
+        _finish_job(ai, job_id, invalid)
+
+    reject(first_job_id)
+    intelligence.reconcile()
+
+    original_link = intelligence._link_analysis_job
+    monkeypatch.setattr(
+        intelligence,
+        "_link_analysis_job",
+        lambda _row, _job: False,
+    )
+    clock["now"] = first_now + timedelta(hours=1)
+    assert intelligence.run_scheduled(now=clock["now"])["queued"] == 1
+    with sqlite3.connect(ai.path) as connection:
+        jobs = connection.execute(
+            """SELECT job_id,execution_number FROM ai_jobs
+               WHERE job_type='news_impact' ORDER BY execution_number"""
+        ).fetchall()
+    assert len(jobs) == 2
+    second_job_id = jobs[1][0]
+    assert jobs[1][1] == 2
+    reject(second_job_id)
+
+    original_get_job = ai.get_job
+    original_read_job = intelligence._read_ai_job
+    original_snapshot = intelligence._ai_job_snapshot
+    snapshot_news_ids: list[set[int]] = []
+
+    def forbid_per_candidate_get(_job_id):
+        raise AssertionError("scheduled path must use one batched AI snapshot")
+
+    def counted_snapshot(**kwargs):
+        requested = kwargs.get("news_ids")
+        if requested is not None:
+            snapshot_news_ids.append(set(requested))
+        return original_snapshot(**kwargs)
+
+    monkeypatch.setattr(ai, "get_job", forbid_per_candidate_get)
+    monkeypatch.setattr(
+        intelligence,
+        "_read_ai_job",
+        forbid_per_candidate_get,
+    )
+    monkeypatch.setattr(
+        intelligence,
+        "_ai_job_snapshot",
+        counted_snapshot,
+    )
+    clock["now"] = first_now + timedelta(hours=2)
+    assert intelligence.run_scheduled(now=clock["now"])["queued"] == 0
+    assert snapshot_news_ids == [{593}]
+    monkeypatch.setattr(intelligence, "_ai_job_snapshot", original_snapshot)
+    clock["now"] = first_now + timedelta(hours=3)
+    assert intelligence.run_scheduled(now=clock["now"])["queued"] == 0
+    monkeypatch.setattr(ai, "get_job", original_get_job)
+    monkeypatch.setattr(intelligence, "_read_ai_job", original_read_job)
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            """SELECT COUNT(*) FROM ai_jobs
+               WHERE job_type='news_impact'"""
+        ).fetchone()[0] == 2
+
+    monkeypatch.setattr(intelligence, "_link_analysis_job", original_link)
+    recovered = intelligence.reconcile()
+    assert recovered["analysis_links_recovered"] == 1
+    assert intelligence.run_scheduled(now=clock["now"])["queued"] == 1
+    with sqlite3.connect(ai.path) as connection:
+        jobs = connection.execute(
+            """SELECT job_id,execution_number FROM ai_jobs
+               WHERE job_type='news_impact' ORDER BY execution_number"""
+        ).fetchall()
+    assert len(jobs) == 3
+    assert jobs[-1][1] == 3
+
+    reject(jobs[-1][0])
+    intelligence.reconcile()
+    clock["now"] = first_now + timedelta(hours=4)
+    intelligence.run_scheduled(now=clock["now"])
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            """SELECT COUNT(*) FROM ai_jobs
+               WHERE job_type='news_impact'"""
+        ).fetchone()[0] == 3
+
+
+def test_scheduled_retries_completed_focus_rejected_before_publish(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
+    first_now = datetime.now(timezone.utc).replace(microsecond=0)
+    clock = {"now": first_now}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    monkeypatch.setattr(
+        ai_jobs_repository_module,
+        "_utcnow",
+        lambda: clock["now"],
+    )
+    _apply_news(
+        etl,
+        [_news_change(1, 592, available_at=first_now - timedelta(minutes=2))],
+        as_of=first_now - timedelta(minutes=1),
+    )
+    intelligence.reconcile()
+    news_job = intelligence.request_analysis(
+        592,
+        force=False,
+        expected_change_sequence=1,
+        expected_content_hash="hash-592-1",
+        submission_source="scheduled",
+    )
+    _finish_job(
+        ai,
+        news_job["job_id"],
+        _news_result(
+            news_id=592,
+            change_sequence=1,
+            content_hash="hash-592-1",
+        ),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+        submission_source="scheduled",
+    )
+    invalid = _focus_result(ai, cycle)
+    invalid["title_zh"] = "Markets rally after earnings"
+    invalid_raw = local_module._json(invalid)
+    first_job_id = cycle["job_id"]
+    _finish_job(ai, first_job_id, invalid)
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """CREATE TRIGGER fail_terminal_focus_retirement
+               BEFORE UPDATE OF status ON catalyst_local_focus_cycles
+               WHEN NEW.status='failed' AND NEW.result_json IS NULL
+               BEGIN SELECT RAISE(ABORT,'forced focus retirement failure'); END"""
+        )
+        connection.commit()
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="forced focus retirement failure",
+    ):
+        intelligence.reconcile()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        assert connection.execute(
+            """SELECT COUNT(*) FROM catalyst_local_focus_result_audit
+               WHERE cycle_id=? AND job_id=?""",
+            (cycle["cycle_id"], first_job_id),
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            """SELECT status,result_json FROM catalyst_local_focus_cycles
+               WHERE cycle_id=?""",
+            (cycle["cycle_id"],),
+        ).fetchone() == ("pending", None)
+        connection.execute("DROP TRIGGER fail_terminal_focus_retirement")
+        connection.commit()
+
+    intelligence.reconcile()
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        audit = connection.execute(
+            """SELECT outcome,result_json,result_sha256,result_available_at
+               FROM catalyst_local_focus_result_audit
+               WHERE cycle_id=? AND job_id=?""",
+            (cycle["cycle_id"], first_job_id),
+        ).fetchone()
+        failed_cycle = connection.execute(
+            """SELECT status,error_code,result_json
+               FROM catalyst_local_focus_cycles WHERE cycle_id=?""",
+            (cycle["cycle_id"],),
+        ).fetchone()
+    completed_at = ai.get_job(first_job_id)["completed_at"]
+    assert audit == (
+        "rejected",
+        invalid_raw,
+        hashlib.sha256(invalid_raw.encode("utf-8")).hexdigest(),
+        completed_at,
+    )
+    assert failed_cycle == ("failed", "legacy_output_hidden", None)
+
+    intelligence.reconcile()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        assert connection.execute(
+            """SELECT COUNT(*) FROM catalyst_local_focus_result_audit
+               WHERE cycle_id=? AND job_id=?""",
+            (cycle["cycle_id"], first_job_id),
+        ).fetchone()[0] == 1
+
+    clock["now"] = first_now + timedelta(hours=1)
+    assert intelligence.run_scheduled(now=clock["now"]) == {
+        "queued": 1,
+        "skipped": 0,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        jobs = connection.execute(
+            """SELECT job_id,status,retry_of_job_id,execution_number
+               FROM ai_jobs WHERE job_type='market_focus'
+               ORDER BY execution_number"""
+        ).fetchall()
+    assert len(jobs) == 2
+    assert jobs[0] == (first_job_id, "completed", None, 1)
+    assert jobs[1][1:] == ("pending", first_job_id, 2)
+    with sqlite3.connect(intelligence.db_path) as connection:
+        retried_cycle = connection.execute(
+            """SELECT status,job_id,result_json,error_code
+               FROM catalyst_local_focus_cycles WHERE cycle_id=?""",
+            (cycle["cycle_id"],),
+        ).fetchone()
+    assert retried_cycle == ("pending", jobs[1][0], None, None)
+
+
+def test_completed_previous_identity_focus_is_archived_and_retried(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
+    first_now = datetime(2026, 7, 18, 14, 5, tzinfo=timezone.utc)
+    clock = {"now": first_now}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    monkeypatch.setattr(
+        ai_jobs_repository_module,
+        "_utcnow",
+        lambda: clock["now"],
+    )
+    _apply_news(
+        etl,
+        [_news_change(1, 594, available_at=first_now - timedelta(minutes=2))],
+        as_of=first_now - timedelta(minutes=1),
+    )
+    intelligence.reconcile()
+    news_job = intelligence.request_analysis(
+        594,
+        force=False,
+        expected_change_sequence=1,
+        expected_content_hash="hash-594-1",
+        submission_source="scheduled",
+    )
+    _finish_job(
+        ai,
+        news_job["job_id"],
+        _news_result(
+            news_id=594,
+            change_sequence=1,
+            content_hash="hash-594-1",
+        ),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+        submission_source="scheduled",
+    )
+    focus_result = _focus_result(ai, cycle)
+    raw_result = local_module._json(focus_result)
+    _finish_job(ai, cycle["job_id"], focus_result)
+    completed_at = ai.get_job(cycle["job_id"])["completed_at"]
+    with sqlite3.connect(ai.path) as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET prompt_version=? WHERE job_id=?",
+            ("market-focus-zh-cn-v2", cycle["job_id"]),
+        )
+        connection.commit()
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """CREATE TRIGGER fail_old_focus_retirement
+               BEFORE UPDATE OF status ON catalyst_local_focus_cycles
+               WHEN NEW.error_code='runtime_configuration_changed'
+               BEGIN SELECT RAISE(ABORT,'forced old focus retirement'); END"""
+        )
+        connection.commit()
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="forced old focus retirement",
+    ):
+        intelligence.reconcile()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        assert connection.execute(
+            """SELECT COUNT(*) FROM catalyst_local_focus_result_audit
+               WHERE cycle_id=? AND contract_id=?""",
+            (
+                cycle["cycle_id"],
+                local_module.FOCUS_BINDING_AUDIT_CONTRACT_ID,
+            ),
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            """SELECT status,error_code FROM catalyst_local_focus_cycles
+               WHERE cycle_id=?""",
+            (cycle["cycle_id"],),
+        ).fetchone() == ("pending", None)
+        connection.execute("DROP TRIGGER fail_old_focus_retirement")
+        connection.commit()
+
+    intelligence.reconcile()
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        audit = connection.execute(
+            """SELECT outcome,reason,result_json,result_sha256,
+                      result_available_at
+               FROM catalyst_local_focus_result_audit
+               WHERE cycle_id=? AND job_id=? AND contract_id=?""",
+            (
+                cycle["cycle_id"],
+                cycle["job_id"],
+                local_module.FOCUS_BINDING_AUDIT_CONTRACT_ID,
+            ),
+        ).fetchone()
+        retired = connection.execute(
+            """SELECT status,error_code,result_json
+               FROM catalyst_local_focus_cycles WHERE cycle_id=?""",
+            (cycle["cycle_id"],),
+        ).fetchone()
+    assert audit == (
+        "rejected",
+        "market_focus_runtime_identity_mismatch",
+        raw_result,
+        hashlib.sha256(raw_result.encode("utf-8")).hexdigest(),
+        completed_at,
+    )
+    assert retired == ("failed", "runtime_configuration_changed", None)
+
+    assert intelligence.run_scheduled(now=clock["now"])["queued"] == 1
+    with sqlite3.connect(ai.path) as connection:
+        jobs = connection.execute(
+            """SELECT job_id,status,prompt_version FROM ai_jobs
+               WHERE job_type='market_focus' ORDER BY rowid"""
+        ).fetchall()
+    assert len(jobs) == 2
+    assert jobs[1][1:] == ("pending", local_module.FOCUS_PROMPT_VERSION)
+
+
+def test_completed_focus_payload_mismatch_waits_then_retries_cycle_payload(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
+    first_now = datetime(2026, 7, 18, 16, 5, tzinfo=timezone.utc)
+    clock = {"now": first_now}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    monkeypatch.setattr(
+        ai_jobs_repository_module,
+        "_utcnow",
+        lambda: clock["now"],
+    )
+    _apply_news(
+        etl,
+        [_news_change(1, 596, available_at=first_now - timedelta(minutes=2))],
+        as_of=first_now - timedelta(minutes=1),
+    )
+    intelligence.reconcile()
+    news_job = intelligence.request_analysis(
+        596,
+        force=False,
+        expected_change_sequence=1,
+        expected_content_hash="hash-596-1",
+        submission_source="scheduled",
+    )
+    _finish_job(
+        ai,
+        news_job["job_id"],
+        _news_result(
+            news_id=596,
+            change_sequence=1,
+            content_hash="hash-596-1",
+        ),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+        submission_source="scheduled",
+    )
+    original_job_id = cycle["job_id"]
+    original_payload = _job_payload(ai, original_job_id)
+    wrong_payload = dict(original_payload)
+    wrong_payload["cycle_id"] = "mfc_wrong_payload_binding"
+    wrong_job, created = intelligence._create_focus_job(
+        wrong_payload,
+        submission_source="scheduled",
+    )
+    assert created is True
+    ai.request_cancel(original_job_id)
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """UPDATE catalyst_local_focus_cycles SET
+                   job_id=?,status='pending',updated_at=?
+               WHERE cycle_id=? AND job_id=?""",
+            (
+                wrong_job["job_id"],
+                _iso(first_now),
+                cycle["cycle_id"],
+                original_job_id,
+            ),
+        )
+        connection.commit()
+
+    intelligence.reconcile()
+    intelligence.run_scheduled(now=clock["now"])
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            """SELECT COUNT(*) FROM ai_jobs
+               WHERE job_type='market_focus'"""
+        ).fetchone()[0] == 2
+
+    wrong_result = _focus_result(ai, {"job_id": wrong_job["job_id"]})
+    wrong_raw = local_module._json(wrong_result)
+    _finish_job(ai, wrong_job["job_id"], wrong_result)
+    intelligence.reconcile()
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        audit = connection.execute(
+            """SELECT outcome,reason,result_json
+               FROM catalyst_local_focus_result_audit
+               WHERE cycle_id=? AND job_id=? AND contract_id=?""",
+            (
+                cycle["cycle_id"],
+                wrong_job["job_id"],
+                local_module.FOCUS_BINDING_AUDIT_CONTRACT_ID,
+            ),
+        ).fetchone()
+        retired = connection.execute(
+            """SELECT status,error_code FROM catalyst_local_focus_cycles
+               WHERE cycle_id=?""",
+            (cycle["cycle_id"],),
+        ).fetchone()
+    assert audit == (
+        "rejected",
+        "market_focus_payload_mismatch",
+        wrong_raw,
+    )
+    assert retired == ("failed", "market_focus_payload_mismatch")
+
+    clock["now"] = first_now + timedelta(hours=1)
+    assert intelligence.run_scheduled(now=clock["now"])["queued"] == 1
+    with sqlite3.connect(ai.path) as connection:
+        retry = connection.execute(
+            """SELECT job_id,payload_json,status FROM ai_jobs
+               WHERE job_type='market_focus' ORDER BY rowid DESC LIMIT 1"""
+        ).fetchone()
+        assert connection.execute(
+            """SELECT COUNT(*) FROM ai_jobs
+               WHERE job_type='market_focus'"""
+        ).fetchone()[0] == 3
+    assert json.loads(retry[1]) == original_payload
+    assert retry[2] == "pending"
+    with sqlite3.connect(intelligence.db_path) as connection:
+        assert connection.execute(
+            """SELECT job_id,status FROM catalyst_local_focus_cycles
+               WHERE cycle_id=?""",
+            (cycle["cycle_id"],),
+        ).fetchone() == (retry[0], "pending")
 
 
 def test_scheduled_focus_retries_failed_previous_prompt_with_current_identity(
@@ -2860,9 +3640,15 @@ def test_scheduled_focus_waits_for_every_news_item_in_its_payload(
     )
 
 
+@pytest.mark.parametrize(
+    "rejected_completion",
+    [False, True],
+    ids=["failed-job", "completed-invalid-result"],
+)
 def test_scheduled_news_failure_retries_once_per_hour_then_focus_excludes_it(
     tmp_path,
     monkeypatch,
+    rejected_completion,
 ):
     hourly_slots = tuple(f"{hour:02d}:00" for hour in range(24))
     tickers = ("NVDA", "AMD")
@@ -2904,8 +3690,24 @@ def test_scheduled_news_failure_retries_once_per_hour_then_focus_excludes_it(
             """SELECT job_id,payload_json FROM ai_jobs
                WHERE job_type='news_impact' ORDER BY rowid"""
         ).fetchall()
+
+    def reject_job(job_id):
+        if not rejected_completion:
+            _fail_job(ai, job_id, "provider_failed")
+            return
+        payload = _job_payload(ai, job_id)
+        invalid = _news_result(
+            news_id=payload["news_id"],
+            change_sequence=payload["change_sequence"],
+            content_hash=payload["content_hash"],
+            ticker=payload["allowed_tickers"][0],
+        )
+        invalid["title_zh"] = "Markets rally after earnings"
+        _finish_job(ai, job_id, invalid)
+        intelligence.reconcile()
+
     failed_job_id = first_jobs[0][0]
-    _fail_job(ai, failed_job_id, "provider_failed")
+    reject_job(failed_job_id)
     successful_payload = json.loads(first_jobs[1][1])
     _finish_job(
         ai,
@@ -2945,7 +3747,7 @@ def test_scheduled_news_failure_retries_once_per_hour_then_focus_excludes_it(
             ).fetchone()
         assert retry[1] == expected_execution
         assert retry[2] is not None
-        _fail_job(ai, retry[0], "provider_failed")
+        reject_job(retry[0])
 
     final_hour = first_now + timedelta(hours=3)
     clock["now"] = final_hour

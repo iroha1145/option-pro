@@ -1907,6 +1907,60 @@ def test_explicit_retry_requeues_safe_terminal_job_but_not_unknown_submission(
     assert blocked["error_code"] == "submission_outcome_unknown"
 
 
+def test_explicit_retry_requeues_completed_job_with_hidden_invalid_result(
+    tmp_path,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    owner = "worker-invalid-completed-retry"
+    claimed = repository.claim_due(owner, 60)
+    assert claimed is not None and claimed["job_id"] == row["job_id"]
+    assert repository.mark_submission_started(
+        row["job_id"],
+        owner,
+        daily_limit=4,
+    ) == "started"
+    invalid = _earnings_result()
+    invalid["summary"] = "Markets rally after stronger earnings"
+    repository.complete(row["job_id"], owner, invalid, {})
+
+    hidden = repository.public(repository.get_job(row["job_id"]))
+    assert hidden["status"] == "completed"
+    assert hidden["result"] is None
+    assert hidden["error_code"] == "legacy_output_hidden"
+
+    retried, created = _create_earnings_job(
+        repository,
+        force_retry=True,
+    )
+    assert created is True
+    assert retried["status"] == "pending"
+    assert retried["retry_of_job_id"] == row["job_id"]
+    assert retried["execution_number"] == 2
+
+
+def test_explicit_retry_keeps_a_valid_completed_result_settled(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    owner = "worker-valid-completed-retry"
+    claimed = repository.claim_due(owner, 60)
+    assert claimed is not None and claimed["job_id"] == row["job_id"]
+    assert repository.mark_submission_started(
+        row["job_id"],
+        owner,
+        daily_limit=4,
+    ) == "started"
+    repository.complete(row["job_id"], owner, _earnings_result(), {})
+
+    settled, created = _create_earnings_job(
+        repository,
+        force_retry=True,
+    )
+    assert created is False
+    assert settled["job_id"] == row["job_id"]
+    assert settled["status"] == "completed"
+
+
 def test_explicit_retry_respects_the_queue_capacity_limit(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     version, digest = runtime.schema_identity("earnings_impact")
