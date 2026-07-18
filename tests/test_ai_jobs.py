@@ -152,6 +152,67 @@ def test_earnings_company_names_must_be_simplified_chinese(name):
         )
 
 
+def test_earnings_reason_can_reference_its_structured_impacted_ticker():
+    result = _earnings_result()
+    result["impacted"][0]["reason"] = (
+        "MSFT作为竞争对手，其产品进展可能影响行业定价。"
+    )
+
+    validated = validate_result(
+        "earnings_impact",
+        json.dumps(result, ensure_ascii=False),
+        {"ticker": "AAPL"},
+    )
+
+    assert validated["impacted"][0]["reason"].startswith("MSFT作为")
+
+
+def test_earnings_reason_rejects_unbound_uppercase_word():
+    result = _earnings_result()
+    result["impacted"][0]["reason"] = (
+        "PANIC作为竞争对手，其产品进展可能影响行业定价。"
+    )
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "earnings_impact",
+            json.dumps(result, ensure_ascii=False),
+            {"ticker": "AAPL"},
+        )
+
+
+def test_earnings_reason_cannot_borrow_another_impacted_ticker():
+    result = _earnings_result()
+    result["impacted"][0]["reason"] = (
+        "QCOM作为供应商，其产品进展可能影响行业定价。"
+    )
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "earnings_impact",
+            json.dumps(result, ensure_ascii=False),
+            {"ticker": "AAPL"},
+        )
+
+
+def test_earnings_tickers_cannot_form_an_english_sentence():
+    result = _earnings_result()
+    result["impacted"].append({**result["impacted"][0]})
+    fake_tickers = ("MARKETS", "RALLY", "AFTER", "STRONG", "EARNINGS")
+    for item, ticker in zip(result["impacted"], fake_tickers, strict=True):
+        item["ticker"] = ticker
+    result["impacted"][0]["reason"] = (
+        "MARKETS RALLY AFTER STRONG EARNINGS，行业表现需要继续观察。"
+    )
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "earnings_impact",
+            json.dumps(result, ensure_ascii=False),
+            {"ticker": "AAPL"},
+        )
+
+
 def _large_signal_result():
     evidence = "证" * 500
     twelve = [evidence for _ in range(12)]

@@ -813,6 +813,32 @@ def validate_simplified_chinese_company_name(
     return text
 
 
+def validate_earnings_impact_reason(
+    value: str,
+    info: ValidationInfo,
+) -> str:
+    """Bind each earnings reason to its source and impacted ticker only."""
+
+    raw_source_codes = (
+        info.context.get("allowed_codes", ())
+        if isinstance(info.context, dict)
+        else ()
+    )
+    source_codes = (
+        raw_source_codes
+        if isinstance(raw_source_codes, (list, tuple, set, frozenset))
+        else ()
+    )
+    impacted_code = (
+        info.data.get("ticker") if isinstance(info.data, dict) else None
+    )
+    return validate_simplified_chinese_text(
+        value,
+        None,
+        allowed_codes=[*source_codes, impacted_code],
+    )
+
+
 def _aware_utc_instant(value: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -909,7 +935,7 @@ class EarningsImpactItem(StrictModel):
     reason: Annotated[
         str,
         StringConstraints(strip_whitespace=True, min_length=1, max_length=300),
-        AfterValidator(validate_simplified_chinese_text),
+        AfterValidator(validate_earnings_impact_reason),
     ]
 
     @field_validator("ticker")
