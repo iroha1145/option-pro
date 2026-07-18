@@ -290,7 +290,7 @@ def _legacy_metadata() -> dict[str, str]:
     return {
         "model": "gpt-5.6-terra",
         "reasoning": "max",
-        "prompt_version": "news-impact-zh-cn-v3",
+        "prompt_version": "news-impact-zh-cn-v4",
         "schema_version": schema_version,
     }
 
@@ -304,6 +304,241 @@ def test_canonical_allowlist_rejects_ambiguous_invalid_and_unknown_tickers(tmp_p
     assert "AI" not in intelligence.canonical_tickers
     assert "ON" not in intelligence.canonical_tickers
     assert "CAT" not in intelligence.canonical_tickers
+
+
+def test_v2_local_database_adds_v3_result_audit_tables_without_rewriting_history(
+    tmp_path,
+):
+    cache_path = tmp_path / "catalyst-cache.db"
+    with sqlite3.connect(cache_path) as connection:
+        connection.execute(
+            """CREATE TABLE catalyst_local_schema(
+                   version TEXT PRIMARY KEY,
+                   checksum TEXT NOT NULL,
+                   applied_at TEXT NOT NULL
+               )"""
+        )
+        connection.execute(
+            """INSERT INTO catalyst_local_schema(version,checksum,applied_at)
+               VALUES('optix-local-catalyst-v2','legacy-checksum',?)""",
+            (_iso(datetime.now(timezone.utc)),),
+        )
+        connection.commit()
+    ai = AIJobRepository(tmp_path / "ai-jobs.db")
+    intelligence = LocalCatalystIntelligence(
+        cache_path,
+        ai,
+        mode="manual",
+        canonical_tickers=("NVDA",),
+    )
+
+    intelligence.initialize()
+
+    with sqlite3.connect(cache_path) as connection:
+        versions = connection.execute(
+            "SELECT version FROM catalyst_local_schema ORDER BY version"
+        ).fetchall()
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+    assert versions == [
+        ("optix-local-catalyst-v2",),
+        ("optix-local-catalyst-v3",),
+    ]
+    assert "catalyst_local_analysis_result_audit" in tables
+    assert "catalyst_local_focus_result_audit" in tables
+
+
+def test_reconcile_archives_invalid_published_news_and_makes_it_due_again(
+    tmp_path,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [_news_change(1, 91, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    intelligence.reconcile()
+    job = intelligence.request_analysis(91, force=False)
+    result = _news_result(
+        news_id=91,
+        change_sequence=1,
+        content_hash="hash-91-1",
+    )
+    _finish_job(ai, job["job_id"], result)
+    intelligence.reconcile()
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        accepted = connection.execute(
+            """SELECT outcome FROM catalyst_local_analysis_result_audit
+               WHERE job_id=?""",
+            (job["job_id"],),
+        ).fetchall()
+        link_times = connection.execute(
+            """SELECT result_available_at,verified_at
+               FROM catalyst_local_analysis_links WHERE job_id=?""",
+            (job["job_id"],),
+        ).fetchone()
+    assert accepted == [("accepted",)]
+    assert link_times is not None
+
+    invalid = dict(result)
+    invalid["affected_stocks"] = [dict(result["affected_stocks"][0])]
+    invalid["affected_stocks"][0]["company"] = "NVIDIA"
+    invalid_raw = local_module._json(invalid)
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """UPDATE catalyst_local_analysis_links SET result_json=?
+               WHERE job_id=?""",
+            (invalid_raw, job["job_id"]),
+        )
+        connection.execute(
+            """CREATE TRIGGER fail_result_retirement
+               BEFORE UPDATE OF result_json ON catalyst_local_analysis_links
+               WHEN NEW.result_json IS NULL
+               BEGIN SELECT RAISE(ABORT,'forced retirement failure'); END"""
+        )
+        connection.commit()
+
+    with pytest.raises(sqlite3.IntegrityError, match="forced retirement failure"):
+        intelligence.reconcile()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        assert connection.execute(
+            """SELECT result_json FROM catalyst_local_analysis_links
+               WHERE job_id=?""",
+            (job["job_id"],),
+        ).fetchone()[0] == invalid_raw
+        assert connection.execute(
+            """SELECT COUNT(*) FROM catalyst_local_analysis_result_audit
+               WHERE job_id=? AND outcome='rejected'""",
+            (job["job_id"],),
+        ).fetchone()[0] == 0
+        connection.execute("DROP TRIGGER fail_result_retirement")
+        connection.commit()
+
+    intelligence.reconcile()
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        link = connection.execute(
+            """SELECT result_json,result_available_at,verified_at
+               FROM catalyst_local_analysis_links WHERE job_id=?""",
+            (job["job_id"],),
+        ).fetchone()
+        rejected = connection.execute(
+            """SELECT outcome,result_json,result_available_at,verified_at
+               FROM catalyst_local_analysis_result_audit
+               WHERE job_id=? AND outcome='rejected'""",
+            (job["job_id"],),
+        ).fetchone()
+    assert link == (None, None, None)
+    assert rejected == (
+        "rejected",
+        invalid_raw,
+        link_times[0],
+        link_times[1],
+    )
+    assert intelligence.news(91, as_of=now + timedelta(minutes=1))["item"][
+        "analysis"
+    ] is None
+    candidates = intelligence._scheduled_news_candidates(
+        now=now + timedelta(minutes=1),
+        limit=10,
+    )
+    assert [row["news_id"] for row in candidates] == [91]
+
+    intelligence.reconcile()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        assert connection.execute(
+            """SELECT COUNT(*) FROM catalyst_local_analysis_result_audit
+               WHERE job_id=?""",
+            (job["job_id"],),
+        ).fetchone()[0] == 2
+
+
+def test_focus_audit_is_scoped_to_each_retry_job_even_for_identical_output(
+    tmp_path,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [_news_change(1, 92, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    intelligence.reconcile()
+    news_job = intelligence.request_analysis(92, force=False)
+    _finish_job(
+        ai,
+        news_job["job_id"],
+        _news_result(
+            news_id=92,
+            change_sequence=1,
+            content_hash="hash-92-1",
+        ),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+    )
+    valid = _focus_result(ai, cycle)
+    _finish_job(ai, cycle["job_id"], valid)
+    intelligence.reconcile()
+
+    invalid = dict(valid)
+    invalid["title_zh"] = "Markets rally after earnings"
+    invalid_raw = local_module._json(invalid)
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """UPDATE catalyst_local_focus_cycles SET result_json=?
+               WHERE cycle_id=?""",
+            (invalid_raw, cycle["cycle_id"]),
+        )
+        connection.commit()
+    intelligence.reconcile()
+
+    retry_job_id = "aij_" + "f" * 32
+    with sqlite3.connect(intelligence.db_path) as connection:
+        first = connection.execute(
+            """SELECT status,result_json FROM catalyst_local_focus_cycles
+               WHERE cycle_id=?""",
+            (cycle["cycle_id"],),
+        ).fetchone()
+        first_rejected = connection.execute(
+            """SELECT COUNT(*) FROM catalyst_local_focus_result_audit
+               WHERE cycle_id=? AND outcome='rejected'""",
+            (cycle["cycle_id"],),
+        ).fetchone()[0]
+        connection.execute(
+            """UPDATE catalyst_local_focus_cycles SET
+                   job_id=?,status='completed',error_code=NULL,result_json=?
+               WHERE cycle_id=?""",
+            (retry_job_id, invalid_raw, cycle["cycle_id"]),
+        )
+        connection.commit()
+    assert first == ("failed", invalid_raw)
+    assert first_rejected == 1
+
+    intelligence.reconcile()
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        retried = connection.execute(
+            """SELECT status,result_json FROM catalyst_local_focus_cycles
+               WHERE cycle_id=?""",
+            (cycle["cycle_id"],),
+        ).fetchone()
+        rejected_jobs = connection.execute(
+            """SELECT job_id FROM catalyst_local_focus_result_audit
+               WHERE cycle_id=? AND outcome='rejected' ORDER BY job_id""",
+            (cycle["cycle_id"],),
+        ).fetchall()
+    assert retried == ("failed", invalid_raw)
+    assert rejected_jobs == sorted(
+        [(cycle["job_id"],), (retry_job_id,)]
+    )
 
 
 def test_read_mode_never_creates_paid_jobs_and_never_exposes_raw_english(tmp_path):

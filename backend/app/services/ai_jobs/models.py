@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, Any, Literal, Optional
+from typing import Annotated, Any, Iterable, Literal, Optional
 
 from pydantic import (
     AfterValidator,
@@ -14,6 +15,7 @@ from pydantic import (
     StrictBool,
     StrictInt,
     StringConstraints,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
@@ -29,6 +31,7 @@ AIJobStatus = Literal[
     "insufficient_context",
     "budget_blocked",
 ]
+RESULT_VALIDATION_CONTRACT_VERSION = "simplified-chinese-v4"
 AIJobType = Literal[
     "earnings_impact",
     "option_alerts",
@@ -111,8 +114,7 @@ _TRADITIONAL_CONFLICT_PHRASES = frozenset(
         "象徵",
     }
 )
-_SENTENCE_SPLIT = re.compile(r"[。！？!?；;\n]+")
-_AMBIGUOUS_FINANCE_CODES = frozenset({"A", "AN", "ON", "NOW"})
+_SENTENCE_SPLIT = re.compile(r"[。！？!?\n]+")
 _ENGLISH_PROSE_WORDS = frozenset(
     {
         "a",
@@ -232,38 +234,247 @@ _ENGLISH_PROSE_WORDS = frozenset(
     }
 )
 _FOREIGN_SPAN = re.compile(
-    r"[A-Za-z][A-Za-z0-9]*"
+    r"(?:[A-Za-z][A-Za-z0-9]*|[0-9]+[A-Za-z][A-Za-z0-9]*)"
     r"(?:(?:[.'/-][A-Za-z0-9]+)"
     r"|(?:[ \t]+[A-Za-z0-9][A-Za-z0-9.]*)"
     r"|(?:[ \t]*&[ \t]*[A-Za-z0-9][A-Za-z0-9.]*))*"
 )
 _CURRENCY_PAIR = re.compile(r"[A-Z]{2,6}/[A-Z]{2,6}")
-_VERSIONED_PRODUCT = re.compile(
-    r"(?:[A-Za-z][A-Za-z0-9]*[ -]?\d+(?:\.\d+)*"
-    r"|[A-Za-z]+-\d+[A-Za-z0-9-]*)"
-)
-_CORPORATE_NAME = re.compile(
-    r"[A-Z][A-Za-z0-9']+ (?:Inc|Corp|Ltd|LLC)\.?"
-)
-_DOMAIN_STYLE_NAME = re.compile(r"[A-Z][A-Za-z0-9]*\.[a-z]{2,}")
-_SINGLE_FOREIGN_TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9']*")
-_ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
+_ALLOWED_CURRENCY_CODES = frozenset(
     {
-        "Nookplot Python SDK",
-        "Python SDK",
-        "S&P 500",
-        "nookplot-runtime",
+        "AUD",
+        "BTC",
+        "CAD",
+        "CHF",
+        "CNH",
+        "CNY",
+        "ETH",
+        "EUR",
+        "GBP",
+        "HKD",
+        "JPY",
+        "NZD",
+        "SGD",
+        "SOL",
+        "USD",
+        "USDT",
+        "XAG",
+        "XAU",
     }
 )
-_MEDICAL_FOREIGN_SUFFIXES = (
-    "用于",
-    "治疗",
-    "试验",
-    "获批",
-    "药物",
-    "疗法",
-    "患者",
-    "剂量",
+_VERSIONED_PRODUCT = re.compile(
+    r"(?P<base>[A-Za-z]+)[ -]?(?P<version>\d+(?:\.\d+)*)"
+)
+_ALLOWED_VERSIONED_PRODUCT_BASES = frozenset(
+    {
+        "Android",
+        "CUDA",
+        "COVID",
+        "Claude",
+        "F",
+        "GPT",
+        "Gemini",
+        "Llama",
+        "Python",
+        "RTX",
+        "Windows",
+        "iOS",
+        "iPhone",
+        "macOS",
+    }
+)
+_SINGLE_FOREIGN_TOKEN = re.compile(r"[A-Za-z][A-Za-z']*")
+_NUMERIC_SECURITY_CODE = re.compile(
+    r"(?<![A-Za-z0-9.^-])[0-9]{1,12}(?![A-Za-z0-9])"
+)
+_ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
+    {
+        "5G",
+        "ADP",
+        "AI",
+        "APDS",
+        "API",
+        "AUM",
+        "AWS",
+        "Adobe",
+        "Amazon",
+        "Amazon.com",
+        "Android",
+        "Apple",
+        "Atlas",
+        "Axios",
+        "Azure",
+        "B200",
+        "BOJ",
+        "Base",
+        "Blackwell",
+        "Block",
+        "CAGR",
+        "CDN",
+        "CFTC",
+        "CPI",
+        "CPU",
+        "CRM",
+        "CUDA",
+        "Claude",
+        "Cloudflare",
+        "Copilot",
+        "CrowdStrike",
+        "DCF",
+        "DEI",
+        "DOJ",
+        "DRAM",
+        "EBITDA",
+        "ECB",
+        "EPS",
+        "ETF",
+        "EUV",
+        "EV",
+        "Eylea",
+        "F-35A",
+        "FCF",
+        "FDA",
+        "FOMC",
+        "FTC",
+        "Facebook",
+        "GAAP",
+        "GB200",
+        "GDP",
+        "GLP-1",
+        "GPU",
+        "Gemini",
+        "GitHub",
+        "GitLab",
+        "Goodyear",
+        "Google",
+        "H100",
+        "HBM",
+        "HDD",
+        "HIV",
+        "Humira",
+        "IDM 2.0",
+        "IPO",
+        "ISM",
+        "Instagram",
+        "IonQ",
+        "JOLTS",
+        "Joenja",
+        "Kalshi",
+        "LLM",
+        "LNG",
+        "LinkedIn",
+        "Llama",
+        "MI300X",
+        "McDonald's",
+        "Meta",
+        "Microsoft",
+        "MoM",
+        "Moderna",
+        "NAND",
+        "NAV",
+        "NASCAR",
+        "NVIDIA",
+        "Nookplot",
+        "Nookplot Python SDK",
+        "NPU",
+        "OPEC",
+        "Office",
+        "OpenAI",
+        "Ozempic/Wegovy",
+        "P/E",
+        "PBOC",
+        "PCE",
+        "PEG",
+        "PMI",
+        "Palantir",
+        "PayPal",
+        "Pharming",
+        "Photoshop/Premiere",
+        "PlayStation",
+        "Python",
+        "Python SDK",
+        "PyTorch-Lightning",
+        "QoQ",
+        "Qualcomm",
+        "RAM",
+        "ROE",
+        "ROIC",
+        "RSA",
+        "S&P 500",
+        "SEC",
+        "SDK",
+        "SaaS",
+        "SSD",
+        "Salesforce",
+        "ServiceNow",
+        "Skydance",
+        "Snowflake",
+        "Square",
+        "TSMC",
+        "Temu",
+        "TeraWulf",
+        "TikTok",
+        "Varonis",
+        "VIX",
+        "Visa",
+        "WTI",
+        "WhatsApp",
+        "Windows",
+        "YoY",
+        "YouTube",
+        "eBay",
+        "gpt-oss",
+        "iOS",
+        "iPad",
+        "iPhone",
+        "iShares",
+        "mRNA",
+        "macOS",
+        "nookplot-runtime",
+        "scikit-learn",
+    }
+)
+_ALLOWED_LOWERCASE_FOREIGN_NAMES = frozenset(
+    {
+        "leniolisib",
+        "remdesivir",
+        "semaglutide",
+    }
+)
+_UPPERCASE_BRAND_SPANS = frozenset({"NASCAR", "NVIDIA", "TSMC"})
+_CJK_CONTEXT_SEPARATORS = frozenset(
+    " \t，、：；,:“”‘’「」『』《》【】—–-"
+)
+_SECURITY_CONTEXT_SEPARATORS = _CJK_CONTEXT_SEPARATORS.union("（）()")
+_SECURITY_CODE_SUFFIXES = ("股价", "股票", "公司", "个股", "证券")
+_SECURITY_CODE_PREFIXES = ("股票", "个股", "代码", "证券")
+_SECURITY_PRICE_MOVEMENTS = (
+    "上涨",
+    "下跌",
+    "涨停",
+    "跌停",
+    "走强",
+    "走弱",
+    "收涨",
+    "收跌",
+)
+_PARENTHETICAL_ALIAS_BEFORE_STOCK_PRICE = re.compile(
+    r"^[（(][\u3400-\u9fff]{1,30}[）)]"
+    r"(?:的)?(?:当前|最新|今日|昨日|本周|盘前|盘后)?股价"
+)
+_STOCK_PRICE_SUFFIX = re.compile(
+    r"^(?:的)?(?:当前|最新|今日|昨日|本周|盘前|盘后)?股价"
+)
+_JAPANESE_COMPANY_MARKERS = (
+    "株式会社",
+    "有限会社",
+    "合同会社",
+    "㈱",
+    "㍿",
+    "（株）",
+    "(株)",
+    "売上高",
+    "株価",
 )
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 
@@ -289,19 +500,61 @@ def _is_cjk(char: str) -> bool:
     return any(start <= codepoint <= end for start, end in _CJK_RANGES)
 
 
-def _is_ticker_span(span: str) -> bool:
-    if _CURRENCY_PAIR.fullmatch(span) is not None:
+def _is_ticker_span(span: str, allowed_codes: frozenset[str]) -> bool:
+    if span.upper() == span and span in allowed_codes:
         return True
-    if len(span) > 12 or _TICKER_PATTERN.fullmatch(span) is None:
+    if _CURRENCY_PAIR.fullmatch(span) is None:
         return False
-    if span.upper() != span:
+    base, quote = span.split("/", 1)
+    return base in _ALLOWED_CURRENCY_CODES and quote in _ALLOWED_CURRENCY_CODES
+
+
+def _is_allowed_versioned_product(span: str) -> bool:
+    matched = _VERSIONED_PRODUCT.fullmatch(span)
+    if matched is None:
         return False
-    if "." in span or "^" in span:
-        return True
-    if "-" in span:
-        suffix = span.rsplit("-", 1)[-1]
-        return len(suffix) <= 2 or any(char.isdigit() for char in suffix)
-    return len(span) <= 6
+    return matched.group("base") in _ALLOWED_VERSIONED_PRODUCT_BASES
+
+
+def _approved_span_requires_ticker_binding(
+    span: str,
+    *,
+    sentence: str,
+    start: int,
+    end: int,
+) -> bool:
+    if span.upper() != span or span in _UPPERCASE_BRAND_SPANS:
+        return False
+    before_index = start - 1
+    while (
+        before_index >= 0
+        and sentence[before_index] in _SECURITY_CONTEXT_SEPARATORS
+    ):
+        before_index -= 1
+    prefix = sentence[: before_index + 1]
+    after_index = end
+    while (
+        after_index < len(sentence)
+        and sentence[after_index] in _SECURITY_CONTEXT_SEPARATORS
+    ):
+        after_index += 1
+    suffix = sentence[after_index:]
+    return (
+        prefix.endswith(
+            (
+                "股票",
+                "个股",
+                "股票代码为",
+                "股票代码是",
+                "证券代码为",
+                "证券代码是",
+            )
+        )
+        or _STOCK_PRICE_SUFFIX.match(suffix) is not None
+        or suffix.startswith(("这只股票", "这只个股"))
+        or _PARENTHETICAL_ALIAS_BEFORE_STOCK_PRICE.match(sentence[end:])
+        is not None
+    )
 
 
 def _foreign_span_context(
@@ -310,42 +563,63 @@ def _foreign_span_context(
     sentence: str,
     start: int,
     end: int,
+    allowed_codes: frozenset[str],
 ) -> bool:
+    if span == "A":
+        suffix = sentence[end:]
+        if suffix.startswith(("股价", "股票")):
+            return span in allowed_codes
+        if suffix.startswith(("股", "轮")):
+            return True
     if span in _ALLOWED_EXACT_FOREIGN_SPANS:
+        if _approved_span_requires_ticker_binding(
+            span,
+            sentence=sentence,
+            start=start,
+            end=end,
+        ):
+            return span in allowed_codes
         return True
-    if span in _AMBIGUOUS_FINANCE_CODES:
+    if _is_ticker_span(span, allowed_codes):
         return True
     folded = span.casefold().rstrip(".")
     prose_form = folded[:-2] if folded.endswith("'s") else folded
     if prose_form in _ENGLISH_PROSE_WORDS:
         return False
-    if _is_ticker_span(span):
-        return True
-    if _VERSIONED_PRODUCT.fullmatch(span) is not None:
-        product = re.split(r"[ -]?\d", span, maxsplit=1)[0].casefold()
-        return product not in _ENGLISH_PROSE_WORDS
-    if _CORPORATE_NAME.fullmatch(span) is not None:
-        return True
-    if _DOMAIN_STYLE_NAME.fullmatch(span) is not None:
+    if _is_allowed_versioned_product(span):
         return True
     if _SINGLE_FOREIGN_TOKEN.fullmatch(span) is None:
         return False
+    if span.upper() == span:
+        return False
 
-    before = sentence[start - 1] if start > 0 else ""
-    after = sentence[end] if end < len(sentence) else ""
+    before_index = start - 1
+    while (
+        before_index >= 0
+        and sentence[before_index] in _CJK_CONTEXT_SEPARATORS
+    ):
+        before_index -= 1
+    after_index = end
+    while (
+        after_index < len(sentence)
+        and sentence[after_index] in _CJK_CONTEXT_SEPARATORS
+    ):
+        after_index += 1
+    before = sentence[before_index] if before_index >= 0 else ""
+    after = sentence[after_index] if after_index < len(sentence) else ""
     parenthetical = (
-        start > 1
+        before_index > 0
         and before in "（("
-        and _is_cjk(sentence[start - 2])
+        and _is_cjk(sentence[before_index - 1])
     ) or (
-        end + 1 < len(sentence)
+        after_index + 1 < len(sentence)
         and after in "）)"
-        and _is_cjk(sentence[end + 1])
+        and _is_cjk(sentence[after_index + 1])
     )
     alias_parenthetical = False
     if after in "（(":
         closing = "）" if after == "（" else ")"
-        closing_index = sentence.find(closing, end + 1)
+        closing_index = sentence.find(closing, after_index + 1)
         alias_parenthetical = (
             closing_index >= 0
             and closing_index + 1 < len(sentence)
@@ -356,48 +630,175 @@ def _foreign_span_context(
     )
     letters = span.replace("'", "")
     if letters.islower():
-        suffix = sentence[end:]
-        return parenthetical or alias_parenthetical or any(
-            suffix.startswith(item) for item in _MEDICAL_FOREIGN_SUFFIXES
+        return (
+            span in _ALLOWED_LOWERCASE_FOREIGN_NAMES
+            and (
+                parenthetical
+                or alias_parenthetical
+                or direct_cjk
+            )
         )
-    return parenthetical or alias_parenthetical or direct_cjk
+    return False
 
 
-def validate_simplified_chinese_text(value: str) -> str:
+def _normalize_compatibility_alphanumerics(text: str) -> str:
+    """Expose styled Latin letters and digits to the ASCII language gate."""
+
+    normalized: list[str] = []
+    for char in text:
+        replacement = unicodedata.normalize("NFKC", char)
+        if (
+            replacement != char
+            and any(
+                item.isascii() and (item.isalpha() or item.isdigit())
+                for item in replacement
+            )
+        ):
+            normalized.append(replacement)
+        else:
+            normalized.append(char)
+    return "".join(normalized)
+
+
+def _numeric_code_is_in_security_context(
+    sentence: str,
+    *,
+    start: int,
+    end: int,
+) -> bool:
+    span = sentence[start:end]
+    if len(span) == 5 and span.startswith("0"):
+        return True
+    before_index = start - 1
+    while (
+        before_index >= 0
+        and sentence[before_index] in _SECURITY_CONTEXT_SEPARATORS
+    ):
+        before_index -= 1
+    after_index = end
+    while (
+        after_index < len(sentence)
+        and sentence[after_index] in _SECURITY_CONTEXT_SEPARATORS
+    ):
+        after_index += 1
+    prefix = sentence[: before_index + 1]
+    suffix = sentence[after_index:]
+    return (
+        prefix.endswith(_SECURITY_CODE_PREFIXES)
+        or prefix.endswith(
+            (
+                "股票代码为",
+                "股票代码是",
+                "证券代码为",
+                "证券代码是",
+                "证券编号为",
+                "证券编号是",
+            )
+        )
+        or suffix.startswith(_SECURITY_CODE_SUFFIXES)
+        or suffix.startswith("这只股票")
+        or (
+            len(span) == 6
+            and suffix.startswith(_SECURITY_PRICE_MOVEMENTS)
+        )
+    )
+
+
+def validate_simplified_chinese_text(
+    value: str,
+    info: ValidationInfo | None,
+    *,
+    allowed_codes: Iterable[str] = (),
+) -> str:
     """Reject non-Chinese prose and common Traditional Chinese deterministically."""
 
     text = value.strip()
     if not text:
         raise ValueError("simplified_chinese_text_required")
-    traditional = sorted({char for char in text if char in _TRADITIONAL_ONLY})
+    scan_text = _normalize_compatibility_alphanumerics(text)
+    compatibility_text = unicodedata.normalize("NFKC", scan_text)
+    if any(
+        marker in scan_text or marker in compatibility_text
+        for marker in _JAPANESE_COMPANY_MARKERS
+    ):
+        raise ValueError("non_chinese_script_not_allowed")
+    if any(
+        char.isalpha() and not char.isascii() and not _is_cjk(char)
+        for char in scan_text
+    ):
+        raise ValueError("non_chinese_script_not_allowed")
+    traditional = sorted(
+        {char for char in scan_text if char in _TRADITIONAL_ONLY}
+    )
     if traditional or any(
-        phrase in text for phrase in _TRADITIONAL_CONFLICT_PHRASES
+        phrase in scan_text for phrase in _TRADITIONAL_CONFLICT_PHRASES
     ):
         raise ValueError("traditional_chinese_not_allowed")
-    cjk_count = sum(1 for char in text if _is_cjk(char))
+    cjk_count = sum(1 for char in scan_text if _is_cjk(char))
     if cjk_count == 0:
         raise ValueError("simplified_chinese_text_required")
-    latin_count = sum(1 for char in text if char.isascii() and char.isalpha())
+    latin_count = sum(
+        1 for char in scan_text if char.isascii() and char.isalpha()
+    )
     if latin_count > max(32, cjk_count * 4):
         raise ValueError("english_prose_not_allowed")
-    for sentence in _SENTENCE_SPLIT.split(text):
+    context_codes = (
+        info.context.get("allowed_codes", ())
+        if info is not None and isinstance(info.context, dict)
+        else allowed_codes
+    )
+    normalized_codes = frozenset(
+        str(code).strip().upper()
+        for code in context_codes
+        if isinstance(code, str) and str(code).strip()
+    )
+    for sentence in _SENTENCE_SPLIT.split(scan_text):
         sentence_latin = sum(
             1 for char in sentence if char.isascii() and char.isalpha()
         )
         sentence_cjk = sum(1 for char in sentence if _is_cjk(char))
-        if sentence_latin > max(16, sentence_cjk * 5):
+        if sentence_latin > max(24, sentence_cjk * 5):
             raise ValueError("english_prose_not_allowed")
+        for match in _NUMERIC_SECURITY_CODE.finditer(sentence):
+            if not _numeric_code_is_in_security_context(
+                sentence,
+                start=match.start(),
+                end=match.end(),
+            ):
+                continue
+            if match.group(0) not in normalized_codes:
+                raise ValueError("unbound_numeric_security_code")
         for match in _FOREIGN_SPAN.finditer(sentence):
             if _foreign_span_context(
                 match.group(0),
                 sentence=sentence,
                 start=match.start(),
                 end=match.end(),
+                allowed_codes=normalized_codes,
             ):
                 continue
             raise ValueError("english_prose_not_allowed")
         if sentence_latin >= 16 and sentence_cjk == 0:
             raise ValueError("english_prose_not_allowed")
+    return scan_text
+
+
+def validate_simplified_chinese_company_name(
+    value: str,
+    info: ValidationInfo | None,
+) -> str:
+    """Require company display names to be Chinese, with no Latin alias."""
+
+    text = validate_simplified_chinese_text(value, info)
+    scan_text = _normalize_compatibility_alphanumerics(text)
+    marker_text = unicodedata.normalize("NFKC", scan_text)
+    if any(
+        marker in scan_text or marker in marker_text
+        for marker in _JAPANESE_COMPANY_MARKERS
+    ):
+        raise ValueError("company_name_must_be_simplified_chinese")
+    if any(char.isalpha() and not _is_cjk(char) for char in scan_text):
+        raise ValueError("company_name_must_be_simplified_chinese")
     return text
 
 
@@ -415,6 +816,11 @@ ZhShortText = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=500),
     AfterValidator(validate_simplified_chinese_text),
+]
+ZhCompanyName = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=500),
+    AfterValidator(validate_simplified_chinese_company_name),
 ]
 ZhBoundedText = Annotated[
     str,
@@ -486,7 +892,7 @@ class SignalAnalysisJobRequest(StrictModel):
 
 class EarningsImpactItem(StrictModel):
     ticker: Ticker
-    name: Annotated[str, StringConstraints(min_length=1, max_length=160)]
+    name: ZhCompanyName
     relation: Literal["competitor", "supplier", "customer", "etf", "opposing"]
     direction: Literal["bullish", "bearish", "mixed"]
     reason: Annotated[
@@ -616,7 +1022,7 @@ class SignalAnalysisResult(SimplifiedChineseResult):
 
 class NewsStockImpact(StrictModel):
     ticker: Ticker
-    company: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+    company: ZhCompanyName
     impact_score: StrictInt = Field(ge=-100, le=100)
     confidence: StrictInt = Field(ge=0, le=100)
     horizon: Literal["intraday", "days", "weeks", "uncertain"]
@@ -891,7 +1297,23 @@ def validate_job_payload(job_type: str, payload: dict) -> None:
 
 def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
     model = result_model_for(job_type)
-    result = model.model_validate_json(raw_json)
+    if job_type in {"news_impact", "market_focus"}:
+        raw_allowed_codes = payload.get("allowed_tickers")
+    else:
+        raw_allowed_codes = [payload.get("ticker")]
+    allowed_codes = [
+        str(code).strip().upper()
+        for code in raw_allowed_codes or []
+        if (
+            isinstance(code, str)
+            and str(code).strip()
+            and _TICKER_PATTERN.fullmatch(str(code).strip()) is not None
+        )
+    ]
+    result = model.model_validate_json(
+        raw_json,
+        context={"allowed_codes": allowed_codes},
+    )
     data = result.model_dump(mode="json")
     if job_type == "earnings_impact":
         expected = str(payload.get("ticker") or "").upper()

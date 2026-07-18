@@ -32,11 +32,11 @@ from app.services.runtime_settings import (
 
 _MAX_AI_BODY_BYTES = 64 * 1024
 _PROMPT_VERSIONS = {
-    "earnings_impact": "earnings-impact-zh-cn-v3",
-    "option_alerts": "option-alerts-zh-cn-v3",
-    "signal_analysis": "signal-analysis-zh-cn-v3",
-    "news_impact": "news-impact-zh-cn-v3",
-    "market_focus": "market-focus-zh-cn-v3",
+    "earnings_impact": "earnings-impact-zh-cn-v4",
+    "option_alerts": "option-alerts-zh-cn-v4",
+    "signal_analysis": "signal-analysis-zh-cn-v4",
+    "news_impact": "news-impact-zh-cn-v4",
+    "market_focus": "market-focus-zh-cn-v4",
 }
 
 

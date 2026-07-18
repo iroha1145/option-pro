@@ -128,13 +128,28 @@ def _earnings_result():
                 "reason": "公开业务关系可能形成传导。",
             }
             for ticker, name, relation in [
-                ("MSFT", "Microsoft", "competitor"),
-                ("QCOM", "Qualcomm", "supplier"),
-                ("TSM", "TSMC", "supplier"),
-                ("XLK", "Technology ETF", "etf"),
+                ("MSFT", "微软", "competitor"),
+                ("QCOM", "高通", "supplier"),
+                ("TSM", "台积电", "supplier"),
+                ("XLK", "科技类交易所交易基金", "etf"),
             ]
         ],
     }
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["Microsoft公司", "微软（Microsoft）", "Technology ETF"],
+)
+def test_earnings_company_names_must_be_simplified_chinese(name):
+    result = _earnings_result()
+    result["impacted"][0]["name"] = name
+    with pytest.raises(ValidationError):
+        validate_result(
+            "earnings_impact",
+            json.dumps(result, ensure_ascii=False),
+            {"ticker": "AAPL"},
+        )
 
 
 def _large_signal_result():
@@ -1064,11 +1079,11 @@ def test_worker_health_reports_official_responses_sdk_without_a_key(tmp_path):
 
 def test_all_paid_job_prompt_versions_invalidate_legacy_english_cache():
     assert ai._PROMPT_VERSIONS == {
-        "earnings_impact": "earnings-impact-zh-cn-v3",
-        "option_alerts": "option-alerts-zh-cn-v3",
-        "signal_analysis": "signal-analysis-zh-cn-v3",
-        "news_impact": "news-impact-zh-cn-v3",
-        "market_focus": "market-focus-zh-cn-v3",
+        "earnings_impact": "earnings-impact-zh-cn-v4",
+        "option_alerts": "option-alerts-zh-cn-v4",
+        "signal_analysis": "signal-analysis-zh-cn-v4",
+        "news_impact": "news-impact-zh-cn-v4",
+        "market_focus": "market-focus-zh-cn-v4",
     }
 
 
@@ -1528,7 +1543,7 @@ def test_job_post_is_fast_local_and_idempotent(monkeypatch, tmp_path):
     assert first.json()["status"] == "pending"
     assert second.json()["cached"] is False
     stored = repository.get_job(first.json()["job_id"])
-    assert stored["prompt_version"] == "earnings-impact-zh-cn-v3"
+    assert stored["prompt_version"] == "earnings-impact-zh-cn-v4"
 
 
 def test_option_alert_failed_job_requires_explicit_force_to_requeue(

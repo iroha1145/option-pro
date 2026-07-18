@@ -18,7 +18,10 @@ from zoneinfo import ZoneInfo
 
 from app.access import current_request_is_owner
 from app.services.ai_jobs import runtime as ai_runtime
-from app.services.ai_jobs.models import validate_simplified_chinese_text
+from app.services.ai_jobs.models import (
+    validate_result,
+    validate_simplified_chinese_text,
+)
 from app.services.ai_jobs.repository import AIJobRepository
 
 from .errors import CatalystError, InvalidCursorError
@@ -29,14 +32,22 @@ SubmissionSource = Literal["manual", "scheduled"]
 MODEL = "gpt-5.6-terra"
 REASONING = "max"
 EXECUTION_MODE = "background"
-NEWS_PROMPT_VERSION = "news-impact-zh-cn-v3"
-FOCUS_PROMPT_VERSION = "market-focus-zh-cn-v3"
+NEWS_PROMPT_VERSION = "news-impact-zh-cn-v4"
+FOCUS_PROMPT_VERSION = "market-focus-zh-cn-v4"
 TITLE_WAITING = "中文标题等待生成"
 SUMMARY_WAITING = "中文摘要等待生成"
 HOTSPOT_WAITING = "热点标题等待中文分析"
 AMBIGUOUS_TICKERS = frozenset({"AI", "ON", "CAT"})
 TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-^]{0,11}$")
-SCHEMA_VERSION = "optix-local-catalyst-v2"
+SCHEMA_VERSION = "optix-local-catalyst-v3"
+NEWS_RESULT_CONTRACT_ID = (
+    f"{NEWS_PROMPT_VERSION}:"
+    f"{ai_runtime.RESULT_VALIDATION_CONTRACT_VERSION}"
+)
+FOCUS_RESULT_CONTRACT_ID = (
+    f"{FOCUS_PROMPT_VERSION}:"
+    f"{ai_runtime.RESULT_VALIDATION_CONTRACT_VERSION}"
+)
 SCHEDULE_CLAIM_TTL_SECONDS = 10 * 60
 SCHEDULED_NEWS_BATCH_SIZE = 20
 SCHEDULED_QUEUE_SOFT_LIMIT = 40
@@ -108,6 +119,21 @@ CREATE TABLE IF NOT EXISTS catalyst_local_analysis_links (
 CREATE INDEX IF NOT EXISTS idx_local_analysis_revision
     ON catalyst_local_analysis_links(news_id,change_sequence,content_hash,result_available_at DESC);
 
+CREATE TABLE IF NOT EXISTS catalyst_local_analysis_result_audit (
+    job_id TEXT NOT NULL,
+    contract_id TEXT NOT NULL,
+    result_sha256 TEXT NOT NULL CHECK(length(result_sha256)=64),
+    outcome TEXT NOT NULL CHECK(outcome IN ('accepted','rejected')),
+    reason TEXT,
+    result_json TEXT NOT NULL,
+    result_available_at TEXT,
+    verified_at TEXT,
+    observed_at TEXT NOT NULL,
+    PRIMARY KEY(job_id,contract_id,result_sha256)
+);
+CREATE INDEX IF NOT EXISTS idx_local_analysis_result_audit_outcome
+    ON catalyst_local_analysis_result_audit(contract_id,outcome,observed_at);
+
 CREATE TABLE IF NOT EXISTS catalyst_local_event_groups (
     event_group_id TEXT NOT NULL,
     event_group_version INTEGER NOT NULL CHECK(event_group_version >= 1),
@@ -169,6 +195,21 @@ CREATE TABLE IF NOT EXISTS catalyst_local_focus_cycles (
 );
 CREATE INDEX IF NOT EXISTS idx_local_focus_latest
     ON catalyst_local_focus_cycles(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS catalyst_local_focus_result_audit (
+    cycle_id TEXT NOT NULL,
+    job_id TEXT NOT NULL,
+    contract_id TEXT NOT NULL,
+    result_sha256 TEXT NOT NULL CHECK(length(result_sha256)=64),
+    outcome TEXT NOT NULL CHECK(outcome IN ('accepted','rejected')),
+    reason TEXT,
+    result_json TEXT NOT NULL,
+    result_available_at TEXT,
+    observed_at TEXT NOT NULL,
+    PRIMARY KEY(cycle_id,job_id,contract_id,result_sha256)
+);
+CREATE INDEX IF NOT EXISTS idx_local_focus_result_audit_outcome
+    ON catalyst_local_focus_result_audit(contract_id,outcome,observed_at);
 
 CREATE TABLE IF NOT EXISTS catalyst_local_refresh_requests (
     request_id TEXT PRIMARY KEY,
@@ -287,7 +328,7 @@ def _sha(value: Any) -> str:
 
 def _public_chinese_text(value: Any, fallback: str) -> str:
     try:
-        return validate_simplified_chinese_text(str(value or ""))
+        return validate_simplified_chinese_text(str(value or ""), None)
     except ValueError:
         return fallback
 
@@ -1101,6 +1142,155 @@ class LocalCatalystIntelligence:
         }
         return all(payload.get(key) == value for key, value in expected.items())
 
+    def _audit_published_news_results(
+        self,
+        connection: sqlite3.Connection,
+    ) -> tuple[int, int]:
+        """Archive and retire published news results that fail this contract."""
+
+        rows = connection.execute(
+            """SELECT link.job_id,link.news_id,link.change_sequence,
+                      link.content_hash,link.result_json,
+                      link.result_available_at,link.verified_at,
+                      revision.canonical_tickers_json
+               FROM catalyst_local_analysis_links link
+               JOIN catalyst_local_news_revisions revision
+                 ON revision.news_id=link.news_id
+                AND revision.change_sequence=link.change_sequence
+                AND revision.content_hash=link.content_hash
+               WHERE link.result_json IS NOT NULL"""
+        ).fetchall()
+        accepted = 0
+        rejected = 0
+        observed_at = _iso()
+        for row in rows:
+            raw_result = str(row["result_json"])
+            digest = hashlib.sha256(raw_result.encode("utf-8")).hexdigest()
+            audited = connection.execute(
+                """SELECT 1 FROM catalyst_local_analysis_result_audit
+                   WHERE job_id=? AND contract_id=? AND result_sha256=?""",
+                (row["job_id"], NEWS_RESULT_CONTRACT_ID, digest),
+            ).fetchone()
+            if audited is not None:
+                continue
+            payload = {
+                "news_id": int(row["news_id"]),
+                "change_sequence": int(row["change_sequence"]),
+                "content_hash": str(row["content_hash"]),
+                "allowed_tickers": _loads(
+                    row["canonical_tickers_json"],
+                    [],
+                ),
+            }
+            try:
+                validate_result("news_impact", raw_result, payload)
+            except (TypeError, ValueError):
+                outcome = "rejected"
+                reason = "current_news_result_contract_rejected"
+            else:
+                outcome = "accepted"
+                reason = None
+            connection.execute(
+                """INSERT INTO catalyst_local_analysis_result_audit(
+                       job_id,contract_id,result_sha256,outcome,reason,
+                       result_json,result_available_at,verified_at,observed_at
+                   ) VALUES(?,?,?,?,?,?,?,?,?)""",
+                (
+                    row["job_id"],
+                    NEWS_RESULT_CONTRACT_ID,
+                    digest,
+                    outcome,
+                    reason,
+                    raw_result,
+                    row["result_available_at"],
+                    row["verified_at"],
+                    observed_at,
+                ),
+            )
+            if outcome == "accepted":
+                accepted += 1
+                continue
+            connection.execute(
+                """UPDATE catalyst_local_analysis_links SET
+                       result_json=NULL,result_available_at=NULL,verified_at=NULL
+                   WHERE job_id=? AND result_json=?""",
+                (row["job_id"], raw_result),
+            )
+            rejected += 1
+        return accepted, rejected
+
+    def _audit_published_focus_results(
+        self,
+        connection: sqlite3.Connection,
+    ) -> tuple[int, int]:
+        """Archive invalid focus output and make its durable intent retryable."""
+
+        rows = connection.execute(
+            """SELECT cycle_id,job_id,payload_json,result_json,
+                      completed_at,updated_at
+               FROM catalyst_local_focus_cycles
+               WHERE result_json IS NOT NULL"""
+        ).fetchall()
+        accepted = 0
+        rejected = 0
+        observed_at = _iso()
+        for row in rows:
+            raw_result = str(row["result_json"])
+            digest = hashlib.sha256(raw_result.encode("utf-8")).hexdigest()
+            audited = connection.execute(
+                """SELECT 1 FROM catalyst_local_focus_result_audit
+                   WHERE cycle_id=? AND job_id=? AND contract_id=?
+                     AND result_sha256=?""",
+                (
+                    row["cycle_id"],
+                    row["job_id"],
+                    FOCUS_RESULT_CONTRACT_ID,
+                    digest,
+                ),
+            ).fetchone()
+            if audited is not None:
+                continue
+            payload = _loads(row["payload_json"], None)
+            try:
+                if not isinstance(payload, dict):
+                    raise ValueError("market_focus_payload_invalid")
+                validate_result("market_focus", raw_result, payload)
+            except (TypeError, ValueError):
+                outcome = "rejected"
+                reason = "current_focus_result_contract_rejected"
+            else:
+                outcome = "accepted"
+                reason = None
+            connection.execute(
+                """INSERT INTO catalyst_local_focus_result_audit(
+                       cycle_id,job_id,contract_id,result_sha256,outcome,
+                       reason,result_json,result_available_at,observed_at
+                   ) VALUES(?,?,?,?,?,?,?,?,?)""",
+                (
+                    row["cycle_id"],
+                    row["job_id"],
+                    FOCUS_RESULT_CONTRACT_ID,
+                    digest,
+                    outcome,
+                    reason,
+                    raw_result,
+                    row["completed_at"] or row["updated_at"],
+                    observed_at,
+                ),
+            )
+            if outcome == "accepted":
+                accepted += 1
+                continue
+            connection.execute(
+                """UPDATE catalyst_local_focus_cycles SET
+                       status='failed',error_code='legacy_output_hidden',
+                       updated_at=?
+                   WHERE cycle_id=? AND result_json=?""",
+                (observed_at, row["cycle_id"], raw_result),
+            )
+            rejected += 1
+        return accepted, rejected
+
     def _publish_completed_news(
         self,
         connection: sqlite3.Connection,
@@ -1509,6 +1699,21 @@ class LocalCatalystIntelligence:
         ).fetchone()
         if previous_snapshot is not None and str(previous_snapshot["input_hash"]) == input_hash:
             return int(previous_snapshot["prepared_revision"]), len(prepared), True
+        # Invalidating a published analysis can temporarily restore an older
+        # waiting-state plan. The snapshot hash is historically unique, so
+        # retain the latest prepared view until the replacement analysis lands
+        # instead of attempting to insert the old hash again.
+        historical_snapshot = connection.execute(
+            """SELECT prepared_revision FROM catalyst_local_hotspot_revisions
+               WHERE input_hash=? LIMIT 1""",
+            (input_hash,),
+        ).fetchone()
+        if historical_snapshot is not None and current_snapshot is not None:
+            return (
+                int(current_snapshot["prepared_revision"]),
+                int(current_snapshot["item_count"]),
+                True,
+            )
         revision = int(previous_snapshot["prepared_revision"] if previous_snapshot else 0) + 1
         data_through = max((str(item["available_at"]) for item in prepared), default=None)
         connection.execute(
@@ -1551,6 +1756,8 @@ class LocalCatalystIntelligence:
                 )
                 analyses = self._publish_completed_news(connection, ai_jobs)
                 focus_results = self._publish_completed_focus(connection, ai_jobs)
+                self._audit_published_news_results(connection)
+                self._audit_published_focus_results(connection)
                 connection.commit()
             except Exception:
                 connection.rollback()
@@ -3437,6 +3644,9 @@ class LocalCatalystIntelligence:
                     cycle_payload.get("allowed_event_group_ids", [])
                 ),
                 "focus_symbol_count": len(cycle_payload.get("allowed_tickers", [])),
+                "validation_allowed_tickers": list(
+                    cycle_payload.get("allowed_tickers", [])
+                ),
                 "model": self.model,
                 "reasoning_effort": self.reasoning,
                 "result": result,

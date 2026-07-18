@@ -544,7 +544,7 @@ def test_historical_news_never_exposes_future_job_state_or_result(
                 "model": "gpt-5.6-terra",
                 "reasoning": "max",
                 "execution_mode": "background",
-                "prompt_version": "news-impact-zh-cn-v3",
+                "prompt_version": "news-impact-zh-cn-v4",
                 "schema_version": schema_version,
                 "schema_sha256": schema_hash,
                 "created_at": link_created_at.isoformat().replace("+00:00", "Z"),
@@ -791,7 +791,7 @@ def test_analysis_job_endpoint_is_limited_to_news_jobs() -> None:
                 "model": "gpt-5.6-terra",
                 "reasoning": "max",
                 "execution_mode": "background",
-                "prompt_version": "news-impact-zh-cn-v3",
+                "prompt_version": "news-impact-zh-cn-v4",
                 "schema_version": schema_version,
                 "schema_sha256": schema_hash,
                 "result": _news_result(),
@@ -826,7 +826,7 @@ def test_read_mode_can_cancel_a_news_job_created_before_the_mode_changed() -> No
                 "model": "gpt-5.6-terra",
                 "reasoning": "max",
                 "execution_mode": "background",
-                "prompt_version": "news-impact-zh-cn-v3",
+                "prompt_version": "news-impact-zh-cn-v4",
                 "schema_version": schema_version,
                 "schema_sha256": schema_hash,
                 "result": None,
@@ -861,6 +861,110 @@ def test_focus_result_must_match_cycle_time_and_input_hash() -> None:
     hidden = PersonalCatalystService._project_focus_cycle(mismatched)
     assert hidden["result"] is None
     assert hidden["error_code"] == "legacy_output_hidden"
+
+
+def test_projection_preserves_results_with_their_task_ticker_context() -> None:
+    analysis = _news_result()
+    analysis["title_zh"] = "NVDA发布新一代芯片"
+    analysis["summary_zh"] = "NVDA新品进展受到市场关注。"
+    item = {
+        "news_id": 101,
+        "change_sequence": 7,
+        "content_hash": "hash-101",
+        "source_tickers": ["NVDA"],
+    }
+    projected_news = PersonalCatalystService._project_news_analysis(
+        analysis,
+        item=item,
+    )
+    assert projected_news is not None
+    assert projected_news["title_zh"].startswith("NVDA")
+
+    expected_hash = "a" * 64
+    focus = _focus_result(input_hash=expected_hash)
+    focus["title_zh"] = "NVDA成为当前市场焦点"
+    cycle = {
+        "cycle_id": "mfc_" + "a" * 32,
+        "snapshot_as_of": "2026-07-15T04:00:00Z",
+        "input_hash": expected_hash,
+        "status": "completed",
+        "validation_allowed_tickers": ["NVDA"],
+        "result": focus,
+    }
+    projected_focus = PersonalCatalystService._project_focus_cycle(cycle)
+    assert projected_focus is not None
+    assert projected_focus["result"]["title_zh"].startswith("NVDA")
+    assert "validation_allowed_tickers" not in projected_focus
+
+
+def test_focus_request_removes_internal_validation_context_while_pending() -> None:
+    class PendingFocusIntelligence(FakeIntelligence):
+        def request_market_focus_cycle(
+            self,
+            *,
+            expected_prepared_revision,
+            retry_cycle_id=None,
+            force=False,
+        ):
+            return {
+                "cycle_id": "mfc_" + "a" * 32,
+                "status": "pending",
+                "validation_allowed_tickers": ["NVDA"],
+                "result": None,
+            }
+
+    service = _service("manual", engine=PendingFocusIntelligence())
+    projected = service.request_market_focus_cycle(
+        expected_prepared_revision=3,
+    )
+
+    assert projected["status"] == "pending"
+    assert "validation_allowed_tickers" not in projected
+
+
+@pytest.mark.parametrize(
+    ("title", "result_is_visible"),
+    [
+        ("NVDA成为当前市场焦点", True),
+        ("ZZZZ成为当前市场焦点", False),
+    ],
+)
+def test_focus_request_revalidates_completed_result_with_payload_context(
+    title,
+    result_is_visible,
+) -> None:
+    expected_hash = "b" * 64
+    result = _focus_result(input_hash=expected_hash)
+    result["title_zh"] = title
+
+    class CompletedFocusIntelligence(FakeIntelligence):
+        def request_market_focus_cycle(
+            self,
+            *,
+            expected_prepared_revision,
+            retry_cycle_id=None,
+            force=False,
+        ):
+            return {
+                "cycle_id": "mfc_" + "a" * 32,
+                "status": "completed",
+                "snapshot_as_of": "2026-07-15T04:00:00Z",
+                "input_hash": expected_hash,
+                "validation_allowed_tickers": ["NVDA"],
+                "result": result,
+            }
+
+    service = _service("manual", engine=CompletedFocusIntelligence())
+    projected = service.request_market_focus_cycle(
+        expected_prepared_revision=3,
+    )
+
+    assert (projected["result"] is not None) is result_is_visible
+    assert "validation_allowed_tickers" not in projected
+    if result_is_visible:
+        assert projected["result"]["title_zh"].startswith("NVDA")
+    else:
+        assert projected["error_code"] == "legacy_output_hidden"
 
 
 def test_api_factory_always_uses_personal_service(monkeypatch) -> None:

@@ -32,7 +32,7 @@ _WAITING_TITLE = "中文标题等待生成"
 _WAITING_SUMMARY = "中文摘要等待生成"
 _WAITING_HOTSPOT_TITLE = "热点标题等待中文分析"
 _INTERACTIVE_MODES = frozenset({"manual", "scheduled"})
-_NEWS_PROMPT_VERSION = "news-impact-zh-cn-v3"
+_NEWS_PROMPT_VERSION = "news-impact-zh-cn-v4"
 _LOCAL_STORE_RUNTIME_CODES = frozenset(
     {
         "ai_job_insert_failed",
@@ -80,11 +80,19 @@ def _canonical_tickers() -> frozenset[str]:
     )
 
 
-def _valid_zh_text(value: Any) -> str | None:
+def _valid_zh_text(
+    value: Any,
+    *,
+    allowed_codes: Sequence[str] = (),
+) -> str | None:
     if not isinstance(value, str):
         return None
     try:
-        return validate_simplified_chinese_text(value)
+        return validate_simplified_chinese_text(
+            value,
+            None,
+            allowed_codes=allowed_codes,
+        )
     except ValueError:
         return None
 
@@ -601,8 +609,14 @@ class PersonalCatalystService:
     ) -> dict[str, Any] | None:
         if not isinstance(analysis, Mapping):
             return None
+        allowed_codes = item.get("source_tickers")
+        if not isinstance(allowed_codes, list):
+            allowed_codes = []
         try:
-            validated = NewsImpactResult.model_validate(dict(analysis))
+            validated = NewsImpactResult.model_validate(
+                dict(analysis),
+                context={"allowed_codes": allowed_codes},
+            )
         except (TypeError, ValueError):
             return None
         data = validated.model_dump(mode="json")
@@ -654,7 +668,10 @@ class PersonalCatalystService:
         item["summary_zh"] = summary or _WAITING_SUMMARY
 
         for field in ("headline_summary", "causal_summary"):
-            value = _valid_zh_text(item.get(field))
+            value = _valid_zh_text(
+                item.get(field),
+                allowed_codes=item.get("source_tickers") or [],
+            )
             if value is None:
                 item.pop(field, None)
             else:
@@ -757,9 +774,18 @@ class PersonalCatalystService:
                 continue
             item = dict(raw)
             item.pop("title", None)
+            allowed_codes = item.get("validated_tickers")
+            if not isinstance(allowed_codes, list):
+                allowed_codes = []
             item["representative_title"] = (
-                _valid_zh_text(item.get("representative_title"))
-                or _valid_zh_text(item.get("title_zh"))
+                _valid_zh_text(
+                    item.get("representative_title"),
+                    allowed_codes=allowed_codes,
+                )
+                or _valid_zh_text(
+                    item.get("title_zh"),
+                    allowed_codes=allowed_codes,
+                )
                 or _WAITING_HOTSPOT_TITLE
             )
             items.append(item)
@@ -771,11 +797,17 @@ class PersonalCatalystService:
         if not isinstance(cycle, Mapping):
             return None
         projected = dict(cycle)
+        allowed_codes = projected.pop("validation_allowed_tickers", [])
+        if not isinstance(allowed_codes, list):
+            allowed_codes = []
         result = projected.get("result")
         if result is None:
             return projected
         try:
-            validated = MarketFocusResult.model_validate(result)
+            validated = MarketFocusResult.model_validate(
+                result,
+                context={"allowed_codes": allowed_codes},
+            )
         except (TypeError, ValueError):
             projected["result"] = None
             projected["error_code"] = (
@@ -1372,7 +1404,11 @@ class PersonalCatalystService:
             }
             if force:
                 arguments["force"] = True
-            return self.intelligence.request_market_focus_cycle(**arguments)
+            cycle = self.intelligence.request_market_focus_cycle(**arguments)
+            projected = self._project_focus_cycle(cycle)
+            if projected is None:
+                raise RuntimeError("market_focus_cycle_invalid")
+            return projected
         except Exception as error:
             classified = self._analysis_request_error(error)
             if classified is not None:

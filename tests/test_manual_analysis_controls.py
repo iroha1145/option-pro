@@ -161,10 +161,10 @@ def _completed_earnings_result() -> dict:
                 "reason": "公开业务关系可能形成市场传导。",
             }
             for ticker, name, relation in (
-                ("MSFT", "Microsoft", "competitor"),
-                ("QCOM", "Qualcomm", "supplier"),
-                ("TSM", "TSMC", "supplier"),
-                ("XLK", "Technology ETF", "etf"),
+                ("MSFT", "微软", "competitor"),
+                ("QCOM", "高通", "supplier"),
+                ("TSM", "台积电", "supplier"),
+                ("XLK", "科技类交易所交易基金", "etf"),
             )
         ],
     }
