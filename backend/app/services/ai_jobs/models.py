@@ -588,6 +588,17 @@ def _foreign_span_context(
         return False
     if _is_allowed_versioned_product(span):
         return True
+    if any(char.isspace() for char in span):
+        for token_match in re.finditer(r"\S+", span):
+            if not _foreign_span_context(
+                token_match.group(0),
+                sentence=sentence,
+                start=start + token_match.start(),
+                end=start + token_match.end(),
+                allowed_codes=allowed_codes,
+            ):
+                return False
+        return True
     if _SINGLE_FOREIGN_TOKEN.fullmatch(span) is None:
         return False
     if span.upper() == span:

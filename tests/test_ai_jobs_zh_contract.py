@@ -354,6 +354,9 @@ def test_common_traditional_and_variant_prose_is_rejected(traditional_text):
         "GPU与CPU供应趋紧",
         "API与SDK完成升级",
         "H100与B200出货增加",
+        "H100 GPU需求增长",
+        "CPI PCE数据受到关注",
+        "AWS Azure需求增长",
         "MI300X与GB200受到市场关注",
         "RTX 5090发布后需求增长",
         "Gemini 2.5完成升级",
@@ -713,6 +716,7 @@ def test_unihan_self_mapped_characters_remain_valid_in_simplified_contexts(title
         "Tesla发布最新业绩",
         "Broadcom发布最新业绩",
         "Intel发布最新业绩",
+        "H100 Markets需求增长",
     ],
 )
 def test_chinese_text_rejects_english_fragments(mixed_prose):
