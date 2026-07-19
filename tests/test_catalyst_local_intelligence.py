@@ -733,6 +733,25 @@ def test_active_revision_database_errors_are_not_reported_as_empty(tmp_path):
         )
 
 
+def test_recent_windows_compare_timezone_offsets_as_instants(
+    tmp_path,
+    monkeypatch,
+):
+    etl, _ai, intelligence = _stack(tmp_path)
+    now = datetime(2026, 7, 19, 6, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    inside = _news_change(1, 203, available_at=now - timedelta(minutes=5))
+    inside["news"]["published_at"] = "2026-07-18T02:00:00-05:00"
+    outside = _news_change(2, 204, available_at=now - timedelta(minutes=4))
+    outside["news"]["published_at"] = "2026-07-18T01:00:00-05:00"
+    _apply_news(etl, [inside, outside], as_of=now - timedelta(minutes=3))
+
+    intelligence.reconcile()
+    feed = intelligence.feed(as_of=now, window_hours=24, limit=20)
+
+    assert [item["news_id"] for item in feed["items"]] == [203]
+
+
 def test_jobs_can_be_cancelled_after_switching_to_read_mode(tmp_path):
     etl, ai, intelligence = _stack(tmp_path, mode="manual")
     now = datetime.now(timezone.utc).replace(microsecond=0)

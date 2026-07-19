@@ -2332,7 +2332,10 @@ class LocalCatalystIntelligence:
             # A late import must not turn old news into a current event. The
             # source-availability cutoff above still preserves point-in-time
             # visibility; this window is the age of the news itself.
-            time_clause = " AND COALESCE(r.published_at,r.fetched_at)>=?"
+            time_clause = (
+                " AND julianday(COALESCE(r.published_at,r.fetched_at))"
+                ">=julianday(?)"
+            )
             params.append(_iso(as_of - timedelta(hours=window_hours)))
         params.extend(
             [
