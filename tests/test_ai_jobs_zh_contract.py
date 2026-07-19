@@ -248,11 +248,12 @@ def test_rule_10b5_1_exception_remains_narrow(text):
         validate_simplified_chinese_text(text, None)
 
 
-def test_news_prompt_requires_chinese_names_before_submission():
+def test_news_prompt_allows_compact_registered_names_but_not_english_prose():
     request = runtime.build_runtime_request("news_impact", _news_payload())
 
-    assert request.schema_name == "news_impact_zh_cn_v5"
-    assert "禁止原样保留拉丁字母拼写的人名、机构名、品牌名和英文普通词" in request.instructions
+    assert request.schema_name == "news_impact_zh_cn_v6"
+    assert "可以保留简短注册名，例如3M、AT&T或SAP" in request.instructions
+    assert "禁止保留完整英文句子或英文普通叙述" in request.instructions
     assert "输出前逐字段检查" in request.instructions
 
 
@@ -339,9 +340,9 @@ def test_common_traditional_and_variant_prose_is_rejected(traditional_text):
         "NASCAR与Goodyear继续推进DEI合作",
         "Kalshi市场预测显示交易活跃度上升",
         "Axios报道称Kalshi正在扩大事件合约覆盖范围",
-        "nookplot-runtime与Nookplot的Python软件开发工具包在Base平台完成升级",
-        "Nookplot Python SDK在Base平台完成升级",
         "公司发布Python SDK更新",
+        "美国EIA原油库存变化低于预期",
+        "ADP就业数据高于市场预期",
         "Pharming集团的Joenja（leniolisib）用于APDS治疗并改善患者症状",
         "A股市场回暖",
         "公司完成A轮融资",
@@ -578,9 +579,6 @@ def test_every_news_natural_language_field_uses_the_simplified_gate(path):
         "US stocks rally after earnings beat expectations",
         "市場關注聯準會利率",
         "<script>alert(1)</script>",
-        "NVIDIA公司",
-        "Microsoft公司",
-        "微软（Microsoft）",
         "株式会社任天堂",
         "任天堂株式会社",
         "㍿任天堂",
@@ -592,6 +590,49 @@ def test_news_company_name_is_also_bound_to_the_chinese_contract(company):
     result = _news_result()
     result["affected_stocks"][0]["company"] = company
     with pytest.raises(ValidationError):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            _news_payload(),
+        )
+
+
+@pytest.mark.parametrize(
+    ("ticker", "company"),
+    [
+        ("MMM", "3M"),
+        ("MMM", "3M公司"),
+        ("T", "AT&T"),
+        ("SAP", "SAP"),
+        ("SPGI", "S&P Global"),
+        ("TTD", "The Trade Desk"),
+        ("NVDA", "NVIDIA公司"),
+        ("MSFT", "微软（Microsoft）"),
+    ],
+)
+def test_news_company_name_accepts_ticker_bound_registered_names(ticker, company):
+    result = _news_result()
+    result["affected_stocks"][0]["ticker"] = ticker
+    result["affected_stocks"][0]["company"] = company
+    payload = _news_payload()
+    payload["allowed_tickers"] = [ticker]
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["affected_stocks"][0]["company"] == company
+
+
+def test_company_name_rejects_chinese_prefix_followed_by_english_prose():
+    result = _news_result()
+    result["affected_stocks"][0]["company"] = (
+        "微软 Microsoft Reports Strong Growth"
+    )
+
+    with pytest.raises(ValidationError, match="company_registered_name"):
         validate_result(
             "news_impact",
             json.dumps(result, ensure_ascii=False),
@@ -844,6 +885,23 @@ def test_chinese_text_rejects_a_ticker_not_bound_to_the_job_payload():
             "news_impact",
             json.dumps(result, ensure_ascii=False),
             _news_payload(),
+        )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "ZZZZ今日上涨",
+        "ZZZZ公司发布财报",
+        "HELLO WORLD正在发生",
+    ],
+)
+def test_contextual_initialisms_do_not_bypass_ticker_or_language_binding(text):
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        validate_simplified_chinese_text(
+            text,
+            None,
+            allowed_codes=["MSFT"],
         )
 
 

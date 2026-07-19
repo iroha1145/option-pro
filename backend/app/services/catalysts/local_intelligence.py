@@ -32,23 +32,14 @@ SubmissionSource = Literal["manual", "scheduled"]
 MODEL = "gpt-5.6-terra"
 REASONING = "max"
 EXECUTION_MODE = "background"
-NEWS_PROMPT_VERSION = "news-impact-zh-cn-v5"
+NEWS_PROMPT_VERSION = "news-impact-zh-cn-v6"
 FOCUS_PROMPT_VERSION = "market-focus-zh-cn-v4"
 NEWS_RESULT_AUDIT_VERSION = "news-result-validation-v2"
-RECOVERABLE_COMPLETED_NEWS_IDENTITIES = frozenset(
-    {
-        (
-            "news-impact-zh-cn-v2",
-            "news_impact_zh_cn_v2",
-            "372a96dba442b1e58979812c2cff37000a3180670714475b276bfcbbd395aac6",
-        ),
-        (
-            "news-impact-zh-cn-v4",
-            "news_impact_zh_cn_v4",
-            "917ef29ae71ef62a5dc000d78b347dfe004eb98c527815550ff3a3709d126463",
-        ),
-    }
-)
+NEWS_PROMPT_FAMILY_RE = re.compile(r"^news-impact-zh-cn-v[1-9][0-9]*$")
+NEWS_SCHEMA_FAMILY_RE = re.compile(r"^news_impact_zh_cn_v[1-9][0-9]*$")
+FOCUS_PROMPT_FAMILY_RE = re.compile(r"^market-focus-zh-cn-v[1-9][0-9]*$")
+FOCUS_SCHEMA_FAMILY_RE = re.compile(r"^market_focus_zh_cn_v[1-9][0-9]*$")
+SCHEMA_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 TITLE_WAITING = "中文标题等待生成"
 SUMMARY_WAITING = "中文摘要等待生成"
 HOTSPOT_WAITING = "热点标题等待中文分析"
@@ -56,12 +47,12 @@ AMBIGUOUS_TICKERS = frozenset({"AI", "ON", "CAT"})
 TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-^]{0,11}$")
 SCHEMA_VERSION = "optix-local-catalyst-v3"
 NEWS_RESULT_CONTRACT_ID = (
-    f"{NEWS_PROMPT_VERSION}:"
+    "news-impact-result:"
     f"{ai_runtime.RESULT_VALIDATION_CONTRACT_VERSION}:"
     f"{NEWS_RESULT_AUDIT_VERSION}"
 )
 FOCUS_RESULT_CONTRACT_ID = (
-    f"{FOCUS_PROMPT_VERSION}:"
+    "market-focus-result:"
     f"{ai_runtime.RESULT_VALIDATION_CONTRACT_VERSION}"
 )
 NEWS_LINK_AUDIT_CONTRACT_ID = "news-impact-link-v1"
@@ -71,22 +62,21 @@ SCHEDULED_NEWS_BATCH_SIZE = 20
 SCHEDULED_QUEUE_SOFT_LIMIT = 40
 SCHEDULED_NEWS_WINDOW_HOURS = 72
 SCHEDULED_NEWS_MAX_ATTEMPTS = 3
+SCHEDULED_FOCUS_MAX_ATTEMPTS = 3
 SCHEDULED_FOCUS_EVENT_LIMIT = 20
-SCHEDULED_NEWS_RETRYABLE_ERRORS = frozenset(
+SCHEDULED_TRANSIENT_AI_ERRORS = frozenset(
     {
         "ai_empty_response",
-        "news_identity_mismatch",
-        "news_ticker_binding_mismatch",
         "provider_failed",
         "provider_incomplete",
-        "provider_incomplete_max_output_tokens",
         "provider_rate_limited",
         "provider_response_expired",
         "provider_server_error",
         "provider_unavailable",
-        "schema_validation_failed",
     }
 )
+SCHEDULED_NEWS_RETRYABLE_ERRORS = SCHEDULED_TRANSIENT_AI_ERRORS
+SCHEDULED_FOCUS_RETRYABLE_ERRORS = SCHEDULED_TRANSIENT_AI_ERRORS
 MANUAL_REFRESH_CLAIM_TTL_SECONDS = 10 * 60
 MANUAL_REFRESH_TYPES = ("news", "calendar", "source_health")
 ANALYSIS_LINK_BUSY_TIMEOUT_MS = 250
@@ -387,11 +377,164 @@ def _news_result_identity_matches(
     return "" not in output_tickers and output_tickers <= allowed_tickers
 
 
+def _market_focus_result_identity_matches(
+    result: Any,
+    payload: Mapping[str, Any],
+) -> bool:
+    if not isinstance(result, dict):
+        return False
+    result_as_of = _parse_time(result.get("as_of"))
+    payload_as_of = _parse_time(payload.get("as_of"))
+    if (
+        result.get("cycle_id") != payload.get("cycle_id")
+        or result.get("input_hash") != payload.get("input_hash")
+        or result_as_of is None
+        or payload_as_of is None
+        or result_as_of != payload_as_of
+    ):
+        return False
+    allowed_event_ids = {
+        str(value).strip()
+        for value in payload.get("allowed_event_group_ids") or []
+        if isinstance(value, str) and str(value).strip()
+    }
+    allowed_tickers = {
+        str(value).strip().upper()
+        for value in payload.get("allowed_tickers") or []
+        if isinstance(value, str) and str(value).strip()
+    }
+    dominant_events = result.get("dominant_events")
+    assessments = result.get("focus_ticker_assessments")
+    if (
+        not isinstance(dominant_events, list)
+        or not isinstance(assessments, list)
+        or any(not isinstance(item, dict) for item in dominant_events)
+        or any(not isinstance(item, dict) for item in assessments)
+    ):
+        return False
+    output_event_ids = {
+        str(item.get("event_group_id") or "").strip()
+        for item in dominant_events
+    }
+    output_tickers: set[str] = set()
+    for item in assessments:
+        output_tickers.add(str(item.get("ticker") or "").strip().upper())
+        for field in ("supporting_event_ids", "conflicting_event_ids"):
+            values = item.get(field)
+            if not isinstance(values, list) or any(
+                not isinstance(value, str) for value in values
+            ):
+                return False
+            output_event_ids.update(str(value).strip() for value in values)
+    return (
+        "" not in output_event_ids
+        and "" not in output_tickers
+        and output_event_ids <= allowed_event_ids
+        and output_tickers <= allowed_tickers
+    )
+
+
 def _public_chinese_text(value: Any, fallback: str) -> str:
     try:
         return validate_simplified_chinese_text(str(value or ""), None)
     except ValueError:
         return fallback
+
+
+_CALENDAR_INITIALISM_RE = re.compile(
+    r"(?<![A-Za-z0-9])([A-Z][A-Z0-9&./+\-]{1,11})(?![A-Za-z0-9])"
+)
+_CALENDAR_NON_EVENT_CODES = frozenset(
+    {
+        "AUD",
+        "CAD",
+        "CHF",
+        "CNY",
+        "EU",
+        "EUR",
+        "GBP",
+        "JPY",
+        "NZD",
+        "UK",
+        "US",
+        "USA",
+        "USD",
+    }
+)
+_CALENDAR_GENERIC_ENGLISH_WORDS = frozenset(
+    {
+        "claims",
+        "confidence",
+        "consumer",
+        "crude",
+        "decision",
+        "employment",
+        "housing",
+        "index",
+        "inventories",
+        "inventory",
+        "manufacturing",
+        "oil",
+        "rate",
+        "release",
+        "report",
+        "retail",
+        "sales",
+        "services",
+        "starts",
+    }
+)
+
+
+def _public_calendar_title(value: Any) -> str:
+    """Keep useful event acronyms while removing untranslated English prose."""
+
+    raw = str(value or "").strip()
+    if not raw or "<" in raw or ">" in raw:
+        return "经济日历事件"
+    try:
+        return validate_simplified_chinese_text(raw, None)
+    except ValueError:
+        pass
+    acronyms = [
+        match.group(1)
+        for match in _CALENDAR_INITIALISM_RE.finditer(raw)
+        if match.group(1) not in _CALENDAR_NON_EVENT_CODES
+        and match.group(1).casefold() not in _CALENDAR_GENERIC_ENGLISH_WORDS
+        and (not match.group(1).isalpha() or len(match.group(1)) <= 5)
+    ]
+    if not acronyms:
+        return "经济日历事件"
+    acronym = acronyms[0]
+    folded = raw.casefold()
+    if (
+        any(word in folded for word in ("inventory", "inventories", "stockpile"))
+        and any(
+            word in folded
+            for word in ("crude", "oil", "petroleum", "gas", "energy")
+        )
+    ):
+        category = "能源库存数据"
+    elif any(
+        word in folded
+        for word in ("cpi", "pce", "inflation", "price index")
+    ):
+        category = "通胀数据"
+    elif any(
+        word in folded
+        for word in ("employment", "jobs", "payroll", "unemployment", "adp", "jolts")
+    ):
+        category = "就业数据"
+    elif any(
+        word in folded
+        for word in ("interest rate", "rate decision", "fomc", "central bank")
+    ):
+        category = "利率事件"
+    elif any(word in folded for word in ("manufacturing", "pmi", "ism")):
+        category = "制造业数据"
+    else:
+        category = "经济数据"
+    return f"{acronym}{category}"
 
 
 def _cursor_encode(offset: int, anchor: str, query_hash: str) -> str:
@@ -989,26 +1132,123 @@ class LocalCatalystIntelligence:
         public = self._identity_public_job(row, expected_type=expected_type)
         return public if public is not None and public.get("result") is not None else None
 
-    def _recoverable_completed_legacy_news_public_job(
+    def _compatible_news_public_job(
         self,
         row: dict[str, Any] | None,
     ) -> dict[str, Any] | None:
         if (
             row is None
             or row.get("job_type") != "news_impact"
+            or row.get("model") != self.model
+            or row.get("reasoning") != self.reasoning
+            or row.get("execution_mode") != EXECUTION_MODE
+            or NEWS_PROMPT_FAMILY_RE.fullmatch(
+                str(row.get("prompt_version") or "")
+            )
+            is None
+            or NEWS_SCHEMA_FAMILY_RE.fullmatch(
+                str(row.get("schema_version") or "")
+            )
+            is None
+            or SCHEMA_SHA256_RE.fullmatch(
+                str(row.get("schema_sha256") or "")
+            )
+            is None
+        ):
+            return None
+        try:
+            return AIJobRepository.public(row)
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    def _recoverable_completed_legacy_news_public_job(
+        self,
+        row: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        public = self._compatible_news_public_job(row)
+        if (
+            row is None
+            or public is None
+            or row.get("status") != "completed"
+            or not isinstance(row.get("result_json"), str)
+            or not row.get("result_json")
+        ):
+            return None
+        return public
+
+    def _recoverable_completed_focus_public_job(
+        self,
+        row: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if (
+            row is None
+            or row.get("job_type") != "market_focus"
             or row.get("status") != "completed"
             or row.get("model") != self.model
             or row.get("reasoning") != self.reasoning
             or row.get("execution_mode") != EXECUTION_MODE
-            or (
-                row.get("prompt_version"),
-                row.get("schema_version"),
-                row.get("schema_sha256"),
+            or FOCUS_PROMPT_FAMILY_RE.fullmatch(
+                str(row.get("prompt_version") or "")
             )
-            not in RECOVERABLE_COMPLETED_NEWS_IDENTITIES
+            is None
+            or FOCUS_SCHEMA_FAMILY_RE.fullmatch(
+                str(row.get("schema_version") or "")
+            )
+            is None
+            or SCHEMA_SHA256_RE.fullmatch(
+                str(row.get("schema_sha256") or "")
+            )
+            is None
+            or not isinstance(row.get("result_json"), str)
+            or not row.get("result_json")
         ):
             return None
-        return AIJobRepository.public(row)
+        try:
+            return AIJobRepository.public(row)
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    def _scheduled_focus_attempt_count(
+        self,
+        jobs: Iterable[Mapping[str, Any]],
+        *,
+        payload: Mapping[str, Any],
+        observed: datetime,
+    ) -> int:
+        expected_payload = _json(payload)
+        attempts = 0
+        for candidate in jobs:
+            created_at = _parse_time(str(candidate.get("created_at") or ""))
+            if (
+                candidate.get("job_type") != "market_focus"
+                or candidate.get("submission_source") != "scheduled"
+                or candidate.get("status") == "budget_blocked"
+                or candidate.get("model") != self.model
+                or candidate.get("reasoning") != self.reasoning
+                or candidate.get("execution_mode") != EXECUTION_MODE
+                or created_at is None
+                or created_at > observed
+                or FOCUS_PROMPT_FAMILY_RE.fullmatch(
+                    str(candidate.get("prompt_version") or "")
+                )
+                is None
+                or FOCUS_SCHEMA_FAMILY_RE.fullmatch(
+                    str(candidate.get("schema_version") or "")
+                )
+                is None
+                or SCHEMA_SHA256_RE.fullmatch(
+                    str(candidate.get("schema_sha256") or "")
+                )
+                is None
+            ):
+                continue
+            candidate_payload = self._job_payload(dict(candidate))
+            if (
+                isinstance(candidate_payload, dict)
+                and _json(candidate_payload) == expected_payload
+            ):
+                attempts += 1
+        return attempts
 
     def _news_job_revision_key(
         self,
@@ -1456,6 +1696,43 @@ class LocalCatalystIntelligence:
         return all(payload.get(key) == value for key, value in expected.items())
 
     @staticmethod
+    def _news_result_was_previously_accepted(
+        connection: sqlite3.Connection,
+        *,
+        job_id: str,
+        raw_result: str,
+    ) -> bool:
+        digest = hashlib.sha256(raw_result.encode("utf-8")).hexdigest()
+        return (
+            connection.execute(
+                """SELECT 1 FROM catalyst_local_analysis_result_audit
+                   WHERE job_id=? AND result_sha256=? AND result_json=?
+                     AND outcome='accepted' LIMIT 1""",
+                (job_id, digest, raw_result),
+            ).fetchone()
+            is not None
+        )
+
+    @staticmethod
+    def _focus_result_was_previously_accepted(
+        connection: sqlite3.Connection,
+        *,
+        cycle_id: str,
+        job_id: str,
+        raw_result: str,
+    ) -> bool:
+        digest = hashlib.sha256(raw_result.encode("utf-8")).hexdigest()
+        return (
+            connection.execute(
+                """SELECT 1 FROM catalyst_local_focus_result_audit
+                   WHERE cycle_id=? AND job_id=? AND result_sha256=?
+                     AND result_json=? AND outcome='accepted' LIMIT 1""",
+                (cycle_id, job_id, digest, raw_result),
+            ).fetchone()
+            is not None
+        )
+
+    @staticmethod
     def _audit_news_result(
         connection: sqlite3.Connection,
         *,
@@ -1626,7 +1903,7 @@ class LocalCatalystIntelligence:
         self,
         connection: sqlite3.Connection,
     ) -> tuple[int, int]:
-        """Archive and retire published news results that fail this contract."""
+        """Audit paid results without retiring a previously accepted display."""
 
         rows = connection.execute(
             """SELECT link.job_id,link.news_id,link.change_sequence,
@@ -1666,6 +1943,17 @@ class LocalCatalystIntelligence:
             if outcome == "accepted":
                 accepted += int(inserted)
                 continue
+            prior_result = _loads(raw_result, None)
+            if (
+                _news_result_identity_matches(prior_result, payload)
+                and self._news_result_was_previously_accepted(
+                    connection,
+                    job_id=str(row["job_id"]),
+                    raw_result=raw_result,
+                )
+            ):
+                rejected += int(inserted)
+                continue
             connection.execute(
                 """UPDATE catalyst_local_analysis_links SET
                        result_json=NULL,result_available_at=NULL,verified_at=NULL
@@ -1679,7 +1967,7 @@ class LocalCatalystIntelligence:
         self,
         connection: sqlite3.Connection,
     ) -> tuple[int, int]:
-        """Archive invalid focus output and make its durable intent retryable."""
+        """Keep a previously accepted paid focus result across style changes."""
 
         rows = connection.execute(
             """SELECT cycle_id,job_id,payload_json,result_json,
@@ -1706,6 +1994,18 @@ class LocalCatalystIntelligence:
             )
             if outcome == "accepted":
                 accepted += int(inserted)
+                continue
+            prior_result = _loads(raw_result, None)
+            if (
+                _market_focus_result_identity_matches(prior_result, payload)
+                and self._focus_result_was_previously_accepted(
+                    connection,
+                    cycle_id=str(row["cycle_id"]),
+                    job_id=str(row["job_id"]),
+                    raw_result=raw_result,
+                )
+            ):
+                rejected += int(inserted)
                 continue
             retired = connection.execute(
                 """UPDATE catalyst_local_focus_cycles SET
@@ -1750,6 +2050,18 @@ class LocalCatalystIntelligence:
         published = 0
         for link in rows:
             job = jobs.get(str(link["job_id"]))
+            raw_result = (
+                job.get("result_json") if isinstance(job, dict) else None
+            )
+            previously_accepted = bool(
+                isinstance(raw_result, str)
+                and raw_result
+                and self._news_result_was_previously_accepted(
+                    connection,
+                    job_id=str(link["job_id"]),
+                    raw_result=raw_result,
+                )
+            )
             public = self._identity_public_job(
                 job,
                 expected_type="news_impact",
@@ -1761,7 +2073,7 @@ class LocalCatalystIntelligence:
                     int(link["change_sequence"]),
                     str(link["content_hash"]),
                 )
-                if revision_key in current_revision_keys:
+                if revision_key in current_revision_keys and not previously_accepted:
                     continue
                 public = self._recoverable_completed_legacy_news_public_job(job)
             if public is None or public.get("status") != "completed":
@@ -1787,7 +2099,6 @@ class LocalCatalystIntelligence:
             ):
                 continue
             if public.get("result") is None:
-                raw_result = job.get("result_json")
                 if isinstance(raw_result, str) and raw_result:
                     self._audit_news_result(
                         connection,
@@ -1805,6 +2116,32 @@ class LocalCatalystIntelligence:
                         verified_at=None,
                         observed_at=_iso(),
                     )
+                    recovered_result = _loads(raw_result, None)
+                    available = str(
+                        public.get("completed_at")
+                        or public.get("updated_at")
+                        or ""
+                    )
+                    if (
+                        previously_accepted
+                        and _news_result_identity_matches(
+                            recovered_result,
+                            payload,
+                        )
+                        and _parse_time(available) is not None
+                    ):
+                        connection.execute(
+                            """UPDATE catalyst_local_analysis_links SET
+                                   result_json=?,result_available_at=?,verified_at=?
+                               WHERE job_id=? AND result_json IS NULL""",
+                            (
+                                raw_result,
+                                available,
+                                _iso(),
+                                str(link["job_id"]),
+                            ),
+                        )
+                        published += 1
                 continue
             result = public["result"]
             if (
@@ -1842,6 +2179,8 @@ class LocalCatalystIntelligence:
                 job,
                 expected_type="market_focus",
             )
+            if public is None:
+                public = self._recoverable_completed_focus_public_job(job)
             if public is None:
                 if job and job.get("status") == "completed":
                     self._retire_focus_binding_failure(
@@ -1895,22 +2234,54 @@ class LocalCatalystIntelligence:
                 raw_result = job.get("result_json")
                 if isinstance(raw_result, str) and raw_result:
                     observed_at = _iso()
+                    result_available_at = (
+                        str(
+                            public.get("completed_at")
+                            or public.get("updated_at")
+                            or ""
+                        )
+                        or None
+                    )
                     outcome, _inserted = self._audit_focus_result(
                         connection,
                         cycle_id=str(cycle["cycle_id"]),
                         job_id=str(cycle["job_id"]),
                         raw_result=raw_result,
                         payload=job_payload,
-                        result_available_at=(
-                            str(
-                                public.get("completed_at")
-                                or public.get("updated_at")
-                                or ""
-                            )
-                            or None
-                        ),
+                        result_available_at=result_available_at,
                         observed_at=observed_at,
                     )
+                    recovered_result = _loads(raw_result, None)
+                    if (
+                        outcome == "rejected"
+                        and result_available_at is not None
+                        and _parse_time(result_available_at) is not None
+                        and _market_focus_result_identity_matches(
+                            recovered_result,
+                            job_payload,
+                        )
+                        and self._focus_result_was_previously_accepted(
+                            connection,
+                            cycle_id=str(cycle["cycle_id"]),
+                            job_id=str(cycle["job_id"]),
+                            raw_result=raw_result,
+                        )
+                    ):
+                        connection.execute(
+                            """UPDATE catalyst_local_focus_cycles SET
+                                   status='completed',result_json=?,error_code=NULL,
+                                   completed_at=?,updated_at=? WHERE cycle_id=?
+                                     AND job_id=? AND result_json IS NULL""",
+                            (
+                                raw_result,
+                                result_available_at,
+                                result_available_at,
+                                str(cycle["cycle_id"]),
+                                str(cycle["job_id"]),
+                            ),
+                        )
+                        published += 1
+                        continue
                     if outcome == "rejected":
                         retired = connection.execute(
                             """UPDATE catalyst_local_focus_cycles SET
@@ -2018,6 +2389,7 @@ class LocalCatalystIntelligence:
                             analysis.result_json AS analysis_result_json,
                             analysis.result_available_at
                                 AS analysis_result_available_at,
+                            analysis.job_id AS analysis_result_job_id,
                             job_link.job_id AS analysis_job_id,
                             job_link.created_at AS analysis_job_created_at,
                             CASE WHEN audit.job_id IS NULL THEN 0 ELSE 1 END
@@ -2128,12 +2500,14 @@ class LocalCatalystIntelligence:
         if "analysis_result_json" in row:
             raw_value = row.get("analysis_result_json")
             result_available_at = row.get("analysis_result_available_at")
+            result_job_id = row.get("analysis_result_job_id")
             audited = bool(row.get("analysis_result_audited"))
             if raw_value is None or result_available_at is None:
                 return None, None
         else:
             link = connection.execute(
-                """SELECT link.result_json,link.result_available_at,
+                """SELECT link.job_id AS analysis_result_job_id,
+                          link.result_json,link.result_available_at,
                           EXISTS(
                               SELECT 1
                               FROM catalyst_local_analysis_result_audit audit
@@ -2160,6 +2534,7 @@ class LocalCatalystIntelligence:
                 return None, None
             raw_value = link["result_json"]
             result_available_at = link["result_available_at"]
+            result_job_id = link["analysis_result_job_id"]
             audited = bool(link["result_audited"])
         payload = {
             "news_id": row.get("news_id"),
@@ -2175,7 +2550,17 @@ class LocalCatalystIntelligence:
         try:
             result = validate_result("news_impact", raw_result, payload)
         except (TypeError, ValueError):
-            return None, None
+            result = _loads(raw_result, None)
+            if (
+                not isinstance(result_job_id, str)
+                or not _news_result_identity_matches(result, payload)
+                or not self._news_result_was_previously_accepted(
+                    connection,
+                    job_id=result_job_id,
+                    raw_result=raw_result,
+                )
+            ):
+                return None, None
         return result, str(result_available_at)
 
     def _plan_hotspots(
@@ -2950,10 +3335,7 @@ class LocalCatalystIntelligence:
                         event.get("country"),
                         "未知地区",
                     ),
-                    "title": _public_chinese_text(
-                        event.get("title"),
-                        "经济日历事件",
-                    ),
+                    "title": _public_calendar_title(event.get("title")),
                     "impact": impact,
                     "impact_zh": impact_zh,
                     "scheduled_at": event.get("scheduled_at_utc"),
@@ -3269,7 +3651,6 @@ class LocalCatalystIntelligence:
             if (
                 job is None
                 or public is None
-                or public.get("result") is None
                 or not self._news_payload_matches_revision(
                     self._job_payload(job) or {},
                     row,
@@ -3577,16 +3958,8 @@ class LocalCatalystIntelligence:
             }
         if revision_row is None:
             return None
-        revision_key = (
-            int(revision_row["news_id"]),
-            int(revision_row["change_sequence"]),
-            str(revision_row["content_hash"]),
-        )
-        current_revision_exists = revision_key in self._current_news_job_revision_keys(
-            jobs.values()
-        )
         matching: list[
-            tuple[datetime, int, str, dict[str, Any], dict[str, Any]]
+            tuple[datetime, int, int, str, dict[str, Any], dict[str, Any]]
         ] = []
         for job in jobs.values():
             if job.get("job_type") != "news_impact":
@@ -3608,20 +3981,17 @@ class LocalCatalystIntelligence:
                     job,
                     expected_type="news_impact",
                 )
-                legacy_public = False
-                if public is None and not current_revision_exists:
-                    public = self._recoverable_completed_legacy_news_public_job(job)
-                    legacy_public = public is not None
+                current_identity = public is not None
+                if public is None:
+                    public = self._compatible_news_public_job(job)
             except (KeyError, TypeError, ValueError):
                 continue
-            if (
-                public is None
-                or (legacy_public and public.get("result") is None)
-            ):
+            if public is None:
                 continue
             matching.append(
                 (
                     created_at,
+                    int(current_identity),
                     int(job.get("execution_number") or 0),
                     str(job.get("job_id") or ""),
                     job,
@@ -3630,11 +4000,18 @@ class LocalCatalystIntelligence:
             )
         if not matching:
             return None
-        matching.sort(key=lambda item: (item[0], item[1], item[2]))
-        _created_at, _execution, job_id, latest_job, latest_public = matching[-1]
+        matching.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
+        (
+            _created_at,
+            _current_identity,
+            _execution,
+            job_id,
+            latest_job,
+            latest_public,
+        ) = matching[-1]
         scheduled_attempts = sum(
             1
-            for _created, _execution, _job_id, job, _public in matching
+            for _created, _current, _execution, _job_id, job, _public in matching
             if job.get("submission_source") == "scheduled"
             and job.get("status") != "budget_blocked"
         )
@@ -3859,6 +4236,10 @@ class LocalCatalystIntelligence:
                 permanently_skipped = bool(
                     status in {"cancelled", "insufficient_context"}
                     or (
+                        status == "completed"
+                        and previous_job.get("result") is None
+                    )
+                    or (
                         status == "failed"
                         and (
                             error_code not in SCHEDULED_NEWS_RETRYABLE_ERRORS
@@ -3916,26 +4297,35 @@ class LocalCatalystIntelligence:
                     (prepared_revision,),
                 ).fetchone()
             if existing_focus is None:
-                retry_cycle_id = self._scheduled_focus_retry_cycle(
+                retry_cycle_id, retry_blocked = self._scheduled_focus_retry_cycle(
                     prepared_revision,
                     observed=observed,
                 )
-                try:
-                    focus = self.request_market_focus_cycle(
-                        expected_prepared_revision=(
-                            None if retry_cycle_id is not None else prepared_revision
-                        ),
-                        retry_cycle_id=retry_cycle_id,
-                        as_of=observed,
-                        submission_source="scheduled",
-                    )
-                except CatalystError:
+                if retry_blocked:
                     skipped += 1
                 else:
-                    if focus.get("status") in {"pending", "queued", "in_progress"}:
-                        queued += 1
-                    else:
+                    try:
+                        focus = self.request_market_focus_cycle(
+                            expected_prepared_revision=(
+                                None
+                                if retry_cycle_id is not None
+                                else prepared_revision
+                            ),
+                            retry_cycle_id=retry_cycle_id,
+                            as_of=observed,
+                            submission_source="scheduled",
+                        )
+                    except CatalystError:
                         skipped += 1
+                    else:
+                        if focus.get("status") in {
+                            "pending",
+                            "queued",
+                            "in_progress",
+                        }:
+                            queued += 1
+                        else:
+                            skipped += 1
             else:
                 skipped += 1
         if slot is not None:
@@ -3954,31 +4344,46 @@ class LocalCatalystIntelligence:
         prepared_revision: int,
         *,
         observed: datetime,
-    ) -> str | None:
+    ) -> tuple[str | None, bool]:
         """Return one failed focus cycle that is due for scheduled recovery.
 
-        A cycle created under an older prompt or schema is retried immediately
-        so a deployment can repair stale failures without waiting for another
-        slot. A failure under the current identity is retried at most once per
-        hour when ``run_scheduled`` is invoked without an explicit slot claim.
-        Daily budget blocks wait until the next UTC date because the allowance
-        cannot recover within the same day.
+        Transient provider failures may retry once per hour. Deterministic
+        schema, identity and binding failures never retry automatically; a
+        deployment must not turn the same paid intent into fresh work. Daily
+        budget blocks wait until the next UTC date because the allowance cannot
+        recover within the same day.
         """
 
         with self._connect() as connection:
             candidates = connection.execute(
-                """SELECT cycle_id,job_id,status,updated_at
+                """SELECT cycle_id,job_id,status,error_code,payload_json,updated_at
                    FROM catalyst_local_focus_cycles
                    WHERE prepared_revision=?
                      AND status IN ('failed','budget_blocked')
                    ORDER BY updated_at DESC,created_at DESC""",
                 (prepared_revision,),
             ).fetchall()
+        jobs = self._ai_job_snapshot(allow_write_contention=False)
         observed_hour = _hour_bucket(observed)
         for candidate in candidates:
-            job = self.ai_repository.get_job(str(candidate["job_id"]))
+            job = jobs.get(str(candidate["job_id"]))
             if job is None or job.get("error_code") == "submission_outcome_unknown":
-                continue
+                return None, True
+            if job.get("submission_source") != "scheduled":
+                return None, True
+            payload = _loads(candidate["payload_json"], None)
+            job_payload = self._job_payload(job)
+            if (
+                not isinstance(payload, dict)
+                or not isinstance(job_payload, dict)
+                or _json(payload) != _json(job_payload)
+            ):
+                return None, True
+            attempts = self._scheduled_focus_attempt_count(
+                jobs.values(),
+                payload=payload,
+                observed=observed,
+            )
             try:
                 current_identity = self._identity_public_job(
                     job,
@@ -3989,21 +4394,31 @@ class LocalCatalystIntelligence:
             updated_at = _parse_time(
                 str(job.get("updated_at") or candidate["updated_at"] or "")
             )
+            if attempts >= SCHEDULED_FOCUS_MAX_ATTEMPTS:
+                return None, True
             if str(candidate["status"]) == "budget_blocked":
                 if (
                     updated_at is not None
                     and updated_at.astimezone(timezone.utc).date()
                     < observed.astimezone(timezone.utc).date()
                 ):
-                    return str(candidate["cycle_id"])
-                continue
+                    return str(candidate["cycle_id"]), False
+                return None, True
+            error_code = str(
+                job.get("error_code") or candidate["error_code"] or ""
+            )
+            if (
+                error_code not in SCHEDULED_FOCUS_RETRYABLE_ERRORS
+            ):
+                return None, True
             if (
                 current_identity is None
                 or updated_at is None
                 or _hour_bucket(updated_at) < observed_hour
             ):
-                return str(candidate["cycle_id"])
-        return None
+                return str(candidate["cycle_id"]), False
+            return None, True
+        return None, False
 
     def _focus_calendar_events(
         self,

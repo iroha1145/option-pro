@@ -126,15 +126,22 @@ _ENGLISH_PROSE_WORDS = frozenset(
         "attack",
         "attacks",
         "awards",
+        "bank",
         "before",
         "beats",
+        "bear",
+        "bonds",
+        "boom",
         "breaking",
         "business",
+        "bull",
+        "cash",
         "climb",
         "climbs",
         "crash",
         "crashes",
         "crisis",
+        "crunch",
         "cuts",
         "company",
         "conference",
@@ -158,9 +165,11 @@ _ENGLISH_PROSE_WORDS = frozenset(
         "hard",
         "in",
         "jumps",
+        "job",
         "launch",
         "launched",
         "launches",
+        "loss",
         "market",
         "markets",
         "meltdown",
@@ -175,6 +184,7 @@ _ENGLISH_PROSE_WORDS = frozenset(
         "ordered",
         "orders",
         "outlook",
+        "panic",
         "pause",
         "paused",
         "pauses",
@@ -190,6 +200,7 @@ _ENGLISH_PROSE_WORDS = frozenset(
         "raises",
         "raised",
         "rally",
+        "rate",
         "rapidly",
         "report",
         "reports",
@@ -197,13 +208,17 @@ _ENGLISH_PROSE_WORDS = frozenset(
         "retaliates",
         "retreats",
         "revenue",
+        "risk",
         "rises",
         "rose",
         "sales",
         "says",
         "sees",
+        "sell",
         "sells",
         "shares",
+        "shift",
+        "shock",
         "stock",
         "stocks",
         "strong",
@@ -284,6 +299,10 @@ _ALLOWED_VERSIONED_PRODUCT_BASES = frozenset(
     }
 )
 _SINGLE_FOREIGN_TOKEN = re.compile(r"[A-Za-z][A-Za-z']*")
+_OPAQUE_INITIALISM = re.compile(
+    r"(?=.{2,16}\Z)(?=.*[A-Z])"
+    r"(?:[A-Z0-9]+(?:[&./+\-][A-Z0-9]+)*)"
+)
 _NUMERIC_SECURITY_CODE = re.compile(
     r"(?<![A-Za-z0-9.^-])[0-9]{1,12}(?![A-Za-z0-9])"
 )
@@ -376,8 +395,6 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         "NAV",
         "NASCAR",
         "NVIDIA",
-        "Nookplot",
-        "Nookplot Python SDK",
         "NPU",
         "OPEC",
         "Office",
@@ -432,7 +449,6 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         "iShares",
         "mRNA",
         "macOS",
-        "nookplot-runtime",
         "scikit-learn",
     }
 )
@@ -531,6 +547,52 @@ _SECURITY_REFERENCE_MARKERS = (
     "证券",
 )
 _SECURITY_COMPANY_BRIDGES = ("公司", "集团", "企业")
+_SECURITY_FOCUS_SUFFIXES = (
+    "成为当前市场焦点",
+    "成为市场焦点",
+    "是当前市场焦点",
+    "是市场焦点",
+)
+_SECURITY_ROLE_SUFFIXES = (
+    "作为竞争对手",
+    "作为供应商",
+    "作为客户",
+    "作为交易所交易基金",
+    "作为对冲标的",
+)
+_INITIALISM_CONTEXT_SUFFIXES = (
+    "数据",
+    "指数",
+    "报告",
+    "会议",
+    "决议",
+    "调查",
+    "库存",
+    "原油",
+    "能源",
+    "就业",
+    "通胀",
+    "利率",
+    "制造业",
+    "服务业",
+    "规则",
+    "标准",
+    "协议",
+    "系统",
+    "模型",
+    "计划",
+    "政策",
+    "机构",
+    "平台",
+    "工具",
+    "产品",
+    "技术",
+    "芯片",
+    "软件",
+    "基金",
+    "期货",
+    "增长",
+)
 _GENERIC_NON_REFERENCE_SECURITY_COMPOUNDS = (
     "股份有限公司",
     "股份公司",
@@ -651,6 +713,16 @@ def _security_phrase_requires_ticker_binding(span: str, phrase: str) -> bool:
 
     if _STOCK_PRICE_SUFFIX.match(phrase) is not None:
         return True
+    if phrase.startswith(_SECURITY_FOCUS_SUFFIXES):
+        return True
+    if phrase.startswith(_SECURITY_ROLE_SUFFIXES):
+        return True
+    if phrase.startswith(_SECURITY_PRICE_MOVEMENTS) or any(
+        phrase.startswith(f"{period}{movement}")
+        for period in ("当前", "最新", "今日", "昨日", "本周", "盘前", "盘后")
+        for movement in _SECURITY_PRICE_MOVEMENTS
+    ):
+        return True
 
     noun_match = _SECURITY_NOUN_SUFFIX.match(phrase)
     if noun_match is None:
@@ -712,6 +784,54 @@ def _is_allowed_versioned_product(span: str) -> bool:
     if matched is None:
         return False
     return matched.group("base") in _ALLOWED_VERSIONED_PRODUCT_BASES
+
+
+def _is_contextual_initialism(
+    span: str,
+    *,
+    sentence: str,
+    start: int,
+    end: int,
+    allowed_codes: frozenset[str],
+) -> bool:
+    """Allow compact acronyms without maintaining an entity whitelist.
+
+    A ticker-looking token still needs payload binding when it is used as a
+    stock reference. In ordinary Chinese prose, compact identifiers such as
+    EIA, 3M and AT&T are treated as opaque names rather than English prose.
+    """
+
+    if _OPAQUE_INITIALISM.fullmatch(span) is None:
+        return False
+    if not any(char.isascii() and char.isalpha() for char in span):
+        return False
+    if any(
+        token.casefold() in _ENGLISH_PROSE_WORDS
+        for token in re.findall(r"[A-Z]+", span)
+    ):
+        return False
+    if span.isalpha() and len(span) > 4:
+        return False
+    if not any(_is_cjk(char) for char in sentence):
+        return False
+    suffix = _normalize_security_reference_phrase(sentence[end:]).removeprefix(
+        "的"
+    )
+    if span.isalpha() and suffix.startswith(_SECURITY_COMPANY_BRIDGES):
+        return span in allowed_codes
+    if _approved_span_requires_ticker_binding(
+        span,
+        sentence=sentence,
+        start=start,
+        end=end,
+    ):
+        return span in allowed_codes
+    if any(char.isdigit() or char in "&./+-" for char in span):
+        return True
+    prefix = _normalize_security_reference_phrase(sentence[:start])
+    return suffix.startswith(_INITIALISM_CONTEXT_SUFFIXES) or prefix.endswith(
+        ("由", "据", "根据", "来自")
+    )
 
 
 def _approved_span_requires_ticker_binding(
@@ -799,6 +919,14 @@ def _foreign_span_context(
             return span in allowed_codes
         return True
     if _is_ticker_span(span, allowed_codes):
+        return True
+    if _is_contextual_initialism(
+        span,
+        sentence=sentence,
+        start=start,
+        end=end,
+        allowed_codes=allowed_codes,
+    ):
         return True
     folded = span.casefold().rstrip(".")
     prose_form = folded[:-2] if folded.endswith("'s") else folded
@@ -1060,19 +1188,77 @@ def validate_simplified_chinese_company_name(
     value: str,
     info: ValidationInfo | None,
 ) -> str:
-    """Require company display names to be Chinese, with no Latin alias."""
+    """Validate a ticker-bound display name, not a prose sentence.
 
-    text = validate_simplified_chinese_text(value, info)
+    Chinese translations remain preferred, but compact registered names such
+    as 3M, AT&T and SAP are valid company data. This rule deliberately uses a
+    shape and ticker binding instead of an ever-growing entity whitelist.
+    """
+
+    text = value.strip()
+    if not text:
+        raise ValueError("company_name_required")
+    ticker = (
+        info.data.get("ticker")
+        if info is not None and isinstance(info.data, dict)
+        else None
+    )
+    if not isinstance(ticker, str) or _TICKER_PATTERN.fullmatch(ticker) is None:
+        raise ValueError("company_name_requires_ticker_binding")
+
     scan_text = _normalize_compatibility_alphanumerics(text)
     marker_text = unicodedata.normalize("NFKC", scan_text)
     if any(
         marker in scan_text or marker in marker_text
         for marker in _JAPANESE_COMPANY_MARKERS
     ):
-        raise ValueError("company_name_must_be_simplified_chinese")
-    if any(char.isalpha() and not _is_cjk(char) for char in scan_text):
-        raise ValueError("company_name_must_be_simplified_chinese")
-    return text
+        raise ValueError("company_name_must_be_simplified_chinese_or_registered_name")
+    if any(
+        char.isalpha() and not char.isascii() and not _is_cjk(char)
+        for char in scan_text
+    ):
+        raise ValueError("company_name_must_be_simplified_chinese_or_registered_name")
+    traditional = sorted(
+        {char for char in scan_text if char in _TRADITIONAL_ONLY}
+    )
+    if traditional or any(
+        phrase in scan_text for phrase in _TRADITIONAL_CONFLICT_PHRASES
+    ):
+        raise ValueError("traditional_chinese_not_allowed")
+
+    if len(scan_text) > 80 or "\n" in scan_text or "\r" in scan_text:
+        raise ValueError("company_registered_name_invalid")
+    allowed_punctuation = frozenset(" .,&'’()/+-（）")
+    if any(
+        not (
+            _is_cjk(char)
+            or char.isascii() and char.isalnum()
+            or char in allowed_punctuation
+        )
+        for char in scan_text
+    ):
+        raise ValueError("company_registered_name_invalid")
+    edge_text = scan_text.strip("()（）")
+    if not edge_text or not (
+        edge_text[0].isalnum() or _is_cjk(edge_text[0])
+    ) or not (
+        edge_text[-1].isalnum() or _is_cjk(edge_text[-1])
+    ):
+        raise ValueError("company_registered_name_invalid")
+    words = re.findall(r"[A-Za-z]+", scan_text)
+    has_cjk = any(_is_cjk(char) for char in scan_text)
+    prose_words = sum(
+        1 for word in words if word.casefold() in _ENGLISH_PROSE_WORDS
+    )
+    if len(words) > 6 or sum(len(word) for word in words) > 48:
+        raise ValueError("company_registered_name_looks_like_english_prose")
+    if prose_words >= 3:
+        raise ValueError("company_registered_name_looks_like_english_prose")
+    if not has_cjk and not any(
+        char.isupper() or char.isdigit() for char in scan_text
+    ):
+        raise ValueError("company_registered_name_must_be_compact")
+    return scan_text
 
 
 def validate_earnings_impact_reason(
