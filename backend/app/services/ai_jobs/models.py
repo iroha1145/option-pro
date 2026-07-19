@@ -606,6 +606,7 @@ _FOREIGN_PROPER_NAME_CONTEXT_SUFFIXES = (
     "机器人",
     "处理器",
     "车型",
+    "出租车",
     "服务",
     "业务",
     "主题",
@@ -624,6 +625,7 @@ _FOREIGN_PROPER_NAME_BLOCKING_SUFFIXES = (
     "利润",
     "订单",
     "收购",
+    "合作",
 )
 _GENERIC_NON_REFERENCE_SECURITY_COMPOUNDS = (
     "股份有限公司",
@@ -945,7 +947,9 @@ def _foreign_span_context(
         suffix = sentence[end:]
         if suffix.startswith(("股价", "股票")):
             return span in allowed_codes
-        if suffix.startswith(("股", "轮", "类")):
+        if suffix.startswith("股"):
+            return span in {"A", "B", "H"} or span in allowed_codes
+        if suffix.startswith(("轮", "类")):
             return True
     if span in _ALLOWED_EXACT_FOREIGN_SPANS:
         if _approved_span_requires_ticker_binding(
@@ -1040,10 +1044,18 @@ def _foreign_span_context(
         if suffix.startswith(_FOREIGN_PROPER_NAME_BLOCKING_SUFFIXES):
             return False
         previous = sentence[start - 1] if start > 0 else ""
+        coordinated_product = False
+        if bool(previous) and previous in "与和及或、":
+            coordinated_prefix = _normalize_security_reference_phrase(
+                sentence[: start - 1]
+            ).removesuffix("的")
+            coordinated_product = coordinated_prefix.endswith(
+                _FOREIGN_PROPER_NAME_CONTEXT_SUFFIXES
+            )
         return (
             parenthetical
             or alias_parenthetical
-            or (bool(previous) and previous in "与和及或、（(")
+            or coordinated_product
             or suffix.startswith(_FOREIGN_PROPER_NAME_CONTEXT_SUFFIXES)
         )
     return False
