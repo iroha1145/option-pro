@@ -1446,6 +1446,77 @@ class AIJobRepository:
             if updated != 1:
                 raise RuntimeError("ai_job_completion_rejected")
 
+    def recover_schema_validation_failure(
+        self,
+        job_id: str,
+        response_id: str,
+        result: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Publish an already-paid result after a validation false positive.
+
+        This transition is deliberately narrower than a retry: the failed job
+        must still carry the exact durable provider response identity, and the
+        retrieved result must pass the current validator for the stored input.
+        Existing usage and budget accounting are preserved unchanged.
+        """
+
+        if not response_id:
+            raise ValueError("ai_job_recovery_response_id_required")
+        self.initialize()
+        current = self.get_job(job_id)
+        if current is None:
+            raise RuntimeError("ai_job_recovery_not_found")
+        if (
+            current.get("status") != "failed"
+            or current.get("error_code") != "schema_validation_failed"
+            or current.get("result_json") is not None
+            or current.get("openai_response_id") != response_id
+        ):
+            raise RuntimeError("ai_job_recovery_rejected")
+        try:
+            payload = json.loads(str(current["payload_json"]))
+        except (KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("ai_job_recovery_payload_invalid") from exc
+        validated = validate_result(
+            str(current["job_type"]),
+            json.dumps(
+                result,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                allow_nan=False,
+            ),
+            payload,
+        )
+        result_json = self._canonical_result(validated)
+        now = _iso()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            updated = connection.execute(
+                """
+                UPDATE ai_jobs
+                SET status='completed',result_json=?,error_code=NULL,
+                    completed_at=COALESCE(completed_at,?),next_attempt_at=NULL,
+                    lease_owner=NULL,lease_expires_at=NULL,updated_at=?
+                WHERE job_id=? AND status='failed'
+                  AND error_code='schema_validation_failed'
+                  AND result_json IS NULL AND openai_response_id=?
+                """,
+                (result_json, now, now, job_id, response_id),
+            ).rowcount
+            if updated != 1:
+                connection.rollback()
+                raise RuntimeError("ai_job_recovery_rejected")
+            recovered = connection.execute(
+                """SELECT j.*,s.submission_source FROM ai_jobs AS j
+                   JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                   WHERE j.job_id=?""",
+                (job_id,),
+            ).fetchone()
+            connection.commit()
+        if recovered is None:
+            raise RuntimeError("ai_job_recovery_not_found")
+        return dict(recovered)
+
     def defer(
         self,
         job_id: str,

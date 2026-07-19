@@ -299,6 +299,7 @@ _ALLOWED_VERSIONED_PRODUCT_BASES = frozenset(
     }
 )
 _SINGLE_FOREIGN_TOKEN = re.compile(r"[A-Za-z][A-Za-z']*")
+_TITLE_CASE_PROPER_NAME = re.compile(r"[A-Z][a-z]{2,31}")
 _OPAQUE_INITIALISM = re.compile(
     r"(?=.{2,16}\Z)(?=.*[A-Z])"
     r"(?:[A-Z0-9]+(?:[&./+\-][A-Z0-9]+)*)"
@@ -593,6 +594,37 @@ _INITIALISM_CONTEXT_SUFFIXES = (
     "期货",
     "增长",
 )
+_FOREIGN_PROPER_NAME_CONTEXT_SUFFIXES = (
+    "项目",
+    "产品",
+    "平台",
+    "系统",
+    "技术",
+    "芯片",
+    "软件",
+    "模型",
+    "机器人",
+    "处理器",
+    "车型",
+    "服务",
+    "业务",
+    "主题",
+    "进展",
+)
+_FOREIGN_PROPER_NAME_BLOCKING_SUFFIXES = (
+    "公司",
+    "集团",
+    "企业",
+    "发布",
+    "宣布",
+    "推出",
+    "业绩",
+    "财报",
+    "营收",
+    "利润",
+    "订单",
+    "收购",
+)
 _GENERIC_NON_REFERENCE_SECURITY_COMPOUNDS = (
     "股份有限公司",
     "股份公司",
@@ -805,9 +837,15 @@ def _is_contextual_initialism(
         return False
     if not any(char.isascii() and char.isalpha() for char in span):
         return False
+    prose_tokens = re.findall(r"[A-Z]+", span)
     if any(
         token.casefold() in _ENGLISH_PROSE_WORDS
-        for token in re.findall(r"[A-Z]+", span)
+        and not (
+            len(token) == 1
+            and re.fullmatch(r"(?:[0-9]+[A-Z]|[A-Z][0-9]+)", span)
+            is not None
+        )
+        for token in prose_tokens
     ):
         return False
     if span.isalpha() and len(span) > 4:
@@ -903,11 +941,11 @@ def _foreign_span_context(
     end: int,
     allowed_codes: frozenset[str],
 ) -> bool:
-    if span == "A":
+    if len(span) == 1 and span.isascii() and span.isupper():
         suffix = sentence[end:]
         if suffix.startswith(("股价", "股票")):
             return span in allowed_codes
-        if suffix.startswith(("股", "轮")):
+        if suffix.startswith(("股", "轮", "类")):
             return True
     if span in _ALLOWED_EXACT_FOREIGN_SPANS:
         if _approved_span_requires_ticker_binding(
@@ -994,6 +1032,19 @@ def _foreign_span_context(
                 or alias_parenthetical
                 or direct_cjk
             )
+        )
+    if _TITLE_CASE_PROPER_NAME.fullmatch(span) is not None:
+        suffix = _normalize_security_reference_phrase(
+            sentence[end:]
+        ).removeprefix("的")
+        if suffix.startswith(_FOREIGN_PROPER_NAME_BLOCKING_SUFFIXES):
+            return False
+        previous = sentence[start - 1] if start > 0 else ""
+        return (
+            parenthetical
+            or alias_parenthetical
+            or (bool(previous) and previous in "与和及或、（(")
+            or suffix.startswith(_FOREIGN_PROPER_NAME_CONTEXT_SUFFIXES)
         )
     return False
 
@@ -1228,7 +1279,7 @@ def validate_simplified_chinese_company_name(
 
     if len(scan_text) > 80 or "\n" in scan_text or "\r" in scan_text:
         raise ValueError("company_registered_name_invalid")
-    allowed_punctuation = frozenset(" .,&'’()/+-（）")
+    allowed_punctuation = frozenset(" .,&'’()/+-（）·")
     if any(
         not (
             _is_cjk(char)
