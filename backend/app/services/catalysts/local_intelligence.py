@@ -927,7 +927,7 @@ class LocalCatalystIntelligence:
             if timestamp_row is None:
                 self._normalize_local_news_timestamps(connection)
                 connection.execute(
-                    """INSERT INTO catalyst_local_schema(
+                    """INSERT OR IGNORE INTO catalyst_local_schema(
                            version,checksum,applied_at
                        ) VALUES(?,?,?)""",
                     (
