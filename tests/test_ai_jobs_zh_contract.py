@@ -231,6 +231,25 @@ def test_rule_10b5_1_identifier_is_allowed_in_chinese_plan_context(
     assert validate_simplified_chinese_text(text, None) == text
 
 
+def test_rule_10b5_1_english_prefix_is_normalized_without_a_model_retry():
+    text = "该交易依据预先安排的Rule 10b5-1交易计划执行。"
+
+    assert validate_simplified_chinese_text(text, None) == (
+        "该交易依据预先安排的规则10b5-1交易计划执行。"
+    )
+
+
+def test_embedded_greek_scientific_symbol_is_not_treated_as_foreign_prose():
+    text = "该药物用于治疗活化磷脂酰肌醇3激酶δ综合征。"
+
+    assert validate_simplified_chinese_text(text, None) == text
+
+
+def test_greek_prose_is_still_rejected():
+    with pytest.raises(ValueError, match="non_chinese_script_not_allowed"):
+        validate_simplified_chinese_text("ΑΓΟΡΑ上涨", None)
+
+
 @pytest.mark.parametrize(
     "text",
     [
@@ -886,11 +905,170 @@ def test_chinese_text_allows_multiple_tickers_and_a_short_proper_name():
         "特斯拉业绩前瞻：自动驾驶出租车与Optimus能否成为亮点",
         "财务总监出售5万股A类普通股",
         "企业完成B轮融资",
+        "企业完成B 轮融资",
         "公司发行C类普通股",
         "H股市场回暖",
+        "临床试验显示初始B细胞比例改善",
+        "房地产REITs估值仍受利率影响",
+        "成交量Z分数为0.62",
+        "未提供VWAP及其对应周期",
+        "缺少原始OHLC序列",
     ],
 )
 def test_chinese_text_allows_structural_product_and_share_class_names(title):
+    result = _news_result()
+    result["title_zh"] = title
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        _news_payload(),
+    )
+
+    assert validated["title_zh"] == title
+
+
+@pytest.mark.parametrize(
+    ("title", "source_title", "source_summary", "source_ticker_hints"),
+    [
+        (
+            "UFC任命Meridian Holdings为赛事官方赞助商",
+            "UFC Names Meridian Holdings Official Sponsor",
+            "Subsidiary Meridianbet will sponsor the event.",
+            ["MRDN"],
+        ),
+        (
+            "报道称GameStop将所持eBay股份提高至10%",
+            "GameStop raises eBay stake to 10%",
+            None,
+            ["GME", "EBAY"],
+        ),
+        (
+            "评论文章审视SpaceX股票的估值风险",
+            "Three quotes to read before buying SpaceX Stock",
+            None,
+            ["SPCX"],
+        ),
+        (
+            "Hims & Hers宣布首席会计官离职",
+            "Hims & Hers announces departure of chief accounting officer",
+            None,
+            ["HIMS"],
+        ),
+        (
+            "黄仁勋在CES 2026表示内存已成为主要瓶颈",
+            "Jensen Huang Told CES 2026 That Memory Is the Biggest Bottleneck",
+            None,
+            ["NVDA"],
+        ),
+        (
+            "Vanguard Mega Cap Growth ETF与标普500成长基金比较",
+            "Vanguard Mega Cap Growth ETF or S&P 500 Growth ETF",
+            None,
+            ["MGK", "VOOG"],
+        ),
+        (
+            "报道比较Vanguard S&P 500 Growth ETF与Vanguard Mega Cap Growth ETF的分散程度",
+            "Vanguard S&P 500 Growth ETF or Vanguard Mega Cap Growth ETF",
+            None,
+            ["MGK", "VOOG"],
+        ),
+        (
+            "VOOG持有148只证券，MGK持有56只证券",
+            "Vanguard Growth ETF comparison",
+            None,
+            ["VOOG", "MGK"],
+        ),
+        (
+            "IonQ 2025年营收较管理层指引高出20%",
+            "IonQ's Revenue Just Tripled",
+            "IonQ's 2025 revenue came in above guidance.",
+            [],
+        ),
+        (
+            "nookplot-runtime 0.5.75发布智能体运行时更新",
+            "nookplot-runtime 0.5.75",
+            "Python Agent Runtime SDK for Nookplot",
+            [],
+        ),
+        (
+            "美国股息股票ETF在2026年回报约20%",
+            "This Dividend ETF Yields 3.2%",
+            None,
+            ["SCHD"],
+        ),
+        (
+            "IBM的Z大型机业务表现疲弱",
+            "IBM Z Mainframe Shortfall",
+            "The IBM Z mainframe business underperformed.",
+            ["IBM"],
+        ),
+    ],
+)
+def test_news_text_allows_source_bound_registered_entities(
+    title,
+    source_title,
+    source_summary,
+    source_ticker_hints,
+):
+    result = _news_result()
+    result["title_zh"] = title
+    payload = _news_payload()
+    payload.update(
+        {
+            "title": source_title,
+            "summary": source_summary,
+            "source_ticker_hints": source_ticker_hints,
+        }
+    )
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["title_zh"] == title
+
+
+def test_source_binding_does_not_allow_copied_english_prose():
+    result = _news_result()
+    result["title_zh"] = "市场消息：UFC Names Meridian Holdings Official Sponsor"
+    payload = _news_payload()
+    payload["title"] = "UFC Names Meridian Holdings Official Sponsor"
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+def test_news_text_allows_a_source_bound_publisher_name():
+    result = _news_result()
+    result["title_zh"] = "Seeking Alpha提问贸易协议变化的行业影响"
+    payload = _news_payload()
+    payload["source"] = "seekingalpha/Seeking Alpha"
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["title_zh"].startswith("Seeking Alpha")
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "盈透证券2026年客户账户与客户权益继续增长",
+        "首席财务官出售3,982股，价值约45.7万美元",
+        "该股过去一年下跌66%，公司曾出现收入下滑",
+    ],
+)
+def test_years_and_formatted_share_counts_are_not_security_codes(title):
     result = _news_result()
     result["title_zh"] = title
 

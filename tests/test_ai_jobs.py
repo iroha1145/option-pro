@@ -291,6 +291,35 @@ def _large_signal_result():
     }
 
 
+def test_signal_analysis_allows_input_bound_technical_abbreviations():
+    result = _large_signal_result()
+    result["asset"] = "MU"
+    result["top_evidence"][0] = "MACD柱状图转弱，短线动能仍需观察。"
+    result["bottom_evidence"][0] = "相对SPY收益偏弱，但不能单独确认反转。"
+    result["options_flow_read"]["warnings"][0] = (
+        "高ATM IV不代表单向看多或看空。"
+    )
+    result["key_levels"]["vwap_levels"][0] = (
+        "未提供VWAP及其对应周期。"
+    )
+    result["data_quality_notes"][0] = "缺少原始OHLC序列。"
+    payload = {
+        "ticker": "MU",
+        "signals": {
+            "labels": ["MACD", "ATM IV", "VWAP", "OHLC"],
+        },
+        "scores": {"relative_strength_label": "相对强弱(vs SPY)%"},
+    }
+
+    validated = validate_result(
+        "signal_analysis",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["asset"] == "MU"
+
+
 def test_ai_job_heartbeat_survives_a_saturated_default_executor(monkeypatch):
     monkeypatch.setattr(
         ai_worker,
@@ -1537,6 +1566,81 @@ def test_recovery_tool_is_dry_run_by_default_and_never_resubmits(
     assert recovered[0]["status"] == "recovered"
     assert repository.get_job(row["job_id"])["status"] == "completed"
     assert calls == {"retrieve": 2}
+
+
+def test_recovery_tool_reports_each_failure_and_continues(
+    monkeypatch,
+    tmp_path,
+):
+    database = tmp_path / "ai-jobs.db"
+    repository = AIJobRepository(database)
+    version, digest = runtime.schema_identity("earnings_impact")
+
+    def failed_job(ticker, response_id):
+        row, _created = repository.create_job(
+            job_type="earnings_impact",
+            payload={"ticker": ticker, "name": ticker},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="background",
+            prompt_version="earnings-impact-v2",
+            schema_version=version,
+            schema_sha256=digest,
+            max_queued=200,
+        )
+        with repository._connect() as connection:
+            connection.execute(
+                """UPDATE ai_jobs SET status='failed',
+                          error_code='schema_validation_failed',
+                          openai_response_id=? WHERE job_id=?""",
+                (response_id, row["job_id"]),
+            )
+            connection.commit()
+        return row
+
+    invalid = failed_job("AAPL", "resp_invalid")
+    unavailable = failed_job("GOOG", "resp_unavailable")
+    valid = failed_job("META", "resp_valid")
+
+    async def retrieve(_settings, response_id):
+        if response_id == "resp_unavailable":
+            raise RuntimeError("provider detail must not be copied")
+        result = _earnings_result()
+        result["ticker"] = "META"
+        return SimpleNamespace(
+            id=response_id,
+            status="completed",
+            output_text=(
+                json.dumps(result)
+                if response_id == "resp_valid"
+                else "{}"
+            ),
+            error=None,
+            incomplete_details=None,
+        )
+
+    monkeypatch.setattr(
+        recovery_tool,
+        "get_settings",
+        lambda: SimpleNamespace(openai_job_db_path=database),
+    )
+    monkeypatch.setattr(runtime, "retrieve", retrieve)
+
+    results = asyncio.run(
+        recovery_tool.recover(
+            [invalid["job_id"], unavailable["job_id"], valid["job_id"]],
+            apply=False,
+        )
+    )
+
+    assert [item["status"] for item in results] == [
+        "validation_failed",
+        "retrieve_failed",
+        "validated",
+    ]
+    assert results[0]["error_type"] == "ValidationError"
+    assert results[1]["error_type"] == "RuntimeError"
+    assert "provider detail" not in json.dumps(results)
 
 
 def test_background_link_failure_is_not_retryable_as_a_known_submission(
