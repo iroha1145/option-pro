@@ -2215,8 +2215,6 @@ def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
     model = result_model_for(job_type)
     if job_type in {"news_impact", "market_focus"}:
         raw_allowed_codes = list(payload.get("allowed_tickers") or [])
-        if job_type == "news_impact":
-            raw_allowed_codes.extend(payload.get("source_ticker_hints") or [])
     else:
         raw_allowed_codes = [payload.get("ticker")]
     allowed_codes = [
