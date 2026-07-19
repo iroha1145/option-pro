@@ -1827,6 +1827,39 @@ class LocalCatalystIntelligence:
         )
 
     @staticmethod
+    def _news_validation_payload(
+        revision: Mapping[str, Any] | sqlite3.Row,
+    ) -> dict[str, Any]:
+        """Rebuild the source context used by the original paid request."""
+
+        item = dict(revision)
+
+        def list_value(decoded_key: str, json_key: str) -> list[Any]:
+            decoded = item.get(decoded_key)
+            if isinstance(decoded, list):
+                return list(decoded)
+            stored = _loads(item.get(json_key), [])
+            return list(stored) if isinstance(stored, list) else []
+
+        return {
+            "news_id": int(item["news_id"]),
+            "change_sequence": int(item["change_sequence"]),
+            "content_hash": str(item["content_hash"]),
+            "source": str(item.get("source") or ""),
+            "title": str(item.get("raw_title") or ""),
+            "summary": item.get("raw_summary"),
+            "sources": list_value("source_names", "source_names_json"),
+            "source_ticker_hints": list_value(
+                "source_tickers",
+                "source_tickers_json",
+            ),
+            "allowed_tickers": list_value(
+                "canonical_tickers",
+                "canonical_tickers_json",
+            ),
+        }
+
+    @staticmethod
     def _news_result_was_previously_accepted(
         connection: sqlite3.Connection,
         *,
@@ -2040,6 +2073,8 @@ class LocalCatalystIntelligence:
             """SELECT link.job_id,link.news_id,link.change_sequence,
                       link.content_hash,link.result_json,
                       link.result_available_at,link.verified_at,
+                      revision.source,revision.raw_title,revision.raw_summary,
+                      revision.source_names_json,revision.source_tickers_json,
                       revision.canonical_tickers_json
                FROM catalyst_local_analysis_links link
                JOIN catalyst_local_news_revisions revision
@@ -2053,15 +2088,7 @@ class LocalCatalystIntelligence:
         observed_at = _iso()
         for row in rows:
             raw_result = str(row["result_json"])
-            payload = {
-                "news_id": int(row["news_id"]),
-                "change_sequence": int(row["change_sequence"]),
-                "content_hash": str(row["content_hash"]),
-                "allowed_tickers": _loads(
-                    row["canonical_tickers_json"],
-                    [],
-                ),
-            }
+            payload = self._news_validation_payload(row)
             outcome, inserted = self._audit_news_result(
                 connection,
                 job_id=str(row["job_id"]),
@@ -2676,12 +2703,7 @@ class LocalCatalystIntelligence:
             result_available_at = link["result_available_at"]
             result_job_id = link["analysis_result_job_id"]
             audited = bool(link["result_audited"])
-        payload = {
-            "news_id": row.get("news_id"),
-            "change_sequence": row.get("change_sequence"),
-            "content_hash": row.get("content_hash"),
-            "allowed_tickers": list(row.get("canonical_tickers") or []),
-        }
+        payload = self._news_validation_payload(row)
         raw_result = str(raw_value)
         if audited:
             result = _loads(raw_result, None)
