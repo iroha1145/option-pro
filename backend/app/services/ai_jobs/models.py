@@ -316,10 +316,13 @@ _COMPACT_DIGIT_LETTER_IDENTIFIER = re.compile(
 )
 _PLURALIZED_INITIALISM = re.compile(r"[A-Z]{2,8}s")
 _NUMERIC_SECURITY_CODE = re.compile(
-    r"(?<![A-Za-z0-9.^,，．-])[0-9]{1,12}(?![A-Za-z0-9.．])"
+    r"(?<![A-Za-z0-9.^．-])[0-9]{1,12}(?![A-Za-z0-9.．])"
 )
 _FORMATTED_NUMBER_CONTINUATION = re.compile(
     r"^[,，][0-9]{3}(?:[,，][0-9]{3})*(?![0-9])"
+)
+_FORMATTED_NUMBER = re.compile(
+    r"(?<![0-9])[0-9]{1,3}(?:[,，][0-9]{3})+(?![0-9])"
 )
 _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
     {
@@ -1371,6 +1374,11 @@ def _numeric_code_is_in_security_context(
             return False
 
     span = sentence[start:end]
+    if any(
+        formatted.start() <= start and end <= formatted.end()
+        for formatted in _FORMATTED_NUMBER.finditer(sentence)
+    ):
+        return False
     if _FORMATTED_NUMBER_CONTINUATION.match(sentence[end:]) is not None:
         return False
     if len(span) == 5 and span.startswith("0"):

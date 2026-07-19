@@ -1481,6 +1481,8 @@ def test_project_security_code_can_be_used_when_bound_to_the_job():
         "６００５１９走强",
         "600519，股价上涨",
         "600519,股价上涨",
+        "A股，600519股价上涨",
+        "A股,600519股价上涨",
         "A股价上涨",
         "A股票上涨",
         "F股上涨",
@@ -1545,6 +1547,8 @@ def test_numeric_security_code_before_comma_is_allowed_when_bound(title):
         "600519，股价上涨",
         "600519,股价上涨",
         "股票600519受到关注",
+        "A股，600519股价上涨",
+        "A股,600519股价上涨",
     ],
 )
 def test_six_digit_security_code_is_allowed_when_bound(title):
