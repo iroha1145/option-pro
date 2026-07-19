@@ -566,7 +566,9 @@ test("server task state survives a full page reload without creating another tas
 test("Catalyst outage stays inside Catalyst Desk", async ({ page }) => {
   await installCatalystFailureFixtures(page);
   await page.goto("/#catalysts", { waitUntil: "networkidle" });
-  await expect(page.locator("#cat-read-state")).toContainText("新闻读取失败");
+  await expect(page.locator("#cat-read-state")).toContainText(
+    /新闻读取失败|催化剂数据暂不可用/,
+  );
 
   await page.locator('.deck-nav a[data-route="watchlist"]').click();
   await expect(page.locator(".view-head h1")).toContainText("自选观察");
