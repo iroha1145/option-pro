@@ -675,9 +675,29 @@ _SOURCE_BOUND_ENTITY_DISALLOWED_WORDS = frozenset(
 )
 _SOURCE_BOUND_ENTITY_CONNECTORS = frozenset({"and", "of", "the"})
 _SOURCE_BOUND_ENTITY_PART = re.compile(r"[A-Za-z0-9][A-Za-z0-9.'/-]*")
+_SOURCE_BOUND_SECURITY_CONTEXT = re.compile(
+    r"\b(?:stock(?:'s|s)?|shares?|securit(?:y|ies)|stake|equity|equities|"
+    r"investors?|gainers?|losers?|rose|rises?|fell|falls?|gained|lost|"
+    r"outperform(?:ed|s|ing)?|underperform(?:ed|s|ing)?|rallied|slid|"
+    r"plunged|surged|trading|price|buying|selling)\b",
+    re.IGNORECASE,
+)
+_SOURCE_BOUND_SECURITY_CLAUSE_SPLIT = re.compile(r"[;；.!?。！？\n]+")
+_GENERIC_SECURITY_INSTRUMENT_PREFIXES = (
+    "股票",
+    "债券",
+    "商品",
+    "行业",
+    "指数",
+)
+_GENERIC_SECURITY_INSTRUMENT_SPANS = frozenset({"ETF"})
 _GENERIC_NON_REFERENCE_SECURITY_COMPOUNDS = (
     "股份有限公司",
     "股份公司",
+    "证券欺诈集体诉讼",
+    "证券集体诉讼",
+    "证券欺诈诉讼",
+    "证券诉讼",
 )
 _NON_REFERENCE_SECURITY_COMPOUNDS = {
     "10B5-1": ("股票交易计划", "证券交易计划"),
@@ -1064,6 +1084,28 @@ def _is_source_bound_foreign_entity(
     return True
 
 
+def _source_binds_security_reference(
+    span: str,
+    source_texts: tuple[str, ...],
+) -> bool:
+    """Require the same source name to carry its own security context."""
+
+    pattern = re.compile(
+        rf"(?<![A-Za-z0-9]){re.escape(span)}(?![A-Za-z0-9])",
+        re.IGNORECASE,
+    )
+    for source in source_texts:
+        for clause in _SOURCE_BOUND_SECURITY_CLAUSE_SPLIT.split(source):
+            for match in pattern.finditer(clause):
+                # Security wording after the exact name binds the claim to
+                # that source entity. An unrelated ticker elsewhere in the
+                # payload is never enough.
+                suffix = clause[match.end() : match.end() + 80]
+                if _SOURCE_BOUND_SECURITY_CONTEXT.search(suffix) is not None:
+                    return True
+    return False
+
+
 def _foreign_span_context(
     span: str,
     *,
@@ -1109,6 +1151,15 @@ def _foreign_span_context(
         and span.casefold() not in _ENGLISH_PROSE_WORDS
     ):
         return any(_is_cjk(char) for char in sentence)
+    if span in _GENERIC_SECURITY_INSTRUMENT_SPANS:
+        normalized_prefix = _normalize_security_reference_phrase(
+            sentence[:start]
+        )
+        suffix = _strip_security_reference_separators(sentence[end:])
+        if normalized_prefix.endswith(
+            _GENERIC_SECURITY_INSTRUMENT_PREFIXES
+        ) and not _security_phrase_requires_ticker_binding(span, suffix):
+            return True
     if _is_source_bound_foreign_entity(span, source_texts):
         if _approved_span_requires_ticker_binding(
             span,
@@ -1116,16 +1167,9 @@ def _foreign_span_context(
             start=start,
             end=end,
         ):
-            normalized_prefix = _normalize_security_reference_phrase(
-                sentence[:start]
+            return span.upper() in allowed_codes or (
+                _source_binds_security_reference(span, source_texts)
             )
-            if _SECURITY_REFERENCE_PREFIX.search(normalized_prefix) is None or (
-                _NUMERIC_SECURITY_REFERENCE_PREFIX.search(normalized_prefix)
-                is not None
-            ):
-                if span.upper() == span:
-                    return span in allowed_codes
-                return bool(allowed_codes)
         return True
     if span in _ALLOWED_EXACT_FOREIGN_SPANS:
         if _approved_span_requires_ticker_binding(
