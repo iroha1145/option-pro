@@ -1099,6 +1099,99 @@ def test_source_binding_does_not_allow_copied_english_prose(source_title):
         )
 
 
+@pytest.mark.parametrize(
+    ("copied_fragment", "source_title"),
+    [
+        (
+            "Tesla Tops Forecasts",
+            "Tesla Tops Forecasts as Margins Improve",
+        ),
+        (
+            "NVIDIA Launches Blackwell Platform",
+            "NVIDIA Launches Blackwell Platform Today",
+        ),
+        (
+            "Rocket Lab Wins",
+            "Rocket Lab Wins NASA Contract",
+        ),
+        (
+            "Tesla CEO Tops Forecasts",
+            "Tesla CEO Tops Forecasts as Margins Improve",
+        ),
+    ],
+)
+def test_source_binding_rejects_copied_headline_fragments(
+    copied_fragment,
+    source_title,
+):
+    result = _news_result()
+    result["title_zh"] = f"{copied_fragment}消息影响市场"
+    payload = _news_payload()
+    payload["title"] = source_title
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+def test_source_binding_keeps_a_structural_multiword_entity_fragment():
+    result = _news_result()
+    result["title_zh"] = "The Trade Desk平台发布业务更新"
+    payload = _news_payload()
+    payload["title"] = "The Trade Desk platform reports stronger demand"
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["title_zh"].startswith("The Trade Desk平台")
+
+
+@pytest.mark.parametrize(
+    ("title", "source_title", "source_summary"),
+    [
+        (
+            "Varonis CEO Yaki Faitelson将发表主题演讲",
+            "Varonis CEO Yaki Faitelson to Deliver Keynote",
+            None,
+        ),
+        (
+            "Pershing Square USA是一只封闭式基金",
+            "Bill Ackman's New Closed-End Fund Trades Below Its IPO Price",
+            "Pershing Square USA, Bill Ackman's closed-end fund, trades at a discount.",
+        ),
+        (
+            "Pershing Square USA出现资产净值折价",
+            "Bill Ackman's New Closed-End Fund Trades Below Its IPO Price",
+            "Pershing Square USA is a closed-end fund that trades at a discount.",
+        ),
+    ],
+)
+def test_source_binding_keeps_a_role_subject_or_defined_entity(
+    title,
+    source_title,
+    source_summary,
+):
+    result = _news_result()
+    result["title_zh"] = title
+    payload = _news_payload()
+    payload["title"] = source_title
+    payload["summary"] = source_summary
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["title_zh"] == title
+
+
 def test_source_binding_does_not_bind_a_company_name_to_an_unrelated_ticker():
     result = _news_result()
     result["headline_summary"] = "Apple股票上涨受到市场关注"
