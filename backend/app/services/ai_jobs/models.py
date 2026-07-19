@@ -708,6 +708,49 @@ _SOURCE_BOUND_ENTITY_DISALLOWED_WORDS = frozenset(
 )
 _SOURCE_BOUND_ENTITY_CONNECTORS = frozenset({"and", "of", "the"})
 _SOURCE_BOUND_ENTITY_PART = re.compile(r"[A-Za-z0-9][A-Za-z0-9.'/-]*")
+_SOURCE_BOUND_MULTIWORD_ENTITY_ENDINGS = frozenset(
+    {
+        "awards",
+        "conference",
+        "corp",
+        "corporation",
+        "desk",
+        "etf",
+        "fund",
+        "group",
+        "holdings",
+        "inc",
+        "laboratories",
+        "labs",
+        "ltd",
+        "mainframe",
+        "platform",
+        "plc",
+        "systems",
+        "technologies",
+        "technology",
+    }
+)
+_SOURCE_BOUND_MULTIWORD_ENTITY_NOUNS = (
+    _SOURCE_BOUND_MULTIWORD_ENTITY_ENDINGS | {"growth"}
+)
+_SOURCE_BOUND_ROLE_TOKENS = frozenset(
+    {"ceo", "cfo", "cio", "coo", "cto", "president"}
+)
+_SOURCE_BOUND_ROLE_PREDICATE = re.compile(
+    r"^\s+(?:announces?|has|have|is|reports?|said|says|to|was|will)\b",
+    re.IGNORECASE,
+)
+_SOURCE_BOUND_ENTITY_DEFINITION = re.compile(
+    r"^(?:"
+    r"\s+(?:is|remains|was)\s+(?:(?:an?|the)\s+)?"
+    r"|\s*,\s*(?:(?:an?|the)\s+|"
+    r"(?:[A-Z][A-Za-z.'-]*\s+){0,3}[A-Z][A-Za-z.'-]*['’]s\s+)"
+    r")"
+    r"(?:closed-end\s+)?(?:business|company|corporation|etf|fund|group|"
+    r"index|platform|product|service|system)\b",
+    re.IGNORECASE,
+)
 _SOURCE_BOUND_HEADLINE_SEGMENT_SPLIT = re.compile(
     r"(?:\s+[|—–-]\s+|[:：;；.!?。！？\n]+)"
 )
@@ -1105,6 +1148,79 @@ def _approved_span_requires_ticker_binding(
     return _security_phrase_requires_ticker_binding(span, suffix)
 
 
+def _is_copied_source_headline_fragment(
+    span: str,
+    source_texts: tuple[str, ...],
+) -> bool:
+    parts = _SOURCE_BOUND_ENTITY_PART.findall(span)
+    words = [part for part in parts if any(char.isalpha() for char in part)]
+    if len(words) < 3 or any(char.isdigit() for char in span):
+        return False
+    prose_words = {
+        re.sub(r"[^A-Za-z]", "", word).casefold()
+        for word in words
+        if re.sub(r"[^A-Za-z]", "", word).casefold()
+        in _ENGLISH_PROSE_WORDS
+        and re.sub(r"[^A-Za-z]", "", word).casefold()
+        not in _SOURCE_BOUND_ENTITY_CONNECTORS
+    }
+    trailing_word = re.sub(r"[^a-z]", "", words[-1].casefold())
+    fragment_is_entity_shaped = (
+        trailing_word in _SOURCE_BOUND_MULTIWORD_ENTITY_ENDINGS
+        and not (
+            prose_words - _SOURCE_BOUND_MULTIWORD_ENTITY_NOUNS
+        )
+    )
+    span_tokens = tuple(part.casefold() for part in parts)
+    compact_span = re.sub(r"[^A-Za-z0-9]", "", span).casefold()
+    role_subject = bool(
+        {re.sub(r"[^a-z]", "", word.casefold()) for word in words}
+        & _SOURCE_BOUND_ROLE_TOKENS
+    )
+    exact_pattern = re.compile(
+        rf"(?<![A-Za-z0-9]){re.escape(span)}(?![A-Za-z0-9])",
+        re.IGNORECASE,
+    )
+    for source in source_texts:
+        if ("/" in source or "|" in source) and any(
+            re.sub(r"[^A-Za-z0-9]", "", component).casefold()
+            == compact_span
+            for component in re.split(r"[/|]", source)
+        ):
+            continue
+        source_defines_entity = any(
+            _SOURCE_BOUND_ENTITY_DEFINITION.match(source[match.end() :])
+            is not None
+            or (
+                role_subject
+                and _SOURCE_BOUND_ROLE_PREDICATE.match(source[match.end() :])
+                is not None
+            )
+            for match in exact_pattern.finditer(source)
+        )
+        for segment in _SOURCE_BOUND_HEADLINE_SEGMENT_SPLIT.split(source):
+            segment_tokens = tuple(
+                part.casefold()
+                for part in _SOURCE_BOUND_ENTITY_PART.findall(segment)
+            )
+            if segment_tokens == span_tokens:
+                return True
+            if len(segment_tokens) <= len(span_tokens):
+                continue
+            contained = any(
+                segment_tokens[offset : offset + len(span_tokens)]
+                == span_tokens
+                for offset in range(
+                    len(segment_tokens) - len(span_tokens) + 1
+                )
+            )
+            if contained and not (
+                fragment_is_entity_shaped or source_defines_entity
+            ):
+                return True
+    return False
+
+
 def _is_source_bound_foreign_entity(
     span: str,
     source_texts: tuple[str, ...],
@@ -1134,6 +1250,8 @@ def _is_source_bound_foreign_entity(
     )
     if not source_bound:
         return False
+    if _is_copied_source_headline_fragment(span, source_texts):
+        return False
     parts = _SOURCE_BOUND_ENTITY_PART.findall(span)
     if not parts or len(parts) > 6:
         return False
@@ -1158,18 +1276,6 @@ def _is_source_bound_foreign_entity(
         # one ordinary noun available for real names such as a Growth ETF,
         # while rejecting clause-like spans such as "Apple Beats Estimates".
         return False
-    if len(words) >= 3 and not any(char.isdigit() for char in span):
-        normalized_span = " ".join(span.casefold().split())
-        for source in source_texts:
-            for segment in _SOURCE_BOUND_HEADLINE_SEGMENT_SPLIT.split(source):
-                normalized_segment = " ".join(
-                    segment.strip(" \t\r\n\"'“”‘’()[]{}").casefold().split()
-                )
-                if normalized_segment == normalized_span:
-                    # A complete multiword headline segment is prose, even
-                    # when every word is Title Case. Registered names found
-                    # inside a larger source sentence remain source-bound.
-                    return False
 
     def entity_shaped(word: str) -> bool:
         letters = "".join(char for char in word if char.isalpha())
@@ -1247,6 +1353,8 @@ def _foreign_span_context(
     allowed_codes: frozenset[str],
     source_texts: tuple[str, ...] = (),
 ) -> bool:
+    if _is_copied_source_headline_fragment(span, source_texts):
+        return False
     if len(span) == 1 and span.isascii() and span.isupper():
         suffix = _strip_security_reference_separators(sentence[end:])
         if suffix.startswith(("股价", "股票")):
