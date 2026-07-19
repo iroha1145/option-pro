@@ -318,6 +318,9 @@ _PLURALIZED_INITIALISM = re.compile(r"[A-Z]{2,8}s")
 _NUMERIC_SECURITY_CODE = re.compile(
     r"(?<![A-Za-z0-9.^,，．-])[0-9]{1,12}(?![A-Za-z0-9.．])"
 )
+_FORMATTED_NUMBER_CONTINUATION = re.compile(
+    r"^[,，][0-9]{3}(?:[,，][0-9]{3})*(?![0-9])"
+)
 _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
     {
         "5G",
@@ -554,6 +557,7 @@ _NUMERIC_SECURITY_REFERENCE_PREFIX = re.compile(
     r"(?:股票代码|普通股代码|股份代码|证券代码|证券编号)(?:为|是)?$"
 )
 _NUMERIC_CONTEXT_BOUNDARIES = frozenset("，,；;。.!！?？%％、")
+_NUMERIC_SUFFIX_HARD_BOUNDARIES = frozenset("；;。.!！?？%％")
 _SECURITY_REFERENCE_MARKERS = (
     "股价",
     "股票",
@@ -605,6 +609,7 @@ _INITIALISM_CONTEXT_SUFFIXES = (
     "技术",
     "芯片",
     "软件",
+    "安全",
     "基金",
     "期货",
     "增长",
@@ -674,57 +679,10 @@ _SOURCE_BOUND_ENTITY_DISALLOWED_WORDS = frozenset(
     }
 )
 _SOURCE_BOUND_ENTITY_CONNECTORS = frozenset({"and", "of", "the"})
-_SOURCE_BOUND_ENTITY_ACTION_WORDS = frozenset(
-    {
-        "announces",
-        "attacks",
-        "beats",
-        "climbs",
-        "crashes",
-        "cuts",
-        "drops",
-        "expands",
-        "expects",
-        "falls",
-        "fell",
-        "gains",
-        "jumps",
-        "launched",
-        "launches",
-        "misses",
-        "ordered",
-        "outperformed",
-        "outperforms",
-        "paused",
-        "pauses",
-        "plunges",
-        "raises",
-        "raised",
-        "rallied",
-        "reports",
-        "retaliates",
-        "retreats",
-        "rises",
-        "rose",
-        "says",
-        "sees",
-        "sells",
-        "sinks",
-        "slid",
-        "slumps",
-        "soars",
-        "spikes",
-        "strikes",
-        "surged",
-        "surges",
-        "tumbles",
-        "underperformed",
-        "underperforms",
-        "unveils",
-        "warns",
-    }
-)
 _SOURCE_BOUND_ENTITY_PART = re.compile(r"[A-Za-z0-9][A-Za-z0-9.'/-]*")
+_SOURCE_BOUND_HEADLINE_SEGMENT_SPLIT = re.compile(
+    r"(?:\s+[|—–-]\s+|[:：;；.!?。！？\n]+)"
+)
 _SOURCE_BOUND_SECURITY_CONTEXT = re.compile(
     r"\b(?:stock(?:'s|s)?|shares?|securit(?:y|ies)|stake|equity|equities|"
     r"investors?|gainers?|losers?|rose|rises?|fell|falls?|gained|lost|"
@@ -798,6 +756,14 @@ def _is_embedded_greek_scientific_symbol(text: str, index: int) -> bool:
     before = text[index - 1] if index > 0 else ""
     after = text[index + 1] if index + 1 < len(text) else ""
     if before in _GREEK_SCIENTIFIC_SYMBOLS or after in _GREEK_SCIENTIFIC_SYMBOLS:
+        return False
+    prefix = _normalize_security_reference_phrase(text[:index])
+    suffix = _strip_security_reference_separators(text[index + 1 :])
+    if (
+        _SECURITY_REFERENCE_PREFIX.search(prefix) is not None
+        or suffix.startswith(_SECURITY_CODE_SUFFIXES)
+        or suffix.startswith(_SECURITY_PRICE_MOVEMENTS)
+    ):
         return False
     window = text[max(0, index - 6) : index + 7]
     return any(_is_cjk(char) for char in window)
@@ -1077,8 +1043,21 @@ def _is_source_bound_foreign_entity(
 
     if not source_texts or not 1 < len(span) <= 80:
         return False
-    folded_span = span.casefold()
-    if not any(folded_span in source.casefold() for source in source_texts):
+    exact_pattern = re.compile(
+        rf"(?<![A-Za-z0-9]){re.escape(span)}(?:s)?(?![A-Za-z0-9])",
+        re.IGNORECASE,
+    )
+    compact_span = re.sub(r"[^A-Za-z0-9]", "", span).casefold()
+    source_bound = any(
+        exact_pattern.search(source) is not None
+        or any(
+            re.sub(r"[^A-Za-z0-9]", "", component).casefold()
+            == compact_span
+            for component in re.split(r"[/|]", source)
+        )
+        for source in source_texts
+    )
+    if not source_bound:
         return False
     parts = _SOURCE_BOUND_ENTITY_PART.findall(span)
     if not parts or len(parts) > 6:
@@ -1086,11 +1065,10 @@ def _is_source_bound_foreign_entity(
     words = [part for part in parts if any(char.isalpha() for char in part)]
     if not words or sum(sum(char.isalpha() for char in word) for word in words) > 48:
         return False
-    folded_word_sequence = [
+    folded_words = {
         re.sub(r"[^A-Za-z]", "", word).casefold()
         for word in words
-    ]
-    folded_words = set(folded_word_sequence)
+    }
     if folded_words & _SOURCE_BOUND_ENTITY_DISALLOWED_WORDS:
         return False
     prose_words = [
@@ -1105,14 +1083,18 @@ def _is_source_bound_foreign_entity(
         # one ordinary noun available for real names such as a Growth ETF,
         # while rejecting clause-like spans such as "Apple Beats Estimates".
         return False
-    if any(
-        index > 0 and word in _SOURCE_BOUND_ENTITY_ACTION_WORDS
-        for index, word in enumerate(folded_word_sequence)
-    ):
-        # A finite action word after a likely subject makes the span a copied
-        # headline clause, not a registered name.  Keeping the first position
-        # available avoids rejecting brands such as "Beats Electronics".
-        return False
+    if len(words) >= 3 and not any(char.isdigit() for char in span):
+        normalized_span = " ".join(span.casefold().split())
+        for source in source_texts:
+            for segment in _SOURCE_BOUND_HEADLINE_SEGMENT_SPLIT.split(source):
+                normalized_segment = " ".join(
+                    segment.strip(" \t\r\n\"'“”‘’()[]{}").casefold().split()
+                )
+                if normalized_segment == normalized_span:
+                    # A complete multiword headline segment is prose, even
+                    # when every word is Title Case. Registered names found
+                    # inside a larger source sentence remain source-bound.
+                    return False
 
     def entity_shaped(word: str) -> bool:
         letters = "".join(char for char in word if char.isalpha())
@@ -1389,6 +1371,8 @@ def _numeric_code_is_in_security_context(
             return False
 
     span = sentence[start:end]
+    if _FORMATTED_NUMBER_CONTINUATION.match(sentence[end:]) is not None:
+        return False
     if len(span) == 5 and span.startswith("0"):
         return True
     before_index = start - 1
@@ -1407,7 +1391,7 @@ def _numeric_code_is_in_security_context(
         after_index < len(sentence)
         and _is_security_reference_separator(sentence[after_index])
     ):
-        if sentence[after_index] in _NUMERIC_CONTEXT_BOUNDARIES:
+        if sentence[after_index] in _NUMERIC_SUFFIX_HARD_BOUNDARIES:
             suffix_blocked = True
             break
         after_index += 1
@@ -1421,8 +1405,10 @@ def _numeric_code_is_in_security_context(
         if suffix_blocked
         else _normalize_security_reference_phrase(sentence[after_index:])
     )
+    if len(span) == 4 and suffix.startswith(("年", "年度", "财年")):
+        return False
     return (
-        _NUMERIC_SECURITY_REFERENCE_PREFIX.search(prefix) is not None
+        _SECURITY_REFERENCE_PREFIX.search(prefix) is not None
         or suffix.startswith(_SECURITY_CODE_SUFFIXES)
         or suffix.startswith("这只股票")
         or (

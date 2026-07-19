@@ -1872,6 +1872,57 @@ def test_future_language_contract_keeps_previously_accepted_paid_news(
         ).fetchone()[0] == 1
 
 
+def test_new_contract_reaudit_keeps_source_bound_registered_names(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    source = "seekingalpha/Seeking Alpha"
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                1,
+                311,
+                available_at=now - timedelta(minutes=10),
+                title="Seeking Alpha asks about the industry outlook",
+                source=source,
+            )
+        ],
+        as_of=now - timedelta(minutes=9),
+    )
+    intelligence.reconcile()
+    job = intelligence.request_analysis(311, force=False)
+    result = _news_result(
+        news_id=311,
+        change_sequence=1,
+        content_hash="hash-311-1",
+    )
+    result["title_zh"] = "Seeking Alpha提问行业前景"
+    _finish_job(ai, job["job_id"], result)
+    intelligence.reconcile()
+
+    future_contract = "news-impact-result:simplified-chinese-v99:source-context"
+    monkeypatch.setattr(local_module, "NEWS_RESULT_CONTRACT_ID", future_contract)
+    intelligence.reconcile()
+
+    detail = intelligence.news(311, as_of=now + timedelta(minutes=1))
+    assert detail is not None
+    assert detail["item"]["analysis"]["title_zh"] == result["title_zh"]
+    with sqlite3.connect(intelligence.db_path) as connection:
+        assert connection.execute(
+            """SELECT outcome FROM catalyst_local_analysis_result_audit
+               WHERE job_id=? AND contract_id=?""",
+            (job["job_id"], future_contract),
+        ).fetchone()[0] == "accepted"
+        assert connection.execute(
+            """SELECT result_json FROM catalyst_local_analysis_links
+               WHERE job_id=?""",
+            (job["job_id"],),
+        ).fetchone()[0] == local_module._json(result)
+
+
 def test_reconcile_restores_previously_accepted_paid_news_after_old_clear(
     tmp_path,
     monkeypatch,
