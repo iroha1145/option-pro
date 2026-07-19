@@ -316,7 +316,7 @@ _COMPACT_DIGIT_LETTER_IDENTIFIER = re.compile(
 )
 _PLURALIZED_INITIALISM = re.compile(r"[A-Z]{2,8}s")
 _NUMERIC_SECURITY_CODE = re.compile(
-    r"(?<![A-Za-z0-9.^．-])[0-9]{1,12}(?![A-Za-z0-9.．])"
+    r"(?<![A-Za-z0-9^\-])[0-9]{1,12}(?![A-Za-z0-9])"
 )
 _FORMATTED_NUMBER_CONTINUATION = re.compile(
     r"^[,，][0-9]{3}(?:[,，][0-9]{3})*(?![0-9])"
@@ -1374,6 +1374,18 @@ def _numeric_code_is_in_security_context(
             return False
 
     span = sentence[start:end]
+    if (
+        start >= 2
+        and sentence[start - 1] in ".．"
+        and sentence[start - 2].isascii()
+        and sentence[start - 2].isalnum()
+    ) or (
+        end + 1 < len(sentence)
+        and sentence[end] in ".．"
+        and sentence[end + 1].isascii()
+        and sentence[end + 1].isalnum()
+    ):
+        return False
     if any(
         formatted.start() <= start and end <= formatted.end()
         for formatted in _FORMATTED_NUMBER.finditer(sentence)
