@@ -676,6 +676,63 @@ def test_read_mode_never_creates_paid_jobs_and_never_exposes_raw_english(tmp_pat
     assert captured.value.code == "read_only_mode"
 
 
+def test_recent_windows_use_news_time_instead_of_late_import_time(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
+    now = datetime(2026, 7, 19, 6, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    late_old = _news_change(
+        1,
+        201,
+        available_at=now - timedelta(minutes=10),
+        title="Old article imported today",
+    )
+    late_old["news"]["published_at"] = _iso(now - timedelta(days=30))
+    recent = _news_change(
+        2,
+        202,
+        available_at=now - timedelta(minutes=5),
+        title="Current market article",
+    )
+    _apply_news(etl, [late_old, recent], as_of=now - timedelta(minutes=4))
+
+    intelligence.reconcile()
+    feed = intelligence.feed(as_of=now, window_hours=24, limit=20)
+    hotspots = intelligence.hotspots(limit=20, now=now)
+    scheduled = intelligence.run_scheduled(now=now)
+
+    assert [item["news_id"] for item in feed["items"]] == [202]
+    assert feed["summary"]["pending"] == 1
+    assert [item["representative_news_id"] for item in hotspots["items"]] == [202]
+    assert scheduled == {"queued": 1, "skipped": 0}
+    with sqlite3.connect(ai.path) as connection:
+        payloads = [
+            json.loads(row[0])
+            for row in connection.execute(
+                "SELECT payload_json FROM ai_jobs WHERE job_type='news_impact'"
+            )
+        ]
+    assert [payload["news_id"] for payload in payloads] == [202]
+
+
+def test_active_revision_database_errors_are_not_reported_as_empty(tmp_path):
+    _etl, _ai, intelligence = _stack(tmp_path)
+
+    class BrokenConnection:
+        @staticmethod
+        def execute(*_args, **_kwargs):
+            raise sqlite3.OperationalError("database or disk is full")
+
+    with pytest.raises(sqlite3.OperationalError, match="database or disk is full"):
+        intelligence._active_revisions(
+            BrokenConnection(),
+            as_of=datetime(2026, 7, 19, 6, 30, tzinfo=timezone.utc),
+            window_hours=72,
+        )
+
+
 def test_jobs_can_be_cancelled_after_switching_to_read_mode(tmp_path):
     etl, ai, intelligence = _stack(tmp_path, mode="manual")
     now = datetime.now(timezone.utc).replace(microsecond=0)

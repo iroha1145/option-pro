@@ -2329,7 +2329,10 @@ class LocalCatalystIntelligence:
         params: list[Any] = [cutoff, cutoff]
         time_clause = ""
         if window_hours is not None:
-            time_clause = " AND r.source_available_at>=?"
+            # A late import must not turn old news into a current event. The
+            # source-availability cutoff above still preserves point-in-time
+            # visibility; this window is the age of the news itself.
+            time_clause = " AND COALESCE(r.published_at,r.fetched_at)>=?"
             params.append(_iso(as_of - timedelta(hours=window_hours)))
         params.extend(
             [
@@ -2415,7 +2418,10 @@ class LocalCatalystIntelligence:
                 tuple(params),
             ).fetchall()
         except sqlite3.OperationalError:
-            return []
+            # Empty is a valid news result, not a database error. Let callers
+            # expose the existing cache-unavailable retry state instead of
+            # publishing an empty feed or an empty hotspot plan.
+            raise
         output: list[dict[str, Any]] = []
         for row in rows:
             item = dict(row)
