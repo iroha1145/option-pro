@@ -1052,6 +1052,84 @@ def test_source_binding_does_not_allow_copied_english_prose(source_title):
         )
 
 
+def test_source_binding_does_not_bind_a_company_name_to_an_unrelated_ticker():
+    result = _news_result()
+    result["headline_summary"] = "Apple股票上涨受到市场关注"
+    payload = _news_payload()
+    payload["title"] = "Apple outlook improves"
+    payload["allowed_tickers"] = ["NVDA"]
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+def test_source_binding_does_not_guess_a_nearby_ticker_for_a_company_name():
+    result = _news_result()
+    result["headline_summary"] = "SpaceX股票估值受到市场关注"
+    payload = _news_payload()
+    payload["title"] = "SpaceX expands launch operations"
+    payload["allowed_tickers"] = ["NVDA"]
+    payload["source_ticker_hints"] = ["SPCX"]
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+def test_source_bound_ticker_still_requires_an_exact_code_match():
+    result = _news_result()
+    result["headline_summary"] = "SAP股票上涨受到市场关注"
+    payload = _news_payload()
+    payload["title"] = "SAP outlook improves"
+    payload["allowed_tickers"] = ["NVDA", "SAP"]
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["headline_summary"].startswith("SAP")
+
+
+@pytest.mark.parametrize(
+    ("text", "source_title"),
+    [
+        (
+            "针对AeroVironment, Inc.的证券集体诉讼已被提起",
+            "AeroVironment, Inc. Investors Securities Class Action - AVAV",
+        ),
+        (
+            "针对Zoetis Inc.的证券欺诈集体诉讼已被提起",
+            "Zoetis Inc. Investors Securities Fraud Class Action - ZTS",
+        ),
+    ],
+)
+def test_source_bound_legal_names_are_not_mistaken_for_stock_references(
+    text,
+    source_title,
+):
+    result = _news_result()
+    result["headline_summary"] = text
+    payload = _news_payload()
+    payload["title"] = source_title
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["headline_summary"] == text
+
+
 def test_news_text_allows_a_source_bound_publisher_name():
     result = _news_result()
     result["title_zh"] = "Seeking Alpha提问贸易协议变化的行业影响"
