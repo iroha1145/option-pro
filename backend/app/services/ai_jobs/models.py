@@ -316,7 +316,7 @@ _COMPACT_DIGIT_LETTER_IDENTIFIER = re.compile(
 )
 _PLURALIZED_INITIALISM = re.compile(r"[A-Z]{2,8}s")
 _NUMERIC_SECURITY_CODE = re.compile(
-    r"(?<![A-Za-z0-9.^,，．-])[0-9]{1,12}(?![A-Za-z0-9.,，．])"
+    r"(?<![A-Za-z0-9.^,，．-])[0-9]{1,12}(?![A-Za-z0-9.．])"
 )
 _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
     {

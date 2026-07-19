@@ -1397,6 +1397,8 @@ def test_project_security_code_can_be_used_when_bound_to_the_job():
         "𝟘𝟘𝟟𝟘𝟘股价上涨",
         "腾讯（00700）股价上涨",
         "股票代码为00700",
+        "股票代码为00700，受到关注",
+        "股票代码为1234,受到关注",
         "腾讯的股票代码是00700",
         "市场关注00700这只股票",
         "腾讯证券编号为00700",
@@ -1436,6 +1438,28 @@ def test_numeric_and_single_letter_security_codes_are_allowed_when_bound(ticker)
         payload,
     )
     assert validated["title_zh"] == f"{ticker}股价上涨"
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "股票代码为00700，受到关注",
+        "股票代码为00700,受到关注",
+    ],
+)
+def test_numeric_security_code_before_comma_is_allowed_when_bound(title):
+    result = _news_result()
+    result["title_zh"] = title
+    payload = _news_payload()
+    payload["allowed_tickers"] = ["NVDA", "00700"]
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["title_zh"] == title
 
 
 def test_six_digit_security_code_is_allowed_when_bound():
