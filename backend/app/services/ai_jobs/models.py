@@ -122,6 +122,31 @@ _REGULATORY_RULE_PREFIX = re.compile(
 _GREEK_SCIENTIFIC_SYMBOLS = frozenset(
     "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψω"
 )
+_GREEK_SCIENTIFIC_PREFIX_CONTEXTS = (
+    "亚型",
+    "受体",
+    "参数",
+    "变体",
+    "因子",
+    "激酶",
+    "系数",
+    "细胞",
+    "蛋白",
+    "角度",
+    "波长",
+)
+_GREEK_SCIENTIFIC_SUFFIX_CONTEXTS = (
+    "亚型",
+    "变异株",
+    "受体",
+    "射线",
+    "综合征",
+    "粒子",
+    "系数",
+    "细胞",
+    "蛋白",
+    "衰变",
+)
 _ENGLISH_PROSE_WORDS = frozenset(
     {
         "a",
@@ -687,13 +712,53 @@ _SOURCE_BOUND_HEADLINE_SEGMENT_SPLIT = re.compile(
     r"(?:\s+[|—–-]\s+|[:：;；.!?。！？\n]+)"
 )
 _SOURCE_BOUND_SECURITY_CONTEXT = re.compile(
-    r"\b(?:stock(?:'s|s)?|shares?|securit(?:y|ies)|stake|equity|equities|"
+    r"^[\s,:：\-—–]*(?:(?:['’]s[\s,:：\-—–]*)"
+    r"(?:[0-9][0-9,]*(?:\.[0-9]+)?\s+)?|"
+    r"(?:(?:has|have|had|is|are|was|were)\s+)?(?:among\s+)?)"
+    r"(?:stock(?:'s|s)?|shares?|securit(?:y|ies)|stake|equity|equities|"
+    r"holdings?|"
     r"investors?|gainers?|losers?|rose|rises?|fell|falls?|gained|lost|"
     r"outperform(?:ed|s|ing)?|underperform(?:ed|s|ing)?|rallied|slid|"
     r"plunged|surged|trading|price|buying|selling)\b",
     re.IGNORECASE,
 )
 _SOURCE_BOUND_SECURITY_CLAUSE_SPLIT = re.compile(r"[;；.!?。！？\n]+")
+_SOURCE_TECHNICAL_MODIFIERS = (
+    "artificial",
+    "biological",
+    "biotech",
+    "clinical",
+    "genetic",
+    "genomic",
+    "medical",
+    "molecular",
+    "quantum",
+    "semiconductor",
+    "synthetic",
+    "therapeutic",
+)
+_SOURCE_TECHNICAL_NOUNS = (
+    "business",
+    "industry",
+    "manufacturer",
+    "manufacturers",
+    "manufacturing",
+    "market",
+    "platform",
+    "research",
+    "sector",
+    "sequencing",
+    "system",
+    "technology",
+    "therapy",
+)
+_TECHNICAL_INITIALISM_SECURITY_CATEGORY_SUFFIXES = (
+    "企业的股份",
+    "企业的股票",
+    "企业股份",
+    "企业股票",
+    "股票",
+)
 _GENERIC_SECURITY_INSTRUMENT_PREFIXES = (
     "股票",
     "债券",
@@ -768,8 +833,15 @@ def _is_embedded_greek_scientific_symbol(text: str, index: int) -> bool:
         or suffix.startswith(_SECURITY_PRICE_MOVEMENTS)
     ):
         return False
-    window = text[max(0, index - 6) : index + 7]
-    return any(_is_cjk(char) for char in window)
+    scientific_prefix = _normalize_security_reference_phrase(
+        text[max(0, index - 16) : index]
+    )
+    scientific_suffix = _strip_security_reference_separators(
+        text[index + 1 : index + 17]
+    )
+    return scientific_prefix.endswith(_GREEK_SCIENTIFIC_PREFIX_CONTEXTS) or (
+        scientific_suffix.startswith(_GREEK_SCIENTIFIC_SUFFIX_CONTEXTS)
+    )
 
 
 def _is_security_reference_separator(char: str) -> bool:
@@ -1145,9 +1217,25 @@ def _source_binds_security_reference(
                 # that source entity. An unrelated ticker elsewhere in the
                 # payload is never enough.
                 suffix = clause[match.end() : match.end() + 80]
-                if _SOURCE_BOUND_SECURITY_CONTEXT.search(suffix) is not None:
+                if _SOURCE_BOUND_SECURITY_CONTEXT.match(suffix) is not None:
                     return True
     return False
+
+
+def _source_uses_initialism_as_technical_modifier(
+    span: str,
+    source_texts: tuple[str, ...],
+) -> bool:
+    if not (2 <= len(span) <= 8 and span.isascii() and span.isupper()):
+        return False
+    modifiers = "|".join(map(re.escape, _SOURCE_TECHNICAL_MODIFIERS))
+    nouns = "|".join(map(re.escape, _SOURCE_TECHNICAL_NOUNS))
+    pattern = re.compile(
+        rf"\b(?:{modifiers})\s+{re.escape(span)}\s+"
+        rf"(?:{nouns})(?:['’]s)?\b",
+        re.IGNORECASE,
+    )
+    return any(pattern.search(source) is not None for source in source_texts)
 
 
 def _foreign_span_context(
@@ -1211,8 +1299,21 @@ def _foreign_span_context(
             start=start,
             end=end,
         ):
-            return span.upper() in allowed_codes or (
-                _source_binds_security_reference(span, source_texts)
+            suffix = _strip_security_reference_separators(sentence[end:])
+            return (
+                span.upper() in allowed_codes
+                or _source_binds_security_reference(span, source_texts)
+                or (
+                    start > 0
+                    and _is_cjk(sentence[start - 1])
+                    and suffix.startswith(
+                        _TECHNICAL_INITIALISM_SECURITY_CATEGORY_SUFFIXES
+                    )
+                    and _source_uses_initialism_as_technical_modifier(
+                        span,
+                        source_texts,
+                    )
+                )
             )
         return True
     if span in _ALLOWED_EXACT_FOREIGN_SPANS:

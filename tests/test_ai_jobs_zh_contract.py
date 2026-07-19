@@ -239,9 +239,16 @@ def test_rule_10b5_1_english_prefix_is_normalized_without_a_model_retry():
     )
 
 
-def test_embedded_greek_scientific_symbol_is_not_treated_as_foreign_prose():
-    text = "该药物用于治疗活化磷脂酰肌醇3激酶δ综合征。"
-
+@pytest.mark.parametrize(
+    "text",
+    [
+        "该药物用于治疗活化磷脂酰肌醇3激酶δ综合征。",
+        "研究显示β细胞功能有所改善。",
+        "实验测得γ射线强度下降。",
+        "模型中的λ系数保持稳定。",
+    ],
+)
+def test_embedded_greek_scientific_symbol_is_not_treated_as_foreign_prose(text):
     assert validate_simplified_chinese_text(text, None) == text
 
 
@@ -256,6 +263,9 @@ def test_greek_prose_is_still_rejected():
         "Α股价上涨",
         "股票Α受到关注",
         "证券代码为Β",
+        "Α公司发布业绩",
+        "Β产品完成升级",
+        "ο行业需求增长",
     ],
 )
 def test_greek_homoglyphs_are_rejected_in_security_contexts(text):
@@ -1097,6 +1107,118 @@ def test_source_binding_does_not_bind_a_company_name_to_an_unrelated_ticker():
     payload["allowed_tickers"] = ["NVDA"]
 
     with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+@pytest.mark.parametrize(
+    "source_title",
+    [
+        "Apple supplier shares rise",
+        "Apple supplier's shares rise",
+        "Apple says supplier shares rise",
+    ],
+)
+def test_source_binding_does_not_cross_into_another_noun_phrase(source_title):
+    result = _news_result()
+    result["headline_summary"] = "Apple股票上涨受到市场关注"
+    payload = _news_payload()
+    payload["title"] = source_title
+    payload["allowed_tickers"] = ["NVDA"]
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+@pytest.mark.parametrize(
+    ("entity", "source_title"),
+    [
+        ("Apple", "Apple shares rise"),
+        ("Apple", "Apple's stock rises"),
+        ("PayPal", "PayPal among gainers"),
+        ("MGK", "MGK's 56 holdings"),
+        ("Sandisk", "Sandisk Have Outperformed Nvidia's Stock"),
+    ],
+)
+def test_source_binding_accepts_immediate_security_context(entity, source_title):
+    result = _news_result()
+    result["headline_summary"] = f"{entity}股票上涨受到市场关注"
+    payload = _news_payload()
+    payload["title"] = source_title
+    payload["allowed_tickers"] = ["NVDA"]
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["headline_summary"].startswith(f"{entity}股票")
+
+
+@pytest.mark.parametrize(
+    ("title", "source_title"),
+    [
+        (
+            "凯茜·伍德卖出一只年内大涨的合成DNA股票",
+            "Cathie Wood sells a synthetic DNA manufacturer's stock",
+        ),
+        (
+            "基因RNA股票受到市场关注",
+            "The genetic RNA technology market is expanding",
+        ),
+        (
+            "方舟旗下ETF卖出一家合成DNA企业的股份",
+            "Ark sold the synthetic DNA manufacturer's stock",
+        ),
+    ],
+)
+def test_source_bound_technical_initialism_can_describe_a_stock_category(
+    title,
+    source_title,
+):
+    result = _news_result()
+    result["title_zh"] = title
+    payload = _news_payload()
+    payload["title"] = source_title
+    payload["allowed_tickers"] = ["NVDA"]
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["title_zh"] == title
+
+
+@pytest.mark.parametrize(
+    ("title", "source_title"),
+    [
+        ("DNA股价上涨", "A synthetic DNA manufacturer's stock rises"),
+        ("DNA股票上涨", "A synthetic DNA manufacturer's stock rises"),
+        ("合成DNA企业股价上涨", "A synthetic DNA manufacturer's stock rises"),
+        ("关注CAT股票上涨", "CAT manufacturer shares rise"),
+    ],
+)
+def test_source_bound_technical_term_cannot_impersonate_a_ticker(
+    title,
+    source_title,
+):
+    result = _news_result()
+    result["title_zh"] = title
+    payload = _news_payload()
+    payload["title"] = source_title
+    payload["allowed_tickers"] = ["NVDA"]
+
+    with pytest.raises(ValidationError):
         validate_result(
             "news_impact",
             json.dumps(result, ensure_ascii=False),
