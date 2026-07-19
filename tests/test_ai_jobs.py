@@ -139,12 +139,25 @@ def _earnings_result():
 
 @pytest.mark.parametrize(
     "name",
-    ["Microsoft公司", "微软（Microsoft）", "Technology ETF"],
+    ["Microsoft公司", "微软（Microsoft）"],
 )
-def test_earnings_company_names_must_be_simplified_chinese(name):
+def test_earnings_company_names_accept_registered_aliases_in_chinese(name):
     result = _earnings_result()
     result["impacted"][0]["name"] = name
-    with pytest.raises(ValidationError):
+    validated = validate_result(
+        "earnings_impact",
+        json.dumps(result, ensure_ascii=False),
+        {"ticker": "AAPL"},
+    )
+
+    assert validated["impacted"][0]["name"] == name
+
+
+def test_earnings_company_names_reject_english_prose():
+    result = _earnings_result()
+    result["impacted"][0]["name"] = "Markets rally after strong earnings"
+
+    with pytest.raises(ValidationError, match="company_registered_name"):
         validate_result(
             "earnings_impact",
             json.dumps(result, ensure_ascii=False),
@@ -193,6 +206,27 @@ def test_earnings_reason_cannot_borrow_another_impacted_ticker():
             json.dumps(result, ensure_ascii=False),
             {"ticker": "AAPL"},
         )
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "受EIA库存数据影响，相关业务预期可能出现变化。",
+        "FOMC决议可能改变融资成本与市场风险偏好。",
+        "GDP数据变化可能影响行业需求预期。",
+    ],
+)
+def test_earnings_reason_accepts_contextual_economic_initialisms(reason):
+    result = _earnings_result()
+    result["impacted"][0]["reason"] = reason
+
+    validated = validate_result(
+        "earnings_impact",
+        json.dumps(result, ensure_ascii=False),
+        {"ticker": "AAPL"},
+    )
+
+    assert validated["impacted"][0]["reason"] == reason
 
 
 def test_earnings_tickers_cannot_form_an_english_sentence():
@@ -1143,7 +1177,7 @@ def test_all_paid_job_prompt_versions_invalidate_legacy_english_cache():
         "earnings_impact": "earnings-impact-zh-cn-v4",
         "option_alerts": "option-alerts-zh-cn-v4",
         "signal_analysis": "signal-analysis-zh-cn-v4",
-        "news_impact": "news-impact-zh-cn-v5",
+        "news_impact": "news-impact-zh-cn-v6",
         "market_focus": "market-focus-zh-cn-v4",
     }
 
