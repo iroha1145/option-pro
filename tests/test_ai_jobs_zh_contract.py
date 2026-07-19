@@ -1051,6 +1051,9 @@ def test_news_text_allows_source_bound_registered_entities(
             "title": source_title,
             "summary": source_summary,
             "source_ticker_hints": source_ticker_hints,
+            "allowed_tickers": list(
+                dict.fromkeys(["NVDA", *source_ticker_hints])
+            ),
         }
     )
 
@@ -1127,6 +1130,24 @@ def test_source_binding_does_not_guess_a_nearby_ticker_for_a_company_name():
     payload["source_ticker_hints"] = ["SPCX"]
 
     with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+@pytest.mark.parametrize("source_ticker_hint", ["CAT", "ON", "00700"])
+def test_source_ticker_hints_do_not_authorize_uncanonical_codes(
+    source_ticker_hint,
+):
+    result = _news_result()
+    result["title_zh"] = f"{source_ticker_hint}股价上涨"
+    payload = _news_payload()
+    payload["allowed_tickers"] = ["NVDA"]
+    payload["source_ticker_hints"] = [source_ticker_hint]
+
+    with pytest.raises(ValidationError):
         validate_result(
             "news_impact",
             json.dumps(result, ensure_ascii=False),
