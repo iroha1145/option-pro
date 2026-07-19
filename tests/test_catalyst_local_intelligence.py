@@ -799,6 +799,64 @@ def test_initialize_normalizes_legacy_local_timestamp_offsets(tmp_path):
     )
 
 
+def test_completed_news_job_survives_timestamp_normalization(tmp_path):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime(2026, 7, 19, 6, 30, tzinfo=timezone.utc)
+    _apply_news(
+        etl,
+        [_news_change(1, 206, available_at=now - timedelta(minutes=5))],
+        as_of=now - timedelta(minutes=4),
+    )
+    intelligence.reconcile()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """UPDATE catalyst_local_news_revisions
+               SET published_at='2026-07-19T01:20:00-0500',
+                   fetched_at='2026-07-19T01:24:00-0500',
+                   source_available_at='2026-07-19T01:25:00-0500'
+               WHERE news_id=206"""
+        )
+        connection.commit()
+    job = intelligence.request_analysis(206, force=False)
+    with sqlite3.connect(ai.path) as connection:
+        payload = json.loads(
+            connection.execute(
+                "SELECT payload_json FROM ai_jobs WHERE job_id=?",
+                (job["job_id"],),
+            ).fetchone()[0]
+        )
+    assert payload["published_at"] == "2026-07-19T01:20:00-0500"
+    assert payload["fetched_at"] == "2026-07-19T01:24:00-0500"
+    _finish_job(
+        ai,
+        job["job_id"],
+        _news_result(news_id=206, change_sequence=1, content_hash="hash-206-1"),
+    )
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            "DELETE FROM catalyst_local_schema WHERE version=?",
+            (local_module.TIMESTAMP_NORMALIZATION_VERSION,),
+        )
+        connection.commit()
+
+    intelligence.initialize()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        normalized = connection.execute(
+            """SELECT published_at,fetched_at
+               FROM catalyst_local_news_revisions WHERE news_id=206"""
+        ).fetchone()
+    assert normalized == (
+        "2026-07-19T06:20:00Z",
+        "2026-07-19T06:24:00Z",
+    )
+    reconciled = intelligence.reconcile()
+
+    assert reconciled["analyses_published"] == 1
+    detail = intelligence.news(206, as_of=datetime.now(timezone.utc))
+    assert detail is not None
+    assert detail["item"]["analysis"] is not None
+
+
 def test_jobs_can_be_cancelled_after_switching_to_read_mode(tmp_path):
     etl, ai, intelligence = _stack(tmp_path, mode="manual")
     now = datetime.now(timezone.utc).replace(microsecond=0)

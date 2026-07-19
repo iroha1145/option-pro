@@ -303,6 +303,25 @@ def _normalize_utc_timestamp(
     return _iso(parsed)
 
 
+def _timestamps_match(
+    left: Any,
+    right: Any,
+    *,
+    optional: bool = False,
+) -> bool:
+    left_text = str(left or "").strip()
+    right_text = str(right or "").strip()
+    if optional and not left_text and not right_text:
+        return True
+    left_time = _parse_time(left_text)
+    right_time = _parse_time(right_text)
+    return (
+        left_time is not None
+        and right_time is not None
+        and left_time == right_time
+    )
+
+
 def _recent_analysis_count(
     items: Sequence[Mapping[str, Any]],
     *,
@@ -1791,14 +1810,23 @@ class LocalCatalystIntelligence:
             "title": str(revision["raw_title"]),
             "summary": revision["raw_summary"],
             "url": str(revision["url"]),
-            "published_at": revision["published_at"],
-            "fetched_at": revision["fetched_at"],
             "sources": _loads(revision["source_names_json"], []),
             "source_count": int(revision["source_count"]),
             "source_ticker_hints": _loads(revision["source_tickers_json"], []),
             "allowed_tickers": _loads(revision["canonical_tickers_json"], []),
         }
-        return all(payload.get(key) == value for key, value in expected.items())
+        return (
+            all(payload.get(key) == value for key, value in expected.items())
+            and _timestamps_match(
+                payload.get("published_at"),
+                revision["published_at"],
+                optional=True,
+            )
+            and _timestamps_match(
+                payload.get("fetched_at"),
+                revision["fetched_at"],
+            )
+        )
 
     @staticmethod
     def _news_result_was_previously_accepted(
