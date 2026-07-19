@@ -774,7 +774,7 @@ def test_initialize_normalizes_legacy_local_timestamp_offsets(tmp_path):
     with sqlite3.connect(intelligence.db_path) as connection:
         connection.execute(
             """UPDATE catalyst_local_news_revisions
-               SET published_at='2026-07-18T02:00:00-0500',
+               SET published_at='',
                    fetched_at='2026-07-19T01:25:00-0500',
                    source_available_at='2026-07-19T01:26:00-0500'
                WHERE news_id=205"""
@@ -793,7 +793,7 @@ def test_initialize_normalizes_legacy_local_timestamp_offsets(tmp_path):
                FROM catalyst_local_news_revisions WHERE news_id=205"""
         ).fetchone()
     assert stored == (
-        "2026-07-18T07:00:00Z",
+        None,
         "2026-07-19T06:25:00Z",
         "2026-07-19T06:26:00Z",
     )

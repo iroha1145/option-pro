@@ -294,9 +294,10 @@ def _normalize_utc_timestamp(
     field: str,
     optional: bool = False,
 ) -> str | None:
-    if value is None and optional:
+    text = str(value or "").strip()
+    if optional and not text:
         return None
-    parsed = _parse_time(str(value or ""))
+    parsed = _parse_time(text)
     if parsed is None:
         raise ValueError(f"{field} must be a timezone-aware ISO-8601 timestamp")
     return _iso(parsed)
