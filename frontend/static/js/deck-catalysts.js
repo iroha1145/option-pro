@@ -465,7 +465,7 @@
 
         <section class="cat-summary" id="cat-summary" data-reveal style="--reveal-i:4" aria-label="催化剂摘要"></section>
 
-        <section class="cat-workspace sect" data-reveal style="--reveal-i:5">
+        <section class="cat-workspace sect">
           <div class="cat-tabs" role="tablist" aria-label="催化剂数据视图">
             ${[["feed", "新闻流"], ["stocks", "股票影响"], ["calendar", "经济日历"], ["sources", "数据源"]].map(([key, label]) => `
               <button type="button" role="tab" id="cat-tab-${key}" aria-controls="cat-panel" aria-selected="${page.tab === key}" tabindex="${page.tab === key ? "0" : "-1"}" data-cat-tab="${key}">${label}</button>`).join("")}

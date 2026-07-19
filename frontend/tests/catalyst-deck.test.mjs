@@ -670,6 +670,8 @@ test('drawer, tabs, themes, motion preferences, and narrow layouts have explicit
   assert.match(deckCss, /@media \(max-width: 480px\)[\s\S]*\.brand__word small \{ display: none; \}/);
   assert.match(app, /renderBackground = activeRoute !== "watchlist" \|\| !St\.watch/);
   assert.match(app, /tkr\.toUpperCase\(\) \+ " · 标的研究"/);
+  assert.match(catalysts, /<section class="cat-workspace sect">/);
+  assert.doesNotMatch(catalysts, /<section class="cat-workspace sect"[^>]*data-reveal/);
   assert.doesNotMatch(catalystCss, /#[0-9a-f]{3,8}\b/i);
 });
 

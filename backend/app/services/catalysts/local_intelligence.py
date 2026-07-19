@@ -260,6 +260,10 @@ CREATE TABLE IF NOT EXISTS catalyst_local_legacy_import_audit (
 );
 """.strip()
 SCHEMA_CHECKSUM = hashlib.sha256(_SCHEMA.encode("utf-8")).hexdigest()
+TIMESTAMP_NORMALIZATION_VERSION = "optix-local-catalyst-timestamps-v1"
+TIMESTAMP_NORMALIZATION_CHECKSUM = hashlib.sha256(
+    b"normalize local catalyst timestamps to UTC Z v1"
+).hexdigest()
 
 
 def _utc_now() -> datetime:
@@ -282,6 +286,40 @@ def _parse_time(value: str | None) -> datetime | None:
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         return None
     return parsed.astimezone(timezone.utc)
+
+
+def _normalize_utc_timestamp(
+    value: Any,
+    *,
+    field: str,
+    optional: bool = False,
+) -> str | None:
+    text = str(value or "").strip()
+    if optional and not text:
+        return None
+    parsed = _parse_time(text)
+    if parsed is None:
+        raise ValueError(f"{field} must be a timezone-aware ISO-8601 timestamp")
+    return _iso(parsed)
+
+
+def _timestamps_match(
+    left: Any,
+    right: Any,
+    *,
+    optional: bool = False,
+) -> bool:
+    left_text = str(left or "").strip()
+    right_text = str(right or "").strip()
+    if optional and not left_text and not right_text:
+        return True
+    left_time = _parse_time(left_text)
+    right_time = _parse_time(right_text)
+    return (
+        left_time is not None
+        and right_time is not None
+        and left_time == right_time
+    )
 
 
 def _recent_analysis_count(
@@ -874,7 +912,77 @@ class LocalCatalystIntelligence:
                    ) VALUES(?,?,?)""",
                 (SCHEMA_VERSION, SCHEMA_CHECKSUM, _iso()),
             )
+            timestamp_row = connection.execute(
+                "SELECT checksum FROM catalyst_local_schema WHERE version=?",
+                (TIMESTAMP_NORMALIZATION_VERSION,),
+            ).fetchone()
+            if (
+                timestamp_row is not None
+                and str(timestamp_row["checksum"])
+                != TIMESTAMP_NORMALIZATION_CHECKSUM
+            ):
+                raise RuntimeError(
+                    "local_catalyst_timestamp_normalization_checksum_mismatch"
+                )
+            if timestamp_row is None:
+                self._normalize_local_news_timestamps(connection)
+                connection.execute(
+                    """INSERT OR IGNORE INTO catalyst_local_schema(
+                           version,checksum,applied_at
+                       ) VALUES(?,?,?)""",
+                    (
+                        TIMESTAMP_NORMALIZATION_VERSION,
+                        TIMESTAMP_NORMALIZATION_CHECKSUM,
+                        _iso(),
+                    ),
+                )
             connection.commit()
+
+    @staticmethod
+    def _normalize_local_news_timestamps(
+        connection: sqlite3.Connection,
+    ) -> int:
+        rows = connection.execute(
+            """SELECT news_id,change_sequence,content_hash,published_at,
+                      fetched_at,source_available_at
+               FROM catalyst_local_news_revisions
+               WHERE (published_at IS NOT NULL AND published_at NOT LIKE '%Z')
+                  OR fetched_at NOT LIKE '%Z'
+                  OR source_available_at NOT LIKE '%Z'"""
+        ).fetchall()
+        updates: list[tuple[str | None, str, str, int, int, str]] = []
+        for row in rows:
+            updates.append(
+                (
+                    _normalize_utc_timestamp(
+                        row["published_at"],
+                        field="published_at",
+                        optional=True,
+                    ),
+                    str(
+                        _normalize_utc_timestamp(
+                            row["fetched_at"],
+                            field="fetched_at",
+                        )
+                    ),
+                    str(
+                        _normalize_utc_timestamp(
+                            row["source_available_at"],
+                            field="source_available_at",
+                        )
+                    ),
+                    int(row["news_id"]),
+                    int(row["change_sequence"]),
+                    str(row["content_hash"]),
+                )
+            )
+        connection.executemany(
+            """UPDATE catalyst_local_news_revisions
+               SET published_at=?,fetched_at=?,source_available_at=?
+               WHERE news_id=? AND change_sequence=? AND content_hash=?""",
+            updates,
+        )
+        return len(updates)
 
     def validate_tickers(self, values: Iterable[Any]) -> list[str]:
         output: list[str] = []
@@ -926,7 +1034,23 @@ class LocalCatalystIntelligence:
             canonical = self.validate_tickers(news.get("source_tickers") or [])
             content_hash = str(news.get("content_hash") or "").strip()
             title = str(news.get("title") or "").strip()
-            fetched_at = str(news.get("fetched_at") or "").strip()
+            published_at = _normalize_utc_timestamp(
+                news.get("published_at"),
+                field="published_at",
+                optional=True,
+            )
+            fetched_at = str(
+                _normalize_utc_timestamp(
+                    news.get("fetched_at"),
+                    field="fetched_at",
+                )
+            )
+            source_available_at = str(
+                _normalize_utc_timestamp(
+                    row["available_at"],
+                    field="source_available_at",
+                )
+            )
             url = str(news.get("url") or "").strip()
             if not content_hash or not title or not fetched_at or not url:
                 continue
@@ -947,9 +1071,9 @@ class LocalCatalystIntelligence:
                     news.get("summary"),
                     url,
                     news.get("image_url"),
-                    news.get("published_at"),
+                    published_at,
                     fetched_at,
-                    str(row["available_at"]),
+                    source_available_at,
                     _json(news.get("source_tickers") or []),
                     _json(canonical),
                     _json(sources),
@@ -1686,14 +1810,23 @@ class LocalCatalystIntelligence:
             "title": str(revision["raw_title"]),
             "summary": revision["raw_summary"],
             "url": str(revision["url"]),
-            "published_at": revision["published_at"],
-            "fetched_at": revision["fetched_at"],
             "sources": _loads(revision["source_names_json"], []),
             "source_count": int(revision["source_count"]),
             "source_ticker_hints": _loads(revision["source_tickers_json"], []),
             "allowed_tickers": _loads(revision["canonical_tickers_json"], []),
         }
-        return all(payload.get(key) == value for key, value in expected.items())
+        return (
+            all(payload.get(key) == value for key, value in expected.items())
+            and _timestamps_match(
+                payload.get("published_at"),
+                revision["published_at"],
+                optional=True,
+            )
+            and _timestamps_match(
+                payload.get("fetched_at"),
+                revision["fetched_at"],
+            )
+        )
 
     @staticmethod
     def _news_result_was_previously_accepted(
@@ -2329,7 +2462,13 @@ class LocalCatalystIntelligence:
         params: list[Any] = [cutoff, cutoff]
         time_clause = ""
         if window_hours is not None:
-            time_clause = " AND r.source_available_at>=?"
+            # A late import must not turn old news into a current event. The
+            # source-availability cutoff above still preserves point-in-time
+            # visibility; this window is the age of the news itself.
+            time_clause = (
+                " AND julianday(COALESCE(r.published_at,r.fetched_at))"
+                ">=julianday(?)"
+            )
             params.append(_iso(as_of - timedelta(hours=window_hours)))
         params.extend(
             [
@@ -2415,7 +2554,10 @@ class LocalCatalystIntelligence:
                 tuple(params),
             ).fetchall()
         except sqlite3.OperationalError:
-            return []
+            # Empty is a valid news result, not a database error. Let callers
+            # expose the existing cache-unavailable retry state instead of
+            # publishing an empty feed or an empty hotspot plan.
+            raise
         output: list[dict[str, Any]] = []
         for row in rows:
             item = dict(row)
