@@ -115,6 +115,7 @@ def _stack(
     *,
     mode: str = "manual",
     canonical_tickers: Iterable[str] = ("NVDA", "AMD", "AI", "ON", "CAT"),
+    max_queued: int = 200,
 ) -> tuple[CatalystEtlRepository, AIJobRepository, LocalCatalystIntelligence]:
     cache_path = tmp_path / "catalyst-cache.db"
     etl = CatalystEtlRepository(cache_path)
@@ -125,6 +126,7 @@ def _stack(
         ai,
         mode=mode,
         canonical_tickers=canonical_tickers,
+        max_queued=max_queued,
     )
     intelligence.initialize()
     return etl, ai, intelligence
@@ -3366,7 +3368,7 @@ def test_scheduled_mode_uses_eastern_slots_once_and_queues_news(tmp_path, monkey
     ) is None
 
 
-def test_scheduled_hour_queues_at_most_twenty_recent_news(tmp_path, monkeypatch):
+def test_scheduled_hour_uses_available_queue_capacity(tmp_path, monkeypatch):
     etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
     now = datetime.now(timezone.utc).replace(microsecond=0)
     monkeypatch.setattr(local_module, "_utc_now", lambda: now)
@@ -3397,18 +3399,66 @@ def test_scheduled_hour_queues_at_most_twenty_recent_news(tmp_path, monkeypatch)
     monkeypatch.setattr(ai, "get_job", forbid_single_job_read)
 
     assert intelligence.run_scheduled(now=now) == {
-        "queued": 20,
+        "queued": 25,
         "skipped": 0,
     }
     assert len(snapshot_news_ids) == 1
-    assert len(snapshot_news_ids[0]) == 20
+    assert len(snapshot_news_ids[0]) == 25
     with sqlite3.connect(ai.path) as connection:
         assert connection.execute(
             "SELECT COUNT(*) FROM ai_jobs WHERE job_type='news_impact'"
-        ).fetchone()[0] == 20
+        ).fetchone()[0] == 25
         assert connection.execute(
             "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
         ).fetchone()[0] == 0
+
+
+def test_permanent_failures_do_not_starve_later_scheduled_news(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(
+        tmp_path,
+        mode="scheduled",
+        max_queued=21,
+    )
+    first_now = datetime.now(timezone.utc).replace(microsecond=0)
+    clock = {"now": first_now}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    changes = [
+        _news_change(
+            index + 1,
+            800 + index,
+            available_at=first_now - timedelta(minutes=index + 1),
+        )
+        for index in range(25)
+    ]
+    _apply_news(etl, changes, as_of=first_now - timedelta(seconds=1))
+    intelligence.reconcile()
+
+    assert intelligence.run_scheduled(now=first_now) == {
+        "queued": 20,
+        "skipped": 0,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        first_job_ids = [
+            row[0]
+            for row in connection.execute(
+                "SELECT job_id FROM ai_jobs ORDER BY created_at,job_id"
+            )
+        ]
+    for job_id in first_job_ids:
+        _fail_job(ai, job_id, "schema_validation_failed")
+
+    clock["now"] = first_now + timedelta(hours=1)
+    assert intelligence.run_scheduled(now=clock["now"]) == {
+        "queued": 5,
+        "skipped": 21,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='news_impact'"
+        ).fetchone()[0] == 25
 
 
 def test_scheduled_skips_changed_revision_and_continues(tmp_path, monkeypatch):
