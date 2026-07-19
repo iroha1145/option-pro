@@ -1022,6 +1022,18 @@ def _is_source_bound_foreign_entity(
     }
     if folded_words & _SOURCE_BOUND_ENTITY_DISALLOWED_WORDS:
         return False
+    prose_words = [
+        word
+        for word in folded_words
+        if word in _ENGLISH_PROSE_WORDS
+        and word not in _SOURCE_BOUND_ENTITY_CONNECTORS
+    ]
+    if len(prose_words) >= 2:
+        # Source binding proves only that the provider saw the text.  It does
+        # not turn a copied English headline into a registered entity.  Keep
+        # one ordinary noun available for real names such as a Growth ETF,
+        # while rejecting clause-like spans such as "Apple Beats Estimates".
+        return False
 
     def entity_shaped(word: str) -> bool:
         letters = "".join(char for char in word if char.isalpha())
@@ -1098,14 +1110,11 @@ def _foreign_span_context(
     ):
         return any(_is_cjk(char) for char in sentence)
     if _is_source_bound_foreign_entity(span, source_texts):
-        if (
-            span.upper() == span
-            and _approved_span_requires_ticker_binding(
-                span,
-                sentence=sentence,
-                start=start,
-                end=end,
-            )
+        if _approved_span_requires_ticker_binding(
+            span,
+            sentence=sentence,
+            start=start,
+            end=end,
         ):
             normalized_prefix = _normalize_security_reference_phrase(
                 sentence[:start]
@@ -1114,7 +1123,9 @@ def _foreign_span_context(
                 _NUMERIC_SECURITY_REFERENCE_PREFIX.search(normalized_prefix)
                 is not None
             ):
-                return span in allowed_codes
+                if span.upper() == span:
+                    return span in allowed_codes
+                return bool(allowed_codes)
         return True
     if span in _ALLOWED_EXACT_FOREIGN_SPANS:
         if _approved_span_requires_ticker_binding(
@@ -1209,6 +1220,13 @@ def _foreign_span_context(
             )
         )
     if _TITLE_CASE_PROPER_NAME.fullmatch(span) is not None:
+        if _approved_span_requires_ticker_binding(
+            span,
+            sentence=sentence,
+            start=start,
+            end=end,
+        ):
+            return span.upper() in allowed_codes
         suffix = _normalize_security_reference_phrase(
             sentence[end:]
         ).removeprefix("的")

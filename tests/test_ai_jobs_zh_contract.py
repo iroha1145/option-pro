@@ -1031,11 +1031,18 @@ def test_news_text_allows_source_bound_registered_entities(
     assert validated["title_zh"] == title
 
 
-def test_source_binding_does_not_allow_copied_english_prose():
+@pytest.mark.parametrize(
+    "source_title",
+    [
+        "UFC Names Meridian Holdings Official Sponsor",
+        "Apple Beats Estimates",
+    ],
+)
+def test_source_binding_does_not_allow_copied_english_prose(source_title):
     result = _news_result()
-    result["title_zh"] = "市场消息：UFC Names Meridian Holdings Official Sponsor"
+    result["title_zh"] = f"市场消息：{source_title}"
     payload = _news_payload()
-    payload["title"] = "UFC Names Meridian Holdings Official Sponsor"
+    payload["title"] = source_title
 
     with pytest.raises(ValidationError, match="english_prose_not_allowed"):
         validate_result(
@@ -1149,6 +1156,8 @@ def test_contextual_initialisms_do_not_bypass_ticker_or_language_binding(text):
         "Apple\x00股票受到市场关注",
         "Apple\ue000股票受到市场关注",
         "Apple（苹果）\ufe0f股票受到市场关注",
+        "Tesla（股价上涨）受到关注",
+        "公司（Tesla）股价上涨",
         'Apple"苹果"股票受到市场关注',
         "Apple＂苹果＂股票受到市场关注",
         "Apple'苹果'股票受到市场关注",
@@ -1219,6 +1228,8 @@ def test_news_result_rejects_stock_context_for_an_unbound_approved_brand(
         "Apple\x00股票受到市场关注",
         "Apple\ue000股票受到市场关注",
         "Apple（苹果）\ufe0f股票受到市场关注",
+        "Tesla（股价上涨）受到关注",
+        "公司（Tesla）股价上涨",
         'Apple"苹果"股票受到市场关注',
         "Apple＂苹果＂股票受到市场关注",
         "Apple'苹果'股票受到市场关注",
