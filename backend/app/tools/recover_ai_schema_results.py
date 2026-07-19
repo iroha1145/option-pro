@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sqlite3
 from typing import Any, Sequence
 
 from app.config import get_settings
@@ -51,7 +52,17 @@ async def recover(job_ids: Sequence[str], *, apply: bool) -> list[dict[str, Any]
         ):
             output.append({"job_id": job_id, "status": "not_recoverable"})
             continue
-        response = await runtime.retrieve(settings, response_id)
+        try:
+            response = await runtime.retrieve(settings, response_id)
+        except Exception as error:
+            output.append(
+                {
+                    "job_id": job_id,
+                    "status": "retrieve_failed",
+                    "error_type": type(error).__name__,
+                }
+            )
+            continue
         if str(getattr(response, "status", "") or "") != "completed":
             output.append({"job_id": job_id, "status": "provider_not_completed"})
             continue
@@ -65,14 +76,38 @@ async def recover(job_ids: Sequence[str], *, apply: bool) -> list[dict[str, Any]
                 }
             )
             continue
-        payload = json.loads(str(row["payload_json"]))
-        result = runtime.response_result(response, str(row["job_type"]), payload)
-        if apply:
-            recovered = repository.recover_schema_validation_failure(
-                job_id,
-                response_id,
-                result,
+        try:
+            payload = json.loads(str(row["payload_json"]))
+            result = runtime.response_result(
+                response,
+                str(row["job_type"]),
+                payload,
             )
+        except (json.JSONDecodeError, TypeError, ValueError) as error:
+            output.append(
+                {
+                    "job_id": job_id,
+                    "status": "validation_failed",
+                    "error_type": type(error).__name__,
+                }
+            )
+            continue
+        if apply:
+            try:
+                recovered = repository.recover_schema_validation_failure(
+                    job_id,
+                    response_id,
+                    result,
+                )
+            except (OSError, RuntimeError, sqlite3.Error, TypeError, ValueError) as error:
+                output.append(
+                    {
+                        "job_id": job_id,
+                        "status": "persistence_failed",
+                        "error_type": type(error).__name__,
+                    }
+                )
+                continue
             output.append(
                 {
                     "job_id": job_id,
