@@ -846,6 +846,7 @@ def test_unihan_self_mapped_characters_remain_valid_in_simplified_contexts(title
         "任天堂売上高增长",
         "株価上昇，市场关注",
         "Tesla发布最新业绩",
+        "苹果与Tesla合作扩大供应",
         "Broadcom发布最新业绩",
         "Intel发布最新业绩",
         "H100 Markets需求增长",
@@ -884,6 +885,9 @@ def test_chinese_text_allows_multiple_tickers_and_a_short_proper_name():
         "英特尔18A制程的采用仍待量产数据验证",
         "特斯拉业绩前瞻：自动驾驶出租车与Optimus能否成为亮点",
         "财务总监出售5万股A类普通股",
+        "企业完成B轮融资",
+        "公司发行C类普通股",
+        "H股市场回暖",
     ],
 )
 def test_chinese_text_allows_structural_product_and_share_class_names(title):
@@ -1136,6 +1140,8 @@ def test_project_security_code_can_be_used_when_bound_to_the_job():
         "６００５１９走强",
         "A股价上涨",
         "A股票上涨",
+        "F股上涨",
+        "C股下跌",
         "股票代码／1234受到关注",
         "股／票代码：1234受到关注",
     ],
