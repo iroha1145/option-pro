@@ -674,6 +674,56 @@ _SOURCE_BOUND_ENTITY_DISALLOWED_WORDS = frozenset(
     }
 )
 _SOURCE_BOUND_ENTITY_CONNECTORS = frozenset({"and", "of", "the"})
+_SOURCE_BOUND_ENTITY_ACTION_WORDS = frozenset(
+    {
+        "announces",
+        "attacks",
+        "beats",
+        "climbs",
+        "crashes",
+        "cuts",
+        "drops",
+        "expands",
+        "expects",
+        "falls",
+        "fell",
+        "gains",
+        "jumps",
+        "launched",
+        "launches",
+        "misses",
+        "ordered",
+        "outperformed",
+        "outperforms",
+        "paused",
+        "pauses",
+        "plunges",
+        "raises",
+        "raised",
+        "rallied",
+        "reports",
+        "retaliates",
+        "retreats",
+        "rises",
+        "rose",
+        "says",
+        "sees",
+        "sells",
+        "sinks",
+        "slid",
+        "slumps",
+        "soars",
+        "spikes",
+        "strikes",
+        "surged",
+        "surges",
+        "tumbles",
+        "underperformed",
+        "underperforms",
+        "unveils",
+        "warns",
+    }
+)
 _SOURCE_BOUND_ENTITY_PART = re.compile(r"[A-Za-z0-9][A-Za-z0-9.'/-]*")
 _SOURCE_BOUND_SECURITY_CONTEXT = re.compile(
     r"\b(?:stock(?:'s|s)?|shares?|securit(?:y|ies)|stake|equity|equities|"
@@ -1036,10 +1086,11 @@ def _is_source_bound_foreign_entity(
     words = [part for part in parts if any(char.isalpha() for char in part)]
     if not words or sum(sum(char.isalpha() for char in word) for word in words) > 48:
         return False
-    folded_words = {
+    folded_word_sequence = [
         re.sub(r"[^A-Za-z]", "", word).casefold()
         for word in words
-    }
+    ]
+    folded_words = set(folded_word_sequence)
     if folded_words & _SOURCE_BOUND_ENTITY_DISALLOWED_WORDS:
         return False
     prose_words = [
@@ -1053,6 +1104,14 @@ def _is_source_bound_foreign_entity(
         # not turn a copied English headline into a registered entity.  Keep
         # one ordinary noun available for real names such as a Growth ETF,
         # while rejecting clause-like spans such as "Apple Beats Estimates".
+        return False
+    if any(
+        index > 0 and word in _SOURCE_BOUND_ENTITY_ACTION_WORDS
+        for index, word in enumerate(folded_word_sequence)
+    ):
+        # A finite action word after a likely subject makes the span a copied
+        # headline clause, not a registered name.  Keeping the first position
+        # available avoids rejecting brands such as "Beats Electronics".
         return False
 
     def entity_shaped(word: str) -> bool:

@@ -3576,6 +3576,92 @@ def test_permanent_failures_do_not_starve_later_scheduled_news(
         ).fetchone()[0] == 25
 
 
+def test_permanent_hotspot_failure_does_not_block_reserved_focus_slot(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(
+        tmp_path,
+        mode="scheduled",
+        max_queued=3,
+    )
+    first_now = datetime.now(timezone.utc).replace(microsecond=0)
+    clock = {"now": first_now}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    _apply_news(
+        etl,
+        [
+            _news_change(1, 850, available_at=first_now - timedelta(minutes=3)),
+            _news_change(2, 851, available_at=first_now - timedelta(minutes=2)),
+        ],
+        as_of=first_now - timedelta(minutes=1),
+    )
+    intelligence.reconcile()
+
+    assert intelligence.run_scheduled(now=first_now) == {
+        "queued": 2,
+        "skipped": 0,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        news_job_ids = [
+            row[0]
+            for row in connection.execute(
+                "SELECT job_id FROM ai_jobs WHERE job_type='news_impact' "
+                "ORDER BY created_at,job_id"
+            )
+        ]
+    completed_payload = _job_payload(ai, news_job_ids[0])
+    _finish_job(
+        ai,
+        news_job_ids[0],
+        _news_result(
+            news_id=int(completed_payload["news_id"]),
+            change_sequence=int(completed_payload["change_sequence"]),
+            content_hash=str(completed_payload["content_hash"]),
+        ),
+    )
+    _fail_job(ai, news_job_ids[1], "schema_validation_failed")
+    intelligence.reconcile()
+
+    source_job = ai.get_job(news_job_ids[1])
+    assert source_job is not None
+    for index in range(2):
+        unrelated_payload = json.loads(source_job["payload_json"])
+        unrelated_payload.update(
+            {
+                "news_id": 999_850 + index,
+                "change_sequence": 999 + index,
+                "content_hash": f"unrelated-active-job-{index}",
+            }
+        )
+        _unrelated, created = ai.create_job(
+            job_type=source_job["job_type"],
+            payload=unrelated_payload,
+            model=source_job["model"],
+            reasoning=source_job["reasoning"],
+            execution_mode=source_job["execution_mode"],
+            prompt_version=source_job["prompt_version"],
+            schema_version=source_job["schema_version"],
+            schema_sha256=source_job["schema_sha256"],
+            max_queued=3,
+        )
+        assert created is True
+
+    clock["now"] = first_now + timedelta(hours=1)
+    assert intelligence.run_scheduled(now=clock["now"]) == {
+        "queued": 1,
+        "skipped": 1,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs "
+            "WHERE status IN ('pending','queued','in_progress')"
+        ).fetchone()[0] == 3
+
+
 def test_scheduled_skips_changed_revision_and_continues(tmp_path, monkeypatch):
     etl, ai, intelligence = _stack(
         tmp_path,
