@@ -606,6 +606,7 @@ def test_news_company_name_is_also_bound_to_the_chinese_contract(company):
         ("SAP", "SAP"),
         ("SPGI", "S&P Global"),
         ("TTD", "The Trade Desk"),
+        ("LMT", "洛克希德·马丁"),
         ("NVDA", "NVIDIA公司"),
         ("MSFT", "微软（Microsoft）"),
     ],
@@ -875,6 +876,27 @@ def test_chinese_text_allows_multiple_tickers_and_a_short_proper_name():
         payload,
     )
     assert validated["title_zh"].startswith("NVDA")
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "英特尔18A制程的采用仍待量产数据验证",
+        "特斯拉业绩前瞻：自动驾驶出租车与Optimus能否成为亮点",
+        "财务总监出售5万股A类普通股",
+    ],
+)
+def test_chinese_text_allows_structural_product_and_share_class_names(title):
+    result = _news_result()
+    result["title_zh"] = title
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        _news_payload(),
+    )
+
+    assert validated["title_zh"] == title
 
 
 def test_chinese_text_rejects_a_ticker_not_bound_to_the_job_payload():
