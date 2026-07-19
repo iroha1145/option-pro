@@ -992,6 +992,12 @@ def test_chinese_text_allows_structural_product_and_share_class_names(title):
             [],
         ),
         (
+            "公司称其获得五项Global InfoSec Awards",
+            "RSA Conference 2026",
+            "The company won five Global InfoSec Awards at the event.",
+            [],
+        ),
+        (
             "美国股息股票ETF在2026年回报约20%",
             "This Dividend ETF Yields 3.2%",
             None,
@@ -1036,6 +1042,7 @@ def test_news_text_allows_source_bound_registered_entities(
     [
         "UFC Names Meridian Holdings Official Sponsor",
         "Apple Beats Estimates",
+        "NVIDIA Launches Blackwell Platform",
     ],
 )
 def test_source_binding_does_not_allow_copied_english_prose(source_title):

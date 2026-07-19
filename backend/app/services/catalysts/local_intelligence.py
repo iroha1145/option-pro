@@ -4330,8 +4330,6 @@ class LocalCatalystIntelligence:
             news_ids={int(row["news_id"]) for row in candidates},
         )
         for row in candidates:
-            if queued >= batch_capacity:
-                break
             news_id = int(row["news_id"])
             previous_job = self._scheduled_job_for_revision(
                 row,
@@ -4342,6 +4340,8 @@ class LocalCatalystIntelligence:
                 "local_link_pending"
             ):
                 skipped += 1
+                if queued >= batch_capacity:
+                    break
                 continue
             previous_updated = (
                 _parse_time(str(previous_job.get("updated_at") or ""))
@@ -4391,6 +4391,11 @@ class LocalCatalystIntelligence:
                     focus_pending_news_ids.discard(news_id)
                 skipped += 1
                 continue
+            if queued >= batch_capacity:
+                # Inspect terminal jobs before honoring the news capacity.
+                # Otherwise a permanently failed hotspot can occupy the
+                # reserved market-focus position forever.
+                break
             try:
                 job = self.request_analysis(
                     news_id,
