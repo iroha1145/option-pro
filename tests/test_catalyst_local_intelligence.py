@@ -345,6 +345,7 @@ def test_v2_local_database_adds_v3_result_audit_tables_without_rewriting_history
             ).fetchall()
         }
     assert versions == [
+        ("optix-local-catalyst-timestamps-v1",),
         ("optix-local-catalyst-v2",),
         ("optix-local-catalyst-v3",),
     ]
@@ -741,15 +742,61 @@ def test_recent_windows_compare_timezone_offsets_as_instants(
     now = datetime(2026, 7, 19, 6, 30, tzinfo=timezone.utc)
     monkeypatch.setattr(local_module, "_utc_now", lambda: now)
     inside = _news_change(1, 203, available_at=now - timedelta(minutes=5))
-    inside["news"]["published_at"] = "2026-07-18T02:00:00-05:00"
+    inside["news"]["published_at"] = "2026-07-18T02:00:00-0500"
     outside = _news_change(2, 204, available_at=now - timedelta(minutes=4))
-    outside["news"]["published_at"] = "2026-07-18T01:00:00-05:00"
+    outside["news"]["published_at"] = "2026-07-18T01:00:00-0500"
     _apply_news(etl, [inside, outside], as_of=now - timedelta(minutes=3))
 
     intelligence.reconcile()
     feed = intelligence.feed(as_of=now, window_hours=24, limit=20)
 
     assert [item["news_id"] for item in feed["items"]] == [203]
+    with sqlite3.connect(intelligence.db_path) as connection:
+        stored = connection.execute(
+            """SELECT news_id,published_at
+               FROM catalyst_local_news_revisions ORDER BY news_id"""
+        ).fetchall()
+    assert stored == [
+        (203, "2026-07-18T07:00:00Z"),
+        (204, "2026-07-18T06:00:00Z"),
+    ]
+
+
+def test_initialize_normalizes_legacy_local_timestamp_offsets(tmp_path):
+    etl, _ai, intelligence = _stack(tmp_path)
+    now = datetime(2026, 7, 19, 6, 30, tzinfo=timezone.utc)
+    _apply_news(
+        etl,
+        [_news_change(1, 205, available_at=now - timedelta(minutes=5))],
+        as_of=now - timedelta(minutes=4),
+    )
+    intelligence.reconcile()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """UPDATE catalyst_local_news_revisions
+               SET published_at='2026-07-18T02:00:00-0500',
+                   fetched_at='2026-07-19T01:25:00-0500',
+                   source_available_at='2026-07-19T01:26:00-0500'
+               WHERE news_id=205"""
+        )
+        connection.execute(
+            "DELETE FROM catalyst_local_schema WHERE version=?",
+            (local_module.TIMESTAMP_NORMALIZATION_VERSION,),
+        )
+        connection.commit()
+
+    intelligence.initialize()
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        stored = connection.execute(
+            """SELECT published_at,fetched_at,source_available_at
+               FROM catalyst_local_news_revisions WHERE news_id=205"""
+        ).fetchone()
+    assert stored == (
+        "2026-07-18T07:00:00Z",
+        "2026-07-19T06:25:00Z",
+        "2026-07-19T06:26:00Z",
+    )
 
 
 def test_jobs_can_be_cancelled_after_switching_to_read_mode(tmp_path):
