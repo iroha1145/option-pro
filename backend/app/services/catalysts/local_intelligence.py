@@ -58,8 +58,6 @@ FOCUS_RESULT_CONTRACT_ID = (
 NEWS_LINK_AUDIT_CONTRACT_ID = "news-impact-link-v1"
 FOCUS_BINDING_AUDIT_CONTRACT_ID = "market-focus-binding-v1"
 SCHEDULE_CLAIM_TTL_SECONDS = 10 * 60
-SCHEDULED_NEWS_BATCH_SIZE = 20
-SCHEDULED_QUEUE_SOFT_LIMIT = 40
 SCHEDULED_NEWS_WINDOW_HOURS = 72
 SCHEDULED_NEWS_MAX_ATTEMPTS = 3
 SCHEDULED_FOCUS_MAX_ATTEMPTS = 3
@@ -4208,7 +4206,7 @@ class LocalCatalystIntelligence:
                         _iso(now),
                         _iso(now),
                         _iso(now - timedelta(hours=SCHEDULED_NEWS_WINDOW_HOURS)),
-                        min(100, int(limit)),
+                        min(10_000, int(limit)),
                     ),
                 ).fetchall()
             except sqlite3.OperationalError:
@@ -4429,16 +4427,14 @@ class LocalCatalystIntelligence:
         queue_health = self.ai_repository.health()
         active_queue = queue_health.get("pending")
         if not queue_health.get("healthy") or not isinstance(active_queue, int):
-            active_queue = SCHEDULED_QUEUE_SOFT_LIMIT
+            active_queue = self.max_queued
         # Keep one queue position available for a ready market-focus cycle. A
-        # continuous news backlog must not fill the soft limit and starve the
-        # hourly aggregate indefinitely.
+        # continuous news backlog must not fill the queue and starve the hourly
+        # aggregate indefinitely. The daily Token budget, not an item-count
+        # quota, remains the paid-work boundary.
         batch_capacity = max(
             0,
-            min(
-                SCHEDULED_NEWS_BATCH_SIZE,
-                SCHEDULED_QUEUE_SOFT_LIMIT - 1 - active_queue,
-            ),
+            self.max_queued - 1 - active_queue,
         )
         queued = 0
         skipped = 0
@@ -4471,11 +4467,11 @@ class LocalCatalystIntelligence:
                 candidates.append(revision)
         recent = self._scheduled_news_candidates(
             now=observed,
-            limit=SCHEDULED_NEWS_BATCH_SIZE + len(seen),
+            # Scan beyond queue capacity so permanent failures near the front
+            # cannot occupy every candidate position and starve later news.
+            limit=max(self.max_queued * 10, batch_capacity + len(seen)),
         )
         for row in recent:
-            if len(candidates) >= SCHEDULED_NEWS_BATCH_SIZE:
-                break
             news_id = int(row["news_id"])
             if news_id in seen:
                 continue
@@ -4496,6 +4492,8 @@ class LocalCatalystIntelligence:
             news_ids={int(row["news_id"]) for row in candidates},
         )
         for row in candidates:
+            if queued >= batch_capacity:
+                break
             news_id = int(row["news_id"])
             previous_job = self._scheduled_job_for_revision(
                 row,
@@ -4555,9 +4553,6 @@ class LocalCatalystIntelligence:
                     focus_pending_news_ids.discard(news_id)
                 skipped += 1
                 continue
-            if queued >= batch_capacity:
-                skipped += 1
-                continue
             try:
                 job = self.request_analysis(
                     news_id,
@@ -4590,7 +4585,7 @@ class LocalCatalystIntelligence:
         if (
             prepared_revision
             and not focus_pending_news_ids
-            and active_queue + queued < SCHEDULED_QUEUE_SOFT_LIMIT
+            and active_queue + queued < self.max_queued
         ):
             with self._connect() as connection:
                 existing_focus = connection.execute(
