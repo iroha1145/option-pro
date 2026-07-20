@@ -1915,12 +1915,18 @@ class LocalCatalystIntelligence:
         ).fetchone()
         if audited is not None:
             outcome = str(audited["outcome"])
-            if outcome == "accepted" and not _news_result_identity_matches(
-                _loads(raw_result, None),
-                payload,
-            ):
-                return "rejected", False
-            return outcome, False
+            if outcome == "accepted":
+                if not _news_result_identity_matches(
+                    _loads(raw_result, None),
+                    payload,
+                ):
+                    return "rejected", False
+                return "accepted", False
+            # Re-run local validation for cached rejections. The paid result
+            # itself is immutable, but its source context can become richer
+            # after a deployment. Reusing the old rejection would otherwise
+            # clear a result that the current payload can validate without
+            # making another model request.
         try:
             validate_result("news_impact", raw_result, payload)
         except (TypeError, ValueError):
@@ -1929,6 +1935,26 @@ class LocalCatalystIntelligence:
         else:
             outcome = "accepted"
             reason = None
+        if audited is not None:
+            if outcome == "rejected":
+                return "rejected", False
+            updated = connection.execute(
+                """UPDATE catalyst_local_analysis_result_audit SET
+                       outcome='accepted',reason=NULL,result_json=?,
+                       result_available_at=?,verified_at=?,observed_at=?
+                   WHERE job_id=? AND contract_id=? AND result_sha256=?
+                     AND outcome='rejected'""",
+                (
+                    raw_result,
+                    result_available_at,
+                    verified_at,
+                    observed_at,
+                    job_id,
+                    NEWS_RESULT_CONTRACT_ID,
+                    digest,
+                ),
+            ).rowcount
+            return "accepted", updated == 1
         inserted = connection.execute(
             """INSERT OR IGNORE INTO catalyst_local_analysis_result_audit(
                    job_id,contract_id,result_sha256,outcome,reason,

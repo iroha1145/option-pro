@@ -1118,6 +1118,14 @@ def test_source_binding_does_not_allow_copied_english_prose(source_title):
             "Tesla CEO Tops Forecasts",
             "Tesla CEO Tops Forecasts as Margins Improve",
         ),
+        (
+            "Apple Q3 Earnings",
+            "Apple Q3 Earnings Preview",
+        ),
+        (
+            "Apple Q3 Earnings",
+            "Apple Q3 Earnings (AAPL)",
+        ),
     ],
 )
 def test_source_binding_rejects_copied_headline_fragments(
@@ -1169,6 +1177,11 @@ def test_source_binding_keeps_a_structural_multiword_entity_fragment():
             "Pershing Square USA出现资产净值折价",
             "Bill Ackman's New Closed-End Fund Trades Below Its IPO Price",
             "Pershing Square USA is a closed-end fund that trades at a discount.",
+        ),
+        (
+            "4D Molecular Therapeutics公布两年临床试验结果",
+            "4DMT Announces Positive 2-Year Data from PRISM Phase 2b Clinical Trial",
+            "4D Molecular Therapeutics (4DMT) announced positive 2-year results.",
         ),
     ],
 )
