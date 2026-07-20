@@ -2034,6 +2034,87 @@ def test_new_contract_reaudit_keeps_source_bound_registered_names(
         ).fetchone()[0] == local_module._json(result)
 
 
+def test_same_contract_cached_news_rejection_uses_current_source_context(
+    tmp_path,
+):
+    etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                1,
+                312,
+                available_at=now - timedelta(minutes=10),
+                title="Seeking Alpha asks about the industry outlook",
+                source="seekingalpha/Seeking Alpha",
+            )
+        ],
+        as_of=now - timedelta(minutes=9),
+    )
+    intelligence.reconcile()
+    job = intelligence.request_analysis(312, force=False)
+    result = _news_result(
+        news_id=312,
+        change_sequence=1,
+        content_hash="hash-312-1",
+    )
+    result["title_zh"] = "Seeking Alpha提问行业前景"
+    raw_result = local_module._json(result)
+    digest = hashlib.sha256(raw_result.encode("utf-8")).hexdigest()
+    _finish_job(ai, job["job_id"], result)
+    completed_at = ai.get_job(job["job_id"])["completed_at"]
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """INSERT INTO catalyst_local_analysis_result_audit(
+                   job_id,contract_id,result_sha256,outcome,reason,result_json,
+                   result_available_at,verified_at,observed_at
+               ) VALUES(?,?,?,?,?,?,?,?,?)""",
+            (
+                job["job_id"],
+                local_module.NEWS_RESULT_CONTRACT_ID,
+                digest,
+                "rejected",
+                "cached_without_source_context",
+                raw_result,
+                completed_at,
+                None,
+                _iso(now),
+            ),
+        )
+        connection.commit()
+
+    reconciled = intelligence.reconcile()
+
+    assert reconciled["analyses_published"] == 1
+    detail = intelligence.news(312, as_of=now + timedelta(minutes=1))
+    assert detail is not None
+    assert detail["item"]["analysis"]["title_zh"] == result["title_zh"]
+    with sqlite3.connect(intelligence.db_path) as connection:
+        audit = connection.execute(
+            """SELECT outcome,reason,result_json
+               FROM catalyst_local_analysis_result_audit
+               WHERE job_id=? AND contract_id=? AND result_sha256=?""",
+            (
+                job["job_id"],
+                local_module.NEWS_RESULT_CONTRACT_ID,
+                digest,
+            ),
+        ).fetchone()
+        link_result = connection.execute(
+            """SELECT result_json FROM catalyst_local_analysis_links
+               WHERE job_id=?""",
+            (job["job_id"],),
+        ).fetchone()[0]
+    assert audit == ("accepted", None, raw_result)
+    assert link_result == raw_result
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='news_impact'"
+        ).fetchone()[0] == 1
+
+
 def test_reconcile_restores_previously_accepted_paid_news_after_old_clear(
     tmp_path,
     monkeypatch,

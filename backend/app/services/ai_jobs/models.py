@@ -751,6 +751,9 @@ _SOURCE_BOUND_ENTITY_DEFINITION = re.compile(
     r"index|platform|product|service|system)\b",
     re.IGNORECASE,
 )
+_SOURCE_BOUND_ENTITY_ALIAS = re.compile(
+    r"^\s*[（(]\s*[A-Z0-9][A-Z0-9.&/+_-]{1,15}\s*[)）]"
+)
 _SOURCE_BOUND_HEADLINE_SEGMENT_SPLIT = re.compile(
     r"(?:\s+[|—–-]\s+|[:：;；.!?。！？\n]+)"
 )
@@ -1154,7 +1157,7 @@ def _is_copied_source_headline_fragment(
 ) -> bool:
     parts = _SOURCE_BOUND_ENTITY_PART.findall(span)
     words = [part for part in parts if any(char.isalpha() for char in part)]
-    if len(words) < 3 or any(char.isdigit() for char in span):
+    if len(words) < 3:
         return False
     prose_words = {
         re.sub(r"[^A-Za-z]", "", word).casefold()
@@ -1191,6 +1194,11 @@ def _is_copied_source_headline_fragment(
         source_defines_entity = any(
             _SOURCE_BOUND_ENTITY_DEFINITION.match(source[match.end() :])
             is not None
+            or (
+                not prose_words
+                and _SOURCE_BOUND_ENTITY_ALIAS.match(source[match.end() :])
+                is not None
+            )
             or (
                 role_subject
                 and _SOURCE_BOUND_ROLE_PREDICATE.match(source[match.end() :])
