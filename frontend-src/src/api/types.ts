@@ -98,6 +98,8 @@ export interface ScreenerRow {
   /** 契约 change_pct；缺失如实为 null（ChangeBadge 显「—」，不显 +0.00%） */
   changePct: number | null;
   strengthScore: number;
+  /** 后端 avg_dollar_volume_20d；缺失时为 null，不用当日成交额冒充。 */
+  avgDollarVolume20d?: number | null;
   band: StrengthBand;
   subscores: { trend: number; momentum: number; volume: number; volatility: number };
   /** live 契约分项（周期/质量分）：存在时 UI 优先消费；mock 不填，回退 subscores 四维 */
