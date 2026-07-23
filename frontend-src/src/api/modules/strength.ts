@@ -1,6 +1,6 @@
 /** 强度域：GET /api/strength/market · /profiles · /scan?params */
 import { get, mockOr, toQuery } from '../client';
-import { asRec, pickN, pickS, unwrap, type Rec } from '../live';
+import { asRec, pickB, pickN, pickS, unwrap, type Rec } from '../live';
 import * as fx from '@/mocks/fixtures';
 import type {
   MarketRegimeInfo,
@@ -18,6 +18,16 @@ import type {
  * timeframe/profile/top/sector_id/min_price/min_avg_dollar_volume/include_options/universe
  * 为契约参数（api-contract §strength），live 原样下发。
  */
+export interface StrengthScanEnvelope {
+  rows: ScreenerRow[];
+  universeCount: number;
+  screenedCount: number;
+  stale: boolean;
+  asOf: string | null;
+  snapshotSavedAt: string | null;
+  priceProvider: string | null;
+}
+
 export interface ScanParams {
   band?: 'strong' | 'mid' | 'weak' | 'all';
   /** 板块过滤：live 传契约 sector_id；mock 传 sector 名（applyParams 双向匹配） */
@@ -57,8 +67,12 @@ function applyParams(rows: ScreenerRow[], p: ScanParams): ScreenerRow[] {
  * 关键对齐：change_pct（非 changePct/change_percent）· sector_name/sector_id ·
  * 分项 = 契约周期/质量分 score_short/score_mid/score_long/breakout_quality_score（subscoreDims 携带真实标签）。
  */
-function mapScanRow(r: Record<string, unknown>): ScreenerRow {
-  const score = pickN(r, 'strengthScore', 'final_score', 'strength_score', 'score') ?? 0;
+function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
+  const ticker = pickS(r, 'ticker');
+  const score = pickN(r, 'strengthScore', 'final_score', 'strength_score', 'score');
+  const price = pickN(r, 'price');
+  // 价格或评分缺失的行不能用 0 冒充真实扫描结果。
+  if (!ticker || score === null || price === null) return null;
   const band: StrengthBand = score >= 85 ? 'strong' : score >= 60 ? 'mid' : 'weak';
   const dims: ScreenerSubscoreDim[] = [
     { key: 'score_short', label: '短期', value: pickN(r, 'score_short') },
@@ -67,14 +81,15 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow {
     { key: 'breakout_quality_score', label: '突破质量', value: pickN(r, 'breakout_quality_score') },
   ];
   return {
-    ticker: pickS(r, 'ticker') ?? '',
-    name: pickS(r, 'name') ?? '',
+    ticker,
+    name: pickS(r, 'name') ?? ticker,
     sector: pickS(r, 'sector_name', 'primary_sector_name', 'sector') ?? '',
     sectorId: pickS(r, 'sector_id', 'primary_sector_id') ?? undefined,
-    price: pickN(r, 'price') ?? 0,
+    price,
     // 契约键为 change_pct；缺失如实为 null（UI 显「—」，不显 +0.00%）
     changePct: pickN(r, 'changePct', 'change_pct', 'change_percent'),
     strengthScore: score,
+    avgDollarVolume20d: pickN(r, 'avg_dollar_volume_20d'),
     band,
     // 兼容槽位（消费层优先 subscoreDims；此处仅按周期分近似填充，注释如实标注）
     subscores: {
@@ -89,7 +104,7 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow {
 }
 
 /** live 仅下发契约白名单参数（sector → sector_id），其余 UI 参数客户端套用 */
-function liveScan(params: ScanParams): Promise<ScreenerRow[]> {
+function liveScan(params: ScanParams): Promise<StrengthScanEnvelope> {
   const qs = toQuery({
     universe: params.universe,
     timeframe: params.timeframe,
@@ -100,7 +115,22 @@ function liveScan(params: ScanParams): Promise<ScreenerRow[]> {
     min_avg_dollar_volume: params.min_avg_dollar_volume,
     include_options: params.include_options,
   });
-  return get(`/strength/scan${qs ? `?${qs}` : ''}`).then((d) => applyParams(unwrap(d, 'rows', 'results').map(mapScanRow), params));
+  return get(`/strength/scan${qs ? `?${qs}` : ''}`).then((d) => {
+    const env = asRec(d);
+    const rows = unwrap(d, 'rows', 'results')
+      .map(mapScanRow)
+      .filter((row): row is ScreenerRow => row !== null);
+    const sources = asRec(env.data_sources);
+    return {
+      rows: applyParams(rows, params),
+      universeCount: pickN(env, 'universe_count', 'universeCount') ?? rows.length,
+      screenedCount: pickN(env, 'screened_count', 'screenedCount') ?? rows.length,
+      stale: pickB(env, '_stale', 'stale') ?? false,
+      asOf: pickS(env, 'as_of', 'score_data_through', 'data_through'),
+      snapshotSavedAt: pickS(env, 'snapshot_saved_at'),
+      priceProvider: pickS(asRec(sources.prices), 'provider'),
+    };
+  });
 }
 
 /** 契约 market_regime（六维分 + label + warnings）→ MarketRegimeInfo；缺失如实 null */
@@ -195,6 +225,22 @@ export const strengthApi = {
       () => ({ profiles: fx.getStrengthProfiles(), sectors: [] }),
       () => get('/strength/profiles').then((d) => ({ profiles: mapProfiles(d), sectors: mapSectors(d) })),
     ),
+  scanEnvelope: (params: ScanParams = {}): Promise<StrengthScanEnvelope> =>
+    mockOr(
+      () => {
+        const all = fx.runStrengthScan();
+        return {
+          rows: applyParams(all, params),
+          universeCount: all.length,
+          screenedCount: all.length,
+          stale: false,
+          asOf: null,
+          snapshotSavedAt: null,
+          priceProvider: 'mock fixtures',
+        };
+      },
+      () => liveScan(params),
+    ),
   scan: (params: ScanParams = {}): Promise<ScreenerRow[]> =>
-    mockOr(() => applyParams(fx.runStrengthScan(), params), () => liveScan(params)),
+    mockOr(() => applyParams(fx.runStrengthScan(), params), () => liveScan(params).then((result) => result.rows)),
 };
