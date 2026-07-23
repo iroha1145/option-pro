@@ -1196,6 +1196,11 @@ class AIJobRepository:
                   AND (lease_expires_at IS NULL OR lease_expires_at<=?)
                 ORDER BY
                   CASE WHEN cancel_requested_at IS NOT NULL THEN 0 ELSE 1 END,
+                  CASE
+                    WHEN openai_response_id IS NOT NULL THEN 0
+                    WHEN submission_started_at IS NOT NULL THEN 1
+                    ELSE 2
+                  END,
                   priority DESC,
                   created_at
                 LIMIT 1

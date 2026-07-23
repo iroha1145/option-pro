@@ -2001,6 +2001,41 @@ def test_global_concurrency_limit_defers_a_second_paid_submission(tmp_path):
     assert deferred["submission_started_at"] is None
 
 
+def test_claim_due_polls_submitted_response_before_older_pending_backlog(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    pending = [_create_job(repository, f"P{index:02d}") for index in range(12)]
+    submitted = _create_job(repository, "LIVE")
+
+    with repository._connect() as connection:
+        connection.execute(
+            """
+            UPDATE ai_jobs
+            SET status='queued',
+                submission_started_at='2026-07-23T12:00:00Z',
+                submitted_at='2026-07-23T12:00:00Z',
+                openai_response_id='resp_live_poll',
+                next_attempt_at='1970-01-01T00:00:00Z'
+            WHERE job_id=?
+            """,
+            (submitted["job_id"],),
+        )
+        connection.execute(
+            """
+            UPDATE ai_jobs
+            SET next_attempt_at='1970-01-01T00:00:00Z',
+                error_code='global_concurrency_limit'
+            WHERE submission_started_at IS NULL
+            """
+        )
+        connection.commit()
+
+    claimed = repository.claim_due("poll-owner", 60)
+
+    assert claimed["job_id"] == submitted["job_id"]
+    assert claimed["openai_response_id"] == "resp_live_poll"
+    assert all(item["job_id"] != claimed["job_id"] for item in pending)
+
+
 def test_recent_unknown_submission_holds_the_global_concurrency_slot(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     first = _create_job(repository, "AAA")
