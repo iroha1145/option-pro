@@ -25,12 +25,14 @@ import MonthCalendar from '@/components/earnings/MonthCalendar';
 import EarningsList from '@/components/earnings/EarningsList';
 import EpsHatchChart from '@/components/earnings/EpsHatchChart';
 import ImpactCard from '@/components/earnings/ImpactCard';
+import EarningsAnalysisControls from '@/components/earnings/EarningsAnalysisControls';
 import DensityStrip from '@/components/earnings/DensityStrip';
 import PulseDot from '@/components/earnings/PulseDot';
 import type { EarningsRow } from '@/components/earnings/types';
 import { daysUntil, etToday, fmtMDCN, weekStartMonday } from '@/components/earnings/types';
 
 const REFRESH_COOLDOWN_S = 60;
+const LIST_PAGE_SIZE = 80;
 type RefreshStatus = 'refreshed' | 'cooldown' | 'failed_stale' | null;
 
 export default function Earnings() {
@@ -40,7 +42,12 @@ export default function Earnings() {
 
   /* 数据（契约 TTL：earnings 1800s） */
   const q = usePolling(() => earningsApi.upcoming(), 1_800_000);
-  const items = useMemo(() => (q.data ?? []) as unknown as EarningsRow[], [q.data]);
+  const items = useMemo(
+    () => (q.data?.items ?? []) as unknown as EarningsRow[],
+    [q.data],
+  );
+  const coverageLimited = q.data?.dataLimited === true
+    || q.data?.sourceStatus === 'degraded';
 
   /* 周历状态 */
   const [monday, setMonday] = useState(() => weekStartMonday(etToday()));
@@ -61,8 +68,12 @@ export default function Earnings() {
   const [autoPicked, setAutoPicked] = useState(false);
   if (!autoPicked && !selectedTicker && items.length > 0) {
     setAutoPicked(true);
-    const firstUpcoming = items.find((it) => daysUntil(it.date) >= 0) ?? items[0];
-    setSelectedTicker(firstUpcoming.ticker);
+    const firstRelevant =
+      items.find((it) => daysUntil(it.date) === 0 && typeof it.epsActual === 'number')
+      ?? items.find((it) => daysUntil(it.date) === 0)
+      ?? items.find((it) => daysUntil(it.date) > 0)
+      ?? items[0];
+    setSelectedTicker(firstRelevant.ticker);
   }
 
   const onWeekChange = useCallback((dir: -1 | 1) => {
@@ -85,10 +96,21 @@ export default function Earnings() {
     try {
       const fresh = await earningsApi.refresh();
       q.refresh();
-      setCooldownUntil(Date.now() + REFRESH_COOLDOWN_S * 1000);
+      const retrySeconds = fresh.refreshRetryAfterSeconds ?? REFRESH_COOLDOWN_S;
+      setCooldownUntil(Date.now() + retrySeconds * 1000);
+      if (fresh.refreshStatus === 'failed_stale') {
+        setRefreshStatus('failed_stale');
+        toast.info('上游刷新失败，继续使用上一次完整日历');
+        return;
+      }
+      if (fresh.refreshStatus === 'cooldown') {
+        setRefreshStatus('cooldown');
+        toast.info(`刷新冷却中，${retrySeconds}s 后可再次刷新`);
+        return;
+      }
       setRefreshStatus('refreshed');
       setFlashSignal((s) => s + 1);
-      toast.success(`日历已更新 · ${fresh.length} 条`);
+      toast.success(`日历已更新 · ${fresh.items.length} 条`);
     } catch (e) {
       // 失败且带缓存 → _stale 横幅（failed_stale）；无缓存走 503 空态
       if (q.data) {
@@ -117,10 +139,33 @@ export default function Earnings() {
     [monday],
   );
 
-  /* B2「即将公布」口径保持未来数据：选中日过滤到当日（可为历史日）；未选日期仅展示今天起的排期 */
+  /* 默认列表只挂载最近三天至未来 30 天，避免全市场日历生成数千行 DOM。
+     用户在周/月历点选更远日期时仍会看到该日完整结果。 */
   const filteredItems = useMemo(
-    () => (selectedDay ? items.filter((it) => it.date === selectedDay) : items.filter((it) => daysUntil(it.date) >= 0)),
+    () => (
+      selectedDay
+        ? items.filter((it) => it.date === selectedDay)
+        : items.filter((it) => {
+            const distance = daysUntil(it.date);
+            return distance >= -3 && distance <= 30;
+          })
+    ),
     [items, selectedDay],
+  );
+  const listScope = selectedDay ?? 'rolling-window';
+  const [visibleLimit, setVisibleLimit] = useState(LIST_PAGE_SIZE);
+  const [previousListScope, setPreviousListScope] = useState(listScope);
+  if (listScope !== previousListScope) {
+    setPreviousListScope(listScope);
+    setVisibleLimit(LIST_PAGE_SIZE);
+  }
+  const visibleItems = useMemo(
+    () => filteredItems.slice(0, visibleLimit),
+    [filteredItems, visibleLimit],
+  );
+  const selectedRow = useMemo(
+    () => items.find((item) => item.ticker === selectedTicker) ?? null,
+    [items, selectedTicker],
   );
 
   const loading = q.loading;
@@ -213,6 +258,23 @@ export default function Earnings() {
           >
             重试
           </button>
+        </div>
+      )}
+
+      {coverageLimited && (
+        <div
+          className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn-600/30 bg-warn-50 px-4 py-2.5"
+          role="status"
+        >
+          <div>
+            <p className="text-caption font-medium text-warn-600">全市场财报源暂时不完整</p>
+            <p className="mt-0.5 text-micro text-ink-500">
+              当前仅显示已返回的 {items.length} 家公司，未返回的公司不会用热门名单或估算值补齐。
+            </p>
+          </div>
+          <span className="font-mono text-micro text-ink-400">
+            {q.data?.providers.length ? q.data.providers.join(' + ') : '上游来源未返回'}
+          </span>
         </div>
       )}
 
@@ -312,9 +374,12 @@ export default function Earnings() {
         )}
       </div>
 
-      {/* B2 + 图表（左 7 列） · B3（右 5 列吸顶） */}
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <div className="space-y-6 lg:col-span-7">
+      {/* B2 列表（左 7 列） · B3 分析与补充图表（右 5 列） */}
+      <div
+        className="mt-6 grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-12"
+        aria-label="财报主体"
+      >
+        <div className="min-w-0 space-y-6 xl:col-span-7">
           {loading ? (
             <div className="card-surface">
               <SkeletonRows rows={6} />
@@ -355,33 +420,43 @@ export default function Earnings() {
                 </div>
               )}
               <EarningsList
-                items={filteredItems}
+                items={visibleItems}
                 selectedTicker={selectedTicker}
                 onSelectTicker={onSelectTickerFromRow}
                 onNextWeek={() => onWeekChange(1)}
                 filteredByDay={selectedDay != null}
               />
-              <EpsHatchChart items={filteredItems} />
+              {visibleItems.length < filteredItems.length && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-card px-4 py-3">
+                  <p className="text-caption text-ink-500">
+                    已显示 <span className="font-mono text-ink-800 tnum">{visibleItems.length}</span>
+                    {' / '}
+                    <span className="font-mono text-ink-800 tnum">{filteredItems.length}</span> 条
+                  </p>
+                  <button
+                    onClick={() => setVisibleLimit((limit) => limit + LIST_PAGE_SIZE)}
+                    className="h-8 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+                  >
+                    再显示 {Math.min(LIST_PAGE_SIZE, filteredItems.length - visibleItems.length)} 条
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
 
-        {/* B3 AI 影响（右 5 列，吸顶） */}
-        <div className="lg:col-span-5">
+        {/* B3 AI 影响 + 低交互图表，集中在右栏，列表保持可读宽度。 */}
+        <div className="min-w-0 space-y-6 xl:col-span-5">
+          <EarningsAnalysisControls />
           {loading ? (
-            <SkeletonCard className="lg:sticky lg:top-[116px]" />
+            <SkeletonCard />
           ) : (
-            <ImpactCard ticker={selectedTicker} onAnalyzed={() => q.refresh()} className="lg:sticky lg:top-[116px]" />
+            <ImpactCard row={selectedRow} ticker={selectedTicker} onAnalyzed={() => q.refresh()} />
           )}
+          {!loading && !error503 && <EpsHatchChart items={visibleItems} />}
+          {!loading && !error503 && <DensityStrip items={items} onJumpDay={onJumpDay} />}
         </div>
       </div>
-
-      {/* B5 补充带：本月密度条（503 时隐藏） */}
-      {!loading && !error503 && (
-        <div className="mt-6">
-          <DensityStrip items={items} onJumpDay={onJumpDay} />
-        </div>
-      )}
     </div>
   );
 }

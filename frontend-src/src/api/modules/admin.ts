@@ -10,7 +10,7 @@ import { get, mockOr, post, put } from '@/api/client';
 import { asRec, pickB, pickN, pickS, unwrap, type Rec } from '@/api/live';
 
 export type RefreshOperation = 'news' | 'calendar' | 'source_health';
-export type WorkerActionType = 'focus_refresh' | 'strength_refresh' | 'breakout_refresh';
+export type WorkerActionType = 'focus_refresh' | 'strength_refresh' | 'breakout_refresh' | 'earnings_analysis';
 
 export interface ManualOpTicket {
   requestId: string | null;
@@ -36,7 +36,9 @@ export interface WorkerHealth {
 export interface RuntimeToggles {
   manualAnalysisEnabled: boolean | null;
   scheduledAnalysisEnabled: boolean | null;
+  earningsScheduledAnalysisEnabled: boolean | null;
 }
+export type RuntimeTogglesPatch = Partial<RuntimeToggles>;
 
 export interface RuntimeDoc {
   version: number;
@@ -56,10 +58,15 @@ function nTicket(d: unknown): ManualOpTicket {
 
 function nTask(r: Rec): WorkerTaskState {
   const failures = pickN(r, 'consecutive_failures') ?? 0;
+  const enabled = pickB(r, 'enabled') ?? false;
+  const status = pickS(r, 'status') ?? '';
   return {
     name: pickS(r, 'task_name', 'name') ?? '',
-    enabled: pickB(r, 'enabled') ?? false,
-    healthy: (pickB(r, 'healthy') ?? false) && failures === 0,
+    enabled,
+    healthy:
+      (pickB(r, 'healthy')
+        ?? (enabled && !['degraded', 'failed', 'interrupted', 'disabled'].includes(status)))
+      && failures === 0,
     lastSuccessAt: pickS(r, 'last_success_at', 'last_success', 'last_run_at', 'updated_at'),
     note: pickS(r, 'last_error_code', 'last_error', 'note'),
   };
@@ -80,20 +87,26 @@ function nRuntimeDoc(d: unknown): RuntimeDoc {
   const settings = asRec(r.settings);
   const ai = asRec(settings.ai);
   const catalyst = asRec(settings.catalyst);
+  const earnings = asRec(settings.earnings);
   return {
     version: pickN(r, 'version') ?? 1,
     updatedAt: pickS(r, 'updated_at', 'updatedAt') ?? '',
     toggles: {
       manualAnalysisEnabled: pickB(ai, 'manual_analysis_enabled'),
       scheduledAnalysisEnabled: pickB(catalyst, 'scheduled_analysis_enabled'),
+      earningsScheduledAnalysisEnabled: pickB(earnings, 'scheduled_analysis_enabled'),
     },
   };
 }
 
 /* ---------------- mock 桩（确定性，供 owner 模拟态演练） ---------------- */
 let mockRuntimeVersion = 3;
-let mockToggles: RuntimeToggles = { manualAnalysisEnabled: true, scheduledAnalysisEnabled: true };
-const MOCK_TASKS = ['focus_refresh', 'strength_refresh', 'breakout_refresh'];
+let mockToggles: RuntimeToggles = {
+  manualAnalysisEnabled: true,
+  scheduledAnalysisEnabled: true,
+  earningsScheduledAnalysisEnabled: false,
+};
+const MOCK_TASKS = ['focus_refresh', 'strength_refresh', 'breakout_refresh', 'earnings_analysis'];
 
 export const adminApi = {
   catalystRefresh: (operation: RefreshOperation): Promise<ManualOpTicket> =>
@@ -125,20 +138,27 @@ export const adminApi = {
       () => ({ version: mockRuntimeVersion, updatedAt: new Date().toISOString(), toggles: { ...mockToggles } }),
       () => get('/runtime-settings').then(nRuntimeDoc),
     ),
-  updateRuntimeSettings: (expectedVersion: number, toggles: RuntimeToggles): Promise<RuntimeDoc> =>
+  updateRuntimeSettings: (expectedVersion: number, toggles: RuntimeTogglesPatch): Promise<RuntimeDoc> =>
     mockOr(
       () => {
         mockRuntimeVersion += 1;
-        mockToggles = { ...toggles };
+        mockToggles = { ...mockToggles, ...toggles };
         return { version: mockRuntimeVersion, updatedAt: new Date().toISOString(), toggles: { ...mockToggles } };
       },
       () =>
         put('/runtime-settings', {
           expected_version: expectedVersion,
           settings: {
-            ...(toggles.manualAnalysisEnabled !== null ? { ai: { manual_analysis_enabled: toggles.manualAnalysisEnabled } } : {}),
+            ...(toggles.manualAnalysisEnabled !== null && toggles.manualAnalysisEnabled !== undefined
+              ? { ai: { manual_analysis_enabled: toggles.manualAnalysisEnabled } }
+              : {}),
             ...(toggles.scheduledAnalysisEnabled !== null
+              && toggles.scheduledAnalysisEnabled !== undefined
               ? { catalyst: { scheduled_analysis_enabled: toggles.scheduledAnalysisEnabled } }
+              : {}),
+            ...(toggles.earningsScheduledAnalysisEnabled !== null
+              && toggles.earningsScheduledAnalysisEnabled !== undefined
+              ? { earnings: { scheduled_analysis_enabled: toggles.earningsScheduledAnalysisEnabled } }
               : {}),
           },
         }).then(nRuntimeDoc),

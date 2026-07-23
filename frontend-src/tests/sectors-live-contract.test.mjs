@@ -142,6 +142,7 @@ test('IV 排名保留顶层来源状态与覆盖率，不伪装成历史百分�
     success_rate: 50,
     as_of: '2026-07-23T08:00:00Z',
     failed_symbols: ['AMD'],
+    snapshot_source: 'strength_worker',
     rankings: [
       {
         ticker: 'nvda',
@@ -159,6 +160,7 @@ test('IV 排名保留顶层来源状态与覆盖率，不伪装成历史百分�
   assert.equal(result.requestedCount, 2);
   assert.equal(result.rows[0].sectorIvRank, 88.4);
   assert.equal(result.rows[0].atmIvPercent, 41.3);
+  assert.equal(result.snapshotSource, 'strength_worker');
   assert.equal('ivChange30d' in result.rows[0], false);
 });
 
@@ -225,4 +227,21 @@ test('板块组件不再消费无后端依据的趋势、资金流和相关性�
   );
   assert.equal(ivPanel.includes('ivChange30d'), false);
   assert.equal(ivPanel.includes('基于 252 个交易日'), false);
+  assert.equal(ivPanel.includes("meta.snapshotSource === 'strength_worker'"), true);
+  assert.equal(ivPanel.includes("meta.snapshotSource === 'sector_owner_snapshot'"), true);
+});
+
+test('IV 排名等待真实板块目录，首屏不再请求旧占位编号', () => {
+  const page = fs.readFileSync(
+    path.join(sourceRoot, 'pages', 'Sectors.tsx'),
+    'utf8',
+  );
+
+  assert.equal(page.includes("useState('semi')"), false);
+  assert.equal(page.includes('catalogIds.has(ivSectorId)'), true);
+  assert.equal(page.includes('Promise.resolve(null)'), true);
+  assert.match(
+    page,
+    /ivSectorIdValid\s*\?\s*sectorsApi\.ivRanking\(ivSectorIdValid\)\s*:\s*Promise\.resolve\(null\)/,
+  );
 });

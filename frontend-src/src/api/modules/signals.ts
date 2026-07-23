@@ -1,5 +1,6 @@
 /** 信号域：GET /api/signals/market · GET /api/signals/stock/{t} */
 import { get, mockOr } from '../client';
+import { marketGet } from '../marketRead';
 import { asRec, pickN, pickS } from '../live';
 import * as fx from '@/mocks/fixtures';
 import type { MarketSignalsSnapshot, Signal, SignalType } from '../types';
@@ -91,5 +92,12 @@ export const signalsApi = {
   market: (): Promise<MarketSignalsSnapshot> =>
     mockOr(mapMockMarketSignals, () => get('/signals/market').then(mapMarketSignals)),
   stock: (ticker: string): Promise<Signal[]> =>
-    mockOr(() => fx.getStockSignals(ticker), () => get(`/signals/stock/${encodeURIComponent(ticker)}`).then(mapStockSignals)),
+    mockOr(
+      () => fx.getStockSignals(ticker),
+      () =>
+        marketGet(`/signals/stock/${encodeURIComponent(ticker)}`, {
+          ttlMs: 60_000,
+          staleMs: 30 * 60_000,
+        }).then(mapStockSignals),
+    ),
 };

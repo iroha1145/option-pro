@@ -742,10 +742,52 @@ def test_standalone_worker_reads_fresh_runtime_controls_each_iteration(
     assert first == (0, "enabled")
     assert second == (0, "enabled")
     assert third == (0, "analysis_disabled")
+    scheduled = {
+        "news_impact": False,
+        "market_focus": False,
+        "earnings_impact": False,
+    }
+    manual_enabled = {
+        "news_impact": True,
+        "market_focus": True,
+        "option_alerts": True,
+        "signal_analysis": True,
+        "earnings_impact": True,
+    }
+    manual_disabled = {
+        job_type: False for job_type in manual_enabled
+    }
     assert seen == [
-        (3, 1.25, 9_000_000, 45, True, "analysis_disabled", True, False),
-        (3, 1.0, 8_000_000, 45, True, "analysis_disabled", True, False),
-        (3, 1.0, 8_000_000, 45, True, "analysis_disabled", False, False),
+        (
+            3,
+            1.25,
+            9_000_000,
+            45,
+            True,
+            "analysis_disabled",
+            manual_enabled,
+            scheduled,
+        ),
+        (
+            3,
+            1.0,
+            8_000_000,
+            45,
+            True,
+            "analysis_disabled",
+            manual_enabled,
+            scheduled,
+        ),
+        (
+            3,
+            1.0,
+            8_000_000,
+            45,
+            True,
+            "analysis_disabled",
+            manual_disabled,
+            scheduled,
+        ),
     ]
 
 

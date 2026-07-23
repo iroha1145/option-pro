@@ -1,5 +1,6 @@
 /** 强度域：GET /api/strength/market · /profiles · /scan?params */
 import { get, mockOr, toQuery } from '../client';
+import { marketGet } from '../marketRead';
 import { asRec, pickB, pickN, pickS, unwrap, type Rec } from '../live';
 import * as fx from '@/mocks/fixtures';
 import type {
@@ -104,7 +105,7 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
 }
 
 /** live 仅下发契约白名单参数（sector → sector_id），其余 UI 参数客户端套用 */
-function liveScan(params: ScanParams): Promise<StrengthScanEnvelope> {
+function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelope> {
   const qs = toQuery({
     universe: params.universe,
     timeframe: params.timeframe,
@@ -115,7 +116,11 @@ function liveScan(params: ScanParams): Promise<StrengthScanEnvelope> {
     min_avg_dollar_volume: params.min_avg_dollar_volume,
     include_options: params.include_options,
   });
-  return get(`/strength/scan${qs ? `?${qs}` : ''}`).then((d) => {
+  return marketGet(`/strength/scan${qs ? `?${qs}` : ''}`, {
+    ttlMs: 30_000,
+    staleMs: 15 * 60_000,
+    force,
+  }).then((d) => {
     const env = asRec(d);
     const rows = unwrap(d, 'rows', 'results')
       .map(mapScanRow)
@@ -233,7 +238,7 @@ export const strengthApi = {
       () => ({ profiles: fx.getStrengthProfiles(), sectors: [] }),
       () => get('/strength/profiles').then((d) => ({ profiles: mapProfiles(d), sectors: mapSectors(d) })),
     ),
-  scanEnvelope: (params: ScanParams = {}): Promise<StrengthScanEnvelope> =>
+  scanEnvelope: (params: ScanParams = {}, force = false): Promise<StrengthScanEnvelope> =>
     mockOr(
       () => {
         const all = fx.runStrengthScan();
@@ -247,7 +252,7 @@ export const strengthApi = {
           priceProvider: 'mock fixtures',
         };
       },
-      () => liveScan(params),
+      () => liveScan(params, force),
     ),
   scan: (params: ScanParams = {}): Promise<ScreenerRow[]> =>
     mockOr(() => applyParams(fx.runStrengthScan(), params), () => liveScan(params).then((result) => result.rows)),

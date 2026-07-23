@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 from contextlib import suppress
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
@@ -285,8 +286,8 @@ async def process_job(
     *,
     allow_new_submissions: bool = True,
     new_submission_block_reason: str = "analysis_disabled",
-    manual_analysis_enabled: bool = True,
-    scheduled_analysis_enabled: bool = True,
+    manual_analysis_enabled: bool | Mapping[str, bool] = True,
+    scheduled_analysis_enabled: bool | Mapping[str, bool] = True,
 ) -> None:
     stop = asyncio.Event()
     heartbeat_started = asyncio.Event()
@@ -435,11 +436,21 @@ async def process_job(
             if job.get("submission_source") in {"manual", "scheduled"}
             else "manual"
         )
+        scheduled_enabled_for_job = (
+            bool(scheduled_analysis_enabled.get(str(job.get("job_type")), False))
+            if isinstance(scheduled_analysis_enabled, Mapping)
+            else bool(scheduled_analysis_enabled)
+        )
+        manual_enabled_for_job = (
+            bool(manual_analysis_enabled.get(str(job.get("job_type")), False))
+            if isinstance(manual_analysis_enabled, Mapping)
+            else bool(manual_analysis_enabled)
+        )
         source_disabled_error = (
             "manual_analysis_disabled"
-            if submission_source == "manual" and not manual_analysis_enabled
+            if submission_source == "manual" and not manual_enabled_for_job
             else "scheduled_analysis_disabled"
-            if submission_source == "scheduled" and not scheduled_analysis_enabled
+            if submission_source == "scheduled" and not scheduled_enabled_for_job
             else None
         )
         if source_disabled_error is not None:
@@ -575,8 +586,8 @@ async def run_once(
     *,
     allow_new_submissions: bool = True,
     new_submission_block_reason: str = "analysis_disabled",
-    manual_analysis_enabled: bool = True,
-    scheduled_analysis_enabled: bool = True,
+    manual_analysis_enabled: bool | Mapping[str, bool] = True,
+    scheduled_analysis_enabled: bool | Mapping[str, bool] = True,
 ) -> int:
     job = await asyncio.to_thread(
         repository.claim_due,
@@ -649,13 +660,34 @@ async def run_configured_once(
             ),
         }
     )
-    manual_analysis_enabled = bool(
+    catalyst_manual_analysis_enabled = bool(
         mode_allows_manual and effective.ai.manual_analysis_enabled
     )
-    scheduled_analysis_enabled = bool(
+    earnings_manual_analysis_enabled = bool(effective.ai.manual_analysis_enabled)
+    manual_analysis_enabled = {
+        "news_impact": catalyst_manual_analysis_enabled,
+        "market_focus": catalyst_manual_analysis_enabled,
+        "option_alerts": catalyst_manual_analysis_enabled,
+        "signal_analysis": catalyst_manual_analysis_enabled,
+        "earnings_impact": earnings_manual_analysis_enabled,
+    }
+    catalyst_scheduled_analysis_enabled = bool(
         mode_allows_scheduled and effective.catalyst.scheduled_analysis_enabled
     )
-    analysis_enabled = bool(manual_analysis_enabled or scheduled_analysis_enabled)
+    earnings_settings = getattr(effective, "earnings", None)
+    earnings_scheduled_analysis_enabled = bool(
+        getattr(earnings_settings, "scheduled_analysis_enabled", False)
+    )
+    scheduled_analysis_enabled = {
+        "news_impact": catalyst_scheduled_analysis_enabled,
+        "market_focus": catalyst_scheduled_analysis_enabled,
+        "earnings_impact": earnings_scheduled_analysis_enabled,
+    }
+    analysis_enabled = bool(
+        any(manual_analysis_enabled.values())
+        or catalyst_scheduled_analysis_enabled
+        or earnings_scheduled_analysis_enabled
+    )
     processed = await run_once(
         repository,
         effective_settings,

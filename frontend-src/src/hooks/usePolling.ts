@@ -23,24 +23,30 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number | nu
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
-  const inFlight = useRef(false);
+  const generationRef = useRef(0);
+  const activeGenerationsRef = useRef(new Set<number>());
+  const inFlightGenerationsRef = useRef(new Set<number>());
 
-  const tick = useCallback(async (first = false) => {
-    if (inFlight.current) return;
-    inFlight.current = true;
+  const tick = useCallback(async (first = false, generation = generationRef.current) => {
+    if (inFlightGenerationsRef.current.has(generation)) return;
+    inFlightGenerationsRef.current.add(generation);
     if (first) setLoading(true);
     else setRefreshing(true);
     try {
       const result = await fetcherRef.current();
+      if (!activeGenerationsRef.current.has(generation) || generation !== generationRef.current) return;
       setData(result);
       setError(null);
       setLastUpdatedAt(Date.now());
     } catch (e) {
+      if (!activeGenerationsRef.current.has(generation) || generation !== generationRef.current) return;
       setError(e instanceof ApiError ? e : new ApiError(500, e instanceof Error ? e.message : '未知错误'));
     } finally {
-      inFlight.current = false;
-      setLoading(false);
-      setRefreshing(false);
+      inFlightGenerationsRef.current.delete(generation);
+      if (activeGenerationsRef.current.has(generation) && generation === generationRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
@@ -49,18 +55,23 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number | nu
   }, [tick]);
 
   useEffect(() => {
+    const generation = generationRef.current + 1;
+    generationRef.current = generation;
+    const activeGenerations = activeGenerationsRef.current;
+    activeGenerations.add(generation);
     let timer: ReturnType<typeof setInterval> | null = null;
-    void tick(true);
+    void tick(true, generation);
     if (intervalMs && intervalMs > 0) {
       timer = setInterval(() => {
-        if (document.visibilityState === 'visible') void tick(false);
+        if (document.visibilityState === 'visible') void tick(false, generation);
       }, intervalMs);
     }
     const onVisible = () => {
-      if (document.visibilityState === 'visible' && intervalMs && intervalMs > 0) void tick(false);
+      if (document.visibilityState === 'visible' && intervalMs && intervalMs > 0) void tick(false, generation);
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
+      activeGenerations.delete(generation);
       if (timer) clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };

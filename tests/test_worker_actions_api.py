@@ -31,6 +31,7 @@ def _live_repository(tmp_path, monkeypatch) -> tuple[WorkerStateRepository, int]
         "focus_refresh",
         "strength_refresh",
         "breakout_refresh",
+        "earnings_analysis",
         "retention",
     ):
         repository.record_task(
@@ -154,6 +155,7 @@ def test_manual_action_rejects_disabled_task(tmp_path, monkeypatch) -> None:
         ("focus_refresh", "focus_refresh"),
         ("strength_refresh", "strength_refresh"),
         ("breakout_refresh", "breakout_refresh"),
+        ("earnings_analysis", "earnings_analysis"),
         ("retention", "retention"),
     ],
 )
@@ -218,6 +220,32 @@ def test_strength_action_persists_full_parameters_and_hashes_default_idempotency
             (first.json()["request_id"],),
         ).fetchone()[0]
     assert key.endswith(f":{expected_hash}")
+
+
+def test_earnings_analysis_action_applies_paid_work_gate_and_queues(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _live_repository(tmp_path, monkeypatch)
+    checks = 0
+
+    def allow() -> None:
+        nonlocal checks
+        checks += 1
+
+    monkeypatch.setattr(
+        worker_actions,
+        "_require_earnings_manual_submission",
+        allow,
+    )
+    with _client() as client:
+        response = client.post("/api/worker/actions/earnings_analysis", json={})
+
+    assert response.status_code == 202
+    assert response.json()["action_type"] == "earnings_analysis"
+    assert response.json()["task_name"] == "earnings_analysis"
+    assert response.json()["status"] == "queued"
+    assert checks == 1
 
 
 def test_strength_action_reuses_active_actual_parameters_for_a_different_request(

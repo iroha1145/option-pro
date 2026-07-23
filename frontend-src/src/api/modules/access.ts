@@ -23,20 +23,28 @@ async function liveStatus(): Promise<AccessStatus> {
   }
 
   try {
-    const catalystStatus = asRec(await get('/catalysts/status'));
-    const availability = asRec(catalystStatus.analysis_availability);
-    const aiEnabled = pickB(catalystStatus, 'analysis_trigger_enabled') === true;
-    const aiAvailable = aiEnabled && pickB(availability, 'enabled') === true;
+    const [capabilityBody, runtimeBody] = await Promise.all([
+      get('/ai/status'),
+      get('/runtime-settings'),
+    ]);
+    const capability = asRec(capabilityBody);
+    const runtime = asRec(runtimeBody);
+    const runtimeAi = asRec(asRec(runtime.settings).ai);
+    const aiEnabled = pickB(runtimeAi, 'manual_analysis_enabled') === true;
+    const capabilityEnabled = pickB(capability, 'enabled') === true;
+    const aiAvailable = aiEnabled && capabilityEnabled;
     return {
       role: 'owner',
       aiEnabled,
       aiAvailable,
       aiReason: aiAvailable
         ? null
-        : pickS(availability, 'reason') ?? (aiEnabled ? 'analysis_unavailable' : 'analysis_trigger_disabled'),
+        : aiEnabled
+          ? pickS(capability, 'status') ?? 'analysis_unavailable'
+          : 'manual_analysis_disabled',
     };
   } catch {
-    // 登录身份仍以 access/status 为准；分析状态探针失败时绝不显示假绿灯。
+    // 登录身份仍以 access/status 为准；模型能力或运行设置探针失败时绝不显示假绿灯。
     return {
       role: 'owner',
       aiEnabled: false,

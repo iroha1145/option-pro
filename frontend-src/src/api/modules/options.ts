@@ -1,5 +1,6 @@
 /** 期权域：unusual / expirations / chain */
 import { get, mockOr, toQuery } from '../client';
+import { marketGet } from '../marketRead';
 import { asRec, pickN, pickS, unwrap } from '../live';
 import * as fx2 from '@/mocks/fixtures2';
 import type { OptionChain, OptionChainRow, UnusualOption } from '../types';
@@ -87,7 +88,10 @@ export const optionsApi = {
     mockOr(
       () => fx2.getOptionExpirations(ticker),
       () =>
-        get(`/options/${encodeURIComponent(ticker)}/expirations`).then((d) =>
+        marketGet(`/options/${encodeURIComponent(ticker)}/expirations`, {
+          ttlMs: 5 * 60_000,
+          staleMs: 30 * 60_000,
+        }).then((d) =>
           unwrap(d, 'expirations')
             .map((x) => pickS(asRec(x), 'date', 'expiration') ?? (typeof x === 'string' ? x : null))
             .filter((x): x is string => x !== null),
@@ -97,8 +101,9 @@ export const optionsApi = {
     mockOr(
       () => fx2.getOptionChain(ticker, expiration),
       () =>
-        get(
+        marketGet(
           `/options/${encodeURIComponent(ticker)}/chain${expiration ? `?expiration=${encodeURIComponent(expiration)}` : ''}`,
+          { ttlMs: 60_000, staleMs: 30 * 60_000 },
         ).then((d) => mapChain(d, ticker, expiration ?? '')),
     ),
 };

@@ -1,5 +1,6 @@
 /** 突破雷达域 */
 import { get, mockOr, toQuery } from '../client';
+import { marketGet } from '../marketRead';
 import { asRec, num, pickN, pickS, str, unwrap, type Rec } from '../live';
 import * as fx2 from '@/mocks/fixtures2';
 import { SIGNAL_LABELS } from '@/mocks/fixtures';
@@ -291,7 +292,10 @@ export const breakoutsApi = {
     mockOr(
       () => fx2.getBreakoutsByTicker(ticker),
       () =>
-        get(`/breakouts/tickers/${encodeURIComponent(ticker)}`).then(
+        marketGet(`/breakouts/tickers/${encodeURIComponent(ticker)}`, {
+          ttlMs: 60_000,
+          staleMs: 30 * 60_000,
+        }).then(
           (d) => unwrap(d, 'events', 'items').map(normalizeBreakoutEvent) as unknown as BreakoutEvent[],
         ),
     ),

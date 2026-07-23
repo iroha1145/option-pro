@@ -53,6 +53,10 @@ def _effective(*, manual: bool, scheduled: bool):
             manual_analysis_enabled=manual,
         ),
         catalyst=SimpleNamespace(scheduled_analysis_enabled=scheduled),
+        earnings=SimpleNamespace(
+            scheduled_analysis_enabled=scheduled,
+            lookahead_days=30,
+        ),
     )
 
 
@@ -211,7 +215,7 @@ def test_manual_routes_fail_closed_when_only_scheduled_analysis_is_enabled(
     assert repository.health()["pending"] == 0
 
 
-def test_manual_routes_do_not_enqueue_when_personal_mode_is_read_only(
+def test_earnings_manual_route_is_independent_from_catalyst_read_only_mode(
     tmp_path,
     monkeypatch,
 ):
@@ -238,25 +242,23 @@ def test_manual_routes_do_not_enqueue_when_personal_mode_is_read_only(
     app.include_router(ai.router)
     client = TestClient(app, base_url="http://localhost")
 
-    responses = (
-        client.post(
-            "/api/ai/jobs/earnings-impact",
-            json={"ticker": "AAPL", "name": "Apple"},
-        ),
-        client.post(
-            "/api/ai/jobs/option-alerts",
-            json={"ticker": "AAPL", "alerts": [], "underlying_price": 200},
-        ),
+    earnings = client.post(
+        "/api/ai/jobs/earnings-impact",
+        json={"ticker": "AAPL", "name": "Apple"},
+    )
+    options = client.post(
+        "/api/ai/jobs/option-alerts",
+        json={"ticker": "AAPL", "alerts": [], "underlying_price": 200},
     )
 
-    for response in responses:
-        assert response.status_code == 409
-        assert response.json()["detail"] == {
-            "code": "read_only_mode",
-            "message": "当前为只读模式",
-        }
-    assert capability_checked is False
-    assert repository.health()["pending"] == 0
+    assert earnings.status_code == 202
+    assert options.status_code == 409
+    assert options.json()["detail"] == {
+        "code": "read_only_mode",
+        "message": "当前为只读模式",
+    }
+    assert capability_checked is True
+    assert repository.health()["pending"] == 1
 
 
 def test_signal_analysis_checks_manual_switch_before_building_evidence(monkeypatch):

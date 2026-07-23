@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
+import { ApiError } from '@/api/client';
 import { stocksApi } from '@/api/modules/stocks';
 import { useAccess } from '@/hooks/useAccess';
 import { cn } from '@/lib/utils';
@@ -33,6 +34,8 @@ interface Entry {
 
 const RECENT_KEY = 'optix:recent-tickers';
 
+// 供 Layout 写入最近查看记录；该纯函数不参与组件热更新。
+// eslint-disable-next-line react-refresh/only-export-components
 export function pushRecent(ticker: string) {
   try {
     const list = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') as string[];
@@ -50,6 +53,22 @@ function readRecent(): string[] {
   }
 }
 
+function searchErrorText(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.code === 429) {
+      return error.retryAfter
+        ? `搜索请求较多，请 ${Math.ceil(error.retryAfter)} 秒后重试`
+        : '搜索请求较多，请稍后重试';
+    }
+    if (error.code === 401) return '登录状态已失效，请重新登录';
+    if (error.code === 503) return '股票目录暂不可用，请稍后重试';
+    return error.message || '股票搜索失败，请稍后重试';
+  }
+  return error instanceof Error && error.message
+    ? error.message
+    : '股票搜索失败，请稍后重试';
+}
+
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
     <kbd className="rounded-xs border border-line bg-card-warm px-1.5 py-0.5 font-mono text-[10px] leading-[14px] text-ink-400">
@@ -64,6 +83,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{ ticker: string; name: string; sector: string }[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -73,6 +93,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
     if (open) {
       setQuery('');
       setResults([]);
+      setSearchError(null);
       setActive(0);
       requestAnimationFrame(() => inputRef.current?.focus());
     }
@@ -84,17 +105,33 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
     if (!q) {
       setResults([]);
       setSearching(false);
+      setSearchError(null);
       return;
     }
+    setResults([]);
     setSearching(true);
+    setSearchError(null);
+    let cancelled = false;
     const t = setTimeout(async () => {
       try {
-        setResults(await stocksApi.search(q));
+        const next = await stocksApi.search(q);
+        if (!cancelled) {
+          setResults(next);
+          setSearchError(null);
+        }
+      } catch (cause) {
+        if (!cancelled) {
+          setResults([]);
+          setSearchError(searchErrorText(cause));
+        }
       } finally {
-        setSearching(false);
+        if (!cancelled) setSearching(false);
       }
     }, 200);
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [query]);
 
   const pickTicker = useCallback(
@@ -241,6 +278,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                 value={query}
                 onChange={(e) => {
                   setQuery(e.target.value);
+                  setSearchError(null);
                   setActive(0);
                 }}
                 onKeyDown={onKeyDown}
@@ -256,7 +294,22 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
             </div>
 
             <div ref={listRef} className="max-h-[46vh] overflow-y-auto py-1.5">
-              {flat.length === 0 && (
+              {searching && flat.length === 0 && (
+                <div className="flex flex-col items-center py-10 text-center" role="status">
+                  <span className="size-5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-hidden="true" />
+                  <p className="mt-3 text-body-s text-ink-400">正在搜索股票目录…</p>
+                </div>
+              )}
+              {!searching && searchError && (
+                <div className="flex flex-col items-center px-6 py-10 text-center" role="alert" aria-live="assertive">
+                  <span className="flex size-9 items-center justify-center rounded-full bg-down-50 text-down-700">
+                    <Icon name="x" size={15} />
+                  </span>
+                  <p className="mt-3 text-body-s font-medium text-ink-700">搜索未完成</p>
+                  <p className="mt-1 max-w-sm text-micro leading-5 text-ink-400">{searchError}</p>
+                </div>
+              )}
+              {!searching && !searchError && flat.length === 0 && (
                 <div className="flex flex-col items-center py-10 text-center">
                   <Icon name="search" size={30} className="text-ink-300" />
                   <p className="mt-3 text-body-s text-ink-400">没有匹配的结果</p>

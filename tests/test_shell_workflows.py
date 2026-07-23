@@ -19,12 +19,18 @@ from app.tools import personal_secrets
 ROOT = Path(__file__).resolve().parents[1]
 
 WORKER_HEALTH = (
-    '{"healthy":true,"schema_version":"optix-worker-v2","tasks":['
-    '{"task_name":"breakout"},{"task_name":"catalyst_sync"},'
-    '{"task_name":"focus"},{"task_name":"ai_jobs"},'
-    '{"task_name":"maintenance"},{"task_name":"public_home"},'
+    '{"healthy":true,"status":"ok","schema_version":"optix-worker-v2","tasks":['
+    '{"task_name":"breakout","enabled":true,"status":"idle","consecutive_failures":0},'
+    '{"task_name":"catalyst_sync","enabled":true,"status":"idle","consecutive_failures":0},'
+    '{"task_name":"focus","enabled":true,"status":"idle","consecutive_failures":0},'
+    '{"task_name":"ai_jobs","enabled":true,"status":"idle","consecutive_failures":0},'
+    '{"task_name":"maintenance"},'
+    '{"task_name":"stock_directory","enabled":true,"status":"idle","consecutive_failures":0},'
+    '{"task_name":"public_home","enabled":true,"status":"idle","consecutive_failures":0},'
+    '{"task_name":"earnings_analysis"},'
     '{"task_name":"focus_refresh"},'
-    '{"task_name":"strength_refresh"},{"task_name":"breakout_refresh"},'
+    '{"task_name":"strength_refresh","enabled":true,"status":"idle","consecutive_failures":0},'
+    '{"task_name":"breakout_refresh"},'
     '{"task_name":"retention"}]}'
 )
 REMOVED_RUNTIME_KEYS = (
@@ -117,6 +123,8 @@ case "${{1:-}}" in
             log verify-worker
             worker_health='{WORKER_HEALTH}'
             printf '%s\n' "${{FAKE_WORKER_HEALTH:-$worker_health}}"
+        elif [[ " $* " == *" worker python -m app.tools.verify_release_data"* ]]; then
+            printf '{{"ready":true,"required":true,"stock_directory_ready":true,"earnings_complete":true}}\n'
         elif [[ " $* " == *" worker python - "* ]]; then
             printf '{{"watchlist":true,"available":["watchlist","indices","focus_overview","focus_chart","focus_signals","earnings","unusual"]}}\n'
         else
@@ -185,6 +193,7 @@ def _copy_deployment_validator(root: Path) -> None:
         "tools/__init__.py",
         "tools/migrate_legacy_machine_environment.py",
         "tools/validate_personal_deployment.py",
+        "tools/verify_release_data.py",
     ):
         shutil.copy2(ROOT / "backend" / "app" / relative, backend / relative)
 
@@ -297,10 +306,20 @@ def test_deploy_builds_only_current_services_and_verifies_both(tmp_path: Path) -
     assert '"$ROOT_DIR/scripts/compose.sh" "$@"' in script
     assert "Stopping legacy workers before the unified worker starts." in script
     assert "verify_public_snapshots" in script
-    assert 'get_personal_config().access.mode != "password"' in script
-    assert '"reason": "private_network"' in script
-    assert "public_home_entry_is_servable" in script
-    assert "_read_watchlist_snapshot" in script
+    assert 'payload.get("status") != "ok"' in script
+    assert '"ai_jobs",' in script
+    assert 'tasks[name].get("enabled") is not True' in script
+    release_gate = (
+        root / "backend" / "app" / "tools" / "verify_release_data.py"
+    ).read_text(encoding="utf-8")
+    assert '{"AAOI", "NBIS"}.issubset(directory_symbols)' in release_gate
+    assert 'directory_value.get("provider") == "Massive"' in release_gate
+    assert 'earnings_payload.get("data_limited") is False' in release_gate
+    assert 'earnings_payload.get("source_status") == "active"' in release_gate
+    assert 'get_personal_config().access.mode != "password"' in release_gate
+    assert '"reason": "private_network"' in release_gate
+    assert "public_home_entry_is_servable" in release_gate
+    assert "_read_watchlist_snapshot" in release_gate
 
 
 def test_deploy_validates_with_built_runtime_when_host_python_lacks_dependencies(
@@ -477,7 +496,7 @@ def test_deploy_selects_machine_file_without_caller_exports(tmp_path: Path) -> N
     assert set(selected) == {".env,machine.env"}
 
 
-def test_deploy_requires_all_ten_unified_task_types(tmp_path: Path) -> None:
+def test_deploy_requires_all_twelve_unified_task_types(tmp_path: Path) -> None:
     root, environment = _deployment_root(tmp_path)
     environment["FAKE_WORKER_HEALTH"] = (
         '{"healthy":true,"schema_version":"optix-worker-v2",'
@@ -487,7 +506,22 @@ def test_deploy_requires_all_ten_unified_task_types(tmp_path: Path) -> None:
     result = _run_deploy(root, environment)
 
     assert result.returncode != 0
-    assert "all ten task types" in result.stderr
+    assert "all twelve task types" in result.stderr
+
+
+def test_deploy_rejects_disabled_critical_worker_task(tmp_path: Path) -> None:
+    root, environment = _deployment_root(tmp_path)
+    payload = json.loads(WORKER_HEALTH)
+    ai_task = next(
+        item for item in payload["tasks"] if item["task_name"] == "ai_jobs"
+    )
+    ai_task["status"] = "disabled"
+    environment["FAKE_WORKER_HEALTH"] = json.dumps(payload, separators=(",", ":"))
+
+    result = _run_deploy(root, environment)
+
+    assert result.returncode != 0
+    assert "all twelve task types" in result.stderr
 
 
 @pytest.mark.parametrize(

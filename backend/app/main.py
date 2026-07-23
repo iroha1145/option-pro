@@ -141,6 +141,7 @@ async def _redacted_request_validation_error(
 _rl_buckets: dict[str, _deque] = {}
 _RL_HEAVY_LIMIT = 30    # max requests / window for heavy endpoints
 _RL_LIGHT_LIMIT = 200   # max requests / window for cheap endpoints
+_RL_MARKET_READ_LIMIT = 200  # independently bounded cache-protected market reads
 _RL_WINDOW = 60         # seconds
 _RL_MAX_KEYS = 10_000   # safety valve against IP-churn memory growth
 _rl_last_prune = 0.0
@@ -162,6 +163,22 @@ _LIGHT_API_PATHS = {
     "/api/breakouts/current",
     "/api/breakouts/status",
 }
+_CACHED_MARKET_READ_PATHS = {
+    "/api/stocks/watchlist",
+    "/api/stocks/search",
+    "/api/strength/scan",
+}
+_CACHED_MARKET_READ_PATTERNS = tuple(
+    _re.compile(pattern, _re.IGNORECASE)
+    for pattern in (
+        r"^/api/stocks/[^/]+$",
+        r"^/api/stocks/[^/]+/(?:signals|chart)$",
+        r"^/api/options/[^/]+/(?:expirations|chain)$",
+        r"^/api/signals/stock/[^/]+$",
+        r"^/api/strength/stocks/[^/]+$",
+        r"^/api/breakouts/tickers/[^/]+$",
+    )
+)
 _HTML_CSP = (
     "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; "
     "script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
@@ -301,6 +318,8 @@ def _scope_is_https(scope) -> bool:
 
 def _is_heavy_api_path(path: str, method: str = "GET") -> bool:
     normalized_method = method.upper()
+    if _is_cached_market_read_path(path, normalized_method):
+        return False
     if normalized_method == "GET" and (
         path.startswith("/api/ai/jobs/")
         or path == "/api/catalysts/status"
@@ -320,6 +339,22 @@ def _is_heavy_api_path(path: str, method: str = "GET") -> bool:
         path == "/api/market/indices"
         or path.startswith(_HEAVY_API_PREFIXES)
         or path.startswith("/api/stocks/")
+    )
+
+
+def _is_cached_market_read_path(path: str, method: str = "GET") -> bool:
+    """Identify bounded read endpoints already protected by server-side cache.
+
+    A stock drawer fans out across quote, chart, signal, option and event
+    snapshots. Keeping these reads in their own finite bucket prevents normal
+    navigation from consuming the stricter mutation/provider-work budget.
+    """
+
+    if method.upper() not in {"GET", "HEAD"}:
+        return False
+    return path in _CACHED_MARKET_READ_PATHS or any(
+        pattern.fullmatch(path) is not None
+        for pattern in _CACHED_MARKET_READ_PATTERNS
     )
 
 
@@ -450,9 +485,18 @@ class _GatewayMiddleware:
 
         if method != "OPTIONS" and path.startswith("/api/"):
             # ── Per-IP rate limit ──
-            is_heavy = _is_heavy_api_path(path, method)
-            limit = _RL_HEAVY_LIMIT if is_heavy else _RL_LIGHT_LIMIT
-            key = f"{_scope_client_ip(scope)}:{'h' if is_heavy else 'l'}"
+            is_market_read = _is_cached_market_read_path(path, method)
+            is_heavy = not is_market_read and _is_heavy_api_path(path, method)
+            if is_market_read:
+                limit = _RL_MARKET_READ_LIMIT
+                bucket_kind = "m"
+            elif is_heavy:
+                limit = _RL_HEAVY_LIMIT
+                bucket_kind = "h"
+            else:
+                limit = _RL_LIGHT_LIMIT
+                bucket_kind = "l"
+            key = f"{_scope_client_ip(scope)}:{bucket_kind}"
             now = _time.time()
             _prune_rl_buckets(now)
             bucket = _rl_buckets.get(key)

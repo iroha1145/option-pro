@@ -46,6 +46,21 @@ def _watchlist_payload(label: str) -> dict:
     }
 
 
+def _strength_payload_with_option_rows(rows: list[dict]) -> dict:
+    parameters = {
+        key: value
+        for key, value in strength.DEFAULT_STRENGTH_SCAN_PARAMETERS.items()
+        if key != "include_options"
+    }
+    return {
+        "as_of": "2026-07-23T15:30:00+00:00",
+        "params": parameters,
+        "count": len(rows),
+        "rows": rows,
+        "results": rows,
+    }
+
+
 @pytest.fixture(autouse=True)
 def _clear_process_caches(monkeypatch: pytest.MonkeyPatch):
     stocks._endpoint_cache.clear()
@@ -105,6 +120,11 @@ def test_public_cold_cache_never_calls_market_data_providers(
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", unexpected_async("earnings"))
     monkeypatch.setattr(market, "_build_indices", unexpected_async("market-indices"))
     monkeypatch.setattr(sectors, "_iv_ranking_payload", unexpected_async("sector-iv"))
+    monkeypatch.setattr(
+        sectors,
+        "_SECTOR_IV_SNAPSHOT_DIR",
+        tmp_path / "missing-sector-iv",
+    )
     monkeypatch.setattr(signals, "compute_market_signals", unexpected("market-signals"))
     monkeypatch.setattr(signals, "compute_stock_signals", unexpected("stock-signals"))
     monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", tmp_path / "missing-strength.json")
@@ -116,7 +136,10 @@ def test_public_cold_cache_never_calls_market_data_providers(
         with request_owner_access_context(False):
             await _expect_unavailable(stocks.watchlist(None))
             await _expect_unavailable(stocks.watchlist("AAPL,MSFT"))
-            assert await stocks.search_stocks("ZZZZUNLISTED") == []
+            with pytest.raises(HTTPException) as captured:
+                await stocks.search_stocks("ZZZZUNLISTED")
+            assert captured.value.status_code == 503
+            assert captured.value.detail["code"] == "stock_directory_unavailable"
             await _expect_unavailable(stocks.stock_signals("AAPL"))
             await _expect_unavailable(stocks.stock_logo("AAPL"))
             await _expect_unavailable(stocks.stock_overview("AAPL"))
@@ -240,6 +263,285 @@ def test_public_endpoints_serve_existing_cache_entries_without_loaders(
             assert (await sectors.iv_ranking(sector_id))["sector_id"] == sector_id
 
     asyncio.run(scenario())
+
+
+def test_sector_iv_reads_persisted_strength_worker_options_without_provider_calls(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    now = 1_790_000_000.0
+    path = tmp_path / "strength-snapshot-v1.json"
+    rows = [
+        {
+            "ticker": "NVDA",
+            "name": "英伟达",
+            "price": 172.25,
+            "option_context": {
+                "provider": "Yahoo/yfinance",
+                "source_status": "active",
+                "atm_iv_percent": 48.0,
+                "as_of": "2026-07-23T15:29:00+00:00",
+            },
+        },
+        {
+            "ticker": "AMD",
+            "name": "超威半导体",
+            "price": 161.5,
+            "option_context": {
+                "provider": "Yahoo/yfinance",
+                "source_status": "active",
+                "atm_iv_percent": 32.0,
+                "as_of": "2026-07-23T15:28:00+00:00",
+            },
+        },
+        {
+            "ticker": "MSFT",
+            "name": "微软",
+            "price": 501.0,
+            "option_context": {
+                "provider": "Yahoo/yfinance",
+                "source_status": "active",
+                "atm_iv_percent": 25.0,
+                "as_of": "2026-07-23T15:27:00+00:00",
+            },
+        },
+    ]
+    strength._write_strength_snapshot(
+        path,
+        parameters=dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS),
+        payload=_strength_payload_with_option_rows(rows),
+        saved_at=now - 300,
+    )
+    original = path.read_bytes()
+    monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", path)
+    monkeypatch.setattr(
+        sectors,
+        "_SECTOR_IV_SNAPSHOT_DIR",
+        tmp_path / "missing-sector-iv",
+    )
+    monkeypatch.setattr(sectors.time, "time", lambda: now)
+    calls = 0
+
+    async def unexpected_scan(_sector_id: str) -> dict:
+        nonlocal calls
+        calls += 1
+        raise AssertionError("persisted worker snapshot must suppress provider scan")
+
+    monkeypatch.setattr(sectors, "_iv_ranking_payload", unexpected_scan)
+
+    async def scenario() -> tuple[dict, dict, dict]:
+        with request_owner_access_context(False):
+            public_payload = await sectors.iv_ranking("semiconductors")
+            heatmap_payload = await sectors.heatmap("semiconductors")
+        with request_owner_access_context(True):
+            owner_payload = await sectors.iv_ranking("software")
+        return public_payload, heatmap_payload, owner_payload
+
+    public_payload, heatmap_payload, owner_payload = asyncio.run(scenario())
+
+    assert calls == 0
+    assert public_payload["snapshot_source"] == "strength_worker"
+    assert public_payload["_cached"] is True
+    assert public_payload["_stale"] is False
+    assert public_payload["source_status"] == "degraded"
+    assert public_payload["success_count"] == 2
+    assert public_payload["requested_count"] == len(
+        sectors.SECTORS["semiconductors"]["tickers"]
+    )
+    assert [item["ticker"] for item in public_payload["rankings"]] == [
+        "NVDA",
+        "AMD",
+    ]
+    assert [item["sector_iv_rank"] for item in public_payload["rankings"]] == [
+        100.0,
+        0.0,
+    ]
+    assert public_payload["providers"] == ["Yahoo/yfinance"]
+    assert heatmap_payload["data"] == heatmap_payload["rankings"]
+    assert heatmap_payload["data"][0]["ticker"] == "NVDA"
+    assert owner_payload["rankings"][0]["ticker"] == "MSFT"
+    assert owner_payload["rankings"][0]["sector_iv_rank"] == 50.0
+    assert path.read_bytes() == original
+
+
+def test_sector_iv_marks_expired_strength_worker_snapshot_stale(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    now = 1_790_000_000.0
+    path = tmp_path / "strength-snapshot-v1.json"
+    row = {
+        "ticker": "NVDA",
+        "price": 170.0,
+        "option_context": {
+            "provider": "Yahoo/yfinance",
+            "source_status": "active",
+            "atm_iv_percent": 45.0,
+        },
+    }
+    saved_at = now - strength.STRENGTH_CACHE_TTL_SECONDS - 60
+    strength._write_strength_snapshot(
+        path,
+        parameters=dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS),
+        payload=_strength_payload_with_option_rows([row]),
+        saved_at=saved_at,
+    )
+    monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", path)
+    monkeypatch.setattr(
+        sectors,
+        "_SECTOR_IV_SNAPSHOT_DIR",
+        tmp_path / "missing-sector-iv",
+    )
+    monkeypatch.setattr(sectors.time, "time", lambda: now)
+
+    async def scenario() -> dict:
+        with request_owner_access_context(False):
+            return await sectors.iv_ranking("semiconductors")
+
+    payload = asyncio.run(scenario())
+
+    assert payload["_stale"] is True
+    assert payload["source_status"] == "stale"
+    assert payload["stale_reason"] == "strength_worker_snapshot_expired"
+    assert payload["stale_age_seconds"] == pytest.approx(now - saved_at)
+
+
+def test_sector_iv_rejects_non_provider_option_placeholders(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    now = 1_790_000_000.0
+    path = tmp_path / "strength-snapshot-v1.json"
+    row = {
+        "ticker": "NVDA",
+        "price": 170.0,
+        "option_context": {
+            "provider": "Yahoo/yfinance",
+            "status": "skipped",
+            "atm_iv_percent": 99.0,
+        },
+    }
+    strength._write_strength_snapshot(
+        path,
+        parameters=dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS),
+        payload=_strength_payload_with_option_rows([row]),
+        saved_at=now - 60,
+    )
+    monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", path)
+    monkeypatch.setattr(
+        sectors,
+        "_SECTOR_IV_SNAPSHOT_DIR",
+        tmp_path / "missing-sector-iv",
+    )
+    monkeypatch.setattr(sectors.time, "time", lambda: now)
+
+    async def unexpected_scan(_sector_id: str) -> dict:
+        raise AssertionError("public request must not scan providers")
+
+    monkeypatch.setattr(sectors, "_iv_ranking_payload", unexpected_scan)
+
+    async def scenario() -> None:
+        with request_owner_access_context(False):
+            await _expect_unavailable(sectors.iv_ranking("semiconductors"))
+
+    asyncio.run(scenario())
+
+
+def test_owner_cold_sector_scan_persists_for_public_restart_without_strength_hit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    now = 1_790_000_000.0
+    strength_path = tmp_path / "strength-snapshot-v1.json"
+    strength_row = {
+        "ticker": "PSX",
+        "price": 150.0,
+        "option_context": {
+            "provider": "Yahoo/yfinance",
+            "source_status": "active",
+            "atm_iv_percent": 28.0,
+        },
+    }
+    strength._write_strength_snapshot(
+        strength_path,
+        parameters=dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS),
+        payload=_strength_payload_with_option_rows([strength_row]),
+        saved_at=now - 60,
+    )
+    snapshot_dir = tmp_path / "sector-iv-snapshots-v1"
+    monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", strength_path)
+    monkeypatch.setattr(sectors, "_SECTOR_IV_SNAPSHOT_DIR", snapshot_dir)
+    monkeypatch.setattr(sectors.time, "time", lambda: now)
+    calls = 0
+
+    async def live_rows(sector_id: str) -> list[dict]:
+        nonlocal calls
+        calls += 1
+        assert sector_id == "semiconductors"
+        return [
+            {
+                "ticker": ticker,
+                "name": ticker,
+                "price": 170.0 if ticker == "NVDA" else 160.0,
+                "iv": 0.48 if ticker == "NVDA" else 0.32,
+                "_stale": False,
+                "as_of": "2026-07-23T15:40:00+00:00",
+                "source_status": "active",
+                "provider": "Yahoo/yfinance",
+            }
+            if ticker in {"NVDA", "AMD"}
+            else {
+                "ticker": ticker,
+                "iv": None,
+                "source_status": "insufficient_data",
+            }
+            for ticker in sectors.SECTORS[sector_id]["tickers"]
+        ]
+
+    monkeypatch.setattr(sectors, "_sector_iv_rows", live_rows)
+
+    async def owner_scan() -> dict:
+        with request_owner_access_context(True):
+            return await sectors.iv_ranking("semiconductors")
+
+    owner_payload = asyncio.run(owner_scan())
+    snapshot_path = snapshot_dir / "semiconductors.json"
+
+    assert calls == 1
+    assert owner_payload["snapshot_source"] == "owner_live"
+    assert owner_payload["snapshot_persisted"] is True
+    assert owner_payload["providers"] == ["Yahoo/yfinance"]
+    assert [row["ticker"] for row in owner_payload["rankings"]] == [
+        "NVDA",
+        "AMD",
+    ]
+    assert snapshot_path.is_file()
+    original = snapshot_path.read_bytes()
+
+    # 模拟发布重启：进程内缓存清空，Strength Top20 仍没有半导体。
+    sectors._cache.clear()
+    sectors._locks.clear()
+
+    async def unexpected_live_rows(_sector_id: str) -> list[dict]:
+        raise AssertionError("public restart read must not scan providers")
+
+    monkeypatch.setattr(sectors, "_sector_iv_rows", unexpected_live_rows)
+
+    async def public_read() -> dict:
+        with request_owner_access_context(False):
+            return await sectors.iv_ranking("semiconductors")
+
+    public_payload = asyncio.run(public_read())
+
+    assert calls == 1
+    assert public_payload["snapshot_source"] == "sector_owner_snapshot"
+    assert public_payload["_cached"] is True
+    assert public_payload["_stale"] is False
+    assert [row["ticker"] for row in public_payload["rankings"]] == [
+        "NVDA",
+        "AMD",
+    ]
+    assert snapshot_path.read_bytes() == original
 
 
 def test_request_owner_context_is_task_local_and_restored() -> None:

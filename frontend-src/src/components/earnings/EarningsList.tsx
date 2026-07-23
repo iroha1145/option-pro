@@ -160,12 +160,12 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
   return (
     <section className="card-surface overflow-hidden" aria-label="即将公布">
       {/* 桌面列头（≥md） */}
-      <div className="hidden border-b border-line bg-card-warm px-4 py-2.5 md:grid md:grid-cols-[minmax(160px,1.4fr)_84px_minmax(140px,1.2fr)_96px_88px] md:gap-3 xl:grid-cols-[minmax(170px,1.4fr)_84px_minmax(150px,1.2fr)_96px_92px_96px_88px]">
+      <div className="hidden border-b border-line bg-card-warm px-4 py-2.5 md:grid md:grid-cols-[minmax(160px,1.4fr)_84px_minmax(140px,1.2fr)_96px_88px] md:gap-3 2xl:grid-cols-[minmax(170px,1.4fr)_84px_minmax(150px,1.2fr)_96px_92px_96px_88px]">
         <span className="eyebrow">代码</span>
         <span className="eyebrow">时间</span>
         <span className="eyebrow">EPS 预期 vs 实际</span>
-        <span className="eyebrow hidden xl:block">营收预期</span>
-        <span className="eyebrow hidden xl:block">市值</span>
+        <span className="eyebrow hidden 2xl:block">营收预期</span>
+        <span className="eyebrow hidden 2xl:block">市值</span>
         <span className="eyebrow">预期波动</span>
         <span className="eyebrow text-right">AI 影响</span>
       </div>
@@ -223,7 +223,7 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: Math.min(i * 0.04, 0.6) }}
                     className={cn(
-                      'hidden cursor-pointer items-center border-b border-line px-4 py-3 transition-colors duration-fast last:border-b-0 md:grid md:grid-cols-[minmax(160px,1.4fr)_84px_minmax(140px,1.2fr)_96px_88px] md:gap-3 xl:grid-cols-[minmax(170px,1.4fr)_84px_minmax(150px,1.2fr)_96px_92px_96px_88px]',
+                      'hidden cursor-pointer items-center border-b border-line px-4 py-3 transition-colors duration-fast last:border-b-0 md:grid md:grid-cols-[minmax(160px,1.4fr)_84px_minmax(140px,1.2fr)_96px_88px] md:gap-3 2xl:grid-cols-[minmax(170px,1.4fr)_84px_minmax(150px,1.2fr)_96px_92px_96px_88px]',
                       selected ? 'bg-brand-50' : 'hover:bg-paper-2',
                     )}
                   >
@@ -252,11 +252,11 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
                       </span>
                     </span>
                     {/* 营收预期 */}
-                    <span className="hidden font-mono text-data-m text-ink-600 tnum xl:block">
-                      {row.revEstimate != null ? `$${fmtCompact(row.revEstimate * 1e6)}` : '—'}
+                    <span className="hidden font-mono text-data-m text-ink-600 tnum 2xl:block">
+                      {row.revEstimate != null ? `$${fmtCompact(row.revEstimate)}` : '—'}
                     </span>
                     {/* 市值 */}
-                    <span className="hidden font-mono text-data-m text-ink-600 tnum xl:block">
+                    <span className="hidden font-mono text-data-m text-ink-600 tnum 2xl:block">
                       {marketCap != null ? `$${fmtCompact(marketCap)}` : '—'}
                     </span>
                     {/* 预期波动 */}

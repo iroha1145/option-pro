@@ -422,6 +422,49 @@ def test_stock_overview_overlays_massive_quote_and_keeps_yahoo_fundamentals(
     assert payload["pe_ratio"] == pytest.approx(31.0)
 
 
+def test_stock_overview_supports_massive_dot_class_symbols_and_yahoo_profiles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    quote_at = datetime(2026, 7, 23, 14, 15, tzinfo=timezone.utc)
+
+    class FakeTicker:
+        def __init__(self, symbol: str):
+            assert symbol == "BRK-B"
+            self.fast_info = SimpleNamespace(
+                last_price=None,
+                previous_close=None,
+                last_volume=None,
+                market_cap=1_000_000_000_000,
+            )
+            self.info = {"shortName": "Berkshire Hathaway Inc. Class B"}
+
+    monkeypatch.setattr(stocks.yf, "Ticker", FakeTicker)
+    monkeypatch.setattr(massive, "configured", lambda: True)
+    monkeypatch.setattr(
+        massive,
+        "snapshot_batch",
+        lambda symbols: {
+            "BRK.B": {
+                "minute": {
+                    "t": int(quote_at.timestamp() * 1_000),
+                    "c": 500.25,
+                },
+                "day": {"c": 500.25, "v": 2_500},
+                "prev_close": 498.0,
+                "as_of": quote_at.isoformat(),
+            }
+        },
+    )
+
+    payload = asyncio.run(stocks._stock_overview_impl("BRK.B"))
+
+    assert payload["ticker"] == "BRK.B"
+    assert payload["price"] == pytest.approx(500.25)
+    assert payload["price_provider"] == "Massive"
+    assert payload["profile_provider"] == "Yahoo/yfinance"
+    assert payload["name_en"] == "Berkshire Hathaway Inc. Class B"
+
+
 def test_stock_overview_falls_back_to_yahoo_quote_when_massive_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -461,3 +504,86 @@ def test_stock_overview_falls_back_to_yahoo_quote_when_massive_fails(
     assert payload["volume"] == 1_000
     assert payload["as_of"] == quote_at.isoformat()
     assert payload["price_provider"] == "Yahoo/yfinance"
+
+
+def test_stock_overview_survives_yahoo_failure_with_massive_quote(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    quote_at = datetime(2026, 7, 23, 14, 15, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(
+        stocks.yf,
+        "Ticker",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("Yahoo rate limited")
+        ),
+    )
+    monkeypatch.setattr(massive, "configured", lambda: True)
+    monkeypatch.setattr(
+        massive,
+        "snapshot_batch",
+        lambda symbols: {
+            "AAOI": {
+                "minute": {
+                    "t": int(quote_at.timestamp() * 1_000),
+                    "c": 25.125,
+                },
+                "day": {
+                    "t": int(quote_at.timestamp() * 1_000),
+                    "o": 24.5,
+                    "h": 25.5,
+                    "l": 24.25,
+                    "c": 25.125,
+                    "v": 50_000,
+                },
+                "prev_close": 24.0,
+                "as_of": quote_at.isoformat(),
+            }
+        },
+    )
+
+    payload = asyncio.run(stocks._stock_overview_impl("AAOI"))
+
+    assert payload["price"] == pytest.approx(25.125)
+    assert payload["prev_close"] == pytest.approx(24.0)
+    assert payload["change"] == pytest.approx(1.125)
+    assert payload["change_percent"] == pytest.approx(4.6875)
+    assert payload["price_provider"] == "Massive"
+    assert payload["profile_provider"] is None
+    assert payload["name_en"] == "AAOI"
+
+
+def test_stock_technical_signals_use_massive_daily_history_first(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    index = pd.date_range("2026-01-01", periods=100, freq="B", tz="UTC")
+    frame = pd.DataFrame(
+        {
+            "Open": [100.0 + i * 0.2 for i in range(100)],
+            "High": [101.0 + i * 0.2 for i in range(100)],
+            "Low": [99.0 + i * 0.2 for i in range(100)],
+            "Close": [100.5 + i * 0.2 for i in range(100)],
+            "Volume": [10_000 + i * 100 for i in range(100)],
+        },
+        index=index,
+    )
+    monkeypatch.setattr(massive, "configured", lambda: True)
+    monkeypatch.setattr(
+        stocks,
+        "_massive_chart_history",
+        lambda *_args, **_kwargs: frame,
+    )
+    monkeypatch.setattr(
+        stocks.yf,
+        "Ticker",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("Massive signal history fell through to Yahoo")
+        ),
+    )
+
+    payload = asyncio.run(stocks._build_stock_signals("AAOI"))
+
+    assert payload["ticker"] == "AAOI"
+    assert payload["price_provider"] == "Massive"
+    assert payload["price"] == pytest.approx(120.3)
+    assert set(payload["signals"]) == {"rsi", "macd", "ema20", "sma50", "volume"}

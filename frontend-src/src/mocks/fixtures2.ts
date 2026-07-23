@@ -550,8 +550,8 @@ const earningsList: EarningsItem[] = (() => {
       timing: r.chance(0.5) ? 'bmo' : 'amc',
       epsEstimate: epsEst,
       epsActual: reported ? round2(epsEst * r.float(0.86, 1.18)) : null,
-      revEstimate: Math.round(r.float(40, 980) * 10) / 10,
-      revActual: reported ? Math.round(r.float(40, 990) * 10) / 10 : null,
+      revEstimate: Math.round(r.float(40, 980) * 1_000_000),
+      revActual: reported ? Math.round(r.float(40, 990) * 1_000_000) : null,
     } as EarningsItem;
   };
   for (let ms = startMs; ms <= endMs; ms += 86_400_000) {
@@ -1048,6 +1048,7 @@ export interface EconomicEvent {
   forecast: string;
   previous: string;
   actual: string | null;
+  releaseStatus?: 'scheduled' | 'released' | 'awaiting_source';
 }
 
 export interface SourceHealth {
@@ -1613,6 +1614,8 @@ export function getEconomicCalendar(): EconomicEvent[] {
       const base = new Date();
       base.setHours(0, 0, 0, 0);
       const at = new Date(base.getTime() + e.d * 86_400_000 + e.h * 3600_000 + e.m * 60_000);
+      const releaseStatus: EconomicEvent['releaseStatus'] =
+        e.a !== null ? 'released' : at.getTime() <= Date.now() ? 'awaiting_source' : 'scheduled';
       return {
         eventId: `ev-${100 + i}`,
         country: '美国',
@@ -1623,6 +1626,7 @@ export function getEconomicCalendar(): EconomicEvent[] {
         forecast: e.f,
         previous: e.p,
         actual: e.a,
+        releaseStatus,
       };
     })
     .sort((a, b) => (a.scheduledAt < b.scheduledAt ? -1 : 1));
@@ -1645,7 +1649,7 @@ export function getCatalystsSources(): SourceHealth[] {
     latencyMs: d.degraded ? Math.round(r.float(2400, 3800)) : Math.round(r.float(220, 980)),
     lastFetchedAt: new Date(Date.now() - (40 + i * 26) * 1000).toISOString(),
     itemsToday: Math.round(r.float(6, 26)),
-    note: d.degraded ? '响应延迟高于阈值，已降频抓取' : '运行正常',
+    note: d.degraded ? '数据覆盖时间落后，采集流处于降级状态' : '运行正常',
   }));
 }
 

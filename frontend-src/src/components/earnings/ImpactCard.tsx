@@ -6,7 +6,7 @@
  *  - 已缓存 → 真实契约结果（摘要 / 预期 / 关联标的）
  *  - 409 analysis_required → owner「生成分析」（confirm 注明模型费用）→ 创建 job 退避轮询 [2,3,5,8,10]s
  *    （活跃 led-pulse + 服务端任务状态，终态渲染结果 / 失败原因 + 重试）
- *  - visitor →「登录后可用模型分析」；AI 关闭 →「AI 分析未启用」（不假造内容）
+ *  - 无论生成开关是否开启都先读取缓存；仅在缺少结果时区分 visitor / AI 关闭
  * 纪律：不展示后端契约没有的推导指标
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -29,6 +29,8 @@ import Icon from '@/components/icons';
 import SourceNote from '@/components/shared/SourceNote';
 import { SkeletonText } from '@/components/shared/Skeleton';
 import PulseDot from './PulseDot';
+import type { EarningsRow } from './types';
+import { exNum, exStr } from './types';
 
 /* ---------------- AIJobPublic 状态机（api-contract §0.4） ---------------- */
 const ACTIVE_STATUSES = new Set(['preparing', 'pending', 'queued', 'in_progress', 'processing', 'running', 'cancel_requested']);
@@ -45,7 +47,7 @@ function JobSteps({ job }: { job: AiJob }) {
     <div role="status">
       <p className="flex items-center gap-2 text-caption text-ink-500">
         <PulseDot className="bg-ai-600" size={8} />
-        {queued ? '任务正在排队' : '模型正在处理'}
+        {queued ? '第 1 / 1 条正在排队' : '正在分析第 1 / 1 条'}
         <span className="ml-auto font-mono text-micro text-ai-600 tnum">
           {job.progress === null ? '等待服务端状态' : `${Math.round(job.progress)}%`}
         </span>
@@ -115,12 +117,13 @@ type Phase =
 
 interface ImpactCardProps {
   ticker: string | null;
+  row?: EarningsRow | null;
   onAnalyzed: (ticker: string) => void;
   className?: string;
 }
 
-export default function ImpactCard({ ticker, onAnalyzed, className }: ImpactCardProps) {
-  const { isOwner, aiEnabled } = useAccess();
+export default function ImpactCard({ ticker, row, onAnalyzed, className }: ImpactCardProps) {
+  const { isOwner, aiEnabled, aiAvailable } = useAccess();
   const { openTicker } = useShell();
   const toast = useToast();
 
@@ -147,7 +150,7 @@ export default function ImpactCard({ ticker, onAnalyzed, className }: ImpactCard
       } catch (e) {
         const err = e instanceof ApiError ? e : null;
         if (err && (err.code === 409 || err.bizCode === 'analysis_required')) {
-          setPhase(isOwner ? 'needs-analysis' : 'locked-visitor');
+          setPhase(!isOwner ? 'locked-visitor' : aiAvailable ? 'needs-analysis' : 'locked-ai');
         } else if (err && err.code === 401) {
           setPhase('locked-visitor');
         } else if (err && err.code === 503) {
@@ -160,7 +163,7 @@ export default function ImpactCard({ ticker, onAnalyzed, className }: ImpactCard
         return false;
       }
     },
-    [isOwner],
+    [aiAvailable, isOwner],
   );
 
   /* 轮询任务（退避 [2,3,5,8,10]s · 隐藏标签页 ×3 降频 · 终态停止） */
@@ -206,7 +209,7 @@ export default function ImpactCard({ ticker, onAnalyzed, className }: ImpactCard
   );
 
   /* 换标的/权限变化 → 渲染期同步重置（adjust-state-during-render），副作用留给 effect */
-  const contextKey = `${ticker ?? ''}|${aiEnabled}|${isOwner}`;
+  const contextKey = `${ticker ?? ''}|${aiEnabled}|${aiAvailable}|${isOwner}`;
   const [prevContextKey, setPrevContextKey] = useState(contextKey);
   if (contextKey !== prevContextKey) {
     setPrevContextKey(contextKey);
@@ -214,25 +217,33 @@ export default function ImpactCard({ ticker, onAnalyzed, className }: ImpactCard
     setConfirming(false);
     setImpact(null);
     setErrorMsg('');
-    setPhase(!ticker ? 'idle' : !aiEnabled ? 'locked-ai' : 'loading');
+    setPhase(!ticker ? 'idle' : 'loading');
   }
 
-  /* 拉取缓存结果 + 卸载/换标的停止轮询（blur-in「聚焦」由 key 驱动） */
+  /* 缓存读取不受生成开关影响；卸载/换标的停止轮询（blur-in「聚焦」由 key 驱动） */
   useEffect(() => {
-    if (!ticker || !aiEnabled) return stopPolling;
+    if (!ticker) return stopPolling;
     const id = window.setTimeout(() => void loadImpact(ticker), 0);
     return () => {
       window.clearTimeout(id);
       stopPolling();
     };
-  }, [ticker, aiEnabled, isOwner, loadImpact, stopPolling]);
+  }, [ticker, aiEnabled, aiAvailable, isOwner, loadImpact, stopPolling]);
 
   /* 创建任务（owner，confirm 注明模型费用） */
   const startJob = async () => {
     if (!ticker) return;
     setConfirming(false);
     try {
-      const j = await aiJobsApi.createEarningsImpact(ticker);
+      const j = await aiJobsApi.createEarningsImpact({
+        ticker,
+        name: row?.name ?? '',
+        sector: row ? exStr(row, 'sector') ?? '' : '',
+        earnings_date: row?.date ?? '',
+        eps_estimate: row?.epsEstimate ?? null,
+        revenue_estimate: row?.revEstimate ?? null,
+        market_cap: row ? exNum(row, 'marketCap') : null,
+      });
       setJob(j);
       setPhase('job');
       pollJob(j.id, ticker);
@@ -304,8 +315,12 @@ export default function ImpactCard({ ticker, onAnalyzed, className }: ImpactCard
           {phase === 'locked-ai' && (
             <LockedPanel
               iconClass="text-ink-300"
-              title="AI 分析未启用"
-              description="模型分析开关已关闭，开启后可生成财报连锁影响。"
+              title={aiEnabled ? 'AI 分析暂不可用' : 'AI 分析未启用'}
+              description={
+                aiEnabled
+                  ? '模型服务当前不可用，已有分析仍会照常显示。'
+                  : '模型生成开关已关闭，已有分析仍会照常显示。'
+              }
             />
           )}
 
@@ -487,7 +502,7 @@ export default function ImpactCard({ ticker, onAnalyzed, className }: ImpactCard
                     );
                   })}
                 </div>
-                <SourceNote className="mt-3" text="模型生成 · 来源：Optix Research · 仅供研究" />
+                <SourceNote className="mt-3" text="模型生成 · 基于当前财报日历字段 · 仅供研究" />
               </Section>
             </motion.div>
           )}

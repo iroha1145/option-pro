@@ -1181,6 +1181,24 @@ class AIJobRepository:
             ).fetchone()
             return dict(row) if row else None
 
+    def latest_for_ticker(self, job_type: str, ticker: str) -> dict[str, Any] | None:
+        """Return the latest durable job for a ticker, regardless of state."""
+
+        self.initialize()
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT j.*,s.submission_source FROM ai_jobs AS j
+                JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                WHERE j.job_type=?
+                  AND upper(json_extract(j.payload_json, '$.ticker'))=?
+                ORDER BY j.created_at DESC,j.job_id DESC
+                LIMIT 1
+                """,
+                (job_type, ticker.upper()),
+            ).fetchone()
+            return dict(row) if row else None
+
     def claim_due(self, owner: str, lease_seconds: int) -> dict[str, Any] | None:
         self.initialize()
         now_dt = _utcnow()

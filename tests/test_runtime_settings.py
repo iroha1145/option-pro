@@ -18,6 +18,7 @@ from app.services import runtime_settings as runtime_settings_module
 from app.services.runtime_settings import (
     RuntimeAISettingsPatch,
     RuntimeCatalystSettingsPatch,
+    RuntimeEarningsSettingsPatch,
     RuntimeSettingsPatch,
     RuntimeSettingsDocumentV1,
     RuntimeSettingsRevisionNotFound,
@@ -113,6 +114,8 @@ def test_defaults_follow_non_secret_personal_configuration(tmp_path: Path) -> No
     assert document.settings.catalyst.scheduled_times_et == tuple(
         personal.catalyst.scheduled_times_et
     )
+    assert document.settings.earnings.scheduled_analysis_enabled is False
+    assert document.settings.earnings.lookahead_days == 30
     catalyst_document = document.settings.catalyst.model_dump()
     assert "manual_force_reanalysis" not in catalyst_document
     assert "manual_refresh_enabled" not in catalyst_document
@@ -456,6 +459,8 @@ def test_v1_read_migrates_limits_but_preserves_owner_switches_and_schedule(
     assert migrated.settings.ai.manual_analysis_enabled is False
     assert migrated.settings.catalyst.scheduled_analysis_enabled is False
     assert migrated.settings.catalyst.scheduled_times_et == ("07:15", "13:45")
+    assert migrated.settings.earnings.scheduled_analysis_enabled is False
+    assert migrated.settings.earnings.lookahead_days == 30
     assert "daily_token_limit" not in json.loads(path.read_text(encoding="utf-8"))[
         "settings"
     ]["ai"]
@@ -717,6 +722,10 @@ def test_effective_settings_reader_observes_updates_without_process_restart(
                 scheduled_analysis_enabled=True,
                 scheduled_times_et=("09:15", "15:45"),
             ),
+            earnings=RuntimeEarningsSettingsPatch(
+                scheduled_analysis_enabled=True,
+                lookahead_days=30,
+            ),
         ),
         expected_version=1,
     )
@@ -731,6 +740,8 @@ def test_effective_settings_reader_observes_updates_without_process_restart(
     assert effective.catalyst.focus_seconds == 900
     assert effective.catalyst.scheduled_analysis_enabled is True
     assert effective.catalyst.scheduled_times_et == ("09:15", "15:45")
+    assert effective.earnings.scheduled_analysis_enabled is True
+    assert effective.earnings.lookahead_days == 30
 
 
 @pytest.mark.parametrize(

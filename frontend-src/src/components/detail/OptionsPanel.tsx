@@ -265,13 +265,13 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
   // 支持名单只属于 mock 数据集;live 由真实接口自证(到期日为空 → 诚实空态)
   const supported = !isMock || optionsSupported(ticker);
   const [expiration, setExpiration] = useState<string | null>(null);
-  const { data: expirations, loading: expLoading } = usePolling(
+  const { data: expirations, loading: expLoading, error: expError } = usePolling(
     () => optionsApi.expirations(ticker),
     null,
     [ticker],
     );
   const exp = expiration ?? expirations?.[0] ?? null;
-  const { data: chain, loading: chainLoading } = usePolling(
+  const { data: chain, loading: chainLoading, error: chainError } = usePolling(
     () => (exp ? optionsApi.chain(ticker, exp) : Promise.resolve(null)),
     null,
     [ticker, exp],
@@ -304,6 +304,23 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
   }
 
   if (expLoading) return <SkeletonRows rows={6} />;
+  const providerError = expError ?? chainError;
+  if (providerError) {
+    const loginExpired = providerError.code === 401;
+    return (
+      <EmptyState
+        icon="doc-quote"
+        title={loginExpired ? '登录状态已失效' : '期权链真实数据暂不可用'}
+        description={
+          loginExpired
+            ? '请重新登录后读取期权链'
+            : '期权数据使用独立数据源；Massive Stocks Starter 股票订阅不包含期权行情'
+        }
+        variant="error"
+        className="py-8"
+      />
+    );
+  }
   const expList = Array.from(new Set(expirations ?? []));
   if (expList.length === 0) {
     return <EmptyState icon="doc-quote" title="暂无到期日数据" description="期权到期日快照为空" className="py-8" />;

@@ -9,6 +9,12 @@ import ts from 'typescript';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const moduleSourcePath = path.resolve(here, '..', 'src', 'api', 'modules', 'earnings.ts');
 const cardSourcePath = path.resolve(here, '..', 'src', 'components', 'earnings', 'ImpactCard.tsx');
+const pageSourcePath = path.resolve(here, '..', 'src', 'pages', 'Earnings.tsx');
+const listSourcePath = path.resolve(here, '..', 'src', 'components', 'earnings', 'EarningsList.tsx');
+const controlsSourcePath = path.resolve(here, '..', 'src', 'components', 'earnings', 'EarningsAnalysisControls.tsx');
+const densitySourcePath = path.resolve(here, '..', 'src', 'components', 'earnings', 'DensityStrip.tsx');
+const earningsComponentsPath = path.resolve(here, '..', 'src', 'components', 'earnings');
+const commandPaletteSourcePath = path.resolve(here, '..', 'src', 'components', 'CommandPalette.tsx');
 
 function loadNormalizer() {
   const source = fs.readFileSync(moduleSourcePath, 'utf8');
@@ -182,6 +188,27 @@ test('财报日程不把缺失或未知时间伪装成盘前', () => {
   assert.equal(source.includes("?? 'bmo'"), false);
 });
 
+test('财报日历保留全市场覆盖状态和真实供应方', () => {
+  const source = fs.readFileSync(moduleSourcePath, 'utf8');
+  const page = fs.readFileSync(pageSourcePath, 'utf8');
+
+  for (const field of [
+    'data_limited',
+    'source_status',
+    'providers',
+    'as_of',
+    'refresh_status',
+    'refresh_retry_after_seconds',
+  ]) {
+    assert.equal(source.includes(field), true, `财报元数据缺少 ${field}`);
+  }
+  assert.equal(source.includes('mapUpcomingPayload'), true);
+  assert.equal(page.includes('全市场财报源暂时不完整'), true);
+  assert.equal(page.includes('未返回的公司不会用热门名单或估算值补齐'), true);
+  assert.equal(page.includes("q.data.providers.join(' + ')"), true);
+  assert.equal(page.includes('继续使用上一次完整日历'), true);
+});
+
 test('财报影响卡只消费真实分析字段', () => {
   const source = fs.readFileSync(cardSourcePath, 'utf8');
   for (const forbidden of [
@@ -204,4 +231,77 @@ test('财报影响卡只消费真实分析字段', () => {
   ]) {
     assert.equal(source.includes(required), true, `应展示 ${required}`);
   }
+  assert.equal(source.includes('if (!ticker || !aiEnabled)'), false);
+  assert.equal(source.includes("setPhase(!ticker ? 'idle' : 'loading')"), true);
+  assert.equal(source.includes('已有分析仍会照常显示'), true);
+});
+
+test('财报页面保留近期已公布结果并把低交互图表放到分析栏', () => {
+  const page = fs.readFileSync(pageSourcePath, 'utf8');
+  const list = fs.readFileSync(listSourcePath, 'utf8');
+
+  assert.equal(page.includes('distance >= -3 && distance <= 30'), true);
+  assert.equal(page.includes('const LIST_PAGE_SIZE = 80'), true);
+  assert.equal(page.includes('filteredItems.slice(0, visibleLimit)'), true);
+  assert.equal(page.includes('再显示 {Math.min(LIST_PAGE_SIZE'), true);
+  assert.equal(page.includes('row={selectedRow}'), true);
+  const rightColumn = page.slice(page.indexOf('B3 AI 影响 + 低交互图表'));
+  assert.equal(rightColumn.includes('<ImpactCard'), true);
+  assert.equal(rightColumn.includes('<EpsHatchChart'), true);
+  assert.equal(rightColumn.includes('<DensityStrip'), true);
+  assert.equal(list.includes('2xl:grid-cols-['), true);
+  assert.equal(list.includes(' xl:grid-cols-['), false);
+  assert.equal(list.includes('row.revEstimate * 1e6'), false);
+  assert.equal(list.includes('fmtCompact(row.revEstimate)'), true);
+});
+
+test('财报模型任务带真实财报上下文、逐条进度和管理员批量入口', () => {
+  const card = fs.readFileSync(cardSourcePath, 'utf8');
+  const controls = fs.readFileSync(controlsSourcePath, 'utf8');
+
+  for (const field of [
+    'earnings_date',
+    'eps_estimate',
+    'revenue_estimate',
+    'market_cap',
+  ]) {
+    assert.equal(card.includes(field), true, `单股任务缺少 ${field}`);
+  }
+  assert.equal(card.includes('正在分析第 1 / 1 条'), true);
+  assert.equal(controls.includes('earningsScheduledAnalysisEnabled'), true);
+  assert.equal(controls.includes("runtimeApi.workerAction('earnings_analysis')"), true);
+  assert.equal(controls.includes('runtimeApi.waitForWorkerAction(action.requestId)'), true);
+  assert.equal(controls.includes("adminApi.workerAction('earnings_analysis')"), false);
+  for (const field of ['eligible', 'queued', 'existing', 'invalid']) {
+    assert.equal(controls.includes(field), true, `批量任务回执缺少 ${field}`);
+  }
+  assert.equal(controls.includes('自动分析设置已保存，但首次任务失败'), true);
+  assert.equal(controls.includes('最近任务检查'), true);
+  assert.equal(controls.includes('未来 30 天'), true);
+});
+
+test('财报组件不再伪造 Optix Research 来源', () => {
+  const componentSources = fs.readdirSync(earningsComponentsPath)
+    .filter((name) => name.endsWith('.tsx'))
+    .map((name) => fs.readFileSync(path.join(earningsComponentsPath, name), 'utf8'));
+  const density = fs.readFileSync(densitySourcePath, 'utf8');
+  const card = fs.readFileSync(cardSourcePath, 'utf8');
+
+  for (const source of componentSources) {
+    assert.equal(source.includes('Optix Research'), false);
+  }
+  assert.equal(density.includes('后端财报日历接口'), true);
+  assert.equal(density.includes('slice(0, MAX_TOOLTIP_TICKERS)'), true);
+  assert.equal(density.includes('+{n - MAX_TOOLTIP_TICKERS}'), true);
+  assert.equal(card.includes('基于当前财报日历字段'), true);
+});
+
+test('股票搜索失败显示明确错误态，不伪装成空结果', () => {
+  const source = fs.readFileSync(commandPaletteSourcePath, 'utf8');
+
+  assert.equal(source.includes('catch (cause)'), true);
+  assert.equal(source.includes('setSearchError(searchErrorText(cause))'), true);
+  assert.equal(source.includes('role="alert"'), true);
+  assert.equal(source.includes('搜索未完成'), true);
+  assert.equal(source.includes('!searching && !searchError && flat.length === 0'), true);
 });

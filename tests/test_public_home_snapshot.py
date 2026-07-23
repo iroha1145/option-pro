@@ -26,6 +26,7 @@ from app.public_home_snapshot import (
     PUBLIC_HOME_MAX_CLOCK_SKEW_SECONDS,
     PUBLIC_HOME_RESOURCE_ORDER,
     PUBLIC_HOME_RESOURCE_SPECS,
+    PUBLIC_HOME_SNAPSHOT_MAX_BYTES,
     PUBLIC_HOME_SNAPSHOT_VERSION,
     breakout_lead_chart_parameters,
     create_public_home_entry,
@@ -261,16 +262,30 @@ def _payload(resource: str, now: float, *, price: float = 100.0) -> dict:
                     "name": "NVIDIA Corporation",
                     "earnings_date": (market_date + timedelta(days=3)).isoformat(),
                     "days_until": 3,
+                    "timing": "amc",
                     "eps_estimate": 1.0,
+                    "eps_actual": None,
                     "eps_high": 1.1,
                     "eps_low": 0.9,
                     "revenue_estimate": 1_000_000.0,
+                    "revenue_actual": None,
                     "market_cap": 2_000_000.0,
                     "sector": "Technology",
                     "earnings_date_source": "calendar",
                     "estimate_source": "calendar",
+                    "actual_source": None,
+                    "release_status": "scheduled",
+                    "quarter": None,
+                    "year": None,
                     "source_status": "active",
                     "observed_at": _iso(now),
+                    "expected_move_pct": 7.5,
+                    "expected_move_expiration": (
+                        market_date + timedelta(days=7)
+                    ).isoformat(),
+                    "expected_move_source": "Yahoo/yfinance options",
+                    "expected_move_observed_at": _iso(now),
+                    "expected_move_source_status": "active",
                 }
             ],
             "attempted": 1,
@@ -278,6 +293,7 @@ def _payload(resource: str, now: float, *, price: float = 100.0) -> dict:
             "failed_symbols": [],
             "data_limited": False,
             "source_status": "active",
+            "providers": ["Yahoo Finance"],
             "as_of": _iso(now),
         }
     if resource == "unusual":
@@ -513,6 +529,73 @@ def test_snapshot_enforces_payload_size_shape_and_field_whitelists() -> None:
         validate_public_home_payload("unusual", unusual)
 
 
+def test_earnings_snapshot_accepts_finnhub_actuals_and_real_expected_move() -> None:
+    now = _regular_time()
+    payload = _payload("earnings", now)
+    row = payload["earnings"][0]
+    row.update(
+        {
+            "ticker": "AAOI",
+            "name": "Applied Optoelectronics",
+            "earnings_date": (
+                datetime.fromtimestamp(now, timezone.utc).date()
+                - timedelta(days=1)
+            ).isoformat(),
+            "days_until": -1,
+            "earnings_date_source": "finnhub_calendar",
+            "estimate_source": "finnhub_calendar",
+            "eps_actual": 0.42,
+            "revenue_actual": 118_000_000.0,
+            "actual_source": "finnhub_calendar",
+            "release_status": "released",
+            "quarter": 2,
+            "year": 2026,
+            "expected_move_pct": None,
+            "expected_move_expiration": None,
+            "expected_move_source": None,
+            "expected_move_observed_at": None,
+            "expected_move_source_status": None,
+        }
+    )
+    payload["providers"] = ["Finnhub"]
+
+    validated = validate_public_home_payload("earnings", payload)
+
+    assert validated["earnings"][0]["eps_actual"] == 0.42
+    assert validated["providers"] == ["Finnhub"]
+
+
+def test_five_thousand_earnings_rows_fit_public_snapshot_limit(
+    tmp_path: Path,
+) -> None:
+    now = _regular_time()
+    payload = _payload("earnings", now)
+    base = {
+        **payload["earnings"][0],
+        "earnings_date_source": "finnhub_calendar",
+        "estimate_source": "finnhub_calendar",
+    }
+    payload["earnings"] = [
+        {**base, "ticker": f"T{index:04d}", "name": f"Company {index}"}
+        for index in range(5_000)
+    ]
+    payload["attempted"] = 5_000
+    payload["succeeded"] = 5_000
+    payload["providers"] = ["Finnhub"]
+    entry = create_public_home_entry(
+        "earnings",
+        payload,
+        saved_at=now,
+        parameters=public_home_resource_parameters("earnings", now=now),
+    )
+    target = tmp_path / "public-home-snapshot-v1.json"
+
+    write_public_home_snapshot(target, {"earnings": entry}, now=now)
+
+    assert target.stat().st_size < PUBLIC_HOME_SNAPSHOT_MAX_BYTES
+    assert "earnings" in read_public_home_entries(target, now=now)
+
+
 def test_snapshot_write_failure_preserves_previous_generation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -597,6 +680,49 @@ def test_worker_publishes_quick_resources_before_heavy_failure(tmp_path: Path) -
         "focus_signals",
         "market_signals",
     }
+
+
+def test_worker_keeps_complete_earnings_snapshot_when_refresh_is_limited(
+    tmp_path: Path,
+) -> None:
+    now = _regular_time()
+    path = tmp_path / "public-home-snapshot-v1.json"
+    entries = _entries(now)
+    entries["earnings"]["saved_at"] = now - 21_601
+    old_saved_at = entries["earnings"]["saved_at"]
+    old_payload = json.loads(json.dumps(entries["earnings"]["payload"]))
+    write_public_home_snapshot(path, entries, now=now)
+    _seed_watchlist(path, now)
+    calls = 0
+
+    async def limited(_parameters: dict) -> dict:
+        nonlocal calls
+        calls += 1
+        payload = _payload("earnings", now)
+        payload["earnings"][0]["ticker"] = "PARTIAL"
+        payload["earnings"][0]["name"] = "Partial fallback"
+        payload["data_limited"] = True
+        payload["source_status"] = "degraded"
+        return payload
+
+    task = PublicHomeTask(
+        _task_config(),
+        builders={"earnings": limited},
+        snapshot_path=path,
+        clock=lambda: now,
+    )
+
+    result = asyncio.run(task())
+    persisted = read_public_home_entries(path, now=now)["earnings"]
+
+    assert result.status == "degraded"
+    assert result.details["failed"] == ["earnings"]
+    assert result.details["refreshed"] == []
+    assert persisted["saved_at"] == old_saved_at
+    assert persisted["payload"] == old_payload
+    assert persisted["payload"]["data_limited"] is False
+    assert persisted["payload"]["source_status"] == "active"
+    assert calls == 1
 
 
 def test_worker_staggers_heavy_resources_and_skips_not_due_providers(
@@ -1211,6 +1337,41 @@ def test_owner_endpoint_and_worker_share_live_signal_builder(
     assert worker_payload["ticker"] == "NVDA"
     assert "_stale" not in worker_payload
     assert "source_status" not in worker_payload
+
+
+def test_public_home_worker_does_not_block_on_massive_symbol_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    now = _regular_time()
+    async def prewarm(*, allow_refresh: bool) -> dict:
+        raise AssertionError(
+            "the independent stock_directory task owns provider prewarming"
+        )
+
+    def builder(resource: str):
+        async def run(_parameters: dict) -> dict:
+            return _payload(resource, now)
+
+        return run
+
+    monkeypatch.setattr(stocks, "_stock_directory", prewarm)
+    task = PublicHomeTask(
+        _task_config(),
+        builders={
+            resource: builder(resource)
+            for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER)
+        },
+        snapshot_path=tmp_path / "public-home-snapshot-v1.json",
+        clock=lambda: now,
+    )
+
+    asyncio.run(task())
+
+    assert (
+        task._snapshot_path
+        == tmp_path / "public-home-snapshot-v1.json"
+    )
 
 
 def test_earnings_refreshes_immediately_on_new_york_date_rollover(

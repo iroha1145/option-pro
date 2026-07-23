@@ -637,6 +637,280 @@ KNOWN_TICKERS = {
 }
 
 
+_STOCK_DIRECTORY_VERSION = 1
+_STOCK_DIRECTORY_CACHE_KEY = "stock-symbol-directory"
+_STOCK_DIRECTORY_FRESH_TTL_SECONDS = 24 * 60 * 60
+_STOCK_DIRECTORY_MAX_AGE_SECONDS = 45 * 24 * 60 * 60
+_STOCK_DIRECTORY_MAX_BYTES = 16 * 1024 * 1024
+_STOCK_DIRECTORY_MAX_RECORDS = 50_000
+_STOCK_DIRECTORY_PATH = (
+    get_data_paths().watchlist_snapshot.parent / "stock-symbol-directory-v1.json"
+)
+_STOCK_DIRECTORY_TICKER_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,31}$")
+_stock_directory_snapshot_observed: tuple[str, tuple[int, int, int]] | None = None
+
+
+def _clean_stock_directory_payload(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    items = value.get("items")
+    if (
+        not isinstance(items, list)
+        or not items
+        or len(items) > _STOCK_DIRECTORY_MAX_RECORDS
+    ):
+        return None
+
+    cleaned_items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw in items:
+        if not isinstance(raw, dict):
+            return None
+        ticker = raw.get("ticker")
+        name = raw.get("name")
+        market = str(raw.get("market") or "").strip().lower()
+        locale = str(raw.get("locale") or "").strip().lower()
+        if (
+            not isinstance(ticker, str)
+            or not _STOCK_DIRECTORY_TICKER_PATTERN.fullmatch(ticker)
+            or ticker in seen
+            or not isinstance(name, str)
+            or not name.strip()
+            or raw.get("active") is not True
+            or market != "stocks"
+            or locale != "us"
+        ):
+            return None
+        seen.add(ticker)
+        cleaned_items.append(
+            {
+                "ticker": ticker,
+                "name": name.strip(),
+                "market": market,
+                "type": str(raw.get("type") or ""),
+                "primary_exchange": str(raw.get("primary_exchange") or ""),
+                "locale": locale,
+                "currency_symbol": str(raw.get("currency_symbol") or ""),
+                "active": True,
+            }
+        )
+    return {
+        "items": cleaned_items,
+        "count": len(cleaned_items),
+        "provider": "Massive",
+    }
+
+
+def _read_stock_directory_snapshot(
+    path: Path,
+    *,
+    now: float,
+) -> _EndpointCacheEntry | None:
+    """Read the bounded provider symbol directory without following symlinks."""
+
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None
+        with path.open("rb") as handle:
+            raw = handle.read(_STOCK_DIRECTORY_MAX_BYTES + 1)
+        if not raw or len(raw) > _STOCK_DIRECTORY_MAX_BYTES:
+            return None
+        document = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_json_keys,
+            parse_constant=_reject_non_finite_json,
+        )
+        if (
+            not isinstance(document, dict)
+            or document.get("version") != _STOCK_DIRECTORY_VERSION
+        ):
+            return None
+        saved_at = document.get("saved_at")
+        if (
+            isinstance(saved_at, bool)
+            or not isinstance(saved_at, (int, float))
+            or not math.isfinite(float(saved_at))
+        ):
+            return None
+        saved_at = float(saved_at)
+        if (
+            saved_at <= 0
+            or saved_at > now
+            or saved_at + _STOCK_DIRECTORY_MAX_AGE_SECONDS <= now
+        ):
+            return None
+        payload = _clean_stock_directory_payload(document.get("payload"))
+        if payload is None:
+            return None
+        return _EndpointCacheEntry(
+            expires_at=saved_at + _STOCK_DIRECTORY_FRESH_TTL_SECONDS,
+            stale_until=saved_at + _STOCK_DIRECTORY_MAX_AGE_SECONDS,
+            fetched_at=saved_at,
+            value=payload,
+        )
+    except (
+        OSError,
+        RecursionError,
+        UnicodeError,
+        ValueError,
+        TypeError,
+        json.JSONDecodeError,
+    ):
+        return None
+
+
+def _write_stock_directory_snapshot(
+    path: Path,
+    *,
+    payload: Any,
+    saved_at: float,
+) -> None:
+    cleaned = _clean_stock_directory_payload(payload)
+    if cleaned is None:
+        raise ValueError("stock symbol directory payload is invalid")
+    if not math.isfinite(saved_at) or saved_at <= 0:
+        raise ValueError("stock symbol directory saved_at is invalid")
+    encoded = json.dumps(
+        {
+            "version": _STOCK_DIRECTORY_VERSION,
+            "saved_at": saved_at,
+            "payload": cleaned,
+        },
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    if len(encoded) > _STOCK_DIRECTORY_MAX_BYTES:
+        raise ValueError("stock symbol directory exceeds the size limit")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=path.parent,
+    )
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_name, path)
+    except BaseException:
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _stock_directory_snapshot_identity(path: Path) -> tuple[int, int, int]:
+    try:
+        item = path.lstat()
+    except FileNotFoundError:
+        return (0, 0, 0)
+    except OSError:
+        return (-1, 0, 0)
+    return (int(item.st_ino), int(item.st_mtime_ns), int(item.st_size))
+
+
+def _load_stock_directory_snapshot(now: float) -> None:
+    global _stock_directory_snapshot_observed
+
+    path_key = str(_STOCK_DIRECTORY_PATH)
+    observed = (
+        path_key,
+        _stock_directory_snapshot_identity(_STOCK_DIRECTORY_PATH),
+    )
+    if observed == _stock_directory_snapshot_observed:
+        return
+    _stock_directory_snapshot_observed = observed
+    entry = _read_stock_directory_snapshot(_STOCK_DIRECTORY_PATH, now=now)
+    if entry is None:
+        return
+    current = _endpoint_cache.get(_STOCK_DIRECTORY_CACHE_KEY)
+    if current is None or entry.fetched_at > current.fetched_at:
+        _endpoint_cache[_STOCK_DIRECTORY_CACHE_KEY] = entry
+
+
+def _persist_stock_directory(payload: Any, saved_at: float) -> None:
+    _write_stock_directory_snapshot(
+        _STOCK_DIRECTORY_PATH,
+        payload=payload,
+        saved_at=saved_at,
+    )
+
+
+async def _build_stock_directory() -> dict[str, Any]:
+    from app.services import massive as massive_provider
+
+    if not massive_provider.configured():
+        raise massive_provider.MassiveError(
+            "MASSIVE_API_KEY is not configured",
+            code="not_configured",
+        )
+    items = await asyncio.to_thread(massive_provider.reference_tickers)
+    payload = {
+        "items": items,
+        "count": len(items),
+        "provider": "Massive",
+    }
+    if _clean_stock_directory_payload(payload) is None:
+        raise RuntimeError("Massive returned an incomplete stock symbol directory")
+    return payload
+
+
+async def _stock_directory(*, allow_refresh: bool) -> dict[str, Any] | None:
+    now = time.time()
+    _load_stock_directory_snapshot(now)
+    try:
+        return await _stale_while_revalidate_endpoint(
+            _STOCK_DIRECTORY_CACHE_KEY,
+            _STOCK_DIRECTORY_FRESH_TTL_SECONDS,
+            _STOCK_DIRECTORY_MAX_AGE_SECONDS,
+            _build_stock_directory,
+            _persist_stock_directory,
+            allow_refresh=allow_refresh,
+        )
+    except HTTPException as exc:
+        if _is_public_snapshot_unavailable(exc):
+            return None
+        raise
+    except Exception:
+        hit = _usable_hit(_STOCK_DIRECTORY_CACHE_KEY, time.time())
+        return _cache_result(hit, stale=True) if hit is not None else None
+
+
+async def _refresh_stock_directory() -> dict[str, Any]:
+    """Wait for a fresh directory and surface provider failures to the worker.
+
+    Search requests may serve a bounded stale snapshot while refreshing in the
+    background.  The daily maintenance task has a different contract: it must
+    not report success until the provider refresh has completed and the new
+    snapshot has been persisted.
+    """
+
+    now = time.time()
+    _load_stock_directory_snapshot(now)
+    background = _endpoint_refresh_tasks.get(_STOCK_DIRECTORY_CACHE_KEY)
+    if background is not None:
+        await background
+    entry = await _load_and_store_endpoint(
+        _STOCK_DIRECTORY_CACHE_KEY,
+        _STOCK_DIRECTORY_FRESH_TTL_SECONDS,
+        _STOCK_DIRECTORY_MAX_AGE_SECONDS,
+        _build_stock_directory,
+    )
+    # The shared endpoint cache deliberately treats persistence as best-effort.
+    # The directory worker is the durability boundary, so its write must be
+    # awaited and any disk failure must reach the supervisor.
+    await asyncio.to_thread(
+        _persist_stock_directory,
+        entry.value,
+        entry.fetched_at,
+    )
+    return _cache_result(entry, stale=False)
+
+
 _WATCHLIST_MAX_TICKERS = 100
 _WATCHLIST_QUERY_MAX_LENGTH = 4096
 _WATCHLIST_FRESH_TTL_SECONDS = 5 * 60
@@ -1650,53 +1924,153 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
 async def search_stocks(q: str = Query(..., min_length=1, max_length=50)):
     q_upper = q.upper().strip()
     q_lower = q.lower().strip()
+    if not q_upper:
+        return []
+    from app.services import massive as massive_provider
     from app.services.zh_names import NAMES
+
+    raw_symbol_query = q_upper[3:] if q_upper.startswith("US.") else q_upper
+    symbol_query = (
+        massive_provider.to_symbol(raw_symbol_query)
+        if _STOCK_DIRECTORY_TICKER_PATTERN.fullmatch(raw_symbol_query)
+        else None
+    ) or raw_symbol_query
 
     def fuzzy(query, text):
         """Check if all chars of query appear in text in order (fuzzy match)."""
         it = iter(text.lower())
         return all(c in it for c in query.lower())
 
-    # 1) Local dictionary — exact substring + fuzzy match
-    exact, fuzzy_results = [], []
-    all_tickers = {**KNOWN_TICKERS}
+    # The checked-in names enrich presentation, but they are not the search
+    # universe. Massive's persisted reference directory supplies complete
+    # active U.S. stock coverage, including symbols outside theme/watch pools.
+    candidates: dict[str, dict[str, Any]] = {
+        ticker: {
+            "ticker": ticker,
+            "name_en": name,
+            "market": "stocks",
+            "type": "CS",
+        }
+        for ticker, name in KNOWN_TICKERS.items()
+    }
     for t, (zh, _) in NAMES.items():
-        if t not in all_tickers:
-            all_tickers[t] = zh
+        candidate = candidates.setdefault(
+            t,
+            {
+                "ticker": t,
+                "name_en": zh,
+                "market": "stocks",
+                "type": "CS",
+            },
+        )
+        candidate["name_zh"] = zh
 
-    for ticker, name in all_tickers.items():
+    directory = await _stock_directory(
+        allow_refresh=current_request_is_owner(),
+    )
+    directory_available = isinstance(directory, dict) and bool(
+        directory.get("items")
+    )
+    for raw in (directory or {}).get("items") or []:
+        if not isinstance(raw, dict):
+            continue
+        ticker = str(raw.get("ticker") or "")
+        if not _STOCK_DIRECTORY_TICKER_PATTERN.fullmatch(ticker):
+            continue
+        candidate = candidates.setdefault(ticker, {"ticker": ticker})
+        candidate.update(
+            {
+                "name_en": str(raw.get("name") or ticker),
+                "market": str(raw.get("market") or "stocks"),
+                "type": str(raw.get("type") or ""),
+                "primary_exchange": str(raw.get("primary_exchange") or ""),
+            }
+        )
+
+    ranked: list[tuple[int, int, str, dict[str, Any]]] = []
+    for ticker, candidate in candidates.items():
+        name = str(candidate.get("name_en") or ticker)
         zh_entry = NAMES.get(ticker)
-        zh_name = zh_entry[0] if zh_entry else ""
+        zh_name = str(candidate.get("name_zh") or (zh_entry[0] if zh_entry else ""))
         zh_desc = zh_entry[1] if zh_entry else ""
         search_text = f"{ticker} {name} {zh_name} {zh_desc}".lower()
+        if symbol_query == ticker:
+            rank = 0
+        elif q_lower == name.lower() or (zh_name and q_lower == zh_name.lower()):
+            rank = 1
+        elif ticker.startswith(symbol_query):
+            rank = 2
+        elif q_lower in search_text:
+            rank = 3
+        elif len(q_lower) >= 2 and fuzzy(q_lower, ticker):
+            rank = 4
+        else:
+            continue
+        ranked.append(
+            (
+                rank,
+                len(ticker),
+                ticker,
+                {
+                    "ticker": ticker,
+                    "name": zh_name or name,
+                    "name_en": name,
+                    "market": candidate.get("market") or "stocks",
+                    "type": candidate.get("type") or "",
+                    "primary_exchange": candidate.get("primary_exchange") or "",
+                },
+            )
+        )
 
-        if q_upper == ticker or q_lower == name.lower():
-            exact.insert(0, {"ticker": ticker, "name": zh_name or name, "name_en": name, "market": "stocks", "type": "CS"})
-        elif q_upper in ticker or q_lower in search_text:
-            exact.append({"ticker": ticker, "name": zh_name or name, "name_en": name, "market": "stocks", "type": "CS"})
-        elif len(q_lower) >= 2 and (fuzzy(q_lower, ticker) or fuzzy(q_lower, name) or fuzzy(q_lower, zh_name)):
-            fuzzy_results.append({"ticker": ticker, "name": zh_name or name, "name_en": name, "market": "stocks", "type": "CS"})
+    ranked.sort(key=lambda item: (item[0], item[1], item[2]))
+    results = [item[3] for item in ranked[:12]]
+    if results and directory_available:
+        return _sanitize(results)
 
-    results = exact + fuzzy_results
-    if results:
-        return _sanitize(results[:12])
-
-    if not current_request_is_owner():
-        return []
-
-    # 2) Fallback: try yfinance for completely unknown tickers
+    # Provider directory outages must not erase exact-symbol lookup. Yahoo is
+    # only the final owner-only fallback and never replaces the persisted
+    # Massive universe for normal search.
     def _yf_search():
         try:
-            tk = yf.Ticker(q_upper)
+            tk = yf.Ticker(massive_provider.to_yahoo_symbol(symbol_query))
             info = tk.info
             name = info.get("shortName", "")
             if name and info.get("regularMarketPrice"):
-                return [{"ticker": q_upper, "name": name, "market": "stocks", "type": info.get("quoteType", "CS")}]
+                return [
+                    {
+                        "ticker": symbol_query,
+                        "name": name,
+                        "market": "stocks",
+                        "type": info.get("quoteType", "CS"),
+                    }
+                ]
         except Exception:
             pass
         return []
+
+    if not current_request_is_owner():
+        if not directory_available:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "stock_directory_unavailable",
+                    "message": "The complete stock directory is not available",
+                },
+            )
+        return []
+
     yf_results = await asyncio.to_thread(_yf_search)
-    return _sanitize(yf_results[:10])
+    if yf_results:
+        return _sanitize(yf_results[:10])
+    if not directory_available:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "stock_directory_unavailable",
+                "message": "The complete stock directory is not available",
+            },
+        )
+    return []
 
 
 async def _build_stock_signals(ticker: str) -> dict[str, Any]:
@@ -1715,8 +2089,24 @@ async def _build_stock_signals(ticker: str) -> dict[str, Any]:
 
     def _compute():
         try:
-            tk = yf.Ticker(symbol)
-            hist = tk.history(period="100d")
+            hist = None
+            price_provider = "Yahoo/yfinance"
+            from app.services import massive as massive_provider
+
+            if massive_provider.configured():
+                massive_symbol = massive_provider.to_symbol(symbol)
+                if massive_symbol is not None and not massive_symbol.startswith("I:"):
+                    hist = _massive_chart_history(
+                        massive_provider,
+                        massive_symbol,
+                        "1d",
+                        adjusted=False,
+                    )
+                    if hist is not None and not hist.empty:
+                        price_provider = "Massive"
+            if hist is None or hist.empty:
+                tk = yf.Ticker(massive_provider.to_yahoo_symbol(symbol))
+                hist = tk.history(period="100d")
             if hist.empty or "Close" not in hist.columns or "Volume" not in hist.columns:
                 raise RuntimeError(f"Insufficient price history for {symbol}")
 
@@ -1831,6 +2221,7 @@ async def _build_stock_signals(ticker: str) -> dict[str, Any]:
             return {
                 "ticker": symbol,
                 "price": round(price, 2),
+                "price_provider": price_provider,
                 "score": score,
                 "overall": "bullish" if score >= 60 else "bearish" if score <= 40 else "neutral",
                 "signals": signals,
@@ -1928,9 +2319,10 @@ async def stock_overview(ticker: str):
         if disk_result is not None:
             return _sanitize(disk_result)
     try:
-        return await _cached_endpoint(
+        return await _stale_while_revalidate_endpoint(
             key,
-            300,
+            60,
+            30 * 60,
             lambda: _stock_overview_impl(ticker),
             allow_refresh=owner,
         )
@@ -1992,21 +2384,20 @@ async def _stock_overview_impl(ticker: str):
 
     def _work():
         symbol = ticker.upper().strip()
-        tk = yf.Ticker(symbol)
-        info = tk.info or {}
-        fi = tk.fast_info
-        last_price = float(fi.last_price)
-        prev_close = float(fi.previous_close)
-        price_provider = "Yahoo/yfinance"
-        quote_as_of = _quote_as_of(info.get("regularMarketTime"))
-        quote_volume = _finite_quote(getattr(fi, "last_volume", None), allow_zero=True)
-        quote_open = _finite_quote(info.get("open"))
-        quote_high = _finite_quote(info.get("dayHigh"))
-        quote_low = _finite_quote(info.get("dayLow"))
+        if not _WATCHLIST_TICKER_PATTERN.fullmatch(symbol):
+            raise RuntimeError("Invalid ticker symbol")
 
-        # Company profile and fundamentals remain on Yahoo. Only the quote
-        # fields are overlaid from Massive, so a provider failure can fall back
-        # without making the entire stock drawer unavailable.
+        last_price: float | None = None
+        prev_close: float | None = None
+        quote_as_of: str | None = None
+        quote_volume: float | None = None
+        quote_open: float | None = None
+        quote_high: float | None = None
+        quote_low: float | None = None
+        price_provider: str | None = None
+
+        # Quote fields are fetched from Massive first. Yahoo profile or
+        # fundamentals failures must not discard a valid paid-provider quote.
         from app.services import massive as massive_provider
 
         massive_symbol = massive_provider.to_symbol(symbol)
@@ -2032,12 +2423,10 @@ async def _stock_overview_impl(ticker: str):
                 if massive_price is not None:
                     last_price = massive_price
                     price_provider = "Massive"
-                    prev_close = (
-                        _finite_quote(snapshot.get("prev_close")) or prev_close
-                    )
-                    quote_open = _finite_quote(day.get("o")) or quote_open
-                    quote_high = _finite_quote(day.get("h")) or quote_high
-                    quote_low = _finite_quote(day.get("l")) or quote_low
+                    prev_close = _finite_quote(snapshot.get("prev_close"))
+                    quote_open = _finite_quote(day.get("o"))
+                    quote_high = _finite_quote(day.get("h"))
+                    quote_low = _finite_quote(day.get("l"))
                     massive_volume = _finite_quote(
                         day.get("v"),
                         allow_zero=True,
@@ -2051,14 +2440,74 @@ async def _stock_overview_impl(ticker: str):
                         or _quote_as_of(snapshot.get("updated"))
                     )
 
+        info: dict[str, Any] = {}
+        fi: Any = None
+        try:
+            tk = yf.Ticker(massive_provider.to_yahoo_symbol(symbol))
+            try:
+                raw_info = tk.info
+                if isinstance(raw_info, dict):
+                    info = raw_info
+            except Exception:
+                info = {}
+            try:
+                fi = tk.fast_info
+            except Exception:
+                fi = None
+        except Exception:
+            pass
+
+        def _fast_value(name: str) -> Any:
+            if fi is None:
+                return None
+            try:
+                return getattr(fi, name)
+            except Exception:
+                return None
+
+        yahoo_price = _finite_quote(_fast_value("last_price"))
+        yahoo_previous = _finite_quote(_fast_value("previous_close"))
+        if last_price is None and yahoo_price is not None:
+            last_price = yahoo_price
+            price_provider = "Yahoo/yfinance"
+        if prev_close is None:
+            prev_close = yahoo_previous
+        if quote_volume is None:
+            quote_volume = _finite_quote(
+                _fast_value("last_volume"),
+                allow_zero=True,
+            )
+        if quote_open is None:
+            quote_open = _finite_quote(info.get("open"))
+        if quote_high is None:
+            quote_high = _finite_quote(info.get("dayHigh"))
+        if quote_low is None:
+            quote_low = _finite_quote(info.get("dayLow"))
+        if quote_as_of is None:
+            quote_as_of = _quote_as_of(info.get("regularMarketTime"))
+        if last_price is None or price_provider is None:
+            raise RuntimeError(f"Price provider unavailable for {symbol}")
+
         from app.services.zh_names import get_zh_info
         zh = get_zh_info(symbol)
         website = info.get("website")
         logo_urls = _logo_urls(symbol, website)
+        change = last_price - prev_close if prev_close is not None else None
+        change_percent = (
+            change / prev_close * 100
+            if change is not None and prev_close is not None
+            else None
+        )
+        market_cap = _finite_quote(_fast_value("market_cap"))
         return {
             "ticker": symbol,
-            "name": zh.get("name_zh") or info.get("shortName", symbol),
-            "name_en": info.get("shortName", symbol),
+            "name": (
+                zh.get("name_zh")
+                or info.get("shortName")
+                or KNOWN_TICKERS.get(symbol)
+                or symbol
+            ),
+            "name_en": info.get("shortName") or KNOWN_TICKERS.get(symbol) or symbol,
             "website": website,
             "logo_url": logo_urls[0] if logo_urls else None,
             "logo_urls": logo_urls,
@@ -2066,16 +2515,17 @@ async def _stock_overview_impl(ticker: str):
             # the appropriate decimals without turning a sub-dollar quote into
             # a different price from the raw K-line shown on the same page.
             "price": last_price,
-            "change": last_price - prev_close,
-            "change_percent": (last_price - prev_close) / prev_close * 100 if prev_close else 0,
+            "change": change,
+            "change_percent": change_percent,
             "volume": int(quote_volume) if quote_volume is not None else None,
-            "market_cap": float(fi.market_cap) if fi.market_cap else None,
+            "market_cap": market_cap,
             "prev_close": prev_close,
             "high": quote_high,
             "low": quote_low,
             "open": quote_open,
             "as_of": quote_as_of,
             "price_provider": price_provider,
+            "profile_provider": "Yahoo/yfinance" if info else None,
             "description": zh.get("description_zh") or info.get("longBusinessSummary", ""),
             "description_en": info.get("longBusinessSummary", ""),
             "sic_description": info.get("industry", ""),
@@ -2116,6 +2566,13 @@ def _compute_sma(data, period):
 # Keep chart data live-ish. Personal dashboard traffic is low, and a 5-minute
 # cap prevents the current candle from feeling stale during active sessions.
 _CHART_TTL = {"5m": 300, "15m": 300, "1h": 300, "1d": 300, "1w": 300}
+_CHART_MAX_AGE = {
+    "5m": 30 * 60,
+    "15m": 60 * 60,
+    "1h": 6 * 60 * 60,
+    "1d": 24 * 60 * 60,
+    "1w": 3 * 24 * 60 * 60,
+}
 _NEW_YORK_TZ = ZoneInfo("America/New_York")
 _EXTENDED_QUOTE_OPEN_OUTLIER_RATIO = 0.03
 _EXTENDED_QUOTE_CLOSE_REJOIN_RATIO = 0.01
@@ -2192,9 +2649,10 @@ async def stock_chart(
         if disk_result is not None:
             return _sanitize(disk_result)
     try:
-        return await _cached_endpoint(
+        return await _stale_while_revalidate_endpoint(
             key,
             _CHART_TTL.get(range, 600),
+            _CHART_MAX_AGE.get(range, 60 * 60),
             lambda: _stock_chart_impl(ticker, range, adjustment),
             allow_refresh=owner,
         )
@@ -2230,7 +2688,7 @@ async def stock_chart(
             raise exc
         return _sanitize(result)
     except Exception as exc:
-        raise HTTPException(status_code=503, detail="Yahoo chart data is currently unavailable") from exc
+        raise HTTPException(status_code=503, detail="Stock chart data is currently unavailable") from exc
 
 
 _MASSIVE_CHART_WINDOWS = {
@@ -2339,7 +2797,7 @@ async def _stock_chart_impl(ticker: str, range: str, adjustment: str = "raw"):
         except Exception:
             hist = None
         if hist is None or hist.empty:
-            tk = yf.Ticker(symbol)
+            tk = yf.Ticker(massive_provider.to_yahoo_symbol(symbol))
             hist = tk.history(
                 period=yf_period,
                 interval=interval,

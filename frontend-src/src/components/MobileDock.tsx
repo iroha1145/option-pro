@@ -73,7 +73,7 @@ export default function MobileDock() {
   return (
     <>
       <nav
-        className="glass fixed inset-x-0 bottom-0 z-[60] flex h-[calc(4rem+env(safe-area-inset-bottom))] items-stretch border-t border-line px-2 pb-[env(safe-area-inset-bottom)] md:hidden"
+        className="glass fixed inset-x-0 bottom-0 z-[60] flex h-[calc(4rem+env(safe-area-inset-bottom))] items-stretch border-t border-line px-2 pb-[env(safe-area-inset-bottom)] xl:hidden"
         aria-label="移动端导航"
       >
         {DOCK_ITEMS.slice(0, 2).map(renderItem)}
@@ -98,7 +98,7 @@ export default function MobileDock() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-[64] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px] md:hidden"
+              className="fixed inset-0 z-[64] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px] xl:hidden"
               onClick={() => setMoreOpen(false)}
             />
             <motion.div
@@ -106,7 +106,7 @@ export default function MobileDock() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="fixed inset-x-0 bottom-0 z-[65] rounded-t-xl border-t border-line bg-card pb-[calc(env(safe-area-inset-bottom)+16px)] shadow-sh-3 md:hidden"
+              className="fixed inset-x-0 bottom-0 z-[65] rounded-t-xl border-t border-line bg-card pb-[calc(env(safe-area-inset-bottom)+16px)] shadow-sh-3 xl:hidden"
               role="dialog"
               aria-modal="true"
               aria-label="更多功能"

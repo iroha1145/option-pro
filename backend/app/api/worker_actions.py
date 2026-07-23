@@ -25,6 +25,7 @@ ActionType = Literal[
     "focus_refresh",
     "strength_refresh",
     "breakout_refresh",
+    "earnings_analysis",
     "retention",
 ]
 
@@ -32,12 +33,14 @@ _ACTION_TASKS: dict[str, str] = {
     "focus_refresh": "focus_refresh",
     "strength_refresh": "strength_refresh",
     "breakout_refresh": "breakout_refresh",
+    "earnings_analysis": "earnings_analysis",
     "retention": "retention",
 }
 _ACTION_COOLDOWNS: dict[str, float] = {
     "focus_refresh": 30.0,
     "strength_refresh": 30.0,
     "breakout_refresh": 30.0,
+    "earnings_analysis": 60.0,
     "retention": 300.0,
 }
 
@@ -89,6 +92,14 @@ def _state_path() -> Path:
 
 def _repository() -> WorkerStateRepository:
     return WorkerStateRepository(_state_path())
+
+
+def _require_earnings_manual_submission() -> None:
+    """Apply the same runtime gates as a single earnings AI job."""
+
+    from app.api.ai import _require_earnings_manual_submission
+
+    _require_earnings_manual_submission()
 
 
 def _minute_key(
@@ -262,6 +273,8 @@ async def request_action(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "worker_task_disabled", "task": task_name},
         )
+    if action_type == "earnings_analysis":
+        _require_earnings_manual_submission()
 
     key = body.idempotency_key or _minute_key(
         action_type,

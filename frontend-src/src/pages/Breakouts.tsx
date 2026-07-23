@@ -473,7 +473,7 @@ export default function Breakouts() {
         )}
       </section>
 
-      <SourceNote className="mt-8" text="来源：Optix Research · 突破扫描 Worker · 延迟行情" />
+      <SourceNote className="mt-8" text="数据：后端突破扫描任务 · 延迟行情" />
 
       {/* 事件详情模态（保留） */}
       <EventDetail

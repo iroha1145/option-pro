@@ -82,6 +82,19 @@ function responseFor(pathname) {
   if (pathname === "/api/stocks/NVDA") return { ticker: "NVDA", price: 142.35, change_percent: 0.85, volume: 48_000_000, market_cap: 3_500_000_000_000 };
   if (pathname === "/api/stocks/NVDA/chart") return { bars: [{ t: NOW, o: 140, h: 143, l: 139, c: 142.35, v: 48_000_000 }], as_of: NOW, last_bar_at: NOW, exchange_timezone: "America/New_York" };
   if (pathname === "/api/stocks/NVDA/signals") return { signals: [] };
+  if (pathname === "/api/ai/status") {
+    return {
+      enabled: true,
+      status: "available",
+      provider_capability_supported: true,
+      sdk_capability_supported: true,
+      methods: {},
+      model: "gpt-5.6-terra",
+      reasoning: "max",
+      execution_mode: "background",
+      background_poll_timeout_seconds: 1800,
+    };
+  }
   if (pathname === "/api/catalysts/status") {
     return {
       status: "active",

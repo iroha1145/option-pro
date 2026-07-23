@@ -51,17 +51,22 @@ def test_deployment_checks_only_the_unified_worker_inventory() -> None:
         "focus",
         "ai_jobs",
         "maintenance",
+        "stock_directory",
         "public_home",
+        "earnings_analysis",
         "focus_refresh",
         "strength_refresh",
         "breakout_refresh",
         "retention",
     ):
         assert f'"{task_name}"' in script
-    assert "all ten task types" in script
+    assert "all twelve task types" in script
     assert "verify_public_snapshots" in script
-    assert '"watchlist": True' in script
-    assert "PUBLIC_HOME_RESOURCE_ORDER" in script
+    release_gate = (
+        ROOT / "backend" / "app" / "tools" / "verify_release_data.py"
+    ).read_text(encoding="utf-8")
+    assert '"watchlist": watchlist_ready' in release_gate
+    assert "PUBLIC_HOME_RESOURCE_ORDER" in release_gate
     assert "app.services.breakouts.worker --healthcheck" not in script
     assert "app.services.ai_jobs.worker --healthcheck" not in script
     assert "app.services.catalysts.worker --healthcheck" not in script

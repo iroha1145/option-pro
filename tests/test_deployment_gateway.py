@@ -923,6 +923,75 @@ def test_expensive_catalyst_reads_use_the_heavy_rate_limit(
 
 
 @pytest.mark.parametrize(
+    ("method", "path", "expected"),
+    [
+        ("GET", "/api/stocks/search", True),
+        ("GET", "/api/stocks/watchlist", True),
+        ("GET", "/api/stocks/AAOI", True),
+        ("GET", "/api/stocks/AAOI/chart", True),
+        ("GET", "/api/stocks/AAOI/signals", True),
+        ("GET", "/api/options/AAOI/expirations", True),
+        ("GET", "/api/options/AAOI/chain", True),
+        ("GET", "/api/signals/stock/AAOI", True),
+        ("GET", "/api/strength/stocks/AAOI", True),
+        ("GET", "/api/strength/scan", True),
+        ("GET", "/api/breakouts/tickers/AAOI", True),
+        ("GET", "/api/options/unusual", False),
+        ("GET", "/api/signals/market", False),
+        ("POST", "/api/stocks/AAOI", False),
+        ("POST", "/api/ai/jobs/signal-analysis", False),
+    ],
+)
+def test_cache_protected_stock_drawer_reads_have_a_separate_finite_bucket(
+    method: str,
+    path: str,
+    expected: bool,
+) -> None:
+    assert main._is_cached_market_read_path(path, method) is expected
+    if expected:
+        assert main._is_heavy_api_path(path, method) is False
+
+
+def test_stock_drawer_read_bucket_is_bounded_and_independent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = FastAPI()
+
+    @app.get("/api/stocks/AAOI")
+    def stock() -> dict[str, bool]:
+        return {"ok": True}
+
+    @app.get("/api/market/status")
+    def market_status() -> dict[str, bool]:
+        return {"ok": True}
+
+    app.add_middleware(
+        _GatewayMiddleware,
+        access_runtime=_runtime("private_network"),
+    )
+    monkeypatch.setattr(main, "_RL_MARKET_READ_LIMIT", 3)
+    main._rl_buckets.clear()
+    try:
+        with TestClient(
+            _PeerAddress(app, "127.0.0.1"),
+            base_url="https://testserver",
+        ) as client:
+            assert [client.get("/api/stocks/AAOI").status_code for _ in range(3)] == [
+                200,
+                200,
+                200,
+            ]
+            # Ordinary light reads do not share the stock-detail bucket.
+            assert client.get("/api/market/status").status_code == 200
+            limited = client.get("/api/stocks/AAOI")
+            assert limited.status_code == 429
+            assert limited.json()["error"] == "rate_limited"
+            assert limited.headers["retry-after"] == str(main._RL_WINDOW)
+    finally:
+        main._rl_buckets.clear()
+
+
+@pytest.mark.parametrize(
     ("method", "path"),
     [
         ("GET", "/staticity/js/deck-app.js"),

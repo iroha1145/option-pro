@@ -1,5 +1,6 @@
 /** 股票域：watchlist / detail / signals / chart / search */
-import { get, mockOr } from '../client';
+import { mockOr } from '../client';
+import { marketGet } from '../marketRead';
 import { asRec, pickN, pickS, unwrap, type Rec } from '../live';
 import * as fx from '@/mocks/fixtures';
 import type { Candle, Signal, StockChart, StockDetail, StockSearchResult, WatchlistItem } from '../types';
@@ -91,8 +92,8 @@ function mapStockDetail(body: unknown): StockDetail {
     name: pickS(r, 'name') ?? '',
     sector: pickS(r, 'sector', 'sic_description') ?? '',
     price: pickN(r, 'price') ?? 0,
-    change: pickN(r, 'change') ?? 0,
-    changePct: pickN(r, 'changePct', 'change_percent') ?? 0,
+    change: pickN(r, 'change') ?? (null as unknown as number),
+    changePct: pickN(r, 'changePct', 'change_percent') ?? (null as unknown as number),
     sparkline: Array.isArray(r.sparkline) ? (r.sparkline as number[]) : [],
     strengthScore: pickN(r, 'strengthScore', 'strength_score') ?? (null as unknown as number),
     signals: [],
@@ -107,6 +108,8 @@ function mapStockDetail(body: unknown): StockDetail {
     pe: pickN(r, 'pe', 'pe_ratio'),
     ivPercentile: pickN(r, 'ivPercentile', 'iv_percentile') ?? (null as unknown as number),
     range52w: yearLow !== null && yearHigh !== null ? [yearLow, yearHigh] : ((null as unknown) as [number, number]),
+    priceProvider: pickS(r, 'priceProvider', 'price_provider'),
+    profileProvider: pickS(r, 'profileProvider', 'profile_provider'),
   };
 }
 
@@ -121,11 +124,33 @@ function mapSearch(body: unknown): StockSearchResult[] {
 
 export const stocksApi = {
   watchlist: (force = false): Promise<WatchlistItem[]> =>
-    mockOr(() => fx.getWatchlist(force), () => get(`/stocks/watchlist${force ? '?force=1' : ''}`).then(mapWatchlist)),
+    mockOr(
+      () => fx.getWatchlist(force),
+      () =>
+        marketGet('/stocks/watchlist', {
+          ttlMs: 5_000,
+          staleMs: 10 * 60_000,
+          force,
+        }).then(mapWatchlist),
+    ),
   detail: (ticker: string): Promise<StockDetail> =>
-    mockOr(() => fx.getStockDetail(ticker), () => get(`/stocks/${encodeURIComponent(ticker)}`).then(mapStockDetail)),
+    mockOr(
+      () => fx.getStockDetail(ticker),
+      () =>
+        marketGet(`/stocks/${encodeURIComponent(ticker)}`, {
+          ttlMs: 15_000,
+          staleMs: 30 * 60_000,
+        }).then(mapStockDetail),
+    ),
   signals: (ticker: string): Promise<Signal[]> =>
-    mockOr(() => fx.getStockSignals(ticker), () => get(`/stocks/${encodeURIComponent(ticker)}/signals`)),
+    mockOr(
+      () => fx.getStockSignals(ticker),
+      () =>
+        marketGet(`/stocks/${encodeURIComponent(ticker)}/signals`, {
+          ttlMs: 60_000,
+          staleMs: 30 * 60_000,
+        }),
+    ),
   // adjustment 形参保留以兼容既有调用签名；契约仅支持 adjustment=raw，live 恒发 raw
   chart: (ticker: string, range: StockChart['range'] = '1d', adjustment = 'raw'): Promise<StockChart> =>
     mockOr(
@@ -133,11 +158,19 @@ export const stocksApi = {
       // 契约仅支持 adjustment=raw；界面直接使用后端真实 K 线周期。
       () => {
         void adjustment;
-        return get(
+        return marketGet(
           `/stocks/${encodeURIComponent(ticker)}/chart?range=${range}&adjustment=raw`,
+          { ttlMs: 60_000, staleMs: 60 * 60_000 },
         ).then((d) => mapChart(d, ticker, range));
       },
     ),
   search: (q: string): Promise<StockSearchResult[]> =>
-    mockOr(() => fx.searchStocks(q), () => get(`/stocks/search?q=${encodeURIComponent(q)}`).then(mapSearch)),
+    mockOr(
+      () => fx.searchStocks(q),
+      () =>
+        marketGet(`/stocks/search?q=${encodeURIComponent(q)}`, {
+          ttlMs: 10 * 60_000,
+          staleMs: 24 * 60 * 60_000,
+        }).then(mapSearch),
+    ),
 };

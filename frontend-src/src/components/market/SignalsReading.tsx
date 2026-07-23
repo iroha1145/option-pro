@@ -188,7 +188,7 @@ export default function SignalsReading({
         </div>
       </div>
 
-      <SourceNote className="mt-5" text="来源：Optix Research · 由真实字段模板化生成 · 非投资建议" />
+      <SourceNote className="mt-5" text="计算方式：由当前真实接口字段模板化生成 · 非投资建议" />
     </motion.section>
   );
 }

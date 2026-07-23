@@ -9,7 +9,7 @@
 export type ApiMode = 'mock' | 'live';
 
 export const API_MODE: ApiMode =
-  (import.meta.env.VITE_API_MODE as ApiMode | undefined) === 'live' ? 'live' : 'mock';
+  (import.meta.env?.VITE_API_MODE as ApiMode | undefined) === 'live' ? 'live' : 'mock';
 
 export const isMock = API_MODE === 'mock';
 

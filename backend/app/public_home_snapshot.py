@@ -35,6 +35,7 @@ PUBLIC_HOME_RESOURCE_ORDER = (
 PUBLIC_HOME_OPTIONAL_RESOURCE_ORDER = ("breakout_lead_chart",)
 _MARKET_TZ = ZoneInfo("America/New_York")
 _BREAKOUT_TICKER_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,19}$")
+_EARNINGS_TICKER_PATTERN = re.compile(r"^[A-Z][A-Z0-9.-]{0,11}$")
 _MARKET_SIGNAL_FIELDS = {
     "sma20_distance",
     "sma50_distance",
@@ -136,16 +137,28 @@ _EARNINGS_ROW_FIELDS = {
     "name",
     "earnings_date",
     "days_until",
+    "timing",
     "eps_estimate",
+    "eps_actual",
     "eps_high",
     "eps_low",
     "revenue_estimate",
+    "revenue_actual",
     "market_cap",
     "sector",
     "earnings_date_source",
     "estimate_source",
+    "actual_source",
+    "release_status",
+    "quarter",
+    "year",
     "source_status",
     "observed_at",
+    "expected_move_pct",
+    "expected_move_expiration",
+    "expected_move_source",
+    "expected_move_observed_at",
+    "expected_move_source_status",
 }
 _UNUSUAL_ROW_FIELDS = {
     "ticker",
@@ -193,7 +206,7 @@ PUBLIC_HOME_RESOURCE_SPECS: dict[str, PublicHomeResourceSpec] = {
         "breakout-lead-chart-v1",
         7 * 24 * 60 * 60,
     ),
-    "earnings": PublicHomeResourceSpec("earnings-upcoming-v1", 30 * 60 * 60),
+    "earnings": PublicHomeResourceSpec("earnings-upcoming-v2", 30 * 60 * 60),
     "unusual": PublicHomeResourceSpec("options-unusual-v1", 4 * 24 * 60 * 60),
 }
 
@@ -268,7 +281,7 @@ def _valid_json_tree(
     budget: list[int] | None = None,
 ) -> bool:
     if budget is None:
-        budget = [100_000]
+        budget = [250_000]
     budget[0] -= 1
     if budget[0] < 0 or depth > 12:
         return False
@@ -351,6 +364,12 @@ def _payload_timestamps_fit_entry(
             row.get("observed_at")
             for row in payload.get("earnings", [])
             if isinstance(row, Mapping)
+        )
+        iso_values.extend(
+            row.get("expected_move_observed_at")
+            for row in payload.get("earnings", [])
+            if isinstance(row, Mapping)
+            and row.get("expected_move_observed_at") is not None
         )
     return bool(
         all(
@@ -695,6 +714,7 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
     rows = payload.get("earnings")
     attempted = payload.get("attempted")
     succeeded = payload.get("succeeded")
+    providers = payload.get("providers")
     if (
         set(payload) != {
             "earnings",
@@ -703,55 +723,138 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
             "failed_symbols",
             "data_limited",
             "source_status",
+            "providers",
             "as_of",
         }
         or not isinstance(rows, list)
-        or len(rows) > 1_000
+        or len(rows) > 5_000
         or isinstance(attempted, bool)
         or not isinstance(attempted, int)
         or isinstance(succeeded, bool)
         or not isinstance(succeeded, int)
-        or not 1 <= succeeded <= attempted <= 1_000
+        or not 1 <= succeeded == len(rows) <= attempted <= 10_000
+        or not isinstance(providers, list)
+        or not 1 <= len(providers) <= 2
+        or not all(isinstance(item, str) for item in providers)
+        or len(set(providers)) != len(providers)
+        or not set(providers).issubset({"Finnhub", "Yahoo Finance"})
         or not _valid_iso_timestamp(payload.get("as_of"))
     ):
         return False
+    contributing_providers: set[str] = set()
     for row in rows:
+        move = row.get("expected_move_pct") if isinstance(row, dict) else None
+        move_metadata = (
+            row.get("expected_move_expiration"),
+            row.get("expected_move_source"),
+            row.get("expected_move_observed_at"),
+            row.get("expected_move_source_status"),
+        ) if isinstance(row, dict) else ()
+        actual_present = bool(
+            isinstance(row, dict)
+            and (
+                row.get("eps_actual") is not None
+                or row.get("revenue_actual") is not None
+            )
+        )
         if (
             not isinstance(row, dict)
             or set(row) != _EARNINGS_ROW_FIELDS
             or not isinstance(row.get("ticker"), str)
+            or _EARNINGS_TICKER_PATTERN.fullmatch(row["ticker"]) is None
             or not isinstance(row.get("name"), str)
+            or not row["name"]
+            or len(row["name"]) > 256
             or not isinstance(row.get("days_until"), int)
             or isinstance(row.get("days_until"), bool)
+            or not -3 <= row["days_until"] <= 180
+            or row.get("timing") not in {None, "bmo", "amc"}
             or not all(
                 _optional_finite(row.get(field))
                 for field in (
                     "eps_estimate",
+                    "eps_actual",
                     "eps_high",
                     "eps_low",
                     "revenue_estimate",
+                    "revenue_actual",
                     "market_cap",
                 )
             )
             or not isinstance(row.get("sector"), str)
             or row.get("earnings_date_source")
-            not in {"calendar", "earnings_dates"}
-            or row.get("estimate_source") not in {None, "calendar"}
+            not in {"calendar", "earnings_dates", "finnhub_calendar"}
+            or row.get("estimate_source")
+            not in {None, "calendar", "earnings_dates", "finnhub_calendar"}
+            or row.get("actual_source")
+            not in {None, "earnings_dates", "finnhub_calendar"}
+            or row.get("release_status")
+            not in {"scheduled", "released", "reported_pending_actual"}
+            or actual_present != (row.get("release_status") == "released")
+            or (actual_present and row.get("actual_source") is None)
+            or (not actual_present and row.get("actual_source") is not None)
+            or (
+                row.get("quarter") is not None
+                and (
+                    isinstance(row.get("quarter"), bool)
+                    or not isinstance(row.get("quarter"), int)
+                    or not 1 <= row["quarter"] <= 4
+                )
+            )
+            or (
+                row.get("year") is not None
+                and (
+                    isinstance(row.get("year"), bool)
+                    or not isinstance(row.get("year"), int)
+                    or not 1900 <= row["year"] <= 2200
+                )
+            )
             or row.get("source_status") != "active"
             or not _valid_iso_timestamp(row.get("observed_at"))
+            or (
+                move is not None
+                and (
+                    not _finite_number(move, minimum=0.0000001)
+                    or float(move) > 200
+                    or not isinstance(row.get("expected_move_expiration"), str)
+                    or not isinstance(row.get("expected_move_source"), str)
+                    or row.get("expected_move_source")
+                    != "Yahoo/yfinance options"
+                    or not _valid_iso_timestamp(
+                        row.get("expected_move_observed_at")
+                    )
+                    or row.get("expected_move_source_status") != "active"
+                )
+            )
+            or (move is None and any(value is not None for value in move_metadata))
         ):
             return False
         try:
             date.fromisoformat(str(row.get("earnings_date")))
+            if row.get("expected_move_expiration") is not None:
+                date.fromisoformat(str(row["expected_move_expiration"]))
         except ValueError:
             return False
+        if row.get("earnings_date_source") == "finnhub_calendar":
+            contributing_providers.add("Finnhub")
+        else:
+            contributing_providers.add("Yahoo Finance")
     failed_symbols = payload.get("failed_symbols")
     return bool(
-        isinstance(failed_symbols, list)
+        set(providers) == contributing_providers
+        and isinstance(failed_symbols, list)
         and len(failed_symbols) <= attempted
-        and all(isinstance(item, str) for item in failed_symbols)
+        and all(
+            isinstance(item, str)
+            and _EARNINGS_TICKER_PATTERN.fullmatch(item) is not None
+            for item in failed_symbols
+        )
         and isinstance(payload.get("data_limited"), bool)
         and payload.get("source_status") in {"active", "degraded"}
+        and (
+            (payload.get("source_status") == "degraded")
+            == payload.get("data_limited")
+        )
     )
 
 

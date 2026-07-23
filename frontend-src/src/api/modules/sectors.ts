@@ -52,6 +52,7 @@ export interface SectorIvRankingEnvelope {
   requestedCount: number | null;
   successRate: number | null;
   failedSymbols: string[];
+  snapshotSource: string | null;
 }
 
 function normalizeStatus(value: unknown): SectorSourceStatus {
@@ -177,6 +178,7 @@ export function mapSectorIvRankingEnvelope(payload: unknown): SectorIvRankingEnv
     requestedCount: pickN(envelope, 'requested_count'),
     successRate: pickN(envelope, 'success_rate'),
     failedSymbols: stringArray(envelope.failed_symbols),
+    snapshotSource: pickS(envelope, 'snapshot_source'),
   };
 }
 
