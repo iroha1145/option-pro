@@ -931,7 +931,7 @@ def test_shell_interface_never_passes_a_secret_value_to_python() -> None:
     assert '*name=rootless*) secret_container_user="0:0"' in script
     assert "Docker user namespace remapping" in script
     assert "Secret values must be entered through standard input." in script
-    assert "FINNHUB_API_KEY|MARKETDATA_TOKEN|INTERNAL_API_TOKEN" in script
+    assert "FINNHUB_API_KEY|MARKETDATA_TOKEN|MASSIVE_API_KEY|INTERNAL_API_TOKEN" in script
     assert "--force-recreate" in script
     assert ' restart "${running[@]}"' not in script
     assert '"$root/scripts/compose.sh" ps' in script
