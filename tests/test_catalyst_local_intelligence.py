@@ -507,6 +507,114 @@ def test_reconcile_archives_invalid_published_news_and_makes_it_due_again(
         ).fetchone()[0] == 2
 
 
+def test_batch_aggregates_full_directional_window_and_applies_stock_filters(
+    tmp_path,
+) -> None:
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                1,
+                201,
+                available_at=now - timedelta(hours=2),
+                source="Reuters",
+                sources=("Reuters", "Bloomberg"),
+            ),
+            _news_change(
+                2,
+                202,
+                available_at=now - timedelta(hours=1),
+                source="Dow Jones",
+            ),
+        ],
+        as_of=now - timedelta(minutes=30),
+    )
+    intelligence.reconcile()
+
+    first = intelligence.request_analysis(201, force=False)
+    first_result = _news_result(
+        news_id=201,
+        change_sequence=1,
+        content_hash="hash-201-1",
+    )
+    first_result["classification"] = "neutral"
+    first_result["confidence"] = 80
+    first_result["affected_stocks"][0]["impact_score"] = 40
+    _finish_job(ai, first["job_id"], first_result)
+    intelligence.reconcile()
+
+    second = intelligence.request_analysis(202, force=False)
+    second_result = _news_result(
+        news_id=202,
+        change_sequence=2,
+        content_hash="hash-202-2",
+    )
+    second_result["classification"] = "bearish"
+    second_result["confidence"] = 60
+    second_result["affected_stocks"][0]["impact_score"] = -20
+    _finish_job(ai, second["job_id"], second_result)
+    intelligence.reconcile()
+
+    result = intelligence.batch(
+        ["NVDA"],
+        as_of=now,
+        window_hours=72,
+        limit=1,
+        include_unanalyzed=False,
+        include_neutral=True,
+        directional_only=True,
+    )["results"]["NVDA"]
+    summary = result["summary"]
+
+    assert len(result["items"]) == 1
+    assert result["has_more"] is True
+    assert {
+        "count": summary["count"],
+        "analyzed_count": summary["analyzed_count"],
+        "directional_count": summary["directional_count"],
+        "net_impact": summary["net_impact"],
+        "source_diversity": summary["source_diversity"],
+        "bullish": summary["bullish"],
+        "bearish": summary["bearish"],
+        "neutral": summary["neutral"],
+        "pending": summary["pending"],
+    } == {
+        "count": 2,
+        "analyzed_count": 2,
+        "directional_count": 2,
+        "net_impact": 10.0,
+        "source_diversity": 2,
+        "bullish": 1,
+        "bearish": 1,
+        "neutral": 0,
+        "pending": 0,
+    }
+    assert summary["latest_at"] == _iso(now - timedelta(hours=1, minutes=5))
+
+    cases = (
+        ({"classification": "bullish"}, 40.0),
+        ({"classification": "bearish"}, -20.0),
+        ({"min_abs_impact": 30}, 40.0),
+        ({"min_confidence": 70}, 40.0),
+        ({"multi_source_only": True}, 40.0),
+    )
+    for filters, expected_score in cases:
+        filtered = intelligence.batch(
+            ["NVDA"],
+            as_of=now,
+            window_hours=72,
+            limit=1,
+            include_unanalyzed=False,
+            include_neutral=True,
+            directional_only=True,
+            **filters,
+        )["results"]["NVDA"]["summary"]
+        assert filtered["directional_count"] == 1
+        assert filtered["net_impact"] == expected_score
+
+
 def test_analyzed_24h_uses_the_result_completion_time(tmp_path) -> None:
     etl, ai, intelligence = _stack(tmp_path)
     now = datetime.now(timezone.utc).replace(microsecond=0)
