@@ -539,6 +539,38 @@ def _period_calendar_days(period: str) -> int:
     return 405
 
 
+def _massive_history_is_complete(
+    rows: list[dict[str, Any]],
+    *,
+    period: str,
+    end: date,
+) -> bool:
+    """Reject short, stale or structurally incomplete Massive histories."""
+
+    minimum_rows = {
+        "2y": 380,
+        "1y": 190,
+        "6mo": 95,
+        "3mo": 45,
+        "1mo": 15,
+    }.get(str(period).lower(), 190)
+    usable = [
+        row
+        for row in rows
+        if isinstance(row.get("t"), (int, float))
+        and isinstance(row.get("c"), (int, float))
+        and math.isfinite(float(row["c"]))
+        and float(row["c"]) > 0
+        and isinstance(row.get("v"), (int, float))
+        and math.isfinite(float(row["v"]))
+        and float(row["v"]) >= 0
+    ]
+    if len(usable) < minimum_rows:
+        return False
+    latest = pd.Timestamp(max(float(row["t"]) for row in usable), unit="ms", tz="UTC").date()
+    return (end - latest).days <= 7
+
+
 def _download_massive_history(
     tickers: list[str],
     period: str,
@@ -569,7 +601,8 @@ def _download_massive_history(
     with ThreadPoolExecutor(max_workers=4) as pool:
         for ticker, bars in pool.map(_one, tickers):
             rows = [bar for bar in (bars or []) if isinstance(bar.get("t"), (int, float))]
-            if not rows:
+            if not rows or not _massive_history_is_complete(rows, period=period, end=end):
+                # 过短、过旧或缺成交量时必须交给 Yahoo/公开源补齐，不能把残缺主源标成成功。
                 missing.append(ticker)
                 continue
             index = pd.DatetimeIndex(
