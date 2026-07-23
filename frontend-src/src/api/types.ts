@@ -170,6 +170,9 @@ export interface StockDetail extends WatchlistItem {
   pe: number | null;
   ivPercentile: number;   // 0–100
   range52w: [number, number];
+  /** 实时报价与公司资料的真实供应方；接口未标注时保持 null。 */
+  priceProvider?: string | null;
+  profileProvider?: string | null;
   /**
    * live 快照口径：'strength-row' = 概览接口未覆盖（焦点池外），
    * 由 /strength/stocks/{t} 扫描行回退的基础行情（仅价/涨跌/市值等，其余如实留空）
@@ -260,8 +263,8 @@ export interface EarningsItem {
   timing: 'bmo' | 'amc' | null;  // 盘前 / 盘后 / 时间待定
   epsEstimate: number | null;
   epsActual: number | null;
-  revEstimate: number | null;  // 百万美元
-  revActual: number | null;
+  revEstimate: number | null;  // 美元；与后端 revenue_estimate 契约一致
+  revActual: number | null;    // 美元
 }
 
 export interface EarningsImpact {

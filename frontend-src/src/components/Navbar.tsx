@@ -72,7 +72,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
         </Link>
 
         {/* 编号导航（桌面） */}
-        <nav ref={navRef} className="relative mx-auto hidden h-full items-center gap-1 lg:flex" aria-label="主导航">
+        <nav ref={navRef} className="relative mx-auto hidden h-full items-center gap-1 xl:flex" aria-label="主导航">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.path}
@@ -98,7 +98,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
         </nav>
 
         {/* 右侧操作区 */}
-        <div className="ml-auto flex items-center gap-2.5 md:gap-3.5 lg:ml-0">
+        <div className="ml-auto flex items-center gap-2.5 md:gap-3.5 xl:ml-0">
           <button
             onClick={onOpenPalette}
             className="hidden h-8 w-[220px] items-center gap-2 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-400 transition-colors duration-fast hover:border-line-strong hover:text-ink-500 md:flex"

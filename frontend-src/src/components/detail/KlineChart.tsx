@@ -301,7 +301,9 @@ export default function KlineChart({
   height?: number;
   className?: string;
 }) {
-  const [range, setRange] = useState<ChartRange>('5m');
+  // Daily bars are the reliable default covered by Massive Stocks Starter;
+  // intraday intervals remain available on demand.
+  const [range, setRange] = useState<ChartRange>('1d');
   const [mode, setMode] = useState<ChartMode>('candle');
   const { data, error, loading, refresh } = usePolling(() => getDetailChart(ticker, range), null, [ticker, range]);
 

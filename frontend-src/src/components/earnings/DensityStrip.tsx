@@ -2,7 +2,7 @@
  * B5 补充带：本月财报密度条（earnings.md）
  * 30 天横向迷你柱（每日财报数，brand-400，grow-bar 错峰）
  * hover 日 → 当日代码列表 tooltip；点击日 → 跳转该周并选中日格
- * 右侧 SourceNote「预期数据来源：Optix Research 共识汇总 ◆」
+ * 右侧 SourceNote 如实说明日历接口当前使用的上游数据源。
  */
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
@@ -17,6 +17,7 @@ interface DensityStripProps {
 }
 
 const DAYS = 30;
+const MAX_TOOLTIP_TICKERS = 12;
 
 export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
   const days = useMemo(() => {
@@ -37,8 +38,8 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
 
   return (
     <section className="card-surface p-5" aria-label="本月财报密度">
-      <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-        <div className="min-w-0 flex-1">
+      <div className="min-w-0">
+        <div className="w-full min-w-0">
           <p className="eyebrow">本月财报密度 · 未来 30 天</p>
           <div className="mt-3 flex h-16 items-end gap-[3px]" role="list" aria-label="每日财报数量">
             {days.map((d, i) => {
@@ -61,11 +62,16 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                       <span className="block text-[10px] text-ink-300">无财报</span>
                     ) : (
                       <span className="mt-0.5 flex flex-wrap gap-1">
-                        {d.rows.map((r) => (
+                        {d.rows.slice(0, MAX_TOOLTIP_TICKERS).map((r) => (
                           <span key={r.ticker} className="font-mono text-[10px] font-semibold text-ink-800">
                             {r.ticker}
                           </span>
                         ))}
+                        {n > MAX_TOOLTIP_TICKERS && (
+                          <span className="font-mono text-[10px] text-ink-400">
+                            +{n - MAX_TOOLTIP_TICKERS}
+                          </span>
+                        )}
                       </span>
                     )}
                   </span>
@@ -91,7 +97,7 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
             <span>+30 天</span>
           </div>
         </div>
-        <SourceNote className="shrink-0 border-t-0 pt-0" text="预期数据来源：Optix Research 共识汇总" />
+        <SourceNote className="mt-4" text="数据：后端财报日历接口；缺失项不补造" />
       </div>
     </section>
   );

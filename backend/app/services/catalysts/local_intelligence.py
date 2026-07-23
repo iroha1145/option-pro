@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Literal, Mapping, Sequence
+from typing import Any, Iterable, Iterator, Literal, Mapping, Sequence, cast
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -527,16 +527,74 @@ _CALENDAR_GENERIC_ENGLISH_WORDS = frozenset(
 )
 
 
-def _public_calendar_title(value: Any) -> str:
-    """Keep useful event acronyms while removing untranslated English prose."""
+_CALENDAR_TITLE_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("initial jobless claims",), "初请失业金人数"),
+    (("unemployment claims",), "初请失业金人数"),
+    (("continuing jobless claims",), "续请失业金人数"),
+    (("nonfarm payroll", "non-farm payroll"), "非农就业人数变动"),
+    (("employment change",), "就业人数变动"),
+    (("unemployment rate",), "失业率"),
+    (("deposit facility rate",), "欧洲央行存款机制利率"),
+    (("main refinancing rate",), "欧洲央行主要再融资利率"),
+    (("interest rate decision", "rate decision"), "利率决议"),
+    (("monetary policy statement",), "货币政策声明"),
+    (("press conference",), "新闻发布会"),
+    (("manufacturing pmi",), "制造业PMI"),
+    (("services pmi", "service pmi"), "服务业PMI"),
+    (("composite pmi",), "综合PMI"),
+    (("consumer price index",), "消费者价格指数"),
+    (("producer price index",), "生产者价格指数"),
+    (("core pce price index",), "核心PCE价格指数"),
+    (("pce price index",), "PCE价格指数"),
+    (("gross domestic product",), "国内生产总值"),
+    (("retail sales",), "零售销售"),
+    (("industrial production",), "工业产出"),
+    (("consumer confidence",), "消费者信心指数"),
+    (("housing starts",), "新屋开工"),
+    (("building permits",), "营建许可"),
+    (("existing home sales",), "成屋销售"),
+    (("new home sales",), "新屋销售"),
+    (("durable goods orders",), "耐用品订单"),
+    (("trade balance",), "贸易帐"),
+    (("job openings",), "职位空缺"),
+)
 
-    raw = str(value or "").strip()
-    if not raw or "<" in raw or ">" in raw:
-        return "经济日历事件"
+
+def _calendar_release_status(
+    *,
+    scheduled_at: datetime | None,
+    actual: Any,
+    as_of: datetime,
+) -> str:
+    """Separate a future release from a past release awaiting provider data."""
+
+    if actual is not None and str(actual).strip():
+        return "released"
+    if scheduled_at is not None and scheduled_at <= as_of:
+        return "awaiting_source"
+    return "scheduled"
+
+
+def _public_calendar_title(value: Any) -> str:
+    """Translate common releases and preserve a safe specific source title."""
+
+    raw = re.sub(r"<[^>]{0,80}>", "", str(value or ""))
+    raw = re.sub(r"[\x00-\x1f\x7f]+", " ", raw)
+    raw = re.sub(r"\s+", " ", raw).strip()[:160]
+    if not raw:
+        return "标题缺失（上游未提供）"
     try:
         return validate_simplified_chinese_text(raw, None)
     except ValueError:
         pass
+    folded = re.sub(r"\s+", " ", raw.casefold())
+    for needles, title in _CALENDAR_TITLE_RULES:
+        if any(needle in folded for needle in needles):
+            if "prelim" in folded or "preliminary" in folded or "flash" in folded:
+                return f"{title}初值"
+            if "final" in folded:
+                return f"{title}终值"
+            return title
     acronyms = [
         match.group(1)
         for match in _CALENDAR_INITIALISM_RE.finditer(raw)
@@ -545,15 +603,18 @@ def _public_calendar_title(value: Any) -> str:
         and (not match.group(1).isalpha() or len(match.group(1)) <= 5)
     ]
     if not acronyms:
-        return "经济日历事件"
+        return f"原文事件：{raw}"
     acronym = acronyms[0]
-    folded = raw.casefold()
     if (
-        any(word in folded for word in ("inventory", "inventories", "stockpile"))
+        (
+            any(word in folded for word in ("inventory", "inventories", "stockpile"))
+            or "库存" in raw
+        )
         and any(
             word in folded
             for word in ("crude", "oil", "petroleum", "gas", "energy")
         )
+        or ("库存" in raw and any(word in raw for word in ("原油", "天然气", "能源")))
     ):
         category = "能源库存数据"
     elif any(
@@ -3383,17 +3444,67 @@ class LocalCatalystIntelligence:
                 ),
                 "warnings": ["cache_unavailable"],
             }
+        items_last_24h: dict[str, int | None] = {
+            "news": None,
+            "calendar": None,
+        }
         try:
             with self._connect() as connection:
                 states = connection.execute(
                     "SELECT * FROM macrolens_etl_state ORDER BY stream"
                 ).fetchall()
+                cutoff = _iso(observed - timedelta(hours=24))
+                observed_text = _iso(observed)
+                items_last_24h["news"] = int(
+                    connection.execute(
+                        """
+                        SELECT COUNT(*) FROM macrolens_etl_news
+                        WHERE deleted=0 AND available_at>=? AND available_at<=?
+                        """,
+                        (cutoff, observed_text),
+                    ).fetchone()[0]
+                )
+                items_last_24h["calendar"] = int(
+                    connection.execute(
+                        """
+                        WITH latest AS (
+                            SELECT snapshot_sequence
+                            FROM macrolens_etl_calendar_snapshots
+                            WHERE complete=1
+                            ORDER BY snapshot_sequence DESC
+                            LIMIT 1
+                        )
+                        SELECT COUNT(*)
+                        FROM macrolens_etl_calendar_events AS event
+                        JOIN latest
+                          ON latest.snapshot_sequence=event.snapshot_sequence
+                        WHERE event.scheduled_at_utc>=?
+                          AND event.scheduled_at_utc<=?
+                        """,
+                        (cutoff, observed_text),
+                    ).fetchone()[0]
+                )
         except sqlite3.Error:
             states = []
         streams = {
             str(row["stream"]): {
                 "last_success_at": row["last_success_at"],
                 "data_through": row["completed_as_of"],
+                "items_last_24h": items_last_24h.get(str(row["stream"])),
+                "lag_ms": (
+                    max(
+                        0,
+                        int(
+                            (
+                                observed
+                                - cast(datetime, _parse_time(row["completed_as_of"]))
+                            ).total_seconds()
+                            * 1000
+                        ),
+                    )
+                    if _parse_time(row["completed_as_of"]) is not None
+                    else None
+                ),
                 "consecutive_failures": 1 if row["last_error_code"] else 0,
                 "last_error_code": row["last_error_code"],
                 "remote_status": "ok" if row["last_success_at"] else "unavailable",
@@ -3841,6 +3952,11 @@ class LocalCatalystIntelligence:
                     "forecast": event.get("forecast"),
                     "previous": event.get("previous"),
                     "actual": event.get("actual"),
+                    "release_status": _calendar_release_status(
+                        scheduled_at=scheduled,
+                        actual=event.get("actual"),
+                        as_of=as_of,
+                    ),
                     "is_stale": bool(event.get("is_stale")),
                     "source_fetched_at": event.get("source_fetched_at"),
                     "available_at": event.get("available_at"),

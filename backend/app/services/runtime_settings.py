@@ -131,9 +131,17 @@ class RuntimeCatalystSettings(_StrictModel):
         return _normalize_scheduled_times(values)
 
 
+class RuntimeEarningsSettings(_StrictModel):
+    """Owner controls for bounded daily earnings-impact analysis."""
+
+    scheduled_analysis_enabled: bool = False
+    lookahead_days: int = Field(default=30, ge=1, le=30)
+
+
 class RuntimeSettings(_StrictModel):
     ai: RuntimeAISettings = Field(default_factory=RuntimeAISettings)
     catalyst: RuntimeCatalystSettings = Field(default_factory=RuntimeCatalystSettings)
+    earnings: RuntimeEarningsSettings = Field(default_factory=RuntimeEarningsSettings)
 
 
 class RuntimeAISettingsPatch(_StrictModel):
@@ -183,9 +191,15 @@ class RuntimeCatalystSettingsPatch(_StrictModel):
         return _normalize_scheduled_times(values)
 
 
+class RuntimeEarningsSettingsPatch(_StrictModel):
+    scheduled_analysis_enabled: Optional[bool] = None
+    lookahead_days: Optional[int] = Field(default=None, ge=1, le=30)
+
+
 class RuntimeSettingsPatch(_StrictModel):
     ai: Optional[RuntimeAISettingsPatch] = None
     catalyst: Optional[RuntimeCatalystSettingsPatch] = None
+    earnings: Optional[RuntimeEarningsSettingsPatch] = None
 
 
 class RuntimeSettingsDocument(_StrictModel):
@@ -251,6 +265,7 @@ def runtime_settings_from_personal_config(config: PersonalConfig) -> RuntimeSett
             scheduled_analysis_enabled=config.catalyst_scheduled_enabled,
             scheduled_times_et=tuple(config.catalyst.scheduled_times_et),
         ),
+        earnings=RuntimeEarningsSettings(),
     )
 
 
@@ -318,6 +333,7 @@ def _migrate_v1_document(
                 ),
                 scheduled_times_et=legacy_catalyst.scheduled_times_et,
             ),
+            earnings=RuntimeEarningsSettings(),
         ),
     )
 

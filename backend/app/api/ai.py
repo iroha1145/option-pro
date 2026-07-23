@@ -197,10 +197,38 @@ def _require_manual_analysis_enabled() -> None:
         )
 
 
+def _require_earnings_manual_analysis_enabled() -> None:
+    """Apply the earnings manual switch without consulting catalyst mode."""
+
+    try:
+        effective = get_effective_runtime_settings()
+    except RuntimeSettingsStorageError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "runtime_settings_unavailable",
+                "message": "运行设置暂不可用",
+            },
+        ) from exc
+    if not effective.ai.manual_analysis_enabled:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "manual_analysis_disabled",
+                "message": "手动分析已关闭",
+            },
+        )
+
+
 def _require_manual_submission() -> None:
     # Check the owner switch before provider configuration so callers receive
     # one stable public reason whenever manual paid work is disabled.
     _require_manual_analysis_enabled()
+    _require_runtime_capability()
+
+
+def _require_earnings_manual_submission() -> None:
+    _require_earnings_manual_analysis_enabled()
     _require_runtime_capability()
 
 
@@ -212,7 +240,10 @@ def _create_job(
 ) -> tuple[dict, bool]:
     # Recheck at the durable enqueue boundary in case the owner changed the
     # switch after the endpoint's initial validation.
-    _require_manual_analysis_enabled()
+    if job_type == "earnings_impact":
+        _require_earnings_manual_analysis_enabled()
+    else:
+        _require_manual_analysis_enabled()
     settings = get_settings()
     ai_job_runtime.validate_job_payload(job_type, payload)
     schema_version, schema_sha256 = ai_job_runtime.schema_identity(job_type)
@@ -315,7 +346,7 @@ async def earnings_impact(
 
 @router.post("/jobs/earnings-impact")
 async def create_earnings_impact_job(req: EarningsImpactJobRequest):
-    _require_manual_submission()
+    _require_earnings_manual_submission()
     request_payload = req.model_dump(mode="json", exclude={"force"})
     row, created = _create_job(
         "earnings_impact",

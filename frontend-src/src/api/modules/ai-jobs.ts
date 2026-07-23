@@ -31,6 +31,16 @@ export interface OptionAlertInput {
   direction_note: string;
 }
 
+export interface EarningsImpactInput {
+  ticker: string;
+  name?: string;
+  sector?: string;
+  earnings_date?: string;
+  eps_estimate?: number | null;
+  revenue_estimate?: number | null;
+  market_cap?: number | null;
+}
+
 /**
  * 创建类任务 POST（契约 §0.4）：202 + Location:/api/ai/jobs/{id} + Retry-After:2
  * body 不含 job_id 时从 Location 头提取。
@@ -46,8 +56,13 @@ export async function postAiJob(path: string, body?: unknown): Promise<AiJob> {
 }
 
 export const aiJobsApi = {
-  createEarningsImpact: (ticker: string): Promise<AiJob> =>
-    mockOr(() => fx2.createAiJob('earnings-impact', ticker), () => postAiJob('/ai/jobs/earnings-impact', { ticker })),
+  createEarningsImpact: (input: string | EarningsImpactInput): Promise<AiJob> => {
+    const payload = typeof input === 'string' ? { ticker: input } : input;
+    return mockOr(
+      () => fx2.createAiJob('earnings-impact', payload.ticker),
+      () => postAiJob('/ai/jobs/earnings-impact', payload),
+    );
+  },
   createOptionAlerts: (params: {
     tickers: string[];
     force?: boolean;

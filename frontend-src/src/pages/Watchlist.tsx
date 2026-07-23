@@ -10,6 +10,8 @@ import { stocksApi } from '@/api/modules/stocks';
 import { signalsApi } from '@/api/modules/signals';
 import { strengthApi } from '@/api/modules/strength';
 import { marketApi } from '@/api/modules/market';
+import { runtimeApi } from '@/api/modules/runtime';
+import { ApiError } from '@/api/client';
 import { usePolling } from '@/hooks/usePolling';
 import { useAccess } from '@/hooks/useAccess';
 import { useNow } from '@/hooks/useNow';
@@ -305,57 +307,51 @@ export default function Watchlist() {
 
   const [view, setView] = useState<'table' | 'cards'>('table');
   const [sort, setSort] = useState<SortState | null>(null);
-  const forceRef = useRef(false);
-  const forcePendingRef = useRef(false);
-  const forceSawRefreshingRef = useRef(false);
+  const [forceRefreshing, setForceRefreshing] = useState(false);
 
-  const fetchWatchlist = useCallback(() => {
-    const f = forceRef.current;
-    forceRef.current = false;
-    return stocksApi.watchlist(f);
-  }, []);
+  const fetchWatchlist = useCallback(() => stocksApi.watchlist(), []);
 
   const wl = usePolling(fetchWatchlist, 60_000);
+  const refreshWatchlist = wl.refresh;
   const signalsQ = usePolling(() => signalsApi.market(), 60_000);
   const strengthQ = usePolling(() => strengthApi.market(), 60_000);
   const statusQ = usePolling(() => marketApi.status(), 60_000);
   const now = useNow(1000);
 
-  /* 命令面板「强制刷新自选」→ /watchlist?force=1 */
-  useEffect(() => {
-    if (searchParams.get('force') === '1') {
-      if (isOwner) {
-        forceRef.current = true;
-        forcePendingRef.current = true;
-        wl.refresh();
-        toast.info('刷新请求已提交', '快照返回后页面会自动更新');
-      } else {
-        toast.info('登录 Owner 后可强制刷新');
-      }
-      setSearchParams({}, { replace: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, isOwner]);
-
-  const onForceRefresh = () => {
-    forceRef.current = true;
-    forcePendingRef.current = true;
-    wl.refresh();
-    toast.info('刷新请求已提交', '快照返回后页面会自动更新');
-  };
-
-  useEffect(() => {
-    if (!forcePendingRef.current) return;
-    if (wl.refreshing) {
-      forceSawRefreshingRef.current = true;
+  const onForceRefresh = useCallback(async () => {
+    if (!isOwner || forceRefreshing) {
+      if (!isOwner) toast.info('登录 Owner 后可强制刷新');
       return;
     }
-    if (!forceSawRefreshingRef.current) return;
-    forcePendingRef.current = false;
-    forceSawRefreshingRef.current = false;
-    if (wl.error) toast.error('自选快照刷新失败', wl.error.message);
-    else toast.success('自选快照已更新');
-  }, [wl.refreshing, wl.error, toast]);
+    setForceRefreshing(true);
+    toast.info('正在刷新', '后台正在重建完整自选快照');
+    try {
+      const action = await runtimeApi.workerAction('focus_refresh');
+      if (action.status !== 'completed') {
+        if (!action.requestId) throw new ApiError(502, '后台刷新未返回 request_id');
+        await runtimeApi.waitForWorkerAction(action.requestId);
+      }
+      // worker 原子写入后绕过浏览器短缓存读取一次同一路径；不再发送
+      // 后端从未支持的 ?force=1 占位参数。
+      await stocksApi.watchlist(true);
+      refreshWatchlist();
+      toast.success('自选快照已更新', '已读取后台生成的真实行情快照');
+    } catch (error) {
+      toast.error(
+        '自选快照刷新失败',
+        error instanceof ApiError ? error.message : '后台刷新暂不可用',
+      );
+    } finally {
+      setForceRefreshing(false);
+    }
+  }, [forceRefreshing, isOwner, refreshWatchlist, toast]);
+
+  /* 命令面板「强制刷新自选」→ 真实 worker focus_refresh */
+  useEffect(() => {
+    if (searchParams.get('force') !== '1') return;
+    void onForceRefresh();
+    setSearchParams({}, { replace: true });
+  }, [onForceRefresh, searchParams, setSearchParams]);
 
   /* 涨跌 tick-flash 差异检测 */
   const [flashes, setFlashes] = useState<Record<string, 'up' | 'down'>>({});
@@ -502,7 +498,10 @@ export default function Watchlist() {
             <span className="hidden font-mono text-data-m text-ink-600 tnum sm:inline" suppressHydrationWarning>
               {fmtNyTime(new Date(now))}
             </span>
-            <ForceRefreshButton onRefresh={onForceRefresh} spinning={wl.refreshing} />
+            <ForceRefreshButton
+              onRefresh={() => void onForceRefresh()}
+              spinning={forceRefreshing || wl.refreshing}
+            />
           </>
         }
       />

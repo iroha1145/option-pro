@@ -189,7 +189,16 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
         )}
       </div>
 
-      <SourceNote className="mt-4" text="板块排位来自当前成分 ATM IV 的横截面比较，不是历史 252 日百分位" />
+      <SourceNote
+        className="mt-4"
+        text={
+          meta.snapshotSource === 'strength_worker' ||
+          meta.snapshotSource === 'sector_owner_snapshot' ||
+          meta.snapshotSource === 'owner_live'
+            ? '数据来自后台持久化的真实期权链快照；板块排位是当前成分的横截面比较，不是历史 252 日百分位'
+            : '板块排位来自当前成分 ATM IV 的横截面比较，不是历史 252 日百分位'
+        }
+      />
     </div>
   );
 }

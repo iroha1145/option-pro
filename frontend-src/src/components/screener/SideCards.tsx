@@ -172,7 +172,7 @@ export function MethodCard({ profile }: { profile: StrengthProfile | null }) {
                   ? '偏好档位决定后端评分器的因子取舍，最终强度分 0–100，≥85 为高强度区。'
                   : '最终强度分为四因子加权合成（0–100），≥85 为高强度区。')}
             </p>
-            <SourceNote className="mt-3" text="来源：Optix Research" />
+            <SourceNote className="mt-3" text="计算方法：后端强度评分配置" />
           </motion.div>
         )}
       </AnimatePresence>

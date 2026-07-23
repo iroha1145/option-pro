@@ -7,7 +7,8 @@
  * - GET /api/strength/stocks/{t}（概览 503 时的基础行情回退：扫描行快照，匿名可用）
  * mock 模式下代码不存在抛 404（整页形态 404 空态）。
  */
-import { ApiError, get, mockOr } from '@/api/client';
+import { ApiError, mockOr } from '@/api/client';
+import { marketGet } from '@/api/marketRead';
 import { asRec, pickN, pickS, unwrap, type Rec } from '@/api/live';
 import { ma20Of, mapBar } from '@/api/modules/stocks';
 import { stocksApi } from '@/api/modules/stocks';
@@ -76,6 +77,8 @@ function strengthRowToDetail(env: Rec): StockDetail | null {
     pe: pickN(fin, 'pe_ttm'),
     ivPercentile: nullNum,
     range52w: null as unknown as [number, number],
+    priceProvider: pickS(row, 'price_provider'),
+    profileProvider: null,
     snapshotScope: 'strength-row',
   };
 }
@@ -91,7 +94,10 @@ export function getDetail(ticker: string): Promise<StockDetail> {
       try {
         // 行情价格仍以 stocks 概览（Massive 主源）为准；强度快照只补其真实评分与缺失基本面。
         const detail = await stocksApi.detail(t);
-        const strengthBody = await get(`/strength/stocks/${encodeURIComponent(t)}`).catch(() => null);
+        const strengthBody = await marketGet(
+          `/strength/stocks/${encodeURIComponent(t)}`,
+          { ttlMs: 60_000, staleMs: 30 * 60_000 },
+        ).catch(() => null);
         const strength = strengthBody !== null ? strengthRowToDetail(asRec(strengthBody)) : null;
         const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
         return {
@@ -106,7 +112,10 @@ export function getDetail(ticker: string): Promise<StockDetail> {
       } catch (e) {
         // 焦点池外（匿名 503 public_snapshot_unavailable）：回退强度扫描行基础行情
         if (!(e instanceof ApiError) || e.code !== 503) throw e;
-        const body = await get(`/strength/stocks/${encodeURIComponent(t)}`).catch(() => null);
+        const body = await marketGet(
+          `/strength/stocks/${encodeURIComponent(t)}`,
+          { ttlMs: 60_000, staleMs: 30 * 60_000 },
+        ).catch(() => null);
         const fallback = body !== null ? strengthRowToDetail(asRec(body)) : null;
         if (fallback === null) throw e;
         return fallback;
@@ -124,7 +133,10 @@ export function getDetailChart(ticker: string, range: ChartRange): Promise<Stock
     },
     // 契约 range ∈ 5m|15m|1h|1d|1w：界面与后端周期一一对应。
     () =>
-      get(`/stocks/${encodeURIComponent(t)}/chart?range=${range}&adjustment=raw`).then((d) =>
+      marketGet(
+        `/stocks/${encodeURIComponent(t)}/chart?range=${range}&adjustment=raw`,
+        { ttlMs: 60_000, staleMs: 60 * 60_000 },
+      ).then((d) =>
         mapChartEx(d, t, range),
       ),
   );
@@ -137,7 +149,11 @@ export function getTrendBias(ticker: string): Promise<StockTrendBias> {
       if (!fx.hasTicker(t)) throw new ApiError(404, `代码 ${t} 不存在`);
       return fx.getStockTrendBias(t);
     },
-    () => get(`/signals/stock/${encodeURIComponent(t)}`),
+    () =>
+      marketGet(`/signals/stock/${encodeURIComponent(t)}`, {
+        ttlMs: 60_000,
+        staleMs: 30 * 60_000,
+      }),
   );
 }
 

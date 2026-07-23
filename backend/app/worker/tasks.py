@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import sqlite3
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -22,7 +23,9 @@ DEFAULT_TASK_NAMES = (
     "catalyst_sync",
     "ai_jobs",
     "maintenance",
+    "stock_directory",
     "public_home",
+    "earnings_analysis",
     "focus_refresh",
     "strength_refresh",
     "breakout_refresh",
@@ -217,6 +220,236 @@ class AIJobsTask:
             details={"processed": int(processed)},
             next_delay_seconds=0.5 if processed else 2.0,
         )
+
+
+class EarningsAnalysisTask:
+    """Queue one real earnings-impact job per new report date in the next month."""
+
+    def __init__(
+        self,
+        owner_id: str,
+        *,
+        settings: Any,
+        personal_config: Any | None = None,
+        repository: Any | None = None,
+        builder: Callable[[date], Any] | None = None,
+        runtime_settings_reader: Callable[[], Any] | None = None,
+        today: Callable[[], date] | None = None,
+    ) -> None:
+        self.owner_id = f"{owner_id}:earnings-analysis"
+        self._settings = settings
+        self._personal_config = personal_config or get_personal_config()
+        self._repository = repository
+        self._builder = builder
+        self._runtime_settings_reader = runtime_settings_reader
+        self._today = today
+
+    async def _effective_settings(self) -> Any:
+        if self._runtime_settings_reader is not None:
+            return await _call_local(self._runtime_settings_reader)
+        from app.services.runtime_settings import get_effective_runtime_settings
+
+        return await _call_local(get_effective_runtime_settings)
+
+    async def _prepare_repository(self) -> Any:
+        if self._repository is None:
+            from app.services.ai_jobs.repository import AIJobRepository
+
+            self._repository = AIJobRepository(self._settings.openai_job_db_path)
+        await _call_local(self._repository.initialize)
+        return self._repository
+
+    @staticmethod
+    def _same_report_date(row: Mapping[str, Any] | None, report_date: str) -> bool:
+        if not row:
+            return False
+        try:
+            payload = json.loads(str(row.get("payload_json") or ""))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return False
+        return (
+            isinstance(payload, dict)
+            and str(payload.get("earnings_date") or "") == report_date
+        )
+
+    async def _run(self, *, manual: bool) -> TaskResult:
+        from app.api import earnings
+        from app.services.ai_jobs import runtime as ai_runtime
+        from app.services.ai_jobs.models import EarningsImpactJobRequest
+        from app.services.runtime_settings import RuntimeSettingsStorageError
+
+        try:
+            effective = await self._effective_settings()
+        except RuntimeSettingsStorageError:
+            return TaskResult(
+                status="degraded",
+                error_code="runtime_settings_unavailable",
+                details={"reason": "runtime_settings_unavailable", "queued": 0},
+            )
+        if manual and not bool(effective.ai.manual_analysis_enabled):
+            return TaskResult(
+                status="disabled",
+                details={"reason": "manual_analysis_disabled", "queued": 0},
+            )
+        if not manual and not bool(
+            effective.earnings.scheduled_analysis_enabled
+        ):
+            return TaskResult(
+                status="idle",
+                details={"result": "not_scheduled", "queued": 0},
+            )
+
+        capability = ai_runtime.capability_status(self._settings)
+        if not bool(capability.get("supported")):
+            return TaskResult(
+                status="disabled",
+                details={
+                    "reason": str(
+                        capability.get("status") or "ai_runtime_unavailable"
+                    ),
+                    "queued": 0,
+                },
+            )
+
+        observed = (
+            self._today()
+            if self._today is not None
+            else earnings._market_today()
+        )
+        builder = self._builder or earnings._build_upcoming_earnings
+        snapshot = await _call_local(builder, observed)
+        if (
+            not isinstance(snapshot, Mapping)
+            or snapshot.get("data_limited") is not False
+            or snapshot.get("source_status") != "active"
+        ):
+            # A provider outage can leave only the curated Yahoo supplement.
+            # Do not mistake that partial hot-list for the full-market scope.
+            return TaskResult(
+                status="degraded",
+                error_code="earnings_snapshot_incomplete",
+                details={
+                    "reason": "earnings_snapshot_incomplete",
+                    "queued": 0,
+                },
+            )
+        rows = (
+            list(snapshot.get("earnings") or [])
+            if isinstance(snapshot, Mapping)
+            else []
+        )
+        lookahead_days = int(effective.earnings.lookahead_days)
+        eligible: list[dict[str, Any]] = []
+        for value in rows:
+            if not isinstance(value, Mapping):
+                continue
+            try:
+                days_until = int(value.get("days_until"))
+            except (TypeError, ValueError):
+                continue
+            if 0 <= days_until <= lookahead_days:
+                eligible.append(dict(value))
+        eligible.sort(
+            key=lambda item: (
+                int(item.get("days_until") or 0),
+                str(item.get("ticker") or ""),
+            )
+        )
+
+        repository = await self._prepare_repository()
+        schema_version, schema_sha256 = ai_runtime.schema_identity(
+            "earnings_impact"
+        )
+        queued = 0
+        existing = 0
+        invalid = 0
+        queue_full = False
+        for item in eligible:
+            raw_payload = {
+                "ticker": str(item.get("ticker") or ""),
+                "name": str(item.get("name") or ""),
+                "sector": str(item.get("sector") or ""),
+                "earnings_date": str(item.get("earnings_date") or item.get("date") or ""),
+                "eps_estimate": item.get("eps_estimate"),
+                "revenue_estimate": item.get("revenue_estimate"),
+                "market_cap": item.get("market_cap"),
+            }
+            try:
+                payload = EarningsImpactJobRequest.model_validate(
+                    raw_payload
+                ).model_dump(mode="json", exclude={"force"})
+            except (TypeError, ValueError):
+                invalid += 1
+                continue
+            latest = await _call_local(
+                repository.latest_for_ticker,
+                "earnings_impact",
+                payload["ticker"],
+            )
+            same_report_date = self._same_report_date(
+                latest,
+                payload["earnings_date"],
+            )
+            retry_failed_report = bool(
+                same_report_date
+                and str((latest or {}).get("status") or "")
+                in {"failed", "cancelled", "budget_blocked"}
+            )
+            if same_report_date and not retry_failed_report:
+                existing += 1
+                continue
+            try:
+                _row, created = await _call_local(
+                    repository.create_job,
+                    job_type="earnings_impact",
+                    payload=payload,
+                    model=self._settings.openai_model,
+                    reasoning=self._settings.openai_reasoning,
+                    execution_mode=self._settings.openai_execution_mode,
+                    prompt_version="earnings-impact-zh-cn-v4",
+                    schema_version=schema_version,
+                    schema_sha256=schema_sha256,
+                    max_queued=self._settings.openai_job_max_queued,
+                    submission_source="manual" if manual else "scheduled",
+                    priority=70 if manual else 40,
+                    force_retry=retry_failed_report,
+                )
+            except RuntimeError as exc:
+                if str(exc) == "ai_job_queue_full":
+                    queue_full = True
+                    break
+                raise
+            queued += int(bool(created))
+            existing += int(not created)
+
+        details = {
+            "result": "queued" if manual else "scheduled",
+            "range_start": observed.isoformat(),
+            "range_end": (observed + timedelta(days=lookahead_days)).isoformat(),
+            "lookahead_days": lookahead_days,
+            "discovered": len(rows),
+            "eligible": len(eligible),
+            "queued": queued,
+            "existing": existing,
+            "invalid": invalid,
+        }
+        if queue_full:
+            return TaskResult(
+                status="degraded",
+                error_code="ai_job_queue_full",
+                details={**details, "reason": "ai_job_queue_full"},
+                next_delay_seconds=60.0,
+            )
+        return TaskResult(status="idle", details=details)
+
+    async def run_for_actions(
+        self,
+        _actions: list[dict[str, Any]],
+    ) -> TaskResult:
+        return await self._run(manual=True)
+
+    async def __call__(self) -> TaskResult:
+        return await self._run(manual=False)
 
 
 class CatalystSyncTask:
@@ -652,6 +885,30 @@ class FocusRefreshTask:
         )
 
 
+class StockDirectoryTask:
+    """Warm and persist the complete Massive U.S. stock directory."""
+
+    async def __call__(self) -> TaskResult:
+        from app.api import stocks
+
+        payload = await stocks._refresh_stock_directory()
+        if (
+            not isinstance(payload, dict)
+            or not payload.get("items")
+            or payload.get("provider") != "Massive"
+            or payload.get("_stale") is True
+        ):
+            raise RuntimeError("stock_directory_unavailable")
+        return TaskResult(
+            status="idle",
+            details={
+                "result": "refreshed",
+                "provider": str(payload.get("provider") or "Massive"),
+                "count": max(0, int(payload.get("count") or 0)),
+            },
+        )
+
+
 @dataclass
 class _PublicHomeFailure:
     attempts: int
@@ -939,6 +1196,14 @@ class PublicHomeTask:
                 "saved_at": float(self._clock()),
                 "parameters": dict(parameters),
             }
+        if resource == "earnings" and (
+            not isinstance(payload, Mapping)
+            or payload.get("data_limited") is not False
+            or payload.get("source_status") != "active"
+        ):
+            # Never replace a complete public calendar with a partial
+            # hot-list fallback produced during a provider outage.
+            raise RuntimeError("earnings_snapshot_incomplete")
         from app.public_home_snapshot import create_public_home_entry
 
         return create_public_home_entry(
@@ -1155,7 +1420,6 @@ class PublicHomeTask:
             breakout_lead_chart_parameters,
             public_home_resource_parameters,
         )
-
         path = self._snapshot_path or get_data_paths().public_home_snapshot
         watchlist_path = self._watchlist_path or (
             path.parent / "watchlist-snapshot-v1.json"
@@ -1757,6 +2021,12 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
     )
     retention = RetentionTask(owner_id, retention_backup)
     public_home = PublicHomeTask(config.public_home)
+    stock_directory = StockDirectoryTask()
+    earnings_analysis = EarningsAnalysisTask(
+        owner_id,
+        settings=settings,
+        personal_config=config,
+    )
     return (
         TaskSpec(
             "breakout",
@@ -1800,6 +2070,15 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             max_backoff_seconds=3600.0,
         ),
         TaskSpec(
+            "stock_directory",
+            stock_directory,
+            interval_seconds=86_400.0,
+            enabled=bool(getattr(settings, "massive_api_key", "")),
+            timeout_seconds=900.0,
+            failure_backoff_seconds=300.0,
+            max_backoff_seconds=3600.0,
+        ),
+        TaskSpec(
             "public_home",
             public_home,
             interval_seconds=float(config.public_home.poll_seconds),
@@ -1809,6 +2088,17 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             max_backoff_seconds=float(config.public_home.poll_seconds),
             may_block_event_loop=False,
             close=public_home.aclose,
+        ),
+        TaskSpec(
+            "earnings_analysis",
+            earnings_analysis,
+            interval_seconds=86_400.0,
+            # Earnings analysis has its own runtime switch. Keep the task
+            # addressable even when the unrelated news-catalyst mode is off.
+            enabled=True,
+            timeout_seconds=1800.0,
+            failure_backoff_seconds=300.0,
+            max_backoff_seconds=3600.0,
         ),
         TaskSpec(
             "focus_refresh",
@@ -1849,12 +2139,14 @@ __all__ = [
     "AIJobsTask",
     "BreakoutTask",
     "CatalystSyncTask",
+    "EarningsAnalysisTask",
     "FocusTask",
     "FocusRefreshTask",
     "MaintenanceTask",
     "DEFAULT_TASK_NAMES",
     "PublicHomeTask",
     "RetentionTask",
+    "StockDirectoryTask",
     "StrengthRefreshTask",
     "build_default_tasks",
 ]

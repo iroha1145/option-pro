@@ -27,11 +27,13 @@ from app.worker.tasks import (
     AIJobsTask,
     BreakoutTask,
     CatalystSyncTask,
+    EarningsAnalysisTask,
     FocusRefreshTask,
     FocusTask,
     MaintenanceTask,
     PublicHomeTask,
     RetentionTask,
+    StockDirectoryTask,
     StrengthRefreshTask,
     build_default_tasks,
 )
@@ -43,7 +45,9 @@ SCHEDULED_TASK_NAMES = {
     "catalyst_sync",
     "ai_jobs",
     "maintenance",
+    "stock_directory",
     "public_home",
+    "earnings_analysis",
     "strength_refresh",
 }
 MANUAL_TASK_NAMES = {
@@ -56,6 +60,63 @@ NOW = datetime(2026, 7, 16, 0, 0, tzinfo=timezone.utc)
 ETL_AS_OF = "2026-07-15T12:00:00Z"
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = REPOSITORY_ROOT / "backend"
+
+
+def test_stock_directory_task_reports_real_persisted_directory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api import stocks
+
+    calls: list[bool] = []
+
+    async def refresh_directory():
+        calls.append(True)
+        return {
+            "items": [{"ticker": "AAOI"}, {"ticker": "NBIS"}],
+            "count": 2,
+            "provider": "Massive",
+        }
+
+    monkeypatch.setattr(stocks, "_refresh_stock_directory", refresh_directory)
+    result = asyncio.run(StockDirectoryTask()())
+    assert calls == [True]
+    assert result.status == "idle"
+    assert result.details == {
+        "result": "refreshed",
+        "provider": "Massive",
+        "count": 2,
+    }
+
+
+def test_stock_directory_task_fails_when_no_safe_directory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api import stocks
+
+    async def refresh_directory():
+        return None
+
+    monkeypatch.setattr(stocks, "_refresh_stock_directory", refresh_directory)
+    with pytest.raises(RuntimeError, match="stock_directory_unavailable"):
+        asyncio.run(StockDirectoryTask()())
+
+
+def test_stock_directory_task_rejects_stale_refresh_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api import stocks
+
+    async def refresh_directory():
+        return {
+            "items": [{"ticker": "AAOI"}],
+            "count": 1,
+            "provider": "Massive",
+            "_stale": True,
+        }
+
+    monkeypatch.setattr(stocks, "_refresh_stock_directory", refresh_directory)
+    with pytest.raises(RuntimeError, match="stock_directory_unavailable"):
+        asyncio.run(StockDirectoryTask()())
 
 
 def _worker_config(
@@ -91,6 +152,8 @@ def _runtime_settings(
     daily_budget_usd: float = 2.0,
     daily_token_limit: int = 10_000_000,
     analysis_cooldown_seconds: int = 30,
+    earnings_scheduled: bool = False,
+    earnings_lookahead_days: int = 30,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         ai=SimpleNamespace(
@@ -106,6 +169,10 @@ def _runtime_settings(
             manual_refresh_cooldown_seconds=30,
             scheduled_analysis_enabled=scheduled,
             scheduled_times_et=scheduled_times,
+        ),
+        earnings=SimpleNamespace(
+            scheduled_analysis_enabled=earnings_scheduled,
+            lookahead_days=earnings_lookahead_days,
         ),
     )
 
@@ -570,9 +637,264 @@ def test_ai_worker_uses_fresh_runtime_budget_without_restart(
     ]
 
 
+def test_earnings_analysis_task_queues_only_new_reports_within_30_days(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.ai_jobs import runtime as ai_runtime
+    from app.services.ai_jobs.repository import AIJobRepository
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    settings = SimpleNamespace(
+        openai_job_db_path=repository.path,
+        openai_api_key=SecretStr("test-only-key"),
+        openai_model="gpt-5.6-terra",
+        openai_reasoning="max",
+        openai_execution_mode="background",
+        openai_job_max_queued=200,
+    )
+    effective = _runtime_settings(
+        manual=True,
+        scheduled=True,
+        earnings_scheduled=True,
+    )
+    personal = SimpleNamespace(
+        features=SimpleNamespace(catalyst_mode="off"),
+    )
+
+    async def builder(_today):
+        return {
+            "data_limited": False,
+            "source_status": "active",
+            "earnings": [
+                {
+                    "ticker": "AAPL",
+                    "name": "Apple",
+                    "earnings_date": "2026-07-23",
+                    "days_until": 0,
+                    "eps_estimate": 1.5,
+                    "revenue_estimate": 90_000_000_000,
+                    "market_cap": 3_000_000_000_000,
+                    "sector": "Technology",
+                },
+                {
+                    "ticker": "MSFT",
+                    "name": "Microsoft",
+                    "earnings_date": "2026-08-22",
+                    "days_until": 30,
+                },
+                {
+                    "ticker": "NVDA",
+                    "name": "NVIDIA",
+                    "earnings_date": "2026-08-23",
+                    "days_until": 31,
+                },
+                {
+                    "ticker": "GOOGL",
+                    "name": "Alphabet",
+                    "earnings_date": "2026-07-22",
+                    "days_until": -1,
+                },
+            ]
+        }
+
+    monkeypatch.setattr(
+        ai_runtime,
+        "capability_status",
+        lambda _settings: {"supported": True, "status": "supported"},
+    )
+    task = EarningsAnalysisTask(
+        "earnings-scheduled",
+        settings=settings,
+        personal_config=personal,
+        repository=repository,
+        builder=builder,
+        runtime_settings_reader=lambda: effective,
+        today=lambda: datetime(2026, 7, 23, tzinfo=timezone.utc).date(),
+    )
+
+    first = asyncio.run(task())
+    second = asyncio.run(task())
+
+    assert first.status == "idle"
+    assert first.details["eligible"] == 2
+    assert first.details["queued"] == 2
+    assert first.details["existing"] == 0
+    assert second.details["queued"] == 0
+    assert second.details["existing"] == 2
+    aapl = repository.latest_for_ticker("earnings_impact", "AAPL")
+    msft = repository.latest_for_ticker("earnings_impact", "MSFT")
+    assert aapl is not None and aapl["submission_source"] == "scheduled"
+    assert msft is not None and msft["submission_source"] == "scheduled"
+    assert repository.latest_for_ticker("earnings_impact", "NVDA") is None
+    assert repository.latest_for_ticker("earnings_impact", "GOOGL") is None
+
+    cancelled = repository.request_cancel(aapl["job_id"])
+    assert cancelled is not None and cancelled["status"] == "cancelled"
+    claimed = repository.claim_due("earnings-completed", lease_seconds=60)
+    assert claimed is not None
+    claimed_payload = json.loads(claimed["payload_json"])
+    assert claimed_payload["ticker"] == "MSFT"
+    repository.complete(
+        claimed["job_id"],
+        "earnings-completed",
+        {
+            "output_language": "zh-CN",
+            "ticker": "MSFT",
+            "summary": "本次财报结果将影响大型软件企业的估值比较。",
+            "expectation": "重点关注云业务增速、利润率与管理层指引。",
+            "impacted": [],
+        },
+        {
+            "input_tokens": 10,
+            "cached_input_tokens": 0,
+            "output_tokens": 10,
+            "reasoning_tokens": 0,
+            "total_tokens": 20,
+        },
+    )
+    third = asyncio.run(task())
+    retried = repository.latest_for_ticker("earnings_impact", "AAPL")
+    completed = repository.latest_for_ticker("earnings_impact", "MSFT")
+
+    assert third.details["queued"] == 1
+    assert third.details["existing"] == 1
+    assert retried is not None and retried["status"] == "pending"
+    assert retried["retry_of_job_id"] == aapl["job_id"]
+    assert completed is not None and completed["status"] == "completed"
+    assert completed["job_id"] == claimed["job_id"]
+
+
+def test_manual_earnings_action_works_when_daily_schedule_is_off(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.ai_jobs import runtime as ai_runtime
+    from app.services.ai_jobs.repository import AIJobRepository
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    settings = SimpleNamespace(
+        openai_job_db_path=repository.path,
+        openai_api_key=SecretStr("test-only-key"),
+        openai_model="gpt-5.6-terra",
+        openai_reasoning="max",
+        openai_execution_mode="background",
+        openai_job_max_queued=200,
+    )
+    effective = _runtime_settings(
+        manual=True,
+        scheduled=True,
+        earnings_scheduled=False,
+    )
+    personal = SimpleNamespace(
+        features=SimpleNamespace(catalyst_mode="off"),
+    )
+
+    monkeypatch.setattr(
+        ai_runtime,
+        "capability_status",
+        lambda _settings: {"supported": True, "status": "supported"},
+    )
+    task = EarningsAnalysisTask(
+        "earnings-manual",
+        settings=settings,
+        personal_config=personal,
+        repository=repository,
+        builder=lambda _today: {
+            "data_limited": False,
+            "source_status": "active",
+            "earnings": [
+                {
+                    "ticker": "META",
+                    "name": "Meta",
+                    "earnings_date": "2026-07-30",
+                    "days_until": 7,
+                }
+            ]
+        },
+        runtime_settings_reader=lambda: effective,
+        today=lambda: datetime(2026, 7, 23, tzinfo=timezone.utc).date(),
+    )
+
+    scheduled = asyncio.run(task())
+    manual = asyncio.run(task.run_for_actions([{"request_id": "manual"}]))
+
+    assert scheduled.details == {"result": "not_scheduled", "queued": 0}
+    assert manual.status == "idle"
+    assert manual.details["queued"] == 1
+    row = repository.latest_for_ticker("earnings_impact", "META")
+    assert row is not None
+    assert row["submission_source"] == "manual"
+
+
+@pytest.mark.parametrize(
+    "snapshot_status",
+    (
+        {"data_limited": True, "source_status": "degraded"},
+        {"data_limited": False, "source_status": "stale"},
+        {},
+    ),
+)
+def test_earnings_analysis_rejects_incomplete_full_market_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    snapshot_status: dict[str, object],
+) -> None:
+    from app.services.ai_jobs import runtime as ai_runtime
+    from app.services.ai_jobs.repository import AIJobRepository
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    settings = SimpleNamespace(
+        openai_job_db_path=repository.path,
+        openai_api_key=SecretStr("test-only-key"),
+        openai_model="gpt-5.6-terra",
+        openai_reasoning="max",
+        openai_execution_mode="background",
+        openai_job_max_queued=200,
+    )
+    effective = _runtime_settings(
+        manual=True,
+        scheduled=True,
+        earnings_scheduled=True,
+    )
+    monkeypatch.setattr(
+        ai_runtime,
+        "capability_status",
+        lambda _settings: {"supported": True, "status": "supported"},
+    )
+    task = EarningsAnalysisTask(
+        "earnings-incomplete",
+        settings=settings,
+        repository=repository,
+        builder=lambda _today: {
+            **snapshot_status,
+            "earnings": [
+                {
+                    "ticker": "AAPL",
+                    "name": "Apple",
+                    "earnings_date": "2026-07-30",
+                    "days_until": 7,
+                }
+            ],
+        },
+        runtime_settings_reader=lambda: effective,
+        today=lambda: datetime(2026, 7, 23, tzinfo=timezone.utc).date(),
+    )
+
+    result = asyncio.run(task())
+
+    assert result.status == "degraded"
+    assert result.error_code == "earnings_snapshot_incomplete"
+    assert result.details == {
+        "reason": "earnings_snapshot_incomplete",
+        "queued": 0,
+    }
+    assert repository.path.exists() is False
+
+
 @pytest.mark.parametrize("mode", ["read", "off"])
 @pytest.mark.parametrize("submission_source", ["manual", "scheduled"])
-def test_ai_worker_mode_caps_stale_enabled_runtime_switches(
+def test_earnings_ai_worker_ignores_unrelated_catalyst_mode(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     mode: str,
@@ -607,18 +929,41 @@ def test_ai_worker_mode_caps_stale_enabled_runtime_switches(
         openai_daily_max_jobs=4,
         openai_daily_budget_usd=2.0,
         openai_manual_cooldown_seconds=30,
+        openai_job_max_age_seconds=86_400,
     )
     monkeypatch.setattr(
         "app.services.runtime_settings.get_effective_runtime_settings",
-        lambda: _runtime_settings(manual=True, scheduled=True),
+        lambda: _runtime_settings(
+            manual=True,
+            scheduled=True,
+            earnings_scheduled=True,
+        ),
     )
+    prepared = 0
     provider_calls = 0
+
+    def prepare(*_args, **_kwargs):
+        nonlocal prepared
+        prepared += 1
+        return {"synthetic": True}
+
+    def stop_before_submission(job_id, owner, **_kwargs):
+        repository.defer(
+            job_id,
+            owner,
+            delay_seconds=60,
+            error_code="synthetic_preflight_stop",
+        )
+        return "concurrency_limit"
 
     async def forbidden_submission(*_args, **_kwargs):
         nonlocal provider_calls
         provider_calls += 1
-        raise AssertionError("read/off mode must not submit provider work")
+        raise AssertionError("test stops before provider submission")
 
+    monkeypatch.setattr(runtime, "runtime_configuration_valid", lambda _settings: True)
+    monkeypatch.setattr(runtime, "prepare_background", prepare)
+    monkeypatch.setattr(repository, "mark_submission_started", stop_before_submission)
     monkeypatch.setattr(runtime, "submit_background", forbidden_submission)
     personal_config = SimpleNamespace(
         features=SimpleNamespace(catalyst_mode=mode),
@@ -634,9 +979,10 @@ def test_ai_worker_mode_caps_stale_enabled_runtime_switches(
     )
     stored = repository.get_job(job["job_id"])
 
-    assert (processed, runtime_state) == (1, "analysis_disabled")
-    assert stored["status"] == "failed"
-    assert stored["error_code"] == f"{submission_source}_analysis_disabled"
+    assert (processed, runtime_state) == (1, "enabled")
+    assert prepared == 1
+    assert stored["status"] == "pending"
+    assert stored["error_code"] == "synthetic_preflight_stop"
     assert stored["submission_started_at"] is None
     assert provider_calls == 0
 
@@ -689,7 +1035,13 @@ def test_worker_once_records_scheduled_tasks_and_isolates_failure(
         TaskSpec("catalyst_sync", failure, 60),
         TaskSpec("ai_jobs", lambda: success("ai_jobs"), 60, drain_on_shutdown=True),
         TaskSpec("maintenance", lambda: success("maintenance"), 60),
+        TaskSpec("stock_directory", lambda: success("stock_directory"), 60),
         TaskSpec("public_home", lambda: success("public_home"), 60),
+        TaskSpec(
+            "earnings_analysis",
+            lambda: success("earnings_analysis"),
+            60,
+        ),
         TaskSpec("strength_refresh", lambda: success("strength_refresh"), 60),
     )
     repository = WorkerStateRepository(tmp_path / "worker.db")
@@ -2359,12 +2711,25 @@ def test_default_task_inventory_and_maintenance_backup(
     assert catalyst_spec.interval_seconds == 120
     maintenance_spec = next(spec for spec in specs if spec.name == "maintenance")
     assert isinstance(maintenance_spec.runner, MaintenanceTask)
+    directory_spec = next(spec for spec in specs if spec.name == "stock_directory")
+    assert isinstance(directory_spec.runner, StockDirectoryTask)
+    assert directory_spec.interval_seconds == 86_400
+    assert directory_spec.enabled is False
+    assert directory_spec.failure_backoff_seconds == 300
+    assert directory_spec.max_backoff_seconds == 3600
     public_home_spec = next(spec for spec in specs if spec.name == "public_home")
     assert isinstance(public_home_spec.runner, PublicHomeTask)
     assert public_home_spec.interval_seconds == 30
     assert public_home_spec.enabled is False
     assert public_home_spec.manual_only is False
     assert public_home_spec.may_block_event_loop is False
+    earnings_analysis_spec = next(
+        spec for spec in specs if spec.name == "earnings_analysis"
+    )
+    assert isinstance(earnings_analysis_spec.runner, EarningsAnalysisTask)
+    assert earnings_analysis_spec.interval_seconds == 86_400
+    assert earnings_analysis_spec.enabled is True
+    assert earnings_analysis_spec.manual_only is False
     strength_spec = next(spec for spec in specs if spec.name == "strength_refresh")
     assert isinstance(strength_spec.runner, StrengthRefreshTask)
     assert strength_spec.interval_seconds == 86_400
@@ -2406,3 +2771,10 @@ def test_default_task_inventory_and_maintenance_backup(
         spec for spec in password_specs if spec.name == "public_home"
     )
     assert password_public_home.enabled is True
+
+    worker_settings.massive_api_key = "configured-for-test"
+    massive_specs = build_default_tasks("inventory", settings=worker_settings)
+    massive_directory = next(
+        spec for spec in massive_specs if spec.name == "stock_directory"
+    )
+    assert massive_directory.enabled is True

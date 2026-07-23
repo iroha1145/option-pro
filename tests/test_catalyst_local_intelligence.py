@@ -5471,9 +5471,19 @@ def test_market_focus_snapshot_includes_bounded_calendar_evidence(tmp_path, monk
     ("source_title", "public_title"),
     [
         ("EIA Crude Oil Inventories USA", "EIA能源库存数据"),
-        ("RETAIL SALES", "经济日历事件"),
-        ("NONFARM PAYROLLS", "经济日历事件"),
-        ("美国<EIA>原油库存", "经济日历事件"),
+        ("Unemployment Rate", "失业率"),
+        ("Employment Change", "就业人数变动"),
+        ("Monetary Policy Statement", "货币政策声明"),
+        ("Main Refinancing Rate", "欧洲央行主要再融资利率"),
+        ("Unemployment Claims", "初请失业金人数"),
+        ("ECB Press Conference", "新闻发布会"),
+        ("RETAIL SALES", "零售销售"),
+        ("NONFARM PAYROLLS", "非农就业人数变动"),
+        ("HCOB Manufacturing PMI Flash", "制造业PMI初值"),
+        ("美国<EIA>原油库存", "美国原油库存"),
+        ("Wholesale Inventories m/m", "原文事件：Wholesale Inventories m/m"),
+        ("<script>alert(1)</script>", "原文事件：alert(1)"),
+        ("", "标题缺失（上游未提供）"),
     ],
 )
 def test_public_calendar_title_keeps_only_safe_event_initialisms(
@@ -5481,6 +5491,36 @@ def test_public_calendar_title_keeps_only_safe_event_initialisms(
     public_title,
 ):
     assert local_module._public_calendar_title(source_title) == public_title
+    assert public_title != "经济日历事件"
+
+
+def test_calendar_release_status_distinguishes_upstream_lag_from_future_release():
+    as_of = datetime(2026, 7, 23, 16, 30, tzinfo=timezone.utc)
+
+    assert (
+        local_module._calendar_release_status(
+            scheduled_at=as_of - timedelta(hours=4),
+            actual=None,
+            as_of=as_of,
+        )
+        == "awaiting_source"
+    )
+    assert (
+        local_module._calendar_release_status(
+            scheduled_at=as_of + timedelta(hours=4),
+            actual=None,
+            as_of=as_of,
+        )
+        == "scheduled"
+    )
+    assert (
+        local_module._calendar_release_status(
+            scheduled_at=as_of - timedelta(hours=4),
+            actual="211K",
+            as_of=as_of,
+        )
+        == "released"
+    )
 
 
 def test_historical_news_hides_future_job_state_and_result(tmp_path):
@@ -6225,6 +6265,91 @@ def test_status_exposes_each_manual_refresh_state_and_cooldown(
     assert refreshes["calendar"]["error_code"] == "calendar_upstream_failed"
     assert refreshes["source_health"]["status"] == "idle"
     assert all("idempotency_key" not in item for item in refreshes.values())
+
+
+def test_status_reports_real_24h_item_counts_and_freshness_lag(tmp_path):
+    etl, _ai, intelligence = _stack(tmp_path)
+    observed = datetime(2026, 7, 23, 18, 0, tzinfo=timezone.utc)
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                1,
+                701,
+                available_at=observed - timedelta(hours=2),
+            ),
+            _news_change(
+                2,
+                702,
+                available_at=observed - timedelta(hours=30),
+            ),
+        ],
+        as_of=observed - timedelta(hours=1),
+    )
+    state = etl.state("calendar")
+    page = CalendarPage.model_validate(
+        {
+            "items": [
+                {
+                    "event_id": "recent-event",
+                    "country_code": "USD",
+                    "country": "United States",
+                    "title": "Unemployment Claims",
+                    "impact": "high",
+                    "impact_zh": "高",
+                    "scheduled_at": _iso(observed - timedelta(hours=3)),
+                    "scheduled_at_utc": _iso(observed - timedelta(hours=3)),
+                    "forecast": "220K",
+                    "previous": "215K",
+                    "actual": "211K",
+                    "is_stale": False,
+                    "source_fetched_at": _iso(observed),
+                    "available_at": _iso(observed),
+                    "ordinal": 1,
+                },
+                {
+                    "event_id": "old-event",
+                    "country_code": "USD",
+                    "country": "United States",
+                    "title": "Retail Sales",
+                    "impact": "medium",
+                    "impact_zh": "中",
+                    "scheduled_at": _iso(observed - timedelta(hours=28)),
+                    "scheduled_at_utc": _iso(observed - timedelta(hours=28)),
+                    "forecast": "0.2%",
+                    "previous": "0.1%",
+                    "actual": "0.3%",
+                    "is_stale": False,
+                    "source_fetched_at": _iso(observed),
+                    "available_at": _iso(observed),
+                    "ordinal": 2,
+                },
+            ],
+            "has_more": False,
+            "next_cursor": None,
+            "watermark": {
+                "sequence": 1,
+                "snapshot_token": "cal_" + "7" * 40,
+                "as_of": _iso(observed - timedelta(minutes=30)),
+            },
+            "data_through": _iso(observed - timedelta(minutes=30)),
+            "is_stale": False,
+            "next_updated_after": _iso(observed - timedelta(minutes=30)),
+            "next_after_sequence": 1,
+        }
+    )
+    etl.apply_calendar_page(
+        page,
+        expected_cursor=state.cursor,
+        expected_generation=state.generation,
+    )
+
+    streams = intelligence.status(now=observed)["streams"]
+
+    assert streams["news"]["items_last_24h"] == 1
+    assert streams["news"]["lag_ms"] == 3_600_000
+    assert streams["calendar"]["items_last_24h"] == 1
+    assert streams["calendar"]["lag_ms"] == 1_800_000
 
 
 def test_public_reads_never_recover_or_expose_manual_refresh_state(

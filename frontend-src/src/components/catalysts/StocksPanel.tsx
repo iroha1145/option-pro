@@ -39,13 +39,21 @@ function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) 
         aria-label={`净影响 ${sign}${Math.abs(value).toFixed(2)}（非收益）`}
       >
         <span className="absolute left-1/2 top-1/2 h-2.5 w-px -translate-x-1/2 -translate-y-1/2 bg-ink-300" aria-hidden="true" />
-        <motion.span
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ type: 'spring', stiffness: 520, damping: 32, delay: 0.15 }}
-          className={cn('absolute top-1/2 size-2.5 -translate-y-1/2 rounded-full border-2 border-card', value >= 0 ? 'bg-up-600' : 'bg-down-600')}
-          style={{ left: `calc(${pct}% - 5px)` }}
-        />
+        <span
+          className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
+          style={{ left: `${pct}%` }}
+          aria-hidden="true"
+        >
+          <motion.span
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', stiffness: 520, damping: 32, delay: 0.15 }}
+            className={cn(
+              'block size-2.5 rounded-full border-2 border-card',
+              value >= 0 ? 'bg-up-600' : 'bg-down-600',
+            )}
+          />
+        </span>
       </div>
       <span className={cn('font-mono text-data-m tnum', tone)} title="净影响分 · 非收益">
         {sign}

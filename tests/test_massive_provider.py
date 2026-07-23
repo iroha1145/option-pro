@@ -15,6 +15,10 @@ def test_symbol_mapping_covers_indices_classes_and_unsupported() -> None:
     assert massive.to_symbol("^GSPC") == "I:SPX"
     assert massive.to_symbol("^VIX") == "I:VIX"
     assert massive.to_symbol("BRK-B") == "BRK.B"
+    assert massive.to_symbol("BRK.B") == "BRK.B"
+    assert massive.to_symbol("CWEN.A") == "CWEN.A"
+    assert massive.to_yahoo_symbol("BRK.B") == "BRK-B"
+    assert massive.to_yahoo_symbol("AAOI") == "AAOI"
     assert massive.to_symbol("ES=F") is None      # 期货不在范围
     assert massive.to_symbol("RMS.PA") is None    # 非美市场后缀
     assert massive.to_symbol("^UNKNOWNIDX") is None
@@ -119,6 +123,127 @@ def test_ticker_range_request_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     assert seen["params"]["adjusted"] == "false"
     assert seen["params"]["sort"] == "asc"
     assert bars[0]["c"] == 1.5
+
+
+def test_reference_tickers_reads_complete_us_directory_with_safe_pagination(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict] = []
+    monkeypatch.setattr(massive, "_REFERENCE_PAGE_SIZE", 2)
+
+    def fake_get(path, params=None):
+        assert path == "/v3/reference/tickers"
+        calls.append(dict(params))
+        if "cursor" not in params:
+            return {
+                "results": [
+                    {
+                        "ticker": "AAOI",
+                        "name": "Applied Optoelectronics, Inc.",
+                        "market": "stocks",
+                        "locale": "us",
+                        "type": "CS",
+                        "active": True,
+                    },
+                    {
+                        "ticker": "NBIS",
+                        "name": "Nebius Group N.V. Class A",
+                        "market": "stocks",
+                        "locale": "us",
+                        "type": "CS",
+                        "active": True,
+                    },
+                ],
+                "next_url": (
+                    "https://api.massive.com/v3/reference/tickers"
+                    "?cursor=opaque-page-2&apiKey=must-not-be-forwarded"
+                ),
+            }
+        assert params == {"cursor": "opaque-page-2"}
+        return {
+            "results": [
+                {
+                    "ticker": "ZZZZ",
+                    "name": "",
+                    "market": "stocks",
+                    "locale": "us",
+                    "type": "CS",
+                    "active": True,
+                }
+            ]
+        }
+
+    monkeypatch.setattr(massive, "_get", fake_get)
+    rows = massive.reference_tickers()
+
+    assert [row["ticker"] for row in rows] == ["AAOI", "NBIS", "ZZZZ"]
+    assert rows[-1]["name"] == "ZZZZ"
+    assert len(calls) == 2
+    assert calls[0]["market"] == "stocks"
+    assert calls[0]["locale"] == "us"
+    assert calls[0]["active"] == "true"
+    assert "apiKey" not in calls[0]
+    assert all("apiKey" not in call for call in calls)
+
+
+def test_reference_tickers_does_not_publish_a_partial_directory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    def fake_get(_path, params=None):
+        nonlocal calls
+        calls += 1
+        if "cursor" not in params:
+            return {
+                "results": [
+                    {
+                        "ticker": "AAOI",
+                        "name": "Applied Optoelectronics, Inc.",
+                        "market": "stocks",
+                        "locale": "us",
+                        "type": "CS",
+                        "active": True,
+                    }
+                ],
+                "next_url": (
+                    "https://api.massive.com/v3/reference/tickers"
+                    "?cursor=opaque-page-2"
+                ),
+            }
+        return {"status": "OK"}
+
+    monkeypatch.setattr(massive, "_get", fake_get)
+    with pytest.raises(massive.MassiveError) as captured:
+        massive.reference_tickers()
+    assert captured.value.code == "protocol"
+    assert calls == 2
+
+
+@pytest.mark.parametrize(
+    "next_url",
+    [
+        "https://attacker.invalid/v3/reference/tickers?cursor=page-2",
+        "https://api.massive.com/v3/reference/options/contracts?cursor=page-2",
+        "https://api.massive.com/v3/reference/tickers?apiKey=secret",
+        "https://api.massive.com/v3/reference/tickers?cursor=page-2&cursor=again",
+    ],
+)
+def test_reference_tickers_rejects_unsafe_or_invalid_next_urls(
+    monkeypatch: pytest.MonkeyPatch,
+    next_url: str,
+) -> None:
+    monkeypatch.setattr(
+        massive,
+        "_get",
+        lambda *_args, **_kwargs: {
+            "results": [],
+            "next_url": next_url,
+        },
+    )
+    with pytest.raises(massive.MassiveError) as captured:
+        massive.reference_tickers()
+    assert captured.value.code == "protocol"
 
 
 def test_unconfigured_get_raises_without_network(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -48,6 +48,7 @@ export interface IvMetaVm {
   requestedCount: number | null;
   successRate: number | null;
   failedSymbols: string[];
+  snapshotSource: string | null;
 }
 
 const PERIOD_LABELS: Record<SectorPeriod, string> = {
@@ -134,6 +135,7 @@ export function normalizeIvMeta(envelope: SectorIvRankingEnvelope | null): IvMet
     requestedCount: envelope?.requestedCount ?? null,
     successRate: envelope?.successRate ?? null,
     failedSymbols: envelope?.failedSymbols ?? [],
+    snapshotSource: envelope?.snapshotSource ?? null,
   };
 }
 

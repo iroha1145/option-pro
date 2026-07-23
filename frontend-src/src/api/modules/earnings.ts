@@ -23,6 +23,16 @@ export interface EarningsImpactResult {
   impacted: EarningsImpactItem[];
 }
 
+export interface EarningsCalendarResult {
+  items: EarningsItem[];
+  dataLimited: boolean;
+  sourceStatus: string;
+  providers: string[];
+  asOf: string | null;
+  refreshStatus: string | null;
+  refreshRetryAfterSeconds: number | null;
+}
+
 /**
  * 契约 {earnings:[{ticker,name,earnings_date,days_until,eps_estimate,eps_high,eps_low,
  * revenue_estimate,market_cap,sector,earnings_date_source,source_status,observed_at}]} → UI EarningsItem[]
@@ -46,6 +56,22 @@ export function mapUpcoming(body: unknown): EarningsItem[] {
       revActual: pickN(r, 'revActual', 'revenue_actual'),
     };
   });
+}
+
+export function mapUpcomingPayload(body: unknown): EarningsCalendarResult {
+  const row = asRec(body);
+  const providers = Array.isArray(row.providers)
+    ? row.providers.filter((value): value is string => typeof value === 'string' && value.length > 0)
+    : [];
+  return {
+    items: mapUpcoming(body),
+    dataLimited: row.data_limited === true,
+    sourceStatus: pickS(row, 'source_status') ?? 'unknown',
+    providers,
+    asOf: pickS(row, 'as_of'),
+    refreshStatus: pickS(row, 'refresh_status'),
+    refreshRetryAfterSeconds: pickN(row, 'refresh_retry_after_seconds'),
+  };
 }
 
 const RELATIONS = new Set<EarningsImpactRelation>(['competitor', 'supplier', 'customer', 'etf', 'opposing']);
@@ -134,11 +160,33 @@ function normalizeMockEarningsImpact(body: unknown): EarningsImpactResult {
 }
 
 export const earningsApi = {
-  upcoming: (): Promise<EarningsItem[]> =>
-    mockOr(() => fx2.getEarningsUpcoming(), () => get('/earnings/upcoming').then(mapUpcoming)),
-  refresh: (): Promise<EarningsItem[]> =>
+  upcoming: (): Promise<EarningsCalendarResult> =>
+    mockOr(
+      () => ({
+        items: fx2.getEarningsUpcoming(),
+        dataLimited: false,
+        sourceStatus: 'active',
+        providers: ['本地演示数据'],
+        asOf: new Date().toISOString(),
+        refreshStatus: null,
+        refreshRetryAfterSeconds: null,
+      }),
+      () => get('/earnings/upcoming').then(mapUpcomingPayload),
+    ),
+  refresh: (): Promise<EarningsCalendarResult> =>
     // 契约：owner+SO → {earnings:[...], refresh_status∈refreshed|cooldown|failed_stale}
-    mockOr(() => fx2.refreshEarningsUpcoming(), () => post('/earnings/upcoming/refresh').then(mapUpcoming)),
+    mockOr(
+      () => ({
+        items: fx2.refreshEarningsUpcoming(),
+        dataLimited: false,
+        sourceStatus: 'active',
+        providers: ['本地演示数据'],
+        asOf: new Date().toISOString(),
+        refreshStatus: 'refreshed',
+        refreshRetryAfterSeconds: 60,
+      }),
+      () => post('/earnings/upcoming/refresh').then(mapUpcomingPayload),
+    ),
   impact: (ticker: string): Promise<EarningsImpactResult> =>
     // 409 analysis_required 由 client 统一透传（code + bizCode），UI 状态机消费
     mockOr(

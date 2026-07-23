@@ -140,7 +140,10 @@ export default function Screener() {
   const dirty = scanState === 'done' && !filtersEqual(draft, applied);
 
   /* ---------------- 执行扫描 ---------------- */
-  const runScan = useCallback(async (filters: ScanFilters) => {
+  const runScan = useCallback(async (
+    filters: ScanFilters,
+    options: { forceRefresh?: boolean } = {},
+  ) => {
     const seq = ++scanSeq.current;
     setScanState('scanning');
     setScanError(null);
@@ -150,9 +153,7 @@ export default function Screener() {
     try {
       const { apiParams: params, refreshParameters: requested } = buildStrengthScanRequest(filters);
 
-      // Owner 扫描先提交精确参数。后端可能复用另一个仍在执行/冷却中的扫描；
-      // 只有返回参数完全一致时才等待并读取快照，避免把旧参数结果冒充为本次刷新。
-      if (isOwner) {
+      const refreshSnapshot = async () => {
         const action = await runtimeApi.workerAction('strength_refresh', requested);
         if (!strengthParametersMatch(action.details.parameters, requested)) {
           throw new ApiError(409, '另一组筛选条件正在扫描或冷却，请稍后重试', {
@@ -162,8 +163,25 @@ export default function Screener() {
         }
         if (!action.requestId) throw new ApiError(502, '后台扫描未返回 request_id');
         if (action.status !== 'completed') await runtimeApi.waitForWorkerAction(action.requestId);
+      };
+
+      // 普通“扫描”只读取后台已生成的精确参数快照。仅在该快照确实缺失时，
+      // Owner 才补触发一次 worker；“刷新强度分”按钮则明确执行强制刷新。
+      if (isOwner && !isMock && options.forceRefresh) {
+        await refreshSnapshot();
       }
-      const result = await strengthApi.scanEnvelope(params);
+      let result: StrengthScanEnvelope;
+      try {
+        result = await strengthApi.scanEnvelope(params, Boolean(options.forceRefresh));
+      } catch (error) {
+        const snapshotMissing =
+          error instanceof ApiError
+          && error.code === 503
+          && error.bizCode === 'strength_snapshot_unavailable';
+        if (!isOwner || isMock || options.forceRefresh || !snapshotMissing) throw error;
+        await refreshSnapshot();
+        result = await strengthApi.scanEnvelope(params, true);
+      }
       const elapsed = Date.now() - startedAt;
       if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
       if (scanSeq.current !== seq) return;
@@ -320,7 +338,7 @@ export default function Screener() {
   const onStrengthRefresh = useCallback(async () => {
     setRefreshingStrength(true);
     try {
-      const ok = await runScan(applied);
+      const ok = await runScan(applied, { forceRefresh: true });
       if (!ok) {
         toast.error('刷新失败', '后台扫描未完成，请查看结果区错误');
         return;

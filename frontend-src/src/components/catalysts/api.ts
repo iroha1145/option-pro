@@ -250,15 +250,20 @@ function nCycle(raw: unknown): MarketFocusCycle {
   };
 }
 
-const STREAM_CN: Record<string, string> = { news: '新闻流', calendar: '经济日历' };
+const STREAM_CN: Record<string, string> = {
+  news: '新闻采集流',
+  calendar: '经济日历流',
+};
 
 function nStream(key: string, raw: unknown): CatalystStreamHealth | null {
   const r = asRec(raw);
   if (!Object.keys(r).length) return null;
   const failures = pickN(r, 'consecutive_failures') ?? 0;
+  const remoteStatus = pickS(r, 'remote_status');
   return {
     name: STREAM_CN[key] ?? key,
-    ok: (pickS(r, 'remote_status') ?? 'ok') === 'ok' && failures === 0,
+    // 缺少 remote_status 不能视作正常；必须由后端明确报告成功。
+    ok: remoteStatus === 'ok' && failures === 0,
     lastSuccessAt: pickS(r, 'last_success_at', 'data_through') ?? '',
     failures,
     errorCode: pickS(r, 'last_error_code'),
@@ -277,7 +282,8 @@ function nStatus(d: unknown): CatalystsStatusDetail {
     const analysisReason = pickS(avail, 'reason');
     if (analysisReason === 'owner_login_required') notifyOwnerSessionInvalid();
     return {
-      collecting: pickS(r, 'status') === 'active' && (pickB(r, 'enabled') ?? true),
+      // 缺少 enabled 不能默认打开，避免把不完整快照误报成正在采集。
+      collecting: pickS(r, 'status') === 'active' && pickB(r, 'enabled') === true,
       intervalMinutes: null,
       lastCrawlAt: pickS(r, 'last_sync_at', 'data_through') ?? '',
       newsToday: null,
@@ -372,16 +378,28 @@ function nHotspot(r: Rec): HotspotGroup {
 
 function nEconEvent(r: Rec): EconomicEvent {
   const impact = pickS(r, 'impact') ?? 'low';
+  const scheduledAt = pickS(r, 'scheduledAt', 'scheduled_at', 'scheduled_at_utc') ?? '';
+  const actual = pickS(r, 'actual');
+  const rawReleaseStatus = pickS(r, 'releaseStatus', 'release_status');
+  const releaseStatus =
+    rawReleaseStatus === 'released' || rawReleaseStatus === 'awaiting_source' || rawReleaseStatus === 'scheduled'
+      ? rawReleaseStatus
+      : actual !== null
+        ? 'released'
+        : scheduledAt && Date.parse(scheduledAt) <= Date.now()
+          ? 'awaiting_source'
+          : 'scheduled';
   return {
     eventId: pickId(r, 'eventId', 'event_id') ?? '',
     country: pickS(r, 'country') ?? pickS(r, 'country_code') ?? '',
     title: pickS(r, 'title') ?? '',
     impact: (['low', 'medium', 'high', 'holiday'].includes(impact) ? impact : 'low') as EconomicEvent['impact'],
     impactZh: pickS(r, 'impactZh', 'impact_zh') ?? '',
-    scheduledAt: pickS(r, 'scheduledAt', 'scheduled_at', 'scheduled_at_utc') ?? '',
-    forecast: pickS(r, 'forecast') ?? '',
-    previous: pickS(r, 'previous') ?? '',
-    actual: pickS(r, 'actual'),
+    scheduledAt,
+    forecast: pickS(r, 'forecast') ?? '—',
+    previous: pickS(r, 'previous') ?? '—',
+    actual,
+    releaseStatus,
   };
 }
 
@@ -389,9 +407,9 @@ function nSource(r: Rec): SourceHealth {
   return {
     source: pickS(r, 'source', 'name') ?? '',
     status: pickS(r, 'status') === 'active' ? 'active' : 'degraded',
-    latencyMs: pickN(r, 'latencyMs', 'latency_ms'),
+    latencyMs: pickN(r, 'lagMs', 'lag_ms', 'latencyMs', 'latency_ms'),
     lastFetchedAt: pickS(r, 'lastFetchedAt', 'last_fetched_at', 'last_success_at') ?? '',
-    itemsToday: pickN(r, 'itemsToday', 'items_today') ?? 0,
+    itemsToday: pickN(r, 'itemsLast24h', 'items_last_24h', 'itemsToday', 'items_today'),
     note: pickS(r, 'note') ?? '',
   };
 }
@@ -622,9 +640,9 @@ export const catalystsContract = {
           return {
             source: streamNames[key] ?? key,
             status: active ? ('active' as const) : ('degraded' as const),
-            latencyMs: null,
+            latencyMs: pickN(r, 'lag_ms', 'lagMs'),
             lastFetchedAt: pickS(r, 'last_success_at', 'data_through') ?? '',
-            itemsToday: null,
+            itemsToday: pickN(r, 'items_last_24h', 'itemsLast24h'),
             note: active
               ? '后台采集流最近一次执行成功'
               : pickS(r, 'last_error_code') ?? '后台采集流状态异常',

@@ -114,7 +114,10 @@ function PriceHeader({ detail }: { detail: StockDetail }) {
       </div>
 
       <p className="mt-2 text-micro text-ink-400">
-        报价更新于 <span className="font-mono tnum">{fmtTimeHHMMSS(new Date(detail.updatedAt))}</span> · 延迟行情
+        报价更新于 <span className="font-mono tnum">{fmtTimeHHMMSS(new Date(detail.updatedAt))}</span>
+        {' · '}
+        {detail.priceProvider ? `价格来源 ${detail.priceProvider}` : '价格来源未标注'}
+        {' · 延迟行情'}
       </p>
     </motion.header>
   );
@@ -267,6 +270,13 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
       </AnimatePresence>
     </div>
   );
+  const providerNote = [
+    `价格来源：${detail.priceProvider ?? '接口未标注'}`,
+    `公司资料：${detail.profileProvider ?? '接口未标注'}`,
+    '延迟行情',
+    '影响分非收益',
+    '置信度非胜率',
+  ].join(' · ');
 
   if (layout === 'page') {
     return (
@@ -285,7 +295,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
           </aside>
         </div>
         {tabs}
-        <SourceNote className="mt-8" text="来源：Optix Research · 延迟行情 · 影响分非收益 · 置信度非胜率" />
+        <SourceNote className="mt-8" text={providerNote} />
       </div>
     );
   }
@@ -298,7 +308,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
         <KlineChart ticker={detail.ticker} prevClose={detail.prevClose} height={isMobile ? 260 : 320} />
       </div>
       {tabs}
-      <SourceNote className="mt-6" />
+      <SourceNote className="mt-6" text={providerNote} />
     </div>
   );
 }

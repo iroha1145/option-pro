@@ -173,9 +173,11 @@ test('screener waiting state does not invent a percentage', async () => {
 
 test('login identity does not masquerade as AI availability', async () => {
   const source = await readFile(accessApiSource, 'utf8');
-  assert.match(source, /get\('\/catalysts\/status'\)/);
-  assert.match(source, /analysis_trigger_enabled/);
-  assert.match(source, /analysis_availability/);
+  assert.match(source, /get\('\/ai\/status'\)/);
+  assert.match(source, /get\('\/runtime-settings'\)/);
+  assert.match(source, /manual_analysis_enabled/);
+  assert.match(source, /capabilityEnabled/);
+  assert.doesNotMatch(source, /get\('\/catalysts\/status'\)/);
   assert.doesNotMatch(source, /aiEnabled:\s*s\.access_mode\s*===\s*'private_network'\s*\|\|\s*s\.logged_in/);
 });
 
@@ -194,8 +196,11 @@ test('chart controls map one-to-one to the backend candle intervals', async () =
 
 test('missing worker health fields fail closed', async () => {
   const source = await readFile(adminApiSource, 'utf8');
-  assert.match(source, /enabled: pickB\(r, 'enabled'\) \?\? false/);
-  assert.match(source, /healthy: \(pickB\(r, 'healthy'\) \?\? false\)/);
+  assert.match(source, /const enabled = pickB\(r, 'enabled'\) \?\? false/);
+  assert.match(
+    source,
+    /pickB\(r, 'healthy'\)[\s\S]*?\?\? \(enabled && !\[[\s\S]*?'disabled'[\s\S]*?\]\.includes\(status\)\)/,
+  );
   assert.doesNotMatch(source, /enabled: pickB\(r, 'enabled'\) \?\? true/);
 });
 

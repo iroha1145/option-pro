@@ -1,4 +1,4 @@
-/** sources 面板：数据源健康卡（active/degraded LED + 延迟 + 最近抓取 + 今日条数） */
+/** sources 面板：数据源健康卡（采集状态 + 数据新鲜度 + 最近抓取 + 近 24h 条数） */
 import { motion } from 'framer-motion';
 import { usePolling } from '@/hooks/usePolling';
 import { catalystsContract } from './api';
@@ -8,6 +8,14 @@ import { SkeletonCard } from '@/components/shared/Skeleton';
 import SourceNote from '@/components/shared/SourceNote';
 import { cn } from '@/lib/utils';
 import { fmtRelative } from '@/lib/format';
+
+function formatDataLag(milliseconds: number | null): string {
+  if (milliseconds === null) return '—';
+  if (milliseconds < 1_000) return '<1秒';
+  if (milliseconds < 60_000) return `${Math.round(milliseconds / 1_000)}秒`;
+  if (milliseconds < 3_600_000) return `${Math.round(milliseconds / 60_000)}分`;
+  return `${(milliseconds / 3_600_000).toFixed(milliseconds < 36_000_000 ? 1 : 0)}小时`;
+}
 
 export default function SourcesPanel({ refreshToken }: { refreshToken: number }) {
   const q = usePolling(() => catalystsContract.sources(), 120_000, [refreshToken]);
@@ -73,8 +81,8 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
             </div>
             <div className="mt-4 grid grid-cols-3 gap-2 text-center">
               <div>
-                <p className="font-mono text-data-l text-ink-900 tnum">{s.latencyMs ?? '—'}</p>
-                <p className="mt-0.5 text-micro text-ink-400">延迟 ms</p>
+                <p className="font-mono text-data-l text-ink-900 tnum">{formatDataLag(s.latencyMs)}</p>
+                <p className="mt-0.5 text-micro text-ink-400">数据滞后</p>
               </div>
               <div>
                 <p className="font-mono text-data-l text-ink-900 tnum">{s.itemsToday ?? '—'}</p>
@@ -91,7 +99,10 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
           </motion.div>
         ))}
       </motion.div>
-      <SourceNote className="mt-4" text="状态来自后台采集流健康快照；未提供的延迟与条数留空" />
+      <SourceNote
+        className="mt-4"
+        text="数据滞后为状态读取时刻减去数据覆盖截止时刻，不代表接口请求耗时；条数按最近 24 小时的新闻入库时间或经济事件公布时间统计"
+      />
     </div>
   );
 }

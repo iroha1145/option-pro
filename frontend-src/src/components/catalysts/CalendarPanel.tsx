@@ -128,6 +128,8 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                           实际{' '}
                           {ev.actual !== null ? (
                             <span className="font-medium text-brand-600">{ev.actual}</span>
+                          ) : ev.releaseStatus === 'awaiting_source' ? (
+                            <span className="text-warn-600">数据源未回填</span>
                           ) : (
                             <span className="text-ink-300">待公布</span>
                           )}

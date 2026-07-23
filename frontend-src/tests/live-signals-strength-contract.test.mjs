@@ -39,10 +39,12 @@ test('market status normalizes backend hyphenated extended-hours values', async 
   assert.match(api, /normalizeMarketState\(raw\?\.market\)/);
 });
 
-test('watchlist refresh reports submission and follows polling state', async () => {
+test('watchlist refresh waits for the real worker action and follows both refresh states', async () => {
   const watchlist = await read('src/pages/Watchlist.tsx');
-  assert.match(watchlist, /spinning=\{wl\.refreshing\}/);
-  assert.match(watchlist, /刷新请求已提交/);
+  assert.match(watchlist, /runtimeApi\.workerAction\('focus_refresh'\)/);
+  assert.match(watchlist, /runtimeApi\.waitForWorkerAction\(action\.requestId\)/);
+  assert.match(watchlist, /spinning=\{forceRefreshing \|\| wl\.refreshing\}/);
+  assert.match(watchlist, /后台正在重建完整自选快照/);
   assert.doesNotMatch(watchlist, /setTimeout\(\(\) => setSpinning/);
   assert.doesNotMatch(watchlist, /已强制刷新自选快照/);
   assert.match(watchlist, /rowStrengthAvailable/);

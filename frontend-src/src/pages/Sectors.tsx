@@ -43,7 +43,7 @@ export default function Sectors() {
   const [view, setView] = useState<'heat' | 'list'>('heat');
   const [period, setPeriod] = useState<SectorPeriod>('3mo');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [ivSectorId, setIvSectorId] = useState('semi');
+  const [ivSectorId, setIvSectorId] = useState<string | null>(null);
 
   const catalogQ = usePolling(() => sectorsApi.list(), 600_000);
   const strengthQ = usePolling(
@@ -57,12 +57,21 @@ export default function Sectors() {
     [catalogQ.data, strengthEnvelope],
   );
 
+  // IV 路径只接受后端目录中的完整 sector id。目录未到达前不发请求，
+  // 避免旧占位符（如 semi）先触发 404 并污染首屏状态。
+  const catalogIds = useMemo(
+    () => new Set((catalogQ.data ?? []).map((sector) => sector.id)),
+    [catalogQ.data],
+  );
   const ivSectorIdValid =
-    sectors.length > 0 && !sectors.some((sector) => sector.id === ivSectorId)
-      ? sectors[0].id
-      : ivSectorId;
+    ivSectorId && catalogIds.has(ivSectorId)
+      ? ivSectorId
+      : (catalogQ.data?.[0]?.id ?? null);
   const ivQ = usePolling(
-    () => sectorsApi.ivRanking(ivSectorIdValid),
+    () =>
+      ivSectorIdValid
+        ? sectorsApi.ivRanking(ivSectorIdValid)
+        : Promise.resolve(null),
     600_000,
     [ivSectorIdValid],
   );
@@ -242,6 +251,14 @@ export default function Sectors() {
             <div className="card-surface p-4 md:p-6">
               <SkeletonRows rows={6} />
             </div>
+          ) : !ivSectorIdValid ? (
+            <div className="card-surface">
+              <EmptyState
+                image="/empty-chart.svg"
+                title="暂无可查询的板块"
+                description="板块目录没有返回有效编号，未发起 IV 排名请求。"
+              />
+            </div>
           ) : (
             <IvPanel
               sectors={sectors.map((sector) => ({
@@ -268,6 +285,14 @@ export default function Sectors() {
                 icon="doc-quote"
                 title="IV 数据暂不可用"
                 description="板块目录不可用，保持空状态。"
+              />
+            </div>
+          ) : !catalogQ.loading && !ivSectorIdValid ? (
+            <div className="card-surface">
+              <EmptyState
+                image="/empty-chart.svg"
+                title="暂无板块 IV 数据"
+                description="等待板块目录提供有效查询范围。"
               />
             </div>
           ) : (
