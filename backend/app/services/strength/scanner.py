@@ -539,13 +539,13 @@ def _period_calendar_days(period: str) -> int:
     return 405
 
 
-def _massive_history_is_complete(
+def _validated_massive_history(
     rows: list[dict[str, Any]],
     *,
     period: str,
     end: date,
-) -> bool:
-    """Reject short, stale or structurally incomplete Massive histories."""
+) -> list[dict[str, float]]:
+    """Return distinct, coherent OHLCV bars or an empty list when incomplete."""
 
     minimum_rows = {
         "2y": 380,
@@ -554,21 +554,67 @@ def _massive_history_is_complete(
         "3mo": 45,
         "1mo": 15,
     }.get(str(period).lower(), 190)
+    by_session: dict[date, dict[str, float]] = {}
+    for row in rows:
+        values: dict[str, float] = {}
+        valid = True
+        for key in ("t", "o", "h", "l", "c", "v"):
+            raw = row.get(key)
+            if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+                valid = False
+                break
+            value = float(raw)
+            if not math.isfinite(value):
+                valid = False
+                break
+            values[key] = value
+        if not valid:
+            continue
+        if (
+            values["o"] <= 0
+            or values["h"] <= 0
+            or values["l"] <= 0
+            or values["c"] <= 0
+            or values["v"] < 0
+            or values["l"] > min(values["o"], values["c"])
+            or values["h"] < max(values["o"], values["c"])
+            or values["l"] > values["h"]
+        ):
+            continue
+        try:
+            session = (
+                pd.Timestamp(values["t"], unit="ms", tz="UTC")
+                .tz_convert("America/New_York")
+                .date()
+            )
+        except (OverflowError, TypeError, ValueError):
+            continue
+        if session > end:
+            continue
+        # Massive 日线理论上一交易日一根；同日重复不能充当历史长度。
+        by_session[session] = values
     usable = [
-        row
-        for row in rows
-        if isinstance(row.get("t"), (int, float))
-        and isinstance(row.get("c"), (int, float))
-        and math.isfinite(float(row["c"]))
-        and float(row["c"]) > 0
-        and isinstance(row.get("v"), (int, float))
-        and math.isfinite(float(row["v"]))
-        and float(row["v"]) >= 0
+        by_session[session]
+        for session in sorted(by_session)
     ]
     if len(usable) < minimum_rows:
-        return False
-    latest = pd.Timestamp(max(float(row["t"]) for row in usable), unit="ms", tz="UTC").date()
-    return (end - latest).days <= 7
+        return []
+    latest = max(by_session)
+    age_days = (end - latest).days
+    if not 0 <= age_days <= 7:
+        return []
+    return usable
+
+
+def _massive_history_is_complete(
+    rows: list[dict[str, Any]],
+    *,
+    period: str,
+    end: date,
+) -> bool:
+    """Backward-compatible completeness predicate for diagnostics and tests."""
+
+    return bool(_validated_massive_history(rows, period=period, end=end))
 
 
 def _download_massive_history(
@@ -600,9 +646,13 @@ def _download_massive_history(
     missing: list[str] = []
     with ThreadPoolExecutor(max_workers=4) as pool:
         for ticker, bars in pool.map(_one, tickers):
-            rows = [bar for bar in (bars or []) if isinstance(bar.get("t"), (int, float))]
-            if not rows or not _massive_history_is_complete(rows, period=period, end=end):
-                # 过短、过旧或缺成交量时必须交给 Yahoo/公开源补齐，不能把残缺主源标成成功。
+            rows = _validated_massive_history(
+                [bar for bar in (bars or []) if isinstance(bar, dict)],
+                period=period,
+                end=end,
+            )
+            if not rows:
+                # 过短、过旧、重复或 OHLCV 残缺时必须交给 Yahoo/公开源补齐。
                 missing.append(ticker)
                 continue
             index = pd.DatetimeIndex(
