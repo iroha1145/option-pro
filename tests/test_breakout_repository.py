@@ -9,6 +9,7 @@ import pytest
 from app.services.breakouts.repository import (
     BreakoutRepository,
     ReadOnlyRepositoryError,
+    _CARRYOVER_LATEST_ROWS_SQL,
 )
 from app.services.breakouts.research import load_completed_shadows
 
@@ -523,6 +524,84 @@ def test_load_carryover_events_reconstructs_event_before_a_future_update(tmp_pat
     ]
     assert batch.events[0]["lifecycle_state"] == original["lifecycle_state"]
     assert batch.events[0]["last_seen_at"].startswith("2026-07-13T13:30:00")
+
+
+@pytest.mark.parametrize("terminal_state", ["FAILED", "EXPIRED"])
+def test_load_carryover_events_does_not_resurrect_preterminal_snapshot(
+    tmp_path,
+    terminal_state,
+):
+    repo = BreakoutRepository(tmp_path / f"terminal-{terminal_state.lower()}.db")
+    repo.initialize()
+    active = _event(
+        "event-terminal-latest",
+        "AAPL",
+        NOW - timedelta(minutes=30),
+    )
+    _publish(
+        repo,
+        NOW - timedelta(minutes=20),
+        [active],
+        published_at=NOW - timedelta(minutes=20),
+    )
+    terminal = dict(active)
+    terminal.update(
+        {
+            "lifecycle_state": terminal_state,
+            "previous_state": active["lifecycle_state"],
+            "last_seen_at": NOW - timedelta(minutes=5),
+        }
+    )
+    _publish(
+        repo,
+        NOW - timedelta(minutes=5),
+        [terminal],
+        published_at=NOW - timedelta(minutes=5),
+    )
+
+    before_terminal = repo.load_carryover_events(
+        as_of=NOW - timedelta(minutes=10),
+        event_ttl_seconds=3_600,
+        limit=10,
+        expired_due_limit=4,
+    )
+    after_terminal = repo.load_carryover_events(
+        as_of=NOW,
+        event_ttl_seconds=3_600,
+        limit=10,
+        expired_due_limit=4,
+    )
+
+    assert [event["event_id"] for event in before_terminal.events] == [
+        "event-terminal-latest"
+    ]
+    assert after_terminal.events == ()
+    assert after_terminal.expired_due_event_ids == frozenset()
+    assert after_terminal.has_more is False
+
+
+def test_carryover_latest_query_seeks_by_event_without_history_window(tmp_path):
+    repo = BreakoutRepository(tmp_path / "carryover-plan.db")
+    repo.initialize()
+    connection = repo.open_read_connection()
+    try:
+        as_of = NOW.isoformat(timespec="microseconds").replace("+00:00", "Z")
+        plan = connection.execute(
+            f"EXPLAIN QUERY PLAN {_CARRYOVER_LATEST_ROWS_SQL}",
+            (as_of,) * 4,
+        ).fetchall()
+    finally:
+        connection.close()
+
+    details = [str(row["detail"]) for row in plan]
+    assert any(
+        "idx_breakout_scan_events_event" in detail
+        and "event_id=?" in detail
+        for detail in details
+    ), details
+    normalized_sql = " ".join(_CARRYOVER_LATEST_ROWS_SQL.upper().split())
+    assert "ROW_NUMBER" not in normalized_sql
+    assert " OVER " not in normalized_sql
 
 
 def test_load_carryover_events_ttl_boundary_due_and_terminal_exclusion(tmp_path):

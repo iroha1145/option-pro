@@ -506,6 +506,55 @@ SCHEMA_CHECKSUM = hashlib.sha256(
     "\n".join(" ".join(statement.split()) for statement in _SCHEMA).encode("utf-8")
 ).hexdigest()
 
+_CARRYOVER_LATEST_ROWS_SQL = """
+WITH latest_rowids AS MATERIALIZED (
+    SELECT head.event_id,
+           (
+               SELECT snapshot.rowid
+               FROM breakout_scan_events AS snapshot
+                    INDEXED BY idx_breakout_scan_events_event
+               CROSS JOIN breakout_scan_runs AS scan
+               WHERE snapshot.event_id=head.event_id
+                 AND scan.scan_run_id=snapshot.scan_run_id
+                 AND scan.status='completed'
+                 AND scan.published_at IS NOT NULL
+                 AND scan.published_at<=?
+                 AND snapshot.event_at<=?
+                 AND json_extract(
+                     snapshot.event_snapshot_json,'$.first_seen_at'
+                 )<=?
+                 AND json_extract(
+                     snapshot.event_snapshot_json,'$.last_seen_at'
+                 )<=?
+               ORDER BY scan.published_at DESC,
+                        snapshot.event_at DESC,
+                        scan.scan_run_id DESC
+               LIMIT 1
+           ) AS snapshot_rowid
+    FROM breakout_events AS head
+)
+SELECT snapshot.rowid AS snapshot_rowid,
+       snapshot.event_id,
+       json_extract(
+           snapshot.event_snapshot_json,'$.first_seen_at'
+       ) AS first_seen_at,
+       json_extract(
+           snapshot.event_snapshot_json,'$.last_seen_at'
+       ) AS last_seen_at,
+       snapshot.lifecycle_state
+FROM latest_rowids
+CROSS JOIN breakout_scan_events AS snapshot
+WHERE latest_rowids.snapshot_rowid IS NOT NULL
+  AND snapshot.rowid=latest_rowids.snapshot_rowid
+  AND snapshot.lifecycle_state NOT IN ('FAILED','EXPIRED')
+"""
+
+_CARRYOVER_SNAPSHOT_SQL = """
+SELECT event_snapshot_json
+FROM breakout_scan_events
+WHERE rowid=?
+"""
+
 
 class BreakoutRepository:
     """Versioned SQLite repository with lease-fenced atomic publication."""
@@ -3131,93 +3180,50 @@ class BreakoutRepository:
             self._require_schema(connection)
             connection.execute("BEGIN")
             rows = connection.execute(
-                """
-                WITH eligible_snapshots AS (
-                    -- Snapshot JSON can be 512 KiB. Rank only compact keys and
-                    -- join the selected rows back afterward, otherwise SQLite
-                    -- can exhaust a container's bounded temporary filesystem.
-                    SELECT event.scan_run_id,event.event_id,
-                           json_extract(
-                               event.event_snapshot_json,'$.first_seen_at'
-                           ) AS first_seen_at,
-                           json_extract(
-                               event.event_snapshot_json,'$.last_seen_at'
-                           ) AS last_seen_at,
-                           event.lifecycle_state,
-                           ROW_NUMBER() OVER(
-                               PARTITION BY event.event_id
-                               ORDER BY scan.published_at DESC,
-                                        event.event_at DESC,
-                                        scan.scan_run_id DESC
-                           ) AS snapshot_position
-                    FROM breakout_scan_events AS event
-                    JOIN breakout_scan_runs AS scan
-                      ON scan.scan_run_id=event.scan_run_id
-                    WHERE scan.status='completed'
-                      AND scan.published_at IS NOT NULL
-                      AND scan.published_at<=?
-                      AND event.event_at<=?
-                      AND json_extract(
-                          event.event_snapshot_json,'$.first_seen_at'
-                      )<=?
-                      AND json_extract(
-                          event.event_snapshot_json,'$.last_seen_at'
-                      )<=?
-                ),
-                latest AS (
-                    SELECT * FROM eligible_snapshots
-                    WHERE snapshot_position=1
-                      AND lifecycle_state NOT IN ('FAILED','EXPIRED')
-                ),
-                classified AS (
-                    SELECT *,first_seen_at<? AS is_due FROM latest
-                ),
-                lane_ranked AS (
-                    SELECT *,ROW_NUMBER() OVER(
-                        PARTITION BY is_due
-                        ORDER BY CASE
-                                     WHEN is_due THEN first_seen_at
-                                     ELSE last_seen_at
-                                 END ASC,
-                                 event_id ASC
-                    ) AS lane_position
-                    FROM classified
-                ),
-                selected AS (
-                    SELECT scan_run_id,event_id,is_due,lane_position
-                    FROM lane_ranked
-                    WHERE (is_due=1 AND lane_position<=?)
-                       OR (is_due=0 AND lane_position<=?)
-                )
-                SELECT selected.event_id,event.event_snapshot_json,
-                       selected.is_due,selected.lane_position
-                FROM selected
-                JOIN breakout_scan_events AS event
-                  ON event.scan_run_id=selected.scan_run_id
-                 AND event.event_id=selected.event_id
-                ORDER BY selected.is_due DESC,selected.lane_position ASC
-                """,
+                _CARRYOVER_LATEST_ROWS_SQL,
                 (
                     observed_text,
                     observed_text,
                     observed_text,
                     observed_text,
-                    ttl_cutoff,
-                    expired_due_limit + 1,
-                    limit + 1,
                 ),
             ).fetchall()
-            due_rows = [row for row in rows if int(row["is_due"]) == 1]
+            # Rank at most one compact row per logical event in Python. This
+            # prevents SQLite from building a temporary B-tree containing
+            # historical 512 KiB snapshots inside the 128 MiB production tmpfs.
+            due_rows = sorted(
+                (row for row in rows if str(row["first_seen_at"]) < ttl_cutoff),
+                key=lambda row: (
+                    str(row["first_seen_at"]),
+                    str(row["event_id"]),
+                ),
+            )
             selected_due = due_rows[:expired_due_limit]
             live_capacity = limit - len(selected_due)
-            live_rows = [row for row in rows if int(row["is_due"]) == 0]
+            live_rows = sorted(
+                (row for row in rows if str(row["first_seen_at"]) >= ttl_cutoff),
+                key=lambda row: (
+                    str(row["last_seen_at"]),
+                    str(row["event_id"]),
+                ),
+            )
             selected_live = live_rows[:live_capacity]
             selected = [*selected_due, *selected_live]
+            snapshots: list[Mapping[str, Any]] = []
+            for row in selected:
+                snapshot = connection.execute(
+                    _CARRYOVER_SNAPSHOT_SQL,
+                    (int(row["snapshot_rowid"]),),
+                ).fetchone()
+                if snapshot is None:
+                    raise BreakoutRepositoryError(
+                        "selected carryover snapshot disappeared"
+                    )
+                snapshots.append(
+                    _json_loads(snapshot["event_snapshot_json"], {})
+                )
             return CarryoverBatch(
-                events=tuple(
-                    _json_loads(row["event_snapshot_json"], {})
-                    for row in selected
-                ),
+                events=tuple(snapshots),
                 expired_due_event_ids=frozenset(
                     str(row["event_id"]) for row in selected_due
                 ),
