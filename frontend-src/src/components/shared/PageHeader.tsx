@@ -24,7 +24,7 @@ export default function PageHeader({ section, eyebrow, title, description, meta,
       transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
       className={cn('flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-5', className)}
     >
-      <div>
+      <div className="min-w-0">
         <p className="flex items-baseline gap-2.5">
           <span className="font-mono text-caption font-semibold text-brand-600">§{section}</span>
           <span className="eyebrow">{eyebrow}</span>
@@ -32,7 +32,7 @@ export default function PageHeader({ section, eyebrow, title, description, meta,
         <h1 className="mt-2 font-display text-display-l text-ink-900">{title}</h1>
         {description && <p className="mt-1.5 text-body-s text-ink-500">{description}</p>}
       </div>
-      {meta && <div className="flex items-center gap-4 pb-1">{meta}</div>}
+      {meta && <div className="flex max-w-full flex-wrap items-center gap-x-4 gap-y-2 pb-1">{meta}</div>}
     </motion.header>
   );
 }
