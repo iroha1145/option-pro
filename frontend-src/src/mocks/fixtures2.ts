@@ -1134,6 +1134,8 @@ export interface CatalystFeedQuery {
   windowHours?: number;
   classification?: NewsClassification | '';
   analysisStatus?: NewsAnalysisStatus | '';
+  includeUnanalyzed?: boolean;
+  includeNeutral?: boolean;
   minConfidence?: number; // 0–1
   minAbsImpact?: number;
   multiSourceOnly?: boolean;

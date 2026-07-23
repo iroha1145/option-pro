@@ -3270,6 +3270,18 @@ class LocalCatalystIntelligence:
             "change_sequence": int(row["change_sequence"]),
             "content_hash": str(row["content_hash"]),
             "source": str(row["source"]),
+            # PersonalCatalystService performs a second, fail-closed validation
+            # at the public boundary. Preserve the exact source context used
+            # by the paid request so legitimate source-bound company names are
+            # not mistaken for untranslated English, then strip these private
+            # fields before returning an API payload.
+            "_validation_source": str(row["source"]),
+            "_validation_title": str(row.get("raw_title") or ""),
+            "_validation_summary": row.get("raw_summary"),
+            "_validation_sources": list(row.get("source_names") or []),
+            "_validation_allowed_tickers": list(
+                row.get("canonical_tickers") or []
+            ),
             "title": str(
                 result.get("title_zh")
                 if result

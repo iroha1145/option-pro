@@ -617,6 +617,15 @@ class PersonalCatalystService:
         allowed_tickers = item.get("source_tickers")
         if not isinstance(allowed_tickers, list):
             allowed_tickers = []
+        validation_allowed_tickers = item.get(
+            "_validation_allowed_tickers",
+            allowed_tickers,
+        )
+        if not isinstance(validation_allowed_tickers, list):
+            validation_allowed_tickers = allowed_tickers
+        validation_sources = item.get("_validation_sources")
+        if not isinstance(validation_sources, list):
+            validation_sources = []
         try:
             return validate_result(
                 "news_impact",
@@ -630,7 +639,12 @@ class PersonalCatalystService:
                     "news_id": item.get("news_id"),
                     "change_sequence": item.get("change_sequence"),
                     "content_hash": item.get("content_hash"),
-                    "allowed_tickers": allowed_tickers,
+                    "source": item.get("_validation_source")
+                    or item.get("source"),
+                    "title": item.get("_validation_title"),
+                    "summary": item.get("_validation_summary"),
+                    "sources": validation_sources,
+                    "allowed_tickers": validation_allowed_tickers,
                 },
             )
         except (KeyError, TypeError, ValueError):
@@ -648,12 +662,33 @@ class PersonalCatalystService:
         # fields from the public envelope.  This is source text, not generated
         # analysis, and prevents a failed/pending job from leaving a permanent
         # "waiting for Chinese title" placeholder.
-        source_title = str(item.get("title") or "").strip()
-        source_summary = str(item.get("summary") or "").strip()
+        raw_source_title = (
+            item.get("_validation_title")
+            if "_validation_title" in item
+            else item.get("title")
+        )
+        raw_source_summary = (
+            item.get("_validation_summary")
+            if "_validation_summary" in item
+            else item.get("summary")
+        )
+        source_title = str(raw_source_title or "").strip()
+        source_summary = str(raw_source_summary or "").strip()
         if source_title == _WAITING_TITLE:
             source_title = ""
         if source_summary == _WAITING_SUMMARY:
             source_summary = ""
+        allowed_tickers = item.get("source_tickers")
+        if not isinstance(allowed_tickers, list):
+            allowed_tickers = []
+        source_title_zh = _valid_zh_text(
+            source_title,
+            allowed_codes=allowed_tickers,
+        )
+        source_summary_zh = _valid_zh_text(
+            source_summary,
+            allowed_codes=allowed_tickers,
+        )
         for field in (
             "title",
             "summary",
@@ -665,6 +700,14 @@ class PersonalCatalystService:
             item.pop(field, None)
 
         analysis = cls._project_news_analysis(item.get("analysis"), item=item)
+        for field in (
+            "_validation_source",
+            "_validation_title",
+            "_validation_summary",
+            "_validation_sources",
+            "_validation_allowed_tickers",
+        ):
+            item.pop(field, None)
         if analysis is not None and as_of is not None:
             result_available_at = _parse_utc(
                 item.get("available_at") or item.get("analyzed_at")
@@ -698,8 +741,12 @@ class PersonalCatalystService:
             item["trusted_stock_impacts"] = analysis["affected_stocks"]
         title = analysis["title_zh"] if analysis is not None else None
         summary = analysis["summary_zh"] if analysis is not None else None
-        item["title_zh"] = title or source_title
-        item["summary_zh"] = summary or source_summary
+        # The public *_zh fields must never relabel English source prose as
+        # translated Chinese. Pending English news stays blank until the paid
+        # analysis publishes; the live UI omits those rows while exact batch
+        # progress remains visible.
+        item["title_zh"] = title or source_title_zh or ""
+        item["summary_zh"] = summary or source_summary_zh or ""
         if analysis is None:
             item.pop("analyzed_at", None)
             item.pop("available_at", None)
@@ -813,7 +860,7 @@ class PersonalCatalystService:
             candidate_title = item.get("representative_title")
             if candidate_title == _WAITING_HOTSPOT_TITLE:
                 candidate_title = None
-            item["representative_title"] = (
+            representative_title = (
                 _valid_zh_text(
                     candidate_title,
                     allowed_codes=allowed_codes,
@@ -822,9 +869,17 @@ class PersonalCatalystService:
                     item.get("title_zh"),
                     allowed_codes=allowed_codes,
                 )
-                or source_title
-                or str(item.get("event_type") or "新闻热点")
+                or _valid_zh_text(
+                    source_title,
+                    allowed_codes=allowed_codes,
+                )
             )
+            # Keep the strip Chinese-only. A group without validated Chinese
+            # copy remains in the analysis queue instead of exposing source
+            # prose or an internal event code as a finished headline.
+            if representative_title is None:
+                continue
+            item["representative_title"] = representative_title
             items.append(item)
         projected["items"] = items
         return projected
@@ -1064,6 +1119,77 @@ class PersonalCatalystService:
             as_of=kwargs.get("as_of"),
             include_job_state=include_owner_state,
         )
+        projected_items = [
+            item
+            for item in projected.get("items") or []
+            if isinstance(item, dict)
+        ]
+
+        def matches_projected_filters(item: Mapping[str, Any]) -> bool:
+            analysis = item.get("analysis")
+            has_analysis = isinstance(analysis, Mapping)
+            if not kwargs.get("include_unanalyzed", True) and not has_analysis:
+                return False
+            analysis_status = kwargs.get("analysis_status")
+            if (
+                analysis_status
+                and str(item.get("analysis_status") or "") != str(analysis_status)
+            ):
+                return False
+            if not has_analysis:
+                return not any(
+                    (
+                        kwargs.get("classification"),
+                        kwargs.get("min_abs_impact") is not None,
+                        kwargs.get("horizon"),
+                        kwargs.get("mechanism"),
+                        int(kwargs.get("min_confidence") or 0) > 0,
+                    )
+                )
+            assert isinstance(analysis, Mapping)
+            if (
+                kwargs.get("classification")
+                and analysis.get("classification") != kwargs.get("classification")
+            ):
+                return False
+            if (
+                not kwargs.get("include_neutral", True)
+                and analysis.get("classification") == "neutral"
+            ):
+                return False
+            if int(analysis.get("confidence") or 0) < int(
+                kwargs.get("min_confidence") or 0
+            ):
+                return False
+            impacts = [
+                impact
+                for impact in analysis.get("affected_stocks") or []
+                if isinstance(impact, Mapping)
+            ]
+            min_abs_impact = kwargs.get("min_abs_impact")
+            if min_abs_impact is not None and not any(
+                abs(int(impact.get("impact_score") or 0))
+                >= int(min_abs_impact)
+                for impact in impacts
+            ):
+                return False
+            horizon = kwargs.get("horizon")
+            if horizon and not any(
+                impact.get("horizon") == horizon for impact in impacts
+            ):
+                return False
+            mechanism = kwargs.get("mechanism")
+            if mechanism and not any(
+                impact.get("mechanism") == mechanism for impact in impacts
+            ):
+                return False
+            return True
+
+        projected["items"] = [
+            item for item in projected_items if matches_projected_filters(item)
+        ]
+        if not projected["items"] and not projected.get("has_more"):
+            projected["status"] = "empty"
         projected["analysis_availability"] = status["analysis_availability"]
         return projected
 

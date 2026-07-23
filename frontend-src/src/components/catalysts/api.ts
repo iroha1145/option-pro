@@ -403,11 +403,19 @@ function qs(q: CatalystFeedQuery): string {
   const conf = q.minConfidence != null && q.minConfidence > 0 ? Math.round(q.minConfidence <= 1 ? q.minConfidence * 100 : q.minConfidence) : undefined;
   // UI 'pending'（未分析）↔ 个人版 'not_requested'
   const status = q.analysisStatus === 'pending' ? 'not_requested' : q.analysisStatus || undefined;
+  // 默认新闻流只展示已经通过中文校验的分析。用户明确筛选待处理
+  // 状态时才请求未分析项。文章整体中性仍可能包含有方向的个股影响，
+  // 因此文章流保留中性；股票影响榜另按非零个股影响严格过滤。
+  const includeUnanalyzed =
+    q.includeUnanalyzed ?? Boolean(status && status !== 'completed');
+  const includeNeutral = q.includeNeutral ?? true;
   const s = toQuery({
     ticker: q.ticker,
     window_hours: q.windowHours,
     classification: q.classification || undefined,
     analysis_status: status,
+    include_unanalyzed: includeUnanalyzed,
+    include_neutral: includeNeutral,
     min_confidence: conf,
     min_abs_impact: toBackendImpact(q.minAbsImpact),
     multi_source_only: q.multiSourceOnly ? true : undefined,
@@ -527,7 +535,12 @@ export const catalystsContract = {
         return { count: s.newsToday ?? 0, analyzed: s.analyzedToday ?? 0, saturated: false };
       },
       () =>
-        get(`/catalysts/feed${qs({ windowHours: 24, limit: 50 })}`).then((d) => {
+        get(`/catalysts/feed${qs({
+          windowHours: 24,
+          limit: 50,
+          includeUnanalyzed: true,
+          includeNeutral: true,
+        })}`).then((d) => {
           const items = unwrap(d, 'items').map(nNewsItem);
           return {
             count: items.length,
@@ -541,7 +554,9 @@ export const catalystsContract = {
       () => fx2.getCatalystsFeedV2(q),
       () =>
         get(`/catalysts/feed${qs(q)}`).then((d) => {
-          const items = unwrap(d, 'items').map(nNewsItem);
+          const items = unwrap(d, 'items')
+            .map(nNewsItem)
+            .filter((item) => item.titleZh && item.summaryZh);
           return { items, nextCursor: pickS(asRec(d), 'next_cursor', 'nextCursor'), total: items.length };
         }),
     ),
