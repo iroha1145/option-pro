@@ -92,7 +92,7 @@ function PriceHeader({ detail }: { detail: StockDetail }) {
         <div className="min-w-0 max-w-full flex flex-wrap items-end gap-x-3 gap-y-2">
           <p
             className={cn(
-              'rounded-sm px-1 font-mono text-[clamp(30px,10vw,44px)] leading-none text-ink-900 tnum',
+              'rounded-sm px-1 font-mono text-[clamp(30px,10vw,44px)] font-medium leading-none tracking-[-0.02em] text-ink-900 tnum',
               flash === 'up' && 'animate-tick-flash-up',
               flash === 'down' && 'animate-tick-flash-down',
             )}
