@@ -3336,6 +3336,9 @@ class LocalCatalystIntelligence:
         include_unanalyzed = bool(kwargs.get("include_unanalyzed", True))
         include_neutral = bool(kwargs.get("include_neutral", False))
         directional_only = bool(kwargs.get("directional_only", False))
+        classification = kwargs.get("classification")
+        min_abs_impact = kwargs.get("min_abs_impact")
+        multi_source_only = bool(kwargs.get("multi_source_only", False))
         with self._connect() as connection:
             rows = self._active_revisions(
                 connection,
@@ -3357,6 +3360,10 @@ class LocalCatalystIntelligence:
                 self._item(connection, row, as_of=as_of, jobs=jobs)
                 for row in rows
             ]
+        rows_by_news_id = {
+            int(row["news_id"]): row
+            for row in rows
+        }
         data_through = self.status(now=as_of).get("data_through")
         results: dict[str, dict[str, Any]] = {}
         for raw_ticker in tickers:
@@ -3399,9 +3406,48 @@ class LocalCatalystIntelligence:
                     and result.get("classification") == "neutral"
                 ):
                     continue
+                if classification:
+                    ticker_classification = (
+                        "bullish"
+                        if (ticker_score or 0) > 0
+                        else "bearish"
+                        if (ticker_score or 0) < 0
+                        else "neutral"
+                    )
+                    if ticker_classification != classification:
+                        continue
+                if min_abs_impact is not None and (
+                    ticker_score is None
+                    or abs(ticker_score) < int(min_abs_impact)
+                ):
+                    continue
+                if multi_source_only:
+                    row = rows_by_news_id.get(int(item["news_id"]))
+                    if row is None or int(row.get("source_count") or 0) < 2:
+                        continue
                 filtered.append(item)
             page = filtered[:limit]
             analyzed = [item for item in filtered if item.get("analysis")]
+            directional_scores = [
+                score
+                for item in filtered
+                if (score := ticker_impact_score(item)) is not None and score != 0
+            ]
+            latest_at = max(
+                (
+                    str(item["published_at"])
+                    for item in filtered
+                    if item.get("published_at")
+                ),
+                default=None,
+            )
+            source_diversity = len(
+                {
+                    str(item["source"])
+                    for item in filtered
+                    if item.get("source")
+                }
+            )
             results[ticker] = {
                 "ticker": ticker,
                 "status": "active" if page else "empty",
@@ -3419,23 +3465,22 @@ class LocalCatalystIntelligence:
                         analyzed,
                         as_of=as_of,
                     ),
-                    "bullish": sum(
-                        1
-                        for item in analyzed
-                        if (
-                            (ticker_impact_score(item) or 0) > 0
-                            if directional_only
-                            else item.get("classification") == "bullish"
-                        )
+                    "count": len(filtered),
+                    "analyzed_count": len(analyzed),
+                    "directional_count": len(directional_scores),
+                    # 原始模型影响分为 [-100, 100]；这里返回窗口内方向分均值。
+                    "net_impact": (
+                        sum(directional_scores) / len(directional_scores)
+                        if directional_scores
+                        else 0.0
                     ),
-                    "bearish": sum(
-                        1
-                        for item in analyzed
-                        if (
-                            (ticker_impact_score(item) or 0) < 0
-                            if directional_only
-                            else item.get("classification") == "bearish"
-                        )
+                    "source_diversity": source_diversity,
+                    "latest_at": latest_at,
+                    "bullish": sum(1 for score in directional_scores if score > 0),
+                    "bearish": sum(1 for score in directional_scores if score < 0),
+                    "neutral": 0 if directional_only else max(
+                        0,
+                        len(analyzed) - len(directional_scores),
                     ),
                     "pending": (
                         0
