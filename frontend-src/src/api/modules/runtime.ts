@@ -93,7 +93,7 @@ export const runtimeApi = {
     mockOr(
       async () => {
         await fx2.postWorkerAction(action);
-        return { requestId: `mock-${Date.now()}`, action, status: 'completed', errorCode: null, details: {} };
+        return { requestId: `mock-${Date.now()}`, action, status: 'completed', errorCode: null, details: parameters ? { parameters } : {} };
       },
       () =>
         post(`/worker/actions/${encodeURIComponent(action)}`, parameters ? { parameters } : {}).then(mapWorkerAction),
