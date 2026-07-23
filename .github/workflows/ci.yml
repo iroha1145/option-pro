@@ -81,7 +81,7 @@ jobs:
           diff -r frontend-src/dist frontend
 
       - name: Run frontend behavior tests
-        run: node --test frontend-src/tests/*.test.mjs
+        run: node --experimental-strip-types --test frontend-src/tests/*.test.mjs
 
       - name: Run frontend production assertions
         run: node frontend-src/tests/static_assertions.mjs

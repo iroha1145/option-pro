@@ -48,6 +48,8 @@ _OVERVIEW_FIELDS = {
     "high",
     "low",
     "open",
+    "as_of",
+    "price_provider",
     "description",
     "description_en",
     "sic_description",
@@ -127,7 +129,7 @@ PUBLIC_HOME_RESOURCE_SPECS: dict[str, PublicHomeResourceSpec] = {
     # limits keep Friday's last successful research view available through a
     # weekend without ever presenting it as live data.
     "indices": PublicHomeResourceSpec("market-indices-v1", 4 * 24 * 60 * 60),
-    "focus_overview": PublicHomeResourceSpec("focus-overview-v1", 24 * 60 * 60),
+    "focus_overview": PublicHomeResourceSpec("focus-overview-v2", 24 * 60 * 60),
     "focus_chart": PublicHomeResourceSpec("focus-chart-v1", 7 * 24 * 60 * 60),
     "focus_signals": PublicHomeResourceSpec("focus-signals-v1", 7 * 24 * 60 * 60),
     "earnings": PublicHomeResourceSpec("earnings-upcoming-v1", 30 * 60 * 60),
@@ -246,7 +248,13 @@ def _payload_timestamps_fit_entry(
     limit = not_after
     iso_values: list[Any] = []
     integer_values: list[Any] = []
-    if resource in {"indices", "focus_chart", "earnings", "unusual"}:
+    if resource in {
+        "indices",
+        "focus_overview",
+        "focus_chart",
+        "earnings",
+        "unusual",
+    }:
         iso_values.append(payload.get("as_of"))
     if resource == "focus_chart":
         if payload.get("last_bar_at") is not None:
@@ -352,6 +360,8 @@ def _validate_overview(payload: Mapping[str, Any]) -> bool:
             isinstance(payload.get(field), str)
             for field in ("description", "description_en", "sic_description")
         )
+        and payload.get("price_provider") in {"Massive", "Yahoo/yfinance"}
+        and _valid_iso_timestamp(payload.get("as_of"))
         and _string_or_none(payload.get("website"))
         and _string_or_none(payload.get("logo_url"))
         and isinstance(logo_urls, list)

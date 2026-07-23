@@ -8,12 +8,14 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
+from urllib.parse import quote
 
 from app.services.ai_jobs.models import AIJobPublic, validate_result
 
 
 _SCHEMA_VERSION = "ai-jobs-v3"
 _SOURCE_SCHEMA_VERSION = "ai-job-sources-v1"
+_BATCH_SCHEMA_VERSION = "ai-job-batch-members-v1"
 _IDENTITY_MIGRATION_VERSION = "ai-job-identities-v2"
 _IDENTITY_MIGRATION_CHECKSUM = hashlib.sha256(
     b"restore-source-aware-hashes-and-seal-unsubmitted-duplicates-v2"
@@ -110,6 +112,31 @@ CREATE TABLE IF NOT EXISTS ai_job_sources (
 """
 _SOURCE_SCHEMA_CHECKSUM = hashlib.sha256(
     _AI_JOB_SOURCES_TABLE_SQL.encode("utf-8")
+).hexdigest()
+_AI_JOB_BATCH_MEMBERS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS ai_job_batch_members (
+    job_id TEXT PRIMARY KEY REFERENCES ai_jobs(job_id) ON DELETE CASCADE,
+    batch_id TEXT NOT NULL,
+    position INTEGER NOT NULL CHECK(position >= 1),
+    created_at TEXT NOT NULL,
+    UNIQUE(batch_id, position)
+);
+CREATE INDEX IF NOT EXISTS idx_ai_job_batch_members_batch
+ON ai_job_batch_members(batch_id, position);
+"""
+_AI_JOB_BATCH_MEMBERS_STATEMENTS = (
+    """CREATE TABLE IF NOT EXISTS ai_job_batch_members (
+           job_id TEXT PRIMARY KEY REFERENCES ai_jobs(job_id) ON DELETE CASCADE,
+           batch_id TEXT NOT NULL,
+           position INTEGER NOT NULL CHECK(position >= 1),
+           created_at TEXT NOT NULL,
+           UNIQUE(batch_id, position)
+       )""",
+    """CREATE INDEX IF NOT EXISTS idx_ai_job_batch_members_batch
+       ON ai_job_batch_members(batch_id, position)""",
+)
+_BATCH_SCHEMA_CHECKSUM = hashlib.sha256(
+    _AI_JOB_BATCH_MEMBERS_TABLE_SQL.encode("utf-8")
 ).hexdigest()
 
 
@@ -225,6 +252,22 @@ class AIJobRepository:
                 """INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at)
                    VALUES(?,?,?)""",
                 (_SOURCE_SCHEMA_VERSION, _SOURCE_SCHEMA_CHECKSUM, _iso()),
+            )
+            for statement in _AI_JOB_BATCH_MEMBERS_STATEMENTS:
+                connection.execute(statement)
+            batch_schema = connection.execute(
+                "SELECT checksum FROM ai_job_schema WHERE version=?",
+                (_BATCH_SCHEMA_VERSION,),
+            ).fetchone()
+            if (
+                batch_schema is not None
+                and batch_schema["checksum"] != _BATCH_SCHEMA_CHECKSUM
+            ):
+                raise RuntimeError("ai_job_batch_schema_checksum_mismatch")
+            connection.execute(
+                """INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at)
+                   VALUES(?,?,?)""",
+                (_BATCH_SCHEMA_VERSION, _BATCH_SCHEMA_CHECKSUM, _iso()),
             )
             identity_migration = connection.execute(
                 "SELECT checksum FROM ai_job_schema WHERE version=?",
@@ -699,11 +742,26 @@ class AIJobRepository:
         submission_source: str = "manual",
         priority: int = 50,
         force_retry: bool = False,
+        batch_id: str | None = None,
+        batch_position: int | None = None,
     ) -> tuple[dict[str, Any], bool]:
         if execution_mode != "background":
             raise ValueError("background_execution_required")
         if submission_source not in {"manual", "scheduled"}:
             raise ValueError("invalid_submission_source")
+        if batch_id is not None:
+            if (
+                job_type != "news_impact"
+                or not isinstance(batch_id, str)
+                or not batch_id.strip()
+                or len(batch_id) > 96
+                or isinstance(batch_position, bool)
+                or not isinstance(batch_position, int)
+                or batch_position < 1
+            ):
+                raise ValueError("invalid_ai_job_batch")
+        elif batch_position is not None:
+            raise ValueError("invalid_ai_job_batch")
         self.initialize()
         payload_json = self._canonical_payload(payload)
         request_hash = self._request_hash(
@@ -908,6 +966,8 @@ class AIJobRepository:
                         now=now,
                         retry_of_job_id=str(retry_parent["job_id"]),
                         execution_number=global_max_execution + 1,
+                        batch_id=batch_id,
+                        batch_position=batch_position,
                     )
                     connection.commit()
                     return row, True
@@ -938,6 +998,8 @@ class AIJobRepository:
                 now=now,
                 retry_of_job_id=None,
                 execution_number=1,
+                batch_id=batch_id,
+                batch_position=batch_position,
             )
             connection.commit()
             return row, True
@@ -989,6 +1051,8 @@ class AIJobRepository:
         now: str,
         retry_of_job_id: str | None,
         execution_number: int,
+        batch_id: str | None = None,
+        batch_position: int | None = None,
     ) -> dict[str, Any]:
         job_id = "aij_" + uuid.uuid4().hex
         connection.execute(
@@ -1026,6 +1090,15 @@ class AIJobRepository:
                ) VALUES(?,?,?)""",
             (job_id, submission_source, now),
         )
+        if job_type == "news_impact":
+            resolved_batch_id = batch_id or ("aib_" + uuid.uuid4().hex)
+            resolved_position = batch_position or 1
+            connection.execute(
+                """INSERT INTO ai_job_batch_members(
+                       job_id,batch_id,position,created_at
+                   ) VALUES(?,?,?,?)""",
+                (job_id, resolved_batch_id, resolved_position, now),
+            )
         row = connection.execute(
             """SELECT j.*,s.submission_source FROM ai_jobs AS j
                JOIN ai_job_sources AS s ON s.job_id=j.job_id
@@ -1445,6 +1518,77 @@ class AIJobRepository:
             connection.commit()
             if updated != 1:
                 raise RuntimeError("ai_job_completion_rejected")
+
+    def recover_schema_validation_failure(
+        self,
+        job_id: str,
+        response_id: str,
+        result: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Publish an already-paid result after a validation false positive.
+
+        This transition is deliberately narrower than a retry: the failed job
+        must still carry the exact durable provider response identity, and the
+        retrieved result must pass the current validator for the stored input.
+        Existing usage and budget accounting are preserved unchanged.
+        """
+
+        if not response_id:
+            raise ValueError("ai_job_recovery_response_id_required")
+        self.initialize()
+        current = self.get_job(job_id)
+        if current is None:
+            raise RuntimeError("ai_job_recovery_not_found")
+        if (
+            current.get("status") != "failed"
+            or current.get("error_code") != "schema_validation_failed"
+            or current.get("result_json") is not None
+            or current.get("openai_response_id") != response_id
+        ):
+            raise RuntimeError("ai_job_recovery_rejected")
+        try:
+            payload = json.loads(str(current["payload_json"]))
+        except (KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("ai_job_recovery_payload_invalid") from exc
+        validated = validate_result(
+            str(current["job_type"]),
+            json.dumps(
+                result,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                allow_nan=False,
+            ),
+            payload,
+        )
+        result_json = self._canonical_result(validated)
+        now = _iso()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            updated = connection.execute(
+                """
+                UPDATE ai_jobs
+                SET status='completed',result_json=?,error_code=NULL,
+                    completed_at=COALESCE(completed_at,?),next_attempt_at=NULL,
+                    lease_owner=NULL,lease_expires_at=NULL,updated_at=?
+                WHERE job_id=? AND status='failed'
+                  AND error_code='schema_validation_failed'
+                  AND result_json IS NULL AND openai_response_id=?
+                """,
+                (result_json, now, now, job_id, response_id),
+            ).rowcount
+            if updated != 1:
+                connection.rollback()
+                raise RuntimeError("ai_job_recovery_rejected")
+            recovered = connection.execute(
+                """SELECT j.*,s.submission_source FROM ai_jobs AS j
+                   JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                   WHERE j.job_id=?""",
+                (job_id,),
+            ).fetchone()
+            connection.commit()
+        if recovered is None:
+            raise RuntimeError("ai_job_recovery_not_found")
+        return dict(recovered)
 
     def defer(
         self,
@@ -1874,6 +2018,278 @@ class AIJobRepository:
             "active_job": active_public,
             "cooldown_until": _iso(cooldown_until) if cooldown_until else None,
             "cooldown_complete": cooldown_until is None,
+        }
+
+    def news_analysis_progress(
+        self,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Read one exact, persisted news batch without mutating either store.
+
+        New jobs have durable batch membership. Rows created before that schema
+        are deliberately treated as one-job batches; timestamps are never used
+        to guess membership.
+        """
+
+        observed = now or _utcnow()
+        if observed.tzinfo is None or observed.utcoffset() is None:
+            raise ValueError("now must be timezone-aware")
+        observed_text = _iso(observed)
+
+        def idle() -> dict[str, Any]:
+            return {
+                "status": "idle",
+                "scope": "latest_submission_batch",
+                "batch_id": None,
+                "batch_source": None,
+                "total": 0,
+                "finished": 0,
+                "succeeded": 0,
+                "awaiting_validation": 0,
+                "rejected": 0,
+                "failed": 0,
+                "waiting": 0,
+                "in_progress": 0,
+                "cancelled": 0,
+                "insufficient_context": 0,
+                "budget_blocked": 0,
+                "progress_percent": 0,
+                "current_index": None,
+                "current_news_id": None,
+                "current_phase": None,
+                "queue_total": 0,
+                "queue_waiting": 0,
+                "queue_in_progress": 0,
+                "started_at": None,
+                "last_updated_at": None,
+                "as_of": observed_text,
+                "_batch_jobs": [],
+            }
+
+        if not self.path.is_file():
+            return idle()
+        uri = f"file:{quote(self.path.resolve().as_posix(), safe='/')}?mode=ro"
+
+        @contextmanager
+        def read_connection() -> Iterator[sqlite3.Connection]:
+            connection = sqlite3.connect(uri, uri=True, timeout=5.0)
+            try:
+                yield connection
+            finally:
+                connection.close()
+
+        with read_connection() as connection:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA query_only=ON")
+            tables = {
+                str(row["name"])
+                for row in connection.execute(
+                    """SELECT name FROM sqlite_master
+                       WHERE type='table' AND name IN (
+                           'ai_jobs','ai_job_sources','ai_job_batch_members'
+                       )"""
+                ).fetchall()
+            }
+            if "ai_jobs" not in tables:
+                return idle()
+            has_sources = "ai_job_sources" in tables
+            has_batches = "ai_job_batch_members" in tables
+            source_select = (
+                "COALESCE(s.submission_source,'manual') AS submission_source"
+                if has_sources
+                else "'manual' AS submission_source"
+            )
+            source_join = (
+                "LEFT JOIN ai_job_sources AS s ON s.job_id=j.job_id"
+                if has_sources
+                else ""
+            )
+            batch_select = (
+                "b.batch_id,b.position"
+                if has_batches
+                else "NULL AS batch_id,NULL AS position"
+            )
+            batch_join = (
+                "LEFT JOIN ai_job_batch_members AS b ON b.job_id=j.job_id"
+                if has_batches
+                else ""
+            )
+            projection = f"""
+                SELECT j.job_id,j.payload_json,j.result_json,j.status,
+                       j.openai_response_id,j.submission_started_at,
+                       j.created_at,j.updated_at,{source_select},{batch_select}
+                FROM ai_jobs AS j
+                {source_join}
+                {batch_join}
+            """
+            anchor = connection.execute(
+                projection
+                + """
+                  WHERE j.job_type='news_impact' AND j.created_at<=?
+                    AND j.status IN ('pending','queued','in_progress')
+                  ORDER BY j.created_at,j.job_id LIMIT 1
+                  """,
+                (observed_text,),
+            ).fetchone()
+            if anchor is None:
+                anchor = connection.execute(
+                    projection
+                    + """
+                      WHERE j.job_type='news_impact' AND j.created_at<=?
+                      ORDER BY j.created_at DESC,j.job_id DESC LIMIT 1
+                      """,
+                    (observed_text,),
+                ).fetchone()
+            if anchor is None:
+                return idle()
+            anchor_dict = dict(anchor)
+            persisted_batch_id = anchor_dict.get("batch_id")
+            if has_batches and isinstance(persisted_batch_id, str):
+                batch = [
+                    dict(row)
+                    for row in connection.execute(
+                        projection
+                        + """
+                          WHERE j.job_type='news_impact'
+                            AND b.batch_id=? AND j.created_at<=?
+                          ORDER BY b.position,j.created_at,j.job_id
+                          """,
+                        (persisted_batch_id, observed_text),
+                    ).fetchall()
+                ]
+            else:
+                # A pre-schema row is an exact one-item historical batch.
+                batch = [anchor_dict]
+                persisted_batch_id = None
+            queue = connection.execute(
+                """
+                SELECT
+                  COUNT(*) AS total,
+                  SUM(CASE
+                        WHEN status='pending'
+                          OR (
+                            status='queued'
+                            AND submission_started_at IS NULL
+                            AND openai_response_id IS NULL
+                          )
+                        THEN 1 ELSE 0 END
+                  ) AS waiting,
+                  SUM(CASE
+                        WHEN status='in_progress'
+                          OR (
+                            status='queued'
+                            AND (
+                              submission_started_at IS NOT NULL
+                              OR openai_response_id IS NOT NULL
+                            )
+                          )
+                        THEN 1 ELSE 0 END
+                  ) AS in_progress
+                FROM ai_jobs
+                WHERE job_type='news_impact'
+                  AND status IN ('pending','queued','in_progress')
+                  AND created_at<=?
+                """,
+                (observed_text,),
+            ).fetchone()
+
+        counts = {
+            status: sum(1 for row in batch if str(row["status"]) == status)
+            for status in (
+                "pending",
+                "queued",
+                "in_progress",
+                "completed",
+                "failed",
+                "cancelled",
+                "insufficient_context",
+                "budget_blocked",
+            )
+        }
+        provider_rows = [
+            row
+            for row in batch
+            if str(row["status"]) == "in_progress"
+            or (
+                str(row["status"]) == "queued"
+                and (
+                    row.get("submission_started_at") is not None
+                    or row.get("openai_response_id") is not None
+                )
+            )
+        ]
+        provider_job_ids = {str(row["job_id"]) for row in provider_rows}
+        waiting = sum(
+            1
+            for row in batch
+            if str(row["status"]) in {"pending", "queued"}
+            and str(row["job_id"]) not in provider_job_ids
+        )
+        in_progress = len(provider_rows)
+        finished = len(batch) - waiting - in_progress
+        current_rows = [
+            (index, row)
+            for index, row in enumerate(batch, start=1)
+            if str(row["job_id"]) in provider_job_ids
+        ]
+        current_index: int | None = None
+        current_news_id: int | None = None
+        current_phase: str | None = None
+        if len(current_rows) == 1:
+            current_index, current_row = current_rows[0]
+            current_phase = (
+                "provider_queued"
+                if str(current_row["status"]) == "queued"
+                else "provider_processing"
+            )
+            try:
+                payload = json.loads(str(current_row["payload_json"]))
+            except (TypeError, json.JSONDecodeError):
+                payload = {}
+            raw_news_id = payload.get("news_id") if isinstance(payload, dict) else None
+            if isinstance(raw_news_id, int) and raw_news_id >= 1:
+                current_news_id = raw_news_id
+
+        queue_total = int(queue["total"] or 0) if queue is not None else 0
+        queue_waiting = int(queue["waiting"] or 0) if queue is not None else 0
+        queue_in_progress = (
+            int(queue["in_progress"] or 0) if queue is not None else 0
+        )
+        updated_values = [
+            str(row["updated_at"])
+            for row in batch
+            if isinstance(row.get("updated_at"), str) and row["updated_at"]
+        ]
+        return {
+            "status": "active" if waiting or in_progress else "completed",
+            "scope": "latest_submission_batch",
+            "batch_id": persisted_batch_id,
+            "batch_source": str(batch[0]["submission_source"]),
+            "total": len(batch),
+            "finished": finished,
+            # Completed rows are classified only after the local, read-only
+            # result-audit lookup performed by PersonalCatalystService.
+            "succeeded": 0,
+            "awaiting_validation": counts["completed"],
+            "rejected": 0,
+            "failed": counts["failed"],
+            "waiting": waiting,
+            "in_progress": in_progress,
+            "cancelled": counts["cancelled"],
+            "insufficient_context": counts["insufficient_context"],
+            "budget_blocked": counts["budget_blocked"],
+            "progress_percent": round(finished * 100 / len(batch)),
+            "current_index": current_index,
+            "current_news_id": current_news_id,
+            "current_phase": current_phase,
+            "queue_total": queue_total,
+            "queue_waiting": queue_waiting,
+            "queue_in_progress": queue_in_progress,
+            "started_at": str(batch[0]["created_at"]),
+            "last_updated_at": max(updated_values) if updated_values else None,
+            "as_of": observed_text,
+            "_batch_jobs": batch,
         }
 
     def health(self) -> dict[str, Any]:

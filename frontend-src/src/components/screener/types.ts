@@ -73,15 +73,20 @@ export interface ScanFilters {
   presetId: string | null;
 }
 
+/** 与后端每日真实强度快照的默认成交额门槛保持一致。 */
+export const DEFAULT_MIN_DOLLAR_VOLUME = 10_000_000;
+export const DEFAULT_MIN_PRICE = 5;
+export const DEFAULT_TOP_N = 20;
+
 export const DEFAULT_FILTERS: ScanFilters = {
   tier: 'all',
   timeframe: 'all',
   profile: 'balanced',
-  topN: 0,
+  topN: DEFAULT_TOP_N,
   sectors: [],
-  priceMin: null,
+  priceMin: DEFAULT_MIN_PRICE,
   priceMax: null,
-  minDollarVol: 0,
+  minDollarVol: DEFAULT_MIN_DOLLAR_VOLUME,
   minScore: null,
   presetId: null,
 };
@@ -150,6 +155,7 @@ export const TOPN_OPTIONS: { value: number; label: string }[] = [
 
 export const DOLLAR_VOL_OPTIONS: { value: number; label: string }[] = [
   { value: 0, label: '不限成交额' },
+  { value: DEFAULT_MIN_DOLLAR_VOLUME, label: '≥ 10M' },
   { value: 5e8, label: '≥ 500M' },
   { value: 1e9, label: '≥ 1B' },
   { value: 3e9, label: '≥ 3B' },

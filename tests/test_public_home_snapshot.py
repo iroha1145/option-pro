@@ -128,6 +128,8 @@ def _payload(resource: str, now: float, *, price: float = 100.0) -> dict:
             "high": price + 2,
             "low": price - 2,
             "open": price - 0.5,
+            "as_of": _iso(now),
+            "price_provider": "Massive",
             "description": "测试公司",
             "description_en": "Test company",
             "sic_description": "Semiconductors",
@@ -376,6 +378,7 @@ def test_snapshot_rejects_future_saved_at(tmp_path: Path) -> None:
     ("resource", "field"),
     (
         ("indices", "as_of"),
+        ("focus_overview", "as_of"),
         ("focus_chart", "as_of"),
         ("focus_chart", "last_bar_at"),
         ("earnings", "as_of"),

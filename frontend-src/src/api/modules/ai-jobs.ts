@@ -1,72 +1,34 @@
 /** AI 任务域：POST /api/ai/jobs/* · GET /api/ai/jobs/{id} · POST /cancel */
 import { ApiError, get, idFromLocation, mockOr, postCreate, post } from '../client';
-import { asRec, pickN, pickS } from '../live';
+import {
+  aiJobResultSummary,
+  normalizeAiJob,
+  normalizeJobStatus,
+} from '../aiJobNormalize';
 import * as fx2 from '@/mocks/fixtures2';
-import type { AiJob, AiJobStatus } from '../types';
+import type { AiJob } from '../types';
 
-/** 契约 AIJobPublic.job_type → UI kind */
-const KIND_MAP: Record<string, AiJob['kind']> = {
-  earnings_impact: 'earnings-impact',
-  option_alerts: 'option-alerts',
-  news_impact: 'news-analysis',
-  signal_analysis: 'signal-analysis',
-  market_focus: 'market-focus',
-};
+export { aiJobResultSummary, normalizeAiJob, normalizeJobStatus };
 
-/**
- * 状态归一（api-contract §0.4）：
- * - 活跃 {preparing,pending,queued} → queued；{in_progress,processing,running,cancel_requested} → in_progress
- * - 终态 {completed,succeeded} → succeeded；failed → failed；{canceled,cancelled} → cancelled；
- *   其余失败类终态（insufficient_context/budget_blocked/incomplete_output/
- *   submission_outcome_unknown/worker_interrupted）→ failed（细节由 error 透出）
- */
-export function normalizeJobStatus(raw: unknown): AiJobStatus {
-  const s = String(raw ?? '');
-  switch (s) {
-    case 'preparing':
-    case 'pending':
-    case 'queued':
-      return 'queued';
-    case 'in_progress':
-    case 'processing':
-    case 'running':
-    case 'cancel_requested':
-      return 'in_progress';
-    case 'completed':
-    case 'succeeded':
-      return 'succeeded';
-    case 'canceled':
-    case 'cancelled':
-      return 'cancelled';
-    default:
-      return 'failed'; // failed 及未知/失败类终态
-  }
-}
-
-/** 契约 AIJobPublic → UI AiJob（字段名对齐，缺失不编造） */
-export function normalizeAiJob(raw: unknown, fallbackId?: string | null): AiJob {
-  const r = asRec(raw);
-  const id = pickS(r, 'id', 'job_id') ?? fallbackId ?? '';
-  const kindRaw = pickS(r, 'kind', 'job_type') ?? '';
-  const status = normalizeJobStatus(r.status);
-  const resultRaw = r.result;
-  let result: string | undefined;
-  if (typeof resultRaw === 'string') result = resultRaw;
-  else if (resultRaw !== null && typeof resultRaw === 'object') {
-    // AI result 内层字段后端按 job_type 不同（残余风险，见 AUDIT-live.md）
-    const rr = asRec(resultRaw);
-    result = pickS(rr, 'text', 'summary', 'headline_summary') ?? JSON.stringify(resultRaw);
-  }
-  return {
-    id,
-    kind: KIND_MAP[kindRaw] ?? ((kindRaw || 'news-analysis') as AiJob['kind']),
-    status,
-    progress: pickN(r, 'progress') ?? (status === 'queued' ? 5 : status === 'in_progress' ? 50 : 100),
-    createdAt: pickS(r, 'createdAt', 'submitted_at', 'created_at') ?? '',
-    updatedAt: pickS(r, 'updatedAt', 'updated_at', 'completed_at') ?? '',
-    result,
-    error: pickS(r, 'error', 'error_code', 'message') ?? undefined,
-  };
+export interface OptionAlertInput {
+  strike: number;
+  type: 'call' | 'put';
+  expiration: string;
+  dte: number;
+  volume: number;
+  open_interest: number;
+  implied_volatility?: number;
+  premium_flow?: number;
+  vol_oi_ratio?: number;
+  reasons: string[];
+  signal: 'unknown';
+  inferred_direction: 'unknown';
+  moneyness: 'itm' | 'otm' | 'atm' | 'unavailable';
+  direction: 'unknown';
+  direction_confidence: 0;
+  direction_status: 'unavailable_without_trade_side';
+  direction_deprecated: true;
+  direction_note: string;
 }
 
 /**
@@ -89,7 +51,7 @@ export const aiJobsApi = {
   createOptionAlerts: (params: {
     tickers: string[];
     force?: boolean;
-    alerts?: unknown[];
+    alerts?: OptionAlertInput[];
     underlyingPrice?: number;
     expiration?: string;
   }): Promise<AiJob> =>

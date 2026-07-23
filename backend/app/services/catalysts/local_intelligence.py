@@ -43,6 +43,10 @@ SCHEMA_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 TITLE_WAITING = "中文标题等待生成"
 SUMMARY_WAITING = "中文摘要等待生成"
 HOTSPOT_WAITING = "热点标题等待中文分析"
+_FOCUS_WAITING_PLACEHOLDERS = frozenset(
+    {TITLE_WAITING, SUMMARY_WAITING, HOTSPOT_WAITING}
+)
+_LEGACY_PLACEHOLDER_INPUT_ERROR = "legacy_placeholder_input_hidden"
 AMBIGUOUS_TICKERS = frozenset({"AI", "ON", "CAT"})
 TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-^]{0,11}$")
 SCHEMA_VERSION = "optix-local-catalyst-v3"
@@ -57,9 +61,8 @@ FOCUS_RESULT_CONTRACT_ID = (
 )
 NEWS_LINK_AUDIT_CONTRACT_ID = "news-impact-link-v1"
 FOCUS_BINDING_AUDIT_CONTRACT_ID = "market-focus-binding-v1"
+FOCUS_INPUT_POLICY_AUDIT_CONTRACT_ID = "market-focus-input-policy-v1"
 SCHEDULE_CLAIM_TTL_SECONDS = 10 * 60
-SCHEDULED_NEWS_BATCH_SIZE = 20
-SCHEDULED_QUEUE_SOFT_LIMIT = 40
 SCHEDULED_NEWS_WINDOW_HOURS = 72
 SCHEDULED_NEWS_MAX_ATTEMPTS = 3
 SCHEDULED_FOCUS_MAX_ATTEMPTS = 3
@@ -829,6 +832,27 @@ def _cluster_key(members: list[dict[str, Any]]) -> str:
     return f"{kind}:{','.join(tickers[:5])}:{signature}"
 
 
+def _market_focus_payload_has_waiting_placeholder(
+    payload: Mapping[str, Any],
+) -> bool:
+    """Recognize only the historical waiting literals inside focus events."""
+
+    events = payload.get("events")
+    if not isinstance(events, list):
+        return False
+    pending: list[Any] = list(events)
+    while pending:
+        value = pending.pop()
+        if isinstance(value, str):
+            if value.strip() in _FOCUS_WAITING_PLACEHOLDERS:
+                return True
+        elif isinstance(value, Mapping):
+            pending.extend(value.values())
+        elif isinstance(value, (list, tuple)):
+            pending.extend(value)
+    return False
+
+
 class LocalCatalystIntelligence:
     """Local-only news intelligence and Chinese presentation store.
 
@@ -1107,6 +1131,92 @@ class LocalCatalystIntelligence:
             if "connection" in locals():
                 connection.close()
         return dict(row) if row is not None else None
+
+    def news_result_audit_states(
+        self,
+        jobs: Sequence[Mapping[str, Any]],
+    ) -> dict[str, Literal["accepted", "rejected", "awaiting_validation"]]:
+        """Classify completed news results through a strictly read-only lookup.
+
+        A result succeeds only when the current payload/result pair still
+        passes the Simplified-Chinese contract and the exact result bytes have
+        an accepted local audit. This method never initializes, reconciles, or
+        submits work.
+        """
+
+        states: dict[
+            str,
+            Literal["accepted", "rejected", "awaiting_validation"],
+        ] = {}
+        candidates: list[tuple[str, str, str]] = []
+        for row in jobs:
+            if str(row.get("status") or "") != "completed":
+                continue
+            job_id = str(row.get("job_id") or "")
+            raw_result = row.get("result_json")
+            payload = _loads(row.get("payload_json"), None)
+            if not job_id:
+                continue
+            if not isinstance(raw_result, str) or not isinstance(payload, dict):
+                states[job_id] = "rejected"
+                continue
+            try:
+                validate_result("news_impact", raw_result, payload)
+            except (TypeError, ValueError):
+                states[job_id] = "rejected"
+                continue
+            states[job_id] = "awaiting_validation"
+            candidates.append(
+                (
+                    job_id,
+                    hashlib.sha256(raw_result.encode("utf-8")).hexdigest(),
+                    raw_result,
+                )
+            )
+        if not candidates or not self.db_path.is_file():
+            return states
+
+        uri = f"file:{quote(self.db_path.resolve().as_posix(), safe='/')}?mode=ro"
+        connection: sqlite3.Connection | None = None
+        try:
+            connection = sqlite3.connect(uri, uri=True, timeout=2.0)
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA query_only=ON")
+            table = connection.execute(
+                """SELECT 1 FROM sqlite_master
+                   WHERE type='table'
+                     AND name='catalyst_local_analysis_result_audit'"""
+            ).fetchone()
+            if table is None:
+                return states
+            for job_id, digest, raw_result in candidates:
+                audit = connection.execute(
+                    """SELECT outcome
+                       FROM catalyst_local_analysis_result_audit
+                       WHERE job_id=? AND contract_id=?
+                         AND result_sha256=? AND result_json=?
+                       ORDER BY observed_at DESC LIMIT 1""",
+                    (
+                        job_id,
+                        NEWS_RESULT_CONTRACT_ID,
+                        digest,
+                        raw_result,
+                    ),
+                ).fetchone()
+                if audit is not None:
+                    states[job_id] = (
+                        "accepted"
+                        if str(audit["outcome"]) == "accepted"
+                        else "rejected"
+                    )
+        except sqlite3.Error:
+            # An unavailable audit store cannot turn an unaudited result into
+            # success. Retain the honest awaiting-validation state.
+            return states
+        finally:
+            if connection is not None:
+                connection.close()
+        return states
 
     def _ai_job_snapshot(
         self,
@@ -1829,6 +1939,39 @@ class LocalCatalystIntelligence:
         )
 
     @staticmethod
+    def _news_validation_payload(
+        revision: Mapping[str, Any] | sqlite3.Row,
+    ) -> dict[str, Any]:
+        """Rebuild the source context used by the original paid request."""
+
+        item = dict(revision)
+
+        def list_value(decoded_key: str, json_key: str) -> list[Any]:
+            decoded = item.get(decoded_key)
+            if isinstance(decoded, list):
+                return list(decoded)
+            stored = _loads(item.get(json_key), [])
+            return list(stored) if isinstance(stored, list) else []
+
+        return {
+            "news_id": int(item["news_id"]),
+            "change_sequence": int(item["change_sequence"]),
+            "content_hash": str(item["content_hash"]),
+            "source": str(item.get("source") or ""),
+            "title": str(item.get("raw_title") or ""),
+            "summary": item.get("raw_summary"),
+            "sources": list_value("source_names", "source_names_json"),
+            "source_ticker_hints": list_value(
+                "source_tickers",
+                "source_tickers_json",
+            ),
+            "allowed_tickers": list_value(
+                "canonical_tickers",
+                "canonical_tickers_json",
+            ),
+        }
+
+    @staticmethod
     def _news_result_was_previously_accepted(
         connection: sqlite3.Connection,
         *,
@@ -1863,6 +2006,17 @@ class LocalCatalystIntelligence:
                 (cycle_id, job_id, digest, raw_result),
             ).fetchone()
             is not None
+            and connection.execute(
+                """SELECT 1 FROM catalyst_local_focus_result_audit
+                   WHERE cycle_id=? AND job_id=? AND contract_id=?
+                     AND outcome='rejected' LIMIT 1""",
+                (
+                    cycle_id,
+                    job_id,
+                    FOCUS_INPUT_POLICY_AUDIT_CONTRACT_ID,
+                ),
+            ).fetchone()
+            is None
         )
 
     @staticmethod
@@ -1884,12 +2038,18 @@ class LocalCatalystIntelligence:
         ).fetchone()
         if audited is not None:
             outcome = str(audited["outcome"])
-            if outcome == "accepted" and not _news_result_identity_matches(
-                _loads(raw_result, None),
-                payload,
-            ):
-                return "rejected", False
-            return outcome, False
+            if outcome == "accepted":
+                if not _news_result_identity_matches(
+                    _loads(raw_result, None),
+                    payload,
+                ):
+                    return "rejected", False
+                return "accepted", False
+            # Re-run local validation for cached rejections. The paid result
+            # itself is immutable, but its source context can become richer
+            # after a deployment. Reusing the old rejection would otherwise
+            # clear a result that the current payload can validate without
+            # making another model request.
         try:
             validate_result("news_impact", raw_result, payload)
         except (TypeError, ValueError):
@@ -1898,6 +2058,26 @@ class LocalCatalystIntelligence:
         else:
             outcome = "accepted"
             reason = None
+        if audited is not None:
+            if outcome == "rejected":
+                return "rejected", False
+            updated = connection.execute(
+                """UPDATE catalyst_local_analysis_result_audit SET
+                       outcome='accepted',reason=NULL,result_json=?,
+                       result_available_at=?,verified_at=?,observed_at=?
+                   WHERE job_id=? AND contract_id=? AND result_sha256=?
+                     AND outcome='rejected'""",
+                (
+                    raw_result,
+                    result_available_at,
+                    verified_at,
+                    observed_at,
+                    job_id,
+                    NEWS_RESULT_CONTRACT_ID,
+                    digest,
+                ),
+            ).rowcount
+            return "accepted", updated == 1
         inserted = connection.execute(
             """INSERT OR IGNORE INTO catalyst_local_analysis_result_audit(
                    job_id,contract_id,result_sha256,outcome,reason,
@@ -2032,6 +2212,59 @@ class LocalCatalystIntelligence:
         if retired != 1:
             raise RuntimeError("focus_binding_retirement_conflict")
 
+    @staticmethod
+    def _retire_focus_placeholder_input(
+        connection: sqlite3.Connection,
+        *,
+        cycle: Mapping[str, Any] | sqlite3.Row,
+        observed_at: str,
+    ) -> bool:
+        """Hide a historical focus snapshot built from waiting literals."""
+
+        cycle_row = dict(cycle)
+        payload = _loads(cycle_row.get("payload_json"), None)
+        if (
+            not isinstance(payload, dict)
+            or not _market_focus_payload_has_waiting_placeholder(payload)
+        ):
+            return False
+        raw_payload = _json(payload)
+        digest = hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()
+        connection.execute(
+            """INSERT OR IGNORE INTO catalyst_local_focus_result_audit(
+                   cycle_id,job_id,contract_id,result_sha256,outcome,
+                   reason,result_json,result_available_at,observed_at
+               ) VALUES(?,?,?,?,?,?,?,?,?)""",
+            (
+                str(cycle_row["cycle_id"]),
+                str(cycle_row["job_id"]),
+                FOCUS_INPUT_POLICY_AUDIT_CONTRACT_ID,
+                digest,
+                "rejected",
+                _LEGACY_PLACEHOLDER_INPUT_ERROR,
+                raw_payload,
+                cycle_row.get("completed_at") or cycle_row.get("updated_at"),
+                observed_at,
+            ),
+        )
+        if str(cycle_row.get("status") or "") == "cancelled":
+            return True
+        retired = connection.execute(
+            """UPDATE catalyst_local_focus_cycles SET
+                   status='failed',error_code=?,result_json=NULL,
+                   completed_at=NULL,updated_at=?
+               WHERE cycle_id=? AND job_id=? AND status!='cancelled'""",
+            (
+                _LEGACY_PLACEHOLDER_INPUT_ERROR,
+                observed_at,
+                str(cycle_row["cycle_id"]),
+                str(cycle_row["job_id"]),
+            ),
+        ).rowcount
+        if retired != 1:
+            raise RuntimeError("focus_placeholder_retirement_conflict")
+        return True
+
     def _audit_published_news_results(
         self,
         connection: sqlite3.Connection,
@@ -2042,6 +2275,8 @@ class LocalCatalystIntelligence:
             """SELECT link.job_id,link.news_id,link.change_sequence,
                       link.content_hash,link.result_json,
                       link.result_available_at,link.verified_at,
+                      revision.source,revision.raw_title,revision.raw_summary,
+                      revision.source_names_json,revision.source_tickers_json,
                       revision.canonical_tickers_json
                FROM catalyst_local_analysis_links link
                JOIN catalyst_local_news_revisions revision
@@ -2055,15 +2290,7 @@ class LocalCatalystIntelligence:
         observed_at = _iso()
         for row in rows:
             raw_result = str(row["result_json"])
-            payload = {
-                "news_id": int(row["news_id"]),
-                "change_sequence": int(row["change_sequence"]),
-                "content_hash": str(row["content_hash"]),
-                "allowed_tickers": _loads(
-                    row["canonical_tickers_json"],
-                    [],
-                ),
-            }
+            payload = self._news_validation_payload(row)
             outcome, inserted = self._audit_news_result(
                 connection,
                 job_id=str(row["job_id"]),
@@ -2116,6 +2343,13 @@ class LocalCatalystIntelligence:
             payload = _loads(row["payload_json"], None)
             if not isinstance(payload, dict):
                 payload = {}
+            if self._retire_focus_placeholder_input(
+                connection,
+                cycle=row,
+                observed_at=observed_at,
+            ):
+                rejected += 1
+                continue
             outcome, inserted = self._audit_focus_result(
                 connection,
                 cycle_id=str(row["cycle_id"]),
@@ -2303,7 +2537,9 @@ class LocalCatalystIntelligence:
         cycles = connection.execute(
             """SELECT * FROM catalyst_local_focus_cycles
                WHERE result_json IS NULL AND status NOT IN ('cancelled')
-               ORDER BY created_at"""
+                 AND COALESCE(error_code,'') != ?
+               ORDER BY created_at""",
+            (_LEGACY_PLACEHOLDER_INPUT_ERROR,),
         ).fetchall()
         published = 0
         for cycle in cycles:
@@ -2345,6 +2581,13 @@ class LocalCatalystIntelligence:
                     "UPDATE catalyst_local_focus_cycles SET status=?,updated_at=? WHERE cycle_id=?",
                     (str(public["status"]), str(public["updated_at"]), str(cycle["cycle_id"])),
                 )
+                continue
+            observed_at = _iso()
+            if self._retire_focus_placeholder_input(
+                connection,
+                cycle=cycle,
+                observed_at=observed_at,
+            ):
                 continue
             assert job is not None
             job_payload = self._job_payload(job)
@@ -2678,12 +2921,7 @@ class LocalCatalystIntelligence:
             result_available_at = link["result_available_at"]
             result_job_id = link["analysis_result_job_id"]
             audited = bool(link["result_audited"])
-        payload = {
-            "news_id": row.get("news_id"),
-            "change_sequence": row.get("change_sequence"),
-            "content_hash": row.get("content_hash"),
-            "allowed_tickers": list(row.get("canonical_tickers") or []),
-        }
+        payload = self._news_validation_payload(row)
         raw_result = str(raw_value)
         if audited:
             result = _loads(raw_result, None)
@@ -3622,10 +3860,18 @@ class LocalCatalystIntelligence:
             consumed_cycle = connection.execute(
                 """SELECT MAX(prepared_revision) AS prepared_revision
                    FROM catalyst_local_focus_cycles
-                   WHERE status='completed' AND completed_at<=?
+                   WHERE created_at<=?
+                     AND (
+                       (status='completed' AND completed_at<=?)
+                       OR error_code=?
+                     )
                      AND COALESCE(json_extract(payload_json,'$.force'),0)=0
                 """,
-                (_iso(observed),),
+                (
+                    _iso(observed),
+                    _iso(observed),
+                    _LEGACY_PLACEHOLDER_INPUT_ERROR,
+                ),
             ).fetchone()
         prepared_revision = int(revision["prepared_revision"]) if revision else 0
         last_consumed = (
@@ -3984,6 +4230,8 @@ class LocalCatalystIntelligence:
         expected_content_hash: str | None = None,
         submission_source: SubmissionSource = "manual",
         _job_snapshot: Mapping[str, dict[str, Any]] | None = None,
+        _batch_id: str | None = None,
+        _batch_position: int | None = None,
     ) -> dict[str, Any]:
         if self.mode not in {"manual", "scheduled"}:
             raise CatalystError(
@@ -4102,6 +4350,8 @@ class LocalCatalystIntelligence:
             # A forced request is a new immutable analysis revision. The
             # minute bucket above keeps repeated confirmation clicks idempotent.
             force_retry=scheduled_retry,
+            batch_id=_batch_id,
+            batch_position=_batch_position,
         )
         public = AIJobRepository.public(
             job,
@@ -4208,7 +4458,7 @@ class LocalCatalystIntelligence:
                         _iso(now),
                         _iso(now),
                         _iso(now - timedelta(hours=SCHEDULED_NEWS_WINDOW_HOURS)),
-                        min(100, int(limit)),
+                        min(10_000, int(limit)),
                     ),
                 ).fetchall()
             except sqlite3.OperationalError:
@@ -4429,16 +4679,14 @@ class LocalCatalystIntelligence:
         queue_health = self.ai_repository.health()
         active_queue = queue_health.get("pending")
         if not queue_health.get("healthy") or not isinstance(active_queue, int):
-            active_queue = SCHEDULED_QUEUE_SOFT_LIMIT
+            active_queue = self.max_queued
         # Keep one queue position available for a ready market-focus cycle. A
-        # continuous news backlog must not fill the soft limit and starve the
-        # hourly aggregate indefinitely.
+        # continuous news backlog must not fill the queue and starve the hourly
+        # aggregate indefinitely. The daily Token budget, not an item-count
+        # quota, remains the paid-work boundary.
         batch_capacity = max(
             0,
-            min(
-                SCHEDULED_NEWS_BATCH_SIZE,
-                SCHEDULED_QUEUE_SOFT_LIMIT - 1 - active_queue,
-            ),
+            self.max_queued - 1 - active_queue,
         )
         queued = 0
         skipped = 0
@@ -4471,11 +4719,11 @@ class LocalCatalystIntelligence:
                 candidates.append(revision)
         recent = self._scheduled_news_candidates(
             now=observed,
-            limit=SCHEDULED_NEWS_BATCH_SIZE + len(seen),
+            # Scan beyond queue capacity so permanent failures near the front
+            # cannot occupy every candidate position and starve later news.
+            limit=max(self.max_queued * 10, batch_capacity + len(seen)),
         )
         for row in recent:
-            if len(candidates) >= SCHEDULED_NEWS_BATCH_SIZE:
-                break
             news_id = int(row["news_id"])
             if news_id in seen:
                 continue
@@ -4495,6 +4743,8 @@ class LocalCatalystIntelligence:
             allow_write_contention=False,
             news_ids={int(row["news_id"]) for row in candidates},
         )
+        scheduled_batch_id = "aib_" + uuid.uuid4().hex
+        scheduled_batch_position = 0
         for row in candidates:
             news_id = int(row["news_id"])
             previous_job = self._scheduled_job_for_revision(
@@ -4506,6 +4756,8 @@ class LocalCatalystIntelligence:
                 "local_link_pending"
             ):
                 skipped += 1
+                if queued >= batch_capacity:
+                    break
                 continue
             previous_updated = (
                 _parse_time(str(previous_job.get("updated_at") or ""))
@@ -4556,8 +4808,11 @@ class LocalCatalystIntelligence:
                 skipped += 1
                 continue
             if queued >= batch_capacity:
-                skipped += 1
-                continue
+                # Inspect terminal jobs before honoring the news capacity.
+                # Otherwise a permanently failed hotspot can occupy the
+                # reserved market-focus position forever.
+                break
+            scheduled_batch_position += 1
             try:
                 job = self.request_analysis(
                     news_id,
@@ -4567,6 +4822,8 @@ class LocalCatalystIntelligence:
                     expected_content_hash=str(row["content_hash"]),
                     submission_source="scheduled",
                     _job_snapshot=scheduled_job_snapshot,
+                    _batch_id=scheduled_batch_id,
+                    _batch_position=scheduled_batch_position,
                 )
             except CatalystError as error:
                 if error.code == "news_revision_changed":
@@ -4590,7 +4847,7 @@ class LocalCatalystIntelligence:
         if (
             prepared_revision
             and not focus_pending_news_ids
-            and active_queue + queued < SCHEDULED_QUEUE_SOFT_LIMIT
+            and active_queue + queued < self.max_queued
         ):
             with self._connect() as connection:
                 existing_focus = connection.execute(
@@ -4670,12 +4927,21 @@ class LocalCatalystIntelligence:
         jobs = self._ai_job_snapshot(allow_write_contention=False)
         observed_hour = _hour_bucket(observed)
         for candidate in candidates:
+            payload = _loads(candidate["payload_json"], None)
+            if (
+                str(candidate["error_code"] or "")
+                == _LEGACY_PLACEHOLDER_INPUT_ERROR
+                or (
+                    isinstance(payload, dict)
+                    and _market_focus_payload_has_waiting_placeholder(payload)
+                )
+            ):
+                return None, False
             job = jobs.get(str(candidate["job_id"]))
             if job is None or job.get("error_code") == "submission_outcome_unknown":
                 return None, True
             if job.get("submission_source") != "scheduled":
                 return None, True
-            payload = _loads(candidate["payload_json"], None)
             job_payload = self._job_payload(job)
             if (
                 not isinstance(payload, dict)
@@ -5013,8 +5279,9 @@ class LocalCatalystIntelligence:
                         """SELECT cycle_id FROM catalyst_local_focus_cycles
                            WHERE prepared_revision=?
                              AND COALESCE(json_extract(payload_json,'$.force'),0)=0
+                             AND COALESCE(error_code,'') != ?
                            ORDER BY created_at DESC LIMIT 1""",
-                        (revision,),
+                        (revision, _LEGACY_PLACEHOLDER_INPUT_ERROR),
                     ).fetchone()
                 if existing is not None:
                     resume_cycle_id = str(existing["cycle_id"])
@@ -5113,6 +5380,20 @@ class LocalCatalystIntelligence:
                         "Focus cycle was not found",
                         counts_for_circuit=False,
                     )
+                payload = _loads(previous["payload_json"], None)
+                if (
+                    str(previous["error_code"] or "")
+                    == _LEGACY_PLACEHOLDER_INPUT_ERROR
+                    or (
+                        isinstance(payload, dict)
+                        and _market_focus_payload_has_waiting_placeholder(payload)
+                    )
+                ):
+                    raise CatalystError(
+                        "market_focus_cycle_not_retryable",
+                        "Focus cycle used a legacy placeholder snapshot",
+                        counts_for_circuit=False,
+                    )
                 current_job = self.ai_repository.get_job(str(previous["job_id"]))
                 if str(previous["status"]) not in {
                     "failed",
@@ -5140,7 +5421,6 @@ class LocalCatalystIntelligence:
                         "Focus cycle retry cannot safely identify the prior submission",
                         counts_for_circuit=False,
                     )
-                payload = _loads(previous["payload_json"], None)
                 if not isinstance(payload, dict):
                     raise CatalystError(
                         "market_focus_cycle_not_retryable",
@@ -5206,10 +5486,13 @@ class LocalCatalystIntelligence:
             raise CatalystError("invalid_market_focus_request", "Prepared revision is required", counts_for_circuit=False)
         if int(status["prepared_revision"]) != expected_prepared_revision:
             raise CatalystError("prepared_revision_changed", "Prepared hotspot revision changed", counts_for_circuit=False)
-        if force and bool(status.get("has_new_hotspots")):
+        if force and (
+            bool(status.get("has_new_hotspots"))
+            or int(status.get("prepared_hot_count") or 0) <= 0
+        ):
             raise CatalystError(
                 "invalid_market_focus_request",
-                "Forced reanalysis requires an already-consumed prepared revision",
+                "Forced reanalysis requires an already-consumed non-empty prepared revision",
                 counts_for_circuit=False,
             )
         return self._enqueue_focus(

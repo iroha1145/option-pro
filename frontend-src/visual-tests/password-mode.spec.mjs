@@ -130,6 +130,35 @@ function responseFor(pathname) {
     };
   }
   if (pathname === "/api/catalysts/market-focus-cycles/latest") return null;
+  if (pathname === "/api/catalysts/analysis-progress") {
+    return {
+      status: "active",
+      scope: "latest_submission_batch",
+      batch_id: "aib_password_e2e",
+      batch_source: "scheduled",
+      total: 4,
+      finished: 2,
+      succeeded: 1,
+      awaiting_validation: 0,
+      rejected: 1,
+      failed: 0,
+      waiting: 1,
+      in_progress: 1,
+      cancelled: 0,
+      insufficient_context: 0,
+      budget_blocked: 0,
+      progress_percent: 50,
+      current_index: 3,
+      current_news_id: 103,
+      current_phase: "provider_processing",
+      queue_total: 2,
+      queue_waiting: 1,
+      queue_in_progress: 1,
+      started_at: NOW,
+      last_updated_at: NOW,
+      as_of: NOW,
+    };
+  }
   if (pathname === "/api/catalysts/calendar") return { status: "active", events: [] };
   if (pathname === "/api/runtime-settings") {
     // 契约形状保留（乐观锁 version 信封）；新 UI 当前无页面消费，仅作契约文档与兜底。
@@ -312,6 +341,21 @@ test("password mode keeps public research readable and reserves owner controls f
   await page.waitForLoadState("networkidle");
   await expect(page.getByText("公开浏览可见的中文新闻标题").first()).toBeVisible();
   await expectOwnerShell(page);
+  const analysisProgress = page.getByLabel("新闻分析进度");
+  await expect(analysisProgress).toContainText("正在处理第 3 / 4 条");
+  await expect(analysisProgress.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "50");
+  await page.setViewportSize({ width: 320, height: 568 });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      ),
+    )
+    .toBeLessThanOrEqual(1);
+  await expect(analysisProgress).toBeVisible();
+  await analysisProgress.scrollIntoViewIfNeeded();
+  await screenshot(page, "password-owner-analysis-progress-mobile");
+  await page.setViewportSize({ width: 1280, height: 720 });
   await screenshot(page, "password-owner-catalysts");
 
   // ── 登出 → 回到访客 ──────────────────────────────────────────────────────

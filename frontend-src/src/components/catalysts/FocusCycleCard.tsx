@@ -176,17 +176,25 @@ export default function FocusCycleCard() {
       setJob(j);
       toast.info('焦点周期计算已提交', '完成后自动刷新');
       stopPoll();
-      if (!j.jobId) {
-        // 202 已受理但响应未携带任务 id：延迟拉取 latest 兜底，不误报失败
+      if (!j.cycleId) {
+        // 202 已受理但响应未携带周期编号：延迟拉取 latest 兜底，不误报失败
         window.setTimeout(() => {
           latestQ.refresh();
           setJob(null);
         }, 12_000);
         return;
       }
+      const pollDeadline = Date.now() + 5 * 60_000;
       pollRef.current = window.setInterval(async () => {
+        if (Date.now() >= pollDeadline) {
+          stopPoll();
+          latestQ.refresh();
+          setJob(null);
+          toast.error('焦点周期仍在处理中', '稍后刷新页面可继续查看结果');
+          return;
+        }
         try {
-          const next = await catalystsContract.focusCycleJob(j.jobId);
+          const next = await catalystsContract.focusCycleJob(j.cycleId!);
           setJob({ ...next });
           if (next.status === 'completed' || next.status === 'failed') {
             stopPoll();
@@ -198,9 +206,11 @@ export default function FocusCycleCard() {
             }
             window.setTimeout(() => setJob(null), 1200);
           }
-        } catch {
+        } catch (error) {
           stopPoll();
           setJob(null);
+          latestQ.refresh();
+          toast.error('焦点周期状态读取失败', error instanceof Error ? error.message : '请稍后刷新页面');
         }
       }, 2000);
     } catch (e) {
@@ -235,7 +245,7 @@ export default function FocusCycleCard() {
             {running ? (
               <>
                 <Led tone="brand" pulse className="size-1.5" />
-                周期计算中 {job.progress}%
+                周期计算中{job.progress !== null ? ` ${job.progress}%` : ''}
               </>
             ) : (
               <>
@@ -251,7 +261,7 @@ export default function FocusCycleCard() {
 
       {/* 任务进度条 */}
       <AnimatePresence>
-        {running && (
+        {running && job.progress !== null && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -319,7 +329,7 @@ export default function FocusCycleCard() {
       <ConfirmDialog
         open={confirmOpen}
         title="触发新的市场焦点周期？"
-        description="将基于当前热点准备区生成一次综合分析，消耗模型预算并计入每日额度；若准备区没有新事件，后端会如实拒绝。"
+        description="将基于当前热点准备区生成一次综合分析，消耗模型预算并计入每日额度；若当前版本已分析过，将明确重算一次。"
         confirmLabel="确认触发"
         onConfirm={() => void startJob()}
         onCancel={() => setConfirmOpen(false)}

@@ -1100,7 +1100,8 @@ export interface NewsAnalysisJob {
   jobId: string;
   newsId: string;
   status: AnalysisJobStatus;
-  progress: number; // 0–100
+  /** 后端明确提供时才有百分比；null 表示只能展示真实状态。 */
+  progress: number | null;
   submittedAt: string;
   updatedAt: string;
   error: string | null;
@@ -1110,7 +1111,7 @@ export interface NewsAnalysisJob {
 export interface FocusCycleJob {
   jobId: string;
   status: 'queued' | 'in_progress' | 'completed' | 'failed';
-  progress: number;
+  progress: number | null;
   submittedAt: string;
   updatedAt: string;
   cycleId: string | null;

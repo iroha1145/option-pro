@@ -135,6 +135,27 @@ def _finite(value: Any) -> float | None:
     return number
 
 
+def _epoch_iso(value: Any) -> str | None:
+    """Massive 的毫秒/微秒/纳秒时间戳 → UTC ISO-8601。"""
+
+    try:
+        stamp = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(stamp) or stamp <= 0:
+        return None
+    if stamp >= 1e17:
+        stamp /= 1_000_000_000
+    elif stamp >= 1e14:
+        stamp /= 1_000_000
+    elif stamp >= 1e11:
+        stamp /= 1_000
+    try:
+        return datetime.fromtimestamp(stamp, timezone.utc).isoformat()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
 def grouped_daily(day: str) -> dict[str, dict[str, Any]]:
     """{SYM: {t,o,h,l,c,v}} — 单日全市场股票/ETF 日线;休市日返回空。"""
 
@@ -284,6 +305,11 @@ def snapshot_batch(symbols: list[str]) -> dict[str, dict[str, Any]]:
             close_price = _finite(minute.get("c")) or _finite(day.get("c"))
             if close_price is None:
                 continue
+            as_of = (
+                _epoch_iso(minute.get("t"))
+                or _epoch_iso(day.get("t"))
+                or _epoch_iso(row.get("updated"))
+            )
             out[symbol] = {
                 "minute": {
                     "t": minute.get("t"),
@@ -293,9 +319,18 @@ def snapshot_batch(symbols: list[str]) -> dict[str, dict[str, Any]]:
                     "l": _finite(minute.get("l")),
                     "v": minute.get("v"),
                 },
+                "day": {
+                    "t": day.get("t"),
+                    "c": _finite(day.get("c")),
+                    "o": _finite(day.get("o")),
+                    "h": _finite(day.get("h")),
+                    "l": _finite(day.get("l")),
+                    "v": day.get("v"),
+                },
                 "day_close": _finite(day.get("c")),
                 "prev_close": _finite(prev.get("c")),
                 "updated": row.get("updated"),
+                "as_of": as_of,
             }
     return out
 

@@ -18,7 +18,12 @@ import { cn } from '@/lib/utils';
 import { fmtCompact, fmtPrice } from '@/lib/format';
 import { OPTION_SUPPORTED_LIST, optionsSupported } from '@/mocks/fixtures2';
 import { AI_DISCLAIMER, useAiJob } from './useAiJob';
-import type { OptionChainRow } from '@/api/types';
+import {
+  buildOptionAlertEvidence,
+  parseOptionAlertResult,
+  type OptionAlertResult,
+} from './optionAnalysis';
+import type { OptionChain, OptionChainRow } from '@/api/types';
 
 function dte(expiration: string): number {
   return Math.max(0, Math.round((new Date(`${expiration}T16:00:00`).getTime() - Date.now()) / 86_400_000));
@@ -48,15 +53,53 @@ function rowMeta(r: OptionChainRow): RowMeta {
   };
 }
 
+const DIRECTION_META: Record<
+  OptionAlertResult['direction'],
+  { label: string; className: string }
+> = {
+  bullish: { label: '偏多', className: 'bg-up-50 text-up-700' },
+  bearish: { label: '偏空', className: 'bg-down-50 text-down-700' },
+  mixed: { label: '多空混合', className: 'bg-warn-50 text-warn-600' },
+  unknown: { label: '方向未知', className: 'bg-paper-2 text-ink-500' },
+};
+
+const CONFIDENCE_LABEL: Record<OptionAlertResult['confidence'], string> = {
+  high: '证据一致性高',
+  medium: '证据一致性中等',
+  low: '证据一致性低',
+};
+
 /* ---------------- AI 期权解读（owner） ---------------- */
-function AiOptionInsight({ ticker, expiration }: { ticker: string; expiration: string | null }) {
+function AiOptionInsight({
+  ticker,
+  expiration,
+  chain,
+}: {
+  ticker: string;
+  expiration: string | null;
+  chain: OptionChain | null;
+}) {
   const { isOwner } = useAccess();
   const { job, error, start, cancel, reset } = useAiJob();
   const [confirming, setConfirming] = useState(false);
+  const evidence = useMemo(
+    () =>
+      chain && expiration
+        ? buildOptionAlertEvidence(chain, expiration, dte(expiration))
+        : [],
+    [chain, expiration],
+  );
+  const result =
+    job?.status === 'succeeded' ? parseOptionAlertResult(job.result) : null;
 
   if (!isOwner) return null;
 
-  const running = job && (job.status === 'queued' || job.status === 'running');
+  const running =
+    job &&
+    (job.status === 'queued' ||
+      job.status === 'in_progress' ||
+      job.status === 'running');
+  const hasEvidence = Boolean(chain && expiration && evidence.length > 0);
   return (
     <div className="mt-4 rounded-md border border-ai-600/25 bg-ai-50 p-3.5">
       <div className="flex items-center justify-between gap-3">
@@ -67,21 +110,44 @@ function AiOptionInsight({ ticker, expiration }: { ticker: string; expiration: s
         {!job && !confirming && (
           <button
             onClick={() => setConfirming(true)}
-            className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white transition-[filter] duration-fast hover:brightness-105"
+            disabled={!hasEvidence}
+            title={
+              hasEvidence
+                ? `使用当前期权链的 ${evidence.length} 条异动证据`
+                : '当前期权链没有达到异动阈值的合约'
+            }
+            className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white transition-[filter] duration-fast hover:brightness-105 disabled:cursor-not-allowed disabled:bg-ink-300"
           >
-            生成解读
+            {hasEvidence ? '生成解读' : '暂无异动'}
           </button>
         )}
       </div>
 
+      {!job && !confirming && chain && evidence.length === 0 && (
+        <p className="mt-2.5 text-caption text-ink-500">
+          当前到期日没有达到成交量、成交量/持仓量或估算权利金阈值的合约，未创建付费任务。
+        </p>
+      )}
+
       {!job && confirming && (
         <div className="mt-2.5">
-          <p className="text-caption text-ink-600">将对 {ticker} 当前期权链生成异动解读，消耗 1 次 AI 额度，确认继续？</p>
+          <p className="text-caption text-ink-600">
+            将提交 {ticker} 当前到期日的 {evidence.length}{' '}
+            条真实异动证据、标的价和到期日，消耗 1 次模型额度。确认继续？
+          </p>
           <div className="mt-2 flex gap-2">
             <button
               onClick={() => {
                 setConfirming(false);
-                void start(() => aiJobsApi.createOptionAlerts({ tickers: [ticker] }));
+                if (!chain || !expiration || evidence.length === 0) return;
+                void start(() =>
+                  aiJobsApi.createOptionAlerts({
+                    tickers: [ticker],
+                    alerts: evidence,
+                    underlyingPrice: chain.spot,
+                    expiration,
+                  }),
+                );
               }}
               className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white hover:brightness-105"
             >
@@ -102,29 +168,84 @@ function AiOptionInsight({ ticker, expiration }: { ticker: string; expiration: s
           <div className="flex items-center justify-between text-caption text-ink-500">
             <span className="flex items-center gap-1.5">
               <span className="size-1.5 animate-led-pulse rounded-full bg-ai-600" />
-              {job!.status === 'queued' ? '排队中…' : `解读中 ${job!.progress}%`}
+              {job.status === 'queued'
+                ? '排队中…'
+                : job.progress === null
+                  ? '模型正在处理 · 接口未提供百分比'
+                  : `解读中 ${Math.round(job.progress)}%`}
             </span>
             <button onClick={() => void cancel()} className="text-ink-400 hover:text-ink-600">取消任务</button>
           </div>
-          <div className="mt-1.5 h-1 overflow-hidden rounded-pill bg-line">
-            <div className="h-full rounded-pill bg-ai-600 transition-all duration-ui" style={{ width: `${job!.progress}%` }} />
-          </div>
+          {job.progress !== null && (
+            <div className="mt-1.5 h-1 overflow-hidden rounded-pill bg-line">
+              <div
+                className="h-full rounded-pill bg-ai-600 transition-all duration-ui"
+                style={{ width: `${job.progress}%` }}
+              />
+            </div>
+          )}
         </div>
       )}
 
       {error && <p className="mt-2.5 text-caption text-down-700">任务失败：{error}</p>}
 
-      {job?.status === 'succeeded' && (
-        <div className="mt-2.5">
-          <p className="text-body-s leading-relaxed text-ink-600">
-            {job.result && job.result.length > 24
-              ? job.result
-              : `${ticker} 期权链解读完成（到期 ${expiration ?? '—'}）：成交/持仓异动集中于近月价外行权价，bolt 角标行为 vol/oi 超过 3 倍的位置；权利金流以买卖中价估算，量级最大的行权价附近是关键博弈区。`}
+      {job?.status === 'succeeded' && result && (
+        <div className="mt-3 border-t border-ai-600/20 pt-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              className={cn(
+                'rounded-xs px-1.5 py-0.5 text-micro font-medium',
+                DIRECTION_META[result.direction].className,
+              )}
+            >
+              {DIRECTION_META[result.direction].label}
+            </span>
+            <span className="rounded-xs bg-card px-1.5 py-0.5 text-micro text-ink-500">
+              {CONFIDENCE_LABEL[result.confidence]} · 非胜率
+            </span>
+            {result.direction_status === 'unavailable_without_trade_side' && (
+              <span className="text-micro text-ink-400">
+                缺少成交主动方，方向不可判定
+              </span>
+            )}
+          </div>
+          <p className="mt-2.5 text-body-s font-medium leading-relaxed text-ink-800">
+            {result.summary}
+          </p>
+          <p className="mt-2 text-body-s leading-relaxed text-ink-600">
+            {result.analysis}
+          </p>
+          {result.key_strikes.length > 0 && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              <span className="text-micro text-ink-400">关键行权价</span>
+              {result.key_strikes.map((strike) => (
+                <span
+                  key={strike}
+                  className="rounded-xs border border-ai-600/20 bg-card px-1.5 py-0.5 font-mono text-micro text-ink-600"
+                >
+                  {strike}
+                </span>
+              ))}
+            </div>
+          )}
+          <p className="mt-2.5 border-t border-ai-600/15 pt-2 text-caption text-warn-600">
+            风险说明：{result.risk_note}
           </p>
           <p className="mt-2 text-micro text-ink-400">
-            {AI_DISCLAIMER} · 到期 {expiration ?? '—'}
+            {AI_DISCLAIMER} · 到期 {expiration ?? '—'} · 输入证据 {evidence.length} 条
           </p>
           <button onClick={reset} className="mt-2 text-caption font-medium text-ai-600 hover:text-ai-600/80">
+            重新生成
+          </button>
+        </div>
+      )}
+
+      {job?.status === 'succeeded' && !result && (
+        <div className="mt-3 border-t border-ai-600/20 pt-3">
+          <p className="text-caption text-down-700">
+            任务已完成，但服务没有返回符合期权解读契约的结构化结果。
+          </p>
+          <button onClick={reset} className="mt-2 text-caption font-medium text-ai-600">
             重新生成
           </button>
         </div>
@@ -305,7 +426,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
         浅底为价内（ITM）侧 · 异动标注 vol/oi &gt; 3（倍数为该侧比值）· 权利金按买卖中价估算 · 非收益承诺
       </p>
 
-      <AiOptionInsight ticker={ticker} expiration={exp} />
+      <AiOptionInsight ticker={ticker} expiration={exp} chain={chain} />
     </div>
   );
 }
