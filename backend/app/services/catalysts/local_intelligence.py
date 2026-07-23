@@ -3335,6 +3335,7 @@ class LocalCatalystIntelligence:
         min_confidence = int(kwargs.get("min_confidence") or 0)
         include_unanalyzed = bool(kwargs.get("include_unanalyzed", True))
         include_neutral = bool(kwargs.get("include_neutral", False))
+        directional_only = bool(kwargs.get("directional_only", False))
         with self._connect() as connection:
             rows = self._active_revisions(
                 connection,
@@ -3360,11 +3361,29 @@ class LocalCatalystIntelligence:
         results: dict[str, dict[str, Any]] = {}
         for raw_ticker in tickers:
             ticker = raw_ticker.strip().upper()
+
+            def ticker_impact_score(item: dict[str, Any]) -> int | None:
+                result = item.get("analysis")
+                if not isinstance(result, dict):
+                    return None
+                scores = [
+                    int(stock.get("impact_score") or 0)
+                    for stock in result.get("affected_stocks") or []
+                    if isinstance(stock, dict) and stock.get("ticker") == ticker
+                ]
+                return max(scores, key=abs) if scores else None
+
             filtered: list[dict[str, Any]] = []
             for item in items:
                 result = item.get("analysis") or {}
                 affected = result.get("affected_stocks") or []
-                if ticker not in item.get("source_tickers", []) and not any(
+                ticker_score = ticker_impact_score(item)
+                if directional_only:
+                    # 只返回该股票自身具有非零方向影响的完成分析；文章整体
+                    # neutral 仍可包含方向性个股影响，不能按文章分类误杀。
+                    if ticker_score is None or ticker_score == 0:
+                        continue
+                elif ticker not in item.get("source_tickers", []) and not any(
                     stock.get("ticker") == ticker
                     for stock in affected
                     if isinstance(stock, dict)
@@ -3374,7 +3393,11 @@ class LocalCatalystIntelligence:
                     continue
                 if result and int(result.get("confidence") or 0) < min_confidence:
                     continue
-                if not include_neutral and result.get("classification") == "neutral":
+                if (
+                    not directional_only
+                    and not include_neutral
+                    and result.get("classification") == "neutral"
+                ):
                     continue
                 filtered.append(item)
             page = filtered[:limit]
@@ -3399,15 +3422,25 @@ class LocalCatalystIntelligence:
                     "bullish": sum(
                         1
                         for item in analyzed
-                        if item.get("classification") == "bullish"
+                        if (
+                            (ticker_impact_score(item) or 0) > 0
+                            if directional_only
+                            else item.get("classification") == "bullish"
+                        )
                     ),
                     "bearish": sum(
                         1
                         for item in analyzed
-                        if item.get("classification") == "bearish"
+                        if (
+                            (ticker_impact_score(item) or 0) < 0
+                            if directional_only
+                            else item.get("classification") == "bearish"
+                        )
                     ),
-                    "pending": sum(
-                        1 for item in filtered if not item.get("analysis")
+                    "pending": (
+                        0
+                        if directional_only
+                        else sum(1 for item in filtered if not item.get("analysis"))
                     ),
                     "high_impact_macro": None,
                 },
