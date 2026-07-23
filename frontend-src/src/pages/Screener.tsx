@@ -12,7 +12,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { strengthApi, type ScanParams, type StrengthScanEnvelope } from '@/api/modules/strength';
 import { catalystsApi } from '@/api/modules/catalysts';
 import { stocksApi } from '@/api/modules/stocks';
-import { runtimeApi } from '@/api/modules/runtime';
+import { runtimeApi, type StrengthRefreshParameters } from '@/api/modules/runtime';
 import { ApiError } from '@/api/client';
 import type { ScreenerRow, SectorOption, Signal, StrengthProfile } from '@/api/types';
 import { usePolling } from '@/hooks/usePolling';
@@ -68,6 +68,21 @@ function withPreset(base: ScanFilters, id: string): ScanFilters {
 
 function filtersEqual(a: ScanFilters, b: ScanFilters): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function strengthParametersMatch(actual: unknown, expected: StrengthRefreshParameters): boolean {
+  if (!actual || typeof actual !== 'object') return false;
+  const value = actual as Record<string, unknown>;
+  return (
+    value.universe === expected.universe &&
+    value.timeframe === expected.timeframe &&
+    value.profile === expected.profile &&
+    value.top === expected.top &&
+    value.sector_id === expected.sector_id &&
+    value.min_price === expected.min_price &&
+    value.min_avg_dollar_volume === expected.min_avg_dollar_volume &&
+    value.include_options === expected.include_options
+  );
 }
 
 export default function Screener() {
@@ -161,9 +176,10 @@ export default function Screener() {
         ...(filters.minScore != null ? { minScore: filters.minScore } : {}),
       } as ScanParams;
 
-      // Owner 扫描先提交精确参数，等待 worker 完成后再读取同一参数快照。
+      // Owner 扫描先提交精确参数。后端可能复用另一个仍在执行/冷却中的扫描；
+      // 只有返回参数完全一致时才等待并读取快照，避免把旧参数结果冒充为本次刷新。
       if (isOwner) {
-        const action = await runtimeApi.workerAction('strength_refresh', {
+        const requested: StrengthRefreshParameters = {
           universe: 'themes',
           timeframe: filters.timeframe,
           profile: filters.profile,
@@ -172,7 +188,14 @@ export default function Screener() {
           min_price: filters.priceMin ?? 0,
           min_avg_dollar_volume: filters.minDollarVol,
           include_options: true,
-        });
+        };
+        const action = await runtimeApi.workerAction('strength_refresh', requested);
+        if (!strengthParametersMatch(action.details.parameters, requested)) {
+          throw new ApiError(409, '另一组筛选条件正在扫描或冷却，请稍后重试', {
+            bizCode: 'strength_parameters_busy',
+            payload: action,
+          });
+        }
         if (!action.requestId) throw new ApiError(502, '后台扫描未返回 request_id');
         if (action.status !== 'completed') await runtimeApi.waitForWorkerAction(action.requestId);
       }
