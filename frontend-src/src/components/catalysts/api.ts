@@ -9,7 +9,7 @@
  *     触发需 expected_prepared_revision（取自 hotspots/status.prepared_revision）
  *   snake_case → camelCase 的归一在本文件完成；契约缺失字段不编造（null/空由 UI 显「—」或隐藏）。
  */
-import { ApiError, get, idFromLocation, mockOr, post, postCreate, toQuery } from '@/api/client';
+import { ApiError, get, idFromLocation, mockOr, notifyOwnerSessionInvalid, post, postCreate, toQuery } from '@/api/client';
 import { asRec, pickB, pickN, pickS, unwrap, type Rec } from '@/api/live';
 import * as fx2 from '@/mocks/fixtures2';
 import type {
@@ -28,6 +28,7 @@ import type {
   NewsImpactResult,
   SourceHealth,
   TickerImpactSummary,
+  TrustedStockImpact,
 } from '@/mocks/fixtures2';
 
 export type {
@@ -64,6 +65,22 @@ function pickId(r: Rec, ...keys: string[]): string | null {
   return n !== null ? String(n) : null;
 }
 
+function nStockImpact(v: unknown): TrustedStockImpact | null {
+  const r = asRec(v);
+  const ticker = pickS(r, 'ticker');
+  const impactScore = pickN(r, 'impactScore', 'impact_score');
+  // 个人版 NewsStockImpact 没有 direction/classification；有符号 impact_score 是唯一方向事实。
+  if (!ticker || impactScore === null || impactScore === 0) return null;
+  return {
+    ticker,
+    direction: impactScore > 0 ? 'bullish' : 'bearish',
+    impactScore,
+    horizon: pickS(r, 'horizon') ?? '',
+    mechanism: pickS(r, 'mechanism') ?? '',
+    reason: pickS(r, 'reason', 'reason_zh', 'why') ?? '',
+  };
+}
+
 function nImpact(v: unknown): NewsImpactResult | null {
   const r = asRec(v);
   if (!Object.keys(r).length) return null;
@@ -74,14 +91,9 @@ function nImpact(v: unknown): NewsImpactResult | null {
     confidence: conf > 1 ? conf / 100 : conf,
     headlineSummary: pickS(r, 'headlineSummary', 'headline_summary') ?? '',
     causalSummary: pickS(r, 'causalSummary', 'causal_summary', 'summary_zh', 'market_summary') ?? '',
-    trustedStockImpacts: unwrap(r, 'trustedStockImpacts', 'trusted_stock_impacts', 'affected_stocks').map((t) => ({
-      ticker: pickS(t, 'ticker') ?? '',
-      direction: nClassification(t.direction ?? t.classification),
-      impactScore: pickN(t, 'impactScore', 'impact_score') ?? 0,
-      horizon: pickS(t, 'horizon') ?? '',
-      mechanism: pickS(t, 'mechanism') ?? '',
-      reason: pickS(t, 'reason', 'reason_zh', 'why') ?? '',
-    })),
+    trustedStockImpacts: unwrap(r, 'trustedStockImpacts', 'trusted_stock_impacts', 'affected_stocks')
+      .map(nStockImpact)
+      .filter((x): x is TrustedStockImpact => x !== null),
     model: pickS(r, 'model') ?? '',
     generatedAt: pickS(r, 'generatedAt', 'generated_at') ?? '',
   };
@@ -98,17 +110,24 @@ function nAnalysisStatus(v: unknown): CatalystNewsItem['analysisStatus'] {
   return 'pending';
 }
 
+const WAITING_ZH = new Set(['中文标题等待生成', '中文摘要等待生成', '热点标题等待中文分析']);
+const usefulZh = (value: string | null): string | null => (value && !WAITING_ZH.has(value) ? value : null);
+
 function nNewsItem(r: Rec): CatalystNewsItem {
   const impact = nImpact(r.analysis);
   if (impact && !impact.generatedAt) impact.generatedAt = pickS(r, 'analyzed_at', 'available_at') ?? '';
+  const rawTitle = pickS(r, 'title');
+  const rawSummary = pickS(r, 'summary');
+  const titleZh = usefulZh(pickS(r, 'titleZh', 'title_zh'));
+  const summaryZh = usefulZh(pickS(r, 'summaryZh', 'summary_zh'));
   return {
     newsId: pickId(r, 'newsId', 'news_id') ?? '',
     source: pickS(r, 'source') ?? '',
     sourceCount: pickN(r, 'sourceCount', 'source_count') ?? 1,
-    title: pickS(r, 'title') ?? pickS(r, 'titleZh', 'title_zh') ?? '',
-    titleZh: pickS(r, 'titleZh', 'title_zh') ?? pickS(r, 'title') ?? '',
-    summary: pickS(r, 'summary') ?? '',
-    summaryZh: pickS(r, 'summaryZh', 'summary_zh') ?? '',
+    title: rawTitle ?? titleZh ?? '',
+    titleZh: titleZh ?? rawTitle ?? '',
+    summary: rawSummary ?? '',
+    summaryZh: summaryZh ?? rawSummary ?? '',
     url: pickS(r, 'url') ?? '',
     publishedAt: pickS(r, 'publishedAt', 'published_at') ?? '',
     fetchedAt: pickS(r, 'fetchedAt', 'fetched_at') ?? '',
@@ -228,6 +247,8 @@ function nStatus(d: unknown): CatalystsStatusDetail {
       .map(([k, v]) => nStream(k, v))
       .filter((s): s is CatalystStreamHealth => s !== null);
     const avail = asRec(r.analysis_availability);
+    const analysisReason = pickS(avail, 'reason');
+    if (analysisReason === 'owner_login_required') notifyOwnerSessionInvalid();
     return {
       collecting: pickS(r, 'status') === 'active' && (pickB(r, 'enabled') ?? true),
       intervalMinutes: null,
@@ -236,7 +257,7 @@ function nStatus(d: unknown): CatalystsStatusDetail {
       analyzedToday: null,
       queueDepth: null,
       analysisAvailable: pickB(avail, 'enabled') ?? false,
-      analysisReason: pickS(avail, 'reason'),
+      analysisReason,
       analysisModel: pickS(r, 'model'),
       analysisReasoning: pickS(r, 'reasoning'),
       analysisTriggerEnabled: pickB(r, 'analysis_trigger_enabled'),
@@ -372,42 +393,41 @@ function qs(q: CatalystFeedQuery): string {
 function aggTickerSummary(ticker: string, raw: unknown): TickerImpactSummary {
   const r = asRec(raw);
   const items = unwrap(r, 'items').map(nNewsItem);
-  const summary = asRec(r.summary);
-  let bullish = pickN(summary, 'bullish') ?? 0;
-  let bearish = pickN(summary, 'bearish') ?? 0;
-  let neutral = 0;
+  let bullish = 0;
+  let bearish = 0;
   let analyzed = 0;
   const impacts: number[] = [];
   let latest = '';
   const sources = new Set<string>();
-  for (const it of items) {
-    if (it.source) sources.add(it.source.split('/')[0]);
-    if (it.publishedAt > latest) latest = it.publishedAt;
-    if (it.analysisStatus !== 'completed' || !it.analysis) continue;
+
+  for (const item of items) {
+    if (item.analysisStatus !== 'completed' || !item.analysis) continue;
+    const mine = item.analysis.trustedStockImpacts
+      .filter((impact) => impact.ticker === ticker && impact.impactScore !== 0)
+      .sort((a, b) => Math.abs(b.impactScore) - Math.abs(a.impactScore))[0];
+    if (!mine) continue;
     analyzed += 1;
-    const cls = it.analysis.classification;
-    if (cls === 'neutral') neutral += 1;
-    const mine = it.analysis.trustedStockImpacts.filter((x) => x.ticker === ticker);
-    for (const x of mine) impacts.push(x.impactScore);
+    impacts.push(mine.impactScore);
+    if (mine.impactScore > 0) bullish += 1;
+    else bearish += 1;
+    if (item.source) sources.add(item.source.split('/')[0]);
+    if (item.publishedAt > latest) latest = item.publishedAt;
   }
-  if (!bullish && !bearish && analyzed) {
-    bullish = items.filter((i) => i.analysis?.classification === 'bullish').length;
-    bearish = items.filter((i) => i.analysis?.classification === 'bearish').length;
-  }
-  // 净影响 = 已分析条目中该股影响分均值（客户端聚合，非契约字段；无分析时 0 且 UI 显「—」）
-  const netImpact = impacts.length ? impacts.reduce((s, x) => s + x, 0) / impacts.length : 0;
+
+  // 只统计该股票自身存在非零方向影响的已完成分析；提及、待分析、0 分均不上榜。
+  const netImpact = impacts.length ? impacts.reduce((sum, score) => sum + score, 0) / impacts.length : 0;
   return {
     ticker,
     name: ticker,
     sector: '',
-    count: items.length,
+    count: analyzed,
     analyzed,
     netImpact,
     latestAt: latest,
     sourceDiversity: sources.size,
     bullish,
     bearish,
-    neutral,
+    neutral: 0,
   };
 }
 
@@ -424,12 +444,16 @@ function nBatchSummaries(body: unknown): TickerImpactSummary[] {
   }
   const arr = unwrap(body, 'results', 'items', 'summaries');
   if (arr.length) {
-    return arr.map((x) => aggTickerSummary(pickS(x, 'ticker') ?? '', x)).sort((a, b) => b.count - a.count);
+    return arr
+      .map((x) => aggTickerSummary(pickS(x, 'ticker') ?? '', x))
+      .filter((x) => x.count > 0)
+      .sort((a, b) => b.count - a.count);
   }
   const per = asRec(r.tickers ?? body);
   return Object.entries(per)
     .filter(([, v]) => v && typeof v === 'object')
     .map(([t, v]) => aggTickerSummary(t, v))
+    .filter((x) => x.count > 0)
     .sort((a, b) => b.count - a.count);
 }
 
@@ -597,8 +621,10 @@ export const catalystsContract = {
           tickers,
           window_hours: q.windowHours ?? 72,
           limit: PUBLIC_BATCH_MAX_LIMIT,
+          // 文章整体可为 neutral，但个股仍可能有方向；只取该 ticker 的非零个股影响。
           include_neutral: true,
-          include_unanalyzed: true,
+          include_unanalyzed: false,
+          directional_only: true,
         });
         return nBatchSummaries(body);
       },
