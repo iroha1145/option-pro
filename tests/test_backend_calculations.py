@@ -4,7 +4,7 @@ import asyncio
 import logging
 import math
 import time
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from threading import Lock
 from types import SimpleNamespace
@@ -39,6 +39,24 @@ def _history(size: int = 260) -> pd.DataFrame:
             "Volume": pd.Series([1_000_000 + index * 1_000 for index in range(size)], dtype=float),
         }
     )
+
+
+def _massive_bars(count: int, *, end: date) -> list[dict[str, float]]:
+    start = end - timedelta(days=count - 1)
+    return [
+        {
+            "t": float(
+                pd.Timestamp(start + timedelta(days=index), tz="UTC").timestamp()
+                * 1000
+            ),
+            "o": 100.0 + index,
+            "h": 102.0 + index,
+            "l": 99.0 + index,
+            "c": 101.0 + index,
+            "v": 1_000_000.0 + index,
+        }
+        for index in range(count)
+    ]
 
 
 @pytest.mark.parametrize(
@@ -314,6 +332,51 @@ def test_scan_uses_server_fixed_cache_ttl(monkeypatch: pytest.MonkeyPatch) -> No
     assert second["_cached"] is True
     assert first["cache_ttl_seconds"] == scanner.STRENGTH_CACHE_TTL_SECONDS
     assert second["cache_ttl_seconds"] == scanner.STRENGTH_CACHE_TTL_SECONDS
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    ["missing_ohl", "nan_ohl", "duplicate_session", "future_session", "bool_timestamp"],
+)
+def test_massive_history_rejects_incomplete_or_non_distinct_ohlcv(
+    invalid: str,
+) -> None:
+    observed = date(2026, 7, 23)
+    bars = _massive_bars(15, end=observed)
+    if invalid == "missing_ohl":
+        bars[-1].pop("o")
+    elif invalid == "nan_ohl":
+        bars[-1]["h"] = float("nan")
+    elif invalid == "duplicate_session":
+        bars[-1]["t"] = bars[0]["t"]
+    elif invalid == "future_session":
+        bars[-1]["t"] = float(
+            pd.Timestamp(observed + timedelta(days=1), tz="UTC").timestamp()
+            * 1000
+        )
+    else:
+        bars[-1]["t"] = True
+
+    assert not scanner._massive_history_is_complete(
+        bars,
+        period="1mo",
+        end=observed,
+    )
+
+
+def test_massive_history_returns_sorted_coherent_distinct_rows() -> None:
+    observed = date(2026, 7, 23)
+    bars = list(reversed(_massive_bars(15, end=observed)))
+
+    validated = scanner._validated_massive_history(
+        bars,
+        period="1mo",
+        end=observed,
+    )
+
+    assert len(validated) == 15
+    assert [row["t"] for row in validated] == sorted(row["t"] for row in validated)
+    assert all(set(row) == {"t", "o", "h", "l", "c", "v"} for row in validated)
 
 
 @pytest.mark.parametrize("initial_shape", ["empty", "all_nan"])
