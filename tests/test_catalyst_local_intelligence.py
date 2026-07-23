@@ -2317,9 +2317,13 @@ def test_hot_score_reweights_missing_factors_instead_of_inventing_neutral_values
     assert reasons == ["多来源交叉出现"]
 
 
-def test_clustering_requires_approximate_title_and_intersecting_validated_ticker(tmp_path):
+def test_clustering_requires_approximate_title_and_intersecting_validated_ticker(
+    tmp_path,
+    monkeypatch,
+):
     etl, _ai, intelligence = _stack(tmp_path, mode="read")
-    now = datetime.now(timezone.utc).replace(microsecond=0)
+    now = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
     _apply_news(
         etl,
         [
