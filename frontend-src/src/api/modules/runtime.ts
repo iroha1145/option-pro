@@ -12,6 +12,36 @@ interface LiveSettingsEnvelope {
   updated_at?: string;
 }
 
+export interface StrengthRefreshParameters {
+  universe: 'themes';
+  timeframe: 'short' | 'mid' | 'long' | 'all';
+  profile: 'conservative' | 'balanced' | 'aggressive';
+  top: number;
+  sector_id: string | null;
+  min_price: number;
+  min_avg_dollar_volume: number;
+  include_options: boolean;
+}
+
+export interface WorkerAction {
+  requestId: string;
+  action: string;
+  status: string;
+  errorCode: string | null;
+  details: Record<string, unknown>;
+}
+
+function mapWorkerAction(d: unknown): WorkerAction {
+  const r = asRec(d);
+  return {
+    requestId: String(r.request_id ?? ''),
+    action: String(r.action_type ?? ''),
+    status: String(r.status ?? ''),
+    errorCode: typeof r.error_code === 'string' ? r.error_code : null,
+    details: asRec(r.details),
+  };
+}
+
 function liveVersion(d: unknown): number {
   return pickN(asRec(d), 'version') ?? 0;
 }
@@ -59,6 +89,30 @@ export const runtimeApi = {
       () => withOptimisticLock((v) => post('/runtime-settings/rollback', { expected_version: v, target_version: id })),
     ),
   workerStatus: (): Promise<WorkerTask[]> => mockOr(() => fx2.getWorkerStatus(), () => get('/worker/status')),
-  workerAction: (action: string): Promise<{ ok: boolean; action: string }> =>
-    mockOr(() => fx2.postWorkerAction(action), () => post(`/worker/actions/${encodeURIComponent(action)}`, {})),
+  workerAction: (action: string, parameters?: StrengthRefreshParameters): Promise<WorkerAction> =>
+    mockOr(
+      async () => {
+        await fx2.postWorkerAction(action);
+        return { requestId: `mock-${Date.now()}`, action, status: 'completed', errorCode: null, details: {} };
+      },
+      () =>
+        post(`/worker/actions/${encodeURIComponent(action)}`, parameters ? { parameters } : {}).then(mapWorkerAction),
+    ),
+  workerActionStatus: (requestId: string): Promise<WorkerAction> =>
+    mockOr(
+      () => Promise.resolve({ requestId, action: '', status: 'completed', errorCode: null, details: {} }),
+      () => get(`/worker/actions/${encodeURIComponent(requestId)}`).then(mapWorkerAction),
+    ),
+  waitForWorkerAction: async (requestId: string, timeoutMs = 1_200_000): Promise<WorkerAction> => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const action = await runtimeApi.workerActionStatus(requestId);
+      if (action.status === 'completed') return action;
+      if (action.status === 'failed' || action.status === 'cancelled' || action.status === 'canceled') {
+        throw new ApiError(503, action.errorCode ?? '后台扫描失败', { bizCode: action.errorCode ?? undefined, payload: action });
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 1_500));
+    }
+    throw new ApiError(504, '后台扫描等待超时', { bizCode: 'worker_action_timeout' });
+  },
 };
