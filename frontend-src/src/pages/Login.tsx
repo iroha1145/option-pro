@@ -169,7 +169,7 @@ type SubmitState = 'idle' | 'verifying' | 'success' | 'error';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, isOwner, loading, aiEnabled } = useAccess();
+  const { login, isOwner, loading } = useAccess();
   const toast = useToast();
   const reduced = useReducedMotion();
 
@@ -237,7 +237,7 @@ export default function Login() {
       await login(password); // mock：任意非空密码 → owner
       setState('success');
       window.setTimeout(() => {
-        toast.success('欢迎回来', aiEnabled ? 'AI 分析已启用' : 'AI 分析未启用');
+        toast.success('欢迎回来', 'Owner 登录成功');
         navigate('/watchlist');
       }, 400);
     } catch (err) {
