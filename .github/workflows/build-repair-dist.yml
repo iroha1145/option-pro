@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/repair-live-data-ai-mobile
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
