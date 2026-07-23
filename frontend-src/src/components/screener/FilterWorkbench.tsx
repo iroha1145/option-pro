@@ -285,8 +285,8 @@ export default function FilterWorkbench({
       aria-label="筛选工作台"
     >
       {/* 行 1 · 分档与预设 */}
-      <motion.div variants={row} className="flex flex-wrap items-center gap-x-5 gap-y-3">
-        <div>
+      <motion.div variants={row} className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3">
+        <div className="w-full min-w-0 sm:w-auto">
           <FieldLabel>强度分档</FieldLabel>
           <TierSegmented
             value={draft.tier}
@@ -295,7 +295,7 @@ export default function FilterWorkbench({
           />
         </div>
         <div className="hidden h-9 w-px bg-line sm:block" aria-hidden="true" />
-        <div className="min-w-0 flex-1">
+        <div className="w-full min-w-0 sm:w-auto sm:flex-1">
           <FieldLabel>预设策略</FieldLabel>
           {presetsFailed ? (
             <p className="flex h-8 items-center text-caption text-ink-400">预设不可用 · 已降级为静态分档</p>

@@ -236,10 +236,8 @@ export default function Login() {
     try {
       await login(password); // mock：任意非空密码 → owner
       setState('success');
-      window.setTimeout(() => {
-        toast.success('欢迎回来', 'Owner 登录成功');
-        navigate('/watchlist');
-      }, 400);
+      toast.success('欢迎回来', 'Owner 登录成功');
+      navigate('/watchlist', { replace: true });
     } catch (err) {
       setState('error');
       setStatusMsg(mapError(err));
