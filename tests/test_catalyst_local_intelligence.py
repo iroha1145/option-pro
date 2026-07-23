@@ -557,9 +557,10 @@ def test_batch_aggregates_full_directional_window_and_applies_stock_filters(
     _finish_job(ai, second["job_id"], second_result)
     intelligence.reconcile()
 
+    observed = now + timedelta(minutes=1)
     result = intelligence.batch(
         ["NVDA"],
-        as_of=now,
+        as_of=observed,
         window_hours=72,
         limit=1,
         include_unanalyzed=False,
@@ -603,7 +604,7 @@ def test_batch_aggregates_full_directional_window_and_applies_stock_filters(
     for filters, expected_score in cases:
         filtered = intelligence.batch(
             ["NVDA"],
-            as_of=now,
+            as_of=observed,
             window_hours=72,
             limit=1,
             include_unanalyzed=False,
