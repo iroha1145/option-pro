@@ -44,10 +44,10 @@ SCHEDULED_TASK_NAMES = {
     "ai_jobs",
     "maintenance",
     "public_home",
+    "strength_refresh",
 }
 MANUAL_TASK_NAMES = {
     "focus_refresh",
-    "strength_refresh",
     "breakout_refresh",
     "retention",
 }
@@ -1240,7 +1240,11 @@ def test_worker_once_selects_personal_etl_from_repository_files_offline(
         async def offline_public_home(_self):
             return TaskResult(status="idle", details={{"result": "offline-test"}})
 
+        async def offline_strength(_self):
+            return TaskResult(status="idle", details={{"result": "offline-test"}})
+
         worker_tasks.PublicHomeTask.__call__ = offline_public_home
+        worker_tasks.StrengthRefreshTask.__call__ = offline_strength
 
         def handle(request):
             assert request.url.host == "macrolens.invalid"
@@ -2362,7 +2366,10 @@ def test_default_task_inventory_and_maintenance_backup(
     manual_specs = {spec.name: spec for spec in specs if spec.manual_only}
     assert set(manual_specs) == MANUAL_TASK_NAMES
     assert isinstance(manual_specs["focus_refresh"].runner, FocusRefreshTask)
-    assert isinstance(manual_specs["strength_refresh"].runner, StrengthRefreshTask)
+    strength_spec = next(spec for spec in specs if spec.name == "strength_refresh")
+    assert isinstance(strength_spec.runner, StrengthRefreshTask)
+    assert strength_spec.manual_only is False
+    assert strength_spec.interval_seconds == 86_400
     assert isinstance(manual_specs["breakout_refresh"].runner, BreakoutTask)
     assert isinstance(manual_specs["retention"].runner, RetentionTask)
     result = asyncio.run(maintenance_spec.runner())
