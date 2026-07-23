@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { strengthApi, type ScanParams, type StrengthScanEnvelope } from '@/api/modules/strength';
 import { catalystsApi } from '@/api/modules/catalysts';
+import { stocksApi } from '@/api/modules/stocks';
 import { runtimeApi } from '@/api/modules/runtime';
 import { ApiError } from '@/api/client';
 import type { ScreenerRow, SectorOption, Signal, StrengthProfile } from '@/api/types';
