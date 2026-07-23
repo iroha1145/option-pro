@@ -117,6 +117,9 @@ class BatchRequest(_RequestModel):
     include_neutral: bool = False
     include_unanalyzed: bool = True
     directional_only: bool = False
+    classification: Optional[Literal["bullish", "bearish", "neutral"]] = None
+    min_abs_impact: Optional[int] = Field(default=None, ge=0, le=100)
+    multi_source_only: bool = False
 
     @field_validator("tickers")
     @classmethod
@@ -377,6 +380,9 @@ def ticker_catalyst_batch(
             include_unanalyzed=request.include_unanalyzed,
             include_neutral=request.include_neutral,
             directional_only=request.directional_only,
+            classification=request.classification,
+            min_abs_impact=request.min_abs_impact,
+            multi_source_only=request.multi_source_only,
         )
     except CatalystError as error:
         _raise_safe(error)
