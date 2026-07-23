@@ -73,7 +73,7 @@ export default function MobileDock() {
   return (
     <>
       <nav
-        className="glass fixed inset-x-0 bottom-0 z-[60] flex h-16 items-stretch border-t border-line px-2 pb-[env(safe-area-inset-bottom)] md:hidden"
+        className="glass fixed inset-x-0 bottom-0 z-[60] flex h-[calc(4rem+env(safe-area-inset-bottom))] items-stretch border-t border-line px-2 pb-[env(safe-area-inset-bottom)] md:hidden"
         aria-label="移动端导航"
       >
         {DOCK_ITEMS.slice(0, 2).map(renderItem)}
