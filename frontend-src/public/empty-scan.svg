@@ -1,0 +1,37 @@
+<svg width="480" height="360" viewBox="0 0 480 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 漏斗过滤 K 线柱 · 斜纹细节 · 1.6px 手绘细线 -->
+  <defs>
+    <pattern id="scan-hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#2E46E0" stroke-width="1.2" opacity="0.55"/>
+    </pattern>
+  </defs>
+  <!-- 上方散落 K 线柱 -->
+  <g stroke="#182338" stroke-width="1.6" stroke-linecap="round">
+    <path d="M150 44v14M150 78v12"/>
+    <rect x="143" y="58" width="14" height="20" rx="2"/>
+    <path d="M196 36v12M196 70v14"/>
+    <rect x="189" y="48" width="14" height="22" rx="2"/>
+    <path d="M288 40v14M288 76v10"/>
+    <rect x="281" y="54" width="14" height="22" rx="2"/>
+    <path d="M330 48v10M330 78v12"/>
+    <rect x="323" y="58" width="14" height="20" rx="2"/>
+  </g>
+  <!-- 斜纹柱（预估感） -->
+  <rect x="235" y="46" width="16" height="36" rx="2" fill="url(#scan-hatch)" stroke="#2E46E0" stroke-width="1.6"/>
+  <!-- 漏斗 -->
+  <g stroke="#182338" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M120 110h240L268 196v66c0 5-3 8-8 8h-40c-5 0-8-3-8-8v-66L120 110Z"/>
+    <path d="M120 110c0-6 5-10 10-10h220c5 0 10 4 10 10" opacity="0.55"/>
+    <!-- 滤网横线 -->
+    <path d="M180 142h120M198 168h84" opacity="0.5"/>
+  </g>
+  <!-- 漏斗内穿过的小柱 -->
+  <rect x="228" y="206" width="24" height="44" rx="3" fill="url(#scan-hatch)" stroke="#2E46E0" stroke-width="1.6"/>
+  <!-- 出口落下的达标柱（实心 brand） -->
+  <rect x="228" y="292" width="24" height="34" rx="3" stroke="#2E46E0" stroke-width="1.6"/>
+  <path d="M235 300h10" stroke="#2E46E0" stroke-width="1.6" stroke-linecap="round"/>
+  <!-- 达标小勾（绿） -->
+  <path d="M286 300l8 8 16-18" stroke="#0E9F6E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 地面线 -->
+  <path d="M96 336c96 4 192 4 288 0" stroke="#182338" stroke-width="1.6" stroke-linecap="round" opacity="0.35"/>
+</svg>

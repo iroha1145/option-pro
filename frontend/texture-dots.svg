@@ -1,0 +1,7 @@
+<svg width="44" height="44" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+  <!-- 备用点阵纹理 tile（默认用 CSS 实现） -->
+  <circle cx="11" cy="11" r="1" fill="rgba(13,22,38,.055)"/>
+  <circle cx="33" cy="11" r="1" fill="rgba(13,22,38,.055)"/>
+  <circle cx="11" cy="33" r="1" fill="rgba(13,22,38,.055)"/>
+  <circle cx="33" cy="33" r="1" fill="rgba(13,22,38,.055)"/>
+</svg>

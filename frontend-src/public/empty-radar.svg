@@ -1,0 +1,30 @@
+<svg width="480" height="360" viewBox="0 0 480 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 雷达屏同心圆 + 扫描线 + 信号点 · brand 蓝线条 -->
+  <g stroke="#2E46E0" stroke-width="1.6" stroke-linecap="round">
+    <circle cx="240" cy="180" r="128" opacity="0.9"/>
+    <circle cx="240" cy="180" r="92" opacity="0.55"/>
+    <circle cx="240" cy="180" r="56" opacity="0.4"/>
+    <circle cx="240" cy="180" r="20" opacity="0.3"/>
+    <!-- 辐条 -->
+    <path d="M240 52v256M112 180h256M150 90l180 180M330 90 150 270" opacity="0.25"/>
+    <!-- 扫描针 + 尾迹 -->
+    <path d="M240 180 330 88" stroke-width="2.2"/>
+  </g>
+  <path d="M330 88A128 128 0 0 1 368 180" stroke="#2E46E0" stroke-width="1.6" stroke-linecap="round" opacity="0.45"/>
+  <!-- 扫描尾迹三角 -->
+  <path d="M240 180 330 88A128 128 0 0 1 356 136Z" fill="#2E46E0" opacity="0.08"/>
+  <!-- 信号点（blip） -->
+  <g stroke="#2E46E0" stroke-width="1.6">
+    <circle cx="296" cy="146" r="5"/>
+    <circle cx="296" cy="146" r="11" opacity="0.4"/>
+    <circle cx="188" cy="222" r="5"/>
+    <circle cx="188" cy="222" r="11" opacity="0.4"/>
+  </g>
+  <circle cx="296" cy="146" r="2.2" fill="#0E9F6E"/>
+  <circle cx="188" cy="222" r="2.2" fill="#182338"/>
+  <!-- 刻度铭文 -->
+  <g stroke="#182338" stroke-width="1.6" stroke-linecap="round" opacity="0.7">
+    <path d="M368 60h48M368 74h32"/>
+  </g>
+  <path d="M120 330c80 4 160 4 240 0" stroke="#182338" stroke-width="1.6" stroke-linecap="round" opacity="0.35"/>
+</svg>

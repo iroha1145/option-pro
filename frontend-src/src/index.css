@@ -1,0 +1,220 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Optix Pro · 纸面终端 Paper Terminal 全局样式
+   design.md 单一事实来源：色值/字体/间距/阴影/动效参数
+   ============================================================ */
+
+@layer base {
+  :root {
+    /* §1.1 纸面基底 */
+    --paper: #F6F5F1;
+    --paper-2: #FBFAF7;
+    --card: #FFFFFF;
+    --card-warm: #FDFCF9;
+    --overlay: rgba(253, 252, 249, 0.72);
+    /* §1.2 墨色 */
+    --ink-900: #0D1626;
+    --ink-800: #182338;
+    --ink-600: #3D4A68;
+    --ink-500: #5A6788;
+    --ink-400: #8A94B0;
+    --ink-300: #B7BFD3;
+    /* §1.3 发丝线 */
+    --line: #E9E7E0;
+    --line-strong: #DBD8CE;
+    --line-chart: #EFEDE6;
+    /* §1.4 群青品牌 */
+    --brand-700: #2338C8;
+    --brand-600: #2E46E0;
+    --brand-500: #3B59F2;
+    --brand-400: #6B82FF;
+    --brand-100: #E4E9FF;
+    --brand-50: #F0F3FF;
+    /* §1.5 语义 */
+    --up-600: #0E9F6E;
+    --up-700: #0B7A55;
+    --up-50: #E5F6EF;
+    --down-600: #E5484D;
+    --down-700: #C4302B;
+    --down-50: #FCECEC;
+    --warn-600: #E8930C;
+    --warn-50: #FCF3E2;
+    --ai-600: #7C5CFF;
+    --ai-50: #F1EDFF;
+    /* §4.1 缓动 */
+    --ease-paper: cubic-bezier(.16, 1, .3, 1);
+    --ease-snap: cubic-bezier(.22, 1, .36, 1);
+    --ease-inout: cubic-bezier(.45, 0, .15, 1);
+
+    /* shadcn/ui 基座变量（亮纸面映射） */
+    --background: 44 22% 95%;
+    --foreground: 218 48% 10%;
+    --card-h: 0 0% 100%;
+    --card-foreground: 218 48% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 218 48% 10%;
+    --primary: 232 74% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 44 22% 95%;
+    --secondary-foreground: 220 26% 32%;
+    --muted: 45 18% 94%;
+    --muted-foreground: 222 20% 45%;
+    --accent: 231 100% 97%;
+    --accent-foreground: 232 74% 53%;
+    --destructive: 359 75% 59%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 45 15% 90%;
+    --input: 43 13% 83%;
+    --ring: 232 74% 53%;
+    --radius: 8px;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-paper text-ink-600 font-sans text-body;
+    font-feature-settings: "tnum" 1, "cv05" 1;
+  }
+
+  /* §3.5 纸面点阵纹理（22px，几乎不可见、近看有纸纹） */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: radial-gradient(circle, rgba(13, 22, 38, .055) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  ::selection {
+    background: var(--brand-100);
+    color: var(--brand-700);
+  }
+
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(46, 70, 224, .18);
+    border-radius: 6px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ink-300) transparent;
+  }
+}
+
+@layer components {
+  /* 发丝线工具类 */
+  .hairline-b { border-bottom: 1px solid var(--line); }
+  .hairline-t { border-top: 1px solid var(--line); }
+  .hairline-x { border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+  .hairline { border: 1px solid var(--line); }
+  .hairline-strong { border: 1px solid var(--line-strong); }
+
+  /* §3.4 毛玻璃（禁液态玻璃，仅磨砂分层） */
+  .glass {
+    background: var(--overlay);
+    backdrop-filter: blur(14px) saturate(1.5);
+    -webkit-backdrop-filter: blur(14px) saturate(1.5);
+  }
+
+  /* 卡片规范：白底 + 发丝边 + sh-1 + 内高光 */
+  .card-surface {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(13, 22, 38, .05), inset 0 1px 0 rgba(255, 255, 255, .9);
+  }
+  .card-hover {
+    transition: transform 260ms var(--ease-paper), box-shadow 260ms var(--ease-paper);
+  }
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 1px 2px rgba(13, 22, 38, .04), 0 8px 24px -12px rgba(13, 22, 38, .12), inset 0 1px 0 rgba(255, 255, 255, .9);
+  }
+
+  /* 表格数字 */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "cv05" 1;
+  }
+
+  /* 眉题 Eyebrow（仅拉丁文） */
+  .eyebrow {
+    @apply font-sans text-eyebrow uppercase text-ink-400;
+  }
+
+  /* 骨架屏 shimmer 高光 */
+  .skeleton-shimmer {
+    position: relative;
+    overflow: hidden;
+    background: var(--card-warm);
+  }
+  .skeleton-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .85), transparent);
+    animation: shimmer 1.6s linear infinite;
+  }
+
+  /* marquee hover 暂停 */
+  .marquee-track:hover .marquee-inner {
+    animation-play-state: paused;
+  }
+}
+
+/* sparkline 首绘 draw-line 700ms（§6-4） */
+@keyframes spark-draw {
+  to { stroke-dashoffset: 0; }
+}
+.spark-draw {
+  animation: spark-draw 700ms cubic-bezier(.16, 1, .3, 1) forwards;
+}
+
+@layer utilities {
+  /* 点阵纹理（登录页/页头带可加密到 18px） */
+  .dot-grid {
+    background-image: radial-gradient(circle, rgba(13, 22, 38, .055) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  .dot-grid-dense {
+    background-image: radial-gradient(circle, rgba(13, 22, 38, .06) 1px, transparent 1px);
+    background-size: 18px 18px;
+  }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+}
+
+/* §4.2 降级：减少动态偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .animate-radar-sweep,
+  .animate-marquee,
+  .marquee-inner,
+  .animate-blip-ripple,
+  .skeleton-shimmer::after,
+  .animate-shimmer,
+  .spark-draw,
+  .animate-led-pulse {
+    animation: none !important;
+  }
+  .spark-draw {
+    stroke-dashoffset: 0 !important;
+  }
+  .animate-rise-in,
+  .animate-page-fade-in {
+    animation-duration: 160ms !important;
+  }
+  *, *::before, *::after {
+    transition-duration: 160ms !important;
+  }
+}

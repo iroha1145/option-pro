@@ -197,6 +197,8 @@ class Settings(BaseSettings):
     yahoo_option_max_dte: int = Field(default=60, alias="YAHOO_OPTION_MAX_DTE")
     yahoo_option_strike_window_pct: float = Field(default=0.16, alias="YAHOO_OPTION_STRIKE_WINDOW_PCT")
     yahoo_options_failure_limit: int = Field(default=8, alias="YAHOO_OPTIONS_FAILURE_LIMIT")
+    massive_api_key: str = Field(default="", alias="MASSIVE_API_KEY")
+    massive_base_url: str = Field(default="https://api.massive.com", alias="MASSIVE_BASE_URL")
     marketdata_token: str = Field(default="", alias="MARKETDATA_TOKEN")
     marketdata_base_url: AnyHttpUrl = Field(default="https://api.marketdata.app", alias="MARKETDATA_BASE_URL")
     marketdata_stock_candle_fallback_enabled: bool = Field(default=True, alias="MARKETDATA_STOCK_CANDLE_FALLBACK_ENABLED")

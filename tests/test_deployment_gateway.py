@@ -90,7 +90,7 @@ def _test_app(runtime: OwnerAccessRuntime) -> FastAPI:
     def public_batch_query() -> dict[str, bool]:
         return {"public": True}
 
-    @app.get("/login.html")
+    @app.get("/login")
     def login_page() -> dict[str, str]:
         return {"page": "login"}
 
@@ -294,13 +294,13 @@ def test_password_mode_serves_public_reads_and_protects_owner_surfaces() -> None
 
         owner_page = client.get("/owner.html")
         assert owner_page.status_code == 303
-        assert owner_page.headers["location"] == "/login.html"
+        assert owner_page.headers["location"] == "/login"
         assert client.get("/api/value").status_code == 401
         assert client.get("/api/ai/status").status_code == 401
         assert client.get("/api/runtime-settings").status_code == 401
         assert client.get("/api/worker/status").status_code == 401
         assert client.post("/api/market/status", json={}).status_code == 401
-        assert client.get("/login.html").status_code == 200
+        assert client.get("/login").status_code == 200
 
         public_batch = client.post(
             "/api/catalysts/tickers/batch",
@@ -874,7 +874,8 @@ def test_production_validation_errors_never_echo_submitted_password() -> None:
         ("GET", "/api/strength/scan", True),
         ("GET", "/api/breakouts/current", True),
         ("POST", "/api/catalysts/tickers/batch", True),
-        ("GET", "/index.html/extra", False),
+        # SPA(BrowserRouter):无扩展名路径回退到 index.html 壳,匿名可读
+        ("GET", "/index.html/extra", True),
         ("GET", "/staticity/js/deck-app.js", False),
         ("GET", "/api/access/status/extra", False),
         ("GET", "/api/stocks-private", False),

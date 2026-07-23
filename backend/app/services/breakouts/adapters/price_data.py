@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Sequence
 from zoneinfo import ZoneInfo
 
@@ -163,7 +163,63 @@ class YahooPriceDataAdapter:
         if len(symbols) > 60:
             raise ValueError("intraday ticker set exceeds 60 symbols")
 
+        def _massive_intraday() -> pd.DataFrame | None:
+            """主源 Massive 分钟聚合 → yfinance 同形状 MultiIndex 帧;失败回落。"""
+            from app.services import massive as massive_provider
+
+            if not massive_provider.configured():
+                return None
+            minutes = _interval_minutes(interval)
+            end_day = _utc_now().astimezone(NEW_YORK).date()
+            start_day = end_day - timedelta(days=30)
+            frames: dict[tuple[str, str], pd.Series] = {}
+            for symbol in symbols:
+                massive_symbol = massive_provider.to_symbol(symbol)
+                if massive_symbol is None:
+                    return None  # 集合含不支持代码:整体回落,保持单源语义
+                try:
+                    bars = massive_provider.ticker_range(
+                        massive_symbol,
+                        minutes,
+                        "minute",
+                        start_day.isoformat(),
+                        end_day.isoformat(),
+                    )
+                except massive_provider.MassiveError:
+                    return None
+                if not bars:
+                    continue
+                index = pd.DatetimeIndex(
+                    [
+                        pd.Timestamp(bar["t"], unit="ms", tz="UTC")
+                        for bar in bars
+                        if isinstance(bar.get("t"), (int, float))
+                    ]
+                )
+                for field, key in (
+                    ("Open", "o"),
+                    ("High", "h"),
+                    ("Low", "l"),
+                    ("Close", "c"),
+                    ("Volume", "v"),
+                ):
+                    frames[(symbol, field)] = pd.Series(
+                        [bar.get(key) for bar in bars if isinstance(bar.get("t"), (int, float))],
+                        index=index,
+                    )
+            if not frames:
+                return None
+            frame = pd.DataFrame(frames)
+            frame.columns = pd.MultiIndex.from_tuples(frame.columns)
+            return frame.sort_index()
+
         def download() -> pd.DataFrame:
+            try:
+                massive_frame = _massive_intraday()
+            except Exception:
+                massive_frame = None
+            if massive_frame is not None and not massive_frame.empty:
+                return massive_frame
             kwargs = {
                 "period": "20d",
                 "interval": interval,

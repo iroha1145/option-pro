@@ -72,7 +72,7 @@ run_secret_python() {
 
 select_affected_services() {
     case "$key" in
-        OPENAI_API_KEY|FINNHUB_API_KEY|MARKETDATA_TOKEN|INTERNAL_API_TOKEN)
+        OPENAI_API_KEY|FINNHUB_API_KEY|MARKETDATA_TOKEN|MASSIVE_API_KEY|INTERNAL_API_TOKEN)
             services=(backend worker)
             ;;
         APP_PASSWORD_HASH) services=(backend) ;;

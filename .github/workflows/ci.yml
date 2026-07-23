@@ -40,7 +40,7 @@ jobs:
         with:
           node-version: "22.17.1"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: frontend-src/package-lock.json
 
       - name: Prepare build metadata and environment
         shell: bash
@@ -73,24 +73,23 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q backend/app
 
-      - name: Check frontend JavaScript syntax
+      - name: Build frontend and verify committed artifacts match source
         shell: bash
         run: |
-          while IFS= read -r -d '' file; do
-            node --check "$file"
-          done < <(git ls-files -z 'frontend/**/*.js')
+          npm ci --prefix frontend-src --ignore-scripts --no-audit --no-fund
+          VITE_API_MODE=live npm run build --prefix frontend-src
+          diff -r frontend-src/dist frontend
 
       - name: Run frontend behavior tests
-        run: node --test frontend/tests/*.test.mjs
+        run: node --test frontend-src/tests/*.test.mjs
 
       - name: Run frontend production assertions
-        run: node frontend/tests/static_assertions.mjs
+        run: node frontend-src/tests/static_assertions.mjs
 
       - name: Install locked browser-test dependencies
         shell: bash
         run: |
-          npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
-          cd frontend
+          cd frontend-src
           npx playwright install --with-deps chromium
 
       - name: Check shell script syntax
@@ -170,7 +169,7 @@ jobs:
       - name: Capture Catalyst Desk visual evidence
         env:
           OPTIX_VISUAL_BASE_URL: http://127.0.0.1:2000
-        run: npm --prefix frontend run test:visual
+        run: npm --prefix frontend-src run test:visual
 
       - name: Upload visual evidence
         if: always()
@@ -178,9 +177,9 @@ jobs:
         with:
           name: catalyst-desk-visual-evidence-${{ github.sha }}
           path: |
-            frontend/test-results/visual-evidence/*.png
-            frontend/test-results/report/**
-            frontend/test-results/playwright/**
+            frontend-src/test-results/visual-evidence/*.png
+            frontend-src/test-results/report/**
+            frontend-src/test-results/playwright/**
           if-no-files-found: error
           retention-days: 14
 

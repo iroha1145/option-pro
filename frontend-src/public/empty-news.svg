@@ -1,0 +1,27 @@
+<svg width="480" height="360" viewBox="0 0 480 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 报纸 / 电报纸带 + 引号 · 墨色线条 -->
+  <g stroke="#182338" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <!-- 报纸主体 -->
+    <path d="M120 78h200c5 0 8 3 8 8v190c0 5-3 8-8 8H140c-11 0-20-9-20-20V78Z"/>
+    <path d="M120 78v186c0 11 9 20 20 20" opacity="0.45"/>
+    <!-- 报头 -->
+    <path d="M148 104h120" stroke-width="2.6"/>
+    <path d="M148 104h34" stroke="#2E46E0" stroke-width="2.6"/>
+    <!-- 栏目 -->
+    <path d="M148 134h132M148 152h132M148 170h96" opacity="0.8"/>
+    <!-- 配图框 -->
+    <rect x="148" y="192" width="60" height="52" rx="4"/>
+    <path d="M220 200h60M220 216h60M220 232h44" opacity="0.8"/>
+    <!-- 电报纸带（右上卷出） -->
+    <path d="M336 96c28-6 44 6 42 22-2 14-18 20-30 14" opacity="0.7"/>
+  </g>
+  <!-- 大引号 -->
+  <g stroke="#182338" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M346 176c-9 4-15 12-15 23h17v24h-21v-26c0-14 7-24 21-29l-2 8Z"/>
+    <path d="M392 176c-9 4-15 12-15 23h17v24h-21v-26c0-14 7-24 21-29l-2 8Z"/>
+  </g>
+  <!-- 热度小火苗（brand 点缀） -->
+  <path d="M404 258c8-10 4-20-2-28 0 8-3 11-7 14 1-7-2-14-8-18 0 8-3 11-7 15-4 4-6 8-6 13 0 9 7 14 15 14s13-4 15-10Z" stroke="#2E46E0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 地面线 -->
+  <path d="M104 316c92 4 180 4 272 0" stroke="#182338" stroke-width="1.6" stroke-linecap="round" opacity="0.35"/>
+</svg>

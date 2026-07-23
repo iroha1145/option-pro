@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import ipaddress
 import json
@@ -1292,35 +1292,141 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
     # regular/extended-hours price. Keeping both calls batched avoids the old
     # one-fast_info-request-per-ticker cold-load penalty without presenting a
     # previous daily close as a freshly fetched quote.
+    def _massive_daily_frame(closes):
+        """Massive 日线收盘 → yfinance 形状帧(MultiIndex 列,naive 日期索引)。"""
+        import pandas as pd
+
+        columns = {}
+        for ticker, points in closes.items():
+            index = [
+                datetime.fromtimestamp(stamp / 1000, tz=timezone.utc)
+                .astimezone(_watchlist_market_timezone(ticker))
+                .replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+                for stamp, _ in points
+            ]
+            columns[(ticker, "Close")] = pd.Series(
+                [price for _, price in points], index=pd.DatetimeIndex(index)
+            )
+        if not columns:
+            return None
+        frame = pd.DataFrame(columns)
+        frame.columns = pd.MultiIndex.from_tuples(frame.columns)
+        return frame.sort_index()
+
+    def _massive_latest_frame(symbol_by_ticker, snaps):
+        """Massive 快照最新分钟条 → yfinance 形状帧;无分钟条的标的进 missing。"""
+        import pandas as pd
+
+        columns = {}
+        missing = []
+        for ticker, symbol in symbol_by_ticker.items():
+            row = snaps.get(symbol)
+            minute = (row or {}).get("minute") or {}
+            price = minute.get("c")
+            stamp = minute.get("t")
+            if price is None or not isinstance(stamp, (int, float)) or stamp <= 0:
+                missing.append(ticker)
+                continue
+            index = pd.DatetimeIndex(
+                [datetime.fromtimestamp(stamp / 1000, tz=timezone.utc)]
+            )
+            columns[(ticker, "Close")] = pd.Series([price], index=index)
+        if not columns:
+            return None, missing
+        frame = pd.DataFrame(columns)
+        frame.columns = pd.MultiIndex.from_tuples(frame.columns)
+        return frame.sort_index(), missing
+
     def _fetch_quotes():
         try:
+            import pandas as pd
             import yfinance as yf_mod
             session = getattr(
                 __import__("app.services.yahoo", fromlist=["_yf_session"]),
                 "_yf_session",
                 None,
             )
-            daily_df = download_in_bounded_batches(
-                yf_mod.download,
-                tickers=all_tickers,
-                period="7d",
-                interval="1d",
-                group_by="ticker",
-                progress=False,
-                auto_adjust=False,
-                session=session,
+            # 主源 Massive:日线(spark/涨跌基准)+ 批量快照(最新价);
+            # 任一环节失败或个别标的缺失,仅该部分回落 Yahoo,行为与旧链一致。
+            from app.services import massive as massive_provider
+
+            massive_daily = None
+            massive_latest = None
+            yahoo_daily_tickers = list(all_tickers)
+            yahoo_latest_tickers = list(all_tickers)
+            if massive_provider.configured():
+                try:
+                    closes, daily_missing = massive_provider.watchlist_daily_closes(
+                        all_tickers
+                    )
+                    if closes:
+                        massive_daily = _massive_daily_frame(closes)
+                        yahoo_daily_tickers = list(daily_missing)
+                        symbol_by_ticker = {
+                            ticker: massive_provider.to_symbol(ticker)
+                            for ticker in closes
+                        }
+                        try:
+                            snaps = massive_provider.snapshot_batch(
+                                sorted(set(symbol_by_ticker.values()))
+                            )
+                            frame, latest_missing = _massive_latest_frame(
+                                symbol_by_ticker, snaps
+                            )
+                            if frame is not None:
+                                massive_latest = frame
+                                yahoo_latest_tickers = sorted(
+                                    set(daily_missing) | set(latest_missing)
+                                )
+                        except massive_provider.MassiveError:
+                            pass  # 快照计划不含/限流:最新价整体走 Yahoo
+                except massive_provider.MassiveError:
+                    massive_daily = None
+                    massive_latest = None
+                    yahoo_daily_tickers = list(all_tickers)
+                    yahoo_latest_tickers = list(all_tickers)
+
+            daily_df = (
+                download_in_bounded_batches(
+                    yf_mod.download,
+                    tickers=yahoo_daily_tickers,
+                    period="7d",
+                    interval="1d",
+                    group_by="ticker",
+                    progress=False,
+                    auto_adjust=False,
+                    session=session,
+                )
+                if yahoo_daily_tickers
+                else pd.DataFrame()
             )
-            latest_df = download_in_bounded_batches(
-                yf_mod.download,
-                tickers=all_tickers,
-                period="1d",
-                interval=_WATCHLIST_LATEST_INTERVAL,
-                prepost=True,
-                group_by="ticker",
-                progress=False,
-                auto_adjust=False,
-                session=session,
+            if massive_daily is not None:
+                daily_df = (
+                    massive_daily
+                    if getattr(daily_df, "empty", True)
+                    else pd.concat([massive_daily, daily_df], axis=1)
+                )
+            latest_df = (
+                download_in_bounded_batches(
+                    yf_mod.download,
+                    tickers=yahoo_latest_tickers,
+                    period="1d",
+                    interval=_WATCHLIST_LATEST_INTERVAL,
+                    prepost=True,
+                    group_by="ticker",
+                    progress=False,
+                    auto_adjust=False,
+                    session=session,
+                )
+                if yahoo_latest_tickers
+                else pd.DataFrame()
             )
+            if massive_latest is not None:
+                latest_df = (
+                    massive_latest
+                    if getattr(latest_df, "empty", True)
+                    else pd.concat([massive_latest, latest_df], axis=1)
+                )
             provider_previous_closes = _fetch_watchlist_provider_previous_closes(
                 [
                     ticker
@@ -2016,6 +2122,60 @@ async def stock_chart(
         raise HTTPException(status_code=503, detail="Yahoo chart data is currently unavailable") from exc
 
 
+_MASSIVE_CHART_WINDOWS = {
+    # range → (multiplier, timespan, 回看天数);窗口略宽于 Yahoo period,余量无害
+    "5m": (5, "minute", 10),
+    "15m": (15, "minute", 45),
+    "1h": (1, "hour", 100),
+    "1d": (1, "day", 750),
+    "1w": (1, "week", 1850),
+}
+
+
+def _massive_chart_history(provider, symbol: str, range_key: str, adjusted: bool):
+    """Massive 聚合条 → yfinance.history 同形状 DataFrame(失败返回 None)。"""
+    import pandas as pd
+
+    window = _MASSIVE_CHART_WINDOWS.get(range_key)
+    if window is None:
+        return None
+    multiplier, timespan, lookback_days = window
+    end_day = datetime.now(timezone.utc).astimezone(_NEW_YORK_TZ).date()
+    start_day = end_day - timedelta(days=lookback_days)
+    try:
+        bars = provider.ticker_range(
+            symbol,
+            multiplier,
+            timespan,
+            start_day.isoformat(),
+            end_day.isoformat(),
+            adjusted=adjusted,
+        )
+    except provider.MassiveError:
+        return None
+    if not bars:
+        return None
+    index = []
+    rows = []
+    for bar in bars:
+        stamp = bar.get("t")
+        if not isinstance(stamp, (int, float)) or stamp <= 0:
+            continue
+        index.append(datetime.fromtimestamp(stamp / 1000, tz=timezone.utc))
+        rows.append(
+            {
+                "Open": bar.get("o"),
+                "High": bar.get("h"),
+                "Low": bar.get("l"),
+                "Close": bar.get("c"),
+                "Volume": bar.get("v") or 0,
+            }
+        )
+    if not rows:
+        return None
+    return pd.DataFrame(rows, index=pd.DatetimeIndex(index))
+
+
 async def _stock_chart_impl(ticker: str, range: str, adjustment: str = "raw"):
     def _work():
         # Buttons = K-line intervals (周期), fetch plenty of data for scrolling
@@ -2054,13 +2214,27 @@ async def _stock_chart_impl(ticker: str, range: str, adjustment: str = "raw"):
                 "visible": visible,
             }
 
-        tk = yf.Ticker(symbol)
-        hist = tk.history(
-            period=yf_period,
-            interval=interval,
-            prepost=prepost,
-            auto_adjust=auto_adjust,
-        )
+        # 主源 Massive:同形状历史帧;失败/未配置/不支持的代码回落 Yahoo。
+        hist = None
+        try:
+            from app.services import massive as massive_provider
+
+            if massive_provider.configured():
+                massive_symbol = massive_provider.to_symbol(symbol)
+                if massive_symbol is not None:
+                    hist = _massive_chart_history(
+                        massive_provider, massive_symbol, range, auto_adjust
+                    )
+        except Exception:
+            hist = None
+        if hist is None or hist.empty:
+            tk = yf.Ticker(symbol)
+            hist = tk.history(
+                period=yf_period,
+                interval=interval,
+                prepost=prepost,
+                auto_adjust=auto_adjust,
+            )
         if hist.empty:
             return {
                 **response_metadata(source_status="empty", bars=[]),

@@ -1,0 +1,172 @@
+/**
+ * B1 指数概览（6 卡：SPX/NDX/DJI/RUT/SOX/VIX）
+ * 名称+代码 · 价格 count-up · ChangeBadge · 当日 mini sparkline · tick-flash
+ * live 模式无指数K线端点 → sparkline 如实留空「—」（design.md 数据诚信原则）
+ * ?index= 指定的卡高亮（左缘 2px brand 条）并滚动定位
+ */
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import { isMock, type ApiError } from '@/api/client';
+import type { IndexQuote } from '@/api/types';
+import { getIndexIntraday } from '@/mocks/marketPulse';
+import { useCountUp } from '@/hooks/useCountUp';
+import { cn } from '@/lib/utils';
+import { fmtPrice } from '@/lib/format';
+import ChangeBadge from '@/components/shared/ChangeBadge';
+import EmptyState from '@/components/shared/EmptyState';
+import { SkeletonCard } from '@/components/shared/Skeleton';
+import Sparkline from '@/components/charts/Sparkline';
+
+const IndexCard = memo(function IndexCard({
+  quote,
+  index,
+  flash,
+  focused,
+  registerRef,
+}: {
+  quote: IndexQuote;
+  index: number;
+  flash: 'up' | 'down' | undefined;
+  focused: boolean;
+  registerRef: (code: string, el: HTMLDivElement | null) => void;
+}) {
+  /* 数据纪律：无有效价（live 快照缺失时映射为 0）显「—」，不显 0.00 */
+  const hasPrice = Number.isFinite(quote.price) && quote.price > 0;
+  const price = useCountUp(hasPrice ? quote.price : 0, 900);
+  const spark = useMemo(
+    () => (isMock ? getIndexIntraday(quote.code, quote.changePct) : null),
+    [quote.code, quote.changePct],
+  );
+  return (
+    <motion.div
+      ref={(el) => registerRef(quote.code, el)}
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.045, 0.4) }}
+      className={cn(
+        'card-surface relative overflow-hidden p-4',
+        focused && 'shadow-[inset_2px_0_0_0_var(--brand-600),0_1px_2px_rgba(13,22,38,.05),inset_0_1px_0_rgba(255,255,255,.9)] ring-1 ring-brand-100',
+      )}
+      aria-label={`${quote.name} ${quote.code}`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="min-w-0">
+          <span className="block truncate text-caption text-ink-500">{quote.name}</span>
+          <span className="font-mono text-micro text-ink-400">{quote.code}</span>
+        </p>
+        <ChangeBadge value={quote.changePct} size="sm" />
+      </div>
+      <p
+        className={cn(
+          'mt-2 inline-block rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
+          flash === 'up' && 'animate-tick-flash-up',
+          flash === 'down' && 'animate-tick-flash-down',
+        )}
+      >
+        {hasPrice ? fmtPrice(price) : '—'}
+      </p>
+      <div className="mt-2 flex h-8 items-end justify-between gap-2">
+        {spark ? (
+          <Sparkline data={spark} width={132} height={30} change={quote.changePct} className="w-full" />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center gap-1.5 font-mono text-micro text-ink-300">
+            —<span className="font-sans text-[10px]">分时未覆盖</span>
+          </span>
+        )}
+      </div>
+    </motion.div>
+  );
+});
+
+export default function IndexCards({
+  data,
+  loading,
+  error,
+  focus,
+  onRetry,
+  refreshing,
+}: {
+  data: IndexQuote[] | null;
+  loading: boolean;
+  error: ApiError | null;
+  focus: string | null;
+  onRetry: () => void;
+  refreshing: boolean;
+}) {
+  /* tick-flash 差异检测（60s 轮询） */
+  const [flashes, setFlashes] = useState<Record<string, 'up' | 'down'>>({});
+  const prevPrices = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (!data) return;
+    const next: Record<string, 'up' | 'down'> = {};
+    data.forEach((q) => {
+      const prev = prevPrices.current[q.code];
+      if (prev !== undefined && prev !== q.price) next[q.code] = q.price > prev ? 'up' : 'down';
+      prevPrices.current[q.code] = q.price;
+    });
+    if (Object.keys(next).length) {
+      setFlashes(next);
+      const t = setTimeout(() => setFlashes({}), 700);
+      return () => clearTimeout(t);
+    }
+  }, [data]);
+
+  /* ?index= 滚动定位 */
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const registerRef = (code: string, el: HTMLDivElement | null) => {
+    cardRefs.current[code] = el;
+  };
+  useEffect(() => {
+    if (!focus || !data) return;
+    const el = cardRefs.current[focus.toUpperCase()];
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, [focus, data]);
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        {Array.from({ length: 6 }, (_, i) => (
+          <SkeletonCard key={i} />
+        ))}
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="card-surface">
+        <EmptyState
+          variant="error"
+          image="/empty-chart.svg"
+          title={error.code === 503 ? '快照暂不可用' : '加载失败'}
+          description={error.code === 503 ? '指数快照未覆盖，留空而非编造' : error.message}
+          action={
+            <button
+              onClick={onRetry}
+              disabled={refreshing}
+              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
+            >
+              {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+              重试
+            </button>
+          }
+        />
+      </div>
+    );
+  }
+  if (!data?.length) return null;
+
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      {data.map((q, i) => (
+        <IndexCard
+          key={q.code}
+          quote={q}
+          index={i}
+          flash={flashes[q.code]}
+          focused={focus?.toUpperCase() === q.code}
+          registerRef={registerRef}
+        />
+      ))}
+    </div>
+  );
+}

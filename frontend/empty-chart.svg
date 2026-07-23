@@ -1,0 +1,23 @@
+<svg width="480" height="300" viewBox="0 0 480 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 空坐标系 + 虚线趋势 · 图表 503 占位 -->
+  <g stroke="#182338" stroke-width="1.6" stroke-linecap="round">
+    <!-- 坐标轴 -->
+    <path d="M72 40v200M72 240h340"/>
+    <!-- 刻度 -->
+    <path d="M66 190h6M66 140h6M66 90h6" opacity="0.6"/>
+    <path d="M140 240v6M220 240v6M300 240v6M380 240v6" opacity="0.6"/>
+    <!-- 网格（极淡） -->
+    <path d="M72 190h340M72 140h340M72 90h340" opacity="0.22"/>
+  </g>
+  <!-- 虚线趋势线（缺失感） -->
+  <path d="M92 206c42-8 62-40 96-44 40-5 56 18 92 8 30-8 48-30 84-40" stroke="#182338" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="6 8" opacity="0.55"/>
+  <!-- 空态挂牌 -->
+  <g stroke="#182338" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="186" y="96" width="108" height="44" rx="8"/>
+    <path d="M204 118h44M204 118h0" />
+  </g>
+  <path d="M204 118h30" stroke="#2E46E0" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M242 118h24" stroke="#182338" stroke-width="1.6" stroke-linecap="round" opacity="0.6"/>
+  <!-- 墨点 -->
+  <circle cx="404" cy="60" r="3" fill="#2E46E0"/>
+</svg>

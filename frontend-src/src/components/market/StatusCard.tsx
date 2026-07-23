@@ -1,0 +1,117 @@
+/**
+ * B2 市场状态卡
+ * SessionLED+时段 · NY 时钟（秒级）· 下一开/收盘倒计时 · 时段说明
+ * 字段对齐 contract market/status：market/phase/holiday/next_open/next_close，缺字段显示「—」
+ */
+import { motion } from 'framer-motion';
+import type { ApiError } from '@/api/client';
+import type { MarketSession } from '@/api/types';
+import type { MarketStatusDetail } from './api';
+import { useNow } from '@/hooks/useNow';
+import { fmtCountdown, fmtNyTime } from '@/lib/format';
+import SessionLED from '@/components/shared/SessionLED';
+import EmptyState from '@/components/shared/EmptyState';
+import { SkeletonCard } from '@/components/shared/Skeleton';
+import Icon from '@/components/icons';
+
+const MARKET_TO_SESSION: Record<MarketStatusDetail['market'], MarketSession> = {
+  open: 'regular',
+  premarket: 'premarket',
+  postmarket: 'afterhours',
+  closed: 'closed',
+};
+
+const MARKET_LABEL: Record<MarketStatusDetail['market'], string> = {
+  open: '盘中',
+  premarket: '盘前',
+  postmarket: '盘后',
+  closed: '休市',
+};
+
+function CountdownRow({ label, at, now }: { label: string; at: string | null; now: number }) {
+  return (
+    <div className="flex items-center justify-between border-t border-line py-2.5">
+      <span className="text-caption text-ink-500">{label}</span>
+      <span className="font-mono text-data-m text-brand-600 tnum" suppressHydrationWarning>
+        {at ? fmtCountdown(at, now) : '—'}
+      </span>
+    </div>
+  );
+}
+
+export default function StatusCard({
+  data,
+  loading,
+  error,
+  onRetry,
+  refreshing,
+}: {
+  data: MarketStatusDetail | null;
+  loading: boolean;
+  error: ApiError | null;
+  onRetry: () => void;
+  refreshing: boolean;
+}) {
+  const now = useNow(1000);
+
+  if (loading) return <SkeletonCard className="h-full" />;
+  if (error) {
+    return (
+      <div className="card-surface h-full">
+        <EmptyState
+          variant="error"
+          icon="doc-quote"
+          title={error.code === 503 ? '快照暂不可用' : '加载失败'}
+          description={error.code === 503 ? '市场状态未覆盖，留空而非编造' : error.message}
+          action={
+            <button
+              onClick={onRetry}
+              disabled={refreshing}
+              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
+            >
+              {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+              重试
+            </button>
+          }
+        />
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  const session = MARKET_TO_SESSION[data.market] ?? 'closed';
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 14 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.3 }}
+      transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
+      className="card-surface flex h-full flex-col p-5"
+      aria-label="市场状态"
+    >
+      <div className="flex items-start justify-between">
+        <p className="eyebrow">市场状态 · MARKET STATUS</p>
+        <Icon name="clock-ny" size={18} className="text-ink-400" />
+      </div>
+      <div className="mt-4 flex items-center gap-2.5">
+        <SessionLED session={session} label={MARKET_LABEL[data.market]} />
+        <span className="font-display text-[20px] leading-[26px] text-ink-900">{MARKET_LABEL[data.market]}</span>
+      </div>
+      <div className="mt-3">
+        <p className="font-mono text-data-xl text-ink-900 tnum" suppressHydrationWarning>
+          {fmtNyTime(new Date(now))}
+        </p>
+        <p className="mt-1 text-micro text-ink-400">纽约时间 ET · 秒级走字</p>
+      </div>
+      <div className="mt-4">
+        <CountdownRow label="距下一开盘" at={data.next_open} now={now} />
+        <CountdownRow label="距下一收盘" at={data.next_close} now={now} />
+        <div className="flex items-center justify-between border-y border-line py-2.5">
+          <span className="text-caption text-ink-500">节假日</span>
+          <span className="font-mono text-data-m text-ink-600 tnum">{data.holiday ?? '—'}</span>
+        </div>
+      </div>
+      <p className="mt-3 text-caption text-ink-500">{data.phase ?? '—'}</p>
+    </motion.section>
+  );
+}

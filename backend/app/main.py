@@ -22,6 +22,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import Headers, MutableHeaders
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import PlainTextResponse
@@ -173,8 +174,28 @@ _PUBLIC_ACCESS_PATHS = {
 _PUBLIC_DOCUMENT_PATHS = {
     "/",
     "/index.html",
-    "/login.html",
 }
+# SPA(BrowserRouter)文档路径:无扩展名的 GET 路径由 index.html 壳接管。
+_SPA_EXCLUDED_PREFIXES = ("/api/", "/static/", "/assets/")
+# 构建产物根目录的公共静态资产(手绘插画/Logo),登录前也需可加载。
+_ROOT_PUBLIC_ASSETS = frozenset({
+    "/logo.svg",
+    "/login-motif.svg",
+    "/texture-dots.svg",
+    "/empty-scan.svg",
+    "/empty-radar.svg",
+    "/empty-news.svg",
+    "/empty-watchlist.svg",
+    "/empty-chart.svg",
+})
+
+
+def _is_spa_document_path(path: str) -> bool:
+    if not path.startswith("/") or path in _PUBLIC_ACCESS_PATHS:
+        return False
+    if any(path.startswith(prefix) for prefix in _SPA_EXCLUDED_PREFIXES):
+        return False
+    return "." not in path.rsplit("/", 1)[-1]
 _PUBLIC_READ_API_PATHS = {
     "/api/access/status",
     "/api/stocks/watchlist",
@@ -220,11 +241,13 @@ _PUBLIC_READ_POST_PATHS = {
     "/api/catalysts/tickers/batch",
 }
 _PASSWORD_ENTRY_PATHS = {
-    "/login.html",
+    "/login",
     "/api/access/login",
-    "/static/js/login.js",
-    "/static/favicon.svg",
+    "/logo.svg",
+    "/login-motif.svg",
 }
+# 登录页所需的构建资产(文件名带内容 hash,按前缀放行)。
+_PASSWORD_ENTRY_PREFIXES = ("/assets/",)
 
 
 def _is_public_read_api_path(path: str) -> bool:
@@ -241,7 +264,10 @@ def _is_public_read_request(path: str, method: str) -> bool:
     if normalized_method in {"GET", "HEAD"}:
         return bool(
             path in _PUBLIC_DOCUMENT_PATHS
+            or _is_spa_document_path(path)
             or path.startswith("/static/")
+            or path.startswith("/assets/")
+            or path in _ROOT_PUBLIC_ASSETS
             or _is_public_read_api_path(path)
         )
     return normalized_method == "POST" and path in _PUBLIC_READ_POST_PATHS
@@ -354,8 +380,12 @@ class _GatewayMiddleware:
 
         path = scope.get("path", "")
         method = scope.get("method", "GET")
-        is_html = path == "/" or path.endswith(".html")
-        is_static = path.startswith("/static/")
+        is_html = path == "/" or path.endswith(".html") or _is_spa_document_path(path)
+        is_static = (
+            path.startswith("/static/")
+            or path.startswith("/assets/")
+            or path in _ROOT_PUBLIC_ASSETS
+        )
 
         async def send_with_response_headers(message):
             if message["type"] == "http.response.start":
@@ -390,6 +420,7 @@ class _GatewayMiddleware:
                 self.access_runtime.mode == "password"
                 and (
                     path in _PASSWORD_ENTRY_PATHS
+                    or path.startswith(_PASSWORD_ENTRY_PREFIXES)
                     or _is_public_read_request(path, method)
                 )
             )
@@ -404,7 +435,7 @@ class _GatewayMiddleware:
             and not owner_access
         ):
             if self.access_runtime.mode == "password" and is_html:
-                response = RedirectResponse("/login.html", status_code=303)
+                response = RedirectResponse("/login", status_code=303)
                 return await response(scope, receive, send_with_response_headers)
             code = (
                 "owner_login_required"
@@ -487,17 +518,10 @@ else:
 
 
 _FRONTEND_REQUIRED_FILES = (
+    # Vite 构建产物:JS/CSS 文件名带内容 hash,由构建期 manifest 全量覆盖;
+    # 这里只钉稳定名文件作为无 manifest 环境的兜底。
     "index.html",
-    "login.html",
-    "static/favicon.svg",
-    "static/css/optix-deck.css",
-    "static/css/optix-catalysts.css",
-    "static/js/theme-init.js",
-    "static/js/login.js",
-    "static/js/deck-api.js",
-    "static/js/deck-ai-jobs.js",
-    "static/js/deck-catalysts.js",
-    "static/js/deck-app.js",
+    "logo.svg",
 )
 _FRONTEND_MANIFEST_NAME = ".integrity-manifest"
 
@@ -586,8 +610,27 @@ async def ready():
     )
 
 
+class _SPAStaticFiles(StaticFiles):
+    """Serve the built SPA: unknown extension-less paths fall back to index.html.
+
+    BrowserRouter 路由(/watchlist、/market、/stock/NVDA…)在磁盘上没有对应
+    文件;带扩展名的缺失路径(资产)仍如实返回 404。
+    """
+
+    async def get_response(self, path: str, scope):
+        try:
+            response = await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code == 404 and _is_spa_document_path("/" + path):
+                return await super().get_response("index.html", scope)
+            raise
+        if response.status_code == 404 and _is_spa_document_path("/" + path):
+            return await super().get_response("index.html", scope)
+        return response
+
+
 if FRONTEND_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+    app.mount("/", _SPAStaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
 else:
     import warnings
     warnings.warn(f"FRONTEND_DIR not found at {FRONTEND_DIR}; static serving disabled")

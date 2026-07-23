@@ -1457,13 +1457,16 @@ def test_password_mode_anonymous_dependency_reads_snapshot_without_provider(
 def test_frontend_default_focus_contract_matches_worker_snapshot() -> None:
     source = (
         Path(__file__).resolve().parents[1]
-        / "frontend"
-        / "static"
-        / "js"
-        / "deck-app.js"
+        / "frontend-src"
+        / "src"
+        / "api"
+        / "modules"
+        / "stocks.ts"
     ).read_text(encoding="utf-8")
-    assert 'focusRange = "1d", focusAdj = "raw"' in source
-    assert 'flat.some(s => s.ticker === "NVDA") ? "NVDA"' in source
+    # React 前端的默认图参数契约:1D→1d 显式映射,adjustment 恒 raw
+    assert "'1D': '1d'" in source
+    assert "range: StockChart['range'] = '1D'" in source
+    assert "adjustment = 'raw'" in source
     assert public_home_resource_parameters("focus_overview", now=time.time()) == {
         "ticker": "NVDA"
     }

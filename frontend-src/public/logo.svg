@@ -1,0 +1,10 @@
+<svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 棱镜折纸 O × 上升折线 · 单色 brand-600 · 1.6px 细线 -->
+  <g stroke="#2E46E0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M48 14c18.8-.5 33.7 14.6 33.4 33.5C81.1 66.4 66.3 81.5 47.6 81.7 29 81.9 14.4 67.1 14.6 48.4 14.8 29.7 29.2 14.5 48 14Z"/>
+    <path d="M48 14 63 33.5 48.3 47.6 31 33.2 48 14Z" opacity="0.9"/>
+    <path d="M31 33.2 14.8 47.9M63 33.5l18.4 14M48.3 47.6 48 81.5" opacity="0.45"/>
+    <path d="M31 62.5 42.8 51l8.6 7.4L64.5 43" />
+    <path d="M57.6 42.5h7.4v7.4"/>
+  </g>
+</svg>
