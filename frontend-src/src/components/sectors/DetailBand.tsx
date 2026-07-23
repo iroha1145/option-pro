@@ -147,16 +147,16 @@ export default function DetailBand({ sector, onOpenTicker }: DetailBandProps) {
                     <button
                       type="button"
                       onClick={() => onOpenTicker(c.ticker)}
-                      className="group flex h-10 w-full items-center gap-3 px-1 text-left transition-colors duration-fast hover:bg-paper-2"
+                      className="group flex h-10 w-full items-center gap-2 px-1 text-left transition-colors duration-fast hover:bg-paper-2 sm:gap-3"
                       aria-label={`打开 ${c.ticker} 详情`}
                     >
                       <TickerLogo ticker={c.ticker} size={24} />
-                      <span className="w-16 font-mono text-body-s font-semibold text-ink-800">{c.ticker}</span>
+                      <span className="w-12 shrink-0 font-mono text-body-s font-semibold text-ink-800 sm:w-16">{c.ticker}</span>
                       <span className="hidden min-w-0 flex-1 truncate text-micro text-ink-400 sm:inline">{c.name}</span>
-                      <span className="ml-auto w-20 text-right font-mono text-body-s text-ink-800 tnum">
+                      <span className="ml-auto min-w-16 shrink-0 text-right font-mono text-body-s text-ink-800 tnum sm:w-20">
                         {c.price !== null ? fmtPrice(c.price) : '—'}
                       </span>
-                      <span className="w-24 text-right">
+                      <span className="w-auto shrink-0 text-right sm:w-24">
                         {c.changePct !== null ? <ChangeBadge value={c.changePct} size="sm" /> : <span className="font-mono text-ink-300">—</span>}
                       </span>
                       <span className="hidden w-28 justify-end md:flex">
@@ -166,7 +166,7 @@ export default function DetailBand({ sector, onOpenTicker }: DetailBandProps) {
                           <span className="font-mono text-ink-300">—</span>
                         )}
                       </span>
-                      <span className="inline-flex size-6 items-center justify-center rounded-xs border border-line bg-card text-ink-400 opacity-0 transition-opacity duration-fast group-hover:opacity-100">
+                      <span className="hidden size-6 items-center justify-center rounded-xs border border-line bg-card text-ink-400 opacity-0 transition-opacity duration-fast group-hover:opacity-100 sm:inline-flex">
                         <Icon name="arrow-up-right" size={12} />
                       </span>
                     </button>
