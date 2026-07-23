@@ -115,6 +115,38 @@ _TRADITIONAL_CONFLICT_PHRASES = frozenset(
     }
 )
 _SENTENCE_SPLIT = re.compile(r"[。！？!?\n]+")
+_REGULATORY_RULE_PREFIX = re.compile(
+    r"(?<![A-Za-z0-9])Rule\s+(?=10b5-1(?![A-Za-z0-9]))",
+    re.IGNORECASE,
+)
+_GREEK_SCIENTIFIC_SYMBOLS = frozenset(
+    "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψω"
+)
+_GREEK_SCIENTIFIC_PREFIX_CONTEXTS = (
+    "亚型",
+    "受体",
+    "参数",
+    "变体",
+    "因子",
+    "激酶",
+    "系数",
+    "细胞",
+    "蛋白",
+    "角度",
+    "波长",
+)
+_GREEK_SCIENTIFIC_SUFFIX_CONTEXTS = (
+    "亚型",
+    "变异株",
+    "受体",
+    "射线",
+    "综合征",
+    "粒子",
+    "系数",
+    "细胞",
+    "蛋白",
+    "衰变",
+)
 _ENGLISH_PROSE_WORDS = frozenset(
     {
         "a",
@@ -299,12 +331,23 @@ _ALLOWED_VERSIONED_PRODUCT_BASES = frozenset(
     }
 )
 _SINGLE_FOREIGN_TOKEN = re.compile(r"[A-Za-z][A-Za-z']*")
+_TITLE_CASE_PROPER_NAME = re.compile(r"[A-Z][a-z]{2,31}")
 _OPAQUE_INITIALISM = re.compile(
     r"(?=.{2,16}\Z)(?=.*[A-Z])"
     r"(?:[A-Z0-9]+(?:[&./+\-][A-Z0-9]+)*)"
 )
+_COMPACT_DIGIT_LETTER_IDENTIFIER = re.compile(
+    r"(?:[0-9]{1,4}[A-Za-z]|[A-Za-z][0-9]{1,4})"
+)
+_PLURALIZED_INITIALISM = re.compile(r"[A-Z]{2,8}s")
 _NUMERIC_SECURITY_CODE = re.compile(
-    r"(?<![A-Za-z0-9.^-])[0-9]{1,12}(?![A-Za-z0-9])"
+    r"(?<![A-Za-z0-9^\-])[0-9]{1,12}(?![A-Za-z0-9])"
+)
+_FORMATTED_NUMBER_CONTINUATION = re.compile(
+    r"^[,，][0-9]{3}(?:[,，][0-9]{3})*(?![0-9])"
+)
+_FORMATTED_NUMBER = re.compile(
+    r"(?<![0-9])[0-9]{1,3}(?:[,，][0-9]{3})+(?![0-9])"
 )
 _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
     {
@@ -538,6 +581,11 @@ _SECURITY_REFERENCE_PREFIX = re.compile(
     r"(?:股票代码|普通股代码|股份代码|证券代码|证券编号|"
     r"股票|普通股|股份|个股|证券)(?:为|是)?$"
 )
+_NUMERIC_SECURITY_REFERENCE_PREFIX = re.compile(
+    r"(?:股票代码|普通股代码|股份代码|证券代码|证券编号)(?:为|是)?$"
+)
+_NUMERIC_CONTEXT_BOUNDARIES = frozenset("，,；;。.!！?？%％、")
+_NUMERIC_SUFFIX_HARD_BOUNDARIES = frozenset("；;。.!！?？%％")
 _SECURITY_REFERENCE_MARKERS = (
     "股价",
     "股票",
@@ -589,13 +637,189 @@ _INITIALISM_CONTEXT_SUFFIXES = (
     "技术",
     "芯片",
     "软件",
+    "安全",
     "基金",
     "期货",
     "增长",
+    "序列",
+    "指标",
+    "柱状图",
+    "分位",
+    "分数",
+    "关键位",
 )
+_FOREIGN_PROPER_NAME_CONTEXT_SUFFIXES = (
+    "项目",
+    "产品",
+    "平台",
+    "系统",
+    "技术",
+    "芯片",
+    "软件",
+    "模型",
+    "机器人",
+    "处理器",
+    "大型机",
+    "车型",
+    "出租车",
+    "服务",
+    "业务",
+    "主题",
+    "进展",
+)
+_FOREIGN_PROPER_NAME_BLOCKING_SUFFIXES = (
+    "公司",
+    "集团",
+    "企业",
+    "发布",
+    "宣布",
+    "推出",
+    "业绩",
+    "财报",
+    "营收",
+    "利润",
+    "订单",
+    "收购",
+    "合作",
+)
+_SOURCE_BOUND_ENTITY_DISALLOWED_WORDS = frozenset(
+    {
+        "a",
+        "after",
+        "an",
+        "announces",
+        "before",
+        "for",
+        "from",
+        "has",
+        "have",
+        "in",
+        "is",
+        "names",
+        "on",
+        "raises",
+        "reports",
+        "rule",
+        "says",
+        "sells",
+        "to",
+        "with",
+    }
+)
+_SOURCE_BOUND_ENTITY_CONNECTORS = frozenset({"and", "of", "the"})
+_SOURCE_BOUND_ENTITY_PART = re.compile(r"[A-Za-z0-9][A-Za-z0-9.'/-]*")
+_SOURCE_BOUND_MULTIWORD_ENTITY_ENDINGS = frozenset(
+    {
+        "awards",
+        "conference",
+        "corp",
+        "corporation",
+        "desk",
+        "etf",
+        "fund",
+        "group",
+        "holdings",
+        "inc",
+        "laboratories",
+        "labs",
+        "ltd",
+        "mainframe",
+        "platform",
+        "plc",
+        "systems",
+        "technologies",
+        "technology",
+    }
+)
+_SOURCE_BOUND_MULTIWORD_ENTITY_NOUNS = (
+    _SOURCE_BOUND_MULTIWORD_ENTITY_ENDINGS | {"growth"}
+)
+_SOURCE_BOUND_ROLE_TOKENS = frozenset(
+    {"ceo", "cfo", "cio", "coo", "cto", "president"}
+)
+_SOURCE_BOUND_ROLE_PREDICATE = re.compile(
+    r"^\s+(?:announces?|has|have|is|reports?|said|says|to|was|will)\b",
+    re.IGNORECASE,
+)
+_SOURCE_BOUND_ENTITY_DEFINITION = re.compile(
+    r"^(?:"
+    r"\s+(?:is|remains|was)\s+(?:(?:an?|the)\s+)?"
+    r"|\s*,\s*(?:(?:an?|the)\s+|"
+    r"(?:[A-Z][A-Za-z.'-]*\s+){0,3}[A-Z][A-Za-z.'-]*['’]s\s+)"
+    r")"
+    r"(?:closed-end\s+)?(?:business|company|corporation|etf|fund|group|"
+    r"index|platform|product|service|system)\b",
+    re.IGNORECASE,
+)
+_SOURCE_BOUND_ENTITY_ALIAS = re.compile(
+    r"^\s*[（(]\s*[A-Z0-9][A-Z0-9.&/+_-]{1,15}\s*[)）]"
+)
+_SOURCE_BOUND_HEADLINE_SEGMENT_SPLIT = re.compile(
+    r"(?:\s+[|—–-]\s+|[:：;；.!?。！？\n]+)"
+)
+_SOURCE_BOUND_SECURITY_CONTEXT = re.compile(
+    r"^[\s,:：\-—–]*(?:(?:['’]s[\s,:：\-—–]*)"
+    r"(?:[0-9][0-9,]*(?:\.[0-9]+)?\s+)?|"
+    r"(?:(?:has|have|had|is|are|was|were)\s+)?(?:among\s+)?)"
+    r"(?:stock(?:'s|s)?|shares?|securit(?:y|ies)|stake|equity|equities|"
+    r"holdings?|"
+    r"investors?|gainers?|losers?|rose|rises?|fell|falls?|gained|lost|"
+    r"outperform(?:ed|s|ing)?|underperform(?:ed|s|ing)?|rallied|slid|"
+    r"plunged|surged|trading|price|buying|selling)\b",
+    re.IGNORECASE,
+)
+_SOURCE_BOUND_SECURITY_CLAUSE_SPLIT = re.compile(r"[;；.!?。！？\n]+")
+_SOURCE_TECHNICAL_MODIFIERS = (
+    "artificial",
+    "biological",
+    "biotech",
+    "clinical",
+    "genetic",
+    "genomic",
+    "medical",
+    "molecular",
+    "quantum",
+    "semiconductor",
+    "synthetic",
+    "therapeutic",
+)
+_SOURCE_TECHNICAL_NOUNS = (
+    "business",
+    "industry",
+    "manufacturer",
+    "manufacturers",
+    "manufacturing",
+    "market",
+    "platform",
+    "research",
+    "sector",
+    "sequencing",
+    "system",
+    "technology",
+    "therapy",
+)
+_TECHNICAL_INITIALISM_SECURITY_CATEGORY_SUFFIXES = (
+    "企业的股份",
+    "企业的股票",
+    "企业股份",
+    "企业股票",
+    "股票",
+)
+_GENERIC_SECURITY_INSTRUMENT_PREFIXES = (
+    "股票",
+    "债券",
+    "商品",
+    "行业",
+    "指数",
+)
+_GENERIC_SECURITY_INSTRUMENT_SPANS = frozenset({"ETF"})
 _GENERIC_NON_REFERENCE_SECURITY_COMPOUNDS = (
     "股份有限公司",
     "股份公司",
+    "证券欺诈集体诉讼",
+    "证券集体诉讼",
+    "证券欺诈诉讼",
+    "证券诉讼",
 )
 _NON_REFERENCE_SECURITY_COMPOUNDS = {
     "10B5-1": ("股票交易计划", "证券交易计划"),
@@ -638,6 +862,32 @@ _CJK_RANGES = (
 def _is_cjk(char: str) -> bool:
     codepoint = ord(char)
     return any(start <= codepoint <= end for start, end in _CJK_RANGES)
+
+
+def _is_embedded_greek_scientific_symbol(text: str, index: int) -> bool:
+    if text[index] not in _GREEK_SCIENTIFIC_SYMBOLS:
+        return False
+    before = text[index - 1] if index > 0 else ""
+    after = text[index + 1] if index + 1 < len(text) else ""
+    if before in _GREEK_SCIENTIFIC_SYMBOLS or after in _GREEK_SCIENTIFIC_SYMBOLS:
+        return False
+    prefix = _normalize_security_reference_phrase(text[:index])
+    suffix = _strip_security_reference_separators(text[index + 1 :])
+    if (
+        _SECURITY_REFERENCE_PREFIX.search(prefix) is not None
+        or suffix.startswith(_SECURITY_CODE_SUFFIXES)
+        or suffix.startswith(_SECURITY_PRICE_MOVEMENTS)
+    ):
+        return False
+    scientific_prefix = _normalize_security_reference_phrase(
+        text[max(0, index - 16) : index]
+    )
+    scientific_suffix = _strip_security_reference_separators(
+        text[index + 1 : index + 17]
+    )
+    return scientific_prefix.endswith(_GREEK_SCIENTIFIC_PREFIX_CONTEXTS) or (
+        scientific_suffix.startswith(_GREEK_SCIENTIFIC_SUFFIX_CONTEXTS)
+    )
 
 
 def _is_security_reference_separator(char: str) -> bool:
@@ -805,9 +1055,15 @@ def _is_contextual_initialism(
         return False
     if not any(char.isascii() and char.isalpha() for char in span):
         return False
+    prose_tokens = re.findall(r"[A-Z]+", span)
     if any(
         token.casefold() in _ENGLISH_PROSE_WORDS
-        for token in re.findall(r"[A-Z]+", span)
+        and not (
+            len(token) == 1
+            and re.fullmatch(r"(?:[0-9]+[A-Z]|[A-Z][0-9]+)", span)
+            is not None
+        )
+        for token in prose_tokens
     ):
         return False
     if span.isalpha() and len(span) > 4:
@@ -830,7 +1086,7 @@ def _is_contextual_initialism(
         return True
     prefix = _normalize_security_reference_phrase(sentence[:start])
     return suffix.startswith(_INITIALISM_CONTEXT_SUFFIXES) or prefix.endswith(
-        ("由", "据", "根据", "来自")
+        ("由", "据", "根据", "来自", "未提供", "缺少", "没有", "无法取得")
     )
 
 
@@ -895,6 +1151,207 @@ def _approved_span_requires_ticker_binding(
     return _security_phrase_requires_ticker_binding(span, suffix)
 
 
+def _is_copied_source_headline_fragment(
+    span: str,
+    source_texts: tuple[str, ...],
+) -> bool:
+    parts = _SOURCE_BOUND_ENTITY_PART.findall(span)
+    words = [part for part in parts if any(char.isalpha() for char in part)]
+    if len(words) < 3:
+        return False
+    prose_words = {
+        re.sub(r"[^A-Za-z]", "", word).casefold()
+        for word in words
+        if re.sub(r"[^A-Za-z]", "", word).casefold()
+        in _ENGLISH_PROSE_WORDS
+        and re.sub(r"[^A-Za-z]", "", word).casefold()
+        not in _SOURCE_BOUND_ENTITY_CONNECTORS
+    }
+    trailing_word = re.sub(r"[^a-z]", "", words[-1].casefold())
+    fragment_is_entity_shaped = (
+        trailing_word in _SOURCE_BOUND_MULTIWORD_ENTITY_ENDINGS
+        and not (
+            prose_words - _SOURCE_BOUND_MULTIWORD_ENTITY_NOUNS
+        )
+    )
+    span_tokens = tuple(part.casefold() for part in parts)
+    compact_span = re.sub(r"[^A-Za-z0-9]", "", span).casefold()
+    role_subject = bool(
+        {re.sub(r"[^a-z]", "", word.casefold()) for word in words}
+        & _SOURCE_BOUND_ROLE_TOKENS
+    )
+    exact_pattern = re.compile(
+        rf"(?<![A-Za-z0-9]){re.escape(span)}(?![A-Za-z0-9])",
+        re.IGNORECASE,
+    )
+    for source in source_texts:
+        if ("/" in source or "|" in source) and any(
+            re.sub(r"[^A-Za-z0-9]", "", component).casefold()
+            == compact_span
+            for component in re.split(r"[/|]", source)
+        ):
+            continue
+        source_defines_entity = any(
+            _SOURCE_BOUND_ENTITY_DEFINITION.match(source[match.end() :])
+            is not None
+            or (
+                not prose_words
+                and _SOURCE_BOUND_ENTITY_ALIAS.match(source[match.end() :])
+                is not None
+            )
+            or (
+                role_subject
+                and _SOURCE_BOUND_ROLE_PREDICATE.match(source[match.end() :])
+                is not None
+            )
+            for match in exact_pattern.finditer(source)
+        )
+        for segment in _SOURCE_BOUND_HEADLINE_SEGMENT_SPLIT.split(source):
+            segment_tokens = tuple(
+                part.casefold()
+                for part in _SOURCE_BOUND_ENTITY_PART.findall(segment)
+            )
+            if segment_tokens == span_tokens:
+                return True
+            if len(segment_tokens) <= len(span_tokens):
+                continue
+            contained = any(
+                segment_tokens[offset : offset + len(span_tokens)]
+                == span_tokens
+                for offset in range(
+                    len(segment_tokens) - len(span_tokens) + 1
+                )
+            )
+            if contained and not (
+                fragment_is_entity_shaped or source_defines_entity
+            ):
+                return True
+    return False
+
+
+def _is_source_bound_foreign_entity(
+    span: str,
+    source_texts: tuple[str, ...],
+) -> bool:
+    """Accept a compact proper name only when it exists in the paid input.
+
+    The source binding replaces entity-by-entity allow-list growth.  Shape
+    checks still reject copied English prose, while registered names, product
+    names and event names can remain inside otherwise Chinese text.
+    """
+
+    if not source_texts or not 1 < len(span) <= 80:
+        return False
+    exact_pattern = re.compile(
+        rf"(?<![A-Za-z0-9]){re.escape(span)}(?:s)?(?![A-Za-z0-9])",
+        re.IGNORECASE,
+    )
+    compact_span = re.sub(r"[^A-Za-z0-9]", "", span).casefold()
+    source_bound = any(
+        exact_pattern.search(source) is not None
+        or any(
+            re.sub(r"[^A-Za-z0-9]", "", component).casefold()
+            == compact_span
+            for component in re.split(r"[/|]", source)
+        )
+        for source in source_texts
+    )
+    if not source_bound:
+        return False
+    if _is_copied_source_headline_fragment(span, source_texts):
+        return False
+    parts = _SOURCE_BOUND_ENTITY_PART.findall(span)
+    if not parts or len(parts) > 6:
+        return False
+    words = [part for part in parts if any(char.isalpha() for char in part)]
+    if not words or sum(sum(char.isalpha() for char in word) for word in words) > 48:
+        return False
+    folded_words = {
+        re.sub(r"[^A-Za-z]", "", word).casefold()
+        for word in words
+    }
+    if folded_words & _SOURCE_BOUND_ENTITY_DISALLOWED_WORDS:
+        return False
+    prose_words = [
+        word
+        for word in folded_words
+        if word in _ENGLISH_PROSE_WORDS
+        and word not in _SOURCE_BOUND_ENTITY_CONNECTORS
+    ]
+    if len(prose_words) >= 2:
+        # Source binding proves only that the provider saw the text.  It does
+        # not turn a copied English headline into a registered entity.  Keep
+        # one ordinary noun available for real names such as a Growth ETF,
+        # while rejecting clause-like spans such as "Apple Beats Estimates".
+        return False
+
+    def entity_shaped(word: str) -> bool:
+        letters = "".join(char for char in word if char.isalpha())
+        if not letters:
+            return True
+        folded = letters.casefold()
+        if len(words) > 1 and folded in _SOURCE_BOUND_ENTITY_CONNECTORS:
+            return True
+        if len(words) == 1 and folded in _ENGLISH_PROSE_WORDS:
+            return False
+        if len(words) == 1 and any(char in word for char in "-./"):
+            return True
+        return (
+            any(char.isdigit() for char in word)
+            or letters.isupper()
+            or letters[0].isupper()
+            or any(char.isupper() for char in letters[1:])
+        )
+
+    if not all(entity_shaped(word) for word in words):
+        return False
+    if (
+        len(words) > 1
+        and not any(char.isdigit() for char in span)
+        and all(word.isupper() and len(word) > 4 for word in words)
+    ):
+        return False
+    return True
+
+
+def _source_binds_security_reference(
+    span: str,
+    source_texts: tuple[str, ...],
+) -> bool:
+    """Require the same source name to carry its own security context."""
+
+    pattern = re.compile(
+        rf"(?<![A-Za-z0-9]){re.escape(span)}(?![A-Za-z0-9])",
+        re.IGNORECASE,
+    )
+    for source in source_texts:
+        for clause in _SOURCE_BOUND_SECURITY_CLAUSE_SPLIT.split(source):
+            for match in pattern.finditer(clause):
+                # Security wording after the exact name binds the claim to
+                # that source entity. An unrelated ticker elsewhere in the
+                # payload is never enough.
+                suffix = clause[match.end() : match.end() + 80]
+                if _SOURCE_BOUND_SECURITY_CONTEXT.match(suffix) is not None:
+                    return True
+    return False
+
+
+def _source_uses_initialism_as_technical_modifier(
+    span: str,
+    source_texts: tuple[str, ...],
+) -> bool:
+    if not (2 <= len(span) <= 8 and span.isascii() and span.isupper()):
+        return False
+    modifiers = "|".join(map(re.escape, _SOURCE_TECHNICAL_MODIFIERS))
+    nouns = "|".join(map(re.escape, _SOURCE_TECHNICAL_NOUNS))
+    pattern = re.compile(
+        rf"\b(?:{modifiers})\s+{re.escape(span)}\s+"
+        rf"(?:{nouns})(?:['’]s)?\b",
+        re.IGNORECASE,
+    )
+    return any(pattern.search(source) is not None for source in source_texts)
+
+
 def _foreign_span_context(
     span: str,
     *,
@@ -902,13 +1359,79 @@ def _foreign_span_context(
     start: int,
     end: int,
     allowed_codes: frozenset[str],
+    source_texts: tuple[str, ...] = (),
 ) -> bool:
-    if span == "A":
-        suffix = sentence[end:]
+    if _is_copied_source_headline_fragment(span, source_texts):
+        return False
+    if len(span) == 1 and span.isascii() and span.isupper():
+        suffix = _strip_security_reference_separators(sentence[end:])
         if suffix.startswith(("股价", "股票")):
             return span in allowed_codes
-        if suffix.startswith(("股", "轮")):
+        if suffix.startswith("股"):
+            return span in {"A", "B", "H"} or span in allowed_codes
+        if suffix.startswith(("轮", "类")):
             return True
+        if suffix.startswith("细胞"):
+            return span in {"B", "T"}
+        if suffix.startswith(("分数", "值", "统计量")):
+            return True
+        if suffix.startswith(_FOREIGN_PROPER_NAME_CONTEXT_SUFFIXES) and any(
+            re.search(
+                rf"(?<![A-Za-z0-9]){re.escape(span)}(?![A-Za-z0-9])",
+                source,
+                re.IGNORECASE,
+            )
+            is not None
+            for source in source_texts
+        ):
+            return True
+    if _COMPACT_DIGIT_LETTER_IDENTIFIER.fullmatch(span) is not None:
+        if _approved_span_requires_ticker_binding(
+            span,
+            sentence=sentence,
+            start=start,
+            end=end,
+        ):
+            return span.upper() in allowed_codes
+        return any(_is_cjk(char) for char in sentence)
+    if (
+        _PLURALIZED_INITIALISM.fullmatch(span) is not None
+        and span.casefold() not in _ENGLISH_PROSE_WORDS
+    ):
+        return any(_is_cjk(char) for char in sentence)
+    if span in _GENERIC_SECURITY_INSTRUMENT_SPANS:
+        normalized_prefix = _normalize_security_reference_phrase(
+            sentence[:start]
+        )
+        suffix = _strip_security_reference_separators(sentence[end:])
+        if normalized_prefix.endswith(
+            _GENERIC_SECURITY_INSTRUMENT_PREFIXES
+        ) and not _security_phrase_requires_ticker_binding(span, suffix):
+            return True
+    if _is_source_bound_foreign_entity(span, source_texts):
+        if _approved_span_requires_ticker_binding(
+            span,
+            sentence=sentence,
+            start=start,
+            end=end,
+        ):
+            suffix = _strip_security_reference_separators(sentence[end:])
+            return (
+                span.upper() in allowed_codes
+                or _source_binds_security_reference(span, source_texts)
+                or (
+                    start > 0
+                    and _is_cjk(sentence[start - 1])
+                    and suffix.startswith(
+                        _TECHNICAL_INITIALISM_SECURITY_CATEGORY_SUFFIXES
+                    )
+                    and _source_uses_initialism_as_technical_modifier(
+                        span,
+                        source_texts,
+                    )
+                )
+            )
+        return True
     if span in _ALLOWED_EXACT_FOREIGN_SPANS:
         if _approved_span_requires_ticker_binding(
             span,
@@ -916,7 +1439,7 @@ def _foreign_span_context(
             start=start,
             end=end,
         ):
-            return span in allowed_codes
+            return span.upper() in allowed_codes
         return True
     if _is_ticker_span(span, allowed_codes):
         return True
@@ -936,12 +1459,18 @@ def _foreign_span_context(
         return True
     if any(char.isspace() for char in span):
         for token_match in re.finditer(r"\S+", span):
+            if re.fullmatch(
+                r"[0-9]+(?:\.[0-9]+)*",
+                token_match.group(0),
+            ) is not None:
+                continue
             if not _foreign_span_context(
                 token_match.group(0),
                 sentence=sentence,
                 start=start + token_match.start(),
                 end=start + token_match.end(),
                 allowed_codes=allowed_codes,
+                source_texts=source_texts,
             ):
                 return False
         return True
@@ -995,6 +1524,34 @@ def _foreign_span_context(
                 or direct_cjk
             )
         )
+    if _TITLE_CASE_PROPER_NAME.fullmatch(span) is not None:
+        if _approved_span_requires_ticker_binding(
+            span,
+            sentence=sentence,
+            start=start,
+            end=end,
+        ):
+            return span.upper() in allowed_codes
+        suffix = _normalize_security_reference_phrase(
+            sentence[end:]
+        ).removeprefix("的")
+        if suffix.startswith(_FOREIGN_PROPER_NAME_BLOCKING_SUFFIXES):
+            return False
+        previous = sentence[start - 1] if start > 0 else ""
+        coordinated_product = False
+        if bool(previous) and previous in "与和及或、":
+            coordinated_prefix = _normalize_security_reference_phrase(
+                sentence[: start - 1]
+            ).removesuffix("的")
+            coordinated_product = coordinated_prefix.endswith(
+                _FOREIGN_PROPER_NAME_CONTEXT_SUFFIXES
+            )
+        return (
+            parenthetical
+            or alias_parenthetical
+            or coordinated_product
+            or suffix.startswith(_FOREIGN_PROPER_NAME_CONTEXT_SUFFIXES)
+        )
     return False
 
 
@@ -1034,24 +1591,59 @@ def _numeric_code_is_in_security_context(
             return False
 
     span = sentence[start:end]
+    if (
+        start >= 2
+        and sentence[start - 1] in ".．"
+        and sentence[start - 2].isascii()
+        and sentence[start - 2].isalnum()
+    ) or (
+        end + 1 < len(sentence)
+        and sentence[end] in ".．"
+        and sentence[end + 1].isascii()
+        and sentence[end + 1].isalnum()
+    ):
+        return False
+    if any(
+        formatted.start() <= start and end <= formatted.end()
+        for formatted in _FORMATTED_NUMBER.finditer(sentence)
+    ):
+        return False
+    if _FORMATTED_NUMBER_CONTINUATION.match(sentence[end:]) is not None:
+        return False
     if len(span) == 5 and span.startswith("0"):
         return True
     before_index = start - 1
+    prefix_blocked = False
     while (
         before_index >= 0
         and _is_security_reference_separator(sentence[before_index])
     ):
+        if sentence[before_index] in _NUMERIC_CONTEXT_BOUNDARIES:
+            prefix_blocked = True
+            break
         before_index -= 1
     after_index = end
+    suffix_blocked = False
     while (
         after_index < len(sentence)
         and _is_security_reference_separator(sentence[after_index])
     ):
+        if sentence[after_index] in _NUMERIC_SUFFIX_HARD_BOUNDARIES:
+            suffix_blocked = True
+            break
         after_index += 1
-    prefix = _normalize_security_reference_phrase(
-        sentence[: before_index + 1]
+    prefix = (
+        ""
+        if prefix_blocked
+        else _normalize_security_reference_phrase(sentence[: before_index + 1])
     )
-    suffix = _normalize_security_reference_phrase(sentence[after_index:])
+    suffix = (
+        ""
+        if suffix_blocked
+        else _normalize_security_reference_phrase(sentence[after_index:])
+    )
+    if len(span) == 4 and suffix.startswith(("年", "年度", "财年")):
+        return False
     return (
         _SECURITY_REFERENCE_PREFIX.search(prefix) is not None
         or suffix.startswith(_SECURITY_CODE_SUFFIXES)
@@ -1093,7 +1685,7 @@ def validate_simplified_chinese_text(
 ) -> str:
     """Reject non-Chinese prose and common Traditional Chinese deterministically."""
 
-    text = value.strip()
+    text = _REGULATORY_RULE_PREFIX.sub("规则", value.strip())
     if not text:
         raise ValueError("simplified_chinese_text_required")
     scan_text = _normalize_compatibility_alphanumerics(text)
@@ -1104,8 +1696,11 @@ def validate_simplified_chinese_text(
     ):
         raise ValueError("non_chinese_script_not_allowed")
     if any(
-        char.isalpha() and not char.isascii() and not _is_cjk(char)
-        for char in scan_text
+        char.isalpha()
+        and not char.isascii()
+        and not _is_cjk(char)
+        and not _is_embedded_greek_scientific_symbol(scan_text, index)
+        for index, char in enumerate(scan_text)
     ):
         raise ValueError("non_chinese_script_not_allowed")
     traditional = sorted(
@@ -1118,11 +1713,6 @@ def validate_simplified_chinese_text(
     cjk_count = sum(1 for char in scan_text if _is_cjk(char))
     if cjk_count == 0:
         raise ValueError("simplified_chinese_text_required")
-    latin_count = sum(
-        1 for char in scan_text if char.isascii() and char.isalpha()
-    )
-    if latin_count > max(32, cjk_count * 4):
-        raise ValueError("english_prose_not_allowed")
     context_codes = (
         info.context.get("allowed_codes", ())
         if info is not None and isinstance(info.context, dict)
@@ -1133,12 +1723,40 @@ def validate_simplified_chinese_text(
         for code in context_codes
         if isinstance(code, str) and str(code).strip()
     )
+    context_source_texts = (
+        info.context.get("source_texts", ())
+        if info is not None and isinstance(info.context, dict)
+        else ()
+    )
+    source_texts = tuple(
+        source
+        for source in context_source_texts
+        if isinstance(source, str) and source
+    )
+    latin_count = sum(
+        1 for char in scan_text if char.isascii() and char.isalpha()
+    )
+    source_bound_latin = sum(
+        sum(char.isascii() and char.isalpha() for char in match.group(0))
+        for match in _FOREIGN_SPAN.finditer(scan_text)
+        if _is_source_bound_foreign_entity(match.group(0), source_texts)
+    )
+    if latin_count - source_bound_latin > max(32, cjk_count * 4):
+        raise ValueError("english_prose_not_allowed")
     for sentence in _SENTENCE_SPLIT.split(scan_text):
         sentence_latin = sum(
             1 for char in sentence if char.isascii() and char.isalpha()
         )
         sentence_cjk = sum(1 for char in sentence if _is_cjk(char))
-        if sentence_latin > max(24, sentence_cjk * 5):
+        sentence_source_bound_latin = sum(
+            sum(char.isascii() and char.isalpha() for char in match.group(0))
+            for match in _FOREIGN_SPAN.finditer(sentence)
+            if _is_source_bound_foreign_entity(match.group(0), source_texts)
+        )
+        if sentence_latin - sentence_source_bound_latin > max(
+            24,
+            sentence_cjk * 5,
+        ):
             raise ValueError("english_prose_not_allowed")
         for match in _NUMERIC_SECURITY_CODE.finditer(sentence):
             if not _numeric_code_is_in_security_context(
@@ -1156,6 +1774,7 @@ def validate_simplified_chinese_text(
                 start=match.start(),
                 end=match.end(),
                 allowed_codes=normalized_codes,
+                source_texts=source_texts,
             ):
                 continue
             raise ValueError("english_prose_not_allowed")
@@ -1228,7 +1847,7 @@ def validate_simplified_chinese_company_name(
 
     if len(scan_text) > 80 or "\n" in scan_text or "\r" in scan_text:
         raise ValueError("company_registered_name_invalid")
-    allowed_punctuation = frozenset(" .,&'’()/+-（）")
+    allowed_punctuation = frozenset(" .,&'’()/+-（）·")
     if any(
         not (
             _is_cjk(char)
@@ -1780,10 +2399,39 @@ def validate_job_payload(job_type: str, payload: dict) -> None:
         raise ValueError("unsupported_job_type")
 
 
+def _validation_source_texts(job_type: str, payload: dict) -> tuple[str, ...]:
+    values: list[str] = []
+
+    def collect(value: Any) -> None:
+        if len(values) >= 200:
+            return
+        if isinstance(value, str):
+            if value and value not in values:
+                values.append(value)
+            return
+        if isinstance(value, dict):
+            for nested in value.values():
+                collect(nested)
+            return
+        if isinstance(value, (list, tuple)):
+            for nested in value:
+                collect(nested)
+
+    if job_type == "news_impact":
+        for field in ("title", "summary", "source", "sources"):
+            collect(payload.get(field))
+    elif job_type == "market_focus":
+        collect(payload.get("events"))
+    elif job_type == "signal_analysis":
+        collect(payload.get("signals"))
+        collect(payload.get("scores"))
+    return tuple(values)
+
+
 def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
     model = result_model_for(job_type)
     if job_type in {"news_impact", "market_focus"}:
-        raw_allowed_codes = payload.get("allowed_tickers")
+        raw_allowed_codes = list(payload.get("allowed_tickers") or [])
     else:
         raw_allowed_codes = [payload.get("ticker")]
     allowed_codes = [
@@ -1797,7 +2445,10 @@ def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
     ]
     result = model.model_validate_json(
         raw_json,
-        context={"allowed_codes": allowed_codes},
+        context={
+            "allowed_codes": allowed_codes,
+            "source_texts": _validation_source_texts(job_type, payload),
+        },
     )
     data = result.model_dump(mode="json")
     if job_type == "earnings_impact":

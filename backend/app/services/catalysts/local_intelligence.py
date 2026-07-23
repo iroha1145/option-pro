@@ -63,8 +63,6 @@ NEWS_LINK_AUDIT_CONTRACT_ID = "news-impact-link-v1"
 FOCUS_BINDING_AUDIT_CONTRACT_ID = "market-focus-binding-v1"
 FOCUS_INPUT_POLICY_AUDIT_CONTRACT_ID = "market-focus-input-policy-v1"
 SCHEDULE_CLAIM_TTL_SECONDS = 10 * 60
-SCHEDULED_NEWS_BATCH_SIZE = 20
-SCHEDULED_QUEUE_SOFT_LIMIT = 40
 SCHEDULED_NEWS_WINDOW_HOURS = 72
 SCHEDULED_NEWS_MAX_ATTEMPTS = 3
 SCHEDULED_FOCUS_MAX_ATTEMPTS = 3
@@ -1941,6 +1939,39 @@ class LocalCatalystIntelligence:
         )
 
     @staticmethod
+    def _news_validation_payload(
+        revision: Mapping[str, Any] | sqlite3.Row,
+    ) -> dict[str, Any]:
+        """Rebuild the source context used by the original paid request."""
+
+        item = dict(revision)
+
+        def list_value(decoded_key: str, json_key: str) -> list[Any]:
+            decoded = item.get(decoded_key)
+            if isinstance(decoded, list):
+                return list(decoded)
+            stored = _loads(item.get(json_key), [])
+            return list(stored) if isinstance(stored, list) else []
+
+        return {
+            "news_id": int(item["news_id"]),
+            "change_sequence": int(item["change_sequence"]),
+            "content_hash": str(item["content_hash"]),
+            "source": str(item.get("source") or ""),
+            "title": str(item.get("raw_title") or ""),
+            "summary": item.get("raw_summary"),
+            "sources": list_value("source_names", "source_names_json"),
+            "source_ticker_hints": list_value(
+                "source_tickers",
+                "source_tickers_json",
+            ),
+            "allowed_tickers": list_value(
+                "canonical_tickers",
+                "canonical_tickers_json",
+            ),
+        }
+
+    @staticmethod
     def _news_result_was_previously_accepted(
         connection: sqlite3.Connection,
         *,
@@ -2007,12 +2038,18 @@ class LocalCatalystIntelligence:
         ).fetchone()
         if audited is not None:
             outcome = str(audited["outcome"])
-            if outcome == "accepted" and not _news_result_identity_matches(
-                _loads(raw_result, None),
-                payload,
-            ):
-                return "rejected", False
-            return outcome, False
+            if outcome == "accepted":
+                if not _news_result_identity_matches(
+                    _loads(raw_result, None),
+                    payload,
+                ):
+                    return "rejected", False
+                return "accepted", False
+            # Re-run local validation for cached rejections. The paid result
+            # itself is immutable, but its source context can become richer
+            # after a deployment. Reusing the old rejection would otherwise
+            # clear a result that the current payload can validate without
+            # making another model request.
         try:
             validate_result("news_impact", raw_result, payload)
         except (TypeError, ValueError):
@@ -2021,6 +2058,26 @@ class LocalCatalystIntelligence:
         else:
             outcome = "accepted"
             reason = None
+        if audited is not None:
+            if outcome == "rejected":
+                return "rejected", False
+            updated = connection.execute(
+                """UPDATE catalyst_local_analysis_result_audit SET
+                       outcome='accepted',reason=NULL,result_json=?,
+                       result_available_at=?,verified_at=?,observed_at=?
+                   WHERE job_id=? AND contract_id=? AND result_sha256=?
+                     AND outcome='rejected'""",
+                (
+                    raw_result,
+                    result_available_at,
+                    verified_at,
+                    observed_at,
+                    job_id,
+                    NEWS_RESULT_CONTRACT_ID,
+                    digest,
+                ),
+            ).rowcount
+            return "accepted", updated == 1
         inserted = connection.execute(
             """INSERT OR IGNORE INTO catalyst_local_analysis_result_audit(
                    job_id,contract_id,result_sha256,outcome,reason,
@@ -2218,6 +2275,8 @@ class LocalCatalystIntelligence:
             """SELECT link.job_id,link.news_id,link.change_sequence,
                       link.content_hash,link.result_json,
                       link.result_available_at,link.verified_at,
+                      revision.source,revision.raw_title,revision.raw_summary,
+                      revision.source_names_json,revision.source_tickers_json,
                       revision.canonical_tickers_json
                FROM catalyst_local_analysis_links link
                JOIN catalyst_local_news_revisions revision
@@ -2231,15 +2290,7 @@ class LocalCatalystIntelligence:
         observed_at = _iso()
         for row in rows:
             raw_result = str(row["result_json"])
-            payload = {
-                "news_id": int(row["news_id"]),
-                "change_sequence": int(row["change_sequence"]),
-                "content_hash": str(row["content_hash"]),
-                "allowed_tickers": _loads(
-                    row["canonical_tickers_json"],
-                    [],
-                ),
-            }
+            payload = self._news_validation_payload(row)
             outcome, inserted = self._audit_news_result(
                 connection,
                 job_id=str(row["job_id"]),
@@ -2870,12 +2921,7 @@ class LocalCatalystIntelligence:
             result_available_at = link["result_available_at"]
             result_job_id = link["analysis_result_job_id"]
             audited = bool(link["result_audited"])
-        payload = {
-            "news_id": row.get("news_id"),
-            "change_sequence": row.get("change_sequence"),
-            "content_hash": row.get("content_hash"),
-            "allowed_tickers": list(row.get("canonical_tickers") or []),
-        }
+        payload = self._news_validation_payload(row)
         raw_result = str(raw_value)
         if audited:
             result = _loads(raw_result, None)
@@ -4412,7 +4458,7 @@ class LocalCatalystIntelligence:
                         _iso(now),
                         _iso(now),
                         _iso(now - timedelta(hours=SCHEDULED_NEWS_WINDOW_HOURS)),
-                        min(100, int(limit)),
+                        min(10_000, int(limit)),
                     ),
                 ).fetchall()
             except sqlite3.OperationalError:
@@ -4633,16 +4679,14 @@ class LocalCatalystIntelligence:
         queue_health = self.ai_repository.health()
         active_queue = queue_health.get("pending")
         if not queue_health.get("healthy") or not isinstance(active_queue, int):
-            active_queue = SCHEDULED_QUEUE_SOFT_LIMIT
+            active_queue = self.max_queued
         # Keep one queue position available for a ready market-focus cycle. A
-        # continuous news backlog must not fill the soft limit and starve the
-        # hourly aggregate indefinitely.
+        # continuous news backlog must not fill the queue and starve the hourly
+        # aggregate indefinitely. The daily Token budget, not an item-count
+        # quota, remains the paid-work boundary.
         batch_capacity = max(
             0,
-            min(
-                SCHEDULED_NEWS_BATCH_SIZE,
-                SCHEDULED_QUEUE_SOFT_LIMIT - 1 - active_queue,
-            ),
+            self.max_queued - 1 - active_queue,
         )
         queued = 0
         skipped = 0
@@ -4675,11 +4719,11 @@ class LocalCatalystIntelligence:
                 candidates.append(revision)
         recent = self._scheduled_news_candidates(
             now=observed,
-            limit=SCHEDULED_NEWS_BATCH_SIZE + len(seen),
+            # Scan beyond queue capacity so permanent failures near the front
+            # cannot occupy every candidate position and starve later news.
+            limit=max(self.max_queued * 10, batch_capacity + len(seen)),
         )
         for row in recent:
-            if len(candidates) >= SCHEDULED_NEWS_BATCH_SIZE:
-                break
             news_id = int(row["news_id"])
             if news_id in seen:
                 continue
@@ -4712,6 +4756,8 @@ class LocalCatalystIntelligence:
                 "local_link_pending"
             ):
                 skipped += 1
+                if queued >= batch_capacity:
+                    break
                 continue
             previous_updated = (
                 _parse_time(str(previous_job.get("updated_at") or ""))
@@ -4762,8 +4808,10 @@ class LocalCatalystIntelligence:
                 skipped += 1
                 continue
             if queued >= batch_capacity:
-                skipped += 1
-                continue
+                # Inspect terminal jobs before honoring the news capacity.
+                # Otherwise a permanently failed hotspot can occupy the
+                # reserved market-focus position forever.
+                break
             scheduled_batch_position += 1
             try:
                 job = self.request_analysis(
@@ -4799,7 +4847,7 @@ class LocalCatalystIntelligence:
         if (
             prepared_revision
             and not focus_pending_news_ids
-            and active_queue + queued < SCHEDULED_QUEUE_SOFT_LIMIT
+            and active_queue + queued < self.max_queued
         ):
             with self._connect() as connection:
                 existing_focus = connection.execute(

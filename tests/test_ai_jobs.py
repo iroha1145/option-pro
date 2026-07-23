@@ -19,6 +19,7 @@ from app.services.ai_jobs import runtime, worker as ai_worker
 from app.services.ai_jobs.models import validate_result
 from app.services.ai_jobs.repository import AIJobRepository
 from app.services.ai_jobs.worker import health_payload, process_job
+from app.tools import recover_ai_schema_results as recovery_tool
 
 
 def _settings(path):
@@ -288,6 +289,35 @@ def _large_signal_result():
         "data_quality_notes": twelve,
         "summary": "结" * 1200,
     }
+
+
+def test_signal_analysis_allows_input_bound_technical_abbreviations():
+    result = _large_signal_result()
+    result["asset"] = "MU"
+    result["top_evidence"][0] = "MACD柱状图转弱，短线动能仍需观察。"
+    result["bottom_evidence"][0] = "相对SPY收益偏弱，但不能单独确认反转。"
+    result["options_flow_read"]["warnings"][0] = (
+        "高ATM IV不代表单向看多或看空。"
+    )
+    result["key_levels"]["vwap_levels"][0] = (
+        "未提供VWAP及其对应周期。"
+    )
+    result["data_quality_notes"][0] = "缺少原始OHLC序列。"
+    payload = {
+        "ticker": "MU",
+        "signals": {
+            "labels": ["MACD", "ATM IV", "VWAP", "OHLC"],
+        },
+        "scores": {"relative_strength_label": "相对强弱(vs SPY)%"},
+    }
+
+    validated = validate_result(
+        "signal_analysis",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["asset"] == "MU"
 
 
 def test_ai_job_heartbeat_survives_a_saturated_default_executor(monkeypatch):
@@ -1425,6 +1455,192 @@ def test_direct_background_completion_links_response_before_publish(
     assert snapshot["token_budget_used_tokens"] == runtime.token_reservation(
         "earnings_impact"
     )
+
+
+def test_paid_schema_failure_can_be_recovered_without_changing_usage(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    failed_at = "2026-07-19T12:34:56Z"
+    with repository._connect() as connection:
+        connection.execute(
+            """UPDATE ai_jobs SET status='failed',
+                      error_code='schema_validation_failed',
+                      openai_response_id='resp_paid_valid_result',
+                      submission_started_at='2026-07-19T12:30:00Z',
+                      completed_at=?,usage_total_tokens=4321,
+                      budget_charge_microusd=765432
+               WHERE job_id=?""",
+            (failed_at, row["job_id"]),
+        )
+        connection.commit()
+
+    recovered = repository.recover_schema_validation_failure(
+        row["job_id"],
+        "resp_paid_valid_result",
+        _earnings_result(),
+    )
+
+    assert recovered["status"] == "completed"
+    assert recovered["error_code"] is None
+    assert recovered["completed_at"] == failed_at
+    assert recovered["usage_total_tokens"] == 4321
+    assert recovered["budget_charge_microusd"] == 765432
+    assert recovered["attempt_count"] == 0
+    assert repository.public(recovered)["result"]["ticker"] == "AAPL"
+
+
+def test_paid_schema_failure_recovery_rejects_wrong_response_or_invalid_result(
+    tmp_path,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    with repository._connect() as connection:
+        connection.execute(
+            """UPDATE ai_jobs SET status='failed',
+                      error_code='schema_validation_failed',
+                      openai_response_id='resp_paid_valid_result'
+               WHERE job_id=?""",
+            (row["job_id"],),
+        )
+        connection.commit()
+
+    with pytest.raises(RuntimeError, match="ai_job_recovery_rejected"):
+        repository.recover_schema_validation_failure(
+            row["job_id"],
+            "resp_different",
+            _earnings_result(),
+        )
+
+    invalid = _earnings_result()
+    invalid["summary"] = "Markets rally after strong earnings"
+    with pytest.raises(ValidationError):
+        repository.recover_schema_validation_failure(
+            row["job_id"],
+            "resp_paid_valid_result",
+            invalid,
+        )
+    assert repository.get_job(row["job_id"])["status"] == "failed"
+
+
+def test_recovery_tool_is_dry_run_by_default_and_never_resubmits(
+    monkeypatch,
+    tmp_path,
+):
+    database = tmp_path / "ai-jobs.db"
+    repository = AIJobRepository(database)
+    row, _ = _create_earnings_job(repository)
+    with repository._connect() as connection:
+        connection.execute(
+            """UPDATE ai_jobs SET status='failed',
+                      error_code='schema_validation_failed',
+                      openai_response_id='resp_paid_valid_result'
+               WHERE job_id=?""",
+            (row["job_id"],),
+        )
+        connection.commit()
+    calls = {"retrieve": 0}
+
+    async def retrieve(_settings, response_id):
+        calls["retrieve"] += 1
+        assert response_id == "resp_paid_valid_result"
+        return SimpleNamespace(
+            id=response_id,
+            status="completed",
+            output_text=json.dumps(_earnings_result()),
+            error=None,
+            incomplete_details=None,
+        )
+
+    monkeypatch.setattr(
+        recovery_tool,
+        "get_settings",
+        lambda: SimpleNamespace(openai_job_db_path=database),
+    )
+    monkeypatch.setattr(runtime, "retrieve", retrieve)
+
+    validated = asyncio.run(recovery_tool.recover([row["job_id"]], apply=False))
+    assert validated == [{"job_id": row["job_id"], "status": "validated"}]
+    assert repository.get_job(row["job_id"])["status"] == "failed"
+
+    recovered = asyncio.run(recovery_tool.recover([row["job_id"]], apply=True))
+    assert recovered[0]["status"] == "recovered"
+    assert repository.get_job(row["job_id"])["status"] == "completed"
+    assert calls == {"retrieve": 2}
+
+
+def test_recovery_tool_reports_each_failure_and_continues(
+    monkeypatch,
+    tmp_path,
+):
+    database = tmp_path / "ai-jobs.db"
+    repository = AIJobRepository(database)
+    version, digest = runtime.schema_identity("earnings_impact")
+
+    def failed_job(ticker, response_id):
+        row, _created = repository.create_job(
+            job_type="earnings_impact",
+            payload={"ticker": ticker, "name": ticker},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="background",
+            prompt_version="earnings-impact-v2",
+            schema_version=version,
+            schema_sha256=digest,
+            max_queued=200,
+        )
+        with repository._connect() as connection:
+            connection.execute(
+                """UPDATE ai_jobs SET status='failed',
+                          error_code='schema_validation_failed',
+                          openai_response_id=? WHERE job_id=?""",
+                (response_id, row["job_id"]),
+            )
+            connection.commit()
+        return row
+
+    invalid = failed_job("AAPL", "resp_invalid")
+    unavailable = failed_job("GOOG", "resp_unavailable")
+    valid = failed_job("META", "resp_valid")
+
+    async def retrieve(_settings, response_id):
+        if response_id == "resp_unavailable":
+            raise RuntimeError("provider detail must not be copied")
+        result = _earnings_result()
+        result["ticker"] = "META"
+        return SimpleNamespace(
+            id=response_id,
+            status="completed",
+            output_text=(
+                json.dumps(result)
+                if response_id == "resp_valid"
+                else "{}"
+            ),
+            error=None,
+            incomplete_details=None,
+        )
+
+    monkeypatch.setattr(
+        recovery_tool,
+        "get_settings",
+        lambda: SimpleNamespace(openai_job_db_path=database),
+    )
+    monkeypatch.setattr(runtime, "retrieve", retrieve)
+
+    results = asyncio.run(
+        recovery_tool.recover(
+            [invalid["job_id"], unavailable["job_id"], valid["job_id"]],
+            apply=False,
+        )
+    )
+
+    assert [item["status"] for item in results] == [
+        "validation_failed",
+        "retrieve_failed",
+        "validated",
+    ]
+    assert results[0]["error_type"] == "ValidationError"
+    assert results[1]["error_type"] == "RuntimeError"
+    assert "provider detail" not in json.dumps(results)
 
 
 def test_background_link_failure_is_not_retryable_as_a_known_submission(

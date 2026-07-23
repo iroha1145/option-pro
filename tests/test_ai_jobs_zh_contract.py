@@ -231,6 +231,48 @@ def test_rule_10b5_1_identifier_is_allowed_in_chinese_plan_context(
     assert validate_simplified_chinese_text(text, None) == text
 
 
+def test_rule_10b5_1_english_prefix_is_normalized_without_a_model_retry():
+    text = "该交易依据预先安排的Rule 10b5-1交易计划执行。"
+
+    assert validate_simplified_chinese_text(text, None) == (
+        "该交易依据预先安排的规则10b5-1交易计划执行。"
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "该药物用于治疗活化磷脂酰肌醇3激酶δ综合征。",
+        "研究显示β细胞功能有所改善。",
+        "实验测得γ射线强度下降。",
+        "模型中的λ系数保持稳定。",
+    ],
+)
+def test_embedded_greek_scientific_symbol_is_not_treated_as_foreign_prose(text):
+    assert validate_simplified_chinese_text(text, None) == text
+
+
+def test_greek_prose_is_still_rejected():
+    with pytest.raises(ValueError, match="non_chinese_script_not_allowed"):
+        validate_simplified_chinese_text("ΑΓΟΡΑ上涨", None)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Α股价上涨",
+        "股票Α受到关注",
+        "证券代码为Β",
+        "Α公司发布业绩",
+        "Β产品完成升级",
+        "ο行业需求增长",
+    ],
+)
+def test_greek_homoglyphs_are_rejected_in_security_contexts(text):
+    with pytest.raises(ValueError, match="non_chinese_script_not_allowed"):
+        validate_simplified_chinese_text(text, None)
+
+
 @pytest.mark.parametrize(
     "text",
     [
@@ -341,6 +383,7 @@ def test_common_traditional_and_variant_prose_is_rejected(traditional_text):
         "Kalshi市场预测显示交易活跃度上升",
         "Axios报道称Kalshi正在扩大事件合约覆盖范围",
         "公司发布Python SDK更新",
+        "企业IT安全风险上升",
         "美国EIA原油库存变化低于预期",
         "ADP就业数据高于市场预期",
         "Pharming集团的Joenja（leniolisib）用于APDS治疗并改善患者症状",
@@ -606,6 +649,7 @@ def test_news_company_name_is_also_bound_to_the_chinese_contract(company):
         ("SAP", "SAP"),
         ("SPGI", "S&P Global"),
         ("TTD", "The Trade Desk"),
+        ("LMT", "洛克希德·马丁"),
         ("NVDA", "NVIDIA公司"),
         ("MSFT", "微软（Microsoft）"),
     ],
@@ -845,6 +889,7 @@ def test_unihan_self_mapped_characters_remain_valid_in_simplified_contexts(title
         "任天堂売上高增长",
         "株価上昇，市场关注",
         "Tesla发布最新业绩",
+        "苹果与Tesla合作扩大供应",
         "Broadcom发布最新业绩",
         "Intel发布最新业绩",
         "H100 Markets需求增长",
@@ -875,6 +920,571 @@ def test_chinese_text_allows_multiple_tickers_and_a_short_proper_name():
         payload,
     )
     assert validated["title_zh"].startswith("NVDA")
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "英特尔18A制程的采用仍待量产数据验证",
+        "特斯拉业绩前瞻：自动驾驶出租车与Optimus能否成为亮点",
+        "财务总监出售5万股A类普通股",
+        "企业完成B轮融资",
+        "企业完成B 轮融资",
+        "公司发行C类普通股",
+        "H股市场回暖",
+        "临床试验显示初始B细胞比例改善",
+        "房地产REITs估值仍受利率影响",
+        "成交量Z分数为0.62",
+        "未提供VWAP及其对应周期",
+        "缺少原始OHLC序列",
+    ],
+)
+def test_chinese_text_allows_structural_product_and_share_class_names(title):
+    result = _news_result()
+    result["title_zh"] = title
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        _news_payload(),
+    )
+
+    assert validated["title_zh"] == title
+
+
+@pytest.mark.parametrize(
+    ("title", "source_title", "source_summary", "source_ticker_hints"),
+    [
+        (
+            "UFC任命Meridian Holdings为赛事官方赞助商",
+            "UFC Names Meridian Holdings Official Sponsor",
+            "Subsidiary Meridianbet will sponsor the event.",
+            ["MRDN"],
+        ),
+        (
+            "报道称GameStop将所持eBay股份提高至10%",
+            "GameStop raises eBay stake to 10%",
+            None,
+            ["GME", "EBAY"],
+        ),
+        (
+            "评论文章审视SpaceX股票的估值风险",
+            "Three quotes to read before buying SpaceX Stock",
+            None,
+            ["SPCX"],
+        ),
+        (
+            "Hims & Hers宣布首席会计官离职",
+            "Hims & Hers announces departure of chief accounting officer",
+            None,
+            ["HIMS"],
+        ),
+        (
+            "黄仁勋在CES 2026表示内存已成为主要瓶颈",
+            "Jensen Huang Told CES 2026 That Memory Is the Biggest Bottleneck",
+            None,
+            ["NVDA"],
+        ),
+        (
+            "Vanguard Mega Cap Growth ETF与标普500成长基金比较",
+            "Vanguard Mega Cap Growth ETF or S&P 500 Growth ETF",
+            None,
+            ["MGK", "VOOG"],
+        ),
+        (
+            "报道比较Vanguard S&P 500 Growth ETF与Vanguard Mega Cap Growth ETF的分散程度",
+            "Vanguard S&P 500 Growth ETF or Vanguard Mega Cap Growth ETF",
+            None,
+            ["MGK", "VOOG"],
+        ),
+        (
+            "VOOG持有148只证券，MGK持有56只证券",
+            "Vanguard Growth ETF comparison",
+            None,
+            ["VOOG", "MGK"],
+        ),
+        (
+            "IonQ 2025年营收较管理层指引高出20%",
+            "IonQ's Revenue Just Tripled",
+            "IonQ's 2025 revenue came in above guidance.",
+            [],
+        ),
+        (
+            "nookplot-runtime 0.5.75发布智能体运行时更新",
+            "nookplot-runtime 0.5.75",
+            "Python Agent Runtime SDK for Nookplot",
+            [],
+        ),
+        (
+            "公司称其获得五项Global InfoSec Awards",
+            "RSA Conference 2026",
+            "The company won five Global InfoSec Awards at the event.",
+            [],
+        ),
+        (
+            "Robotaxi项目仍缺乏可验证的运营数据",
+            "How important are Robotaxis to the company's future?",
+            None,
+            [],
+        ),
+        (
+            "公司正在开发LPU等人工智能处理器",
+            "AI infrastructure update",
+            "Product development includes GPUs, CPUs, and LPUs.",
+            [],
+        ),
+        (
+            "美国股息股票ETF在2026年回报约20%",
+            "This Dividend ETF Yields 3.2%",
+            None,
+            ["SCHD"],
+        ),
+        (
+            "IBM的Z大型机业务表现疲弱",
+            "IBM Z Mainframe Shortfall",
+            "The IBM Z mainframe business underperformed.",
+            ["IBM"],
+        ),
+    ],
+)
+def test_news_text_allows_source_bound_registered_entities(
+    title,
+    source_title,
+    source_summary,
+    source_ticker_hints,
+):
+    result = _news_result()
+    result["title_zh"] = title
+    payload = _news_payload()
+    payload.update(
+        {
+            "title": source_title,
+            "summary": source_summary,
+            "source_ticker_hints": source_ticker_hints,
+            "allowed_tickers": list(
+                dict.fromkeys(["NVDA", *source_ticker_hints])
+            ),
+        }
+    )
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["title_zh"] == title
+
+
+@pytest.mark.parametrize(
+    "source_title",
+    [
+        "UFC Names Meridian Holdings Official Sponsor",
+        "Apple Beats Estimates",
+        "NVIDIA Launches Blackwell Platform",
+        "Rocket Lab Wins NASA Contract",
+    ],
+)
+def test_source_binding_does_not_allow_copied_english_prose(source_title):
+    result = _news_result()
+    result["title_zh"] = f"市场消息：{source_title}"
+    payload = _news_payload()
+    payload["title"] = source_title
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+@pytest.mark.parametrize(
+    ("copied_fragment", "source_title"),
+    [
+        (
+            "Tesla Tops Forecasts",
+            "Tesla Tops Forecasts as Margins Improve",
+        ),
+        (
+            "NVIDIA Launches Blackwell Platform",
+            "NVIDIA Launches Blackwell Platform Today",
+        ),
+        (
+            "Rocket Lab Wins",
+            "Rocket Lab Wins NASA Contract",
+        ),
+        (
+            "Tesla CEO Tops Forecasts",
+            "Tesla CEO Tops Forecasts as Margins Improve",
+        ),
+        (
+            "Apple Q3 Earnings",
+            "Apple Q3 Earnings Preview",
+        ),
+        (
+            "Apple Q3 Earnings",
+            "Apple Q3 Earnings (AAPL)",
+        ),
+    ],
+)
+def test_source_binding_rejects_copied_headline_fragments(
+    copied_fragment,
+    source_title,
+):
+    result = _news_result()
+    result["title_zh"] = f"{copied_fragment}消息影响市场"
+    payload = _news_payload()
+    payload["title"] = source_title
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+def test_source_binding_keeps_a_structural_multiword_entity_fragment():
+    result = _news_result()
+    result["title_zh"] = "The Trade Desk平台发布业务更新"
+    payload = _news_payload()
+    payload["title"] = "The Trade Desk platform reports stronger demand"
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["title_zh"].startswith("The Trade Desk平台")
+
+
+@pytest.mark.parametrize(
+    ("title", "source_title", "source_summary"),
+    [
+        (
+            "Varonis CEO Yaki Faitelson将发表主题演讲",
+            "Varonis CEO Yaki Faitelson to Deliver Keynote",
+            None,
+        ),
+        (
+            "Pershing Square USA是一只封闭式基金",
+            "Bill Ackman's New Closed-End Fund Trades Below Its IPO Price",
+            "Pershing Square USA, Bill Ackman's closed-end fund, trades at a discount.",
+        ),
+        (
+            "Pershing Square USA出现资产净值折价",
+            "Bill Ackman's New Closed-End Fund Trades Below Its IPO Price",
+            "Pershing Square USA is a closed-end fund that trades at a discount.",
+        ),
+        (
+            "4D Molecular Therapeutics公布两年临床试验结果",
+            "4DMT Announces Positive 2-Year Data from PRISM Phase 2b Clinical Trial",
+            "4D Molecular Therapeutics (4DMT) announced positive 2-year results.",
+        ),
+    ],
+)
+def test_source_binding_keeps_a_role_subject_or_defined_entity(
+    title,
+    source_title,
+    source_summary,
+):
+    result = _news_result()
+    result["title_zh"] = title
+    payload = _news_payload()
+    payload["title"] = source_title
+    payload["summary"] = source_summary
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["title_zh"] == title
+
+
+def test_source_binding_does_not_bind_a_company_name_to_an_unrelated_ticker():
+    result = _news_result()
+    result["headline_summary"] = "Apple股票上涨受到市场关注"
+    payload = _news_payload()
+    payload["title"] = "Apple outlook improves"
+    payload["allowed_tickers"] = ["NVDA"]
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+@pytest.mark.parametrize(
+    "source_title",
+    [
+        "Apple supplier shares rise",
+        "Apple supplier's shares rise",
+        "Apple says supplier shares rise",
+    ],
+)
+def test_source_binding_does_not_cross_into_another_noun_phrase(source_title):
+    result = _news_result()
+    result["headline_summary"] = "Apple股票上涨受到市场关注"
+    payload = _news_payload()
+    payload["title"] = source_title
+    payload["allowed_tickers"] = ["NVDA"]
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+@pytest.mark.parametrize(
+    ("entity", "source_title"),
+    [
+        ("Apple", "Apple shares rise"),
+        ("Apple", "Apple's stock rises"),
+        ("PayPal", "PayPal among gainers"),
+        ("MGK", "MGK's 56 holdings"),
+        ("Sandisk", "Sandisk Have Outperformed Nvidia's Stock"),
+    ],
+)
+def test_source_binding_accepts_immediate_security_context(entity, source_title):
+    result = _news_result()
+    result["headline_summary"] = f"{entity}股票上涨受到市场关注"
+    payload = _news_payload()
+    payload["title"] = source_title
+    payload["allowed_tickers"] = ["NVDA"]
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["headline_summary"].startswith(f"{entity}股票")
+
+
+@pytest.mark.parametrize(
+    ("title", "source_title"),
+    [
+        (
+            "凯茜·伍德卖出一只年内大涨的合成DNA股票",
+            "Cathie Wood sells a synthetic DNA manufacturer's stock",
+        ),
+        (
+            "基因RNA股票受到市场关注",
+            "The genetic RNA technology market is expanding",
+        ),
+        (
+            "方舟旗下ETF卖出一家合成DNA企业的股份",
+            "Ark sold the synthetic DNA manufacturer's stock",
+        ),
+    ],
+)
+def test_source_bound_technical_initialism_can_describe_a_stock_category(
+    title,
+    source_title,
+):
+    result = _news_result()
+    result["title_zh"] = title
+    payload = _news_payload()
+    payload["title"] = source_title
+    payload["allowed_tickers"] = ["NVDA"]
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["title_zh"] == title
+
+
+@pytest.mark.parametrize(
+    ("title", "source_title"),
+    [
+        ("DNA股价上涨", "A synthetic DNA manufacturer's stock rises"),
+        ("DNA股票上涨", "A synthetic DNA manufacturer's stock rises"),
+        ("合成DNA企业股价上涨", "A synthetic DNA manufacturer's stock rises"),
+        ("关注CAT股票上涨", "CAT manufacturer shares rise"),
+    ],
+)
+def test_source_bound_technical_term_cannot_impersonate_a_ticker(
+    title,
+    source_title,
+):
+    result = _news_result()
+    result["title_zh"] = title
+    payload = _news_payload()
+    payload["title"] = source_title
+    payload["allowed_tickers"] = ["NVDA"]
+
+    with pytest.raises(ValidationError):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+def test_source_binding_requires_exact_token_boundaries():
+    result = _news_result()
+    result["headline_summary"] = "SAP公司产品进展受到市场关注"
+    payload = _news_payload()
+    payload["title"] = "WhatsApp product update"
+    payload["summary"] = "WhatsApp expanded its messaging features."
+    payload["allowed_tickers"] = []
+    payload["source_ticker_hints"] = []
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+def test_source_binding_does_not_guess_a_nearby_ticker_for_a_company_name():
+    result = _news_result()
+    result["headline_summary"] = "SpaceX股票估值受到市场关注"
+    payload = _news_payload()
+    payload["title"] = "SpaceX expands launch operations"
+    payload["allowed_tickers"] = ["NVDA"]
+    payload["source_ticker_hints"] = ["SPCX"]
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+@pytest.mark.parametrize("source_ticker_hint", ["CAT", "ON", "00700"])
+def test_source_ticker_hints_do_not_authorize_uncanonical_codes(
+    source_ticker_hint,
+):
+    result = _news_result()
+    result["title_zh"] = f"{source_ticker_hint}股价上涨"
+    payload = _news_payload()
+    payload["allowed_tickers"] = ["NVDA"]
+    payload["source_ticker_hints"] = [source_ticker_hint]
+
+    with pytest.raises(ValidationError):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
+
+
+def test_source_bound_ticker_still_requires_an_exact_code_match():
+    result = _news_result()
+    result["headline_summary"] = "SAP股票上涨受到市场关注"
+    payload = _news_payload()
+    payload["title"] = "SAP outlook improves"
+    payload["allowed_tickers"] = ["NVDA", "SAP"]
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["headline_summary"].startswith("SAP")
+
+
+@pytest.mark.parametrize(
+    ("text", "source_title"),
+    [
+        (
+            "针对AeroVironment, Inc.的证券集体诉讼已被提起",
+            "AeroVironment, Inc. Investors Securities Class Action - AVAV",
+        ),
+        (
+            "针对Zoetis Inc.的证券欺诈集体诉讼已被提起",
+            "Zoetis Inc. Investors Securities Fraud Class Action - ZTS",
+        ),
+    ],
+)
+def test_source_bound_legal_names_are_not_mistaken_for_stock_references(
+    text,
+    source_title,
+):
+    result = _news_result()
+    result["headline_summary"] = text
+    payload = _news_payload()
+    payload["title"] = source_title
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["headline_summary"] == text
+
+
+def test_news_text_allows_a_source_bound_publisher_name():
+    result = _news_result()
+    result["title_zh"] = "Seeking Alpha提问贸易协议变化的行业影响"
+    payload = _news_payload()
+    payload["source"] = "seekingalpha/Seeking Alpha"
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["title_zh"].startswith("Seeking Alpha")
+
+
+def test_news_text_allows_a_compact_source_identifier_as_publisher_name():
+    result = _news_result()
+    result["title_zh"] = "Seeking Alpha提问行业前景"
+    payload = _news_payload()
+    payload["source"] = "seekingalpha/breaking"
+    payload["sources"] = ["seekingalpha/breaking"]
+    payload["title"] = "SA Asks: What is the industry outlook?"
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["title_zh"].startswith("Seeking Alpha")
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "盈透证券2026年客户账户与客户权益继续增长",
+        "首席财务官出售3,982股，价值约45.7万美元",
+        "公司出售股票3,982股，价值约45.7万美元",
+        "公司出售股票3，982股，价值约45.7万美元",
+        "股票45.7美元",
+        "股票45．7美元",
+        "该股过去一年下跌66%，公司曾出现收入下滑",
+    ],
+)
+def test_years_and_formatted_share_counts_are_not_security_codes(title):
+    result = _news_result()
+    result["title_zh"] = title
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        _news_payload(),
+    )
+
+    assert validated["title_zh"] == title
 
 
 def test_chinese_text_rejects_a_ticker_not_bound_to_the_job_payload():
@@ -945,6 +1555,8 @@ def test_contextual_initialisms_do_not_bypass_ticker_or_language_binding(text):
         "Apple\x00股票受到市场关注",
         "Apple\ue000股票受到市场关注",
         "Apple（苹果）\ufe0f股票受到市场关注",
+        "Tesla（股价上涨）受到关注",
+        "公司（Tesla）股价上涨",
         'Apple"苹果"股票受到市场关注',
         "Apple＂苹果＂股票受到市场关注",
         "Apple'苹果'股票受到市场关注",
@@ -1015,6 +1627,8 @@ def test_news_result_rejects_stock_context_for_an_unbound_approved_brand(
         "Apple\x00股票受到市场关注",
         "Apple\ue000股票受到市场关注",
         "Apple（苹果）\ufe0f股票受到市场关注",
+        "Tesla（股价上涨）受到关注",
+        "公司（Tesla）股价上涨",
         'Apple"苹果"股票受到市场关注',
         "Apple＂苹果＂股票受到市场关注",
         "Apple'苹果'股票受到市场关注",
@@ -1104,6 +1718,12 @@ def test_project_security_code_can_be_used_when_bound_to_the_job():
         "𝟘𝟘𝟟𝟘𝟘股价上涨",
         "腾讯（00700）股价上涨",
         "股票代码为00700",
+        "股票代码为00700，受到关注",
+        "股票代码为1234,受到关注",
+        "股票代码为00700.受到关注",
+        "股票代码为00700．受到关注",
+        "股票1234受到关注",
+        "证券1234受到关注",
         "腾讯的股票代码是00700",
         "市场关注00700这只股票",
         "腾讯证券编号为00700",
@@ -1112,8 +1732,14 @@ def test_project_security_code_can_be_used_when_bound_to_the_job():
         "𝟘𝟘𝟟𝟘𝟘受到关注",
         "600519上涨",
         "６００５１９走强",
+        "600519，股价上涨",
+        "600519,股价上涨",
+        "A股，600519股价上涨",
+        "A股,600519股价上涨",
         "A股价上涨",
         "A股票上涨",
+        "F股上涨",
+        "C股下跌",
         "股票代码／1234受到关注",
         "股／票代码：1234受到关注",
     ],
@@ -1143,9 +1769,46 @@ def test_numeric_and_single_letter_security_codes_are_allowed_when_bound(ticker)
     assert validated["title_zh"] == f"{ticker}股价上涨"
 
 
-def test_six_digit_security_code_is_allowed_when_bound():
+@pytest.mark.parametrize(
+    "title",
+    [
+        "股票代码为00700，受到关注",
+        "股票代码为00700,受到关注",
+        "股票代码为00700.受到关注",
+        "股票代码为00700．受到关注",
+        "00700，股价上涨",
+        "00700,股价上涨",
+    ],
+)
+def test_numeric_security_code_before_comma_is_allowed_when_bound(title):
     result = _news_result()
-    result["title_zh"] = "600519上涨"
+    result["title_zh"] = title
+    payload = _news_payload()
+    payload["allowed_tickers"] = ["NVDA", "00700"]
+
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+
+    assert validated["title_zh"] == title
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "600519上涨",
+        "600519，股价上涨",
+        "600519,股价上涨",
+        "股票600519受到关注",
+        "A股，600519股价上涨",
+        "A股,600519股价上涨",
+    ],
+)
+def test_six_digit_security_code_is_allowed_when_bound(title):
+    result = _news_result()
+    result["title_zh"] = title
     payload = _news_payload()
     payload["allowed_tickers"] = ["NVDA", "600519"]
     validated = validate_result(
@@ -1153,7 +1816,7 @@ def test_six_digit_security_code_is_allowed_when_bound():
         json.dumps(result, ensure_ascii=False),
         payload,
     )
-    assert validated["title_zh"] == "600519上涨"
+    assert validated["title_zh"] == title
 
 
 @pytest.mark.parametrize(
