@@ -4,20 +4,6 @@ import { asRec, pickN, pickS, unwrap, type Rec } from '../live';
 import * as fx from '@/mocks/fixtures';
 import type { Candle, Signal, StockChart, StockDetail, StockSearchResult, WatchlistItem } from '../types';
 
-/**
- * UI range → 契约 range（api-contract §stocks：range ∈ 5m|15m|1h|1d|1w，adjustment=raw）
- * 有损映射（后端无 1M/6M/1Y/ALL 挡位，统一降级为 1w，粒度损失在 UI 层如实呈现）：
- *   1D→1d · 5D→1w · 1M/6M/1Y/ALL→1w
- */
-export const CHART_RANGE_MAP: Record<StockChart['range'], '5m' | '15m' | '1h' | '1d' | '1w'> = {
-  '1D': '1d',
-  '5D': '1w',
-  '1M': '1w', // 有损：契约无月级挡位
-  '6M': '1w', // 有损
-  '1Y': '1w', // 有损
-  ALL: '1w', // 有损
-};
-
 /** 契约 bar {t,o,h,l,c,v,quote_only} → UI Candle（字段名 1:1，仅做容错读取） */
 export function mapBar<T extends Candle = Candle>(b: Rec): T {
   return {
@@ -141,14 +127,14 @@ export const stocksApi = {
   signals: (ticker: string): Promise<Signal[]> =>
     mockOr(() => fx.getStockSignals(ticker), () => get(`/stocks/${encodeURIComponent(ticker)}/signals`)),
   // adjustment 形参保留以兼容既有调用签名；契约仅支持 adjustment=raw，live 恒发 raw
-  chart: (ticker: string, range: StockChart['range'] = '1D', adjustment = 'raw'): Promise<StockChart> =>
+  chart: (ticker: string, range: StockChart['range'] = '1d', adjustment = 'raw'): Promise<StockChart> =>
     mockOr(
       () => fx.getStockChart(ticker, range),
-      // 契约仅支持 adjustment=raw；UI range 经 CHART_RANGE_MAP 显式映射，不发非法参数
+      // 契约仅支持 adjustment=raw；界面直接使用后端真实 K 线周期。
       () => {
         void adjustment;
         return get(
-          `/stocks/${encodeURIComponent(ticker)}/chart?range=${CHART_RANGE_MAP[range]}&adjustment=raw`,
+          `/stocks/${encodeURIComponent(ticker)}/chart?range=${range}&adjustment=raw`,
         ).then((d) => mapChart(d, ticker, range));
       },
     ),

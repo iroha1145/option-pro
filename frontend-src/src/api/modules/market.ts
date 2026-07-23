@@ -22,27 +22,31 @@ const INDEX_SYMBOL_MAP: Record<string, { code: string; name: string }> = {
 
 /** 契约 {indices:[{symbol, price, change_percent}], ...} → UI IndexQuote[] */
 function mapIndices(body: unknown): IndexQuote[] {
-  return unwrap(body, 'indices').map((r) => {
-    const price = pickN(r, 'price') ?? 0;
-    const changePct = pickN(r, 'change_percent', 'changePct') ?? 0;
+  return unwrap(body, 'indices').flatMap((r) => {
+    const price = pickN(r, 'price');
+    const changePct = pickN(r, 'change_percent', 'changePct');
+    // 后端允许单个指数失败并返回 null；该行应隐藏，不能冒充为 0。
+    if (price === null || changePct === null) return [];
     // change 由 price 与 change_percent 反推（真实算术，非编造）
     const change = Math.round(((price * changePct) / (100 + changePct)) * 100) / 100;
     const symbol = pickS(r, 'code', 'symbol') ?? '';
     const mapped = INDEX_SYMBOL_MAP[symbol];
-    return {
+    return [{
       code: mapped?.code ?? symbol,
       name: mapped?.name ?? pickS(r, 'name') ?? symbol,
       price,
       change,
       changePct,
-    };
+    }];
   });
 }
 
-/** 契约 market ∈ open|premarket|postmarket|closed → UI MarketSession */
+/** 契约 market ∈ open|pre-market|after-hours|closed；兼容旧别名。 */
 const SESSION_MAP: Record<string, { session: MarketSession; label: string }> = {
   open: { session: 'regular', label: '盘中' },
+  'pre-market': { session: 'premarket', label: '盘前' },
   premarket: { session: 'premarket', label: '盘前' },
+  'after-hours': { session: 'afterhours', label: '盘后' },
   postmarket: { session: 'afterhours', label: '盘后' },
   closed: { session: 'closed', label: '休市' },
 };

@@ -9,7 +9,7 @@
  */
 import { ApiError, get, mockOr } from '@/api/client';
 import { asRec, pickN, pickS, unwrap, type Rec } from '@/api/live';
-import { CHART_RANGE_MAP, ma20Of, mapBar } from '@/api/modules/stocks';
+import { ma20Of, mapBar } from '@/api/modules/stocks';
 import { stocksApi } from '@/api/modules/stocks';
 import { postAiJob } from '@/api/modules/ai-jobs';
 import * as fx from '@/mocks/fixtures';
@@ -18,7 +18,13 @@ import type { AiJob, StockChart, StockDetail } from '@/api/types';
 import type { ChartBarEx, StockChartEx, StockTrendBias } from '@/mocks/fixtures';
 
 export type ChartRange = StockChart['range'];
-export const CHART_RANGES: ChartRange[] = ['1D', '5D', '1M', '6M', '1Y', 'ALL'];
+export const CHART_RANGES: { value: ChartRange; label: string }[] = [
+  { value: '5m', label: '5分' },
+  { value: '15m', label: '15分' },
+  { value: '1h', label: '1小时' },
+  { value: '1d', label: '日线' },
+  { value: '1w', label: '周线' },
+];
 
 /** 契约 {bars:[{t,o,h,l,c,v,quote_only}], as_of, _stale?} → StockChartEx（字段名 1:1） */
 function mapChartEx(body: unknown, ticker: string, range: ChartRange): StockChartEx {
@@ -83,8 +89,20 @@ export function getDetail(ticker: string): Promise<StockDetail> {
     },
     async () => {
       try {
-        // 概览契约（snake→camel 归一在 stocks 模块完成）
-        return { ...(await stocksApi.detail(t)), snapshotScope: 'full' as const };
+        // 行情价格仍以 stocks 概览（Massive 主源）为准；强度快照只补其真实评分与缺失基本面。
+        const detail = await stocksApi.detail(t);
+        const strengthBody = await get(`/strength/stocks/${encodeURIComponent(t)}`).catch(() => null);
+        const strength = strengthBody !== null ? strengthRowToDetail(asRec(strengthBody)) : null;
+        const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+        return {
+          ...detail,
+          sector: detail.sector || strength?.sector || '',
+          strengthScore: finite(strength?.strengthScore) ? strength.strengthScore : detail.strengthScore,
+          avgVolume: finite(detail.avgVolume) ? detail.avgVolume : strength?.avgVolume ?? detail.avgVolume,
+          marketCap: finite(detail.marketCap) ? detail.marketCap : strength?.marketCap ?? detail.marketCap,
+          pe: detail.pe ?? strength?.pe ?? null,
+          snapshotScope: 'full' as const,
+        };
       } catch (e) {
         // 焦点池外（匿名 503 public_snapshot_unavailable）：回退强度扫描行基础行情
         if (!(e instanceof ApiError) || e.code !== 503) throw e;
@@ -104,9 +122,9 @@ export function getDetailChart(ticker: string, range: ChartRange): Promise<Stock
       if (!fx.hasTicker(t)) throw new ApiError(404, `代码 ${t} 不存在`);
       return fx.getStockChartEx(t, range);
     },
-    // 契约 range ∈ 5m|15m|1h|1d|1w：UI 挡位经 CHART_RANGE_MAP 显式映射（有损见 stocks 模块注释）
+    // 契约 range ∈ 5m|15m|1h|1d|1w：界面与后端周期一一对应。
     () =>
-      get(`/stocks/${encodeURIComponent(t)}/chart?range=${CHART_RANGE_MAP[range]}&adjustment=raw`).then((d) =>
+      get(`/stocks/${encodeURIComponent(t)}/chart?range=${range}&adjustment=raw`).then((d) =>
         mapChartEx(d, t, range),
       ),
   );

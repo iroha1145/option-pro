@@ -136,13 +136,15 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
       {/* 评分套组迷你条 */}
       <ScoreBarsMini event={ev} className="mt-3 border-t border-line pt-3" />
 
-      {/* 底行：强度条 + 证据计数 */}
+      {/* 底行：后端未提供证据时不显示假 0。 */}
       <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
         <StrengthBar score={ev.intrinsic_strength_score} width={64} />
-        <span className="inline-flex items-center gap-1 text-micro text-ink-400">
-          <Icon name="doc-quote" size={12} />
-          证据 {(ev.evidence ?? []).length} 条
-        </span>
+        {(ev.evidence ?? []).length > 0 && (
+          <span className="inline-flex items-center gap-1 text-micro text-ink-400">
+            <Icon name="doc-quote" size={12} />
+            证据 {(ev.evidence ?? []).length} 条
+          </span>
+        )}
       </div>
     </motion.article>
   );

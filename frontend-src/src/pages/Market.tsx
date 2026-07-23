@@ -51,19 +51,18 @@ export default function Market() {
   const status = statusQ.data;
   const session: MarketSession = MARKET_TO_SESSION[status?.market ?? 'closed'] ?? 'closed';
 
-  /* 趋势偏向：优先六维形态均值，退化为全市场强度均值，并标注推导依据 */
+  /* 趋势偏向只依据六维 market_regime；接口没有全市场均分时不做近似替代。 */
   const mean = useMemo(() => (regimeQ.data ? regimeMean(regimeQ.data) : null), [regimeQ.data]);
   const bias: TrendBias | null = useMemo(() => {
     const classify = (v: number): TrendBias['label'] => (v >= 60 ? '偏多' : v <= 40 ? '偏空' : '中性');
     if (mean !== null) {
       return { label: classify(mean), basis: `推导依据：六维形态均值 ${mean.toFixed(1)}（≥60 偏多 · ≤40 偏空）` };
     }
-    if (strengthQ.data) {
-      const v = strengthQ.data.avgScore;
-      return { label: classify(v), basis: `推导依据：全市场强度均值 ${v.toFixed(1)}（market_regime 未覆盖，近似推导）` };
-    }
     return null;
-  }, [mean, strengthQ.data]);
+  }, [mean]);
+  const hasStrengthAggregate =
+    strengthQ.data?.aggregateAvailable === true &&
+    strengthQ.data.histogram.length > 0;
 
   return (
     <div>
@@ -122,7 +121,7 @@ export default function Market() {
 
       {/* B4 信号解读 + B5 强度分布 */}
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <div className="lg:col-span-8">
+        <div className={hasStrengthAggregate ? 'lg:col-span-8' : 'lg:col-span-12'}>
           <SignalsReading
             signals={signalsQ.data}
             loading={signalsQ.loading}
@@ -130,21 +129,22 @@ export default function Market() {
             onRetry={signalsQ.refresh}
             refreshing={signalsQ.refreshing}
             indices={indicesQ.data}
-            strength={strengthQ.data}
             regimeMean={mean}
             status={status}
             bias={bias}
           />
         </div>
-        <div className="lg:col-span-4">
-          <BreadthHistogram
-            data={strengthQ.data}
-            loading={strengthQ.loading}
-            error={strengthQ.error}
-            onRetry={strengthQ.refresh}
-            refreshing={strengthQ.refreshing}
-          />
-        </div>
+        {hasStrengthAggregate && (
+          <div className="lg:col-span-4">
+            <BreadthHistogram
+              data={strengthQ.data}
+              loading={strengthQ.loading}
+              error={strengthQ.error}
+              onRetry={strengthQ.refresh}
+              refreshing={strengthQ.refreshing}
+            />
+          </div>
+        )}
       </div>
 
       {/* B6 联动卡 */}

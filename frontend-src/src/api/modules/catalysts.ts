@@ -47,8 +47,9 @@ export function mapNewsItem(r: Record<string, unknown>): NewsItem {
   const tickers = Array.isArray(r.source_tickers) ? (r.source_tickers as string[]) : Array.isArray(r.tickers) ? (r.tickers as string[]) : [];
   return {
     id: pickS(r, 'id', 'news_id') ?? '',
-    title: pickS(r, 'title') ?? '',
-    summary: pickS(r, 'summary') ?? '',
+    // 公开投影会移除原文 title/summary，只保留已生成或安全回退的简体中文字段。
+    title: pickS(r, 'title_zh', 'titleZh', 'title') ?? '',
+    summary: pickS(r, 'summary_zh', 'summaryZh', 'summary') ?? '',
     source: pickS(r, 'source') ?? '',
     publishedAt: pickS(r, 'publishedAt', 'published_at') ?? '',
     sentiment: mapSentiment(r),
@@ -99,7 +100,11 @@ export const catalystsApi = {
   byTicker: (ticker: string): Promise<NewsItem[]> =>
     mockOr(
       () => fx2.getNewsByTicker(ticker),
-      () => get(`/catalysts/tickers/${encodeURIComponent(ticker)}`).then((d) => unwrap(d, 'items').map(mapNewsItem)),
+      // 个股影响区只展示已经分析且有方向的新闻；待分析/中性项不冒充股票影响。
+      () =>
+        get(
+          `/catalysts/tickers/${encodeURIComponent(ticker)}?window_hours=72&limit=20&include_unanalyzed=false&include_neutral=false`,
+        ).then((d) => unwrap(d, 'items').map(mapNewsItem).filter((item) => item.title)),
     ),
   batchTickers: (tickers: string[]): Promise<{ accepted: number }> =>
     mockOr(

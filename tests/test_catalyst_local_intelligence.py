@@ -5164,12 +5164,80 @@ def test_hotspot_and_latest_focus_reads_respect_historical_as_of(tmp_path, monke
         item["prepared_revision"]
         for item in intelligence.hotspots(limit=20, now=historical)["items"]
     } == {first_revision}
-    assert intelligence.latest_market_focus_cycle(now=historical)["cycle"][
-        "cycle_id"
-    ] == first_cycle["cycle_id"]
-    assert intelligence.latest_market_focus_cycle(now=second_now + timedelta(minutes=1))[
-        "cycle"
-    ]["cycle_id"] == second_cycle["cycle_id"]
+    historical_focus = intelligence.latest_market_focus_cycle(now=historical)
+    assert historical_focus["cycle"]["cycle_id"] == first_cycle["cycle_id"]
+    assert historical_focus["previous_successful_cycle"] is None
+
+    active_focus = intelligence.latest_market_focus_cycle(
+        now=second_now + timedelta(minutes=1)
+    )
+    assert active_focus["cycle"]["cycle_id"] == second_cycle["cycle_id"]
+    assert active_focus["previous_successful_cycle"] is None
+
+    _finish_job(ai, second_cycle["job_id"], _focus_result(ai, second_cycle))
+    intelligence.reconcile()
+    after_both_completions = datetime(2030, 7, 15, 16, 0, tzinfo=timezone.utc)
+    with request_owner_access_context(False):
+        public_focus = intelligence.latest_market_focus_cycle(
+            now=after_both_completions
+        )
+    assert public_focus["cycle"]["cycle_id"] == second_cycle["cycle_id"]
+    assert (
+        public_focus["previous_successful_cycle"]["cycle_id"]
+        == first_cycle["cycle_id"]
+    )
+
+
+def test_active_owner_focus_cycle_exposes_latest_success_as_previous(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    first_now = datetime(2030, 7, 15, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: first_now)
+    _apply_news(
+        etl,
+        [_news_change(1, 93, available_at=first_now - timedelta(minutes=10))],
+        as_of=first_now - timedelta(minutes=9),
+    )
+    first_revision = intelligence.reconcile()["prepared_revision"]
+    first_cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=first_revision
+    )
+    _finish_job(ai, first_cycle["job_id"], _focus_result(ai, first_cycle))
+    intelligence.reconcile()
+
+    second_now = first_now + timedelta(hours=2)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: second_now)
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                2,
+                94,
+                available_at=second_now - timedelta(minutes=1),
+                tickers=("AMD",),
+            )
+        ],
+        as_of=second_now,
+    )
+    second_revision = intelligence.reconcile()["prepared_revision"]
+    second_cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=second_revision
+    )
+
+    latest = intelligence.latest_market_focus_cycle(
+        now=second_now + timedelta(minutes=1)
+    )
+    assert latest["cycle"]["cycle_id"] == second_cycle["cycle_id"]
+    assert (
+        latest["latest_successful_cycle"]["cycle_id"]
+        == first_cycle["cycle_id"]
+    )
+    assert (
+        latest["previous_successful_cycle"]["cycle_id"]
+        == first_cycle["cycle_id"]
+    )
 
 
 def test_active_focus_cycle_only_reuses_the_same_prepared_revision(

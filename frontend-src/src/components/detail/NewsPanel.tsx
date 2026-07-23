@@ -1,11 +1,12 @@
 /**
  * 相关新闻（stock-detail.md T4）：catalysts/tickers/{t} · 72h · 最多 5 条
- * 顶部 AI 财报影响摘要条（±X.X% · 非收益标注）· 「更多」→ /catalysts?ticker=X
+ * 顶部财报分析摘要条（只展示后端真实摘要/预期）· 「更多」→ /catalysts?ticker=X
  */
 import { Link } from 'react-router';
 import { catalystsApi } from '@/api/modules/catalysts';
 import { earningsApi } from '@/api/modules/earnings';
 import { usePolling } from '@/hooks/usePolling';
+import { useNow } from '@/hooks/useNow';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
@@ -19,23 +20,18 @@ const SENTIMENT_META: Record<NewsSentiment, { text: string; cls: string }> = {
   negative: { text: '利空', cls: 'bg-down-50 text-down-700' },
 };
 
-const IMPACT_SENTIMENT = {
-  bullish: { text: '偏多', cls: 'bg-up-50 text-up-700' },
-  neutral: { text: '中性', cls: 'bg-card-warm text-ink-500 border border-line-strong' },
-  bearish: { text: '偏空', cls: 'bg-down-50 text-down-700' },
-} as const;
-
 const WINDOW_MS = 72 * 3600_000;
 const MAX_ITEMS = 5;
 
 export default function NewsPanel({ ticker }: { ticker: string }) {
   const { data: news, loading } = usePolling(() => catalystsApi.byTicker(ticker), null, [ticker]);
   const { data: impact } = usePolling(() => earningsApi.impact(ticker), null, [ticker]);
+  const now = useNow(60_000);
 
   if (loading) return <SkeletonText lines={6} className="py-2" />;
 
   const items: NewsItem[] = (news ?? [])
-    .filter((n) => Date.now() - new Date(n.publishedAt).getTime() < WINDOW_MS)
+    .filter((n) => now - new Date(n.publishedAt).getTime() < WINDOW_MS)
     .slice(0, MAX_ITEMS);
 
   return (
@@ -47,16 +43,14 @@ export default function NewsPanel({ ticker }: { ticker: string }) {
               <Icon name="spark-ai" size={15} className="text-ai-600" />
               AI 财报影响
             </span>
-            <span className="font-mono text-body-s font-medium text-ink-900 tnum">±{impact.expectedMovePct.toFixed(1)}%</span>
-            <span className={cn('rounded-xs px-1.5 py-px text-micro font-medium', IMPACT_SENTIMENT[impact.sentiment].cls)}>
-              {IMPACT_SENTIMENT[impact.sentiment].text}
-            </span>
+            <span className="rounded-xs border border-ai-600/20 bg-card px-1.5 py-px text-micro font-medium text-ai-600">简体中文</span>
             <Link to="/earnings" className="ml-auto flex items-center gap-1 text-caption font-medium text-ai-600 hover:text-ai-600/80">
               查看财报页
               <Icon name="chevron-right" size={13} />
             </Link>
           </div>
-          <p className="mt-1.5 text-micro text-ink-400">预期波动为方向性估计 · 非收益预测 · IV 百分位 {impact.ivRank}%</p>
+          <p className="mt-2 text-caption leading-5 text-ink-700">{impact.summary}</p>
+          <p className="mt-1.5 text-micro leading-4 text-ink-500">预期：{impact.expectation}</p>
         </div>
       )}
 

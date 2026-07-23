@@ -1466,9 +1466,10 @@ def test_frontend_default_focus_contract_matches_worker_snapshot() -> None:
         / "modules"
         / "stocks.ts"
     ).read_text(encoding="utf-8")
-    # React 前端的默认图参数契约:1D→1d 显式映射,adjustment 恒 raw
-    assert "'1D': '1d'" in source
-    assert "range: StockChart['range'] = '1D'" in source
+    # React 前端直接使用后端真实 K 线周期；默认日线与 worker 快照一致。
+    assert "range: StockChart['range'] = '1d'" in source
+    assert "range=${range}&adjustment=raw" in source
+    assert "CHART_RANGE_MAP" not in source
     assert "adjustment = 'raw'" in source
     assert public_home_resource_parameters("focus_overview", now=time.time()) == {
         "ticker": "NVDA"

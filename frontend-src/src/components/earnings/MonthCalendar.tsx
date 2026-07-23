@@ -26,6 +26,10 @@ const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'] as const;
 const MAX_CHIPS = 3;
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
+const timingLabel = (timing: EarningsRow['timing']) => (
+  timing === 'bmo' ? '盘前' : timing === 'amc' ? '盘后' : '时间待定'
+);
+
 /** 'YYYY-MM' 加减月（UTC 锚定） */
 function shiftMonth(key: string, delta: number): string {
   const y = Number(key.slice(0, 4));
@@ -216,16 +220,16 @@ export default function MonthCalendar({
                           e.stopPropagation();
                           onSelectTicker(it.ticker, date);
                         }}
-                        aria-label={`${it.ticker} ${it.timing === 'bmo' ? '盘前' : '盘后'}财报，查看 AI 影响`}
+                        aria-label={`${it.ticker} ${timingLabel(it.timing)}财报，查看 AI 影响`}
                         className={cn(
                           'flex h-5 items-center gap-1 rounded-xs px-1 transition-colors duration-fast',
                           active ? 'bg-brand-100' : 'hover:bg-brand-50',
                         )}
                       >
                         <Icon
-                          name={it.timing === 'bmo' ? 'sun-bmo' : 'moon-amc'}
+                          name={it.timing === 'bmo' ? 'sun-bmo' : it.timing === 'amc' ? 'moon-amc' : 'clock-ny'}
                           size={11}
-                          className={it.timing === 'bmo' ? 'text-warn-600' : 'text-ai-600'}
+                          className={it.timing === 'bmo' ? 'text-warn-600' : it.timing === 'amc' ? 'text-ai-600' : 'text-ink-400'}
                         />
                         <span className="truncate font-mono text-[10px] font-medium leading-4 text-ink-800">
                           {it.ticker}
@@ -244,7 +248,10 @@ export default function MonthCalendar({
                         {shown.map((it, i) => (
                           <span
                             key={`${it.ticker}-${i}`}
-                            className={cn('size-1.5 rounded-full', it.timing === 'bmo' ? 'bg-warn-600' : 'bg-ai-600')}
+                            className={cn(
+                              'size-1.5 rounded-full',
+                              it.timing === 'bmo' ? 'bg-warn-600' : it.timing === 'amc' ? 'bg-ai-600' : 'bg-ink-300',
+                            )}
                           />
                         ))}
                       </span>

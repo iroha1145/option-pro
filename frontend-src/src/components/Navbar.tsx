@@ -34,7 +34,7 @@ function NyClock({ className }: { className?: string }) {
 }
 
 export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void }) {
-  const { isOwner, logout } = useAccess();
+  const { isOwner, aiEnabled, aiAvailable, aiReason, logout } = useAccess();
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -127,7 +127,25 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           </span>
 
           {isOwner && (
-            <span className="hidden items-center gap-1.5 rounded-pill border border-line bg-ai-50 px-2 py-0.5 text-micro text-ai-600 md:flex" title="AI 分析开关已开启">
+            <span
+              className={cn(
+                'hidden items-center gap-1.5 rounded-pill border px-2 py-0.5 text-micro md:flex',
+                aiAvailable
+                  ? 'border-ai-600/20 bg-ai-50 text-ai-600'
+                  : aiEnabled
+                    ? 'border-warn-600/25 bg-warn-50 text-warn-600'
+                    : 'border-line bg-card-warm text-ink-400',
+              )}
+              title={
+                aiAvailable
+                  ? '分析服务可用'
+                  : aiEnabled && ['analysis_in_progress', 'global_concurrency_limit', 'queue_busy'].includes(aiReason ?? '')
+                    ? '分析任务处理中'
+                    : aiEnabled
+                      ? '分析服务暂不可用'
+                      : '分析服务未开启'
+              }
+            >
               <Icon name="spark-ai" size={12} />
               AI
             </span>

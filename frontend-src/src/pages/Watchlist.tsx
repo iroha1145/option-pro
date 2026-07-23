@@ -17,7 +17,7 @@ import { useToast } from '@/components/Toast';
 import { useShell } from '@/components/Layout';
 import { cn } from '@/lib/utils';
 import { fmtCountdown, fmtNyTime, fmtPrice, fmtTimeHHMMSS } from '@/lib/format';
-import type { MarketSignalsSummary, WatchlistItem } from '@/api/types';
+import type { MarketSignalsSnapshot, WatchlistItem } from '@/api/types';
 import PageHeader from '@/components/shared/PageHeader';
 import StatCard from '@/components/shared/StatCard';
 import TickerLogo from '@/components/shared/TickerLogo';
@@ -29,7 +29,6 @@ import DataTable, { type Column, type SortState } from '@/components/shared/Data
 import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
 import SessionLED, { SessionDot } from '@/components/shared/SessionLED';
-import HatchLegend from '@/components/shared/HatchLegend';
 import { SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
 import Icon from '@/components/icons';
@@ -90,7 +89,7 @@ function ForceRefreshButton({ onRefresh, spinning }: { onRefresh: () => void; sp
   return (
     <button
       onClick={isOwner ? onRefresh : undefined}
-      disabled={!isOwner}
+      disabled={!isOwner || spinning}
       title={isOwner ? '强制刷新自选快照' : '登录 Owner 后可强制刷新'}
       className={cn(
         'flex h-9 items-center gap-2 rounded-md border px-3 text-caption transition-colors duration-fast',
@@ -105,44 +104,22 @@ function ForceRefreshButton({ onRefresh, spinning }: { onRefresh: () => void; sp
   );
 }
 
-/* ---------------- B3 小件：信号分布（横向 hatch 柱） ---------------- */
-function SignalDistribution({ data }: { data: MarketSignalsSummary }) {
-  const max = Math.max(...data.byType.map((t) => Math.max(t.today, t.avg7d)), 1);
+/* ---------------- B3 小件：真实市场信号指标 ---------------- */
+function SignalDistribution({ data }: { data: MarketSignalsSnapshot }) {
   return (
     <div className="card-surface p-5">
-      <p className="eyebrow">信号分布 · 今日 vs 7日均值</p>
+      <p className="eyebrow">市场信号 · 实时指标快照</p>
       <div className="mt-4 space-y-3">
-        {data.byType.map((t, i) => (
-          <div key={t.type} className="grid grid-cols-[52px_1fr_36px] items-center gap-2">
-            <span className="text-caption text-ink-500">{t.label}</span>
-            <div className="space-y-1">
-              <motion.div
-                className="h-2 origin-left rounded-[2px] bg-brand-600"
-                initial={{ scaleX: 0 }}
-                whileInView={{ scaleX: 1 }}
-                viewport={{ once: true, amount: 0.4 }}
-                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: i * 0.045 }}
-                style={{ width: `${(t.today / max) * 100}%` }}
-                title={`今日 ${t.today} 条`}
-              />
-              <motion.div
-                className="h-2 origin-left rounded-[2px] border border-brand-400/50"
-                initial={{ scaleX: 0 }}
-                whileInView={{ scaleX: 1 }}
-                viewport={{ once: true, amount: 0.4 }}
-                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: i * 0.045 + 0.06 }}
-                style={{
-                  width: `${(t.avg7d / max) * 100}%`,
-                  backgroundImage: 'repeating-linear-gradient(45deg, rgba(46,70,224,.5) 0 1.2px, transparent 1.2px 4px)',
-                }}
-                title={`7 日均值 ${t.avg7d} 条`}
-              />
-            </div>
-            <span className="text-right font-mono text-micro text-ink-500 tnum">{t.today}</span>
+        {data.metrics.slice(0, 8).map((metric) => (
+          <div key={metric.key} className="grid grid-cols-[minmax(0,1fr)_56px] items-center gap-2">
+            <span className="truncate text-caption text-ink-500" title={metric.label}>{metric.label}</span>
+            <span className="text-right font-mono text-caption text-ink-800 tnum">{metric.value}</span>
           </div>
         ))}
       </div>
-      <HatchLegend className="mt-4" actual="今日" estimate="7日均值" />
+      <p className="mt-4 text-micro text-ink-400">
+        顶部风险 {data.topScore ?? '—'} · 底部修复 {data.bottomScore ?? '—'} · 数据质量 {data.dataQuality ?? '—'}
+      </p>
     </div>
   );
 }
@@ -268,7 +245,19 @@ function SortDropdown({ sort, onChange }: { sort: SortState | null; onChange: (s
 }
 
 /* ---------------- 卡片模式单卡 ---------------- */
-function WatchCard({ item, index, onClick }: { item: WatchlistItem; index: number; onClick: () => void }) {
+function WatchCard({
+  item,
+  index,
+  onClick,
+  showStrength,
+  showSignals,
+}: {
+  item: WatchlistItem;
+  index: number;
+  onClick: () => void;
+  showStrength: boolean;
+  showSignals: boolean;
+}) {
   return (
     <motion.button
       layout="position"
@@ -290,15 +279,19 @@ function WatchCard({ item, index, onClick }: { item: WatchlistItem; index: numbe
       <div className="mt-2">
         <Sparkline data={item.sparkline} width={230} height={56} change={item.changePct} variant="area" className="w-full" />
       </div>
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3">
-        <StrengthBar score={item.strengthScore} width={64} />
-        <span className="flex gap-1">
-          {item.signals.slice(0, 2).map((s, i) => (
-            <SignalChip key={i} type={s.type} label={s.label} />
-          ))}
-          {item.signals.length > 2 && <span className="font-mono text-micro text-ink-400">+{item.signals.length - 2}</span>}
-        </span>
-      </div>
+      {(showStrength || showSignals) && (
+        <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3">
+          {showStrength && <StrengthBar score={item.strengthScore} width={64} />}
+          {showSignals && (
+            <span className="flex gap-1">
+              {item.signals.slice(0, 2).map((s, i) => (
+                <SignalChip key={i} type={s.type} label={s.label} />
+              ))}
+              {item.signals.length > 2 && <span className="font-mono text-micro text-ink-400">+{item.signals.length - 2}</span>}
+            </span>
+          )}
+        </div>
+      )}
     </motion.button>
   );
 }
@@ -312,8 +305,9 @@ export default function Watchlist() {
 
   const [view, setView] = useState<'table' | 'cards'>('table');
   const [sort, setSort] = useState<SortState | null>(null);
-  const [spinning, setSpinning] = useState(false);
   const forceRef = useRef(false);
+  const forcePendingRef = useRef(false);
+  const forceSawRefreshingRef = useRef(false);
 
   const fetchWatchlist = useCallback(() => {
     const f = forceRef.current;
@@ -332,8 +326,9 @@ export default function Watchlist() {
     if (searchParams.get('force') === '1') {
       if (isOwner) {
         forceRef.current = true;
+        forcePendingRef.current = true;
         wl.refresh();
-        toast.success('已强制刷新自选快照');
+        toast.info('刷新请求已提交', '快照返回后页面会自动更新');
       } else {
         toast.info('登录 Owner 后可强制刷新');
       }
@@ -343,11 +338,24 @@ export default function Watchlist() {
   }, [searchParams, isOwner]);
 
   const onForceRefresh = () => {
-    setSpinning(true);
     forceRef.current = true;
+    forcePendingRef.current = true;
     wl.refresh();
-    setTimeout(() => setSpinning(false), 650);
+    toast.info('刷新请求已提交', '快照返回后页面会自动更新');
   };
+
+  useEffect(() => {
+    if (!forcePendingRef.current) return;
+    if (wl.refreshing) {
+      forceSawRefreshingRef.current = true;
+      return;
+    }
+    if (!forceSawRefreshingRef.current) return;
+    forcePendingRef.current = false;
+    forceSawRefreshingRef.current = false;
+    if (wl.error) toast.error('自选快照刷新失败', wl.error.message);
+    else toast.success('自选快照已更新');
+  }, [wl.refreshing, wl.error, toast]);
 
   /* 涨跌 tick-flash 差异检测 */
   const [flashes, setFlashes] = useState<Record<string, 'up' | 'down'>>({});
@@ -374,6 +382,14 @@ export default function Watchlist() {
       decliners: items.filter((x) => x.changePct < 0).length,
     };
   }, [wl.data]);
+  const rowStrengthAvailable = useMemo(
+    () => (wl.data ?? []).some((item) => Number.isFinite(item.strengthScore)),
+    [wl.data],
+  );
+  const rowSignalsAvailable = useMemo(
+    () => (wl.data ?? []).some((item) => item.signals.length > 0),
+    [wl.data],
+  );
 
   /* 表格列（watchlist.md B2） */
   const columns = useMemo<Column<WatchlistItem>[]>(
@@ -425,29 +441,33 @@ export default function Watchlist() {
         title: '今日分时',
         render: (r) => <Sparkline data={r.sparkline} change={r.changePct} />,
       },
-      {
-        key: 'strength',
-        title: '强度',
-        sortable: true,
-        sortValue: (r) => r.strengthScore,
-        render: (r) => <StrengthBar score={r.strengthScore} width={80} />,
-      },
-      {
-        key: 'signals',
-        title: '信号',
-        render: (r) => (
-          <span className="flex items-center gap-1">
-            {r.signals.slice(0, 2).map((s, i) => (
-              <SignalChip key={i} type={s.type} label={s.label} />
-            ))}
-            {r.signals.length > 2 && (
-              <span className="font-mono text-micro text-ink-400" title={r.signals.slice(2).map((s) => s.label).join('、')}>
-                +{r.signals.length - 2}
+      ...(rowStrengthAvailable
+        ? [{
+            key: 'strength',
+            title: '强度',
+            sortable: true,
+            sortValue: (r: WatchlistItem) => r.strengthScore,
+            render: (r: WatchlistItem) => <StrengthBar score={r.strengthScore} width={80} />,
+          }]
+        : []),
+      ...(rowSignalsAvailable
+        ? [{
+            key: 'signals',
+            title: '信号',
+            render: (r: WatchlistItem) => (
+              <span className="flex items-center gap-1">
+                {r.signals.slice(0, 2).map((s, i) => (
+                  <SignalChip key={i} type={s.type} label={s.label} />
+                ))}
+                {r.signals.length > 2 && (
+                  <span className="font-mono text-micro text-ink-400" title={r.signals.slice(2).map((s) => s.label).join('、')}>
+                    +{r.signals.length - 2}
+                  </span>
+                )}
               </span>
-            )}
-          </span>
-        ),
-      },
+            ),
+          }]
+        : []),
       {
         key: 'actions',
         title: '',
@@ -460,7 +480,7 @@ export default function Watchlist() {
         ),
       },
     ],
-    [flashes],
+    [flashes, rowSignalsAvailable, rowStrengthAvailable],
   );
 
   const loading = wl.loading;
@@ -482,7 +502,7 @@ export default function Watchlist() {
             <span className="hidden font-mono text-data-m text-ink-600 tnum sm:inline" suppressHydrationWarning>
               {fmtNyTime(new Date(now))}
             </span>
-            <ForceRefreshButton onRefresh={onForceRefresh} spinning={spinning} />
+            <ForceRefreshButton onRefresh={onForceRefresh} spinning={wl.refreshing} />
           </>
         }
       />
@@ -503,31 +523,12 @@ export default function Watchlist() {
             className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-1 no-scrollbar sm:grid sm:grid-cols-2 sm:overflow-visible xl:grid-cols-4"
           >
             {[
-              <StatCard
-                key="sig"
-                label="今日信号"
-                icon="flag"
-                value={signalsQ.data?.totalToday ?? 0}
-                sub={
-                  <span className={cn('font-mono tnum', (signalsQ.data?.deltaVsYesterday ?? 0) >= 0 ? 'text-up-700' : 'text-down-700')}>
-                    较昨日 {(signalsQ.data?.deltaVsYesterday ?? 0) >= 0 ? '+' : ''}
-                    {signalsQ.data?.deltaVsYesterday ?? 0} 条
-                  </span>
-                }
-              />,
-              <StatCard
-                key="ge85"
-                label="高强度标的 ≥85"
-                icon="target"
-                value={strengthQ.data?.ge85Count ?? 0}
-                sub={
-                  <span className="mt-1 flex items-center gap-1.5">
-                    <span className="h-1 w-10 rounded-pill bg-up-600" />
-                    <span className="h-1 w-6 rounded-pill bg-brand-600" />
-                    <span className="h-1 w-3 rounded-pill bg-brand-400" />
-                  </span>
-                }
-              />,
+              ...(signalsQ.data?.topScore !== null && signalsQ.data?.topScore !== undefined
+                ? [<StatCard key="top-risk" label="顶部风险分" icon="flag" value={signalsQ.data.topScore} sub={signalsQ.data.topLabel ?? '市场信号模型'} />]
+                : []),
+              ...(signalsQ.data?.bottomScore !== null && signalsQ.data?.bottomScore !== undefined
+                ? [<StatCard key="bottom-repair" label="底部修复分" icon="target" value={signalsQ.data.bottomScore} sub={signalsQ.data.bottomLabel ?? '市场信号模型'} />]
+                : []),
               <div key="ad" className="card-surface min-w-[220px] snap-start p-5 sm:min-w-0">
                 <div className="flex items-start justify-between">
                   <p className="eyebrow">上涨 / 下跌</p>
@@ -535,13 +536,17 @@ export default function Watchlist() {
                 </div>
                 <AdvanceDeclineBar advancers={aggregates.advancers} decliners={aggregates.decliners} />
               </div>,
-              <div key="avg" className="card-surface min-w-[220px] snap-start p-5 sm:min-w-0">
-                <div className="flex items-start justify-between">
-                  <p className="eyebrow">平均强度分</p>
-                  <Icon name="wallet-gauge" size={18} className="text-ink-400" />
-                </div>
-                <ScoreDonut score={strengthQ.data?.avgScore ?? 0} />
-              </div>,
+              ...(strengthQ.data?.aggregateAvailable
+                ? [
+                    <div key="avg" className="card-surface min-w-[220px] snap-start p-5 sm:min-w-0">
+                      <div className="flex items-start justify-between">
+                        <p className="eyebrow">全市场平均强度</p>
+                        <Icon name="wallet-gauge" size={18} className="text-ink-400" />
+                      </div>
+                      <ScoreDonut score={strengthQ.data.avgScore} />
+                    </div>,
+                  ]
+                : []),
             ].map((node, i) => (
               <motion.div
                 key={i}
@@ -637,14 +642,28 @@ export default function Watchlist() {
                 {/* 移动：表格转卡片流 */}
                 <div className="grid grid-cols-1 gap-3 md:hidden">
                   {items.map((it, i) => (
-                    <WatchCard key={it.ticker} item={it} index={i} onClick={() => openTicker(it.ticker)} />
+                    <WatchCard
+                      key={it.ticker}
+                      item={it}
+                      index={i}
+                      onClick={() => openTicker(it.ticker)}
+                      showStrength={rowStrengthAvailable}
+                      showSignals={rowSignalsAvailable}
+                    />
                   ))}
                 </div>
               </>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {items.map((it, i) => (
-                  <WatchCard key={it.ticker} item={it} index={i} onClick={() => openTicker(it.ticker)} />
+                  <WatchCard
+                    key={it.ticker}
+                    item={it}
+                    index={i}
+                    onClick={() => openTicker(it.ticker)}
+                    showStrength={rowStrengthAvailable}
+                    showSignals={rowSignalsAvailable}
+                  />
                 ))}
               </div>
             )}
@@ -658,11 +677,11 @@ export default function Watchlist() {
           ) : (
             <SkeletonCard />
           )}
-          {strengthQ.data ? (
+          {strengthQ.data?.aggregateAvailable && strengthQ.data.histogram.length > 0 ? (
             <StrengthHistogram histogram={strengthQ.data.histogram} />
-          ) : (
+          ) : strengthQ.loading ? (
             <SkeletonCard />
-          )}
+          ) : null}
           <MarketClockCard />
           <SourceNote />
         </aside>

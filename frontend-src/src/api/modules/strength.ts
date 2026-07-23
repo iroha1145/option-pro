@@ -160,11 +160,19 @@ function mapRegime(env: Rec): MarketRegimeInfo | null {
 function mapMarket(d: unknown): MarketStrength {
   const r = asRec(d);
   const regime = mapRegime(r);
+  const avgScore = pickN(r, 'avgScore', 'avg_score');
+  const ge85Count = pickN(r, 'ge85Count', 'ge85_count');
+  const histogram = Array.isArray(r.histogram)
+    ? (r.histogram as unknown[]).filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+    : [];
+  const aggregateAvailable = avgScore !== null && ge85Count !== null && histogram.length > 0;
   return {
-    // 契约无全市场均分/直方图：avgScore 回退 regime 综合分（页面注释口径），histogram 留空 → UI 隐藏参照
-    avgScore: pickN(r, 'avgScore', 'avg_score') ?? regime?.score ?? 0,
-    ge85Count: pickN(r, 'ge85Count', 'ge85_count') ?? 0,
-    histogram: Array.isArray(r.histogram) ? (r.histogram as number[]) : [],
+    // 兼容旧消费层的数值槽位；aggregateAvailable=false 时界面不得读取或展示。
+    // null 通过边界类型转换保留，避免把 market_regime.score 冒充全市场均分。
+    avgScore: avgScore as number,
+    ge85Count: ge85Count as number,
+    histogram,
+    aggregateAvailable,
     ...(regime ? { regime } : {}),
   };
 }

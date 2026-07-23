@@ -1456,6 +1456,8 @@ class PersonalCatalystService:
                 "as_of": status["as_of"],
                 "data_through": status.get("data_through"),
                 "cycle": None,
+                "latest_successful_cycle": None,
+                "previous_successful_cycle": None,
                 "warnings": status.get("warnings", []),
             }
         try:
@@ -1468,6 +1470,8 @@ class PersonalCatalystService:
                 "as_of": _iso(now or _utc_now()),
                 "data_through": None,
                 "cycle": None,
+                "latest_successful_cycle": None,
+                "previous_successful_cycle": None,
                 "warnings": ["cache_unavailable"],
             }
         payload["cycle"] = self._project_focus_cycle_for_access(
@@ -1476,6 +1480,10 @@ class PersonalCatalystService:
         )
         payload["latest_successful_cycle"] = self._project_focus_cycle_for_access(
             payload.get("latest_successful_cycle"),
+            include_owner_state=include_owner_state,
+        )
+        payload["previous_successful_cycle"] = self._project_focus_cycle_for_access(
+            payload.get("previous_successful_cycle"),
             include_owner_state=include_owner_state,
         )
         return payload

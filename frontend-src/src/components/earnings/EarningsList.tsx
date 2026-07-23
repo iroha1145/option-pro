@@ -46,7 +46,15 @@ function EpsPairBars({ est, act, index }: { est: number | null; act: number | nu
 }
 
 /* ---------------- 时间徽章（盘前太阳 / 盘后月亮） ---------------- */
-export function TimingBadge({ timing, className }: { timing: 'bmo' | 'amc'; className?: string }) {
+export function TimingBadge({ timing, className }: { timing: EarningsRow['timing']; className?: string }) {
+  if (timing == null) {
+    return (
+      <span className={cn('inline-flex items-center gap-1.5 text-ink-400', className)} aria-label="公布时间待定">
+        <Icon name="clock-ny" size={14} />
+        <span className="text-caption">时间待定</span>
+      </span>
+    );
+  }
   const bmo = timing === 'bmo';
   return (
     <span

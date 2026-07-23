@@ -2,7 +2,7 @@
  * K线主图（stock-detail.md S1 · design.md §6-1 / §6-2）
  * 蜡烛：阳实心 --up-600 / 阴实心 --down-600 / 影线 1.2px / MA20 --brand-500 虚线(4/4)
  * 成交量副图（18% 高，随阴阳 40% 透明）· 十字光标 dash 3/3
- * 面积模式：brand-500 主线 + 点阵填充 + 虚线趋势线；1D 叠昨收基准虚线 + 末端价格旗标
+ * 面积模式：brand-500 主线 + 点阵填充 + 虚线趋势线；5 分钟图叠昨收基准虚线 + 末端价格旗标
  * quote_only bar 半透明标注 · _stale 横幅 · 503 → empty-chart.svg「快照不可用」
  */
 import { useMemo, useState } from 'react';
@@ -24,8 +24,9 @@ type ChartMode = 'candle' | 'area';
 function fmtAxisLabel(iso: string, range: ChartRange): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
-  if (range === '1D') return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  if (range === '5D') return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (range === '5m' || range === '15m' || range === '1h') {
+    return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
@@ -33,7 +34,9 @@ function barTooltipTitle(iso: string, range: ChartRange): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
   const ymd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  return range === '1D' || range === '5D' ? `${ymd} ${pad(d.getHours())}:${pad(d.getMinutes())}` : ymd;
+  return range === '5m' || range === '15m' || range === '1h'
+    ? `${ymd} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    : ymd;
 }
 
 function buildOption(
@@ -118,7 +121,7 @@ function buildOption(
             distance: 6,
           },
           markLine:
-            range === '1D' && prevClose
+            range === '5m' && prevClose
               ? {
                   symbol: 'none',
                   silent: true,
@@ -298,7 +301,7 @@ export default function KlineChart({
   height?: number;
   className?: string;
 }) {
-  const [range, setRange] = useState<ChartRange>('1D');
+  const [range, setRange] = useState<ChartRange>('5m');
   const [mode, setMode] = useState<ChartMode>('candle');
   const { data, error, loading, refresh } = usePolling(() => getDetailChart(ticker, range), null, [ticker, range]);
 
@@ -311,7 +314,7 @@ export default function KlineChart({
     <section className={className} aria-label={`${ticker} K线图`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Segmented
-          options={CHART_RANGES.map((r) => ({ value: r, label: r }))}
+          options={CHART_RANGES}
           value={range}
           onChange={setRange}
           className="[&_button]:font-mono [&_button]:text-micro"
@@ -353,7 +356,7 @@ export default function KlineChart({
                 variant="error"
                 image="/empty-chart.svg"
                 title="快照不可用"
-                description={`${ticker} · ${range} 区间数据暂不可用，其他区间仍可切换`}
+                description={`${ticker} · ${CHART_RANGES.find((item) => item.value === range)?.label ?? range}数据暂不可用，其他周期仍可切换`}
                 action={
                   <button
                     onClick={refresh}

@@ -12,12 +12,21 @@ import type { MarketRegime, MarketStatusDetail } from '@/mocks/marketPulse';
 export type { MarketRegime, MarketStatusDetail } from '@/mocks/marketPulse';
 
 interface RawMarketStatus {
-  market?: MarketStatusDetail['market'];
+  market?: string;
   phase?: string | null;
   holiday?: string | null;
   next_open?: string | null;
   next_close?: string | null;
   server_time?: string;
+}
+
+/** 后端使用带连字符的正式值；兼容旧前端别名，统一成页面内部枚举。 */
+export function normalizeMarketState(value: string | null | undefined): MarketStatusDetail['market'] {
+  const state = value?.trim().toLowerCase();
+  if (state === 'open' || state === 'regular') return 'open';
+  if (state === 'pre-market' || state === 'premarket') return 'premarket';
+  if (state === 'after-hours' || state === 'postmarket' || state === 'afterhours') return 'postmarket';
+  return 'closed';
 }
 
 export const marketPulseApi = {
@@ -28,7 +37,7 @@ export const marketPulseApi = {
       async () => {
         const raw = await get<RawMarketStatus>('/market/status');
         return {
-          market: raw?.market ?? 'closed',
+          market: normalizeMarketState(raw?.market),
           phase: raw?.phase ?? null,
           holiday: raw?.holiday ?? null,
           next_open: raw?.next_open ?? null,

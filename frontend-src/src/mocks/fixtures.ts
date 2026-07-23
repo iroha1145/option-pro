@@ -284,12 +284,11 @@ function buildCandles(ticker: string, range: StockChart['range']): { candles: Ca
   let points: number;
   let stepMs: number;
   switch (range) {
-    case '1D': points = 390; stepMs = 60_000; break;
-    case '5D': points = 5 * 78; stepMs = 5 * 60_000; break;
-    case '1M': points = 22; stepMs = 86_400_000; break;
-    case '6M': points = 126; stepMs = 86_400_000; break;
-    case '1Y': points = 252; stepMs = 86_400_000; break;
-    case 'ALL': points = 500; stepMs = 86_400_000; break;
+    case '5m': points = 5 * 78; stepMs = 5 * 60_000; break;
+    case '15m': points = 22 * 26; stepMs = 15 * 60_000; break;
+    case '1h': points = 90 * 7; stepMs = 60 * 60_000; break;
+    case '1d': points = 500; stepMs = 86_400_000; break;
+    case '1w': points = 260; stepMs = 7 * 86_400_000; break;
   }
   const daily = stepMs >= 86_400_000;
   const vol = daily ? 0.022 : 0.0022;
@@ -350,7 +349,7 @@ export function getStockChartEx(ticker: string, range: StockChart['range']): Sto
   const { candles, ma20 } = buildCandles(t, range);
   const bars: ChartBarEx[] = candles.map((c) => ({ ...c }));
   // 盘中末根为「仅报价」实时 bar（quote_only）
-  if ((range === '1D' || range === '5D') && bars.length > 0) {
+  if ((range === '5m' || range === '15m' || range === '1h') && bars.length > 0) {
     bars[bars.length - 1].quote_only = true;
   }
   return {

@@ -1,7 +1,7 @@
 /**
  * B1 指数概览（6 卡：SPX/NDX/DJI/RUT/SOX/VIX）
  * 名称+代码 · 价格 count-up · ChangeBadge · 当日 mini sparkline · tick-flash
- * live 模式无指数K线端点 → sparkline 如实留空「—」（design.md 数据诚信原则）
+ * live 模式无指数 K 线端点 → 不渲染分时图模块
  * ?index= 指定的卡高亮（左缘 2px brand 条）并滚动定位
  */
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
@@ -65,15 +65,11 @@ const IndexCard = memo(function IndexCard({
       >
         {hasPrice ? fmtPrice(price) : '—'}
       </p>
-      <div className="mt-2 flex h-8 items-end justify-between gap-2">
-        {spark ? (
+      {spark && (
+        <div className="mt-2 flex h-8 items-end justify-between gap-2">
           <Sparkline data={spark} width={132} height={30} change={quote.changePct} className="w-full" />
-        ) : (
-          <span className="flex h-full w-full items-center justify-center gap-1.5 font-mono text-micro text-ink-300">
-            —<span className="font-sans text-[10px]">分时未覆盖</span>
-          </span>
-        )}
-      </div>
+        </div>
+      )}
     </motion.div>
   );
 });
@@ -105,9 +101,12 @@ export default function IndexCards({
       prevPrices.current[q.code] = q.price;
     });
     if (Object.keys(next).length) {
-      setFlashes(next);
-      const t = setTimeout(() => setFlashes({}), 700);
-      return () => clearTimeout(t);
+      const show = window.setTimeout(() => setFlashes(next), 0);
+      const clear = window.setTimeout(() => setFlashes({}), 700);
+      return () => {
+        window.clearTimeout(show);
+        window.clearTimeout(clear);
+      };
     }
   }, [data]);
 

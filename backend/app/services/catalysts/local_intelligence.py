@@ -5651,21 +5651,43 @@ class LocalCatalystIntelligence:
                    WHERE created_at<=? ORDER BY created_at DESC LIMIT 1""",
                 (_iso(observed),),
             ).fetchone()
-            successful_row = connection.execute(
+            successful_rows = connection.execute(
                 """SELECT cycle_id FROM catalyst_local_focus_cycles
                    WHERE status='completed' AND result_json IS NOT NULL
                      AND completed_at<=?
-                   ORDER BY completed_at DESC,created_at DESC LIMIT 1""",
+                   ORDER BY completed_at DESC,created_at DESC LIMIT 2""",
                 (_iso(observed),),
-            ).fetchone()
+            ).fetchall()
+        successful_row = successful_rows[0] if successful_rows else None
+        latest_cycle_id = str(row["cycle_id"]) if row is not None else None
+        latest_successful_id = (
+            str(successful_row["cycle_id"])
+            if successful_row is not None
+            else None
+        )
+        if (
+            include_owner_state
+            and latest_cycle_id is not None
+            and latest_cycle_id != latest_successful_id
+        ):
+            previous_successful_row = successful_row
+        else:
+            previous_successful_row = (
+                successful_rows[1] if len(successful_rows) > 1 else None
+            )
         cycle = (
-            self.market_focus_cycle(str(row["cycle_id"]))
-            if row and include_owner_state
+            self.market_focus_cycle(latest_cycle_id)
+            if latest_cycle_id is not None and include_owner_state
             else None
         )
         latest_successful_cycle = (
-            self.market_focus_cycle(str(successful_row["cycle_id"]))
-            if successful_row is not None
+            self.market_focus_cycle(latest_successful_id)
+            if latest_successful_id is not None
+            else None
+        )
+        previous_successful_cycle = (
+            self.market_focus_cycle(str(previous_successful_row["cycle_id"]))
+            if previous_successful_row is not None
             else None
         )
         if not include_owner_state:
@@ -5685,6 +5707,7 @@ class LocalCatalystIntelligence:
             "data_through": self.hotspot_status(now=observed).get("data_through"),
             "cycle": cycle,
             "latest_successful_cycle": latest_successful_cycle,
+            "previous_successful_cycle": previous_successful_cycle,
             "warnings": [],
         }
 

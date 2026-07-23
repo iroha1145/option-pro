@@ -7,6 +7,8 @@ import type { AccessRole, AccessStatus } from '@/api/types';
 interface AccessContextValue {
   role: AccessRole;
   aiEnabled: boolean;
+  aiAvailable: boolean;
+  aiReason: string | null;
   isOwner: boolean;
   isVisitor: boolean;
   loading: boolean;
@@ -22,7 +24,12 @@ const AccessContext = createContext<AccessContextValue | null>(null);
  * mock 默认 visitor；「模拟登录」任意密码即可切换为 owner。
  */
 export function AccessProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<AccessStatus>({ role: 'visitor', aiEnabled: true });
+  const [status, setStatus] = useState<AccessStatus>({
+    role: 'visitor',
+    aiEnabled: false,
+    aiAvailable: false,
+    aiReason: 'owner_login_required',
+  });
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -43,7 +50,12 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     if (status.role !== 'owner') return;
     const verify = () => void refresh().catch(() => undefined);
     const onInvalidated = () => {
-      setStatus((current) => ({ ...current, role: 'visitor' }));
+      setStatus({
+        role: 'visitor',
+        aiEnabled: false,
+        aiAvailable: false,
+        aiReason: 'owner_login_required',
+      });
       verify();
     };
     const onVisibility = () => {
@@ -73,6 +85,8 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     () => ({
       role: status.role,
       aiEnabled: status.aiEnabled,
+      aiAvailable: status.aiAvailable,
+      aiReason: status.aiReason,
       isOwner: status.role === 'owner',
       isVisitor: status.role !== 'owner',
       loading,
@@ -86,6 +100,8 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   return <AccessContext.Provider value={value}>{children}</AccessContext.Provider>;
 }
 
+// Provider 与消费 Hook 同文件便于保持访问状态的单一事实源。
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAccess(): AccessContextValue {
   const ctx = useContext(AccessContext);
   if (!ctx) throw new Error('useAccess 必须在 <AccessProvider> 内使用');

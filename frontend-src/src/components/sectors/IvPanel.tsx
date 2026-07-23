@@ -1,12 +1,4 @@
-/**
- * B3 IV 排名面板（sectors.md：左 7 列，card + r-lg）
- * - 头：H3「IV 百分位排名」+ source_status 徽标 + 排序（IV rank 升序默认）
- *   「低 IV 在前 = 便宜的权利金」Caption + 板块选择 pills（随 B1 联动，可手动改）
- * - 表（行高 44px）：代码 / 价 / IV rank（Mono 600 + 100px 色阶条 grow-bar 700ms）
- *   / IV% Mono / 30日变化（契约恒 null → 如实「—」，旁注「买方视角」，<768 隐藏）
- * - `_stale` → 「过期快照」横幅；degraded/stale/insufficient_data → 可见徽标
- * - iv-ranking 503 → 仅本面板空态（留空优于编造）+ 重试；骨架 6 行
- */
+/** 当前 ATM IV 在所选板块成分中的真实横截面排名。 */
 import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { fmtPrice, fmtRelative } from '@/lib/format';
@@ -17,8 +9,8 @@ import SourceNote from '@/components/shared/SourceNote';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import SectorChips from './SectorChips';
-import type { IvRowVm } from './model';
-import { SOURCE_STATUS_CN, aggregateIvMeta, ivRankColor } from './model';
+import type { IvMetaVm, IvRowVm } from './model';
+import { SOURCE_STATUS_CN, ivRankColor } from './model';
 
 /* ---------- source_status 徽标 ---------- */
 function SourceStatusBadge({ status }: { status: keyof typeof SOURCE_STATUS_CN }) {
@@ -59,14 +51,15 @@ interface IvPanelProps {
   sectorId: string;
   onSectorChange: (id: string) => void;
   data: IvRowVm[];
+  meta: IvMetaVm;
   loading: boolean;
   error: ApiError | null;
   onRetry: () => void;
   onOpenTicker: (ticker: string) => void;
 }
 
-export default function IvPanel({ sectors, sectorId, onSectorChange, data, loading, error, onRetry, onOpenTicker }: IvPanelProps) {
-  const [desc, setDesc] = useState(false); // 默认 IV rank 升序：低 IV 在前 = 便宜的权利金
+export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta, loading, error, onRetry, onOpenTicker }: IvPanelProps) {
+  const [desc, setDesc] = useState(false);
 
   const rows = useMemo(() => {
     const sorted = [...data].sort((a, b) => {
@@ -83,14 +76,12 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, loadi
     return sorted;
   }, [data, desc]);
 
-  const meta = useMemo(() => aggregateIvMeta(data), [data]);
-
   return (
     <div className="card-surface p-4 md:p-6">
       {/* 头：标题 + 徽标 + 排序 */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex items-center gap-2.5">
-          <h2 className="text-h3 text-ink-800">IV 百分位排名</h2>
+          <h2 className="text-h3 text-ink-800">板块 IV 横截面排名</h2>
           {meta.status !== 'active' && <SourceStatusBadge status={meta.status} />}
         </div>
         <div className="flex items-center gap-3">
@@ -101,15 +92,15 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, loadi
             type="button"
             onClick={() => setDesc((v) => !v)}
             className="flex h-7 items-center gap-1 rounded-md border border-line bg-card px-2 text-caption text-ink-500 transition-colors duration-fast hover:border-line-strong hover:text-ink-800"
-            aria-label={`切换排序，当前 IV rank ${desc ? '降序' : '升序'}`}
+            aria-label={`切换排序，当前板块排位${desc ? '降序' : '升序'}`}
           >
             <Icon name={desc ? 'arrow-down' : 'arrow-up'} size={12} />
-            IV rank {desc ? '降序' : '升序'}
+            排位{desc ? '降序' : '升序'}
           </button>
         </div>
       </div>
       <p className="mt-1 text-caption text-ink-400">
-        {desc ? '高 IV 在前 = 权利金更贵，关注卖方机会' : '低 IV 在前 = 便宜的权利金'}
+        {desc ? '当前 ATM IV 较高的成分在前' : '当前 ATM IV 较低的成分在前'}
       </p>
 
       {/* 板块 pills（随 B1 联动，可手动改） */}
@@ -147,17 +138,13 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, loadi
         ) : rows.length === 0 ? (
           <EmptyState image="/empty-chart.svg" title="该板块暂无 IV 排名数据" description="留空优于编造" />
         ) : (
-          <table className="min-w-[520px] w-full border-collapse" aria-label="IV 百分位排名表">
+          <table className="min-w-[420px] w-full border-collapse" aria-label="板块 IV 横截面排名表">
             <thead>
               <tr className="border-b border-line text-left text-eyebrow font-sans uppercase tracking-[0.14em] text-ink-400">
                 <th className="py-2.5 pr-2 font-sans">代码</th>
                 <th className="px-2 py-2.5 text-right font-sans">价</th>
-                <th className="px-2 py-2.5 font-sans">IV rank</th>
+                <th className="px-2 py-2.5 font-sans">板块排位</th>
                 <th className="px-2 py-2.5 text-right font-sans">IV%</th>
-                <th className="hidden py-2.5 pl-2 text-right font-sans md:table-cell">
-                  30日变化
-                  <span className="block text-micro normal-case tracking-normal text-ink-300">买方视角</span>
-                </th>
                 <th className="w-10" aria-label="操作" />
               </tr>
             </thead>
@@ -190,14 +177,6 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, loadi
                   <td className="px-2 py-2 text-right font-mono text-data-m text-ink-600 tnum">
                     {r.atmIv !== null ? `${r.atmIv.toFixed(1)}%` : <span className="text-ink-300">—</span>}
                   </td>
-                  <td className="hidden py-2 pl-2 text-right font-mono text-data-m tnum md:table-cell">
-                    {/* iv_change_30d 契约恒 null：如实留空，不编造 */}
-                    {r.ivChange30d !== null ? (
-                      <span className={r.ivChange30d <= 0 ? 'text-up-700' : 'text-down-700'}>{r.ivChange30d.toFixed(1)}%</span>
-                    ) : (
-                      <span className="text-ink-300">—</span>
-                    )}
-                  </td>
                   <td className="py-2 pl-2">
                     <span className="inline-flex size-7 items-center justify-center rounded-xs border border-line bg-card text-ink-400 opacity-0 transition-opacity duration-fast group-hover:opacity-100">
                       <Icon name="arrow-up-right" size={13} />
@@ -210,7 +189,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, loadi
         )}
       </div>
 
-      <SourceNote className="mt-4" text="IV 百分位基于 252 个交易日 · 来源：Optix Research" />
+      <SourceNote className="mt-4" text="板块排位来自当前成分 ATM IV 的横截面比较，不是历史 252 日百分位" />
     </div>
   );
 }

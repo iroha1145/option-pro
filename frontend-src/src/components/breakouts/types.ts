@@ -98,6 +98,17 @@ export interface RangePersistence {
   volume: number;
   participation: number;
 }
+/** 生产契约的真实区间持续指标；与早期演示五维不是同一口径。 */
+export interface RangePersistenceLive {
+  kind: 'live';
+  value: number | null;
+  slope5d: number | null;
+  ratio10d: number | null;
+  selfPercentile: number | null;
+  globalPercentile: number | null;
+  sectorPercentile: number | null;
+  status: string;
+}
 export const RANGE_PERSISTENCE_DEFS = [
   { key: 'trend', label: '趋势持续' },
   { key: 'hold', label: '区间保持' },
@@ -147,7 +158,7 @@ export interface BreakoutEventFull extends BreakoutEventDetail {
   market_fit_score: number;
   alert_priority_score: number;
   data_confidence_score: number;
-  range_persistence: RangePersistence;
+  range_persistence: RangePersistence | RangePersistenceLive | null;
   transitions: BreakoutTransition[];
 }
 
