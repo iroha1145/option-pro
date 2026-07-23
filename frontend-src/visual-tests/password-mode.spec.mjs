@@ -352,8 +352,10 @@ test("password mode keeps public research readable and reserves owner controls f
       ),
     )
     .toBeLessThanOrEqual(1);
-  await expect(analysisProgress).toBeVisible();
-  await analysisProgress.scrollIntoViewIfNeeded();
+  // 分析进度每五秒会换成最新服务端快照。直接执行同步 DOM 滚动，
+  // 避免 Playwright 等待元素稳定时恰逢快照刷新、旧节点被替换。
+  await analysisProgress.evaluate(element => element.scrollIntoView({ block: "center" }));
+  await expect(page.getByLabel("新闻分析进度")).toBeVisible();
   await screenshot(page, "password-owner-analysis-progress-mobile");
   await page.setViewportSize({ width: 1280, height: 720 });
   await screenshot(page, "password-owner-catalysts");
