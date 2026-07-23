@@ -116,11 +116,36 @@ export function normalizeBreakoutEvent(raw: unknown): BreakoutSignal & BreakoutE
   const targetPrice = pickN(r, 'target_price', 'targetPrice'); // 契约无 → null（不编造目标价）
   const invalidation = pickN(r, 'invalidation_price', 'invalidPrice');
   const rangePersistence = (() => {
-    // mock 为五维对象；契约为单一数值（语义不同，不映射）→ 非五维对象一律 null
+    // 兼容早期 mock 五维，并把生产契约的真实标量/斜率/分位保留为独立口径。
     const rp = asRec(r.range_persistence);
     const dims = ['trend', 'hold', 'volatility', 'volume', 'participation'];
-    return dims.every((d) => num(rp[d]) !== null)
-      ? { trend: num(rp.trend)!, hold: num(rp.hold)!, volatility: num(rp.volatility)!, volume: num(rp.volume)!, participation: num(rp.participation)! }
+    if (dims.every((d) => num(rp[d]) !== null)) {
+      return {
+        trend: num(rp.trend)!,
+        hold: num(rp.hold)!,
+        volatility: num(rp.volatility)!,
+        volume: num(rp.volume)!,
+        participation: num(rp.participation)!,
+      };
+    }
+    const value = num(r.range_persistence);
+    const slope5d = pickN(r, 'range_persistence_slope_5d');
+    const ratio10d = pickN(r, 'range_persistence_ratio_10d');
+    const selfPercentile = pickN(r, 'range_persistence_self_percentile');
+    const globalPercentile = pickN(r, 'range_persistence_global_percentile');
+    const sectorPercentile = pickN(r, 'range_persistence_sector_percentile');
+    const status = pickS(r, 'range_persistence_status') ?? 'unavailable';
+    return [value, slope5d, ratio10d, selfPercentile, globalPercentile, sectorPercentile].some((v) => v !== null)
+      ? {
+          kind: 'live' as const,
+          value,
+          slope5d,
+          ratio10d,
+          selfPercentile,
+          globalPercentile,
+          sectorPercentile,
+          status,
+        }
       : null;
   })();
   return {
@@ -279,7 +304,7 @@ export const breakoutsApi = {
  * lifecycle_state→result(hit/failed/pending 分类)+lifecycle_state
  * event_price→event_price/triggerPrice · invalidation_price→invalidation_price/invalidPrice
  * target_price：契约无 → null（targetPrice 同）· summary：契约无 → ''
- * support_zone/resistance_zone→{low,high}|null · range_persistence：契约为单值 → null（五维仅 mock）
+ * support_zone/resistance_zone→{low,high}|null · range_persistence 标量/斜率/分位→真实口径对象（兼容 mock 五维）
  * transitions：{from_state,to_state,evidence_at,reason}[]→{state,at,note}[](升序+起点)
  * contribution_breakdown：*_score 键补短键别名 · evidence：契约无 → []
  * triggered_at/rvol_time_of_day/pivot_price/各评分：可空透传（null → UI「—」）

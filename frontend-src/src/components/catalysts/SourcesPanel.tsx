@@ -77,8 +77,8 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
                 <p className="mt-0.5 text-micro text-ink-400">延迟 ms</p>
               </div>
               <div>
-                <p className="font-mono text-data-l text-ink-900 tnum">{s.itemsToday}</p>
-                <p className="mt-0.5 text-micro text-ink-400">今日条数</p>
+                <p className="font-mono text-data-l text-ink-900 tnum">{s.itemsToday ?? '—'}</p>
+                <p className="mt-0.5 text-micro text-ink-400">近 24h 条数</p>
               </div>
               <div>
                 <p className="font-mono text-data-l text-ink-900 tnum" suppressHydrationWarning>
@@ -91,7 +91,7 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
           </motion.div>
         ))}
       </motion.div>
-      <SourceNote className="mt-4" text="来源：各通讯社公开稿件 · 采集频率每 5 分钟 · 延迟行情" />
+      <SourceNote className="mt-4" text="状态来自后台采集流健康快照；未提供的延迟与条数留空" />
     </div>
   );
 }

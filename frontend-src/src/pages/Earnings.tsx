@@ -34,7 +34,7 @@ const REFRESH_COOLDOWN_S = 60;
 type RefreshStatus = 'refreshed' | 'cooldown' | 'failed_stale' | null;
 
 export default function Earnings() {
-  const { isOwner, aiEnabled } = useAccess();
+  const { isOwner, aiEnabled, aiAvailable, aiReason } = useAccess();
   const toast = useToast();
   const now = useNow(1000);
 
@@ -129,18 +129,39 @@ export default function Earnings() {
   /* 页头右侧：AI 状态点 + owner 刷新 */
   const headerMeta = (
     <>
-      <span className="flex items-center gap-2" aria-label={aiEnabled ? 'AI 已启用' : 'AI 已关闭'}>
-        {aiEnabled ? (
+      <span
+        className="flex items-center gap-2"
+        aria-label={
+          aiAvailable
+            ? 'AI 分析可用'
+            : aiEnabled
+              ? 'AI 分析暂不可用'
+              : isOwner
+                ? 'AI 分析未开启'
+                : '登录后可用 AI 分析'
+        }
+      >
+        {aiAvailable ? (
           <>
             <PulseDot className="bg-ai-600" size={8} />
             <Icon name="spark-ai" size={15} className="text-ai-600" />
-            <span className="text-caption text-ai-600">AI 已启用</span>
+            <span className="text-caption text-ai-600">AI 可用</span>
+          </>
+        ) : aiEnabled ? (
+          <>
+            <span className="size-2 rounded-full bg-warn-600" aria-hidden="true" />
+            <Icon name="spark-ai" size={15} className="text-warn-600" />
+            <span className="text-caption text-warn-600">
+              {['analysis_in_progress', 'global_concurrency_limit', 'queue_busy'].includes(aiReason ?? '')
+                ? 'AI 处理中'
+                : 'AI 暂不可用'}
+            </span>
           </>
         ) : (
           <>
             <span className="size-2 rounded-full bg-ink-300" aria-hidden="true" />
             <Icon name="spark-ai" size={15} className="text-ink-300" />
-            <span className="text-caption text-ink-400">AI 已关闭</span>
+            <span className="text-caption text-ink-400">{isOwner ? 'AI 未开启' : '登录后可用'}</span>
           </>
         )}
       </span>

@@ -286,11 +286,26 @@ class SensitivePublicIntelligence(FakeIntelligence):
             "submission_source": "manual",
             "result": _focus_result(input_hash=input_hash),
         }
+        previous_cycle_id = "mfc_" + "d" * 32
+        previous_input_hash = "e" * 64
+        previous_result = _focus_result(input_hash=previous_input_hash)
+        previous_result["cycle_id"] = previous_cycle_id
+        previous_result["as_of"] = "2026-07-15T03:00:00Z"
+        previous_cycle = {
+            **cycle,
+            "cycle_id": previous_cycle_id,
+            "input_hash": previous_input_hash,
+            "snapshot_as_of": "2026-07-15T03:00:00Z",
+            "created_at": "2026-07-15T03:00:00Z",
+            "completed_at": "2026-07-15T03:01:00Z",
+            "result": previous_result,
+        }
         return {
             "status": "active",
             "as_of": (now or NOW).isoformat(),
             "cycle": cycle,
             "latest_successful_cycle": cycle,
+            "previous_successful_cycle": previous_cycle,
         }
 
 
@@ -403,7 +418,12 @@ def test_public_catalyst_reads_skip_owner_ai_store_and_metadata() -> None:
     assert latest["status"] == "active"
     assert latest["cycle"]["status"] == "completed"
     assert latest["latest_successful_cycle"]["status"] == "completed"
-    for cycle in (latest["cycle"], latest["latest_successful_cycle"]):
+    assert latest["previous_successful_cycle"]["status"] == "completed"
+    for cycle in (
+        latest["cycle"],
+        latest["latest_successful_cycle"],
+        latest["previous_successful_cycle"],
+    ):
         assert "job_id" not in cycle
         assert "budget_charge_usd" not in cycle
         assert "usage" not in cycle

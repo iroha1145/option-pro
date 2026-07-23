@@ -1055,10 +1055,8 @@ export interface SourceHealth {
   status: 'active' | 'degraded';
   latencyMs: number | null;
   lastFetchedAt: string;
-  itemsToday: number;
+  itemsToday: number | null;
   note: string;
-  /** live：源健康快照缺失时由近 24h 新闻流聚合推导 */
-  derived?: boolean;
 }
 
 export interface FocusCycleStockAssessment {

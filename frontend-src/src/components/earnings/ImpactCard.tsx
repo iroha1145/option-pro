@@ -3,11 +3,11 @@
  * 顶边 2px ai-600 标识条 · 吸顶 · 换代码 blur(6px)→0 + fade 400ms「聚焦」
  *
  * 状态机：
- *  - 已缓存 → 五段结果（预期波动 count-up / 情绪渐变条 / IV 排名 / 连锁 chips / Serif 引文）
+ *  - 已缓存 → 真实契约结果（摘要 / 预期 / 关联标的）
  *  - 409 analysis_required → owner「生成分析」（confirm 注明模型费用）→ 创建 job 退避轮询 [2,3,5,8,10]s
  *    （活跃 led-pulse + 服务端任务状态，终态渲染结果 / 失败原因 + 重试）
  *  - visitor →「登录后可用模型分析」；AI 关闭 →「AI 分析未启用」（不假造内容）
- * 纪律：连锁影响幅度标注「· 非收益」，模型置信度标注「· 非胜率」
+ * 纪律：不展示后端契约没有的推导指标
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -15,19 +15,20 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
 import { aiJobsApi } from '@/api/modules/ai-jobs';
 import { earningsApi } from '@/api/modules/earnings';
+import type {
+  EarningsImpactDirection,
+  EarningsImpactRelation,
+  EarningsImpactResult,
+} from '@/api/modules/earnings';
 import type { AiJob } from '@/api/types';
 import { useAccess } from '@/hooks/useAccess';
-import { useCountUp } from '@/hooks/useCountUp';
 import { useToast } from '@/components/Toast';
 import { useShell } from '@/components/Layout';
 import { cn } from '@/lib/utils';
-import { fmtPct, fmtRelative } from '@/lib/format';
 import Icon from '@/components/icons';
 import SourceNote from '@/components/shared/SourceNote';
 import { SkeletonText } from '@/components/shared/Skeleton';
 import PulseDot from './PulseDot';
-import type { EarningsImpactResult, EarningsRow } from './types';
-import { exNum } from './types';
 
 /* ---------------- AIJobPublic 状态机（api-contract §0.4） ---------------- */
 const ACTIVE_STATUSES = new Set(['preparing', 'pending', 'queued', 'in_progress', 'processing', 'running', 'cancel_requested']);
@@ -61,65 +62,19 @@ function JobSteps({ job }: { job: AiJob }) {
   );
 }
 
-/* ---------------- 情绪渐变条（§6-8：down→warn→up + 指针） ---------------- */
-const SENTIMENT_META = {
-  bullish: { label: '看涨', pos: 80, text: 'text-up-700' },
-  neutral: { label: '中性', pos: 50, text: 'text-warn-600' },
-  bearish: { label: '看跌', pos: 20, text: 'text-down-700' },
-} as const;
+const DIRECTION_META: Record<EarningsImpactDirection, { label: string; className: string }> = {
+  bullish: { label: '利多', className: 'border-up-600/25 bg-up-50 text-up-700' },
+  bearish: { label: '利空', className: 'border-down-600/25 bg-down-50 text-down-700' },
+  mixed: { label: '多空交织', className: 'border-warn-600/25 bg-warn-50 text-warn-600' },
+};
 
-function SentimentGauge({ sentiment }: { sentiment: EarningsImpactResult['sentiment'] }) {
-  const meta = SENTIMENT_META[sentiment] ?? SENTIMENT_META.neutral;
-  return (
-    <div>
-      <div className="flex items-center justify-between">
-        <span className="text-caption text-ink-500">情绪</span>
-        <span className={cn('text-caption font-semibold', meta.text)}>{meta.label}</span>
-      </div>
-      <div className="relative mt-3 h-1.5 rounded-pill" style={{ background: 'linear-gradient(90deg,#E5484D,#E8930C,#0E9F6E)' }}>
-        <motion.span
-          className="absolute -top-[3px] size-3 rounded-full border-2 border-card bg-ink-900"
-          initial={{ left: '50%' }}
-          animate={{ left: `calc(${meta.pos}% - 6px)` }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-          aria-hidden="true"
-        />
-      </div>
-      <div className="mt-1.5 flex justify-between font-mono text-[9px] text-ink-300">
-        <span>看跌</span>
-        <span>中性</span>
-        <span>看涨</span>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- IV 排名色阶条（§6-5：低 up → brand → 高 down） ---------------- */
-function IvRankBar({ ivRank }: { ivRank: number }) {
-  const color = ivRank < 35 ? 'bg-up-600' : ivRank < 70 ? 'bg-brand-400' : 'bg-down-600';
-  return (
-    <div>
-      <div className="flex items-baseline justify-between">
-        <span className="text-caption text-ink-500">IV 排名</span>
-        <span className="font-mono text-data-m text-ink-900 tnum">IV Rank {ivRank}%</span>
-      </div>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-pill bg-line" role="img" aria-label={`IV 百分位 ${ivRank}%`}>
-        <motion.div
-          className={cn('h-full origin-left rounded-pill', color)}
-          initial={{ scaleX: 0 }}
-          animate={{ scaleX: 1 }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-          style={{ width: `${ivRank}%` }}
-        />
-      </div>
-      <div className="mt-1.5 flex justify-between font-mono text-[9px] text-ink-300">
-        <span>低</span>
-        <span>50</span>
-        <span>高</span>
-      </div>
-    </div>
-  );
-}
+const RELATION_LABELS: Record<EarningsImpactRelation, string> = {
+  competitor: '竞争对手',
+  supplier: '供应链',
+  customer: '客户',
+  etf: '交易所交易基金',
+  opposing: '反向关联',
+};
 
 /* ---------------- Serif 引文：$CODE 高亮可点击 ---------------- */
 function QuotedSummary({ text, onOpenTicker }: { text: string; onOpenTicker: (t: string) => void }) {
@@ -143,53 +98,6 @@ function QuotedSummary({ text, onOpenTicker }: { text: string; onOpenTicker: (t:
         )}
       </p>
     </blockquote>
-  );
-}
-
-/* ---------------- 预期波动大数（count-up） + 历史均值对照微条 ---------------- */
-function ExpectedMoveHero({ impact }: { impact: EarningsImpactResult }) {
-  const v = useCountUp(impact.expectedMovePct);
-  const hist = exNum(impact as EarningsImpactResult & EarningsRow, 'histAvgMovePct');
-  const max = Math.max(impact.expectedMovePct, hist ?? 0, 0.01);
-  return (
-    <div>
-      <p className="eyebrow">预期波动</p>
-      <p className="mt-1.5 font-mono text-data-xl text-ink-900 tnum">±{v.toFixed(1)}%</p>
-      <div className="mt-3 space-y-1.5">
-        <div className="flex items-center gap-2">
-          <span className="w-14 shrink-0 text-micro text-ink-400">预期</span>
-          <span className="h-2 flex-1 overflow-hidden rounded-pill bg-line/60" aria-hidden="true">
-            <motion.span
-              className="block h-full rounded-pill border border-brand-400/60"
-              style={{
-                width: `${(impact.expectedMovePct / max) * 100}%`,
-                backgroundImage: 'repeating-linear-gradient(45deg, rgba(46,70,224,.55) 0 1.2px, transparent 1.2px 4px)',
-              }}
-              initial={{ scaleX: 0, transformOrigin: 'left' }}
-              animate={{ scaleX: 1 }}
-              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            />
-          </span>
-          <span className="w-12 text-right font-mono text-micro text-ink-500 tnum">±{impact.expectedMovePct.toFixed(1)}%</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-14 shrink-0 text-micro text-ink-400">历史均值</span>
-          <span className="h-2 flex-1 overflow-hidden rounded-pill bg-line/60" aria-hidden="true">
-            {hist != null && (
-              <motion.span
-                className="block h-full rounded-pill bg-brand-600"
-                style={{ width: `${(hist / max) * 100}%` }}
-                initial={{ scaleX: 0, transformOrigin: 'left' }}
-                animate={{ scaleX: 1 }}
-                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.08 }}
-              />
-            )}
-          </span>
-          <span className="w-12 text-right font-mono text-micro text-ink-500 tnum">{hist != null ? `±${hist.toFixed(1)}%` : '—'}</span>
-        </div>
-      </div>
-      <p className="mt-2 text-micro text-ink-400">斜纹=期权隐含预期 · 实心=近四次财报后平均实际波动 · 非收益</p>
-    </div>
   );
 }
 
@@ -232,7 +140,7 @@ export default function ImpactCard({ ticker, onAnalyzed, className }: ImpactCard
   const loadImpact = useCallback(
     async (t: string): Promise<boolean> => {
       try {
-        const res = (await earningsApi.impact(t)) as EarningsImpactResult;
+        const res = await earningsApi.impact(t);
         setImpact(res);
         setPhase('ready');
         return true;
@@ -351,8 +259,6 @@ export default function ImpactCard({ ticker, onAnalyzed, className }: ImpactCard
       toast.error('取消失败');
     }
   };
-
-  const sentimentConf = impact ? exNum(impact as EarningsImpactResult & EarningsRow, 'confidence') : null;
 
   return (
     <aside className={cn('card-surface self-start overflow-hidden', className)} aria-label="AI 影响分析">
@@ -519,7 +425,7 @@ export default function ImpactCard({ ticker, onAnalyzed, className }: ImpactCard
             </div>
           )}
 
-          {/* ---------- 已缓存结果：五段 ---------- */}
+          {/* ---------- 已缓存结果：严格展示后端真实契约 ---------- */}
           {phase === 'ready' && impact && (
             <motion.div
               initial="hidden"
@@ -531,61 +437,55 @@ export default function ImpactCard({ ticker, onAnalyzed, className }: ImpactCard
                 <div className="flex items-center gap-2">
                   <Icon name="spark-ai" size={16} className="text-ai-600" />
                   <h3 className="font-display text-[18px] leading-6 text-ink-900">AI 影响 · {impact.ticker}</h3>
+                  <span className="ml-auto rounded-pill border border-ai-600/20 bg-ai-50 px-2 py-0.5 text-micro font-medium text-ai-600">
+                    简体中文
+                  </span>
                 </div>
-                {impact.generatedAt && (
-                  <p className="mt-1 font-mono text-micro text-ink-400 tnum">{fmtRelative(impact.generatedAt)}生成</p>
-                )}
+                <p className="mt-1 font-mono text-micro text-ink-400">{impact.outputLanguage}</p>
               </Section>
 
-              {/* 2 预期波动 */}
+              {/* 2 摘要 */}
               <Section>
-                <ExpectedMoveHero impact={impact} />
+                <p className="eyebrow">分析摘要</p>
+                <div className="mt-2.5">
+                  <QuotedSummary text={impact.summary} onOpenTicker={openTicker} />
+                </div>
               </Section>
 
-              {/* 3 情绪 */}
+              {/* 3 财报预期 */}
               <Section>
-                <SentimentGauge sentiment={impact.sentiment} />
-                {sentimentConf != null && (
-                  <p className="mt-2 text-micro text-ink-400">
-                    模型置信 <span className="font-mono tnum">{Math.round(sentimentConf * 100)}%</span>
-                    <span className="text-ink-300"> · 非胜率</span>
-                  </p>
-                )}
+                <p className="eyebrow">财报预期</p>
+                <p className="mt-2 text-body-s leading-6 text-ink-700">{impact.expectation}</p>
               </Section>
 
-              {/* 4 IV 排名 */}
-              <Section>
-                <IvRankBar ivRank={impact.ivRank} />
-              </Section>
-
-              {/* 5 连锁反应 + AI 洞察 */}
+              {/* 4 关联标的 */}
               <Section>
                 <div className="flex items-baseline justify-between">
-                  <p className="eyebrow">连锁反应</p>
-                  <span className="text-micro text-ink-300">影响幅度 · 非收益</span>
+                  <p className="eyebrow">关联标的</p>
+                  <span className="text-micro text-ink-300">{impact.impacted.length} 项</span>
                 </div>
-                <div className="mt-2.5 flex flex-wrap gap-1.5">
-                  {impact.related.map((r) => {
-                    const up = r.changePct >= 0;
+                <div className="mt-2.5 space-y-2">
+                  {impact.impacted.map((item) => {
+                    const meta = DIRECTION_META[item.direction];
                     return (
                       <button
-                        key={r.ticker}
-                        onClick={() => openTicker(r.ticker)}
-                        title={`${r.name} · ${r.relation}`}
-                        aria-label={`${r.ticker} 预期联动 ${up ? '涨' : '跌'} ${Math.abs(r.changePct).toFixed(1)}%，查看详情`}
-                        className={cn(
-                          'inline-flex items-baseline gap-1 rounded-xs px-1.5 py-1 font-mono text-micro tnum transition-transform duration-fast hover:-translate-y-px',
-                          up ? 'bg-up-50 text-up-700' : 'bg-down-50 text-down-700',
-                        )}
+                        key={`${item.ticker}-${item.relation}`}
+                        onClick={() => openTicker(item.ticker)}
+                        aria-label={`查看 ${item.ticker}：${meta.label}`}
+                        className="w-full rounded-md border border-line bg-card-warm p-3 text-left transition-colors hover:border-brand-400/50 hover:bg-card"
                       >
-                        <span className="font-semibold">${r.ticker}</span>
-                        <span>{fmtPct(r.changePct, 1)}</span>
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="font-mono text-caption font-semibold text-ink-900">${item.ticker}</span>
+                          <span className="min-w-0 truncate text-caption text-ink-500">{item.name}</span>
+                          <span className={cn('ml-auto shrink-0 rounded-xs border px-1.5 py-0.5 text-micro font-medium', meta.className)}>
+                            {meta.label}
+                          </span>
+                        </span>
+                        <span className="mt-1.5 block text-micro text-ink-400">{RELATION_LABELS[item.relation]}</span>
+                        <span className="mt-1 block text-caption leading-5 text-ink-600">{item.reason}</span>
                       </button>
                     );
                   })}
-                </div>
-                <div className="mt-3">
-                  <QuotedSummary text={impact.summary} onOpenTicker={openTicker} />
                 </div>
                 <SourceNote className="mt-3" text="模型生成 · 来源：Optix Research · 仅供研究" />
               </Section>

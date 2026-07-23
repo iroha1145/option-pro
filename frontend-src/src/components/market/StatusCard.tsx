@@ -28,6 +28,17 @@ const MARKET_LABEL: Record<MarketStatusDetail['market'], string> = {
   closed: '休市',
 };
 
+const PHASE_LABEL: Record<string, string> = {
+  regular: '常规交易时段 · 9:30–16:00 ET',
+  'pre-market': '盘前交易 · 流动性较薄，报价点差偏大',
+  premarket: '盘前交易 · 流动性较薄，报价点差偏大',
+  'after-hours': '盘后交易 · 留意财报与公告驱动',
+  postmarket: '盘后交易 · 留意财报与公告驱动',
+  overnight: '隔夜休市 · 等待下一交易时段',
+  weekend: '周末休市 · 等待下一个交易日',
+  holiday: '节假日休市',
+};
+
 function CountdownRow({ label, at, now }: { label: string; at: string | null; now: number }) {
   return (
     <div className="flex items-center justify-between border-t border-line py-2.5">
@@ -111,7 +122,9 @@ export default function StatusCard({
           <span className="font-mono text-data-m text-ink-600 tnum">{data.holiday ?? '—'}</span>
         </div>
       </div>
-      <p className="mt-3 text-caption text-ink-500">{data.phase ?? '—'}</p>
+      <p className="mt-3 text-caption text-ink-500">
+        {data.phase ? (PHASE_LABEL[data.phase] ?? data.phase) : '—'}
+      </p>
     </motion.section>
   );
 }

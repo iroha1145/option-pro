@@ -7,7 +7,7 @@
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { SCORE_DEFS, riskBarClass, scoreBarClass } from './types';
-import type { BreakoutEventFull } from './types';
+import type { BreakoutEventFull, RangePersistence } from './types';
 
 function barCls(key: string, v: number): string {
   return key === 'chase_risk_score' ? riskBarClass(v) : scoreBarClass(v);
@@ -74,17 +74,61 @@ export function ScoreBarsFull({ event, className }: { event: BreakoutEventFull; 
   );
 }
 
-/** range_persistence 五维条（详情面板）；live 契约为单值（无五维）→ 诚实空态 */
+/** 区间持续指标：生产显示真实标量/斜率/分位，mock 兼容早期五维。 */
 import { RANGE_PERSISTENCE_DEFS } from './types';
 
 export function RangePersistenceBars({ event, className }: { event: BreakoutEventFull; className?: string }) {
   const rp = event.range_persistence as BreakoutEventFull['range_persistence'] | null | undefined;
-  const hasDims = rp && typeof rp === 'object' && RANGE_PERSISTENCE_DEFS.every((d) => fin(rp[d.key]));
+  if (rp && typeof rp === 'object' && 'kind' in rp && rp.kind === 'live') {
+    const metrics = [
+      { key: 'value', label: '持续分', value: rp.value },
+      { key: 'ratio10d', label: '10日占比', value: rp.ratio10d },
+      { key: 'globalPercentile', label: '全局分位', value: rp.globalPercentile },
+      { key: 'sectorPercentile', label: '板块分位', value: rp.sectorPercentile },
+      { key: 'selfPercentile', label: '自身分位', value: rp.selfPercentile },
+    ] as const;
+    const statusCn: Record<string, string> = {
+      active: '有效',
+      warming_up: '积累中',
+      insufficient_history: '历史不足',
+      unavailable: '暂不可用',
+    };
+    return (
+      <div className={cn('space-y-2', className)} aria-label="区间持续指标">
+        <div className="mb-2 flex items-center justify-between rounded-sm bg-card-warm px-2.5 py-1.5">
+          <span className="text-caption text-ink-500">状态</span>
+          <span className="font-mono text-caption text-ink-700">{statusCn[rp.status] ?? rp.status}</span>
+        </div>
+        {metrics.map((metric, i) => (
+          <div key={metric.key} className="grid grid-cols-[64px_1fr_38px] items-center gap-2.5">
+            <span className="text-caption text-ink-500">{metric.label}</span>
+            <div className="h-1 overflow-hidden rounded-pill bg-line">
+              {fin(metric.value) && (
+                <motion.div
+                  className={cn('h-full origin-left rounded-pill', scoreBarClass(metric.value))}
+                  initial={{ scaleX: 0 }}
+                  animate={{ scaleX: 1 }}
+                  transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.06 + i * 0.045 }}
+                  style={{ width: `${Math.max(3, Math.min(100, metric.value))}%` }}
+                />
+              )}
+            </div>
+            <span className="text-right font-mono text-caption text-ink-600 tnum">{disp(metric.value)}</span>
+          </div>
+        ))}
+        <p className="pt-1 text-right font-mono text-micro text-ink-400 tnum">
+          5 日斜率 {fin(rp.slope5d) ? `${rp.slope5d >= 0 ? '+' : ''}${rp.slope5d.toFixed(2)}` : '—'}
+        </p>
+      </div>
+    );
+  }
+  const legacy = rp as RangePersistence | null | undefined;
+  const hasDims = legacy && RANGE_PERSISTENCE_DEFS.every((d) => fin(legacy[d.key]));
   if (!hasDims) {
     return (
-      <div className={cn('space-y-2', className)} aria-label="区间持续五维">
+      <div className={cn('space-y-2', className)} aria-label="区间持续指标">
         <p className="flex h-[104px] items-center justify-center rounded-md border border-line bg-card-warm text-caption text-ink-400">
-          接口未覆盖五维数据 · 留空而非编造
+          区间持续指标暂不可用
         </p>
       </div>
     );
@@ -92,7 +136,7 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
   return (
     <div className={cn('space-y-2', className)} aria-label="区间持续五维">
       {RANGE_PERSISTENCE_DEFS.map((d, i) => {
-        const v = rp[d.key];
+        const v = legacy[d.key];
         return (
           <div key={d.key} className="grid grid-cols-[64px_1fr_30px] items-center gap-2.5">
             <span className="text-caption text-ink-500">{d.label}</span>

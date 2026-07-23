@@ -1,12 +1,13 @@
 /**
  * B4 事件详情模态（breakouts.md；居中 720px，spring-pop 240ms，ESC/背板关闭）
- * 支撑/阻力区带可视化 · range_persistence 五维条 · transitions 生命周期轨迹
+ * 支撑/阻力区带可视化 · 区间持续指标 · transitions 生命周期轨迹
  * 评分条组 · 证据竖向时间线（stagger 30ms）· 内嵌该股催化剂摘要（catalystsApi.byTicker）
  */
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { catalystsApi } from '@/api/modules/catalysts';
 import type { NewsItem } from '@/api/types';
+import { usePolling } from '@/hooks/usePolling';
 import { cn } from '@/lib/utils';
 import { fmtPrice, fmtRelative } from '@/lib/format';
 import Icon from '@/components/icons';
@@ -135,24 +136,9 @@ function LifecycleTrack({ ev }: { ev: BreakoutEventFull }) {
 
 /* ---------------- 催化剂摘要 ---------------- */
 function CatalystDigest({ ticker }: { ticker: string }) {
-  const [items, setItems] = useState<NewsItem[] | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    setItems(null);
-    setFailed(false);
-    catalystsApi
-      .byTicker(ticker)
-      .then((d) => {
-        if (alive) setItems(d.slice(0, 3));
-      })
-      .catch(() => {
-        if (alive) setFailed(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [ticker]);
+  const q = usePolling(() => catalystsApi.byTicker(ticker), null, [ticker]);
+  const items: NewsItem[] | null = q.data ? q.data.slice(0, 3) : null;
+  const failed = q.error !== null;
 
   const DOT: Record<NewsItem['sentiment'], string> = {
     positive: 'bg-up-600',
@@ -274,10 +260,10 @@ export default function EventDetail({ event, onClose, onOpenTicker, onShowTicker
                 <ZoneBand ev={event} />
               </section>
 
-              {/* 五维 + 评分 */}
+              {/* 区间持续 + 评分 */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <section>
-                  <p className="eyebrow mb-2">区间持续五维</p>
+                  <p className="eyebrow mb-2">区间持续指标</p>
                   <RangePersistenceBars event={event} />
                 </section>
                 <section>
@@ -292,11 +278,12 @@ export default function EventDetail({ event, onClose, onOpenTicker, onShowTicker
                 <LifecycleTrack ev={event} />
               </section>
 
-              {/* 证据列表 */}
-              <section>
-                <p className="eyebrow mb-2">证据列表 · {(event.evidence ?? []).length} 条</p>
-                <ol className="relative ml-1.5 border-l-2 border-line pl-4">
-                  {(event.evidence ?? []).map((line, i) => (
+              {/* 证据列表：后端未提供时整段隐藏，不显示假 0。 */}
+              {(event.evidence ?? []).length > 0 && (
+                <section>
+                  <p className="eyebrow mb-2">证据列表 · {(event.evidence ?? []).length} 条</p>
+                  <ol className="relative ml-1.5 border-l-2 border-line pl-4">
+                    {(event.evidence ?? []).map((line, i) => (
                     <motion.li
                       key={i}
                       initial={{ opacity: 0, x: 8 }}
@@ -308,9 +295,10 @@ export default function EventDetail({ event, onClose, onOpenTicker, onShowTicker
                       <span className="mr-2 font-mono text-micro text-ink-400 tnum">{line.slice(0, 5)}</span>
                       <span className="text-body-s text-ink-600">{line.slice(6)}</span>
                     </motion.li>
-                  ))}
-                </ol>
-              </section>
+                    ))}
+                  </ol>
+                </section>
+              )}
 
               {/* 催化剂摘要 */}
               <section>

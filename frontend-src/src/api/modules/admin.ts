@@ -58,8 +58,8 @@ function nTask(r: Rec): WorkerTaskState {
   const failures = pickN(r, 'consecutive_failures') ?? 0;
   return {
     name: pickS(r, 'task_name', 'name') ?? '',
-    enabled: pickB(r, 'enabled') ?? true,
-    healthy: (pickB(r, 'healthy') ?? true) && failures === 0,
+    enabled: pickB(r, 'enabled') ?? false,
+    healthy: (pickB(r, 'healthy') ?? false) && failures === 0,
     lastSuccessAt: pickS(r, 'last_success_at', 'last_success', 'last_run_at', 'updated_at'),
     note: pickS(r, 'last_error_code', 'last_error', 'note'),
   };

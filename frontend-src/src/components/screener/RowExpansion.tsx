@@ -29,7 +29,7 @@ function fetchDailyCloses(ticker: string): Promise<number[] | null> {
   let p = closesCache.get(ticker);
   if (!p) {
     p = stocksApi
-      .chart(ticker, '1D') // CHART_RANGE_MAP：1D→契约 range=1d（日 K），不发明新挡位
+      .chart(ticker, '1d') // 后端真实日 K 周期
       .then((c) => {
         const closes = c.candles
           .map((b) => b.c)

@@ -1,13 +1,11 @@
 /**
  * B4 市场信号解读（signals/market）
- * 今日信号总数 / 较昨日 delta / 六类分布横条 + 趋势偏向大字（由真实 scores 推导并标注依据）
- * + 编辑式解读（真实字段模板化生成，serif 引文卡 + SourceNote「· 非投资建议」）
+ * 直接展示 signals 指标对象与 scores 聚合；接口未提供的时序统计不渲染。
  */
 import { motion } from 'framer-motion';
 import type { ApiError } from '@/api/client';
-import type { IndexQuote, MarketSignalsSummary, MarketStrength } from '@/api/types';
+import type { IndexQuote, MarketSignalsSnapshot } from '@/api/types';
 import type { MarketStatusDetail } from './api';
-import { useCountUp } from '@/hooks/useCountUp';
 import { cn } from '@/lib/utils';
 import { fmtPct, fmtPrice } from '@/lib/format';
 import EmptyState from '@/components/shared/EmptyState';
@@ -28,21 +26,27 @@ function biasColor(label: TrendBias['label']): string {
 
 /** 编辑式解读：全部由真实字段模板化生成 */
 function buildReading(
-  signals: MarketSignalsSummary,
+  signals: MarketSignalsSnapshot,
   indices: IndexQuote[] | null,
-  strength: MarketStrength | null,
   regimeMean: number | null,
   status: MarketStatusDetail | null,
   bias: TrendBias | null,
 ): string {
   const parts: string[] = [];
-  const delta = signals.deltaVsYesterday;
-  const top = [...signals.byType].sort((a, b) => b.today - a.today)[0];
-  parts.push(
-    `今日全市场共触发 ${signals.totalToday} 条信号，较昨日${delta >= 0 ? '增加' : '减少'} ${Math.abs(delta)} 条` +
-      (top ? `，其中「${top.label}」类 ${top.today} 条居首，7 日均值 ${top.avg7d} 条` : '') +
-      '。',
-  );
+  if (signals.topScore !== null || signals.bottomScore !== null) {
+    const scores = [
+      signals.topScore !== null ? `顶部风险 ${signals.topScore}` : null,
+      signals.bottomScore !== null ? `底部修复 ${signals.bottomScore}` : null,
+    ].filter(Boolean);
+    parts.push(`市场信号模型当前评分为${scores.join('，')}。`);
+  }
+  const leading = [...signals.metrics]
+    .filter((metric) => metric.topScore !== null || metric.bottomScore !== null)
+    .sort((a, b) => Math.max(b.topScore ?? 0, b.bottomScore ?? 0) - Math.max(a.topScore ?? 0, a.bottomScore ?? 0))
+    .slice(0, 2);
+  if (leading.length) {
+    parts.push(`主要观测项为${leading.map((metric) => `「${metric.label}」${metric.value}`).join('、')}。`);
+  }
   if (indices?.length) {
     const adv = indices.filter((q) => q.changePct >= 0).length;
     const spx = indices.find((q) => q.code === 'SPX');
@@ -52,10 +56,9 @@ function buildReading(
         '。',
     );
   }
-  const bits: string[] = [];
-  if (strength) bits.push(`全市场强度均值 ${strength.avgScore.toFixed(1)}，高强度（≥85）标的 ${strength.ge85Count} 只`);
-  if (regimeMean !== null) bits.push(`六维形态均值 ${regimeMean.toFixed(1)}`);
-  if (bits.length) parts.push(`${bits.join('，')}${bias ? `，综合判断趋势偏向「${bias.label}」` : ''}。`);
+  if (regimeMean !== null) {
+    parts.push(`六维市场形态均值 ${regimeMean.toFixed(1)}${bias ? `，形态偏向「${bias.label}」` : ''}。`);
+  }
   if (status) {
     if (status.market === 'open') parts.push('盘中关注量能能否延续，追高注意回撤风险。');
     else if (status.market === 'premarket') parts.push('盘前流动性较薄，信号以开盘后确认为准。');
@@ -65,43 +68,22 @@ function buildReading(
   return parts.join('');
 }
 
-function TypeBars({ data }: { data: MarketSignalsSummary }) {
-  const max = Math.max(...data.byType.map((t) => Math.max(t.today, t.avg7d)), 1);
+function MetricRows({ data }: { data: MarketSignalsSnapshot }) {
+  const rows = data.metrics.slice(0, 8);
   return (
     <div className="space-y-2.5">
-      {data.byType.map((t, i) => (
-        <div key={t.type} className="grid grid-cols-[52px_1fr_64px] items-center gap-2">
-          <span className="text-caption text-ink-500">{t.label}</span>
-          <div className="space-y-1">
-            <motion.div
-              className="h-2 origin-left rounded-[2px] bg-brand-600"
-              initial={{ scaleX: 0 }}
-              whileInView={{ scaleX: 1 }}
-              viewport={{ once: true, amount: 0.4 }}
-              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: i * 0.045 }}
-              style={{ width: `${(t.today / max) * 100}%` }}
-              title={`今日 ${t.today} 条`}
-            />
-            <motion.div
-              className="h-2 origin-left rounded-[2px] border border-brand-400/50"
-              initial={{ scaleX: 0 }}
-              whileInView={{ scaleX: 1 }}
-              viewport={{ once: true, amount: 0.4 }}
-              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: i * 0.045 + 0.06 }}
-              style={{
-                width: `${(t.avg7d / max) * 100}%`,
-                backgroundImage: 'repeating-linear-gradient(45deg, rgba(46,70,224,.5) 0 1.2px, transparent 1.2px 4px)',
-              }}
-              title={`7 日均值 ${t.avg7d} 条`}
-            />
-          </div>
-          <span className="text-right font-mono text-micro text-ink-500 tnum">
-            {t.today}
-            <span className="text-ink-300"> / {t.avg7d}</span>
+      {rows.map((metric) => (
+        <div key={metric.key} className="grid grid-cols-[minmax(0,1fr)_64px_64px] items-center gap-2">
+          <span className="truncate text-caption text-ink-500" title={metric.label}>{metric.label}</span>
+          <span className="text-right font-mono text-caption text-ink-800 tnum">{metric.value}</span>
+          <span className="text-right font-mono text-micro text-ink-400 tnum">
+            {metric.topScore !== null || metric.bottomScore !== null
+              ? `${metric.topScore ?? '—'} / ${metric.bottomScore ?? '—'}`
+              : '未评分'}
           </span>
         </div>
       ))}
-      <p className="pt-1 text-micro text-ink-400">▮ 今日 · ▨ 7 日均值</p>
+      <p className="pt-1 text-micro text-ink-400">右列：指标值 · 顶部风险分 / 底部修复分</p>
     </div>
   );
 }
@@ -113,24 +95,20 @@ export default function SignalsReading({
   onRetry,
   refreshing,
   indices,
-  strength,
   regimeMean,
   status,
   bias,
 }: {
-  signals: MarketSignalsSummary | null;
+  signals: MarketSignalsSnapshot | null;
   loading: boolean;
   error: ApiError | null;
   onRetry: () => void;
   refreshing: boolean;
   indices: IndexQuote[] | null;
-  strength: MarketStrength | null;
   regimeMean: number | null;
   status: MarketStatusDetail | null;
   bias: TrendBias | null;
 }) {
-  const total = useCountUp(signals?.totalToday ?? 0, 900);
-
   if (loading) return <SkeletonCard className="h-full" />;
   if (error || !signals) {
     return (
@@ -155,8 +133,7 @@ export default function SignalsReading({
     );
   }
 
-  const delta = signals.deltaVsYesterday;
-  const reading = buildReading(signals, indices, strength, regimeMean, status, bias);
+  const reading = buildReading(signals, indices, regimeMean, status, bias);
 
   return (
     <motion.section
@@ -173,23 +150,24 @@ export default function SignalsReading({
       </div>
 
       <div className="mt-5 grid flex-1 grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* 左：总量 + 六类分布 */}
+        {/* 左：真实评分 + 指标对象 */}
         <div>
-          <div className="flex items-end gap-4">
-            <p>
-              <span className="font-mono text-data-xl text-ink-900 tnum">{Math.round(total)}</span>
-              <span className="ml-1.5 text-caption text-ink-500">今日信号总数</span>
+          <div className="grid grid-cols-3 gap-3">
+            <p className="rounded-md border border-line bg-card-warm p-3">
+              <span className="block text-micro text-ink-400">顶部风险</span>
+              <span className="mt-1 block font-mono text-data-m text-down-700 tnum">{signals.topScore ?? '—'}</span>
             </p>
-            <p
-              className={cn('pb-1 font-mono text-data-m tnum', delta >= 0 ? 'text-up-700' : 'text-down-700')}
-              aria-label={`较昨日${delta >= 0 ? '增加' : '减少'} ${Math.abs(delta)} 条`}
-            >
-              {delta >= 0 ? '+' : '−'}
-              {Math.abs(delta)} 较昨日
+            <p className="rounded-md border border-line bg-card-warm p-3">
+              <span className="block text-micro text-ink-400">底部修复</span>
+              <span className="mt-1 block font-mono text-data-m text-up-700 tnum">{signals.bottomScore ?? '—'}</span>
+            </p>
+            <p className="rounded-md border border-line bg-card-warm p-3">
+              <span className="block text-micro text-ink-400">数据质量</span>
+              <span className="mt-1 block font-mono text-data-m text-ink-800 tnum">{signals.dataQuality ?? '—'}</span>
             </p>
           </div>
           <div className="mt-5">
-            <TypeBars data={signals} />
+            <MetricRows data={signals} />
           </div>
         </div>
 

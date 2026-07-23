@@ -23,6 +23,21 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(here, '..', 'dist'); // frontend-src/dist（本地构建输出）
 const artifactDir = path.resolve(here, '..', '..', 'frontend'); // 仓库提交的构建产物
 const screenerSource = path.resolve(here, '..', 'src', 'pages', 'Screener.tsx');
+const catalystApiSource = path.resolve(
+  here,
+  '..',
+  'src',
+  'components',
+  'catalysts',
+  'api.ts',
+);
+const filterWorkbenchSource = path.resolve(here, '..', 'src', 'components', 'screener', 'FilterWorkbench.tsx');
+const accessApiSource = path.resolve(here, '..', 'src', 'api', 'modules', 'access.ts');
+const stockApiSource = path.resolve(here, '..', 'src', 'api', 'modules', 'stocks.ts');
+const chartApiSource = path.resolve(here, '..', 'src', 'components', 'detail', 'api.ts');
+const adminApiSource = path.resolve(here, '..', 'src', 'api', 'modules', 'admin.ts');
+const legacyCatalystApiSource = path.resolve(here, '..', 'src', 'api', 'modules', 'catalysts.ts');
+const breakoutApiSource = path.resolve(here, '..', 'src', 'api', 'modules', 'breakouts.ts');
 
 test('committed build artifact matches the local Vite build output', async t => {
   if (!existsSync(path.join(distDir, 'index.html'))) {
@@ -124,4 +139,70 @@ test('market focus polling uses the cycle endpoint and only forces a consumed no
     trigger: 'manual',
     expected_prepared_revision: 12,
   });
+});
+
+test('previous focus-cycle comparison reads the live history field', async () => {
+  const source = await readFile(catalystApiSource, 'utf8');
+  assert.match(source, /previous_successful_cycle/);
+  assert.doesNotMatch(
+    source,
+    /上一焦点周期快照暂不可用（契约未提供该端点）/,
+  );
+});
+
+test('screener waiting state does not invent a percentage', async () => {
+  const [page, workbench] = await Promise.all([
+    readFile(screenerSource, 'utf8'),
+    readFile(filterWorkbenchSource, 'utf8'),
+  ]);
+  assert.doesNotMatch(page, /setProgress|Math\.exp\(-el/);
+  assert.doesNotMatch(workbench, /扫描中[^\n]*\{pct\}|style=\{\{ width: `\$\{pct\}%`/);
+  assert.match(workbench, /扫描中 · 等待后台结果/);
+  assert.match(workbench, /aria-busy=\{scanning\}/);
+});
+
+test('login identity does not masquerade as AI availability', async () => {
+  const source = await readFile(accessApiSource, 'utf8');
+  assert.match(source, /get\('\/catalysts\/status'\)/);
+  assert.match(source, /analysis_trigger_enabled/);
+  assert.match(source, /analysis_availability/);
+  assert.doesNotMatch(source, /aiEnabled:\s*s\.access_mode\s*===\s*'private_network'\s*\|\|\s*s\.logged_in/);
+});
+
+test('chart controls map one-to-one to the backend candle intervals', async () => {
+  const [stocks, detail] = await Promise.all([
+    readFile(stockApiSource, 'utf8'),
+    readFile(chartApiSource, 'utf8'),
+  ]);
+  assert.doesNotMatch(stocks, /CHART_RANGE_MAP/);
+  assert.match(detail, /value: '5m', label: '5分'/);
+  assert.match(detail, /value: '15m', label: '15分'/);
+  assert.match(detail, /value: '1h', label: '1小时'/);
+  assert.match(detail, /value: '1d', label: '日线'/);
+  assert.match(detail, /value: '1w', label: '周线'/);
+});
+
+test('missing worker health fields fail closed', async () => {
+  const source = await readFile(adminApiSource, 'utf8');
+  assert.match(source, /enabled: pickB\(r, 'enabled'\) \?\? false/);
+  assert.match(source, /healthy: \(pickB\(r, 'healthy'\) \?\? false\)/);
+  assert.doesNotMatch(source, /enabled: pickB\(r, 'enabled'\) \?\? true/);
+});
+
+test('stock news uses Chinese projection and excludes non-directional items', async () => {
+  const source = await readFile(legacyCatalystApiSource, 'utf8');
+  assert.match(source, /pickS\(r, 'title_zh', 'titleZh', 'title'\)/);
+  assert.match(source, /include_unanalyzed=false&include_neutral=false/);
+});
+
+test('breakout detail retains the live range-persistence metrics', async () => {
+  const source = await readFile(breakoutApiSource, 'utf8');
+  for (const field of [
+    'range_persistence_slope_5d',
+    'range_persistence_ratio_10d',
+    'range_persistence_global_percentile',
+    'range_persistence_sector_percentile',
+  ]) {
+    assert.match(source, new RegExp(field));
+  }
 });

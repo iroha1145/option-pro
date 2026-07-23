@@ -259,7 +259,7 @@ function buildMiniOption(bars: Candle[]): ChartOption {
 }
 
 function MiniKline({ ticker }: { ticker: string }) {
-  const { data, error, loading, refresh } = usePolling(() => stocksApi.chart(ticker, '1D'), null, [ticker]);
+  const { data, error, loading, refresh } = usePolling(() => stocksApi.chart(ticker, '1d'), null, [ticker]);
   const option = useMemo(() => (data && data.candles.length > 1 ? buildMiniOption(data.candles) : null), [data]);
 
   return (

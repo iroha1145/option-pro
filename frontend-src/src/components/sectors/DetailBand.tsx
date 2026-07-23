@@ -1,115 +1,46 @@
-/**
- * B2 板块详情带（sectors.md：选中时出现，accordion 320ms ease-paper，内部双栏）
- * - 左栏（7 列）：成分股 mini 表（代码/价/涨跌/强度，前 8 只，行高 40px）
- *   表头：板块名 Serif 18 +「查看全部 N 只」→ /screener?sector=id；行点击 → 详情抽屉
- * - 右栏（5 列）：板块强度趋势 30 日（§6-2 点阵面积，draw-line 1000ms）
- *   + 三项对照 Mono 行（对比 SPY 相对强度 / 5 日资金流评级 / 板块 IV 均值）
- * - 空板块：「该板块暂无成分数据」+ empty-chart.svg
- */
-import { useMemo } from 'react';
 import { Link } from 'react-router';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { fmtPct, fmtPrice } from '@/lib/format';
-import ReactECharts from '@/components/charts/ReactECharts';
+import { fmtPct } from '@/lib/format';
 import TickerLogo from '@/components/shared/TickerLogo';
-import ChangeBadge from '@/components/shared/ChangeBadge';
-import StrengthBar from '@/components/shared/StrengthBar';
 import Icon from '@/components/icons';
-import { CH, baseAnimation, glassTooltip, stippleAreaStyle, type ChartOption } from '@/lib/chart';
 import type { SectorVm } from './model';
+import { periodLabel } from './model';
 
-/* ---------- 三项对照行 ---------- */
-function CompareRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between border-t border-line py-2.5 first:border-0">
-      <span className="text-caption text-ink-500">{label}</span>
-      <span className="font-mono text-data-m text-ink-800 tnum">{children}</span>
-    </div>
-  );
-}
-
-function FlowDots({ rating }: { rating: number }) {
-  const n = Math.max(0, Math.min(5, Math.round(rating)));
-  return (
-    <span className="inline-flex items-center gap-1" aria-label={`资金流评级 ${n}/5`}>
-      {Array.from({ length: 5 }, (_, i) => (
-        <span key={i} className={cn('text-[9px] leading-none', i < n ? 'text-brand-600' : 'text-ink-300')} aria-hidden="true">
-          ●
-        </span>
-      ))}
-      <span className="ml-1 font-mono text-micro text-ink-400 tnum">{n}/5</span>
-    </span>
-  );
-}
-
-/* ---------- 30 日强度趋势（点阵面积 §6-2） ---------- */
-function TrendChart({ sector }: { sector: SectorVm }) {
-  const option = useMemo<ChartOption>(() => {
-    const data = sector.trend30d;
-    /* 以数据自带 asOf 为锚（保持渲染纯净）；缺失时退化为序号 */
-    const anchor = sector.asOf ? new Date(sector.asOf).getTime() : null;
-    const labels = data.map((_, i) => {
-      if (anchor === null || Number.isNaN(anchor)) return `${i + 1}`;
-      const d = new Date(anchor - (data.length - 1 - i) * 86_400_000);
-      return `${d.getMonth() + 1}/${d.getDate()}`;
-    });
-    return {
-      ...baseAnimation,
-      animationDuration: 1000,
-      grid: { left: 2, right: 6, top: 10, bottom: 2, containLabel: false },
-      tooltip: glassTooltip({
-        formatter: (ps: unknown) => {
-          const arr = ps as { axisValue?: string; data?: number }[];
-          const p = arr?.[0];
-          if (!p) return '';
-          return `<span style="font-family:'IBM Plex Mono',monospace;font-size:12px">${p.axisValue} · 强度 <b>${Number(p.data).toFixed(1)}</b></span>`;
-        },
-      }),
-      xAxis: { type: 'category', data: labels, show: false, boundaryGap: false },
-      yAxis: {
-        type: 'value',
-        show: false,
-        splitLine: { show: false },
-        min: (v: { min: number }) => Math.floor(v.min - 3),
-        max: (v: { max: number }) => Math.ceil(v.max + 3),
-      },
-      series: [
-        {
-          type: 'line',
-          data,
-          symbol: 'none',
-          smooth: 0.3,
-          lineStyle: { color: CH.brand500, width: 2 },
-          areaStyle: stippleAreaStyle(),
-        },
-      ],
-    };
-  }, [sector]);
-
-  if (sector.trend30d.length < 2) {
-    return (
-      <div className="flex h-36 flex-col items-center justify-center rounded-md border border-dashed border-line-strong bg-card-warm text-center">
-        <Icon name="candle" size={20} className="text-ink-300" />
-        <p className="mt-2 text-micro text-ink-400">趋势快照缺失 · 留空而非编造</p>
-      </div>
-    );
-  }
-  return (
-    <div className="h-36 w-full" role="img" aria-label={`${sector.name} 30 日强度趋势`}>
-      <ReactECharts option={option} ariaLabel={`${sector.name} 30 日强度趋势`} />
-    </div>
-  );
-}
-
-/* ---------- 详情带 ---------- */
 interface DetailBandProps {
   sector: SectorVm;
   onOpenTicker: (ticker: string) => void;
 }
 
-export default function DetailBand({ sector, onOpenTicker }: DetailBandProps) {
-  const top = sector.constituents.slice(0, 8);
+function Metric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: React.ReactNode;
+  tone?: 'up' | 'down';
+}) {
+  return (
+    <div className="min-w-0 border-l border-line pl-3 first:border-0 first:pl-0 sm:pl-4">
+      <dt className="text-micro text-ink-400">{label}</dt>
+      <dd
+        className={cn(
+          'mt-1 truncate font-mono text-data-l font-semibold text-ink-800 tnum',
+          tone === 'up' && 'text-up-700',
+          tone === 'down' && 'text-down-700',
+        )}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+export default function DetailBand({
+  sector,
+  onOpenTicker,
+}: DetailBandProps) {
   return (
     <motion.section
       key={sector.id}
@@ -121,54 +52,78 @@ export default function DetailBand({ sector, onOpenTicker }: DetailBandProps) {
       aria-label={`${sector.name} 板块详情`}
     >
       <div className="card-surface mt-6 p-4 md:p-6">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* 左栏：成分股 mini 表 */}
-          <div className="lg:col-span-7">
-            <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-3">
-              <h2 className="font-display text-[18px] leading-[24px] font-semibold text-ink-900">{sector.name} · 成分概览</h2>
-              <Link
-                to={`/screener?sector=${encodeURIComponent(sector.id)}`}
-                className="flex items-center gap-1 text-caption text-brand-600 transition-colors hover:text-brand-500"
-              >
-                查看全部 {sector.count} 只
-                <Icon name="arrow-up-right" size={12} />
-              </Link>
-            </div>
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-3">
+          <div>
+            <p className="eyebrow">板块详情 · 接口聚合</p>
+            <h2 className="mt-1 font-display text-[18px] font-semibold leading-[24px] text-ink-900">
+              {sector.name}
+            </h2>
+          </div>
+          <Link
+            to={`/screener?sector=${encodeURIComponent(sector.id)}`}
+            className="flex items-center gap-1 text-caption text-brand-600 transition-colors hover:text-brand-500"
+          >
+            查看该板块扫描结果
+            <Icon name="arrow-up-right" size={12} />
+          </Link>
+        </div>
 
-            {top.length === 0 ? (
-              <div className="flex flex-col items-center py-8 text-center">
-                <img src="/empty-chart.svg" alt="" width={150} height={94} className="h-auto w-[150px] opacity-95" loading="lazy" />
-                <p className="mt-3 text-body-s text-ink-500">该板块暂无成分数据</p>
-              </div>
+        <dl className="mt-4 grid grid-cols-3 gap-2 sm:gap-4">
+          <Metric
+            label={`${periodLabel(sector.period)}平均收益`}
+            value={sector.avgReturn !== null ? fmtPct(sector.avgReturn) : '—'}
+            tone={
+              sector.avgReturn === null
+                ? undefined
+                : sector.avgReturn >= 0
+                  ? 'up'
+                  : 'down'
+            }
+          />
+          <Metric
+            label="平均强度"
+            value={sector.avgStrength?.toFixed(1) ?? '—'}
+          />
+          <Metric
+            label="统计覆盖"
+            value={`${sector.coveredCount ?? '—'} / ${sector.memberCount}`}
+          />
+        </dl>
+
+        <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div>
+            <p className="eyebrow">强度领先标的</p>
+            {sector.leaders.length === 0 ? (
+              <p className="mt-3 text-body-s text-ink-400">
+                强度接口尚未返回领先标的。
+              </p>
             ) : (
-              <ul className="divide-y divide-line">
-                {top.map((c) => (
-                  <li key={c.ticker}>
+              <ul className="mt-2 divide-y divide-line">
+                {sector.leaders.map((leader, index) => (
+                  <li key={leader.ticker}>
                     <button
                       type="button"
-                      onClick={() => onOpenTicker(c.ticker)}
-                      className="group flex h-10 w-full items-center gap-2 px-1 text-left transition-colors duration-fast hover:bg-paper-2 sm:gap-3"
-                      aria-label={`打开 ${c.ticker} 详情`}
+                      onClick={() => onOpenTicker(leader.ticker)}
+                      className="group flex min-h-11 w-full items-center gap-3 py-2 text-left transition-colors hover:bg-paper-2"
                     >
-                      <TickerLogo ticker={c.ticker} size={24} />
-                      <span className="w-12 shrink-0 font-mono text-body-s font-semibold text-ink-800 sm:w-16">{c.ticker}</span>
-                      <span className="hidden min-w-0 flex-1 truncate text-micro text-ink-400 sm:inline">{c.name}</span>
-                      <span className="ml-auto min-w-16 shrink-0 text-right font-mono text-body-s text-ink-800 tnum sm:w-20">
-                        {c.price !== null ? fmtPrice(c.price) : '—'}
+                      <span className="w-5 shrink-0 font-mono text-micro text-ink-300 tnum">
+                        {String(index + 1).padStart(2, '0')}
                       </span>
-                      <span className="w-auto shrink-0 text-right sm:w-24">
-                        {c.changePct !== null ? <ChangeBadge value={c.changePct} size="sm" /> : <span className="font-mono text-ink-300">—</span>}
+                      <TickerLogo ticker={leader.ticker} size={26} />
+                      <span className="font-mono text-body-s font-semibold text-ink-800">
+                        {leader.ticker}
                       </span>
-                      <span className="hidden w-28 justify-end md:flex">
-                        {c.strengthScore !== null ? (
-                          <StrengthBar score={c.strengthScore} width={56} />
-                        ) : (
-                          <span className="font-mono text-ink-300">—</span>
-                        )}
+                      <span className="ml-auto text-micro text-ink-400">
+                        强度
                       </span>
-                      <span className="hidden size-6 items-center justify-center rounded-xs border border-line bg-card text-ink-400 opacity-0 transition-opacity duration-fast group-hover:opacity-100 sm:inline-flex">
-                        <Icon name="arrow-up-right" size={12} />
+                      <span className="w-12 text-right font-mono text-data-m font-semibold text-ink-800 tnum">
+                        {leader.score?.toFixed(1) ?? '—'}
                       </span>
+                      <Icon
+                        name="arrow-up-right"
+                        size={12}
+                        className="text-ink-300 transition-colors group-hover:text-brand-600"
+                      />
                     </button>
                   </li>
                 ))}
@@ -176,28 +131,42 @@ export default function DetailBand({ sector, onOpenTicker }: DetailBandProps) {
             )}
           </div>
 
-          {/* 右栏：30 日强度趋势 + 三项对照 */}
-          <div className="lg:col-span-5">
-            <p className="eyebrow">板块强度趋势 · 30 日</p>
-            <div className="mt-3">
-              <TrendChart sector={sector} />
+          <div>
+            <div className="flex items-center justify-between gap-3">
+              <p className="eyebrow">板块目录成分</p>
+              <span className="font-mono text-micro text-ink-400 tnum">
+                {sector.memberCount} 只
+              </span>
             </div>
-            <div className="mt-4">
-              <CompareRow label="对比 SPY 相对强度">
-                {sector.rsVsSpy !== null ? (
-                  <span className={cn(sector.rsVsSpy >= 0 ? 'text-up-700' : 'text-down-700')}>{fmtPct(sector.rsVsSpy)}</span>
-                ) : (
-                  '—'
-                )}
-              </CompareRow>
-              <CompareRow label="5 日资金流评级">
-                {sector.flowRating !== null ? <FlowDots rating={sector.flowRating} /> : '—'}
-              </CompareRow>
-              <CompareRow label="板块 IV 均值">
-                {sector.ivAvg !== null ? `${sector.ivAvg.toFixed(1)}%` : '—'}
-              </CompareRow>
-            </div>
+            {sector.tickers.length === 0 ? (
+              <p className="mt-3 text-body-s text-ink-400">
+                板块目录尚未返回成分代码。
+              </p>
+            ) : (
+              <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {sector.tickers.slice(0, 12).map((ticker) => (
+                  <button
+                    key={ticker}
+                    type="button"
+                    onClick={() => onOpenTicker(ticker)}
+                    className="min-w-0 rounded-md border border-line bg-card-warm px-2 py-2 text-center font-mono text-caption font-semibold text-ink-700 transition-colors hover:border-brand-300 hover:text-brand-700"
+                  >
+                    <span className="block truncate">{ticker}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+        </div>
+
+        <div
+          className="mt-5 flex items-start gap-2 border-t border-line pt-3 text-micro leading-5 text-ink-400"
+          role="note"
+        >
+          <Icon name="flag" size={13} className="mt-0.5 shrink-0" />
+          <span>
+            当前接口未提供板块资金流、相关性和历史趋势，本页不推算这些指标。
+          </span>
         </div>
       </div>
     </motion.section>

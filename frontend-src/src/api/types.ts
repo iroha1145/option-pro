@@ -22,7 +22,11 @@ export interface MarketStatus {
 export type AccessRole = 'visitor' | 'owner';
 export interface AccessStatus {
   role: AccessRole;
+  /** 模型分析是否由后台配置开启；不得由登录状态推导。 */
   aiEnabled: boolean;
+  /** 当前是否可立即创建新分析任务（忙碌/额度/配置均由后台判定）。 */
+  aiAvailable: boolean;
+  aiReason: string | null;
 }
 
 /* ---------- 信号 / 强度 ---------- */
@@ -52,6 +56,25 @@ export interface MarketSignalsSummary {
   byType: { type: SignalType; label: string; today: number; avg7d: number }[];
 }
 
+/** 生产 /signals/market 的真实指标对象；不含接口未提供的“今日/昨日/7日”统计。 */
+export interface MarketSignalsSnapshot {
+  metrics: {
+    key: string;
+    label: string;
+    value: number;
+    topScore: number | null;
+    bottomScore: number | null;
+  }[];
+  topScore: number | null;
+  bottomScore: number | null;
+  topLabel: string | null;
+  bottomLabel: string | null;
+  dataQuality: number | null;
+  sourceStatus: string | null;
+  asOf: string | null;
+  cached: boolean;
+}
+
 /** 契约 market_regime 六维分（/strength/market · /strength/scan 同源；缺失如实为 null） */
 export interface MarketRegimeDims {
   indexTrend: number | null;      // index_trend_score
@@ -72,6 +95,8 @@ export interface MarketRegimeInfo {
 }
 
 export interface MarketStrength {
+  /** 仅当接口明确返回全市场聚合时为 true；market_regime 综合分不等于全市场均分。 */
+  aggregateAvailable?: boolean;
   avgScore: number;
   ge85Count: number;
   histogram: number[];    // 10 桶（0-9 … 90-100）；live 契约无直方图 → []（UI 隐藏参照）
@@ -158,7 +183,8 @@ export interface Candle {
 }
 export interface StockChart {
   ticker: string;
-  range: '1D' | '5D' | '1M' | '6M' | '1Y' | 'ALL';
+  /** 后端真实 K 线周期；不是回看区间。 */
+  range: '5m' | '15m' | '1h' | '1d' | '1w';
   candles: Candle[];
   ma20: (number | null)[];
 }
@@ -205,16 +231,25 @@ export interface BreakoutEventDetail extends BreakoutEvent {
 export interface Sector {
   id: string;
   name: string;
-  changePct: number;
-  strengthScore: number;
-  constituents: { ticker: string; name: string; changePct: number }[];
+  /** GET /api/sectors 的真实目录字段。 */
+  tickers?: string[];
+  /** 仅供本地预览旧夹具兼容；在线页面不把这些字段当作接口依据。 */
+  changePct?: number;
+  strengthScore?: number;
+  constituents?: { ticker: string; name: string; changePct: number }[];
 }
 export interface IvRankRow {
   ticker: string;
   name: string;
-  ivPercentile: number;
-  iv: number;
-  changePct: number;
+  price?: number | null;
+  sectorIvRank?: number | null;
+  atmIvPercent?: number | null;
+  stale?: boolean;
+  asOf?: string | null;
+  /** 本地预览旧夹具兼容。 */
+  ivPercentile?: number;
+  iv?: number;
+  changePct?: number;
 }
 
 /* ---------- 财报 ---------- */
@@ -222,7 +257,7 @@ export interface EarningsItem {
   ticker: string;
   name: string;
   date: string;           // ISO date
-  timing: 'bmo' | 'amc';  // 盘前 / 盘后
+  timing: 'bmo' | 'amc' | null;  // 盘前 / 盘后 / 时间待定
   epsEstimate: number | null;
   epsActual: number | null;
   revEstimate: number | null;  // 百万美元

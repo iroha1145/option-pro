@@ -1,5 +1,6 @@
 /** 访问域：GET /api/access/status · POST /api/access/login · POST /api/access/logout */
 import { get, post, mockOr } from '../client';
+import { asRec, pickB, pickS } from '../live';
 import * as session from '@/mocks/session';
 import type { AccessStatus } from '../types';
 
@@ -9,11 +10,40 @@ interface LiveAccessStatus {
   logged_in: boolean;
 }
 
-function mapLive(s: LiveAccessStatus): AccessStatus {
-  return {
-    role: s.access_mode === 'private_network' || s.logged_in ? 'owner' : 'visitor',
-    aiEnabled: s.access_mode === 'private_network' || s.logged_in,
-  };
+async function liveStatus(): Promise<AccessStatus> {
+  const s = await get<LiveAccessStatus>('/access/status');
+  const owner = s.access_mode === 'private_network' || s.logged_in;
+  if (!owner) {
+    return {
+      role: 'visitor',
+      aiEnabled: false,
+      aiAvailable: false,
+      aiReason: 'owner_login_required',
+    };
+  }
+
+  try {
+    const catalystStatus = asRec(await get('/catalysts/status'));
+    const availability = asRec(catalystStatus.analysis_availability);
+    const aiEnabled = pickB(catalystStatus, 'analysis_trigger_enabled') === true;
+    const aiAvailable = aiEnabled && pickB(availability, 'enabled') === true;
+    return {
+      role: 'owner',
+      aiEnabled,
+      aiAvailable,
+      aiReason: aiAvailable
+        ? null
+        : pickS(availability, 'reason') ?? (aiEnabled ? 'analysis_unavailable' : 'analysis_trigger_disabled'),
+    };
+  } catch {
+    // 登录身份仍以 access/status 为准；分析状态探针失败时绝不显示假绿灯。
+    return {
+      role: 'owner',
+      aiEnabled: false,
+      aiAvailable: false,
+      aiReason: 'analysis_status_unavailable',
+    };
+  }
 }
 
 /**
@@ -25,15 +55,15 @@ function mapLive(s: LiveAccessStatus): AccessStatus {
  */
 export const accessApi = {
   status: (): Promise<AccessStatus> =>
-    mockOr(() => session.getAccess(), () => get<LiveAccessStatus>('/access/status').then(mapLive)),
+    mockOr(() => session.getAccess(), liveStatus),
   login: (password: string): Promise<AccessStatus> =>
     mockOr(
       () => session.login(password),
-      () => post('/access/login', { password }).then(() => get<LiveAccessStatus>('/access/status').then(mapLive)),
+      () => post('/access/login', { password }).then(liveStatus),
     ),
   logout: (): Promise<AccessStatus> =>
     mockOr(
       () => session.logout(),
-      () => post('/access/logout').then(() => get<LiveAccessStatus>('/access/status').then(mapLive)),
+      () => post('/access/logout').then(liveStatus),
     ),
 };

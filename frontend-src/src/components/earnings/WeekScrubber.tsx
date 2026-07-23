@@ -25,6 +25,10 @@ interface WeekScrubberProps {
 
 const MAX_CHIPS = 3;
 
+const timingLabel = (timing: EarningsRow['timing']) => (
+  timing === 'bmo' ? '盘前' : timing === 'amc' ? '盘后' : '时间待定'
+);
+
 export default function WeekScrubber({
   items,
   monday,
@@ -165,7 +169,7 @@ export default function WeekScrubber({
                                 e.stopPropagation();
                                 onSelectTicker(it.ticker, date);
                               }}
-                              aria-label={`${it.ticker} ${it.timing === 'bmo' ? '盘前' : '盘后'}财报，查看 AI 影响`}
+                              aria-label={`${it.ticker} ${timingLabel(it.timing)}财报，查看 AI 影响`}
                               className={cn(
                                 'flex h-6 items-center gap-1 rounded-xs border-l-2 px-1 transition-[transform,background-color] duration-fast hover:-translate-y-px',
                                 active
@@ -174,9 +178,9 @@ export default function WeekScrubber({
                               )}
                             >
                               <Icon
-                                name={it.timing === 'bmo' ? 'sun-bmo' : 'moon-amc'}
+                                name={it.timing === 'bmo' ? 'sun-bmo' : it.timing === 'amc' ? 'moon-amc' : 'clock-ny'}
                                 size={12}
-                                className={it.timing === 'bmo' ? 'text-warn-600' : 'text-ai-600'}
+                                className={it.timing === 'bmo' ? 'text-warn-600' : it.timing === 'amc' ? 'text-ai-600' : 'text-ink-400'}
                               />
                               <span className="font-mono text-micro font-medium text-ink-800">{it.ticker}</span>
                             </motion.button>

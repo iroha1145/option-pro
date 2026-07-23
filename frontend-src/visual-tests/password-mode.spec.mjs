@@ -8,8 +8,8 @@
 //
 // UI 流程按新 SPA 重写，选择器全部用文案/角色定位（不改业务源码、不加 data-testid）：
 // - 访客标记：Navbar.tsx L145-150 的「登录」链接（to=/login）
-// - Owner 标记：Navbar.tsx L136-143 的「退出」按钮 + L129-134 的 AI 徽标
-//   （title="AI 分析开关已开启"）
+// - Owner 标记：Navbar 的「退出」按钮 + 读取真实后端可用性的 AI 徽标
+//   （fixture 可用时 title="分析服务可用"）
 // - 登录页：Login.tsx L370-381 密码输入（aria-label="访问密码"）、L396-421 提交按钮
 //   （idle 文案「登录」）、L424-433 状态行（tone=error 时 role="alert"；
 //   mapError L215-222：未知业务码 →「密码不正确」，渲染时追加「，请重试」）
@@ -213,14 +213,14 @@ async function installLocalDataFixtures(page) {
 async function expectVisitorShell(page) {
   await expect(page.getByRole("link", { name: "登录" })).toBeVisible();
   await expect(page.getByRole("button", { name: "退出" })).toHaveCount(0);
-  await expect(page.getByTitle("AI 分析开关已开启")).toHaveCount(0);
+  await expect(page.getByTitle("分析服务可用")).toHaveCount(0);
 }
 
 
 // Owner 壳断言：「退出」按钮 + AI 徽标出现，「登录」链接消失
 async function expectOwnerShell(page) {
   await expect(page.getByRole("button", { name: "退出" })).toBeVisible();
-  await expect(page.getByTitle("AI 分析开关已开启")).toBeVisible();
+  await expect(page.getByTitle("分析服务可用")).toBeVisible();
   await expect(page.getByRole("link", { name: "登录" })).toHaveCount(0);
 }
 

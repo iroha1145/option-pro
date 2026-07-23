@@ -1,7 +1,7 @@
 /**
  * §02 选股扫描（screener.md 完整实现）
  * B0 页头带（上次扫描 / 扫描历史 popover / owner strength_refresh）
- * B1 筛选工作台（周期/偏好/分档/预设/板块/价格/成交额/TopN + 进度形变扫描钮）
+ * B1 筛选工作台（周期/偏好/分档/预设/板块/价格/成交额/TopN + 真实等待态扫描钮）
  * B2 结果区（统计行 + 参数回显 chips + 三态排序 Segmented + 结果表/卡片流 + 行展开）
  * B3 右侧栏（市场形态 6 维 / 强度剖面 / 评分方法 / 空结果引导）
  * 状态：未扫描 empty-scan.svg · 扫描中骨架 · 无命中 · 503 快照不可用（保留上次结果）
@@ -120,7 +120,6 @@ export default function Screener() {
   const [rows, setRows] = useState<ScreenerRow[] | null>(null);
   const [scanError, setScanError] = useState<ApiError | null>(null);
   const [scanMeta, setScanMeta] = useState<StrengthScanEnvelope | null>(null);
-  const [progress, setProgress] = useState(0);
   const [lastScanAt, setLastScanAt] = useState<number | null>(null);
   const [scanDurationMs, setScanDurationMs] = useState(0);
   const [history, setHistory] = useState<ScanHistoryEntry[]>([]);
@@ -139,19 +138,6 @@ export default function Screener() {
   const scanSeq = useRef(0);
 
   const dirty = scanState === 'done' && !filtersEqual(draft, applied);
-
-  /* ---------------- 扫描进度补间（形变进度条） ---------------- */
-  useEffect(() => {
-    if (scanState !== 'scanning') return;
-    setProgress(0);
-    const t0 = Date.now();
-    const id = setInterval(() => {
-      const el = Date.now() - t0;
-      setProgress(Math.min(92, Math.round(92 * (1 - Math.exp(-el / 420)))));
-    }, 90);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scanState, scanSeq.current]);
 
   /* ---------------- 执行扫描 ---------------- */
   const runScan = useCallback(async (filters: ScanFilters) => {
@@ -209,7 +195,6 @@ export default function Screener() {
       setScanDurationMs(durationMs);
       setPage(1);
       setExpanded(null);
-      setProgress(100);
       setScanState('done');
       setHistory((h) => [{ at: Date.now(), count: result.rows.length, durationMs, summary: summarizeFilters(filters) }, ...h].slice(0, 5));
       return true;
@@ -442,7 +427,6 @@ export default function Screener() {
           presets={profiles}
           presetsFailed={!!profilesQ.error}
           scanning={scanState === 'scanning'}
-          progress={progress}
           dirty={dirty}
           onScan={onScanClick}
         />

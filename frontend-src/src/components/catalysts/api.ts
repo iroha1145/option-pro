@@ -388,7 +388,7 @@ function nEconEvent(r: Rec): EconomicEvent {
 function nSource(r: Rec): SourceHealth {
   return {
     source: pickS(r, 'source', 'name') ?? '',
-    status: pickS(r, 'status') === 'degraded' ? 'degraded' : 'active',
+    status: pickS(r, 'status') === 'active' ? 'active' : 'degraded',
     latencyMs: pickN(r, 'latencyMs', 'latency_ms'),
     lastFetchedAt: pickS(r, 'lastFetchedAt', 'last_fetched_at', 'last_success_at') ?? '',
     itemsToday: pickN(r, 'itemsToday', 'items_today') ?? 0,
@@ -590,39 +590,48 @@ export const catalystsContract = {
     mockOr(
       () => fx2.getCatalystsSources(),
       async () => {
-        // 优先 status.sources 源健康快照；为空时由近 24h 新闻流按来源聚合诚实推导
+        // 只展示后端真实健康快照。新闻数量不能证明当前采集链路健康。
         const statusBody = await get('/catalysts/status');
         const fromStatus = unwrap(statusBody, 'sources', 'source_health').map(nSource).filter((s) => s.source);
         if (fromStatus.length) return fromStatus;
-        const feedBody = await get(`/catalysts/feed${qs({ windowHours: 24, limit: 50 })}`);
-        const items = unwrap(feedBody, 'items').map(nNewsItem);
-        const bySource = new Map<string, { count: number; latest: string }>();
-        for (const it of items) {
-          if (!it.source) continue;
-          const cur = bySource.get(it.source) ?? { count: 0, latest: '' };
-          cur.count += 1;
-          if (it.fetchedAt > cur.latest) cur.latest = it.fetchedAt;
-          bySource.set(it.source, cur);
-        }
-        return [...bySource.entries()]
-          .map(([source, v]) => ({
-            source,
-            status: 'active' as const,
+        const streams = asRec(asRec(statusBody).streams);
+        const streamNames: Record<string, string> = {
+          news: '新闻采集流',
+          calendar: '经济日历流',
+        };
+        const realStreams = Object.entries(streams).map(([key, raw]) => {
+          const r = asRec(raw);
+          const failures = pickN(r, 'consecutive_failures') ?? 0;
+          const remoteStatus = pickS(r, 'remote_status');
+          const active = remoteStatus === 'ok' && failures === 0;
+          return {
+            source: streamNames[key] ?? key,
+            status: active ? ('active' as const) : ('degraded' as const),
             latencyMs: null,
-            lastFetchedAt: v.latest,
-            itemsToday: v.count,
-            note: '由近 24 小时新闻流推导（后端未提供源健康快照）',
-            derived: true,
-          }))
-          .sort((a, b) => b.itemsToday - a.itemsToday);
+            lastFetchedAt: pickS(r, 'last_success_at', 'data_through') ?? '',
+            itemsToday: null,
+            note: active
+              ? '后台采集流最近一次执行成功'
+              : pickS(r, 'last_error_code') ?? '后台采集流状态异常',
+          };
+        });
+        if (realStreams.length) return realStreams;
+        throw new ApiError(503, '后端未提供数据源健康快照');
       },
     ),
   latestFocusCycle: (): Promise<MarketFocusCycle> =>
     mockOr(() => fx2.getLatestFocusCycleV2(), () => get('/catalysts/market-focus-cycles/latest').then(nCycle)),
   previousFocusCycle: (): Promise<MarketFocusCycle> =>
-    // 契约无「上一成功周期」端点（仅 latest 与 {id}）：live 下如实报快照不可用，UI 隐藏对照区
     mockOr(() => fx2.getPreviousSuccessfulFocusCycle(), () =>
-      Promise.reject(new ApiError(503, '上一焦点周期快照暂不可用（契约未提供该端点）', { bizCode: 'public_snapshot_unavailable' })),
+      get('/catalysts/market-focus-cycles/latest').then((data) => {
+        const previous = asRec(asRec(data).previous_successful_cycle);
+        if (!Object.keys(previous).length) {
+          throw new ApiError(404, '暂无更早的成功焦点周期', {
+            bizCode: 'previous_focus_cycle_not_found',
+          });
+        }
+        return nCycle(previous);
+      }),
     ),
   triggerFocusCycle: (): Promise<FocusCycleJob> =>
     // 个人版：POST 需带 expected_prepared_revision（来自 hotspots/status），XOR retry_cycle_id

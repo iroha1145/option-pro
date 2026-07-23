@@ -7,11 +7,18 @@ const session = {
 };
 
 export function getAccess(): AccessStatus {
-  return { role: session.role, aiEnabled: session.aiEnabled };
+  const owner = session.role === 'owner';
+  return {
+    role: session.role,
+    aiEnabled: owner && session.aiEnabled,
+    aiAvailable: owner && session.aiEnabled,
+    aiReason: owner && session.aiEnabled ? null : owner ? 'analysis_trigger_disabled' : 'owner_login_required',
+  };
 }
 
-export function login(_password: string): AccessStatus {
+export function login(password: string): AccessStatus {
   // mock：任意密码均可登录为 owner
+  void password;
   session.role = 'owner';
   return getAccess();
 }

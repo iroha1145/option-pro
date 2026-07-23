@@ -1,44 +1,95 @@
 /** 信号域：GET /api/signals/market · GET /api/signals/stock/{t} */
 import { get, mockOr } from '../client';
-import { pickN, pickS, unwrap } from '../live';
+import { asRec, pickN, pickS } from '../live';
 import * as fx from '@/mocks/fixtures';
-import type { MarketSignalsSummary, Signal, SignalType } from '../types';
+import type { MarketSignalsSnapshot, Signal, SignalType } from '../types';
 
-const SIGNAL_TYPES: SignalType[] = ['breakout', 'volume', 'pullback', 'ma-touch', 'gap', 'iv-spike'];
-
-/** 契约 {trend_bias_*, scores, signals:[...]} → UI Signal[]（信封解包 + 字段容错） */
+/** 契约 signals 为指标对象；只把有明确高分方向的指标投影成“活跃信号”。 */
 function mapStockSignals(d: unknown): Signal[] {
-  return unwrap(d, 'signals').map((r) => {
-    const t = pickS(r, 'type') ?? 'breakout';
+  const env = asRec(d);
+  const signals = asRec(env.signals);
+  const at = pickS(env, 'as_of') ?? '';
+  return Object.entries(signals).flatMap(([key, raw]) => {
+    if (key.startsWith('_')) return [];
+    const metric = asRec(raw);
+    const value = pickN(metric, 'value');
+    if (value === null) return [];
+    const topScore = pickN(metric, 'top_score', 'topScore');
+    const bottomScore = pickN(metric, 'bottom_score', 'bottomScore');
+    const activeScore = Math.max(topScore ?? -1, bottomScore ?? -1);
+    if (activeScore < 40) return [];
+    const label = pickS(metric, 'label') ?? key;
+    let type: SignalType = 'pullback';
+    if (key.includes('volume')) type = 'volume';
+    else if (key.includes('iv')) type = 'iv-spike';
+    else if (key.includes('sma')) type = 'ma-touch';
+    else if (key.includes('return') || key.includes('relative_strength') || key.includes('macd')) {
+      type = value >= 0 ? 'breakout' : 'pullback';
+    }
     return {
-      type: (SIGNAL_TYPES as string[]).includes(t) ? (t as SignalType) : 'breakout',
-      label: pickS(r, 'label') ?? t,
-      at: pickS(r, 'at', 'triggered_at') ?? '',
+      type,
+      label: `${label} ${value} · ${topScore !== null && topScore >= (bottomScore ?? -1) ? '顶部风险' : '底部修复'} ${activeScore}`,
+      at,
     };
   });
 }
 
-/** 契约 /signals/market → UI MarketSignalsSummary（snake/camel 容错，缺失不编造） */
-function mapMarketSignals(d: unknown): MarketSignalsSummary {
-  const byType = unwrap(d, 'byType', 'by_type').map((r) => {
-    const t = pickS(r, 'type') ?? 'breakout';
-    return {
-      type: (SIGNAL_TYPES as string[]).includes(t) ? (t as SignalType) : 'breakout',
-      label: pickS(r, 'label') ?? t,
-      today: pickN(r, 'today') ?? 0,
-      avg7d: pickN(r, 'avg7d', 'avg_7d') ?? 0,
-    };
+/** 契约 /signals/market = {signals:{key:{value,label,top_score,bottom_score}},scores:{…}}。 */
+export function mapMarketSignals(d: unknown): MarketSignalsSnapshot {
+  const env = asRec(d);
+  const rawSignals = asRec(env.signals);
+  const scores = asRec(env.scores);
+  const source = asRec(rawSignals._source_status);
+  const metrics = Object.entries(rawSignals).flatMap(([key, raw]) => {
+    if (key.startsWith('_')) return [];
+    const metric = asRec(raw);
+    const value = pickN(metric, 'value');
+    if (value === null) return [];
+    return [{
+      key,
+      label: pickS(metric, 'label') ?? key,
+      value,
+      topScore: pickN(metric, 'top_score', 'topScore'),
+      bottomScore: pickN(metric, 'bottom_score', 'bottomScore'),
+    }];
   });
   return {
-    totalToday: pickN(d as Record<string, unknown>, 'totalToday', 'total_today') ?? byType.reduce((s, x) => s + x.today, 0),
-    deltaVsYesterday: pickN(d as Record<string, unknown>, 'deltaVsYesterday', 'delta_vs_yesterday') ?? 0,
-    byType,
+    metrics,
+    topScore: pickN(scores, 'top_score', 'topScore'),
+    bottomScore: pickN(scores, 'bottom_score', 'bottomScore'),
+    topLabel: pickS(scores, 'top_label', 'topLabel'),
+    bottomLabel: pickS(scores, 'bottom_label', 'bottomLabel'),
+    dataQuality: pickN(scores, 'data_quality', 'dataQuality'),
+    sourceStatus: pickS(source, 'value'),
+    asOf: pickS(env, 'as_of', 'asOf'),
+    cached: env._cached === true,
+  };
+}
+
+function mapMockMarketSignals(): MarketSignalsSnapshot {
+  const mock = fx.getMarketSignals();
+  return {
+    metrics: mock.byType.map((item) => ({
+      key: item.type,
+      label: item.label,
+      value: item.today,
+      topScore: null,
+      bottomScore: null,
+    })),
+    topScore: null,
+    bottomScore: null,
+    topLabel: null,
+    bottomLabel: null,
+    dataQuality: null,
+    sourceStatus: 'mock',
+    asOf: new Date().toISOString(),
+    cached: false,
   };
 }
 
 export const signalsApi = {
-  market: (): Promise<MarketSignalsSummary> =>
-    mockOr(() => fx.getMarketSignals(), () => get('/signals/market').then(mapMarketSignals)),
+  market: (): Promise<MarketSignalsSnapshot> =>
+    mockOr(mapMockMarketSignals, () => get('/signals/market').then(mapMarketSignals)),
   stock: (ticker: string): Promise<Signal[]> =>
     mockOr(() => fx.getStockSignals(ticker), () => get(`/signals/stock/${encodeURIComponent(ticker)}`).then(mapStockSignals)),
 };

@@ -2,7 +2,7 @@
  * B1 筛选工作台（screener.md）
  * 行1 分档 Segmented（带数量徽标）+ 预设策略 chips（spring-pop 1.04）
  * 行2 周期 / 偏好 / Top N
- * 行3 板块多选（折叠 +N）· 价格区间 · 成交额下限 · 开始扫描（形变进度条）
+ * 行3 板块多选（折叠 +N）· 价格区间 · 成交额下限 · 开始扫描（真实等待态）
  * 行 stagger 60ms；过滤器变更主按钮脉冲（box-shadow 呼吸 1.2s ×2）
  */
 import { useState } from 'react';
@@ -154,23 +154,20 @@ function PriceInput({
   );
 }
 
-/* ---------------- 扫描按钮（形变进度条） ---------------- */
+/* ---------------- 扫描按钮（无真实计数时只显示不定等待态） ---------------- */
 export function ScanButton({
   scanning,
-  progress,
   dirty,
   universeCount,
   onScan,
   className,
 }: {
   scanning: boolean;
-  progress: number;
   dirty: boolean;
   universeCount: number;
   onScan: () => void;
   className?: string;
 }) {
-  const pct = Math.round(progress);
   return (
     <motion.button
       onClick={onScan}
@@ -187,12 +184,14 @@ export function ScanButton({
         className,
       )}
       aria-live="polite"
+      aria-busy={scanning}
     >
       {scanning && (
         <motion.span
-          className="absolute inset-y-0 left-0 bg-brand-500"
-          style={{ width: `${pct}%`, transformOrigin: 'left' }}
-          transition={{ ease: 'linear' }}
+          className="absolute inset-y-0 w-2/5 bg-gradient-to-r from-transparent via-white/18 to-transparent"
+          initial={{ x: '-120%' }}
+          animate={{ x: '350%' }}
+          transition={{ duration: 1.25, ease: 'linear', repeat: Infinity }}
           aria-hidden="true"
         />
       )}
@@ -200,8 +199,7 @@ export function ScanButton({
         {scanning ? (
           <>
             <span className="size-[18px] animate-spin rounded-full border-2 border-white/35 border-t-white" aria-hidden="true" />
-            <span className="text-body-s font-medium">扫描中</span>
-            <span className="font-mono text-body-s tnum">{pct}%</span>
+            <span className="text-body-s font-medium">扫描中 · 等待后台结果</span>
           </>
         ) : (
           <>
@@ -225,7 +223,6 @@ interface FilterWorkbenchProps {
   presets: StrengthProfile[] | null;
   presetsFailed: boolean;
   scanning: boolean;
-  progress: number;
   dirty: boolean;
   onScan: () => void;
 }
@@ -240,7 +237,6 @@ export default function FilterWorkbench({
   presets,
   presetsFailed,
   scanning,
-  progress,
   dirty,
   onScan,
 }: FilterWorkbenchProps) {
@@ -430,7 +426,7 @@ export default function FilterWorkbench({
             options={DOLLAR_VOL_OPTIONS}
           />
         </div>
-        <ScanButton scanning={scanning} progress={progress} dirty={dirty} universeCount={universe.count} onScan={onScan} className="ml-auto" />
+        <ScanButton scanning={scanning} dirty={dirty} universeCount={universe.count} onScan={onScan} className="ml-auto" />
       </motion.div>
     </motion.section>
   );
