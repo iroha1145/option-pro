@@ -73,6 +73,7 @@ def test_option_pro_secret_allowlist_is_exact() -> None:
         "INTERNAL_API_TOKEN",
         "FINNHUB_API_KEY",
         "MARKETDATA_TOKEN",
+        "MASSIVE_API_KEY",
     }
     assert set(personal_secrets.SECRET_KEYS) == expected
     assert legacy_env_adapter.SECRET_KEYS == expected
