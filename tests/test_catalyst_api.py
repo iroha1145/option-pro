@@ -232,6 +232,56 @@ def test_read_routes_use_only_the_personal_service() -> None:
     assert any(call[0] == "feed" for call in service.calls)
 
 
+def test_ticker_batch_forwards_directional_stock_filters() -> None:
+    service = StubPersonalService()
+    client = client_for(service)
+
+    response = client.post(
+        "/api/catalysts/tickers/batch",
+        json={
+            "tickers": ["nvda"],
+            "window_hours": 48,
+            "limit": 5,
+            "min_confidence": 70,
+            "include_neutral": True,
+            "include_unanalyzed": False,
+            "directional_only": True,
+            "classification": "bearish",
+            "min_abs_impact": 40,
+            "multi_source_only": True,
+        },
+        headers=_SAME_ORIGIN_JSON_HEADERS,
+    )
+
+    assert response.status_code == 200
+    call = next(item for item in service.calls if item[0] == "batch")
+    assert call[1] == ("NVDA",)
+    assert {
+        key: call[2][key]
+        for key in (
+            "window_hours",
+            "limit",
+            "min_confidence",
+            "include_neutral",
+            "include_unanalyzed",
+            "directional_only",
+            "classification",
+            "min_abs_impact",
+            "multi_source_only",
+        )
+    } == {
+        "window_hours": 48,
+        "limit": 5,
+        "min_confidence": 70,
+        "include_neutral": True,
+        "include_unanalyzed": False,
+        "directional_only": True,
+        "classification": "bearish",
+        "min_abs_impact": 40,
+        "multi_source_only": True,
+    }
+
+
 @pytest.mark.parametrize("chunked", [False, True])
 def test_catalyst_routes_reject_oversized_body_before_json_parsing(
     chunked: bool,
