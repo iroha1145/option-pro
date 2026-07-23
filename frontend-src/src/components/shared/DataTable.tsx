@@ -71,7 +71,7 @@ export default function DataTable<T>({
   };
 
   return (
-    <div className={cn('card-surface overflow-hidden', className)}>
+    <div className={cn('card-surface overflow-x-auto overscroll-x-contain', className)}>
       <table className="w-full border-collapse">
         <thead>
           <tr className="bg-card-warm">
