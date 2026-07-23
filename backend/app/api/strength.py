@@ -31,6 +31,8 @@ router = APIRouter(prefix="/api/strength", tags=["strength"])
 
 _STRENGTH_SNAPSHOT_VERSION = 1
 _STRENGTH_SNAPSHOT_TTL_SECONDS = 26 * 60 * 60
+# Backward-compatible public name used by existing diagnostics and tests.
+STRENGTH_CACHE_TTL_SECONDS = _STRENGTH_SNAPSHOT_TTL_SECONDS
 _STRENGTH_SNAPSHOT_MAX_BYTES = 4 * 1024 * 1024
 _STRENGTH_SNAPSHOT_VARIANT_LIMIT = 24
 _STRENGTH_SNAPSHOT_PATH = get_data_paths().strength_snapshot
