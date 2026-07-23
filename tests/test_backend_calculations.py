@@ -351,7 +351,7 @@ def test_massive_history_rejects_incomplete_or_non_distinct_ohlcv(
         bars[-1]["t"] = bars[0]["t"]
     elif invalid == "future_session":
         bars[-1]["t"] = float(
-            pd.Timestamp(observed + timedelta(days=1), tz="UTC").timestamp()
+            pd.Timestamp(observed + timedelta(days=2), tz="UTC").timestamp()
             * 1000
         )
     else:
