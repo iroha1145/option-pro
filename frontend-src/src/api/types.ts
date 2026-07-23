@@ -310,10 +310,12 @@ export interface AiJob {
   /** live 由契约 job_type 归一：earnings_impact/option_alerts/news_impact/signal_analysis/market_focus */
   kind: 'earnings-impact' | 'option-alerts' | 'news-analysis' | 'signal-analysis' | 'market-focus';
   status: AiJobStatus;
-  progress: number; // 0–100
+  /** 后端明确提供时为 0–100；未提供时为 null，前端不得自行推算。 */
+  progress: number | null;
   createdAt: string;
   updatedAt: string;
-  result?: string;
+  /** 按任务类型保留后端结构化结果；消费组件负责校验所属契约。 */
+  result?: string | Record<string, unknown>;
   error?: string;
 }
 

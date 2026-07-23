@@ -79,7 +79,14 @@ def test_snapshot_batch_batches_and_parses(monkeypatch: pytest.MonkeyPatch) -> N
                 {
                     "ticker": symbol,
                     "min": {"t": 1_700_000_000_000, "c": 10.0, "o": 9.0, "h": 11.0, "l": 8.0, "v": 5},
-                    "day": {"c": 10.5},
+                    "day": {
+                        "t": 1_700_000_000_000,
+                        "c": 10.5,
+                        "o": 9.5,
+                        "h": 11.5,
+                        "l": 8.5,
+                        "v": 50,
+                    },
                     "prevDay": {"c": 9.5},
                 }
                 for symbol in calls[-1][:1]  # 每批只回第一只,验证部分覆盖可行
@@ -92,7 +99,10 @@ def test_snapshot_batch_batches_and_parses(monkeypatch: pytest.MonkeyPatch) -> N
     assert len(calls) == 2                      # 100 + 50 分批
     assert set(out) == {"S0", "S100"}
     assert out["S0"]["minute"]["c"] == 10.0
+    assert out["S0"]["day"]["o"] == 9.5
+    assert out["S0"]["day"]["v"] == 50
     assert out["S0"]["prev_close"] == 9.5
+    assert out["S0"]["as_of"] == "2023-11-14T22:13:20+00:00"
 
 
 def test_ticker_range_request_shape(monkeypatch: pytest.MonkeyPatch) -> None:

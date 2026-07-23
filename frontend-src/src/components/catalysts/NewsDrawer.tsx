@@ -13,7 +13,6 @@ import type { CatalystNewsItem, NewsAnalysisJob, NewsClassification, TrustedStoc
 import { AnalysisStatusChip, ClassificationChip, ConfidenceLabel, ImpactValue, Led, StaleChip, TickerChip } from './bits';
 import ConfirmDialog from './ConfirmDialog';
 
-const JOB_STEPS = ['排队', '摘要', '情绪', '关联标的', '结论'] as const;
 const TERMINAL: NewsAnalysisJob['status'][] = ['completed', 'failed', 'cancelled', 'insufficient_context'];
 const DIR_STYLE: Record<NewsClassification, { label: string; cls: string }> = {
   bullish: { label: '利多', cls: 'bg-up-50 text-up-700' },
@@ -46,41 +45,26 @@ function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: numbe
   );
 }
 
-/* ---------------- 任务步骤条 ---------------- */
+/* ---------------- 服务端任务进度 ---------------- */
 function JobStepper({ job }: { job: NewsAnalysisJob }) {
-  const activeIdx = job.status === 'queued' ? 0 : Math.min(4, Math.floor(job.progress / 22) + 1);
+  const label = job.status === 'queued' ? '任务排队中' : '模型分析中';
   return (
-    <div>
-      <ol className="flex items-center gap-1">
-        {JOB_STEPS.map((s, i) => {
-          const done = i < activeIdx;
-          const active = i === activeIdx;
-          return (
-            <li key={s} className="flex flex-1 items-center gap-1">
-              <span
-                className={cn(
-                  'flex size-4 shrink-0 items-center justify-center rounded-full border',
-                  done && 'border-brand-600 bg-brand-600 text-white',
-                  active && 'border-brand-600 bg-brand-50',
-                  !done && !active && 'border-line bg-card',
-                )}
-              >
-                {done ? <Icon name="check" size={9} /> : active ? <Led tone="brand" pulse className="size-1.5" /> : null}
-              </span>
-              <span className={cn('hidden text-[10px] leading-[14px] sm:block', active ? 'font-medium text-brand-600' : done ? 'text-ink-500' : 'text-ink-300')}>
-                {s}
-              </span>
-              {i < JOB_STEPS.length - 1 && <span className={cn('h-px flex-1', done ? 'bg-brand-400' : 'bg-line')} aria-hidden="true" />}
-            </li>
-          );
-        })}
-      </ol>
-      <div className="mt-2 h-1 overflow-hidden rounded-pill bg-brand-100">
-        <div className="h-full rounded-pill bg-brand-600 transition-all duration-500" style={{ width: `${job.progress}%` }} />
+    <div className="rounded-sm border border-line bg-card px-3 py-2.5">
+      <div className="flex min-w-0 items-center gap-2">
+        <Led tone="brand" pulse={job.status === 'in_progress'} />
+        <p className="truncate text-body-s font-medium text-ink-700">{label}</p>
+        <span className="ml-auto shrink-0 font-mono text-micro text-ink-400 tnum">
+          {job.progress === null ? '等待服务端状态' : `${Math.round(job.progress)}%`}
+        </span>
       </div>
-      <p className="mt-1.5 font-mono text-micro text-ink-400 tnum">
-        {job.status === 'queued' ? '排队中' : '分析中'} · {job.progress}%
-      </p>
+      {job.progress !== null && (
+        <div className="mt-2 h-1 overflow-hidden rounded-pill bg-brand-100">
+          <div
+            className="h-full w-full origin-left rounded-pill bg-brand-600 transition-transform duration-500 motion-reduce:transition-none"
+            style={{ transform: `scaleX(${job.progress / 100})` }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -203,7 +187,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
         const nextItem = { ...item, analysisStatus: (j.status === 'queued' ? 'queued' : 'in_progress') as CatalystNewsItem['analysisStatus'], analysisJobId: j.jobId };
         setItem(nextItem);
         onUpdate(nextItem);
-        toast.info('分析任务已提交', force ? '强制重新分析' : '预计数秒内完成');
+        toast.info('分析任务已提交', force ? '强制重新分析' : '可在本页查看真实状态');
       } catch (e) {
         toast.error('提交失败', e instanceof Error ? e.message : undefined);
       }

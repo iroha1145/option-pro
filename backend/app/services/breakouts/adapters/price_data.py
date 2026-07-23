@@ -211,7 +211,9 @@ class YahooPriceDataAdapter:
                 return None
             frame = pd.DataFrame(frames)
             frame.columns = pd.MultiIndex.from_tuples(frame.columns)
-            return frame.sort_index()
+            frame = frame.sort_index()
+            frame.attrs["price_source"] = "Massive"
+            return frame
 
         def download() -> pd.DataFrame:
             try:
@@ -232,17 +234,29 @@ class YahooPriceDataAdapter:
             if session is not None:
                 kwargs["session"] = session
             try:
-                return download_in_bounded_batches(
+                frame = download_in_bounded_batches(
                     yf.download,
                     tickers=symbols,
                     **kwargs,
                 )
+                frame.attrs["price_source"] = self.source
+                return frame
             except Exception:
-                return pd.DataFrame()
+                frame = pd.DataFrame()
+                frame.attrs["price_source"] = self.source
+                return frame
 
         requested_at = _utc_now()
         raw = await asyncio.to_thread(download)
         received_at = _utc_now()
+        source_value = raw.attrs.get("price_source")
+        if isinstance(source_value, dict):
+            source_value = source_value.get("provider")
+        actual_source = (
+            str(source_value).strip()
+            if isinstance(source_value, str) and source_value.strip()
+            else self.source
+        )
         interval_value = _interval_minutes(interval)
         expected_through = _expected_intraday_through(cutoff, interval_value)
         results: dict[str, PriceDataSnapshot] = {}
@@ -276,7 +290,7 @@ class YahooPriceDataAdapter:
             results[symbol] = PriceDataSnapshot(
                 ticker=symbol,
                 frame=bounded,
-                source=self.source,
+                source=actual_source,
                 raw_as_of=data_through,
                 cutoff=cutoff,
                 session=cutoff.session,

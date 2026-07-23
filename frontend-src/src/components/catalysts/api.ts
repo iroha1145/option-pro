@@ -30,6 +30,10 @@ import type {
   TickerImpactSummary,
   TrustedStockImpact,
 } from '@/mocks/fixtures2';
+import {
+  buildFocusCycleRequestBody,
+  focusCyclePollPath,
+} from '@/components/catalysts/focusCycleRequest';
 
 export type {
   CatalystFeedQuery,
@@ -163,12 +167,11 @@ function nJobStatus(v: unknown): AnalysisJobStatus {
   return 'failed'; // failed 及其余失败类终态
 }
 
-function nJobProgress(status: AnalysisJobStatus, raw: unknown): number {
-  const p = pickN(asRec(raw), 'progress');
-  if (p !== null) return p;
-  if (status === 'queued') return 5;
-  if (status === 'in_progress') return 50;
-  return 100;
+function nJobProgress(raw: unknown): number | null {
+  const progress = pickN(asRec(raw), 'progress');
+  return progress !== null && progress >= 0 && progress <= 100
+    ? progress
+    : null;
 }
 
 function nAnalysisJob(raw: unknown, fallbackId?: string | null): NewsAnalysisJob {
@@ -178,7 +181,7 @@ function nAnalysisJob(raw: unknown, fallbackId?: string | null): NewsAnalysisJob
     jobId: pickS(r, 'jobId', 'job_id') ?? fallbackId ?? '',
     newsId: pickId(r, 'newsId', 'news_id') ?? '',
     status,
-    progress: nJobProgress(status, raw),
+    progress: nJobProgress(raw),
     submittedAt: pickS(r, 'submittedAt', 'submitted_at', 'created_at') ?? '',
     updatedAt: pickS(r, 'updatedAt', 'updated_at', 'completed_at') ?? '',
     error: pickS(r, 'error', 'error_code'),
@@ -186,17 +189,29 @@ function nAnalysisJob(raw: unknown, fallbackId?: string | null): NewsAnalysisJob
   };
 }
 
-function nFocusJob(raw: unknown, fallbackId?: string | null): FocusCycleJob {
+function nFocusJob(
+  raw: unknown,
+  fallbackId?: string | null,
+  fallbackCycleId?: string | null,
+): FocusCycleJob {
   const r = asRec(raw);
   const s = nJobStatus(r.status);
+  const locationCycleId =
+    fallbackId && /^mfc_[0-9a-f]{32}$/.test(fallbackId) ? fallbackId : null;
   return {
-    jobId: pickS(r, 'jobId', 'job_id', 'intent_id', 'request_id') ?? fallbackId ?? '',
+    jobId:
+      pickS(r, 'jobId', 'job_id', 'intent_id', 'request_id') ??
+      (locationCycleId ? '' : fallbackId) ??
+      '',
     // FocusCycleJob 状态机不含 cancelled/insufficient_context：归一到 failed 停止轮询
     status: s === 'queued' ? 'queued' : s === 'in_progress' ? 'in_progress' : s === 'completed' ? 'completed' : 'failed',
-    progress: nJobProgress(s, raw),
+    progress: nJobProgress(raw),
     submittedAt: pickS(r, 'submittedAt', 'submitted_at', 'created_at') ?? '',
     updatedAt: pickS(r, 'updatedAt', 'updated_at', 'completed_at') ?? '',
-    cycleId: pickS(r, 'cycleId', 'cycle_id'),
+    cycleId:
+      pickS(r, 'cycleId', 'cycle_id') ??
+      fallbackCycleId ??
+      locationCycleId,
   };
 }
 
@@ -611,20 +626,35 @@ export const catalystsContract = {
     ),
   triggerFocusCycle: (): Promise<FocusCycleJob> =>
     // 个人版：POST 需带 expected_prepared_revision（来自 hotspots/status），XOR retry_cycle_id
-    mockOr(() => fx2.triggerFocusCycle(), async () => {
+    mockOr(() => {
+      const job = fx2.triggerFocusCycle();
+      // mock 的任务表仍以 jobId 为键；统一放进轮询标识槽，live 始终使用真实 cycleId。
+      return { ...job, cycleId: job.cycleId ?? job.jobId };
+    }, async () => {
       const hs = await get('/catalysts/hotspots/status');
       const revision = pickN(asRec(hs), 'prepared_revision');
-      const body: Record<string, unknown> = { trigger: 'manual' };
-      if (revision !== null) body.expected_prepared_revision = revision;
+      const hasNewHotspots = pickB(asRec(hs), 'has_new_hotspots');
+      const preparedHotCount = pickN(asRec(hs), 'prepared_hot_count');
+      const body = buildFocusCycleRequestBody(
+        revision,
+        hasNewHotspots,
+        preparedHotCount,
+      );
       const { data, location } = await postCreate('/catalysts/market-focus-cycles', body);
       const rec = asRec(data);
-      const job = nFocusJob(rec.job ?? rec.cycle ?? data, idFromLocation(location));
-      // 202 已受理但拿不到任务 id（形状差异）：交给 UI 走「延迟刷新 latest」兜底，不视为失败
+      const locationId = idFromLocation(location);
+      const cycle = asRec(rec.cycle);
+      const cycleId =
+        pickS(rec, 'cycleId', 'cycle_id') ??
+        pickS(cycle, 'cycleId', 'cycle_id') ??
+        (locationId && /^mfc_[0-9a-f]{32}$/.test(locationId) ? locationId : null);
+      const job = nFocusJob(rec.job ?? rec.cycle ?? data, locationId, cycleId);
+      // 202 已受理但拿不到周期编号（形状差异）：交给 UI 走「延迟刷新 latest」兜底，不视为失败
       return job;
     }),
-  focusCycleJob: (jobId: string): Promise<FocusCycleJob> =>
-    mockOr(() => fx2.getFocusCycleJob(jobId), () =>
-      get(`/catalysts/analysis-jobs/${encodeURIComponent(jobId)}`).then((d) => nFocusJob(d, jobId)),
+  focusCycleJob: (cycleId: string): Promise<FocusCycleJob> =>
+    mockOr(() => fx2.getFocusCycleJob(cycleId), () =>
+      get(focusCyclePollPath(cycleId)).then((d) => nFocusJob(d, null, cycleId)),
     ),
   tickerSummaries: (q: CatalystFeedQuery = {}): Promise<TickerImpactSummary[]> =>
     mockOr(

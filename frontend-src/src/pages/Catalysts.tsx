@@ -11,6 +11,7 @@ import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import StatusHero from '@/components/catalysts/StatusHero';
+import AnalysisProgressCard from '@/components/catalysts/AnalysisProgressCard';
 import HotspotsStrip from '@/components/catalysts/HotspotsStrip';
 import FocusCycleCard from '@/components/catalysts/FocusCycleCard';
 import ManagePanel from '@/components/catalysts/ManagePanel';
@@ -130,6 +131,9 @@ export default function Catalysts() {
 
       {/* 状态 hero：数据源状态 / 热点计算 / 分析可用性 */}
       <StatusHero />
+
+      {/* Owner 专属：任务库真实计数，不以定时补间伪造单条进度 */}
+      <AnalysisProgressCard />
 
       {/* B1 热点主题带（点击卡片打开代表新闻抽屉） */}
       <HotspotsStrip onOpenNews={setSelectedNewsId} />

@@ -38,6 +38,7 @@ _LOCAL_STORE_RUNTIME_CODES = frozenset(
         "ai_job_insert_failed",
         "ai_job_created_at_invalid",
         "ai_job_payload_invalid",
+        "ai_job_batch_schema_checksum_mismatch",
         "ai_job_schema_checksum_mismatch",
         "local_catalyst_schema_checksum_mismatch",
     }
@@ -134,6 +135,10 @@ class _LocalIntelligence(Protocol):
     def request_analysis(self, news_id: int, *, force: bool) -> dict[str, Any]: ...
     def analysis_job(self, job_id: str) -> dict[str, Any] | None: ...
     def cancel_analysis_job(self, job_id: str) -> dict[str, Any] | None: ...
+    def news_result_audit_states(
+        self,
+        jobs: Sequence[Mapping[str, Any]],
+    ) -> Mapping[str, str]: ...
 
 
 class PersonalCatalystService:
@@ -1275,6 +1280,62 @@ class PersonalCatalystService:
             if self._is_local_store_error(error):
                 raise self._cache_unavailable() from error
             raise
+
+    def analysis_progress(
+        self,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Read exact batch progress and accepted-result audits without writes."""
+
+        try:
+            progress = self.ai_repository.news_analysis_progress(
+                now=now or _utc_now()
+            )
+            batch_jobs = progress.pop("_batch_jobs", [])
+            completed_jobs = [
+                row
+                for row in batch_jobs
+                if isinstance(row, Mapping)
+                and str(row.get("status") or "") == "completed"
+            ]
+            audit_reader = getattr(
+                self.intelligence,
+                "news_result_audit_states",
+                None,
+            )
+            audit_states: Mapping[str, str] = {}
+            if completed_jobs and callable(audit_reader):
+                audit_states = audit_reader(completed_jobs)
+            succeeded = 0
+            awaiting_validation = 0
+            rejected = 0
+            for row in completed_jobs:
+                state = str(
+                    audit_states.get(
+                        str(row.get("job_id") or ""),
+                        "awaiting_validation",
+                    )
+                )
+                if state == "accepted":
+                    succeeded += 1
+                elif state == "rejected":
+                    rejected += 1
+                else:
+                    awaiting_validation += 1
+            progress["succeeded"] = succeeded
+            progress["awaiting_validation"] = awaiting_validation
+            progress["rejected"] = rejected
+            if awaiting_validation and progress.get("status") == "completed":
+                progress["status"] = "active"
+            return progress
+        except (OSError, sqlite3.Error, RuntimeError, TypeError, ValueError) as error:
+            raise CatalystError(
+                "analysis_progress_unavailable",
+                "新闻分析进度暂不可用",
+                retryable=True,
+                counts_for_circuit=False,
+            ) from error
 
     def hotspot_status(
         self,

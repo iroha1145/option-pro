@@ -11,6 +11,7 @@ from app.services.breakouts.adapters import price_data
 from app.services.breakouts.adapters.price_data import YahooPriceDataAdapter
 from app.services.breakouts.models import MarketSession, TemporalCutoff
 from app.services.breakouts.protocols import PriceDataSnapshot
+from app.services import massive
 from app.services.strength import scanner
 
 
@@ -94,3 +95,87 @@ def test_daily_adapter_records_request_receive_source_and_actual_market_close(
     assert snapshot.adjustment == "auto_adjusted"
     assert snapshot.completeness == "completed_daily_sessions"
     assert snapshot.quality == 1.0
+
+
+def test_intraday_adapter_labels_massive_when_massive_supplies_the_frame(
+    monkeypatch,
+) -> None:
+    bar_at = datetime(2026, 7, 10, 10, 20, tzinfo=NY)
+    cutoff = TemporalCutoff(
+        event_at=datetime(2026, 7, 10, 10, 30, tzinfo=NY),
+        session=MarketSession.REGULAR,
+    )
+
+    monkeypatch.setattr(massive, "configured", lambda: True)
+    monkeypatch.setattr(
+        massive,
+        "ticker_range",
+        lambda *_args, **_kwargs: [
+            {
+                "t": int(bar_at.timestamp() * 1_000),
+                "o": 100.0,
+                "h": 102.0,
+                "l": 99.0,
+                "c": 101.0,
+                "v": 1_000.0,
+            }
+        ],
+    )
+
+    def unexpected_yahoo(*_args, **_kwargs):
+        raise AssertionError("Yahoo fallback must not run after a Massive success")
+
+    monkeypatch.setattr(
+        price_data,
+        "download_in_bounded_batches",
+        unexpected_yahoo,
+    )
+
+    snapshot = asyncio.run(
+        YahooPriceDataAdapter().intraday(["AAPL"], cutoff=cutoff, interval="5m")
+    )["AAPL"]
+
+    assert snapshot.source == "Massive"
+    assert snapshot.data_through == datetime(
+        2026,
+        7,
+        10,
+        14,
+        25,
+        tzinfo=timezone.utc,
+    )
+
+
+def test_intraday_adapter_labels_yahoo_after_massive_failure(monkeypatch) -> None:
+    bar_at = datetime(2026, 7, 10, 10, 20, tzinfo=NY)
+    fallback = pd.DataFrame(
+        {
+            "Open": [100.0],
+            "High": [102.0],
+            "Low": [99.0],
+            "Close": [101.0],
+            "Volume": [1_000.0],
+        },
+        index=pd.DatetimeIndex([bar_at]),
+    )
+    cutoff = TemporalCutoff(
+        event_at=datetime(2026, 7, 10, 10, 30, tzinfo=NY),
+        session=MarketSession.REGULAR,
+    )
+
+    def fail_massive(*_args, **_kwargs):
+        raise massive.MassiveError("plan", code="plan", status=403)
+
+    monkeypatch.setattr(massive, "configured", lambda: True)
+    monkeypatch.setattr(massive, "ticker_range", fail_massive)
+    monkeypatch.setattr(
+        price_data,
+        "download_in_bounded_batches",
+        lambda *_args, **_kwargs: fallback,
+    )
+
+    snapshot = asyncio.run(
+        YahooPriceDataAdapter().intraday(["AAPL"], cutoff=cutoff, interval="5m")
+    )["AAPL"]
+
+    assert snapshot.source == "Yahoo/yfinance"

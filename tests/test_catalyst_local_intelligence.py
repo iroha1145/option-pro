@@ -19,6 +19,7 @@ from app.services.catalysts.errors import CatalystError
 from app.services.catalysts.etl_client import CalendarPage, NewsChangesPage
 from app.services.catalysts.etl_repository import CatalystEtlRepository
 from app.services.catalysts.local_intelligence import (
+    HOTSPOT_WAITING,
     SUMMARY_WAITING,
     TITLE_WAITING,
     LocalCatalystIntelligence,
@@ -2121,6 +2122,203 @@ def test_reconcile_restores_previously_accepted_paid_focus_after_old_clear(
         ).fetchone()
     assert restored == ("completed", raw_result, None)
     assert audit == ("rejected",)
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "placeholder"),
+    (
+        ("title_zh", TITLE_WAITING),
+        ("title_zh", HOTSPOT_WAITING),
+        ("summary_zh", SUMMARY_WAITING),
+    ),
+)
+def test_reconcile_retires_previously_accepted_focus_with_waiting_input(
+    tmp_path,
+    field,
+    placeholder,
+):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                1,
+                34,
+                available_at=now - timedelta(minutes=10),
+                title="NVIDIA expands Blackwell production",
+                summary="The company shared a real production update.",
+            )
+        ],
+        as_of=now - timedelta(minutes=9),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+    )
+    payload = _job_payload(ai, cycle["job_id"])
+    assert placeholder not in json.dumps(payload["events"], ensure_ascii=False)
+    payload["events"][0][field] = placeholder
+    tainted_payload = local_module._json(payload)
+    with sqlite3.connect(ai.path) as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET payload_json=? WHERE job_id=?",
+            (tainted_payload, cycle["job_id"]),
+        )
+        connection.commit()
+
+    result = _focus_result(ai, cycle)
+    raw_result = local_module._json(result)
+    _finish_job(ai, cycle["job_id"], result)
+    completed_at = _iso(now)
+    digest = hashlib.sha256(raw_result.encode("utf-8")).hexdigest()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """UPDATE catalyst_local_focus_cycles SET
+                   status='completed',payload_json=?,result_json=?,error_code=NULL,
+                   completed_at=?,updated_at=?
+               WHERE cycle_id=? AND job_id=?""",
+            (
+                tainted_payload,
+                raw_result,
+                completed_at,
+                completed_at,
+                cycle["cycle_id"],
+                cycle["job_id"],
+            ),
+        )
+        connection.execute(
+            """INSERT INTO catalyst_local_focus_result_audit(
+                   cycle_id,job_id,contract_id,result_sha256,outcome,
+                   reason,result_json,result_available_at,observed_at
+               ) VALUES(?,?,?,?,?,?,?,?,?)""",
+            (
+                cycle["cycle_id"],
+                cycle["job_id"],
+                local_module.FOCUS_RESULT_CONTRACT_ID,
+                digest,
+                "accepted",
+                None,
+                raw_result,
+                completed_at,
+                completed_at,
+            ),
+        )
+        connection.commit()
+
+    intelligence.reconcile()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        retired = connection.execute(
+            """SELECT status,result_json,error_code,completed_at
+               FROM catalyst_local_focus_cycles WHERE cycle_id=?""",
+            (cycle["cycle_id"],),
+        ).fetchone()
+    assert retired == (
+        "failed",
+        None,
+        "legacy_placeholder_input_hidden",
+        None,
+    )
+    status = intelligence.hotspot_status(now=now + timedelta(minutes=1))
+    assert status["last_consumed_revision"] == prepared
+    assert status["has_new_hotspots"] is False
+
+    owner_view = intelligence.market_focus_cycle(cycle["cycle_id"])
+    assert owner_view is not None
+    assert owner_view["status"] == "failed"
+    assert owner_view["result"] is None
+    with pytest.raises(CatalystError) as captured:
+        intelligence.request_market_focus_cycle(
+            expected_prepared_revision=None,
+            retry_cycle_id=cycle["cycle_id"],
+        )
+    assert captured.value.code == "market_focus_cycle_not_retryable"
+
+    intelligence.reconcile()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        unchanged = connection.execute(
+            """SELECT status,result_json,error_code,completed_at
+               FROM catalyst_local_focus_cycles WHERE cycle_id=?""",
+            (cycle["cycle_id"],),
+        ).fetchone()
+        rejected_audit = connection.execute(
+            """SELECT outcome,reason FROM catalyst_local_focus_result_audit
+               WHERE cycle_id=? AND contract_id=?""",
+            (
+                cycle["cycle_id"],
+                local_module.FOCUS_INPUT_POLICY_AUDIT_CONTRACT_ID,
+            ),
+        ).fetchone()
+    assert unchanged == retired
+    assert rejected_audit == (
+        "rejected",
+        "legacy_placeholder_input_hidden",
+    )
+    with request_owner_access_context(False):
+        latest = intelligence.latest_market_focus_cycle(
+            now=now + timedelta(minutes=1)
+        )
+    assert latest["cycle"] is None
+    replacement = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+        as_of=now + timedelta(minutes=1),
+    )
+    assert replacement["cycle_id"] != cycle["cycle_id"]
+    replacement_payload = _job_payload(ai, replacement["job_id"])
+    assert not local_module._market_focus_payload_has_waiting_placeholder(
+        replacement_payload
+    )
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 2
+
+
+def test_owner_poll_never_publishes_completed_focus_with_waiting_input(tmp_path):
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [_news_change(1, 35, available_at=now - timedelta(minutes=10))],
+        as_of=now - timedelta(minutes=9),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=prepared,
+    )
+    payload = _job_payload(ai, cycle["job_id"])
+    payload["events"][0]["title_zh"] = TITLE_WAITING
+    tainted_payload = local_module._json(payload)
+    with sqlite3.connect(ai.path) as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET payload_json=? WHERE job_id=?",
+            (tainted_payload, cycle["job_id"]),
+        )
+        connection.commit()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """UPDATE catalyst_local_focus_cycles SET payload_json=?
+               WHERE cycle_id=?""",
+            (tainted_payload, cycle["cycle_id"]),
+        )
+        connection.commit()
+
+    _finish_job(ai, cycle["job_id"], _focus_result(ai, cycle))
+    owner_view = intelligence.market_focus_cycle(cycle["cycle_id"])
+    assert owner_view is not None
+    assert owner_view["status"] == "failed"
+    assert owner_view["error_code"] == "legacy_placeholder_input_hidden"
+    assert owner_view["result"] is None
+    retry_cycle_id, retry_blocked = intelligence._scheduled_focus_retry_cycle(
+        prepared,
+        observed=now + timedelta(minutes=1),
+    )
+    assert retry_cycle_id is None
+    assert retry_blocked is False
     with sqlite3.connect(ai.path) as connection:
         assert connection.execute(
             "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"

@@ -216,6 +216,7 @@ def _raise_safe(error: CatalystError) -> None:
         "worker_unavailable": 503,
         "runtime_settings_unavailable": 503,
         "cache_unavailable": 503,
+        "analysis_progress_unavailable": 503,
         "analysis_unavailable": 503,
     }.get(error.code, 503)
     headers = (
@@ -240,6 +241,19 @@ def catalyst_status(
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     return service.status()
+
+
+@router.get(
+    "/analysis-progress",
+    dependencies=[Depends(require_owner_access)],
+)
+def catalyst_analysis_progress(
+    service: PersonalCatalystService = Depends(_service),
+) -> dict:
+    try:
+        return service.analysis_progress(now=_now())
+    except CatalystError as error:
+        _raise_safe(error)
 
 
 @router.get("/feed")

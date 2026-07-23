@@ -1946,17 +1946,110 @@ async def stock_overview(ticker: str):
             raise exc
         return _sanitize(result)
     except Exception as exc:
-        raise HTTPException(status_code=503, detail="Yahoo stock data is currently unavailable") from exc
+        raise HTTPException(status_code=503, detail="Stock data is currently unavailable") from exc
 
 
 async def _stock_overview_impl(ticker: str):
+    def _finite_quote(value: Any, *, allow_zero: bool = False) -> float | None:
+        try:
+            number = float(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        minimum_ok = number >= 0 if allow_zero else number > 0
+        return number if math.isfinite(number) and minimum_ok else None
+
+    def _quote_as_of(value: Any) -> str | None:
+        if isinstance(value, datetime):
+            stamp = value
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            return stamp.astimezone(timezone.utc).isoformat()
+        if isinstance(value, str):
+            try:
+                stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+            if stamp.tzinfo is None:
+                return None
+            return stamp.astimezone(timezone.utc).isoformat()
+        try:
+            epoch = float(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if not math.isfinite(epoch) or epoch <= 0:
+            return None
+        if epoch >= 1e17:
+            epoch /= 1_000_000_000
+        elif epoch >= 1e14:
+            epoch /= 1_000_000
+        elif epoch >= 1e11:
+            epoch /= 1_000
+        try:
+            return datetime.fromtimestamp(epoch, timezone.utc).isoformat()
+        except (OverflowError, OSError, ValueError):
+            return None
+
     def _work():
-        symbol = ticker.upper()
+        symbol = ticker.upper().strip()
         tk = yf.Ticker(symbol)
-        info = tk.info
+        info = tk.info or {}
         fi = tk.fast_info
         last_price = float(fi.last_price)
         prev_close = float(fi.previous_close)
+        price_provider = "Yahoo/yfinance"
+        quote_as_of = _quote_as_of(info.get("regularMarketTime"))
+        quote_volume = _finite_quote(getattr(fi, "last_volume", None), allow_zero=True)
+        quote_open = _finite_quote(info.get("open"))
+        quote_high = _finite_quote(info.get("dayHigh"))
+        quote_low = _finite_quote(info.get("dayLow"))
+
+        # Company profile and fundamentals remain on Yahoo. Only the quote
+        # fields are overlaid from Massive, so a provider failure can fall back
+        # without making the entire stock drawer unavailable.
+        from app.services import massive as massive_provider
+
+        massive_symbol = massive_provider.to_symbol(symbol)
+        if (
+            massive_provider.configured()
+            and massive_symbol is not None
+            and not massive_symbol.startswith("I:")
+        ):
+            try:
+                snapshot = massive_provider.snapshot_batch([massive_symbol]).get(
+                    massive_symbol
+                )
+            except massive_provider.MassiveError:
+                snapshot = None
+            if snapshot:
+                minute = snapshot.get("minute") or {}
+                day = snapshot.get("day") or {}
+                massive_price = (
+                    _finite_quote(minute.get("c"))
+                    or _finite_quote(day.get("c"))
+                    or _finite_quote(snapshot.get("day_close"))
+                )
+                if massive_price is not None:
+                    last_price = massive_price
+                    price_provider = "Massive"
+                    prev_close = (
+                        _finite_quote(snapshot.get("prev_close")) or prev_close
+                    )
+                    quote_open = _finite_quote(day.get("o")) or quote_open
+                    quote_high = _finite_quote(day.get("h")) or quote_high
+                    quote_low = _finite_quote(day.get("l")) or quote_low
+                    massive_volume = _finite_quote(
+                        day.get("v"),
+                        allow_zero=True,
+                    )
+                    if massive_volume is not None:
+                        quote_volume = massive_volume
+                    quote_as_of = (
+                        _quote_as_of(snapshot.get("as_of"))
+                        or _quote_as_of(minute.get("t"))
+                        or _quote_as_of(day.get("t"))
+                        or _quote_as_of(snapshot.get("updated"))
+                    )
+
         from app.services.zh_names import get_zh_info
         zh = get_zh_info(symbol)
         website = info.get("website")
@@ -1974,12 +2067,14 @@ async def _stock_overview_impl(ticker: str):
             "price": last_price,
             "change": last_price - prev_close,
             "change_percent": (last_price - prev_close) / prev_close * 100 if prev_close else 0,
-            "volume": int(fi.last_volume) if fi.last_volume else None,
+            "volume": int(quote_volume) if quote_volume is not None else None,
             "market_cap": float(fi.market_cap) if fi.market_cap else None,
             "prev_close": prev_close,
-            "high": info.get("dayHigh"),
-            "low": info.get("dayLow"),
-            "open": info.get("open"),
+            "high": quote_high,
+            "low": quote_low,
+            "open": quote_open,
+            "as_of": quote_as_of,
+            "price_provider": price_provider,
             "description": zh.get("description_zh") or info.get("longBusinessSummary", ""),
             "description_en": info.get("longBusinessSummary", ""),
             "sic_description": info.get("industry", ""),

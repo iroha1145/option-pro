@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
@@ -10,6 +10,7 @@ import pytest
 
 from app.api import stocks
 from app.models.schemas import BarsResponse
+from app.services import massive
 
 
 def _intraday_history() -> pd.DataFrame:
@@ -341,6 +342,7 @@ def test_stock_overview_preserves_sub_dollar_quote_precision(
             }
 
     monkeypatch.setattr(stocks.yf, "Ticker", FakeTicker)
+    monkeypatch.setattr(massive, "configured", lambda: False)
     payload = asyncio.run(stocks._stock_overview_impl("penny"))
 
     assert payload["price"] == pytest.approx(0.123456)
@@ -349,3 +351,113 @@ def test_stock_overview_preserves_sub_dollar_quote_precision(
     assert payload["price"] != round(payload["price"], 2)
     assert payload["volume"] is None
     assert payload["market_cap"] is None
+    assert payload["price_provider"] == "Yahoo/yfinance"
+
+
+def test_stock_overview_overlays_massive_quote_and_keeps_yahoo_fundamentals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    quote_at = datetime(2026, 7, 23, 14, 15, tzinfo=timezone.utc)
+
+    class FakeTicker:
+        def __init__(self, symbol: str):
+            assert symbol == "AAPL"
+            self.fast_info = SimpleNamespace(
+                last_price=190.0,
+                previous_close=188.0,
+                last_volume=1_000,
+                market_cap=3_000_000_000_000,
+            )
+            self.info = {
+                "shortName": "Apple Inc.",
+                "regularMarketTime": int(
+                    datetime(2026, 7, 22, 20, 0, tzinfo=timezone.utc).timestamp()
+                ),
+                "dayHigh": 191.0,
+                "dayLow": 187.0,
+                "open": 189.0,
+                "longBusinessSummary": "Consumer technology company.",
+                "industry": "Consumer Electronics",
+                "trailingPE": 31.0,
+            }
+
+    monkeypatch.setattr(stocks.yf, "Ticker", FakeTicker)
+    monkeypatch.setattr(massive, "configured", lambda: True)
+    monkeypatch.setattr(
+        massive,
+        "snapshot_batch",
+        lambda symbols: {
+            "AAPL": {
+                "minute": {
+                    "t": int(quote_at.timestamp() * 1_000),
+                    "c": 200.25,
+                },
+                "day": {
+                    "t": int(quote_at.timestamp() * 1_000),
+                    "o": 197.0,
+                    "h": 202.0,
+                    "l": 196.5,
+                    "c": 200.25,
+                    "v": 2_500,
+                },
+                "prev_close": 198.0,
+                "as_of": quote_at.isoformat(),
+            }
+        },
+    )
+
+    payload = asyncio.run(stocks._stock_overview_impl("aapl"))
+
+    assert payload["price"] == pytest.approx(200.25)
+    assert payload["prev_close"] == pytest.approx(198.0)
+    assert payload["change"] == pytest.approx(2.25)
+    assert payload["open"] == pytest.approx(197.0)
+    assert payload["high"] == pytest.approx(202.0)
+    assert payload["low"] == pytest.approx(196.5)
+    assert payload["volume"] == 2_500
+    assert payload["as_of"] == quote_at.isoformat()
+    assert payload["price_provider"] == "Massive"
+    assert payload["name_en"] == "Apple Inc."
+    assert payload["sic_description"] == "Consumer Electronics"
+    assert payload["pe_ratio"] == pytest.approx(31.0)
+
+
+def test_stock_overview_falls_back_to_yahoo_quote_when_massive_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    quote_at = datetime(2026, 7, 22, 20, 0, tzinfo=timezone.utc)
+
+    class FakeTicker:
+        def __init__(self, symbol: str):
+            assert symbol == "AAPL"
+            self.fast_info = SimpleNamespace(
+                last_price=190.0,
+                previous_close=188.0,
+                last_volume=1_000,
+                market_cap=3_000_000_000_000,
+            )
+            self.info = {
+                "shortName": "Apple Inc.",
+                "regularMarketTime": int(quote_at.timestamp()),
+                "dayHigh": 191.0,
+                "dayLow": 187.0,
+                "open": 189.0,
+            }
+
+    def fail(_symbols):
+        raise massive.MassiveError("plan", code="plan", status=403)
+
+    monkeypatch.setattr(stocks.yf, "Ticker", FakeTicker)
+    monkeypatch.setattr(massive, "configured", lambda: True)
+    monkeypatch.setattr(massive, "snapshot_batch", fail)
+
+    payload = asyncio.run(stocks._stock_overview_impl("AAPL"))
+
+    assert payload["price"] == pytest.approx(190.0)
+    assert payload["prev_close"] == pytest.approx(188.0)
+    assert payload["open"] == pytest.approx(189.0)
+    assert payload["high"] == pytest.approx(191.0)
+    assert payload["low"] == pytest.approx(187.0)
+    assert payload["volume"] == 1_000
+    assert payload["as_of"] == quote_at.isoformat()
+    assert payload["price_provider"] == "Yahoo/yfinance"

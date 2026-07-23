@@ -61,7 +61,12 @@ export function useAiJob() {
   );
 
   const cancel = useCallback(async () => {
-    if (!job || (job.status !== 'queued' && job.status !== 'running')) return;
+    if (
+      !job ||
+      !['queued', 'in_progress', 'running'].includes(job.status)
+    ) {
+      return;
+    }
     try {
       const j = await aiJobsApi.cancel(job.id);
       setJob(j);

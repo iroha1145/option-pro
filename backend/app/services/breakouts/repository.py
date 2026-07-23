@@ -3133,7 +3133,10 @@ class BreakoutRepository:
             rows = connection.execute(
                 """
                 WITH eligible_snapshots AS (
-                    SELECT event.event_id,event.event_snapshot_json,
+                    -- Snapshot JSON can be 512 KiB. Rank only compact keys and
+                    -- join the selected rows back afterward, otherwise SQLite
+                    -- can exhaust a container's bounded temporary filesystem.
+                    SELECT event.scan_run_id,event.event_id,
                            json_extract(
                                event.event_snapshot_json,'$.first_seen_at'
                            ) AS first_seen_at,
@@ -3179,12 +3182,20 @@ class BreakoutRepository:
                                  event_id ASC
                     ) AS lane_position
                     FROM classified
+                ),
+                selected AS (
+                    SELECT scan_run_id,event_id,is_due,lane_position
+                    FROM lane_ranked
+                    WHERE (is_due=1 AND lane_position<=?)
+                       OR (is_due=0 AND lane_position<=?)
                 )
-                SELECT event_id,event_snapshot_json,is_due,lane_position
-                FROM lane_ranked
-                WHERE (is_due=1 AND lane_position<=?)
-                   OR (is_due=0 AND lane_position<=?)
-                ORDER BY is_due DESC,lane_position ASC
+                SELECT selected.event_id,event.event_snapshot_json,
+                       selected.is_due,selected.lane_position
+                FROM selected
+                JOIN breakout_scan_events AS event
+                  ON event.scan_run_id=selected.scan_run_id
+                 AND event.event_id=selected.event_id
+                ORDER BY selected.is_due DESC,selected.lane_position ASC
                 """,
                 (
                     observed_text,

@@ -66,6 +66,32 @@ class StubPersonalService:
             "warnings": [],
         }
 
+    def analysis_progress(self, *, now: Any) -> dict[str, Any]:
+        self.calls.append(("analysis_progress", now))
+        return {
+            "status": "active",
+            "scope": "latest_submission_batch",
+            "batch_source": "scheduled",
+            "total": 4,
+            "finished": 2,
+            "succeeded": 2,
+            "failed": 0,
+            "waiting": 1,
+            "in_progress": 1,
+            "cancelled": 0,
+            "insufficient_context": 0,
+            "budget_blocked": 0,
+            "progress_percent": 50,
+            "current_index": 3,
+            "current_news_id": 103,
+            "queue_total": 2,
+            "queue_waiting": 1,
+            "queue_in_progress": 1,
+            "started_at": NOW,
+            "last_updated_at": NOW,
+            "as_of": NOW,
+        }
+
     def feed(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("feed", kwargs))
         if self.invalid_cursor:
@@ -223,13 +249,29 @@ def test_read_routes_use_only_the_personal_service() -> None:
         client.get(f"/api/catalysts/market-focus-cycles/{CYCLE_ID}"),
         client.get(f"/api/catalysts/analysis-jobs/{JOB_ID}"),
         client.get(f"/api/catalysts/refresh/{REFRESH_ID}"),
+        client.get("/api/catalysts/analysis-progress"),
     )
 
     assert all(response.status_code == 200 for response in responses)
     assert responses[1].json()["items"][0]["title_zh"] == "芯片企业发布最新业绩"
     assert responses[3].json()["ticker"] == "NVDA"
     assert list(responses[4].json()["results"]) == ["NVDA", "AMD"]
+    assert responses[-1].json()["progress_percent"] == 50
     assert any(call[0] == "feed" for call in service.calls)
+    assert any(call[0] == "analysis_progress" for call in service.calls)
+
+
+def test_analysis_progress_requires_owner_access() -> None:
+    service = StubPersonalService()
+    app = FastAPI()
+    app.include_router(catalyst_api.router)
+    app.dependency_overrides[catalyst_api._service] = lambda: service
+    client = TestClient(app, base_url="http://localhost")
+
+    response = client.get("/api/catalysts/analysis-progress")
+
+    assert response.status_code in {401, 403}
+    assert not any(call[0] == "analysis_progress" for call in service.calls)
 
 
 def test_ticker_batch_forwards_directional_stock_filters() -> None:

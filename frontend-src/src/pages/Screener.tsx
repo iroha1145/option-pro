@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { strengthApi, type ScanParams, type StrengthScanEnvelope } from '@/api/modules/strength';
+import { strengthApi, type StrengthScanEnvelope } from '@/api/modules/strength';
 import { catalystsApi } from '@/api/modules/catalysts';
 import { stocksApi } from '@/api/modules/stocks';
 import { runtimeApi, type StrengthRefreshParameters } from '@/api/modules/runtime';
@@ -33,6 +33,7 @@ import ResultTable from '@/components/screener/ResultTable';
 import ResultCards from '@/components/screener/ResultCards';
 import ScanHistoryPopover from '@/components/screener/ScanHistoryPopover';
 import { MethodCard, TierHistogram } from '@/components/screener/SideCards';
+import { buildStrengthScanRequest } from '@/components/screener/scanRequest';
 import {
   DEFAULT_FILTERS,
   DOLLAR_VOL_OPTIONS,
@@ -161,42 +162,11 @@ export default function Screener() {
     // 仅演示数据保留可见扫描过程；真实接口完成后立即呈现结果。
     const minMs = isMock ? 800 + Math.random() * 700 : 0;
     try {
-      // 后端必须先返回足够大的真实候选集，再应用只存在于客户端的条件；
-      // 否则先截 TopN 会漏掉价格上限、多板块、分档或最低分过滤后的合资格股票。
-      const hasClientOnlyNarrowing =
-        filters.priceMax != null ||
-        filters.sectors.length > 1 ||
-        filters.tier !== 'all' ||
-        filters.minScore != null;
-      const apiTop = filters.topN <= 0 || hasClientOnlyNarrowing ? 120 : filters.topN;
-      const params = {
-        band: 'all',
-        sort: 'score',
-        order: 'desc',
-        universe: 'themes',
-        timeframe: filters.timeframe,
-        profile: filters.profile,
-        top: apiTop,
-        sector_id: filters.sectors.length === 1 ? filters.sectors[0] : undefined,
-        min_price: filters.priceMin ?? 0,
-        min_avg_dollar_volume: filters.minDollarVol,
-        include_options: true,
-        ...(filters.minScore != null ? { minScore: filters.minScore } : {}),
-      } as ScanParams;
+      const { apiParams: params, refreshParameters: requested } = buildStrengthScanRequest(filters);
 
       // Owner 扫描先提交精确参数。后端可能复用另一个仍在执行/冷却中的扫描；
       // 只有返回参数完全一致时才等待并读取快照，避免把旧参数结果冒充为本次刷新。
       if (isOwner) {
-        const requested: StrengthRefreshParameters = {
-          universe: 'themes',
-          timeframe: filters.timeframe,
-          profile: filters.profile,
-          top: apiTop,
-          sector_id: filters.sectors.length === 1 ? filters.sectors[0] : null,
-          min_price: filters.priceMin ?? 0,
-          min_avg_dollar_volume: filters.minDollarVol,
-          include_options: true,
-        };
         const action = await runtimeApi.workerAction('strength_refresh', requested);
         if (!strengthParametersMatch(action.details.parameters, requested)) {
           throw new ApiError(409, '另一组筛选条件正在扫描或冷却，请稍后重试', {

@@ -5,7 +5,7 @@
  * 状态机：
  *  - 已缓存 → 五段结果（预期波动 count-up / 情绪渐变条 / IV 排名 / 连锁 chips / Serif 引文）
  *  - 409 analysis_required → owner「生成分析」（confirm 注明模型费用）→ 创建 job 退避轮询 [2,3,5,8,10]s
- *    （活跃 led-pulse + 步骤条 排队中→拉取行情→关联计算→生成结论，终态渲染结果 / 失败原因 + 重试）
+ *    （活跃 led-pulse + 服务端任务状态，终态渲染结果 / 失败原因 + 重试）
  *  - visitor →「登录后可用模型分析」；AI 关闭 →「AI 分析未启用」（不假造内容）
  * 纪律：连锁影响幅度标注「· 非收益」，模型置信度标注「· 非胜率」
  */
@@ -37,75 +37,26 @@ const isSuccess = (s: string) => SUCCESS_STATUSES.has(s);
 
 const BACKOFF_MS = [2000, 3000, 5000, 8000, 10000];
 
-const JOB_STEPS = ['排队中', '拉取行情', '关联计算', '生成结论'] as const;
-
-function jobStepIndex(job: AiJob): number {
-  const s = job.status as string;
-  if (s === 'queued' || s === 'pending' || s === 'preparing') return 0;
-  if (job.progress < 30) return 1;
-  if (job.progress < 70) return 2;
-  return 3;
-}
-
-/* ---------------- 步骤指示（桌面横向 / 移动竖向） ---------------- */
+/* ---------------- 服务端任务进度 ---------------- */
 function JobSteps({ job }: { job: AiJob }) {
-  const current = jobStepIndex(job);
+  const queued = ['queued', 'pending', 'preparing'].includes(String(job.status));
   return (
-    <div>
-      {/* ≥sm 横向 */}
-      <div className="hidden sm:flex sm:items-center">
-        {JOB_STEPS.map((label, i) => {
-          const done = i < current;
-          const active = i === current;
-          return (
-            <div key={label} className={cn('flex items-center', i > 0 && 'flex-1')}>
-              {i > 0 && (
-                <span className="relative mx-1.5 h-0.5 min-w-4 flex-1 overflow-hidden rounded-pill bg-line" aria-hidden="true">
-                  <span
-                    className="absolute inset-y-0 left-0 rounded-pill bg-gradient-to-r from-ai-600/60 to-ai-600 transition-[width] duration-300"
-                    style={{ width: done || active ? '100%' : '0%' }}
-                  />
-                </span>
-              )}
-              <span className="flex flex-col items-center gap-1">
-                {done ? (
-                  <span className="flex size-4 items-center justify-center rounded-full bg-up-600 text-white">
-                    <Icon name="check" size={10} strokeWidth={2.2} />
-                  </span>
-                ) : active ? (
-                  <PulseDot className="bg-ai-600" size={10} />
-                ) : (
-                  <span className="size-2.5 rounded-full bg-ink-300" aria-hidden="true" />
-                )}
-                <span className={cn('whitespace-nowrap text-micro', done ? 'text-up-700' : active ? 'text-ai-600' : 'text-ink-300')}>
-                  {label}
-                </span>
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      {/* <sm 竖向 */}
-      <ol className="space-y-2.5 sm:hidden">
-        {JOB_STEPS.map((label, i) => {
-          const done = i < current;
-          const active = i === current;
-          return (
-            <li key={label} className="flex items-center gap-2.5">
-              {done ? (
-                <span className="flex size-4 items-center justify-center rounded-full bg-up-600 text-white">
-                  <Icon name="check" size={10} strokeWidth={2.2} />
-                </span>
-              ) : active ? (
-                <PulseDot className="bg-ai-600" size={10} />
-              ) : (
-                <span className="size-2.5 rounded-full bg-ink-300" aria-hidden="true" />
-              )}
-              <span className={cn('text-caption', done ? 'text-up-700' : active ? 'text-ai-600' : 'text-ink-300')}>{label}</span>
-            </li>
-          );
-        })}
-      </ol>
+    <div role="status">
+      <p className="flex items-center gap-2 text-caption text-ink-500">
+        <PulseDot className="bg-ai-600" size={8} />
+        {queued ? '任务正在排队' : '模型正在处理'}
+        <span className="ml-auto font-mono text-micro text-ai-600 tnum">
+          {job.progress === null ? '等待服务端状态' : `${Math.round(job.progress)}%`}
+        </span>
+      </p>
+      {job.progress !== null && (
+        <div className="mt-2 h-1 overflow-hidden rounded-pill bg-line">
+          <div
+            className="h-full w-full origin-left rounded-pill bg-ai-600 transition-transform duration-300 motion-reduce:transition-none"
+            style={{ transform: `scaleX(${job.progress / 100})` }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -510,7 +461,9 @@ export default function ImpactCard({ ticker, onAnalyzed, className }: ImpactCard
               <div className="flex items-center gap-2">
                 <PulseDot className="bg-ai-600" size={8} />
                 <h3 className="text-h3 text-ink-800">正在分析 · {ticker}</h3>
-                <span className="ml-auto font-mono text-micro text-ai-600 tnum">{job.progress}%</span>
+                <span className="ml-auto font-mono text-micro text-ai-600 tnum">
+                  {job.progress === null ? '处理中' : `${Math.round(job.progress)}%`}
+                </span>
               </div>
               <div className="mt-5">
                 <JobSteps job={job} />

@@ -8,6 +8,16 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { buildStrengthScanRequest } from '../src/components/screener/scanRequest.ts';
+import {
+  DEFAULT_FILTERS,
+  DOLLAR_VOL_OPTIONS,
+  TOPN_OPTIONS,
+} from '../src/components/screener/types.ts';
+import {
+  buildFocusCycleRequestBody,
+  focusCyclePollPath,
+} from '../src/components/catalysts/focusCycleRequest.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(here, '..', 'dist'); // frontend-src/dist（本地构建输出）
@@ -46,4 +56,72 @@ test('live screener does not add the mock-only random delay', async () => {
     /const minMs = 800 \+ Math\.random\(\) \* 700;/,
     'live 模式不得无条件等待随机演示时长',
   );
+});
+
+test('default screener request matches the daily live snapshot parameters', () => {
+  const request = buildStrengthScanRequest(DEFAULT_FILTERS);
+  assert.deepEqual(request.apiParams, {
+    band: 'all',
+    sort: 'score',
+    order: 'desc',
+    universe: 'themes',
+    timeframe: 'all',
+    profile: 'balanced',
+    top: 20,
+    sector_id: undefined,
+    min_price: 5,
+    min_avg_dollar_volume: 10_000_000,
+    include_options: true,
+  });
+  assert.deepEqual(request.refreshParameters, {
+    universe: 'themes',
+    timeframe: 'all',
+    profile: 'balanced',
+    top: 20,
+    sector_id: null,
+    min_price: 5,
+    min_avg_dollar_volume: 10_000_000,
+    include_options: true,
+  });
+});
+
+test('Owner custom scan keeps the broad and unrestricted controls', () => {
+  const request = buildStrengthScanRequest({
+    ...DEFAULT_FILTERS,
+    topN: 0,
+    priceMin: null,
+    minDollarVol: 0,
+  });
+  assert.equal(request.apiParams.top, 120);
+  assert.equal(request.apiParams.min_price, 0);
+  assert.equal(request.apiParams.min_avg_dollar_volume, 0);
+  assert.equal(request.refreshParameters.top, 120);
+  assert.equal(request.refreshParameters.min_price, 0);
+  assert.equal(request.refreshParameters.min_avg_dollar_volume, 0);
+  assert.ok(TOPN_OPTIONS.some((option) => option.value === 0 && option.label === '最多 120'));
+  assert.ok(DOLLAR_VOL_OPTIONS.some((option) => option.value === 0 && option.label === '不限成交额'));
+});
+
+test('market focus polling uses the cycle endpoint and only forces a consumed nonempty revision', () => {
+  assert.equal(
+    focusCyclePollPath('mfc_0123456789abcdef0123456789abcdef'),
+    '/catalysts/market-focus-cycles/mfc_0123456789abcdef0123456789abcdef',
+  );
+  assert.deepEqual(buildFocusCycleRequestBody(12, true, 8), {
+    trigger: 'manual',
+    expected_prepared_revision: 12,
+  });
+  assert.deepEqual(buildFocusCycleRequestBody(12, false, 8), {
+    trigger: 'manual',
+    expected_prepared_revision: 12,
+    force: true,
+  });
+  assert.deepEqual(buildFocusCycleRequestBody(0, false, 0), {
+    trigger: 'manual',
+    expected_prepared_revision: 0,
+  });
+  assert.deepEqual(buildFocusCycleRequestBody(12, false, 0), {
+    trigger: 'manual',
+    expected_prepared_revision: 12,
+  });
 });
