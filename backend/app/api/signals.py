@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import re
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException
@@ -24,10 +25,15 @@ from app.access import (
     public_snapshot_unavailable,
     require_same_origin_action,
 )
+from app.personal_config import get_personal_config
+from app.public_home_snapshot import (
+    public_home_resource_parameters,
+    read_owner_public_home_entry_async,
+    read_public_home_resource_async,
+)
 from app.services.ai_jobs.models import StrictModel
 from app.services.scoring import compute_market_scores, compute_stock_scores
 from app.services.signals import (
-    cached_market_signals,
     cached_stock_signals,
     compute_market_signals,
     compute_stock_signals,
@@ -127,20 +133,57 @@ def _trend_bias(signals: dict) -> dict:
     }
 
 
+async def _build_market_signals_payload() -> dict:
+    signals = await asyncio.to_thread(compute_market_signals)
+    if not isinstance(signals, dict):
+        raise RuntimeError("Market signals payload is unavailable")
+    cleaned = dict(signals)
+    cleaned.pop("_cached", None)
+    return _sanitize(
+        {
+            "signals": cleaned,
+            "scores": compute_market_scores(cleaned),
+            "as_of": today_str(),
+        }
+    )
+
+
 @router.get("/market")
 async def market_signals():
-    """Full market top/bottom analysis with market-level indicators."""
+    """Read the worker-published market-signal snapshot without blocking GETs."""
     try:
-        signals = (
-            await asyncio.to_thread(compute_market_signals)
-            if current_request_is_owner()
-            else cached_market_signals()
-        )
-        if signals is None:
-            raise public_snapshot_unavailable("signals:market")
-        cached = bool(isinstance(signals, dict) and signals.pop("_cached", False))
-        scores = compute_market_scores(signals)
-        return _sanitize({"signals": signals, "scores": scores, "as_of": today_str(), "_cached": cached})
+        owner = current_request_is_owner()
+        config = get_personal_config()
+        now = time.time()
+        parameters = public_home_resource_parameters("market_signals", now=now)
+        if owner:
+            disk_entry = await read_owner_public_home_entry_async(
+                "market_signals",
+                parameters=parameters,
+                fresh_for_seconds=float(config.public_home.signals_seconds),
+                now=now,
+            )
+            if disk_entry is not None:
+                payload = dict(disk_entry["payload"])
+                payload["_cached"] = True
+                payload["snapshot_source"] = "worker"
+                return _sanitize(payload)
+            # Private-network installations do not run PublicHomeTask. Keep
+            # their owner-only live path, while password-mode production is
+            # normally served from the restart-safe worker snapshot.
+            if config.access.mode != "password":
+                return await _build_market_signals_payload()
+        else:
+            payload = await read_public_home_resource_async(
+                "market_signals",
+                parameters=parameters,
+                now=now,
+            )
+            if payload is not None:
+                payload["_cached"] = True
+                payload["snapshot_source"] = "worker"
+                return _sanitize(payload)
+        raise public_snapshot_unavailable("signals:market")
     except HTTPException:
         raise
     except Exception as exc:

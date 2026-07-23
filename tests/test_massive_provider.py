@@ -133,6 +133,38 @@ def test_unconfigured_get_raises_without_network(monkeypatch: pytest.MonkeyPatch
     assert exc_info.value.code == "not_configured"
 
 
+def test_get_fails_fast_when_provider_concurrency_gate_is_busy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gate = types.SimpleNamespace(
+        acquire=lambda **_kwargs: False,
+        release=lambda: (_ for _ in ()).throw(
+            AssertionError("unacquired gate was released")
+        ),
+    )
+    monkeypatch.setattr(
+        massive,
+        "get_settings",
+        lambda: types.SimpleNamespace(
+            massive_api_key="configured-for-test",
+            massive_base_url="https://api.massive.com",
+        ),
+    )
+    monkeypatch.setattr(massive, "_request_gate", gate)
+    monkeypatch.setattr(
+        massive,
+        "_http",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("busy gate still called provider")
+        ),
+    )
+
+    with pytest.raises(massive.MassiveError) as exc_info:
+        massive._get("/v2/aggs/ticker/AAPL/prev")
+
+    assert exc_info.value.code == "provider_busy"
+
+
 def test_chart_history_helper_builds_yfinance_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.api import stocks
 

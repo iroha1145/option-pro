@@ -28,6 +28,7 @@ from app.data_paths import get_data_paths
 from app.personal_config import get_personal_config
 from app.public_home_snapshot import (
     PUBLIC_HOME_RESOURCE_SPECS,
+    breakout_lead_chart_parameters,
     read_owner_public_home_entry_async,
     read_public_home_resource_async,
 )
@@ -2210,6 +2211,21 @@ async def stock_chart(
             },
             now=now,
         )
+        if result is None:
+            try:
+                breakout_parameters = breakout_lead_chart_parameters(symbol)
+            except ValueError:
+                breakout_parameters = None
+            if (
+                breakout_parameters is not None
+                and range == "1d"
+                and adjustment == "raw"
+            ):
+                result = await read_public_home_resource_async(
+                    "breakout_lead_chart",
+                    parameters=breakout_parameters,
+                    now=now,
+                )
         if result is None:
             raise exc
         return _sanitize(result)

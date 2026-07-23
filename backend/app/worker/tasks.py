@@ -677,6 +677,8 @@ class PublicHomeTask:
         "focus_overview": "overview_seconds",
         "focus_chart": "chart_seconds",
         "focus_signals": "signals_seconds",
+        "market_signals": "signals_seconds",
+        "breakout_lead_chart": "chart_seconds",
         "earnings": "earnings_seconds",
         "unusual": "unusual_seconds",
     }
@@ -693,6 +695,7 @@ class PublicHomeTask:
         watchlist_reader: Callable[..., Any] | None = None,
         watchlist_writer: Callable[..., Any] | None = None,
         watchlist_path: Path | None = None,
+        breakout_lead_ticker_reader: Callable[..., Any] | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self._config = config
@@ -703,6 +706,7 @@ class PublicHomeTask:
         self._watchlist_reader = watchlist_reader
         self._watchlist_writer = watchlist_writer
         self._watchlist_path = watchlist_path
+        self._breakout_lead_ticker_reader = breakout_lead_ticker_reader
         self._clock = clock
         self._failures: dict[str, _PublicHomeFailure] = {}
         self._inflight: dict[str, _PublicHomeInflight] = {}
@@ -713,7 +717,7 @@ class PublicHomeTask:
         resource: str,
         parameters: Mapping[str, Any],
     ) -> Any:
-        from app.api import earnings, market, options, stocks
+        from app.api import earnings, market, options, signals, stocks
 
         if resource == "watchlist":
             return await stocks._build_watchlist()
@@ -729,6 +733,14 @@ class PublicHomeTask:
             )
         if resource == "focus_signals":
             return await stocks._build_stock_signals(str(parameters["ticker"]))
+        if resource == "market_signals":
+            return await signals._build_market_signals_payload()
+        if resource == "breakout_lead_chart":
+            return await stocks._stock_chart_impl(
+                str(parameters["ticker"]),
+                str(parameters["range"]),
+                str(parameters["adjustment"]),
+            )
         if resource == "earnings":
             market_date = datetime.fromisoformat(
                 str(parameters["market_date"])
@@ -740,6 +752,43 @@ class PublicHomeTask:
                 float(parameters["min_vol_oi"]),
             )
         raise ValueError("unknown public home resource")
+
+    @staticmethod
+    def _default_breakout_lead_ticker() -> str | None:
+        try:
+            from app.services.breakouts.config import get_breakout_settings
+            from app.services.breakouts.repository import BreakoutRepository
+
+            settings = get_breakout_settings()
+            if not settings.enabled:
+                return None
+            scan = BreakoutRepository(
+                settings.db_path,
+                read_only=True,
+            ).latest_completed_scan()
+            events = scan.get("events") if isinstance(scan, Mapping) else None
+            first = events[0] if isinstance(events, list) and events else None
+            ticker = first.get("ticker") if isinstance(first, Mapping) else None
+            return str(ticker).strip().upper() if ticker else None
+        except (FileNotFoundError, OSError, RuntimeError, ValueError, sqlite3.Error):
+            return None
+
+    async def _breakout_lead_ticker(self) -> str | None:
+        reader = (
+            self._breakout_lead_ticker_reader
+            or self._default_breakout_lead_ticker
+        )
+        value = await _call_local(reader)
+        if not isinstance(value, str) or not value.strip():
+            return None
+        from app.public_home_snapshot import breakout_lead_chart_parameters
+
+        try:
+            return str(
+                breakout_lead_chart_parameters(value)["ticker"]
+            )
+        except ValueError:
+            return None
 
     async def _build(
         self,
@@ -1101,11 +1150,12 @@ class PublicHomeTask:
 
     async def __call__(self) -> TaskResult:
         from app.public_home_snapshot import (
+            PUBLIC_HOME_OPTIONAL_RESOURCE_ORDER,
             PUBLIC_HOME_RESOURCE_ORDER,
+            breakout_lead_chart_parameters,
             public_home_resource_parameters,
         )
 
-        resource_order = ("watchlist", *tuple(PUBLIC_HOME_RESOURCE_ORDER))
         path = self._snapshot_path or get_data_paths().public_home_snapshot
         watchlist_path = self._watchlist_path or (
             path.parent / "watchlist-snapshot-v1.json"
@@ -1113,6 +1163,27 @@ class PublicHomeTask:
             else get_data_paths().watchlist_snapshot
         )
         observed = float(self._clock())
+        breakout_lead_ticker = await self._breakout_lead_ticker()
+        if breakout_lead_ticker is None:
+            orphaned = self._inflight.get("breakout_lead_chart")
+            if orphaned is not None:
+                orphaned.superseded = True
+                if orphaned.task.done():
+                    try:
+                        orphaned.task.result()
+                    except BaseException:
+                        pass
+                    self._inflight.pop("breakout_lead_chart", None)
+        optional_resources = (
+            tuple(PUBLIC_HOME_OPTIONAL_RESOURCE_ORDER)
+            if breakout_lead_ticker is not None
+            else ()
+        )
+        resource_order = (
+            "watchlist",
+            *tuple(PUBLIC_HOME_RESOURCE_ORDER),
+            *optional_resources,
+        )
         market_phases = {
             resource: self._market_phase(observed, resource=resource)
             for resource in resource_order
@@ -1122,6 +1193,8 @@ class PublicHomeTask:
             resource: (
                 {"tickers": None}
                 if resource == "watchlist"
+                else breakout_lead_chart_parameters(breakout_lead_ticker)
+                if resource == "breakout_lead_chart"
                 else public_home_resource_parameters(resource, now=observed)
             )
             for resource in resource_order

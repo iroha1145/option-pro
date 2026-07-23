@@ -15,7 +15,8 @@ import pytest
 import httpx
 from fastapi import HTTPException
 
-from app.api import market, strength as strength_api
+from app.api import market, signals as signals_api, strength as strength_api
+from app.public_home_snapshot import validate_public_home_payload
 from app.services import scoring, signals, yahoo
 from app.services.cache import TTLCache
 from app.services.strength import (
@@ -205,6 +206,52 @@ def test_market_signal_breadth_uses_only_available_funds_in_denominator(
     assert result["sectors_above_50dma"]["value"] == 100.0
     assert result["_breadth_coverage"]["available"] == 7
     assert result["_source_status"]["value"] == "degraded"
+
+
+def test_market_signal_bulk_fallback_does_not_retry_massive_per_symbol(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    massive_calls: list[str] = []
+    yahoo_calls: list[str] = []
+
+    monkeypatch.setattr(signals.massive, "configured", lambda: True)
+    monkeypatch.setattr(
+        signals,
+        "_massive_daily",
+        lambda symbol, _period: (
+            massive_calls.append(symbol) or pd.DataFrame()
+        ),
+    )
+    monkeypatch.setattr(signals.yf, "download", lambda **_kwargs: pd.DataFrame())
+    monkeypatch.setattr(
+        signals,
+        "_yahoo_history",
+        lambda symbol, _period: (
+            yahoo_calls.append(symbol) or pd.DataFrame()
+        ),
+    )
+
+    result = signals._bulk_history(["AAA", "BBB"])
+
+    assert set(result) == {"AAA", "BBB"}
+    assert sorted(massive_calls) == ["AAA", "BBB"]
+    assert sorted(yahoo_calls) == ["AAA", "BBB"]
+
+
+def test_worker_market_signal_payload_matches_persisted_schema(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signals._cache.clear()
+    history = _history()
+    monkeypatch.setattr(
+        signals,
+        "_bulk_history",
+        lambda symbols: {symbol: history for symbol in symbols},
+    )
+
+    payload = asyncio.run(signals_api._build_market_signals_payload())
+
+    assert validate_public_home_payload("market_signals", payload) == payload
 
 
 def test_data_quality_excludes_metadata_dictionaries() -> None:
