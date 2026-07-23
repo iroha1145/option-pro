@@ -3924,8 +3924,13 @@ class LocalCatalystIntelligence:
             else:
                 rows = connection.execute(
                     """SELECT g.*,i.prepared_revision,
+                              r.source AS representative_source,
                               r.raw_title AS representative_source_title,
                               r.raw_summary AS representative_source_summary,
+                              r.source_names_json
+                                AS representative_source_names_json,
+                              r.canonical_tickers_json
+                                AS representative_canonical_tickers_json,
                               EXISTS(
                                   SELECT 1
                                   FROM catalyst_local_analysis_links link
@@ -4003,6 +4008,21 @@ class LocalCatalystIntelligence:
                     else row["representative_summary_zh"]
                 ),
                 "representative_news_id": int(row["representative_news_id"]),
+                "_validation_source": str(row["representative_source"] or ""),
+                "_validation_title": str(
+                    row["representative_source_title"] or ""
+                ),
+                "_validation_summary": str(
+                    row["representative_source_summary"] or ""
+                ),
+                "_validation_sources": _loads(
+                    row["representative_source_names_json"],
+                    [],
+                ),
+                "_validation_allowed_tickers": _loads(
+                    row["representative_canonical_tickers_json"],
+                    [],
+                ),
                 "_analysis_published": bool(
                     row["representative_analysis_published"]
                 ),
@@ -4026,8 +4046,13 @@ class LocalCatalystIntelligence:
                 return None, []
             rows = connection.execute(
                 """SELECT g.*,i.prepared_revision,
+                          r.source AS representative_source,
                           r.raw_title AS representative_source_title,
                           r.raw_summary AS representative_source_summary,
+                          r.source_names_json
+                            AS representative_source_names_json,
+                          r.canonical_tickers_json
+                            AS representative_canonical_tickers_json,
                           EXISTS(
                               SELECT 1
                               FROM catalyst_local_analysis_links link

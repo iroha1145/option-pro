@@ -780,6 +780,15 @@ def test_read_mode_never_creates_paid_jobs_and_uses_source_text_fallback(tmp_pat
     assert "Secret raw English summary" in public_json
     assert feed["items"][0]["title"] == "Secret raw English headline"
     assert feed["items"][0]["summary"] == "Secret raw English summary"
+    assert hotspots["items"][0]["_validation_source"] == "Reuters"
+    assert hotspots["items"][0]["_validation_title"] == (
+        "Secret raw English headline"
+    )
+    assert hotspots["items"][0]["_validation_summary"] == (
+        "Secret raw English summary"
+    )
+    assert hotspots["items"][0]["_validation_sources"] == ["Reuters"]
+    assert hotspots["items"][0]["_validation_allowed_tickers"] == ["NVDA"]
     assert TITLE_WAITING not in public_json
     assert SUMMARY_WAITING not in public_json
     hotspot_status = intelligence.hotspot_status(now=now)

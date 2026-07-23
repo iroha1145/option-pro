@@ -547,6 +547,80 @@ def test_deleted_news_and_untranslated_hotspots_stay_hidden() -> None:
     assert service.hotspots(limit=10)["items"] == []
 
 
+def test_hidden_hotspots_change_an_active_payload_to_empty() -> None:
+    engine = FakeIntelligence()
+
+    def hotspots(*, limit, now=None):
+        return {
+            "status": "active",
+            "items": [
+                {
+                    "event_group_id": "event-1",
+                    "representative_title": "English hotspot title",
+                    "summary_zh": "English summary",
+                }
+            ][:limit],
+        }
+
+    engine.hotspots = hotspots
+    payload = _service("read", engine=engine).hotspots(limit=10)
+
+    assert payload["status"] == "empty"
+    assert payload["items"] == []
+
+
+def test_source_bound_names_remain_visible_in_hotspots_without_english_leaks() -> None:
+    engine = FakeIntelligence()
+
+    def hotspots(*, limit, now=None):
+        return {
+            "status": "ok",
+            "items": [
+                {
+                    "event_group_id": "event-1",
+                    "representative_title": "Hormel Foods公布最新季度业绩",
+                    "summary_zh": "季度销售额增长，利润率仍然承压。",
+                    "validated_tickers": ["HRL"],
+                    "_validation_source": "Business Wire",
+                    "_validation_title": (
+                        "Hormel Foods reports fiscal third-quarter results"
+                    ),
+                    "_validation_summary": (
+                        "Hormel Foods reports higher quarterly sales."
+                    ),
+                    "_validation_sources": ["Business Wire"],
+                    "_validation_allowed_tickers": ["HRL"],
+                    "_analysis_published": True,
+                },
+                {
+                    "event_group_id": "event-2",
+                    "representative_title": "Seeking Alpha提问行业前景",
+                    "summary_zh": "English summary must remain private",
+                    "validated_tickers": ["NVDA"],
+                    "_validation_source": "seekingalpha/Seeking Alpha",
+                    "_validation_title": "SA Asks: What is the industry outlook?",
+                    "_validation_summary": "English source summary",
+                    "_validation_sources": ["seekingalpha/breaking"],
+                    "_validation_allowed_tickers": ["NVDA"],
+                    "_analysis_published": True,
+                },
+            ][:limit],
+        }
+
+    engine.hotspots = hotspots
+    items = _service("read", engine=engine).hotspots(limit=10)["items"]
+
+    assert [item["representative_title"] for item in items] == [
+        "Hormel Foods公布最新季度业绩",
+        "Seeking Alpha提问行业前景",
+    ]
+    assert items[0]["summary_zh"] == "季度销售额增长，利润率仍然承压。"
+    assert items[1]["summary_zh"] == ""
+    for item in items:
+        assert not any(key.startswith("_validation_") for key in item)
+        assert "_analysis_published" not in item
+
+
 def test_include_unanalyzed_is_reapplied_after_analysis_projection() -> None:
     engine = FakeIntelligence()
     engine.item = {
