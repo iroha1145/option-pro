@@ -1727,9 +1727,10 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         TaskSpec(
             "strength_refresh",
             StrengthRefreshTask(),
-            # 日线强度按日刷新；15 分钟缓存只用于单次计算去重，不应让 worker 快照永久过期。
+            # 日线强度按需刷新；API 动作会携带完整筛选参数并唤醒该任务。
             interval_seconds=86_400.0,
             timeout_seconds=1200.0,
+            manual_only=True,
         ),
         TaskSpec(
             "breakout_refresh",
