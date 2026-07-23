@@ -1,10 +1,13 @@
 /**
  * 催化剂契约网关（catalysts 页专用）
  * - mock：走 fixtures2 的契约扩展（确定性种子）
- * - live：走 /api/catalysts/* 与 /api/ai/jobs/*（形状 1:1 对齐 api-contract.md，
- *   snake_case 契约 → camelCase UI 的归一在本文件完成；契约缺失字段不编造）
- * 注：脚手架 src/api/modules/catalysts.ts 为精简形状且按约束不可改动，
- *     本网关复用 client 的 mockOr/get/post 模式，不改动 api 层。
+ * - live：对齐个人版后端真实契约（app/api/catalysts.py + services/catalysts）：
+ *   · status = {status, enabled, last_sync_at, streams:{news,calendar}, analysis_availability:{enabled,reason}, model…}
+ *   · feed/calendar/hotspots 数据在 items 键；news_id 为数字；匿名态 analysis_status 仅 not_requested|completed（设计使然）
+ *   · hotspots 为事件组 {event_group_id, hot_score, representative_title, source_count, validated_tickers…}
+ *   · 焦点周期 = {cycle:{…, result:{title_zh, summary_zh, headline_summary, focus_ticker_assessments…}}}
+ *     触发需 expected_prepared_revision（取自 hotspots/status.prepared_revision）
+ *   snake_case → camelCase 的归一在本文件完成；契约缺失字段不编造（null/空由 UI 显「—」或隐藏）。
  */
 import { ApiError, get, idFromLocation, mockOr, post, postCreate, toQuery } from '@/api/client';
 import { asRec, pickB, pickN, pickS, unwrap, type Rec } from '@/api/live';
@@ -14,6 +17,7 @@ import type {
   CatalystFeedQuery,
   CatalystNewsItem,
   CatalystsStatusDetail,
+  CatalystStreamHealth,
   EconomicEvent,
   FocusCycleJob,
   HotspotGroup,
@@ -30,6 +34,7 @@ export type {
   CatalystFeedQuery,
   CatalystNewsItem,
   CatalystsStatusDetail,
+  CatalystStreamHealth,
   EconomicEvent,
   FocusCycleJob,
   FocusCycleStockAssessment,
@@ -51,21 +56,31 @@ function nClassification(v: unknown): NewsClassification {
   return v === 'bullish' || v === 'bearish' ? v : 'neutral';
 }
 
+/** id 兼容数字（个人版 news_id 为整数） */
+function pickId(r: Rec, ...keys: string[]): string | null {
+  const s = pickS(r, ...keys);
+  if (s) return s;
+  const n = pickN(r, ...keys);
+  return n !== null ? String(n) : null;
+}
+
 function nImpact(v: unknown): NewsImpactResult | null {
   const r = asRec(v);
   if (!Object.keys(r).length) return null;
+  const conf = pickN(r, 'confidence') ?? 0;
   return {
     classification: nClassification(r.classification),
-    confidence: pickN(r, 'confidence') ?? 0,
+    // 个人版契约 confidence 为 0–100 整数；UI 口径 0–1
+    confidence: conf > 1 ? conf / 100 : conf,
     headlineSummary: pickS(r, 'headlineSummary', 'headline_summary') ?? '',
-    causalSummary: pickS(r, 'causalSummary', 'causal_summary') ?? '',
-    trustedStockImpacts: unwrap(r, 'trustedStockImpacts', 'trusted_stock_impacts').map((t) => ({
+    causalSummary: pickS(r, 'causalSummary', 'causal_summary', 'summary_zh', 'market_summary') ?? '',
+    trustedStockImpacts: unwrap(r, 'trustedStockImpacts', 'trusted_stock_impacts', 'affected_stocks').map((t) => ({
       ticker: pickS(t, 'ticker') ?? '',
-      direction: nClassification(t.direction),
+      direction: nClassification(t.direction ?? t.classification),
       impactScore: pickN(t, 'impactScore', 'impact_score') ?? 0,
       horizon: pickS(t, 'horizon') ?? '',
       mechanism: pickS(t, 'mechanism') ?? '',
-      reason: pickS(t, 'reason') ?? '',
+      reason: pickS(t, 'reason', 'reason_zh', 'why') ?? '',
     })),
     model: pickS(r, 'model') ?? '',
     generatedAt: pickS(r, 'generatedAt', 'generated_at') ?? '',
@@ -74,21 +89,24 @@ function nImpact(v: unknown): NewsImpactResult | null {
 
 function nAnalysisStatus(v: unknown): CatalystNewsItem['analysisStatus'] {
   const s = String(v ?? 'pending');
-  // 契约 §0.4 活跃态归一（processing/running → in_progress；preparing/pending → pending/queued）
+  // 契约活跃态归一（processing/running → in_progress；preparing → pending）
+  // 个人版匿名态只回 not_requested|completed：not_requested 视作「未分析」
+  if (s === 'not_requested' || s === 'preparing') return 'pending';
   if (s === 'processing' || s === 'running' || s === 'cancel_requested') return 'in_progress';
-  if (s === 'preparing') return 'pending';
   if (s === 'canceled') return 'failed';
-  if (s === 'queued' || s === 'in_progress' || s === 'completed' || s === 'insufficient_context' || s === 'failed') return s;
+  if (s === 'queued' || s === 'in_progress' || s === 'completed' || s === 'insufficient_context' || s === 'failed' || s === 'pending') return s;
   return 'pending';
 }
 
 function nNewsItem(r: Rec): CatalystNewsItem {
+  const impact = nImpact(r.analysis);
+  if (impact && !impact.generatedAt) impact.generatedAt = pickS(r, 'analyzed_at', 'available_at') ?? '';
   return {
-    newsId: pickS(r, 'newsId', 'news_id') ?? '',
+    newsId: pickId(r, 'newsId', 'news_id') ?? '',
     source: pickS(r, 'source') ?? '',
     sourceCount: pickN(r, 'sourceCount', 'source_count') ?? 1,
-    title: pickS(r, 'title') ?? '',
-    titleZh: pickS(r, 'titleZh', 'title_zh') ?? '',
+    title: pickS(r, 'title') ?? pickS(r, 'titleZh', 'title_zh') ?? '',
+    titleZh: pickS(r, 'titleZh', 'title_zh') ?? pickS(r, 'title') ?? '',
     summary: pickS(r, 'summary') ?? '',
     summaryZh: pickS(r, 'summaryZh', 'summary_zh') ?? '',
     url: pickS(r, 'url') ?? '',
@@ -98,15 +116,15 @@ function nNewsItem(r: Rec): CatalystNewsItem {
     isStale: pickB(r, 'isStale', 'is_stale') ?? false,
     themeIds: Array.isArray(r.theme_ids) ? (r.theme_ids as string[]) : Array.isArray(r.themeIds) ? (r.themeIds as string[]) : [],
     analysisStatus: nAnalysisStatus(r.analysis_status ?? r.analysisStatus),
-    analysis: nImpact(r.analysis),
+    analysis: impact,
     analysisJobId: pickS(r, 'analysisJobId', 'analysis_job_id') ?? pickS(asRec(r.analysis_job), 'job_id') ?? (typeof r.analysis_job === 'string' ? r.analysis_job : null),
   };
 }
 
-/** 契约任务状态（§0.4）→ NewsAnalysisJob.status */
+/** 契约任务状态 → NewsAnalysisJob.status */
 function nJobStatus(v: unknown): AnalysisJobStatus {
   const s = String(v ?? '');
-  if (s === 'preparing' || s === 'pending' || s === 'queued') return 'queued';
+  if (s === 'preparing' || s === 'pending' || s === 'queued' || s === 'not_requested') return 'queued';
   if (s === 'in_progress' || s === 'processing' || s === 'running' || s === 'cancel_requested') return 'in_progress';
   if (s === 'completed') return 'completed';
   if (s === 'insufficient_context') return 'insufficient_context';
@@ -127,10 +145,10 @@ function nAnalysisJob(raw: unknown, fallbackId?: string | null): NewsAnalysisJob
   const status = nJobStatus(r.status);
   return {
     jobId: pickS(r, 'jobId', 'job_id') ?? fallbackId ?? '',
-    newsId: pickS(r, 'newsId', 'news_id') ?? '',
+    newsId: pickId(r, 'newsId', 'news_id') ?? '',
     status,
     progress: nJobProgress(status, raw),
-    submittedAt: pickS(r, 'submittedAt', 'submitted_at') ?? '',
+    submittedAt: pickS(r, 'submittedAt', 'submitted_at', 'created_at') ?? '',
     updatedAt: pickS(r, 'updatedAt', 'updated_at', 'completed_at') ?? '',
     error: pickS(r, 'error', 'error_code'),
     cancellable: pickB(r, 'cancellable') ?? (status === 'queued' || status === 'in_progress'),
@@ -141,55 +159,145 @@ function nFocusJob(raw: unknown, fallbackId?: string | null): FocusCycleJob {
   const r = asRec(raw);
   const s = nJobStatus(r.status);
   return {
-    jobId: pickS(r, 'jobId', 'job_id') ?? fallbackId ?? '',
+    jobId: pickS(r, 'jobId', 'job_id', 'intent_id', 'request_id') ?? fallbackId ?? '',
     // FocusCycleJob 状态机不含 cancelled/insufficient_context：归一到 failed 停止轮询
     status: s === 'queued' ? 'queued' : s === 'in_progress' ? 'in_progress' : s === 'completed' ? 'completed' : 'failed',
     progress: nJobProgress(s, raw),
-    submittedAt: pickS(r, 'submittedAt', 'submitted_at') ?? '',
+    submittedAt: pickS(r, 'submittedAt', 'submitted_at', 'created_at') ?? '',
     updatedAt: pickS(r, 'updatedAt', 'updated_at', 'completed_at') ?? '',
     cycleId: pickS(r, 'cycleId', 'cycle_id'),
   };
 }
 
+/** 个人版焦点周期：{cycle:{…, result:{…}}} → MarketFocusCycle（无 stage 概念 → null 隐藏步进条） */
 function nCycle(raw: unknown): MarketFocusCycle {
-  const r = asRec(raw);
-  const stage = pickN(r, 'stage') ?? 1;
+  const env = asRec(raw);
+  const r = asRec(env.cycle ?? env);
+  const result = asRec(r.result);
+  const legacyStage = pickN(r, 'stage');
+  const assessments = unwrap(result, 'focus_ticker_assessments').length
+    ? unwrap(result, 'focus_ticker_assessments')
+    : unwrap(r, 'assessments');
   return {
     cycleId: pickS(r, 'cycleId', 'cycle_id', 'id') ?? '',
-    dominantEvent: pickS(r, 'dominantEvent', 'dominant_event') ?? '',
-    stage: (Math.min(4, Math.max(1, stage)) as MarketFocusCycle['stage']),
-    startedAt: pickS(r, 'startedAt', 'started_at') ?? '',
-    generatedAt: pickS(r, 'generatedAt', 'generated_at') ?? '',
-    trigger: pickS(r, 'trigger') === 'manual' ? 'manual' : 'scheduled',
+    dominantEvent: pickS(result, 'title_zh') ?? pickS(r, 'dominantEvent', 'dominant_event') ?? '—',
+    stage: legacyStage !== null ? (Math.min(4, Math.max(1, legacyStage)) as 1 | 2 | 3 | 4) : null,
+    startedAt: pickS(r, 'startedAt', 'started_at', 'created_at') ?? '',
+    generatedAt: pickS(r, 'generatedAt', 'generated_at', 'completed_at') ?? '',
+    trigger: pickS(r, 'trigger') === 'manual' || pickB(r, 'force') === true ? 'manual' : 'scheduled',
     model: pickS(r, 'model') ?? '',
-    newsCount: pickN(r, 'newsCount', 'news_count') ?? 0,
-    summary: pickS(r, 'summary') ?? '',
-    assessments: unwrap(r, 'assessments').map((a) => ({
+    newsCount: pickN(r, 'newsCount', 'news_count') ?? pickN(r, 'event_group_count') ?? 0,
+    sampleLabel: pickN(r, 'newsCount', 'news_count') !== null ? '条' : '组事件',
+    summary: pickS(result, 'summary_zh', 'market_summary') ?? pickS(r, 'summary') ?? '',
+    headline: pickS(result, 'headline_summary'),
+    uncertainties: unwrap(result, 'market_uncertainties').length
+      ? (result.market_uncertainties as unknown[]).filter((x): x is string => typeof x === 'string')
+      : undefined,
+    assessments: assessments.map((a) => ({
       ticker: pickS(a, 'ticker') ?? '',
       name: pickS(a, 'name') ?? '',
-      direction: nClassification(a.direction),
+      direction: nClassification(a.direction ?? a.stance ?? a.classification),
       impactScore: pickN(a, 'impactScore', 'impact_score') ?? 0,
-      note: pickS(a, 'note') ?? '',
+      note: pickS(a, 'note', 'note_zh', 'assessment_zh', 'reason', 'reason_zh') ?? '',
     })),
+  };
+}
+
+const STREAM_CN: Record<string, string> = { news: '新闻流', calendar: '经济日历' };
+
+function nStream(key: string, raw: unknown): CatalystStreamHealth | null {
+  const r = asRec(raw);
+  if (!Object.keys(r).length) return null;
+  const failures = pickN(r, 'consecutive_failures') ?? 0;
+  return {
+    name: STREAM_CN[key] ?? key,
+    ok: (pickS(r, 'remote_status') ?? 'ok') === 'ok' && failures === 0,
+    lastSuccessAt: pickS(r, 'last_success_at', 'data_through') ?? '',
+    failures,
+    errorCode: pickS(r, 'last_error_code'),
   };
 }
 
 function nStatus(d: unknown): CatalystsStatusDetail {
   const r = asRec(d);
+  // 个人版真实契约：status/enabled/last_sync_at/streams/analysis_availability
+  if (r.streams !== undefined || r.analysis_availability !== undefined || r.last_sync_at !== undefined) {
+    const streamsRec = asRec(r.streams);
+    const streams = Object.entries(streamsRec)
+      .map(([k, v]) => nStream(k, v))
+      .filter((s): s is CatalystStreamHealth => s !== null);
+    const avail = asRec(r.analysis_availability);
+    return {
+      collecting: pickS(r, 'status') === 'active' && (pickB(r, 'enabled') ?? true),
+      intervalMinutes: null,
+      lastCrawlAt: pickS(r, 'last_sync_at', 'data_through') ?? '',
+      newsToday: null,
+      analyzedToday: null,
+      queueDepth: null,
+      analysisAvailable: pickB(avail, 'enabled') ?? false,
+      analysisReason: pickS(avail, 'reason'),
+      analysisModel: pickS(r, 'model'),
+      analysisReasoning: pickS(r, 'reasoning'),
+      analysisTriggerEnabled: pickB(r, 'analysis_trigger_enabled'),
+      sourcesActive: streams.filter((s) => s.ok).length,
+      sourcesTotal: streams.length,
+      streams,
+      warnings: Array.isArray(r.warnings) ? (r.warnings as unknown[]).filter((x): x is string => typeof x === 'string') : [],
+    };
+  }
+  // mock 契约字段
   return {
     collecting: pickB(r, 'collecting') ?? false,
-    intervalMinutes: pickN(r, 'intervalMinutes', 'interval_minutes') ?? 0,
+    intervalMinutes: pickN(r, 'intervalMinutes', 'interval_minutes'),
     lastCrawlAt: pickS(r, 'lastCrawlAt', 'last_crawl_at') ?? '',
-    newsToday: pickN(r, 'newsToday', 'news_today') ?? 0,
-    analyzedToday: pickN(r, 'analyzedToday', 'analyzed_today') ?? 0,
+    newsToday: pickN(r, 'newsToday', 'news_today'),
+    analyzedToday: pickN(r, 'analyzedToday', 'analyzed_today'),
     analysisAvailable: pickB(r, 'analysisAvailable', 'analysis_available') ?? false,
-    queueDepth: pickN(r, 'queueDepth', 'queue_depth') ?? 0,
+    queueDepth: pickN(r, 'queueDepth', 'queue_depth'),
     sourcesActive: pickN(r, 'sourcesActive', 'sources_active') ?? 0,
     sourcesTotal: pickN(r, 'sourcesTotal', 'sources_total') ?? 0,
   };
 }
 
+const EVENT_TYPE_CN: Record<string, string> = {
+  merger: '并购',
+  earnings: '财报',
+  product: '产品',
+  regulatory: '监管',
+  macro: '宏观',
+  guidance: '指引',
+  legal: '法务',
+  calendar: '日历',
+};
+
 function nHotspot(r: Rec): HotspotGroup {
+  // 个人版事件组契约
+  if (r.event_group_id !== undefined || r.hot_score !== undefined) {
+    const heat = pickN(r, 'hot_score') ?? 0;
+    const repId = pickId(r, 'representative_news_id');
+    const repTitle = pickS(r, 'representative_title', 'summary_zh') ?? '';
+    const eventType = pickS(r, 'event_type');
+    return {
+      hotspotId: pickS(r, 'event_group_id') ?? '',
+      theme: repTitle || '—',
+      keywords: Array.isArray(r.reasons) ? (r.reasons as unknown[]).filter((x): x is string => typeof x === 'string') : [],
+      heat: Math.round(heat),
+      heatLevel: Math.max(0, Math.min(5, Math.ceil(heat / 20))),
+      newsCount: pickN(r, 'source_count') ?? 0,
+      countKind: 'sources',
+      eventType: eventType ? (EVENT_TYPE_CN[eventType] ?? eventType) : null,
+      representative: repId
+        ? {
+            newsId: repId,
+            titleZh: repTitle,
+            publishedAt: pickS(r, 'last_published_at', 'first_published_at') ?? '',
+          }
+        : null,
+      tickers: Array.isArray(r.validated_tickers) ? (r.validated_tickers as string[]) : [],
+      updatedAt: pickS(r, 'prepared_at', 'available_at') ?? '',
+    };
+  }
+  // mock 契约
   const rep = asRec(r.representative);
   return {
     hotspotId: pickS(r, 'hotspotId', 'hotspot_id', 'id') ?? '',
@@ -198,9 +306,10 @@ function nHotspot(r: Rec): HotspotGroup {
     heat: pickN(r, 'heat') ?? 0,
     heatLevel: pickN(r, 'heatLevel', 'heat_level') ?? 0,
     newsCount: pickN(r, 'newsCount', 'news_count') ?? 0,
+    countKind: 'news',
     representative: Object.keys(rep).length
       ? {
-          newsId: pickS(rep, 'newsId', 'news_id') ?? '',
+          newsId: pickId(rep, 'newsId', 'news_id') ?? '',
           titleZh: pickS(rep, 'titleZh', 'title_zh') ?? pickS(rep, 'title') ?? '',
           publishedAt: pickS(rep, 'publishedAt', 'published_at') ?? '',
         }
@@ -213,12 +322,12 @@ function nHotspot(r: Rec): HotspotGroup {
 function nEconEvent(r: Rec): EconomicEvent {
   const impact = pickS(r, 'impact') ?? 'low';
   return {
-    eventId: pickS(r, 'eventId', 'event_id') ?? '',
-    country: pickS(r, 'country') ?? '',
+    eventId: pickId(r, 'eventId', 'event_id') ?? '',
+    country: pickS(r, 'country') ?? pickS(r, 'country_code') ?? '',
     title: pickS(r, 'title') ?? '',
     impact: (['low', 'medium', 'high', 'holiday'].includes(impact) ? impact : 'low') as EconomicEvent['impact'],
     impactZh: pickS(r, 'impactZh', 'impact_zh') ?? '',
-    scheduledAt: pickS(r, 'scheduledAt', 'scheduled_at') ?? '',
+    scheduledAt: pickS(r, 'scheduledAt', 'scheduled_at', 'scheduled_at_utc') ?? '',
     forecast: pickS(r, 'forecast') ?? '',
     previous: pickS(r, 'previous') ?? '',
     actual: pickS(r, 'actual'),
@@ -227,84 +336,127 @@ function nEconEvent(r: Rec): EconomicEvent {
 
 function nSource(r: Rec): SourceHealth {
   return {
-    source: pickS(r, 'source') ?? '',
+    source: pickS(r, 'source', 'name') ?? '',
     status: pickS(r, 'status') === 'degraded' ? 'degraded' : 'active',
-    latencyMs: pickN(r, 'latencyMs', 'latency_ms') ?? 0,
-    lastFetchedAt: pickS(r, 'lastFetchedAt', 'last_fetched_at') ?? '',
+    latencyMs: pickN(r, 'latencyMs', 'latency_ms'),
+    lastFetchedAt: pickS(r, 'lastFetchedAt', 'last_fetched_at', 'last_success_at') ?? '',
     itemsToday: pickN(r, 'itemsToday', 'items_today') ?? 0,
     note: pickS(r, 'note') ?? '',
   };
 }
 
-/** 契约 batch 每股 {items, net_impact, latest_at, source_diversity, count} → TickerImpactSummary */
-function nTickerSummary(ticker: string, raw: unknown): TickerImpactSummary {
-  const r = asRec(raw);
-  const items = unwrap(r, 'items');
-  let bullish = 0;
-  let bearish = 0;
-  let neutral = 0;
-  let analyzed = 0;
-  for (const it of items) {
-    const st = nAnalysisStatus(it.analysis_status ?? it.analysisStatus);
-    if (st !== 'completed') continue;
-    analyzed += 1;
-    const cls = nClassification(asRec(it.analysis).classification);
-    if (cls === 'bullish') bullish += 1;
-    else if (cls === 'bearish') bearish += 1;
-    else neutral += 1;
-  }
-  return {
-    ticker,
-    name: pickS(r, 'name') ?? ticker,
-    sector: pickS(r, 'sector') ?? '—', // 契约每股汇总无板块字段
-    count: pickN(r, 'count') ?? items.length,
-    analyzed,
-    netImpact: pickN(r, 'netImpact', 'net_impact') ?? 0,
-    latestAt: pickS(r, 'latestAt', 'latest_at') ?? '',
-    sourceDiversity: pickN(r, 'sourceDiversity', 'source_diversity') ?? 0,
-    bullish,
-    bearish,
-    neutral,
-  };
-}
-
-/* ================= 查询序列化（契约 §catalysts feed 参数） ================= */
+/* ================= 查询序列化（个人版 feed 参数） ================= */
 
 function qs(q: CatalystFeedQuery): string {
-  // 契约参数：ticker/window_hours/classification/analysis_status/min_confidence/
-  // min_abs_impact/source/limit/cursor；multiSourceOnly/themeId 为 UI 侧过滤，契约无此参数不下发
+  // UI minConfidence 为 0–1；契约 min_confidence 为 0–100 整数
+  const conf = q.minConfidence != null && q.minConfidence > 0 ? Math.round(q.minConfidence <= 1 ? q.minConfidence * 100 : q.minConfidence) : undefined;
+  // UI 'pending'（未分析）↔ 个人版 'not_requested'
+  const status = q.analysisStatus === 'pending' ? 'not_requested' : q.analysisStatus || undefined;
   const s = toQuery({
     ticker: q.ticker,
     window_hours: q.windowHours,
     classification: q.classification || undefined,
-    analysis_status: q.analysisStatus || undefined,
-    min_confidence: q.minConfidence,
-    min_abs_impact: q.minAbsImpact,
+    analysis_status: status,
+    min_confidence: conf,
+    min_abs_impact: q.minAbsImpact || undefined,
+    multi_source_only: q.multiSourceOnly ? true : undefined,
     limit: q.limit,
     cursor: q.cursor ?? undefined,
   });
   return s ? `?${s}` : '';
 }
 
-/** batch 响应：可能是 {ticker: {...}} 映射或 {results|items:[...]} */
+/* ================= 股票影响汇总（batch results map → 客户端聚合） ================= */
+
+function aggTickerSummary(ticker: string, raw: unknown): TickerImpactSummary {
+  const r = asRec(raw);
+  const items = unwrap(r, 'items').map(nNewsItem);
+  const summary = asRec(r.summary);
+  let bullish = pickN(summary, 'bullish') ?? 0;
+  let bearish = pickN(summary, 'bearish') ?? 0;
+  let neutral = 0;
+  let analyzed = 0;
+  const impacts: number[] = [];
+  let latest = '';
+  const sources = new Set<string>();
+  for (const it of items) {
+    if (it.source) sources.add(it.source.split('/')[0]);
+    if (it.publishedAt > latest) latest = it.publishedAt;
+    if (it.analysisStatus !== 'completed' || !it.analysis) continue;
+    analyzed += 1;
+    const cls = it.analysis.classification;
+    if (cls === 'neutral') neutral += 1;
+    const mine = it.analysis.trustedStockImpacts.filter((x) => x.ticker === ticker);
+    for (const x of mine) impacts.push(x.impactScore);
+  }
+  if (!bullish && !bearish && analyzed) {
+    bullish = items.filter((i) => i.analysis?.classification === 'bullish').length;
+    bearish = items.filter((i) => i.analysis?.classification === 'bearish').length;
+  }
+  // 净影响 = 已分析条目中该股影响分均值（客户端聚合，非契约字段；无分析时 0 且 UI 显「—」）
+  const netImpact = impacts.length ? impacts.reduce((s, x) => s + x, 0) / impacts.length : 0;
+  return {
+    ticker,
+    name: ticker,
+    sector: '',
+    count: items.length,
+    analyzed,
+    netImpact,
+    latestAt: latest,
+    sourceDiversity: sources.size,
+    bullish,
+    bearish,
+    neutral,
+  };
+}
+
+/** batch 响应：个人版 {results: {TICKER: {...}}}；兼容 {results|items:[...]} 与顶层映射 */
 function nBatchSummaries(body: unknown): TickerImpactSummary[] {
   const r = asRec(body);
+  const resultsRec = asRec(r.results);
+  if (Object.keys(resultsRec).length && !Array.isArray(r.results)) {
+    return Object.entries(resultsRec)
+      .filter(([, v]) => v && typeof v === 'object')
+      .map(([t, v]) => aggTickerSummary(t, v))
+      .filter((x) => x.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }
   const arr = unwrap(body, 'results', 'items', 'summaries');
   if (arr.length) {
-    return arr.map((x) => nTickerSummary(pickS(x, 'ticker') ?? '', x)).sort((a, b) => b.count - a.count);
+    return arr.map((x) => aggTickerSummary(pickS(x, 'ticker') ?? '', x)).sort((a, b) => b.count - a.count);
   }
   const per = asRec(r.tickers ?? body);
   return Object.entries(per)
     .filter(([, v]) => v && typeof v === 'object')
-    .map(([t, v]) => nTickerSummary(t, v))
+    .map(([t, v]) => aggTickerSummary(t, v))
     .sort((a, b) => b.count - a.count);
 }
 
 /* ================= 网关 ================= */
 
+const PUBLIC_BATCH_MAX_TICKERS = 20; // 匿名上限（owner 50，取交集下限保证双态可用）
+const PUBLIC_BATCH_MAX_LIMIT = 5;
+
 export const catalystsContract = {
   status: (): Promise<CatalystsStatusDetail> =>
     mockOr(() => fx2.getCatalystsStatusV2(), () => get('/catalysts/status').then(nStatus)),
+  /** 今日新闻计数（个人版 status 无计数字段：由 24h 窗口 feed 诚实推导；50 条封顶记 saturated） */
+  newsToday: (): Promise<{ count: number; analyzed: number; saturated: boolean }> =>
+    mockOr(
+      async () => {
+        const s = await fx2.getCatalystsStatusV2();
+        return { count: s.newsToday ?? 0, analyzed: s.analyzedToday ?? 0, saturated: false };
+      },
+      () =>
+        get(`/catalysts/feed${qs({ windowHours: 24, limit: 50 })}`).then((d) => {
+          const items = unwrap(d, 'items').map(nNewsItem);
+          return {
+            count: items.length,
+            analyzed: items.filter((i) => i.analysisStatus === 'completed').length,
+            saturated: items.length >= 50,
+          };
+        }),
+    ),
   feed: (q: CatalystFeedQuery = {}): Promise<{ items: CatalystNewsItem[]; nextCursor: string | null; total: number }> =>
     mockOr(
       () => fx2.getCatalystsFeedV2(q),
@@ -315,7 +467,12 @@ export const catalystsContract = {
         }),
     ),
   news: (id: string): Promise<CatalystNewsItem> =>
-    mockOr(() => fx2.getNewsDetailV2(id), () => get(`/catalysts/news/${encodeURIComponent(id)}`).then((d) => nNewsItem(asRec(d)))),
+    mockOr(() => fx2.getNewsDetailV2(id), () =>
+      get(`/catalysts/news/${encodeURIComponent(id)}`).then((d) => {
+        const env = asRec(d);
+        return nNewsItem(asRec(env.item ?? env));
+      }),
+    ),
   hotspots: (): Promise<HotspotGroup[]> =>
     mockOr(() => fx2.getHotspotsV2(), () => get('/catalysts/hotspots?limit=8').then((d) => unwrap(d, 'items').map(nHotspot))),
   hotspotsStatus: (): Promise<HotspotsStatusDetail> =>
@@ -324,6 +481,20 @@ export const catalystsContract = {
       () =>
         get('/catalysts/hotspots/status').then((d) => {
           const r = asRec(d);
+          // 个人版：status/prepared_hot_count/prepared_since/manual_enabled/prepared_revision
+          if (r.prepared_revision !== undefined || r.prepared_hot_count !== undefined) {
+            const count = pickN(r, 'prepared_hot_count') ?? 0;
+            return {
+              state: 'ready' as const,
+              scanning: pickS(r, 'status') === 'active',
+              updatedAt: pickS(r, 'prepared_since', 'as_of', 'last_sync_at') ?? '',
+              etaSeconds: null,
+              groupCount: count,
+              manualEnabled: pickB(r, 'manual_enabled'),
+              preparedRevision: pickN(r, 'prepared_revision'),
+              lastCycleAt: pickS(r, 'last_cycle_at'),
+            };
+          }
           const scanning = pickB(r, 'scanning') ?? false;
           return {
             state: (pickS(r, 'state') === 'computing' || scanning ? 'computing' : 'ready') as HotspotsStatusDetail['state'],
@@ -335,11 +506,37 @@ export const catalystsContract = {
         }),
     ),
   calendar: (): Promise<EconomicEvent[]> =>
-    mockOr(() => fx2.getEconomicCalendar(), () => get('/catalysts/calendar').then((d) => unwrap(d, 'events').map(nEconEvent))),
+    mockOr(() => fx2.getEconomicCalendar(), () => get('/catalysts/calendar').then((d) => unwrap(d, 'items', 'events').map(nEconEvent))),
   sources: (): Promise<SourceHealth[]> =>
     mockOr(
       () => fx2.getCatalystsSources(),
-      () => get('/catalysts/status').then((d) => unwrap(d, 'sources', 'source_health').map(nSource)),
+      async () => {
+        // 优先 status.sources 源健康快照；为空时由近 24h 新闻流按来源聚合诚实推导
+        const statusBody = await get('/catalysts/status');
+        const fromStatus = unwrap(statusBody, 'sources', 'source_health').map(nSource).filter((s) => s.source);
+        if (fromStatus.length) return fromStatus;
+        const feedBody = await get(`/catalysts/feed${qs({ windowHours: 24, limit: 50 })}`);
+        const items = unwrap(feedBody, 'items').map(nNewsItem);
+        const bySource = new Map<string, { count: number; latest: string }>();
+        for (const it of items) {
+          if (!it.source) continue;
+          const cur = bySource.get(it.source) ?? { count: 0, latest: '' };
+          cur.count += 1;
+          if (it.fetchedAt > cur.latest) cur.latest = it.fetchedAt;
+          bySource.set(it.source, cur);
+        }
+        return [...bySource.entries()]
+          .map(([source, v]) => ({
+            source,
+            status: 'active' as const,
+            latencyMs: null,
+            lastFetchedAt: v.latest,
+            itemsToday: v.count,
+            note: '由近 24 小时新闻流推导（后端未提供源健康快照）',
+            derived: true,
+          }))
+          .sort((a, b) => b.itemsToday - a.itemsToday);
+      },
     ),
   latestFocusCycle: (): Promise<MarketFocusCycle> =>
     mockOr(() => fx2.getLatestFocusCycleV2(), () => get('/catalysts/market-focus-cycles/latest').then(nCycle)),
@@ -349,14 +546,18 @@ export const catalystsContract = {
       Promise.reject(new ApiError(503, '上一焦点周期快照暂不可用（契约未提供该端点）', { bizCode: 'public_snapshot_unavailable' })),
     ),
   triggerFocusCycle: (): Promise<FocusCycleJob> =>
-    // 契约：owner+SO {trigger:"manual", force?} → 202（job_id 可能在 Location 头）
-    mockOr(() => fx2.triggerFocusCycle(), () =>
-      postCreate('/catalysts/market-focus-cycles', { trigger: 'manual' }).then(({ data, location }) => {
-        const job = nFocusJob(data, idFromLocation(location));
-        if (!job.jobId) throw new ApiError(502, '任务创建响应缺少 job_id', { payload: data });
-        return job;
-      }),
-    ),
+    // 个人版：POST 需带 expected_prepared_revision（来自 hotspots/status），XOR retry_cycle_id
+    mockOr(() => fx2.triggerFocusCycle(), async () => {
+      const hs = await get('/catalysts/hotspots/status');
+      const revision = pickN(asRec(hs), 'prepared_revision');
+      const body: Record<string, unknown> = { trigger: 'manual' };
+      if (revision !== null) body.expected_prepared_revision = revision;
+      const { data, location } = await postCreate('/catalysts/market-focus-cycles', body);
+      const rec = asRec(data);
+      const job = nFocusJob(rec.job ?? rec.cycle ?? data, idFromLocation(location));
+      // 202 已受理但拿不到任务 id（形状差异）：交给 UI 走「延迟刷新 latest」兜底，不视为失败
+      return job;
+    }),
   focusCycleJob: (jobId: string): Promise<FocusCycleJob> =>
     mockOr(() => fx2.getFocusCycleJob(jobId), () =>
       get(`/catalysts/analysis-jobs/${encodeURIComponent(jobId)}`).then((d) => nFocusJob(d, jobId)),
@@ -364,30 +565,39 @@ export const catalystsContract = {
   tickerSummaries: (q: CatalystFeedQuery = {}): Promise<TickerImpactSummary[]> =>
     mockOr(
       () => fx2.getTickerImpactSummaries(q),
-      // 契约 batch body {tickers≤50, window_hours, limit, include_neutral}：
-      // 查询只有单 ticker 时直接送；否则先按同条件拉 feed 收集 source_tickers（≤50）再汇总
+      // 个人版 batch {tickers, window_hours, limit≤5(匿名), include_neutral/unanalyzed}：
+      // 候选代码 = 指定 ticker，否则 feed.source_tickers ∪ hotspots.validated_tickers（≤20 匿名安全）
       async () => {
-        const tickers: string[] = q.ticker ? [q.ticker] : [];
+        const seen = new Set<string>();
+        const tickers: string[] = [];
+        const push = (t: unknown) => {
+          if (typeof t === 'string' && t && !seen.has(t) && tickers.length < PUBLIC_BATCH_MAX_TICKERS) {
+            seen.add(t);
+            tickers.push(t);
+          }
+        };
+        if (q.ticker) push(q.ticker);
         if (!tickers.length) {
-          const feedBody = await get(`/catalysts/feed${qs({ ...q, limit: q.limit ?? 50 })}`);
-          const seen = new Set<string>();
+          const [feedBody, hotBody] = await Promise.all([
+            get(`/catalysts/feed${qs({ ...q, limit: 50 })}`).catch(() => null),
+            get('/catalysts/hotspots?limit=20').catch(() => null),
+          ]);
           for (const it of unwrap(feedBody, 'items')) {
             const sts = Array.isArray(it.source_tickers) ? it.source_tickers : [];
-            for (const t of sts) {
-              if (typeof t === 'string' && t && !seen.has(t)) {
-                seen.add(t);
-                tickers.push(t);
-              }
-            }
-            if (tickers.length >= 50) break;
+            for (const t of sts) push(t);
+          }
+          for (const h of unwrap(hotBody, 'items')) {
+            const vts = Array.isArray(h.validated_tickers) ? h.validated_tickers : Array.isArray(h.tickers) ? h.tickers : [];
+            for (const t of vts) push(t);
           }
         }
         if (!tickers.length) return [];
         const body = await post('/catalysts/tickers/batch', {
-          tickers: tickers.slice(0, 50),
-          window_hours: q.windowHours,
-          limit: q.limit,
+          tickers,
+          window_hours: q.windowHours ?? 72,
+          limit: PUBLIC_BATCH_MAX_LIMIT,
           include_neutral: true,
+          include_unanalyzed: true,
         });
         return nBatchSummaries(body);
       },

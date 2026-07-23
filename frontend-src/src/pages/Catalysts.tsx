@@ -13,6 +13,7 @@ import { fmtTimeHHMMSS } from '@/lib/format';
 import StatusHero from '@/components/catalysts/StatusHero';
 import HotspotsStrip from '@/components/catalysts/HotspotsStrip';
 import FocusCycleCard from '@/components/catalysts/FocusCycleCard';
+import ManagePanel from '@/components/catalysts/ManagePanel';
 import FilterBar from '@/components/catalysts/FilterBar';
 import { DEFAULT_FILTERS, type CatalystFilters } from '@/components/catalysts/filters';
 import FeedPanel from '@/components/catalysts/FeedPanel';
@@ -130,16 +131,17 @@ export default function Catalysts() {
       {/* 状态 hero：数据源状态 / 热点计算 / 分析可用性 */}
       <StatusHero />
 
-      {/* B1 热点主题带 */}
-      <HotspotsStrip
-        activeThemeId={filters.themeId}
-        onSelectTheme={(id) => syncUrl({ ...filters, themeId: id }, 'feed')}
-      />
+      {/* B1 热点主题带（点击卡片打开代表新闻抽屉） */}
+      <HotspotsStrip onOpenNews={setSelectedNewsId} />
 
       {/* B2 市场焦点周期卡 */}
       <div className="mt-6">
         <FocusCycleCard />
       </div>
+
+      {/* B2.5 管理面板（owner 专属：数据刷新 / 后台任务 / 运行设置） */}
+      <ManagePanel onDataRefreshed={onRefresh} />
+
 
       {/* 标签页（URL 同步 ?tab=） */}
       <div className="mt-8 flex items-center gap-1 border-b border-line" role="tablist" aria-label="催化剂视图">

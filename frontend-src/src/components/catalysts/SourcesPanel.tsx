@@ -73,7 +73,7 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
             </div>
             <div className="mt-4 grid grid-cols-3 gap-2 text-center">
               <div>
-                <p className="font-mono text-data-l text-ink-900 tnum">{s.latencyMs}</p>
+                <p className="font-mono text-data-l text-ink-900 tnum">{s.latencyMs ?? '—'}</p>
                 <p className="mt-0.5 text-micro text-ink-400">延迟 ms</p>
               </div>
               <div>

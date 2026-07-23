@@ -123,7 +123,13 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
               <TickerLogo ticker={r.ticker} size={28} />
               <span className="min-w-0">
                 <span className="block font-mono text-body-s font-semibold text-ink-800">{r.ticker}</span>
-                <span className="block truncate text-micro text-ink-400">{r.name} · {r.sector}</span>
+                {(r.name !== r.ticker || r.sector) && (
+                  <span className="block truncate text-micro text-ink-400">
+                    {r.name !== r.ticker ? r.name : ''}
+                    {r.name !== r.ticker && r.sector ? ' · ' : ''}
+                    {r.sector}
+                  </span>
+                )}
               </span>
             </span>
             <span className="min-w-[180px] flex-1">

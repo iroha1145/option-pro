@@ -76,14 +76,28 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
       </div>
       <p className="mt-1 font-mono text-micro text-ink-400 tnum">
         启动 {new Date(cycle.startedAt).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })} · 生成{' '}
-        {new Date(cycle.generatedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} · 样本 {cycle.newsCount} 条
+        {new Date(cycle.generatedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} · 样本 {cycle.newsCount}{' '}
+        {cycle.sampleLabel ?? '条'}
       </p>
+      {/* 一句话结论（live headline_summary） */}
+      {cycle.headline && <p className="mt-2.5 text-body-s font-medium text-ink-800">{cycle.headline}</p>}
       {/* serif 引文摘要 */}
       <blockquote className="mt-3 border-l-[3px] border-line-strong pl-3.5">
         <p className={cn('font-display text-ink-800', compact ? 'text-[13px] leading-[22px]' : 'text-[15px] leading-[26px]')}>
           {cycle.summary}
         </p>
       </blockquote>
+      {/* 不确定性（live market_uncertainties，如实罗列） */}
+      {!!cycle.uncertainties?.length && (
+        <ul className="mt-3 space-y-1">
+          {cycle.uncertainties.slice(0, 4).map((u, i) => (
+            <li key={i} className="flex items-start gap-1.5 text-micro text-ink-500">
+              <Icon name="flag" size={11} className="mt-0.5 shrink-0 text-warn-600" />
+              <span>{u}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       {/* 逐股评估 */}
       <div className="mt-4 space-y-1.5">
         {cycle.assessments.map((a, i) => {
@@ -136,8 +150,16 @@ export default function FocusCycleCard() {
     try {
       const j = await catalystsContract.triggerFocusCycle();
       setJob(j);
-      toast.info('焦点周期计算已提交', '预计 6 秒内完成');
+      toast.info('焦点周期计算已提交', '完成后自动刷新');
       stopPoll();
+      if (!j.jobId) {
+        // 202 已受理但响应未携带任务 id：延迟拉取 latest 兜底，不误报失败
+        window.setTimeout(() => {
+          latestQ.refresh();
+          setJob(null);
+        }, 12_000);
+        return;
+      }
       pollRef.current = window.setInterval(async () => {
         try {
           const next = await catalystsContract.focusCycleJob(j.jobId);
@@ -230,8 +252,8 @@ export default function FocusCycleCard() {
           <p className="text-body-s text-ink-500">焦点周期快照暂不可用 · 留空优于编造</p>
         ) : latestQ.data ? (
           <>
-            <StageStepper stage={latestQ.data.stage} />
-            <div className="mt-4">
+            {latestQ.data.stage !== null && <StageStepper stage={latestQ.data.stage} />}
+            <div className={latestQ.data.stage !== null ? 'mt-4' : ''}>
               <CycleSummary cycle={latestQ.data} />
             </div>
           </>
@@ -273,7 +295,7 @@ export default function FocusCycleCard() {
       <ConfirmDialog
         open={confirmOpen}
         title="触发新的市场焦点周期？"
-        description="将对近期全量新闻重新聚类并生成综合分析，预计消耗约 $0.35 AI 额度，计入每日预算。计算期间约 6 秒。"
+        description="将基于当前热点准备区生成一次综合分析，消耗模型预算并计入每日额度；若准备区没有新事件，后端会如实拒绝。"
         confirmLabel="确认触发"
         onConfirm={() => void startJob()}
         onCancel={() => setConfirmOpen(false)}

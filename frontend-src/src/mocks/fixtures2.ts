@@ -990,6 +990,9 @@ export interface HotspotGroup {
   heat: number; // 0–100
   heatLevel: number; // 0–5 段
   newsCount: number;
+  /** newsCount 的口径：news=新闻条数（mock 契约）；sources=来源数（live 事件组契约） */
+  countKind?: 'news' | 'sources';
+  eventType?: string | null;
   representative: { newsId: string; titleZh: string; publishedAt: string } | null;
   tickers: string[];
   updatedAt: string;
@@ -1001,18 +1004,38 @@ export interface HotspotsStatusDetail {
   updatedAt: string;
   etaSeconds: number | null;
   groupCount: number;
+  /** live 扩展：手动焦点周期开关 / 热点准备区修订号（触发周期需带 expected_prepared_revision） */
+  manualEnabled?: boolean | null;
+  preparedRevision?: number | null;
+  lastCycleAt?: string | null;
+}
+
+/** live 扩展：个人版按「流」报告采集健康（news / calendar 两条流） */
+export interface CatalystStreamHealth {
+  name: string;
+  ok: boolean;
+  lastSuccessAt: string;
+  failures: number;
+  errorCode: string | null;
 }
 
 export interface CatalystsStatusDetail {
   collecting: boolean;
-  intervalMinutes: number;
+  intervalMinutes: number | null;
   lastCrawlAt: string;
-  newsToday: number;
-  analyzedToday: number;
+  newsToday: number | null;
+  analyzedToday: number | null;
   analysisAvailable: boolean;
-  queueDepth: number;
+  queueDepth: number | null;
   sourcesActive: number;
   sourcesTotal: number;
+  /** live 扩展：不可用原因（owner_login_required / ai_not_configured…）与模型信息 */
+  analysisReason?: string | null;
+  analysisModel?: string | null;
+  analysisReasoning?: string | null;
+  analysisTriggerEnabled?: boolean | null;
+  streams?: CatalystStreamHealth[];
+  warnings?: string[];
 }
 
 export interface EconomicEvent {
@@ -1030,10 +1053,12 @@ export interface EconomicEvent {
 export interface SourceHealth {
   source: string;
   status: 'active' | 'degraded';
-  latencyMs: number;
+  latencyMs: number | null;
   lastFetchedAt: string;
   itemsToday: number;
   note: string;
+  /** live：源健康快照缺失时由近 24h 新闻流聚合推导 */
+  derived?: boolean;
 }
 
 export interface FocusCycleStockAssessment {
@@ -1047,7 +1072,8 @@ export interface FocusCycleStockAssessment {
 export interface MarketFocusCycle {
   cycleId: string;
   dominantEvent: string;
-  stage: 1 | 2 | 3 | 4; // 萌芽 → 发酵 → 主升 → 退潮
+  /** 1 萌芽 → 4 退潮；live 契约无阶段概念时为 null（UI 隐藏步进条） */
+  stage: 1 | 2 | 3 | 4 | null;
   startedAt: string;
   generatedAt: string;
   trigger: 'scheduled' | 'manual';
@@ -1055,6 +1081,10 @@ export interface MarketFocusCycle {
   newsCount: number;
   summary: string;
   assessments: FocusCycleStockAssessment[];
+  /** live 扩展：一句话结论 / 不确定性列表 / 样本单位（条 news vs 组事件） */
+  headline?: string | null;
+  uncertainties?: string[];
+  sampleLabel?: string;
 }
 
 export type AnalysisJobStatus =

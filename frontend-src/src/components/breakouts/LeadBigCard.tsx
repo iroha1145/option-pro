@@ -299,9 +299,10 @@ function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
   return (
     <div className="space-y-2" aria-label="四维评分">
       {BIG_SCORES.map((d, i) => {
-        const v = num(ev[d.key]) ?? 0;
+        const raw = num(ev[d.key]);
+        const v = raw ?? 0;
         return (
-          <div key={d.key} className="grid grid-cols-[64px_1fr_30px] items-center gap-2.5">
+          <div key={d.key} className="grid grid-cols-[64px_1fr_36px] items-center gap-2.5">
             <span className="text-caption text-ink-500">{d.label}</span>
             <div className="h-1 overflow-hidden rounded-pill bg-line">
               <motion.div
@@ -313,7 +314,7 @@ function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
                 style={{ width: `${Math.max(3, Math.min(100, v))}%` }}
               />
             </div>
-            <span className="text-right font-mono text-caption text-ink-600 tnum">{num(ev[d.key]) ?? '—'}</span>
+            <span className="text-right font-mono text-caption text-ink-600 tnum">{raw !== null ? raw.toFixed(1) : '—'}</span>
           </div>
         );
       })}

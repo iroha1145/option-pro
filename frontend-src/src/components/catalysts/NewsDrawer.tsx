@@ -421,7 +421,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
       <ConfirmDialog
         open={confirm === 'create'}
         title="生成 AI 分析？"
-        description="将调用模型对该新闻进行情绪与影响分析，预计消耗约 $0.02 AI 额度，计入每日预算。"
+        description="将调用模型对该新闻进行情绪与影响分析，消耗模型预算并计入每日额度与任务上限。"
         confirmLabel="确认生成"
         onConfirm={() => void startAnalysis(false)}
         onCancel={() => setConfirm(null)}
@@ -429,7 +429,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
       <ConfirmDialog
         open={confirm === 'force'}
         title="强制重新分析？"
-        description="将忽略既有结果重新调用模型，预计消耗约 $0.02 AI 额度，计入每日预算。"
+        description="将忽略既有结果重新调用模型，消耗模型预算并计入每日额度；后台可能因冷却或开关限制而拒绝。"
         confirmLabel="确认重试"
         onConfirm={() => void startAnalysis(true)}
         onCancel={() => setConfirm(null)}

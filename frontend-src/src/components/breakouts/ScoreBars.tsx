@@ -105,7 +105,7 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
                 style={{ width: `${Math.max(3, Math.min(100, v))}%` }}
               />
             </div>
-            <span className="text-right font-mono text-caption text-ink-600 tnum">{v}</span>
+            <span className="text-right font-mono text-caption text-ink-600 tnum">{disp(v)}</span>
           </div>
         );
       })}
