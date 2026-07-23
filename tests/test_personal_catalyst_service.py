@@ -461,7 +461,7 @@ def test_public_catalyst_router_propagates_visitor_state_and_bounds_queries() ->
     assert repository.owner_state_calls == []
 
 
-def test_invalid_or_revision_mismatched_analysis_fails_closed() -> None:
+def test_invalid_or_revision_mismatched_analysis_uses_source_text_fallback() -> None:
     engine = FakeIntelligence()
     engine.item = {
         **engine.item,
@@ -475,13 +475,14 @@ def test_invalid_or_revision_mismatched_analysis_fails_closed() -> None:
 
     assert item["analysis"] is None
     assert item["analysis_status"] == "pending"
-    assert item["title_zh"] == "中文标题等待生成"
-    assert item["summary_zh"] == "中文摘要等待生成"
+    assert item["title_zh"] == "Chip company reports latest results"
+    assert item["summary_zh"] == "Revenue rose, but demand remains uncertain."
+    assert "等待生成" not in str(item)
     assert "analyzed_at" not in item
     assert "available_at" not in item
 
 
-def test_deleted_news_and_english_hotspot_titles_fail_closed() -> None:
+def test_deleted_news_and_unanalyzed_hotspots_use_source_title() -> None:
     engine = FakeIntelligence()
     engine.item = {**engine.item, "deleted": True}
     service = _service("read", engine=engine)
@@ -489,7 +490,8 @@ def test_deleted_news_and_english_hotspot_titles_fail_closed() -> None:
     assert service.feed(as_of=NOW)["items"] == []
     assert service.news(101, as_of=NOW) is None
     hotspot = service.hotspots(limit=10)["items"][0]
-    assert hotspot["representative_title"] == "热点标题等待中文分析"
+    assert hotspot["representative_title"] == "English hotspot title"
+    assert "等待中文分析" not in str(hotspot)
     assert "title" not in hotspot
 
 
@@ -520,8 +522,8 @@ def test_analysis_available_after_as_of_is_hidden_but_news_remains_visible() -> 
     item = service.feed(as_of=historical)["items"][0]
 
     assert item["analysis"] is None
-    assert item["title_zh"] == "中文标题等待生成"
-    assert item["summary_zh"] == "中文摘要等待生成"
+    assert item["title_zh"] == "Chip company reports latest results"
+    assert item["summary_zh"] == "Revenue rose, but demand remains uncertain."
     assert "analyzed_at" not in item
     assert "available_at" not in item
     for field in (
@@ -1004,8 +1006,9 @@ def test_news_projection_hides_structured_ticker_outside_source_context() -> Non
     )
 
     assert projected["analysis"] is None
-    assert projected["title_zh"] == "中文标题等待生成"
-    assert projected["summary_zh"] == "中文摘要等待生成"
+    assert projected["title_zh"] == ""
+    assert projected["summary_zh"] == ""
+    assert "等待生成" not in str(projected)
     assert projected["analysis_status"] == "pending"
     assert projected["analysis_error_code"] == "legacy_output_hidden"
     assert "analyzed_at" not in projected
@@ -1406,7 +1409,7 @@ def test_analysis_capacity_errors_keep_their_http_and_retry_semantics(
         assert response.headers["Retry-After"] == str(retry_after)
 
 
-def test_real_local_intelligence_keeps_unanalyzed_news_visible_without_english(
+def test_real_local_intelligence_uses_source_text_until_analysis_is_available(
     tmp_path,
 ) -> None:
     cache_path = tmp_path / "catalyst.db"
@@ -1489,9 +1492,9 @@ def test_real_local_intelligence_keeps_unanalyzed_news_visible_without_english(
 
     assert len(payload["items"]) == 1
     assert payload["items"][0]["analysis"] is None
-    assert payload["items"][0]["title_zh"] == "中文标题等待生成"
-    assert payload["items"][0]["summary_zh"] == "中文摘要等待生成"
-    assert "English" not in str(payload["items"][0])
+    assert payload["items"][0]["title_zh"] == "English source headline"
+    assert payload["items"][0]["summary_zh"] == "English source summary"
+    assert "等待生成" not in str(payload["items"][0])
 
 
 def test_web_reads_do_not_initialize_missing_worker_databases(tmp_path) -> None:

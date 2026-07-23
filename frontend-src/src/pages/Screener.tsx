@@ -13,7 +13,7 @@ import { strengthApi, type ScanParams, type StrengthScanEnvelope } from '@/api/m
 import { catalystsApi } from '@/api/modules/catalysts';
 import { stocksApi } from '@/api/modules/stocks';
 import { runtimeApi, type StrengthRefreshParameters } from '@/api/modules/runtime';
-import { ApiError } from '@/api/client';
+import { ApiError, isMock } from '@/api/client';
 import type { ScreenerRow, SectorOption, Signal, StrengthProfile } from '@/api/types';
 import { usePolling } from '@/hooks/usePolling';
 import { useAccess } from '@/hooks/useAccess';
@@ -158,8 +158,8 @@ export default function Screener() {
     setScanState('scanning');
     setScanError(null);
     const startedAt = Date.now();
-    // mock 展示时长 800–1500ms（screener.md B1）
-    const minMs = 800 + Math.random() * 700;
+    // 仅演示数据保留可见扫描过程；真实接口完成后立即呈现结果。
+    const minMs = isMock ? 800 + Math.random() * 700 : 0;
     try {
       // 后端必须先返回足够大的真实候选集，再应用只存在于客户端的条件；
       // 否则先截 TopN 会漏掉价格上限、多板块、分档或最低分过滤后的合资格股票。
@@ -270,7 +270,7 @@ export default function Screener() {
       });
     }
     return out;
-  }, [rows, applied, details]);
+  }, [rows, applied]);
 
   const filtered = useMemo(() => {
     let out = filteredBase;

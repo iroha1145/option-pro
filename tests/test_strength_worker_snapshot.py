@@ -122,7 +122,7 @@ def test_expired_cache_is_returned_as_stale_worker_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path = tmp_path / "strength-snapshot-v1.json"
-    saved_at = NOW - strength.STRENGTH_CACHE_TTL_SECONDS - 5
+    saved_at = NOW - strength._STRENGTH_SNAPSHOT_TTL_SECONDS - 5
     strength._write_strength_snapshot(
         path,
         parameters=dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS),

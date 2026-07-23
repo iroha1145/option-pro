@@ -2744,8 +2744,20 @@ class LocalCatalystIntelligence:
             input_hash = _sha(group_input)
             group_id = "evt_" + hashlib.sha256(key.encode()).hexdigest()[:32]
             score, components, reasons = self._hot_score(representative, result, now)
-            title_zh = str(result.get("title_zh") if result else HOTSPOT_WAITING)
-            summary_zh = str(result.get("headline_summary") if result else SUMMARY_WAITING)
+            # Until the paid Chinese analysis is available, keep the news
+            # usable with the source-provided text.  A literal "waiting"
+            # placeholder can otherwise survive indefinitely when a job fails
+            # validation or the queue is temporarily unavailable.
+            title_zh = str(
+                result.get("title_zh")
+                if result
+                else representative.get("raw_title") or ""
+            )
+            summary_zh = str(
+                result.get("headline_summary")
+                if result
+                else representative.get("raw_summary") or ""
+            )
             published_values = [item.get("published_at") or item.get("fetched_at") for item in members]
             available = max(
                 [str(item["source_available_at"]) for item in members]
@@ -3020,10 +3032,26 @@ class LocalCatalystIntelligence:
             "change_sequence": int(row["change_sequence"]),
             "content_hash": str(row["content_hash"]),
             "source": str(row["source"]),
-            "title": str(result.get("title_zh") if result else TITLE_WAITING),
-            "title_zh": str(result.get("title_zh") if result else TITLE_WAITING),
-            "summary": str(result.get("headline_summary") if result else SUMMARY_WAITING),
-            "summary_zh": str(result.get("summary_zh") if result else SUMMARY_WAITING),
+            "title": str(
+                result.get("title_zh")
+                if result
+                else row.get("raw_title") or ""
+            ),
+            "title_zh": str(
+                result.get("title_zh")
+                if result
+                else row.get("raw_title") or ""
+            ),
+            "summary": str(
+                result.get("headline_summary")
+                if result
+                else row.get("raw_summary") or ""
+            ),
+            "summary_zh": str(
+                result.get("summary_zh")
+                if result
+                else row.get("raw_summary") or ""
+            ),
             "url": str(row["url"]),
             "image_url": row.get("image_url"),
             "published_at": row.get("published_at"),
@@ -3637,13 +3665,34 @@ class LocalCatalystIntelligence:
                 rows: list[sqlite3.Row] = []
             else:
                 rows = connection.execute(
-                    """SELECT g.*,i.prepared_revision FROM catalyst_local_hotspot_items i
+                    """SELECT g.*,i.prepared_revision,
+                              r.raw_title AS representative_source_title,
+                              r.raw_summary AS representative_source_summary,
+                              EXISTS(
+                                  SELECT 1
+                                  FROM catalyst_local_analysis_links link
+                                  JOIN catalyst_local_analysis_result_audit audit
+                                    ON audit.job_id=link.job_id
+                                   AND audit.contract_id=?
+                                   AND audit.outcome='accepted'
+                                   AND audit.result_json=link.result_json
+                                  WHERE link.news_id=g.representative_news_id
+                                    AND link.change_sequence=g.representative_change_sequence
+                                    AND link.content_hash=g.representative_content_hash
+                                    AND link.result_json IS NOT NULL
+                              ) AS representative_analysis_published
+                       FROM catalyst_local_hotspot_items i
                        JOIN catalyst_local_event_groups g
                          ON g.event_group_id=i.event_group_id
                         AND g.event_group_version=i.event_group_version
+                       LEFT JOIN catalyst_local_news_revisions r
+                         ON r.news_id=g.representative_news_id
+                        AND r.change_sequence=g.representative_change_sequence
+                        AND r.content_hash=g.representative_content_hash
                        WHERE i.prepared_revision=? AND g.available_at<=?
                        ORDER BY i.ordinal LIMIT ?""",
                     (
+                        NEWS_RESULT_CONTRACT_ID,
                         revision["prepared_revision"],
                         _iso(observed),
                         min(100, max(1, limit)),
@@ -3678,7 +3727,11 @@ class LocalCatalystIntelligence:
                 "reasons": _loads(row["reasons_json"], []),
                 "status": "prepared",
                 "prepared_at": prepared_at,
-                "representative_title": str(row["representative_title_zh"]),
+                "representative_title": str(
+                    (row["representative_source_title"] or "")
+                    if row["representative_title_zh"] == HOTSPOT_WAITING
+                    else row["representative_title_zh"]
+                ),
                 "event_type": str(row["event_type"]),
                 "available_at": str(row["available_at"]),
                 "first_published_at": row["first_published_at"],
@@ -3686,8 +3739,15 @@ class LocalCatalystIntelligence:
                 "source_count": int(row["source_count"]),
                 "source_names": _loads(row["source_names_json"], []),
                 "validated_tickers": _loads(row["validated_tickers_json"], []),
-                "summary_zh": str(row["representative_summary_zh"]),
+                "summary_zh": str(
+                    row["representative_source_summary"] or ""
+                    if row["representative_summary_zh"] == SUMMARY_WAITING
+                    else row["representative_summary_zh"]
+                ),
                 "representative_news_id": int(row["representative_news_id"]),
+                "_analysis_published": bool(
+                    row["representative_analysis_published"]
+                ),
             }
             for row in rows
         ]
@@ -3707,13 +3767,37 @@ class LocalCatalystIntelligence:
             if revision_row is None:
                 return None, []
             rows = connection.execute(
-                """SELECT g.*,i.prepared_revision FROM catalyst_local_hotspot_items i
+                """SELECT g.*,i.prepared_revision,
+                          r.raw_title AS representative_source_title,
+                          r.raw_summary AS representative_source_summary,
+                          EXISTS(
+                              SELECT 1
+                              FROM catalyst_local_analysis_links link
+                              JOIN catalyst_local_analysis_result_audit audit
+                                ON audit.job_id=link.job_id
+                               AND audit.contract_id=?
+                               AND audit.outcome='accepted'
+                               AND audit.result_json=link.result_json
+                              WHERE link.news_id=g.representative_news_id
+                                AND link.change_sequence=g.representative_change_sequence
+                                AND link.content_hash=g.representative_content_hash
+                                AND link.result_json IS NOT NULL
+                          ) AS representative_analysis_published
+                   FROM catalyst_local_hotspot_items i
                    JOIN catalyst_local_event_groups g
                      ON g.event_group_id=i.event_group_id
                     AND g.event_group_version=i.event_group_version
+                   LEFT JOIN catalyst_local_news_revisions r
+                     ON r.news_id=g.representative_news_id
+                    AND r.change_sequence=g.representative_change_sequence
+                    AND r.content_hash=g.representative_content_hash
                    WHERE i.prepared_revision=?
                    ORDER BY i.ordinal LIMIT ?""",
-                (revision, min(100, max(1, limit))),
+                (
+                    NEWS_RESULT_CONTRACT_ID,
+                    revision,
+                    min(100, max(1, limit)),
+                ),
             ).fetchall()
         return revision_row, self._project_hotspot_rows(
             rows,
@@ -4852,8 +4936,7 @@ class LocalCatalystIntelligence:
             items = [
                 item
                 for item in items
-                if item.get("representative_title") != HOTSPOT_WAITING
-                and item.get("summary_zh") != SUMMARY_WAITING
+                if item.get("_analysis_published") is True
             ]
         observed = as_of or _utc_now()
         prepared_at = (

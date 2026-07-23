@@ -12,6 +12,7 @@ import path from 'node:path';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(here, '..', 'dist'); // frontend-src/dist（本地构建输出）
 const artifactDir = path.resolve(here, '..', '..', 'frontend'); // 仓库提交的构建产物
+const screenerSource = path.resolve(here, '..', 'src', 'pages', 'Screener.tsx');
 
 test('committed build artifact matches the local Vite build output', async t => {
   if (!existsSync(path.join(distDir, 'index.html'))) {
@@ -31,4 +32,18 @@ test('committed build artifact matches the local Vite build output', async t => 
 
 test('committed artifact directory is servable (index.html present)', () => {
   assert.ok(existsSync(path.join(artifactDir, 'index.html')), '仓库 frontend/index.html 必须存在');
+});
+
+test('live screener does not add the mock-only random delay', async () => {
+  const source = await readFile(screenerSource, 'utf8');
+  assert.match(
+    source,
+    /const minMs = isMock \? 800 \+ Math\.random\(\) \* 700 : 0;/,
+    '选股扫描的随机延时必须只在 mock 模式启用',
+  );
+  assert.doesNotMatch(
+    source,
+    /const minMs = 800 \+ Math\.random\(\) \* 700;/,
+    'live 模式不得无条件等待随机演示时长',
+  );
 });

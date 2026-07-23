@@ -128,8 +128,8 @@ const usefulZh = (value: string | null): string | null => (value && !WAITING_ZH.
 function nNewsItem(r: Rec): CatalystNewsItem {
   const impact = nImpact(r.analysis);
   if (impact && !impact.generatedAt) impact.generatedAt = pickS(r, 'analyzed_at', 'available_at') ?? '';
-  const rawTitle = pickS(r, 'title');
-  const rawSummary = pickS(r, 'summary');
+  const rawTitle = usefulZh(pickS(r, 'title'));
+  const rawSummary = usefulZh(pickS(r, 'summary'));
   const titleZh = usefulZh(pickS(r, 'titleZh', 'title_zh'));
   const summaryZh = usefulZh(pickS(r, 'summaryZh', 'summary_zh'));
   return {
@@ -309,8 +309,10 @@ function nHotspot(r: Rec): HotspotGroup {
   if (r.event_group_id !== undefined || r.hot_score !== undefined) {
     const heat = pickN(r, 'hot_score') ?? 0;
     const repId = pickId(r, 'representative_news_id');
-    const repTitle = pickS(r, 'representative_title', 'summary_zh') ?? '';
     const eventType = pickS(r, 'event_type');
+    const repTitle =
+      usefulZh(pickS(r, 'representative_title', 'summary_zh')) ??
+      (eventType ? EVENT_TYPE_CN[eventType] ?? eventType : '新闻热点');
     return {
       hotspotId: pickS(r, 'event_group_id') ?? '',
       theme: repTitle || '—',

@@ -670,7 +670,7 @@ def test_process_file_lock_excludes_two_descriptors_and_processes(tmp_path: Path
     second.release()
 
 
-def test_worker_once_records_six_scheduled_tasks_and_isolates_failure(
+def test_worker_once_records_scheduled_tasks_and_isolates_failure(
     tmp_path: Path,
 ) -> None:
     calls: list[str] = []
@@ -690,6 +690,7 @@ def test_worker_once_records_six_scheduled_tasks_and_isolates_failure(
         TaskSpec("ai_jobs", lambda: success("ai_jobs"), 60, drain_on_shutdown=True),
         TaskSpec("maintenance", lambda: success("maintenance"), 60),
         TaskSpec("public_home", lambda: success("public_home"), 60),
+        TaskSpec("strength_refresh", lambda: success("strength_refresh"), 60),
     )
     repository = WorkerStateRepository(tmp_path / "worker.db")
     supervisor = WorkerSupervisor(
@@ -1327,6 +1328,7 @@ def test_worker_once_selects_personal_etl_from_repository_files_offline(
     assert payload["tasks"]["catalyst_sync"]["status"] == "idle"
     assert payload["tasks"]["focus"]["status"] == "idle"
     assert payload["tasks"]["ai_jobs"]["status"] == "disabled"
+    assert payload["tasks"]["strength_refresh"]["status"] == "idle"
     cache_path = data_dir / "catalyst-cache.db"
     assert cache_path.is_file()
     with sqlite3.connect(cache_path) as connection:
@@ -2363,6 +2365,10 @@ def test_default_task_inventory_and_maintenance_backup(
     assert public_home_spec.enabled is False
     assert public_home_spec.manual_only is False
     assert public_home_spec.may_block_event_loop is False
+    strength_spec = next(spec for spec in specs if spec.name == "strength_refresh")
+    assert isinstance(strength_spec.runner, StrengthRefreshTask)
+    assert strength_spec.interval_seconds == 86_400
+    assert strength_spec.manual_only is False
     manual_specs = {spec.name: spec for spec in specs if spec.manual_only}
     assert set(manual_specs) == MANUAL_TASK_NAMES
     assert isinstance(manual_specs["focus_refresh"].runner, FocusRefreshTask)

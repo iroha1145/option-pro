@@ -748,7 +748,7 @@ def test_focus_audit_is_scoped_to_each_retry_job_even_for_identical_output(
     assert retired_owner_view["completed_at"] is None
 
 
-def test_read_mode_never_creates_paid_jobs_and_never_exposes_raw_english(tmp_path):
+def test_read_mode_never_creates_paid_jobs_and_uses_source_text_fallback(tmp_path):
     etl, ai, intelligence = _stack(tmp_path, mode="read")
     now = datetime.now(timezone.utc).replace(microsecond=0)
     change = _news_change(
@@ -773,10 +773,12 @@ def test_read_mode_never_creates_paid_jobs_and_never_exposes_raw_english(tmp_pat
         {"feed": feed, "detail": detail, "hotspots": hotspots},
         ensure_ascii=False,
     )
-    assert "Secret raw English headline" not in public_json
-    assert "Secret raw English summary" not in public_json
-    assert feed["items"][0]["title"] == TITLE_WAITING
-    assert feed["items"][0]["summary"] == SUMMARY_WAITING
+    assert "Secret raw English headline" in public_json
+    assert "Secret raw English summary" in public_json
+    assert feed["items"][0]["title"] == "Secret raw English headline"
+    assert feed["items"][0]["summary"] == "Secret raw English summary"
+    assert TITLE_WAITING not in public_json
+    assert SUMMARY_WAITING not in public_json
     hotspot_status = intelligence.hotspot_status(now=now)
     assert hotspot_status["manual_enabled"] is False
     assert "action_enabled" not in hotspot_status
@@ -2373,7 +2375,7 @@ def test_content_update_never_attaches_the_old_completed_analysis(tmp_path):
     assert before["item"]["content_hash"] == "first-hash"
     assert after is not None and after["item"]["content_hash"] == "second-hash"
     assert after["item"]["analysis"] is None
-    assert after["item"]["title"] == TITLE_WAITING
+    assert after["item"]["title"] == "NVIDIA updates the Blackwell platform"
 
 
 def test_point_in_time_reads_follow_revisions_and_delete_tombstone(tmp_path):
@@ -5392,7 +5394,7 @@ def test_local_publication_rejects_mostly_english_model_text(tmp_path):
 
     assert detail is not None
     assert detail["item"]["analysis"] is None
-    assert detail["item"]["title"] == TITLE_WAITING
+    assert detail["item"]["title"] == "NVIDIA launches Blackwell platform 171"
     assert public_job is not None and public_job["result"] is None
     assert "NVIDIA launches new chip" not in json.dumps(
         {"detail": detail, "job": public_job},
@@ -5761,6 +5763,82 @@ def test_public_ticker_batch_scans_the_news_window_once(
 
     assert calls == 1
     assert len(result["results"]) == 20
+
+
+def test_directional_batch_keeps_only_the_requested_tickers_nonzero_impact(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _etl, _ai, intelligence = _stack(tmp_path)
+    observed = datetime(2030, 7, 16, 18, 36, tzinfo=timezone.utc)
+    items = [
+        {
+            "news_id": 1,
+            "published_at": _iso(observed - timedelta(minutes=1)),
+            "source_tickers": ["NVDA"],
+            "analysis": {
+                "classification": "neutral",
+                "confidence": 70,
+                "affected_stocks": [
+                    {"ticker": "NVDA", "impact_score": 25},
+                ],
+            },
+        },
+        {
+            "news_id": 2,
+            "published_at": _iso(observed - timedelta(minutes=2)),
+            "source_tickers": ["NVDA"],
+            "analysis": {
+                "classification": "neutral",
+                "confidence": 80,
+                "affected_stocks": [
+                    {"ticker": "NVDA", "impact_score": 0},
+                ],
+            },
+        },
+        {
+            "news_id": 3,
+            "published_at": _iso(observed - timedelta(minutes=3)),
+            "source_tickers": ["NVDA"],
+            "analysis": None,
+        },
+    ]
+    monkeypatch.setattr(
+        intelligence,
+        "_active_revisions",
+        lambda *_args, **_kwargs: [
+            {
+                "index": index,
+                "news_id": items[index]["news_id"],
+                "source_count": 1,
+            }
+            for index in range(3)
+        ],
+    )
+    monkeypatch.setattr(intelligence, "_ai_job_snapshot", lambda **_kwargs: {})
+    monkeypatch.setattr(
+        intelligence,
+        "_item",
+        lambda _connection, row, **_kwargs: items[row["index"]],
+    )
+    monkeypatch.setattr(
+        intelligence,
+        "status",
+        lambda **_kwargs: {"data_through": _iso(observed)},
+    )
+
+    result = intelligence.batch(
+        ["NVDA"],
+        as_of=observed,
+        directional_only=True,
+        include_neutral=True,
+        include_unanalyzed=False,
+    )["results"]["NVDA"]
+
+    assert [item["news_id"] for item in result["items"]] == [1]
+    assert result["summary"]["bullish"] == 1
+    assert result["summary"]["bearish"] == 0
+    assert result["summary"]["pending"] == 0
 
 
 def test_owner_feed_and_batch_reuse_one_ai_job_snapshot(
