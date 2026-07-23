@@ -89,17 +89,16 @@ export function ImpactValue({ value, className, dash = '—' }: { value: number 
   );
 }
 
-/* ---------------- 代码 chip ---------------- */
+/* ---------------- 代码 chip(无 onClick 渲染为 span,可安全嵌入按钮内) ---------------- */
 export function TickerChip({ ticker, onClick, className }: { ticker: string; onClick?: () => void; className?: string }) {
+  const cls = cn(
+    'inline-flex items-center rounded-xs bg-brand-50 px-1.5 py-0.5 font-mono text-[11px] leading-[14px] font-medium text-brand-700 transition-colors duration-fast',
+    onClick ? 'hover:bg-brand-100 cursor-pointer' : 'cursor-default',
+    className,
+  );
+  if (!onClick) return <span className={cls}>{ticker}</span>;
   return (
-    <button
-      onClick={onClick}
-      className={cn(
-        'inline-flex items-center rounded-xs bg-brand-50 px-1.5 py-0.5 font-mono text-[11px] leading-[14px] font-medium text-brand-700 transition-colors duration-fast',
-        onClick ? 'hover:bg-brand-100 cursor-pointer' : 'cursor-default',
-        className,
-      )}
-    >
+    <button onClick={onClick} className={cls}>
       {ticker}
     </button>
   );

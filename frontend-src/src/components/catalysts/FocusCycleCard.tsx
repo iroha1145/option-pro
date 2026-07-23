@@ -63,20 +63,44 @@ function StageStepper({ stage }: { stage: number }) {
   );
 }
 
+/** 无效/缺失 ISO 时间 → '—'（周期未完成时 completed_at 为空，不能渲染 Invalid Date） */
+function fmtCycleDate(iso: string, withTime: boolean): string {
+  const d = new Date(iso);
+  if (!iso || Number.isNaN(d.getTime())) return '—';
+  return withTime
+    ? d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+}
+
+const CYCLE_STATUS_CN: Record<string, string> = {
+  in_progress: '计算中',
+  queued: '排队中',
+  cancel_requested: '取消中',
+  cancelled: '已取消',
+  canceled: '已取消',
+  failed: '失败',
+};
+
 function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; compact?: boolean }) {
+  const statusCn = cycle.status && cycle.status !== 'completed' ? CYCLE_STATUS_CN[cycle.status] ?? cycle.status : null;
   return (
     <div>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h3 className={cn('font-display font-semibold text-ink-900', compact ? 'text-[16px]' : 'text-[20px] leading-[28px]')}>
           {cycle.dominantEvent}
         </h3>
+        {statusCn && (
+          <span className="inline-flex items-center gap-1.5 rounded-xs border border-warn-600/40 bg-warn-50 px-1.5 py-0.5 text-micro font-medium text-warn-600">
+            <Led tone="warn" pulse={cycle.status === 'in_progress' || cycle.status === 'cancel_requested'} className="size-1.5" />
+            {statusCn}
+          </span>
+        )}
         <span className="font-mono text-micro text-ink-400 tnum">
           {cycle.cycleId} · {cycle.trigger === 'manual' ? '手动触发' : '定时生成'} · {cycle.model}
         </span>
       </div>
       <p className="mt-1 font-mono text-micro text-ink-400 tnum">
-        启动 {new Date(cycle.startedAt).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })} · 生成{' '}
-        {new Date(cycle.generatedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} · 样本 {cycle.newsCount}{' '}
+        启动 {fmtCycleDate(cycle.startedAt, false)} · 生成 {fmtCycleDate(cycle.generatedAt, true)} · 样本 {cycle.newsCount}{' '}
         {cycle.sampleLabel ?? '条'}
       </p>
       {/* 一句话结论（live headline_summary） */}

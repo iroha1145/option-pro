@@ -1,21 +1,113 @@
 /**
  * 行展开分项明细（screener.md B2 行展开 · accordion 260ms）
- * ① 分项强度 breakdown（4 条 grow-bar + 分值 + 权重）
- * ② 迷你点阵面积图（§6-2 stipple）
+ * ① 分项强度 breakdown（与行内微条同源 subscoreDimsOf；4 条 grow-bar + 分值 + 权重）
+ * ② 迷你点阵面积图（§6-2 stipple）：mock 用行内 sparkline；live 契约无 sparkline →
+ *    按需拉真实日 K（stocksApi.chart range=1d）取近 6 根收盘；拿不到如实空态，杜绝 Infinity
  * ③ 操作（打开详情 / 相关突破事件）+ 信号 + 成交额
  */
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { motion } from 'framer-motion';
+import { stocksApi } from '@/api/modules/stocks';
 import type { ScreenerRow, Signal } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { fmtCompact } from '@/lib/format';
 import Icon from '@/components/icons';
 import SignalChip from '@/components/shared/SignalChip';
 import Sparkline from '@/components/charts/Sparkline';
+import { SkeletonBlock } from '@/components/shared/Skeleton';
 import { strengthBarClass } from '@/components/shared/StrengthBar';
-import { SUBSCORE_META } from './types';
+import { subscoreDimsOf } from './types';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
+
+/* ---------------- 近 6 日收盘（live 懒加载 + 模块级缓存；表格/卡片双实例共享一次请求） ---------------- */
+const DOT_DAYS = 6;
+const closesCache = new Map<string, Promise<number[] | null>>();
+
+function fetchDailyCloses(ticker: string): Promise<number[] | null> {
+  let p = closesCache.get(ticker);
+  if (!p) {
+    p = stocksApi
+      .chart(ticker, '1D') // CHART_RANGE_MAP：1D→契约 range=1d（日 K），不发明新挡位
+      .then((c) => {
+        const closes = c.candles
+          .map((b) => b.c)
+          .filter((v) => Number.isFinite(v) && v > 0)
+          .slice(-DOT_DAYS);
+        return closes.length >= 2 ? closes : null;
+      })
+      .catch(() => {
+        closesCache.delete(ticker); // 失败不缓存，下次展开可重试
+        return null;
+      });
+    closesCache.set(ticker, p);
+  }
+  return p;
+}
+
+/**
+ * 点阵面积块三态：undefined 加载中 · null 数据不可用（诚实空态） · number[] 真实收盘
+ * mock 行自带 sparkline 直接使用；live 行 sparkline 恒空 → 拉真实日 K。
+ */
+function DotMatrixBlock({ row }: { row: ScreenerRow }) {
+  const hasSpark = row.sparkline.length >= 2;
+  const [closes, setCloses] = useState<number[] | null | undefined>(hasSpark ? row.sparkline : undefined);
+
+  useEffect(() => {
+    if (hasSpark) {
+      setCloses(row.sparkline);
+      return;
+    }
+    let alive = true;
+    setCloses(undefined);
+    void fetchDailyCloses(row.ticker).then((v) => {
+      if (alive) setCloses(v);
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [row.ticker, hasSpark]);
+
+  const title = hasSpark
+    ? '近 5 日 · 点阵面积'
+    : Array.isArray(closes)
+      ? `近 ${closes.length} 日 · 点阵面积`
+      : '日线 · 点阵面积';
+
+  return (
+    <div>
+      <p className="eyebrow">{title}</p>
+      <div className="mt-3 rounded-md border border-line bg-card p-3">
+        {closes === undefined ? (
+          <SkeletonBlock className="h-[72px] w-full rounded-sm" />
+        ) : closes === null ? (
+          /* 接口拿不到日线：如实留空，严禁 Infinity/编造 */
+          <div className="flex h-[72px] flex-col items-center justify-center gap-1 text-center">
+            <Icon name="candle" size={16} className="text-ink-300" />
+            <p className="text-caption text-ink-400">日线数据暂不可用 · 留空优于编造</p>
+          </div>
+        ) : (
+          <>
+            <Sparkline
+              data={closes}
+              width={260}
+              height={72}
+              change={closes[closes.length - 1] - closes[0]}
+              variant="area"
+              className="w-full"
+            />
+            <div className="mt-2 flex items-center justify-between font-mono text-micro text-ink-400 tnum">
+              <span>低 {Math.min(...closes).toFixed(1)}</span>
+              <span>高 {Math.max(...closes).toFixed(1)}</span>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export interface RowExpansionProps {
   row: ScreenerRow;
@@ -26,29 +118,35 @@ export interface RowExpansionProps {
 }
 
 export default function RowExpansion({ row, weights, dollarVolume, signals, onOpenDetail }: RowExpansionProps) {
+  const dims = subscoreDimsOf(row);
+  // 权重仅对 mock 四维键有意义（live 契约 profiles 无权重 → weights 为 null 自动隐藏）
+  const weightOf = (key: string): number | null =>
+    weights && key in weights ? weights[key as keyof typeof weights] : null;
   return (
     <div className="grid grid-cols-1 gap-x-8 gap-y-5 border-t border-line bg-card-warm/60 px-4 py-4 md:grid-cols-3">
-      {/* ① 分项强度 breakdown */}
+      {/* ① 分项强度 breakdown（与行内微条同源） */}
       <div>
         <p className="eyebrow">分项强度 · BREAKDOWN</p>
         <div className="mt-3 space-y-2.5">
-          {SUBSCORE_META.map(({ key, label }, i) => {
-            const v = row.subscores[key];
+          {dims.map(({ key, label, value }, i) => {
+            const w = weightOf(key);
             return (
-              <div key={key} className="grid grid-cols-[40px_1fr_64px] items-center gap-2.5">
+              <div key={key} className="grid grid-cols-[56px_1fr_64px] items-center gap-2.5">
                 <span className="text-caption text-ink-500">{label}</span>
                 <span className="h-1.5 overflow-hidden rounded-pill bg-line" role="presentation">
-                  <motion.span
-                    className={cn('block h-full origin-left rounded-pill', strengthBarClass(v))}
-                    initial={{ scaleX: 0 }}
-                    animate={{ scaleX: 1 }}
-                    transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.05 }}
-                    style={{ width: `${Math.max(2, Math.min(100, v))}%` }}
-                  />
+                  {value !== null && (
+                    <motion.span
+                      className={cn('block h-full origin-left rounded-pill', strengthBarClass(value))}
+                      initial={{ scaleX: 0 }}
+                      animate={{ scaleX: 1 }}
+                      transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.05 }}
+                      style={{ width: `${Math.max(2, Math.min(100, value))}%` }}
+                    />
+                  )}
                 </span>
                 <span className="text-right font-mono text-caption text-ink-800 tnum">
-                  {v}
-                  {weights && <span className="ml-1 text-micro text-ink-300">×{weights[key]}%</span>}
+                  {value !== null ? value : '—'}
+                  {w !== null && <span className="ml-1 text-micro text-ink-300">×{w}%</span>}
                 </span>
               </div>
             );
@@ -57,17 +155,8 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
         {weights && <p className="mt-2.5 text-micro text-ink-400">权重来自当前评分方法（右侧栏）</p>}
       </div>
 
-      {/* ② 迷你点阵面积图 */}
-      <div>
-        <p className="eyebrow">近 5 日 · 点阵面积</p>
-        <div className="mt-3 rounded-md border border-line bg-card p-3">
-          <Sparkline data={row.sparkline} width={260} height={72} change={row.changePct} variant="area" className="w-full" />
-          <div className="mt-2 flex items-center justify-between font-mono text-micro text-ink-400 tnum">
-            <span>低 {Math.min(...row.sparkline).toFixed(1)}</span>
-            <span>高 {Math.max(...row.sparkline).toFixed(1)}</span>
-          </div>
-        </div>
-      </div>
+      {/* ② 迷你点阵面积图（真实日 K / mock sparkline；空态诚实） */}
+      <DotMatrixBlock row={row} />
 
       {/* ③ 操作 + 信号 + 成交额 */}
       <div>

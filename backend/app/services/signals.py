@@ -3,11 +3,16 @@ from __future__ import annotations
 import math
 import threading
 from collections import OrderedDict
-from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 
 import pandas as pd
 import yfinance as yf
+
+from app.services import massive
+
+_MASSIVE_PERIOD_DAYS = {"1y": 405, "2y": 770, "6mo": 200, "3mo": 105, "1mo": 40}
 
 _cache: OrderedDict[str, tuple[datetime, Any]] = OrderedDict()
 _cache_lock = threading.RLock()
@@ -145,6 +150,41 @@ def _clean_frame(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _massive_daily(symbol: str, period: str) -> pd.DataFrame:
+    """Massive 主源单票日线(复权)→ yfinance 形状单层 frame;不支持/失败返回空。"""
+    if not massive.configured():
+        return pd.DataFrame()
+    mapped = massive.to_symbol(symbol)
+    if mapped is None or mapped.startswith("I:"):
+        return pd.DataFrame()
+    end = date.today()
+    start = end - timedelta(days=_MASSIVE_PERIOD_DAYS.get(str(period).lower(), 405))
+    try:
+        bars = massive.ticker_range(mapped, 1, "day", start.isoformat(), end.isoformat(), adjusted=True)
+    except massive.MassiveError:
+        return pd.DataFrame()
+    rows = [bar for bar in bars if isinstance(bar.get("t"), (int, float))]
+    if not rows:
+        return pd.DataFrame()
+    index = pd.DatetimeIndex(
+        [
+            pd.Timestamp(bar["t"], unit="ms", tz="UTC").tz_convert("America/New_York").normalize().tz_localize(None)
+            for bar in rows
+        ]
+    )
+    frame = pd.DataFrame(
+        {
+            "Open": [bar.get("o") for bar in rows],
+            "High": [bar.get("h") for bar in rows],
+            "Low": [bar.get("l") for bar in rows],
+            "Close": [bar.get("c") for bar in rows],
+            "Volume": [bar.get("v") for bar in rows],
+        },
+        index=index,
+    )
+    return _clean_frame(frame.sort_index())
+
+
 def _history(symbol: str, period: str = "1y") -> pd.DataFrame:
     """Single-symbol daily history with a short TTL cache.
 
@@ -152,6 +192,9 @@ def _history(symbol: str, period: str = "1y") -> pd.DataFrame:
     which used to mean one redundant network download per stock request.
     """
     def load() -> pd.DataFrame:
+        frame = _massive_daily(symbol, period)
+        if not frame.empty:
+            return frame
         try:
             return _clean_frame(yf.Ticker(symbol).history(period=period, auto_adjust=True))
         except Exception:
@@ -165,6 +208,18 @@ def _bulk_history(symbols: list[str], period: str = "1y") -> dict[str, pd.DataFr
     requests. Falls back to per-symbol fetch for anything missing."""
     out: dict[str, pd.DataFrame] = {}
     remaining = list(dict.fromkeys(symbols))
+    # Massive 主源批量(并发 4);未覆盖的余量继续走 yfinance 批下载
+    if remaining and massive.configured():
+        try:
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                for symbol, frame in zip(remaining, pool.map(lambda s: _massive_daily(s, period), remaining)):
+                    if not frame.empty:
+                        out[symbol] = frame
+        except Exception:
+            pass
+        remaining = [symbol for symbol in remaining if symbol not in out]
+        if not remaining:
+            return out
     try:
         from app.services.yahoo import _yf_session
         kwargs: dict[str, Any] = {

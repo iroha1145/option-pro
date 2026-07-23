@@ -1,24 +1,30 @@
 /**
  * 关键数据 definition list（stock-detail.md S3 侧栏）
  * 开盘/最高/最低/52周高低/市值/PE 等，Mono 行间发丝线；52 周区间标尺
+ * live 契约缺失字段（运行时 null）如实显「—」；52 周区间缺失时隐藏标尺（留空优于编造）
  */
 import { fmtCompact, fmtPrice } from '@/lib/format';
 import type { StockDetail } from '@/api/types';
 
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const priceOr = (v: number | null | undefined): string => (isNum(v) ? fmtPrice(v) : '—');
+const compactOr = (v: number | null | undefined): string => (isNum(v) ? fmtCompact(v) : '—');
+
 export default function KeyStats({ detail }: { detail: StockDetail }) {
   const rows: [string, string][] = [
-    ['今开', fmtPrice(detail.open)],
-    ['昨收', fmtPrice(detail.prevClose)],
-    ['最高', fmtPrice(detail.high)],
-    ['最低', fmtPrice(detail.low)],
-    ['成交量', fmtCompact(detail.volume)],
-    ['均量', fmtCompact(detail.avgVolume)],
-    ['市值', `$${fmtCompact(detail.marketCap)}`],
-    ['市盈率', detail.pe == null ? '—' : detail.pe.toFixed(1)],
-    ['IV 百分位', `${detail.ivPercentile}%`],
+    ['今开', priceOr(detail.open)],
+    ['昨收', priceOr(detail.prevClose)],
+    ['最高', priceOr(detail.high)],
+    ['最低', priceOr(detail.low)],
+    ['成交量', compactOr(detail.volume)],
+    ['均量', compactOr(detail.avgVolume)],
+    ['市值', isNum(detail.marketCap) ? `$${fmtCompact(detail.marketCap)}` : '—'],
+    ['市盈率', isNum(detail.pe) ? detail.pe.toFixed(1) : '—'],
+    ['IV 百分位', isNum(detail.ivPercentile) ? `${detail.ivPercentile}%` : '—'],
   ];
-  const [lo52, hi52] = detail.range52w;
-  const pos = Math.min(100, Math.max(2, ((detail.price - lo52) / Math.max(1e-9, hi52 - lo52)) * 100));
+  const r52 = detail.range52w;
+  const has52 = Array.isArray(r52) && isNum(r52[0]) && isNum(r52[1]);
+  const pos = has52 ? Math.min(100, Math.max(2, ((detail.price - r52[0]) / Math.max(1e-9, r52[1] - r52[0])) * 100)) : 0;
 
   return (
     <div className="card-surface p-5">
@@ -35,17 +41,17 @@ export default function KeyStats({ detail }: { detail: StockDetail }) {
       <div className="mt-3 border-t border-line pt-3">
         <div className="flex items-center justify-between text-micro text-ink-400">
           <span>52 周区间</span>
-          <span className="font-mono tnum">
-            {fmtPrice(lo52)} — {fmtPrice(hi52)}
-          </span>
+          <span className="font-mono tnum">{has52 ? `${fmtPrice(r52[0])} — ${fmtPrice(r52[1])}` : '—'}</span>
         </div>
-        <div className="relative mt-2 h-1 rounded-pill bg-line" role="presentation">
-          <div className="h-full rounded-pill bg-brand-100" style={{ width: '100%' }} />
-          <span
-            className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card bg-brand-600 shadow-sh-1"
-            style={{ left: `${pos}%` }}
-          />
-        </div>
+        {has52 && (
+          <div className="relative mt-2 h-1 rounded-pill bg-line" role="presentation">
+            <div className="h-full rounded-pill bg-brand-100" style={{ width: '100%' }} />
+            <span
+              className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card bg-brand-600 shadow-sh-1"
+              style={{ left: `${pos}%` }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

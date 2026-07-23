@@ -5,7 +5,7 @@
  * B2 结果区（统计行 + 参数回显 chips + 三态排序 Segmented + 结果表/卡片流 + 行展开）
  * B3 右侧栏（市场形态 6 维 / 强度剖面 / 评分方法 / 空结果引导）
  * 状态：未扫描 empty-scan.svg · 扫描中骨架 · 无命中 · 503 快照不可用（保留上次结果）
- * 数据：strengthApi.scan / market / profiles + catalystsApi batch（72h 汇总）+ stocksApi.detail（成交额推导）
+ * 数据：strengthApi.scan / market / profilesMeta + catalystsApi.batchSummaries72h（单次批量）+ stocksApi.detail（成交额推导）
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -14,7 +14,7 @@ import { catalystsApi } from '@/api/modules/catalysts';
 import { stocksApi } from '@/api/modules/stocks';
 import { runtimeApi } from '@/api/modules/runtime';
 import { ApiError } from '@/api/client';
-import type { ScreenerRow, Signal, StrengthProfile } from '@/api/types';
+import type { ScreenerRow, SectorOption, Signal, StrengthProfile } from '@/api/types';
 import { usePolling } from '@/hooks/usePolling';
 import { useAccess } from '@/hooks/useAccess';
 import { useCountUp } from '@/hooks/useCountUp';
@@ -53,12 +53,14 @@ import {
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const PAGE_SIZE = 20;
-const CATALYST_WINDOW_MS = 72 * 3600_000;
 
 type ScanState = 'idle' | 'scanning' | 'done' | 'error';
 
-/* 预设策略 → 偏好映射 + 强度下限 */
+/* 预设策略 → 偏好映射 + 强度下限（契约枚举 conservative/balanced/aggressive 直接落偏好） */
 function withPreset(base: ScanFilters, id: string): ScanFilters {
+  if (id === 'conservative' || id === 'balanced' || id === 'aggressive') {
+    return { ...base, presetId: id, profile: id, minScore: null };
+  }
   if (id === 'breakout') return { ...base, presetId: id, profile: 'aggressive', minScore: 70 };
   if (id === 'lowvol') return { ...base, presetId: id, profile: 'conservative', minScore: null };
   return { ...base, presetId: id, profile: 'balanced', minScore: null };
@@ -76,7 +78,8 @@ export default function Screener() {
   /* ---------------- 基础数据（消费层） ---------------- */
   const universeQ = usePolling(() => strengthApi.scan({ band: 'all', sort: 'score', order: 'desc' }), null);
   const marketQ = usePolling(() => strengthApi.market(), 300_000);
-  const profilesQ = usePolling(() => strengthApi.profiles(), null);
+  const profilesQ = usePolling(() => strengthApi.profilesMeta(), null);
+  const profiles = profilesQ.data?.profiles ?? null;
 
   const universe = useMemo(() => {
     const rows = universeQ.data ?? [];
@@ -86,6 +89,13 @@ export default function Screener() {
       count: rows.length,
     };
   }, [universeQ.data]);
+
+  /* 板块选项：live 取 /strength/profiles 的板块字典（id+中文名，扫描下发 id）；mock 回退扫描行 sector 名 */
+  const sectorOptions = useMemo<SectorOption[]>(() => {
+    const fromMeta = profilesQ.data?.sectors ?? [];
+    if (fromMeta.length > 0) return fromMeta;
+    return universe.sectors.map((s) => ({ id: s, name: s }));
+  }, [profilesQ.data, universe.sectors]);
 
   /* ---------------- 扫描状态机 ---------------- */
   const [draft, setDraft] = useState<ScanFilters>(DEFAULT_FILTERS);
@@ -219,7 +229,8 @@ export default function Screener() {
     if (!rows) return [];
     const f = applied;
     let out = rows;
-    if (f.sectors.length > 0) out = out.filter((r) => f.sectors.includes(r.sector));
+    // f.sectors 存板块 id（live 契约 sector_id / mock 回退 name）：按 id 或名双向匹配
+    if (f.sectors.length > 0) out = out.filter((r) => f.sectors.includes(r.sectorId ?? r.sector) || f.sectors.includes(r.sector));
     if (f.priceMin != null) out = out.filter((r) => r.price >= (f.priceMin ?? 0));
     if (f.priceMax != null) out = out.filter((r) => r.price <= (f.priceMax ?? Infinity));
     if (f.minScore != null) out = out.filter((r) => r.strengthScore >= (f.minScore ?? 0));
@@ -244,7 +255,7 @@ export default function Screener() {
   const sorted = useMemo(() => {
     const out = [...filtered];
     const byScore = (a: ScreenerRow, b: ScreenerRow) =>
-      b.strengthScore - a.strengthScore || Math.abs(b.changePct) - Math.abs(a.changePct) || a.ticker.localeCompare(b.ticker);
+      b.strengthScore - a.strengthScore || Math.abs(b.changePct ?? 0) - Math.abs(a.changePct ?? 0) || a.ticker.localeCompare(b.ticker);
     if (sortMode === 'deterministic') {
       out.sort(byScore);
     } else if (sortMode === 'latest') {
@@ -271,7 +282,7 @@ export default function Screener() {
     [sorted, safePage],
   );
 
-  /* ---------------- 催化剂 72h 汇总（batch + 逐股明细） ---------------- */
+  /* ---------------- 催化剂 72h 汇总（当前页 ≤20 只一次批量 POST；禁止逐行请求） ---------------- */
   const pageTickerKey = pageRows.map((r) => r.ticker).join(',');
   useEffect(() => {
     if (scanState !== 'done') return;
@@ -279,40 +290,21 @@ export default function Screener() {
     if (tickers.length === 0) return;
     let cancelled = false;
     void (async () => {
-      try {
-        await catalystsApi.batchTickers(tickers);
-      } catch {
-        /* 批次句柄失败不阻断逐股汇总 */
-      }
-      const cutoff = Date.now() - CATALYST_WINDOW_MS;
-      const entries = await Promise.all(
-        tickers.map(async (t) => {
-          try {
-            const items = await catalystsApi.byTicker(t);
-            const inWin = items.filter((n) => new Date(n.publishedAt).getTime() >= cutoff);
-            const pos = inWin.filter((n) => n.sentiment === 'positive').length;
-            const neg = inWin.filter((n) => n.sentiment === 'negative').length;
-            const latest = inWin[0];
-            const summary: CatalystSummary = {
-              loaded: true,
-              count: inWin.length,
-              pos,
-              neg,
-              neu: inWin.length - pos - neg,
-              latestAt: latest?.publishedAt ?? null,
-              latestTitle: latest?.title ?? null,
-            };
-            return [t, summary] as const;
-          } catch {
-            return [t, { ...EMPTY_CATALYST, loaded: true }] as const;
-          }
-        }),
-      );
-      if (cancelled) return;
       const patch: Record<string, CatalystSummary> = {};
-      entries.forEach(([t, s]) => {
-        patch[t] = s;
-      });
+      try {
+        const map = await catalystsApi.batchSummaries72h(tickers);
+        tickers.forEach((t) => {
+          const s = map[t];
+          // 响应缺该股条目视作真实 0（契约 batch 对无新闻股返回空 items，同义）
+          patch[t] = s ? { loaded: true, ...s } : { ...EMPTY_CATALYST, loaded: true };
+        });
+      } catch {
+        // 批量接口失败：failed 标记 → 徽标如实显「—」（不显 0，不逐行重试）
+        tickers.forEach((t) => {
+          patch[t] = { ...EMPTY_CATALYST, loaded: true, failed: true };
+        });
+      }
+      if (cancelled) return;
       catalystsRef.current = { ...catalystsRef.current, ...patch };
       setCatalysts(catalystsRef.current);
     })();
@@ -395,14 +387,16 @@ export default function Screener() {
   }, [filteredBase]);
 
   const activeProfile: StrengthProfile | null = useMemo(() => {
-    const ps = profilesQ.data;
-    if (!ps || ps.length === 0) return null;
-    return ps.find((p) => p.id === applied.presetId) ?? ps[0];
-  }, [profilesQ.data, applied.presetId]);
+    if (!profiles || profiles.length === 0) return null;
+    return profiles.find((p) => p.id === applied.presetId) ?? profiles[0];
+  }, [profiles, applied.presetId]);
 
   const detailsPending = applied.minDollarVol > 0 && filteredBase.some((r) => details[r.ticker] === undefined);
 
-  const chips = useMemo(() => buildChips(applied, profilesQ.data, patchApplied), [applied, profilesQ.data, patchApplied]);
+  const chips = useMemo(
+    () => buildChips(applied, profiles, sectorOptions, patchApplied),
+    [applied, profiles, sectorOptions, patchApplied],
+  );
 
   const animKey = `${scanSeq.current}:${safePage}`;
 
@@ -445,7 +439,8 @@ export default function Screener() {
           draft={draft}
           onChange={setDraft}
           universe={universe}
-          presets={profilesQ.data}
+          sectorOptions={sectorOptions}
+          presets={profiles}
           presetsFailed={!!profilesQ.error}
           scanning={scanState === 'scanning'}
           progress={progress}
@@ -513,9 +508,9 @@ export default function Screener() {
                         <Icon name="crosshair" size={14} />
                         开始扫描
                       </button>
-                      {profilesQ.data && (
+                      {profiles && (
                         <div className="flex flex-wrap justify-center gap-2">
-                          {profilesQ.data.map((p) => (
+                          {profiles.map((p) => (
                             <button
                               key={p.id}
                               onClick={() => onPresetQuick(p.id)}
@@ -713,14 +708,24 @@ interface EchoChip {
   onRemove: () => void;
 }
 
-function buildChips(f: ScanFilters, profiles: StrengthProfile[] | null, patch: (p: Partial<ScanFilters>) => void): EchoChip[] {
+function buildChips(
+  f: ScanFilters,
+  profiles: StrengthProfile[] | null,
+  sectorOptions: SectorOption[],
+  patch: (p: Partial<ScanFilters>) => void,
+): EchoChip[] {
   const chips: EchoChip[] = [];
   if (f.tier !== 'all') chips.push({ key: 'tier', label: `${f.tier} 档`, onRemove: () => patch({ tier: 'all' }) });
   if (f.timeframe !== 'all') chips.push({ key: 'tf', label: `周期 ${TIMEFRAME_CN[f.timeframe]}`, onRemove: () => patch({ timeframe: 'all' }) });
   if (f.profile !== 'balanced') chips.push({ key: 'pf', label: `偏好 ${PROFILE_CN[f.profile]}`, onRemove: () => patch({ profile: 'balanced' }) });
   if (f.topN > 0) chips.push({ key: 'top', label: `Top ${f.topN}`, onRemove: () => patch({ topN: 0 }) });
   f.sectors.forEach((s) =>
-    chips.push({ key: `sec-${s}`, label: s, onRemove: () => patch({ sectors: f.sectors.filter((x) => x !== s) }) }),
+    chips.push({
+      key: `sec-${s}`,
+      // sectors 存 id：回显中文名（mock id=name 等价）
+      label: sectorOptions.find((o) => o.id === s)?.name ?? s,
+      onRemove: () => patch({ sectors: f.sectors.filter((x) => x !== s) }),
+    }),
   );
   if (f.priceMin != null || f.priceMax != null) {
     const lo = f.priceMin != null ? `$${f.priceMin}` : '—';

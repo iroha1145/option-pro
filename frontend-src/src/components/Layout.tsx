@@ -9,6 +9,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import Navbar from '@/components/Navbar';
 import IndexTape from '@/components/IndexTape';
 import Footer from '@/components/Footer';
+import RouteErrorBoundary from '@/components/shared/RouteErrorBoundary';
 import MobileDock from '@/components/MobileDock';
 import CommandPalette, { pushRecent } from '@/components/CommandPalette';
 import Drawer from '@/components/Drawer';
@@ -67,7 +68,10 @@ export default function Layout() {
               exit={{ opacity: 0, transition: { duration: 0.16 } }}
               transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
             >
-              <Outlet />
+              {/* 按路由重建的错误边界:页面崩溃显示错误卡而非白屏,切页自动复位 */}
+              <RouteErrorBoundary>
+                <Outlet />
+              </RouteErrorBoundary>
             </motion.div>
           </AnimatePresence>
         </main>

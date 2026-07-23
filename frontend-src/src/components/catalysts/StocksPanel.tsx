@@ -86,6 +86,15 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtersKey, refreshToken]);
 
+  /* 只显示有实际影响的：已完成分析且存在非中性方向；无分析/纯中性不上榜 */
+  const impactful = useMemo(
+    () =>
+      (rows ?? [])
+        .filter((r) => r.analyzed > 0 && r.bullish + r.bearish > 0)
+        .sort((a, b) => Math.abs(b.netImpact) - Math.abs(a.netImpact) || b.count - a.count),
+    [rows],
+  );
+
   const content = useMemo(() => {
     if (loading && !rows) return <SkeletonRows rows={7} />;
     if (error) {
@@ -98,18 +107,22 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
         />
       );
     }
-    if (!rows || rows.length === 0) {
+    if (impactful.length === 0) {
       return (
         <EmptyState
           image="/empty-news.svg"
-          title="当前过滤下没有股票影响数据"
-          description="放宽时间窗或清除过滤后重试"
+          title="当前窗口暂无已分析出方向性影响的股票"
+          description={
+            rows && rows.length > 0
+              ? `${rows.length} 只候选股票的新闻尚未分析或影响为中性，暂不上榜`
+              : '放宽时间窗或清除过滤后重试'
+          }
         />
       );
     }
     return (
       <div className="divide-y divide-line">
-        {rows.map((r, i) => (
+        {impactful.map((r, i) => (
           <motion.button
             key={r.ticker}
             initial={{ opacity: 0, y: 14 }}
@@ -157,7 +170,7 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
         ))}
       </div>
     );
-  }, [loading, rows, error, navigate]);
+  }, [loading, rows, impactful, error, navigate]);
 
   return (
     <div className="card-surface overflow-hidden">

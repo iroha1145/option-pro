@@ -3,7 +3,7 @@
  * - 分档：S≥90 / A 80–89 / B 70–79 / C 60–69（D<60 仅计入「全部」）
  * - 周期 short/mid/long/all · 偏好 conservative/balanced/aggressive（契约枚举）
  */
-import type { ScreenerRow } from '@/api/types';
+import type { ScreenerRow, ScreenerSubscoreDim } from '@/api/types';
 
 export type Tier = 'S' | 'A' | 'B' | 'C' | 'D';
 export type TierFilter = 'all' | 'S' | 'A' | 'B' | 'C';
@@ -86,7 +86,7 @@ export const DEFAULT_FILTERS: ScanFilters = {
   presetId: null,
 };
 
-/** 72h 窗口催化剂汇总（catalystsApi 消费层聚合） */
+/** 72h 窗口催化剂汇总（catalystsApi.batchSummaries72h 单次批量） */
 export interface CatalystSummary {
   loaded: boolean;
   count: number;
@@ -95,6 +95,12 @@ export interface CatalystSummary {
   neu: number;
   latestAt: string | null;
   latestTitle: string | null;
+  /** 契约 has_more（limit=5 截断）：true 时徽标显「5+」 */
+  hasMore?: boolean;
+  /** 契约 summary.pending（待分析计数）；mock 无此概念 → 不填 */
+  pending?: number | null;
+  /** 批量接口失败：如实显「—」（区别于真实 0） */
+  failed?: boolean;
 }
 
 export const EMPTY_CATALYST: CatalystSummary = {
@@ -118,13 +124,22 @@ export interface ScanHistoryEntry {
   summary: string;
 }
 
-/** 分项元数据（ScreenerRow.subscores 键 → 中文名） */
+/** 分项元数据（mock ScreenerRow.subscores 键 → 中文名；live 行自带 subscoreDims 真实标签） */
 export const SUBSCORE_META: { key: keyof ScreenerRow['subscores']; label: string }[] = [
   { key: 'trend', label: '趋势' },
   { key: 'momentum', label: '动量' },
   { key: 'volume', label: '量能' },
   { key: 'volatility', label: '波动' },
 ];
+
+/**
+ * 行分项统一读取：live 优先契约 subscoreDims（短期/中期/长期/突破质量，值可为 null），
+ * mock 回退 subscores 四维（趋势/动量/量能/波动）。行内与展开区共用，保证两处同源。
+ */
+export function subscoreDimsOf(row: ScreenerRow): ScreenerSubscoreDim[] {
+  if (row.subscoreDims && row.subscoreDims.length > 0) return row.subscoreDims;
+  return SUBSCORE_META.map(({ key, label }) => ({ key, label, value: row.subscores[key] }));
+}
 
 export const TOPN_OPTIONS: { value: number; label: string }[] = [
   { value: 10, label: 'Top 10' },

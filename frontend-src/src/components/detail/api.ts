@@ -4,11 +4,13 @@
  * - GET /api/stocks/{t}/chart（ChartBar quote_only / as_of / _stale）
  * - GET /api/signals/stock/{t}（trend_bias_* 完整形状）
  * - POST /api/signals/stock/{t}/ai-analysis（signal_analysis 任务，202）
+ * - GET /api/strength/stocks/{t}（概览 503 时的基础行情回退：扫描行快照，匿名可用）
  * mock 模式下代码不存在抛 404（整页形态 404 空态）。
  */
 import { ApiError, get, mockOr } from '@/api/client';
-import { asRec, pickS, unwrap, type Rec } from '@/api/live';
+import { asRec, pickN, pickS, unwrap, type Rec } from '@/api/live';
 import { CHART_RANGE_MAP, ma20Of, mapBar } from '@/api/modules/stocks';
+import { stocksApi } from '@/api/modules/stocks';
 import { postAiJob } from '@/api/modules/ai-jobs';
 import * as fx from '@/mocks/fixtures';
 import * as fx2 from '@/mocks/fixtures2';
@@ -32,6 +34,46 @@ function mapChartEx(body: unknown, ticker: string, range: ChartRange): StockChar
   };
 }
 
+/**
+ * /strength/stocks/{t} 信封 {as_of, row:{…扫描行…}} → 基础行情 StockDetail。
+ * 仅填契约真实字段：价/涨跌（change 由 change_pct 反推真实算术）/板块/强度分/
+ * 市值+PE（finnhub_metrics，市值单位为百万美元）/20 日均量；其余如实留空（UI 显「—」）。
+ */
+function strengthRowToDetail(env: Rec): StockDetail | null {
+  const row = asRec(env.row);
+  const ticker = pickS(row, 'ticker');
+  const price = pickN(row, 'price');
+  if (!ticker || price === null) return null; // 连基础行情都没有 → 保持原 503 空态
+  const changePct = pickN(row, 'change_pct');
+  const prevClose = changePct !== null && changePct > -100 ? price / (1 + changePct / 100) : null;
+  const fin = asRec(row.finnhub_metrics);
+  const marketCapM = pickN(fin, 'market_cap'); // Finnhub 市值单位：百万美元
+  const nullNum = null as unknown as number;
+  return {
+    ticker,
+    name: pickS(row, 'name') ?? ticker,
+    sector: pickS(row, 'sector_name', 'primary_sector_name') ?? '',
+    price,
+    change: prevClose !== null ? price - prevClose : nullNum,
+    changePct: changePct ?? nullNum,
+    sparkline: [],
+    strengthScore: pickN(row, 'final_score', 'strength_score', 'score') ?? nullNum,
+    signals: [],
+    updatedAt: pickS(env, 'as_of') ?? '',
+    open: nullNum,
+    high: nullNum,
+    low: nullNum,
+    prevClose: prevClose ?? nullNum,
+    volume: nullNum, // 契约仅有 20 日均量，无当日成交量——不冒充
+    avgVolume: pickN(row, 'avg_volume_20d') ?? nullNum,
+    marketCap: marketCapM !== null ? marketCapM * 1e6 : nullNum,
+    pe: pickN(fin, 'pe_ttm'),
+    ivPercentile: nullNum,
+    range52w: null as unknown as [number, number],
+    snapshotScope: 'strength-row',
+  };
+}
+
 export function getDetail(ticker: string): Promise<StockDetail> {
   const t = ticker.toUpperCase();
   return mockOr(
@@ -39,7 +81,19 @@ export function getDetail(ticker: string): Promise<StockDetail> {
       if (!fx.hasTicker(t)) throw new ApiError(404, `代码 ${t} 不存在`);
       return fx.getStockDetail(t);
     },
-    () => get(`/stocks/${encodeURIComponent(t)}`),
+    async () => {
+      try {
+        // 概览契约（snake→camel 归一在 stocks 模块完成）
+        return { ...(await stocksApi.detail(t)), snapshotScope: 'full' as const };
+      } catch (e) {
+        // 焦点池外（匿名 503 public_snapshot_unavailable）：回退强度扫描行基础行情
+        if (!(e instanceof ApiError) || e.code !== 503) throw e;
+        const body = await get(`/strength/stocks/${encodeURIComponent(t)}`).catch(() => null);
+        const fallback = body !== null ? strengthRowToDetail(asRec(body)) : null;
+        if (fallback === null) throw e;
+        return fallback;
+      }
+    },
   );
 }
 

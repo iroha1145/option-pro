@@ -6,6 +6,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { isMock } from '@/api/client';
 import { optionsApi } from '@/api/modules/options';
 import { aiJobsApi } from '@/api/modules/ai-jobs';
 import { usePolling } from '@/hooks/usePolling';
@@ -140,7 +141,8 @@ function AiOptionInsight({ ticker, expiration }: { ticker: string; expiration: s
 
 /* ---------------- 链主体 ---------------- */
 export default function OptionsPanel({ ticker }: { ticker: string }) {
-  const supported = optionsSupported(ticker);
+  // 支持名单只属于 mock 数据集;live 由真实接口自证(到期日为空 → 诚实空态)
+  const supported = !isMock || optionsSupported(ticker);
   const [expiration, setExpiration] = useState<string | null>(null);
   const { data: expirations, loading: expLoading } = usePolling(
     () => optionsApi.expirations(ticker),

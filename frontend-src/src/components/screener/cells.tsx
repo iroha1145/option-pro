@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { fmtRelative } from '@/lib/format';
 import Icon from '@/components/icons';
 import { strengthBarClass } from '@/components/shared/StrengthBar';
-import { SUBSCORE_META, type CatalystSummary } from './types';
+import { subscoreDimsOf, type CatalystSummary } from './types';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -37,25 +37,30 @@ export function ScoreCell({ score, index }: { score: number; index: number }) {
   );
 }
 
-/* ---------------- 分项微条：4 段（14×3px，§6-5 色阶，hover 毛玻璃 tooltip） ---------------- */
+/* ----------------------------------------------------------------------------
+ * 分项微条：4 段（14×3px 轨道 + 比例填充，§6-5 色阶，hover 毛玻璃 tooltip）
+ * 数据源与展开区 BREAKDOWN 同源（subscoreDimsOf：live 契约周期分 / mock 四维），
+ * 单项缺失（null）如实空轨道，tooltip 该项显「—」——不再出现整排占位。
+ * -------------------------------------------------------------------------- */
 export function SubscoreTicks({ row }: { row: ScreenerRow }) {
+  const dims = subscoreDimsOf(row);
   return (
     <span className="group relative inline-flex items-center gap-1" aria-label="分项强度">
-      {SUBSCORE_META.map(({ key }) => {
-        const v = row.subscores[key];
-        return (
-          <span
-            key={key}
-            className={cn('inline-block h-[3px] w-[14px] rounded-full', strengthBarClass(v))}
-            aria-hidden="true"
-          />
-        );
-      })}
+      {dims.map(({ key, value }) => (
+        <span key={key} className="inline-block h-[3px] w-[14px] overflow-hidden rounded-full bg-line" aria-hidden="true">
+          {value !== null && (
+            <span
+              className={cn('block h-full rounded-full', strengthBarClass(value))}
+              style={{ width: `${Math.max(8, Math.min(100, value))}%` }}
+            />
+          )}
+        </span>
+      ))}
       <span className="glass pointer-events-none absolute -top-2 left-1/2 z-20 hidden w-40 -translate-x-1/2 -translate-y-full rounded-md border border-line p-2.5 shadow-sh-2 group-hover:block">
-        {SUBSCORE_META.map(({ key, label }) => (
+        {dims.map(({ key, label, value }) => (
           <span key={key} className="flex items-center justify-between py-0.5 text-micro">
             <span className="text-ink-500">{label}</span>
-            <span className="font-mono text-ink-800 tnum">{row.subscores[key]}</span>
+            <span className="font-mono text-ink-800 tnum">{value !== null ? value : '—'}</span>
           </span>
         ))}
       </span>
@@ -63,29 +68,50 @@ export function SubscoreTicks({ row }: { row: ScreenerRow }) {
   );
 }
 
-/* ---------------- 催化剂汇总（72h 窗口） ---------------- */
+/* ---------------- 催化剂汇总（72h 窗口）：有数显数 · 0 显 0 · 接口失败显「—」 ---------------- */
 export function CatalystBadge({ summary }: { summary: CatalystSummary | undefined }) {
   if (!summary || !summary.loaded) {
     return <span className="skeleton-shimmer inline-block h-5 w-16 rounded-xs" aria-hidden="true" />;
   }
+  if (summary.failed) {
+    // 批量接口失败：如实「—」（区别于真实 0），不编造计数
+    return (
+      <span className="font-mono text-caption text-ink-300 tnum" title="催化剂接口暂不可用" aria-label="催化剂数据不可用">
+        —
+      </span>
+    );
+  }
   if (summary.count === 0) {
-    return <span className="font-mono text-caption text-ink-300 tnum">—</span>;
+    return (
+      <span className="font-mono text-caption text-ink-300 tnum" aria-label="72 小时内无催化剂">
+        0
+      </span>
+    );
   }
   const net = summary.pos - summary.neg;
   const tone = net > 0 ? 'text-up-700 bg-up-50' : net < 0 ? 'text-down-700 bg-down-50' : 'text-ink-500 bg-card-warm';
   const label = net > 0 ? '利多' : net < 0 ? '利空' : '中性';
+  const countText = `${summary.count}${summary.hasMore ? '+' : ''}`;
   return (
     <span className="group relative inline-flex">
       <span className={cn('inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-micro font-medium leading-[16px]', tone)}>
         <Icon name="bolt" size={11} />
         {label}
-        <span className="font-mono tnum">{summary.count}</span>
+        <span className="font-mono tnum">{countText}</span>
       </span>
       <span className="glass pointer-events-none absolute -top-2 right-0 z-20 hidden w-60 -translate-y-full rounded-md border border-line p-3 shadow-sh-2 group-hover:block">
         <span className="block text-micro text-ink-500">
           72h 窗口 · 利多 <span className="font-mono text-up-700 tnum">{summary.pos}</span>
           {' · '}利空 <span className="font-mono text-down-700 tnum">{summary.neg}</span>
-          {' · '}中性 <span className="font-mono tnum">{summary.neu}</span>
+          {summary.pending != null ? (
+            <>
+              {' · '}待分析 <span className="font-mono tnum">{summary.pending}</span>
+            </>
+          ) : (
+            <>
+              {' · '}中性 <span className="font-mono tnum">{summary.neu}</span>
+            </>
+          )}
         </span>
         {summary.latestTitle && (
           <span className="mt-1.5 block truncate text-caption text-ink-800" title={summary.latestTitle}>

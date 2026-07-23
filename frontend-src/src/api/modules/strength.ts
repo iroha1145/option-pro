@@ -1,8 +1,17 @@
 /** 强度域：GET /api/strength/market · /profiles · /scan?params */
 import { get, mockOr, toQuery } from '../client';
-import { asRec, pickN, pickS, unwrap } from '../live';
+import { asRec, pickN, pickS, unwrap, type Rec } from '../live';
 import * as fx from '@/mocks/fixtures';
-import type { MarketStrength, ScreenerRow, StrengthBand, StrengthProfile } from '../types';
+import type {
+  MarketRegimeInfo,
+  MarketStrength,
+  ScreenerRow,
+  ScreenerSubscoreDim,
+  SectorOption,
+  StrengthBand,
+  StrengthProfile,
+  StrengthProfilesMeta,
+} from '../types';
 
 /**
  * 扫描参数：band/sector/minScore/sort/order 为 UI 侧筛选（live 下客户端套用）；
@@ -11,6 +20,7 @@ import type { MarketStrength, ScreenerRow, StrengthBand, StrengthProfile } from 
  */
 export interface ScanParams {
   band?: 'strong' | 'mid' | 'weak' | 'all';
+  /** 板块过滤：live 传契约 sector_id；mock 传 sector 名（applyParams 双向匹配） */
   sector?: string;
   minScore?: number;
   sort?: 'score' | 'changePct' | 'ticker';
@@ -29,38 +39,52 @@ export interface ScanParams {
 function applyParams(rows: ScreenerRow[], p: ScanParams): ScreenerRow[] {
   let out = [...rows];
   if (p.band && p.band !== 'all') out = out.filter((r) => r.band === p.band);
-  if (p.sector && p.sector !== 'all') out = out.filter((r) => r.sector === p.sector);
+  // sector 入参可能是契约 sector_id（live）或板块名（mock）：双向匹配
+  if (p.sector && p.sector !== 'all') out = out.filter((r) => r.sector === p.sector || r.sectorId === p.sector);
   if (p.minScore !== undefined) out = out.filter((r) => r.strengthScore >= p.minScore!);
   const sort = p.sort ?? 'score';
   const dir = p.order === 'asc' ? 1 : -1;
   out.sort((a, b) => {
     if (sort === 'ticker') return a.ticker.localeCompare(b.ticker) * dir;
-    if (sort === 'changePct') return (a.changePct - b.changePct) * dir;
+    if (sort === 'changePct') return ((a.changePct ?? 0) - (b.changePct ?? 0)) * dir;
     return (a.strengthScore - b.strengthScore) * dir;
   });
   return out;
 }
 
-/** 契约 StrengthRow（snake_case）→ UI ScreenerRow；契约缺失字段不编造（见 AUDIT-live.md） */
+/**
+ * 契约 StrengthRow（snake_case）→ UI ScreenerRow；契约缺失字段不编造（见 AUDIT-live.md）。
+ * 关键对齐：change_pct（非 changePct/change_percent）· sector_name/sector_id ·
+ * 分项 = 契约周期/质量分 score_short/score_mid/score_long/breakout_quality_score（subscoreDims 携带真实标签）。
+ */
 function mapScanRow(r: Record<string, unknown>): ScreenerRow {
-  const score = pickN(r, 'strengthScore', 'final_score') ?? 0;
+  const score = pickN(r, 'strengthScore', 'final_score', 'strength_score', 'score') ?? 0;
   const band: StrengthBand = score >= 85 ? 'strong' : score >= 60 ? 'mid' : 'weak';
+  const dims: ScreenerSubscoreDim[] = [
+    { key: 'score_short', label: '短期', value: pickN(r, 'score_short') },
+    { key: 'score_mid', label: '中期', value: pickN(r, 'score_mid') },
+    { key: 'score_long', label: '长期', value: pickN(r, 'score_long') },
+    { key: 'breakout_quality_score', label: '突破质量', value: pickN(r, 'breakout_quality_score') },
+  ];
   return {
     ticker: pickS(r, 'ticker') ?? '',
     name: pickS(r, 'name') ?? '',
-    sector: pickS(r, 'sector') ?? '',
+    sector: pickS(r, 'sector_name', 'primary_sector_name', 'sector') ?? '',
+    sectorId: pickS(r, 'sector_id', 'primary_sector_id') ?? undefined,
     price: pickN(r, 'price') ?? 0,
-    changePct: pickN(r, 'changePct', 'change_percent') ?? 0,
+    // 契约键为 change_pct；缺失如实为 null（UI 显「—」，不显 +0.00%）
+    changePct: pickN(r, 'changePct', 'change_pct', 'change_percent'),
     strengthScore: score,
     band,
-    // 契约无 trend/momentum/volume/volatility 四维子分：以周期分近似（注释如实标注）
+    // 兼容槽位（消费层优先 subscoreDims；此处仅按周期分近似填充，注释如实标注）
     subscores: {
-      trend: pickN(r, 'score_long') ?? 0,
-      momentum: pickN(r, 'score_short') ?? 0,
-      volume: pickN(r, 'score_mid') ?? 0,
-      volatility: pickN(r, 'breakout_quality_score') ?? 0,
+      trend: dims[2].value ?? 0,
+      momentum: dims[0].value ?? 0,
+      volume: dims[1].value ?? 0,
+      volatility: dims[3].value ?? 0,
     },
-    sparkline: [], // 契约 StrengthRow 无 sparkline
+    subscoreDims: dims,
+    sparkline: [], // 契约 StrengthRow 无 sparkline（行展开按需拉日 K，见 RowExpansion）
   };
 }
 
@@ -76,42 +100,101 @@ function liveScan(params: ScanParams): Promise<ScreenerRow[]> {
     min_avg_dollar_volume: params.min_avg_dollar_volume,
     include_options: params.include_options,
   });
-  return get(`/strength/scan${qs ? `?${qs}` : ''}`).then((d) => applyParams(unwrap(d, 'rows').map(mapScanRow), params));
+  return get(`/strength/scan${qs ? `?${qs}` : ''}`).then((d) => applyParams(unwrap(d, 'rows', 'results').map(mapScanRow), params));
 }
 
-/** 契约 /strength/market（market_regime 六维分）→ UI MarketStrength（直读 snake/camel，缺失不编造） */
-function mapMarket(d: unknown): MarketStrength {
-  const r = asRec(d);
-  const regime = asRec(r.market_regime);
+/** 契约 market_regime（六维分 + label + warnings）→ MarketRegimeInfo；缺失如实 null */
+function mapRegime(env: Rec): MarketRegimeInfo | null {
+  const regime = asRec(env.market_regime);
+  if (Object.keys(regime).length === 0) return null;
   return {
-    avgScore: pickN(r, 'avgScore', 'avg_score') ?? pickN(regime, 'index_trend_score') ?? 0,
-    ge85Count: pickN(r, 'ge85Count', 'ge85_count') ?? 0,
-    histogram: Array.isArray(r.histogram) ? (r.histogram as number[]) : [],
+    score: pickN(regime, 'score', 'partial_score'),
+    label: pickS(regime, 'label'),
+    spreadLabel: pickS(regime, 'risk_on_spread_label'),
+    warnings: Array.isArray(regime.warnings)
+      ? (regime.warnings as unknown[]).filter((x): x is string => typeof x === 'string')
+      : [],
+    dims: {
+      indexTrend: pickN(regime, 'index_trend_score'),
+      momentum: pickN(regime, 'market_momentum_score'),
+      breadth: pickN(regime, 'market_breadth_score'),
+      volume: pickN(regime, 'market_volume_score'),
+      riskAppetite: pickN(regime, 'risk_appetite_score'),
+      riskOnSpread: pickN(regime, 'risk_on_spread_score'),
+    },
+    asOf: pickS(env, 'as_of') ?? pickS(regime, 'as_of'),
   };
 }
 
-/** 契约 /strength/profiles → UI StrengthProfile[]（解包 + 权重容错） */
+/** 契约 /strength/market = {as_of, market_regime:{…}} → UI MarketStrength（直读真实六维，缺失不编造） */
+function mapMarket(d: unknown): MarketStrength {
+  const r = asRec(d);
+  const regime = mapRegime(r);
+  return {
+    // 契约无全市场均分/直方图：avgScore 回退 regime 综合分（页面注释口径），histogram 留空 → UI 隐藏参照
+    avgScore: pickN(r, 'avgScore', 'avg_score') ?? regime?.score ?? 0,
+    ge85Count: pickN(r, 'ge85Count', 'ge85_count') ?? 0,
+    histogram: Array.isArray(r.histogram) ? (r.histogram as number[]) : [],
+    ...(regime ? { regime } : {}),
+  };
+}
+
+/** 契约 profile 枚举 → 中文名（与 screener PROFILE_CN 同口径） */
+const PROFILE_NAME_CN: Record<string, string> = {
+  conservative: '稳健',
+  balanced: '均衡',
+  aggressive: '进取',
+};
+
+/**
+ * 契约 /strength/profiles → UI StrengthProfile[]。
+ * 真实契约 profiles 为枚举字符串数组（无 name/description/weights）——不编造：
+ * name 用枚举中文名，description 留空，weights 缺失（UI 隐藏权重条）。
+ * 对象数组形状（mock 契约扩展）保留原映射。
+ */
 function mapProfiles(d: unknown): StrengthProfile[] {
   return unwrap(d, 'profiles').map((p) => {
+    if (typeof (p as unknown) === 'string') {
+      const id = p as unknown as string;
+      return { id, name: PROFILE_NAME_CN[id] ?? id, description: '' };
+    }
     const w = asRec(p.weights);
+    const hasW = ['trend', 'momentum', 'volume', 'volatility'].some((k) => pickN(w, k) !== null);
     return {
       id: pickS(p, 'id') ?? '',
       name: pickS(p, 'name') ?? '',
       description: pickS(p, 'description') ?? '',
-      weights: {
-        trend: pickN(w, 'trend') ?? 0,
-        momentum: pickN(w, 'momentum') ?? 0,
-        volume: pickN(w, 'volume') ?? 0,
-        volatility: pickN(w, 'volatility') ?? 0,
-      },
+      ...(hasW
+        ? {
+            weights: {
+              trend: pickN(w, 'trend') ?? 0,
+              momentum: pickN(w, 'momentum') ?? 0,
+              volume: pickN(w, 'volume') ?? 0,
+              volatility: pickN(w, 'volatility') ?? 0,
+            },
+          }
+        : {}),
     };
   });
+}
+
+/** 契约 sectors:[{id,name}]（中文名）→ SectorOption[]；live 板块过滤下发 id */
+function mapSectors(d: unknown): SectorOption[] {
+  return unwrap(d, 'sectors')
+    .map((s) => ({ id: pickS(s, 'id', 'sector_id') ?? '', name: pickS(s, 'name') ?? '' }))
+    .filter((s) => s.id !== '' && s.name !== '');
 }
 
 export const strengthApi = {
   market: (): Promise<MarketStrength> => mockOr(() => fx.getMarketStrength(), () => get('/strength/market').then(mapMarket)),
   profiles: (): Promise<StrengthProfile[]> =>
     mockOr(() => fx.getStrengthProfiles(), () => get('/strength/profiles').then(mapProfiles)),
+  /** profiles + 板块字典一次取齐（mock 无板块字典 → sectors:[]，消费层回退扫描行 sector 名） */
+  profilesMeta: (): Promise<StrengthProfilesMeta> =>
+    mockOr(
+      () => ({ profiles: fx.getStrengthProfiles(), sectors: [] }),
+      () => get('/strength/profiles').then((d) => ({ profiles: mapProfiles(d), sectors: mapSectors(d) })),
+    ),
   scan: (params: ScanParams = {}): Promise<ScreenerRow[]> =>
     mockOr(() => applyParams(fx.runStrengthScan(), params), () => liveScan(params)),
 };

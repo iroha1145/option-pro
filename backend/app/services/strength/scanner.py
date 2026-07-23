@@ -15,6 +15,7 @@ import pandas as pd
 import yfinance as yf
 
 from app.config import get_settings
+from app.services import massive
 from app.services import yahoo
 from app.services.cache import cache
 from app.services.sectors import SECTORS
@@ -523,7 +524,87 @@ def _has_usable_history(df: pd.DataFrame, tickers: list[str] | tuple[str, ...]) 
     return any(not _slice_ticker(df, ticker).empty for ticker in tickers)
 
 
+def _period_calendar_days(period: str) -> int:
+    """yfinance 周期串 → 日历天数(多留缓冲覆盖节假日),解析失败按 1y。"""
+    text = str(period or "1y").strip().lower()
+    try:
+        if text.endswith("mo"):
+            return max(20, int(float(text[:-2]) * 31) + 10)
+        if text.endswith("y"):
+            return max(60, int(float(text[:-1]) * 365) + 40)
+        if text.endswith("d"):
+            return max(5, int(float(text[:-1])) + 5)
+    except ValueError:
+        pass
+    return 405
+
+
+def _download_massive_history(
+    tickers: list[str],
+    period: str,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Massive 主源日线(复权,正股专用)。
+
+    返回 (MultiIndex frame, 未覆盖代码);指数/期货等不支持形态直接进
+    未覆盖名单,由既有 Yahoo → 公开源链兜底。未配置密钥时整体跳过。
+    """
+    if not massive.configured():
+        return pd.DataFrame(), list(tickers)
+    end = date.today()
+    start_s = (end - timedelta(days=_period_calendar_days(period))).isoformat()
+    end_s = end.isoformat()
+
+    def _one(ticker: str) -> tuple[str, list[dict[str, Any]] | None]:
+        symbol = massive.to_symbol(ticker)
+        if symbol is None or symbol.startswith("I:"):
+            return ticker, None
+        try:
+            bars = massive.ticker_range(symbol, 1, "day", start_s, end_s, adjusted=True)
+        except massive.MassiveError:
+            return ticker, None
+        return ticker, bars or None
+
+    frames: dict[tuple[str, str], pd.Series] = {}
+    missing: list[str] = []
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for ticker, bars in pool.map(_one, tickers):
+            rows = [bar for bar in (bars or []) if isinstance(bar.get("t"), (int, float))]
+            if not rows:
+                missing.append(ticker)
+                continue
+            index = pd.DatetimeIndex(
+                [
+                    pd.Timestamp(bar["t"], unit="ms", tz="UTC")
+                    .tz_convert("America/New_York")
+                    .normalize()
+                    .tz_localize(None)
+                    for bar in rows
+                ]
+            )
+            for field, key in (
+                ("Open", "o"),
+                ("High", "h"),
+                ("Low", "l"),
+                ("Close", "c"),
+                ("Volume", "v"),
+            ):
+                frames[(ticker, field)] = pd.Series([bar.get(key) for bar in rows], index=index)
+    if not frames:
+        return pd.DataFrame(), missing
+    frame = pd.DataFrame(frames)
+    frame.columns = pd.MultiIndex.from_tuples(frame.columns)
+    return frame.sort_index(), missing
+
+
 def _download_history(tickers: list[str], period: str = "1y") -> pd.DataFrame:
+    # Massive 为主源;未覆盖(未配置/指数/单票无数据)的余量走 Yahoo 链
+    try:
+        massive_frame, massive_missing = _download_massive_history(tickers, period)
+    except Exception:
+        massive_frame, massive_missing = pd.DataFrame(), list(tickers)
+    massive_used = not massive_frame.empty
+    yahoo_targets = massive_missing if massive_used else list(tickers)
+
     session = getattr(yahoo, "_yf_session", None)
     kwargs: dict[str, Any] = {
         "period": period,
@@ -538,27 +619,37 @@ def _download_history(tickers: list[str], period: str = "1y") -> pd.DataFrame:
     # A fresh yfinance session can occasionally return an immediate empty
     # frame while its cookie/crumb state is being initialized. Retry that
     # transient shape once before falling back or reporting unavailability.
-    for _attempt in range(_YAHOO_HISTORY_DOWNLOAD_ATTEMPTS):
-        try:
-            candidate = download_in_bounded_batches(
-                yf.download,
-                tickers=tickers,
-                **kwargs,
-            )
-        except Exception:
-            candidate = pd.DataFrame()
-        if isinstance(candidate, pd.DataFrame) and _has_usable_history(candidate, tickers):
-            primary = candidate
-            break
+    if yahoo_targets:
+        for _attempt in range(_YAHOO_HISTORY_DOWNLOAD_ATTEMPTS):
+            try:
+                candidate = download_in_bounded_batches(
+                    yf.download,
+                    tickers=yahoo_targets,
+                    **kwargs,
+                )
+            except Exception:
+                candidate = pd.DataFrame()
+            if isinstance(candidate, pd.DataFrame) and _has_usable_history(candidate, yahoo_targets):
+                primary = candidate
+                break
+
+    yahoo_used = not primary.empty
+    if massive_used:
+        primary = _merge_history(massive_frame, primary) if yahoo_used else massive_frame
+    base_label = " + ".join(
+        label
+        for label, used in (("Massive", massive_used), ("Yahoo/yfinance", yahoo_used))
+        if used
+    ) or "Yahoo/yfinance"
 
     missing = [ticker for ticker in tickers if _slice_ticker(primary, ticker).empty]
     if not primary.empty and not missing:
         return _attach_history_status(
             primary,
             _history_status(
-                provider="Yahoo/yfinance",
+                provider=base_label,
                 status="active",
-                message="Yahoo/yfinance 日线价格、成交量与技术指标输入",
+                message=f"{base_label} 日线价格、成交量与技术指标输入",
             ),
         )
 
@@ -593,13 +684,13 @@ def _download_history(tickers: list[str], period: str = "1y") -> pd.DataFrame:
 
     if not merged.empty and providers:
         still_missing = [ticker for ticker in tickers if _slice_ticker(merged, ticker).empty]
-        provider = "Yahoo/yfinance + " + " + ".join(providers)
+        provider = f"{base_label} + " + " + ".join(providers)
         status = "active" if not still_missing else "degraded"
         source_label = " + ".join(providers)
         message = (
-            f"Yahoo/yfinance 部分或全部数据不可用，已启用 {source_label} 日线兜底"
+            f"{base_label} 部分或全部数据不可用，已启用 {source_label} 日线兜底"
             if primary.empty
-            else f"Yahoo/yfinance 缺少部分标的，已用 {source_label} 日线补齐"
+            else f"{base_label} 缺少部分标的，已用 {source_label} 日线补齐"
         )
         return _attach_history_status(
             merged,
@@ -616,9 +707,9 @@ def _download_history(tickers: list[str], period: str = "1y") -> pd.DataFrame:
         fallback_missing = list(dict.fromkeys([*marketdata_missing, *stooq_missing, *finnhub_missing]))
         return _empty_history_with_status(
             _history_status(
-                provider="Yahoo/yfinance",
+                provider=base_label,
                 status="degraded",
-                message="Yahoo/yfinance 数据不可用，公开日线兜底源也未拿到可用数据",
+                message=f"{base_label} 数据不可用，公开日线兜底源也未拿到可用数据",
                 missing_symbols=fallback_missing or tickers,
             )
         )
@@ -626,9 +717,9 @@ def _download_history(tickers: list[str], period: str = "1y") -> pd.DataFrame:
     return _attach_history_status(
         primary,
         _history_status(
-            provider="Yahoo/yfinance",
+            provider=base_label,
             status="degraded",
-            message="Yahoo/yfinance 缺少部分标的，公开日线兜底源未拿到可用数据",
+            message=f"{base_label} 缺少部分标的，公开日线兜底源未拿到可用数据",
             missing_symbols=missing,
         ),
     )

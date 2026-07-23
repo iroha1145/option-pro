@@ -7,7 +7,7 @@
  */
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import type { StrengthProfile } from '@/api/types';
+import type { SectorOption, StrengthProfile } from '@/api/types';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import Segmented from '@/components/shared/Segmented';
@@ -220,6 +220,8 @@ interface FilterWorkbenchProps {
   draft: ScanFilters;
   onChange: (f: ScanFilters) => void;
   universe: { tierCounts: Record<TierFilter, number>; sectors: string[]; count: number };
+  /** 板块选项：live 来自 /strength/profiles sectors（id+中文名，下发 id）；mock 回退扫描行 sector 名（id=name） */
+  sectorOptions: SectorOption[];
   presets: StrengthProfile[] | null;
   presetsFailed: boolean;
   scanning: boolean;
@@ -234,6 +236,7 @@ export default function FilterWorkbench({
   draft,
   onChange,
   universe,
+  sectorOptions,
   presets,
   presetsFailed,
   scanning,
@@ -242,14 +245,14 @@ export default function FilterWorkbench({
   onScan,
 }: FilterWorkbenchProps) {
   const [showAllSectors, setShowAllSectors] = useState(false);
-  const visibleSectors = showAllSectors ? universe.sectors : universe.sectors.slice(0, SECTOR_COLLAPSE_AT);
-  const hiddenCount = universe.sectors.length - visibleSectors.length;
+  const visibleSectors = showAllSectors ? sectorOptions : sectorOptions.slice(0, SECTOR_COLLAPSE_AT);
+  const hiddenCount = sectorOptions.length - visibleSectors.length;
 
   const patch = (p: Partial<ScanFilters>) => onChange({ ...draft, ...p });
 
-  const toggleSector = (s: string) => {
-    const has = draft.sectors.includes(s);
-    patch({ sectors: has ? draft.sectors.filter((x) => x !== s) : [...draft.sectors, s] });
+  const toggleSector = (id: string) => {
+    const has = draft.sectors.includes(id);
+    patch({ sectors: has ? draft.sectors.filter((x) => x !== id) : [...draft.sectors, id] });
   };
 
   const applyPreset = (id: string) => {
@@ -257,7 +260,12 @@ export default function FilterWorkbench({
       patch({ presetId: null, minScore: null });
       return;
     }
-    // 预设策略 → 偏好映射 + 强度下限（契约 profile 枚举）
+    // 契约 /strength/profiles 枚举（conservative/balanced/aggressive）→ 直接落偏好
+    if (id === 'conservative' || id === 'balanced' || id === 'aggressive') {
+      patch({ presetId: id, profile: id, minScore: null });
+      return;
+    }
+    // mock 预设策略 → 偏好映射 + 强度下限
     if (id === 'breakout') patch({ presetId: id, profile: 'aggressive', minScore: 70 });
     else if (id === 'lowvol') patch({ presetId: id, profile: 'conservative', minScore: null });
     else patch({ presetId: id, profile: 'balanced', minScore: null });
@@ -358,7 +366,7 @@ export default function FilterWorkbench({
       <motion.div variants={row} className="flex flex-wrap items-end gap-x-6 gap-y-3">
         <div className="min-w-0 flex-1">
           <FieldLabel>板块（多选）</FieldLabel>
-          {universe.sectors.length === 0 ? (
+          {sectorOptions.length === 0 ? (
             <div className="flex gap-2" aria-hidden="true">
               {Array.from({ length: 5 }, (_, i) => (
                 <span key={i} className="skeleton-shimmer h-7 w-16 rounded-xs" />
@@ -367,11 +375,11 @@ export default function FilterWorkbench({
           ) : (
             <div className="flex flex-wrap items-center gap-1.5">
               {visibleSectors.map((s) => {
-                const active = draft.sectors.includes(s);
+                const active = draft.sectors.includes(s.id);
                 return (
                   <motion.button
-                    key={s}
-                    onClick={() => toggleSector(s)}
+                    key={s.id}
+                    onClick={() => toggleSector(s.id)}
                     animate={{ scale: active ? 1.04 : 1 }}
                     transition={SPRING_POP}
                     aria-pressed={active}
@@ -382,7 +390,7 @@ export default function FilterWorkbench({
                         : 'border-line bg-card text-ink-500 hover:border-brand-400/60 hover:text-brand-600',
                     )}
                   >
-                    {s}
+                    {s.name}
                   </motion.button>
                 );
               })}
@@ -394,7 +402,7 @@ export default function FilterWorkbench({
                   +{hiddenCount}
                 </button>
               )}
-              {showAllSectors && universe.sectors.length > SECTOR_COLLAPSE_AT && (
+              {showAllSectors && sectorOptions.length > SECTOR_COLLAPSE_AT && (
                 <button
                   onClick={() => setShowAllSectors(false)}
                   className="flex h-7 items-center rounded-xs px-1.5 text-caption text-ink-400 transition-colors hover:text-ink-600"

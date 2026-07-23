@@ -1,8 +1,29 @@
 /** 催化剂域：status / feed / news / tickers / calendar / hotspots / focus-cycles */
 import { get, post, mockOr, toQuery } from '../client';
-import { asRec, pickN, pickS, unwrap } from '../live';
+import { asRec, pickB, pickN, pickS, unwrap } from '../live';
 import * as fx2 from '@/mocks/fixtures2';
 import type { CatalystsStatus, FocusCycle, Hotspot, NewsItem, NewsSentiment } from '../types';
+
+/**
+ * 72h 窗口逐股催化剂计数（选股页行内徽标消费）
+ * - count = 返回条目数（契约 limit=5 截断，hasMore=true 时 UI 显「5+」）
+ * - pos/neg = 契约 summary.bullish/bearish（窗口级真实计数）；
+ *   契约无「中性」计数 → neu 恒 0 不编造，pending（待分析）如实透传
+ */
+export interface TickerCatalystSummary {
+  count: number;
+  hasMore: boolean;
+  pos: number;
+  neg: number;
+  neu: number;
+  pending: number | null;
+  latestAt: string | null;
+  latestTitle: string | null;
+}
+
+const BATCH_WINDOW_HOURS = 72;
+const BATCH_MAX_TICKERS = 20; // 匿名上限（契约 tickers/batch）
+const BATCH_ITEM_LIMIT = 5;
 
 export interface FeedParams {
   page?: number;
@@ -89,6 +110,72 @@ export const catalystsApi = {
           const r = asRec(d);
           const perTicker = asRec(r.results ?? r.tickers ?? d);
           return { accepted: pickN(r, 'accepted') ?? (Object.keys(perTicker).length || tickers.length) };
+        }),
+    ),
+  /**
+   * 72h 逐股计数（一页 ≤20 只一次 POST；禁止逐行请求）
+   * live：POST /catalysts/tickers/batch {tickers, window_hours:72, limit:5, include_neutral, include_unanalyzed}
+   *       → {results:{TICKER:{items, has_more, summary:{bullish,bearish,pending}}}}
+   * mock：本地 fixtures 逐股聚合（72h 截断，情绪计数），不发 HTTP
+   */
+  batchSummaries72h: (tickers: string[]): Promise<Record<string, TickerCatalystSummary>> =>
+    mockOr(
+      () => {
+        const cutoff = Date.now() - BATCH_WINDOW_HOURS * 3600_000;
+        const out: Record<string, TickerCatalystSummary> = {};
+        for (const t of tickers) {
+          const items = fx2.getNewsByTicker(t).filter((n) => new Date(n.publishedAt).getTime() >= cutoff);
+          const pos = items.filter((n) => n.sentiment === 'positive').length;
+          const neg = items.filter((n) => n.sentiment === 'negative').length;
+          out[t] = {
+            count: items.length,
+            hasMore: false,
+            pos,
+            neg,
+            neu: items.length - pos - neg,
+            pending: null,
+            latestAt: items[0]?.publishedAt ?? null,
+            latestTitle: items[0]?.title ?? null,
+          };
+        }
+        return out;
+      },
+      () =>
+        post('/catalysts/tickers/batch', {
+          tickers: tickers.slice(0, BATCH_MAX_TICKERS),
+          window_hours: BATCH_WINDOW_HOURS,
+          limit: BATCH_ITEM_LIMIT,
+          include_neutral: true,
+          include_unanalyzed: true,
+        }).then((d) => {
+          const results = asRec(asRec(d).results);
+          const out: Record<string, TickerCatalystSummary> = {};
+          for (const [t, raw] of Object.entries(results)) {
+            if (!raw || typeof raw !== 'object') continue;
+            const r = asRec(raw);
+            const items = unwrap(r, 'items');
+            const sum = asRec(r.summary);
+            let latestAt: string | null = null;
+            let latestTitle: string | null = null;
+            for (const it of items) {
+              const at = pickS(it, 'published_at', 'publishedAt');
+              if (at !== null && (latestAt === null || at > latestAt)) {
+                latestAt = at;
+                latestTitle = pickS(it, 'title_zh', 'title', 'summary_zh');
+              }
+            }
+            out[t] = {
+              count: items.length,
+              hasMore: pickB(r, 'has_more', 'hasMore') ?? false,
+              pos: pickN(sum, 'bullish') ?? 0,
+              neg: pickN(sum, 'bearish') ?? 0,
+              neu: 0, // 契约 summary 无中性计数——留空优于编造
+              pending: pickN(sum, 'pending'),
+              latestAt,
+              latestTitle,
+            };
+          }
+          return out;
         }),
     ),
   calendar: (): Promise<{ date: string; items: { kind: string; label: string }[] }[]> =>

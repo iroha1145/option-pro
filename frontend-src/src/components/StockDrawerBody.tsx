@@ -42,6 +42,10 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'news', label: '新闻' },
 ];
 
+/** live 缺失数值字段（类型为 number 但运行时可为 null）如实显「—」 */
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const compactOr = (v: number | null | undefined): string => (isNum(v) ? fmtCompact(v) : '—');
+
 /* ---------------- S0 头部 ---------------- */
 function PriceHeader({ detail }: { detail: StockDetail }) {
   const { data: market } = usePolling(() => marketApi.status(), 60_000, []);
@@ -97,13 +101,15 @@ function PriceHeader({ detail }: { detail: StockDetail }) {
           </p>
           <div className="flex items-center gap-2 pb-1.5">
             <ChangeBadge value={detail.changePct} />
-            <span className={cn('font-mono text-data-m tnum', detail.change >= 0 ? 'text-up-700' : 'text-down-700')}>
-              {detail.change >= 0 ? '+' : '−'}{fmtPrice(Math.abs(detail.change))}
-            </span>
+            {isNum(detail.change) && (
+              <span className={cn('font-mono text-data-m tnum', detail.change >= 0 ? 'text-up-700' : 'text-down-700')}>
+                {detail.change >= 0 ? '+' : '−'}{fmtPrice(Math.abs(detail.change))}
+              </span>
+            )}
           </div>
         </div>
         <p className="pb-1.5 text-right font-mono text-micro text-ink-500 tnum">
-          成交量 {fmtCompact(detail.volume)} · 市值 ${fmtCompact(detail.marketCap)}
+          成交量 {compactOr(detail.volume)} · 市值 {isNum(detail.marketCap) ? `$${fmtCompact(detail.marketCap)}` : '—'}
         </p>
       </div>
 
@@ -203,7 +209,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
         variant="error"
         image="/empty-chart.svg"
         title={is404 ? '代码不存在' : '该标的快照不可用'}
-        description={is404 ? `${ticker} 不在当前代码池中` : '接口未覆盖此能力，留空而非编造'}
+        description={is404 ? `${ticker} 不在当前代码池中` : '该标的不在焦点池与扫描快照内，接口未覆盖 · 留空优于编造'}
         action={
           is404 ? (
             <Link
@@ -225,6 +231,14 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
       />
     );
   }
+
+  /* 概览接口未覆盖（焦点池外）：基础行情来自强度扫描行快照，如实提示口径 */
+  const scopeBanner = detail.snapshotScope === 'strength-row' && (
+    <p className="mt-3 flex items-start gap-2 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption leading-[18px] text-warn-600" role="status">
+      <Icon name="flag" size={13} className="mt-px shrink-0" />
+      该标的不在焦点池 · 仅提供扫描快照基础行情（价/涨跌/市值），其余板块如实留空
+    </p>
+  );
 
   const tabs = (
     <div className={layout === 'page' ? 'mt-8' : 'mt-6'}>
@@ -258,6 +272,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
     return (
       <div>
         <PriceHeader detail={detail} />
+        {scopeBanner}
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
           <div className="lg:col-span-8">
             <div className="card-surface p-5">
@@ -278,6 +293,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
   return (
     <div className="px-5 pb-8 pt-5 md:px-6">
       <PriceHeader detail={detail} />
+      {scopeBanner}
       <div className="mt-5">
         <KlineChart ticker={detail.ticker} prevClose={detail.prevClose} height={isMobile ? 260 : 320} />
       </div>

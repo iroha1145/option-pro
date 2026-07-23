@@ -17,12 +17,19 @@ function HeroCell({ label, children }: { label: string; children: React.ReactNod
   );
 }
 
-/** 分析不可用原因 → 中文（未知码原样展示，不猜测语义） */
-const ANALYSIS_REASON_CN: Record<string, { label: string; tone: 'muted' | 'down' }> = {
+/** 分析不可用原因 → 中文（对齐 personal_service.analysis_availability 的真实原因码；未知码给通用文案） */
+const ANALYSIS_REASON_CN: Record<string, { label: string; tone: 'muted' | 'down' | 'warn' }> = {
   owner_login_required: { label: '需 Owner 登录', tone: 'muted' },
+  not_configured: { label: '未配置模型密钥', tone: 'down' },
   ai_not_configured: { label: '未配置模型密钥', tone: 'down' },
+  settings_unavailable: { label: '运行设置不可用', tone: 'down' },
   read_only_mode: { label: '只读模式', tone: 'muted' },
   manual_analysis_disabled: { label: '手动分析已关闭', tone: 'muted' },
+  worker_unavailable: { label: '后台 worker 不可用', tone: 'down' },
+  daily_token_limit: { label: '今日 Token 预算已用完', tone: 'warn' },
+  daily_budget_usd_reached: { label: '今日预算已用完', tone: 'warn' },
+  analysis_in_progress: { label: '分析任务进行中', tone: 'warn' },
+  cooldown_active: { label: '冷却中', tone: 'warn' },
   catalyst_disabled: { label: '催化剂模块未启用', tone: 'down' },
 };
 

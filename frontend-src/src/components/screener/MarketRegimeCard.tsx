@@ -1,10 +1,12 @@
 /**
  * 市场形态 6 维条（契约 market_regime 字段对照）
  * index_trend / momentum / breadth / volume / risk_appetite / risk_on_spread
- * grow-bar 700ms 错峰 45ms + 毛玻璃 tooltip；值由 strengthApi.market() 全市场强度分布推导（确定性变换，不编造随机量）
+ * live：直读 /strength/market 的 market_regime 真实六维分 + 综合分/label/warnings（不再由分布推导）
+ * mock：无 regime 字段时回退直方图确定性推导（不编造随机量）
+ * grow-bar 700ms 错峰 45ms + 毛玻璃 tooltip
  */
 import { motion } from 'framer-motion';
-import type { MarketStrength } from '@/api/types';
+import type { MarketRegimeDims, MarketRegimeInfo, MarketStrength } from '@/api/types';
 import { useCountUp } from '@/hooks/useCountUp';
 import SourceNote from '@/components/shared/SourceNote';
 
@@ -14,11 +16,31 @@ interface RegimeDim {
   key: string;
   label: string;
   en: string;
-  value: number;
+  /** null = 契约缺失（空轨道 + 「—」，不编造） */
+  value: number | null;
   hint: string;
 }
 
-/** 由 10 桶直方图推导六维（0–100） */
+/** live：契约 market_regime 六维 → 展示维度（字段名如实标注） */
+function liveDims(r: MarketRegimeInfo): RegimeDim[] {
+  const d: MarketRegimeDims = r.dims;
+  return [
+    { key: 'index_trend', label: '指数趋势', en: 'INDEX TREND', value: d.indexTrend, hint: '契约 index_trend_score：指数层面趋势健康度。' },
+    { key: 'momentum', label: '市场动量', en: 'MOMENTUM', value: d.momentum, hint: '契约 market_momentum_score：动量资金活跃度。' },
+    { key: 'breadth', label: '市场广度', en: 'BREADTH', value: d.breadth, hint: '契约 market_breadth_score：上涨扩散广度。' },
+    { key: 'volume', label: '量能配合', en: 'VOLUME', value: d.volume, hint: '契约 market_volume_score：量能对趋势的确认度。' },
+    { key: 'risk_appetite', label: '风险偏好', en: 'RISK APPETITE', value: d.riskAppetite, hint: '契约 risk_appetite_score：资金追高风险意愿。' },
+    {
+      key: 'risk_on_spread',
+      label: '强弱价差',
+      en: 'RISK-ON SPREAD',
+      value: d.riskOnSpread,
+      hint: `契约 risk_on_spread_score：风险偏好强弱价差${r.spreadLabel ? `（${r.spreadLabel}）` : ''}。`,
+    },
+  ];
+}
+
+/** mock：由 10 桶直方图推导六维（0–100）——live 无直方图时不会走到这里 */
 function deriveRegime(m: MarketStrength): RegimeDim[] {
   const h = m.histogram;
   const total = Math.max(1, h.reduce((s, n) => s + n, 0));
@@ -49,22 +71,26 @@ function deriveRegime(m: MarketStrength): RegimeDim[] {
 }
 
 function RegimeBar({ dim, index }: { dim: RegimeDim; index: number }) {
-  const v = useCountUp(dim.value, 900);
+  const v = useCountUp(dim.value ?? 0, 900);
   return (
     <div className="group relative">
       <div className="flex items-center gap-3">
         <span className="w-16 shrink-0 text-caption text-ink-500">{dim.label}</span>
         <span className="relative h-1.5 flex-1 overflow-hidden rounded-pill bg-line" role="presentation">
-          <motion.span
-            className="block h-full origin-left rounded-pill bg-brand-500"
-            initial={{ scaleX: 0 }}
-            whileInView={{ scaleX: 1 }}
-            viewport={{ once: true, amount: 0.4 }}
-            transition={{ duration: 0.7, ease: EASE_PAPER, delay: index * 0.045 }}
-            style={{ width: `${dim.value}%` }}
-          />
+          {dim.value !== null && (
+            <motion.span
+              className="block h-full origin-left rounded-pill bg-brand-500"
+              initial={{ scaleX: 0 }}
+              whileInView={{ scaleX: 1 }}
+              viewport={{ once: true, amount: 0.4 }}
+              transition={{ duration: 0.7, ease: EASE_PAPER, delay: index * 0.045 }}
+              style={{ width: `${Math.max(0, Math.min(100, dim.value))}%` }}
+            />
+          )}
         </span>
-        <span className="w-8 shrink-0 text-right font-mono text-caption text-ink-800 tnum">{Math.round(v)}</span>
+        <span className="w-8 shrink-0 text-right font-mono text-caption text-ink-800 tnum">
+          {dim.value !== null ? Math.round(v) : '—'}
+        </span>
       </div>
       {/* 毛玻璃 tooltip */}
       <div className="glass pointer-events-none absolute -top-2 left-16 z-20 hidden w-56 -translate-y-full rounded-md border border-line p-3 shadow-sh-2 group-hover:block">
@@ -73,26 +99,58 @@ function RegimeBar({ dim, index }: { dim: RegimeDim; index: number }) {
           <span className="font-mono text-micro text-ink-400">{dim.en}</span>
         </p>
         <p className="mt-1.5 text-micro leading-[16px] text-ink-500">{dim.hint}</p>
-        <p className="mt-1.5 font-mono text-caption text-brand-600 tnum">{dim.value} / 100</p>
+        <p className="mt-1.5 font-mono text-caption text-brand-600 tnum">
+          {dim.value !== null ? `${Math.round(dim.value * 10) / 10} / 100` : '契约缺失 · 留空优于编造'}
+        </p>
       </div>
     </div>
   );
 }
 
 export default function MarketRegimeCard({ market }: { market: MarketStrength }) {
-  const dims = deriveRegime(market);
+  const regime = market.regime ?? null;
+  const dims = regime ? liveDims(regime) : deriveRegime(market);
   return (
     <div className="card-surface p-5">
       <div className="flex items-baseline justify-between">
         <p className="eyebrow">市场形态 · MARKET REGIME</p>
-        <span className="font-mono text-micro text-ink-300 tnum">6 维</span>
+        {regime && regime.score !== null ? (
+          <span className="font-mono text-data-m text-ink-900 tnum">{regime.score}</span>
+        ) : (
+          <span className="font-mono text-micro text-ink-300 tnum">6 维</span>
+        )}
       </div>
+      {regime && (regime.label || regime.spreadLabel) && (
+        <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {regime.label && (
+            <span className="rounded-xs bg-brand-50 px-1.5 py-px text-micro font-medium text-brand-700">{regime.label}</span>
+          )}
+          {regime.spreadLabel && (
+            <span className="rounded-xs border border-line bg-card-warm px-1.5 py-px text-micro text-ink-500">{regime.spreadLabel}</span>
+          )}
+        </p>
+      )}
       <div className="mt-4 space-y-3">
         {dims.map((d, i) => (
           <RegimeBar key={d.key} dim={d} index={i} />
         ))}
       </div>
-      <SourceNote className="mt-4" text="推导自全市场强度分布 · 300s 轮询" />
+      {regime && regime.warnings.length > 0 && (
+        <ul className="mt-3.5 space-y-1 border-t border-line pt-3">
+          {regime.warnings.map((w, i) => (
+            <li key={i} className="flex items-start gap-1.5 text-micro leading-[16px] text-warn-600">
+              <span className="mt-px shrink-0" aria-hidden="true">
+                ⚠
+              </span>
+              {w}
+            </li>
+          ))}
+        </ul>
+      )}
+      <SourceNote
+        className="mt-4"
+        text={regime ? '来源：/strength/market · market_regime 快照 · 300s 轮询' : '推导自全市场强度分布 · 300s 轮询'}
+      />
     </div>
   );
 }

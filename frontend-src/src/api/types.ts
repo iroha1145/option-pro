@@ -52,30 +52,77 @@ export interface MarketSignalsSummary {
   byType: { type: SignalType; label: string; today: number; avg7d: number }[];
 }
 
+/** 契约 market_regime 六维分（/strength/market · /strength/scan 同源；缺失如实为 null） */
+export interface MarketRegimeDims {
+  indexTrend: number | null;      // index_trend_score
+  momentum: number | null;        // market_momentum_score
+  breadth: number | null;         // market_breadth_score
+  volume: number | null;          // market_volume_score
+  riskAppetite: number | null;    // risk_appetite_score
+  riskOnSpread: number | null;    // risk_on_spread_score
+}
+
+export interface MarketRegimeInfo {
+  score: number | null;           // 契约 score / partial_score
+  label: string | null;           // 如「温和偏强」
+  spreadLabel: string | null;     // risk_on_spread_label
+  warnings: string[];             // 契约 warnings（如「IWM/SPY偏弱…」）
+  dims: MarketRegimeDims;
+  asOf: string | null;
+}
+
 export interface MarketStrength {
   avgScore: number;
   ge85Count: number;
-  histogram: number[];    // 10 桶（0-9 … 90-100）
+  histogram: number[];    // 10 桶（0-9 … 90-100）；live 契约无直方图 → []（UI 隐藏参照）
+  /** live 契约 market_regime 快照；mock 不填（UI 回退直方图推导） */
+  regime?: MarketRegimeInfo;
 }
 
 export type StrengthBand = 'strong' | 'mid' | 'weak';
+
+/** 扫描行分项（live 契约周期/质量分；value 缺失如实为 null，UI 显「—」） */
+export interface ScreenerSubscoreDim {
+  key: string;            // 契约字段名（score_short / score_mid / score_long / breakout_quality_score）
+  label: string;          // 中文短标签（短期 / 中期 / 长期 / 突破质量）
+  value: number | null;
+}
+
 export interface ScreenerRow {
   ticker: string;
   name: string;
   sector: string;
+  /** live 契约 sector_id（板块过滤下发用）；mock 无 id，过滤回退 sector 名 */
+  sectorId?: string;
   price: number;
-  changePct: number;
+  /** 契约 change_pct；缺失如实为 null（ChangeBadge 显「—」，不显 +0.00%） */
+  changePct: number | null;
   strengthScore: number;
   band: StrengthBand;
   subscores: { trend: number; momentum: number; volume: number; volatility: number };
+  /** live 契约分项（周期/质量分）：存在时 UI 优先消费；mock 不填，回退 subscores 四维 */
+  subscoreDims?: ScreenerSubscoreDim[];
   sparkline: number[];
+}
+
+/** 契约 /strength/profiles 的板块字典（{id,name}，name 为中文） */
+export interface SectorOption {
+  id: string;
+  name: string;
 }
 
 export interface StrengthProfile {
   id: string;
   name: string;
   description: string;
-  weights: { trend: number; momentum: number; volume: number; volatility: number };
+  /** mock 四因子权重；live 契约仅返回枚举字符串（无权重）→ 缺失时 UI 隐藏权重条 */
+  weights?: { trend: number; momentum: number; volume: number; volatility: number };
+}
+
+/** /strength/profiles 全量元数据（profiles + 板块字典；mock 无板块字典 → []） */
+export interface StrengthProfilesMeta {
+  profiles: StrengthProfile[];
+  sectors: SectorOption[];
 }
 
 /* ---------- 股票 ---------- */
@@ -96,6 +143,11 @@ export interface StockDetail extends WatchlistItem {
   pe: number | null;
   ivPercentile: number;   // 0–100
   range52w: [number, number];
+  /**
+   * live 快照口径：'strength-row' = 概览接口未覆盖（焦点池外），
+   * 由 /strength/stocks/{t} 扫描行回退的基础行情（仅价/涨跌/市值等，其余如实留空）
+   */
+  snapshotScope?: 'full' | 'strength-row';
 }
 
 export interface Candle {

@@ -31,16 +31,17 @@ export function TierHistogram({
   activeTier: TierFilter;
   onSelect: (t: TierFilter) => void;
 }) {
-  // 全市场 10 桶 → 五档
-  const ref: Record<Tier, number> | null = market
-    ? {
-        S: market.histogram[9],
-        A: market.histogram[8],
-        B: market.histogram[7],
-        C: market.histogram[6],
-        D: market.histogram.slice(0, 6).reduce((s, n) => s + n, 0),
-      }
-    : null;
+  // 全市场 10 桶 → 五档；live 契约无直方图（histogram=[]）→ 参照如实隐藏，不编造
+  const ref: Record<Tier, number> | null =
+    market && market.histogram.length >= 10
+      ? {
+          S: market.histogram[9],
+          A: market.histogram[8],
+          B: market.histogram[7],
+          C: market.histogram[6],
+          D: market.histogram.slice(0, 6).reduce((s, n) => s + n, 0),
+        }
+      : null;
   const maxHit = Math.max(1, ...TIERS.map((t) => hits?.[t] ?? 0));
   const maxRef = Math.max(1, ...TIERS.map((t) => ref?.[t] ?? 0));
 
@@ -69,20 +70,22 @@ export function TierHistogram({
               )}
             >
               <span className="font-mono text-[10px] leading-none text-ink-400 tnum">{hit}</span>
-              {/* 全市场参照（斜纹） */}
-              <motion.span
-                className="w-full max-w-[26px] rounded-t-[3px] border border-ink-300/60"
-                initial={{ scaleY: 0 }}
-                whileInView={{ scaleY: 1 }}
-                viewport={{ once: true, amount: 0.3 }}
-                transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.05 }}
-                style={{
-                  height: `${Math.max(4, (refN / maxRef) * 72)}px`,
-                  transformOrigin: 'bottom',
-                  backgroundImage: 'repeating-linear-gradient(45deg, rgba(138,148,176,.45) 0 1.2px, transparent 1.2px 4px)',
-                }}
-                aria-hidden="true"
-              />
+              {/* 全市场参照（斜纹）：live 无直方图时整列隐藏 */}
+              {ref !== null && (
+                <motion.span
+                  className="w-full max-w-[26px] rounded-t-[3px] border border-ink-300/60"
+                  initial={{ scaleY: 0 }}
+                  whileInView={{ scaleY: 1 }}
+                  viewport={{ once: true, amount: 0.3 }}
+                  transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.05 }}
+                  style={{
+                    height: `${Math.max(4, (refN / maxRef) * 72)}px`,
+                    transformOrigin: 'bottom',
+                    backgroundImage: 'repeating-linear-gradient(45deg, rgba(138,148,176,.45) 0 1.2px, transparent 1.2px 4px)',
+                  }}
+                  aria-hidden="true"
+                />
+              )}
               {/* 命中（实心） */}
               <motion.span
                 className={cn('-mt-1 w-full max-w-[26px] rounded-t-[3px]', active ? 'bg-brand-600' : 'bg-brand-600/85')}
@@ -104,7 +107,12 @@ export function TierHistogram({
           </span>
         ))}
       </div>
-      <HatchLegend className="mt-3.5" actual="本次命中" estimate="全市场参照" />
+      {ref !== null ? (
+        <HatchLegend className="mt-3.5" actual="本次命中" estimate="全市场参照" />
+      ) : (
+        /* 契约无全市场直方图：只标注命中分布，参照留空优于编造 */
+        <p className="mt-3.5 text-micro text-ink-400">仅本次命中分布 · 契约未提供全市场参照</p>
+      )}
     </div>
   );
 }
@@ -132,29 +140,37 @@ export function MethodCard({ profile }: { profile: StrengthProfile | null }) {
             transition={{ duration: 0.26, ease: EASE_PAPER }}
             className="overflow-hidden"
           >
-            <div className="mt-4 space-y-2.5">
-              {SUBSCORE_META.map(({ key, label }, i) => {
-                const w = profile?.weights[key] ?? 25;
-                return (
-                  <div key={key} className="grid grid-cols-[40px_1fr_40px] items-center gap-2.5">
-                    <span className="text-caption text-ink-500">{label}</span>
-                    <span className="h-1.5 overflow-hidden rounded-pill bg-line" role="presentation">
-                      <motion.span
-                        className="block h-full origin-left rounded-pill bg-brand-500"
-                        initial={{ scaleX: 0 }}
-                        whileInView={{ scaleX: 1 }}
-                        viewport={{ once: true, amount: 0.4 }}
-                        transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.05 }}
-                        style={{ width: `${w}%` }}
-                      />
-                    </span>
-                    <span className="text-right font-mono text-caption text-ink-800 tnum">{w}%</span>
-                  </div>
-                );
-              })}
-            </div>
+            {profile && !profile.weights ? (
+              /* live 契约 /strength/profiles 仅返回枚举，无权重明细：隐藏权重条，不编造默认 25% */
+              <p className="mt-4 text-caption leading-[18px] text-ink-400">契约未提供权重明细 · 留空优于编造</p>
+            ) : (
+              <div className="mt-4 space-y-2.5">
+                {SUBSCORE_META.map(({ key, label }, i) => {
+                  const w = profile?.weights?.[key] ?? 25;
+                  return (
+                    <div key={key} className="grid grid-cols-[40px_1fr_40px] items-center gap-2.5">
+                      <span className="text-caption text-ink-500">{label}</span>
+                      <span className="h-1.5 overflow-hidden rounded-pill bg-line" role="presentation">
+                        <motion.span
+                          className="block h-full origin-left rounded-pill bg-brand-500"
+                          initial={{ scaleX: 0 }}
+                          whileInView={{ scaleX: 1 }}
+                          viewport={{ once: true, amount: 0.4 }}
+                          transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.05 }}
+                          style={{ width: `${w}%` }}
+                        />
+                      </span>
+                      <span className="text-right font-mono text-caption text-ink-800 tnum">{w}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <p className="mt-3 text-caption leading-[18px] text-ink-500">
-              {profile?.description ?? '最终强度分为四因子加权合成（0–100），≥85 为高强度区。'}
+              {profile?.description ||
+                (profile && !profile.weights
+                  ? '偏好档位决定后端评分器的因子取舍，最终强度分 0–100，≥85 为高强度区。'
+                  : '最终强度分为四因子加权合成（0–100），≥85 为高强度区。')}
             </p>
             <SourceNote className="mt-3" text="来源：Optix Research" />
           </motion.div>

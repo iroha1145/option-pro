@@ -1081,10 +1081,11 @@ export interface MarketFocusCycle {
   newsCount: number;
   summary: string;
   assessments: FocusCycleStockAssessment[];
-  /** live 扩展：一句话结论 / 不确定性列表 / 样本单位（条 news vs 组事件） */
+  /** live 扩展：一句话结论 / 不确定性列表 / 样本单位（条 news vs 组事件）/ 周期状态 */
   headline?: string | null;
   uncertainties?: string[];
   sampleLabel?: string;
+  status?: string | null;
 }
 
 export type AnalysisJobStatus =

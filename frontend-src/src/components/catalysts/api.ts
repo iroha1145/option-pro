@@ -188,6 +188,7 @@ function nCycle(raw: unknown): MarketFocusCycle {
     model: pickS(r, 'model') ?? '',
     newsCount: pickN(r, 'newsCount', 'news_count') ?? pickN(r, 'event_group_count') ?? 0,
     sampleLabel: pickN(r, 'newsCount', 'news_count') !== null ? '条' : '组事件',
+    status: pickS(r, 'status'),
     summary: pickS(result, 'summary_zh', 'market_summary') ?? pickS(r, 'summary') ?? '',
     headline: pickS(result, 'headline_summary'),
     uncertainties: unwrap(result, 'market_uncertainties').length
