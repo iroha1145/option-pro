@@ -376,6 +376,40 @@ def test_personal_feed_never_projects_source_language_title_or_summary() -> None
     assert "English" not in str(item)
 
 
+def test_personal_feed_reuses_exact_source_context_for_chinese_validation() -> None:
+    engine = FakeIntelligence()
+    analysis = _news_result()
+    analysis["title_zh"] = "Hormel Foods公布最新季度业绩"
+    analysis["summary_zh"] = (
+        "Hormel Foods收入增长，但管理层仍提示需求波动风险。"
+    )
+    engine.item = {
+        **engine.item,
+        "source": "Reuters",
+        "source_tickers": ["HRL"],
+        "title": analysis["title_zh"],
+        "summary": analysis["summary_zh"],
+        "title_zh": analysis["title_zh"],
+        "summary_zh": analysis["summary_zh"],
+        "analysis": analysis,
+        "_validation_source": "Reuters",
+        "_validation_title": "Hormel Foods reports quarterly earnings",
+        "_validation_summary": "Hormel Foods posted higher revenue.",
+        "_validation_sources": ["Reuters"],
+        "_validation_allowed_tickers": ["HRL"],
+    }
+
+    item = _service("read", engine=engine).feed(
+        as_of=NOW,
+        include_unanalyzed=False,
+    )["items"][0]
+
+    assert item["analysis"]["output_language"] == "zh-CN"
+    assert item["title_zh"] == analysis["title_zh"]
+    assert item["summary_zh"] == analysis["summary_zh"]
+    assert not any(key.startswith("_validation_") for key in item)
+
+
 def test_public_catalyst_reads_skip_owner_ai_store_and_metadata() -> None:
     repository = PublicReadGuardRepository()
     service = _service(
@@ -481,7 +515,7 @@ def test_public_catalyst_router_propagates_visitor_state_and_bounds_queries() ->
     assert repository.owner_state_calls == []
 
 
-def test_invalid_or_revision_mismatched_analysis_uses_source_text_fallback() -> None:
+def test_invalid_or_revision_mismatched_analysis_never_labels_english_as_chinese() -> None:
     engine = FakeIntelligence()
     engine.item = {
         **engine.item,
@@ -495,24 +529,48 @@ def test_invalid_or_revision_mismatched_analysis_uses_source_text_fallback() -> 
 
     assert item["analysis"] is None
     assert item["analysis_status"] == "pending"
-    assert item["title_zh"] == "Chip company reports latest results"
-    assert item["summary_zh"] == "Revenue rose, but demand remains uncertain."
+    assert item["title_zh"] == ""
+    assert item["summary_zh"] == ""
     assert "等待生成" not in str(item)
+    assert "English" not in str(item)
     assert "analyzed_at" not in item
     assert "available_at" not in item
 
 
-def test_deleted_news_and_unanalyzed_hotspots_use_source_title() -> None:
+def test_deleted_news_and_untranslated_hotspots_stay_hidden() -> None:
     engine = FakeIntelligence()
     engine.item = {**engine.item, "deleted": True}
     service = _service("read", engine=engine)
 
     assert service.feed(as_of=NOW)["items"] == []
     assert service.news(101, as_of=NOW) is None
-    hotspot = service.hotspots(limit=10)["items"][0]
-    assert hotspot["representative_title"] == "English hotspot title"
-    assert "等待中文分析" not in str(hotspot)
-    assert "title" not in hotspot
+    assert service.hotspots(limit=10)["items"] == []
+
+
+def test_include_unanalyzed_is_reapplied_after_analysis_projection() -> None:
+    engine = FakeIntelligence()
+    engine.item = {
+        **engine.item,
+        "analysis": _news_result(change_sequence=6),
+        "analysis_status": "completed",
+        "title": "芯片企业公布最新业绩",
+        "summary": "收入增长，但管理层仍提示需求波动风险。",
+        "title_zh": "芯片企业公布最新业绩",
+        "summary_zh": "收入增长，但管理层仍提示需求波动风险。",
+        "_validation_source": "wire",
+        "_validation_title": "Chip company reports latest results",
+        "_validation_summary": "Revenue rose, but demand remains uncertain.",
+        "_validation_sources": ["wire"],
+        "_validation_allowed_tickers": [],
+    }
+
+    payload = _service("read", engine=engine).feed(
+        as_of=NOW,
+        include_unanalyzed=False,
+    )
+
+    assert payload["items"] == []
+    assert payload["status"] == "empty"
 
 
 def test_news_available_after_as_of_is_not_projected() -> None:
@@ -542,8 +600,8 @@ def test_analysis_available_after_as_of_is_hidden_but_news_remains_visible() -> 
     item = service.feed(as_of=historical)["items"][0]
 
     assert item["analysis"] is None
-    assert item["title_zh"] == "Chip company reports latest results"
-    assert item["summary_zh"] == "Revenue rose, but demand remains uncertain."
+    assert item["title_zh"] == ""
+    assert item["summary_zh"] == ""
     assert "analyzed_at" not in item
     assert "available_at" not in item
     for field in (
@@ -1429,7 +1487,7 @@ def test_analysis_capacity_errors_keep_their_http_and_retry_semantics(
         assert response.headers["Retry-After"] == str(retry_after)
 
 
-def test_real_local_intelligence_uses_source_text_until_analysis_is_available(
+def test_real_local_intelligence_does_not_relabel_source_english_as_chinese(
     tmp_path,
 ) -> None:
     cache_path = tmp_path / "catalyst.db"
@@ -1512,8 +1570,9 @@ def test_real_local_intelligence_uses_source_text_until_analysis_is_available(
 
     assert len(payload["items"]) == 1
     assert payload["items"][0]["analysis"] is None
-    assert payload["items"][0]["title_zh"] == "English source headline"
-    assert payload["items"][0]["summary_zh"] == "English source summary"
+    assert payload["items"][0]["title_zh"] == ""
+    assert payload["items"][0]["summary_zh"] == ""
+    assert "English source" not in str(payload["items"][0])
     assert "等待生成" not in str(payload["items"][0])
 
 

@@ -150,6 +150,16 @@ test('previous focus-cycle comparison reads the live history field', async () =>
   );
 });
 
+test('default catalyst feed requests translated analysis and preserves neutral articles', async () => {
+  const source = await readFile(catalystApiSource, 'utf8');
+  assert.match(source, /q\.includeUnanalyzed \?\? Boolean\(status && status !== 'completed'\)/);
+  assert.match(source, /q\.includeNeutral \?\? true/);
+  assert.match(source, /include_unanalyzed: includeUnanalyzed/);
+  assert.match(source, /include_neutral: includeNeutral/);
+  assert.match(source, /\.filter\(\(item\) => item\.titleZh && item\.summaryZh\)/);
+  assert.match(source, /includeUnanalyzed: true,\s*includeNeutral: true,/);
+});
+
 test('screener waiting state does not invent a percentage', async () => {
   const [page, workbench] = await Promise.all([
     readFile(screenerSource, 'utf8'),
