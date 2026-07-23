@@ -1051,8 +1051,8 @@ class AIJobRepository:
         now: str,
         retry_of_job_id: str | None,
         execution_number: int,
-        batch_id: str | None,
-        batch_position: int | None,
+        batch_id: str | None = None,
+        batch_position: int | None = None,
     ) -> dict[str, Any]:
         job_id = "aij_" + uuid.uuid4().hex
         connection.execute(
