@@ -13,6 +13,7 @@ import yfinance as yf
 from app.services import massive
 
 _MASSIVE_PERIOD_DAYS = {"1y": 405, "2y": 770, "6mo": 200, "3mo": 105, "1mo": 40}
+_YAHOO_TIMEOUT_SECONDS = 10
 
 _cache: OrderedDict[str, tuple[datetime, Any]] = OrderedDict()
 _cache_lock = threading.RLock()
@@ -185,6 +186,19 @@ def _massive_daily(symbol: str, period: str) -> pd.DataFrame:
     return _clean_frame(frame.sort_index())
 
 
+def _yahoo_history(symbol: str, period: str = "1y") -> pd.DataFrame:
+    try:
+        return _clean_frame(
+            yf.Ticker(symbol).history(
+                period=period,
+                auto_adjust=True,
+                timeout=_YAHOO_TIMEOUT_SECONDS,
+            )
+        )
+    except Exception:
+        return pd.DataFrame()
+
+
 def _history(symbol: str, period: str = "1y") -> pd.DataFrame:
     """Single-symbol daily history with a short TTL cache.
 
@@ -195,10 +209,7 @@ def _history(symbol: str, period: str = "1y") -> pd.DataFrame:
         frame = _massive_daily(symbol, period)
         if not frame.empty:
             return frame
-        try:
-            return _clean_frame(yf.Ticker(symbol).history(period=period, auto_adjust=True))
-        except Exception:
-            return pd.DataFrame()
+        return _yahoo_history(symbol, period)
 
     return _cached(f"hist:{symbol}:{period}", 300, load)
 
@@ -230,6 +241,7 @@ def _bulk_history(symbols: list[str], period: str = "1y") -> dict[str, pd.DataFr
             "threads": False,
             "progress": False,
             "auto_adjust": True,
+            "timeout": _YAHOO_TIMEOUT_SECONDS,
         }
         if _yf_session is not None:
             kwargs["session"] = _yf_session
@@ -248,9 +260,18 @@ def _bulk_history(symbols: list[str], period: str = "1y") -> dict[str, pd.DataFr
                     out[remaining[0]] = frame
     except Exception:
         pass
-    for symbol in remaining:
-        if symbol not in out:
-            out[symbol] = _history(symbol, period)
+    missing = [symbol for symbol in remaining if symbol not in out]
+    if missing:
+        try:
+            with ThreadPoolExecutor(max_workers=min(4, len(missing))) as pool:
+                for symbol, frame in zip(
+                    missing,
+                    pool.map(lambda s: _yahoo_history(s, period), missing),
+                ):
+                    out[symbol] = frame
+        except Exception:
+            for symbol in missing:
+                out.setdefault(symbol, pd.DataFrame())
     return out
 
 

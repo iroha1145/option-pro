@@ -19,7 +19,7 @@ from app.access import (
     request_owner_access_context,
     require_public_read_or_owner_access,
 )
-from app.api import earnings, market, options, stocks
+from app.api import earnings, market, options, signals, stocks
 from app.data_paths import get_data_paths
 from app.public_home_snapshot import (
     PUBLIC_HOME_INDEX_SYMBOLS,
@@ -27,6 +27,7 @@ from app.public_home_snapshot import (
     PUBLIC_HOME_RESOURCE_ORDER,
     PUBLIC_HOME_RESOURCE_SPECS,
     PUBLIC_HOME_SNAPSHOT_VERSION,
+    breakout_lead_chart_parameters,
     create_public_home_entry,
     public_home_resource_parameters,
     read_public_home_entries,
@@ -183,6 +184,73 @@ def _payload(resource: str, now: float, *, price: float = 100.0) -> dict:
                 "volume": {"value": 1.0, "signal": "normal", "label": "Volume"},
             },
             "tags": ["TREND"],
+        }
+    if resource == "market_signals":
+        return {
+            "signals": {
+                "rsi14": {
+                    "value": 50.0,
+                    "label": "SPY RSI(14)",
+                    "top_score": 0,
+                    "bottom_score": 0,
+                },
+                "_breadth_coverage": {
+                    "available": 11,
+                    "expected": 11,
+                    "ratio": 1.0,
+                },
+                "_source_status": {
+                    "value": "active",
+                    "label": "板块广度数据完整",
+                },
+            },
+            "scores": {
+                "top_score": 20,
+                "bottom_score": 10,
+                "top_status": "active",
+                "bottom_status": "active",
+                "data_quality": 100,
+                "signal_data_quality": 100,
+                "data_quality_available": 14,
+                "data_quality_expected": 14,
+                "coverage": {
+                    "top_active_weight": 0.9,
+                    "bottom_active_weight": 0.95,
+                    "top_ratio": 0.9,
+                    "bottom_ratio": 0.95,
+                    "top_missing_components": ["positioning"],
+                    "bottom_missing_components": ["sentiment_pessimism"],
+                },
+                "top_breakdown": {
+                    "price_overheated": 20.0,
+                    "breadth_divergence": 10.0,
+                    "options_sentiment": 30.0,
+                    "volatility_turning": 10.0,
+                    "rates_pressure": 10.0,
+                    "credit_risk": 10.0,
+                    "positioning": None,
+                },
+                "bottom_breakdown": {
+                    "panic_release": 10.0,
+                    "technical_reclaim": 20.0,
+                    "breadth_repair": 20.0,
+                    "volatility_falling": 10.0,
+                    "credit_stable": 10.0,
+                    "rates_easing": 10.0,
+                    "sentiment_pessimism": None,
+                },
+                "top_label": "顶部风险低",
+                "bottom_label": "没有底部迹象",
+                "top_reasons": {
+                    "raising": ["SPY RSI(14) 50.0"],
+                    "suppressing": [],
+                },
+                "bottom_reasons": {
+                    "raising": [],
+                    "suppressing": ["SPY RSI(14) 50.0"],
+                },
+            },
+            "as_of": _iso(now),
         }
     if resource == "earnings":
         market_date = datetime.fromtimestamp(now, timezone.utc).date()
@@ -516,16 +584,18 @@ def test_worker_publishes_quick_resources_before_heavy_failure(tmp_path: Path) -
     assert calls == [
         "watchlist",
         "indices",
-        "focus_overview",
-        "focus_chart",
-        "focus_signals",
-        "earnings",
-    ]
+            "focus_overview",
+            "focus_chart",
+            "focus_signals",
+            "market_signals",
+            "earnings",
+        ]
     assert set(read_public_home_entries(path, now=now)) == {
         "indices",
         "focus_overview",
         "focus_chart",
         "focus_signals",
+        "market_signals",
     }
 
 
@@ -1209,6 +1279,7 @@ def test_public_cold_process_reads_file_without_provider_or_write(
     monkeypatch.setattr(stocks.yf, "Ticker", unexpected_ticker)
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", unexpected)
     monkeypatch.setattr(options, "_unusual_activity_impl", unexpected)
+    monkeypatch.setattr(signals, "compute_market_signals", unexpected_ticker)
 
     async def scenario() -> None:
         with request_owner_access_context(False):
@@ -1431,6 +1502,7 @@ def test_password_mode_anonymous_dependency_reads_snapshot_without_provider(
     monkeypatch.setattr(stocks.yf, "Ticker", unexpected_ticker)
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", unexpected)
     monkeypatch.setattr(options, "_unusual_activity_impl", unexpected)
+    monkeypatch.setattr(signals, "compute_market_signals", unexpected_ticker)
 
     app = FastAPI()
     app.state.access_runtime = OwnerAccessRuntime(
@@ -1438,7 +1510,13 @@ def test_password_mode_anonymous_dependency_reads_snapshot_without_provider(
         password_hash=hash_owner_password("public-home-test-password"),
     )
     dependency = [Depends(require_public_read_or_owner_access)]
-    for router in (market.router, stocks.router, earnings.router, options.router):
+    for router in (
+        market.router,
+        stocks.router,
+        earnings.router,
+        options.router,
+        signals.router,
+    ):
         app.include_router(router, dependencies=dependency)
 
     with TestClient(app, base_url="https://testserver") as client:
@@ -1449,12 +1527,160 @@ def test_password_mode_anonymous_dependency_reads_snapshot_without_provider(
             client.get("/api/stocks/NVDA/signals"),
             client.get("/api/earnings/upcoming"),
             client.get("/api/options/unusual?type=all&min_vol_oi=1.0"),
+            client.get("/api/signals/market"),
         ]
 
-    assert [response.status_code for response in responses] == [200] * 6
+    assert [response.status_code for response in responses] == [200] * 7
     assert all(response.json()["_stale"] is True for response in responses)
     assert calls == []
     assert path.read_bytes() == original
+
+
+def test_breakout_lead_chart_snapshot_binds_payload_to_exact_ticker() -> None:
+    now = time.time()
+    parameters = breakout_lead_chart_parameters("nvec")
+    payload = {**_payload("focus_chart", now), "ticker": "NVEC"}
+
+    entry = create_public_home_entry(
+        "breakout_lead_chart",
+        payload,
+        saved_at=now,
+        parameters=parameters,
+    )
+
+    assert entry["parameters"] == {
+        "ticker": "NVEC",
+        "range": "1d",
+        "adjustment": "raw",
+    }
+    with pytest.raises(
+        ValueError,
+        match="payload does not match its parameters",
+    ):
+        create_public_home_entry(
+            "breakout_lead_chart",
+            {**payload, "ticker": "AAPL"},
+            saved_at=now,
+            parameters=parameters,
+        )
+
+
+def test_password_owner_market_signals_reads_worker_snapshot_without_provider(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = time.time()
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    write_public_home_snapshot(
+        get_data_paths().public_home_snapshot,
+        _entries(now),
+        now=now,
+    )
+    private_config = signals.get_personal_config()
+    password_config = private_config.model_copy(
+        update={
+            "access": private_config.access.model_copy(
+                update={"mode": "password"}
+            )
+        }
+    )
+    monkeypatch.setattr(
+        signals,
+        "get_personal_config",
+        lambda: password_config,
+    )
+    calls: list[str] = []
+
+    def unexpected() -> dict:
+        calls.append("provider")
+        raise AssertionError("owner snapshot request called provider")
+
+    monkeypatch.setattr(signals, "compute_market_signals", unexpected)
+
+    async def scenario() -> dict:
+        with request_owner_access_context(True):
+            return await signals.market_signals()
+
+    payload = asyncio.run(scenario())
+
+    assert payload["_cached"] is True
+    assert payload["snapshot_source"] == "worker"
+    assert payload["signals"]["rsi14"]["value"] == 50.0
+    assert calls == []
+
+
+def test_worker_publishes_exact_breakout_lead_chart_as_optional_resource(
+    tmp_path: Path,
+) -> None:
+    now = _regular_time()
+    path = tmp_path / "public-home-snapshot-v1.json"
+    write_public_home_snapshot(path, _entries(now), now=now)
+    _seed_watchlist(path, now)
+    calls: list[dict] = []
+
+    async def build(parameters: dict) -> dict:
+        calls.append(parameters)
+        return {
+            **_payload("focus_chart", now),
+            "ticker": parameters["ticker"],
+        }
+
+    task = PublicHomeTask(
+        _task_config(),
+        builders={"breakout_lead_chart": build},
+        snapshot_path=path,
+        breakout_lead_ticker_reader=lambda: "NVEC",
+        clock=lambda: now,
+    )
+    result = asyncio.run(task())
+    stored = read_public_home_entries(path, now=now)
+
+    assert result.status == "idle"
+    assert result.details["refreshed"] == ["breakout_lead_chart"]
+    assert "breakout_lead_chart" in result.details["available"]
+    assert calls == [breakout_lead_chart_parameters("NVEC")]
+    assert stored["breakout_lead_chart"]["parameters"] == calls[0]
+    assert stored["breakout_lead_chart"]["payload"]["ticker"] == "NVEC"
+
+
+def test_anonymous_breakout_lead_chart_reads_disk_without_provider(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = time.time()
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    path = get_data_paths().public_home_snapshot
+    parameters = breakout_lead_chart_parameters("NVEC")
+    entries = _entries(now)
+    entries["breakout_lead_chart"] = create_public_home_entry(
+        "breakout_lead_chart",
+        {**_payload("focus_chart", now), "ticker": "NVEC"},
+        saved_at=now,
+        parameters=parameters,
+    )
+    write_public_home_snapshot(path, entries, now=now)
+    stocks._endpoint_cache.clear()
+    calls: list[str] = []
+
+    async def unexpected(*_args, **_kwargs):
+        calls.append("provider")
+        raise AssertionError("anonymous chart request called provider")
+
+    monkeypatch.setattr(stocks, "_stock_chart_impl", unexpected)
+
+    async def scenario() -> tuple[dict, int]:
+        with request_owner_access_context(False):
+            payload = await stocks.stock_chart("NVEC", "1d", "raw")
+            with pytest.raises(HTTPException) as exc_info:
+                await stocks.stock_chart("AAPL", "1d", "raw")
+            return payload, exc_info.value.status_code
+
+    payload, missing_status = asyncio.run(scenario())
+
+    assert payload["ticker"] == "NVEC"
+    assert payload["_stale"] is True
+    assert missing_status == 503
+    assert calls == []
 
 
 def test_frontend_default_focus_contract_matches_worker_snapshot() -> None:

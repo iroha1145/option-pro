@@ -38,6 +38,7 @@ _INDEX_SYMBOLS = {
 _CONNECT_TIMEOUT = 3.0
 _READ_TIMEOUT = 10.0
 _MAX_CONCURRENT_REQUESTS = 4
+_REQUEST_GATE_TIMEOUT = _CONNECT_TIMEOUT + _READ_TIMEOUT
 _request_gate = threading.BoundedSemaphore(_MAX_CONCURRENT_REQUESTS)
 
 _client_lock = threading.Lock()
@@ -99,7 +100,13 @@ def _get(path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
     key = settings.massive_api_key
     if not key:
         raise MassiveError("MASSIVE_API_KEY is not configured", code="not_configured")
-    with _request_gate:
+    acquired = _request_gate.acquire(timeout=_REQUEST_GATE_TIMEOUT)
+    if not acquired:
+        raise MassiveError(
+            "provider concurrency gate is busy",
+            code="provider_busy",
+        )
+    try:
         try:
             response = _http().get(
                 path,
@@ -108,6 +115,8 @@ def _get(path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
             )
         except httpx.HTTPError as exc:
             raise MassiveError(f"transport failure: {type(exc).__name__}", code="transport") from exc
+    finally:
+        _request_gate.release()
     if response.status_code == 429:
         raise MassiveError("rate limited", code="rate_limited", status=429)
     if response.status_code in {401, 403}:

@@ -272,7 +272,7 @@ function MiniKline({ ticker }: { ticker: string }) {
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-4 text-center">
           <img src="/empty-chart.svg" alt="" className="h-12 w-auto opacity-90" loading="lazy" />
           <p className="text-caption font-medium text-ink-600">K线读取失败</p>
-          <p className="text-micro text-ink-400">15 分钟行情暂不可用</p>
+          <p className="text-micro text-ink-400">日线行情暂不可用</p>
           <button
             onClick={refresh}
             className="mt-1.5 rounded-md border border-line bg-card px-2.5 py-1 text-micro font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"

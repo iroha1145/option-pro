@@ -6,6 +6,7 @@ import asyncio
 import json
 import math
 import os
+import re
 import tempfile
 import time
 from dataclasses import dataclass
@@ -27,10 +28,65 @@ PUBLIC_HOME_RESOURCE_ORDER = (
     "focus_overview",
     "focus_chart",
     "focus_signals",
+    "market_signals",
     "earnings",
     "unusual",
 )
+PUBLIC_HOME_OPTIONAL_RESOURCE_ORDER = ("breakout_lead_chart",)
 _MARKET_TZ = ZoneInfo("America/New_York")
+_BREAKOUT_TICKER_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,19}$")
+_MARKET_SIGNAL_FIELDS = {
+    "sma20_distance",
+    "sma50_distance",
+    "sma200_distance",
+    "rsi14",
+    "return_20d",
+    "rsp_spy_5d",
+    "iwm_spy_5d",
+    "qqq_spy_5d",
+    "sectors_above_50dma",
+    "vix",
+    "vix_percentile",
+    "vix_5d_change",
+    "credit_risk",
+    "yield_10y",
+    "yield_10y_20d_change",
+}
+_MARKET_SCORE_FIELDS = {
+    "top_score",
+    "bottom_score",
+    "top_status",
+    "bottom_status",
+    "data_quality",
+    "signal_data_quality",
+    "data_quality_available",
+    "data_quality_expected",
+    "coverage",
+    "top_breakdown",
+    "bottom_breakdown",
+    "top_label",
+    "bottom_label",
+    "top_reasons",
+    "bottom_reasons",
+}
+_MARKET_TOP_BREAKDOWN_FIELDS = {
+    "price_overheated",
+    "breadth_divergence",
+    "options_sentiment",
+    "volatility_turning",
+    "rates_pressure",
+    "credit_risk",
+    "positioning",
+}
+_MARKET_BOTTOM_BREAKDOWN_FIELDS = {
+    "panic_release",
+    "technical_reclaim",
+    "breadth_repair",
+    "volatility_falling",
+    "credit_stable",
+    "rates_easing",
+    "sentiment_pessimism",
+}
 _ENTRY_FIELDS = {"payload", "saved_at", "parameters", "schema", "max_age"}
 _OVERVIEW_FIELDS = {
     "ticker",
@@ -132,6 +188,11 @@ PUBLIC_HOME_RESOURCE_SPECS: dict[str, PublicHomeResourceSpec] = {
     "focus_overview": PublicHomeResourceSpec("focus-overview-v2", 24 * 60 * 60),
     "focus_chart": PublicHomeResourceSpec("focus-chart-v1", 7 * 24 * 60 * 60),
     "focus_signals": PublicHomeResourceSpec("focus-signals-v1", 7 * 24 * 60 * 60),
+    "market_signals": PublicHomeResourceSpec("market-signals-v1", 7 * 24 * 60 * 60),
+    "breakout_lead_chart": PublicHomeResourceSpec(
+        "breakout-lead-chart-v1",
+        7 * 24 * 60 * 60,
+    ),
     "earnings": PublicHomeResourceSpec("earnings-upcoming-v1", 30 * 60 * 60),
     "unusual": PublicHomeResourceSpec("options-unusual-v1", 4 * 24 * 60 * 60),
 }
@@ -150,6 +211,8 @@ def public_home_resource_parameters(resource: str, *, now: float) -> dict[str, A
         }
     if resource == "focus_signals":
         return {"ticker": PUBLIC_HOME_DEFAULT_TICKER, "period": "100d"}
+    if resource == "market_signals":
+        return {"period": "1y"}
     if resource == "earnings":
         return {
             "market_date": datetime.fromtimestamp(now, _MARKET_TZ).date().isoformat()
@@ -157,6 +220,17 @@ def public_home_resource_parameters(resource: str, *, now: float) -> dict[str, A
     if resource == "unusual":
         return {"type": "all", "min_vol_oi": 1.0}
     raise KeyError(resource)
+
+
+def breakout_lead_chart_parameters(ticker: str) -> dict[str, Any]:
+    symbol = str(ticker).strip().upper()
+    if not _BREAKOUT_TICKER_PATTERN.fullmatch(symbol):
+        raise ValueError("invalid breakout lead ticker")
+    return {
+        "ticker": symbol,
+        "range": "1d",
+        "adjustment": "raw",
+    }
 
 
 def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -252,11 +326,13 @@ def _payload_timestamps_fit_entry(
         "indices",
         "focus_overview",
         "focus_chart",
+        "breakout_lead_chart",
+        "market_signals",
         "earnings",
         "unusual",
     }:
         iso_values.append(payload.get("as_of"))
-    if resource == "focus_chart":
+    if resource in {"focus_chart", "breakout_lead_chart"}:
         if payload.get("last_bar_at") is not None:
             iso_values.append(payload.get("last_bar_at"))
         integer_values.extend(
@@ -372,11 +448,15 @@ def _validate_overview(payload: Mapping[str, Any]) -> bool:
     )
 
 
-def _validate_chart(payload: Mapping[str, Any]) -> bool:
+def _validate_chart_for_ticker(
+    payload: Mapping[str, Any],
+    *,
+    expected_ticker: str,
+) -> bool:
     bars = payload.get("bars")
     if (
         set(payload) != _CHART_FIELDS
-        or payload.get("ticker") != PUBLIC_HOME_DEFAULT_TICKER
+        or payload.get("ticker") != expected_ticker
         or payload.get("range") != "1d"
         or payload.get("period") != "2y"
         or payload.get("interval") != "1d"
@@ -444,6 +524,22 @@ def _validate_chart(payload: Mapping[str, Any]) -> bool:
     return True
 
 
+def _validate_chart(payload: Mapping[str, Any]) -> bool:
+    return _validate_chart_for_ticker(
+        payload,
+        expected_ticker=PUBLIC_HOME_DEFAULT_TICKER,
+    )
+
+
+def _validate_breakout_lead_chart(payload: Mapping[str, Any]) -> bool:
+    ticker = payload.get("ticker")
+    return bool(
+        isinstance(ticker, str)
+        and _BREAKOUT_TICKER_PATTERN.fullmatch(ticker)
+        and _validate_chart_for_ticker(payload, expected_ticker=ticker)
+    )
+
+
 def _validate_signals(payload: Mapping[str, Any]) -> bool:
     signals = payload.get("signals")
     if not isinstance(signals, dict) or set(signals) != {
@@ -473,6 +569,125 @@ def _validate_signals(payload: Mapping[str, Any]) -> bool:
         and isinstance(payload.get("tags"), list)
         and len(payload.get("tags")) <= 8
         and all(isinstance(item, str) for item in payload.get("tags"))
+    )
+
+
+def _validate_market_signals(payload: Mapping[str, Any]) -> bool:
+    signals = payload.get("signals")
+    scores = payload.get("scores")
+    if (
+        set(payload) != {"signals", "scores", "as_of"}
+        or not isinstance(signals, dict)
+        or not 1 <= len(signals) <= 64
+        or not isinstance(scores, dict)
+        or set(scores) != _MARKET_SCORE_FIELDS
+        or not _valid_iso_timestamp(payload.get("as_of"))
+    ):
+        return False
+    source = signals.get("_source_status")
+    breadth = signals.get("_breadth_coverage")
+    if (
+        not isinstance(source, dict)
+        or set(source) != {"value", "label"}
+        or source.get("value") not in {"active", "degraded"}
+        or not isinstance(source.get("label"), str)
+        or not isinstance(breadth, dict)
+        or set(breadth) != {"available", "expected", "ratio"}
+        or isinstance(breadth.get("available"), bool)
+        or not isinstance(breadth.get("available"), int)
+        or isinstance(breadth.get("expected"), bool)
+        or not isinstance(breadth.get("expected"), int)
+        or not 0 <= breadth["available"] <= breadth["expected"] <= 100
+        or not _finite_number(breadth.get("ratio"), minimum=0)
+        or float(breadth["ratio"]) > 1
+    ):
+        return False
+    metric_count = 0
+    for key, item in signals.items():
+        if key.startswith("_"):
+            continue
+        metric_count += 1
+        if (
+            not isinstance(key, str)
+            or key not in _MARKET_SIGNAL_FIELDS
+            or not isinstance(item, dict)
+            or set(item) != {"value", "label", "top_score", "bottom_score"}
+            or not _optional_finite(item.get("value"))
+            or not isinstance(item.get("label"), str)
+            or not _optional_finite(item.get("top_score"), minimum=0)
+            or not _optional_finite(item.get("bottom_score"), minimum=0)
+        ):
+            return False
+    coverage = scores.get("coverage")
+    top_breakdown = scores.get("top_breakdown")
+    bottom_breakdown = scores.get("bottom_breakdown")
+    if (
+        not isinstance(coverage, dict)
+        or set(coverage)
+        != {
+            "top_active_weight",
+            "bottom_active_weight",
+            "top_ratio",
+            "bottom_ratio",
+            "top_missing_components",
+            "bottom_missing_components",
+        }
+        or not all(
+            _finite_number(coverage.get(field), minimum=0)
+            and float(coverage[field]) <= 1
+            for field in (
+                "top_active_weight",
+                "bottom_active_weight",
+                "top_ratio",
+                "bottom_ratio",
+            )
+        )
+        or not all(
+            isinstance(coverage.get(field), list)
+            and all(isinstance(item, str) for item in coverage[field])
+            for field in ("top_missing_components", "bottom_missing_components")
+        )
+        or not isinstance(top_breakdown, dict)
+        or set(top_breakdown) != _MARKET_TOP_BREAKDOWN_FIELDS
+        or not isinstance(bottom_breakdown, dict)
+        or set(bottom_breakdown) != _MARKET_BOTTOM_BREAKDOWN_FIELDS
+        or not all(_optional_finite(value) for value in top_breakdown.values())
+        or not all(_optional_finite(value) for value in bottom_breakdown.values())
+    ):
+        return False
+    for field in ("top_reasons", "bottom_reasons"):
+        reasons = scores.get(field)
+        if (
+            not isinstance(reasons, dict)
+            or set(reasons) != {"raising", "suppressing"}
+            or not all(
+                isinstance(reasons.get(kind), list)
+                and len(reasons[kind]) <= 3
+                and all(isinstance(item, str) for item in reasons[kind])
+                for kind in ("raising", "suppressing")
+            )
+        ):
+            return False
+    return bool(
+        metric_count > 0
+        and _optional_finite(scores.get("top_score"), minimum=0)
+        and _optional_finite(scores.get("bottom_score"), minimum=0)
+        and scores.get("top_status") in {"active", "insufficient_data"}
+        and scores.get("bottom_status") in {"active", "insufficient_data"}
+        and _finite_number(scores.get("data_quality"), minimum=0)
+        and float(scores["data_quality"]) <= 100
+        and _finite_number(scores.get("signal_data_quality"), minimum=0)
+        and float(scores["signal_data_quality"]) <= 100
+        and isinstance(scores.get("data_quality_available"), int)
+        and not isinstance(scores.get("data_quality_available"), bool)
+        and isinstance(scores.get("data_quality_expected"), int)
+        and not isinstance(scores.get("data_quality_expected"), bool)
+        and 0
+        <= scores["data_quality_available"]
+        <= scores["data_quality_expected"]
+        <= 100
+        and isinstance(scores.get("top_label"), str)
+        and isinstance(scores.get("bottom_label"), str)
     )
 
 
@@ -618,6 +833,8 @@ _PAYLOAD_VALIDATORS = {
     "focus_overview": _validate_overview,
     "focus_chart": _validate_chart,
     "focus_signals": _validate_signals,
+    "market_signals": _validate_market_signals,
+    "breakout_lead_chart": _validate_breakout_lead_chart,
     "earnings": _validate_earnings,
     "unusual": _validate_unusual,
 }
@@ -643,7 +860,23 @@ def _valid_parameters(resource: str, parameters: Any) -> bool:
         except ValueError:
             return False
         return True
+    if resource == "breakout_lead_chart":
+        try:
+            expected = breakout_lead_chart_parameters(str(parameters.get("ticker")))
+        except (AttributeError, ValueError):
+            return False
+        return parameters == expected
     return parameters == public_home_resource_parameters(resource, now=1_700_000_000.0)
+
+
+def _payload_matches_parameters(
+    resource: str,
+    payload: Mapping[str, Any],
+    parameters: Mapping[str, Any],
+) -> bool:
+    if resource == "breakout_lead_chart":
+        return payload.get("ticker") == parameters.get("ticker")
+    return True
 
 
 def create_public_home_entry(
@@ -662,6 +895,8 @@ def create_public_home_entry(
     if not _valid_parameters(resource, parameter_copy):
         raise ValueError("public home parameters are invalid")
     payload_copy = validate_public_home_payload(resource, payload)
+    if not _payload_matches_parameters(resource, payload_copy, parameter_copy):
+        raise ValueError("public home payload does not match its parameters")
     if not _payload_timestamps_fit_entry(
         resource,
         payload_copy,
@@ -693,6 +928,8 @@ def _validate_entry(resource: str, value: Any, *, now: float) -> dict[str, Any] 
     try:
         payload = validate_public_home_payload(resource, value.get("payload"))
     except ValueError:
+        return None
+    if not _payload_matches_parameters(resource, payload, value["parameters"]):
         return None
     if not _payload_timestamps_fit_entry(
         resource,
@@ -963,11 +1200,13 @@ __all__ = [
     "PUBLIC_HOME_DEFAULT_TICKER",
     "PUBLIC_HOME_INDEX_SYMBOLS",
     "PUBLIC_HOME_MAX_CLOCK_SKEW_SECONDS",
+    "PUBLIC_HOME_OPTIONAL_RESOURCE_ORDER",
     "PUBLIC_HOME_RESOURCE_ORDER",
     "PUBLIC_HOME_RESOURCE_SPECS",
     "PUBLIC_HOME_SNAPSHOT_MAX_BYTES",
     "PUBLIC_HOME_SNAPSHOT_VERSION",
     "create_public_home_entry",
+    "breakout_lead_chart_parameters",
     "public_home_entry_is_servable",
     "public_home_resource_parameters",
     "read_owner_public_home_entry",
