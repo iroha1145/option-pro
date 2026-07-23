@@ -628,32 +628,51 @@ export const catalystsContract = {
     mockOr(
       () => fx2.getTickerImpactSummaries(q),
       // 个人版 batch {tickers, window_hours, limit≤5(匿名), include_neutral/unanalyzed}：
-      // 候选代码 = 指定 ticker，否则 feed.source_tickers ∪ hotspots.validated_tickers（≤20 匿名安全）
+      // 候选代码 = 指定 ticker，否则按 feed 中真实个股影响排序并用来源/热点补足（≤20 匿名安全）
       async () => {
         // 股票榜只包含已完成且有方向的分析；选择其他分析状态时结果应为空。
         if (q.analysisStatus && q.analysisStatus !== 'completed') return [];
-        const seen = new Set<string>();
-        const tickers: string[] = [];
-        const push = (t: unknown) => {
-          if (typeof t === 'string' && t && !seen.has(t) && tickers.length < PUBLIC_BATCH_MAX_TICKERS) {
-            seen.add(t);
-            tickers.push(t);
-          }
-        };
-        if (q.ticker) push(q.ticker);
+        let tickers: string[] = q.ticker ? [q.ticker] : [];
         if (!tickers.length) {
+          // 候选发现不能套用文章整体多空过滤；真实排名按每只股票自己的影响分完成。
           const [feedBody, hotBody] = await Promise.all([
-            get(`/catalysts/feed${qs({ ...q, limit: 50 })}`).catch(() => null),
+            get(
+              `/catalysts/feed${qs({
+                windowHours: q.windowHours,
+                analysisStatus: 'completed',
+                limit: 50,
+              })}`,
+            ).catch(() => null),
             get('/catalysts/hotspots?limit=20').catch(() => null),
           ]);
-          for (const it of unwrap(feedBody, 'items')) {
-            const sts = Array.isArray(it.source_tickers) ? it.source_tickers : [];
-            for (const t of sts) push(t);
+          const candidateScores = new Map<string, number>();
+          const addCandidate = (value: unknown, score: number) => {
+            if (typeof value !== 'string' || !value) return;
+            candidateScores.set(value, Math.max(candidateScores.get(value) ?? -1, score));
+          };
+          for (const item of unwrap(feedBody, 'items')) {
+            for (const ticker of Array.isArray(item.source_tickers) ? item.source_tickers : []) {
+              addCandidate(ticker, 0);
+            }
+            const analysis = asRec(item.analysis);
+            for (const impact of Array.isArray(analysis.affected_stocks) ? analysis.affected_stocks : []) {
+              const row = asRec(impact);
+              const score = pickN(row, 'impact_score', 'impactScore') ?? 0;
+              if (score !== 0) addCandidate(pickS(row, 'ticker'), Math.abs(score));
+            }
           }
-          for (const h of unwrap(hotBody, 'items')) {
-            const vts = Array.isArray(h.validated_tickers) ? h.validated_tickers : Array.isArray(h.tickers) ? h.tickers : [];
-            for (const t of vts) push(t);
+          for (const hotspot of unwrap(hotBody, 'items')) {
+            const values = Array.isArray(hotspot.validated_tickers)
+              ? hotspot.validated_tickers
+              : Array.isArray(hotspot.tickers)
+                ? hotspot.tickers
+                : [];
+            for (const ticker of values) addCandidate(ticker, 0);
           }
+          tickers = [...candidateScores]
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .slice(0, PUBLIC_BATCH_MAX_TICKERS)
+            .map(([ticker]) => ticker);
         }
         if (!tickers.length) return [];
         const body = await post('/catalysts/tickers/batch', {
