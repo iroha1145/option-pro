@@ -46,8 +46,11 @@ export default function Earnings() {
     () => (q.data?.items ?? []) as unknown as EarningsRow[],
     [q.data],
   );
-  const coverageLimited = q.data?.dataLimited === true
-    || q.data?.sourceStatus === 'degraded';
+  // sourceStatus can be "degraded" for a fresh, complete public snapshot
+  // because guests consume the persisted read-only copy. Coverage is limited
+  // only when the backend explicitly says the Finnhub full-market calendar is
+  // incomplete; optional/stale enrichment must not trigger a false warning.
+  const coverageLimited = q.data?.dataLimited === true;
 
   /* 周历状态 */
   const [monday, setMonday] = useState(() => weekStartMonday(etToday()));
