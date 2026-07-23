@@ -9,9 +9,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { strengthApi, type ScanParams } from '@/api/modules/strength';
+import { strengthApi, type ScanParams, type StrengthScanEnvelope } from '@/api/modules/strength';
 import { catalystsApi } from '@/api/modules/catalysts';
-import { stocksApi } from '@/api/modules/stocks';
 import { runtimeApi } from '@/api/modules/runtime';
 import { ApiError } from '@/api/client';
 import type { ScreenerRow, SectorOption, Signal, StrengthProfile } from '@/api/types';
@@ -76,17 +75,17 @@ export default function Screener() {
   const toast = useToast();
 
   /* ---------------- 基础数据（消费层） ---------------- */
-  const universeQ = usePolling(() => strengthApi.scan({ band: 'all', sort: 'score', order: 'desc' }), null);
+  const universeQ = usePolling(() => strengthApi.scanEnvelope({ band: 'all', sort: 'score', order: 'desc' }), null);
   const marketQ = usePolling(() => strengthApi.market(), 300_000);
   const profilesQ = usePolling(() => strengthApi.profilesMeta(), null);
   const profiles = profilesQ.data?.profiles ?? null;
 
   const universe = useMemo(() => {
-    const rows = universeQ.data ?? [];
+    const snapshotRows = universeQ.data?.rows ?? [];
     return {
-      tierCounts: countByTier(rows.map((r) => r.strengthScore)),
-      sectors: [...new Set(rows.map((r) => r.sector))].sort((a, b) => a.localeCompare(b, 'zh-CN')),
-      count: rows.length,
+      tierCounts: countByTier(snapshotRows.map((r) => r.strengthScore)),
+      sectors: [...new Set(snapshotRows.map((r) => r.sector))].sort((a, b) => a.localeCompare(b, 'zh-CN')),
+      count: universeQ.data?.universeCount ?? snapshotRows.length,
     };
   }, [universeQ.data]);
 
@@ -103,6 +102,7 @@ export default function Screener() {
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [rows, setRows] = useState<ScreenerRow[] | null>(null);
   const [scanError, setScanError] = useState<ApiError | null>(null);
+  const [scanMeta, setScanMeta] = useState<StrengthScanEnvelope | null>(null);
   const [progress, setProgress] = useState(0);
   const [lastScanAt, setLastScanAt] = useState<number | null>(null);
   const [scanDurationMs, setScanDurationMs] = useState(0);
@@ -149,16 +149,33 @@ export default function Screener() {
         band: 'all',
         sort: 'score',
         order: 'desc',
-        ...(filters.minScore != null ? { minScore: filters.minScore } : {}),
-        ...(filters.sectors.length === 1 ? { sector: filters.sectors[0] } : {}),
-        // live 模式契约参数（mock 忽略）：timeframe/profile/top/min_price/min_avg_dollar_volume
+        universe: 'themes',
         timeframe: filters.timeframe,
         profile: filters.profile,
-        ...(filters.topN > 0 ? { top: filters.topN } : {}),
-        ...(filters.priceMin != null ? { min_price: filters.priceMin } : {}),
-        ...(filters.minDollarVol > 0 ? { min_avg_dollar_volume: filters.minDollarVol } : {}),
+        top: filters.topN > 0 ? filters.topN : 120,
+        sector_id: filters.sectors.length === 1 ? filters.sectors[0] : undefined,
+        min_price: filters.priceMin ?? 0,
+        min_avg_dollar_volume: filters.minDollarVol,
+        include_options: true,
+        ...(filters.minScore != null ? { minScore: filters.minScore } : {}),
       } as ScanParams;
-      const result = await strengthApi.scan(params);
+
+      // Owner 扫描先提交精确参数，等待 worker 完成后再读取同一参数快照。
+      if (isOwner) {
+        const action = await runtimeApi.workerAction('strength_refresh', {
+          universe: 'themes',
+          timeframe: filters.timeframe,
+          profile: filters.profile,
+          top: filters.topN > 0 ? filters.topN : 120,
+          sector_id: filters.sectors.length === 1 ? filters.sectors[0] : null,
+          min_price: filters.priceMin ?? 0,
+          min_avg_dollar_volume: filters.minDollarVol,
+          include_options: true,
+        });
+        if (!action.requestId) throw new ApiError(502, '后台扫描未返回 request_id');
+        if (action.status !== 'completed') await runtimeApi.waitForWorkerAction(action.requestId);
+      }
+      const result = await strengthApi.scanEnvelope(params);
       const elapsed = Date.now() - startedAt;
       if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
       if (scanSeq.current !== seq) return;
@@ -167,7 +184,7 @@ export default function Screener() {
         if (prev) {
           const prevMap = new Map(prev.map((r) => [r.ticker, r.price]));
           const f: Record<string, 'up' | 'down'> = {};
-          result.forEach((r) => {
+          result.rows.forEach((r) => {
             const p = prevMap.get(r.ticker);
             if (p !== undefined && p !== r.price) f[r.ticker] = r.price > p ? 'up' : 'down';
           });
@@ -176,8 +193,14 @@ export default function Screener() {
             setTimeout(() => setFlashes({}), 700);
           }
         }
-        return result;
+        return result.rows;
       });
+      setScanMeta(result);
+      const detailPatch: DetailCache = Object.fromEntries(
+        result.rows.map((row) => [row.ticker, { dollarVolume: row.avgDollarVolume20d ?? null }]),
+      );
+      detailsRef.current = { ...detailsRef.current, ...detailPatch };
+      setDetails(detailsRef.current);
       setApplied(filters);
       setDraft(filters);
       setLastScanAt(Date.now());
@@ -186,43 +209,17 @@ export default function Screener() {
       setExpanded(null);
       setProgress(100);
       setScanState('done');
-      setHistory((h) => [{ at: Date.now(), count: result.length, durationMs, summary: summarizeFilters(filters) }, ...h].slice(0, 5));
+      setHistory((h) => [{ at: Date.now(), count: result.rows.length, durationMs, summary: summarizeFilters(filters) }, ...h].slice(0, 5));
+      return true;
     } catch (e) {
       if (scanSeq.current !== seq) return;
       setScanError(e instanceof ApiError ? e : new ApiError(500, e instanceof Error ? e.message : '扫描失败'));
       setScanState('error');
+      return false;
     }
-  }, []);
+  }, [isOwner]);
 
-  /* ---------------- 成交额缓存（stocksApi.detail 推导，后台批量） ---------------- */
-  useEffect(() => {
-    if (scanState !== 'done' || !rows) return;
-    const missing = rows.map((r) => r.ticker).filter((t) => detailsRef.current[t] === undefined);
-    if (missing.length === 0) return;
-    let cancelled = false;
-    void (async () => {
-      const entries = await Promise.all(
-        missing.map(async (t) => {
-          try {
-            const d = await stocksApi.detail(t);
-            return [t, { dollarVolume: d.price * d.volume }] as const;
-          } catch {
-            return [t, { dollarVolume: null }] as const;
-          }
-        }),
-      );
-      if (cancelled) return;
-      const patch: DetailCache = {};
-      entries.forEach(([t, v]) => {
-        patch[t] = v;
-      });
-      detailsRef.current = { ...detailsRef.current, ...patch };
-      setDetails(detailsRef.current);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [scanState, rows]);
+  /* 成交额直接使用后端 avg_dollar_volume_20d，不再逐股请求并用当日成交额冒充。 */
 
   /* ---------------- 过滤（applied 快照，客户端） ---------------- */
   const filteredBase = useMemo(() => {
@@ -236,9 +233,8 @@ export default function Screener() {
     if (f.minScore != null) out = out.filter((r) => r.strengthScore >= (f.minScore ?? 0));
     if (f.minDollarVol > 0) {
       out = out.filter((r) => {
-        const d = details[r.ticker];
-        if (d === undefined || d.dollarVolume === null) return true; // 未加载先保留
-        return d.dollarVolume >= f.minDollarVol;
+        const dollarVolume = r.avgDollarVolume20d;
+        return dollarVolume !== null && dollarVolume !== undefined && dollarVolume >= f.minDollarVol;
       });
     }
     return out;
@@ -337,11 +333,14 @@ export default function Screener() {
   const onStrengthRefresh = useCallback(async () => {
     setRefreshingStrength(true);
     try {
-      await runtimeApi.workerAction('strength_refresh');
-      toast.success('已触发 strength_refresh', '强度快照将在后台重建，已重新扫描');
+      const ok = await runScan(applied);
+      if (!ok) {
+        toast.error('刷新失败', '后台扫描未完成，请查看结果区错误');
+        return;
+      }
+      toast.success('强度扫描完成', '已读取 worker 生成的精确参数快照');
       universeQ.refresh();
       marketQ.refresh();
-      void runScan(applied);
     } catch (e) {
       toast.error('触发失败', e instanceof ApiError ? e.message : 'worker 不可用');
     } finally {
@@ -391,8 +390,6 @@ export default function Screener() {
     return profiles.find((p) => p.id === applied.presetId) ?? profiles[0];
   }, [profiles, applied.presetId]);
 
-  const detailsPending = applied.minDollarVol > 0 && filteredBase.some((r) => details[r.ticker] === undefined);
-
   const chips = useMemo(
     () => buildChips(applied, profiles, sectorOptions, patchApplied),
     [applied, profiles, sectorOptions, patchApplied],
@@ -408,7 +405,7 @@ export default function Screener() {
         section="02"
         eyebrow="SCREENER · STRENGTH SCAN"
         title="选股扫描"
-        description="一套强度分，扫遍整个市场。"
+        description="基于真实行情接口扫描主题股票池，快照来源与时效可追溯。"
         meta={
           <>
             <span className="hidden text-right sm:block">
@@ -465,7 +462,17 @@ export default function Screener() {
                   命中 <span className="font-mono tnum">{Math.round(hitCount)}</span> 只
                 </h2>
                 <span className="font-mono text-caption text-ink-400 tnum">· 耗时 {(scanDurationMs / 1000).toFixed(1)}s</span>
-                {detailsPending && <span className="text-micro text-ink-400">成交额加载中…</span>}
+                {scanMeta && (
+                  <span className="font-mono text-micro text-ink-400 tnum">
+                    · 股票池 {scanMeta.universeCount} · 已评分 {scanMeta.screenedCount}
+                    {scanMeta.priceProvider ? ` · ${scanMeta.priceProvider}` : ''}
+                  </span>
+                )}
+                {scanMeta?.stale && (
+                  <span className="rounded-xs bg-warn-50 px-1.5 py-px text-micro text-warn-600">
+                    过期快照{scanMeta.snapshotSavedAt ? ` · ${new Date(scanMeta.snapshotSavedAt).toLocaleString('zh-CN')}` : ''}
+                  </span>
+                )}
                 {chips.map((c) => (
                   <span
                     key={c.key}
