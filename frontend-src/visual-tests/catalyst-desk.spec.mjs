@@ -36,7 +36,7 @@ async function expectShell(page) {
 }
 
 test("Catalyst Desk visual evidence: home /", async ({ page }) => {
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   // SPA 首页 index 路由重定向 /watchlist（App.tsx <Navigate to="/watchlist">）
   await expect(page).toHaveURL(/\/watchlist$/);
   await expectShell(page);
@@ -45,11 +45,11 @@ test("Catalyst Desk visual evidence: home /", async ({ page }) => {
 
 test("Catalyst Desk visual evidence: /catalysts", async ({ page }) => {
   if (HAS_REAL_BACKEND) {
-    await page.goto("/catalysts", { waitUntil: "networkidle" });
+    await page.goto("/catalysts", { waitUntil: "domcontentloaded" });
   } else {
-    await page.goto("/", { waitUntil: "networkidle" });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.getByRole("link", { name: "06 催化" }).click();
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
   }
   await expect(page).toHaveURL(/\/catalysts$/);
   await expectShell(page);
@@ -60,11 +60,11 @@ test("Catalyst Desk visual evidence: /catalysts", async ({ page }) => {
 
 test("Catalyst Desk visual evidence: /breakouts", async ({ page }) => {
   if (HAS_REAL_BACKEND) {
-    await page.goto("/breakouts", { waitUntil: "networkidle" });
+    await page.goto("/breakouts", { waitUntil: "domcontentloaded" });
   } else {
-    await page.goto("/", { waitUntil: "networkidle" });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.getByRole("link", { name: "03 雷达" }).click();
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
   }
   await expect(page).toHaveURL(/\/breakouts$/);
   await expectShell(page);
@@ -76,7 +76,7 @@ test("Catalyst Desk visual evidence: /market", async ({ page }) => {
   // /market 不在 Navbar 编号导航里（入口是 IndexTape 指数条，依赖真实行情数据），
   // 静态 http.server 无 SPA 回退也无数据 → 仅在真实后端环境取证。
   test.skip(!HAS_REAL_BACKEND, "http.server 无 SPA 回退，/market 需真实后端（OPTIX_VISUAL_BASE_URL）");
-  await page.goto("/market", { waitUntil: "networkidle" });
+  await page.goto("/market", { waitUntil: "domcontentloaded" });
   await expect(page).toHaveURL(/\/market$/);
   await expectShell(page);
   await screenshot(page, "1440x900-market");
