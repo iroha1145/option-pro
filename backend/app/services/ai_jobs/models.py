@@ -1682,6 +1682,7 @@ def validate_simplified_chinese_text(
     info: ValidationInfo | None,
     *,
     allowed_codes: Iterable[str] = (),
+    source_texts: Iterable[str] = (),
 ) -> str:
     """Reject non-Chinese prose and common Traditional Chinese deterministically."""
 
@@ -1726,7 +1727,7 @@ def validate_simplified_chinese_text(
     context_source_texts = (
         info.context.get("source_texts", ())
         if info is not None and isinstance(info.context, dict)
-        else ()
+        else source_texts
     )
     source_texts = tuple(
         source

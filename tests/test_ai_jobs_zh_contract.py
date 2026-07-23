@@ -561,6 +561,23 @@ def test_wholly_english_sentence_is_rejected():
         )
 
 
+def test_source_bound_company_name_can_be_revalidated_outside_pydantic_context():
+    text = "Hormel Foods公布最新季度业绩"
+
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        validate_simplified_chinese_text(text, None, allowed_codes={"HRL"})
+
+    assert (
+        validate_simplified_chinese_text(
+            text,
+            None,
+            allowed_codes={"HRL"},
+            source_texts={"Hormel Foods reports fiscal third-quarter results"},
+        )
+        == text
+    )
+
+
 @pytest.mark.parametrize(
     "english_text",
     [

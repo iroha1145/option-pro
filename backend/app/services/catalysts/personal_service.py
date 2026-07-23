@@ -85,6 +85,7 @@ def _valid_zh_text(
     value: Any,
     *,
     allowed_codes: Sequence[str] = (),
+    source_texts: Sequence[str] = (),
 ) -> str | None:
     if not isinstance(value, str):
         return None
@@ -93,6 +94,7 @@ def _valid_zh_text(
             value,
             None,
             allowed_codes=allowed_codes,
+            source_texts=source_texts,
         )
     except ValueError:
         return None
@@ -848,6 +850,24 @@ class PersonalCatalystService:
                 continue
             item = dict(raw)
             item.pop("_analysis_published", None)
+            validation_sources = item.pop("_validation_sources", [])
+            if not isinstance(validation_sources, list):
+                validation_sources = []
+            validation_source_texts = [
+                source_text
+                for key in (
+                    "_validation_source",
+                    "_validation_title",
+                    "_validation_summary",
+                )
+                if isinstance((source_text := item.pop(key, None)), str)
+                and source_text.strip()
+            ]
+            validation_source_texts.extend(
+                source
+                for source in validation_sources
+                if isinstance(source, str) and source.strip()
+            )
             source_title = str(
                 item.get("representative_title") or item.get("title") or ""
             ).strip()
@@ -857,21 +877,30 @@ class PersonalCatalystService:
             allowed_codes = item.get("validated_tickers")
             if not isinstance(allowed_codes, list):
                 allowed_codes = []
+            validation_allowed_codes = item.pop(
+                "_validation_allowed_tickers",
+                allowed_codes,
+            )
+            if not isinstance(validation_allowed_codes, list):
+                validation_allowed_codes = allowed_codes
             candidate_title = item.get("representative_title")
             if candidate_title == _WAITING_HOTSPOT_TITLE:
                 candidate_title = None
             representative_title = (
                 _valid_zh_text(
                     candidate_title,
-                    allowed_codes=allowed_codes,
+                    allowed_codes=validation_allowed_codes,
+                    source_texts=validation_source_texts,
                 )
                 or _valid_zh_text(
                     item.get("title_zh"),
-                    allowed_codes=allowed_codes,
+                    allowed_codes=validation_allowed_codes,
+                    source_texts=validation_source_texts,
                 )
                 or _valid_zh_text(
                     source_title,
-                    allowed_codes=allowed_codes,
+                    allowed_codes=validation_allowed_codes,
+                    source_texts=validation_source_texts,
                 )
             )
             # Keep the strip Chinese-only. A group without validated Chinese
@@ -880,8 +909,21 @@ class PersonalCatalystService:
             if representative_title is None:
                 continue
             item["representative_title"] = representative_title
+            summary = item.get("summary_zh")
+            if summary == _WAITING_SUMMARY:
+                summary = None
+            item["summary_zh"] = (
+                _valid_zh_text(
+                    summary,
+                    allowed_codes=validation_allowed_codes,
+                    source_texts=validation_source_texts,
+                )
+                or ""
+            )
             items.append(item)
         projected["items"] = items
+        if projected.get("status") in {"active", "empty"}:
+            projected["status"] = "active" if items else "empty"
         return projected
 
     @staticmethod
