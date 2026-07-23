@@ -43,6 +43,14 @@ export class ApiError extends Error implements ApiErrorShape {
 
 const BASE = '/api';
 
+export const OWNER_SESSION_INVALID_EVENT = 'optix:owner-session-invalid';
+
+export function notifyOwnerSessionInvalid(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(OWNER_SESSION_INVALID_EVENT));
+  }
+}
+
 function pick(obj: unknown, ...keys: string[]): unknown {
   if (obj && typeof obj === 'object') {
     for (const k of keys) {
@@ -111,6 +119,9 @@ export async function requestRaw(path: string, init?: RequestInit): Promise<Resp
       if (typeof raNum === 'number' && Number.isFinite(raNum)) retryAfter = raNum;
     } catch {
       /* ignore */
+    }
+    if (res.status === 401 && bizCode === 'owner_login_required') {
+      notifyOwnerSessionInvalid();
     }
     throw new ApiError(res.status, message, { bizCode, retryable, retryAfter, payload });
   }
