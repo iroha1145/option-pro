@@ -53,8 +53,18 @@ export type {
 
 /* ================= live 契约归一（snake_case → camelCase） ================= */
 
+const BACKEND_IMPACT_POINTS_PER_UI_UNIT = 20;
+
 function nClassification(v: unknown): NewsClassification {
   return v === 'bullish' || v === 'bearish' ? v : 'neutral';
+}
+
+function toBackendImpact(value: number | undefined): number | undefined {
+  return value && value > 0 ? Math.round(value * BACKEND_IMPACT_POINTS_PER_UI_UNIT) : undefined;
+}
+
+function fromBackendImpact(value: number): number {
+  return value / BACKEND_IMPACT_POINTS_PER_UI_UNIT;
 }
 
 /** id 兼容数字（个人版 news_id 为整数） */
@@ -68,12 +78,14 @@ function pickId(r: Rec, ...keys: string[]): string | null {
 function nStockImpact(v: unknown): TrustedStockImpact | null {
   const r = asRec(v);
   const ticker = pickS(r, 'ticker');
-  const impactScore = pickN(r, 'impactScore', 'impact_score');
+  const backendImpactScore = pickN(r, 'impactScore', 'impact_score');
   // 个人版 NewsStockImpact 没有 direction/classification；有符号 impact_score 是唯一方向事实。
-  if (!ticker || impactScore === null || impactScore === 0) return null;
+  // 后端范围 [-100,100]，统一映射为界面使用的 [-5,5]，避免真实数据全部挤在端点。
+  if (!ticker || backendImpactScore === null || backendImpactScore === 0) return null;
+  const impactScore = fromBackendImpact(backendImpactScore);
   return {
     ticker,
-    direction: impactScore > 0 ? 'bullish' : 'bearish',
+    direction: backendImpactScore > 0 ? 'bullish' : 'bearish',
     impactScore,
     horizon: pickS(r, 'horizon') ?? '',
     mechanism: pickS(r, 'mechanism') ?? '',
@@ -380,7 +392,7 @@ function qs(q: CatalystFeedQuery): string {
     classification: q.classification || undefined,
     analysis_status: status,
     min_confidence: conf,
-    min_abs_impact: q.minAbsImpact || undefined,
+    min_abs_impact: toBackendImpact(q.minAbsImpact),
     multi_source_only: q.multiSourceOnly ? true : undefined,
     limit: q.limit,
     cursor: q.cursor ?? undefined,
@@ -392,6 +404,30 @@ function qs(q: CatalystFeedQuery): string {
 
 function aggTickerSummary(ticker: string, raw: unknown): TickerImpactSummary {
   const r = asRec(raw);
+  const summary = asRec(r.summary);
+  const directionalCount = pickN(summary, 'directional_count', 'directionalCount');
+  const backendNetImpact = pickN(summary, 'net_impact', 'netImpact');
+
+  // 新版个人接口在完整过滤窗口上聚合；items 仍受匿名 limit=5 约束，只用于明细预览。
+  if (directionalCount !== null && backendNetImpact !== null) {
+    const bullish = pickN(summary, 'bullish') ?? 0;
+    const bearish = pickN(summary, 'bearish') ?? 0;
+    return {
+      ticker,
+      name: ticker,
+      sector: '',
+      count: directionalCount,
+      analyzed: pickN(summary, 'analyzed_count', 'analyzedCount') ?? directionalCount,
+      netImpact: fromBackendImpact(backendNetImpact),
+      latestAt: pickS(summary, 'latest_at', 'latestAt') ?? '',
+      sourceDiversity: pickN(summary, 'source_diversity', 'sourceDiversity') ?? 0,
+      bullish,
+      bearish,
+      neutral: pickN(summary, 'neutral') ?? 0,
+    };
+  }
+
+  // 兼容旧接口：仅能按返回页推导，仍严格排除待分析、提及和 0 分影响。
   const items = unwrap(r, 'items').map(nNewsItem);
   let bullish = 0;
   let bearish = 0;
@@ -414,8 +450,9 @@ function aggTickerSummary(ticker: string, raw: unknown): TickerImpactSummary {
     if (item.publishedAt > latest) latest = item.publishedAt;
   }
 
-  // 只统计该股票自身存在非零方向影响的已完成分析；提及、待分析、0 分均不上榜。
-  const netImpact = impacts.length ? impacts.reduce((sum, score) => sum + score, 0) / impacts.length : 0;
+  const netImpact = impacts.length
+    ? impacts.reduce((sum, score) => sum + score, 0) / impacts.length
+    : 0;
   return {
     ticker,
     name: ticker,
@@ -593,6 +630,8 @@ export const catalystsContract = {
       // 个人版 batch {tickers, window_hours, limit≤5(匿名), include_neutral/unanalyzed}：
       // 候选代码 = 指定 ticker，否则 feed.source_tickers ∪ hotspots.validated_tickers（≤20 匿名安全）
       async () => {
+        // 股票榜只包含已完成且有方向的分析；选择其他分析状态时结果应为空。
+        if (q.analysisStatus && q.analysisStatus !== 'completed') return [];
         const seen = new Set<string>();
         const tickers: string[] = [];
         const push = (t: unknown) => {
@@ -625,6 +664,13 @@ export const catalystsContract = {
           include_neutral: true,
           include_unanalyzed: false,
           directional_only: true,
+          classification: q.classification || undefined,
+          min_confidence:
+            q.minConfidence && q.minConfidence > 0
+              ? Math.round(q.minConfidence <= 1 ? q.minConfidence * 100 : q.minConfidence)
+              : 0,
+          min_abs_impact: toBackendImpact(q.minAbsImpact),
+          multi_source_only: Boolean(q.multiSourceOnly),
         });
         return nBatchSummaries(body);
       },
