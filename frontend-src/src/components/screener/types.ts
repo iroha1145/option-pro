@@ -113,7 +113,7 @@ export const EMPTY_CATALYST: CatalystSummary = {
   latestTitle: null,
 };
 
-/** 成交额缓存（stocksApi.detail 推导：price × volume）；dollarVolume null = 获取失败 */
+/** 成交额缓存（后端 avg_dollar_volume_20d）；dollarVolume null = 契约缺失 */
 export type DetailCache = Record<string, { dollarVolume: number | null } | undefined>;
 
 /** 扫描历史条目（页头 popover 最近 5 次） */
@@ -145,7 +145,7 @@ export const TOPN_OPTIONS: { value: number; label: string }[] = [
   { value: 10, label: 'Top 10' },
   { value: 20, label: 'Top 20' },
   { value: 40, label: 'Top 40' },
-  { value: 0, label: '全部' },
+  { value: 0, label: '最多 120' },
 ];
 
 export const DOLLAR_VOL_OPTIONS: { value: number; label: string }[] = [
