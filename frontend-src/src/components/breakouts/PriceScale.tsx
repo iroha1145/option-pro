@@ -32,6 +32,8 @@ interface MarkerDef {
 }
 
 const fin = (v: number | null | undefined): v is number => typeof v === 'number' && Number.isFinite(v);
+const edgeAnchor = (pct: number): string =>
+  pct < 12 ? 'translate-x-0 text-left' : pct > 88 ? '-translate-x-full text-right' : '-translate-x-1/2 text-center';
 
 export default function PriceScale({ invalidation, trigger, target, current, large = false, flash = null, className }: PriceScaleProps) {
   /* 首绘 700ms / 轮询 400ms（hooks 必须在任何 early return 之前） */
@@ -74,7 +76,7 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
       {/* marker 图标行 */}
       <div className="relative h-4">
         {markers.map((m) => (
-          <span key={m.key} className="absolute -translate-x-1/2" style={{ left: `${x(m.value)}%` }}>
+          <span key={m.key} className={cn('absolute', edgeAnchor(x(m.value)))} style={{ left: `${x(m.value)}%` }}>
             <Icon name={m.icon} size={large ? 15 : 12} className={m.iconCls} />
           </span>
         ))}
@@ -102,7 +104,7 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
       {large ? (
         <div className="relative mt-2 h-8">
           {markers.map((m) => (
-            <span key={m.key} className="absolute -translate-x-1/2 text-center" style={{ left: `${x(m.value)}%` }}>
+            <span key={m.key} className={cn('absolute', edgeAnchor(x(m.value)))} style={{ left: `${x(m.value)}%` }}>
               <span className="block text-[10px] leading-[14px] text-ink-400">{m.label}</span>
               <span className="block font-mono text-micro leading-[14px] text-ink-600 tnum">{fmtPrice(m.value)}</span>
             </span>
@@ -111,7 +113,7 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
             initial={{ left: `${x(cursorFrom)}%` }}
             animate={{ left: `${x(current)}%` }}
             transition={{ duration: mounted.current ? 0.4 : 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute -translate-x-1/2 text-center"
+            className={cn('absolute', edgeAnchor(x(current)))}
           >
             <span className="block text-[10px] leading-[14px] text-brand-600">现价</span>
             <span
@@ -131,7 +133,7 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
             initial={{ left: `${x(cursorFrom)}%` }}
             animate={{ left: `${x(current)}%` }}
             transition={{ duration: mounted.current ? 0.4 : 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute -translate-x-1/2"
+            className={cn('absolute', edgeAnchor(x(current)))}
           >
             <span
               className={cn(
