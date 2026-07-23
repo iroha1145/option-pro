@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { accessApi } from '@/api/modules/access';
+import { OWNER_SESSION_INVALID_EVENT } from '@/api/client';
 import type { AccessRole, AccessStatus } from '@/api/types';
 
 interface AccessContextValue {
@@ -35,6 +36,30 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // backend 重启、新设备登录或会话过期后，旧 SPA 不能继续显示“已登录”。
+  // 多数公开 GET 会以 visitor 身份返回 200，因此还需在重新聚焦/可见和定时点主动核验。
+  useEffect(() => {
+    if (status.role !== 'owner') return;
+    const verify = () => void refresh().catch(() => undefined);
+    const onInvalidated = () => {
+      setStatus((current) => ({ ...current, role: 'visitor' }));
+      verify();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') verify();
+    };
+    window.addEventListener(OWNER_SESSION_INVALID_EVENT, onInvalidated);
+    window.addEventListener('focus', verify);
+    document.addEventListener('visibilitychange', onVisibility);
+    const interval = window.setInterval(verify, 60_000);
+    return () => {
+      window.removeEventListener(OWNER_SESSION_INVALID_EVENT, onInvalidated);
+      window.removeEventListener('focus', verify);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.clearInterval(interval);
+    };
+  }, [refresh, status.role]);
 
   const login = useCallback(async (password: string) => {
     setStatus(await accessApi.login(password));

@@ -78,7 +78,7 @@ export default function Drawer({ open, onClose, title, children, width = 560 }: 
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className={cn('fixed inset-x-0 bottom-0 top-14 z-[71] flex flex-col rounded-t-xl border-t border-line bg-card shadow-sh-3 md:hidden')}
+            className={cn('fixed inset-x-0 bottom-0 top-14 z-[71] flex flex-col rounded-t-xl border-t border-line bg-card pb-[env(safe-area-inset-bottom)] shadow-sh-3 md:hidden')}
           >
             <div className="flex flex-col items-center pb-1 pt-2 text-ink-300">
               <Icon name="dots-grid" size={18} aria-hidden="true" />

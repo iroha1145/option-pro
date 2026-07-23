@@ -18,7 +18,6 @@ from app.data_paths import get_data_paths
 from app.services.sectors import SECTORS
 from app.services.strength.scanner import (
     PROFILES,
-    STRENGTH_CACHE_TTL_SECONDS,
     TIMEFRAMES,
     UNIVERSES,
     market_strength,
@@ -31,6 +30,9 @@ from app.services.utils import sanitize
 router = APIRouter(prefix="/api/strength", tags=["strength"])
 
 _STRENGTH_SNAPSHOT_VERSION = 1
+_STRENGTH_SNAPSHOT_TTL_SECONDS = 26 * 60 * 60
+# Backward-compatible public name used by existing diagnostics and tests.
+STRENGTH_CACHE_TTL_SECONDS = _STRENGTH_SNAPSHOT_TTL_SECONDS
 _STRENGTH_SNAPSHOT_MAX_BYTES = 4 * 1024 * 1024
 _STRENGTH_SNAPSHOT_VARIANT_LIMIT = 24
 _STRENGTH_SNAPSHOT_PATH = get_data_paths().strength_snapshot
@@ -366,7 +368,7 @@ def _read_strength_snapshot(
             return None
         return {
             "saved_at": saved_at,
-            "stale": saved_at + STRENGTH_CACHE_TTL_SECONDS <= now,
+            "stale": saved_at + _STRENGTH_SNAPSHOT_TTL_SECONDS <= now,
             "payload": payload,
         }
     except (
@@ -493,9 +495,9 @@ async def scan(
             "_cached": True,
             "_stale": stale,
             "source_status": "stale" if stale else "active",
-            "cache_ttl_seconds": STRENGTH_CACHE_TTL_SECONDS,
+            "cache_ttl_seconds": _STRENGTH_SNAPSHOT_TTL_SECONDS,
             "cache_expires_at": datetime.fromtimestamp(
-                saved_at + STRENGTH_CACHE_TTL_SECONDS,
+                saved_at + _STRENGTH_SNAPSHOT_TTL_SECONDS,
                 timezone.utc,
             ).isoformat(),
             "snapshot_source": "worker",

@@ -144,7 +144,7 @@ export default function Catalysts() {
 
 
       {/* 标签页（URL 同步 ?tab=） */}
-      <div className="mt-8 flex items-center gap-1 border-b border-line" role="tablist" aria-label="催化剂视图">
+      <div className="no-scrollbar mt-8 flex items-center gap-1 overflow-x-auto border-b border-line" role="tablist" aria-label="催化剂视图">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -152,7 +152,7 @@ export default function Catalysts() {
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
             className={cn(
-              'relative px-3.5 py-2.5 text-body-s font-medium transition-colors duration-fast sm:px-4',
+              'relative shrink-0 whitespace-nowrap px-3.5 py-2.5 text-body-s font-medium transition-colors duration-fast sm:px-4',
               tab === t.id ? 'text-brand-600' : 'text-ink-500 hover:text-ink-800',
             )}
           >
@@ -167,7 +167,7 @@ export default function Catalysts() {
           </button>
         ))}
         {tab === 'feed' && total !== null && (
-          <span className="ml-auto pb-1 font-mono text-micro text-ink-400 tnum">{total} 条</span>
+          <span className="ml-auto shrink-0 pb-1 font-mono text-micro text-ink-400 tnum">{total} 条</span>
         )}
       </div>
 

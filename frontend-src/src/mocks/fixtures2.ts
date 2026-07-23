@@ -1122,7 +1122,7 @@ export interface TickerImpactSummary {
   sector: string;
   count: number; // 相关新闻数
   analyzed: number; // 其中已完成分析数
-  netImpact: number; // 净影响分合计（· 非收益）
+  netImpact: number; // 方向性新闻的平均净影响分，范围 ±5（· 非收益）
   latestAt: string;
   sourceDiversity: number;
   bullish: number;
@@ -1748,14 +1748,14 @@ export function getTickerImpactSummaries(q: CatalystFeedQuery = {}): TickerImpac
   catalystsNews.forEach(syncNewsJob);
   const filtered = catalystsNews.filter((n) => matchNews(n, q, true));
   const acc = new Map<string, {
-    count: number; analyzed: number; net: number; latestAt: string;
+    count: number; analyzed: number; impactCount: number; net: number; latestAt: string;
     sources: Set<string>; bullish: number; bearish: number; neutral: number;
   }>();
   for (const item of filtered) {
     for (const t of item.sourceTickers) {
       let a = acc.get(t);
       if (!a) {
-        a = { count: 0, analyzed: 0, net: 0, latestAt: item.publishedAt, sources: new Set(), bullish: 0, bearish: 0, neutral: 0 };
+        a = { count: 0, analyzed: 0, impactCount: 0, net: 0, latestAt: item.publishedAt, sources: new Set(), bullish: 0, bearish: 0, neutral: 0 };
         acc.set(t, a);
       }
       a.count += 1;
@@ -1765,6 +1765,7 @@ export function getTickerImpactSummaries(q: CatalystFeedQuery = {}): TickerImpac
         a.analyzed += 1;
         const imp = item.analysis.trustedStockImpacts.find((x) => x.ticker === t);
         if (imp) {
+          a.impactCount += 1;
           a.net += imp.impactScore;
           if (imp.direction === 'bullish') a.bullish += 1;
           else if (imp.direction === 'bearish') a.bearish += 1;
@@ -1784,7 +1785,7 @@ export function getTickerImpactSummaries(q: CatalystFeedQuery = {}): TickerImpac
         sector: info?.sector ?? '—',
         count: a.count,
         analyzed: a.analyzed,
-        netImpact: Math.round(a.net * 100) / 100,
+        netImpact: a.impactCount ? Math.round((a.net / a.impactCount) * 100) / 100 : 0,
         latestAt: a.latestAt,
         sourceDiversity: a.sources.size,
         bullish: a.bullish,

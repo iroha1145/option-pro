@@ -81,7 +81,7 @@ export function NewsRow({
         <p className="mt-1 line-clamp-2 text-body-s text-ink-500">{item.summaryZh}</p>
         {/* 底行：代码 chips + 分析状态 + 分类/置信度/影响 */}
         <div className="mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-          <span className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <span className="flex max-w-full flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
             {item.sourceTickers.map((t) => (
               <TickerChip key={t} ticker={t} onClick={() => openTicker(t)} />
             ))}

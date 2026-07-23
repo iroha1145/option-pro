@@ -132,7 +132,7 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
             className="group flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 text-left transition-colors duration-fast hover:bg-paper-2/70 sm:px-5"
             aria-label={`查看 ${r.ticker} 股票详情`}
           >
-            <span className="flex w-40 items-center gap-2.5">
+            <span className="flex min-w-0 flex-1 items-center gap-2.5 sm:w-40 sm:flex-none">
               <TickerLogo ticker={r.ticker} size={28} />
               <span className="min-w-0">
                 <span className="block font-mono text-body-s font-semibold text-ink-800">{r.ticker}</span>
@@ -145,7 +145,7 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
                 )}
               </span>
             </span>
-            <span className="min-w-[180px] flex-1">
+            <span className="order-last w-full min-w-0 sm:order-none sm:min-w-[180px] sm:flex-1">
               <NetImpactBar value={r.netImpact} analyzed={r.analyzed} />
             </span>
             <span className="hidden items-center gap-1 font-mono text-micro tnum md:flex" title="利多 / 利空 / 中性">
@@ -161,11 +161,11 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
             <span className="hidden w-16 text-right font-mono text-micro text-ink-400 tnum lg:block" title="最新新闻">
               {fmtRelative(r.latestAt)}
             </span>
-            <span className="w-12 text-right font-mono text-data-m text-ink-800 tnum" title="相关新闻数">
+            <span className="w-12 shrink-0 text-right font-mono text-data-m text-ink-800 tnum" title="相关新闻数">
               {r.count}
               <span className="ml-0.5 text-micro font-normal text-ink-400">条</span>
             </span>
-            <Icon name="chevron-right" size={14} className="text-ink-300 transition-colors group-hover:text-brand-600" />
+            <Icon name="chevron-right" size={14} className="shrink-0 text-ink-300 transition-colors group-hover:text-brand-600" />
           </motion.button>
         ))}
       </div>

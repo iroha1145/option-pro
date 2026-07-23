@@ -291,8 +291,8 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
           </blockquote>
 
           {/* 关联代码 */}
-          <div className="mt-4 flex items-center gap-1.5">
-            <span className="text-micro text-ink-400">关联代码</span>
+          <div className="mt-4 flex flex-wrap items-center gap-1.5">
+            <span className="shrink-0 text-micro text-ink-400">关联代码</span>
             {item.sourceTickers.map((t) => (
               <TickerChip key={t} ticker={t} />
             ))}

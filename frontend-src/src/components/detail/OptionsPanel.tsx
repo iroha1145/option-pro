@@ -191,7 +191,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
   return (
     <div>
       {/* 到期日下拉 + DTE */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <label className="relative inline-flex items-center">
           <select
             value={exp ?? ''}
@@ -219,7 +219,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
         {chainLoading || !chain ? (
           <SkeletonRows rows={8} />
         ) : (
-          <table className="w-full border-collapse font-mono text-micro tnum">
+          <table className="min-w-[520px] w-full whitespace-nowrap border-collapse font-mono text-micro tnum">
             <thead className="sticky top-0 z-10">
               <tr className="bg-card-warm text-left font-sans text-micro text-ink-400">
                 <th className="px-2 py-2 font-medium" colSpan={2}>CALLS · 量/持 · 权利金</th>

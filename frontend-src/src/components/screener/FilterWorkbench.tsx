@@ -44,7 +44,7 @@ function TierSegmented({
   onChange: (v: TierFilter) => void;
 }) {
   return (
-    <div role="tablist" aria-label="强度分档" className="inline-flex items-center gap-0.5 rounded-md border border-line bg-card-warm p-0.5">
+    <div role="tablist" aria-label="强度分档" className="no-scrollbar inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-md border border-line bg-card-warm p-0.5">
       {TIER_OPTIONS.map((o) => {
         const active = value === o.value;
         return (
@@ -54,7 +54,7 @@ function TierSegmented({
             aria-selected={active}
             onClick={() => onChange(o.value)}
             className={cn(
-              'relative rounded-[6px] px-2.5 py-1 text-caption font-medium transition-colors duration-fast',
+              'relative shrink-0 whitespace-nowrap rounded-[6px] px-2.5 py-1 text-caption font-medium transition-colors duration-fast',
               active ? 'text-ink-800' : 'text-ink-400 hover:text-ink-600',
             )}
           >
@@ -281,12 +281,12 @@ export default function FilterWorkbench({
       initial="hidden"
       animate="show"
       variants={{ show: { transition: { staggerChildren: 0.06 } } }}
-      className="card-surface p-5 max-md:sticky max-md:top-[100px] max-md:z-30 max-md:glass"
+      className="card-surface p-4 sm:p-5"
       aria-label="筛选工作台"
     >
       {/* 行 1 · 分档与预设 */}
-      <motion.div variants={row} className="flex flex-wrap items-center gap-x-5 gap-y-3">
-        <div>
+      <motion.div variants={row} className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3">
+        <div className="w-full min-w-0 sm:w-auto">
           <FieldLabel>强度分档</FieldLabel>
           <TierSegmented
             value={draft.tier}
@@ -295,7 +295,7 @@ export default function FilterWorkbench({
           />
         </div>
         <div className="hidden h-9 w-px bg-line sm:block" aria-hidden="true" />
-        <div className="min-w-0 flex-1">
+        <div className="w-full min-w-0 sm:w-auto sm:flex-1">
           <FieldLabel>预设策略</FieldLabel>
           {presetsFailed ? (
             <p className="flex h-8 items-center text-caption text-ink-400">预设不可用 · 已降级为静态分档</p>

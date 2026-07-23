@@ -124,7 +124,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, loadi
       )}
 
       {/* 表 / 骨架 / 空态 */}
-      <div className="mt-3">
+      <div className="mt-3 overflow-x-auto overscroll-x-contain">
         {loading ? (
           <SkeletonRows rows={6} />
         ) : error ? (
@@ -147,7 +147,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, loadi
         ) : rows.length === 0 ? (
           <EmptyState image="/empty-chart.svg" title="该板块暂无 IV 排名数据" description="留空优于编造" />
         ) : (
-          <table className="w-full border-collapse" aria-label="IV 百分位排名表">
+          <table className="min-w-[520px] w-full border-collapse" aria-label="IV 百分位排名表">
             <thead>
               <tr className="border-b border-line text-left text-eyebrow font-sans uppercase tracking-[0.14em] text-ink-400">
                 <th className="py-2.5 pr-2 font-sans">代码</th>

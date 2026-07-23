@@ -639,8 +639,16 @@ class PersonalCatalystService:
         as_of: datetime | None = None,
     ) -> dict[str, Any]:
         item = dict(raw)
-        # Source-language text stays in the ETL store.  It is never a display
-        # fallback, even while a paid analysis is pending or unavailable.
+        # Keep a bounded display fallback before removing the duplicate source
+        # fields from the public envelope.  This is source text, not generated
+        # analysis, and prevents a failed/pending job from leaving a permanent
+        # "waiting for Chinese title" placeholder.
+        source_title = str(item.get("title") or "").strip()
+        source_summary = str(item.get("summary") or "").strip()
+        if source_title == _WAITING_TITLE:
+            source_title = ""
+        if source_summary == _WAITING_SUMMARY:
+            source_summary = ""
         for field in (
             "title",
             "summary",
@@ -685,8 +693,8 @@ class PersonalCatalystService:
             item["trusted_stock_impacts"] = analysis["affected_stocks"]
         title = analysis["title_zh"] if analysis is not None else None
         summary = analysis["summary_zh"] if analysis is not None else None
-        item["title_zh"] = title or _WAITING_TITLE
-        item["summary_zh"] = summary or _WAITING_SUMMARY
+        item["title_zh"] = title or source_title
+        item["summary_zh"] = summary or source_summary
         if analysis is None:
             item.pop("analyzed_at", None)
             item.pop("available_at", None)
@@ -787,20 +795,30 @@ class PersonalCatalystService:
             if not isinstance(raw, Mapping):
                 continue
             item = dict(raw)
+            item.pop("_analysis_published", None)
+            source_title = str(
+                item.get("representative_title") or item.get("title") or ""
+            ).strip()
+            if source_title == _WAITING_HOTSPOT_TITLE:
+                source_title = ""
             item.pop("title", None)
             allowed_codes = item.get("validated_tickers")
             if not isinstance(allowed_codes, list):
                 allowed_codes = []
+            candidate_title = item.get("representative_title")
+            if candidate_title == _WAITING_HOTSPOT_TITLE:
+                candidate_title = None
             item["representative_title"] = (
                 _valid_zh_text(
-                    item.get("representative_title"),
+                    candidate_title,
                     allowed_codes=allowed_codes,
                 )
                 or _valid_zh_text(
                     item.get("title_zh"),
                     allowed_codes=allowed_codes,
                 )
-                or _WAITING_HOTSPOT_TITLE
+                or source_title
+                or str(item.get("event_type") or "新闻热点")
             )
             items.append(item)
         projected["items"] = items

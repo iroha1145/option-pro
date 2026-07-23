@@ -281,6 +281,14 @@ test("password mode keeps public research readable and reserves owner controls f
   expect(setCookie).toMatch(/Path=\//i);
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/watchlist`);
 
+  // 登录成功后不得残留延迟跳转：过去的 400ms 定时器会把随后打开的页面拉回 /watchlist。
+  await page.getByRole("link", { name: "06 催化" }).click();
+  await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
+  await page.waitForTimeout(500);
+  await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
+  await page.getByRole("link", { name: "01 自选" }).click();
+  await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/watchlist`);
+
   // 会话仅存于 HttpOnly Cookie：脚本不可见、口令不落任何浏览器存储
   const ownerCookie = (await context.cookies(PASSWORD_BASE_URL)).find(cookie => cookie.name === "optix_owner_session");
   expect(ownerCookie).toMatchObject({ httpOnly: true, secure: true, sameSite: "Strict", path: "/" });

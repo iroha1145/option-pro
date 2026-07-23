@@ -32,6 +32,8 @@ interface MarkerDef {
 }
 
 const fin = (v: number | null | undefined): v is number => typeof v === 'number' && Number.isFinite(v);
+const edgeAnchor = (pct: number): string =>
+  pct < 12 ? 'translate-x-0 text-left' : pct > 88 ? '-translate-x-full text-right' : '-translate-x-1/2 text-center';
 
 export default function PriceScale({ invalidation, trigger, target, current, large = false, flash = null, className }: PriceScaleProps) {
   /* 首绘 700ms / 轮询 400ms（hooks 必须在任何 early return 之前） */
@@ -65,6 +67,13 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
     { key: 'trigger', label: '触发', icon: 'flag' as const, value: trigger as number, iconCls: 'text-brand-600' },
     { key: 'target', label: '目标', icon: 'target' as const, value: target as number, iconCls: 'text-up-600' },
   ].filter((m) => fin(m.value));
+  const currentPct = x(current);
+  const nearbyMarker = [...markers]
+    .sort((a, b) => Math.abs(x(a.value) - currentPct) - Math.abs(x(b.value) - currentPct))
+    .find((marker) => Math.abs(x(marker.value) - currentPct) < 12);
+  const labelMarkers = nearbyMarker
+    ? markers.filter((marker) => marker.key !== nearbyMarker.key)
+    : markers;
 
   return (
     <div
@@ -101,8 +110,8 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
       {/* 标注行 */}
       {large ? (
         <div className="relative mt-2 h-8">
-          {markers.map((m) => (
-            <span key={m.key} className="absolute -translate-x-1/2 text-center" style={{ left: `${x(m.value)}%` }}>
+          {labelMarkers.map((m) => (
+            <span key={m.key} className={cn('absolute', edgeAnchor(x(m.value)))} style={{ left: `${x(m.value)}%` }}>
               <span className="block text-[10px] leading-[14px] text-ink-400">{m.label}</span>
               <span className="block font-mono text-micro leading-[14px] text-ink-600 tnum">{fmtPrice(m.value)}</span>
             </span>
@@ -111,9 +120,11 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
             initial={{ left: `${x(cursorFrom)}%` }}
             animate={{ left: `${x(current)}%` }}
             transition={{ duration: mounted.current ? 0.4 : 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute -translate-x-1/2 text-center"
+            className={cn('absolute', edgeAnchor(x(current)))}
           >
-            <span className="block text-[10px] leading-[14px] text-brand-600">现价</span>
+            <span className="block text-[10px] leading-[14px] text-brand-600">
+              {nearbyMarker ? `${nearbyMarker.label} / 现价` : '现价'}
+            </span>
             <span
               className={cn(
                 'block rounded-xs px-0.5 font-mono text-micro font-semibold leading-[14px] text-brand-700 tnum',
@@ -131,7 +142,7 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
             initial={{ left: `${x(cursorFrom)}%` }}
             animate={{ left: `${x(current)}%` }}
             transition={{ duration: mounted.current ? 0.4 : 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute -translate-x-1/2"
+            className={cn('absolute', edgeAnchor(x(current)))}
           >
             <span
               className={cn(

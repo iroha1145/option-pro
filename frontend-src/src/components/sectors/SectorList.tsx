@@ -111,6 +111,7 @@ export default function SectorList({ sectors, selectedId, onSelect }: SectorList
       onRowClick={(r) => onSelect(r.id)}
       rowHeight={44}
       rowClassName={(r) => cn(selectedId === r.id && 'bg-brand-50 hover:bg-brand-50')}
+      className="[&>table]:min-w-[760px]"
     />
   );
 }

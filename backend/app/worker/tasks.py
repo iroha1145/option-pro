@@ -1295,7 +1295,7 @@ class PublicHomeTask:
 
 
 class StrengthRefreshTask:
-    """Run and persist the default Strength Radar scan on demand."""
+    """Refresh the daily default snapshot and exact owner-requested variants."""
 
     def __init__(
         self,
@@ -1304,11 +1304,23 @@ class StrengthRefreshTask:
         writer: Callable[..., Any] | None = None,
         snapshot_path: Path | None = None,
         clock: Callable[[], float] = time.time,
+        scheduled_interval_seconds: float = 86_400.0,
     ) -> None:
         self._scanner = scanner
         self._writer = writer
         self._snapshot_path = snapshot_path
         self._clock = clock
+        self._scheduled_interval_seconds = float(scheduled_interval_seconds)
+        self._last_scheduled_at: float | None = None
+
+    def _next_scheduled_delay(self) -> float:
+        if self._last_scheduled_at is None:
+            return 0.0
+        due_at = self._last_scheduled_at + self._scheduled_interval_seconds
+        return min(
+            self._scheduled_interval_seconds,
+            max(0.0, due_at - float(self._clock())),
+        )
 
     async def _run(self, parameters: dict[str, Any]) -> TaskResult:
         from app.api.strength import (
@@ -1375,14 +1387,22 @@ class StrengthRefreshTask:
             if selected is not None and parameters != selected:
                 raise ValueError("strength refresh actions have conflicting parameters")
             selected = parameters
-        return await self._run(
+        result = await self._run(
             selected or dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
+        )
+        return TaskResult(
+            status=result.status,
+            details=result.details,
+            next_delay_seconds=self._next_scheduled_delay(),
+            error_code=result.error_code,
         )
 
     async def __call__(self) -> TaskResult:
         from app.api.strength import DEFAULT_STRENGTH_SCAN_PARAMETERS
 
-        return await self._run(dict(DEFAULT_STRENGTH_SCAN_PARAMETERS))
+        result = await self._run(dict(DEFAULT_STRENGTH_SCAN_PARAMETERS))
+        self._last_scheduled_at = float(self._clock())
+        return result
 
 
 class BreakoutTask:
@@ -1727,9 +1747,9 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         TaskSpec(
             "strength_refresh",
             StrengthRefreshTask(),
+            # 默认快照每天刷新；参数化 API 动作不会重置默认快照的绝对截止时间。
             interval_seconds=86_400.0,
             timeout_seconds=1200.0,
-            manual_only=True,
         ),
         TaskSpec(
             "breakout_refresh",

@@ -68,14 +68,14 @@ function PriceHeader({ detail }: { detail: StockDetail }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1] }}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <TickerLogo ticker={detail.ticker} size={40} />
         <div className="min-w-0">
           <p className="flex flex-wrap items-baseline gap-x-2.5">
             <span className="font-display text-[22px] leading-[28px] font-bold text-ink-900">{detail.ticker}</span>
             <span className="text-body-s text-ink-500">{detail.name}</span>
           </p>
-          <div className="mt-1 flex items-center gap-2">
+          <div className="mt-1 flex flex-wrap items-center gap-2">
             <span className="rounded-xs border border-line-strong bg-card-warm px-1.5 py-px text-micro text-ink-500">
               {detail.sector}
             </span>
@@ -89,10 +89,10 @@ function PriceHeader({ detail }: { detail: StockDetail }) {
       </div>
 
       <div className="mt-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-        <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+        <div className="min-w-0 max-w-full flex flex-wrap items-end gap-x-3 gap-y-2">
           <p
             className={cn(
-              'rounded-sm px-1 font-mono text-data-xxl text-ink-900 tnum',
+              'rounded-sm px-1 font-mono text-[clamp(30px,10vw,44px)] font-medium leading-none tracking-[-0.02em] text-ink-900 tnum',
               flash === 'up' && 'animate-tick-flash-up',
               flash === 'down' && 'animate-tick-flash-down',
             )}

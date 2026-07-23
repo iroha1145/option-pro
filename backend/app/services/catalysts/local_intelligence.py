@@ -2744,8 +2744,20 @@ class LocalCatalystIntelligence:
             input_hash = _sha(group_input)
             group_id = "evt_" + hashlib.sha256(key.encode()).hexdigest()[:32]
             score, components, reasons = self._hot_score(representative, result, now)
-            title_zh = str(result.get("title_zh") if result else HOTSPOT_WAITING)
-            summary_zh = str(result.get("headline_summary") if result else SUMMARY_WAITING)
+            # Until the paid Chinese analysis is available, keep the news
+            # usable with the source-provided text.  A literal "waiting"
+            # placeholder can otherwise survive indefinitely when a job fails
+            # validation or the queue is temporarily unavailable.
+            title_zh = str(
+                result.get("title_zh")
+                if result
+                else representative.get("raw_title") or ""
+            )
+            summary_zh = str(
+                result.get("headline_summary")
+                if result
+                else representative.get("raw_summary") or ""
+            )
             published_values = [item.get("published_at") or item.get("fetched_at") for item in members]
             available = max(
                 [str(item["source_available_at"]) for item in members]
@@ -3020,10 +3032,26 @@ class LocalCatalystIntelligence:
             "change_sequence": int(row["change_sequence"]),
             "content_hash": str(row["content_hash"]),
             "source": str(row["source"]),
-            "title": str(result.get("title_zh") if result else TITLE_WAITING),
-            "title_zh": str(result.get("title_zh") if result else TITLE_WAITING),
-            "summary": str(result.get("headline_summary") if result else SUMMARY_WAITING),
-            "summary_zh": str(result.get("summary_zh") if result else SUMMARY_WAITING),
+            "title": str(
+                result.get("title_zh")
+                if result
+                else row.get("raw_title") or ""
+            ),
+            "title_zh": str(
+                result.get("title_zh")
+                if result
+                else row.get("raw_title") or ""
+            ),
+            "summary": str(
+                result.get("headline_summary")
+                if result
+                else row.get("raw_summary") or ""
+            ),
+            "summary_zh": str(
+                result.get("summary_zh")
+                if result
+                else row.get("raw_summary") or ""
+            ),
             "url": str(row["url"]),
             "image_url": row.get("image_url"),
             "published_at": row.get("published_at"),
@@ -3335,6 +3363,10 @@ class LocalCatalystIntelligence:
         min_confidence = int(kwargs.get("min_confidence") or 0)
         include_unanalyzed = bool(kwargs.get("include_unanalyzed", True))
         include_neutral = bool(kwargs.get("include_neutral", False))
+        directional_only = bool(kwargs.get("directional_only", False))
+        classification = kwargs.get("classification")
+        min_abs_impact = kwargs.get("min_abs_impact")
+        multi_source_only = bool(kwargs.get("multi_source_only", False))
         with self._connect() as connection:
             rows = self._active_revisions(
                 connection,
@@ -3356,15 +3388,37 @@ class LocalCatalystIntelligence:
                 self._item(connection, row, as_of=as_of, jobs=jobs)
                 for row in rows
             ]
+        rows_by_news_id = {
+            int(row["news_id"]): row
+            for row in rows
+        }
         data_through = self.status(now=as_of).get("data_through")
         results: dict[str, dict[str, Any]] = {}
         for raw_ticker in tickers:
             ticker = raw_ticker.strip().upper()
+
+            def ticker_impact_score(item: dict[str, Any]) -> int | None:
+                result = item.get("analysis")
+                if not isinstance(result, dict):
+                    return None
+                scores = [
+                    int(stock.get("impact_score") or 0)
+                    for stock in result.get("affected_stocks") or []
+                    if isinstance(stock, dict) and stock.get("ticker") == ticker
+                ]
+                return max(scores, key=abs) if scores else None
+
             filtered: list[dict[str, Any]] = []
             for item in items:
                 result = item.get("analysis") or {}
                 affected = result.get("affected_stocks") or []
-                if ticker not in item.get("source_tickers", []) and not any(
+                ticker_score = ticker_impact_score(item)
+                if directional_only:
+                    # 只返回该股票自身具有非零方向影响的完成分析；文章整体
+                    # neutral 仍可包含方向性个股影响，不能按文章分类误杀。
+                    if ticker_score is None or ticker_score == 0:
+                        continue
+                elif ticker not in item.get("source_tickers", []) and not any(
                     stock.get("ticker") == ticker
                     for stock in affected
                     if isinstance(stock, dict)
@@ -3374,11 +3428,54 @@ class LocalCatalystIntelligence:
                     continue
                 if result and int(result.get("confidence") or 0) < min_confidence:
                     continue
-                if not include_neutral and result.get("classification") == "neutral":
+                if (
+                    not directional_only
+                    and not include_neutral
+                    and result.get("classification") == "neutral"
+                ):
                     continue
+                if classification:
+                    ticker_classification = (
+                        "bullish"
+                        if (ticker_score or 0) > 0
+                        else "bearish"
+                        if (ticker_score or 0) < 0
+                        else "neutral"
+                    )
+                    if ticker_classification != classification:
+                        continue
+                if min_abs_impact is not None and (
+                    ticker_score is None
+                    or abs(ticker_score) < int(min_abs_impact)
+                ):
+                    continue
+                if multi_source_only:
+                    row = rows_by_news_id.get(int(item["news_id"]))
+                    if row is None or int(row.get("source_count") or 0) < 2:
+                        continue
                 filtered.append(item)
             page = filtered[:limit]
             analyzed = [item for item in filtered if item.get("analysis")]
+            directional_scores = [
+                score
+                for item in filtered
+                if (score := ticker_impact_score(item)) is not None and score != 0
+            ]
+            latest_at = max(
+                (
+                    str(item["published_at"])
+                    for item in filtered
+                    if item.get("published_at")
+                ),
+                default=None,
+            )
+            source_diversity = len(
+                {
+                    str(item["source"])
+                    for item in filtered
+                    if item.get("source")
+                }
+            )
             results[ticker] = {
                 "ticker": ticker,
                 "status": "active" if page else "empty",
@@ -3396,18 +3493,27 @@ class LocalCatalystIntelligence:
                         analyzed,
                         as_of=as_of,
                     ),
-                    "bullish": sum(
-                        1
-                        for item in analyzed
-                        if item.get("classification") == "bullish"
+                    "count": len(filtered),
+                    "analyzed_count": len(analyzed),
+                    "directional_count": len(directional_scores),
+                    # 原始模型影响分为 [-100, 100]；这里返回窗口内方向分均值。
+                    "net_impact": (
+                        sum(directional_scores) / len(directional_scores)
+                        if directional_scores
+                        else 0.0
                     ),
-                    "bearish": sum(
-                        1
-                        for item in analyzed
-                        if item.get("classification") == "bearish"
+                    "source_diversity": source_diversity,
+                    "latest_at": latest_at,
+                    "bullish": sum(1 for score in directional_scores if score > 0),
+                    "bearish": sum(1 for score in directional_scores if score < 0),
+                    "neutral": 0 if directional_only else max(
+                        0,
+                        len(analyzed) - len(directional_scores),
                     ),
-                    "pending": sum(
-                        1 for item in filtered if not item.get("analysis")
+                    "pending": (
+                        0
+                        if directional_only
+                        else sum(1 for item in filtered if not item.get("analysis"))
                     ),
                     "high_impact_macro": None,
                 },
@@ -3559,13 +3665,34 @@ class LocalCatalystIntelligence:
                 rows: list[sqlite3.Row] = []
             else:
                 rows = connection.execute(
-                    """SELECT g.*,i.prepared_revision FROM catalyst_local_hotspot_items i
+                    """SELECT g.*,i.prepared_revision,
+                              r.raw_title AS representative_source_title,
+                              r.raw_summary AS representative_source_summary,
+                              EXISTS(
+                                  SELECT 1
+                                  FROM catalyst_local_analysis_links link
+                                  JOIN catalyst_local_analysis_result_audit audit
+                                    ON audit.job_id=link.job_id
+                                   AND audit.contract_id=?
+                                   AND audit.outcome='accepted'
+                                   AND audit.result_json=link.result_json
+                                  WHERE link.news_id=g.representative_news_id
+                                    AND link.change_sequence=g.representative_change_sequence
+                                    AND link.content_hash=g.representative_content_hash
+                                    AND link.result_json IS NOT NULL
+                              ) AS representative_analysis_published
+                       FROM catalyst_local_hotspot_items i
                        JOIN catalyst_local_event_groups g
                          ON g.event_group_id=i.event_group_id
                         AND g.event_group_version=i.event_group_version
+                       LEFT JOIN catalyst_local_news_revisions r
+                         ON r.news_id=g.representative_news_id
+                        AND r.change_sequence=g.representative_change_sequence
+                        AND r.content_hash=g.representative_content_hash
                        WHERE i.prepared_revision=? AND g.available_at<=?
                        ORDER BY i.ordinal LIMIT ?""",
                     (
+                        NEWS_RESULT_CONTRACT_ID,
                         revision["prepared_revision"],
                         _iso(observed),
                         min(100, max(1, limit)),
@@ -3600,7 +3727,11 @@ class LocalCatalystIntelligence:
                 "reasons": _loads(row["reasons_json"], []),
                 "status": "prepared",
                 "prepared_at": prepared_at,
-                "representative_title": str(row["representative_title_zh"]),
+                "representative_title": str(
+                    (row["representative_source_title"] or "")
+                    if row["representative_title_zh"] == HOTSPOT_WAITING
+                    else row["representative_title_zh"]
+                ),
                 "event_type": str(row["event_type"]),
                 "available_at": str(row["available_at"]),
                 "first_published_at": row["first_published_at"],
@@ -3608,8 +3739,15 @@ class LocalCatalystIntelligence:
                 "source_count": int(row["source_count"]),
                 "source_names": _loads(row["source_names_json"], []),
                 "validated_tickers": _loads(row["validated_tickers_json"], []),
-                "summary_zh": str(row["representative_summary_zh"]),
+                "summary_zh": str(
+                    row["representative_source_summary"] or ""
+                    if row["representative_summary_zh"] == SUMMARY_WAITING
+                    else row["representative_summary_zh"]
+                ),
                 "representative_news_id": int(row["representative_news_id"]),
+                "_analysis_published": bool(
+                    row["representative_analysis_published"]
+                ),
             }
             for row in rows
         ]
@@ -3629,13 +3767,37 @@ class LocalCatalystIntelligence:
             if revision_row is None:
                 return None, []
             rows = connection.execute(
-                """SELECT g.*,i.prepared_revision FROM catalyst_local_hotspot_items i
+                """SELECT g.*,i.prepared_revision,
+                          r.raw_title AS representative_source_title,
+                          r.raw_summary AS representative_source_summary,
+                          EXISTS(
+                              SELECT 1
+                              FROM catalyst_local_analysis_links link
+                              JOIN catalyst_local_analysis_result_audit audit
+                                ON audit.job_id=link.job_id
+                               AND audit.contract_id=?
+                               AND audit.outcome='accepted'
+                               AND audit.result_json=link.result_json
+                              WHERE link.news_id=g.representative_news_id
+                                AND link.change_sequence=g.representative_change_sequence
+                                AND link.content_hash=g.representative_content_hash
+                                AND link.result_json IS NOT NULL
+                          ) AS representative_analysis_published
+                   FROM catalyst_local_hotspot_items i
                    JOIN catalyst_local_event_groups g
                      ON g.event_group_id=i.event_group_id
                     AND g.event_group_version=i.event_group_version
+                   LEFT JOIN catalyst_local_news_revisions r
+                     ON r.news_id=g.representative_news_id
+                    AND r.change_sequence=g.representative_change_sequence
+                    AND r.content_hash=g.representative_content_hash
                    WHERE i.prepared_revision=?
                    ORDER BY i.ordinal LIMIT ?""",
-                (revision, min(100, max(1, limit))),
+                (
+                    NEWS_RESULT_CONTRACT_ID,
+                    revision,
+                    min(100, max(1, limit)),
+                ),
             ).fetchall()
         return revision_row, self._project_hotspot_rows(
             rows,
@@ -4774,8 +4936,7 @@ class LocalCatalystIntelligence:
             items = [
                 item
                 for item in items
-                if item.get("representative_title") != HOTSPOT_WAITING
-                and item.get("summary_zh") != SUMMARY_WAITING
+                if item.get("_analysis_published") is True
             ]
         observed = as_of or _utc_now()
         prepared_at = (
