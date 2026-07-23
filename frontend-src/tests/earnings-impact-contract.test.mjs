@@ -205,6 +205,8 @@ test('财报日历保留全市场覆盖状态和真实供应方', () => {
   assert.equal(source.includes('mapUpcomingPayload'), true);
   assert.equal(page.includes('全市场财报源暂时不完整'), true);
   assert.equal(page.includes('未返回的公司不会用热门名单或估算值补齐'), true);
+  assert.equal(page.includes('const coverageLimited = q.data?.dataLimited === true;'), true);
+  assert.equal(page.includes("q.data?.sourceStatus === 'degraded'"), false);
   assert.equal(page.includes("q.data.providers.join(' + ')"), true);
   assert.equal(page.includes('继续使用上一次完整日历'), true);
 });
