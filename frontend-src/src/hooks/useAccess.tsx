@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { accessApi } from '@/api/modules/access';
+import { OWNER_SESSION_INVALID_EVENT } from '@/api/client';
 import type { AccessRole, AccessStatus } from '@/api/types';
 
 interface AccessContextValue {
@@ -35,6 +36,14 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // backend 重启、新设备登录或会话过期后，旧 SPA 不能继续显示“已登录”。
+  useEffect(() => {
+    if (status.role !== 'owner') return;
+    const onInvalidated = () => void refresh();
+    window.addEventListener(OWNER_SESSION_INVALID_EVENT, onInvalidated);
+    return () => window.removeEventListener(OWNER_SESSION_INVALID_EVENT, onInvalidated);
+  }, [refresh, status.role]);
 
   const login = useCallback(async (password: string) => {
     setStatus(await accessApi.login(password));
