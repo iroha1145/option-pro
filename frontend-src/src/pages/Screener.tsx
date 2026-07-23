@@ -161,6 +161,14 @@ export default function Screener() {
     // mock 展示时长 800–1500ms（screener.md B1）
     const minMs = 800 + Math.random() * 700;
     try {
+      // 后端必须先返回足够大的真实候选集，再应用只存在于客户端的条件；
+      // 否则先截 TopN 会漏掉价格上限、多板块、分档或最低分过滤后的合资格股票。
+      const hasClientOnlyNarrowing =
+        filters.priceMax != null ||
+        filters.sectors.length > 1 ||
+        filters.tier !== 'all' ||
+        filters.minScore != null;
+      const apiTop = filters.topN <= 0 || hasClientOnlyNarrowing ? 120 : filters.topN;
       const params = {
         band: 'all',
         sort: 'score',
@@ -168,7 +176,7 @@ export default function Screener() {
         universe: 'themes',
         timeframe: filters.timeframe,
         profile: filters.profile,
-        top: filters.topN > 0 ? filters.topN : 120,
+        top: apiTop,
         sector_id: filters.sectors.length === 1 ? filters.sectors[0] : undefined,
         min_price: filters.priceMin ?? 0,
         min_avg_dollar_volume: filters.minDollarVol,
@@ -183,7 +191,7 @@ export default function Screener() {
           universe: 'themes',
           timeframe: filters.timeframe,
           profile: filters.profile,
-          top: filters.topN > 0 ? filters.topN : 120,
+          top: apiTop,
           sector_id: filters.sectors.length === 1 ? filters.sectors[0] : null,
           min_price: filters.priceMin ?? 0,
           min_avg_dollar_volume: filters.minDollarVol,
