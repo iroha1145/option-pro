@@ -29,7 +29,13 @@ import EarningsAnalysisControls from '@/components/earnings/EarningsAnalysisCont
 import DensityStrip from '@/components/earnings/DensityStrip';
 import PulseDot from '@/components/earnings/PulseDot';
 import type { EarningsRow } from '@/components/earnings/types';
-import { daysUntil, etToday, fmtMDCN, weekStartMonday } from '@/components/earnings/types';
+import {
+  daysUntil,
+  etToday,
+  fmtMDCN,
+  prioritizeEarningsRows,
+  weekStartMonday,
+} from '@/components/earnings/types';
 
 const REFRESH_COOLDOWN_S = 60;
 const LIST_PAGE_SIZE = 80;
@@ -163,8 +169,12 @@ export default function Earnings() {
     setVisibleLimit(LIST_PAGE_SIZE);
   }
   const visibleItems = useMemo(
-    () => filteredItems.slice(0, visibleLimit),
-    [filteredItems, visibleLimit],
+    () => (
+      selectedDay
+        ? filteredItems
+        : prioritizeEarningsRows(filteredItems, visibleLimit)
+    ),
+    [filteredItems, selectedDay, visibleLimit],
   );
   const selectedRow = useMemo(
     () => items.find((item) => item.ticker === selectedTicker) ?? null,
@@ -430,7 +440,7 @@ export default function Earnings() {
                 onNextWeek={() => onWeekChange(1)}
                 filteredByDay={selectedDay != null}
               />
-              {visibleItems.length < filteredItems.length && (
+              {!selectedDay && visibleItems.length < filteredItems.length && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-card px-4 py-3">
                   <p className="text-caption text-ink-500">
                     已显示 <span className="font-mono text-ink-800 tnum">{visibleItems.length}</span>

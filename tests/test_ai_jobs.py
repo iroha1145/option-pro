@@ -1757,6 +1757,49 @@ def test_pending_job_fails_safely_when_frozen_runtime_configuration_changed(
     assert failed["error_code"] == "runtime_configuration_changed"
 
 
+def test_new_submission_uses_persisted_submission_time_for_poll_window(
+    monkeypatch,
+    tmp_path,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    settings = _settings(tmp_path / "ai-jobs.db")
+    owner = "worker-old-pending-submission"
+    cancel_calls = 0
+
+    async def fake_submit(*_args, **_kwargs):
+        return SimpleNamespace(status="queued", id="resp_newly_queued")
+
+    async def fake_cancel(*_args, **_kwargs):
+        nonlocal cancel_calls
+        cancel_calls += 1
+        return SimpleNamespace(status="cancelled", id="resp_newly_queued")
+
+    monkeypatch.setattr(runtime, "submit_background", fake_submit)
+    monkeypatch.setattr(runtime, "cancel", fake_cancel)
+    with repository._connect() as connection:
+        connection.execute(
+            """
+            UPDATE ai_jobs
+            SET created_at='2020-01-01T00:00:00Z',
+                updated_at='2020-01-01T00:00:00Z'
+            WHERE job_id=?
+            """,
+            (row["job_id"],),
+        )
+        connection.commit()
+
+    claimed = repository.claim_due(owner, 60)
+    asyncio.run(process_job(repository, settings, claimed, owner))
+
+    waiting = repository.get_job(row["job_id"])
+    assert cancel_calls == 0
+    assert waiting["status"] == "queued"
+    assert waiting["openai_response_id"] == "resp_newly_queued"
+    assert waiting["submitted_at"] is not None
+    assert waiting["error_code"] is None
+
+
 def test_elapsed_poll_window_cancels_the_stalled_background_response(
     monkeypatch,
     tmp_path,
