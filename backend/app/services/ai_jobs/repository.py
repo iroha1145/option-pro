@@ -1378,29 +1378,69 @@ class AIJobRepository:
             ).fetchone()
             return self._decorate_earnings_row(connection, row)
 
+    def active_scheduled_earnings_pre_release_count(self) -> int:
+        """Count only active automatic preliminary earnings analyses."""
+
+        self.initialize()
+        with self._connect() as connection:
+            return int(
+                connection.execute(
+                    """
+                    SELECT COUNT(*) FROM ai_jobs AS j
+                    JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                    WHERE j.job_type='earnings_impact'
+                      AND j.status IN ('pending','queued','in_progress')
+                      AND s.submission_source='scheduled'
+                      AND COALESCE(
+                            json_extract(j.payload_json,'$.analysis_stage'),
+                            json_extract(j.payload_json,'$.analysis_phase'),
+                            'pre_release'
+                          )='pre_release'
+                    """
+                ).fetchone()[0]
+            )
+
     def latest_for_report(
         self,
         ticker: str,
         report_id: str,
         *,
         analysis_stage: str | None = None,
+        status: str | None = None,
     ) -> dict[str, Any] | None:
         self.initialize()
         with self._connect() as connection:
             stage_filter = ""
+            status_filter = ""
             parameters: list[Any] = [
                 ticker.upper(),
                 report_id,
                 _iso(_utcnow() - timedelta(days=30)),
             ]
             if analysis_stage:
-                stage_filter = """
-                  AND COALESCE(
-                        json_extract(j.payload_json,'$.analysis_stage'),
-                        json_extract(j.payload_json,'$.analysis_phase')
-                      )=?
-                """
+                if analysis_stage == "pre_release":
+                    # Jobs written before earnings stages were introduced are
+                    # pre-release analyses. Keep them discoverable so a
+                    # released report can be finalized without paying for the
+                    # same preliminary analysis again.
+                    stage_filter = """
+                      AND COALESCE(
+                            json_extract(j.payload_json,'$.analysis_stage'),
+                            json_extract(j.payload_json,'$.analysis_phase'),
+                            'pre_release'
+                          )=?
+                    """
+                else:
+                    stage_filter = """
+                      AND COALESCE(
+                            json_extract(j.payload_json,'$.analysis_stage'),
+                            json_extract(j.payload_json,'$.analysis_phase')
+                          )=?
+                    """
                 parameters.append(analysis_stage)
+            if status:
+                status_filter = " AND j.status=?"
+                parameters.append(status)
             row = connection.execute(
                 f"""
                 SELECT j.*,s.submission_source FROM ai_jobs AS j
@@ -1410,6 +1450,7 @@ class AIJobRepository:
                   AND json_extract(j.payload_json,'$.report_id')=?
                   AND COALESCE(j.completed_at,j.updated_at,j.created_at)>=?
                   {stage_filter}
+                  {status_filter}
                 ORDER BY j.created_at DESC,j.job_id DESC
                 LIMIT 1
                 """,

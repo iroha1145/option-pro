@@ -115,7 +115,7 @@ def test_defaults_follow_non_secret_personal_configuration(tmp_path: Path) -> No
         personal.catalyst.scheduled_times_et
     )
     assert document.settings.earnings.scheduled_analysis_enabled is False
-    assert document.settings.earnings.lookahead_days == 30
+    assert document.settings.earnings.lookahead_days == 5
     catalyst_document = document.settings.catalyst.model_dump()
     assert "manual_force_reanalysis" not in catalyst_document
     assert "manual_refresh_enabled" not in catalyst_document
@@ -460,7 +460,7 @@ def test_v1_read_migrates_limits_but_preserves_owner_switches_and_schedule(
     assert migrated.settings.catalyst.scheduled_analysis_enabled is False
     assert migrated.settings.catalyst.scheduled_times_et == ("07:15", "13:45")
     assert migrated.settings.earnings.scheduled_analysis_enabled is False
-    assert migrated.settings.earnings.lookahead_days == 30
+    assert migrated.settings.earnings.lookahead_days == 5
     assert "daily_token_limit" not in json.loads(path.read_text(encoding="utf-8"))[
         "settings"
     ]["ai"]

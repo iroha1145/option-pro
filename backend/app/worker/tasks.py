@@ -223,7 +223,7 @@ class AIJobsTask:
 
 
 class EarningsAnalysisTask:
-    """Queue one real earnings-impact job per new report date in the next month."""
+    """Queue real earnings-impact jobs within the configured report window."""
 
     def __init__(
         self,
@@ -235,6 +235,7 @@ class EarningsAnalysisTask:
         builder: Callable[[date], Any] | None = None,
         runtime_settings_reader: Callable[[], Any] | None = None,
         today: Callable[[], date] | None = None,
+        now: Callable[[], datetime] | None = None,
     ) -> None:
         self.owner_id = f"{owner_id}:earnings-analysis"
         self._settings = settings
@@ -243,6 +244,7 @@ class EarningsAnalysisTask:
         self._builder = builder
         self._runtime_settings_reader = runtime_settings_reader
         self._today = today
+        self._now = now or (lambda: datetime.now(timezone.utc))
 
     async def _effective_settings(self) -> Any:
         if self._runtime_settings_reader is not None:
@@ -271,6 +273,29 @@ class EarningsAnalysisTask:
             isinstance(payload, dict)
             and str(payload.get("earnings_date") or "") == report_date
         )
+
+    @staticmethod
+    def _updated_before_utc_date(
+        row: Mapping[str, Any] | None,
+        utc_date: date,
+    ) -> bool:
+        if not row:
+            return False
+        raw = str(
+            row.get("updated_at")
+            or row.get("completed_at")
+            or row.get("created_at")
+            or ""
+        )
+        if not raw:
+            return False
+        try:
+            updated = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        if updated.tzinfo is None or updated.utcoffset() is None:
+            updated = updated.replace(tzinfo=timezone.utc)
+        return updated.astimezone(timezone.utc).date() < utc_date
 
     async def _run(self, *, manual: bool) -> TaskResult:
         from app.api import earnings
@@ -391,7 +416,22 @@ class EarningsAnalysisTask:
         queued = 0
         existing = 0
         invalid = 0
+        skipped_final_without_pre_release = 0
+        scheduled_pre_release_active = (
+            0
+            if manual
+            else await _call_local(
+                repository.active_scheduled_earnings_pre_release_count
+            )
+        )
+        scheduled_pre_release_slots = max(
+            0,
+            ai_runtime.EARNINGS_PRE_RELEASE_ACTIVE_LIMIT
+            - scheduled_pre_release_active,
+        )
+        skipped_pre_release_capacity = 0
         queue_full = False
+        utc_date = self._now().astimezone(timezone.utc).date()
         for item in eligible:
             raw_payload = {
                 "ticker": str(item.get("ticker") or ""),
@@ -426,16 +466,33 @@ class EarningsAnalysisTask:
             except (TypeError, ValueError):
                 invalid += 1
                 continue
+            if analysis_stage == "post_release_final":
+                preliminary = await _call_local(
+                    repository.latest_for_report,
+                    payload["ticker"],
+                    payload["report_id"],
+                    analysis_stage="pre_release",
+                    status="completed",
+                )
+                if not preliminary:
+                    skipped_final_without_pre_release += 1
+                    continue
             latest = await _call_local(
                 repository.latest_for_report,
                 payload["ticker"],
                 payload["report_id"],
                 analysis_stage=analysis_stage,
             )
+            latest_status = str((latest or {}).get("status") or "")
             retry_failed_report = bool(
                 latest
-                and str((latest or {}).get("status") or "")
-                in {"failed", "cancelled", "budget_blocked"}
+                and (
+                    latest_status in {"failed", "cancelled"}
+                    or (
+                        latest_status == "budget_blocked"
+                        and self._updated_before_utc_date(latest, utc_date)
+                    )
+                )
             )
             if (
                 analysis_stage == "pre_release"
@@ -443,6 +500,13 @@ class EarningsAnalysisTask:
                 and not retry_failed_report
             ):
                 existing += 1
+                continue
+            if (
+                not manual
+                and analysis_stage == "pre_release"
+                and scheduled_pre_release_slots <= 0
+            ):
+                skipped_pre_release_capacity += 1
                 continue
             try:
                 queue_limit = self._settings.openai_job_max_queued
@@ -485,6 +549,12 @@ class EarningsAnalysisTask:
                 raise
             queued += int(bool(created))
             existing += int(not created)
+            if (
+                created
+                and not manual
+                and analysis_stage == "pre_release"
+            ):
+                scheduled_pre_release_slots -= 1
 
         details = {
             "result": "queued" if manual else "scheduled",
@@ -496,6 +566,14 @@ class EarningsAnalysisTask:
             "queued": queued,
             "existing": existing,
             "invalid": invalid,
+            "skipped_final_without_pre_release": (
+                skipped_final_without_pre_release
+            ),
+            "pre_release_active_limit": (
+                ai_runtime.EARNINGS_PRE_RELEASE_ACTIVE_LIMIT
+            ),
+            "pre_release_active_before": scheduled_pre_release_active,
+            "skipped_pre_release_capacity": skipped_pre_release_capacity,
             "retention_deleted": int(retention_deleted),
         }
         if queue_full:

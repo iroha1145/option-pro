@@ -135,7 +135,7 @@ class RuntimeEarningsSettings(_StrictModel):
     """Owner controls for bounded daily earnings-impact analysis."""
 
     scheduled_analysis_enabled: bool = False
-    lookahead_days: int = Field(default=30, ge=1, le=30)
+    lookahead_days: int = Field(default=5, ge=1, le=30)
 
 
 class RuntimeSettings(_StrictModel):
