@@ -1122,6 +1122,8 @@ class PersonalCatalystService:
                 "summary": {
                     "news_6h": None,
                     "analyzed_24h": None,
+                    "count": None,
+                    "analyzed_count": None,
                     "bullish": None,
                     "bearish": None,
                     "pending": None,
@@ -1147,6 +1149,8 @@ class PersonalCatalystService:
                 "summary": {
                     "news_6h": None,
                     "analyzed_24h": None,
+                    "count": None,
+                    "analyzed_count": None,
                     "bullish": None,
                     "bearish": None,
                     "pending": None,

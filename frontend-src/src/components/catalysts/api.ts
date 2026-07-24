@@ -593,7 +593,7 @@ const PUBLIC_BATCH_MAX_LIMIT = 5;
 export const catalystsContract = {
   status: (): Promise<CatalystsStatusDetail> =>
     mockOr(() => fx2.getCatalystsStatusV2(), () => get('/catalysts/status').then(nStatus)),
-  /** 今日新闻计数（个人版 status 无计数字段：由 24h 窗口 feed 诚实推导；50 条封顶记 saturated） */
+  /** 今日新闻计数优先使用后端完整过滤窗口汇总；旧后端才退回当前页计数。 */
   newsToday: (): Promise<{ count: number; analyzed: number; saturated: boolean }> =>
     mockOr(
       async () => {
@@ -608,10 +608,19 @@ export const catalystsContract = {
           includeNeutral: true,
         })}`).then((d) => {
           const items = unwrap(d, 'items').map(nNewsItem);
+          const summary = asRec(asRec(d).summary);
+          const completeCount = pickN(summary, 'count');
+          const completeAnalyzed = pickN(
+            summary,
+            'analyzedCount',
+            'analyzed_count',
+          );
           return {
-            count: items.length,
-            analyzed: items.filter((i) => i.analysisStatus === 'completed').length,
-            saturated: items.length >= 50,
+            count: completeCount ?? items.length,
+            analyzed:
+              completeAnalyzed
+              ?? items.filter((i) => i.analysisStatus === 'completed').length,
+            saturated: completeCount === null && items.length >= 50,
           };
         }),
     ),

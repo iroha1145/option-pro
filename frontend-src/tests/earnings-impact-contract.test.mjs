@@ -70,6 +70,59 @@ function loadNormalizer() {
   return module.exports.normalizeLiveEarningsImpact;
 }
 
+function loadUpcomingMapper() {
+  const source = fs.readFileSync(moduleSourcePath, 'utf8');
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+      esModuleInterop: true,
+    },
+  }).outputText;
+  const module = { exports: {} };
+  const require = (id) => {
+    if (id === '../client') {
+      return {
+        get: () => Promise.resolve({}),
+        post: () => Promise.resolve({}),
+        mockOr: (_mock, live) => live(),
+      };
+    }
+    if (id === '../live') {
+      const asRec = (value) => (
+        value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {}
+      );
+      return {
+        asRec,
+        pickN: (row, ...keys) => {
+          for (const key of keys) {
+            const value = typeof row[key] === 'string' ? Number(row[key]) : row[key];
+            if (typeof value === 'number' && Number.isFinite(value)) return value;
+          }
+          return null;
+        },
+        pickS: (row, ...keys) => {
+          for (const key of keys) {
+            if (typeof row[key] === 'string' && row[key]) return row[key];
+          }
+          return null;
+        },
+        unwrap: (body, ...keys) => {
+          if (Array.isArray(body)) return body;
+          for (const key of keys) {
+            if (Array.isArray(body?.[key])) return body[key];
+          }
+          return [];
+        },
+      };
+    }
+    if (id === '@/mocks/fixtures2') return {};
+    throw new Error(`unexpected import: ${id}`);
+  };
+  vm.runInNewContext(compiled, { module, exports: module.exports, require });
+  return module.exports.mapUpcoming;
+}
+
 function loadEarningsDateTools() {
   const source = fs.readFileSync(earningsTypesSourcePath, 'utf8');
   const compiled = ts.transpileModule(source, {
@@ -207,6 +260,34 @@ test('财报日程不把缺失或未知时间伪装成盘前', () => {
   assert.equal(rows[1].timing, 'amc');
   assert.equal(rows[2].timing, null);
   assert.equal(source.includes("?? 'bmo'"), false);
+});
+
+test('财报市值只保留数据源提供的正数，缺失和占位值保持为空', () => {
+  const mapUpcoming = loadUpcomingMapper();
+  const rows = mapUpcoming({
+    earnings: [
+      { ticker: 'REAL', earnings_date: '2026-07-30', market_cap: 123_456_789 },
+      { ticker: 'ZERO', earnings_date: '2026-07-30', market_cap: 0 },
+      { ticker: 'NEG', earnings_date: '2026-07-30', market_cap: -1 },
+      { ticker: 'MISS', earnings_date: '2026-07-30' },
+    ],
+  });
+
+  assert.equal(rows[0].marketCap, 123_456_789);
+  assert.equal(rows[0].market_cap, 123_456_789);
+  for (const row of rows.slice(1)) {
+    assert.equal(row.marketCap, null);
+    assert.equal(row.market_cap, null);
+  }
+
+  const list = fs.readFileSync(listSourcePath, 'utf8');
+  assert.equal(list.includes("marketCap != null ? `$${fmtCompact(marketCap)}` : '—'"), true);
+  const fixtures = fs.readFileSync(
+    path.resolve(here, '..', 'src', 'mocks', 'fixtures2.ts'),
+    'utf8',
+  );
+  assert.equal(fixtures.includes('marketCap: info ? Math.round'), false);
+  assert.equal(fixtures.includes('marketCap: null'), true);
 });
 
 test('财报日历保留全市场覆盖状态和真实供应方', () => {

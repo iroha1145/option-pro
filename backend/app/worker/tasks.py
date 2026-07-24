@@ -374,6 +374,12 @@ class EarningsAnalysisTask:
                 eligible.append(dict(value))
         eligible.sort(
             key=lambda item: (
+                0
+                if (
+                    item.get("eps_actual") is not None
+                    or item.get("revenue_actual") is not None
+                )
+                else 1,
                 int(item.get("days_until") or 0),
                 str(item.get("ticker") or ""),
             )
@@ -439,6 +445,12 @@ class EarningsAnalysisTask:
                 existing += 1
                 continue
             try:
+                queue_limit = self._settings.openai_job_max_queued
+                if analysis_stage == "post_release_final":
+                    # Final analyses must still enter when scheduled
+                    # pre-release work and the manual reserve are saturated.
+                    # The larger reserve remains a hard total cap.
+                    queue_limit += ai_runtime.EARNINGS_FINAL_QUEUE_RESERVE
                 _row, created = await _call_local(
                     repository.create_job,
                     job_type="earnings_impact",
@@ -449,14 +461,14 @@ class EarningsAnalysisTask:
                     prompt_version="earnings-impact-zh-cn-v5",
                     schema_version=schema_version,
                     schema_sha256=schema_sha256,
-                    max_queued=self._settings.openai_job_max_queued,
+                    max_queued=queue_limit,
                     submission_source="manual" if manual else "scheduled",
                     priority=(
-                        90
+                        ai_runtime.EARNINGS_FINAL_PRIORITY
                         if analysis_stage == "post_release_final"
-                        else 70
+                        else ai_runtime.EARNINGS_OWNER_PRIORITY
                         if manual
-                        else 40
+                        else ai_runtime.EARNINGS_PRE_RELEASE_PRIORITY
                     ),
                     force_retry=retry_failed_report,
                 )

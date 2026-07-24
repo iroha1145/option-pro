@@ -30,7 +30,8 @@ export function exNum(
   const r = row as unknown as Record<string, unknown>;
   const snake = camel.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
   const v = r[camel] ?? r[snake];
-  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+  if (typeof v !== 'number' || !Number.isFinite(v)) return null;
+  return camel === 'marketCap' && v <= 0 ? null : v;
 }
 export function exStr(
   row: EarningsRow,

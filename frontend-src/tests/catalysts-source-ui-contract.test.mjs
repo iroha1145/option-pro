@@ -181,6 +181,31 @@ test('数据源卡映射真实近24小时条数与新鲜度滞后', async () => 
   assert.equal(panel.includes('不代表接口请求耗时'), true);
 });
 
+test('今日新闻优先使用完整过滤窗口汇总而非首屏五十条', async () => {
+  const feedPath =
+    '/catalysts/feed?window_hours=24'
+    + '&include_unanalyzed=true&include_neutral=true&limit=50';
+  const loaded = loadCatalystsModule({
+    [feedPath]: {
+      items: [
+        { news_id: 1, analysis_status: 'completed' },
+        { news_id: 2, analysis_status: 'not_requested' },
+      ],
+      summary: {
+        count: 342,
+        analyzed_count: 217,
+      },
+    },
+  });
+
+  const today = await loaded.exports.catalystsContract.newsToday();
+
+  assert.equal(today.count, 342);
+  assert.equal(today.analyzed, 217);
+  assert.equal(today.saturated, false);
+  assert.deepEqual(loaded.calls, [feedPath]);
+});
+
 test('股票影响圆点由外层定位，缩放动画不会覆盖居中位移', () => {
   const source = fs.readFileSync(
     path.join(sourceRoot, 'components', 'catalysts', 'StocksPanel.tsx'),

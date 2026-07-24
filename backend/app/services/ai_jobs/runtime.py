@@ -49,6 +49,16 @@ AI_TASK_MAX_OUTPUT_TOKENS: dict[str, int] = {
     "news_impact": 32_768,
     "market_focus": 49_152,
 }
+# Queue policy is cumulative above OPENAI_JOB_MAX_QUEUED. Scheduled
+# pre-release work stays inside the configured base capacity, explicit report
+# analysis may use the first reserve, and post-release finalization alone may
+# use the larger reserve.
+EARNINGS_PRE_RELEASE_PRIORITY = 40
+EARNINGS_VISITOR_PRIORITY = 75
+EARNINGS_OWNER_PRIORITY = 80
+EARNINGS_FINAL_PRIORITY = 90
+EARNINGS_MANUAL_QUEUE_RESERVE = 20
+EARNINGS_FINAL_QUEUE_RESERVE = 40
 
 
 @dataclass(frozen=True)
