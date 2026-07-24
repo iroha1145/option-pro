@@ -942,17 +942,20 @@ def test_public_catalyst_reads_do_not_consume_the_provider_work_budget(
         ("GET", "/api/signals/market", True),
         ("GET", "/api/catalysts/feed", True),
         ("POST", "/api/stocks/AAOI", False),
+        ("POST", "/api/stocks/AAOI/pull", False),
+        ("POST", "/api/earnings/upcoming/refresh", False),
+        ("GET", "/api/catalysts/analysis-progress", False),
+        ("GET", "/api/ai/earnings-impact/NVDA", False),
         ("POST", "/api/ai/jobs/signal-analysis", False),
     ],
 )
-def test_cache_protected_stock_drawer_reads_have_a_separate_finite_bucket(
+def test_public_ui_reads_have_a_separate_bucket_and_provider_work_stays_heavy(
     method: str,
     path: str,
     expected: bool,
 ) -> None:
     assert main._is_cached_market_read_path(path, method) is expected
-    if expected:
-        assert main._is_heavy_api_path(path, method) is False
+    assert main._is_heavy_api_path(path, method) is (not expected)
 
 
 def test_stock_drawer_read_bucket_is_bounded_and_independent(
