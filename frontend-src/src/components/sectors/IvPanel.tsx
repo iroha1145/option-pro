@@ -8,6 +8,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
+import { useRetryCountdown } from '@/hooks/useRetryCountdown';
 import SectorChips from './SectorChips';
 import type { IvMetaVm, IvRowVm } from './model';
 import { SOURCE_STATUS_CN, ivRankColor } from './model';
@@ -60,6 +61,7 @@ interface IvPanelProps {
 
 export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta, loading, error, onRetry, onOpenTicker }: IvPanelProps) {
   const [desc, setDesc] = useState(false);
+  const retrySeconds = useRetryCountdown(error, error?.retryAfter);
 
   const rows = useMemo(() => {
     const sorted = [...data].sort((a, b) => {
@@ -75,7 +77,10 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
     }
     return sorted;
   }, [data, desc]);
-
+  const priceProviders = useMemo(
+    () => Array.from(new Set(data.map((row) => row.priceProvider).filter((value): value is string => Boolean(value)))),
+    [data],
+  );
   return (
     <div className="card-surface p-4 md:p-6">
       {/* 头：标题 + 徽标 + 排序 */}
@@ -120,18 +125,22 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
           <SkeletonRows rows={6} />
         ) : error ? (
           <EmptyState
-            variant="error"
             image="/empty-chart.svg"
             title={error.code === 503 ? 'IV 排名快照暂不可用' : 'IV 排名加载失败'}
-            description={error.code === 503 ? '接口未覆盖此能力，留空而非编造' : error.message}
+            description={
+              error.code === 503
+                ? `Yahoo/yfinance 期权数据暂不可用${retrySeconds > 0 ? ` · ${retrySeconds} 秒后可重试` : ''}`
+                : error.message
+            }
             action={
               <button
                 type="button"
                 onClick={onRetry}
-                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+                disabled={retrySeconds > 0}
+                className="flex min-h-11 items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
               >
                 <Icon name="refresh" size={14} />
-                重试
+                {retrySeconds > 0 ? `${retrySeconds} 秒后重试` : '重试'}
               </button>
             }
           />
@@ -164,7 +173,10 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
                       </span>
                     </span>
                   </td>
-                  <td className="px-2 py-2 text-right font-mono text-data-m text-ink-800 tnum">
+                  <td
+                    className="px-2 py-2 text-right font-mono text-data-m text-ink-800 tnum"
+                    title={r.priceProvider ? `价格来源：${r.priceProvider}` : undefined}
+                  >
                     {r.price !== null ? fmtPrice(r.price) : <span className="text-ink-300">—</span>}
                   </td>
                   <td className="px-2 py-2">
@@ -192,11 +204,16 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
       <SourceNote
         className="mt-4"
         text={
-          meta.snapshotSource === 'strength_worker' ||
-          meta.snapshotSource === 'sector_owner_snapshot' ||
-          meta.snapshotSource === 'owner_live'
-            ? '数据来自后台持久化的真实期权链快照；板块排位是当前成分的横截面比较，不是历史 252 日百分位'
-            : '板块排位来自当前成分 ATM IV 的横截面比较，不是历史 252 日百分位'
+          `隐含波动率来源：${meta.providers.join(' + ') || 'Yahoo/yfinance'}；价格来源：${
+            priceProviders.join(' + ') || '接口未标注'
+          }；${
+            meta.snapshotSource === 'strength_worker' ||
+            meta.snapshotSource === 'sector_snapshot' ||
+            meta.snapshotSource === 'owner_live' ||
+            meta.snapshotSource === 'public_live'
+              ? '当前显示真实期权链快照'
+              : '当前显示实时返回结果'
+          }；板块排位是当前成分的横截面比较，不是历史 252 日百分位`
         }
       />
     </div>

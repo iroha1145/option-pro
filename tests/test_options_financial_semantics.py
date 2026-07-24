@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from types import SimpleNamespace
 
 import pandas as pd
 import pytest
 from fastapi import HTTPException
 
+from app.access import request_owner_access_context
 from app.api import options
 from app.services import yahoo
 
@@ -15,10 +17,12 @@ from app.services import yahoo
 @pytest.fixture(autouse=True)
 def _clear_option_state() -> None:
     options._unusual_failure_deadlines.clear()
+    options._option_failure_cache.clear()
     options.cache.clear()
     yahoo._cache.clear()
     yield
     options._unusual_failure_deadlines.clear()
+    options._option_failure_cache.clear()
     options.cache.clear()
     yahoo._cache.clear()
 
@@ -162,6 +166,175 @@ def test_concurrent_total_failures_share_one_negative_result(
         isinstance(result, HTTPException) and result.status_code == 503
         for result in results
     )
+
+
+def test_public_option_reads_cold_pull_yahoo_and_coalesce(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expiration_calls = 0
+    chain_calls = 0
+
+    def load_expirations(_symbol: str) -> dict:
+        nonlocal expiration_calls
+        expiration_calls += 1
+        time.sleep(0.03)
+        return {
+            "expirations": ["2030-08-16"],
+            "_stale": False,
+            "source_status": "active",
+            "as_of": "2030-07-01T00:00:00+00:00",
+        }
+
+    def load_chain(symbol: str, expiration: str) -> dict:
+        nonlocal chain_calls
+        chain_calls += 1
+        time.sleep(0.03)
+        return {
+            "ticker": symbol,
+            "expiration": expiration,
+            "underlying_price": 100.0,
+            "calls": [{"strike": 100.0}],
+            "puts": [{"strike": 100.0}],
+            "alerts": [],
+            "data_limited": False,
+        }
+
+    monkeypatch.setattr(yahoo, "get_expirations_snapshot", load_expirations)
+    monkeypatch.setattr(yahoo, "get_option_chain", load_chain)
+
+    async def scenario() -> tuple[list[dict], list[dict]]:
+        with request_owner_access_context(False):
+            expirations = await asyncio.gather(
+                *[options.expirations("aaoi") for _ in range(5)]
+            )
+            chains = await asyncio.gather(
+                *[
+                    options.option_chain("aaoi", "2030-08-16")
+                    for _ in range(5)
+                ]
+            )
+        return expirations, chains
+
+    expirations, chains = asyncio.run(scenario())
+
+    assert expiration_calls == 1
+    assert chain_calls == 1
+    assert all(row["provider"] == "Yahoo/yfinance" for row in expirations)
+    assert all(row["expirations"] == ["2030-08-16"] for row in expirations)
+    assert all(row["provider"] == "Yahoo/yfinance" for row in chains)
+    assert all(row["ticker"] == "AAOI" for row in chains)
+
+
+def test_public_option_failure_is_cooled_without_repeating_provider_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = [500.0]
+    calls = 0
+
+    def unavailable(_symbol: str, _expiration: str) -> dict:
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(yahoo, "get_option_chain", unavailable)
+    monkeypatch.setattr(
+        yahoo,
+        "get_expirations_snapshot",
+        lambda _symbol: {"expirations": ["2030-08-16"]},
+    )
+    monkeypatch.setattr(options.time, "monotonic", lambda: now[0])
+
+    async def scenario() -> list[object]:
+        with request_owner_access_context(False):
+            return await asyncio.gather(
+                *[
+                    options.option_chain("aaoi", "2030-08-16")
+                    for _ in range(5)
+                ],
+                return_exceptions=True,
+            )
+
+    first = asyncio.run(scenario())
+
+    assert calls == 1
+    assert all(
+        isinstance(result, HTTPException)
+        and result.status_code == 503
+        and result.headers == {"Retry-After": "30"}
+        for result in first
+    )
+
+    with request_owner_access_context(False):
+        with pytest.raises(HTTPException) as cooled:
+            asyncio.run(options.option_chain("aaoi", "2030-08-16"))
+    assert cooled.value.headers == {"Retry-After": "30"}
+    assert calls == 1
+
+    now[0] += 31
+    with pytest.raises(HTTPException):
+        asyncio.run(options.option_chain("aaoi", "2030-08-16"))
+    assert calls == 2
+
+
+@pytest.mark.parametrize(
+    ("ticker", "expiration", "code"),
+    [
+        ("AAOI/../../AAPL", "2030-08-16", "invalid_ticker"),
+        ("AAOI", "2030-02-30", "invalid_option_expiration"),
+    ],
+)
+def test_option_chain_rejects_invalid_inputs_before_provider_work(
+    monkeypatch: pytest.MonkeyPatch,
+    ticker: str,
+    expiration: str,
+    code: str,
+) -> None:
+    calls = 0
+
+    def unexpected(_symbol: str) -> dict:
+        nonlocal calls
+        calls += 1
+        return {"expirations": ["2030-08-16"]}
+
+    monkeypatch.setattr(yahoo, "get_expirations_snapshot", unexpected)
+
+    with pytest.raises(HTTPException) as captured:
+        asyncio.run(options.option_chain(ticker, expiration))
+
+    assert captured.value.status_code == 400
+    assert captured.value.detail["code"] == code
+    assert calls == 0
+
+
+def test_option_chain_rejects_expiration_outside_ticker_membership_and_cools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+    chain_calls = 0
+
+    def expirations(_symbol: str) -> dict:
+        nonlocal calls
+        calls += 1
+        return {"expirations": ["2030-08-16"]}
+
+    monkeypatch.setattr(yahoo, "get_expirations_snapshot", expirations)
+
+    def unexpected_chain(_symbol: str, _expiration: str) -> dict:
+        nonlocal chain_calls
+        chain_calls += 1
+        raise AssertionError("membership validation must run before chain fetch")
+
+    monkeypatch.setattr(yahoo, "get_option_chain", unexpected_chain)
+
+    for _ in range(2):
+        with pytest.raises(HTTPException) as captured:
+            asyncio.run(options.option_chain("AAOI", "2030-08-23"))
+        assert captured.value.status_code == 400
+        assert captured.value.detail["code"] == "invalid_option_expiration"
+        assert captured.value.headers == {"Retry-After": "30"}
+
+    assert calls == 1
+    assert chain_calls == 0
 
 
 def test_unusual_scan_keeps_a_ticker_when_one_expiration_fails(

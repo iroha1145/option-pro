@@ -4,23 +4,23 @@
  *
  * 状态机：
  *  - 已缓存 → 真实契约结果（摘要 / 预期 / 关联标的）
- *  - 409 analysis_required → owner「生成分析」（confirm 注明模型费用）→ 创建 job 退避轮询 [2,3,5,8,10]s
- *    （活跃 led-pulse + 服务端任务状态，终态渲染结果 / 失败原因 + 重试）
- *  - 无论生成开关是否开启都先读取缓存；仅在缺少结果时区分 visitor / AI 关闭
+ *  - 409 analysis_required → owner / visitor 均可「生成分析」→ 报告级状态退避轮询 [2,3,5,8,10]s
+ *    （只读取状态和结果，不向 visitor 暴露任务编号、费用或取消能力）
+ *  - 财报发布后由后台自动重分析；最终结果锁定，界面不再提供重复请求入口
+ *  - 无论生成开关是否开启都先读取缓存；owner 的运行开关不限制 visitor 读取公开入口
  * 纪律：不展示后端契约没有的推导指标
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
-import { aiJobsApi } from '@/api/modules/ai-jobs';
 import { earningsApi } from '@/api/modules/earnings';
 import type {
   EarningsImpactDirection,
   EarningsImpactRelation,
   EarningsImpactResult,
+  EarningsReportAnalysis,
 } from '@/api/modules/earnings';
-import type { AiJob } from '@/api/types';
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/components/Toast';
 import { useShell } from '@/components/Layout';
@@ -30,36 +30,72 @@ import SourceNote from '@/components/shared/SourceNote';
 import { SkeletonText } from '@/components/shared/Skeleton';
 import PulseDot from './PulseDot';
 import type { EarningsRow } from './types';
-import { exNum, exStr } from './types';
+import { exNum } from './types';
 
-/* ---------------- AIJobPublic 状态机（api-contract §0.4） ---------------- */
+/* ---------------- 报告级公开分析状态机 ---------------- */
 const ACTIVE_STATUSES = new Set(['preparing', 'pending', 'queued', 'in_progress', 'processing', 'running', 'cancel_requested']);
-const SUCCESS_STATUSES = new Set(['succeeded', 'completed']);
+const FAILED_STATUSES = new Set(['failed', 'cancelled', 'canceled', 'budget_blocked']);
 const isActive = (s: string) => ACTIVE_STATUSES.has(s);
-const isSuccess = (s: string) => SUCCESS_STATUSES.has(s);
 
 const BACKOFF_MS = [2000, 3000, 5000, 8000, 10000];
+const FINAL_STAGES = new Set([
+  'final',
+  'finalized',
+  'locked',
+  'final_analysis',
+  'post_release_final',
+]);
 
-/* ---------------- 服务端任务进度 ---------------- */
-function JobSteps({ job }: { job: AiJob }) {
-  const queued = ['queued', 'pending', 'preparing'].includes(String(job.status));
+function normalizedStage(value: string | undefined): string {
+  return String(value ?? '').trim().toLowerCase().replaceAll('-', '_');
+}
+
+function isReanalysisStage(value: string | undefined): boolean {
+  const stage = normalizedStage(value);
+  return stage.includes('reanalysis')
+    || stage === 'reanalyzing'
+    || stage === 'released_pending'
+    || stage === 'finalization_in_progress';
+}
+
+function isFinalImpact(value: EarningsImpactResult | null): boolean {
+  if (!value) return false;
+  return value.locked === true
+    || value.final === true
+    || FINAL_STAGES.has(normalizedStage(value.analysisStage));
+}
+
+function isImpactFinalizing(value: EarningsImpactResult | null): boolean {
+  return value?.finalizationInProgress === true
+    || isReanalysisStage(value?.analysisStage);
+}
+
+function completedStageLabel(value: EarningsImpactResult): string {
+  const stage = normalizedStage(value.analysisStage);
+  if (stage === 'pre_release') return '发布前分析';
+  if (stage === 'post_release_manual') return '发布后分析';
+  return '简体中文';
+}
+
+/* ---------------- 报告级服务端状态：不展示任务编号、费用或取消能力 ---------------- */
+function JobSteps({ analysis }: { analysis: EarningsReportAnalysis }) {
+  const queued = ['queued', 'pending', 'preparing'].includes(String(analysis.status));
   return (
     <div role="status">
       <p className="flex items-center gap-2 text-caption text-ink-500">
         <PulseDot className="bg-ai-600" size={8} />
         {queued ? '第 1 / 1 条正在排队' : '正在分析第 1 / 1 条'}
         <span className="ml-auto font-mono text-micro text-ai-600 tnum">
-          {job.progress === null ? '等待服务端状态' : `${Math.round(job.progress)}%`}
+          {queued ? '等待开始' : '模型处理中'}
         </span>
       </p>
-      {job.progress !== null && (
-        <div className="mt-2 h-1 overflow-hidden rounded-pill bg-line">
-          <div
-            className="h-full w-full origin-left rounded-pill bg-ai-600 transition-transform duration-300 motion-reduce:transition-none"
-            style={{ transform: `scaleX(${job.progress / 100})` }}
-          />
-        </div>
-      )}
+      <div className="mt-2 h-1 overflow-hidden rounded-pill bg-line" role="progressbar" aria-label="财报分析处理中">
+        <motion.div
+          className="h-full w-1/3 rounded-pill bg-ai-600"
+          animate={{ x: ['-100%', '300%'] }}
+          transition={{ duration: 1.5, ease: 'easeInOut', repeat: Infinity }}
+        />
+      </div>
     </div>
   );
 }
@@ -108,9 +144,11 @@ type Phase =
   | 'idle' // 未选标的
   | 'loading' // 拉取缓存结果
   | 'ready' // 已缓存
-  | 'needs-analysis' // 409 analysis_required（owner 可生成）
-  | 'locked-visitor' // visitor 未分析 / 401
+  | 'needs-analysis' // 409 analysis_required（owner / visitor 均可生成）
   | 'locked-ai' // AI 已关闭
+  | 'public-unavailable' // 公开任务入口尚不可用
+  | 'finalizing' // 财报已发布，后台自动重分析
+  | 'final-locked' // 最终分析已锁定
   | 'job' // 任务活跃
   | 'job-failed' // 任务终态失败
   | 'unavailable'; // 503 / 其他错误
@@ -118,41 +156,118 @@ type Phase =
 interface ImpactCardProps {
   ticker: string | null;
   row?: EarningsRow | null;
-  onAnalyzed: (ticker: string) => void;
+  onAnalyzed: (ticker: string, analysis: EarningsReportAnalysis) => void;
   className?: string;
+}
+
+function reportAnalysisNeedsPolling(value: EarningsReportAnalysis | null): boolean {
+  if (!value) return false;
+  return isActive(normalizedStage(value.status))
+    || value.finalizationInProgress
+    || (
+      normalizedStage(value.analysisStage) === 'post_release_final'
+      && !value.final
+      && !value.locked
+    );
 }
 
 export default function ImpactCard({ ticker, row, onAnalyzed, className }: ImpactCardProps) {
   const { isOwner, aiEnabled, aiAvailable } = useAccess();
   const { openTicker } = useShell();
   const toast = useToast();
+  const reportDate = row?.date ?? null;
+  const reportYear = row ? exNum(row, 'year') : null;
+  const reportQuarter = row ? exNum(row, 'quarter') : null;
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [impact, setImpact] = useState<EarningsImpactResult | null>(null);
+  const [analysis, setAnalysis] = useState<EarningsReportAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
-  const [job, setJob] = useState<AiJob | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const pollRef = useRef<{ stopped: boolean; timer?: number }>({ stopped: true });
+  const [pollAttempt, setPollAttempt] = useState(0);
 
-  const stopPolling = useCallback(() => {
-    pollRef.current.stopped = true;
-    if (pollRef.current.timer) window.clearTimeout(pollRef.current.timer);
-  }, []);
+  const applyReportAnalysis = useCallback((next: EarningsReportAnalysis) => {
+    const resolvedReportDate = next.reportDate ?? reportDate ?? undefined;
+    const resolvedResult = next.result
+      ? {
+          ...next.result,
+          ...(next.analysisStage ? { analysisStage: next.analysisStage } : {}),
+          ...(next.locked ? { locked: true } : {}),
+          ...(next.final ? { final: true } : {}),
+          ...(next.finalizationInProgress ? { finalizationInProgress: true } : {}),
+          ...(next.reportId ? { reportId: next.reportId } : {}),
+          ...(resolvedReportDate ? { reportDate: resolvedReportDate } : {}),
+        }
+      : null;
+    const resolvedAnalysis: EarningsReportAnalysis = {
+      ...next,
+      ...(resolvedReportDate ? { reportDate: resolvedReportDate } : {}),
+      result: resolvedResult,
+    };
 
-  /* 拉取已缓存分析结果 */
+    setAnalysis(resolvedAnalysis);
+    setImpact(resolvedResult);
+    setErrorMsg(resolvedAnalysis.errorCode ?? '');
+    if (ticker) onAnalyzed(ticker, resolvedAnalysis);
+    if (resolvedResult) {
+      setPhase('ready');
+      return;
+    }
+    if (resolvedAnalysis.locked || resolvedAnalysis.final) {
+      setPhase('final-locked');
+      return;
+    }
+    if (
+      resolvedAnalysis.finalizationInProgress
+      || (
+        normalizedStage(resolvedAnalysis.analysisStage) === 'post_release_final'
+        && isActive(normalizedStage(resolvedAnalysis.status))
+      )
+    ) {
+      setPhase('finalizing');
+      return;
+    }
+    if (isActive(normalizedStage(resolvedAnalysis.status))) {
+      setPhase('job');
+      return;
+    }
+    if (FAILED_STATUSES.has(normalizedStage(resolvedAnalysis.status))) {
+      setPhase('job-failed');
+      return;
+    }
+    if (resolvedAnalysis.errorCode === 'manual_analysis_disabled') {
+      setPhase('locked-ai');
+      return;
+    }
+    setPhase(isOwner && !aiAvailable ? 'locked-ai' : 'needs-analysis');
+  }, [aiAvailable, isOwner, onAnalyzed, reportDate, ticker]);
+
+  /* 精确报告级 GET：只读状态与结果，不读取通用任务、费用或取消信息。 */
   const loadImpact = useCallback(
-    async (t: string): Promise<boolean> => {
+    async (t: string): Promise<EarningsReportAnalysis | null> => {
+      if (!reportDate) {
+        setErrorMsg('当前日历行缺少财报日期，无法绑定精确报告');
+        setPhase('unavailable');
+        return null;
+      }
       try {
-        const res = await earningsApi.impact(t);
-        setImpact(res);
-        setPhase('ready');
-        return true;
+        const next = await earningsApi.reportAnalysis(t, reportDate, {
+          year: reportYear,
+          quarter: reportQuarter,
+        });
+        applyReportAnalysis(next);
+        return next;
       } catch (e) {
         const err = e instanceof ApiError ? e : null;
-        if (err && (err.code === 409 || err.bizCode === 'analysis_required')) {
-          setPhase(!isOwner ? 'locked-visitor' : aiAvailable ? 'needs-analysis' : 'locked-ai');
+        if (err?.bizCode === 'earnings_analysis_locked') {
+          setPhase('final-locked');
+        } else if (err?.bizCode === 'earnings_finalization_in_progress') {
+          setPhase('finalizing');
+        } else if (err && (err.code === 409 || err.bizCode === 'analysis_required')) {
+          setPhase(isOwner && !aiAvailable ? 'locked-ai' : 'needs-analysis');
         } else if (err && err.code === 401) {
-          setPhase('locked-visitor');
+          setErrorMsg(err.message || '公开分析入口暂不可用');
+          setPhase('public-unavailable');
         } else if (err && err.code === 503) {
           setErrorMsg(err.message || '快照暂不可用');
           setPhase('unavailable');
@@ -160,114 +275,100 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
           setErrorMsg(err?.message ?? '加载失败');
           setPhase('unavailable');
         }
-        return false;
+        return null;
       }
     },
-    [aiAvailable, isOwner],
-  );
-
-  /* 轮询任务（退避 [2,3,5,8,10]s · 隐藏标签页 ×3 降频 · 终态停止） */
-  const pollJob = useCallback(
-    (id: string, t: string) => {
-      stopPolling();
-      const state: { stopped: boolean; timer?: number } = { stopped: false };
-      pollRef.current = state;
-      let attempt = 0;
-      const tick = async () => {
-        if (state.stopped) return;
-        try {
-          const j = await aiJobsApi.get(id);
-          if (state.stopped) return;
-          setJob(j);
-          if (!isActive(j.status)) {
-            if (isSuccess(j.status)) {
-              toast.success(`${t} AI 影响分析已生成`);
-              onAnalyzed(t);
-              setPhase('loading');
-              await loadImpact(t);
-            } else if (j.status === 'cancelled') {
-              toast.info('已取消分析任务');
-              setPhase('needs-analysis');
-            } else {
-              setErrorMsg(j.error || '任务失败，请重试');
-              setPhase('job-failed');
-            }
-            return;
-          }
-        } catch {
-          /* 单次轮询失败不致命，按退避继续 */
-        }
-        if (state.stopped) return;
-        const base = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)];
-        attempt += 1;
-        const delay = typeof document !== 'undefined' && document.visibilityState !== 'visible' ? base * 3 : base;
-        state.timer = window.setTimeout(() => void tick(), delay);
-      };
-      state.timer = window.setTimeout(() => void tick(), BACKOFF_MS[0]);
-    },
-    [loadImpact, onAnalyzed, stopPolling, toast],
+    [
+      aiAvailable,
+      applyReportAnalysis,
+      isOwner,
+      reportDate,
+      reportQuarter,
+      reportYear,
+    ],
   );
 
   /* 换标的/权限变化 → 渲染期同步重置（adjust-state-during-render），副作用留给 effect */
-  const contextKey = `${ticker ?? ''}|${aiEnabled}|${aiAvailable}|${isOwner}`;
+  const contextKey = [
+    ticker ?? '',
+    reportDate ?? '',
+    reportYear ?? '',
+    reportQuarter ?? '',
+    aiEnabled,
+    aiAvailable,
+    isOwner,
+  ].join('|');
   const [prevContextKey, setPrevContextKey] = useState(contextKey);
   if (contextKey !== prevContextKey) {
     setPrevContextKey(contextKey);
-    setJob(null);
+    setAnalysis(null);
     setConfirming(false);
+    setPollAttempt(0);
     setImpact(null);
     setErrorMsg('');
     setPhase(!ticker ? 'idle' : 'loading');
   }
 
-  /* 缓存读取不受生成开关影响；卸载/换标的停止轮询（blur-in「聚焦」由 key 驱动） */
+  /* 缓存读取不受生成开关影响。 */
   useEffect(() => {
-    if (!ticker) return stopPolling;
-    const id = window.setTimeout(() => void loadImpact(ticker), 0);
-    return () => {
-      window.clearTimeout(id);
-      stopPolling();
-    };
-  }, [ticker, aiEnabled, aiAvailable, isOwner, loadImpact, stopPolling]);
-
-  /* 创建任务（owner，confirm 注明模型费用） */
-  const startJob = async () => {
     if (!ticker) return;
+    const id = window.setTimeout(() => void loadImpact(ticker), 0);
+    return () => window.clearTimeout(id);
+  }, [ticker, aiEnabled, aiAvailable, isOwner, loadImpact]);
+
+  /* 排队、分析或自动终版期间只轮询报告级 GET。 */
+  const shouldPoll = reportAnalysisNeedsPolling(analysis);
+  useEffect(() => {
+    if (!ticker || !shouldPoll) return;
+    const serverDelay = analysis?.retryAfterSeconds;
+    const base = serverDelay != null && serverDelay > 0
+      ? Math.max(1_000, serverDelay * 1_000)
+      : BACKOFF_MS[Math.min(pollAttempt, BACKOFF_MS.length - 1)];
+    const delay = typeof document !== 'undefined' && document.visibilityState !== 'visible' ? base * 3 : base;
+    const timer = window.setTimeout(async () => {
+      const next = await loadImpact(ticker);
+      setPollAttempt((value) => value + 1);
+      if (next?.result && !reportAnalysisNeedsPolling(next)) {
+        toast.success(`${ticker} AI 影响分析已生成`);
+      }
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [analysis?.retryAfterSeconds, loadImpact, pollAttempt, shouldPoll, ticker, toast]);
+
+  /* 报告级 POST 的正文固定为 {confirm:true}，全部财务事实由服务端当前快照绑定。 */
+  const startJob = async () => {
+    if (
+      !ticker
+      || !reportDate
+      || phase === 'finalizing'
+      || phase === 'final-locked'
+      || isFinalImpact(impact)
+    ) return;
     setConfirming(false);
     try {
-      const j = await aiJobsApi.createEarningsImpact({
-        ticker,
-        name: row?.name ?? '',
-        sector: row ? exStr(row, 'sector') ?? '' : '',
-        earnings_date: row?.date ?? '',
-        eps_estimate: row?.epsEstimate ?? null,
-        revenue_estimate: row?.revEstimate ?? null,
-        market_cap: row ? exNum(row, 'marketCap') : null,
+      const next = await earningsApi.requestReportAnalysis(ticker, reportDate, {
+        year: reportYear,
+        quarter: reportQuarter,
       });
-      setJob(j);
-      setPhase('job');
-      pollJob(j.id, ticker);
+      applyReportAnalysis(next);
+      setPollAttempt(0);
     } catch (e) {
       const err = e instanceof ApiError ? e : null;
-      if (err?.code === 429) {
+      if (err?.bizCode === 'earnings_analysis_locked') {
+        const finalState = await loadImpact(ticker);
+        if (!finalState?.result) setPhase('final-locked');
+      } else if (err?.bizCode === 'earnings_finalization_in_progress') {
+        setPhase('finalizing');
+      } else if (err?.code === 429) {
         toast.error('AI 任务队列已满', `约 ${err.retryAfter ?? 60}s 后重试`);
       } else if (err?.code === 401) {
-        setPhase('locked-visitor');
+        setErrorMsg(err.message || '公开分析入口暂不可用');
+        setPhase('public-unavailable');
+      } else if (err?.bizCode === 'manual_analysis_disabled') {
+        setPhase('locked-ai');
       } else {
         toast.error('任务创建失败', err?.message);
       }
-    }
-  };
-
-  const cancelJob = async () => {
-    if (!job) return;
-    try {
-      await aiJobsApi.cancel(job.id);
-      stopPolling();
-      toast.info('已取消分析任务');
-      setPhase('needs-analysis');
-    } catch {
-      toast.error('取消失败');
     }
   };
 
@@ -324,16 +425,66 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
             />
           )}
 
-          {/* ---------- visitor 锁定态 ---------- */}
-          {phase === 'locked-visitor' && (
+          {/* ---------- 公开入口异常 ---------- */}
+          {phase === 'public-unavailable' && (
             <LockedPanel
               iconClass="text-ink-300"
-              title="登录后可用模型分析"
-              description={`${ticker ?? '该标的'} 尚未生成 AI 影响分析，登录 Owner 后可创建模型任务。`}
+              title="公开分析入口暂不可用"
+              description={errorMsg || `${ticker ?? '该标的'} 的模型任务暂时无法提交，请稍后重试。`}
             />
           )}
 
-          {/* ---------- 409：owner 生成引导 ---------- */}
+          {/* ---------- 财报发布后：后台自动重分析 ---------- */}
+          {phase === 'finalizing' && (
+            <div className="py-8" role="status" aria-live="polite">
+              <div className="flex items-center gap-2">
+                <PulseDot className="bg-ai-600" size={8} />
+                <h3 className="text-h3 text-ink-800">正在生成最终分析 · {ticker}</h3>
+              </div>
+              <p className="mt-2 text-caption leading-5 text-ink-500">
+                财报已经发布，后台正在把实际每股收益和营收纳入模型。完成后会自动锁定为最终分析。
+              </p>
+              <div className="mt-4 h-1 overflow-hidden rounded-pill bg-line">
+                <motion.div
+                  className="h-full w-1/3 rounded-pill bg-ai-600"
+                  animate={{ x: ['-100%', '300%'] }}
+                  transition={{ duration: 1.6, ease: 'easeInOut', repeat: Infinity }}
+                />
+              </div>
+              <button
+                type="button"
+                disabled
+                className="mt-4 h-8 cursor-not-allowed rounded-md border border-line bg-card-warm px-3 text-caption text-ink-300"
+              >
+                自动重分析中
+              </button>
+            </div>
+          )}
+
+          {/* ---------- 最终结果锁定，禁止重复请求 ---------- */}
+          {phase === 'final-locked' && (
+            <div className="flex flex-col items-center py-9 text-center">
+              <span className="flex size-12 items-center justify-center rounded-lg border border-up-600/25 bg-up-50 text-up-700">
+                <Icon name="spark-ai" size={22} />
+              </span>
+              <span className="mt-3 rounded-pill border border-up-600/25 bg-up-50 px-2.5 py-1 text-micro font-semibold text-up-700">
+                已锁定 · 最终分析
+              </span>
+              <h3 className="mt-3 text-h3 text-ink-800">该财报不再重复分析</h3>
+              <p className="mt-1 max-w-[280px] text-caption text-ink-500">
+                财报发布后的自动重分析已经完成，后台已禁止再次创建同一财报的任务。
+              </p>
+              <button
+                type="button"
+                disabled
+                className="mt-4 h-8 cursor-not-allowed rounded-md border border-line bg-card-warm px-3 text-caption text-ink-300"
+              >
+                最终分析已锁定
+              </button>
+            </div>
+          )}
+
+          {/* ---------- 409：公开生成引导 ---------- */}
           {phase === 'needs-analysis' && (
             <div className="flex flex-col items-center py-8 text-center">
               <span className="flex size-12 items-center justify-center rounded-lg border border-ai-600/30 bg-ai-50 text-ai-600">
@@ -346,7 +497,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
               {confirming ? (
                 <div className="mt-4 w-full rounded-md border border-ai-600/30 bg-ai-50 p-3 text-left">
                   <p className="text-caption text-ink-600">
-                    将调用模型生成 {ticker} 的财报影响分析，<span className="font-semibold text-ai-600">会产生模型费用</span>。
+                    将按当前财报日期生成 {ticker} 的报告级分析；最终结果锁定后不会重复生成。
                   </p>
                   <div className="mt-2.5 flex gap-2">
                     <button
@@ -376,28 +527,24 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
             </div>
           )}
 
-          {/* ---------- 任务活跃：步骤条 + 取消 ---------- */}
-          {phase === 'job' && job && (
+          {/* ---------- 报告级任务活跃：无任务编号、费用或取消入口 ---------- */}
+          {phase === 'job' && analysis && (
             <div>
               <div className="flex items-center gap-2">
                 <PulseDot className="bg-ai-600" size={8} />
                 <h3 className="text-h3 text-ink-800">正在分析 · {ticker}</h3>
                 <span className="ml-auto font-mono text-micro text-ai-600 tnum">
-                  {job.progress === null ? '处理中' : `${Math.round(job.progress)}%`}
+                  {['queued', 'pending', 'preparing'].includes(normalizedStage(analysis.status))
+                    ? '排队中'
+                    : '模型处理中'}
                 </span>
               </div>
               <div className="mt-5">
-                <JobSteps job={job} />
+                <JobSteps analysis={analysis} />
               </div>
-              <div className="mt-5 flex items-center justify-between border-t border-line pt-3">
-                <span className="font-mono text-micro text-ink-400">任务 {job.id}</span>
-                <button
-                  onClick={() => void cancelJob()}
-                  className="h-7 rounded-sm border border-line px-2.5 text-caption text-ink-500 transition-colors hover:border-down-600/50 hover:text-down-700"
-                >
-                  取消
-                </button>
-              </div>
+              <p className="mt-5 border-t border-line pt-3 text-micro leading-5 text-ink-400">
+                报告级状态会自动刷新；公开页面不显示任务编号、费用或取消入口。
+              </p>
             </div>
           )}
 
@@ -452,11 +599,41 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                 <div className="flex items-center gap-2">
                   <Icon name="spark-ai" size={16} className="text-ai-600" />
                   <h3 className="font-display text-[18px] leading-6 text-ink-900">AI 影响 · {impact.ticker}</h3>
-                  <span className="ml-auto rounded-pill border border-ai-600/20 bg-ai-50 px-2 py-0.5 text-micro font-medium text-ai-600">
-                    简体中文
-                  </span>
+                  {isFinalImpact(impact) ? (
+                    <span className="ml-auto rounded-pill border border-up-600/25 bg-up-50 px-2 py-0.5 text-micro font-semibold text-up-700">
+                      已锁定 · 最终分析
+                    </span>
+                  ) : isImpactFinalizing(impact) ? (
+                    <span className="ml-auto inline-flex items-center gap-1.5 rounded-pill border border-ai-600/25 bg-ai-50 px-2 py-0.5 text-micro font-medium text-ai-600">
+                      <PulseDot className="bg-ai-600" size={6} />
+                      自动重分析中
+                    </span>
+                  ) : (
+                    <span className="ml-auto rounded-pill border border-ai-600/20 bg-ai-50 px-2 py-0.5 text-micro font-medium text-ai-600">
+                      {completedStageLabel(impact)}
+                    </span>
+                  )}
                 </div>
-                <p className="mt-1 font-mono text-micro text-ink-400">{impact.outputLanguage}</p>
+                <p className="mt-1 font-mono text-micro text-ink-400">
+                  {impact.outputLanguage}
+                  {impact.reportDate ? ` · 财报日 ${impact.reportDate}` : ''}
+                </p>
+                {isImpactFinalizing(impact) && !isFinalImpact(impact) && (
+                  <div className="mt-3 rounded-md border border-ai-600/25 bg-ai-50 px-3 py-2.5" role="status" aria-live="polite">
+                    <p className="flex items-center gap-2 text-caption font-medium text-ai-600">
+                      <PulseDot className="bg-ai-600" size={7} />
+                      财报已发布，正在自动重分析
+                    </p>
+                    <p className="mt-1 text-micro text-ink-500">
+                      当前先保留发布前结果；实际每股收益和营收写入完成后，将自动替换并锁定。
+                    </p>
+                  </div>
+                )}
+                {isFinalImpact(impact) && (
+                  <p className="mt-3 rounded-md border border-up-600/20 bg-up-50 px-3 py-2 text-micro leading-5 text-up-700">
+                    已纳入发布后的实际财报数据，并锁定为最终版本；不会再次发起模型请求。
+                  </p>
+                )}
               </Section>
 
               {/* 2 摘要 */}

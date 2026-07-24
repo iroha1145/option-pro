@@ -10,12 +10,17 @@ from pathlib import Path
 from typing import Any, Iterator
 from urllib.parse import quote
 
-from app.services.ai_jobs.models import AIJobPublic, validate_result
+from app.services.ai_jobs.models import (
+    AIJobPublic,
+    earnings_report_id,
+    validate_result,
+)
 
 
 _SCHEMA_VERSION = "ai-jobs-v3"
 _SOURCE_SCHEMA_VERSION = "ai-job-sources-v1"
 _BATCH_SCHEMA_VERSION = "ai-job-batch-members-v1"
+_EARNINGS_LOCK_SCHEMA_VERSION = "ai-earnings-final-locks-v1"
 _IDENTITY_MIGRATION_VERSION = "ai-job-identities-v2"
 _IDENTITY_MIGRATION_CHECKSUM = hashlib.sha256(
     b"restore-source-aware-hashes-and-seal-unsubmitted-duplicates-v2"
@@ -137,6 +142,37 @@ _AI_JOB_BATCH_MEMBERS_STATEMENTS = (
 )
 _BATCH_SCHEMA_CHECKSUM = hashlib.sha256(
     _AI_JOB_BATCH_MEMBERS_TABLE_SQL.encode("utf-8")
+).hexdigest()
+_EARNINGS_FINAL_LOCKS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS ai_earnings_final_locks (
+    report_id TEXT PRIMARY KEY,
+    ticker TEXT NOT NULL,
+    earnings_date TEXT NOT NULL,
+    report_year INTEGER,
+    report_quarter INTEGER,
+    job_id TEXT NOT NULL UNIQUE
+        REFERENCES ai_jobs(job_id) ON DELETE CASCADE,
+    locked_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_earnings_final_locks_ticker
+ON ai_earnings_final_locks(ticker, earnings_date DESC);
+"""
+_EARNINGS_FINAL_LOCK_STATEMENTS = (
+    """CREATE TABLE IF NOT EXISTS ai_earnings_final_locks (
+           report_id TEXT PRIMARY KEY,
+           ticker TEXT NOT NULL,
+           earnings_date TEXT NOT NULL,
+           report_year INTEGER,
+           report_quarter INTEGER,
+           job_id TEXT NOT NULL UNIQUE
+               REFERENCES ai_jobs(job_id) ON DELETE CASCADE,
+           locked_at TEXT NOT NULL
+       )""",
+    """CREATE INDEX IF NOT EXISTS idx_ai_earnings_final_locks_ticker
+       ON ai_earnings_final_locks(ticker, earnings_date DESC)""",
+)
+_EARNINGS_LOCK_SCHEMA_CHECKSUM = hashlib.sha256(
+    _EARNINGS_FINAL_LOCKS_TABLE_SQL.encode("utf-8")
 ).hexdigest()
 
 
@@ -268,6 +304,27 @@ class AIJobRepository:
                 """INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at)
                    VALUES(?,?,?)""",
                 (_BATCH_SCHEMA_VERSION, _BATCH_SCHEMA_CHECKSUM, _iso()),
+            )
+            for statement in _EARNINGS_FINAL_LOCK_STATEMENTS:
+                connection.execute(statement)
+            earnings_lock_schema = connection.execute(
+                "SELECT checksum FROM ai_job_schema WHERE version=?",
+                (_EARNINGS_LOCK_SCHEMA_VERSION,),
+            ).fetchone()
+            if (
+                earnings_lock_schema is not None
+                and earnings_lock_schema["checksum"]
+                != _EARNINGS_LOCK_SCHEMA_CHECKSUM
+            ):
+                raise RuntimeError("ai_earnings_lock_schema_checksum_mismatch")
+            connection.execute(
+                """INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at)
+                   VALUES(?,?,?)""",
+                (
+                    _EARNINGS_LOCK_SCHEMA_VERSION,
+                    _EARNINGS_LOCK_SCHEMA_CHECKSUM,
+                    _iso(),
+                ),
             )
             identity_migration = connection.execute(
                 "SELECT checksum FROM ai_job_schema WHERE version=?",
@@ -727,6 +784,70 @@ class AIJobRepository:
             return "invalid"
         return "unknown"
 
+    @staticmethod
+    def _earnings_identity(payload: dict[str, Any]) -> tuple[str, str, str]:
+        if not isinstance(payload, dict):
+            return "", "", ""
+        ticker = str(payload.get("ticker") or "").strip().upper()
+        report_date = str(payload.get("earnings_date") or "").strip()
+        report_id = str(payload.get("report_id") or "").strip()
+        if not report_id and ticker:
+            report_id = earnings_report_id(payload)
+        return report_id, ticker, report_date
+
+    @staticmethod
+    def _final_stage(payload: dict[str, Any]) -> bool:
+        return str(
+            payload.get("analysis_stage")
+            or payload.get("analysis_phase")
+            or ""
+        ) == "post_release_final"
+
+    @classmethod
+    def _decorate_earnings_row(
+        cls,
+        connection: sqlite3.Connection,
+        row: sqlite3.Row | dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if row is None:
+            return None
+        decorated = dict(row)
+        if decorated.get("job_type") != "earnings_impact":
+            return decorated
+        try:
+            payload = json.loads(str(decorated.get("payload_json") or "{}"))
+        except (TypeError, json.JSONDecodeError):
+            payload = {}
+        report_id, _ticker, _report_date = cls._earnings_identity(payload)
+        if not report_id:
+            decorated["earnings_final_locked"] = 0
+            decorated["earnings_finalization_in_progress"] = 0
+            return decorated
+        decorated["earnings_final_locked"] = int(
+            connection.execute(
+                """SELECT EXISTS(
+                       SELECT 1 FROM ai_earnings_final_locks WHERE report_id=?
+                   )""",
+                (report_id,),
+            ).fetchone()[0]
+        )
+        decorated["earnings_finalization_in_progress"] = int(
+            connection.execute(
+                """SELECT EXISTS(
+                       SELECT 1 FROM ai_jobs
+                       WHERE job_type='earnings_impact'
+                         AND status IN ('pending','queued','in_progress')
+                         AND json_extract(payload_json,'$.report_id')=?
+                         AND COALESCE(
+                               json_extract(payload_json,'$.analysis_stage'),
+                               json_extract(payload_json,'$.analysis_phase')
+                             )='post_release_final'
+                   )""",
+                (report_id,),
+            ).fetchone()[0]
+        )
+        return decorated
+
     def create_job(
         self,
         *,
@@ -834,8 +955,47 @@ class AIJobRepository:
                     schema_version,
                     schema_sha256,
                 ),
-            ).fetchall()
+                ).fetchall()
             ]
+            if job_type == "earnings_impact":
+                report_id, _ticker, _report_date = self._earnings_identity(payload)
+                if report_id:
+                    locked = bool(
+                        connection.execute(
+                            """SELECT 1 FROM ai_earnings_final_locks
+                               WHERE report_id=?""",
+                            (report_id,),
+                        ).fetchone()
+                    )
+                    if locked:
+                        connection.rollback()
+                        raise RuntimeError("earnings_analysis_locked")
+                    final_active = bool(
+                        connection.execute(
+                            """SELECT 1 FROM ai_jobs
+                               WHERE job_type='earnings_impact'
+                                 AND status IN ('pending','queued','in_progress')
+                                 AND json_extract(payload_json,'$.report_id')=?
+                                 AND COALESCE(
+                                       json_extract(payload_json,'$.analysis_stage'),
+                                       json_extract(payload_json,'$.analysis_phase')
+                                     )='post_release_final'
+                               LIMIT 1""",
+                            (report_id,),
+                        ).fetchone()
+                    )
+                    exact_final_active = bool(
+                        self._final_stage(payload)
+                        and any(
+                            row["status"] in {"pending", "queued", "in_progress"}
+                            for row in matches
+                        )
+                    )
+                    if final_active and not exact_final_active:
+                        connection.rollback()
+                        raise RuntimeError(
+                            "earnings_finalization_in_progress"
+                        )
             if matches:
                 global_max_execution = max(
                     int(row["execution_number"]) for row in matches
@@ -1162,24 +1322,43 @@ class AIJobRepository:
                    WHERE j.job_id=?""",
                 (job_id,),
             ).fetchone()
-            return dict(row) if row else None
+            return self._decorate_earnings_row(connection, row)
 
-    def latest_completed(self, job_type: str, ticker: str) -> dict[str, Any] | None:
+    def latest_completed(
+        self,
+        job_type: str,
+        ticker: str,
+        *,
+        report_id: str | None = None,
+    ) -> dict[str, Any] | None:
         self.initialize()
         with self._connect() as connection:
+            report_filter = ""
+            parameters: list[Any] = [job_type, ticker.upper()]
+            if job_type == "earnings_impact":
+                parameters.append(_iso(_utcnow() - timedelta(days=30)))
+                report_filter += (
+                    " AND COALESCE(j.completed_at,j.updated_at,j.created_at)>=?"
+                )
+                if report_id:
+                    report_filter += (
+                        " AND json_extract(j.payload_json,'$.report_id')=?"
+                    )
+                    parameters.append(report_id)
             row = connection.execute(
-                """
+                f"""
                 SELECT j.*,s.submission_source FROM ai_jobs AS j
                 JOIN ai_job_sources AS s ON s.job_id=j.job_id
                 WHERE j.job_type=? AND j.status='completed'
                   AND upper(json_extract(j.payload_json, '$.ticker'))=?
                   AND json_extract(j.result_json, '$.output_language')='zh-CN'
+                  {report_filter}
                 ORDER BY j.completed_at DESC, j.created_at DESC
                 LIMIT 1
                 """,
-                (job_type, ticker.upper()),
+                tuple(parameters),
             ).fetchone()
-            return dict(row) if row else None
+            return self._decorate_earnings_row(connection, row)
 
     def latest_for_ticker(self, job_type: str, ticker: str) -> dict[str, Any] | None:
         """Return the latest durable job for a ticker, regardless of state."""
@@ -1197,7 +1376,95 @@ class AIJobRepository:
                 """,
                 (job_type, ticker.upper()),
             ).fetchone()
-            return dict(row) if row else None
+            return self._decorate_earnings_row(connection, row)
+
+    def latest_for_report(
+        self,
+        ticker: str,
+        report_id: str,
+        *,
+        analysis_stage: str | None = None,
+    ) -> dict[str, Any] | None:
+        self.initialize()
+        with self._connect() as connection:
+            stage_filter = ""
+            parameters: list[Any] = [
+                ticker.upper(),
+                report_id,
+                _iso(_utcnow() - timedelta(days=30)),
+            ]
+            if analysis_stage:
+                stage_filter = """
+                  AND COALESCE(
+                        json_extract(j.payload_json,'$.analysis_stage'),
+                        json_extract(j.payload_json,'$.analysis_phase')
+                      )=?
+                """
+                parameters.append(analysis_stage)
+            row = connection.execute(
+                f"""
+                SELECT j.*,s.submission_source FROM ai_jobs AS j
+                JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                WHERE j.job_type='earnings_impact'
+                  AND upper(json_extract(j.payload_json,'$.ticker'))=?
+                  AND json_extract(j.payload_json,'$.report_id')=?
+                  AND COALESCE(j.completed_at,j.updated_at,j.created_at)>=?
+                  {stage_filter}
+                ORDER BY j.created_at DESC,j.job_id DESC
+                LIMIT 1
+                """,
+                tuple(parameters),
+            ).fetchone()
+            return self._decorate_earnings_row(connection, row)
+
+    def prune_earnings_retention(
+        self,
+        *,
+        now: datetime | None = None,
+        retention_days: int = 30,
+    ) -> int:
+        """Delete terminal earnings inputs and outputs strictly before cutoff."""
+
+        if isinstance(retention_days, bool) or retention_days < 1:
+            raise ValueError("invalid_earnings_retention_days")
+        self.initialize()
+        observed = (now or _utcnow()).astimezone(timezone.utc)
+        cutoff = _iso(observed - timedelta(days=retention_days))
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            expired_ids = [
+                str(row["job_id"])
+                for row in connection.execute(
+                    """SELECT job_id FROM ai_jobs
+                       WHERE job_type='earnings_impact'
+                         AND status IN (
+                           'completed','failed','cancelled',
+                           'insufficient_context','budget_blocked'
+                         )
+                         AND COALESCE(completed_at,updated_at,created_at)<?""",
+                    (cutoff,),
+                ).fetchall()
+            ]
+            if not expired_ids:
+                connection.commit()
+                return 0
+            placeholders = ",".join("?" for _ in expired_ids)
+            params = tuple(expired_ids)
+            connection.execute(
+                f"DELETE FROM ai_job_sources WHERE job_id IN ({placeholders})",
+                params,
+            )
+            connection.execute(
+                f"DELETE FROM ai_earnings_final_locks "
+                f"WHERE job_id IN ({placeholders})",
+                params,
+            )
+            connection.execute(
+                f"DELETE FROM ai_jobs WHERE job_id IN ({placeholders})",
+                params,
+            )
+            connection.commit()
+            return len(expired_ids)
 
     def claim_due(self, owner: str, lease_seconds: int) -> dict[str, Any] | None:
         self.initialize()
@@ -1501,7 +1768,7 @@ class AIJobRepository:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             current = connection.execute(
-                """SELECT job_type,budget_charge_microusd FROM ai_jobs
+                """SELECT job_type,payload_json,budget_charge_microusd FROM ai_jobs
                    WHERE job_id=? AND lease_owner=?""",
                 (job_id, owner),
             ).fetchone()
@@ -1538,6 +1805,50 @@ class AIJobRepository:
                     owner,
                 ),
             ).rowcount
+            if updated == 1 and current["job_type"] == "earnings_impact":
+                try:
+                    earnings_payload = json.loads(
+                        str(current["payload_json"] or "{}")
+                    )
+                except (TypeError, json.JSONDecodeError):
+                    earnings_payload = {}
+                report_id, ticker, report_date = self._earnings_identity(
+                    earnings_payload
+                )
+                has_actual = (
+                    earnings_payload.get("eps_actual") is not None
+                    or earnings_payload.get("revenue_actual") is not None
+                )
+                has_comparison = (
+                    earnings_payload.get("eps_actual") is not None
+                    and earnings_payload.get("eps_estimate") is not None
+                ) or (
+                    earnings_payload.get("revenue_actual") is not None
+                    and earnings_payload.get("revenue_estimate") is not None
+                )
+                if (
+                    report_id
+                    and ticker
+                    and report_date
+                    and has_actual
+                    and has_comparison
+                    and self._final_stage(earnings_payload)
+                ):
+                    connection.execute(
+                        """INSERT INTO ai_earnings_final_locks(
+                               report_id,ticker,earnings_date,report_year,
+                               report_quarter,job_id,locked_at
+                           ) VALUES(?,?,?,?,?,?,?)""",
+                        (
+                            report_id,
+                            ticker,
+                            report_date,
+                            earnings_payload.get("year"),
+                            earnings_payload.get("quarter"),
+                            job_id,
+                            now,
+                        ),
+                    )
             connection.commit()
             if updated != 1:
                 raise RuntimeError("ai_job_completion_rejected")
@@ -1602,6 +1913,39 @@ class AIJobRepository:
             if updated != 1:
                 connection.rollback()
                 raise RuntimeError("ai_job_recovery_rejected")
+            report_id, ticker, report_date = self._earnings_identity(payload)
+            if (
+                current.get("job_type") == "earnings_impact"
+                and self._final_stage(payload)
+                and report_id
+                and ticker
+                and report_date
+                and (
+                    (
+                        payload.get("eps_actual") is not None
+                        and payload.get("eps_estimate") is not None
+                    )
+                    or (
+                        payload.get("revenue_actual") is not None
+                        and payload.get("revenue_estimate") is not None
+                    )
+                )
+            ):
+                connection.execute(
+                    """INSERT INTO ai_earnings_final_locks(
+                           report_id,ticker,earnings_date,report_year,
+                           report_quarter,job_id,locked_at
+                       ) VALUES(?,?,?,?,?,?,?)""",
+                    (
+                        report_id,
+                        ticker,
+                        report_date,
+                        payload.get("year"),
+                        payload.get("quarter"),
+                        job_id,
+                        now,
+                    ),
+                )
             recovered = connection.execute(
                 """SELECT j.*,s.submission_source FROM ai_jobs AS j
                    JOIN ai_job_sources AS s ON s.job_id=j.job_id
@@ -1872,6 +2216,7 @@ class AIJobRepository:
                 legacy_output_hidden = True
         if legacy_output_hidden:
             result = None
+        payload_source = payload
         public = AIJobPublic(
             job_id=row["job_id"],
             job_type=row["job_type"],
@@ -1925,6 +2270,34 @@ class AIJobRepository:
             if row.get("submission_source") in {"manual", "scheduled"}
             else "manual"
         )
+        if row.get("job_type") == "earnings_impact":
+            analysis_stage = str(
+                payload_source.get("analysis_stage")
+                or payload_source.get("analysis_phase")
+                or "pre_release"
+            )
+            locked = bool(row.get("earnings_final_locked"))
+            payload["_analysis_stage"] = analysis_stage
+            payload["_analysis_phase"] = analysis_stage
+            payload["_report_date"] = str(
+                payload_source.get("earnings_date") or ""
+            )
+            payload["_report_id"] = str(
+                payload_source.get("report_id")
+                or earnings_report_id(payload_source)
+            )
+            payload["_input_hash"] = str(
+                payload_source.get("input_hash") or ""
+            )
+            payload["_locked"] = locked
+            payload["_final"] = bool(
+                locked
+                and analysis_stage == "post_release_final"
+                and row.get("status") == "completed"
+            )
+            payload["_finalization_in_progress"] = bool(
+                row.get("earnings_finalization_in_progress")
+            )
         return payload
 
     def budget_snapshot(

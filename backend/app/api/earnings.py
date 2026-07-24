@@ -121,6 +121,42 @@ def _market_today() -> date:
     return datetime.now(MARKET_TZ).date()
 
 
+async def _read_current_upcoming_earnings_snapshot(
+    market_date: date | None = None,
+) -> dict[str, Any] | None:
+    """Read the shared current snapshot without starting another provider scan."""
+
+    observed = market_date or _market_today()
+    key = f"earnings:upcoming:{observed.isoformat()}"
+    cached = cache.get(key)
+    if isinstance(cached, dict):
+        return cached
+    config = get_personal_config()
+    now = time.time()
+    disk_entry = await read_owner_public_home_entry_async(
+        "earnings",
+        parameters=public_home_resource_parameters("earnings", now=now),
+        fresh_for_seconds=float(config.public_home.earnings_seconds),
+        now=now,
+    )
+    if (
+        disk_entry is None
+        or not bool(disk_entry.get("fresh"))
+        or not isinstance(disk_entry.get("payload"), dict)
+    ):
+        return None
+    payload = dict(disk_entry["payload"])
+    remaining = max(
+        1,
+        int(
+            float(disk_entry["saved_at"])
+            + float(config.public_home.earnings_seconds)
+            - now
+        ),
+    )
+    return cache.set(key, payload, remaining)
+
+
 def _coerce_date(value: Any) -> date | None:
     if value is None:
         return None

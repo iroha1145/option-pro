@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 
 import pytest
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
 from app.access import (
     OwnerAccessRuntime,
@@ -18,6 +20,21 @@ from app.personal_config import AccessConfig
 from app.services import signals as signal_service
 from app.services import yahoo
 from app.services.cache import cache
+
+
+def _request(ip: str = "203.0.113.10") -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "https",
+            "server": ("example.test", 443),
+            "client": (ip, 12345),
+        }
+    )
 
 
 def _watchlist_payload(label: str) -> dict:
@@ -71,6 +88,8 @@ def _clear_process_caches(monkeypatch: pytest.MonkeyPatch):
     cache.clear()
     sectors._cache.clear()
     sectors._locks.clear()
+    sectors._sector_iv_failure_deadlines.clear()
+    sectors._public_sector_iv_recent.clear()
     with signal_service._cache_lock:
         signal_service._cache.clear()
     with yahoo._cache_lock:
@@ -115,11 +134,8 @@ def test_public_cold_cache_never_calls_market_data_providers(
     monkeypatch.setattr(stocks, "_stock_chart_impl", unexpected_async("stock-chart"))
     monkeypatch.setattr(stocks.yf, "Ticker", unexpected("stock-search"))
     monkeypatch.setattr(options, "_unusual_activity_impl", unexpected_async("unusual-options"))
-    monkeypatch.setattr(yahoo, "get_expirations_snapshot", unexpected("expirations"))
-    monkeypatch.setattr(yahoo, "get_option_chain", unexpected("option-chain"))
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", unexpected_async("earnings"))
     monkeypatch.setattr(market, "_build_indices", unexpected_async("market-indices"))
-    monkeypatch.setattr(sectors, "_iv_ranking_payload", unexpected_async("sector-iv"))
     monkeypatch.setattr(
         sectors,
         "_SECTOR_IV_SNAPSHOT_DIR",
@@ -145,11 +161,8 @@ def test_public_cold_cache_never_calls_market_data_providers(
             await _expect_unavailable(stocks.stock_overview("AAPL"))
             await _expect_unavailable(stocks.stock_chart("AAPL", "1d", "raw"))
             await _expect_unavailable(options.unusual_activity(type="all", min_vol_oi=1.0))
-            await _expect_unavailable(options.expirations("AAPL"))
-            await _expect_unavailable(options.option_chain("AAPL", "2026-12-18"))
             await _expect_unavailable(earnings.upcoming_earnings())
             await _expect_unavailable(market.market_indices())
-            await _expect_unavailable(sectors.iv_ranking(next(iter(sectors.SECTORS))))
             await _expect_unavailable(signals.market_signals())
             await _expect_unavailable(signals.stock_signals("AAPL"))
             await _expect_unavailable(strength.market())
@@ -260,7 +273,9 @@ def test_public_endpoints_serve_existing_cache_entries_without_loaders(
             assert (
                 await options.unusual_activity(type="all", min_vol_oi=1.0)
             )["items"] == ["saved"]
-            assert (await sectors.iv_ranking(sector_id))["sector_id"] == sector_id
+            assert (
+                await sectors.iv_ranking(sector_id, _request())
+            )["sector_id"] == sector_id
 
     asyncio.run(scenario())
 
@@ -331,10 +346,10 @@ def test_sector_iv_reads_persisted_strength_worker_options_without_provider_call
 
     async def scenario() -> tuple[dict, dict, dict]:
         with request_owner_access_context(False):
-            public_payload = await sectors.iv_ranking("semiconductors")
-            heatmap_payload = await sectors.heatmap("semiconductors")
+            public_payload = await sectors.iv_ranking("semiconductors", _request())
+            heatmap_payload = await sectors.heatmap("semiconductors", _request())
         with request_owner_access_context(True):
-            owner_payload = await sectors.iv_ranking("software")
+            owner_payload = await sectors.iv_ranking("software", _request())
         return public_payload, heatmap_payload, owner_payload
 
     public_payload, heatmap_payload, owner_payload = asyncio.run(scenario())
@@ -396,7 +411,7 @@ def test_sector_iv_marks_expired_strength_worker_snapshot_stale(
 
     async def scenario() -> dict:
         with request_owner_access_context(False):
-            return await sectors.iv_ranking("semiconductors")
+            return await sectors.iv_ranking("semiconductors", _request())
 
     payload = asyncio.run(scenario())
 
@@ -435,16 +450,36 @@ def test_sector_iv_rejects_non_provider_option_placeholders(
     )
     monkeypatch.setattr(sectors.time, "time", lambda: now)
 
-    async def unexpected_scan(_sector_id: str) -> dict:
-        raise AssertionError("public request must not scan providers")
+    calls = 0
 
-    monkeypatch.setattr(sectors, "_iv_ranking_payload", unexpected_scan)
+    async def unavailable_scan(_sector_id: str) -> dict:
+        nonlocal calls
+        calls += 1
+        return {
+            "sector_id": "semiconductors",
+            "rankings": [],
+            "source_status": "insufficient_data",
+        }
 
-    async def scenario() -> None:
+    monkeypatch.setattr(sectors, "_iv_ranking_payload", unavailable_scan)
+
+    async def scenario() -> list[HTTPException]:
         with request_owner_access_context(False):
-            await _expect_unavailable(sectors.iv_ranking("semiconductors"))
+            return [
+                await _expect_unavailable(
+                    sectors.iv_ranking("semiconductors", _request())
+                )
+                for _ in range(2)
+            ]
 
-    asyncio.run(scenario())
+    failures = asyncio.run(scenario())
+
+    assert calls == 1
+    assert all(
+        failure.detail["code"] == "sector_iv_cooldown"
+        and int(failure.headers["Retry-After"]) > 0
+        for failure in failures
+    )
 
 
 def test_owner_cold_sector_scan_persists_for_public_restart_without_strength_hit(
@@ -502,13 +537,14 @@ def test_owner_cold_sector_scan_persists_for_public_restart_without_strength_hit
 
     async def owner_scan() -> dict:
         with request_owner_access_context(True):
-            return await sectors.iv_ranking("semiconductors")
+            return await sectors.iv_ranking("semiconductors", _request())
 
     owner_payload = asyncio.run(owner_scan())
     snapshot_path = snapshot_dir / "semiconductors.json"
 
     assert calls == 1
     assert owner_payload["snapshot_source"] == "owner_live"
+    assert owner_payload["snapshot_origin"] == "owner_live"
     assert owner_payload["snapshot_persisted"] is True
     assert owner_payload["providers"] == ["Yahoo/yfinance"]
     assert [row["ticker"] for row in owner_payload["rankings"]] == [
@@ -516,6 +552,7 @@ def test_owner_cold_sector_scan_persists_for_public_restart_without_strength_hit
         "AMD",
     ]
     assert snapshot_path.is_file()
+    assert json.loads(snapshot_path.read_text())["snapshot_origin"] == "owner_live"
     original = snapshot_path.read_bytes()
 
     # 模拟发布重启：进程内缓存清空，Strength Top20 仍没有半导体。
@@ -529,18 +566,101 @@ def test_owner_cold_sector_scan_persists_for_public_restart_without_strength_hit
 
     async def public_read() -> dict:
         with request_owner_access_context(False):
-            return await sectors.iv_ranking("semiconductors")
+            return await sectors.iv_ranking("semiconductors", _request())
 
     public_payload = asyncio.run(public_read())
 
     assert calls == 1
-    assert public_payload["snapshot_source"] == "sector_owner_snapshot"
+    assert public_payload["snapshot_source"] == "sector_snapshot"
+    assert public_payload["snapshot_origin"] == "owner_live"
     assert public_payload["_cached"] is True
     assert public_payload["_stale"] is False
     assert [row["ticker"] for row in public_payload["rankings"]] == [
         "NVDA",
         "AMD",
     ]
+    assert snapshot_path.read_bytes() == original
+
+
+def test_public_cold_sector_iv_uses_yahoo_and_persists_restart_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    sector_id = "public-cold-sector"
+    monkeypatch.setitem(
+        sectors.SECTORS,
+        sector_id,
+        {"name": "Public Cold Sector", "tickers": ["AAA", "BBB"]},
+    )
+    snapshot_dir = tmp_path / "sector-iv-snapshots-v1"
+    monkeypatch.setattr(sectors, "_SECTOR_IV_SNAPSHOT_DIR", snapshot_dir)
+    monkeypatch.setattr(
+        strength,
+        "_STRENGTH_SNAPSHOT_PATH",
+        tmp_path / "missing-strength.json",
+    )
+    calls = 0
+
+    async def live_rows(requested_sector_id: str) -> list[dict]:
+        nonlocal calls
+        calls += 1
+        assert requested_sector_id == sector_id
+        return [
+            {
+                "ticker": "AAA",
+                "name": "AAA",
+                "price": 100.0,
+                "iv": 0.25,
+                "_stale": False,
+                "as_of": "2026-07-24T05:00:00+00:00",
+                "source_status": "active",
+                "provider": "Yahoo/yfinance",
+            },
+            {
+                "ticker": "BBB",
+                "name": "BBB",
+                "price": 200.0,
+                "iv": 0.5,
+                "_stale": False,
+                "as_of": "2026-07-24T05:00:00+00:00",
+                "source_status": "active",
+                "provider": "Yahoo/yfinance",
+            },
+        ]
+
+    monkeypatch.setattr(sectors, "_sector_iv_rows", live_rows)
+
+    async def public_read() -> dict:
+        with request_owner_access_context(False):
+            return await sectors.iv_ranking(sector_id, _request())
+
+    first = asyncio.run(public_read())
+    snapshot_path = snapshot_dir / f"{sector_id}.json"
+
+    assert calls == 1
+    assert first["snapshot_source"] == "public_live"
+    assert first["snapshot_origin"] == "public_live"
+    assert first["snapshot_persisted"] is True
+    assert first["providers"] == ["Yahoo/yfinance"]
+    assert [row["ticker"] for row in first["rankings"]] == ["BBB", "AAA"]
+    assert snapshot_path.is_file()
+    assert json.loads(snapshot_path.read_text())["snapshot_origin"] == "public_live"
+    original = snapshot_path.read_bytes()
+
+    sectors._cache.clear()
+    sectors._locks.clear()
+
+    async def unexpected_live_rows(_sector_id: str) -> list[dict]:
+        raise AssertionError("durable public IV snapshot must suppress a repeat scan")
+
+    monkeypatch.setattr(sectors, "_sector_iv_rows", unexpected_live_rows)
+    second = asyncio.run(public_read())
+
+    assert calls == 1
+    assert second["snapshot_source"] == "sector_snapshot"
+    assert second["snapshot_origin"] == "public_live"
+    assert second["_cached"] is True
+    assert second["_stale"] is False
     assert snapshot_path.read_bytes() == original
 
 

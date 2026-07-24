@@ -13,7 +13,6 @@ import { breakoutsApi } from '@/api/modules/breakouts';
 import { usePolling } from '@/hooks/usePolling';
 import { useCountUp } from '@/hooks/useCountUp';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useAccess } from '@/hooks/useAccess';
 import { cn } from '@/lib/utils';
 import { fmtCompact, fmtPrice, fmtRelative, fmtTimeHHMMSS } from '@/lib/format';
 import TickerLogo from '@/components/shared/TickerLogo';
@@ -188,10 +187,15 @@ function SidebarEvents({ ticker }: { ticker: string }) {
 
 /* ---------------- 主体 ---------------- */
 export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker: string; layout?: 'drawer' | 'page' }) {
-  const { isOwner } = useAccess();
   const [dataRevision, setDataRevision] = useState(0);
   const forceDetailRef = useRef({ ticker, force: false });
-  const { data: detail, loading, error, refresh } = usePolling(
+  const {
+    data: detail,
+    loading,
+    error,
+    refreshing,
+    refresh,
+  } = usePolling(
     () => {
       const force = (
         forceDetailRef.current.ticker === ticker
@@ -235,20 +239,35 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
 
   if (error || !detail) {
     const is404 = error?.code === 404;
+    const loginExpired = error?.code === 401;
+    const rateLimited = error?.code === 429;
     const publicSnapshotMissing = error?.bizCode === 'public_snapshot_unavailable';
+    const manualRecovery = publicSnapshotMissing || (!error && !detail);
     return (
       <EmptyState
         variant="empty"
         image="/empty-chart.svg"
-        title={is404 ? '代码不存在' : '该标的快照不可用'}
+        title={
+          is404
+            ? '代码不存在'
+            : loginExpired
+              ? '登录状态已失效'
+              : rateLimited
+                ? '请求较频繁'
+                : manualRecovery
+                  ? '该标的尚无完整快照'
+                  : '行情服务暂不可用'
+        }
         description={
           is404
             ? `${ticker} 不在当前股票目录中`
+            : loginExpired
+              ? '请重新登录后读取个股详情'
             : publicSnapshotMissing
-              ? isOwner
-                ? '尚未保存该股票的行情快照，可从 Massive 拉取真实数据'
-                : '该股票尚无公开快照，登录管理员账号后可手动拉取'
-              : error?.message || '真实行情接口暂未返回可用数据'
+              ? '该股票尚无公开快照，可手动拉取真实行情、日线与技术信号'
+              : `${error?.message || '真实行情接口暂未返回可用数据'}${
+                  error?.retryAfter ? ` · ${Math.ceil(error.retryAfter)} 秒后可重试` : ''
+                }`
         }
         action={
           is404 ? (
@@ -258,14 +277,24 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
             >
               返回自选
             </Link>
-          ) : isOwner ? (
+          ) : loginExpired ? (
+            <Link
+              to="/login"
+              className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white hover:brightness-105"
+            >
+              重新登录
+            </Link>
+          ) : manualRecovery ? (
             <ManualStockPull ticker={ticker} onPulled={handlePulled} />
           ) : (
             <button
+              type="button"
               onClick={refresh}
-              className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white hover:brightness-105"
+              disabled={refreshing}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
             >
-              重试
+              <Icon name="refresh" size={14} />
+              {refreshing ? '正在重试' : '重试'}
             </button>
           )
         }

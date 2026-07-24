@@ -1,7 +1,8 @@
 /**
  * B2 即将公布表（earnings.md）· 按日期分组
  * 行：TickerLogo+代码/名称 · 时间（sun-bmo 盘前 warn-600 / moon-amc 盘后 ai-600）
- *     EPS 迷你斜纹柱对（预估斜纹 ink-400 / 实际实心 brand-600）· 营收预期 · 市值 · 预期波动微条 · AI 影响钮
+ *     EPS 迷你斜纹柱对（预估斜纹 ink-400 / 实际实心 brand-600）· 营收预期 · 市值
+ *     预期波动仅在至少一条真实数值存在时出现 · AI 影响钮
  * days_until=0「今天」高亮 · 行 stagger 40ms · 斜纹柱对 grow 错峰 700ms · <md 转卡片流
  */
 import { motion } from 'framer-motion';
@@ -10,7 +11,6 @@ import { fmtCompact } from '@/lib/format';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
 import EmptyState from '@/components/shared/EmptyState';
-import { useAccess } from '@/hooks/useAccess';
 import type { EarningsRow } from './types';
 import { daysUntil, exBool, exNum, exStr, fmtMDCN, relativeDayCN, weekdayCN } from './types';
 
@@ -69,7 +69,7 @@ export function TimingBadge({ timing, className }: { timing: EarningsRow['timing
 
 /* ---------------- 预期波动微条（0–15% 映射 ai-600） ---------------- */
 function ExpectedMoveCell({ pct, index }: { pct: number | null; index: number }) {
-  if (pct == null) return <span className="font-mono text-data-m text-ink-300">—</span>;
+  if (pct == null) return <span aria-hidden="true" />;
   return (
     <span className="block">
       <span className="font-mono text-data-m text-ink-800 tnum">±{pct.toFixed(1)}%</span>
@@ -89,11 +89,20 @@ function ExpectedMoveCell({ pct, index }: { pct: number | null; index: number })
 
 /* ---------------- AI 影响操作钮 ---------------- */
 function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => void }) {
-  const { isOwner } = useAccess();
   const ready = exBool(row, 'impactReady');
-  // 未分析 → visitor 隐藏（B3 显示锁定/引导态）；owner 显示「分析」；已分析 →「查看」
-  if (ready === false && !isOwner) return null;
-  const label = ready === true ? '查看' : ready === false ? '分析' : 'AI 影响';
+  const stage = exStr(row, 'analysisStage');
+  const locked = exBool(row, 'locked') === true || exBool(row, 'final') === true;
+  const finalizing = exBool(row, 'finalizationInProgress') === true
+    || stage === 'post_release_final';
+  const label = locked
+    ? '查看最终'
+    : finalizing
+      ? '重分析中'
+      : ready === true
+        ? '查看'
+        : ready === false
+          ? '分析'
+          : 'AI 影响';
   return (
     <button
       onClick={(e) => {
@@ -147,6 +156,11 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
     );
   }
 
+  const hasExpectedMove = items.some((row) => exNum(row, 'expectedMovePct') != null);
+  const gridColumns = hasExpectedMove
+    ? 'md:grid-cols-[minmax(160px,1.4fr)_84px_minmax(140px,1.2fr)_96px_88px] 2xl:grid-cols-[minmax(170px,1.4fr)_84px_minmax(150px,1.2fr)_96px_92px_96px_88px]'
+    : 'md:grid-cols-[minmax(160px,1.4fr)_84px_minmax(140px,1.2fr)_88px] 2xl:grid-cols-[minmax(170px,1.4fr)_84px_minmax(150px,1.2fr)_96px_92px_88px]';
+
   /* 按日期分组（升序） */
   const groups: { date: string; rows: EarningsRow[] }[] = [];
   for (const it of items) {
@@ -158,15 +172,23 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
   let rowIndex = -1;
 
   return (
-    <section className="card-surface overflow-hidden" aria-label="即将公布">
+    <section
+      className="card-surface overflow-hidden md:max-h-[min(72vh,880px)] md:overflow-y-auto md:overscroll-contain [scrollbar-gutter:stable]"
+      aria-label="即将公布"
+    >
       {/* 桌面列头（≥md） */}
-      <div className="hidden border-b border-line bg-card-warm px-4 py-2.5 md:grid md:grid-cols-[minmax(160px,1.4fr)_84px_minmax(140px,1.2fr)_96px_88px] md:gap-3 2xl:grid-cols-[minmax(170px,1.4fr)_84px_minmax(150px,1.2fr)_96px_92px_96px_88px]">
+      <div
+        className={cn(
+          'sticky top-0 z-20 hidden border-b border-line bg-card-warm px-4 py-2.5 md:grid md:gap-3',
+          gridColumns,
+        )}
+      >
         <span className="eyebrow">代码</span>
         <span className="eyebrow">时间</span>
         <span className="eyebrow">EPS 预期 vs 实际</span>
         <span className="eyebrow hidden 2xl:block">营收预期</span>
         <span className="eyebrow hidden 2xl:block">市值</span>
-        <span className="eyebrow">预期波动</span>
+        {hasExpectedMove && <span className="eyebrow">预期波动</span>}
         <span className="eyebrow text-right">AI 影响</span>
       </div>
 
@@ -223,7 +245,8 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: Math.min(i * 0.04, 0.6) }}
                     className={cn(
-                      'hidden cursor-pointer items-center border-b border-line px-4 py-3 transition-colors duration-fast last:border-b-0 md:grid md:grid-cols-[minmax(160px,1.4fr)_84px_minmax(140px,1.2fr)_96px_88px] md:gap-3 2xl:grid-cols-[minmax(170px,1.4fr)_84px_minmax(150px,1.2fr)_96px_92px_96px_88px]',
+                      'hidden cursor-pointer items-center border-b border-line px-4 py-3 transition-colors duration-fast last:border-b-0 md:grid md:gap-3',
+                      gridColumns,
                       selected ? 'bg-brand-50' : 'hover:bg-paper-2',
                     )}
                   >
@@ -259,8 +282,7 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
                     <span className="hidden font-mono text-data-m text-ink-600 tnum 2xl:block">
                       {marketCap != null ? `$${fmtCompact(marketCap)}` : '—'}
                     </span>
-                    {/* 预期波动 */}
-                    <ExpectedMoveCell pct={move} index={i} />
+                    {hasExpectedMove && <ExpectedMoveCell pct={move} index={i} />}
                     {/* AI 影响 */}
                     <span className="flex justify-end">
                       <ImpactAction row={row} onSelect={() => onSelectTicker(row.ticker)} />
@@ -301,7 +323,7 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
                           </span>
                         </span>
                       </span>
-                      <ExpectedMoveCell pct={move} index={i} />
+                      {hasExpectedMove && <ExpectedMoveCell pct={move} index={i} />}
                     </span>
                   </motion.button>
                 </div>

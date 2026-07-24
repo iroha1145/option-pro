@@ -10,12 +10,14 @@ import { isMock } from '@/api/client';
 import { optionsApi } from '@/api/modules/options';
 import { aiJobsApi } from '@/api/modules/ai-jobs';
 import { usePolling } from '@/hooks/usePolling';
+import { useRetryCountdown } from '@/hooks/useRetryCountdown';
 import { useAccess } from '@/hooks/useAccess';
 import EmptyState from '@/components/shared/EmptyState';
+import SourceNote from '@/components/shared/SourceNote';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
-import { fmtCompact, fmtPrice } from '@/lib/format';
+import { fmtCompact, fmtPrice, fmtRelative } from '@/lib/format';
 import { OPTION_SUPPORTED_LIST, optionsSupported } from '@/mocks/fixtures2';
 import { AI_DISCLAIMER, useAiJob } from './useAiJob';
 import {
@@ -265,16 +267,41 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
   // 支持名单只属于 mock 数据集;live 由真实接口自证(到期日为空 → 诚实空态)
   const supported = !isMock || optionsSupported(ticker);
   const [expiration, setExpiration] = useState<string | null>(null);
-  const { data: expirations, loading: expLoading, error: expError } = usePolling(
-    () => optionsApi.expirations(ticker),
+  const forceExpirationsRef = useRef(false);
+  const {
+    data: expirations,
+    loading: expLoading,
+    error: expError,
+    refreshing: expRefreshing,
+    refresh: refreshExpirations,
+  } = usePolling(
+    () => {
+      const force = forceExpirationsRef.current;
+      forceExpirationsRef.current = false;
+      return optionsApi.expirations(ticker, { force });
+    },
     null,
     [ticker],
     );
-  const exp = expiration ?? expirations?.[0] ?? null;
-  const { data: chain, loading: chainLoading, error: chainError } = usePolling(
+  const exp =
+    expiration && expirations?.includes(expiration)
+      ? expiration
+      : expirations?.[0] ?? null;
+  const {
+    data: chain,
+    loading: chainLoading,
+    error: chainError,
+    refreshing: chainRefreshing,
+    refresh: refreshChain,
+  } = usePolling(
     () => (exp ? optionsApi.chain(ticker, exp) : Promise.resolve(null)),
     null,
     [ticker, exp],
+  );
+  const providerError = expError ?? chainError;
+  const retrySeconds = useRetryCountdown(
+    providerError,
+    providerError?.retryAfter,
   );
 
   const atmRef = useRef<HTMLTableRowElement>(null);
@@ -297,24 +324,54 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
         icon="doc-quote"
         title="期权链快照未覆盖该标的"
         description={`支持标的：${OPTION_SUPPORTED_LIST}`}
-        variant="error"
         className="py-8"
       />
     );
   }
 
   if (expLoading) return <SkeletonRows rows={6} />;
-  const providerError = expError ?? chainError;
   if (providerError) {
     const loginExpired = providerError.code === 401;
+    const rateLimited = providerError.code === 429;
+    const retrying = expRefreshing || chainRefreshing;
     return (
       <EmptyState
         icon="doc-quote"
-        title={loginExpired ? '登录状态已失效' : '期权链真实数据暂不可用'}
+        title={
+          loginExpired
+            ? '登录状态已失效'
+            : rateLimited
+              ? '期权链请求较频繁'
+              : '期权链真实数据暂不可用'
+        }
         description={
           loginExpired
             ? '请重新登录后读取期权链'
-            : '期权数据使用独立数据源；Massive Stocks Starter 股票订阅不包含期权行情'
+            : `期权链由 Yahoo/yfinance 拉取；Massive Stocks Starter 股票订阅不包含期权行情${
+                retrySeconds > 0 ? ` · ${retrySeconds} 秒后可重试` : ''
+              }`
+        }
+        action={
+          loginExpired ? null : (
+            <button
+              type="button"
+              onClick={() => {
+                if (providerError.code === 400) {
+                  setExpiration(null);
+                  forceExpirationsRef.current = true;
+                  refreshExpirations();
+                  return;
+                }
+                refreshExpirations();
+                if (exp) refreshChain();
+              }}
+              disabled={retrySeconds > 0 || retrying}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+            >
+              <Icon name="refresh" size={14} />
+              {retrying ? '正在重试' : retrySeconds > 0 ? `${retrySeconds} 秒后重试` : '重试'}
+            </button>
+          )
         }
         variant="error"
         className="py-8"
@@ -351,6 +408,14 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
           </p>
         )}
       </div>
+      {chain && (
+        <SourceNote
+          className="mt-2"
+          text={`期权链来源：${chain.provider ?? 'Yahoo/yfinance'}${
+            chain.asOf ? ` · 数据时间 ${fmtRelative(chain.asOf)}` : ''
+          }${chain.stale ? ' · 当前为最近一次可用快照' : ''}`}
+        />
+      )}
 
       {/* 三带表 */}
       <div className="relative mt-3 max-h-[420px] overflow-auto rounded-lg border border-line">

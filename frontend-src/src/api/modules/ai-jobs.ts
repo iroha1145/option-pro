@@ -36,9 +36,14 @@ export interface EarningsImpactInput {
   name?: string;
   sector?: string;
   earnings_date?: string;
+  year?: number | null;
+  quarter?: number | null;
   eps_estimate?: number | null;
+  eps_actual?: number | null;
   revenue_estimate?: number | null;
+  revenue_actual?: number | null;
   market_cap?: number | null;
+  release_status?: 'scheduled' | 'reported_pending_actual' | 'released';
 }
 
 /**

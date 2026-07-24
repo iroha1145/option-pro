@@ -275,7 +275,9 @@ class EarningsAnalysisTask:
     async def _run(self, *, manual: bool) -> TaskResult:
         from app.api import earnings
         from app.services.ai_jobs import runtime as ai_runtime
-        from app.services.ai_jobs.models import EarningsImpactJobRequest
+        from app.services.ai_jobs.models import (
+            normalize_earnings_analysis_payload,
+        )
         from app.services.runtime_settings import RuntimeSettingsStorageError
 
         try:
@@ -286,6 +288,11 @@ class EarningsAnalysisTask:
                 error_code="runtime_settings_unavailable",
                 details={"reason": "runtime_settings_unavailable", "queued": 0},
             )
+        repository = await self._prepare_repository()
+        retention_deleted = await _call_local(
+            repository.prune_earnings_retention,
+            retention_days=30,
+        )
         if manual and not bool(effective.ai.manual_analysis_enabled):
             return TaskResult(
                 status="disabled",
@@ -316,8 +323,17 @@ class EarningsAnalysisTask:
             if self._today is not None
             else earnings._market_today()
         )
-        builder = self._builder or earnings._build_upcoming_earnings
-        snapshot = await _call_local(builder, observed)
+        if self._builder is not None:
+            snapshot = await _call_local(self._builder, observed)
+        else:
+            snapshot = await earnings._read_current_upcoming_earnings_snapshot(
+                observed
+            )
+            if snapshot is None:
+                snapshot = await _call_local(
+                    earnings._build_upcoming_earnings,
+                    observed,
+                )
         if (
             not isinstance(snapshot, Mapping)
             or snapshot.get("data_limited") is not False
@@ -347,7 +363,14 @@ class EarningsAnalysisTask:
                 days_until = int(value.get("days_until"))
             except (TypeError, ValueError):
                 continue
-            if 0 <= days_until <= lookahead_days:
+            has_actual = (
+                value.get("eps_actual") is not None
+                or value.get("revenue_actual") is not None
+            )
+            if (
+                0 <= days_until <= lookahead_days
+                or (has_actual and -30 <= days_until < 0)
+            ):
                 eligible.append(dict(value))
         eligible.sort(
             key=lambda item: (
@@ -356,7 +379,6 @@ class EarningsAnalysisTask:
             )
         )
 
-        repository = await self._prepare_repository()
         schema_version, schema_sha256 = ai_runtime.schema_identity(
             "earnings_impact"
         )
@@ -370,32 +392,50 @@ class EarningsAnalysisTask:
                 "name": str(item.get("name") or ""),
                 "sector": str(item.get("sector") or ""),
                 "earnings_date": str(item.get("earnings_date") or item.get("date") or ""),
+                "year": item.get("year"),
+                "quarter": item.get("quarter"),
                 "eps_estimate": item.get("eps_estimate"),
+                "eps_actual": item.get("eps_actual"),
                 "revenue_estimate": item.get("revenue_estimate"),
+                "revenue_actual": item.get("revenue_actual"),
                 "market_cap": item.get("market_cap"),
+                "release_status": item.get("release_status"),
             }
+            has_actual = (
+                raw_payload["eps_actual"] is not None
+                or raw_payload["revenue_actual"] is not None
+            )
+            analysis_stage = (
+                "post_release_final"
+                if has_actual and not manual
+                else "post_release_manual"
+                if has_actual
+                else "pre_release"
+            )
             try:
-                payload = EarningsImpactJobRequest.model_validate(
-                    raw_payload
-                ).model_dump(mode="json", exclude={"force"})
+                payload = normalize_earnings_analysis_payload(
+                    raw_payload,
+                    analysis_stage=analysis_stage,
+                )
             except (TypeError, ValueError):
                 invalid += 1
                 continue
             latest = await _call_local(
-                repository.latest_for_ticker,
-                "earnings_impact",
+                repository.latest_for_report,
                 payload["ticker"],
-            )
-            same_report_date = self._same_report_date(
-                latest,
-                payload["earnings_date"],
+                payload["report_id"],
+                analysis_stage=analysis_stage,
             )
             retry_failed_report = bool(
-                same_report_date
+                latest
                 and str((latest or {}).get("status") or "")
                 in {"failed", "cancelled", "budget_blocked"}
             )
-            if same_report_date and not retry_failed_report:
+            if (
+                analysis_stage == "pre_release"
+                and latest
+                and not retry_failed_report
+            ):
                 existing += 1
                 continue
             try:
@@ -406,18 +446,30 @@ class EarningsAnalysisTask:
                     model=self._settings.openai_model,
                     reasoning=self._settings.openai_reasoning,
                     execution_mode=self._settings.openai_execution_mode,
-                    prompt_version="earnings-impact-zh-cn-v4",
+                    prompt_version="earnings-impact-zh-cn-v5",
                     schema_version=schema_version,
                     schema_sha256=schema_sha256,
                     max_queued=self._settings.openai_job_max_queued,
                     submission_source="manual" if manual else "scheduled",
-                    priority=70 if manual else 40,
+                    priority=(
+                        90
+                        if analysis_stage == "post_release_final"
+                        else 70
+                        if manual
+                        else 40
+                    ),
                     force_retry=retry_failed_report,
                 )
             except RuntimeError as exc:
                 if str(exc) == "ai_job_queue_full":
                     queue_full = True
                     break
+                if str(exc) in {
+                    "earnings_analysis_locked",
+                    "earnings_finalization_in_progress",
+                }:
+                    existing += 1
+                    continue
                 raise
             queued += int(bool(created))
             existing += int(not created)
@@ -432,6 +484,7 @@ class EarningsAnalysisTask:
             "queued": queued,
             "existing": existing,
             "invalid": invalid,
+            "retention_deleted": int(retention_deleted),
         }
         if queue_full:
             return TaskResult(
@@ -2092,7 +2145,7 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         TaskSpec(
             "earnings_analysis",
             earnings_analysis,
-            interval_seconds=86_400.0,
+            interval_seconds=float(config.public_home.earnings_seconds),
             # Earnings analysis has its own runtime switch. Keep the task
             # addressable even when the unrelated news-catalyst mode is off.
             enabled=True,

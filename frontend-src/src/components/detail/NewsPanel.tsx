@@ -7,6 +7,7 @@ import { catalystsApi } from '@/api/modules/catalysts';
 import { earningsApi } from '@/api/modules/earnings';
 import { usePolling } from '@/hooks/usePolling';
 import { useNow } from '@/hooks/useNow';
+import { useAccess } from '@/hooks/useAccess';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
@@ -24,8 +25,13 @@ const WINDOW_MS = 72 * 3600_000;
 const MAX_ITEMS = 5;
 
 export default function NewsPanel({ ticker }: { ticker: string }) {
+  const { isOwner } = useAccess();
   const { data: news, loading } = usePolling(() => catalystsApi.byTicker(ticker), null, [ticker]);
-  const { data: impact } = usePolling(() => earningsApi.impact(ticker), null, [ticker]);
+  const { data: impact } = usePolling(
+    () => isOwner ? earningsApi.impact(ticker) : Promise.resolve(null),
+    null,
+    [isOwner, ticker],
+  );
   const now = useNow(60_000);
 
   if (loading) return <SkeletonText lines={6} className="py-2" />;

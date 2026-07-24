@@ -100,12 +100,28 @@ def build_runtime_request(job_type: str, payload: dict[str, Any]) -> RuntimeRequ
     schema = model.model_json_schema(mode="validation")
     common = _shared_instructions()
     if job_type == "earnings_impact":
+        earnings_stage = str(
+            payload.get("analysis_stage")
+            or payload.get("analysis_phase")
+            or "pre_release"
+        )
         instructions = common + (
             "只分析输入提供的美股财报资料和公司联动关系，不浏览网页，也不补充外部事实。"
             "列出4至8家受影响的上市公司，不得包含输入公司本身。"
             "impacted.name必须使用简体中文公司名；"
-            "direction表示输入公司业绩超预期时的可能传导方向，不代表收益概率。"
         )
+        if earnings_stage in {"post_release_manual", "post_release_final"}:
+            instructions += (
+                "这是已发布财报分析。必须逐项比较输入中的actual与estimate，"
+                "明确说明超预期、不及预期或持平；缺少可比较字段时必须直接说明数据缺口。"
+                "不得继续使用“假设超预期”或其他发布前的泛化表述。"
+                "direction表示已发布结果相对预期的实际差异所形成的可能传导方向，"
+                "不代表收益概率。"
+            )
+        else:
+            instructions += (
+                "direction表示输入公司业绩超预期时的可能传导方向，不代表收益概率。"
+            )
         # Hosted search has a per-call fee, and its documented context-size
         # control has no numeric returned-token ceiling. Keeping it disabled is
         # the only useful hard bound under the default two-dollar daily cap.

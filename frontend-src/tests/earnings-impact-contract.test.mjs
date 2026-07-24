@@ -259,16 +259,16 @@ test('财报影响卡只消费真实分析字段', () => {
   assert.equal(source.includes('已有分析仍会照常显示'), true);
 });
 
-test('财报页面保留近期已公布结果并把低交互图表放到分析栏', () => {
+test('财报页面保留近期已公布结果并默认收纳长列表', () => {
   const page = fs.readFileSync(pageSourcePath, 'utf8');
   const list = fs.readFileSync(listSourcePath, 'utf8');
 
   assert.equal(page.includes('distance >= -3 && distance <= 30'), true);
-  assert.equal(page.includes('const LIST_PAGE_SIZE = 80'), true);
+  assert.equal(page.includes('const LIST_PAGE_SIZE = 24'), true);
   assert.equal(page.includes('prioritizeEarningsRows(filteredItems, visibleLimit)'), true);
-  assert.equal(page.includes('selectedDay\n        ? filteredItems'), true);
-  assert.equal(page.includes('!selectedDay && visibleItems.length < filteredItems.length'), true);
-  assert.equal(page.includes('再显示 {Math.min(LIST_PAGE_SIZE'), true);
+  assert.equal(page.includes('visibleItems.length < filteredItems.length'), true);
+  assert.equal(page.includes('显示更多 · {Math.min(LIST_PAGE_SIZE'), true);
+  assert.equal(page.includes('收起至前 {LIST_PAGE_SIZE} 条'), true);
   assert.equal(page.includes('row={selectedRow}'), true);
   assert.equal(page.includes('xl:col-span-8'), true);
   assert.equal(page.includes('xl:col-span-4'), true);
@@ -278,10 +278,26 @@ test('财报页面保留近期已公布结果并把低交互图表放到分析�
   assert.equal(rightColumn.includes('<ImpactCard'), true);
   assert.equal(rightColumn.includes('<EpsHatchChart'), true);
   assert.equal(rightColumn.includes('<DensityStrip'), true);
+  assert.equal(list.includes('md:max-h-[min(72vh,880px)]'), true);
+  assert.equal(list.includes('md:overflow-y-auto'), true);
+  assert.equal(list.includes('sticky top-0'), true);
   assert.equal(list.includes('2xl:grid-cols-['), true);
-  assert.equal(list.includes(' xl:grid-cols-['), false);
   assert.equal(list.includes('row.revEstimate * 1e6'), false);
   assert.equal(list.includes('fmtCompact(row.revEstimate)'), true);
+});
+
+test('预期波动仅在存在真实数值时显示', () => {
+  const list = fs.readFileSync(listSourcePath, 'utf8');
+  const cell = list.slice(
+    list.indexOf('function ExpectedMoveCell'),
+    list.indexOf('/* ---------------- AI 影响操作钮'),
+  );
+
+  assert.equal(list.includes("items.some((row) => exNum(row, 'expectedMovePct') != null)"), true);
+  assert.equal(list.includes('hasExpectedMove && <span className="eyebrow">预期波动</span>'), true);
+  assert.equal(list.includes('hasExpectedMove && <ExpectedMoveCell'), true);
+  assert.equal(cell.includes('if (pct == null) return <span aria-hidden="true" />'), true);
+  assert.equal(cell.includes('—'), false);
 });
 
 test('财报首屏同时保留已公布大市值结果和近期待公布项目', () => {
@@ -327,17 +343,24 @@ test('财报首屏同时保留已公布大市值结果和近期待公布项目',
   assert.equal(visible.every((row) => expanded.includes(row)), true);
 });
 
-test('财报模型任务带真实财报上下文、逐条进度和管理员批量入口', () => {
+test('财报模型使用精确报告级接口、逐条进度和管理员批量入口', () => {
+  const api = fs.readFileSync(moduleSourcePath, 'utf8');
   const card = fs.readFileSync(cardSourcePath, 'utf8');
   const controls = fs.readFileSync(controlsSourcePath, 'utf8');
 
+  assert.equal(card.includes('earningsApi.reportAnalysis'), true);
+  assert.equal(card.includes('earningsApi.requestReportAnalysis'), true);
+  assert.equal(api.includes('post(reportAnalysisPath(ticker, reportDate, identity), { confirm: true })'), true);
+  assert.equal(card.includes('只轮询报告级 GET'), true);
   for (const field of [
     'earnings_date',
     'eps_estimate',
+    'eps_actual',
     'revenue_estimate',
+    'revenue_actual',
     'market_cap',
   ]) {
-    assert.equal(card.includes(field), true, `单股任务缺少 ${field}`);
+    assert.equal(card.includes(field), false, `访客请求不应携带客户端财务字段 ${field}`);
   }
   assert.equal(card.includes('正在分析第 1 / 1 条'), true);
   assert.equal(controls.includes('earningsScheduledAnalysisEnabled'), true);
@@ -350,6 +373,17 @@ test('财报模型任务带真实财报上下文、逐条进度和管理员批�
   assert.equal(controls.includes('自动分析设置已保存，但首次任务失败'), true);
   assert.equal(controls.includes('最近任务检查'), true);
   assert.equal(controls.includes('未来 30 天'), true);
+});
+
+test('访客能看到单股分析入口和终版状态', () => {
+  const page = fs.readFileSync(pageSourcePath, 'utf8');
+  const list = fs.readFileSync(listSourcePath, 'utf8');
+
+  assert.equal(page.includes('登录后可用 AI 分析'), false);
+  assert.equal(page.includes('单股分析可用'), true);
+  assert.equal(list.includes('ready === false && !isOwner'), false);
+  assert.equal(list.includes("'查看最终'"), true);
+  assert.equal(list.includes("'重分析中'"), true);
 });
 
 test('财报组件不再伪造 Optix Research 来源', () => {

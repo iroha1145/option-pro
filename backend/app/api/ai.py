@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from datetime import date
+from collections import deque
+from datetime import date, datetime, timedelta, timezone
+import hashlib
+import json
+import math
+import time
 from typing import Annotated, Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Path, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from pydantic import (
@@ -16,6 +21,7 @@ from pydantic import (
 )
 
 from app.api.stocks import _sanitize
+from app.access import current_request_is_owner, require_same_origin_json
 from app.config import get_settings
 from app.personal_config import get_personal_config
 from app.services.ai_jobs import runtime as ai_job_runtime
@@ -23,16 +29,29 @@ from app.services.ai_jobs.models import (
     CancelRequest,
     EarningsImpactJobRequest,
     OptionAlertJobRequest,
+    earnings_report_id,
+    normalize_earnings_analysis_payload,
 )
 from app.services.ai_jobs.repository import AIJobRepository
+from app.services.request_security import request_client_ip
 from app.services.runtime_settings import (
     RuntimeSettingsStorageError,
     get_effective_runtime_settings,
 )
 
 _MAX_AI_BODY_BYTES = 64 * 1024
+_PUBLIC_EARNINGS_WINDOW_SECONDS = 10 * 60
+_PUBLIC_EARNINGS_LIMIT = 3
+_PUBLIC_EARNINGS_MAX_CLIENTS = 2_048
+_RETRYABLE_EARNINGS_REPORT_STATUSES = frozenset(
+    {"failed", "cancelled", "budget_blocked"}
+)
+_NON_RETRYABLE_EARNINGS_ERRORS = frozenset(
+    {"submission_outcome_unknown", "duplicate_request_migrated"}
+)
+_public_earnings_recent: dict[str, deque[tuple[float, str]]] = {}
 _PROMPT_VERSIONS = {
-    "earnings_impact": "earnings-impact-zh-cn-v4",
+    "earnings_impact": "earnings-impact-zh-cn-v5",
     "option_alerts": "option-alerts-zh-cn-v4",
     "signal_analysis": "signal-analysis-zh-cn-v5",
     "news_impact": "news-impact-zh-cn-v6",
@@ -149,6 +168,12 @@ class AlertsRequest(BaseModel):
         return value
 
 
+class EarningsReportAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirm: StrictBool
+
+
 def _job_repository() -> AIJobRepository:
     return AIJobRepository(get_settings().openai_job_db_path)
 
@@ -237,6 +262,7 @@ def _create_job(
     payload: dict,
     *,
     force_retry: bool = False,
+    priority: int = 80,
 ) -> tuple[dict, bool]:
     # Recheck at the durable enqueue boundary in case the owner changed the
     # switch after the endpoint's initial validation.
@@ -259,7 +285,7 @@ def _create_job(
             schema_sha256=schema_sha256,
             max_queued=settings.openai_job_max_queued,
             submission_source="manual",
-            priority=80,
+            priority=priority,
             force_retry=force_retry,
         )
     except RuntimeError as exc:
@@ -269,7 +295,292 @@ def _create_job(
                 detail={"code": "ai_job_queue_full", "retry_after": 60},
                 headers={"Retry-After": "60"},
             ) from exc
+        if str(exc) in {
+            "earnings_analysis_locked",
+            "earnings_finalization_in_progress",
+        }:
+            code = str(exc)
+            message = (
+                "该财报的最终分析已经生成"
+                if code == "earnings_analysis_locked"
+                else "该财报的最终分析正在生成"
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={"code": code, "message": message},
+            ) from exc
         raise
+
+
+def _reserve_public_earnings_submission(
+    request: Request,
+    payload: dict,
+    *,
+    force_retry: bool,
+) -> None:
+    if current_request_is_owner():
+        return
+    now = time.monotonic()
+    cutoff = now - _PUBLIC_EARNINGS_WINDOW_SECONDS
+    for client_id, attempts in list(_public_earnings_recent.items()):
+        while attempts and attempts[0][0] <= cutoff:
+            attempts.popleft()
+        if not attempts:
+            _public_earnings_recent.pop(client_id, None)
+    if len(_public_earnings_recent) > _PUBLIC_EARNINGS_MAX_CLIENTS:
+        overflow = len(_public_earnings_recent) - _PUBLIC_EARNINGS_MAX_CLIENTS
+        for client_id, attempts in sorted(
+            _public_earnings_recent.items(),
+            key=lambda item: item[1][-1][0] if item[1] else float("-inf"),
+        )[:overflow]:
+            _public_earnings_recent.pop(client_id, None)
+
+    task_key = hashlib.sha256(
+        json.dumps(
+            {
+                "report_id": payload.get("report_id"),
+                "input_hash": payload.get("input_hash"),
+                "analysis_stage": payload.get("analysis_stage"),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    client_id = request_client_ip(request)
+    attempts = _public_earnings_recent.setdefault(client_id, deque())
+    if not force_retry and any(key == task_key for _stamp, key in attempts):
+        return
+    if len(attempts) >= _PUBLIC_EARNINGS_LIMIT:
+        retry_after = max(
+            1,
+            math.ceil(
+                attempts[0][0] + _PUBLIC_EARNINGS_WINDOW_SECONDS - now
+            ),
+        )
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "earnings_analysis_rate_limited",
+                "message": "财报分析触发过于频繁，请稍后再试",
+                "retry_after_seconds": retry_after,
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
+    attempts.append((now, task_key))
+
+
+def _earnings_report_force_retry(row: dict | None) -> bool:
+    """Retry only settled report jobs that the repository can safely replace."""
+
+    return bool(
+        row
+        and row.get("status") in _RETRYABLE_EARNINGS_REPORT_STATUSES
+        and row.get("error_code") not in _NON_RETRYABLE_EARNINGS_ERRORS
+    )
+
+
+async def _normalized_earnings_submission(
+    req: EarningsImpactJobRequest,
+) -> dict:
+    raw = req.model_dump(
+        mode="json",
+        exclude={
+            "force",
+            "analysis_stage",
+            "analysis_phase",
+            "report_id",
+            "input_hash",
+        },
+    )
+    if not current_request_is_owner():
+        from app.api import earnings
+
+        snapshot = await earnings._read_current_upcoming_earnings_snapshot()
+        if (
+            not isinstance(snapshot, dict)
+            or snapshot.get("data_limited") is not False
+            or snapshot.get("source_status") != "active"
+        ):
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "earnings_snapshot_unavailable",
+                    "message": "当前财报快照不可用",
+                },
+            )
+        requested_date = str(req.earnings_date or "")
+        matches = [
+            value
+            for value in list(snapshot.get("earnings") or [])
+            if (
+                isinstance(value, dict)
+                and str(value.get("ticker") or "").strip().upper() == req.ticker
+                and (
+                    not requested_date
+                    or str(value.get("earnings_date") or "") == requested_date
+                )
+            )
+        ]
+        if not matches:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "earnings_snapshot_mismatch",
+                    "message": "当前快照中没有匹配的财报",
+                },
+            )
+        source = matches[0]
+        raw = {
+            field: source.get(field)
+            for field in (
+                "ticker",
+                "name",
+                "sector",
+                "earnings_date",
+                "year",
+                "quarter",
+                "eps_estimate",
+                "eps_actual",
+                "revenue_estimate",
+                "revenue_actual",
+                "market_cap",
+                "release_status",
+            )
+        }
+    has_actual = (
+        raw.get("eps_actual") is not None
+        or raw.get("revenue_actual") is not None
+    )
+    stage: Literal["pre_release", "post_release_manual"] = (
+        "post_release_manual" if has_actual else "pre_release"
+    )
+    try:
+        return normalize_earnings_analysis_payload(
+            raw,
+            analysis_stage=stage,
+        )
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "earnings_snapshot_invalid",
+                "message": "财报快照字段不完整",
+            },
+        ) from exc
+
+
+async def _snapshot_bound_earnings_report(
+    ticker: str,
+    report_date: str,
+    *,
+    year: int | None,
+    quarter: int | None,
+) -> dict:
+    from app.api import earnings
+
+    snapshot = await earnings._read_current_upcoming_earnings_snapshot()
+    if (
+        not isinstance(snapshot, dict)
+        or snapshot.get("data_limited") is not False
+        or snapshot.get("source_status") != "active"
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "earnings_snapshot_unavailable",
+                "message": "当前财报快照不可用",
+            },
+        )
+    matches = [
+        value
+        for value in list(snapshot.get("earnings") or [])
+        if (
+            isinstance(value, dict)
+            and str(value.get("ticker") or "").strip().upper() == ticker
+            and str(value.get("earnings_date") or "") == report_date
+            and (
+                year is None
+                or value.get("year") is None
+                or value.get("year") == year
+            )
+            and (
+                quarter is None
+                or value.get("quarter") is None
+                or value.get("quarter") == quarter
+            )
+        )
+    ]
+    if not matches:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "earnings_snapshot_mismatch",
+                "message": "当前快照中没有匹配的财报",
+            },
+        )
+    source = matches[0]
+    raw = {
+        field: source.get(field)
+        for field in (
+            "ticker",
+            "name",
+            "sector",
+            "earnings_date",
+            "year",
+            "quarter",
+            "eps_estimate",
+            "eps_actual",
+            "revenue_estimate",
+            "revenue_actual",
+            "market_cap",
+            "release_status",
+        )
+    }
+    has_actual = (
+        raw.get("eps_actual") is not None
+        or raw.get("revenue_actual") is not None
+    )
+    return normalize_earnings_analysis_payload(
+        raw,
+        analysis_stage=(
+            "post_release_manual" if has_actual else "pre_release"
+        ),
+    )
+
+
+def _public_earnings_report_status(
+    repository: AIJobRepository,
+    row: dict,
+    *,
+    cached: bool = False,
+) -> dict:
+    published = repository.public(row, cached=cached)
+    return _sanitize(
+        {
+            "status": published.get("status"),
+            "error_code": published.get("error_code"),
+            "result": published.get("result"),
+            "retry_after_seconds": (
+                2
+                if published.get("status")
+                in {"pending", "queued", "in_progress"}
+                else None
+            ),
+            **{
+                key: published.get(key)
+                for key in (
+                    "_analysis_stage",
+                    "_analysis_phase",
+                    "_report_date",
+                    "_report_id",
+                    "_input_hash",
+                    "_locked",
+                    "_final",
+                    "_finalization_in_progress",
+                )
+            },
+        }
+    )
 
 
 @router.get("/status")
@@ -318,13 +629,38 @@ async def earnings_correlation():
 @router.get("/earnings-impact/{ticker}")
 async def earnings_impact(
     ticker: Annotated[Ticker, Path(description="US-listed ticker symbol")],
+    report_id: Annotated[
+        str | None,
+        Query(max_length=96),
+    ] = None,
+    report_date: Annotated[
+        str | None,
+        Query(max_length=10),
+    ] = None,
+    year: Annotated[int | None, Query(ge=1900, le=2200)] = None,
+    quarter: Annotated[int | None, Query(ge=1, le=4)] = None,
 ):
     """Return a completed cache entry; GET never creates paid work."""
 
+    resolved_report_id = report_id
+    if not resolved_report_id and report_date:
+        resolved_report_id = earnings_report_id(
+            {
+                "ticker": ticker,
+                "earnings_date": report_date,
+                "year": year,
+                "quarter": quarter,
+            }
+        )
     repository = _job_repository()
-    row = repository.latest_completed("earnings_impact", ticker)
+    row = repository.latest_completed(
+        "earnings_impact",
+        ticker,
+        report_id=resolved_report_id,
+    )
     if row:
-        result = repository.public(row, cached=True)["result"]
+        published = repository.public(row, cached=True)
+        result = published["result"]
         if result is not None:
             return _sanitize(
                 {
@@ -332,6 +668,19 @@ async def earnings_impact(
                     "_cached": True,
                     "_job_id": row["job_id"],
                     "_generated_at": row.get("completed_at"),
+                    **{
+                        key: published.get(key)
+                        for key in (
+                            "_analysis_stage",
+                            "_analysis_phase",
+                            "_report_date",
+                            "_report_id",
+                            "_input_hash",
+                            "_locked",
+                            "_final",
+                            "_finalization_in_progress",
+                        )
+                    },
                 }
             )
     return JSONResponse(
@@ -344,14 +693,117 @@ async def earnings_impact(
     )
 
 
-@router.post("/jobs/earnings-impact")
-async def create_earnings_impact_job(req: EarningsImpactJobRequest):
+@router.get("/earnings-impact/{ticker}/reports/{report_date}")
+async def earnings_report_impact(
+    ticker: Annotated[Ticker, Path(description="US-listed ticker symbol")],
+    report_date: Annotated[str, Path(min_length=10, max_length=10)],
+    year: Annotated[int | None, Query(ge=1900, le=2200)] = None,
+    quarter: Annotated[int | None, Query(ge=1, le=4)] = None,
+):
+    try:
+        date.fromisoformat(report_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid report date") from exc
+    report_id = earnings_report_id(
+        {
+            "ticker": ticker,
+            "earnings_date": report_date,
+            "year": year,
+            "quarter": quarter,
+        }
+    )
+    repository = _job_repository()
+    row = repository.latest_for_report(ticker, report_id)
+    if row is None:
+        return JSONResponse(
+            {
+                "status": "analysis_required",
+                "_report_id": report_id,
+                "_report_date": report_date,
+                "_locked": False,
+                "_final": False,
+                "_finalization_in_progress": False,
+            },
+            status_code=409,
+        )
+    return _public_earnings_report_status(
+        repository,
+        row,
+        cached=row.get("status") == "completed",
+    )
+
+
+@router.post(
+    "/earnings-impact/{ticker}/reports/{report_date}",
+    dependencies=[Depends(require_same_origin_json)],
+)
+async def trigger_earnings_report_impact(
+    request: Request,
+    ticker: Annotated[Ticker, Path(description="US-listed ticker symbol")],
+    report_date: Annotated[str, Path(min_length=10, max_length=10)],
+    action: EarningsReportAction,
+    year: Annotated[int | None, Query(ge=1900, le=2200)] = None,
+    quarter: Annotated[int | None, Query(ge=1, le=4)] = None,
+):
+    if not action.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "confirmation_required", "message": "需要确认分析"},
+        )
+    try:
+        date.fromisoformat(report_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid report date") from exc
     _require_earnings_manual_submission()
-    request_payload = req.model_dump(mode="json", exclude={"force"})
+    payload = await _snapshot_bound_earnings_report(
+        ticker,
+        report_date,
+        year=year,
+        quarter=quarter,
+    )
+    repository = _job_repository()
+    force_retry = _earnings_report_force_retry(
+        repository.latest_for_report(
+            ticker,
+            str(payload["report_id"]),
+        )
+    )
+    _reserve_public_earnings_submission(
+        request,
+        payload,
+        force_retry=force_retry,
+    )
+    row, _created = _create_job(
+        "earnings_impact",
+        payload,
+        force_retry=force_retry,
+        priority=80 if current_request_is_owner() else 20,
+    )
+    return JSONResponse(
+        _public_earnings_report_status(repository, row),
+        status_code=202,
+        headers={"Retry-After": "2"},
+    )
+
+
+@router.post("/jobs/earnings-impact")
+async def create_earnings_impact_job(
+    request: Request,
+    req: EarningsImpactJobRequest,
+):
+    _require_earnings_manual_submission()
+    request_payload = await _normalized_earnings_submission(req)
+    _reserve_public_earnings_submission(
+        request,
+        request_payload,
+        force_retry=req.force,
+    )
+    owner = current_request_is_owner()
     row, created = _create_job(
         "earnings_impact",
         request_payload,
         force_retry=req.force,
+        priority=80 if owner else 20,
     )
     payload = _job_repository().public(
         row,
@@ -391,6 +843,14 @@ async def get_ai_job(job_id: Annotated[str, Path(min_length=10, max_length=80)])
     row = _job_repository().get_job(job_id)
     if not row:
         raise HTTPException(status_code=404, detail="AI job not found")
+    if not current_request_is_owner() and row.get("job_type") == "earnings_impact":
+        stamp = row.get("completed_at") or row.get("updated_at") or row.get("created_at")
+        try:
+            observed = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            observed = datetime.min.replace(tzinfo=timezone.utc)
+        if observed < datetime.now(timezone.utc) - timedelta(days=30):
+            raise HTTPException(status_code=404, detail="AI job not found")
     return _job_repository().public(row)
 
 

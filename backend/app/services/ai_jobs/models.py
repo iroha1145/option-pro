@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import unicodedata
 from datetime import datetime, timezone
@@ -1957,18 +1958,139 @@ class EarningsImpactJobRequest(StrictModel):
     name: BoundedText = ""
     sector: BoundedText = ""
     earnings_date: Annotated[str, StringConstraints(max_length=10)] = ""
+    year: Optional[StrictInt] = Field(default=None, ge=1900, le=2200)
+    quarter: Optional[StrictInt] = Field(default=None, ge=1, le=4)
     eps_estimate: Optional[float] = Field(
         default=None,
         ge=-1_000_000,
         le=1_000_000,
     )
+    eps_actual: Optional[float] = Field(
+        default=None,
+        ge=-1_000_000,
+        le=1_000_000,
+    )
     revenue_estimate: Optional[float] = Field(default=None, ge=0, le=1e16)
+    revenue_actual: Optional[float] = Field(default=None, ge=0, le=1e16)
     market_cap: Optional[float] = Field(default=None, ge=0, le=1e16)
+    release_status: Literal[
+        "scheduled",
+        "reported_pending_actual",
+        "released",
+    ] = "scheduled"
+    analysis_stage: Literal[
+        "pre_release",
+        "post_release_manual",
+        "post_release_final",
+    ] = "pre_release"
+    analysis_phase: Literal[
+        "pre_release",
+        "post_release_manual",
+        "post_release_final",
+    ] = "pre_release"
+    report_id: Annotated[str, StringConstraints(max_length=96)] = ""
+    input_hash: Annotated[
+        str,
+        StringConstraints(max_length=64, pattern=r"^(?:[0-9a-f]{64})?$"),
+    ] = ""
 
     @field_validator("ticker")
     @classmethod
     def normalize_ticker(cls, value: str) -> str:
         return value.upper()
+
+
+def earnings_report_id(payload: dict[str, Any]) -> str:
+    """Build a stable report identity independent of model and prompt versions."""
+
+    ticker = str(payload.get("ticker") or "").strip().upper()
+    report_date = str(payload.get("earnings_date") or "").strip()
+    year = payload.get("year")
+    quarter = payload.get("quarter")
+    year_part = str(year) if type(year) is int else "na"
+    quarter_part = f"q{quarter}" if type(quarter) is int else "qna"
+    return f"earnings:{ticker}:{report_date or 'undated'}:{year_part}:{quarter_part}"
+
+
+def earnings_input_hash(payload: dict[str, Any]) -> str:
+    """Hash only the bound earnings facts, excluding execution controls."""
+
+    facts = {
+        field: payload.get(field)
+        for field in (
+            "ticker",
+            "name",
+            "sector",
+            "earnings_date",
+            "year",
+            "quarter",
+            "eps_estimate",
+            "eps_actual",
+            "revenue_estimate",
+            "revenue_actual",
+            "market_cap",
+            "release_status",
+        )
+    }
+    raw = json.dumps(
+        facts,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def normalize_earnings_analysis_payload(
+    payload: dict[str, Any],
+    *,
+    analysis_stage: Literal[
+        "pre_release",
+        "post_release_manual",
+        "post_release_final",
+    ],
+) -> dict[str, Any]:
+    """Normalize server-bound facts and derive immutable analysis identities."""
+
+    normalized = dict(payload)
+    normalized.pop("force", None)
+    has_actual = (
+        normalized.get("eps_actual") is not None
+        or normalized.get("revenue_actual") is not None
+    )
+    if analysis_stage != "pre_release" and not has_actual:
+        raise ValueError("post_release_analysis_requires_actuals")
+    if analysis_stage == "post_release_final" and not (
+        (
+            normalized.get("eps_actual") is not None
+            and normalized.get("eps_estimate") is not None
+        )
+        or (
+            normalized.get("revenue_actual") is not None
+            and normalized.get("revenue_estimate") is not None
+        )
+    ):
+        raise ValueError("final_earnings_analysis_requires_comparable_actuals")
+    if analysis_stage == "pre_release" and has_actual:
+        raise ValueError("pre_release_analysis_cannot_include_actuals")
+    normalized["release_status"] = (
+        "released"
+        if has_actual
+        else (
+            "reported_pending_actual"
+            if normalized.get("release_status") == "reported_pending_actual"
+            else "scheduled"
+        )
+    )
+    normalized["analysis_stage"] = analysis_stage
+    normalized["analysis_phase"] = analysis_stage
+    normalized["report_id"] = earnings_report_id(normalized)
+    normalized["input_hash"] = earnings_input_hash(normalized)
+    return EarningsImpactJobRequest.model_validate(normalized).model_dump(
+        mode="json",
+        exclude={"force"},
+    )
 
 
 class OptionAlertJobRequest(StrictModel):

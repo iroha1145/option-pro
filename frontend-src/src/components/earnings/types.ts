@@ -25,19 +25,29 @@ export interface EarningsImpactResult extends EarningsImpact {
 /** 读取扩展字段：camelCase 优先，兼容 live 的 snake_case；缺失返回 null（留空纪律） */
 export function exNum(
   row: EarningsRow | EarningsImpactResult,
-  camel: 'epsHigh' | 'epsLow' | 'marketCap' | 'expectedMovePct' | 'histAvgMovePct' | 'confidence',
+  camel: 'epsHigh' | 'epsLow' | 'marketCap' | 'expectedMovePct' | 'histAvgMovePct' | 'confidence' | 'year' | 'quarter',
 ): number | null {
   const r = row as unknown as Record<string, unknown>;
   const snake = camel.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
   const v = r[camel] ?? r[snake];
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
-export function exStr(row: EarningsRow, camel: 'sector'): string | null {
-  const v = (row as unknown as Record<string, unknown>)[camel];
+export function exStr(
+  row: EarningsRow,
+  camel: 'sector' | 'releaseStatus' | 'analysisStage' | 'reportId',
+): string | null {
+  const record = row as unknown as Record<string, unknown>;
+  const snake = camel.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+  const v = record[camel] ?? record[snake] ?? record[`_${snake}`];
   return typeof v === 'string' && v ? v : null;
 }
-export function exBool(row: EarningsRow, camel: 'impactReady'): boolean | null {
-  const v = (row as unknown as Record<string, unknown>)[camel];
+export function exBool(
+  row: EarningsRow,
+  camel: 'impactReady' | 'locked' | 'final' | 'finalizationInProgress',
+): boolean | null {
+  const record = row as unknown as Record<string, unknown>;
+  const snake = camel.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+  const v = record[camel] ?? record[snake] ?? record[`_${snake}`];
   return typeof v === 'boolean' ? v : null;
 }
 

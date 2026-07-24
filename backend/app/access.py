@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import ipaddress
 import os
+import re
 import secrets
 import threading
 import time
@@ -45,6 +46,15 @@ _REQUEST_OWNER_ACCESS: ContextVar[bool | None] = ContextVar(
     "optix_request_owner_access",
     default=None,
 )
+_PUBLIC_STOCK_PULL_PATH = re.compile(
+    r"^/api/stocks/(?:\^[A-Z0-9][A-Z0-9.^_=-]{0,30}|[A-Z0-9][A-Z0-9.^_=-]{0,31})/pull$",
+    re.IGNORECASE,
+)
+_PUBLIC_EARNINGS_REPORT_PATH = re.compile(
+    r"^/api/ai/earnings-impact/[A-Z0-9][A-Z0-9.\-^]{0,11}"
+    r"/reports/\d{4}-\d{2}-\d{2}$",
+    re.IGNORECASE,
+)
 
 
 @contextmanager
@@ -75,6 +85,20 @@ def public_snapshot_unavailable(resource: str) -> HTTPException:
             "message": f"Saved public snapshot is unavailable for {resource}",
         },
     )
+
+
+def is_public_stock_pull_path(path: str) -> bool:
+    """Match only the bounded, same-origin stock refresh action."""
+
+    return _PUBLIC_STOCK_PULL_PATH.fullmatch(path) is not None
+
+
+def is_public_earnings_impact_action_path(path: str) -> bool:
+    return _PUBLIC_EARNINGS_REPORT_PATH.fullmatch(path) is not None
+
+
+def is_public_earnings_ai_read_path(path: str) -> bool:
+    return _PUBLIC_EARNINGS_REPORT_PATH.fullmatch(path) is not None
 
 
 def _canonical_origin_host(
@@ -493,8 +517,12 @@ async def require_public_read_or_owner_access(
         method == "POST"
         and request.url.path == "/api/catalysts/tickers/batch"
     )
+    public_stock_pull = (
+        method == "POST"
+        and is_public_stock_pull_path(request.url.path)
+    )
     if runtime.mode == "password" and (
-        method in {"GET", "HEAD"} or public_batch_query
+        method in {"GET", "HEAD"} or public_batch_query or public_stock_pull
     ):
         owner_access = runtime.request_is_owner(request)
         request.state.owner_access = owner_access
@@ -542,8 +570,24 @@ def require_same_origin_json(request: Request) -> None:
 
 
 def require_same_origin_action(request: Request) -> None:
-    if not getattr(request.state, "owner_access", False):
+    method = request.method.upper()
+    path = request.url.path
+    owner_access = bool(getattr(request.state, "owner_access", False))
+    if (
+        not owner_access
+        and method in {"GET", "HEAD"}
+        and is_public_earnings_ai_read_path(path)
+    ):
+        return
+    if (
+        not owner_access
+        and method == "POST"
+        and is_public_earnings_impact_action_path(path)
+    ):
+        require_same_origin_json(request)
+        return
+    if not owner_access:
         require_owner_access(request)
-    if request.method.upper() in {"GET", "HEAD", "OPTIONS"}:
+    if method in {"GET", "HEAD", "OPTIONS"}:
         return
     require_same_origin_json(request)

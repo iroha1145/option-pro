@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 import threading
 import time
 
@@ -19,6 +20,16 @@ from app.stock_pull_snapshot import (
 )
 
 
+def _request(address: str = "127.0.0.1"):
+    return SimpleNamespace(
+        scope={
+            "type": "http",
+            "client": (address, 50_000),
+            "headers": [],
+        }
+    )
+
+
 @pytest.fixture(autouse=True)
 def _clear_stock_endpoint_state():
     stocks._endpoint_cache.clear()
@@ -26,6 +37,8 @@ def _clear_stock_endpoint_state():
     stocks._endpoint_lock_users.clear()
     stocks._endpoint_refresh_retry_after.clear()
     stocks._stock_pull_tasks.clear()
+    stocks._public_stock_pull_ticker_deadlines.clear()
+    stocks._public_stock_pull_recent.clear()
     signal_service._cache.clear()
     yield
     stocks._endpoint_cache.clear()
@@ -33,6 +46,8 @@ def _clear_stock_endpoint_state():
     stocks._endpoint_lock_users.clear()
     stocks._endpoint_refresh_retry_after.clear()
     stocks._stock_pull_tasks.clear()
+    stocks._public_stock_pull_ticker_deadlines.clear()
+    stocks._public_stock_pull_recent.clear()
     signal_service._cache.clear()
 
 
@@ -109,7 +124,7 @@ def test_manual_pull_bypasses_fresh_get_cache_and_publishes_all_resources(
 
     async def scenario() -> dict:
         with request_owner_access_context(True):
-            return await stocks.pull_stock_data("aaoi")
+            return await stocks.pull_stock_data("aaoi", request=_request())
 
     payload = asyncio.run(scenario())
 
@@ -217,7 +232,7 @@ def test_manual_pull_falls_back_when_independent_adjusted_history_fails(
 
     async def scenario() -> dict:
         with request_owner_access_context(True):
-            return await stocks.pull_stock_data("AAOI")
+            return await stocks.pull_stock_data("AAOI", request=_request())
 
     payload = asyncio.run(scenario())
 
@@ -259,7 +274,7 @@ def test_manual_pull_returns_partial_when_only_daily_chart_is_available(
 
     async def scenario() -> dict:
         with request_owner_access_context(True):
-            return await stocks.pull_stock_data("NBIS")
+            return await stocks.pull_stock_data("NBIS", request=_request())
 
     payload = asyncio.run(scenario())
 
@@ -400,7 +415,7 @@ def test_manual_pull_invalid_empty_payloads_preserve_last_usable_process_cache(
 
     async def scenario() -> dict:
         with request_owner_access_context(True):
-            return await stocks.pull_stock_data("AAOI")
+            return await stocks.pull_stock_data("AAOI", request=_request())
 
     payload = asyncio.run(scenario())
 
@@ -434,7 +449,7 @@ def test_manual_pull_raises_stable_503_when_both_resources_fail(
 
     async def scenario() -> None:
         with request_owner_access_context(True):
-            await stocks.pull_stock_data("AAOI")
+            await stocks.pull_stock_data("AAOI", request=_request())
 
     with pytest.raises(HTTPException) as captured:
         asyncio.run(scenario())
@@ -546,9 +561,13 @@ def test_complete_manual_pull_is_coalesced_per_ticker(
 
     async def scenario() -> tuple[dict, dict]:
         with request_owner_access_context(True):
-            first = asyncio.create_task(stocks.pull_stock_data("AAOI"))
+            first = asyncio.create_task(
+                stocks.pull_stock_data("AAOI", request=_request())
+            )
             await raw_started.wait()
-            second = asyncio.create_task(stocks.pull_stock_data("aaoi"))
+            second = asyncio.create_task(
+                stocks.pull_stock_data("aaoi", request=_request())
+            )
             await asyncio.sleep(0)
             release_raw.set()
             results = await asyncio.gather(first, second)
@@ -567,6 +586,115 @@ def test_complete_manual_pull_is_coalesced_per_ticker(
         "persist": 1,
     }
     assert stocks._stock_pull_tasks == {}
+
+
+def test_public_pull_has_global_per_ticker_cooldown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    async def pull(symbol: str) -> dict:
+        nonlocal calls
+        calls += 1
+        return {"ticker": symbol, "status": "completed"}
+
+    monkeypatch.setattr(stocks, "_pull_stock_data_once", pull)
+
+    async def scenario() -> HTTPException:
+        with request_owner_access_context(False):
+            first = await stocks.pull_stock_data(
+                "AAOI",
+                request=_request("203.0.113.10"),
+            )
+            assert first["status"] == "completed"
+            await asyncio.sleep(0)
+            with pytest.raises(HTTPException) as captured:
+                await stocks.pull_stock_data(
+                    "AAOI",
+                    request=_request("203.0.113.99"),
+                )
+            return captured.value
+
+    error = asyncio.run(scenario())
+
+    assert calls == 1
+    assert error.status_code == 429
+    assert error.detail["code"] == "stock_pull_cooldown"
+    assert int(error.headers["Retry-After"]) >= 1
+
+
+def test_public_callers_join_the_same_inflight_ticker_pull(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    async def pull(symbol: str) -> dict:
+        nonlocal calls
+        calls += 1
+        started.set()
+        await release.wait()
+        return {"ticker": symbol, "status": "completed"}
+
+    monkeypatch.setattr(stocks, "_pull_stock_data_once", pull)
+
+    async def scenario() -> tuple[dict, dict]:
+        with request_owner_access_context(False):
+            first = asyncio.create_task(
+                stocks.pull_stock_data(
+                    "AAOI",
+                    request=_request("203.0.113.11"),
+                )
+            )
+            await started.wait()
+            second = asyncio.create_task(
+                stocks.pull_stock_data(
+                    "aaoi",
+                    request=_request("203.0.113.12"),
+                )
+            )
+            await asyncio.sleep(0)
+            release.set()
+            result = await asyncio.gather(first, second)
+            await asyncio.sleep(0)
+            return result[0], result[1]
+
+    first, second = asyncio.run(scenario())
+
+    assert first == second == {"ticker": "AAOI", "status": "completed"}
+    assert calls == 1
+    assert stocks._stock_pull_tasks == {}
+
+
+def test_public_pull_has_bounded_per_client_symbol_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(stocks, "_PUBLIC_STOCK_PULL_CLIENT_LIMIT", 2)
+    calls: list[str] = []
+
+    async def pull(symbol: str) -> dict:
+        calls.append(symbol)
+        return {"ticker": symbol, "status": "completed"}
+
+    monkeypatch.setattr(stocks, "_pull_stock_data_once", pull)
+
+    async def scenario() -> HTTPException:
+        request = _request("203.0.113.13")
+        with request_owner_access_context(False):
+            await stocks.pull_stock_data("AAOI", request=request)
+            await asyncio.sleep(0)
+            await stocks.pull_stock_data("NBIS", request=request)
+            await asyncio.sleep(0)
+            with pytest.raises(HTTPException) as captured:
+                await stocks.pull_stock_data("AAPL", request=request)
+            return captured.value
+
+    error = asyncio.run(scenario())
+
+    assert calls == ["AAOI", "NBIS"]
+    assert error.status_code == 429
+    assert error.detail["code"] == "stock_pull_rate_limited"
 
 
 def test_different_tickers_run_in_parallel_with_bounded_blocking_work(
@@ -659,7 +787,10 @@ def test_different_tickers_run_in_parallel_with_bounded_blocking_work(
     async def scenario() -> list[dict]:
         with request_owner_access_context(True):
             results = await asyncio.gather(
-                *(stocks.pull_stock_data(symbol) for symbol in symbols)
+                *(
+                    stocks.pull_stock_data(symbol, request=_request())
+                    for symbol in symbols
+                )
             )
             await asyncio.sleep(0)
             return results
@@ -694,9 +825,13 @@ def test_cancelling_one_waiter_does_not_cancel_shared_stock_pull(
 
     async def scenario() -> dict:
         with request_owner_access_context(True):
-            first = asyncio.create_task(stocks.pull_stock_data("AAOI"))
+            first = asyncio.create_task(
+                stocks.pull_stock_data("AAOI", request=_request())
+            )
             await started.wait()
-            second = asyncio.create_task(stocks.pull_stock_data("aaoi"))
+            second = asyncio.create_task(
+                stocks.pull_stock_data("aaoi", request=_request())
+            )
             await asyncio.sleep(0)
             first.cancel()
             with pytest.raises(asyncio.CancelledError):

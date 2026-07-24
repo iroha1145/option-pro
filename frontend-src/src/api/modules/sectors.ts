@@ -53,6 +53,8 @@ export interface SectorIvRankingEnvelope {
   successRate: number | null;
   failedSymbols: string[];
   snapshotSource: string | null;
+  snapshotOrigin: string | null;
+  providers: string[];
 }
 
 function normalizeStatus(value: unknown): SectorSourceStatus {
@@ -65,6 +67,13 @@ function stringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
     .map((item) => (typeof item === 'string' ? item.trim().toUpperCase() : ''))
+    .filter(Boolean);
+}
+
+function sourceArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
     .filter(Boolean);
 }
 
@@ -157,6 +166,7 @@ export function mapSectorIvRankingEnvelope(payload: unknown): SectorIvRankingEnv
         ticker,
         name: pickS(raw, 'name') ?? ticker,
         price: pickN(raw, 'price'),
+        priceProvider: pickS(raw, 'price_provider', 'priceProvider'),
         sectorIvRank: pickN(raw, 'sector_iv_rank', 'sectorIvRank', 'ivPercentile'),
         atmIvPercent: pickN(raw, 'atm_iv_percent', 'atmIvPercent', 'iv'),
         stale: pickB(raw, '_stale', 'stale') ?? false,
@@ -179,6 +189,8 @@ export function mapSectorIvRankingEnvelope(payload: unknown): SectorIvRankingEnv
     successRate: pickN(envelope, 'success_rate'),
     failedSymbols: stringArray(envelope.failed_symbols),
     snapshotSource: pickS(envelope, 'snapshot_source'),
+    snapshotOrigin: pickS(envelope, 'snapshot_origin'),
+    providers: sourceArray(envelope.providers),
   };
 }
 

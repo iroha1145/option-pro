@@ -24,6 +24,7 @@ from app.access import (
 )
 import app.access as access_module
 from app.api import access as access_api
+from app.api import stocks
 import app.main as main
 from app.main import _GatewayMiddleware, _configured_allowed_hosts
 from app.personal_config import AccessConfig
@@ -137,12 +138,14 @@ def _login(client: TestClient) -> str:
 
 
 _BODY_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
-# Login is the anonymous authentication bootstrap and the ticker batch is a
-# bounded read query. They still require same-origin JSON, but not an owner
-# action header or an existing owner session.
+# Login is the anonymous authentication bootstrap. The ticker batch and
+# single-stock pull are bounded public actions. They still require same-origin
+# JSON, but not an existing owner session.
 _SAME_ORIGIN_JSON_ONLY_OPERATIONS = {
     ("POST", "/api/access/login"),
+    ("POST", "/api/ai/earnings-impact/{ticker}/reports/{report_date}"),
     ("POST", "/api/catalysts/tickers/batch"),
+    ("POST", "/api/stocks/{ticker}/pull"),
 }
 
 
@@ -314,6 +317,63 @@ def test_password_mode_serves_public_reads_and_protects_owner_surfaces() -> None
             headers=_action_headers("https://evil.example"),
         )
         assert cross_site_batch.status_code == 403
+
+
+def test_password_visitor_stock_pull_is_same_origin_and_rate_limited(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _runtime("password")
+    app = FastAPI()
+    app.state.access_runtime = runtime
+    app.include_router(
+        stocks.router,
+        dependencies=[Depends(require_public_read_or_owner_access)],
+    )
+    app.add_middleware(_GatewayMiddleware, access_runtime=runtime)
+    calls = 0
+
+    async def pull(symbol: str) -> dict:
+        nonlocal calls
+        calls += 1
+        return {"ticker": symbol, "status": "completed"}
+
+    monkeypatch.setattr(stocks, "_pull_stock_data_once", pull)
+    stocks._stock_pull_tasks.clear()
+    stocks._public_stock_pull_ticker_deadlines.clear()
+    stocks._public_stock_pull_recent.clear()
+    try:
+        with TestClient(
+            _PeerAddress(app, "203.0.113.40"),
+            base_url="https://testserver",
+        ) as client:
+            first = client.post(
+                "/api/stocks/AAOI/pull",
+                json={},
+                headers=_action_headers(),
+            )
+            assert first.status_code == 200
+            assert first.json() == {"ticker": "AAOI", "status": "completed"}
+
+            second = client.post(
+                "/api/stocks/AAOI/pull",
+                json={},
+                headers=_action_headers(),
+            )
+            assert second.status_code == 429
+            assert second.json()["detail"]["code"] == "stock_pull_cooldown"
+
+            cross_site = client.post(
+                "/api/stocks/NBIS/pull",
+                json={},
+                headers=_action_headers("https://evil.example"),
+            )
+            assert cross_site.status_code == 403
+    finally:
+        stocks._stock_pull_tasks.clear()
+        stocks._public_stock_pull_ticker_deadlines.clear()
+        stocks._public_stock_pull_recent.clear()
+
+    assert calls == 1
 
 
 def test_password_login_sets_strict_server_only_cookie_and_unlocks_owner_routes() -> None:
@@ -861,8 +921,10 @@ def test_production_validation_errors_never_echo_submitted_password() -> None:
         ("GET", "/api/stocks/NVDA", True),
         ("HEAD", "/api/stocks/NVDA/chart", True),
         ("GET", "/api/options/NVDA/chain", True),
+        ("GET", "/api/options/NVDA/expirations", True),
         ("GET", "/api/earnings/upcoming", True),
         ("GET", "/api/sectors/technology/heatmap", True),
+        ("GET", "/api/sectors/technology/iv-ranking", True),
         ("GET", "/api/market/status", True),
         ("GET", "/api/signals/market", True),
         ("GET", "/api/catalysts/feed", True),
@@ -873,7 +935,10 @@ def test_production_validation_errors_never_echo_submitted_password() -> None:
         ("GET", "/api/catalysts/refresh/refresh_test", False),
         ("GET", "/api/strength/scan", True),
         ("GET", "/api/breakouts/current", True),
+        ("GET", "/api/ai/earnings-impact/AAPL/reports/2026-07-23", True),
+        ("POST", "/api/ai/earnings-impact/AAPL/reports/2026-07-23", True),
         ("POST", "/api/catalysts/tickers/batch", True),
+        ("POST", "/api/stocks/AAOI/pull", True),
         # SPA(BrowserRouter):无扩展名路径回退到 index.html 壳,匿名可读
         ("GET", "/index.html/extra", True),
         ("GET", "/staticity/js/deck-app.js", False),
@@ -888,8 +953,14 @@ def test_production_validation_errors_never_echo_submitted_password() -> None:
         ("GET", "/api/strengthened", False),
         ("GET", "/api/breakouts2", False),
         ("GET", "/api/ai/status", False),
+        ("GET", "/api/ai/earnings-impact/AAPL", False),
+        ("GET", "/api/ai/jobs/aij_" + "a" * 32, False),
+        ("POST", "/api/ai/jobs/earnings-impact", False),
+        ("POST", "/api/ai/earnings-impact/AAPL/reports/2026-07-23/", False),
         ("GET", "/api/runtime-settings", False),
         ("POST", "/api/stocks", False),
+        ("POST", "/api/stocks/AAOI/pull/", False),
+        ("POST", "/api/stocks/AAOI/options/pull", False),
         ("POST", "/api/catalysts/tickers/batch/", False),
         ("POST", "/api/catalysts/tickers/batch/extra", False),
     ],
@@ -931,8 +1002,10 @@ def test_public_catalyst_reads_do_not_consume_the_provider_work_budget(
         ("GET", "/api/stocks/AAOI", True),
         ("GET", "/api/stocks/AAOI/chart", True),
         ("GET", "/api/stocks/AAOI/signals", True),
-        ("GET", "/api/options/AAOI/expirations", True),
-        ("GET", "/api/options/AAOI/chain", True),
+        ("GET", "/api/options/AAOI/expirations", False),
+        ("GET", "/api/options/AAOI/chain", False),
+        ("GET", "/api/sectors/technology/iv-ranking", False),
+        ("GET", "/api/sectors/technology/heatmap", False),
         ("GET", "/api/signals/stock/AAOI", True),
         ("GET", "/api/strength/stocks/AAOI", True),
         ("GET", "/api/strength/scan", True),

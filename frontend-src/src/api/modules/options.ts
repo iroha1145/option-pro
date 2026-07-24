@@ -11,6 +11,10 @@ export interface UnusualParams {
   minVolOi?: number;
 }
 
+export interface OptionExpirationReadOptions {
+  force?: boolean;
+}
+
 /** 契约 {results:[{ticker,contract_type,strike,expiration,volume,open_interest,vol_oi_ratio,premium,...}]} → UI */
 function mapUnusual(body: unknown): UnusualOption[] {
   return unwrap(body, 'results', 'items').map((r, i) => {
@@ -71,7 +75,15 @@ function mapChain(body: unknown, ticker: string, expiration: string): OptionChai
     Object.assign(ensure(strike), legRow(p, 'put'));
   }
   const rows = [...byStrike.values()].sort((a, b) => a.strike - b.strike);
-  return { ticker, expiration, spot, rows };
+  return {
+    ticker,
+    expiration,
+    spot,
+    rows,
+    provider: pickS(r, 'provider'),
+    asOf: pickS(r, 'as_of', 'asOf'),
+    stale: r._stale === true || r.stale === true,
+  };
 }
 
 export const optionsApi = {
@@ -84,13 +96,17 @@ export const optionsApi = {
         return get(`/options/unusual${qs ? `?${qs}` : ''}`).then(mapUnusual);
       },
     ),
-  expirations: (ticker: string): Promise<string[]> =>
+  expirations: (
+    ticker: string,
+    readOptions: OptionExpirationReadOptions = {},
+  ): Promise<string[]> =>
     mockOr(
       () => fx2.getOptionExpirations(ticker),
       () =>
         marketGet(`/options/${encodeURIComponent(ticker)}/expirations`, {
           ttlMs: 5 * 60_000,
           staleMs: 30 * 60_000,
+          force: readOptions.force,
         }).then((d) =>
           unwrap(d, 'expirations')
             .map((x) => pickS(asRec(x), 'date', 'expiration') ?? (typeof x === 'string' ? x : null))

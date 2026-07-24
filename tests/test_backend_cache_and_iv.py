@@ -7,7 +7,9 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from fastapi import HTTPException
 
+from app.access import request_owner_access_context
 from app.api import sectors as sector_api
 from app.services import yahoo
 from app.services.cache import TTLCache
@@ -254,3 +256,213 @@ def test_sector_iv_all_failures_are_not_reported_as_valid_data(monkeypatch: pyte
     assert payload["data_limited"] is True
     assert payload["success_rate"] == 0.0
     assert payload["failed_symbols"] == ["AAA", "BBB"]
+
+
+def test_sector_iv_total_failure_is_cooled_and_concurrent_calls_coalesce(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sector_id = "cooldown-sector"
+    monkeypatch.setitem(
+        sector_api.SECTORS,
+        sector_id,
+        {"name": "Cooldown", "tickers": ["AAA", "BBB"]},
+    )
+    monkeypatch.setattr(
+        sector_api,
+        "_read_sector_iv_snapshot",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        sector_api,
+        "_read_strength_sector_iv_snapshot",
+        lambda *_args, **_kwargs: None,
+    )
+    sector_api._cache.clear()
+    sector_api._locks.clear()
+    sector_api._sector_iv_failure_deadlines.clear()
+    calls = 0
+
+    async def unavailable(_sector_id: str) -> dict:
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0.02)
+        return {
+            "sector_id": sector_id,
+            "rankings": [],
+            "source_status": "insufficient_data",
+        }
+
+    monkeypatch.setattr(sector_api, "_iv_ranking_payload", unavailable)
+
+    async def scenario() -> list[object]:
+        with request_owner_access_context(False):
+            return await asyncio.gather(
+                *[
+                    sector_api._request_iv_payload(
+                        sector_id,
+                        public_client_id="203.0.113.20",
+                    )
+                    for _ in range(5)
+                ],
+                return_exceptions=True,
+            )
+
+    results = asyncio.run(scenario())
+
+    assert calls == 1
+    assert all(
+        isinstance(result, HTTPException)
+        and result.status_code == 503
+        and result.detail["code"] == "sector_iv_cooldown"
+        and int(result.headers["Retry-After"]) > 0
+        for result in results
+    )
+    sector_api._sector_iv_failure_deadlines.clear()
+    sector_api._public_sector_iv_recent.clear()
+    sector_api._cache.clear()
+    sector_api._locks.clear()
+
+
+def test_public_sector_iv_provider_work_has_a_per_client_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sector_ids = ["budget-one", "budget-two", "budget-three"]
+    for sector_id in sector_ids:
+        monkeypatch.setitem(
+            sector_api.SECTORS,
+            sector_id,
+            {"name": sector_id, "tickers": ["AAA"]},
+        )
+    monkeypatch.setattr(
+        sector_api,
+        "_read_sector_iv_snapshot",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        sector_api,
+        "_read_strength_sector_iv_snapshot",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        sector_api,
+        "_write_sector_iv_snapshot",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(sector_api, "_PUBLIC_SECTOR_IV_CLIENT_LIMIT", 2)
+    sector_api._cache.clear()
+    sector_api._locks.clear()
+    sector_api._sector_iv_failure_deadlines.clear()
+    sector_api._public_sector_iv_recent.clear()
+
+    async def available(sector_id: str) -> dict:
+        return {
+            "sector_id": sector_id,
+            "sector_name": sector_id,
+            "rankings": [{"ticker": "AAA", "atm_iv_percent": 25.0}],
+            "source_status": "active",
+        }
+
+    monkeypatch.setattr(sector_api, "_iv_ranking_payload", available)
+
+    async def scenario() -> None:
+        with request_owner_access_context(False):
+            for sector_id in sector_ids[:2]:
+                await sector_api._request_iv_payload(
+                    sector_id,
+                    public_client_id="203.0.113.21",
+                )
+            with pytest.raises(HTTPException) as captured:
+                await sector_api._request_iv_payload(
+                    sector_ids[2],
+                    public_client_id="203.0.113.21",
+                )
+            assert captured.value.status_code == 429
+            assert captured.value.detail["code"] == "sector_iv_rate_limited"
+            assert int(captured.value.headers["Retry-After"]) > 0
+
+    asyncio.run(scenario())
+    sector_api._public_sector_iv_recent.clear()
+    sector_api._cache.clear()
+    sector_api._locks.clear()
+
+
+def test_sector_iv_uses_massive_price_then_yahoo_for_uncovered_symbols(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(
+        sector_api.SECTORS,
+        "price-fallback-sector",
+        {"name": "Price Fallback", "tickers": ["AAA", "BBB"]},
+    )
+    monkeypatch.setattr(sector_api.massive, "configured", lambda: True)
+    monkeypatch.setattr(sector_api.massive, "to_symbol", lambda ticker: ticker)
+    monkeypatch.setattr(
+        sector_api.massive,
+        "snapshot_batch",
+        lambda symbols: {
+            "AAA": {
+                "minute": {"c": 101.25},
+                "day_close": 100.0,
+            }
+        },
+    )
+    monkeypatch.setattr(
+        yahoo,
+        "get_stock_iv_snapshot",
+        lambda ticker: {
+            "atm_iv": 0.25 if ticker == "AAA" else 0.5,
+            "_stale": False,
+            "as_of": "2026-07-24T05:00:00+00:00",
+            "source_status": "active",
+        },
+    )
+    yahoo_price_calls: list[str] = []
+
+    def yahoo_price(ticker: str) -> float:
+        yahoo_price_calls.append(ticker)
+        return 202.5
+
+    monkeypatch.setattr(yahoo, "get_last_price", yahoo_price)
+
+    rows = asyncio.run(sector_api._sector_iv_rows("price-fallback-sector"))
+    by_ticker = {row["ticker"]: row for row in rows}
+
+    assert by_ticker["AAA"]["price"] == 101.25
+    assert by_ticker["AAA"]["price_provider"] == "Massive"
+    assert by_ticker["BBB"]["price"] == 202.5
+    assert by_ticker["BBB"]["price_provider"] == "Yahoo/yfinance"
+    assert yahoo_price_calls == ["BBB"]
+    assert {row["provider"] for row in rows} == {"Yahoo/yfinance"}
+
+
+def test_sector_iv_keeps_valid_iv_when_both_price_sources_fail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(
+        sector_api.SECTORS,
+        "iv-without-price",
+        {"name": "IV Without Price", "tickers": ["AAA"]},
+    )
+    monkeypatch.setattr(sector_api.massive, "configured", lambda: False)
+    monkeypatch.setattr(
+        yahoo,
+        "get_stock_iv_snapshot",
+        lambda _ticker: {
+            "atm_iv": 0.35,
+            "_stale": False,
+            "as_of": "2026-07-24T05:00:00+00:00",
+            "source_status": "active",
+        },
+    )
+    monkeypatch.setattr(
+        yahoo,
+        "get_last_price",
+        lambda _ticker: (_ for _ in ()).throw(RuntimeError("price unavailable")),
+    )
+
+    rows = asyncio.run(sector_api._sector_iv_rows("iv-without-price"))
+
+    assert rows[0]["iv"] == 0.35
+    assert rows[0]["price"] is None
+    assert rows[0]["price_provider"] is None
+    assert rows[0]["provider"] == "Yahoo/yfinance"

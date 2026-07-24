@@ -305,7 +305,7 @@ export default function Watchlist() {
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [view, setView] = useState<'table' | 'cards'>('table');
+  const [view, setView] = useState<'table' | 'cards'>('cards');
   const [sort, setSort] = useState<SortState | null>(null);
   const [forceRefreshing, setForceRefreshing] = useState(false);
 
@@ -481,7 +481,19 @@ export default function Watchlist() {
 
   const loading = wl.loading;
   const err = wl.error;
-  const items = wl.data ?? [];
+  const items = useMemo(() => wl.data ?? [], [wl.data]);
+  const cardItems = useMemo(() => {
+    if (!sort) return items;
+    const direction = sort.desc ? -1 : 1;
+    return [...items].sort((left, right) => {
+      if (sort.key === 'ticker') {
+        return left.ticker.localeCompare(right.ticker) * direction;
+      }
+      const leftValue = sort.key === 'strength' ? left.strengthScore : left.changePct;
+      const rightValue = sort.key === 'strength' ? right.strengthScore : right.changePct;
+      return (leftValue - rightValue) * direction;
+    });
+  }, [items, sort]);
   const statsLoading = signalsQ.loading || strengthQ.loading;
 
   return (
@@ -563,8 +575,8 @@ export default function Watchlist() {
         {/* B2 自选主区（8 列） */}
         <section className="lg:col-span-8" aria-label="自选列表">
           {/* 工具行 */}
-          <div className="flex h-11 items-center justify-between border-b border-line">
-            <div className="flex items-center gap-2.5">
+          <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-line py-1.5">
+            <div className="flex min-w-0 flex-wrap items-center gap-2.5">
               <Segmented
                 options={[
                   { value: 'table', label: '表格' },
@@ -575,10 +587,10 @@ export default function Watchlist() {
               />
               <SortDropdown sort={sort} onChange={setSort} />
             </div>
-            <p className="text-caption text-ink-400">
+            <p className="w-full text-right text-caption text-ink-400 sm:w-auto">
               <span className="font-mono tnum">{items.length}</span> 只标的
               {wl.lastUpdatedAt && (
-                <span className="ml-2 font-mono text-micro tnum">更新 {fmtTimeHHMMSS(wl.lastUpdatedAt)}</span>
+                <span className="ml-2 hidden font-mono text-micro tnum sm:inline">更新 {fmtTimeHHMMSS(wl.lastUpdatedAt)}</span>
               )}
             </p>
           </div>
@@ -640,7 +652,7 @@ export default function Watchlist() {
                 </div>
                 {/* 移动：表格转卡片流 */}
                 <div className="grid grid-cols-1 gap-3 md:hidden">
-                  {items.map((it, i) => (
+                  {cardItems.map((it, i) => (
                     <WatchCard
                       key={it.ticker}
                       item={it}
@@ -654,7 +666,7 @@ export default function Watchlist() {
               </>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {items.map((it, i) => (
+                {cardItems.map((it, i) => (
                   <WatchCard
                     key={it.ticker}
                     item={it}

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 import math
+import re
 import time
 from typing import Literal
 
@@ -26,6 +27,14 @@ _UNUSUAL_TTL = 120  # seconds; the scan costs ~30 Yahoo calls, never run it per 
 _UNUSUAL_FAILURE_TTL = 30
 _UNUSUAL_FAILURE_MAX_KEYS = 128
 _unusual_failure_deadlines: dict[str, float] = {}
+_OPTION_EXPIRATIONS_TTL = 15 * 60
+_OPTION_CHAIN_TTL = 10 * 60
+_OPTION_FAILURE_TTL = 30
+_OPTION_FAILURE_MAX_KEYS = 256
+_OPTION_TICKER_PATTERN = re.compile(
+    r"^(?:\^[A-Z0-9][A-Z0-9.^_=-]{0,30}|[A-Z0-9][A-Z0-9.^_=-]{0,31})$"
+)
+_option_failure_cache: dict[str, tuple[float, int, object]] = {}
 
 
 def _unusual_key(option_type: str, min_vol_oi: float) -> str:
@@ -92,6 +101,151 @@ def _cooldown_error(retry_after: int) -> HTTPException:
         detail="Yahoo options data is temporarily cooling down",
         headers={"Retry-After": str(retry_after)},
     )
+
+
+def _option_failure_error(key: str) -> HTTPException | None:
+    now = time.monotonic()
+    for expired in [
+        item_key
+        for item_key, (deadline, _status_code, _detail) in _option_failure_cache.items()
+        if deadline <= now
+    ]:
+        _option_failure_cache.pop(expired, None)
+    failure = _option_failure_cache.get(key)
+    if failure is None:
+        return None
+    deadline, status_code, detail = failure
+    retry_after = max(1, math.ceil(deadline - now))
+    return HTTPException(
+        status_code=status_code,
+        detail=detail,
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
+def _record_option_failure(
+    key: str,
+    *,
+    status_code: int,
+    detail: object,
+) -> HTTPException:
+    now = time.monotonic()
+    _option_failure_cache[key] = (
+        now + _OPTION_FAILURE_TTL,
+        status_code,
+        detail,
+    )
+    if len(_option_failure_cache) > _OPTION_FAILURE_MAX_KEYS:
+        oldest = min(
+            _option_failure_cache,
+            key=lambda item_key: _option_failure_cache[item_key][0],
+        )
+        _option_failure_cache.pop(oldest, None)
+    failure = _option_failure_error(key)
+    assert failure is not None
+    return failure
+
+
+def _option_symbol(ticker: str) -> str:
+    symbol = ticker.upper().strip()
+    if not _OPTION_TICKER_PATTERN.fullmatch(symbol):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "invalid_ticker",
+                "message": "股票代码格式无效",
+            },
+        )
+    return symbol
+
+
+def _validate_expiration_date(expiration: str, *, failure_key: str) -> None:
+    try:
+        parsed = datetime.strptime(expiration, "%Y-%m-%d")
+    except ValueError:
+        raise _record_option_failure(
+            failure_key,
+            status_code=400,
+            detail={
+                "code": "invalid_option_expiration",
+                "message": "期权到期日无效",
+            },
+        )
+    if parsed.strftime("%Y-%m-%d") != expiration:
+        raise _record_option_failure(
+            failure_key,
+            status_code=400,
+            detail={
+                "code": "invalid_option_expiration",
+                "message": "期权到期日无效",
+            },
+        )
+
+
+async def _cached_yahoo_option_resource(
+    key: str,
+    ttl: int,
+    loader,
+):
+    """Load one Yahoo option resource behind shared cache and failure cooling.
+
+    Massive Stocks Starter does not include option chains.  Yahoo/yfinance is
+    therefore the real provider for this path rather than a placeholder behind
+    an owner-only cold-cache gate.  ``cache.get_or_set`` coalesces concurrent
+    callers for the same ticker/expiration; the Yahoo service adds a second
+    per-key lock for callers outside this API module.
+    """
+
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    failure = _option_failure_error(key)
+    if failure is not None:
+        raise failure
+
+    async def produce():
+        locked_failure = _option_failure_error(key)
+        if locked_failure is not None:
+            raise locked_failure
+        try:
+            return await asyncio.to_thread(loader)
+        except ValueError as exc:
+            raise _record_option_failure(
+                key,
+                status_code=400,
+                detail={
+                    "code": "invalid_option_expiration",
+                    "message": "期权到期日无效",
+                },
+            ) from exc
+        except HTTPException as exc:
+            raise _record_option_failure(
+                key,
+                status_code=exc.status_code,
+                detail=exc.detail,
+            ) from exc
+        except Exception as exc:
+            raise _record_option_failure(
+                key,
+                status_code=503,
+                detail={
+                    "code": "yahoo_options_unavailable",
+                    "message": "Yahoo/yfinance 期权数据暂不可用",
+                },
+            ) from exc
+
+    payload = await cache.get_or_set(key, ttl, produce)
+    _option_failure_cache.pop(key, None)
+    return payload
+
+
+def _load_expirations_snapshot(symbol: str) -> dict:
+    snapshot = yahoo.get_expirations_snapshot(symbol)
+    expirations = snapshot.get("expirations")
+    if not isinstance(expirations, list) or not expirations:
+        raise RuntimeError("Yahoo returned no option expirations")
+    return snapshot
 
 
 @router.get("/unusual")
@@ -303,32 +457,68 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
 
 @router.get("/{ticker}/expirations")
 async def expirations(ticker: str):
-    if not current_request_is_owner():
-        cached = yahoo.get_cached_expirations_snapshot(ticker)
-        if cached is None:
-            raise public_snapshot_unavailable(f"options:expirations:{ticker.upper()}")
-        return {"ticker": ticker.upper(), **cached}
+    symbol = _option_symbol(ticker)
+    key = f"options:expirations:{symbol}"
+
     try:
-        snapshot = await asyncio.to_thread(yahoo.get_expirations_snapshot, ticker)
-        return {"ticker": ticker.upper(), **snapshot}
+        snapshot = await _cached_yahoo_option_resource(
+            key,
+            _OPTION_EXPIRATIONS_TTL,
+            lambda: _load_expirations_snapshot(symbol),
+        )
+        return {
+            **snapshot,
+            "ticker": symbol,
+            "provider": "Yahoo/yfinance",
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=503, detail="Yahoo options data is currently unavailable") from e
+        raise HTTPException(
+            status_code=503,
+            detail="Yahoo options data is currently unavailable",
+        ) from e
 
 
 @router.get("/{ticker}/chain")
 async def option_chain(ticker: str, expiration: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$")):
-    if not current_request_is_owner():
-        cached = yahoo.get_cached_option_chain(ticker, expiration)
-        if cached is None:
-            raise public_snapshot_unavailable(
-                f"options:chain:{ticker.upper()}:{expiration}"
-            )
-        from app.api.stocks import _sanitize
-        return _sanitize(cached)
+    symbol = _option_symbol(ticker)
+    key = f"options:chain:{symbol}:{expiration}"
+    _validate_expiration_date(expiration, failure_key=key)
+
     try:
         from app.api.stocks import _sanitize
-        return _sanitize(await asyncio.to_thread(yahoo.get_option_chain, ticker, expiration))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail="Invalid option expiration") from e
+
+        expiration_snapshot = await _cached_yahoo_option_resource(
+            f"options:expirations:{symbol}",
+            _OPTION_EXPIRATIONS_TTL,
+            lambda: _load_expirations_snapshot(symbol),
+        )
+        available_expirations = expiration_snapshot.get("expirations")
+        if (
+            not isinstance(available_expirations, list)
+            or expiration not in available_expirations
+        ):
+            raise _record_option_failure(
+                key,
+                status_code=400,
+                detail={
+                    "code": "invalid_option_expiration",
+                    "message": "该股票没有这个期权到期日",
+                },
+            )
+        payload = await _cached_yahoo_option_resource(
+            key,
+            _OPTION_CHAIN_TTL,
+            lambda: yahoo.get_option_chain(symbol, expiration),
+        )
+        return _sanitize(
+            {
+                **payload,
+                "provider": "Yahoo/yfinance",
+            }
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=503, detail="Yahoo options data is currently unavailable") from e
