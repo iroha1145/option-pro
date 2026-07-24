@@ -548,6 +548,17 @@ async def process_job(
             raise
         if submission_state != "started":
             return
+        persisted_job = repository.get_job(job["job_id"])
+        if (
+            persisted_job is None
+            or not persisted_job.get("submission_started_at")
+            or not persisted_job.get("submitted_at")
+        ):
+            raise RuntimeError("ai_job_submission_state_missing")
+        # The claimed row can be much older than the provider submission.
+        # Keep timeout decisions anchored to the timestamps written by
+        # mark_submission_started instead of falling back to created_at.
+        job.update(persisted_job)
         # Every local validation and SDK construction step has completed. From
         # this point an exception can represent a request whose upstream
         # outcome is unknown, so it must consume both budget and concurrency.

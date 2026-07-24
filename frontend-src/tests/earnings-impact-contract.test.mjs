@@ -15,6 +15,7 @@ const controlsSourcePath = path.resolve(here, '..', 'src', 'components', 'earnin
 const densitySourcePath = path.resolve(here, '..', 'src', 'components', 'earnings', 'DensityStrip.tsx');
 const earningsComponentsPath = path.resolve(here, '..', 'src', 'components', 'earnings');
 const commandPaletteSourcePath = path.resolve(here, '..', 'src', 'components', 'CommandPalette.tsx');
+const earningsTypesSourcePath = path.resolve(here, '..', 'src', 'components', 'earnings', 'types.ts');
 
 function loadNormalizer() {
   const source = fs.readFileSync(moduleSourcePath, 'utf8');
@@ -67,6 +68,26 @@ function loadNormalizer() {
   };
   vm.runInNewContext(compiled, { module, exports: module.exports, require });
   return module.exports.normalizeLiveEarningsImpact;
+}
+
+function loadEarningsDateTools() {
+  const source = fs.readFileSync(earningsTypesSourcePath, 'utf8');
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+      esModuleInterop: true,
+    },
+  }).outputText;
+  const module = { exports: {} };
+  vm.runInNewContext(compiled, {
+    module,
+    exports: module.exports,
+    require: (id) => {
+      throw new Error(`unexpected runtime import: ${id}`);
+    },
+  });
+  return module.exports;
 }
 
 test('财报影响在线契约归一化 snake_case 和 camelCase 语言字段', () => {
@@ -244,7 +265,9 @@ test('财报页面保留近期已公布结果并把低交互图表放到分析�
 
   assert.equal(page.includes('distance >= -3 && distance <= 30'), true);
   assert.equal(page.includes('const LIST_PAGE_SIZE = 80'), true);
-  assert.equal(page.includes('filteredItems.slice(0, visibleLimit)'), true);
+  assert.equal(page.includes('prioritizeEarningsRows(filteredItems, visibleLimit)'), true);
+  assert.equal(page.includes('selectedDay\n        ? filteredItems'), true);
+  assert.equal(page.includes('!selectedDay && visibleItems.length < filteredItems.length'), true);
   assert.equal(page.includes('再显示 {Math.min(LIST_PAGE_SIZE'), true);
   assert.equal(page.includes('row={selectedRow}'), true);
   assert.equal(page.includes('xl:col-span-8'), true);
@@ -259,6 +282,49 @@ test('财报页面保留近期已公布结果并把低交互图表放到分析�
   assert.equal(list.includes(' xl:grid-cols-['), false);
   assert.equal(list.includes('row.revEstimate * 1e6'), false);
   assert.equal(list.includes('fmtCompact(row.revEstimate)'), true);
+});
+
+test('财报首屏同时保留已公布大市值结果和近期待公布项目', () => {
+  const { addDays, etToday, prioritizeEarningsRows } = loadEarningsDateTools();
+  const today = etToday();
+  const rows = [];
+
+  for (let index = 0; index < 100; index += 1) {
+    rows.push({
+      ticker: index === 73 ? 'GOOGL' : `R${String(index).padStart(3, '0')}`,
+      date: addDays(today, -1),
+      epsActual: index + 0.1,
+      marketCap: index === 73 ? 2_000_000_000_000 : 1_000_000 + index,
+    });
+  }
+  for (let index = 0; index < 100; index += 1) {
+    rows.push({
+      ticker: `F${String(index).padStart(3, '0')}`,
+      date: addDays(today, 1),
+      epsActual: null,
+      marketCap: 2_000_000 - index,
+    });
+  }
+  rows.unshift({
+    ticker: 'MISSING_ACTUAL',
+    date: addDays(today, -1),
+    epsActual: null,
+    marketCap: 5_000_000_000_000,
+  });
+
+  const visible = prioritizeEarningsRows(rows, 80);
+  assert.equal(visible.length, 80);
+  assert.equal(visible.some((row) => row.ticker === 'GOOGL'), true);
+  assert.equal(visible.some((row) => row.ticker.startsWith('R')), true);
+  assert.equal(visible.some((row) => row.ticker.startsWith('F')), true);
+  assert.equal(visible.some((row) => row.ticker === 'MISSING_ACTUAL'), false);
+  assert.deepEqual(
+    visible.map((row) => rows.indexOf(row)),
+    visible.map((row) => rows.indexOf(row)).toSorted((a, b) => a - b),
+  );
+
+  const expanded = prioritizeEarningsRows(rows, 81);
+  assert.equal(visible.every((row) => expanded.includes(row)), true);
 });
 
 test('财报模型任务带真实财报上下文、逐条进度和管理员批量入口', () => {

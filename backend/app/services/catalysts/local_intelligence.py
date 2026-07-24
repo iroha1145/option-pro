@@ -4788,57 +4788,6 @@ class LocalCatalystIntelligence:
         if self.mode != "scheduled":
             return {"queued": 0, "skipped": 0}
         observed = now or _utc_now()
-        slot: tuple[str, str] | None = None
-        claim_marker: str | None = None
-        if scheduled_times_et is not None:
-            slot = self._scheduled_slot(observed, scheduled_times_et)
-            if slot is None:
-                return {"queued": 0, "skipped": 0}
-            claim_now = _utc_now()
-            claim_marker = "claim:" + _iso(claim_now)
-            with self._connect() as connection:
-                claimed = connection.execute(
-                    """INSERT OR IGNORE INTO catalyst_local_schedule_runs(
-                           slot_key,scheduled_for,completed_at,queued,skipped
-                       ) VALUES(?,?,?,?,?)""",
-                    (slot[0], slot[1], claim_marker, 0, 0),
-                ).rowcount
-                if claimed != 1:
-                    existing = connection.execute(
-                        """SELECT completed_at FROM catalyst_local_schedule_runs
-                           WHERE slot_key=?""",
-                        (slot[0],),
-                    ).fetchone()
-                    previous_marker = (
-                        str(existing["completed_at"])
-                        if existing is not None
-                        else ""
-                    )
-                    claimed_at = (
-                        _parse_time(previous_marker.removeprefix("claim:"))
-                        if previous_marker.startswith("claim:")
-                        else None
-                    )
-                    if (
-                        claimed_at is not None
-                        and (claim_now - claimed_at).total_seconds()
-                        >= SCHEDULE_CLAIM_TTL_SECONDS
-                    ):
-                        claimed = connection.execute(
-                            """UPDATE catalyst_local_schedule_runs SET
-                                   scheduled_for=?,completed_at=?,queued=0,skipped=0
-                               WHERE slot_key=? AND completed_at=?""",
-                            (
-                                slot[1],
-                                claim_marker,
-                                slot[0],
-                                previous_marker,
-                            ),
-                        ).rowcount
-                connection.commit()
-            if claimed != 1:
-                return {"queued": 0, "skipped": 0}
-        snapshot = self.hotspots(limit=SCHEDULED_FOCUS_EVENT_LIMIT, now=observed)
         queue_health = self.ai_repository.health()
         active_queue = queue_health.get("pending")
         if not queue_health.get("healthy") or not isinstance(active_queue, int):
@@ -4888,6 +4837,57 @@ class LocalCatalystIntelligence:
                     else:
                         skipped += 1
                         resumed_focus_cycle_id = None
+        slot: tuple[str, str] | None = None
+        claim_marker: str | None = None
+        if scheduled_times_et is not None:
+            slot = self._scheduled_slot(observed, scheduled_times_et)
+            if slot is None:
+                return {"queued": queued, "skipped": skipped}
+            claim_now = _utc_now()
+            claim_marker = "claim:" + _iso(claim_now)
+            with self._connect() as connection:
+                claimed = connection.execute(
+                    """INSERT OR IGNORE INTO catalyst_local_schedule_runs(
+                           slot_key,scheduled_for,completed_at,queued,skipped
+                       ) VALUES(?,?,?,?,?)""",
+                    (slot[0], slot[1], claim_marker, 0, 0),
+                ).rowcount
+                if claimed != 1:
+                    existing = connection.execute(
+                        """SELECT completed_at FROM catalyst_local_schedule_runs
+                           WHERE slot_key=?""",
+                        (slot[0],),
+                    ).fetchone()
+                    previous_marker = (
+                        str(existing["completed_at"])
+                        if existing is not None
+                        else ""
+                    )
+                    claimed_at = (
+                        _parse_time(previous_marker.removeprefix("claim:"))
+                        if previous_marker.startswith("claim:")
+                        else None
+                    )
+                    if (
+                        claimed_at is not None
+                        and (claim_now - claimed_at).total_seconds()
+                        >= SCHEDULE_CLAIM_TTL_SECONDS
+                    ):
+                        claimed = connection.execute(
+                            """UPDATE catalyst_local_schedule_runs SET
+                                   scheduled_for=?,completed_at=?,queued=0,skipped=0
+                               WHERE slot_key=? AND completed_at=?""",
+                            (
+                                slot[1],
+                                claim_marker,
+                                slot[0],
+                                previous_marker,
+                            ),
+                        ).rowcount
+                connection.commit()
+            if claimed != 1:
+                return {"queued": queued, "skipped": skipped}
+        snapshot = self.hotspots(limit=SCHEDULED_FOCUS_EVENT_LIMIT, now=observed)
         # Keep one queue position available for a ready market-focus cycle. A
         # continuous news backlog must not fill the queue and starve the hourly
         # aggregate indefinitely. The daily Token budget, not an item-count

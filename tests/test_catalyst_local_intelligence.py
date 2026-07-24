@@ -3352,6 +3352,102 @@ def test_scheduled_run_resumes_focus_intent_after_queue_capacity_returns(
         ).fetchone()[0] == 1
 
 
+def test_scheduled_run_resumes_focus_intent_outside_configured_slot(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
+    first_now = datetime(2030, 7, 16, 10, 42, tzinfo=timezone.utc)
+    clock = {"now": first_now}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    _apply_news(
+        etl,
+        [_news_change(1, 78, available_at=first_now - timedelta(minutes=10))],
+        as_of=first_now - timedelta(minutes=9),
+    )
+    intelligence.reconcile()
+    news_job = intelligence.request_analysis(
+        78,
+        force=False,
+        expected_change_sequence=1,
+        expected_content_hash="hash-78-1",
+        submission_source="scheduled",
+    )
+    _finish_job(
+        ai,
+        news_job["job_id"],
+        _news_result(
+            news_id=78,
+            change_sequence=1,
+            content_hash="hash-78-1",
+        ),
+    )
+    prepared = intelligence.reconcile()["prepared_revision"]
+    original_create = intelligence._create_focus_job
+
+    def interrupted_after_intent(*_args, **_kwargs):
+        raise RuntimeError("simulated_process_exit")
+
+    monkeypatch.setattr(
+        intelligence,
+        "_create_focus_job",
+        interrupted_after_intent,
+    )
+    with pytest.raises(RuntimeError, match="simulated_process_exit"):
+        intelligence.request_market_focus_cycle(
+            expected_prepared_revision=prepared,
+            as_of=first_now,
+            submission_source="scheduled",
+        )
+    monkeypatch.setattr(intelligence, "_create_focus_job", original_create)
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        intent = connection.execute(
+            """SELECT cycle_id,status,job_id
+               FROM catalyst_local_focus_cycles
+               WHERE prepared_revision=?""",
+            (prepared,),
+        ).fetchone()
+    assert intent is not None
+    assert intent[1] == "preparing"
+    assert intent[2] == f"intent:{intent[0]}"
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 0
+
+    restarted = LocalCatalystIntelligence(
+        intelligence.db_path,
+        ai,
+        mode="scheduled",
+        canonical_tickers=("NVDA", "AMD", "AI", "ON", "CAT"),
+    )
+    restarted.initialize()
+
+    # 06:47 ET is outside the configured 08:00 slot. Recovery must not wait
+    # until a later paid-work window after the durable intent already exists.
+    clock["now"] = first_now + timedelta(minutes=5)
+    assert restarted._scheduled_slot(clock["now"], ("08:00",)) is None
+    assert restarted.run_scheduled(
+        scheduled_times_et=("08:00",),
+        now=clock["now"],
+    ) == {"queued": 1, "skipped": 0}
+
+    with sqlite3.connect(restarted.db_path) as connection:
+        linked = connection.execute(
+            """SELECT status,job_id FROM catalyst_local_focus_cycles
+               WHERE cycle_id=?""",
+            (intent[0],),
+        ).fetchone()
+    assert linked is not None
+    assert linked[0] == "pending"
+    assert not str(linked[1]).startswith("intent:")
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 1
+
+
 def test_owner_poll_defers_terminal_publish_during_local_lock(
     tmp_path,
     monkeypatch,

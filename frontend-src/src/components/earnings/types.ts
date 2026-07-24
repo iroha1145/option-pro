@@ -41,6 +41,70 @@ export function exBool(row: EarningsRow, camel: 'impactReady'): boolean | null {
   return typeof v === 'boolean' ? v : null;
 }
 
+/**
+ * 在有限的首屏额度里同时保留两类关键信息：
+ * - 最近三天已经公布、带实际 EPS 的财报（大市值优先）；
+ * - 今天及未来待公布的财报（日近、市值高者优先）。
+ *
+ * 最终仍按接口原顺序展示，避免日期分组被打散。额度增加时旧结果只会保留、
+ * 不会被新结果替换；点选单日时调用方应直接展示该日完整列表。
+ */
+export function prioritizeEarningsRows(
+  items: EarningsRow[],
+  limit: number,
+): EarningsRow[] {
+  const boundedLimit = Math.max(0, Math.floor(limit));
+  if (boundedLimit === 0) return [];
+  if (items.length <= boundedLimit) return items;
+
+  const released = items
+    .filter((row) => daysUntil(row.date) <= 0 && Number.isFinite(row.epsActual))
+    .sort((a, b) => {
+      const marketCapDelta = (exNum(b, 'marketCap') ?? -1) - (exNum(a, 'marketCap') ?? -1);
+      if (marketCapDelta !== 0) return marketCapDelta;
+      const dateDelta = b.date.localeCompare(a.date);
+      return dateDelta !== 0 ? dateDelta : a.ticker.localeCompare(b.ticker);
+    });
+  const releasedSet = new Set(released);
+  const scheduled = items
+    .filter((row) => !releasedSet.has(row) && daysUntil(row.date) >= 0)
+    .sort((a, b) => {
+      const aDistance = daysUntil(a.date);
+      const bDistance = daysUntil(b.date);
+      if (aDistance !== bDistance) return aDistance - bDistance;
+      const marketCapDelta = (exNum(b, 'marketCap') ?? -1) - (exNum(a, 'marketCap') ?? -1);
+      return marketCapDelta !== 0 ? marketCapDelta : a.ticker.localeCompare(b.ticker);
+    });
+  const scheduledSet = new Set(scheduled);
+  const historicalMissingActual = items
+    .filter((row) => !releasedSet.has(row) && !scheduledSet.has(row))
+    .sort((a, b) => {
+      const dateDelta = b.date.localeCompare(a.date);
+      if (dateDelta !== 0) return dateDelta;
+      const marketCapDelta = (exNum(b, 'marketCap') ?? -1) - (exNum(a, 'marketCap') ?? -1);
+      return marketCapDelta !== 0 ? marketCapDelta : a.ticker.localeCompare(b.ticker);
+    });
+
+  const selected = new Set<EarningsRow>();
+  let releasedIndex = 0;
+  let scheduledIndex = 0;
+  let historicalIndex = 0;
+  while (selected.size < boundedLimit) {
+    const releasedRow = released[releasedIndex++];
+    const scheduledRow = scheduled[scheduledIndex++];
+    if (releasedRow) selected.add(releasedRow);
+    if (selected.size >= boundedLimit) break;
+    if (scheduledRow) selected.add(scheduledRow);
+    if (!releasedRow && !scheduledRow) break;
+  }
+  while (selected.size < boundedLimit) {
+    const historicalRow = historicalMissingActual[historicalIndex++];
+    if (!historicalRow) break;
+    selected.add(historicalRow);
+  }
+  return items.filter((row) => selected.has(row));
+}
+
 /* ---------------- 美东日期 ---------------- */
 const etFmt = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/New_York',
