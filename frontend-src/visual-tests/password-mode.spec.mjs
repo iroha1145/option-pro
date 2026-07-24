@@ -383,7 +383,7 @@ test("password mode keeps public research readable and reserves owner controls f
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/watchlist`);
   expect((await context.cookies(PASSWORD_BASE_URL)).some(cookie => cookie.name === "optix_owner_session")).toBe(false);
   await expectVisitorShell(page);
-  await expect(page.getByText("英伟达 · 本地验收").first()).toBeVisible();
+  await expect(page.getByText("英伟达", { exact: true }).first()).toBeVisible();
 
   // 登出后公共研究面仍可读
   await page.getByRole("link", { name: "06 催化" }).click();
