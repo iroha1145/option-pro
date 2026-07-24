@@ -98,6 +98,37 @@ def _active_job_count(repository: AIJobRepository) -> int:
         )
 
 
+def _complete_pre_release_analysis(
+    repository: AIJobRepository,
+    ticker: str,
+    *,
+    report_date: str,
+    year: int | None = None,
+    quarter: int | None = None,
+) -> dict:
+    payload = normalize_earnings_analysis_payload(
+        {
+            "ticker": ticker,
+            "name": ticker,
+            "earnings_date": report_date,
+            "year": year,
+            "quarter": quarter,
+            "eps_estimate": 1.0,
+            "release_status": "scheduled",
+        },
+        analysis_stage="pre_release",
+    )
+    row, created = _create(repository, payload)
+    assert created is True
+    owner = f"pre-release-{ticker}"
+    claimed = repository.claim_due(owner, 60)
+    assert claimed is not None and claimed["job_id"] == row["job_id"]
+    repository.complete(row["job_id"], owner, _result(ticker), {})
+    completed = repository.get_job(row["job_id"])
+    assert completed is not None
+    return completed
+
+
 def _final_payload(
     ticker: str = "AAPL",
     *,
@@ -207,6 +238,95 @@ def test_completed_final_locks_exact_report_but_not_new_quarter(tmp_path) -> Non
     )
     _next, next_created = _create(repository, next_quarter)
     assert next_created is True
+
+
+def test_latest_for_report_treats_stage_less_job_as_pre_release(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    payload = normalize_earnings_analysis_payload(
+        {
+            "ticker": "AAPL",
+            "name": "Apple",
+            "earnings_date": "2026-07-23",
+            "year": 2026,
+            "quarter": 2,
+            "eps_estimate": 1.4,
+        },
+        analysis_stage="pre_release",
+    )
+    report_id = payload["report_id"]
+    payload.pop("analysis_stage")
+    payload.pop("analysis_phase")
+    legacy, created = _create(repository, payload)
+    assert created is True
+    claimed = repository.claim_due("legacy-pre-release", 60)
+    assert claimed is not None and claimed["job_id"] == legacy["job_id"]
+    repository.complete(
+        legacy["job_id"],
+        "legacy-pre-release",
+        _result("AAPL"),
+        {},
+    )
+
+    preliminary = repository.latest_for_report(
+        "AAPL",
+        report_id,
+        analysis_stage="pre_release",
+        status="completed",
+    )
+    final = repository.latest_for_report(
+        "AAPL",
+        report_id,
+        analysis_stage="post_release_final",
+    )
+
+    assert preliminary is not None and preliminary["job_id"] == legacy["job_id"]
+    assert final is None
+
+    monkeypatch.setattr(
+        runtime,
+        "capability_status",
+        lambda _settings: {"supported": True, "status": "supported"},
+    )
+    task = EarningsAnalysisTask(
+        "legacy-pre-release-final",
+        settings=_settings(repository.path),
+        repository=repository,
+        builder=lambda _today: {
+            "data_limited": False,
+            "source_status": "active",
+            "earnings": [
+                {
+                    "ticker": "AAPL",
+                    "name": "Apple",
+                    "earnings_date": "2026-07-23",
+                    "days_until": -1,
+                    "year": 2026,
+                    "quarter": 2,
+                    "eps_estimate": 1.4,
+                    "eps_actual": 1.6,
+                    "release_status": "released",
+                }
+            ],
+        },
+        runtime_settings_reader=lambda: SimpleNamespace(
+            ai=SimpleNamespace(manual_analysis_enabled=True),
+            earnings=SimpleNamespace(
+                scheduled_analysis_enabled=True,
+                lookahead_days=5,
+            ),
+        ),
+        today=lambda: datetime(2026, 7, 24, tzinfo=timezone.utc).date(),
+    )
+    scheduled = asyncio.run(task())
+    latest = repository.latest_for_ticker("earnings_impact", "AAPL")
+    assert scheduled.details["queued"] == 1
+    assert latest is not None
+    assert json.loads(latest["payload_json"])["analysis_stage"] == (
+        "post_release_final"
+    )
 
 
 def test_final_failure_does_not_lock_and_exact_retry_is_allowed(tmp_path) -> None:
@@ -423,6 +543,16 @@ def test_queue_reserves_are_tiered_and_keep_a_hard_total_cap(
         "capability_status",
         lambda _settings: {"supported": True, "status": "supported"},
     )
+    final_capacity = (
+        runtime.EARNINGS_FINAL_QUEUE_RESERVE
+        - runtime.EARNINGS_MANUAL_QUEUE_RESERVE
+    )
+    for index in range(final_capacity + 1):
+        _complete_pre_release_analysis(
+            repository,
+            f"F{index:03d}",
+            report_date="2026-07-23",
+        )
     _seed_active_jobs(repository, settings.openai_job_max_queued)
 
     async def pre_release_builder(_today):
@@ -495,11 +625,6 @@ def test_queue_reserves_are_tiered_and_keep_a_hard_total_cap(
     assert getattr(blocked.value, "status_code", None) == 429
     assert _active_job_count(repository) == manual_cap
 
-    final_capacity = (
-        runtime.EARNINGS_FINAL_QUEUE_RESERVE
-        - runtime.EARNINGS_MANUAL_QUEUE_RESERVE
-    )
-
     async def final_builder(_today):
         return {
             "data_limited": False,
@@ -571,6 +696,11 @@ def test_saturated_base_queue_processes_same_day_final_before_pre_release(
         runtime,
         "capability_status",
         lambda _settings: {"supported": True, "status": "supported"},
+    )
+    _complete_pre_release_analysis(
+        repository,
+        "ZZZ",
+        report_date="2026-07-24",
     )
     _seed_active_jobs(repository, settings.openai_job_max_queued)
 
@@ -764,6 +894,67 @@ def test_visitor_rate_limit_counts_unique_reports_but_reuses_exact_task() -> Non
         ai._public_earnings_recent.clear()
 
 
+def test_scheduled_actuals_without_pre_release_require_manual_analysis(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    settings = _settings(repository.path)
+    effective = SimpleNamespace(
+        ai=SimpleNamespace(manual_analysis_enabled=True),
+        earnings=SimpleNamespace(
+            scheduled_analysis_enabled=True,
+            lookahead_days=5,
+        ),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "capability_status",
+        lambda _settings: {"supported": True, "status": "supported"},
+    )
+
+    async def builder(_today):
+        return {
+            "data_limited": False,
+            "source_status": "active",
+            "earnings": [
+                {
+                    "ticker": "AAPL",
+                    "name": "Apple",
+                    "earnings_date": "2026-07-23",
+                    "days_until": -1,
+                    "year": 2026,
+                    "quarter": 2,
+                    "eps_estimate": 1.4,
+                    "eps_actual": 1.6,
+                    "release_status": "released",
+                }
+            ],
+        }
+
+    task = EarningsAnalysisTask(
+        "scheduled-final-without-pre-release",
+        settings=settings,
+        repository=repository,
+        builder=builder,
+        runtime_settings_reader=lambda: effective,
+        today=lambda: datetime(2026, 7, 24, tzinfo=timezone.utc).date(),
+    )
+
+    scheduled = asyncio.run(task())
+    assert scheduled.details["queued"] == 0
+    assert scheduled.details["skipped_final_without_pre_release"] == 1
+    assert repository.latest_for_ticker("earnings_impact", "AAPL") is None
+
+    manual = asyncio.run(task.run_for_actions([{"request_id": "manual"}]))
+    assert manual.details["queued"] == 1
+    stored = repository.latest_for_ticker("earnings_impact", "AAPL")
+    assert stored is not None
+    assert json.loads(stored["payload_json"])["analysis_stage"] == (
+        "post_release_manual"
+    )
+
+
 def test_scheduled_actuals_queue_final_and_lock_after_success(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
@@ -831,6 +1022,28 @@ def test_scheduled_actuals_queue_final_and_lock_after_success(
         {},
     )
     assert repository.public(repository.get_job(pre["job_id"]))["_locked"] is False
+    later_pre_payload = normalize_earnings_analysis_payload(
+        {
+            "ticker": "AAPL",
+            "name": "Apple",
+            "earnings_date": "2026-07-23",
+            "year": 2026,
+            "quarter": 2,
+            "eps_estimate": 1.45,
+            "release_status": "scheduled",
+        },
+        analysis_stage="pre_release",
+    )
+    later_pre, later_created = _create(repository, later_pre_payload)
+    assert later_created is True
+    claimed_later = repository.claim_due("later-pre-release-worker", 60)
+    assert claimed_later is not None
+    repository.fail(
+        claimed_later["job_id"],
+        "later-pre-release-worker",
+        "provider_failed",
+    )
+    assert claimed_later["job_id"] == later_pre["job_id"]
 
     first = asyncio.run(task())
     assert first.details["queued"] == 1
