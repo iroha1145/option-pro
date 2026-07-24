@@ -842,10 +842,13 @@ def status() -> BreakoutStatusResponse:
         # The session chip must reflect the market NOW. Worker-stored details
         # only carry a session while paused and lag scan cadence otherwise,
         # so classify the current instant with the shared market clock.
+        # next_session_at keeps its original contract — "when the paused
+        # worker resumes" — and stays absent while sessions are running.
         market_session=clock_snapshot.session.value,
         next_session_at=(
-            (read_state.details.get("next_session_at") if read_state else None)
-            or clock_snapshot.next_transition
+            read_state.details.get("next_session_at")
+            if read_state is not None
+            else None
         ),
         failure_domain=(
             read_state.details.get("failure_domain")
