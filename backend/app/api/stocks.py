@@ -21,9 +21,13 @@ from zoneinfo import ZoneInfo
 
 import httpx
 import yfinance as yf
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
-from app.access import current_request_is_owner, public_snapshot_unavailable
+from app.access import (
+    current_request_is_owner,
+    public_snapshot_unavailable,
+    require_same_origin_action,
+)
 from app.data_paths import get_data_paths
 from app.personal_config import get_personal_config
 from app.public_home_snapshot import (
@@ -33,6 +37,12 @@ from app.public_home_snapshot import (
     read_public_home_resource_async,
 )
 from app.services.yfinance_batch import download_in_bounded_batches
+from app.stock_pull_snapshot import (
+    STOCK_PULL_RESOURCE_FRESH_SECONDS,
+    read_stock_pull_resource,
+    validate_stock_pull_payload,
+    write_stock_pull_resources,
+)
 
 
 router = APIRouter(prefix="/api/stocks", tags=["stocks"])
@@ -65,6 +75,12 @@ _endpoint_refresh_retry_after: dict[str, float] = {}
 _ENDPOINT_PURGE_THRESHOLD = 2048
 _ENDPOINT_MAX_ENTRIES = 2048
 _ENDPOINT_REFRESH_FAILURE_COOLDOWN_SECONDS = 60
+_STOCK_PULL_BLOCKING_MAX_WORKERS = 2
+_stock_pull_blocking_executor = ThreadPoolExecutor(
+    max_workers=_STOCK_PULL_BLOCKING_MAX_WORKERS,
+    thread_name_prefix="stock-pull",
+)
+_stock_pull_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
 
 
 def _is_public_snapshot_unavailable(error: HTTPException) -> bool:
@@ -173,6 +189,38 @@ async def _reuse_fresh_public_home_entry(
     return _cache_result(hydrated, stale=not bool(disk_entry["fresh"]))
 
 
+async def _hydrate_stock_pull_resource(
+    ticker: str,
+    resource: str,
+    key: str,
+) -> _EndpointCacheEntry | None:
+    """Hydrate the process cache from an explicit owner's durable snapshot."""
+
+    now = time.time()
+    current = _usable_hit(key, now)
+    if current is not None and current.expires_at > now:
+        return current
+    saved = await asyncio.to_thread(
+        read_stock_pull_resource,
+        ticker,
+        resource,
+        now=now,
+    )
+    if saved is None:
+        return current
+    saved_at = float(saved["saved_at"])
+    entry = _EndpointCacheEntry(
+        expires_at=saved_at + STOCK_PULL_RESOURCE_FRESH_SECONDS[resource],
+        stale_until=saved_at + int(saved["max_age"]),
+        fetched_at=saved_at,
+        value=saved["payload"],
+    )
+    if current is None or entry.fetched_at > current.fetched_at:
+        _endpoint_cache[key] = entry
+        return entry
+    return current
+
+
 async def _cached_endpoint(
     key: str,
     ttl: int,
@@ -257,6 +305,47 @@ async def _load_and_store_endpoint(
             _endpoint_cache[key] = entry
             _endpoint_refresh_retry_after.pop(key, None)
             _run_endpoint_success_callback(key, on_success, value, fetched_at)
+            return entry
+    finally:
+        _release_lock(key, lock)
+
+
+async def _force_replace_endpoint(
+    key: str,
+    ttl: int,
+    max_age: int,
+    loader,
+) -> _EndpointCacheEntry:
+    """Replace one cached market resource for an explicit owner pull.
+
+    A normal GET intentionally serves a fresh value or bounded stale value.
+    The manual action has different semantics: it must contact the configured
+    providers even when the cache is fresh. Concurrent manual requests still
+    share the first completed refresh so one click cannot fan out into a herd.
+    """
+
+    started_at = time.time()
+    lock = _lock_for(key)
+    try:
+        async with lock:
+            # Another refresh that started before us may have completed while
+            # this request waited for the key lock. Reuse that newly fetched
+            # provider result instead of immediately calling the provider again.
+            hit = _usable_hit(key, time.time())
+            if hit is not None and hit.fetched_at >= started_at:
+                return hit
+
+            value = await loader()
+            fetched_at = time.time()
+            _maybe_purge_endpoint_cache(fetched_at)
+            entry = _EndpointCacheEntry(
+                expires_at=fetched_at + ttl,
+                stale_until=fetched_at + max(ttl, max_age),
+                fetched_at=fetched_at,
+                value=value,
+            )
+            _endpoint_cache[key] = entry
+            _endpoint_refresh_retry_after.pop(key, None)
             return entry
     finally:
         _release_lock(key, lock)
@@ -2307,6 +2396,7 @@ async def stock_overview(ticker: str):
     owner = current_request_is_owner()
     symbol = ticker.upper().strip()
     key = f"stock:{symbol}"
+    await _hydrate_stock_pull_resource(symbol, "overview", key)
     if owner and symbol == "NVDA":
         disk_result = await _reuse_fresh_public_home_entry(
             key,
@@ -2637,6 +2727,12 @@ async def stock_chart(
     owner = current_request_is_owner()
     symbol = ticker.upper().strip()
     key = f"chart:{symbol}:{range}:{adjustment}"
+    if range == "1d" and adjustment == "raw":
+        await _hydrate_stock_pull_resource(
+            symbol,
+            "daily_chart",
+            key,
+        )
     if owner and symbol == "NVDA" and range == "1d" and adjustment == "raw":
         disk_result = await _reuse_fresh_public_home_entry(
             key,
@@ -2653,7 +2749,7 @@ async def stock_chart(
             key,
             _CHART_TTL.get(range, 600),
             _CHART_MAX_AGE.get(range, 60 * 60),
-            lambda: _stock_chart_impl(ticker, range, adjustment),
+            lambda: _load_stock_chart(ticker, range, adjustment),
             allow_refresh=owner,
         )
     except HTTPException as exc:
@@ -2689,6 +2785,26 @@ async def stock_chart(
         return _sanitize(result)
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Stock chart data is currently unavailable") from exc
+
+
+async def _load_stock_chart(
+    ticker: str,
+    range_key: str,
+    adjustment: str,
+) -> dict[str, Any]:
+    """Load a chart without publishing an empty daily refresh.
+
+    A provider can transiently answer with no daily aggregates. Treat that as
+    a failed refresh so stale process data, including a durable manual-pull
+    snapshot hydrated above, remains the last usable value.
+    """
+
+    payload = await _stock_chart_impl(ticker, range_key, adjustment)
+    if range_key == "1d":
+        bars = payload.get("bars") if isinstance(payload, dict) else None
+        if not isinstance(bars, list) or not bars:
+            raise RuntimeError("Daily stock chart provider returned no bars")
+    return payload
 
 
 _MASSIVE_CHART_WINDOWS = {
@@ -2761,7 +2877,12 @@ async def _stock_chart_impl(ticker: str, range: str, adjustment: str = "raw"):
         symbol = ticker.upper()
         auto_adjust = adjustment == "adjusted"
 
-        def response_metadata(*, source_status: str, bars: list[dict[str, Any]]) -> dict[str, Any]:
+        def response_metadata(
+            *,
+            source_status: str,
+            bars: list[dict[str, Any]],
+            price_provider: str,
+        ) -> dict[str, Any]:
             fetched_at = datetime.now(timezone.utc).isoformat()
             last_bar_at = (
                 datetime.fromtimestamp(int(bars[-1]["t"]), timezone.utc).isoformat()
@@ -2780,20 +2901,24 @@ async def _stock_chart_impl(ticker: str, range: str, adjustment: str = "raw"):
                 "as_of": fetched_at,
                 "last_bar_at": last_bar_at,
                 "source_status": source_status,
+                "price_provider": price_provider,
                 "visible": visible,
             }
 
         # 主源 Massive:同形状历史帧;失败/未配置/不支持的代码回落 Yahoo。
-        hist = None
-        try:
-            from app.services import massive as massive_provider
+        from app.services import massive as massive_provider
 
+        hist = None
+        price_provider = "Yahoo/yfinance"
+        try:
             if massive_provider.configured():
                 massive_symbol = massive_provider.to_symbol(symbol)
                 if massive_symbol is not None:
                     hist = _massive_chart_history(
                         massive_provider, massive_symbol, range, auto_adjust
                     )
+                    if hist is not None and not hist.empty:
+                        price_provider = "Massive"
         except Exception:
             hist = None
         if hist is None or hist.empty:
@@ -2806,7 +2931,11 @@ async def _stock_chart_impl(ticker: str, range: str, adjustment: str = "raw"):
             )
         if hist.empty:
             return {
-                **response_metadata(source_status="empty", bars=[]),
+                **response_metadata(
+                    source_status="empty",
+                    bars=[],
+                    price_provider=price_provider,
+                ),
                 "bars": [],
                 "ema20": [],
                 "sma50": [],
@@ -2903,10 +3032,375 @@ async def _stock_chart_impl(ticker: str, range: str, adjustment: str = "raw"):
         # visible tells frontend how many bars to show initially
         source_status = "active" if bars else "empty"
         return {
-            **response_metadata(source_status=source_status, bars=bars),
+            **response_metadata(
+                source_status=source_status,
+                bars=bars,
+                price_provider=price_provider,
+            ),
             "bars": bars,
             "ema20": ema20_data,
             "sma50": sma50_data,
         }
 
     return _sanitize(await asyncio.to_thread(_work))
+
+
+async def _run_stock_pull_blocking(function, *args):
+    """Run bounded manual-pull CPU/disk work outside the default executor."""
+
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        _stock_pull_blocking_executor,
+        function,
+        *args,
+    )
+
+
+def _finish_stock_pull_task(
+    ticker: str,
+    task: asyncio.Task[dict[str, Any]],
+) -> None:
+    if _stock_pull_tasks.get(ticker) is task:
+        _stock_pull_tasks.pop(ticker, None)
+    if not task.cancelled():
+        # Retrieve an exception even when every waiting HTTP client disconnects.
+        task.exception()
+
+
+async def _coalesced_stock_pull(ticker: str) -> dict[str, Any]:
+    """Share one complete in-flight manual pull for the same ticker."""
+
+    task = _stock_pull_tasks.get(ticker)
+    if task is None or task.done():
+        task = asyncio.create_task(
+            _pull_stock_data_once(ticker),
+            name=f"stock-pull:{ticker}",
+        )
+        _stock_pull_tasks[ticker] = task
+        task.add_done_callback(
+            lambda completed, symbol=ticker: _finish_stock_pull_task(
+                symbol,
+                completed,
+            )
+        )
+    # A client disconnect must not cancel the shared provider work while
+    # another request is still awaiting the same result.
+    return await asyncio.shield(task)
+
+
+@router.post(
+    "/{ticker}/pull",
+    dependencies=[Depends(require_same_origin_action)],
+)
+async def pull_stock_data(ticker: str):
+    """Owner-only refresh for overview, daily chart, and derived signals.
+
+    This write endpoint deliberately bypasses the public saved-snapshot
+    boundary and the normal fresh/stale GET cache. The refreshed values are
+    published into both the exact GET cache keys and a restart-safe snapshot.
+    Each resource is independent: an options or signal-enrichment failure
+    cannot erase a valid quote or daily chart.
+    """
+
+    symbol = ticker.upper().strip()
+    if not _WATCHLIST_TICKER_PATTERN.fullmatch(symbol):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "invalid_ticker",
+                "message": "股票代码格式无效",
+            },
+        )
+
+    return await _coalesced_stock_pull(symbol)
+
+
+async def _pull_stock_data_once(symbol: str) -> dict[str, Any]:
+    overview_key = f"stock:{symbol}"
+    chart_key = f"chart:{symbol}:1d:raw"
+
+    async def _load_valid_overview() -> dict[str, Any]:
+        payload = await _stock_overview_impl(symbol)
+        cleaned = validate_stock_pull_payload(symbol, "overview", payload)
+        if cleaned is None:
+            raise ValueError("manual stock overview payload is unavailable")
+        return cleaned
+
+    async def _load_valid_daily_chart() -> dict[str, Any]:
+        payload = await _stock_chart_impl(symbol, "1d", "raw")
+        cleaned = validate_stock_pull_payload(symbol, "daily_chart", payload)
+        if cleaned is None:
+            raise ValueError("manual stock daily chart payload is unavailable")
+        return cleaned
+
+    async def _capture_refresh(awaitable):
+        try:
+            return await awaitable
+        except Exception as exc:
+            return exc
+
+    overview_result, chart_result = await asyncio.gather(
+        _capture_refresh(
+            _force_replace_endpoint(
+                    overview_key,
+                    60,
+                    30 * 60,
+                    _load_valid_overview,
+            )
+        ),
+        _capture_refresh(
+            _force_replace_endpoint(
+                    chart_key,
+                    _CHART_TTL["1d"],
+                    _CHART_MAX_AGE["1d"],
+                    _load_valid_daily_chart,
+            )
+        ),
+    )
+
+    async def _build_pulled_signals():
+        from app.services import signals as signal_provider
+
+        try:
+            # The visible K-line intentionally stays raw. Technical indicators
+            # need a separate adjusted history so a split cannot look like a
+            # crash or spike. _stock_chart_impl keeps Massive as the primary
+            # source and uses Yahoo only when Massive has no usable aggregates.
+            chart_payload = await _load_stock_chart(symbol, "1d", "adjusted")
+            bars = chart_payload["bars"]
+
+            if isinstance(bars, list) and bars:
+                def _compute_from_chart():
+                    import pandas as pd
+
+                    frame = pd.DataFrame(
+                        {
+                            "Open": [bar.get("o") for bar in bars],
+                            "High": [bar.get("h") for bar in bars],
+                            "Low": [bar.get("l") for bar in bars],
+                            "Close": [bar.get("c") for bar in bars],
+                            "Volume": [bar.get("v") for bar in bars],
+                        },
+                        index=pd.DatetimeIndex(
+                            [
+                                datetime.fromtimestamp(
+                                    int(bar["t"]),
+                                    timezone.utc,
+                                )
+                                for bar in bars
+                            ]
+                        ),
+                    )
+                    return signal_provider.compute_stock_signals_from_history(
+                        symbol,
+                        frame,
+                        price_provider=(
+                            str(chart_payload.get("price_provider"))
+                            if chart_payload.get("price_provider")
+                            else None
+                        ),
+                    )
+
+                return await _run_stock_pull_blocking(_compute_from_chart)
+
+        except Exception as exc:
+            logger.warning(
+                "Adjusted signal history failed for %s (%s); using signal fallback",
+                symbol,
+                type(exc).__name__,
+            )
+
+        # Preserve resource independence. If the independent adjusted history
+        # fails, the existing Massive-first signal path gets one honest chance.
+        return await _run_stock_pull_blocking(
+            signal_provider.compute_stock_signals,
+            symbol,
+        )
+
+    signals_result = await _capture_refresh(_build_pulled_signals())
+    signals_fetched_at = time.time()
+
+    def _failed_resource(name: str, error: Exception) -> dict[str, Any]:
+        logger.warning(
+            "Manual stock pull failed for %s %s (%s)",
+            symbol,
+            name,
+            type(error).__name__,
+        )
+        return {
+            "status": "failed",
+            "error_code": f"{name}_provider_unavailable",
+            "persisted": False,
+        }
+
+    if isinstance(overview_result, Exception):
+        overview_resource = _failed_resource("overview", overview_result)
+    else:
+        overview_payload = _cache_result(overview_result, stale=False)
+        overview_price = (
+            overview_payload.get("price")
+            if isinstance(overview_payload, dict)
+            else None
+        )
+        overview_available = (
+            isinstance(overview_price, (int, float))
+            and math.isfinite(float(overview_price))
+            and float(overview_price) > 0
+        )
+        overview_resource = {
+            "status": "available" if overview_available else "unavailable",
+            "provider": (
+                overview_payload.get("price_provider")
+                if isinstance(overview_payload, dict)
+                else None
+            ),
+            "as_of": (
+                overview_payload.get("as_of")
+                if isinstance(overview_payload, dict)
+                else None
+            )
+            or datetime.fromtimestamp(
+                overview_result.fetched_at,
+                timezone.utc,
+            ).isoformat(),
+            "persisted": False,
+        }
+
+    if isinstance(chart_result, Exception):
+        chart_resource = _failed_resource("daily_chart", chart_result)
+    else:
+        chart_payload = _cache_result(chart_result, stale=False)
+        bars = (
+            chart_payload.get("bars")
+            if isinstance(chart_payload, dict)
+            else None
+        )
+        bar_count = len(bars) if isinstance(bars, list) else 0
+        chart_resource = {
+            "status": "available" if bar_count > 0 else "unavailable",
+            "provider": (
+                chart_payload.get("price_provider")
+                if isinstance(chart_payload, dict)
+                else None
+            ),
+            "as_of": (
+                chart_payload.get("as_of")
+                if isinstance(chart_payload, dict)
+                else None
+            )
+            or datetime.fromtimestamp(
+                chart_result.fetched_at,
+                timezone.utc,
+            ).isoformat(),
+            "bar_count": bar_count,
+            "last_bar_at": (
+                chart_payload.get("last_bar_at")
+                if isinstance(chart_payload, dict)
+                else None
+            ),
+            "persisted": False,
+        }
+
+    if isinstance(signals_result, Exception):
+        signals_resource = _failed_resource("signals", signals_result)
+    else:
+        signal_keys = [
+            key
+            for key, value in signals_result.items()
+            if not key.startswith("_") and isinstance(value, dict)
+        ]
+        provider_meta = signals_result.get("_price_provider")
+        signal_provider = (
+            provider_meta.get("value")
+            if isinstance(provider_meta, dict)
+            else None
+        )
+        signals_resource = {
+            "status": "available" if signal_keys else "unavailable",
+            "provider": signal_provider,
+            "as_of": datetime.fromtimestamp(
+                signals_fetched_at,
+                timezone.utc,
+            ).isoformat(),
+            "metric_count": len(signal_keys),
+            "persisted": False,
+        }
+
+    resources = {
+        "overview": overview_resource,
+        "daily_chart": chart_resource,
+        "signals": signals_resource,
+    }
+    available_count = sum(
+        resource["status"] == "available"
+        for resource in resources.values()
+    )
+    if available_count == 0:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "stock_pull_failed",
+                "message": "真实行情接口暂未返回可用数据，请稍后重试",
+                "ticker": symbol,
+                "resources": resources,
+            },
+        )
+
+    persistable: dict[str, tuple[Any, float]] = {}
+    if (
+        overview_resource["status"] == "available"
+        and not isinstance(overview_result, Exception)
+    ):
+        persistable["overview"] = (
+            overview_result.value,
+            overview_result.fetched_at,
+        )
+    if (
+        chart_resource["status"] == "available"
+        and not isinstance(chart_result, Exception)
+    ):
+        persistable["daily_chart"] = (
+            chart_result.value,
+            chart_result.fetched_at,
+        )
+    if (
+        signals_resource["status"] == "available"
+        and not isinstance(signals_result, Exception)
+    ):
+        persistable["signals"] = (
+            signals_result,
+            signals_fetched_at,
+        )
+
+    persistence_status = "completed"
+    try:
+        persisted = await _run_stock_pull_blocking(
+            write_stock_pull_resources,
+            symbol,
+            persistable,
+        )
+    except Exception as exc:
+        persisted = set()
+        persistence_status = "failed"
+        logger.warning(
+            "Manual stock pull persistence failed for %s (%s)",
+            symbol,
+            type(exc).__name__,
+        )
+    for resource_name, resource in resources.items():
+        resource["persisted"] = resource_name in persisted
+
+    completed = (
+        available_count == len(resources)
+        and persistence_status == "completed"
+        and len(persisted) == available_count
+    )
+    return _sanitize(
+        {
+            "ticker": symbol,
+            "status": "completed" if completed else "partial",
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "persistence_status": persistence_status,
+            "resources": resources,
+        }
+    )

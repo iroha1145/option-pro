@@ -199,6 +199,22 @@ def test_news_and_market_focus_results_accept_simplified_chinese():
     assert focus["cycle_id"] == "cycle-20260715-01"
 
 
+def test_market_focus_prompt_explains_cross_field_evidence_semantics():
+    request = runtime.build_runtime_request(
+        "market_focus",
+        _market_focus_payload(),
+    )
+
+    assert request.schema_name == "market_focus_zh_cn_v5"
+    assert "insufficient_evidence为true时，catalyst_bias必须为null" in (
+        request.instructions
+    )
+    assert "insufficient_evidence为false时" in request.instructions
+    assert "supporting_event_ids与conflicting_event_ids不得重叠" in (
+        request.instructions
+    )
+
+
 def test_news_result_accepts_rule_10b5_1_identifier_in_real_fields():
     result = _news_result()
     result["summary_zh"] = (

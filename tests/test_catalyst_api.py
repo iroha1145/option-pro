@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 
 import pytest
@@ -261,6 +261,42 @@ def test_read_routes_use_only_the_personal_service() -> None:
     assert any(call[0] == "analysis_progress" for call in service.calls)
 
 
+def test_calendar_default_window_keeps_three_previous_natural_days(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = StubPersonalService()
+    observed = datetime(2026, 7, 24, 2, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(catalyst_api, "_now", lambda: observed)
+
+    response = client_for(service).get("/api/catalysts/calendar")
+
+    assert response.status_code == 200
+    calendar_call = next(call for call in service.calls if call[0] == "calendar")
+    assert calendar_call[1]["date_from"] == date(2026, 7, 21)
+    assert calendar_call[1]["date_to"] == date(2026, 8, 7)
+    assert calendar_call[1]["as_of"] == observed
+    assert calendar_call[1]["timezone_offset_minutes"] == 0
+
+
+def test_calendar_forwards_browser_local_date_window_and_timezone_offset() -> None:
+    service = StubPersonalService()
+
+    response = client_for(service).get(
+        "/api/catalysts/calendar",
+        params={
+            "date_from": "2026-07-21",
+            "date_to": "2026-08-07",
+            "timezone_offset_minutes": 540,
+        },
+    )
+
+    assert response.status_code == 200
+    calendar_call = next(call for call in service.calls if call[0] == "calendar")
+    assert calendar_call[1]["date_from"] == date(2026, 7, 21)
+    assert calendar_call[1]["date_to"] == date(2026, 8, 7)
+    assert calendar_call[1]["timezone_offset_minutes"] == 540
+
+
 def test_analysis_progress_requires_owner_access() -> None:
     service = StubPersonalService()
     app = FastAPI()
@@ -430,10 +466,15 @@ def test_route_validation_and_missing_local_rows_fail_safely() -> None:
         "/api/catalysts/calendar",
         params={"date_from": date(2026, 7, 15), "date_to": date(2027, 1, 1)},
     )
+    invalid_calendar_timezone = client.get(
+        "/api/catalysts/calendar",
+        params={"timezone_offset_minutes": 841},
+    )
     missing_news = client.get("/api/catalysts/news/999")
     missing_job = client.get("/api/catalysts/analysis-jobs/aij_" + "c" * 32)
 
     assert invalid_ticker.status_code == 404
     assert invalid_calendar.status_code == 422
+    assert invalid_calendar_timezone.status_code == 422
     assert missing_news.status_code == 404
     assert missing_job.status_code == 404

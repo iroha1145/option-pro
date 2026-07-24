@@ -31,6 +31,7 @@ from .errors import CatalystError
 _WAITING_TITLE = "中文标题等待生成"
 _WAITING_SUMMARY = "中文摘要等待生成"
 _WAITING_HOTSPOT_TITLE = "热点标题等待中文分析"
+_HOTSPOT_PROJECTION_SCAN_LIMIT = 100
 _INTERACTIVE_MODES = frozenset({"manual", "scheduled"})
 _NEWS_PROMPT_VERSION = "news-impact-zh-cn-v6"
 _LOCAL_STORE_RUNTIME_CODES = frozenset(
@@ -1357,6 +1358,7 @@ class PersonalCatalystService:
         as_of: datetime,
         currencies: Sequence[str] | None,
         min_impact: str | None,
+        timezone_offset_minutes: int = 0,
         include_owner_state: bool | None = None,
     ) -> dict[str, Any]:
         include_owner_state = self._resolve_owner_state(include_owner_state)
@@ -1379,6 +1381,7 @@ class PersonalCatalystService:
                 as_of=as_of,
                 currencies=currencies,
                 min_impact=min_impact,
+                timezone_offset_minutes=timezone_offset_minutes,
             )
         except Exception as error:
             if not self._is_local_store_error(error):
@@ -1594,7 +1597,16 @@ class PersonalCatalystService:
                 "warnings": status.get("warnings", []),
             }
         try:
-            payload = self.intelligence.hotspots(limit=limit, now=now)
+            # Raw groups are ranked before the Chinese-only projection below.
+            # Scan a bounded window and apply the caller's limit afterwards;
+            # otherwise untranslated leaders can hide valid translated groups
+            # ranked immediately behind them and make a live snapshot look
+            # empty.
+            requested_limit = min(100, max(1, int(limit)))
+            payload = self.intelligence.hotspots(
+                limit=max(requested_limit, _HOTSPOT_PROJECTION_SCAN_LIMIT),
+                now=now,
+            )
         except Exception as error:
             if not self._is_local_store_error(error):
                 raise
@@ -1605,7 +1617,9 @@ class PersonalCatalystService:
                 "items": [],
                 "warnings": ["cache_unavailable"],
             }
-        return self._project_hotspots(payload)
+        projected = self._project_hotspots(payload)
+        projected["items"] = list(projected.get("items") or [])[:requested_limit]
+        return projected
 
     def latest_market_focus_cycle(
         self,

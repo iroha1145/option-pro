@@ -16,7 +16,12 @@ import { postAiJob } from '@/api/modules/ai-jobs';
 import * as fx from '@/mocks/fixtures';
 import * as fx2 from '@/mocks/fixtures2';
 import type { AiJob, StockChart, StockDetail } from '@/api/types';
-import type { ChartBarEx, StockChartEx, StockTrendBias } from '@/mocks/fixtures';
+import type {
+  ChartBarEx,
+  StockChartEx,
+  StockTrendBias,
+  TrendBiasFactor,
+} from '@/mocks/fixtures';
 
 export type ChartRange = StockChart['range'];
 export const CHART_RANGES: { value: ChartRange; label: string }[] = [
@@ -83,7 +88,7 @@ function strengthRowToDetail(env: Rec): StockDetail | null {
   };
 }
 
-export function getDetail(ticker: string): Promise<StockDetail> {
+export function getDetail(ticker: string, force = false): Promise<StockDetail> {
   const t = ticker.toUpperCase();
   return mockOr(
     () => {
@@ -93,10 +98,10 @@ export function getDetail(ticker: string): Promise<StockDetail> {
     async () => {
       try {
         // 行情价格仍以 stocks 概览（Massive 主源）为准；强度快照只补其真实评分与缺失基本面。
-        const detail = await stocksApi.detail(t);
+        const detail = await stocksApi.detail(t, force);
         const strengthBody = await marketGet(
           `/strength/stocks/${encodeURIComponent(t)}`,
-          { ttlMs: 60_000, staleMs: 30 * 60_000 },
+          { ttlMs: 60_000, staleMs: 30 * 60_000, force },
         ).catch(() => null);
         const strength = strengthBody !== null ? strengthRowToDetail(asRec(strengthBody)) : null;
         const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
@@ -110,11 +115,11 @@ export function getDetail(ticker: string): Promise<StockDetail> {
           snapshotScope: 'full' as const,
         };
       } catch (e) {
-        // 焦点池外（匿名 503 public_snapshot_unavailable）：回退强度扫描行基础行情
-        if (!(e instanceof ApiError) || e.code !== 503) throw e;
+        // 只有明确的公开快照边界才允许回退扫描行；供应方错误不能被伪装成基础行情成功。
+        if (!(e instanceof ApiError) || e.code !== 503 || e.bizCode !== 'public_snapshot_unavailable') throw e;
         const body = await marketGet(
           `/strength/stocks/${encodeURIComponent(t)}`,
-          { ttlMs: 60_000, staleMs: 30 * 60_000 },
+          { ttlMs: 60_000, staleMs: 30 * 60_000, force },
         ).catch(() => null);
         const fallback = body !== null ? strengthRowToDetail(asRec(body)) : null;
         if (fallback === null) throw e;
@@ -124,7 +129,7 @@ export function getDetail(ticker: string): Promise<StockDetail> {
   );
 }
 
-export function getDetailChart(ticker: string, range: ChartRange): Promise<StockChartEx> {
+export function getDetailChart(ticker: string, range: ChartRange, force = false): Promise<StockChartEx> {
   const t = ticker.toUpperCase();
   return mockOr(
     () => {
@@ -135,25 +140,256 @@ export function getDetailChart(ticker: string, range: ChartRange): Promise<Stock
     () =>
       marketGet(
         `/stocks/${encodeURIComponent(t)}/chart?range=${range}&adjustment=raw`,
-        { ttlMs: 60_000, staleMs: 60 * 60_000 },
+        { ttlMs: 60_000, staleMs: 60 * 60_000, force },
       ).then((d) =>
         mapChartEx(d, t, range),
       ),
   );
 }
 
-export function getTrendBias(ticker: string): Promise<StockTrendBias> {
+type TrendBiasScoreKey = keyof StockTrendBias['scores'];
+type TrendBiasLabel = StockTrendBias['trend_bias_label'] | '数据不足';
+
+export interface StockTrendBiasView {
+  ticker: string;
+  trend_bias_score: number | null;
+  trend_bias_label: TrendBiasLabel;
+  trend_bias_status: StockTrendBias['trend_bias_status'];
+  trend_bias_coverage: number | null;
+  trend_bias_missing_components: string[];
+  scores: Record<TrendBiasScoreKey, number | null>;
+  factors: TrendBiasFactor[];
+  as_of: string;
+}
+
+const SCORE_KEYS: TrendBiasScoreKey[] = ['trend', 'momentum', 'volume', 'volatility'];
+
+const FACTOR_SIGNALS: {
+  key: TrendBiasScoreKey;
+  label: string;
+  candidates: string[];
+}[] = [
+  {
+    key: 'trend',
+    label: '趋势',
+    candidates: ['relative_strength_spy', 'sma50_dist', 'sma20_dist'],
+  },
+  {
+    key: 'momentum',
+    label: '动量',
+    candidates: ['rsi14', 'macd_hist', 'return_20d'],
+  },
+  {
+    key: 'volume',
+    label: '量能',
+    candidates: ['obv_divergence', 'volume_zscore', '_volume_ratio'],
+  },
+  {
+    key: 'volatility',
+    label: '波动',
+    candidates: ['atr_percentile', 'atm_iv_percent'],
+  },
+];
+
+const PERCENT_SIGNALS = new Set([
+  'relative_strength_spy',
+  'sma20_dist',
+  'sma50_dist',
+  'sma200_dist',
+  'return_20d',
+  'atr_percentile',
+  'atm_iv_percent',
+]);
+
+function boundedScore(value: number | null): number | null {
+  return value === null ? null : Math.max(0, Math.min(100, value));
+}
+
+function meanAvailableScores(values: (number | null)[]): number | null {
+  const available = values.filter((value): value is number => value !== null);
+  if (available.length === 0) return null;
+  return Math.round((available.reduce((sum, value) => sum + value, 0) / available.length) * 10) / 10;
+}
+
+/**
+ * Backend signal scorers expose two bounded directional sides. For the
+ * trend-oriented indicators below, top_score rises with positive direction
+ * and bottom_score rises with negative direction, so their midpoint
+ * difference maps deterministically onto the panel's 0–100 scale.
+ */
+function directionalSignalScore(signals: Rec, key: string): number | null {
+  const signal = asRec(signals[key]);
+  const top = pickN(signal, 'top_score');
+  const bottom = pickN(signal, 'bottom_score');
+  if (top === null || bottom === null) return null;
+  return boundedScore(50 + (top - bottom) / 2);
+}
+
+function scoresFromSignals(body: Rec): Record<TrendBiasScoreKey, number | null> {
+  const signals = asRec(body.signals);
+  return {
+    trend: meanAvailableScores(
+      ['sma20_dist', 'sma50_dist', 'sma200_dist', 'relative_strength_spy']
+        .map((key) => directionalSignalScore(signals, key)),
+    ),
+    momentum: meanAvailableScores(
+      ['rsi14', 'return_20d']
+        .map((key) => directionalSignalScore(signals, key)),
+    ),
+    // OBV 背离自身带有价格与成交量的方向；单纯放量不等于利多或利空。
+    volume: directionalSignalScore(signals, 'obv_divergence'),
+    // 后端直接返回 1 年真实分位，无需二次推断方向。
+    volatility: boundedScore(pickN(asRec(signals.atr_percentile), 'value')),
+  };
+}
+
+function signalTone(key: string, value: number): TrendBiasFactor['tone'] {
+  if (key === 'rsi14') {
+    return value >= 55 ? 'bullish' : value <= 45 ? 'bearish' : 'neutral';
+  }
+  if (
+    key === 'relative_strength_spy'
+    || key === 'sma20_dist'
+    || key === 'sma50_dist'
+    || key === 'sma200_dist'
+    || key === 'return_20d'
+    || key === 'macd_hist'
+    || key === 'obv_divergence'
+  ) {
+    return value > 0 ? 'bullish' : value < 0 ? 'bearish' : 'neutral';
+  }
+  return 'neutral';
+}
+
+function signalReading(label: string, key: string, value: number): string {
+  const formatted = value.toLocaleString('zh-CN', {
+    maximumFractionDigits: 2,
+  });
+  return `${label}：${formatted}${PERCENT_SIGNALS.has(key) ? '%' : ''}`;
+}
+
+function mapProvidedFactors(body: Rec): TrendBiasFactor[] {
+  const allowedKeys = new Set<TrendBiasScoreKey>(SCORE_KEYS);
+  const allowedTones = new Set<TrendBiasFactor['tone']>(['bullish', 'neutral', 'bearish']);
+  return unwrap(body, 'factors').flatMap((item) => {
+    const key = pickS(item, 'key') as TrendBiasScoreKey | null;
+    const tone = pickS(item, 'tone') as TrendBiasFactor['tone'] | null;
+    const label = pickS(item, 'label');
+    const reading = pickS(item, 'reading');
+    if (
+      key === null
+      || !allowedKeys.has(key)
+      || tone === null
+      || !allowedTones.has(tone)
+      || label === null
+      || reading === null
+    ) {
+      return [];
+    }
+    return [{ key, tone, label, reading }];
+  });
+}
+
+function factorsFromSignals(body: Rec): TrendBiasFactor[] {
+  const signals = asRec(body.signals);
+  return FACTOR_SIGNALS.flatMap((spec) => {
+    for (const signalKey of spec.candidates) {
+      const signal = asRec(signals[signalKey]);
+      const value = pickN(signal, 'value');
+      if (value === null) continue;
+      const sourceLabel = pickS(signal, 'label') ?? signalKey;
+      return [{
+        key: spec.key,
+        label: spec.label,
+        reading: signalReading(sourceLabel, signalKey, value),
+        tone: signalTone(signalKey, value),
+      }];
+    }
+    return [];
+  });
+}
+
+/** Live /signals/stock response → null-safe detail-panel contract. */
+export function mapTrendBiasResponse(body: unknown, ticker: string): StockTrendBiasView {
+  const raw = asRec(body);
+  const rawScores = asRec(raw.scores);
+  const trendBiasScore = boundedScore(pickN(raw, 'trend_bias_score'));
+  const derivedScores = scoresFromSignals(raw);
+  const scores = Object.fromEntries(
+    SCORE_KEYS.map((key) => [
+      key,
+      boundedScore(pickN(rawScores, key)) ?? derivedScores[key],
+    ]),
+  ) as Record<TrendBiasScoreKey, number | null>;
+
+  const rawLabel = pickS(raw, 'trend_bias_label');
+  const trendBiasLabel: TrendBiasLabel =
+    rawLabel === '偏多' || rawLabel === '中性' || rawLabel === '偏空' || rawLabel === '数据不足'
+      ? rawLabel
+      : trendBiasScore === null
+        ? '数据不足'
+        : trendBiasScore >= 58
+          ? '偏多'
+          : trendBiasScore <= 42
+            ? '偏空'
+            : '中性';
+
+  const missingComponents = Array.isArray(raw.trend_bias_missing_components)
+    ? raw.trend_bias_missing_components.filter((value): value is string => typeof value === 'string')
+    : [];
+  const coverage = boundedScore(
+    (() => {
+      const value = pickN(raw, 'trend_bias_coverage');
+      return value === null ? null : value * 100;
+    })(),
+  );
+  const rawStatus = pickS(raw, 'trend_bias_status');
+  const hasMissingSubscores = SCORE_KEYS.some((key) => scores[key] === null);
+  const trendBiasStatus: StockTrendBias['trend_bias_status'] =
+    trendBiasScore === null || rawStatus === 'insufficient_data'
+      ? 'insufficient_data'
+      : rawStatus === 'degraded'
+        || hasMissingSubscores
+        || missingComponents.length > 0
+        || (coverage !== null && coverage < 100)
+        ? 'degraded'
+        : 'ok';
+
+  const mergedFactors = new Map<TrendBiasScoreKey, TrendBiasFactor>();
+  for (const factor of mapProvidedFactors(raw)) mergedFactors.set(factor.key, factor);
+  for (const factor of factorsFromSignals(raw)) {
+    if (!mergedFactors.has(factor.key)) mergedFactors.set(factor.key, factor);
+  }
+
+  return {
+    ticker: pickS(raw, 'ticker') ?? ticker.toUpperCase(),
+    trend_bias_score: trendBiasScore,
+    trend_bias_label: trendBiasLabel,
+    trend_bias_status: trendBiasStatus,
+    trend_bias_coverage: coverage,
+    trend_bias_missing_components: missingComponents,
+    scores,
+    factors: SCORE_KEYS.flatMap((key) => {
+      const factor = mergedFactors.get(key);
+      return factor ? [factor] : [];
+    }),
+    as_of: pickS(raw, 'as_of') ?? '',
+  };
+}
+
+export function getTrendBias(ticker: string, force = false): Promise<StockTrendBiasView> {
   const t = ticker.toUpperCase();
-  return mockOr(
+  return mockOr<StockTrendBiasView>(
     () => {
       if (!fx.hasTicker(t)) throw new ApiError(404, `代码 ${t} 不存在`);
-      return fx.getStockTrendBias(t);
+      return mapTrendBiasResponse(fx.getStockTrendBias(t), t);
     },
     () =>
       marketGet(`/signals/stock/${encodeURIComponent(t)}`, {
         ttlMs: 60_000,
         staleMs: 30 * 60_000,
-      }),
+        force,
+      }).then((body) => mapTrendBiasResponse(body, t)),
   );
 }
 

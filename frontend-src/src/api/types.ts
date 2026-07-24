@@ -174,10 +174,34 @@ export interface StockDetail extends WatchlistItem {
   priceProvider?: string | null;
   profileProvider?: string | null;
   /**
-   * live 快照口径：'strength-row' = 概览接口未覆盖（焦点池外），
-   * 由 /strength/stocks/{t} 扫描行回退的基础行情（仅价/涨跌/市值等，其余如实留空）
+   * live 快照口径：'strength-row' = 当前仅命中扫描行保存快照，
+   * 由 /strength/stocks/{t} 回退基础行情（仅价/涨跌/市值等，其余如实留空）。
    */
   snapshotScope?: 'full' | 'strength-row';
+}
+
+export interface StockPullResource {
+  status: 'available' | 'unavailable' | 'failed';
+  provider: string | null;
+  asOf: string | null;
+  persisted: boolean;
+  errorCode?: string | null;
+  barCount?: number;
+  metricCount?: number;
+  lastBarAt?: string | null;
+}
+
+/** 管理员按需拉取：后端以 Massive 为价格主源，结果回填详情、日线与信号快照。 */
+export interface StockPullResult {
+  ticker: string;
+  status: 'completed' | 'partial';
+  fetchedAt: string;
+  persistenceStatus: 'completed' | 'failed';
+  resources: {
+    overview: StockPullResource;
+    dailyChart: StockPullResource;
+    signals: StockPullResource;
+  };
 }
 
 export interface Candle {

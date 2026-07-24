@@ -1085,6 +1085,12 @@ export interface MarketFocusCycle {
   uncertainties?: string[];
   sampleLabel?: string;
   status?: string | null;
+  /** 当前尝试失败时，主卡继续展示上次成功结果，并保留失败尝试供重试。 */
+  latestAttempt?: {
+    cycleId: string;
+    status: string;
+    startedAt: string;
+  } | null;
 }
 
 export type AnalysisJobStatus =

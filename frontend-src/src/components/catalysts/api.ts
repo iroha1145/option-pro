@@ -215,10 +215,7 @@ function nFocusJob(
   };
 }
 
-/** 个人版焦点周期：{cycle:{…, result:{…}}} → MarketFocusCycle（无 stage 概念 → null 隐藏步进条） */
-function nCycle(raw: unknown): MarketFocusCycle {
-  const env = asRec(raw);
-  const r = asRec(env.cycle ?? env);
+function nCycleRecord(r: Rec): MarketFocusCycle {
   const result = asRec(r.result);
   const legacyStage = pickN(r, 'stage');
   const assessments = unwrap(result, 'focus_ticker_assessments').length
@@ -248,6 +245,27 @@ function nCycle(raw: unknown): MarketFocusCycle {
       note: pickS(a, 'note', 'note_zh', 'assessment_zh', 'reason', 'reason_zh') ?? '',
     })),
   };
+}
+
+/** 个人版焦点周期：失败尝试不覆盖最近一次已完成且通过校验的结果。 */
+function nCycle(raw: unknown): MarketFocusCycle {
+  const env = asRec(raw);
+  const current = asRec(env.cycle ?? env);
+  const latestSuccessful = asRec(env.latest_successful_cycle);
+  const currentStatus = pickS(current, 'status');
+  const failedAttempt = ['failed', 'cancelled', 'canceled', 'budget_blocked'].includes(
+    currentStatus ?? '',
+  );
+  const useSuccessfulFallback = failedAttempt && Object.keys(latestSuccessful).length > 0;
+  const normalized = nCycleRecord(useSuccessfulFallback ? latestSuccessful : current);
+  if (useSuccessfulFallback) {
+    normalized.latestAttempt = {
+      cycleId: pickS(current, 'cycleId', 'cycle_id', 'id') ?? '',
+      status: currentStatus ?? 'failed',
+      startedAt: pickS(current, 'startedAt', 'started_at', 'created_at') ?? '',
+    };
+  }
+  return normalized;
 }
 
 const STREAM_CN: Record<string, string> = {
@@ -400,6 +418,36 @@ function nEconEvent(r: Rec): EconomicEvent {
     previous: pickS(r, 'previous') ?? '—',
     actual,
     releaseStatus,
+  };
+}
+
+export interface EconomicCalendarQuery {
+  dateFrom: string;
+  dateTo: string;
+  timezoneOffsetMinutes: number;
+}
+
+function localDateWithOffset(now: Date, dayOffset: number): string {
+  const shifted = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + dayOffset,
+    12,
+  );
+  return [
+    shifted.getFullYear(),
+    String(shifted.getMonth() + 1).padStart(2, '0'),
+    String(shifted.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+/** 以浏览器本地自然日请求：完整保留今天之前三天，而不是按 UTC 日期截断。 */
+export function browserCalendarQuery(now = new Date()): EconomicCalendarQuery {
+  return {
+    dateFrom: localDateWithOffset(now, -3),
+    dateTo: localDateWithOffset(now, 14),
+    // Date#getTimezoneOffset 是“本地到 UTC”的分钟差，后端需要相反方向。
+    timezoneOffsetMinutes: -now.getTimezoneOffset(),
   };
 }
 
@@ -617,8 +665,21 @@ export const catalystsContract = {
           };
         }),
     ),
-  calendar: (): Promise<EconomicEvent[]> =>
-    mockOr(() => fx2.getEconomicCalendar(), () => get('/catalysts/calendar').then((d) => unwrap(d, 'items', 'events').map(nEconEvent))),
+  calendar: (query?: EconomicCalendarQuery): Promise<EconomicEvent[]> =>
+    mockOr(
+      () => fx2.getEconomicCalendar(),
+      () => {
+        const queryString = query
+          ? toQuery({
+              date_from: query.dateFrom,
+              date_to: query.dateTo,
+              timezone_offset_minutes: query.timezoneOffsetMinutes,
+            })
+          : '';
+        const path = `/catalysts/calendar${queryString ? `?${queryString}` : ''}`;
+        return get(path).then((d) => unwrap(d, 'items', 'events').map(nEconEvent));
+      },
+    ),
   sources: (): Promise<SourceHealth[]> =>
     mockOr(
       () => fx2.getCatalystsSources(),
@@ -666,22 +727,27 @@ export const catalystsContract = {
         return nCycle(previous);
       }),
     ),
-  triggerFocusCycle: (): Promise<FocusCycleJob> =>
+  triggerFocusCycle: (retryCycleId: string | null = null): Promise<FocusCycleJob> =>
     // 个人版：POST 需带 expected_prepared_revision（来自 hotspots/status），XOR retry_cycle_id
     mockOr(() => {
       const job = fx2.triggerFocusCycle();
       // mock 的任务表仍以 jobId 为键；统一放进轮询标识槽，live 始终使用真实 cycleId。
       return { ...job, cycleId: job.cycleId ?? job.jobId };
     }, async () => {
-      const hs = await get('/catalysts/hotspots/status');
-      const revision = pickN(asRec(hs), 'prepared_revision');
-      const hasNewHotspots = pickB(asRec(hs), 'has_new_hotspots');
-      const preparedHotCount = pickN(asRec(hs), 'prepared_hot_count');
-      const body = buildFocusCycleRequestBody(
-        revision,
-        hasNewHotspots,
-        preparedHotCount,
-      );
+      let body;
+      if (retryCycleId) {
+        body = buildFocusCycleRequestBody(null, null, null, retryCycleId);
+      } else {
+        const hs = await get('/catalysts/hotspots/status');
+        const revision = pickN(asRec(hs), 'prepared_revision');
+        const hasNewHotspots = pickB(asRec(hs), 'has_new_hotspots');
+        const preparedHotCount = pickN(asRec(hs), 'prepared_hot_count');
+        body = buildFocusCycleRequestBody(
+          revision,
+          hasNewHotspots,
+          preparedHotCount,
+        );
+      }
       const { data, location } = await postCreate('/catalysts/market-focus-cycles', body);
       const rec = asRec(data);
       const locationId = idFromLocation(location);

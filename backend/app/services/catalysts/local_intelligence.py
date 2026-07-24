@@ -33,7 +33,7 @@ MODEL = "gpt-5.6-terra"
 REASONING = "max"
 EXECUTION_MODE = "background"
 NEWS_PROMPT_VERSION = "news-impact-zh-cn-v6"
-FOCUS_PROMPT_VERSION = "market-focus-zh-cn-v4"
+FOCUS_PROMPT_VERSION = "market-focus-zh-cn-v5"
 NEWS_RESULT_AUDIT_VERSION = "news-result-validation-v2"
 NEWS_PROMPT_FAMILY_RE = re.compile(r"^news-impact-zh-cn-v[1-9][0-9]*$")
 NEWS_SCHEMA_FAMILY_RE = re.compile(r"^news_impact_zh_cn_v[1-9][0-9]*$")
@@ -72,6 +72,10 @@ SCHEDULED_TRANSIENT_AI_ERRORS = frozenset(
         "ai_empty_response",
         "provider_failed",
         "provider_incomplete",
+        # Only the confirmed-terminal cancellation is retryable. The sibling
+        # provider_poll_timeout code means cancellation was not confirmed;
+        # retrying that state could overlap paid provider work.
+        "provider_poll_timeout_cancelled",
         "provider_rate_limited",
         "provider_response_expired",
         "provider_server_error",
@@ -3898,6 +3902,7 @@ class LocalCatalystIntelligence:
         as_of: datetime,
         currencies: Sequence[str] | None,
         min_impact: str | None,
+        timezone_offset_minutes: int = 0,
     ) -> dict[str, Any]:
         with self._connect() as connection:
             snapshot = connection.execute(
@@ -3919,7 +3924,12 @@ class LocalCatalystIntelligence:
         for row in rows:
             event = _loads(row["raw_json"], {})
             scheduled = _parse_time(event.get("scheduled_at_utc"))
-            if scheduled is None or not date_from <= scheduled.date() <= date_to:
+            if scheduled is None:
+                continue
+            scheduled_date = (
+                scheduled + timedelta(minutes=timezone_offset_minutes)
+            ).date()
+            if not date_from <= scheduled_date <= date_to:
                 continue
             currency = str(event.get("currency") or event.get("country_code") or "").upper()
             impact = str(event.get("impact") or "low").lower()
@@ -4833,16 +4843,61 @@ class LocalCatalystIntelligence:
         active_queue = queue_health.get("pending")
         if not queue_health.get("healthy") or not isinstance(active_queue, int):
             active_queue = self.max_queued
+        queued = 0
+        skipped = 0
+        resumed_focus_cycle_id: str | None = None
+        if active_queue < self.max_queued:
+            with self._connect() as connection:
+                focus_table = connection.execute(
+                    """SELECT 1 FROM sqlite_master
+                       WHERE type='table'
+                         AND name='catalyst_local_focus_cycles'"""
+                ).fetchone()
+                preparing_focus = (
+                    connection.execute(
+                        """SELECT cycle_id FROM catalyst_local_focus_cycles
+                           WHERE status='preparing'
+                             AND job_id='intent:' || cycle_id
+                           ORDER BY created_at LIMIT 1"""
+                    ).fetchone()
+                    if focus_table is not None
+                    else None
+                )
+            if preparing_focus is not None:
+                resumed_focus_cycle_id = str(preparing_focus["cycle_id"])
+                try:
+                    resumed_focus = self._retry_focus(
+                        resumed_focus_cycle_id,
+                        submission_source="scheduled",
+                    )
+                except CatalystError:
+                    skipped += 1
+                    resumed_focus_cycle_id = None
+                except RuntimeError as error:
+                    if str(error) != "ai_job_queue_full":
+                        raise
+                    skipped += 1
+                    resumed_focus_cycle_id = None
+                else:
+                    if resumed_focus.get("status") in {
+                        "pending",
+                        "queued",
+                        "in_progress",
+                    }:
+                        queued += 1
+                    else:
+                        skipped += 1
+                        resumed_focus_cycle_id = None
         # Keep one queue position available for a ready market-focus cycle. A
         # continuous news backlog must not fill the queue and starve the hourly
         # aggregate indefinitely. The daily Token budget, not an item-count
         # quota, remains the paid-work boundary.
         batch_capacity = max(
             0,
-            self.max_queued - 1 - active_queue,
+            self.max_queued
+            - active_queue
+            - (0 if resumed_focus_cycle_id is not None else 1),
         )
-        queued = 0
-        skipped = 0
         seen: set[int] = set()
         candidates: list[dict[str, Any]] = []
         focus_pending_news_ids: set[int] = set()
@@ -4882,7 +4937,7 @@ class LocalCatalystIntelligence:
                 continue
             seen.add(news_id)
             candidates.append(row)
-        if not candidates and not snapshot["items"]:
+        if not candidates and not snapshot["items"] and queued == 0:
             if slot is not None and claim_marker is not None:
                 with self._connect() as connection:
                     connection.execute(
@@ -5001,6 +5056,7 @@ class LocalCatalystIntelligence:
             prepared_revision
             and not focus_pending_news_ids
             and active_queue + queued < self.max_queued
+            and resumed_focus_cycle_id is None
         ):
             with self._connect() as connection:
                 existing_focus = connection.execute(

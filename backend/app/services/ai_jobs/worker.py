@@ -212,18 +212,56 @@ async def _finish_response(
         if not response_id:
             repository.fail(job["job_id"], owner, "provider_response_id_missing")
             return
+        poll_timeout = float(
+            getattr(settings, "openai_background_poll_timeout_seconds", 0.0)
+            or 0.0
+        )
+        if poll_timeout > 0 and _submitted_age_seconds(job) > poll_timeout:
+            # A single upstream background response occupies the only provider
+            # concurrency slot. Do not let an indefinitely queued response
+            # block every pending analysis. Ask the provider to cancel it; if
+            # the provider cannot return a terminal state, retire the local
+            # lease without creating a duplicate retry.
+            try:
+                terminal = await runtime.cancel(settings, response_id)
+            except Exception as exc:
+                logger.warning(
+                    "AI response exceeded poll window; cancellation failed (%s)",
+                    type(exc).__name__,
+                )
+                repository.fail(job["job_id"], owner, "provider_poll_timeout")
+                return
+            terminal_status = str(getattr(terminal, "status", "") or "")
+            if terminal_status in {"queued", "in_progress"}:
+                repository.fail(job["job_id"], owner, "provider_poll_timeout")
+                return
+            if terminal_status == "cancelled":
+                # This is distinct from an unknown cancellation outcome. The
+                # provider has confirmed that the old paid response is
+                # terminal, so the catalyst scheduler may safely apply its
+                # existing bounded retry policy without overlapping work.
+                repository.fail(
+                    job["job_id"],
+                    owner,
+                    "provider_poll_timeout_cancelled",
+                    usage=runtime.response_usage(terminal),
+                )
+                return
+            await _finish_response(
+                repository,
+                settings,
+                job,
+                owner,
+                terminal,
+            )
+            return
         repository.record_background_response(
             job["job_id"],
             owner,
             response_id,
             status,
             delay_seconds=_poll_delay(settings, int(job.get("poll_count") or 0)),
-            error_code=(
-                "poll_window_elapsed"
-                if _submitted_age_seconds(job)
-                > float(settings.openai_background_poll_timeout_seconds)
-                else None
-            ),
+            error_code=None,
         )
         return
     usage = runtime.response_usage(response)

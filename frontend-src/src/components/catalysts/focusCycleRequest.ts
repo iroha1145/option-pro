@@ -1,6 +1,7 @@
 export interface FocusCycleRequestBody {
   trigger: 'manual';
   expected_prepared_revision?: number;
+  retry_cycle_id?: string;
   force?: true;
 }
 
@@ -12,8 +13,17 @@ export function buildFocusCycleRequestBody(
   preparedRevision: number | null,
   hasNewHotspots: boolean | null,
   preparedHotCount: number | null,
+  retryCycleId: string | null = null,
 ): FocusCycleRequestBody {
   const body: FocusCycleRequestBody = { trigger: 'manual' };
+  if (retryCycleId) {
+    const normalized = retryCycleId.trim();
+    if (!/^mfc_[0-9a-f]{32}$/.test(normalized)) {
+      throw new Error('市场焦点周期编号无效');
+    }
+    body.retry_cycle_id = normalized;
+    return body;
+  }
   if (preparedRevision !== null) body.expected_prepared_revision = preparedRevision;
   if (
     preparedRevision !== null

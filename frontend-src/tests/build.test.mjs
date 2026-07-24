@@ -31,6 +31,14 @@ const catalystApiSource = path.resolve(
   'catalysts',
   'api.ts',
 );
+const focusCycleCardSource = path.resolve(
+  here,
+  '..',
+  'src',
+  'components',
+  'catalysts',
+  'FocusCycleCard.tsx',
+);
 const filterWorkbenchSource = path.resolve(here, '..', 'src', 'components', 'screener', 'FilterWorkbench.tsx');
 const accessApiSource = path.resolve(here, '..', 'src', 'api', 'modules', 'access.ts');
 const stockApiSource = path.resolve(here, '..', 'src', 'api', 'modules', 'stocks.ts');
@@ -139,6 +147,18 @@ test('market focus polling uses the cycle endpoint and only forces a consumed no
     trigger: 'manual',
     expected_prepared_revision: 12,
   });
+  assert.deepEqual(
+    buildFocusCycleRequestBody(
+      null,
+      null,
+      null,
+      'mfc_0123456789abcdef0123456789abcdef',
+    ),
+    {
+      trigger: 'manual',
+      retry_cycle_id: 'mfc_0123456789abcdef0123456789abcdef',
+    },
+  );
 });
 
 test('previous focus-cycle comparison reads the live history field', async () => {
@@ -148,6 +168,19 @@ test('previous focus-cycle comparison reads the live history field', async () =>
     source,
     /上一焦点周期快照暂不可用（契约未提供该端点）/,
   );
+});
+
+test('failed focus attempt keeps the latest successful result visible and retryable', async () => {
+  const [apiSource, cardSource] = await Promise.all([
+    readFile(catalystApiSource, 'utf8'),
+    readFile(focusCycleCardSource, 'utf8'),
+  ]);
+  assert.match(apiSource, /useSuccessfulFallback/);
+  assert.match(apiSource, /latest_successful_cycle/);
+  assert.match(apiSource, /normalized\.latestAttempt/);
+  assert.match(cardSource, /最近一次更新失败，当前展示上次成功结果/);
+  assert.match(cardSource, /triggerFocusCycle\(failedCycleId\)/);
+  assert.match(cardSource, /重试焦点周期/);
 });
 
 test('default catalyst feed requests translated analysis and preserves neutral articles', async () => {

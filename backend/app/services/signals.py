@@ -183,18 +183,22 @@ def _massive_daily(symbol: str, period: str) -> pd.DataFrame:
         },
         index=index,
     )
-    return _clean_frame(frame.sort_index())
+    cleaned = _clean_frame(frame.sort_index())
+    cleaned.attrs["price_provider"] = "Massive"
+    return cleaned
 
 
 def _yahoo_history(symbol: str, period: str = "1y") -> pd.DataFrame:
     try:
-        return _clean_frame(
+        frame = _clean_frame(
             yf.Ticker(symbol).history(
                 period=period,
                 auto_adjust=True,
                 timeout=_YAHOO_TIMEOUT_SECONDS,
             )
         )
+        frame.attrs["price_provider"] = "Yahoo/yfinance"
+        return frame
     except Exception:
         return pd.DataFrame()
 
@@ -571,96 +575,148 @@ def compute_market_signals() -> dict:
     return _cached("market_signals", 300, load)
 
 
+def compute_stock_signals_from_history(
+    ticker: str,
+    history: pd.DataFrame,
+    *,
+    spy_history: pd.DataFrame | None = None,
+    price_provider: str | None = None,
+) -> dict:
+    """Compute stock signals from caller-supplied, real daily OHLCV history."""
+
+    symbol = ticker.upper().strip()
+    hist = _clean_frame(history.copy())
+    spy = _history("SPY") if spy_history is None else _clean_frame(spy_history.copy())
+    if (
+        hist.empty
+        or len(hist) < 20
+        or not {"High", "Low", "Close", "Volume"}.issubset(hist.columns)
+    ):
+        raise RuntimeError(f"Insufficient price data for {symbol}")
+    close, volume = hist["Close"], hist["Volume"]
+    signals: dict[str, dict] = {}
+    add = lambda k, val, lab: signals.__setitem__(
+        k,
+        _with_score(k, val, lab, _score_stock_signal),
+    )
+
+    def safe(val):
+        """Convert NaN/Inf to None."""
+        if val is None:
+            return None
+        try:
+            f = float(val)
+            return round(f, 4) if math.isfinite(f) else None
+        except (TypeError, ValueError):
+            return None
+
+    # SMA distances
+    for period, key in [
+        (20, "sma20_dist"),
+        (50, "sma50_dist"),
+        (200, "sma200_dist"),
+    ]:
+        sma = close.rolling(period).mean().iloc[-1] if len(close) >= period else None
+        val = safe((close.iloc[-1] / sma - 1) * 100) if sma and safe(sma) else None
+        add(key, val, f"距{period}日线偏离%")
+
+    add("rsi14", safe(compute_rsi(close, 14)), "RSI(14)")
+
+    period_ret20 = compute_period_return(close, 20)
+    ret20 = safe(period_ret20 * 100) if period_ret20 is not None else None
+    add("return_20d", ret20, "20日涨幅%")
+
+    atr = compute_atr(hist, 14)
+    add("atr_percentile", safe(_percentile_rank(atr, _last(atr))), "ATR 1年分位%")
+
+    vol_mean = safe(volume.rolling(20).mean().iloc[-1]) if len(volume) >= 20 else None
+    vol_std = safe(volume.rolling(20).std().iloc[-1]) if len(volume) >= 20 else None
+    vol_cur = safe(volume.iloc[-1])
+    vol_z = (
+        safe((vol_cur - vol_mean) / vol_std)
+        if vol_cur is not None
+        and vol_mean is not None
+        and vol_std is not None
+        and vol_std > 0
+        else None
+    )
+    add("volume_zscore", vol_z, "成交量Z分数")
+
+    signals["_volume_today"] = {
+        "value": int(vol_cur) if vol_cur is not None else None,
+        "label": "今日成交量",
+    }
+    signals["_volume_avg20"] = {
+        "value": int(vol_mean) if vol_mean is not None else None,
+        "label": "20日平均成交量",
+    }
+    signals["_volume_ratio"] = {
+        "value": (
+            safe(vol_cur / vol_mean)
+            if vol_cur is not None and vol_mean is not None and vol_mean > 0
+            else None
+        ),
+        "label": "成交量/均量比",
+    }
+
+    add("obv_divergence", safe(compute_obv_divergence(close, volume)), "OBV背离")
+
+    if not spy.empty and "Close" in spy.columns:
+        stock_ret = safe(compute_period_return(close, 20))
+        spy_ret = safe(compute_period_return(spy["Close"], 20))
+        rs = (
+            safe((stock_ret - spy_ret) * 100)
+            if stock_ret is not None and spy_ret is not None
+            else None
+        )
+        add("relative_strength_spy", rs, "相对强弱(vs SPY)%")
+    else:
+        add("relative_strength_spy", None, "相对强弱(vs SPY)%")
+
+    # Options data is enrichment only. A provider 402/timeout must not erase
+    # otherwise valid price-derived stock signals.
+    try:
+        from app.services.yahoo import get_stock_iv
+
+        iv = get_stock_iv(symbol)
+    except Exception:
+        iv = None
+    add(
+        "atm_iv_percent",
+        round(iv * 100, 1) if iv is not None else None,
+        "当前ATM IV%",
+    )
+
+    day_range = safe(hist["High"].iloc[-1] - hist["Low"].iloc[-1])
+    close_pos = (
+        safe((close.iloc[-1] - hist["Low"].iloc[-1]) / day_range * 100)
+        if day_range is not None and day_range > 0
+        else None
+    )
+    add("close_position", close_pos, "收盘位于当日区间%")
+
+    add("macd_hist", safe(compute_macd_histogram(close)), "MACD柱状图方向")
+    signals["_price_provider"] = {
+        "value": price_provider,
+        "label": "价格历史来源",
+    }
+    return signals
+
+
 def compute_stock_signals(ticker: str) -> dict:
     symbol = ticker.upper().strip()
+
     def load() -> dict:
-        import math
-        hist = _history(symbol); spy = _history("SPY")
-        if hist.empty or len(hist) < 20:
-            raise RuntimeError(f"Insufficient price data for {symbol}")
-        close, volume = hist["Close"], hist["Volume"]
-        signals: dict[str, dict] = {}
-        add = lambda k, val, lab: signals.__setitem__(k, _with_score(k, val, lab, _score_stock_signal))
-
-        def safe(val):
-            """Convert NaN/Inf to None."""
-            if val is None: return None
-            try:
-                f = float(val)
-                return round(f, 4) if math.isfinite(f) else None
-            except (TypeError, ValueError):
-                return None
-
-        # SMA distances
-        for period, key in [(20, "sma20_dist"), (50, "sma50_dist"), (200, "sma200_dist")]:
-            sma = close.rolling(period).mean().iloc[-1] if len(close) >= period else None
-            val = safe((close.iloc[-1] / sma - 1) * 100) if sma and safe(sma) else None
-            add(key, val, f"距{period}日线偏离%")
-
-        add("rsi14", safe(compute_rsi(close, 14)), "RSI(14)")
-
-        period_ret20 = compute_period_return(close, 20)
-        ret20 = safe(period_ret20 * 100) if period_ret20 is not None else None
-        add("return_20d", ret20, "20日涨幅%")
-
-        atr = compute_atr(hist, 14)
-        add("atr_percentile", safe(_percentile_rank(atr, _last(atr))), "ATR 1年分位%")
-
-        vol_mean = safe(volume.rolling(20).mean().iloc[-1]) if len(volume) >= 20 else None
-        vol_std = safe(volume.rolling(20).std().iloc[-1]) if len(volume) >= 20 else None
-        vol_cur = safe(volume.iloc[-1])
-        vol_z = (
-            safe((vol_cur - vol_mean) / vol_std)
-            if vol_cur is not None
-            and vol_mean is not None
-            and vol_std is not None
-            and vol_std > 0
+        hist = _history(symbol)
+        provider = (
+            str(hist.attrs.get("price_provider"))
+            if hist.attrs.get("price_provider")
             else None
         )
-        add("volume_zscore", vol_z, "成交量Z分数")
-
-        signals["_volume_today"] = {
-            "value": int(vol_cur) if vol_cur is not None else None,
-            "label": "今日成交量",
-        }
-        signals["_volume_avg20"] = {
-            "value": int(vol_mean) if vol_mean is not None else None,
-            "label": "20日平均成交量",
-        }
-        signals["_volume_ratio"] = {
-            "value": (
-                safe(vol_cur / vol_mean)
-                if vol_cur is not None and vol_mean is not None and vol_mean > 0
-                else None
-            ),
-            "label": "成交量/均量比",
-        }
-
-        add("obv_divergence", safe(compute_obv_divergence(close, volume)), "OBV背离")
-
-        if not spy.empty:
-            stock_ret = safe(compute_period_return(close, 20))
-            spy_ret = safe(compute_period_return(spy["Close"], 20))
-            rs = safe((stock_ret - spy_ret) * 100) if stock_ret is not None and spy_ret is not None else None
-            add("relative_strength_spy", rs, "相对强弱(vs SPY)%")
-        else:
-            add("relative_strength_spy", None, "相对强弱(vs SPY)%")
-
-        try:
-            from app.services.yahoo import get_stock_iv
-            iv = get_stock_iv(symbol)
-        except Exception:
-            iv = None
-        add("atm_iv_percent", round(iv * 100, 1) if iv is not None else None, "当前ATM IV%")
-
-        day_range = safe(hist["High"].iloc[-1] - hist["Low"].iloc[-1])
-        close_pos = (
-            safe((close.iloc[-1] - hist["Low"].iloc[-1]) / day_range * 100)
-            if day_range is not None and day_range > 0
-            else None
+        return compute_stock_signals_from_history(
+            symbol,
+            hist,
+            price_provider=provider,
         )
-        add("close_position", close_pos, "收盘位于当日区间%")
 
-        add("macd_hist", safe(compute_macd_histogram(close)), "MACD柱状图方向")
-        return signals
     return _cached(f"stock_signals:{symbol}", 300, load)

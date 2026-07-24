@@ -21,6 +21,8 @@ const DEFAULT_STALE_MS = 5 * 60_000;
 const MAX_ENTRIES = 256;
 const cache = new Map<string, MarketReadEntry>();
 const inFlight = new Map<string, Promise<unknown>>();
+const pathVersions = new Map<string, number>();
+const forceBackoffExemptions = new Set<string>();
 let marketBackoffUntil = 0;
 
 function prune(now: number): void {
@@ -56,9 +58,17 @@ export function marketGet<T>(
     return Promise.resolve(hit.value as T);
   }
   const pending = inFlight.get(path);
+  // Path invalidation explicitly detaches work that predates an owner pull.
+  // Any request still registered here started after the latest invalidation,
+  // so forced readers should share it instead of duplicating provider calls.
   if (pending) return pending as Promise<T>;
 
-  if (marketBackoffUntil > now) {
+  // A completed owner pull grants the exact refreshed URL one follow-up read.
+  // Consume the grant when that force read starts, even when no pause is
+  // currently active, so a later request cannot reuse a stale exemption.
+  const bypassSharedBackoff =
+    options.force && forceBackoffExemptions.delete(path);
+  if (marketBackoffUntil > now && !bypassSharedBackoff) {
     if (!options.force && hit && hit.staleUntil > now) {
       return Promise.resolve(hit.value as T);
     }
@@ -73,16 +83,22 @@ export function marketGet<T>(
 
   const ttlMs = Math.max(0, options.ttlMs ?? DEFAULT_TTL_MS);
   const staleMs = Math.max(ttlMs, options.staleMs ?? DEFAULT_STALE_MS);
+  const requestVersion = pathVersions.get(path) ?? 0;
   const request = get<T>(path)
     .then((value) => {
       const completedAt = Date.now();
-      cache.set(path, {
-        value,
-        expiresAt: completedAt + ttlMs,
-        staleUntil: completedAt + staleMs,
-        touchedAt: completedAt,
-      });
-      prune(completedAt);
+      // A completed manual pull may invalidate an older GET while that GET is
+      // still in flight. Never let the older response overwrite the newly
+      // fetched provider result.
+      if ((pathVersions.get(path) ?? 0) === requestVersion) {
+        cache.set(path, {
+          value,
+          expiresAt: completedAt + ttlMs,
+          staleUntil: completedAt + staleMs,
+          touchedAt: completedAt,
+        });
+        prune(completedAt);
+      }
       return value;
     })
     .catch((error: unknown) => {
@@ -111,15 +127,35 @@ export function marketGet<T>(
       throw error;
     })
     .finally(() => {
-      inFlight.delete(path);
+      if (inFlight.get(path) === request) inFlight.delete(path);
     });
   inFlight.set(path, request);
   return request;
+}
+
+/**
+ * Invalidate resources that were explicitly refreshed by an owner action.
+ * Forced follow-up reads already bypass the shared 429 pause. Keep that pause
+ * intact for unrelated market endpoints so one successful stock pull cannot
+ * restart a provider request storm.
+ */
+export function resetMarketReadPaths(paths: string[]): void {
+  for (const path of paths) {
+    cache.delete(path);
+    // Detach reads that started before the successful owner action. Their
+    // responses may still resolve for their original caller, but versioning
+    // below prevents them from repopulating this cache.
+    inFlight.delete(path);
+    pathVersions.set(path, (pathVersions.get(path) ?? 0) + 1);
+    forceBackoffExemptions.add(path);
+  }
 }
 
 /** Test-only reset; production callers should rely on bounded expiry. */
 export function resetMarketReadState(): void {
   cache.clear();
   inFlight.clear();
+  pathVersions.clear();
+  forceBackoffExemptions.clear();
   marketBackoffUntil = 0;
 }

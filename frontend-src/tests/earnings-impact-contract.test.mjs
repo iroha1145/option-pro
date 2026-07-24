@@ -247,6 +247,10 @@ test('财报页面保留近期已公布结果并把低交互图表放到分析�
   assert.equal(page.includes('filteredItems.slice(0, visibleLimit)'), true);
   assert.equal(page.includes('再显示 {Math.min(LIST_PAGE_SIZE'), true);
   assert.equal(page.includes('row={selectedRow}'), true);
+  assert.equal(page.includes('xl:col-span-8'), true);
+  assert.equal(page.includes('xl:col-span-4'), true);
+  assert.equal(page.includes('xl:col-span-7'), false);
+  assert.equal(page.includes('xl:col-span-5'), false);
   const rightColumn = page.slice(page.indexOf('B3 AI 影响 + 低交互图表'));
   assert.equal(rightColumn.includes('<ImpactCard'), true);
   assert.equal(rightColumn.includes('<EpsHatchChart'), true);

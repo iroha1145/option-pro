@@ -125,11 +125,13 @@ def build_runtime_request(job_type: str, payload: dict[str, Any]) -> RuntimeRequ
     elif job_type == "signal_analysis":
         instructions = common + (
             "只分析输入的程序化信号和评分，不使用网页搜索、工具、新闻或未提供的事件。"
+            "证据时间以evidence_as_of为准，不得把历史快照描述为当前实时数据；"
+            "若evidence_stale为true，必须把final_bias设为insufficient_data并明确指出数据陈旧。"
             "置信度表示证据一致性，不代表真实概率。缺少成交主动方、到期日或关键周期时，"
             "必须降低data_quality与期权流置信度。"
         )
         use_web_search = False
-        schema_name = "signal_analysis_zh_cn_v4"
+        schema_name = "signal_analysis_zh_cn_v5"
         boundary = "untrusted_signal_data"
     elif job_type == "news_impact":
         instructions = common + (
@@ -158,11 +160,16 @@ def build_runtime_request(job_type: str, payload: dict[str, Any]) -> RuntimeRequ
             "cycle_id、as_of和input_hash必须原样复制。"
             "不得浏览网页，不得虚构催化剂；证据编号只能使用allowed_event_group_ids，"
             "所有结构化字段和自然语言字段中的股票代码只能使用allowed_tickers。"
+            "逐股评估必须遵守证据语义：insufficient_evidence为true时，"
+            "catalyst_bias必须为null；insufficient_evidence为false时，"
+            "catalyst_bias必须为-100至100的整数。"
+            "同一评估的supporting_event_ids与conflicting_event_ids不得重叠，"
+            "两个数组内部也不得包含重复编号。"
             "当输入标明没有新的重要事件时，no_new_material_catalyst必须为true，"
             "dominant_events必须为空。"
         )
         use_web_search = False
-        schema_name = "market_focus_zh_cn_v4"
+        schema_name = "market_focus_zh_cn_v5"
         boundary = "untrusted_market_focus_snapshot"
     else:
         raise ValueError("unsupported_job_type")

@@ -16,8 +16,18 @@ const RESULT_META = {
   pending: { text: '进行中', cls: 'bg-brand-50 text-brand-700' },
 } as const;
 
-export default function SignalList({ ticker }: { ticker: string }) {
-  const { data: signals } = usePolling(() => signalsApi.stock(ticker), null, [ticker]);
+export default function SignalList({
+  ticker,
+  refreshVersion = 0,
+}: {
+  ticker: string;
+  refreshVersion?: number;
+}) {
+  const { data: signals } = usePolling(
+    () => signalsApi.stock(ticker),
+    null,
+    [ticker, refreshVersion],
+  );
   const { data: events } = usePolling(() => breakoutsApi.byTicker(ticker), null, [ticker]);
 
   const hasSignals = (signals?.length ?? 0) > 0;

@@ -489,6 +489,56 @@ async def test_calendar_sync_keeps_frozen_snapshot_across_pages(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_calendar_sync_applies_actual_from_a_later_upstream_revision(
+    tmp_path,
+):
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        sequence = 1 if request.url.params.get("after_sequence") == "0" else 2
+        as_of = AS_OF if sequence == 1 else NEXT_AS_OF
+        event = _event(1)
+        if sequence == 2:
+            event["actual"] = "217K"
+            event["source_fetched_at"] = NEXT_AS_OF
+            event["available_at"] = NEXT_AS_OF
+        return httpx.Response(
+            200,
+            json={
+                "items": [event],
+                "has_more": False,
+                "next_cursor": None,
+                "watermark": {
+                    "sequence": sequence,
+                    "snapshot_token": "cal_" + str(sequence) * 40,
+                    "as_of": as_of,
+                },
+                "data_through": as_of,
+                "is_stale": False,
+                "next_updated_after": as_of,
+                "next_after_sequence": sequence,
+            },
+        )
+
+    repository = CatalystEtlRepository(tmp_path / "catalyst.db")
+    async with MacroLensEtlClient(
+        EtlClientConfig("https://macrolens.example", "owner-token"),
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        sync = MacroLensIncrementalSync(client, repository)
+        first = await sync.sync_calendar()
+        second = await sync.sync_calendar()
+
+    assert first.watermark_sequence == 1
+    assert second.watermark_sequence == 2
+    assert requests[0].url.params["after_sequence"] == "0"
+    assert requests[1].url.params["after_sequence"] == "1"
+    assert repository.calendar_events()[0]["actual"] == "217K"
+    assert repository.state("calendar").updated_after == NEXT_AS_OF
+
+
+@pytest.mark.anyio
 async def test_changed_watermark_rejects_page_without_advancing_checkpoint(tmp_path):
     first_round = True
 

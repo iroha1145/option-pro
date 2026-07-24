@@ -377,12 +377,13 @@ export default function Earnings() {
         )}
       </div>
 
-      {/* B2 列表（左 7 列） · B3 分析与补充图表（右 5 列） */}
+      {/* B2 列表（左 8 列） · B3 分析与补充图表（右 4 列）。
+          完整桌面表有 7 个数据列，7/5 分栏会在 2xl 表格断点把 AI 操作列裁掉。 */}
       <div
         className="mt-6 grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-12"
         aria-label="财报主体"
       >
-        <div className="min-w-0 space-y-6 xl:col-span-7">
+        <div className="min-w-0 space-y-6 xl:col-span-8">
           {loading ? (
             <div className="card-surface">
               <SkeletonRows rows={6} />
@@ -449,7 +450,7 @@ export default function Earnings() {
         </div>
 
         {/* B3 AI 影响 + 低交互图表，集中在右栏，列表保持可读宽度。 */}
-        <div className="min-w-0 space-y-6 xl:col-span-5">
+        <div className="min-w-0 space-y-6 xl:col-span-4">
           <EarningsAnalysisControls />
           {loading ? (
             <SkeletonCard />

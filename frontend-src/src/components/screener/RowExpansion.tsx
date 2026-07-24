@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { motion } from 'framer-motion';
 import { stocksApi } from '@/api/modules/stocks';
+import { ApiError } from '@/api/client';
 import type { ScreenerRow, Signal } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { fmtCompact } from '@/lib/format';
@@ -18,18 +19,20 @@ import Sparkline from '@/components/charts/Sparkline';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import { strengthBarClass } from '@/components/shared/StrengthBar';
 import { subscoreDimsOf } from './types';
+import ManualStockPull from '@/components/detail/ManualStockPull';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
-/* ---------------- 近 6 日收盘（live 懒加载 + 模块级缓存；表格/卡片双实例共享一次请求） ---------------- */
+/* ---------------- 近 6 日收盘（live 懒加载；表格/卡片双实例只共享进行中的请求） ---------------- */
 const DOT_DAYS = 6;
 const closesCache = new Map<string, Promise<number[] | null>>();
 
-function fetchDailyCloses(ticker: string): Promise<number[] | null> {
+function fetchDailyCloses(ticker: string, force = false): Promise<number[] | null> {
+  if (force) closesCache.delete(ticker);
   let p = closesCache.get(ticker);
   if (!p) {
     p = stocksApi
-      .chart(ticker, '1d') // 后端真实日 K 周期
+      .chart(ticker, '1d', 'raw', force) // 后端真实日 K 周期
       .then((c) => {
         const closes = c.candles
           .map((b) => b.c)
@@ -37,9 +40,13 @@ function fetchDailyCloses(ticker: string): Promise<number[] | null> {
           .slice(-DOT_DAYS);
         return closes.length >= 2 ? closes : null;
       })
-      .catch(() => {
-        closesCache.delete(ticker); // 失败不缓存，下次展开可重试
-        return null;
+      .catch((error) => {
+        throw error;
+      })
+      .finally(() => {
+        // 成功数据的新鲜度由 marketGet 统一管理。这里只合并并发请求，
+        // 不能在单页会话中永久冻结第一次展开时的六日收盘。
+        if (closesCache.get(ticker) === p) closesCache.delete(ticker);
       });
     closesCache.set(ticker, p);
   }
@@ -53,17 +60,26 @@ function fetchDailyCloses(ticker: string): Promise<number[] | null> {
 function DotMatrixBlock({ row }: { row: ScreenerRow }) {
   const hasSpark = row.sparkline.length >= 2;
   const [closes, setCloses] = useState<number[] | null | undefined>(hasSpark ? row.sparkline : undefined);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (hasSpark) {
       setCloses(row.sparkline);
+      setLoadError(null);
       return;
     }
     let alive = true;
     setCloses(undefined);
-    void fetchDailyCloses(row.ticker).then((v) => {
-      if (alive) setCloses(v);
-    });
+    setLoadError(null);
+    void fetchDailyCloses(row.ticker)
+      .then((v) => {
+        if (alive) setCloses(v);
+      })
+      .catch((error: unknown) => {
+        if (!alive) return;
+        setCloses(null);
+        setLoadError(error instanceof ApiError ? error.message : '日线接口暂未返回可用数据');
+      });
     return () => {
       alive = false;
     };
@@ -76,6 +92,17 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
       ? `近 ${closes.length} 日 · 点阵面积`
       : '日线 · 点阵面积';
 
+  const refreshAfterPull = () => {
+    setCloses(undefined);
+    setLoadError(null);
+    void fetchDailyCloses(row.ticker, true)
+      .then(setCloses)
+      .catch((error: unknown) => {
+        setCloses(null);
+        setLoadError(error instanceof ApiError ? error.message : '日线接口暂未返回可用数据');
+      });
+  };
+
   return (
     <div>
       <p className="eyebrow">{title}</p>
@@ -84,9 +111,10 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
           <SkeletonBlock className="h-[72px] w-full rounded-sm" />
         ) : closes === null ? (
           /* 接口拿不到日线：如实留空，严禁 Infinity/编造 */
-          <div className="flex h-[72px] flex-col items-center justify-center gap-1 text-center">
+          <div className="flex min-h-[96px] flex-col items-center justify-center gap-1.5 text-center">
             <Icon name="candle" size={16} className="text-ink-300" />
-            <p className="text-caption text-ink-400">日线数据暂不可用 · 留空优于编造</p>
+            <p className="text-caption text-ink-400">{loadError ?? '日线数据暂不可用'}</p>
+            <ManualStockPull ticker={row.ticker} onPulled={refreshAfterPull} compact />
           </div>
         ) : (
           <>
