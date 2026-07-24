@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from datetime import date, datetime, timedelta, timezone
+from functools import lru_cache
 import hashlib
 import json
 import math
@@ -174,8 +175,13 @@ class EarningsReportAction(BaseModel):
     confirm: StrictBool
 
 
+@lru_cache(maxsize=4)
+def _job_repository_for_path(path: str) -> AIJobRepository:
+    return AIJobRepository(path)
+
+
 def _job_repository() -> AIJobRepository:
-    return AIJobRepository(get_settings().openai_job_db_path)
+    return _job_repository_for_path(str(get_settings().openai_job_db_path))
 
 
 def _require_runtime_capability() -> None:

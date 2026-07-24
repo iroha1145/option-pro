@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import threading
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -226,6 +227,8 @@ def _settled_budget_charge_microusd(
 class AIJobRepository:
     def __init__(self, path: str | Path):
         self.path = Path(path)
+        self._initialize_lock = threading.Lock()
+        self._initialized = False
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -240,6 +243,26 @@ class AIJobRepository:
             connection.close()
 
     def initialize(self) -> None:
+        """Run the durable schema and recovery checks explicitly.
+
+        Explicit callers may use this again after changing a database out of
+        band. Normal repository operations use ``ensure_initialized`` so the
+        worker does not acquire a schema write lock on every queue poll.
+        """
+        with self._initialize_lock:
+            self._initialized = False
+            self._initialize_database()
+            self._initialized = True
+
+    def ensure_initialized(self) -> None:
+        """Initialize this repository instance once, including across threads."""
+        with self._initialize_lock:
+            if self._initialized:
+                return
+            self._initialize_database()
+            self._initialized = True
+
+    def _initialize_database(self) -> None:
         with self._connect() as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=FULL")
@@ -883,7 +906,7 @@ class AIJobRepository:
                 raise ValueError("invalid_ai_job_batch")
         elif batch_position is not None:
             raise ValueError("invalid_ai_job_batch")
-        self.initialize()
+        self.ensure_initialized()
         payload_json = self._canonical_payload(payload)
         request_hash = self._request_hash(
             job_type,
@@ -1314,7 +1337,7 @@ class AIJobRepository:
         return hashlib.sha256(envelope.encode("utf-8")).hexdigest()
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
-        self.initialize()
+        self.ensure_initialized()
         with self._connect() as connection:
             row = connection.execute(
                 """SELECT j.*,s.submission_source FROM ai_jobs AS j
@@ -1331,7 +1354,7 @@ class AIJobRepository:
         *,
         report_id: str | None = None,
     ) -> dict[str, Any] | None:
-        self.initialize()
+        self.ensure_initialized()
         with self._connect() as connection:
             report_filter = ""
             parameters: list[Any] = [job_type, ticker.upper()]
@@ -1363,7 +1386,7 @@ class AIJobRepository:
     def latest_for_ticker(self, job_type: str, ticker: str) -> dict[str, Any] | None:
         """Return the latest durable job for a ticker, regardless of state."""
 
-        self.initialize()
+        self.ensure_initialized()
         with self._connect() as connection:
             row = connection.execute(
                 """
@@ -1381,7 +1404,7 @@ class AIJobRepository:
     def active_scheduled_earnings_pre_release_count(self) -> int:
         """Count only active automatic preliminary earnings analyses."""
 
-        self.initialize()
+        self.ensure_initialized()
         with self._connect() as connection:
             return int(
                 connection.execute(
@@ -1408,7 +1431,7 @@ class AIJobRepository:
         analysis_stage: str | None = None,
         status: str | None = None,
     ) -> dict[str, Any] | None:
-        self.initialize()
+        self.ensure_initialized()
         with self._connect() as connection:
             stage_filter = ""
             status_filter = ""
@@ -1468,7 +1491,7 @@ class AIJobRepository:
 
         if isinstance(retention_days, bool) or retention_days < 1:
             raise ValueError("invalid_earnings_retention_days")
-        self.initialize()
+        self.ensure_initialized()
         observed = (now or _utcnow()).astimezone(timezone.utc)
         cutoff = _iso(observed - timedelta(days=retention_days))
         with self._connect() as connection:
@@ -1508,7 +1531,7 @@ class AIJobRepository:
             return len(expired_ids)
 
     def claim_due(self, owner: str, lease_seconds: int) -> dict[str, Any] | None:
-        self.initialize()
+        self.ensure_initialized()
         now_dt = _utcnow()
         now = _iso(now_dt)
         lease_expires = _iso(now_dt + timedelta(seconds=lease_seconds))
@@ -1910,7 +1933,7 @@ class AIJobRepository:
 
         if not response_id:
             raise ValueError("ai_job_recovery_response_id_required")
-        self.initialize()
+        self.ensure_initialized()
         current = self.get_job(job_id)
         if current is None:
             raise RuntimeError("ai_job_recovery_not_found")
@@ -2189,7 +2212,7 @@ class AIJobRepository:
             connection.commit()
 
     def request_cancel(self, job_id: str) -> dict[str, Any] | None:
-        self.initialize()
+        self.ensure_initialized()
         now = _iso()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -2357,7 +2380,7 @@ class AIJobRepository:
         owner UI and the worker agree about whether the paid slot is available.
         """
 
-        self.initialize()
+        self.ensure_initialized()
         observed = now or _utcnow()
         unknown_submission_cutoff = _iso(
             observed
@@ -2731,7 +2754,7 @@ class AIJobRepository:
 
     def health(self) -> dict[str, Any]:
         try:
-            self.initialize()
+            self.ensure_initialized()
             with self._connect() as connection:
                 connection.execute("SELECT 1").fetchone()
                 pending = connection.execute(

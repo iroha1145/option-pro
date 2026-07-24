@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import json
+import sqlite3
 import sys
 import threading
 from datetime import datetime, timedelta, timezone
@@ -112,6 +113,111 @@ def _create_budget_job(
         schema_sha256=digest,
         max_queued=200,
     )
+
+
+def test_repository_lazy_initialization_runs_once_across_threads(
+    tmp_path,
+    monkeypatch,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    original = repository._initialize_database
+    workers = 8
+    start = threading.Barrier(workers)
+    count_lock = threading.Lock()
+    calls = 0
+
+    def counted_initialize():
+        nonlocal calls
+        with count_lock:
+            calls += 1
+        threading.Event().wait(0.05)
+        original()
+
+    def initialize_from_worker(_index):
+        start.wait(timeout=1)
+        repository.ensure_initialized()
+
+    monkeypatch.setattr(repository, "_initialize_database", counted_initialize)
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        list(executor.map(initialize_from_worker, range(workers)))
+
+    assert calls == 1
+    assert repository._initialized is True
+    assert repository.health()["healthy"] is True
+    assert calls == 1
+
+
+def test_repository_lazy_initialization_retries_after_failure(
+    tmp_path,
+    monkeypatch,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    original = repository._initialize_database
+    calls = 0
+
+    def fail_once():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise sqlite3.OperationalError("database is busy")
+        original()
+
+    monkeypatch.setattr(repository, "_initialize_database", fail_once)
+
+    with pytest.raises(sqlite3.OperationalError, match="database is busy"):
+        repository.ensure_initialized()
+
+    assert repository._initialized is False
+    repository.ensure_initialized()
+    assert repository._initialized is True
+    assert calls == 2
+
+
+def test_repository_explicit_initialization_still_rechecks_database(
+    tmp_path,
+    monkeypatch,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    original = repository._initialize_database
+    calls = 0
+
+    def counted_initialize():
+        nonlocal calls
+        calls += 1
+        original()
+
+    monkeypatch.setattr(repository, "_initialize_database", counted_initialize)
+
+    repository.ensure_initialized()
+    repository.ensure_initialized()
+    repository.initialize()
+
+    assert calls == 2
+
+
+def test_repository_failed_explicit_recheck_requires_lazy_retry(
+    tmp_path,
+    monkeypatch,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    repository.ensure_initialized()
+    original = repository._initialize_database
+    fail_recheck = True
+
+    def recheck():
+        if fail_recheck:
+            raise sqlite3.OperationalError("database is busy")
+        original()
+
+    monkeypatch.setattr(repository, "_initialize_database", recheck)
+
+    with pytest.raises(sqlite3.OperationalError, match="database is busy"):
+        repository.initialize()
+
+    assert repository._initialized is False
+    fail_recheck = False
+    repository.ensure_initialized()
+    assert repository._initialized is True
 
 
 def _earnings_result():
@@ -1958,6 +2064,43 @@ def test_response_expiry_uses_submission_time_not_queue_creation_time(
     assert retrieved == 1
     assert waiting["status"] == "in_progress"
     assert waiting["error_code"] is None
+
+
+def test_job_polling_reuses_initialized_repository(monkeypatch, tmp_path):
+    path = tmp_path / "ai-jobs.db"
+    seeded_repository = AIJobRepository(path)
+    row, _ = _create_earnings_job(seeded_repository)
+    settings = _settings(path)
+    original = AIJobRepository._initialize_database
+    calls = 0
+
+    def counted_initialize(repository):
+        nonlocal calls
+        calls += 1
+        original(repository)
+
+    ai._job_repository_for_path.cache_clear()
+    monkeypatch.setattr(ai, "get_settings", lambda: settings)
+    monkeypatch.setattr(
+        AIJobRepository,
+        "_initialize_database",
+        counted_initialize,
+    )
+    app = FastAPI()
+    app.include_router(ai.router)
+    client = TestClient(app, base_url="http://localhost")
+
+    try:
+        first = client.get(f"/api/ai/jobs/{row['job_id']}")
+        second = client.get(f"/api/ai/jobs/{row['job_id']}")
+    finally:
+        ai._job_repository_for_path.cache_clear()
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["job_id"] == row["job_id"]
+    assert second.json()["job_id"] == row["job_id"]
+    assert calls == 1
 
 
 def test_legacy_get_never_creates_paid_analysis(monkeypatch, tmp_path):
