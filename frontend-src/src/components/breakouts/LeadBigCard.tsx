@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { motion } from 'framer-motion';
+import { ApiError } from '@/api/client';
 import { breakoutsApi } from '@/api/modules/breakouts';
 import { stocksApi } from '@/api/modules/stocks';
 import type { Candle } from '@/api/types';
@@ -261,6 +262,33 @@ function buildMiniOption(bars: Candle[]): ChartOption {
 function MiniKline({ ticker }: { ticker: string }) {
   const { data, error, loading, refresh } = usePolling(() => stocksApi.chart(ticker, '1d'), null, [ticker]);
   const option = useMemo(() => (data && data.candles.length > 1 ? buildMiniOption(data.candles) : null), [data]);
+  /* 突破标的常在焦点池外：503 快照未生成时可手动拉取（与详情页 ManualStockPull 同一预算通道） */
+  const [pulling, setPulling] = useState(false);
+  const [pullError, setPullError] = useState<string | null>(null);
+  useEffect(() => {
+    setPullError(null);
+    setPulling(false);
+  }, [ticker]);
+  const snapshotMissing =
+    error instanceof ApiError && (error.bizCode === 'public_snapshot_unavailable' || error.code === 503);
+
+  const pullAndReload = async () => {
+    if (pulling) return;
+    setPulling(true);
+    setPullError(null);
+    try {
+      await stocksApi.pull(ticker);
+      refresh();
+    } catch (cause) {
+      setPullError(
+        cause instanceof ApiError
+          ? `${cause.message}${cause.retryAfter ? ` · ${cause.retryAfter} 秒后可重试` : ''}`
+          : '拉取失败，请稍后重试',
+      );
+    } finally {
+      setPulling(false);
+    }
+  };
 
   return (
     <div className="relative h-[120px] overflow-hidden rounded-md border border-line-chart bg-card-warm sm:h-[150px]">
@@ -271,14 +299,40 @@ function MiniKline({ ticker }: { ticker: string }) {
       ) : error || !option ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-4 text-center">
           <img src="/empty-chart.svg" alt="" className="h-12 w-auto opacity-90" loading="lazy" />
-          <p className="text-caption font-medium text-ink-600">K线读取失败</p>
-          <p className="text-micro text-ink-400">日线行情暂不可用</p>
-          <button
-            onClick={refresh}
-            className="mt-1.5 rounded-md border border-line bg-card px-2.5 py-1 text-micro font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
-          >
-            重试
-          </button>
+          <p className="text-caption font-medium text-ink-600">
+            {snapshotMissing ? '当日K线快照未生成' : 'K线读取失败'}
+          </p>
+          <p className="text-micro text-ink-400">
+            {snapshotMissing ? '焦点池外标的，可手动拉取真实行情' : '日线行情暂不可用'}
+          </p>
+          {pullError && (
+            <p role="alert" className="text-micro text-down-700">
+              {pullError}
+            </p>
+          )}
+          <div className="mt-1.5 flex items-center gap-1.5">
+            {snapshotMissing && (
+              <button
+                onClick={() => void pullAndReload()}
+                disabled={pulling}
+                className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-2.5 py-1 text-micro font-medium text-white transition-[filter,opacity] duration-fast hover:brightness-105 disabled:cursor-wait disabled:opacity-70"
+              >
+                {pulling && (
+                  <span
+                    className="size-2.5 animate-spin rounded-full border-2 border-white/35 border-t-white"
+                    aria-hidden="true"
+                  />
+                )}
+                {pulling ? '正在拉取' : '拉取行情'}
+              </button>
+            )}
+            <button
+              onClick={refresh}
+              className="rounded-md border border-line bg-card px-2.5 py-1 text-micro font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+            >
+              重试
+            </button>
+          </div>
         </div>
       ) : (
         <ReactECharts option={option} ariaLabel={`${ticker} 当日迷你 K 线图`} />

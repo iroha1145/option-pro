@@ -3,17 +3,20 @@
  * sticky Header + IndexTape + 内容槽（<Outlet/>，page-fade 转场）+ Footer
  * 全局：命令面板（⌘K）、股票详情抽屉、移动 Dock、Toast。
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Suspense, createContext, lazy, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import Navbar from '@/components/Navbar';
 import IndexTape from '@/components/IndexTape';
 import Footer from '@/components/Footer';
 import RouteErrorBoundary from '@/components/shared/RouteErrorBoundary';
+import PageFallback from '@/components/shared/PageFallback';
 import MobileDock from '@/components/MobileDock';
 import CommandPalette, { pushRecent } from '@/components/CommandPalette';
 import Drawer from '@/components/Drawer';
-import StockDrawerBody from '@/components/StockDrawerBody';
+
+/* 抽屉体只在用户点开个股时才需要，独立分包 */
+const StockDrawerBody = lazy(() => import('@/components/StockDrawerBody'));
 
 interface ShellContextValue {
   openPalette: () => void;
@@ -70,7 +73,9 @@ export default function Layout() {
             >
               {/* 按路由重建的错误边界:页面崩溃显示错误卡而非白屏,切页自动复位 */}
               <RouteErrorBoundary>
-                <Outlet />
+                <Suspense fallback={<PageFallback />}>
+                  <Outlet />
+                </Suspense>
               </RouteErrorBoundary>
             </motion.div>
           </AnimatePresence>
@@ -99,7 +104,11 @@ export default function Layout() {
           )
         }
       >
-        {drawerTicker && <StockDrawerBody ticker={drawerTicker} />}
+        {drawerTicker && (
+          <Suspense fallback={<PageFallback />}>
+            <StockDrawerBody ticker={drawerTicker} />
+          </Suspense>
+        )}
       </Drawer>
     </ShellContext.Provider>
   );

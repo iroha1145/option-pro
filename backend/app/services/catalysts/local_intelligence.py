@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import json
 import math
 import re
 import sqlite3
+import threading
+import time
 import uuid
 from collections import Counter
 from contextlib import contextmanager
@@ -49,7 +52,7 @@ _FOCUS_WAITING_PLACEHOLDERS = frozenset(
 _LEGACY_PLACEHOLDER_INPUT_ERROR = "legacy_placeholder_input_hidden"
 AMBIGUOUS_TICKERS = frozenset({"AI", "ON", "CAT"})
 TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-^]{0,11}$")
-SCHEMA_VERSION = "optix-local-catalyst-v3"
+SCHEMA_VERSION = "optix-local-catalyst-v4"
 NEWS_RESULT_CONTRACT_ID = (
     "news-impact-result:"
     f"{ai_runtime.RESULT_VALIDATION_CONTRACT_VERSION}:"
@@ -117,6 +120,8 @@ CREATE TABLE IF NOT EXISTS catalyst_local_news_revisions (
 );
 CREATE INDEX IF NOT EXISTS idx_local_news_available
     ON catalyst_local_news_revisions(source_available_at DESC,news_id DESC);
+CREATE INDEX IF NOT EXISTS idx_local_news_window
+    ON catalyst_local_news_revisions(COALESCE(published_at,fetched_at) DESC);
 
 CREATE TABLE IF NOT EXISTS catalyst_local_analysis_links (
     news_id INTEGER NOT NULL,
@@ -271,6 +276,96 @@ TIMESTAMP_NORMALIZATION_VERSION = "optix-local-catalyst-timestamps-v1"
 TIMESTAMP_NORMALIZATION_CHECKSUM = hashlib.sha256(
     b"normalize local catalyst timestamps to UTC Z v1"
 ).hexdigest()
+
+# ---------------------------------------------------------------------------
+# Active-revision read cache.
+#
+# The point-in-time revision view is deterministic between store writes, yet
+# it used to be recomputed from the full change journal on every feed/batch
+# read (seconds of CPU on the production dataset). Entries are keyed by
+# (db path, window) and validated on every read against a cheap store cursor,
+# so a write by any process (web or worker share the SQLite file) invalidates
+# immediately on the next read. The age cap only bounds how far the *window
+# lower bound* may lag behind wall clock while no writes happen; it is not a
+# correctness boundary. Historical `as_of` reads (cursor pagination anchors)
+# bypass the cache entirely and keep exact point-in-time semantics.
+# ---------------------------------------------------------------------------
+_REVISION_CACHE: dict[tuple[str, int], dict[str, Any]] = {}
+_REVISION_CACHE_LOCK = threading.Lock()
+_REVISION_CACHE_MAX_ENTRIES = 32
+_REVISION_CACHE_MAX_AGE_SECONDS = 300.0
+_REVISION_CACHE_AS_OF_TOLERANCE_SECONDS = 90.0
+
+
+def _reset_revision_cache() -> None:
+    with _REVISION_CACHE_LOCK:
+        _REVISION_CACHE.clear()
+
+
+def _revision_store_cursor(connection: sqlite3.Connection) -> tuple[Any, ...]:
+    """Cheap fingerprint of every table the revision view depends on.
+
+    The change/revision journals are append-only (O(1) MAX(rowid)); the
+    analysis link/audit tables stay small but see in-place result updates,
+    so their fingerprint also sums payload lengths — an in-place edit of a
+    published result (the fail-closed corruption scenarios exercised by the
+    test suite) must invalidate immediately, not after the age cap.
+    """
+    row = connection.execute(
+        """SELECT
+               (SELECT MAX(rowid) FROM macrolens_etl_news_changes),
+               (SELECT MAX(rowid) FROM catalyst_local_news_revisions),
+               (SELECT COUNT(*) FROM catalyst_local_analysis_links),
+               (SELECT MAX(rowid) FROM catalyst_local_analysis_links),
+               (SELECT MAX(COALESCE(result_available_at,''))
+                  FROM catalyst_local_analysis_links),
+               (SELECT MAX(COALESCE(created_at,''))
+                  FROM catalyst_local_analysis_links),
+               (SELECT TOTAL(
+                    LENGTH(COALESCE(result_json,''))
+                    + LENGTH(COALESCE(verified_at,''))
+                ) FROM catalyst_local_analysis_links),
+               (SELECT COUNT(*) FROM catalyst_local_analysis_result_audit),
+               (SELECT MAX(rowid) FROM catalyst_local_analysis_result_audit),
+               (SELECT TOTAL(
+                    LENGTH(COALESCE(result_json,''))
+                    + LENGTH(COALESCE(outcome,''))
+                    + LENGTH(COALESCE(reason,''))
+                ) FROM catalyst_local_analysis_result_audit)"""
+    ).fetchone()
+    return tuple(row)
+
+
+def _copy_revision_row(row: dict[str, Any]) -> dict[str, Any]:
+    copied = dict(row)
+    for key in ("canonical_tickers", "source_names"):
+        value = copied.get(key)
+        if isinstance(value, list):
+            copied[key] = list(value)
+    return copied
+
+
+def _copy_feed_item(item: dict[str, Any]) -> dict[str, Any]:
+    copied = dict(item)
+    for key in (
+        "source_tickers",
+        "_validation_sources",
+        "_validation_allowed_tickers",
+    ):
+        value = copied.get(key)
+        if isinstance(value, list):
+            copied[key] = list(value)
+    analysis = copied.get("analysis")
+    if isinstance(analysis, dict):
+        analysis_copy = copy.deepcopy(analysis)
+        copied["analysis"] = analysis_copy
+        # _item aliases trusted_stock_impacts to analysis["affected_stocks"];
+        # keep that identity in the copy.
+        if "trusted_stock_impacts" in copied:
+            copied["trusted_stock_impacts"] = (
+                analysis_copy.get("affected_stocks") or []
+            )
+    return copied
 
 
 def _utc_now() -> datetime:
@@ -2761,6 +2856,26 @@ class LocalCatalystIntelligence:
             published += 1
         return published
 
+    def _revision_cache_key(
+        self,
+        *,
+        as_of: datetime,
+        window_hours: int | None,
+    ) -> tuple[str, int] | None:
+        """Cache key when this read may be served from cache, else None.
+
+        Only near-now reads are cacheable; historical `as_of` values (cursor
+        pagination anchors) must keep exact point-in-time semantics.
+        """
+        if window_hours is None:
+            return None
+        if (
+            abs((_utc_now() - as_of).total_seconds())
+            > _REVISION_CACHE_AS_OF_TOLERANCE_SECONDS
+        ):
+            return None
+        return (str(self.db_path), int(window_hours))
+
     def _active_revisions(
         self,
         connection: sqlite3.Connection,
@@ -2768,28 +2883,150 @@ class LocalCatalystIntelligence:
         as_of: datetime,
         window_hours: int | None = None,
     ) -> list[dict[str, Any]]:
-        cutoff = _iso(as_of)
-        params: list[Any] = [cutoff, cutoff]
-        time_clause = ""
-        if window_hours is not None:
-            # A late import must not turn old news into a current event. The
-            # source-availability cutoff above still preserves point-in-time
-            # visibility; this window is the age of the news itself.
-            time_clause = (
-                " AND julianday(COALESCE(r.published_at,r.fetched_at))"
-                ">=julianday(?)"
+        """Active revision rows, served from the store-cursor cache when safe.
+
+        Callers always get fresh copies so downstream mutation cannot leak
+        between requests.
+        """
+        key = self._revision_cache_key(as_of=as_of, window_hours=window_hours)
+        if key is None:
+            return self._active_revisions_query(
+                connection, as_of=as_of, window_hours=window_hours
             )
-            params.append(_iso(as_of - timedelta(hours=window_hours)))
-        params.extend(
-            [
+        store_cursor = _revision_store_cursor(connection)
+        with _REVISION_CACHE_LOCK:
+            cached = _REVISION_CACHE.get(key)
+            if (
+                cached is not None
+                and cached["cursor"] == store_cursor
+                and time.monotonic() - cached["built_at"]
+                <= _REVISION_CACHE_MAX_AGE_SECONDS
+            ):
+                return [_copy_revision_row(row) for row in cached["rows"]]
+        built_rows = self._active_revisions_query(
+            connection, as_of=as_of, window_hours=window_hours
+        )
+        with _REVISION_CACHE_LOCK:
+            if (
+                len(_REVISION_CACHE) >= _REVISION_CACHE_MAX_ENTRIES
+                and key not in _REVISION_CACHE
+            ):
+                _REVISION_CACHE.clear()
+            _REVISION_CACHE[key] = {
+                "cursor": store_cursor,
+                "built_at": time.monotonic(),
+                "rows": built_rows,
+                "anon_items": None,
+            }
+        return [_copy_revision_row(row) for row in built_rows]
+
+    def _active_revision_bundle(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        as_of: datetime,
+        window_hours: int | None = None,
+        want_items: bool = False,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]] | None]:
+        """Return (rows, anonymous items or None) on top of _active_revisions.
+
+        Anonymous item payloads are deterministic per row set, so they ride
+        the same cache entry. Owner reads always get items=None and rebuild
+        with live job state; so do historical (non-cacheable) reads.
+        """
+        rows = self._active_revisions(
+            connection, as_of=as_of, window_hours=window_hours
+        )
+        if not want_items:
+            return rows, None
+        key = self._revision_cache_key(as_of=as_of, window_hours=window_hours)
+        if key is None or current_request_is_owner():
+            return rows, None
+        store_cursor = _revision_store_cursor(connection)
+        with _REVISION_CACHE_LOCK:
+            cached = _REVISION_CACHE.get(key)
+            if (
+                cached is not None
+                and cached["cursor"] == store_cursor
+                and time.monotonic() - cached["built_at"]
+                <= _REVISION_CACHE_MAX_AGE_SECONDS
+                and cached.get("anon_items") is not None
+            ):
+                return rows, [
+                    _copy_feed_item(item) for item in cached["anon_items"]
+                ]
+        built_items = [
+            self._item(connection, row, as_of=as_of, jobs=None)
+            for row in rows
+        ]
+        with _REVISION_CACHE_LOCK:
+            cached = _REVISION_CACHE.get(key)
+            if (
+                cached is not None
+                and cached["cursor"] == store_cursor
+                and cached.get("anon_items") is None
+            ):
+                cached["anon_items"] = [
+                    _copy_feed_item(item) for item in built_items
+                ]
+        return rows, built_items
+
+    def _data_through(self, connection: sqlite3.Connection) -> str | None:
+        """Light equivalent of status()['data_through'] for feed/batch reads."""
+        try:
+            row = connection.execute(
+                """SELECT MIN(completed_as_of) FROM macrolens_etl_state
+                   WHERE completed_as_of IS NOT NULL"""
+            ).fetchone()
+        except sqlite3.Error:
+            return None
+        return row[0] if row is not None else None
+
+    def _active_revisions_query(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        as_of: datetime,
+        window_hours: int | None = None,
+    ) -> list[dict[str, Any]]:
+        cutoff = _iso(as_of)
+        if window_hours is not None:
+            # Window-driven plan: walk the (published,fetched) expression index
+            # over the requested window, then verify per candidate that it is
+            # the latest change visible at as_of. Point-in-time semantics are
+            # identical to the journal-driven plan below; cost scales with the
+            # window instead of with full history. Timestamps in this store
+            # are normalized ISO-8601 UTC "Z" strings (timestamps-v1), so
+            # lexicographic comparison is chronological.
+            head = """WITH active_revisions AS (
+                         SELECT r.* FROM catalyst_local_news_revisions r
+                         WHERE COALESCE(r.published_at,r.fetched_at)>=?
+                           AND r.change_sequence=(
+                               SELECT MAX(c.change_sequence)
+                               FROM macrolens_etl_news_changes c
+                               WHERE c.news_id=r.news_id
+                                 AND c.available_at<=?
+                           )
+                           AND EXISTS(
+                               SELECT 1 FROM macrolens_etl_news_changes c2
+                               WHERE c2.news_id=r.news_id
+                                 AND c2.change_sequence=r.change_sequence
+                                 AND c2.operation='upsert'
+                                 AND c2.available_at<=?
+                           )
+                     ), latest_link AS ("""
+            params: list[Any] = [
+                _iso(as_of - timedelta(hours=window_hours)),
+                cutoff,
+                cutoff,
                 cutoff,
                 cutoff,
                 NEWS_RESULT_CONTRACT_ID,
             ]
-        )
-        try:
-            rows = connection.execute(
-                f"""WITH latest AS (
+        else:
+            # A late import must not turn old news into a current event. The
+            # source-availability cutoff preserves point-in-time visibility.
+            head = """WITH latest AS (
                          SELECT news_id,MAX(change_sequence) AS change_sequence
                          FROM macrolens_etl_news_changes
                          WHERE available_at<=? GROUP BY news_id
@@ -2804,8 +3041,18 @@ class LocalCatalystIntelligence:
                          JOIN catalyst_local_news_revisions r
                            ON r.news_id=a.news_id
                           AND r.change_sequence=a.change_sequence
-                         WHERE 1=1 {time_clause}
-                     ), latest_link AS (
+                     ), latest_link AS ("""
+            params = [
+                cutoff,
+                cutoff,
+                cutoff,
+                cutoff,
+                NEWS_RESULT_CONTRACT_ID,
+            ]
+        try:
+            rows = connection.execute(
+                head
+                + """
                          SELECT l.*,
                                 ROW_NUMBER() OVER (
                                     PARTITION BY l.news_id,l.change_sequence,
@@ -3581,22 +3828,31 @@ class LocalCatalystIntelligence:
             as_of = parsed_anchor
         anchor = _iso(as_of)
         with self._connect() as connection:
-            rows = self._active_revisions(connection, as_of=as_of, window_hours=window_hours)
-            jobs = (
-                self._ai_job_snapshot(
-                    job_ids=(
-                        str(row["analysis_job_id"])
-                        for row in rows
-                        if row.get("analysis_job_id") is not None
-                    )
-                )
-                if current_request_is_owner()
-                else None
+            rows, cached_items = self._active_revision_bundle(
+                connection,
+                as_of=as_of,
+                window_hours=window_hours,
+                want_items=True,
             )
-            items = [
-                self._item(connection, row, as_of=as_of, jobs=jobs)
-                for row in rows
-            ]
+            if cached_items is not None:
+                items = cached_items
+            else:
+                jobs = (
+                    self._ai_job_snapshot(
+                        job_ids=(
+                            str(row["analysis_job_id"])
+                            for row in rows
+                            if row.get("analysis_job_id") is not None
+                        )
+                    )
+                    if current_request_is_owner()
+                    else None
+                )
+                items = [
+                    self._item(connection, row, as_of=as_of, jobs=jobs)
+                    for row in rows
+                ]
+            data_through = self._data_through(connection)
         ticker = str(kwargs.get("ticker") or "").upper()
         source = str(kwargs.get("source") or "").casefold()
         classification = kwargs.get("classification")
@@ -3646,7 +3902,7 @@ class LocalCatalystIntelligence:
         return {
             "status": "active" if page else "empty",
             "as_of": anchor,
-            "data_through": self.status(now=as_of).get("data_through"),
+            "data_through": data_through,
             "items": page,
             "summary": {
                 "news_6h": sum(1 for item in filtered if (_parse_time(item.get("published_at")) or as_of) >= as_of - timedelta(hours=6)),
@@ -3737,31 +3993,35 @@ class LocalCatalystIntelligence:
         min_abs_impact = kwargs.get("min_abs_impact")
         multi_source_only = bool(kwargs.get("multi_source_only", False))
         with self._connect() as connection:
-            rows = self._active_revisions(
+            rows, cached_items = self._active_revision_bundle(
                 connection,
                 as_of=as_of,
                 window_hours=window_hours,
+                want_items=True,
             )
-            jobs = (
-                self._ai_job_snapshot(
-                    job_ids=(
-                        str(row["analysis_job_id"])
-                        for row in rows
-                        if row.get("analysis_job_id") is not None
+            if cached_items is not None:
+                items = cached_items
+            else:
+                jobs = (
+                    self._ai_job_snapshot(
+                        job_ids=(
+                            str(row["analysis_job_id"])
+                            for row in rows
+                            if row.get("analysis_job_id") is not None
+                        )
                     )
+                    if current_request_is_owner()
+                    else None
                 )
-                if current_request_is_owner()
-                else None
-            )
-            items = [
-                self._item(connection, row, as_of=as_of, jobs=jobs)
-                for row in rows
-            ]
+                items = [
+                    self._item(connection, row, as_of=as_of, jobs=jobs)
+                    for row in rows
+                ]
+            data_through = self._data_through(connection)
         rows_by_news_id = {
             int(row["news_id"]): row
             for row in rows
         }
-        data_through = self.status(now=as_of).get("data_through")
         results: dict[str, dict[str, Any]] = {}
         for raw_ticker in tickers:
             ticker = raw_ticker.strip().upper()

@@ -590,9 +590,43 @@ function nBatchSummaries(body: unknown): TickerImpactSummary[] {
 const PUBLIC_BATCH_MAX_TICKERS = 20; // 匿名上限（owner 50，取交集下限保证双态可用）
 const PUBLIC_BATCH_MAX_LIMIT = 5;
 
+/* ---------- 客户端读缓存 ----------
+ * 短 TTL + 并发去重：同一路径的并发请求共享一个 Promise（StatusHero 与
+ * HotspotsStrip 各自轮询 hotspots/status 时只发一次），标签切回时 30s 内
+ * 即时显示。TTL 低于最小轮询间隔（45s），不改变轮询的新鲜度语义；
+ * 页头「刷新」与所有写操作（触发分析/焦点周期）会清空缓存。
+ */
+const READ_CACHE_TTL_MS = 30_000;
+const readCache = new Map<string, { at: number; promise: Promise<unknown> }>();
+
+export function clearCatalystReadCache(): void {
+  readCache.clear();
+}
+
+function cachedFetch<T>(key: string, run: () => Promise<T>, ttlMs: number): Promise<T> {
+  const hit = readCache.get(key);
+  const now = Date.now();
+  if (hit && now - hit.at <= ttlMs) return hit.promise as Promise<T>;
+  const promise = run();
+  readCache.set(key, { at: now, promise });
+  promise.catch(() => {
+    // 失败不留缓存，下一次调用重新请求
+    if (readCache.get(key)?.promise === promise) readCache.delete(key);
+  });
+  return promise;
+}
+
+function cachedGet<T = unknown>(path: string, ttlMs = READ_CACHE_TTL_MS): Promise<T> {
+  return cachedFetch(`GET ${path}`, () => get<T>(path), ttlMs);
+}
+
+function cachedPost<T = unknown>(path: string, body: unknown, ttlMs = READ_CACHE_TTL_MS): Promise<T> {
+  return cachedFetch(`POST ${path} ${JSON.stringify(body)}`, () => post<T>(path, body), ttlMs);
+}
+
 export const catalystsContract = {
   status: (): Promise<CatalystsStatusDetail> =>
-    mockOr(() => fx2.getCatalystsStatusV2(), () => get('/catalysts/status').then(nStatus)),
+    mockOr(() => fx2.getCatalystsStatusV2(), () => cachedGet('/catalysts/status').then(nStatus)),
   /** 今日新闻计数优先使用后端完整过滤窗口汇总；旧后端才退回当前页计数。 */
   newsToday: (): Promise<{ count: number; analyzed: number; saturated: boolean }> =>
     mockOr(
@@ -601,7 +635,7 @@ export const catalystsContract = {
         return { count: s.newsToday ?? 0, analyzed: s.analyzedToday ?? 0, saturated: false };
       },
       () =>
-        get(`/catalysts/feed${qs({
+        cachedGet(`/catalysts/feed${qs({
           windowHours: 24,
           limit: 50,
           includeUnanalyzed: true,
@@ -628,7 +662,7 @@ export const catalystsContract = {
     mockOr(
       () => fx2.getCatalystsFeedV2(q),
       () =>
-        get(`/catalysts/feed${qs(q)}`).then((d) => {
+        cachedGet(`/catalysts/feed${qs(q)}`).then((d) => {
           const items = unwrap(d, 'items')
             .map(nNewsItem)
             .filter((item) => item.titleZh && item.summaryZh);
@@ -643,12 +677,12 @@ export const catalystsContract = {
       }),
     ),
   hotspots: (): Promise<HotspotGroup[]> =>
-    mockOr(() => fx2.getHotspotsV2(), () => get('/catalysts/hotspots?limit=8').then((d) => unwrap(d, 'items').map(nHotspot))),
+    mockOr(() => fx2.getHotspotsV2(), () => cachedGet('/catalysts/hotspots?limit=8').then((d) => unwrap(d, 'items').map(nHotspot))),
   hotspotsStatus: (): Promise<HotspotsStatusDetail> =>
     mockOr(
       () => fx2.getHotspotsStatusV2(),
       () =>
-        get('/catalysts/hotspots/status').then((d) => {
+        cachedGet('/catalysts/hotspots/status').then((d) => {
           const r = asRec(d);
           // 个人版：status/prepared_hot_count/prepared_since/manual_enabled/prepared_revision
           if (r.prepared_revision !== undefined || r.prepared_hot_count !== undefined) {
@@ -686,7 +720,7 @@ export const catalystsContract = {
             })
           : '';
         const path = `/catalysts/calendar${queryString ? `?${queryString}` : ''}`;
-        return get(path).then((d) => unwrap(d, 'items', 'events').map(nEconEvent));
+        return cachedGet(path).then((d) => unwrap(d, 'items', 'events').map(nEconEvent));
       },
     ),
   sources: (): Promise<SourceHealth[]> =>
@@ -694,7 +728,7 @@ export const catalystsContract = {
       () => fx2.getCatalystsSources(),
       async () => {
         // 只展示后端真实健康快照。新闻数量不能证明当前采集链路健康。
-        const statusBody = await get('/catalysts/status');
+        const statusBody = await cachedGet('/catalysts/status');
         const fromStatus = unwrap(statusBody, 'sources', 'source_health').map(nSource).filter((s) => s.source);
         if (fromStatus.length) return fromStatus;
         const streams = asRec(asRec(statusBody).streams);
@@ -723,10 +757,10 @@ export const catalystsContract = {
       },
     ),
   latestFocusCycle: (): Promise<MarketFocusCycle> =>
-    mockOr(() => fx2.getLatestFocusCycleV2(), () => get('/catalysts/market-focus-cycles/latest').then(nCycle)),
+    mockOr(() => fx2.getLatestFocusCycleV2(), () => cachedGet('/catalysts/market-focus-cycles/latest').then(nCycle)),
   previousFocusCycle: (): Promise<MarketFocusCycle> =>
     mockOr(() => fx2.getPreviousSuccessfulFocusCycle(), () =>
-      get('/catalysts/market-focus-cycles/latest').then((data) => {
+      cachedGet('/catalysts/market-focus-cycles/latest').then((data) => {
         const previous = asRec(asRec(data).previous_successful_cycle);
         if (!Object.keys(previous).length) {
           throw new ApiError(404, '暂无更早的成功焦点周期', {
@@ -758,6 +792,7 @@ export const catalystsContract = {
         );
       }
       const { data, location } = await postCreate('/catalysts/market-focus-cycles', body);
+      clearCatalystReadCache();
       const rec = asRec(data);
       const locationId = idFromLocation(location);
       const cycle = asRec(rec.cycle);
@@ -785,14 +820,14 @@ export const catalystsContract = {
         if (!tickers.length) {
           // 候选发现不能套用文章整体多空过滤；真实排名按每只股票自己的影响分完成。
           const [feedBody, hotBody] = await Promise.all([
-            get(
+            cachedGet(
               `/catalysts/feed${qs({
                 windowHours: q.windowHours,
                 analysisStatus: 'completed',
                 limit: 50,
               })}`,
             ).catch(() => null),
-            get('/catalysts/hotspots?limit=20').catch(() => null),
+            cachedGet('/catalysts/hotspots?limit=20').catch(() => null),
           ]);
           const candidateScores = new Map<string, number>();
           const addCandidate = (value: unknown, score: number) => {
@@ -824,7 +859,7 @@ export const catalystsContract = {
             .map(([ticker]) => ticker);
         }
         if (!tickers.length) return [];
-        const body = await post('/catalysts/tickers/batch', {
+        const body = await cachedPost('/catalysts/tickers/batch', {
           tickers,
           window_hours: q.windowHours ?? 72,
           limit: PUBLIC_BATCH_MAX_LIMIT,
@@ -849,6 +884,7 @@ export const catalystsContract = {
       () => fx2.createNewsAnalysisJob(newsId, force),
       () =>
         postCreate(`/catalysts/news/${encodeURIComponent(newsId)}/analysis`, { force }).then(({ data, location }) => {
+          clearCatalystReadCache();
           const job = nAnalysisJob(data, idFromLocation(location));
           if (!job.jobId) throw new ApiError(502, '任务创建响应缺少 job_id', { payload: data });
           if (!job.newsId) job.newsId = newsId;
@@ -862,7 +898,7 @@ export const catalystsContract = {
   cancelAnalysisJob: (jobId: string): Promise<NewsAnalysisJob> =>
     mockOr(
       () => fx2.cancelNewsAnalysisJob(jobId),
-      () => post(`/catalysts/analysis-jobs/${encodeURIComponent(jobId)}/cancel`, { confirm: true }).then((d) => nAnalysisJob(d, jobId)),
+      () => post(`/catalysts/analysis-jobs/${encodeURIComponent(jobId)}/cancel`, { confirm: true }).then((d) => { clearCatalystReadCache(); return nAnalysisJob(d, jobId); }),
     ),
   themeName: (themeId: string): string => fx2.getHotspotThemeName(themeId),
 };

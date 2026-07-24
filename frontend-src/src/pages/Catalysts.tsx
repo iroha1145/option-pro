@@ -22,6 +22,7 @@ import StocksPanel from '@/components/catalysts/StocksPanel';
 import CalendarPanel from '@/components/catalysts/CalendarPanel';
 import SourcesPanel from '@/components/catalysts/SourcesPanel';
 import NewsDrawer from '@/components/catalysts/NewsDrawer';
+import { clearCatalystReadCache } from '@/components/catalysts/api';
 import type { CatalystNewsItem, NewsAnalysisStatus, NewsClassification } from '@/components/catalysts/api';
 
 type TabId = 'feed' | 'stocks' | 'calendar' | 'sources';
@@ -84,6 +85,7 @@ export default function Catalysts() {
   const [spinning, setSpinning] = useState(false);
   const onRefresh = useCallback(() => {
     setSpinning(true);
+    clearCatalystReadCache(); // 手动刷新必须穿透客户端读缓存
     setRefreshToken((v) => v + 1);
     window.setTimeout(() => setSpinning(false), 650);
   }, []);

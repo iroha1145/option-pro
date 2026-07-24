@@ -119,6 +119,7 @@ def _stack(
     max_queued: int = 200,
 ) -> tuple[CatalystEtlRepository, AIJobRepository, LocalCatalystIntelligence]:
     cache_path = tmp_path / "catalyst-cache.db"
+    local_module._reset_revision_cache()
     etl = CatalystEtlRepository(cache_path)
     etl.initialize()
     ai = AIJobRepository(tmp_path / "ai-jobs.db")
@@ -350,7 +351,7 @@ def test_v2_local_database_adds_v3_result_audit_tables_without_rewriting_history
     assert versions == [
         ("optix-local-catalyst-timestamps-v1",),
         ("optix-local-catalyst-v2",),
-        ("optix-local-catalyst-v3",),
+        ("optix-local-catalyst-v4",),
     ]
     assert "catalyst_local_analysis_result_audit" in tables
     assert "catalyst_local_focus_result_audit" in tables
@@ -7033,3 +7034,175 @@ def test_failed_forced_news_revision_preserves_previous_analysis(
     assert [
         item["analysis_revision"] for item in detail["analysis_revisions"]
     ] == [1]
+
+
+def test_feed_serves_revision_cache_and_invalidates_on_new_change(
+    tmp_path, monkeypatch
+) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: base)
+    _apply_news(
+        etl,
+        [_news_change(1, 101, available_at=base - timedelta(hours=1))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+
+    first = intelligence.feed(as_of=base, window_hours=24, limit=10)
+    assert [item["news_id"] for item in first["items"]] == [101]
+    assert (str(intelligence.db_path), 24) in local_module._REVISION_CACHE
+
+    def _must_not_run(*_args, **_kwargs):
+        raise AssertionError("cache hit must not re-run the revision query")
+
+    intelligence._active_revisions_query = _must_not_run  # type: ignore[method-assign]
+    try:
+        second = intelligence.feed(as_of=base, window_hours=24, limit=10)
+    finally:
+        del intelligence._active_revisions_query
+    assert [item["news_id"] for item in second["items"]] == [101]
+    assert second["summary"]["count"] == 1
+    assert second["data_through"] is not None
+
+    _apply_news(
+        etl,
+        [_news_change(2, 102, available_at=base - timedelta(minutes=30))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+    third = intelligence.feed(as_of=base, window_hours=24, limit=10)
+    assert sorted(item["news_id"] for item in third["items"]) == [101, 102]
+
+
+def test_historical_as_of_bypasses_revision_cache(tmp_path) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    _apply_news(
+        etl,
+        [_news_change(1, 111, available_at=base - timedelta(hours=1))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+    result = intelligence.feed(as_of=base, window_hours=24, limit=10)
+    assert [item["news_id"] for item in result["items"]] == [111]
+    assert (str(intelligence.db_path), 24) not in local_module._REVISION_CACHE
+
+
+def test_windowed_and_journal_revision_queries_agree(tmp_path) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    _apply_news(
+        etl,
+        [
+            _news_change(1, 201, available_at=base - timedelta(hours=30)),
+            _news_change(2, 202, available_at=base - timedelta(hours=10)),
+            _news_change(3, 203, available_at=base - timedelta(hours=8)),
+            _news_change(
+                4,
+                203,
+                available_at=base - timedelta(hours=2),
+                content_hash="hash-203-4",
+                title="Updated Blackwell headline 203",
+            ),
+            _news_change(5, 204, available_at=base - timedelta(hours=3)),
+        ],
+        as_of=base,
+    )
+    intelligence.reconcile()
+    _apply_news(
+        etl,
+        [_delete_change(6, 204, available_at=base - timedelta(hours=1))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+
+    with intelligence._connect() as connection:
+        windowed = intelligence._active_revisions_query(
+            connection, as_of=base, window_hours=24
+        )
+        journal = intelligence._active_revisions_query(
+            connection, as_of=base, window_hours=None
+        )
+        historical = intelligence._active_revisions_query(
+            connection,
+            as_of=base - timedelta(minutes=90),
+            window_hours=24,
+        )
+
+    floor = _iso(base - timedelta(hours=24))
+    journal_in_window = [
+        (row["news_id"], row["change_sequence"], row["content_hash"])
+        for row in journal
+        if (row["published_at"] or row["fetched_at"]) >= floor
+    ]
+    windowed_ids = [
+        (row["news_id"], row["change_sequence"], row["content_hash"])
+        for row in windowed
+    ]
+    assert windowed_ids == journal_in_window
+    assert sorted(row["news_id"] for row in windowed) == [202, 203]
+    assert [
+        row["change_sequence"] for row in windowed if row["news_id"] == 203
+    ] == [4]
+    # Before the delete became visible the news must still be present.
+    assert any(row["news_id"] == 204 for row in historical)
+
+
+def test_owner_reads_reuse_cached_rows_but_rebuild_items(
+    tmp_path, monkeypatch
+) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: base)
+    _apply_news(
+        etl,
+        [_news_change(1, 121, available_at=base - timedelta(hours=1))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+    anonymous = intelligence.feed(as_of=base, window_hours=24, limit=10)
+    assert [item["news_id"] for item in anonymous["items"]] == [121]
+
+    def _must_not_run(*_args, **_kwargs):
+        raise AssertionError("owner read must reuse the cached row set")
+
+    intelligence._active_revisions_query = _must_not_run  # type: ignore[method-assign]
+    try:
+        with request_owner_access_context(True):
+            with intelligence._connect() as connection:
+                rows, items = intelligence._active_revision_bundle(
+                    connection,
+                    as_of=base,
+                    window_hours=24,
+                    want_items=True,
+                )
+    finally:
+        del intelligence._active_revisions_query
+    assert [row["news_id"] for row in rows] == [121]
+    assert items is None
+
+
+def test_cached_feed_items_are_isolated_from_caller_mutation(
+    tmp_path, monkeypatch
+) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: base)
+    _apply_news(
+        etl,
+        [_news_change(1, 131, available_at=base - timedelta(hours=1))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+    first = intelligence.feed(as_of=base, window_hours=24, limit=10)
+    tampered = first["items"][0]
+    tampered["title"] = "tampered"
+    tampered["source_tickers"].append("HACK")
+    tampered.pop("_validation_title", None)
+
+    second = intelligence.feed(as_of=base, window_hours=24, limit=10)
+    fresh = second["items"][0]
+    assert fresh["title"] != "tampered"
+    assert "HACK" not in fresh["source_tickers"]
+    assert "_validation_title" in fresh

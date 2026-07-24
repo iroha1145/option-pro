@@ -427,7 +427,10 @@ class _GatewayMiddleware:
 
     Cache policy:
     - HTML ("/" and *.html): no-store — deploys must show up immediately.
-    - /static/*: five-minute browser cache plus normal ETag revalidation.
+    - /assets/*: immutable one-year cache — Vite emits content-hashed
+      filenames there, so a new deploy always changes the URL.
+    - other static (unhashed logos/illustrations): five-minute browser cache
+      plus normal ETag revalidation.
     - API and health metadata: private/no-store.
     """
 
@@ -474,7 +477,15 @@ class _GatewayMiddleware:
                     headers["Cloudflare-CDN-Cache-Control"] = "no-store"
                     headers["Content-Security-Policy"] = _HTML_CSP
                 elif is_static:
-                    headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=60"
+                    if path.startswith("/assets/"):
+                        # Content-hashed build artifacts never change in place.
+                        headers["Cache-Control"] = (
+                            "public, max-age=31536000, immutable"
+                        )
+                    else:
+                        headers["Cache-Control"] = (
+                            "public, max-age=300, stale-while-revalidate=60"
+                        )
                 elif path.startswith("/api/") or path in {"/health", "/ready"}:
                     headers["Cache-Control"] = "private, no-store"
             await send(message)
