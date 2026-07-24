@@ -269,9 +269,9 @@ test("password mode keeps public research readable and reserves owner controls f
     await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/watchlist`);
   }
 
-  // 访客可读研究数据（fixture：分组「本地验收」→ 行内「英伟达 · 本地验收」）
+  // 访客可读研究数据（默认卡片视图显示代码与公司名）
   await expect(page.getByText("NVDA", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("英伟达 · 本地验收").first()).toBeVisible();
+  await expect(page.getByText("英伟达", { exact: true }).first()).toBeVisible();
   await expectVisitorShell(page);
   // Owner 专属「强制刷新」对访客禁用（Watchlist.tsx L88-107）
   await expect(page.getByTitle("登录 Owner 后可强制刷新")).toBeDisabled();
