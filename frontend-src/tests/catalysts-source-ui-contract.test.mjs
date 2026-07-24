@@ -204,3 +204,90 @@ test('状态栏不再把产品名伪装成文章来源', () => {
   assert.equal(source.includes('来源：Optix NewsDesk'), false);
   assert.equal(source.includes('每条新闻展示原始文章来源'), true);
 });
+
+test('经济日历保留真实实际值，并按日期与时间稳定排序', async () => {
+  const loaded = loadCatalystsModule({
+    '/catalysts/calendar': {
+      items: [
+        {
+          event_id: 'released-event',
+          country: '美国',
+          title: '初请失业金人数',
+          impact: 'high',
+          impact_zh: '高',
+          scheduled_at: '2026-07-23T12:30:00Z',
+          forecast: '211K',
+          previous: '208K',
+          actual: '217K',
+          release_status: 'released',
+        },
+        {
+          event_id: 'missing-source-event',
+          country: '美国',
+          title: '续请失业金人数',
+          impact: 'medium',
+          impact_zh: '中',
+          scheduled_at: '2026-07-23T12:30:00Z',
+          forecast: '1.9M',
+          previous: '1.8M',
+          actual: null,
+          release_status: 'awaiting_source',
+        },
+      ],
+    },
+  });
+
+  const events = await loaded.exports.catalystsContract.calendar();
+
+  assert.equal(events[0].actual, '217K');
+  assert.equal(events[0].releaseStatus, 'released');
+  assert.equal(events[1].actual, null);
+  assert.equal(events[1].releaseStatus, 'awaiting_source');
+
+  const panel = fs.readFileSync(
+    path.join(sourceRoot, 'components', 'catalysts', 'CalendarPanel.tsx'),
+    'utf8',
+  );
+  assert.match(panel, /sort\(\(\[left\], \[right\]\) => left\.localeCompare\(right\)\)/);
+  assert.match(panel, /Date\.parse\(left\.scheduledAt\) - Date\.parse\(right\.scheduledAt\)/);
+  assert.equal(panel.includes('数据源未回填'), true);
+  assert.equal(panel.includes('待公布'), true);
+});
+
+test('经济日历按浏览器本地自然日请求前三天并传递时区偏移', async () => {
+  const localNoon = new Date(2026, 6, 24, 12, 0, 0);
+  const timezoneOffsetMinutes = -localNoon.getTimezoneOffset();
+  const queryPath =
+    `/catalysts/calendar?date_from=2026-07-21&date_to=2026-08-07`
+    + `&timezone_offset_minutes=${timezoneOffsetMinutes}`;
+  const loaded = loadCatalystsModule({
+    [queryPath]: { items: [] },
+  });
+
+  const query = loaded.exports.browserCalendarQuery(localNoon);
+  const events = await loaded.exports.catalystsContract.calendar(query);
+
+  assert.deepEqual(
+    {
+      dateFrom: query.dateFrom,
+      dateTo: query.dateTo,
+      timezoneOffsetMinutes: query.timezoneOffsetMinutes,
+    },
+    {
+      dateFrom: '2026-07-21',
+      dateTo: '2026-08-07',
+      timezoneOffsetMinutes,
+    },
+  );
+  assert.deepEqual(events, []);
+  assert.deepEqual(loaded.calls, [queryPath]);
+
+  const panel = fs.readFileSync(
+    path.join(sourceRoot, 'components', 'catalysts', 'CalendarPanel.tsx'),
+    'utf8',
+  );
+  assert.match(
+    panel,
+    /catalystsContract\.calendar\(browserCalendarQuery\(\)\)/,
+  );
+});

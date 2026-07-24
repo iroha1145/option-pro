@@ -569,6 +569,43 @@ def test_hidden_hotspots_change_an_active_payload_to_empty() -> None:
     assert payload["items"] == []
 
 
+def test_hotspot_projection_scans_past_untranslated_leaders_before_limiting() -> None:
+    engine = FakeIntelligence()
+    requested_limits: list[int] = []
+
+    def hotspots(*, limit, now=None):
+        requested_limits.append(limit)
+        return {
+            "status": "active",
+            "items": [
+                *[
+                    {
+                        "event_group_id": f"english-{index}",
+                        "representative_title": f"English leader {index}",
+                        "summary_zh": "",
+                    }
+                    for index in range(8)
+                ],
+                {
+                    "event_group_id": "translated-9",
+                    "representative_title": "半导体供应链成为市场关注焦点",
+                    "summary_zh": "多条真实来源指向供应链预期变化。",
+                    "representative_news_id": 109,
+                    "validated_tickers": ["NVDA"],
+                },
+            ][:limit],
+        }
+
+    engine.hotspots = hotspots
+    payload = _service("read", engine=engine).hotspots(limit=8)
+
+    assert requested_limits == [100]
+    assert payload["status"] == "active"
+    assert [item["event_group_id"] for item in payload["items"]] == [
+        "translated-9"
+    ]
+
+
 def test_source_bound_names_remain_visible_in_hotspots_without_english_leaks() -> None:
     engine = FakeIntelligence()
 

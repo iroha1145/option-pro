@@ -5,7 +5,7 @@
  * 面积模式：brand-500 主线 + 点阵填充 + 虚线趋势线；5 分钟图叠昨收基准虚线 + 末端价格旗标
  * quote_only bar 半透明标注 · _stale 横幅 · 503 → empty-chart.svg「快照不可用」
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import ReactECharts from '@/components/charts/ReactECharts';
 import Segmented from '@/components/shared/Segmented';
@@ -295,17 +295,28 @@ export default function KlineChart({
   prevClose,
   height = 320,
   className,
+  refreshVersion = 0,
 }: {
   ticker: string;
   prevClose?: number;
   height?: number;
   className?: string;
+  refreshVersion?: number;
 }) {
   // Daily bars are the reliable default covered by Massive Stocks Starter;
   // intraday intervals remain available on demand.
   const [range, setRange] = useState<ChartRange>('1d');
   const [mode, setMode] = useState<ChartMode>('candle');
-  const { data, error, loading, refresh } = usePolling(() => getDetailChart(ticker, range), null, [ticker, range]);
+  const seenRefreshVersion = useRef(refreshVersion);
+  const { data, error, loading, refresh } = usePolling(
+    () => {
+      const force = seenRefreshVersion.current !== refreshVersion;
+      seenRefreshVersion.current = refreshVersion;
+      return getDetailChart(ticker, range, force);
+    },
+    null,
+    [ticker, range, refreshVersion],
+  );
 
   const option = useMemo(
     () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose) : null),
@@ -355,7 +366,7 @@ export default function KlineChart({
           ) : error || !option ? (
             <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 overflow-auto">
               <EmptyState
-                variant="error"
+                variant="empty"
                 image="/empty-chart.svg"
                 title="快照不可用"
                 description={`${ticker} · ${CHART_RANGES.find((item) => item.value === range)?.label ?? range}数据暂不可用，其他周期仍可切换`}

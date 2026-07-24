@@ -3285,6 +3285,73 @@ def test_owner_poll_never_creates_job_for_unpaid_preparing_intent(
     assert status["has_new_hotspots"] is True
 
 
+def test_scheduled_run_resumes_focus_intent_after_queue_capacity_returns(
+    tmp_path,
+    monkeypatch,
+):
+    etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
+    first_now = datetime(2030, 7, 16, 10, 42, tzinfo=timezone.utc)
+    clock = {"now": first_now}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    _apply_news(
+        etl,
+        [_news_change(1, 76, available_at=first_now - timedelta(minutes=10))],
+        as_of=first_now - timedelta(minutes=9),
+    )
+    intelligence.reconcile()
+    assert intelligence.run_scheduled(now=first_now) == {
+        "queued": 1,
+        "skipped": 0,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        news_job_id = connection.execute(
+            "SELECT job_id FROM ai_jobs WHERE job_type='news_impact'"
+        ).fetchone()[0]
+    _finish_job(
+        ai,
+        news_job_id,
+        _news_result(
+            news_id=76,
+            change_sequence=1,
+            content_hash="hash-76-1",
+        ),
+    )
+
+    clock["now"] = first_now + timedelta(minutes=1)
+    prepared = intelligence.reconcile()["prepared_revision"]
+    original_create = intelligence._create_focus_job
+
+    def queue_full(*_args, **_kwargs):
+        raise RuntimeError("ai_job_queue_full")
+
+    monkeypatch.setattr(intelligence, "_create_focus_job", queue_full)
+    with pytest.raises(RuntimeError, match="ai_job_queue_full"):
+        intelligence.request_market_focus_cycle(
+            expected_prepared_revision=prepared,
+            as_of=clock["now"],
+            submission_source="scheduled",
+        )
+    monkeypatch.setattr(intelligence, "_create_focus_job", original_create)
+
+    clock["now"] = first_now + timedelta(minutes=2)
+    outcome = intelligence.run_scheduled(now=clock["now"])
+
+    assert outcome["queued"] == 1
+    with sqlite3.connect(intelligence.db_path) as connection:
+        cycle = connection.execute(
+            """SELECT status,job_id FROM catalyst_local_focus_cycles
+               WHERE prepared_revision=?""",
+            (prepared,),
+        ).fetchone()
+    assert cycle is not None
+    assert cycle[0] == "pending"
+    assert not str(cycle[1]).startswith("intent:")
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'"
+        ).fetchone()[0] == 1
+
+
 def test_owner_poll_defers_terminal_publish_during_local_lock(
     tmp_path,
     monkeypatch,
@@ -4696,6 +4763,9 @@ def test_completed_focus_payload_mismatch_is_not_retried_automatically(
         "provider_incomplete_max_output_tokens",
         "provider_auth_failed",
         "provider_request_rejected",
+        # Cancellation was not confirmed, so a new paid request would risk
+        # overlapping the still-running provider response.
+        "provider_poll_timeout",
         "ai_input_too_large",
     ],
 )
@@ -4811,7 +4881,7 @@ def test_transient_focus_retry_cap_survives_prompt_version_changes(
         submission_source="scheduled",
     )
     first_job_id = cycle["job_id"]
-    _fail_job(ai, first_job_id, "provider_failed")
+    _fail_job(ai, first_job_id, "provider_poll_timeout_cancelled")
     intelligence.reconcile()
     with sqlite3.connect(ai.path) as connection:
         connection.execute(
@@ -4837,6 +4907,19 @@ def test_transient_focus_retry_cap_survives_prompt_version_changes(
                    WHERE cycle_id=?""",
                 (cycle["cycle_id"],),
             ).fetchone()[0]
+        if hour == 1:
+            # The retry remains active until it reaches a terminal state. A
+            # second scheduler pass in the same hour must not create a
+            # concurrent paid duplicate.
+            assert intelligence.run_scheduled(now=clock["now"]) == {
+                "queued": 0,
+                "skipped": 1,
+            }
+            with sqlite3.connect(ai.path) as connection:
+                assert connection.execute(
+                    """SELECT COUNT(*) FROM ai_jobs
+                       WHERE job_type='market_focus'"""
+                ).fetchone()[0] == 2
         _fail_job(ai, current_job_id, error_code)
         intelligence.reconcile()
 
@@ -5521,6 +5604,123 @@ def test_calendar_release_status_distinguishes_upstream_lag_from_future_release(
         )
         == "released"
     )
+
+
+def test_public_calendar_preserves_real_upstream_actual_without_fallback(
+    tmp_path,
+):
+    etl, _ai, intelligence = _stack(tmp_path)
+    as_of = datetime(2026, 7, 24, 2, 30, tzinfo=timezone.utc)
+    state = etl.state("calendar")
+    page = CalendarPage.model_validate(
+        {
+            "items": [
+                {
+                    "event_id": "us-claims-released",
+                    "country_code": "USD",
+                    "country": "United States",
+                    "title": "Initial Jobless Claims",
+                    "impact": "high",
+                    "impact_zh": "高",
+                    "scheduled_at": "2026-07-23T12:30:00Z",
+                    "scheduled_at_utc": "2026-07-23T12:30:00Z",
+                    "forecast": "211K",
+                    "previous": "208K",
+                    "actual": "217K",
+                    "is_stale": False,
+                    "source_fetched_at": _iso(as_of),
+                    "available_at": _iso(as_of),
+                    "ordinal": 1,
+                },
+                {
+                    "event_id": "us-claims-awaiting-source",
+                    "country_code": "USD",
+                    "country": "United States",
+                    "title": "Continuing Jobless Claims",
+                    "impact": "medium",
+                    "impact_zh": "中",
+                    "scheduled_at": "2026-07-23T12:30:00Z",
+                    "scheduled_at_utc": "2026-07-23T12:30:00Z",
+                    "forecast": "1.9M",
+                    "previous": "1.8M",
+                    "actual": None,
+                    "is_stale": False,
+                    "source_fetched_at": _iso(as_of),
+                    "available_at": _iso(as_of),
+                    "ordinal": 2,
+                },
+                {
+                    "event_id": "tokyo-local-date-boundary",
+                    "country_code": "JPY",
+                    "country": "Japan",
+                    "title": "Consumer Price Index",
+                    "impact": "high",
+                    "impact_zh": "高",
+                    "scheduled_at": "2026-07-23T16:00:00Z",
+                    "scheduled_at_utc": "2026-07-23T16:00:00Z",
+                    "forecast": "2.8%",
+                    "previous": "2.7%",
+                    "actual": "2.9%",
+                    "is_stale": False,
+                    "source_fetched_at": _iso(as_of),
+                    "available_at": _iso(as_of),
+                    "ordinal": 3,
+                },
+            ],
+            "has_more": False,
+            "next_cursor": None,
+            "watermark": {
+                "sequence": 1,
+                "snapshot_token": "cal_" + "4" * 40,
+                "as_of": _iso(as_of),
+            },
+            "data_through": _iso(as_of),
+            "is_stale": False,
+            "next_updated_after": _iso(as_of),
+            "next_after_sequence": 1,
+        }
+    )
+    etl.apply_calendar_page(
+        page,
+        expected_cursor=state.cursor,
+        expected_generation=state.generation,
+    )
+
+    payload = intelligence.calendar(
+        date_from=date(2026, 7, 21),
+        date_to=date(2026, 7, 24),
+        as_of=as_of,
+        currencies=None,
+        min_impact=None,
+    )
+
+    assert payload["items"][0]["actual"] == "217K"
+    assert payload["items"][0]["release_status"] == "released"
+    assert payload["items"][1]["actual"] is None
+    assert payload["items"][1]["release_status"] == "awaiting_source"
+    assert payload["items"][1]["forecast"] == "1.9M"
+    assert payload["items"][1]["previous"] == "1.8M"
+
+    utc_day = intelligence.calendar(
+        date_from=date(2026, 7, 24),
+        date_to=date(2026, 7, 24),
+        as_of=as_of,
+        currencies=None,
+        min_impact=None,
+    )
+    tokyo_day = intelligence.calendar(
+        date_from=date(2026, 7, 24),
+        date_to=date(2026, 7, 24),
+        as_of=as_of,
+        currencies=None,
+        min_impact=None,
+        timezone_offset_minutes=540,
+    )
+
+    assert utc_day["items"] == []
+    assert [item["event_id"] for item in tokyo_day["items"]] == [
+        "tokyo-local-date-boundary"
+    ]
 
 
 def test_historical_news_hides_future_job_state_and_result(tmp_path):

@@ -34,9 +34,9 @@ _MAX_AI_BODY_BYTES = 64 * 1024
 _PROMPT_VERSIONS = {
     "earnings_impact": "earnings-impact-zh-cn-v4",
     "option_alerts": "option-alerts-zh-cn-v4",
-    "signal_analysis": "signal-analysis-zh-cn-v4",
+    "signal_analysis": "signal-analysis-zh-cn-v5",
     "news_impact": "news-impact-zh-cn-v6",
-    "market_focus": "market-focus-zh-cn-v4",
+    "market_focus": "market-focus-zh-cn-v5",
 }
 
 

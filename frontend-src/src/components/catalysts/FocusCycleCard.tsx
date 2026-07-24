@@ -73,6 +73,8 @@ function fmtCycleDate(iso: string, withTime: boolean): string {
 }
 
 const CYCLE_STATUS_CN: Record<string, string> = {
+  preparing: '等待提交',
+  pending: '排队中',
   in_progress: '计算中',
   queued: '排队中',
   cancel_requested: '取消中',
@@ -85,6 +87,15 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
   const statusCn = cycle.status && cycle.status !== 'completed' ? CYCLE_STATUS_CN[cycle.status] ?? cycle.status : null;
   return (
     <div>
+      {cycle.latestAttempt && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-sm border border-warn-600/30 bg-warn-50 px-3 py-2 text-micro text-warn-700">
+          <Led tone="warn" className="size-1.5" />
+          <span>最近一次更新失败，当前展示上次成功结果</span>
+          <span className="font-mono text-warn-600 tnum">
+            {cycle.latestAttempt.cycleId} · {fmtCycleDate(cycle.latestAttempt.startedAt, true)}
+          </span>
+        </div>
+      )}
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h3 className={cn('font-display font-semibold text-ink-900', compact ? 'text-[16px]' : 'text-[20px] leading-[28px]')}>
           {cycle.dominantEvent}
@@ -172,7 +183,15 @@ export default function FocusCycleCard() {
   const startJob = useCallback(async () => {
     setConfirmOpen(false);
     try {
-      const j = await catalystsContract.triggerFocusCycle();
+      const failedCycleId =
+        latestQ.data?.latestAttempt?.cycleId
+        ?? (
+          latestQ.data?.status
+          && ['failed', 'cancelled', 'canceled', 'budget_blocked'].includes(latestQ.data.status)
+            ? latestQ.data.cycleId
+            : null
+        );
+      const j = await catalystsContract.triggerFocusCycle(failedCycleId);
       setJob(j);
       toast.info('焦点周期计算已提交', '完成后自动刷新');
       stopPoll();
@@ -250,7 +269,9 @@ export default function FocusCycleCard() {
             ) : (
               <>
                 <Icon name="spark-ai" size={14} className="text-ai-600" />
-                触发新周期
+                {latestQ.data?.latestAttempt || latestQ.data?.status === 'failed'
+                  ? '重试焦点周期'
+                  : '触发新周期'}
               </>
             )}
           </button>

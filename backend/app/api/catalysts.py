@@ -86,6 +86,8 @@ _PUBLIC_MAX_WINDOW_HOURS = 7 * 24
 _PUBLIC_MAX_FEED_LIMIT = 50
 _PUBLIC_MAX_BATCH_TICKERS = 20
 _PUBLIC_MAX_BATCH_LIMIT = 5
+_DEFAULT_CALENDAR_HISTORY_DAYS = 3
+_DEFAULT_CALENDAR_LOOKAHEAD_DAYS = 14
 
 
 def _require_public_query_bound(
@@ -406,13 +408,19 @@ def ticker_catalyst_batch(
 def catalyst_calendar(
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
+    timezone_offset_minutes: int = Query(default=0, ge=-840, le=840),
     as_of: Optional[AwareDatetime] = Query(default=None),
     currencies: Optional[str] = Query(default=None, max_length=200),
     min_impact: Optional[Literal["low", "medium", "high"]] = Query(default=None),
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
-    start_date = date_from or _now().date()
-    end_date = date_to or (start_date + timedelta(days=14))
+    today = _now().date()
+    start_date = date_from or (today - timedelta(days=_DEFAULT_CALENDAR_HISTORY_DAYS))
+    end_date = date_to or (
+        start_date + timedelta(days=_DEFAULT_CALENDAR_LOOKAHEAD_DAYS)
+        if date_from is not None
+        else today + timedelta(days=_DEFAULT_CALENDAR_LOOKAHEAD_DAYS)
+    )
     if end_date < start_date or (end_date - start_date).days > 92:
         raise HTTPException(status_code=422, detail="invalid calendar date range")
     currency_values = (
@@ -427,6 +435,7 @@ def catalyst_calendar(
             as_of=as_of or _now(),
             currencies=currency_values,
             min_impact=min_impact,
+            timezone_offset_minutes=timezone_offset_minutes,
         )
     except CatalystError as error:
         _raise_safe(error)

@@ -2,7 +2,7 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { usePolling } from '@/hooks/usePolling';
-import { catalystsContract } from './api';
+import { browserCalendarQuery, catalystsContract } from './api';
 import type { EconomicEvent } from './api';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonRows } from '@/components/shared/Skeleton';
@@ -32,7 +32,11 @@ function ImpactChip({ ev }: { ev: EconomicEvent }) {
 }
 
 export default function CalendarPanel({ refreshToken }: { refreshToken: number }) {
-  const q = usePolling(() => catalystsContract.calendar(), 300_000, [refreshToken]);
+  const q = usePolling(
+    () => catalystsContract.calendar(browserCalendarQuery()),
+    300_000,
+    [refreshToken],
+  );
 
   const groups = useMemo(() => {
     const map = new Map<string, EconomicEvent[]>();
@@ -43,7 +47,15 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
       arr.push(ev);
       map.set(key, arr);
     });
-    return [...map.entries()];
+    return [...map.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([date, events]) => [
+        date,
+        [...events].sort(
+          (left, right) =>
+            Date.parse(left.scheduledAt) - Date.parse(right.scheduledAt),
+        ),
+      ] as const);
   }, [q.data]);
 
   const todayKey = useMemo(() => {

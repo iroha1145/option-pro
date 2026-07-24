@@ -1248,9 +1248,9 @@ def test_all_paid_job_prompt_versions_invalidate_legacy_english_cache():
     assert ai._PROMPT_VERSIONS == {
         "earnings_impact": "earnings-impact-zh-cn-v4",
         "option_alerts": "option-alerts-zh-cn-v4",
-        "signal_analysis": "signal-analysis-zh-cn-v4",
+        "signal_analysis": "signal-analysis-zh-cn-v5",
         "news_impact": "news-impact-zh-cn-v6",
-        "market_focus": "market-focus-zh-cn-v4",
+        "market_focus": "market-focus-zh-cn-v5",
     }
 
 
@@ -1757,7 +1757,7 @@ def test_pending_job_fails_safely_when_frozen_runtime_configuration_changed(
     assert failed["error_code"] == "runtime_configuration_changed"
 
 
-def test_elapsed_poll_window_keeps_the_existing_background_response(
+def test_elapsed_poll_window_cancels_the_stalled_background_response(
     monkeypatch,
     tmp_path,
 ):
@@ -1769,7 +1769,11 @@ def test_elapsed_poll_window_keeps_the_existing_background_response(
     async def fake_retrieve(*_args, **_kwargs):
         return SimpleNamespace(status="in_progress", id="resp_existing")
 
+    async def fake_cancel(*_args, **_kwargs):
+        return SimpleNamespace(status="cancelled", id="resp_existing")
+
     monkeypatch.setattr(runtime, "retrieve", fake_retrieve)
+    monkeypatch.setattr(runtime, "cancel", fake_cancel)
     submitted_at = (
         datetime.now(timezone.utc) - timedelta(hours=1)
     ).isoformat().replace("+00:00", "Z")
@@ -1789,10 +1793,88 @@ def test_elapsed_poll_window_keeps_the_existing_background_response(
     claimed = repository.claim_due(owner, 60)
     asyncio.run(process_job(repository, settings, claimed, owner))
 
-    deferred = repository.get_job(row["job_id"])
-    assert deferred["status"] == "in_progress"
-    assert deferred["openai_response_id"] == "resp_existing"
-    assert deferred["error_code"] == "poll_window_elapsed"
+    cancelled = repository.get_job(row["job_id"])
+    assert cancelled["status"] == "failed"
+    assert cancelled["openai_response_id"] == "resp_existing"
+    assert cancelled["error_code"] == "provider_poll_timeout_cancelled"
+
+
+def test_elapsed_poll_window_releases_queue_when_provider_cancel_fails(
+    monkeypatch,
+    tmp_path,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    stalled, _ = _create_earnings_job(repository)
+    settings = _settings(tmp_path / "ai-jobs.db")
+    schema_version, schema_sha256 = runtime.schema_identity("earnings_impact")
+    next_job, created = repository.create_job(
+        job_type="earnings_impact",
+        payload={"ticker": "MSFT", "name": "Microsoft"},
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="earnings-impact-v2",
+        schema_version=schema_version,
+        schema_sha256=schema_sha256,
+        max_queued=200,
+        submission_source="scheduled",
+    )
+    assert created is True
+    for index in range(198):
+        _filler, filler_created = repository.create_job(
+            job_type="earnings_impact",
+            payload={
+                "ticker": f"QUEUE{index:03d}",
+                "name": f"Queue fixture {index}",
+            },
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="background",
+            prompt_version="earnings-impact-v2",
+            schema_version=schema_version,
+            schema_sha256=schema_sha256,
+            max_queued=200,
+            submission_source="scheduled",
+        )
+        assert filler_created is True
+
+    async def fake_retrieve(*_args, **_kwargs):
+        return SimpleNamespace(status="queued", id="resp_stalled")
+
+    async def fake_cancel(*_args, **_kwargs):
+        raise TimeoutError("provider cancellation timed out")
+
+    monkeypatch.setattr(runtime, "retrieve", fake_retrieve)
+    monkeypatch.setattr(runtime, "cancel", fake_cancel)
+    submitted_at = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    with repository._connect() as connection:
+        connection.execute(
+            """
+            UPDATE ai_jobs
+            SET status='queued', openai_response_id='resp_stalled',
+                submission_started_at=?, submitted_at=?,
+                next_attempt_at='1970-01-01T00:00:00Z'
+            WHERE job_id=?
+            """,
+            (submitted_at, submitted_at, stalled["job_id"]),
+        )
+        connection.commit()
+
+    assert repository.health()["pending"] == 200
+    owner = "worker-poll-timeout-release"
+    claimed = repository.claim_due(owner, 60)
+    assert claimed is not None and claimed["job_id"] == stalled["job_id"]
+    asyncio.run(process_job(repository, settings, claimed, owner))
+
+    failed = repository.get_job(stalled["job_id"])
+    assert failed["status"] == "failed"
+    assert failed["error_code"] == "provider_poll_timeout"
+    assert repository.health()["pending"] == 199
+    next_claim = repository.claim_due("next-owner", 60)
+    assert next_claim is not None
+    assert next_claim["job_id"] == next_job["job_id"]
 
 
 def test_response_expiry_uses_submission_time_not_queue_creation_time(

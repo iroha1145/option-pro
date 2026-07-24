@@ -1,14 +1,31 @@
 /** 股票域：watchlist / detail / signals / chart / search */
-import { mockOr } from '../client';
-import { marketGet } from '../marketRead';
+import { mockOr, post } from '../client';
+import { marketGet, resetMarketReadPaths } from '../marketRead';
 import { asRec, pickN, pickS, unwrap, type Rec } from '../live';
 import * as fx from '@/mocks/fixtures';
-import type { Candle, Signal, StockChart, StockDetail, StockSearchResult, WatchlistItem } from '../types';
+import type {
+  Candle,
+  Signal,
+  StockChart,
+  StockDetail,
+  StockPullResource,
+  StockPullResult,
+  StockSearchResult,
+  WatchlistItem,
+} from '../types';
 
 /** 契约 bar {t,o,h,l,c,v,quote_only} → UI Candle（字段名 1:1，仅做容错读取） */
 export function mapBar<T extends Candle = Candle>(b: Rec): T {
+  const rawTime = b.t;
+  const epoch = typeof rawTime === 'number' && Number.isFinite(rawTime)
+    ? (rawTime >= 100_000_000_000 ? rawTime : rawTime * 1_000)
+    : null;
+  const parsedTime = epoch !== null ? new Date(epoch) : null;
+  const isoTime = parsedTime !== null && Number.isFinite(parsedTime.getTime())
+    ? parsedTime.toISOString()
+    : null;
   return {
-    t: pickS(b, 't') ?? '',
+    t: pickS(b, 't') ?? isoTime ?? '',
     o: pickN(b, 'o') ?? 0,
     h: pickN(b, 'h') ?? 0,
     l: pickN(b, 'l') ?? 0,
@@ -122,6 +139,37 @@ function mapSearch(body: unknown): StockSearchResult[] {
   }));
 }
 
+function mapPullResource(body: unknown): StockPullResource {
+  const r = asRec(body);
+  const rawStatus = pickS(r, 'status');
+  return {
+    status: rawStatus === 'available' || rawStatus === 'unavailable' ? rawStatus : 'failed',
+    provider: pickS(r, 'provider'),
+    asOf: pickS(r, 'as_of', 'asOf'),
+    persisted: r.persisted === true,
+    errorCode: pickS(r, 'error_code', 'errorCode'),
+    barCount: pickN(r, 'bar_count', 'barCount') ?? undefined,
+    metricCount: pickN(r, 'metric_count', 'metricCount') ?? undefined,
+    lastBarAt: pickS(r, 'last_bar_at', 'lastBarAt'),
+  };
+}
+
+function mapPull(body: unknown): StockPullResult {
+  const r = asRec(body);
+  const resources = asRec(r.resources);
+  return {
+    ticker: pickS(r, 'ticker') ?? '',
+    status: pickS(r, 'status') === 'completed' ? 'completed' : 'partial',
+    fetchedAt: pickS(r, 'fetched_at', 'fetchedAt') ?? '',
+    persistenceStatus: pickS(r, 'persistence_status', 'persistenceStatus') === 'completed' ? 'completed' : 'failed',
+    resources: {
+      overview: mapPullResource(resources.overview),
+      dailyChart: mapPullResource(resources.daily_chart ?? resources.dailyChart),
+      signals: mapPullResource(resources.signals),
+    },
+  };
+}
+
 export const stocksApi = {
   watchlist: (force = false): Promise<WatchlistItem[]> =>
     mockOr(
@@ -133,13 +181,14 @@ export const stocksApi = {
           force,
         }).then(mapWatchlist),
     ),
-  detail: (ticker: string): Promise<StockDetail> =>
+  detail: (ticker: string, force = false): Promise<StockDetail> =>
     mockOr(
       () => fx.getStockDetail(ticker),
       () =>
         marketGet(`/stocks/${encodeURIComponent(ticker)}`, {
           ttlMs: 15_000,
           staleMs: 30 * 60_000,
+          force,
         }).then(mapStockDetail),
     ),
   signals: (ticker: string): Promise<Signal[]> =>
@@ -152,7 +201,12 @@ export const stocksApi = {
         }),
     ),
   // adjustment 形参保留以兼容既有调用签名；契约仅支持 adjustment=raw，live 恒发 raw
-  chart: (ticker: string, range: StockChart['range'] = '1d', adjustment = 'raw'): Promise<StockChart> =>
+  chart: (
+    ticker: string,
+    range: StockChart['range'] = '1d',
+    adjustment = 'raw',
+    force = false,
+  ): Promise<StockChart> =>
     mockOr(
       () => fx.getStockChart(ticker, range),
       // 契约仅支持 adjustment=raw；界面直接使用后端真实 K 线周期。
@@ -160,7 +214,7 @@ export const stocksApi = {
         void adjustment;
         return marketGet(
           `/stocks/${encodeURIComponent(ticker)}/chart?range=${range}&adjustment=raw`,
-          { ttlMs: 60_000, staleMs: 60 * 60_000 },
+          { ttlMs: 60_000, staleMs: 60 * 60_000, force },
         ).then((d) => mapChart(d, ticker, range));
       },
     ),
@@ -172,5 +226,50 @@ export const stocksApi = {
           ttlMs: 10 * 60_000,
           staleMs: 24 * 60 * 60_000,
         }).then(mapSearch),
+    ),
+  pull: (ticker: string): Promise<StockPullResult> =>
+    mockOr<StockPullResult>(
+      async () => {
+        const [detail, chart] = await Promise.all([
+          fx.getStockDetail(ticker),
+          fx.getStockChart(ticker, '1d'),
+        ]);
+        const asOf = detail.updatedAt || new Date().toISOString();
+        return {
+          ticker: ticker.toUpperCase(),
+          status: 'completed',
+          fetchedAt: asOf,
+          persistenceStatus: 'completed',
+          resources: {
+            overview: { status: 'available', provider: 'Mock', asOf, persisted: true },
+            dailyChart: {
+              status: chart.candles.length ? 'available' : 'unavailable',
+              provider: 'Mock',
+              asOf,
+              persisted: true,
+              barCount: chart.candles.length,
+            },
+            signals: {
+              status: 'available',
+              provider: 'Mock',
+              asOf,
+              persisted: true,
+              metricCount: fx.getStockSignals(ticker).length,
+            },
+          },
+        };
+      },
+      async () => {
+        const t = ticker.toUpperCase();
+        const encoded = encodeURIComponent(t);
+        const result = mapPull(await post(`/stocks/${encoded}/pull`, {}));
+        resetMarketReadPaths([
+          `/stocks/${encoded}`,
+          `/stocks/${encoded}/chart?range=1d&adjustment=raw`,
+          `/signals/stock/${encoded}`,
+          `/stocks/${encoded}/signals`,
+        ]);
+        return result;
+      },
     ),
 };

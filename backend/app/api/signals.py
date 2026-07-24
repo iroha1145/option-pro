@@ -38,6 +38,7 @@ from app.services.signals import (
     compute_market_signals,
     compute_stock_signals,
 )
+from app.stock_pull_snapshot import read_stock_pull_resource
 
 router = APIRouter(prefix="/api/signals", tags=["signals"])
 logger = logging.getLogger(__name__)
@@ -58,11 +59,23 @@ def _signal_analysis_payload(
     symbol: str,
     signals: dict,
     scores: dict,
+    *,
+    evidence_as_of: str | None = None,
+    evidence_source: str = "live",
+    evidence_stale: bool = False,
 ) -> dict:
+    observed_at = (
+        evidence_as_of
+        or datetime.now(timezone.utc).date().isoformat()
+    )
     evidence = {
         "ticker": symbol,
         "signals": _sanitize(signals),
         "scores": _sanitize(scores),
+        "as_of": observed_at,
+        "evidence_as_of": observed_at,
+        "evidence_source": evidence_source,
+        "evidence_stale": evidence_stale,
     }
     canonical = json.dumps(
         evidence,
@@ -73,7 +86,6 @@ def _signal_analysis_payload(
     ).encode("utf-8")
     return {
         **evidence,
-        "as_of": datetime.now(timezone.utc).date().isoformat(),
         "evidence_hash": hashlib.sha256(canonical).hexdigest(),
     }
 
@@ -148,6 +160,29 @@ async def _build_market_signals_payload() -> dict:
     )
 
 
+async def _owner_stock_signal_evidence(
+    symbol: str,
+) -> tuple[dict, dict | None, str | None]:
+    """Use a fresh manual pull first, then live data with durable fallback."""
+
+    saved = await asyncio.to_thread(
+        read_stock_pull_resource,
+        symbol,
+        "signals",
+    )
+    if saved is not None and saved["fresh"]:
+        return dict(saved["payload"]), saved, "manual_pull"
+    try:
+        live = await asyncio.to_thread(compute_stock_signals, symbol)
+        if not isinstance(live, dict):
+            raise RuntimeError("Stock signals payload is unavailable")
+        return dict(live), saved, None
+    except Exception:
+        if saved is None:
+            raise
+        return dict(saved["payload"]), saved, "manual_pull"
+
+
 @router.get("/market")
 async def market_signals():
     """Read the worker-published market-signal snapshot without blocking GETs."""
@@ -196,17 +231,38 @@ async def stock_signals(ticker: str):
     """Full stock top/bottom analysis with stock-level indicators."""
     try:
         symbol = _normalize_ticker(ticker)
-        signals = (
-            await asyncio.to_thread(compute_stock_signals, symbol)
-            if current_request_is_owner()
-            else cached_stock_signals(symbol)
-        )
+        owner = current_request_is_owner()
+        saved: dict | None = None
+        snapshot_source: str | None = None
+        if owner:
+            signals, saved, snapshot_source = (
+                await _owner_stock_signal_evidence(symbol)
+            )
+        else:
+            saved = await asyncio.to_thread(
+                read_stock_pull_resource,
+                symbol,
+                "signals",
+            )
+            signals = cached_stock_signals(symbol)
+            if signals is None and saved is not None:
+                signals = dict(saved["payload"])
+                snapshot_source = "manual_pull"
         if signals is None:
             raise public_snapshot_unavailable(f"signals:stock:{symbol}")
+        signals = dict(signals)
         cached = bool(isinstance(signals, dict) and signals.pop("_cached", False))
         scores = compute_stock_scores(signals)
         trend = _trend_bias(signals)
-        return _sanitize({
+        snapshot_saved_at = (
+            datetime.fromtimestamp(
+                float(saved["saved_at"]),
+                timezone.utc,
+            ).isoformat()
+            if snapshot_source is not None and saved is not None
+            else None
+        )
+        payload = {
             "ticker": symbol,
             "signals": signals,
             "scores": scores,
@@ -215,9 +271,18 @@ async def stock_signals(ticker: str):
             "trend_bias_status": trend["status"],
             "trend_bias_coverage": trend["coverage"],
             "trend_bias_missing_components": trend["missing_components"],
-            "as_of": today_str(),
-            "_cached": cached,
-        })
+            "as_of": snapshot_saved_at or today_str(),
+            "_cached": cached or snapshot_source is not None,
+        }
+        if snapshot_source is not None and saved is not None:
+            payload.update(
+                {
+                    "snapshot_source": snapshot_source,
+                    "snapshot_saved_at": snapshot_saved_at,
+                    "_stale": not bool(saved["fresh"]),
+                }
+            )
+        return _sanitize(payload)
     except HTTPException:
         raise
     except Exception as exc:
@@ -241,13 +306,43 @@ async def stock_ai_analysis(
     _require_runtime_capability()
     symbol = _normalize_ticker(ticker)
     try:
-        signals = await asyncio.to_thread(compute_stock_signals, symbol)
-        if isinstance(signals, dict):
-            signals.pop("_cached", None)
+        signals, saved, snapshot_source = (
+            await _owner_stock_signal_evidence(symbol)
+        )
+        evidence_stale = bool(
+            snapshot_source == "manual_pull"
+            and saved is not None
+            and not saved["fresh"]
+        )
+        if evidence_stale:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "stale_signal_evidence",
+                    "message": "技术信号已过期，请先手动拉取最新行情后再分析",
+                    "ticker": symbol,
+                },
+            )
+        signals.pop("_cached", None)
         scores = compute_stock_scores(signals)
+        evidence_as_of = (
+            datetime.fromtimestamp(
+                float(saved["saved_at"]),
+                timezone.utc,
+            ).isoformat()
+            if snapshot_source == "manual_pull" and saved is not None
+            else datetime.now(timezone.utc).isoformat()
+        )
         row, created = _create_job(
             "signal_analysis",
-            _signal_analysis_payload(symbol, signals, scores),
+            _signal_analysis_payload(
+                symbol,
+                signals,
+                scores,
+                evidence_as_of=evidence_as_of,
+                evidence_source=snapshot_source or "live",
+                evidence_stale=False,
+            ),
             force_retry=request.force,
         )
     except ValueError as exc:

@@ -91,13 +91,14 @@ function mapMockMarketSignals(): MarketSignalsSnapshot {
 export const signalsApi = {
   market: (): Promise<MarketSignalsSnapshot> =>
     mockOr(mapMockMarketSignals, () => get('/signals/market').then(mapMarketSignals)),
-  stock: (ticker: string): Promise<Signal[]> =>
+  stock: (ticker: string, force = false): Promise<Signal[]> =>
     mockOr(
       () => fx.getStockSignals(ticker),
       () =>
         marketGet(`/signals/stock/${encodeURIComponent(ticker)}`, {
           ttlMs: 60_000,
           staleMs: 30 * 60_000,
+          force,
         }).then(mapStockSignals),
     ),
 };
