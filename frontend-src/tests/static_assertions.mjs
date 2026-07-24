@@ -59,21 +59,37 @@ for (const svg of [
 }
 assert.match(index, /rel="icon"[^>]*href="\.\/logo\.svg"/, '本地 favicon（logo.svg）必须被链接');
 
-// ── assets 目录：恰好 1 个 js + 1 个 css，且与 index.html 引用完全一致 ───────
+// ── assets 目录（路由级分包时代）────────────────────────────────────────────
+// HTML 只引用唯一的 index 入口 js + 唯一 css；其余为懒加载 chunk。
+// 全部文件必须带 Vite 内容哈希（后端对 /assets/ 下发 immutable 一年缓存的前提），
+// 目录不得混入 js/css 以外的文件。
 const assetEntries = (await readdir(path.join(artifactDir, 'assets'))).sort();
 const jsAssets = assetEntries.filter(name => name.endsWith('.js'));
 const cssAssets = assetEntries.filter(name => name.endsWith('.css'));
-assert.equal(jsAssets.length, 1, `assets 下应恰有 1 个 js，实际：${jsAssets.join(', ') || '无'}`);
+assert.ok(jsAssets.length >= 1, 'assets 下必须存在 js 产物');
 assert.equal(cssAssets.length, 1, `assets 下应恰有 1 个 css，实际：${cssAssets.join(', ') || '无'}`);
-assert.deepEqual(
-  [...scriptRefs, ...styleRefs].map(ref => ref.replace(/^\.\/assets\//, '')).sort(),
-  [...jsAssets, ...cssAssets].sort(),
-  'index.html 的资源引用必须与 assets 目录内容一一对应',
-);
+for (const name of [...jsAssets, ...cssAssets]) {
+  assert.match(
+    name,
+    /-[A-Za-z0-9_-]{8,}\.(?:js|css)$/,
+    `assets 文件必须带内容哈希（immutable 缓存契约）：${name}`,
+  );
+}
+const entryJsRefs = scriptRefs.filter(ref => /^\.\/assets\/index-[^/]+\.js$/.test(ref));
+assert.equal(entryJsRefs.length, 1, `index.html 应恰好引用 1 个 index-*.js 入口，实际：${scriptRefs.join(', ') || '无'}`);
+assert.equal(scriptRefs.length, 1, 'index.html 除入口外不得直接引用其他 js（chunk 走动态 import）');
+assert.equal(styleRefs.length, 1, 'index.html 应恰好引用 1 个样式表');
+assert.match(styleRefs[0], /^\.\/assets\/index-[^/]+\.css$/, 'CI 就绪探针依赖 index-*.css 命名');
+for (const ref of [...scriptRefs, ...styleRefs]) {
+  assert.ok(
+    assetEntries.includes(ref.replace(/^\.\/assets\//, '')),
+    `index.html 引用必须落在 assets 目录内：${ref}`,
+  );
+}
 assert.deepEqual(
   assetEntries.filter(name => !name.endsWith('.js') && !name.endsWith('.css')),
   [],
   'assets 目录不得混入 js/css 以外的文件',
 );
 
-console.log(`Frontend build assertions passed for ${artifactDir} (1 js + 1 css + ${scriptRefs.length + styleRefs.length} references verified).`);
+console.log(`Frontend build assertions passed for ${artifactDir} (${jsAssets.length} js chunks + ${cssAssets.length} css, entry ${entryJsRefs[0]}).`);
