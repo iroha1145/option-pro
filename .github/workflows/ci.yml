@@ -198,7 +198,8 @@ jobs:
           test -n "$css_ref"
           curl --fail --silent --show-error -H 'Accept-Encoding: gzip' -D /tmp/optix-static.headers -o /tmp/optix-styles.gz "http://127.0.0.1:2000${css_ref#.}"
           grep -qi '^content-encoding: gzip' /tmp/optix-static.headers
-          grep -qi '^cache-control:.*max-age=300' /tmp/optix-static.headers
+          # 带内容哈希的 /assets/ 产物走一年 immutable 缓存（app/main.py 静态头策略）
+          grep -qi '^cache-control:.*max-age=31536000.*immutable' /tmp/optix-static.headers
           worker_ready=false
           for attempt in {1..30}; do
             if ./scripts/compose.sh exec -T worker python -m app.worker --healthcheck |
