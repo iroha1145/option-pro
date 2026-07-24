@@ -6,6 +6,8 @@ import type { ApiError } from '@/api/client';
 import TickerLogo from '@/components/shared/TickerLogo';
 import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { useRetryCountdown } from '@/hooks/useRetryCountdown';
@@ -152,8 +154,14 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
               <tr className="border-b border-line text-left text-eyebrow font-sans uppercase tracking-[0.14em] text-ink-400">
                 <th className="py-2.5 pr-2 font-sans">代码</th>
                 <th className="px-2 py-2.5 text-right font-sans">价</th>
-                <th className="px-2 py-2.5 font-sans">板块排位</th>
-                <th className="px-2 py-2.5 text-right font-sans">IV%</th>
+                <th className="px-2 py-2.5 font-sans">
+                  板块排位
+                  <InfoHint hint={SCORE_HINTS.sectorIvRank} side="bottom" size={11} className="ml-1" />
+                </th>
+                <th className="px-2 py-2.5 text-right font-sans">
+                  IV%
+                  <InfoHint hint={SCORE_HINTS.sectorAtmIv} side="bottom" align="end" size={11} className="ml-1" />
+                </th>
                 <th className="w-10" aria-label="操作" />
               </tr>
             </thead>

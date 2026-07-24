@@ -9,6 +9,8 @@ import type { CatalystFilters } from './filters';
 import { toFeedQuery } from './filters';
 import EmptyState from '@/components/shared/EmptyState';
 import TickerLogo from '@/components/shared/TickerLogo';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
@@ -184,7 +186,10 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
     <div className="card-surface overflow-hidden">
       <div className="hidden grid-cols-none items-center border-b border-line px-5 py-2.5 sm:flex">
         <p className="w-40 eyebrow">代码</p>
-        <p className="min-w-[180px] flex-1 eyebrow">净影响 · 非收益</p>
+        <p className="min-w-[180px] flex-1 eyebrow">
+          净影响 · 非收益
+          <InfoHint hint={SCORE_HINTS.netImpact} side="bottom" size={11} className="ml-1" />
+        </p>
         <p className="hidden eyebrow md:block">多/空/中</p>
         <p className="hidden w-14 text-right eyebrow sm:block">来源</p>
         <p className="hidden w-16 text-right eyebrow lg:block">最新</p>

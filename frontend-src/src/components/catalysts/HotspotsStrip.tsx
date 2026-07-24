@@ -5,6 +5,8 @@ import { catalystsContract } from './api';
 import type { HotspotGroup } from './api';
 import { HeatMeter, Led, TickerChip } from './bits';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS } from '@/lib/scoreHints';
 import Icon from '@/components/icons';
 import { fmtRelative } from '@/lib/format';
 
@@ -90,7 +92,10 @@ export default function HotspotsStrip({ onOpenNews }: { onOpenNews: (newsId: str
     <section className="mt-6" aria-label="热点主题带">
       <div className="flex items-baseline justify-between">
         <div className="flex items-baseline gap-3">
-          <p className="eyebrow">HOT THEMES · 热点带</p>
+          <p className="eyebrow">
+            HOT THEMES · 热点带
+            <InfoHint hint={SCORE_HINTS.hotScore} side="bottom" size={12} className="ml-1" />
+          </p>
           <h2 className="text-h2 text-ink-900">市场在交易什么故事</h2>
         </div>
         {statusQ.data && (

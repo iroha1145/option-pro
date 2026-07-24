@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils';
 import { fmtPct, fmtPrice } from '@/lib/format';
 import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
+import InfoHint from '@/components/shared/InfoHint';
+import { MARKET_SIGNAL_HINTS, SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonCard } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 
@@ -74,7 +76,12 @@ function MetricRows({ data }: { data: MarketSignalsSnapshot }) {
     <div className="space-y-2.5">
       {rows.map((metric) => (
         <div key={metric.key} className="grid grid-cols-[minmax(0,1fr)_64px_64px] items-center gap-2">
-          <span className="truncate text-caption text-ink-500" title={metric.label}>{metric.label}</span>
+          <span className="flex min-w-0 items-center gap-1">
+            <span className="truncate text-caption text-ink-500" title={metric.label}>{metric.label}</span>
+            {MARKET_SIGNAL_HINTS[metric.key] && (
+              <InfoHint hint={MARKET_SIGNAL_HINTS[metric.key]} align="start" size={11} />
+            )}
+          </span>
           <span className="text-right font-mono text-caption text-ink-800 tnum">{metric.value}</span>
           <span className="text-right font-mono text-micro text-ink-400 tnum">
             {metric.topScore !== null || metric.bottomScore !== null
@@ -154,15 +161,24 @@ export default function SignalsReading({
         <div>
           <div className="grid grid-cols-3 gap-3">
             <p className="rounded-md border border-line bg-card-warm p-3">
-              <span className="block text-micro text-ink-400">顶部风险</span>
+              <span className="block text-micro text-ink-400">
+                顶部风险
+                <InfoHint hint={SCORE_HINTS.readingTop} side="bottom" align="start" size={11} className="ml-1" />
+              </span>
               <span className="mt-1 block font-mono text-data-m text-down-700 tnum">{signals.topScore ?? '—'}</span>
             </p>
             <p className="rounded-md border border-line bg-card-warm p-3">
-              <span className="block text-micro text-ink-400">底部修复</span>
+              <span className="block text-micro text-ink-400">
+                底部修复
+                <InfoHint hint={SCORE_HINTS.readingBottom} side="bottom" size={11} className="ml-1" />
+              </span>
               <span className="mt-1 block font-mono text-data-m text-up-700 tnum">{signals.bottomScore ?? '—'}</span>
             </p>
             <p className="rounded-md border border-line bg-card-warm p-3">
-              <span className="block text-micro text-ink-400">数据质量</span>
+              <span className="block text-micro text-ink-400">
+                数据质量
+                <InfoHint hint={SCORE_HINTS.readingDataQuality} side="bottom" align="end" size={11} className="ml-1" />
+              </span>
               <span className="mt-1 block font-mono text-data-m text-ink-800 tnum">{signals.dataQuality ?? '—'}</span>
             </p>
           </div>

@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { fmtPct } from '@/lib/format';
 import TickerLogo from '@/components/shared/TickerLogo';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS } from '@/lib/scoreHints';
 import Icon from '@/components/icons';
 import type { SectorVm } from './model';
 import { periodLabel } from './model';
@@ -17,7 +19,7 @@ function Metric({
   value,
   tone,
 }: {
-  label: string;
+  label: React.ReactNode;
   value: React.ReactNode;
   tone?: 'up' | 'down';
 }) {
@@ -81,7 +83,12 @@ export default function DetailBand({
             }
           />
           <Metric
-            label="平均强度"
+            label={
+              <>
+                平均强度
+                <InfoHint hint={SCORE_HINTS.avgStrength} side="bottom" size={11} className="ml-1" />
+              </>
+            }
             value={sector.avgStrength?.toFixed(1) ?? '—'}
           />
           <Metric

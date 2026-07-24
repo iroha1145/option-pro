@@ -11,6 +11,8 @@ import { fmtCompact, fmtPrice } from '@/lib/format';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
 import ChangeBadge from '@/components/shared/ChangeBadge';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
 import RowExpansion from './RowExpansion';
 import { CatalystBadge, ScoreCell, SubscoreTicks } from './cells';
 import { tierOf, TIER_RANGE, type CatalystSummary, type DetailCache } from './types';
@@ -36,10 +38,10 @@ export interface ResultTableProps {
   stale?: boolean;
 }
 
-const HEADS: { label: string; align?: 'right' | 'center'; width?: string }[] = [
+const HEADS: { label: string; align?: 'right' | 'center'; width?: string; hint?: ScoreHint }[] = [
   { label: '#', width: '36px' },
   { label: '代码' },
-  { label: '强度分' },
+  { label: '强度分', hint: SCORE_HINTS.strengthComposite },
   { label: '分项' },
   { label: '价 / 涨跌', align: 'right' },
   { label: '催化剂 · 72H' },
@@ -79,6 +81,7 @@ export default function ResultTable({
                 )}
               >
                 {h.label}
+                {h.hint && <InfoHint hint={h.hint} side="bottom" size={11} className="ml-1" />}
               </th>
             ))}
           </tr>

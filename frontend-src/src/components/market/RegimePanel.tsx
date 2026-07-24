@@ -9,16 +9,17 @@ import type { MarketRegime } from './api';
 import { cn } from '@/lib/utils';
 import { strengthBarClass } from '@/components/shared/StrengthBar';
 import EmptyState from '@/components/shared/EmptyState';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
 import { SkeletonCard } from '@/components/shared/Skeleton';
-import Icon from '@/components/icons';
 
-const DIMS: { key: keyof MarketRegime; label: string; tip: string }[] = [
-  { key: 'index_trend_score', label: '指数趋势', tip: '主要指数相对关键均线（20/50 日）的位置与斜率，衡量大盘方向性。' },
-  { key: 'market_momentum_score', label: '市场动量', tip: '全市场上涨动能与价格速率，动能衰竭常领先于指数见顶。' },
-  { key: 'market_breadth_score', label: '市场广度', tip: '涨跌家数比与创新高/新低家数，判断指数上涨是否有广度支撑。' },
-  { key: 'market_volume_score', label: '量能配合', tip: '成交量相对均量的放大程度，放量上行比缩量上行更可信。' },
-  { key: 'risk_appetite_score', label: '风险偏好', tip: '成长/小盘相对防御板块的表现，反映资金的风险承担意愿。' },
-  { key: 'risk_on_spread_score', label: '风险利差', tip: '风险资产与避险资产的相对强弱，利差走阔偏向 risk-on。' },
+const DIMS: { key: keyof MarketRegime; label: string; tip: string; hint: ScoreHint }[] = [
+  { key: 'index_trend_score', label: '指数趋势', tip: '主要指数相对关键均线（20/50 日）的位置与斜率，衡量大盘方向性。', hint: SCORE_HINTS.regimeTrend },
+  { key: 'market_momentum_score', label: '市场动量', tip: '全市场上涨动能与价格速率，动能衰竭常领先于指数见顶。', hint: SCORE_HINTS.regimeMomentum },
+  { key: 'market_breadth_score', label: '市场广度', tip: '涨跌家数比与创新高/新低家数，判断指数上涨是否有广度支撑。', hint: SCORE_HINTS.regimeBreadth },
+  { key: 'market_volume_score', label: '量能配合', tip: '成交量相对均量的放大程度，放量上行比缩量上行更可信。', hint: SCORE_HINTS.regimeVolume },
+  { key: 'risk_appetite_score', label: '风险偏好', tip: '成长/小盘相对防御板块的表现，反映资金的风险承担意愿。', hint: SCORE_HINTS.regimeRiskAppetite },
+  { key: 'risk_on_spread_score', label: '风险利差', tip: '风险资产与避险资产的相对强弱，利差走阔偏向 risk-on。', hint: SCORE_HINTS.regimeRiskOn },
 ];
 
 function regimeMean(r: MarketRegime): number {
@@ -79,7 +80,10 @@ export default function RegimePanel({
         <p className="eyebrow">市场形态六维 · MARKET REGIME</p>
         <p className="text-right">
           <span className="font-mono text-data-l text-ink-900 tnum">{mean.toFixed(1)}</span>
-          <span className="block text-micro text-ink-400">综合均值</span>
+          <span className="block text-micro text-ink-400">
+            综合均值
+            <InfoHint hint={SCORE_HINTS.marketRegime} side="bottom" align="end" size={11} className="ml-1" />
+          </span>
         </p>
       </div>
       <div className="mt-5 grid flex-1 grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
@@ -90,7 +94,7 @@ export default function RegimePanel({
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-caption text-ink-600">
                   {d.label}
-                  <Icon name="doc-quote" size={12} className="text-ink-300 transition-colors group-hover:text-brand-500" />
+                  <InfoHint hint={d.hint} side="bottom" size={12} />
                 </span>
                 <span className="font-mono text-data-m text-ink-800 tnum">{score}</span>
               </div>

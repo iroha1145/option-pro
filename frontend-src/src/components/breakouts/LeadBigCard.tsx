@@ -18,6 +18,8 @@ import { useCountUp } from '@/hooks/useCountUp';
 import { useShell } from '@/components/Layout';
 import ReactECharts from '@/components/charts/ReactECharts';
 import ChangeBadge from '@/components/shared/ChangeBadge';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
@@ -97,7 +99,10 @@ function PriorityRing({ score }: { score: number }) {
           <span className="font-mono text-[15px] font-medium leading-[20px] text-ink-900 tnum">{Math.round(v)}</span>
         </div>
       </div>
-      <span className="mt-0.5 text-[10px] leading-[13px] text-ink-400">告警优先级</span>
+      <span className="mt-0.5 whitespace-nowrap text-[10px] leading-[13px] text-ink-400">
+        告警优先级
+        <InfoHint hint={SCORE_HINTS.breakoutPriority} side="top" align="end" size={11} className="ml-0.5" />
+      </span>
     </div>
   );
 }
@@ -343,10 +348,10 @@ function MiniKline({ ticker }: { ticker: string }) {
 
 /* ---------------- 四维评分条（grow-bar 错峰 + Mono 值） ---------------- */
 const BIG_SCORES = [
-  { key: 'base_quality_score', label: '突破质量' },
-  { key: 'breakout_confirmation_score', label: '确认强度' },
-  { key: 'data_confidence_score', label: '数据可信度' },
-  { key: 'chase_risk_score', label: '追高风险' },
+  { key: 'base_quality_score', label: '突破质量', hint: SCORE_HINTS.breakoutBase },
+  { key: 'breakout_confirmation_score', label: '确认强度', hint: SCORE_HINTS.breakoutConfirmation },
+  { key: 'data_confidence_score', label: '数据可信度', hint: SCORE_HINTS.breakoutDataConfidence },
+  { key: 'chase_risk_score', label: '追高风险', hint: SCORE_HINTS.breakoutChaseRisk },
 ] as const;
 
 function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
@@ -357,7 +362,10 @@ function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
         const v = raw ?? 0;
         return (
           <div key={d.key} className="grid grid-cols-[64px_1fr_36px] items-center gap-2.5">
-            <span className="text-caption text-ink-500">{d.label}</span>
+            <span className="whitespace-nowrap text-caption text-ink-500">
+              {d.label}
+              <InfoHint hint={d.hint} size={11} className="ml-0.5" />
+            </span>
             <div className="h-1 overflow-hidden rounded-pill bg-line">
               <motion.div
                 className={cn('h-full origin-left rounded-pill', d.key === 'chase_risk_score' ? riskBarClass(v) : scoreBarClass(v))}
@@ -622,7 +630,10 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
           <BigScoreBars ev={e} />
         </section>
         <section aria-label="评分贡献" className="lg:border-l lg:border-line lg:pl-4">
-          <p className="eyebrow mb-2">评分贡献</p>
+          <p className="eyebrow mb-2">
+            评分贡献
+            <InfoHint hint={SCORE_HINTS.breakoutPriority} size={12} className="ml-1" />
+          </p>
           <ContributionBar ev={e} />
         </section>
       </div>

@@ -12,6 +12,8 @@ import { cn } from '@/lib/utils';
 import { fmtPrice, fmtRelative } from '@/lib/format';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonText } from '@/components/shared/Skeleton';
 import PriceScale from './PriceScale';
 import { RangePersistenceBars, ScoreBarsFull } from './ScoreBars';
@@ -267,7 +269,10 @@ export default function EventDetail({ event, onClose, onOpenTicker, onShowTicker
                   <RangePersistenceBars event={event} />
                 </section>
                 <section>
-                  <p className="eyebrow mb-2">评分套组</p>
+                  <p className="eyebrow mb-2">
+                    评分套组
+                    <InfoHint hint={SCORE_HINTS.breakoutPriority} size={12} className="ml-1" />
+                  </p>
                   <ScoreBarsFull event={event} />
                 </section>
               </div>

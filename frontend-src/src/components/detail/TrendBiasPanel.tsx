@@ -8,6 +8,8 @@ import { usePolling } from '@/hooks/usePolling';
 import { useCountUp } from '@/hooks/useCountUp';
 import { strengthBarClass } from '@/components/shared/StrengthBar';
 import { SkeletonText } from '@/components/shared/Skeleton';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS } from '@/lib/scoreHints';
 import { cn } from '@/lib/utils';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import { getTrendBias, type StockTrendBiasView } from './api';
@@ -61,7 +63,10 @@ function Gauge({ score, label }: { score: number; label: StockTrendBiasView['tre
       </svg>
       <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
         <span className="font-mono text-data-xl text-ink-900 tnum">{Math.round(shown)}</span>
-        <span className={cn('mt-0.5 rounded-xs px-1.5 py-px text-caption font-medium', LABEL_STYLE[label])}>{label}</span>
+        <span className="mt-0.5 flex items-center gap-1">
+          <span className={cn('rounded-xs px-1.5 py-px text-caption font-medium', LABEL_STYLE[label])}>{label}</span>
+          <InfoHint hint={SCORE_HINTS.trendBias} side="bottom" size={11} />
+        </span>
       </div>
     </div>
   );
@@ -166,7 +171,9 @@ export default function TrendBiasPanel({
       )}
 
       <p className="mt-4 text-micro text-ink-400">
-        分项由接口实测信号归一化 · 缺项显示 — · 非收益预测 · 更新于{' '}
+        分项由接口实测信号归一化
+        <InfoHint hint={SCORE_HINTS.trendBiasFactors} size={11} className="mx-0.5" />
+        {' · 缺项显示 — · 非收益预测 · 更新于 '}
         <span className="font-mono tnum">{fmtTimeHHMMSS(new Date(data.as_of))}</span>
       </p>
     </div>

@@ -9,6 +9,8 @@ import { fmtPrice } from '@/lib/format';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
 import ChangeBadge from '@/components/shared/ChangeBadge';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS } from '@/lib/scoreHints';
 import RowExpansion from './RowExpansion';
 import { CatalystBadge, SubscoreTicks } from './cells';
 import {
@@ -82,6 +84,7 @@ export default function ResultCards({
                   </span>
                   <span className="ml-1.5 text-micro text-ink-400">
                     强度分 · {strength.band} {strength.label}
+                    <InfoHint hint={SCORE_HINTS.strengthComposite} size={11} className="ml-1" />
                   </span>
                 </span>
                 <span className="pb-0.5 text-right">

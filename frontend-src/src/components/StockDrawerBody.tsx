@@ -22,6 +22,8 @@ import StrengthBar from '@/components/shared/StrengthBar';
 import SignalChip from '@/components/shared/SignalChip';
 import SourceNote from '@/components/shared/SourceNote';
 import EmptyState from '@/components/shared/EmptyState';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { getDetail } from '@/components/detail/api';
@@ -88,7 +90,10 @@ function PriceHeader({ detail }: { detail: StockDetail }) {
           </div>
         </div>
         <div className="ml-auto text-right">
-          <p className="eyebrow">强度分</p>
+          <p className="eyebrow">
+            强度分
+            <InfoHint hint={SCORE_HINTS.strengthComposite} side="bottom" align="end" size={12} className="ml-1" />
+          </p>
           <StrengthBar score={detail.strengthScore} width={72} className="mt-1.5" />
         </div>
       </div>

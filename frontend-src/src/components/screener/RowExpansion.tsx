@@ -18,10 +18,20 @@ import SignalChip from '@/components/shared/SignalChip';
 import Sparkline from '@/components/charts/Sparkline';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import { strengthBarClass } from '@/components/shared/StrengthBar';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
 import { subscoreDimsOf } from './types';
 import ManualStockPull from '@/components/detail/ManualStockPull';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
+
+/* live 契约分项键 → 评分解释（mock 四维 trend/momentum/… 无对应文案则不渲染图标） */
+const DIM_HINTS: Record<string, ScoreHint> = {
+  score_short: SCORE_HINTS.strengthShort,
+  score_mid: SCORE_HINTS.strengthMid,
+  score_long: SCORE_HINTS.strengthLong,
+  breakout_quality_score: SCORE_HINTS.strengthBreakoutQuality,
+};
 
 /* ---------------- 近 6 日收盘（live 懒加载；表格/卡片双实例只共享进行中的请求） ---------------- */
 const DOT_DAYS = 6;
@@ -160,7 +170,10 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
             const w = weightOf(key);
             return (
               <div key={key} className="grid grid-cols-[56px_1fr_64px] items-center gap-2.5">
-                <span className="text-caption text-ink-500">{label}</span>
+                <span className="whitespace-nowrap text-caption text-ink-500">
+                  {label}
+                  {DIM_HINTS[key] && <InfoHint hint={DIM_HINTS[key]} side="bottom" size={11} className="ml-0.5" />}
+                </span>
                 <span className="h-1.5 overflow-hidden rounded-pill bg-line" role="presentation">
                   {value !== null && (
                     <motion.span

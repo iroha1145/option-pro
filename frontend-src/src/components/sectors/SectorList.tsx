@@ -3,6 +3,8 @@ import { cn } from '@/lib/utils';
 import { fmtPct } from '@/lib/format';
 import DataTable, { type Column } from '@/components/shared/DataTable';
 import StrengthBar from '@/components/shared/StrengthBar';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS } from '@/lib/scoreHints';
 import Icon from '@/components/icons';
 import type { SectorVm } from './model';
 import { periodLabel } from './model';
@@ -61,7 +63,12 @@ export default function SectorList({
       },
       {
         key: 'strength',
-        title: '平均强度',
+        title: (
+          <>
+            平均强度
+            <InfoHint hint={SCORE_HINTS.avgStrength} side="bottom" size={11} />
+          </>
+        ),
         sortable: true,
         sortValue: (row) => row.avgStrength ?? -1,
         render: (row) =>

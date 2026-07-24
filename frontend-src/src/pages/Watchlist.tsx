@@ -30,6 +30,8 @@ import Segmented from '@/components/shared/Segmented';
 import DataTable, { type Column, type SortState } from '@/components/shared/DataTable';
 import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS } from '@/lib/scoreHints';
 import SessionLED, { SessionDot } from '@/components/shared/SessionLED';
 import { SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
@@ -120,7 +122,13 @@ function SignalDistribution({ data }: { data: MarketSignalsSnapshot }) {
         ))}
       </div>
       <p className="mt-4 text-micro text-ink-400">
-        顶部风险 {data.topScore ?? '—'} · 底部修复 {data.bottomScore ?? '—'} · 数据质量 {data.dataQuality ?? '—'}
+        顶部风险
+        <InfoHint hint={SCORE_HINTS.readingTop} align="start" size={11} className="mx-0.5" />
+        {` ${data.topScore ?? '—'} · 底部修复`}
+        <InfoHint hint={SCORE_HINTS.readingBottom} size={11} className="mx-0.5" />
+        {` ${data.bottomScore ?? '—'} · 数据质量`}
+        <InfoHint hint={SCORE_HINTS.readingDataQuality} align="end" size={11} className="mx-0.5" />
+        {` ${data.dataQuality ?? '—'}`}
       </p>
     </div>
   );
@@ -440,7 +448,12 @@ export default function Watchlist() {
       ...(rowStrengthAvailable
         ? [{
             key: 'strength',
-            title: '强度',
+            title: (
+              <>
+                强度
+                <InfoHint hint={SCORE_HINTS.strengthComposite} side="bottom" size={11} />
+              </>
+            ),
             sortable: true,
             sortValue: (r: WatchlistItem) => r.strengthScore,
             render: (r: WatchlistItem) => <StrengthBar score={r.strengthScore} width={80} />,
@@ -551,7 +564,10 @@ export default function Watchlist() {
                 ? [
                     <div key="avg" className="card-surface min-w-[220px] snap-start p-5 sm:min-w-0">
                       <div className="flex items-start justify-between">
-                        <p className="eyebrow">全市场平均强度</p>
+                        <p className="eyebrow">
+                          全市场平均强度
+                          <InfoHint hint={SCORE_HINTS.avgStrength} side="bottom" size={12} className="ml-1" />
+                        </p>
                         <Icon name="wallet-gauge" size={18} className="text-ink-400" />
                       </div>
                       <ScoreDonut score={strengthQ.data.avgScore} />

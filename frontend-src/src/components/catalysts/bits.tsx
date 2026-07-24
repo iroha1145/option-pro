@@ -1,6 +1,8 @@
 /** 催化剂页共享小件：LED / 分类 chip / 分析状态 chip / 置信度·影响标注 / 代码 chip / 热度计 */
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS } from '@/lib/scoreHints';
 import type { NewsAnalysisStatus, NewsClassification } from './api';
 
 /* ---------------- 状态 LED ---------------- */
@@ -68,8 +70,9 @@ export function AnalysisStatusChip({ status, className }: { status: NewsAnalysis
 /* ---------------- 置信度「N% · 非胜率」 ---------------- */
 export function ConfidenceLabel({ value, className }: { value: number; className?: string }) {
   return (
-    <span className={cn('font-mono text-micro text-ink-500 tnum', className)} title="模型置信度，非历史胜率">
+    <span className={cn('font-mono text-micro text-ink-500 tnum', className)}>
       {(value * 100).toFixed(0)}% <span className="text-ink-400">· 非胜率</span>
+      <InfoHint hint={SCORE_HINTS.newsConfidence} size={11} className="ml-1" />
     </span>
   );
 }
@@ -82,9 +85,10 @@ export function ImpactValue({ value, className, dash = '—' }: { value: number 
   const sign = value > 0 ? '+' : value < 0 ? '−' : '';
   const tone = value > 0.05 ? 'text-up-700' : value < -0.05 ? 'text-down-700' : 'text-ink-500';
   return (
-    <span className={cn('font-mono text-micro tnum', tone, className)} title="影响分，非预期收益">
+    <span className={cn('font-mono text-micro tnum', tone, className)}>
       {sign}
       {Math.abs(value).toFixed(2)} <span className="text-ink-400">· 非收益</span>
+      <InfoHint hint={SCORE_HINTS.newsImpact} size={11} className="ml-1" />
     </span>
   );
 }

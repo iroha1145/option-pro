@@ -6,7 +6,8 @@ import Icon from '@/components/icons';
 
 export interface Column<T> {
   key: string;
-  title: string;
+  /** 列头内容；th 内层是 inline-flex gap-1，可携带 InfoHint 等行内小件 */
+  title: ReactNode;
   align?: 'left' | 'right' | 'center';
   width?: string;
   sortable?: boolean;

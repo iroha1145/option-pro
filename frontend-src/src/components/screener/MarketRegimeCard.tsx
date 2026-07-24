@@ -9,6 +9,8 @@ import { motion } from 'framer-motion';
 import type { MarketRegimeDims, MarketRegimeInfo, MarketStrength } from '@/api/types';
 import { useCountUp } from '@/hooks/useCountUp';
 import SourceNote from '@/components/shared/SourceNote';
+import InfoHint from '@/components/shared/InfoHint';
+import { SCORE_HINTS, type ScoreHintKey } from '@/lib/scoreHints';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -19,23 +21,26 @@ interface RegimeDim {
   /** null = 契约缺失（空轨道 + 「—」，不编造） */
   value: number | null;
   hint: string;
+  /** 评分算法解释（lib/scoreHints）——与既有 glass tooltip 并存 */
+  hintKey: ScoreHintKey;
 }
 
 /** live：契约 market_regime 六维 → 展示维度（字段名如实标注） */
 function liveDims(r: MarketRegimeInfo): RegimeDim[] {
   const d: MarketRegimeDims = r.dims;
   return [
-    { key: 'index_trend', label: '指数趋势', en: 'INDEX TREND', value: d.indexTrend, hint: '契约 index_trend_score：指数层面趋势健康度。' },
-    { key: 'momentum', label: '市场动量', en: 'MOMENTUM', value: d.momentum, hint: '契约 market_momentum_score：动量资金活跃度。' },
-    { key: 'breadth', label: '市场广度', en: 'BREADTH', value: d.breadth, hint: '契约 market_breadth_score：上涨扩散广度。' },
-    { key: 'volume', label: '量能配合', en: 'VOLUME', value: d.volume, hint: '契约 market_volume_score：量能对趋势的确认度。' },
-    { key: 'risk_appetite', label: '风险偏好', en: 'RISK APPETITE', value: d.riskAppetite, hint: '契约 risk_appetite_score：资金追高风险意愿。' },
+    { key: 'index_trend', label: '指数趋势', en: 'INDEX TREND', value: d.indexTrend, hint: '契约 index_trend_score：指数层面趋势健康度。', hintKey: 'regimeTrend' },
+    { key: 'momentum', label: '市场动量', en: 'MOMENTUM', value: d.momentum, hint: '契约 market_momentum_score：动量资金活跃度。', hintKey: 'regimeMomentum' },
+    { key: 'breadth', label: '市场广度', en: 'BREADTH', value: d.breadth, hint: '契约 market_breadth_score：上涨扩散广度。', hintKey: 'regimeBreadth' },
+    { key: 'volume', label: '量能配合', en: 'VOLUME', value: d.volume, hint: '契约 market_volume_score：量能对趋势的确认度。', hintKey: 'regimeVolume' },
+    { key: 'risk_appetite', label: '风险偏好', en: 'RISK APPETITE', value: d.riskAppetite, hint: '契约 risk_appetite_score：资金追高风险意愿。', hintKey: 'regimeRiskAppetite' },
     {
       key: 'risk_on_spread',
       label: '强弱价差',
       en: 'RISK-ON SPREAD',
       value: d.riskOnSpread,
       hint: `契约 risk_on_spread_score：风险偏好强弱价差${r.spreadLabel ? `（${r.spreadLabel}）` : ''}。`,
+      hintKey: 'regimeRiskOn',
     },
   ];
 }
@@ -61,12 +66,12 @@ function deriveRegime(m: MarketStrength): RegimeDim[] {
   const spread = Math.max(0, Math.min(100, wAvg(7, 9) - wAvg(0, 3)));
   const clamp = (v: number) => Math.max(0, Math.min(100, Math.round(v)));
   return [
-    { key: 'index_trend', label: '指数趋势', en: 'INDEX TREND', value: clamp(m.avgScore), hint: '全市场强度分均值，衡量指数层面趋势健康度。' },
-    { key: 'momentum', label: '市场动量', en: 'MOMENTUM', value: clamp(ge70 * 160), hint: '强度 ≥70 标的占比放大映射，刻画动量资金活跃度。' },
-    { key: 'breadth', label: '市场广度', en: 'BREADTH', value: clamp(ge50 * 100), hint: '强度 ≥50 标的占全市场比例，越高说明上涨扩散越广。' },
-    { key: 'volume', label: '量能配合', en: 'VOLUME', value: clamp(ge60 * 130), hint: '强度 ≥60 占比映射的资金参与度，配合趋势确认有效性。' },
-    { key: 'risk_appetite', label: '风险偏好', en: 'RISK APPETITE', value: clamp(m.avgScore * 0.8 + ge85 * 80), hint: '均值与 ≥85 高强度占比加权，反映资金追高风险意愿。' },
-    { key: 'risk_on_spread', label: '强弱价差', en: 'RISK-ON SPREAD', value: clamp(spread), hint: '高分组（≥70）与低分组（<40）均分之差，价差越大风格越极化。' },
+    { key: 'index_trend', label: '指数趋势', en: 'INDEX TREND', value: clamp(m.avgScore), hint: '全市场强度分均值，衡量指数层面趋势健康度。', hintKey: 'regimeTrend' },
+    { key: 'momentum', label: '市场动量', en: 'MOMENTUM', value: clamp(ge70 * 160), hint: '强度 ≥70 标的占比放大映射，刻画动量资金活跃度。', hintKey: 'regimeMomentum' },
+    { key: 'breadth', label: '市场广度', en: 'BREADTH', value: clamp(ge50 * 100), hint: '强度 ≥50 标的占全市场比例，越高说明上涨扩散越广。', hintKey: 'regimeBreadth' },
+    { key: 'volume', label: '量能配合', en: 'VOLUME', value: clamp(ge60 * 130), hint: '强度 ≥60 占比映射的资金参与度，配合趋势确认有效性。', hintKey: 'regimeVolume' },
+    { key: 'risk_appetite', label: '风险偏好', en: 'RISK APPETITE', value: clamp(m.avgScore * 0.8 + ge85 * 80), hint: '均值与 ≥85 高强度占比加权，反映资金追高风险意愿。', hintKey: 'regimeRiskAppetite' },
+    { key: 'risk_on_spread', label: '强弱价差', en: 'RISK-ON SPREAD', value: clamp(spread), hint: '高分组（≥70）与低分组（<40）均分之差，价差越大风格越极化。', hintKey: 'regimeRiskOn' },
   ];
 }
 
@@ -75,7 +80,10 @@ function RegimeBar({ dim, index }: { dim: RegimeDim; index: number }) {
   return (
     <div className="group relative">
       <div className="flex items-center gap-3">
-        <span className="w-16 shrink-0 text-caption text-ink-500">{dim.label}</span>
+        <span className="w-16 shrink-0 whitespace-nowrap text-caption text-ink-500">
+          {dim.label}
+          <InfoHint hint={SCORE_HINTS[dim.hintKey]} side="bottom" size={11} className="ml-0.5" />
+        </span>
         <span className="relative h-1.5 flex-1 overflow-hidden rounded-pill bg-line" role="presentation">
           {dim.value !== null && (
             <motion.span
@@ -113,7 +121,10 @@ export default function MarketRegimeCard({ market }: { market: MarketStrength })
   return (
     <div className="card-surface p-5">
       <div className="flex items-baseline justify-between">
-        <p className="eyebrow">市场形态 · MARKET REGIME</p>
+        <p className="eyebrow">
+          市场形态 · MARKET REGIME
+          <InfoHint hint={SCORE_HINTS.marketRegime} side="bottom" size={12} className="ml-1" />
+        </p>
         {regime && regime.score !== null ? (
           <span className="font-mono text-data-m text-ink-900 tnum">{regime.score}</span>
         ) : (
