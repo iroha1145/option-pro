@@ -11,8 +11,11 @@ import TickerLogo from '@/components/shared/TickerLogo';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import RowExpansion from './RowExpansion';
 import { CatalystBadge, SubscoreTicks } from './cells';
-import { strengthBarClass } from '@/components/shared/StrengthBar';
-import type { CatalystSummary, DetailCache } from './types';
+import {
+  screenerStrengthPresentation,
+  type CatalystSummary,
+  type DetailCache,
+} from './types';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -43,6 +46,8 @@ export default function ResultCards({
     <div className="grid grid-cols-1 gap-3" key={animKey}>
       {rows.map((r, i) => {
         const isOpen = expanded === r.ticker;
+        const strength = screenerStrengthPresentation(r.strengthScore);
+        const strengthWidth = Math.max(2, Math.min(100, r.strengthScore));
         return (
           <motion.div
             key={r.ticker}
@@ -72,22 +77,41 @@ export default function ResultCards({
               </span>
               <span className="mt-3 flex items-end justify-between gap-3">
                 <span>
-                  <span className={cn('font-mono text-data-xl tnum', r.strengthScore >= 85 ? 'text-up-700' : 'text-ink-900')}>
+                  <span className={cn('font-mono text-data-xl tnum', strength.textClass)}>
                     {r.strengthScore}
                   </span>
-                  <span className="ml-1.5 text-micro text-ink-400">强度分</span>
+                  <span className="ml-1.5 text-micro text-ink-400">
+                    强度分 · {strength.band} {strength.label}
+                  </span>
                 </span>
                 <span className="pb-0.5 text-right">
                   <span className="block font-mono text-data-m text-ink-800 tnum">{fmtPrice(r.price)}</span>
                 </span>
               </span>
-              <span className="mt-2.5 h-1 w-full overflow-hidden rounded-pill bg-line" role="presentation">
+              <span
+                className="relative mt-2.5 h-1 w-full rounded-pill bg-line"
+                role="presentation"
+                aria-hidden="true"
+                data-strength-band={strength.band}
+                data-strength-tone={strength.tone}
+              >
                 <motion.span
-                  className={cn('block h-full origin-left rounded-pill', strengthBarClass(r.strengthScore))}
+                  className={cn('block h-full origin-left rounded-pill', strength.barClass)}
                   initial={{ scaleX: 0 }}
                   animate={{ scaleX: 1 }}
                   transition={{ duration: 0.7, ease: EASE_PAPER, delay: 0.15 + i * 0.03 }}
-                  style={{ width: `${Math.max(2, Math.min(100, r.strengthScore))}%` }}
+                  style={{ width: `${strengthWidth}%` }}
+                />
+                <motion.span
+                  className={cn(
+                    'absolute top-1/2 size-2 -translate-y-1/2 rounded-full border-2 border-card shadow-sh-1',
+                    strength.barClass,
+                  )}
+                  initial={{ opacity: 0, scale: 0.65 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.26, ease: EASE_PAPER, delay: 0.72 + i * 0.03 }}
+                  style={{ left: `calc(${strengthWidth}% - 4px)` }}
+                  aria-hidden="true"
                 />
               </span>
               <span className="mt-3 flex items-center justify-between border-t border-line pt-3">

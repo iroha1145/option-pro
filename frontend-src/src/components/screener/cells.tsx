@@ -8,25 +8,39 @@ import { cn } from '@/lib/utils';
 import { fmtRelative } from '@/lib/format';
 import Icon from '@/components/icons';
 import { strengthBarClass } from '@/components/shared/StrengthBar';
-import { subscoreDimsOf, type CatalystSummary } from './types';
+import {
+  screenerStrengthPresentation,
+  subscoreDimsOf,
+  type CatalystSummary,
+} from './types';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
-/* ---------------- 强度分：Mono 15 600 + 64px 强度条（≥85 up-700 加粗） ---------------- */
+/* ---------------- 强度分：Mono 15 600 + 64px 强度条（与移动卡片共用固定分档） ---------------- */
 export function ScoreCell({ score, index }: { score: number; index: number }) {
+  const strength = screenerStrengthPresentation(score);
   return (
-    <span className="inline-flex items-center gap-2.5">
+    <span className="inline-flex items-center gap-2.5" title={`${strength.band} ${strength.label}`}>
       <span
         className={cn(
           'font-mono text-[15px] leading-[20px] font-semibold tnum',
-          score >= 85 ? 'text-up-700' : 'text-ink-900',
+          strength.textClass,
         )}
       >
         {score}
       </span>
-      <span className="h-1 w-16 overflow-hidden rounded-pill bg-line" role="presentation">
+      <span
+        className="h-1 w-16 overflow-hidden rounded-pill bg-line"
+        role="progressbar"
+        aria-label={`强度分 ${score}，${strength.band} ${strength.label}`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={score}
+        data-strength-band={strength.band}
+        data-strength-tone={strength.tone}
+      >
         <motion.span
-          className={cn('block h-full origin-left rounded-pill', strengthBarClass(score))}
+          className={cn('block h-full origin-left rounded-pill', strength.barClass)}
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}
           transition={{ duration: 0.7, ease: EASE_PAPER, delay: 0.15 + index * 0.03 }}

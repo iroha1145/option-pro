@@ -12,6 +12,7 @@ import { buildStrengthScanRequest } from '../src/components/screener/scanRequest
 import {
   DEFAULT_FILTERS,
   DOLLAR_VOL_OPTIONS,
+  screenerStrengthPresentation,
   TOPN_OPTIONS,
 } from '../src/components/screener/types.ts';
 import {
@@ -40,6 +41,8 @@ const focusCycleCardSource = path.resolve(
   'FocusCycleCard.tsx',
 );
 const filterWorkbenchSource = path.resolve(here, '..', 'src', 'components', 'screener', 'FilterWorkbench.tsx');
+const resultCardsSource = path.resolve(here, '..', 'src', 'components', 'screener', 'ResultCards.tsx');
+const resultCellsSource = path.resolve(here, '..', 'src', 'components', 'screener', 'cells.tsx');
 const accessApiSource = path.resolve(here, '..', 'src', 'api', 'modules', 'access.ts');
 const stockApiSource = path.resolve(here, '..', 'src', 'api', 'modules', 'stocks.ts');
 const chartApiSource = path.resolve(here, '..', 'src', 'components', 'detail', 'api.ts');
@@ -202,6 +205,43 @@ test('screener waiting state does not invent a percentage', async () => {
   assert.doesNotMatch(workbench, /扫描中[^\n]*\{pct\}|style=\{\{ width: `\$\{pct\}%`/);
   assert.match(workbench, /扫描中 · 等待后台结果/);
   assert.match(workbench, /aria-busy=\{scanning\}/);
+});
+
+test('mobile screener gives the sector field a full row and keeps chips on one line', async () => {
+  const source = await readFile(filterWorkbenchSource, 'utf8');
+  assert.match(source, /data-screener-field="sectors"/);
+  assert.match(source, /w-full min-w-0 flex-none sm:w-auto sm:flex-1/);
+  assert.match(source, /h-7 shrink-0 items-center whitespace-nowrap/);
+});
+
+test('screener result strength colors use stable score bands on mobile and desktop', async () => {
+  const expected = [
+    [59.9, 'D', 'd', 'bg-ink-300'],
+    [60, 'C', 'c', 'bg-warn-600'],
+    [69.9, 'C', 'c', 'bg-warn-600'],
+    [70, 'B', 'b', 'bg-brand-400'],
+    [79.9, 'B', 'b', 'bg-brand-400'],
+    [80, 'A', 'a', 'bg-brand-600'],
+    [84.9, 'A', 'a', 'bg-brand-600'],
+    [85, 'A', 'a-high', 'bg-up-600'],
+    [89.9, 'A', 'a-high', 'bg-up-600'],
+    [90, 'S', 's', 'bg-up-700'],
+  ];
+  for (const [score, band, tone, barClass] of expected) {
+    const presentation = screenerStrengthPresentation(score);
+    assert.equal(presentation.band, band);
+    assert.equal(presentation.tone, tone);
+    assert.equal(presentation.barClass, barClass);
+  }
+
+  const [cards, cells] = await Promise.all([
+    readFile(resultCardsSource, 'utf8'),
+    readFile(resultCellsSource, 'utf8'),
+  ]);
+  assert.match(cards, /screenerStrengthPresentation\(r\.strengthScore\)/);
+  assert.match(cells, /screenerStrengthPresentation\(score\)/);
+  assert.match(cards, /data-strength-band=\{strength\.band\}/);
+  assert.match(cards, /data-strength-tone=\{strength\.tone\}/);
 });
 
 test('login identity does not masquerade as AI availability', async () => {

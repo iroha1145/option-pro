@@ -56,6 +56,40 @@ export const TIER_RANGE: Record<Tier, string> = {
   D: '<60',
 };
 
+/**
+ * 选股结果强度条的视觉分档。
+ * A 档在 85 分处细分颜色与文案，避免默认 Top 20 高分聚集时整页只有一种颜色；
+ * 对外仍属于 A 档，且以固定分数区间着色，不随当前结果集或涨跌方向漂移。
+ */
+export type ScreenerStrengthTone = 's' | 'a-high' | 'a' | 'b' | 'c' | 'd';
+
+export interface ScreenerStrengthPresentation {
+  band: Tier;
+  tone: ScreenerStrengthTone;
+  label: string;
+  barClass: string;
+  textClass: string;
+}
+
+export function screenerStrengthPresentation(score: number): ScreenerStrengthPresentation {
+  if (score >= 90) {
+    return { band: 'S', tone: 's', label: '顶尖', barClass: 'bg-up-700', textClass: 'text-up-700' };
+  }
+  if (score >= 85) {
+    return { band: 'A', tone: 'a-high', label: '极强', barClass: 'bg-up-600', textClass: 'text-up-700' };
+  }
+  if (score >= 80) {
+    return { band: 'A', tone: 'a', label: '强势', barClass: 'bg-brand-600', textClass: 'text-brand-700' };
+  }
+  if (score >= 70) {
+    return { band: 'B', tone: 'b', label: '较强', barClass: 'bg-brand-400', textClass: 'text-brand-700' };
+  }
+  if (score >= 60) {
+    return { band: 'C', tone: 'c', label: '观察', barClass: 'bg-warn-600', textClass: 'text-warn-600' };
+  }
+  return { band: 'D', tone: 'd', label: '偏弱', barClass: 'bg-ink-300', textClass: 'text-ink-600' };
+}
+
 /** 筛选条件（draft = 工作台编辑中；applied = 上次扫描快照） */
 export interface ScanFilters {
   tier: TierFilter;
