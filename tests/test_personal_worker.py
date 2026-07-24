@@ -889,7 +889,10 @@ def test_earnings_analysis_rejects_incomplete_full_market_snapshot(
         "reason": "earnings_snapshot_incomplete",
         "queued": 0,
     }
-    assert repository.path.exists() is False
+    # Retention runs even when the provider snapshot is incomplete, but no
+    # analysis task may be queued from partial market data.
+    assert repository.path.exists() is True
+    assert repository.health()["pending"] == 0
 
 
 @pytest.mark.parametrize("mode", ["read", "off"])
@@ -2727,7 +2730,7 @@ def test_default_task_inventory_and_maintenance_backup(
         spec for spec in specs if spec.name == "earnings_analysis"
     )
     assert isinstance(earnings_analysis_spec.runner, EarningsAnalysisTask)
-    assert earnings_analysis_spec.interval_seconds == 86_400
+    assert earnings_analysis_spec.interval_seconds == 21_600
     assert earnings_analysis_spec.enabled is True
     assert earnings_analysis_spec.manual_only is False
     strength_spec = next(spec for spec in specs if spec.name == "strength_refresh")

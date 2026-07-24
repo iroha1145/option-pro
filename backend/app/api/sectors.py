@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 import json
 import math
 import os
@@ -10,11 +11,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.access import current_request_is_owner, public_snapshot_unavailable
 from app.data_paths import get_data_paths
-from app.services import yahoo
+from app.services import massive, yahoo
+from app.services.request_security import request_client_ip
 from app.services.sectors import SECTORS
 from app.services.zh_names import get_zh_name
 
@@ -31,6 +33,13 @@ _SECTOR_IV_SNAPSHOT_VERSION = 1
 _SECTOR_IV_SNAPSHOT_TTL_SECONDS = 60 * 60
 _SECTOR_IV_SNAPSHOT_MAX_BYTES = 512 * 1024
 _SECTOR_IV_SNAPSHOT_DIR = get_data_paths().root / "sector-iv-snapshots-v1"
+_SECTOR_IV_FAILURE_TTL_SECONDS = 60
+_SECTOR_IV_FAILURE_MAX_KEYS = 128
+_PUBLIC_SECTOR_IV_CLIENT_WINDOW_SECONDS = 5 * 60
+_PUBLIC_SECTOR_IV_CLIENT_LIMIT = 8
+_PUBLIC_SECTOR_IV_MAX_CLIENTS = 2048
+_sector_iv_failure_deadlines: dict[str, float] = {}
+_public_sector_iv_recent: dict[str, deque[float]] = {}
 
 
 def _lock_for(key: str) -> asyncio.Lock:
@@ -39,6 +48,83 @@ def _lock_for(key: str) -> asyncio.Lock:
         lock = asyncio.Lock()
         _locks[key] = lock
     return lock
+
+
+def _sector_iv_failure_retry_after(key: str) -> int | None:
+    now = time.monotonic()
+    for expired_key in [
+        candidate
+        for candidate, deadline in _sector_iv_failure_deadlines.items()
+        if deadline <= now
+    ]:
+        _sector_iv_failure_deadlines.pop(expired_key, None)
+    deadline = _sector_iv_failure_deadlines.get(key)
+    return None if deadline is None else max(1, math.ceil(deadline - now))
+
+
+def _record_sector_iv_failure(key: str) -> int:
+    _sector_iv_failure_deadlines[key] = (
+        time.monotonic() + _SECTOR_IV_FAILURE_TTL_SECONDS
+    )
+    if len(_sector_iv_failure_deadlines) > _SECTOR_IV_FAILURE_MAX_KEYS:
+        oldest = min(
+            _sector_iv_failure_deadlines,
+            key=_sector_iv_failure_deadlines.__getitem__,
+        )
+        _sector_iv_failure_deadlines.pop(oldest, None)
+    return _sector_iv_failure_retry_after(key) or 1
+
+
+def _sector_iv_cooldown_error(retry_after: int) -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail={
+            "code": "sector_iv_cooldown",
+            "message": "Yahoo/yfinance 板块期权数据暂不可用",
+        },
+        headers={"Retry-After": str(max(1, retry_after))},
+    )
+
+
+def _reserve_public_sector_iv(client_id: str) -> None:
+    now = time.monotonic()
+    cutoff = now - _PUBLIC_SECTOR_IV_CLIENT_WINDOW_SECONDS
+    recent = _public_sector_iv_recent.setdefault(client_id, deque())
+    while recent and recent[0] <= cutoff:
+        recent.popleft()
+    if len(recent) >= _PUBLIC_SECTOR_IV_CLIENT_LIMIT:
+        retry_after = max(
+            1,
+            math.ceil(
+                recent[0]
+                + _PUBLIC_SECTOR_IV_CLIENT_WINDOW_SECONDS
+                - now
+            ),
+        )
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "sector_iv_rate_limited",
+                "message": "板块期权拉取较频繁，请稍后重试",
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
+    recent.append(now)
+    if len(_public_sector_iv_recent) > _PUBLIC_SECTOR_IV_MAX_CLIENTS:
+        removable = [
+            candidate
+            for candidate in _public_sector_iv_recent
+            if candidate != client_id
+        ]
+        oldest_client = min(
+            removable or list(_public_sector_iv_recent),
+            key=lambda candidate: (
+                _public_sector_iv_recent[candidate][-1]
+                if _public_sector_iv_recent[candidate]
+                else float("-inf")
+            ),
+        )
+        _public_sector_iv_recent.pop(oldest_client, None)
 
 
 def _with_cache_status(value: Any, *, fetched_at: float, cache_stale: bool) -> Any:
@@ -123,6 +209,41 @@ async def _sector_iv_rows(sector_id: str) -> list[dict[str, Any]]:
     """
     sector = SECTORS[sector_id]
     sem = asyncio.Semaphore(8)
+    massive_prices: dict[str, float] = {}
+
+    # IV itself needs a real option chain, which Stocks Starter does not
+    # provide.  The accompanying stock price can still use Massive first in
+    # one bounded batch; unsupported symbols or plan failures fall back to
+    # Yahoo below without discarding the Yahoo IV result.
+    if massive.configured():
+        massive_symbols = {
+            ticker: symbol
+            for ticker in sector["tickers"]
+            if (symbol := massive.to_symbol(ticker)) is not None
+            and not symbol.startswith("I:")
+        }
+        if massive_symbols:
+            try:
+                snapshots = await asyncio.to_thread(
+                    massive.snapshot_batch,
+                    list(massive_symbols.values()),
+                )
+            except massive.MassiveError:
+                snapshots = {}
+            for ticker, symbol in massive_symbols.items():
+                snapshot = snapshots.get(symbol)
+                if not isinstance(snapshot, dict):
+                    continue
+                minute = snapshot.get("minute")
+                price = (
+                    _finite_number(minute.get("c"))
+                    if isinstance(minute, dict)
+                    else None
+                )
+                if price is None:
+                    price = _finite_number(snapshot.get("day_close"))
+                if price is not None and price > 0:
+                    massive_prices[ticker] = price
 
     def _one(ticker: str) -> dict[str, Any] | None:
         try:
@@ -130,11 +251,19 @@ async def _sector_iv_rows(sector_id: str) -> list[dict[str, Any]]:
             iv = snapshot.get("atm_iv")
             if iv is None:
                 return {"ticker": ticker, "iv": None, "source_status": "insufficient_data"}
-            price = yahoo.get_last_price(ticker)
+            price = massive_prices.get(ticker)
+            price_provider = "Massive" if price is not None else "Yahoo/yfinance"
+            if price is None:
+                try:
+                    price = yahoo.get_last_price(ticker)
+                except Exception:
+                    price = None
+                    price_provider = None
             return {
                 "ticker": ticker,
                 "name": get_zh_name(ticker) or ticker,
                 "price": round(price, 2) if price is not None else None,
+                "price_provider": price_provider if price is not None else None,
                 "iv": iv,
                 "_stale": bool(snapshot.get("_stale")),
                 "as_of": snapshot.get("as_of"),
@@ -181,6 +310,7 @@ def _rank_iv_rows(sector_id: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
             "ticker": row["ticker"],
             "name": row.get("name") or row["ticker"],
             "price": row.get("price"),
+            "price_provider": row.get("price_provider"),
             "atm_iv_percent": atm_iv_percent,
             "sector_iv_rank": round(sector_rank, 1),
             "iv_rank": None,
@@ -326,6 +456,7 @@ def _write_sector_iv_snapshot(
     payload: Any,
     *,
     saved_at: float,
+    snapshot_origin: str = "owner_live",
 ) -> None:
     target = _sector_iv_snapshot_path(sector_id)
     cleaned = _clean_sector_iv_snapshot_payload(sector_id, payload)
@@ -337,11 +468,14 @@ def _write_sector_iv_snapshot(
         or saved_at <= 0
     ):
         raise ValueError("sector snapshot saved_at is invalid")
+    if snapshot_origin not in {"owner_live", "public_live"}:
+        raise ValueError("sector snapshot origin is invalid")
     encoded = json.dumps(
         {
             "version": _SECTOR_IV_SNAPSHOT_VERSION,
             "saved_at": saved_at,
             "sector_id": sector_id,
+            "snapshot_origin": snapshot_origin,
             "payload": cleaned,
         },
         allow_nan=False,
@@ -411,6 +545,9 @@ def _read_sector_iv_snapshot(
         )
         if payload is None:
             return None
+        snapshot_origin = document.get("snapshot_origin", "legacy")
+        if snapshot_origin not in {"owner_live", "public_live", "legacy"}:
+            return None
     except (
         OSError,
         RecursionError,
@@ -430,7 +567,8 @@ def _read_sector_iv_snapshot(
         {
             "_cached": True,
             "_stale": stale,
-            "snapshot_source": "sector_owner_snapshot",
+            "snapshot_source": "sector_snapshot",
+            "snapshot_origin": snapshot_origin,
             "snapshot_saved_at": datetime.fromtimestamp(
                 saved_at,
                 timezone.utc,
@@ -591,28 +729,22 @@ def _read_strength_sector_iv_snapshot(
     return payload
 
 
-async def _request_iv_payload(sector_id: str) -> dict[str, Any]:
-    """Resolve memory and durable snapshots; only Owner may run a cold scan."""
+async def _request_iv_payload(
+    sector_id: str,
+    *,
+    public_client_id: str | None = None,
+) -> dict[str, Any]:
+    """Resolve cached IV first, then perform one protected Yahoo cold scan.
+
+    Massive Stocks Starter does not provide the option chain needed for ATM IV.
+    Yahoo/yfinance is therefore the real source for this endpoint.  The
+    process cache coalesces same-sector requests and the durable sector
+    snapshot keeps later visitors from repeating the provider scan after a
+    restart.
+    """
 
     key = f"iv:{sector_id}"
     owner = current_request_is_owner()
-    if not owner:
-        try:
-            return await _cached(
-                key,
-                600,
-                lambda: _iv_ranking_payload(sector_id),
-                allow_refresh=False,
-            )
-        except HTTPException as unavailable:
-            sector_snapshot = _read_sector_iv_snapshot(sector_id)
-            if sector_snapshot is not None and sector_snapshot.get("rankings"):
-                return sector_snapshot
-            strength_snapshot = _read_strength_sector_iv_snapshot(sector_id)
-            if strength_snapshot is not None and strength_snapshot.get("rankings"):
-                return strength_snapshot
-            raise unavailable
-
     now = time.time()
     hit = _cache.get(key)
     if hit and hit[0] > now:
@@ -639,11 +771,48 @@ async def _request_iv_payload(sector_id: str) -> dict[str, Any]:
         if strength_snapshot is not None and strength_snapshot.get("rankings")
         else None
     )
+    # A visitor can keep using an honestly marked stale provider snapshot.
+    # Only a truly empty cold cache starts new Yahoo work; this preserves the
+    # public read boundary during upstream outages while removing the old
+    # permanent 503 for sectors that never had a snapshot.
+    if not owner and fallback is not None:
+        return fallback
+
+    retry_after = _sector_iv_failure_retry_after(key)
+    if retry_after is not None:
+        if fallback is not None:
+            return fallback
+        raise _sector_iv_cooldown_error(retry_after)
+
+    async def load_live() -> dict[str, Any]:
+        locked_retry_after = _sector_iv_failure_retry_after(key)
+        if locked_retry_after is not None:
+            raise _sector_iv_cooldown_error(locked_retry_after)
+        if public_client_id is not None:
+            _reserve_public_sector_iv(public_client_id)
+        try:
+            candidate = await _iv_ranking_payload(sector_id)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise _sector_iv_cooldown_error(
+                _record_sector_iv_failure(key)
+            ) from exc
+        if (
+            candidate.get("source_status") == "insufficient_data"
+            or not candidate.get("rankings")
+        ):
+            raise _sector_iv_cooldown_error(
+                _record_sector_iv_failure(key)
+            )
+        _sector_iv_failure_deadlines.pop(key, None)
+        return candidate
+
     try:
         payload = await _cached(
             key,
             600,
-            lambda: _iv_ranking_payload(sector_id),
+            load_live,
             allow_refresh=True,
         )
     except Exception:
@@ -660,12 +829,14 @@ async def _request_iv_payload(sector_id: str) -> dict[str, Any]:
                 sector_id,
                 payload,
                 saved_at=saved_at,
+                snapshot_origin="owner_live" if owner else "public_live",
             )
             persisted = True
         except (OSError, ValueError):
             persisted = False
         result = dict(payload)
-        result["snapshot_source"] = "owner_live"
+        result["snapshot_source"] = "owner_live" if owner else "public_live"
+        result["snapshot_origin"] = result["snapshot_source"]
         result["snapshot_persisted"] = persisted
         if persisted:
             result["snapshot_saved_at"] = datetime.fromtimestamp(
@@ -677,10 +848,15 @@ async def _request_iv_payload(sector_id: str) -> dict[str, Any]:
 
 
 @router.get("/{sector_id}/iv-ranking")
-async def iv_ranking(sector_id: str):
+async def iv_ranking(sector_id: str, request: Request):
     ensure_sector(sector_id)
     try:
-        return await _request_iv_payload(sector_id)
+        return await _request_iv_payload(
+            sector_id,
+            public_client_id=(
+                None if current_request_is_owner() else request_client_ip(request)
+            ),
+        )
     except HTTPException:
         raise
     except Exception as exc:
@@ -688,12 +864,17 @@ async def iv_ranking(sector_id: str):
 
 
 @router.get("/{sector_id}/heatmap")
-async def heatmap(sector_id: str):
+async def heatmap(sector_id: str, request: Request):
     ensure_sector(sector_id)
     # Reuse the iv-ranking cache — the heatmap is a projection of the same
     # data, so visiting both views costs one scan instead of two.
     try:
-        payload = await _request_iv_payload(sector_id)
+        payload = await _request_iv_payload(
+            sector_id,
+            public_client_id=(
+                None if current_request_is_owner() else request_client_ip(request)
+            ),
+        )
     except HTTPException:
         raise
     except Exception as exc:
@@ -720,6 +901,7 @@ async def heatmap(sector_id: str):
         "requested_count": payload.get("requested_count", len(SECTORS[sector_id]["tickers"])),
         "failed_symbols": payload.get("failed_symbols", []),
         "snapshot_source": payload.get("snapshot_source"),
+        "snapshot_origin": payload.get("snapshot_origin"),
         "snapshot_saved_at": payload.get("snapshot_saved_at"),
         "providers": payload.get("providers", []),
     }

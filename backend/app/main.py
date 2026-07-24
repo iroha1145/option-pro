@@ -31,6 +31,9 @@ from app.access import (
     OwnerAccessRuntime,
     canonical_request_host,
     get_access_runtime,
+    is_public_earnings_ai_read_path,
+    is_public_earnings_impact_action_path,
+    is_public_stock_pull_path,
     request_owner_access_context,
     require_public_read_or_owner_access,
     require_same_origin_action,
@@ -179,6 +182,13 @@ _CACHED_MARKET_READ_PATTERNS = tuple(
         r"^/api/breakouts/tickers/[^/]+$",
     )
 )
+_PROVIDER_WORK_READ_PATTERNS = tuple(
+    _re.compile(pattern, _re.IGNORECASE)
+    for pattern in (
+        r"^/api/options/[^/]+/(?:expirations|chain)$",
+        r"^/api/sectors/[^/]+/(?:iv-ranking|heatmap)$",
+    )
+)
 _HTML_CSP = (
     "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; "
     "script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
@@ -268,14 +278,18 @@ _PASSWORD_ENTRY_PREFIXES = ("/assets/",)
 
 
 def _is_public_read_api_path(path: str) -> bool:
-    return path in _PUBLIC_READ_API_PATHS or any(
+    return (
+        path in _PUBLIC_READ_API_PATHS
+        or is_public_earnings_ai_read_path(path)
+        or any(
         pattern.fullmatch(path) is not None
         for pattern in _PUBLIC_READ_API_PATTERNS
+        )
     )
 
 
 def _is_public_read_request(path: str, method: str) -> bool:
-    """Return whether password-mode visitors may use this read-only surface."""
+    """Return whether password-mode visitors may use this bounded surface."""
 
     normalized_method = method.upper()
     if normalized_method in {"GET", "HEAD"}:
@@ -287,7 +301,11 @@ def _is_public_read_request(path: str, method: str) -> bool:
             or path in _ROOT_PUBLIC_ASSETS
             or _is_public_read_api_path(path)
         )
-    return normalized_method == "POST" and path in _PUBLIC_READ_POST_PATHS
+    return normalized_method == "POST" and (
+        path in _PUBLIC_READ_POST_PATHS
+        or is_public_earnings_impact_action_path(path)
+        or is_public_stock_pull_path(path)
+    )
 
 
 def _scope_header(scope, name: bytes) -> str:
@@ -354,6 +372,11 @@ def _is_cached_market_read_path(path: str, method: str = "GET") -> bool:
     """
 
     if method.upper() not in {"GET", "HEAD"}:
+        return False
+    if any(
+        pattern.fullmatch(path) is not None
+        for pattern in _PROVIDER_WORK_READ_PATTERNS
+    ):
         return False
     return (
         _is_public_read_api_path(path)

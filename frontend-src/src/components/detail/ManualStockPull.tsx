@@ -3,7 +3,6 @@ import { ApiError } from '@/api/client';
 import { stocksApi } from '@/api/modules/stocks';
 import type { StockPullResource, StockPullResult } from '@/api/types';
 import Icon from '@/components/icons';
-import { useAccess } from '@/hooks/useAccess';
 import { cn } from '@/lib/utils';
 
 const RESOURCE_LABELS: Array<{
@@ -35,7 +34,6 @@ export default function ManualStockPull({
   compact?: boolean;
   className?: string;
 }) {
-  const { isOwner } = useAccess();
   const latestTickerRef = useRef(ticker);
   latestTickerRef.current = ticker;
   const requestSequenceRef = useRef(0);
@@ -54,8 +52,6 @@ export default function ManualStockPull({
     ? state
     : { ticker, running: false, result: null, error: null };
   const { running, result, error } = visibleState;
-
-  if (!isOwner) return null;
 
   const pull = async () => {
     if (running) return;
@@ -90,7 +86,9 @@ export default function ManualStockPull({
         ticker: requestedTicker,
         running: false,
         result: null,
-        error: cause instanceof ApiError ? cause.message : '拉取失败，请稍后重试',
+        error: cause instanceof ApiError
+          ? `${cause.message}${cause.retryAfter ? ` · ${cause.retryAfter} 秒后可重试` : ''}`
+          : '拉取失败，请稍后重试',
       });
     } finally {
       if (
@@ -117,8 +115,7 @@ export default function ManualStockPull({
         onClick={() => void pull()}
         disabled={running}
         className={cn(
-          'inline-flex min-h-9 items-center justify-center gap-2 rounded-md bg-brand-600 px-3 py-2 text-caption font-medium text-white transition-[filter,opacity] duration-fast hover:brightness-105 disabled:cursor-wait disabled:opacity-70',
-          compact && 'min-h-8 py-1.5',
+          'inline-flex min-h-11 w-full items-center justify-center gap-2 whitespace-normal rounded-md bg-brand-600 px-3 py-2 text-caption font-medium text-white transition-[filter,opacity] duration-fast hover:brightness-105 disabled:cursor-wait disabled:opacity-70 sm:w-auto',
         )}
       >
         {running ? (
@@ -126,8 +123,14 @@ export default function ManualStockPull({
         ) : (
           <Icon name="refresh" size={13} />
         )}
-        {running ? '正在拉取真实数据' : result ? '重新拉取' : '拉取真实数据（Massive 优先）'}
+        {running ? '正在拉取真实数据' : result ? '重新拉取' : '拉取真实数据'}
       </button>
+
+      {!running && !result && !error && (
+        <p className="text-micro text-ink-500">
+          行情价格 Massive 优先，Yahoo 兜底（由 yfinance 拉取）
+        </p>
+      )}
 
       {running && (
         <div role="status" aria-live="polite">

@@ -143,11 +143,14 @@ test('IV 排名保留顶层来源状态与覆盖率，不伪装成历史百分�
     as_of: '2026-07-23T08:00:00Z',
     failed_symbols: ['AMD'],
     snapshot_source: 'strength_worker',
+    snapshot_origin: 'public_live',
+    providers: ['Yahoo/yfinance'],
     rankings: [
       {
         ticker: 'nvda',
         name: '英伟达',
         price: 171.2,
+        price_provider: 'Massive',
         atm_iv_percent: 41.3,
         sector_iv_rank: 88.4,
       },
@@ -161,6 +164,9 @@ test('IV 排名保留顶层来源状态与覆盖率，不伪装成历史百分�
   assert.equal(result.rows[0].sectorIvRank, 88.4);
   assert.equal(result.rows[0].atmIvPercent, 41.3);
   assert.equal(result.snapshotSource, 'strength_worker');
+  assert.equal(result.snapshotOrigin, 'public_live');
+  assert.deepEqual(result.providers, ['Yahoo/yfinance']);
+  assert.equal(result.rows[0].priceProvider, 'Massive');
   assert.equal('ivChange30d' in result.rows[0], false);
 });
 
@@ -228,7 +234,9 @@ test('板块组件不再消费无后端依据的趋势、资金流和相关性�
   assert.equal(ivPanel.includes('ivChange30d'), false);
   assert.equal(ivPanel.includes('基于 252 个交易日'), false);
   assert.equal(ivPanel.includes("meta.snapshotSource === 'strength_worker'"), true);
-  assert.equal(ivPanel.includes("meta.snapshotSource === 'sector_owner_snapshot'"), true);
+  assert.equal(ivPanel.includes("meta.snapshotSource === 'sector_snapshot'"), true);
+  assert.equal(ivPanel.includes('priceProvider'), true);
+  assert.equal(ivPanel.includes('meta.providers'), true);
 });
 
 test('IV 排名等待真实板块目录，首屏不再请求旧占位编号', () => {

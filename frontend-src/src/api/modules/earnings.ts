@@ -1,5 +1,5 @@
 /** 财报域：upcoming / refresh / AI 影响分析 */
-import { get, post, mockOr } from '../client';
+import { get, post, mockOr, toQuery } from '../client';
 import { asRec, pickN, pickS, unwrap } from '../live';
 import * as fx2 from '@/mocks/fixtures2';
 import type { EarningsItem } from '../types';
@@ -21,6 +21,31 @@ export interface EarningsImpactResult {
   summary: string;
   expectation: string;
   impacted: EarningsImpactItem[];
+  /** 后端缺少这些元数据时保持 undefined，兼容尚未升级的缓存结果。 */
+  analysisStage?: string;
+  locked?: boolean;
+  final?: boolean;
+  finalizationInProgress?: boolean;
+  reportId?: string;
+  reportDate?: string;
+}
+
+export interface EarningsReportIdentity {
+  year?: number | null;
+  quarter?: number | null;
+}
+
+export interface EarningsReportAnalysis {
+  status: string;
+  errorCode: string | null;
+  retryAfterSeconds: number | null;
+  analysisStage?: string;
+  locked: boolean;
+  final: boolean;
+  finalizationInProgress: boolean;
+  reportId?: string;
+  reportDate?: string;
+  result: EarningsImpactResult | null;
 }
 
 export interface EarningsCalendarResult {
@@ -77,6 +102,16 @@ export function mapUpcomingPayload(body: unknown): EarningsCalendarResult {
 const RELATIONS = new Set<EarningsImpactRelation>(['competitor', 'supplier', 'customer', 'etf', 'opposing']);
 const DIRECTIONS = new Set<EarningsImpactDirection>(['bullish', 'bearish', 'mixed']);
 
+function pickOptionalBool(
+  row: Record<string, unknown>,
+  ...keys: string[]
+): boolean | null {
+  for (const key of keys) {
+    if (typeof row[key] === 'boolean') return row[key];
+  }
+  return null;
+}
+
 /**
  * 已完成财报任务的真实契约：
  * {output_language,ticker,summary,expectation,impacted:[{ticker,name,relation,direction,reason}]}
@@ -89,6 +124,17 @@ export function normalizeLiveEarningsImpact(body: unknown): EarningsImpactResult
   const summary = pickS(row, 'summary');
   const expectation = pickS(row, 'expectation');
   const rawImpacted = Array.isArray(row.impacted) ? row.impacted : null;
+  const analysisStage = pickS(row, 'analysisStage', 'analysis_stage', '_analysis_stage');
+  const locked = pickOptionalBool(row, 'locked', '_locked');
+  const final = pickOptionalBool(row, 'final', '_final');
+  const finalizationInProgress = pickOptionalBool(
+    row,
+    'finalizationInProgress',
+    'finalization_in_progress',
+    '_finalization_in_progress',
+  );
+  const reportId = pickS(row, 'reportId', 'report_id', '_report_id');
+  const reportDate = pickS(row, 'reportDate', 'report_date', '_report_date');
 
   if (outputLanguage !== 'zh-CN' || !ticker || !summary || !expectation || !rawImpacted) {
     throw new Error('财报影响分析返回字段不完整');
@@ -127,7 +173,68 @@ export function normalizeLiveEarningsImpact(body: unknown): EarningsImpactResult
     summary,
     expectation,
     impacted,
+    ...(analysisStage ? { analysisStage } : {}),
+    ...(locked !== null ? { locked } : {}),
+    ...(final !== null ? { final } : {}),
+    ...(finalizationInProgress !== null ? { finalizationInProgress } : {}),
+    ...(reportId ? { reportId } : {}),
+    ...(reportDate ? { reportDate } : {}),
   };
+}
+
+/** 报告级公开接口只返回状态、锁元数据与可选结果，不暴露任务编号、费用或取消能力。 */
+export function normalizeEarningsReportAnalysis(body: unknown): EarningsReportAnalysis {
+  const row = asRec(body);
+  const analysisStage = pickS(row, 'analysisStage', 'analysis_stage', '_analysis_stage');
+  const locked = pickOptionalBool(row, 'locked', '_locked') === true;
+  const final = pickOptionalBool(row, 'final', '_final') === true;
+  const finalizationInProgress = pickOptionalBool(
+    row,
+    'finalizationInProgress',
+    'finalization_in_progress',
+    '_finalization_in_progress',
+  ) === true;
+  const reportId = pickS(row, 'reportId', 'report_id', '_report_id');
+  const reportDate = pickS(row, 'reportDate', 'report_date', '_report_date');
+  const rawResult = asRec(row.result);
+  let result: EarningsImpactResult | null = null;
+  if (Object.keys(rawResult).length > 0) {
+    const normalized = normalizeLiveEarningsImpact(rawResult);
+    result = {
+      ...normalized,
+      ...(analysisStage ? { analysisStage } : {}),
+      ...(locked ? { locked: true } : {}),
+      ...(final ? { final: true } : {}),
+      ...(finalizationInProgress ? { finalizationInProgress: true } : {}),
+      ...(reportId ? { reportId } : {}),
+      ...(reportDate ? { reportDate } : {}),
+    };
+  }
+  return {
+    status: pickS(row, 'status') ?? (result ? 'completed' : 'not_requested'),
+    errorCode: pickS(row, 'errorCode', 'error_code'),
+    retryAfterSeconds: pickN(row, 'retryAfterSeconds', 'retry_after_seconds'),
+    ...(analysisStage ? { analysisStage } : {}),
+    locked,
+    final,
+    finalizationInProgress,
+    ...(reportId ? { reportId } : {}),
+    ...(reportDate ? { reportDate } : {}),
+    result,
+  };
+}
+
+function reportAnalysisPath(
+  ticker: string,
+  reportDate: string,
+  identity: EarningsReportIdentity,
+): string {
+  const query = toQuery({
+    year: identity.year,
+    quarter: identity.quarter,
+  });
+  const suffix = query ? `?${query}` : '';
+  return `/ai/earnings-impact/${encodeURIComponent(ticker)}/reports/${encodeURIComponent(reportDate)}${suffix}`;
 }
 
 /** 旧版演示夹具仅用于本地 mock；在线响应始终走严格的真实契约归一化。 */
@@ -187,10 +294,48 @@ export const earningsApi = {
       }),
       () => post('/earnings/upcoming/refresh').then(mapUpcomingPayload),
     ),
+  /** 旧版按代码读取仅供仍未迁移的所有者视图；财报日历使用下方精确报告级接口。 */
   impact: (ticker: string): Promise<EarningsImpactResult> =>
     // 409 analysis_required 由 client 统一透传（code + bizCode），UI 状态机消费
     mockOr(
       () => normalizeMockEarningsImpact(fx2.getEarningsImpact(ticker)),
       () => get(`/ai/earnings-impact/${encodeURIComponent(ticker)}`).then(normalizeLiveEarningsImpact),
+    ),
+  reportAnalysis: (
+    ticker: string,
+    reportDate: string,
+    identity: EarningsReportIdentity = {},
+  ): Promise<EarningsReportAnalysis> =>
+    mockOr(
+      () => ({
+        status: 'completed',
+        errorCode: null,
+        retryAfterSeconds: null,
+        locked: false,
+        final: false,
+        finalizationInProgress: false,
+        reportDate,
+        result: normalizeMockEarningsImpact(fx2.getEarningsImpact(ticker)),
+      }),
+      () => get(reportAnalysisPath(ticker, reportDate, identity)).then(normalizeEarningsReportAnalysis),
+    ),
+  requestReportAnalysis: (
+    ticker: string,
+    reportDate: string,
+    identity: EarningsReportIdentity = {},
+  ): Promise<EarningsReportAnalysis> =>
+    mockOr(
+      () => ({
+        status: 'queued',
+        errorCode: null,
+        retryAfterSeconds: 2,
+        locked: false,
+        final: false,
+        finalizationInProgress: false,
+        reportDate,
+        result: null,
+      }),
+      () => post(reportAnalysisPath(ticker, reportDate, identity), { confirm: true })
+        .then(normalizeEarningsReportAnalysis),
     ),
 };

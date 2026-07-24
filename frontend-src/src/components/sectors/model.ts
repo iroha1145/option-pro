@@ -33,6 +33,7 @@ export interface IvRowVm {
   ticker: string;
   name: string;
   price: number | null;
+  priceProvider: string | null;
   rank: number | null;
   atmIv: number | null;
   stale: boolean;
@@ -49,6 +50,8 @@ export interface IvMetaVm {
   successRate: number | null;
   failedSymbols: string[];
   snapshotSource: string | null;
+  snapshotOrigin: string | null;
+  providers: string[];
 }
 
 const PERIOD_LABELS: Record<SectorPeriod, string> = {
@@ -112,6 +115,10 @@ export function normalizeIvRow(raw: IvRankRow): IvRowVm {
       typeof raw.price === 'number' && Number.isFinite(raw.price)
         ? raw.price
         : null,
+    priceProvider:
+      typeof raw.priceProvider === 'string' && raw.priceProvider
+        ? raw.priceProvider
+        : null,
     rank:
       typeof raw.sectorIvRank === 'number' && Number.isFinite(raw.sectorIvRank)
         ? raw.sectorIvRank
@@ -136,6 +143,8 @@ export function normalizeIvMeta(envelope: SectorIvRankingEnvelope | null): IvMet
     successRate: envelope?.successRate ?? null,
     failedSymbols: envelope?.failedSymbols ?? [],
     snapshotSource: envelope?.snapshotSource ?? null,
+    snapshotOrigin: envelope?.snapshotOrigin ?? null,
+    providers: envelope?.providers ?? [],
   };
 }
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -21,12 +22,12 @@ from zoneinfo import ZoneInfo
 
 import httpx
 import yfinance as yf
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from app.access import (
     current_request_is_owner,
     public_snapshot_unavailable,
-    require_same_origin_action,
+    require_same_origin_json,
 )
 from app.data_paths import get_data_paths
 from app.personal_config import get_personal_config
@@ -37,6 +38,7 @@ from app.public_home_snapshot import (
     read_public_home_resource_async,
 )
 from app.services.yfinance_batch import download_in_bounded_batches
+from app.services.request_security import request_client_ip
 from app.stock_pull_snapshot import (
     STOCK_PULL_RESOURCE_FRESH_SECONDS,
     read_stock_pull_resource,
@@ -81,6 +83,88 @@ _stock_pull_blocking_executor = ThreadPoolExecutor(
     thread_name_prefix="stock-pull",
 )
 _stock_pull_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
+_PUBLIC_STOCK_PULL_TICKER_COOLDOWN_SECONDS = 60
+_PUBLIC_STOCK_PULL_CLIENT_WINDOW_SECONDS = 5 * 60
+_PUBLIC_STOCK_PULL_CLIENT_LIMIT = 6
+_PUBLIC_STOCK_PULL_MAX_CLIENTS = 2_048
+_PUBLIC_STOCK_PULL_MAX_TICKERS = 8_192
+_public_stock_pull_ticker_deadlines: dict[str, float] = {}
+_public_stock_pull_recent: dict[str, deque[float]] = {}
+
+
+def _prune_public_stock_pull_limits(now: float) -> None:
+    for key in [
+        key
+        for key, deadline in _public_stock_pull_ticker_deadlines.items()
+        if deadline <= now
+    ]:
+        _public_stock_pull_ticker_deadlines.pop(key, None)
+
+    cutoff = now - _PUBLIC_STOCK_PULL_CLIENT_WINDOW_SECONDS
+    for client_id, attempts in list(_public_stock_pull_recent.items()):
+        while attempts and attempts[0] <= cutoff:
+            attempts.popleft()
+        if not attempts:
+            _public_stock_pull_recent.pop(client_id, None)
+
+    if len(_public_stock_pull_ticker_deadlines) > _PUBLIC_STOCK_PULL_MAX_TICKERS:
+        overflow = len(_public_stock_pull_ticker_deadlines) - _PUBLIC_STOCK_PULL_MAX_TICKERS
+        for key, _deadline in sorted(
+            _public_stock_pull_ticker_deadlines.items(),
+            key=lambda item: item[1],
+        )[:overflow]:
+            _public_stock_pull_ticker_deadlines.pop(key, None)
+    if len(_public_stock_pull_recent) > _PUBLIC_STOCK_PULL_MAX_CLIENTS:
+        overflow = len(_public_stock_pull_recent) - _PUBLIC_STOCK_PULL_MAX_CLIENTS
+        for client_id, _attempts in sorted(
+            _public_stock_pull_recent.items(),
+            key=lambda item: item[1][-1] if item[1] else float("-inf"),
+        )[:overflow]:
+            _public_stock_pull_recent.pop(client_id, None)
+
+
+def _reserve_public_stock_pull(client_id: str, ticker: str) -> None:
+    """Reserve one real provider refresh before its first await."""
+
+    now = time.monotonic()
+    _prune_public_stock_pull_limits(now)
+    deadline = _public_stock_pull_ticker_deadlines.get(ticker)
+    if deadline is not None and deadline > now:
+        retry_after = max(1, math.ceil(deadline - now))
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "stock_pull_cooldown",
+                "message": f"{ticker} 刚刚更新过，请稍后再试",
+                "retry_after_seconds": retry_after,
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    attempts = _public_stock_pull_recent.setdefault(client_id, deque())
+    if len(attempts) >= _PUBLIC_STOCK_PULL_CLIENT_LIMIT:
+        retry_after = max(
+            1,
+            math.ceil(
+                attempts[0]
+                + _PUBLIC_STOCK_PULL_CLIENT_WINDOW_SECONDS
+                - now
+            ),
+        )
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "stock_pull_rate_limited",
+                "message": "手动拉取过于频繁，请稍后再试",
+                "retry_after_seconds": retry_after,
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    attempts.append(now)
+    _public_stock_pull_ticker_deadlines[ticker] = (
+        now + _PUBLIC_STOCK_PULL_TICKER_COOLDOWN_SECONDS
+    )
 
 
 def _is_public_snapshot_unavailable(error: HTTPException) -> bool:
@@ -3067,11 +3151,20 @@ def _finish_stock_pull_task(
         task.exception()
 
 
-async def _coalesced_stock_pull(ticker: str) -> dict[str, Any]:
+async def _coalesced_stock_pull(
+    ticker: str,
+    *,
+    public_client_id: str | None = None,
+) -> dict[str, Any]:
     """Share one complete in-flight manual pull for the same ticker."""
 
     task = _stock_pull_tasks.get(ticker)
+    # Joining existing provider work does not spend another visitor allowance.
+    # The check and task creation below contain no await, so two cold requests
+    # cannot both reserve capacity and start duplicate upstream calls.
     if task is None or task.done():
+        if public_client_id is not None:
+            _reserve_public_stock_pull(public_client_id, ticker)
         task = asyncio.create_task(
             _pull_stock_data_once(ticker),
             name=f"stock-pull:{ticker}",
@@ -3090,16 +3183,21 @@ async def _coalesced_stock_pull(ticker: str) -> dict[str, Any]:
 
 @router.post(
     "/{ticker}/pull",
-    dependencies=[Depends(require_same_origin_action)],
+    dependencies=[Depends(require_same_origin_json)],
 )
-async def pull_stock_data(ticker: str):
-    """Owner-only refresh for overview, daily chart, and derived signals.
+async def pull_stock_data(
+    ticker: str,
+    request: Request,
+):
+    """Refresh overview, daily chart, and derived signals.
 
-    This write endpoint deliberately bypasses the public saved-snapshot
-    boundary and the normal fresh/stale GET cache. The refreshed values are
-    published into both the exact GET cache keys and a restart-safe snapshot.
-    Each resource is independent: an options or signal-enrichment failure
-    cannot erase a valid quote or daily chart.
+    Password-mode visitors may start this bounded same-origin action so a
+    Breakout Radar ticker without a saved snapshot can become readable.
+    Visitor starts have a per-client budget and a global per-ticker cooldown;
+    all callers still share the same in-flight task. The refreshed values are
+    published into the exact GET cache keys and a restart-safe snapshot. Each
+    resource remains independent: a signal-enrichment failure cannot erase a
+    valid quote or daily chart.
     """
 
     symbol = ticker.upper().strip()
@@ -3112,7 +3210,14 @@ async def pull_stock_data(ticker: str):
             },
         )
 
-    return await _coalesced_stock_pull(symbol)
+    public_client_id: str | None = None
+    if not current_request_is_owner():
+        public_client_id = request_client_ip(request)
+
+    return await _coalesced_stock_pull(
+        symbol,
+        public_client_id=public_client_id,
+    )
 
 
 async def _pull_stock_data_once(symbol: str) -> dict[str, Any]:

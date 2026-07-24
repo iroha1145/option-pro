@@ -8,6 +8,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { earningsApi } from '@/api/modules/earnings';
+import type { EarningsReportAnalysis } from '@/api/modules/earnings';
 import { ApiError } from '@/api/client';
 import { useAccess } from '@/hooks/useAccess';
 import { useNow } from '@/hooks/useNow';
@@ -38,8 +39,12 @@ import {
 } from '@/components/earnings/types';
 
 const REFRESH_COOLDOWN_S = 60;
-const LIST_PAGE_SIZE = 80;
+const LIST_PAGE_SIZE = 24;
 type RefreshStatus = 'refreshed' | 'cooldown' | 'failed_stale' | null;
+
+function reportAnalysisKey(ticker: string, reportDate: string): string {
+  return `${ticker.trim().toUpperCase()}|${reportDate}`;
+}
 
 export default function Earnings() {
   const { isOwner, aiEnabled, aiAvailable, aiReason } = useAccess();
@@ -48,9 +53,22 @@ export default function Earnings() {
 
   /* 数据（契约 TTL：earnings 1800s） */
   const q = usePolling(() => earningsApi.upcoming(), 1_800_000);
+  const [reportAnalysisStates, setReportAnalysisStates] = useState<Record<string, EarningsReportAnalysis>>({});
   const items = useMemo(
-    () => (q.data?.items ?? []) as unknown as EarningsRow[],
-    [q.data],
+    () => ((q.data?.items ?? []) as unknown as EarningsRow[]).map((row) => {
+      const analysis = reportAnalysisStates[reportAnalysisKey(row.ticker, row.date)];
+      if (!analysis) return row;
+      return {
+        ...row,
+        impactReady: analysis.result != null,
+        analysisStage: analysis.analysisStage,
+        locked: analysis.locked,
+        final: analysis.final,
+        finalizationInProgress: analysis.finalizationInProgress,
+        reportId: analysis.reportId,
+      };
+    }),
+    [q.data, reportAnalysisStates],
   );
   // sourceStatus can be "degraded" for a fresh, complete public snapshot
   // because guests consume the persisted read-only copy. Coverage is limited
@@ -139,6 +157,15 @@ export default function Earnings() {
     setSelectedTicker(ticker);
   }, []);
   const onSelectTickerFromRow = useCallback((ticker: string) => setSelectedTicker(ticker), []);
+  const onReportAnalysis = useCallback((ticker: string, analysis: EarningsReportAnalysis) => {
+    if (!analysis.reportDate) return;
+    const key = reportAnalysisKey(ticker, analysis.reportDate);
+    setReportAnalysisStates((current) => (
+      current[key] === analysis
+        ? current
+        : { ...current, [key]: analysis }
+    ));
+  }, []);
   const onJumpDay = useCallback(
     (date: string) => {
       setWeekDir(date >= monday ? 1 : -1);
@@ -148,8 +175,8 @@ export default function Earnings() {
     [monday],
   );
 
-  /* 默认列表只挂载最近三天至未来 30 天，避免全市场日历生成数千行 DOM。
-     用户在周/月历点选更远日期时仍会看到该日完整结果。 */
+  /* 默认列表只挂载最近三天至未来 30 天，并按 24 条收纳。
+     点选单日后也保持同一上限，避免财报密集日一次生成数百行 DOM。 */
   const filteredItems = useMemo(
     () => (
       selectedDay
@@ -169,12 +196,8 @@ export default function Earnings() {
     setVisibleLimit(LIST_PAGE_SIZE);
   }
   const visibleItems = useMemo(
-    () => (
-      selectedDay
-        ? filteredItems
-        : prioritizeEarningsRows(filteredItems, visibleLimit)
-    ),
-    [filteredItems, selectedDay, visibleLimit],
+    () => prioritizeEarningsRows(filteredItems, visibleLimit),
+    [filteredItems, visibleLimit],
   );
   const selectedRow = useMemo(
     () => items.find((item) => item.ticker === selectedTicker) ?? null,
@@ -196,7 +219,7 @@ export default function Earnings() {
               ? 'AI 分析暂不可用'
               : isOwner
                 ? 'AI 分析未开启'
-                : '登录后可用 AI 分析'
+                : '单股分析可用'
         }
       >
         {aiAvailable ? (
@@ -219,7 +242,7 @@ export default function Earnings() {
           <>
             <span className="size-2 rounded-full bg-ink-300" aria-hidden="true" />
             <Icon name="spark-ai" size={15} className="text-ink-300" />
-            <span className="text-caption text-ink-400">{isOwner ? 'AI 未开启' : '登录后可用'}</span>
+            <span className="text-caption text-ink-400">{isOwner ? 'AI 未开启' : '单股分析可用'}</span>
           </>
         )}
       </span>
@@ -440,7 +463,7 @@ export default function Earnings() {
                 onNextWeek={() => onWeekChange(1)}
                 filteredByDay={selectedDay != null}
               />
-              {!selectedDay && visibleItems.length < filteredItems.length && (
+              {visibleItems.length < filteredItems.length && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-card px-4 py-3">
                   <p className="text-caption text-ink-500">
                     已显示 <span className="font-mono text-ink-800 tnum">{visibleItems.length}</span>
@@ -451,7 +474,17 @@ export default function Earnings() {
                     onClick={() => setVisibleLimit((limit) => limit + LIST_PAGE_SIZE)}
                     className="h-8 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
                   >
-                    再显示 {Math.min(LIST_PAGE_SIZE, filteredItems.length - visibleItems.length)} 条
+                    显示更多 · {Math.min(LIST_PAGE_SIZE, filteredItems.length - visibleItems.length)} 条
+                  </button>
+                </div>
+              )}
+              {visibleLimit > LIST_PAGE_SIZE && (
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setVisibleLimit(LIST_PAGE_SIZE)}
+                    className="h-8 px-2 text-caption text-ink-400 transition-colors hover:text-brand-600"
+                  >
+                    收起至前 {LIST_PAGE_SIZE} 条
                   </button>
                 </div>
               )}
@@ -465,7 +498,7 @@ export default function Earnings() {
           {loading ? (
             <SkeletonCard />
           ) : (
-            <ImpactCard row={selectedRow} ticker={selectedTicker} onAnalyzed={() => q.refresh()} />
+            <ImpactCard row={selectedRow} ticker={selectedTicker} onAnalyzed={onReportAnalysis} />
           )}
           {!loading && !error503 && <EpsHatchChart items={visibleItems} />}
           {!loading && !error503 && <DensityStrip items={items} onJumpDay={onJumpDay} />}

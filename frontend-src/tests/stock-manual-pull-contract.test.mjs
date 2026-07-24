@@ -11,7 +11,7 @@ async function source(relativePath) {
   return readFile(path.join(src, relativePath), 'utf8');
 }
 
-test('owner stock pull refreshes detail, daily chart, and signals cache paths', async () => {
+test('stock pull refreshes detail, daily chart, and signals cache paths', async () => {
   const stocks = await source('api/modules/stocks.ts');
   assert.ok(stocks.includes('post(`/stocks/${encoded}/pull`, {})'));
   for (const pathSource of [
@@ -35,6 +35,9 @@ test('stock pull UI reports truthful three-resource progress and persistence', a
   assert.match(control, /正在更新基础行情、日线与技术信号 · 共 3 项/);
   assert.match(control, /state\.ticker === ticker/);
   assert.match(control, /latestTickerRef\.current !== requestedTicker/);
+  assert.match(control, /Massive 优先，Yahoo 兜底/);
+  assert.match(control, /cause\.retryAfter/);
+  assert.equal(control.includes('if (!isOwner) return null'), false);
 });
 
 test('manual pull refreshes the open detail, chart, and signal panels immediately', async () => {
@@ -47,6 +50,16 @@ test('manual pull refreshes the open detail, chart, and signal panels immediatel
   assert.match(chart, /getDetailChart\(ticker, range, force\)/);
   assert.match(trend, /\[ticker, refreshVersion\]/);
   assert.match(list, /\[ticker, refreshVersion\]/);
+});
+
+test('public breakout research pages and drawers expose the same manual recovery path', async () => {
+  const drawer = await source('components/StockDrawerBody.tsx');
+  const lead = await source('components/breakouts/LeadBigCard.tsx');
+  assert.match(drawer, /publicSnapshotMissing[\s\S]*可手动拉取真实行情、日线与技术信号/);
+  assert.match(drawer, /<ManualStockPull ticker=\{ticker\} onPulled=\{handlePulled\} \/>/);
+  assert.equal(drawer.includes('isOwner'), false);
+  assert.match(lead, /to=\{`\/stock\/\$\{encodeURIComponent\(e\.ticker\)\}`\}/);
+  assert.match(lead, /打开研究页/);
 });
 
 test('live trend bias maps optional signal fields and renders missing data without inventing values', async () => {

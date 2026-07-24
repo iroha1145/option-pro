@@ -111,14 +111,18 @@ for (const viewport of EARNINGS_DESKTOP_VIEWPORTS) {
     test.use({ viewport });
 
     test("keeps every earnings column and the analysis rail fully visible", async ({ page }) => {
+      test.setTimeout(60_000);
       await openEarnings(page, viewport.width);
 
       const subject = page.locator('[aria-label="财报主体"]');
       const list = page.locator('[aria-label="即将公布"]');
       const analysis = page.locator('[aria-label="AI 影响分析"]');
       await expect(subject).toBeVisible();
-      await expect(list).toBeVisible();
-      await expect(analysis).toBeVisible();
+      // The first owner read may wait for the unified worker's cold earnings
+      // snapshot. Keep the visual assertion on the real list instead of
+      // mistaking its loading skeleton for a layout failure.
+      await expect(list).toBeVisible({ timeout: 30_000 });
+      await expect(analysis).toBeVisible({ timeout: 30_000 });
 
       const header = list.locator(":scope > div").first();
       for (const column of [

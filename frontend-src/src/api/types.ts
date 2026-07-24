@@ -269,6 +269,7 @@ export interface IvRankRow {
   ticker: string;
   name: string;
   price?: number | null;
+  priceProvider?: string | null;
   sectorIvRank?: number | null;
   atmIvPercent?: number | null;
   stale?: boolean;
@@ -357,6 +358,9 @@ export interface OptionChain {
   expiration: string;
   spot: number;
   rows: OptionChainRow[];
+  provider?: string | null;
+  asOf?: string | null;
+  stale?: boolean;
 }
 
 /* ---------- AI 任务 ---------- */

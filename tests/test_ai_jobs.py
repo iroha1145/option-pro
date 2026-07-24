@@ -1246,7 +1246,7 @@ def test_worker_health_reports_official_responses_sdk_without_a_key(tmp_path):
 
 def test_all_paid_job_prompt_versions_invalidate_legacy_english_cache():
     assert ai._PROMPT_VERSIONS == {
-        "earnings_impact": "earnings-impact-zh-cn-v4",
+        "earnings_impact": "earnings-impact-zh-cn-v5",
         "option_alerts": "option-alerts-zh-cn-v4",
         "signal_analysis": "signal-analysis-zh-cn-v5",
         "news_impact": "news-impact-zh-cn-v6",
@@ -2021,7 +2021,7 @@ def test_job_post_is_fast_local_and_idempotent(monkeypatch, tmp_path):
     assert first.json()["status"] == "pending"
     assert second.json()["cached"] is False
     stored = repository.get_job(first.json()["job_id"])
-    assert stored["prompt_version"] == "earnings-impact-zh-cn-v4"
+    assert stored["prompt_version"] == "earnings-impact-zh-cn-v5"
 
 
 def test_option_alert_failed_job_requires_explicit_force_to_requeue(
