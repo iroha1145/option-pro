@@ -571,9 +571,20 @@ def test_batch_aggregates_full_directional_window_and_applies_stock_filters(
         directional_only=True,
     )["results"]["NVDA"]
     summary = result["summary"]
+    feed = intelligence.feed(
+        as_of=observed,
+        window_hours=72,
+        limit=1,
+        include_unanalyzed=False,
+        include_neutral=True,
+    )
 
     assert len(result["items"]) == 1
     assert result["has_more"] is True
+    assert len(feed["items"]) == 1
+    assert feed["has_more"] is True
+    assert feed["summary"]["count"] == 2
+    assert feed["summary"]["analyzed_count"] == 2
     assert {
         "count": summary["count"],
         "analyzed_count": summary["analyzed_count"],
@@ -5655,6 +5666,8 @@ def test_market_focus_snapshot_includes_bounded_calendar_evidence(tmp_path, monk
         ("Monetary Policy Statement", "货币政策声明"),
         ("Main Refinancing Rate", "欧洲央行主要再融资利率"),
         ("Unemployment Claims", "初请失业金人数"),
+        ("Claimant Count Change", "失业金申领人数变动"),
+        ("Average Earnings Index 3m/y", "平均工资指数"),
         ("ECB Press Conference", "新闻发布会"),
         ("RETAIL SALES", "零售销售"),
         ("NONFARM PAYROLLS", "非农就业人数变动"),

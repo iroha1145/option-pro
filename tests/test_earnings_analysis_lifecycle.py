@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 import pytest
@@ -68,6 +68,34 @@ def _create(repository: AIJobRepository, payload: dict, *, force=False):
         max_queued=200,
         force_retry=force,
     )
+
+
+def _seed_active_jobs(repository: AIJobRepository, count: int) -> None:
+    version, digest = runtime.schema_identity("option_alerts")
+    for index in range(count):
+        repository.create_job(
+            job_type="option_alerts",
+            payload={"ticker": f"Q{index:04d}"},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="background",
+            prompt_version="queue-capacity-seed-v1",
+            schema_version=version,
+            schema_sha256=digest,
+            max_queued=count + 1,
+            submission_source="scheduled",
+            priority=10,
+        )
+
+
+def _active_job_count(repository: AIJobRepository) -> int:
+    with repository._connect() as connection:
+        return int(
+            connection.execute(
+                """SELECT COUNT(*) FROM ai_jobs
+                   WHERE status IN ('pending','queued','in_progress')"""
+            ).fetchone()[0]
+        )
 
 
 def _final_payload(
@@ -313,6 +341,7 @@ def test_report_action_uses_server_snapshot_and_hides_job_capabilities(
         {"job_id", "usage", "budget_charge_usd", "cancellable"}
     )
     stored = repository.latest_for_ticker("earnings_impact", "AAPL")
+    assert stored["priority"] == 75
     payload = json.loads(stored["payload_json"])
     assert payload["eps_actual"] == 1.6
     assert payload["eps_estimate"] == 1.4
@@ -326,6 +355,272 @@ def test_report_action_uses_server_snapshot_and_hides_job_capabilities(
         headers={"Origin": "http://localhost", "X-Optix-Action": "1"},
     )
     assert tampered.status_code == 422
+
+
+def test_manual_earnings_jobs_keep_reserved_queue_capacity(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    captured: dict = {}
+    real_create = repository.create_job
+
+    def create_job(**kwargs):
+        captured.update(kwargs)
+        return real_create(**kwargs)
+
+    monkeypatch.setattr(repository, "create_job", create_job)
+    monkeypatch.setattr(ai, "_job_repository", lambda: repository)
+    monkeypatch.setattr(ai, "get_settings", lambda: _settings(repository.path))
+    monkeypatch.setattr(ai, "_require_earnings_manual_analysis_enabled", lambda: None)
+
+    ai._create_job(
+        "earnings_impact",
+        _final_payload(),
+        priority=runtime.EARNINGS_VISITOR_PRIORITY,
+    )
+
+    assert captured["max_queued"] == (
+        200 + runtime.EARNINGS_MANUAL_QUEUE_RESERVE
+    )
+    assert captured["priority"] == runtime.EARNINGS_VISITOR_PRIORITY == 75
+    assert captured["submission_source"] == "manual"
+
+
+def test_queue_reserves_are_tiered_and_keep_a_hard_total_cap(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert (
+        runtime.EARNINGS_FINAL_PRIORITY
+        > runtime.EARNINGS_OWNER_PRIORITY
+        > runtime.EARNINGS_VISITOR_PRIORITY
+        > runtime.EARNINGS_PRE_RELEASE_PRIORITY
+    )
+    assert (
+        runtime.EARNINGS_FINAL_QUEUE_RESERVE
+        > runtime.EARNINGS_MANUAL_QUEUE_RESERVE
+        > 0
+    )
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    settings = _settings(repository.path)
+    effective = SimpleNamespace(
+        ai=SimpleNamespace(manual_analysis_enabled=True),
+        earnings=SimpleNamespace(
+            scheduled_analysis_enabled=True,
+            lookahead_days=30,
+        ),
+    )
+    monkeypatch.setattr(ai, "_job_repository", lambda: repository)
+    monkeypatch.setattr(ai, "get_settings", lambda: settings)
+    monkeypatch.setattr(
+        ai,
+        "_require_earnings_manual_analysis_enabled",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        runtime,
+        "capability_status",
+        lambda _settings: {"supported": True, "status": "supported"},
+    )
+    _seed_active_jobs(repository, settings.openai_job_max_queued)
+
+    async def pre_release_builder(_today):
+        return {
+            "data_limited": False,
+            "source_status": "active",
+            "earnings": [
+                {
+                    "ticker": "PRE",
+                    "name": "Pre release",
+                    "earnings_date": "2026-07-25",
+                    "days_until": 1,
+                    "eps_estimate": 1.0,
+                }
+            ],
+        }
+
+    pre_release_task = EarningsAnalysisTask(
+        "scheduled-pre-release-cap",
+        settings=settings,
+        repository=repository,
+        builder=pre_release_builder,
+        runtime_settings_reader=lambda: effective,
+        today=lambda: datetime(2026, 7, 24, tzinfo=timezone.utc).date(),
+    )
+    pre_release = asyncio.run(pre_release_task())
+
+    assert pre_release.status == "degraded"
+    assert pre_release.error_code == "ai_job_queue_full"
+    assert pre_release.details["queued"] == 0
+    assert _active_job_count(repository) == settings.openai_job_max_queued
+
+    for index in range(runtime.EARNINGS_MANUAL_QUEUE_RESERVE):
+        payload = normalize_earnings_analysis_payload(
+            {
+                "ticker": f"M{index:03d}",
+                "earnings_date": "2026-07-23",
+                "eps_estimate": 1.0,
+                "eps_actual": 1.1,
+            },
+            analysis_stage="post_release_manual",
+        )
+        _row, created = ai._create_job(
+            "earnings_impact",
+            payload,
+            priority=runtime.EARNINGS_VISITOR_PRIORITY,
+        )
+        assert created is True
+
+    manual_cap = (
+        settings.openai_job_max_queued
+        + runtime.EARNINGS_MANUAL_QUEUE_RESERVE
+    )
+    assert _active_job_count(repository) == manual_cap
+    overflow_payload = normalize_earnings_analysis_payload(
+        {
+            "ticker": "M999",
+            "earnings_date": "2026-07-23",
+            "eps_estimate": 1.0,
+            "eps_actual": 1.1,
+        },
+        analysis_stage="post_release_manual",
+    )
+    with pytest.raises(HTTPException) as blocked:
+        ai._create_job(
+            "earnings_impact",
+            overflow_payload,
+            priority=runtime.EARNINGS_VISITOR_PRIORITY,
+        )
+    assert getattr(blocked.value, "status_code", None) == 429
+    assert _active_job_count(repository) == manual_cap
+
+    final_capacity = (
+        runtime.EARNINGS_FINAL_QUEUE_RESERVE
+        - runtime.EARNINGS_MANUAL_QUEUE_RESERVE
+    )
+
+    async def final_builder(_today):
+        return {
+            "data_limited": False,
+            "source_status": "active",
+            "earnings": [
+                {
+                    "ticker": f"F{index:03d}",
+                    "name": f"Final {index}",
+                    "earnings_date": "2026-07-23",
+                    "days_until": -1,
+                    "eps_estimate": 1.0,
+                    "eps_actual": 1.2,
+                    "release_status": "released",
+                }
+                for index in range(final_capacity + 1)
+            ],
+        }
+
+    final_task = EarningsAnalysisTask(
+        "scheduled-final-cap",
+        settings=settings,
+        repository=repository,
+        builder=final_builder,
+        runtime_settings_reader=lambda: effective,
+        today=lambda: datetime(2026, 7, 24, tzinfo=timezone.utc).date(),
+    )
+    final_result = asyncio.run(final_task())
+    final_cap = (
+        settings.openai_job_max_queued
+        + runtime.EARNINGS_FINAL_QUEUE_RESERVE
+    )
+
+    assert final_result.status == "degraded"
+    assert final_result.error_code == "ai_job_queue_full"
+    assert final_result.details["queued"] == final_capacity
+    assert _active_job_count(repository) == final_cap
+    with repository._connect() as connection:
+        priority_counts = {
+            int(row["priority"]): int(row["count"])
+            for row in connection.execute(
+                """SELECT priority,COUNT(*) AS count FROM ai_jobs
+                   WHERE status IN ('pending','queued','in_progress')
+                   GROUP BY priority"""
+            ).fetchall()
+        }
+    assert priority_counts[runtime.EARNINGS_VISITOR_PRIORITY] == (
+        runtime.EARNINGS_MANUAL_QUEUE_RESERVE
+    )
+    assert priority_counts[runtime.EARNINGS_FINAL_PRIORITY] == final_capacity
+    claimed = repository.claim_due("priority-contract-worker", 60)
+    assert claimed is not None
+    assert claimed["priority"] == runtime.EARNINGS_FINAL_PRIORITY == 90
+
+
+def test_saturated_base_queue_processes_same_day_final_before_pre_release(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    settings = _settings(repository.path)
+    effective = SimpleNamespace(
+        ai=SimpleNamespace(manual_analysis_enabled=True),
+        earnings=SimpleNamespace(
+            scheduled_analysis_enabled=True,
+            lookahead_days=30,
+        ),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "capability_status",
+        lambda _settings: {"supported": True, "status": "supported"},
+    )
+    _seed_active_jobs(repository, settings.openai_job_max_queued)
+
+    async def mixed_builder(_today):
+        return {
+            "data_limited": False,
+            "source_status": "active",
+            "earnings": [
+                {
+                    "ticker": "AAA",
+                    "name": "Unreleased first alphabetically",
+                    "earnings_date": "2026-07-24",
+                    "days_until": 0,
+                    "eps_estimate": 1.0,
+                },
+                {
+                    "ticker": "ZZZ",
+                    "name": "Released final",
+                    "earnings_date": "2026-07-24",
+                    "days_until": 0,
+                    "eps_estimate": 1.0,
+                    "eps_actual": 1.2,
+                    "release_status": "released",
+                },
+            ],
+        }
+
+    task = EarningsAnalysisTask(
+        "same-day-final-first",
+        settings=settings,
+        repository=repository,
+        builder=mixed_builder,
+        runtime_settings_reader=lambda: effective,
+        today=lambda: datetime(2026, 7, 24, tzinfo=timezone.utc).date(),
+    )
+    result = asyncio.run(task())
+
+    assert result.status == "degraded"
+    assert result.error_code == "ai_job_queue_full"
+    assert result.details["queued"] == 1
+    assert repository.latest_for_ticker("earnings_impact", "AAA") is None
+    final = repository.latest_for_ticker("earnings_impact", "ZZZ")
+    assert final is not None
+    assert final["priority"] == runtime.EARNINGS_FINAL_PRIORITY
+    assert json.loads(final["payload_json"])["analysis_stage"] == (
+        "post_release_final"
+    )
+    assert _active_job_count(repository) == (
+        settings.openai_job_max_queued + 1
+    )
 
 
 @pytest.mark.parametrize(
@@ -542,6 +837,7 @@ def test_scheduled_actuals_queue_final_and_lock_after_success(
     row = repository.latest_for_ticker("earnings_impact", "AAPL")
     payload = json.loads(row["payload_json"])
     assert payload["analysis_stage"] == "post_release_final"
+    assert row["priority"] == runtime.EARNINGS_FINAL_PRIORITY == 90
 
     claimed = repository.claim_due("scheduled-final-worker", 60)
     repository.complete(

@@ -602,6 +602,9 @@ def _normalize_earnings_output_row(value: Mapping[str, Any]) -> dict[str, Any]:
     release_status = str(value.get("release_status") or "scheduled")
     eps_actual = value.get("eps_actual")
     revenue_actual = value.get("revenue_actual")
+    market_cap = _to_optional_float(value.get("market_cap"))
+    if market_cap is not None and market_cap <= 0:
+        market_cap = None
     actual_source = value.get("actual_source")
     if (
         actual_source is None
@@ -622,7 +625,7 @@ def _normalize_earnings_output_row(value: Mapping[str, Any]) -> dict[str, Any]:
         "eps_low": value.get("eps_low"),
         "revenue_estimate": value.get("revenue_estimate"),
         "revenue_actual": revenue_actual,
-        "market_cap": value.get("market_cap"),
+        "market_cap": market_cap,
         "sector": str(value.get("sector") or ""),
         "earnings_date_source": value.get("earnings_date_source"),
         "estimate_source": value.get("estimate_source"),

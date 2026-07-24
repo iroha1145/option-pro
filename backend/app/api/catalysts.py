@@ -24,6 +24,7 @@ from app.access import (
     require_same_origin_json,
 )
 from app.services.catalysts.config import CatalystSettings, get_catalyst_settings
+from app.services.catalysts.economic_calendar_actuals import enrich_recent_actuals
 from app.services.catalysts.errors import CatalystError, InvalidCursorError
 from app.services.catalysts.personal_service import PersonalCatalystService
 
@@ -405,7 +406,7 @@ def ticker_catalyst_batch(
 
 
 @router.get("/calendar")
-def catalyst_calendar(
+async def catalyst_calendar(
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
     timezone_offset_minutes: int = Query(default=0, ge=-840, le=840),
@@ -414,7 +415,8 @@ def catalyst_calendar(
     min_impact: Optional[Literal["low", "medium", "high"]] = Query(default=None),
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
-    today = _now().date()
+    observed = as_of or _now()
+    today = observed.date()
     start_date = date_from or (today - timedelta(days=_DEFAULT_CALENDAR_HISTORY_DAYS))
     end_date = date_to or (
         start_date + timedelta(days=_DEFAULT_CALENDAR_LOOKAHEAD_DAYS)
@@ -429,13 +431,22 @@ def catalyst_calendar(
         else None
     )
     try:
-        return service.calendar(
+        payload = service.calendar(
             date_from=start_date,
             date_to=end_date,
-            as_of=as_of or _now(),
+            as_of=observed,
             currencies=currency_values,
             min_impact=min_impact,
             timezone_offset_minutes=timezone_offset_minutes,
+        )
+        # Explicit point-in-time queries must stay historically reproducible.
+        if as_of is not None:
+            return payload
+        return await enrich_recent_actuals(
+            payload,
+            date_from=start_date,
+            date_to=end_date,
+            as_of=observed,
         )
     except CatalystError as error:
         _raise_safe(error)

@@ -225,6 +225,7 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
               const est = row.epsEstimate;
               const act = row.epsActual;
               const sector = exStr(row, 'sector');
+              // 市值必须是数据源提供的正数；0/负数是缺失占位，不展示成 $0。
               const marketCap = exNum(row, 'marketCap');
               const move = exNum(row, 'expectedMovePct');
               return (

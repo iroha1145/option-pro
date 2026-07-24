@@ -96,3 +96,9 @@ test('screener daily closes only deduplicate in-flight requests', async () => {
   assert.match(row, /closesCache\.get\(ticker\) === p/);
   assert.match(row, /closesCache\.delete\(ticker\)/);
 });
+
+test('screener row expansion reads the persisted technical-signal snapshot', async () => {
+  const screener = await source('pages/Screener.tsx');
+  assert.match(screener, /signalsApi[\s\S]*\.stock\(next\)/);
+  assert.doesNotMatch(screener, /stocksApi[\s\S]*\.signals\(next\)/);
+});

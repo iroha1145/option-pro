@@ -27,6 +27,34 @@ def _finnhub_success(
     )
 
 
+@pytest.mark.parametrize(
+    ("raw_market_cap", "expected"),
+    [
+        (3_000_000_000_000, 3_000_000_000_000.0),
+        ("123456789", 123456789.0),
+        (0, None),
+        (-1, None),
+        (float("nan"), None),
+        ("N/A", None),
+        (None, None),
+    ],
+)
+def test_earnings_output_only_publishes_positive_source_market_cap(
+    raw_market_cap: object,
+    expected: float | None,
+) -> None:
+    row = earnings._normalize_earnings_output_row(
+        {
+            "ticker": "TEST",
+            "name": "Test Corp",
+            "earnings_date": "2026-07-30",
+            "market_cap": raw_market_cap,
+        }
+    )
+
+    assert row["market_cap"] == expected
+
+
 @pytest.fixture(autouse=True)
 def _clear_earnings_state(monkeypatch: pytest.MonkeyPatch) -> None:
     earnings.cache.clear()

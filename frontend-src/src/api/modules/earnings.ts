@@ -69,8 +69,13 @@ export function mapUpcoming(body: unknown): EarningsItem[] {
   return unwrap(body, 'earnings').map((r) => {
     const rawTiming = pickS(r, 'timing', 'earnings_time');
     const timing: EarningsItem['timing'] = rawTiming === 'bmo' || rawTiming === 'amc' ? rawTiming : null;
+    const rawMarketCap = pickN(r, 'marketCap', 'market_cap');
+    const marketCap = rawMarketCap != null && rawMarketCap > 0 ? rawMarketCap : null;
     return {
       ...r,
+      // 同时覆盖两种命名，避免旧响应里的 0 被扩展字段读取逻辑重新捡回。
+      market_cap: marketCap,
+      marketCap,
       ticker: pickS(r, 'ticker') ?? '',
       name: pickS(r, 'name') ?? '',
       date: pickS(r, 'date', 'earnings_date') ?? '',

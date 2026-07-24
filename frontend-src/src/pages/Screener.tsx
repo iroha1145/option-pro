@@ -5,13 +5,13 @@
  * B2 结果区（统计行 + 参数回显 chips + 三态排序 Segmented + 结果表/卡片流 + 行展开）
  * B3 右侧栏（市场形态 6 维 / 强度剖面 / 评分方法 / 空结果引导）
  * 状态：未扫描 empty-scan.svg · 扫描中骨架 · 无命中 · 503 快照不可用（保留上次结果）
- * 数据：strengthApi.scan / market / profilesMeta + catalystsApi.batchSummaries72h（单次批量）+ stocksApi.detail（成交额推导）
+ * 数据：strengthApi.scan / market / profilesMeta + catalystsApi.batchSummaries72h（单次批量）+ signalsApi.stock
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { strengthApi, type StrengthScanEnvelope } from '@/api/modules/strength';
 import { catalystsApi } from '@/api/modules/catalysts';
-import { stocksApi } from '@/api/modules/stocks';
+import { signalsApi } from '@/api/modules/signals';
 import { runtimeApi, type StrengthRefreshParameters } from '@/api/modules/runtime';
 import { ApiError, isMock } from '@/api/client';
 import type { ScreenerRow, SectorOption, Signal, StrengthProfile } from '@/api/types';
@@ -319,8 +319,8 @@ export default function Screener() {
     setExpanded((prev) => {
       const next = prev === ticker ? null : ticker;
       if (next && signalsRef.current[next] === undefined) {
-        stocksApi
-          .signals(next)
+        signalsApi
+          .stock(next)
           .then((sg) => {
             signalsRef.current = { ...signalsRef.current, [next]: sg };
             setSignalsMap(signalsRef.current);

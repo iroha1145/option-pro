@@ -602,7 +602,8 @@ export function getEarningsUpcoming(): EarningsItemEx[] {
       ...e,
       epsHigh: est != null ? round2(est * r.float(1.04, 1.22)) : null,
       epsLow: est != null ? round2(est * r.float(0.78, 0.96)) : null,
-      marketCap: info ? Math.round(info.base * r.float(0.6, 22) * 1e8) : null,
+      // 演示模式没有真实市值来源，必须留空，不能按基础价随机推算。
+      marketCap: null,
       sector: info?.sector ?? '—',
       expectedMovePct: expectedMoveOf(e.ticker),
       impactReady: analyzedTickers.has(e.ticker),

@@ -271,6 +271,11 @@ def _create_job(
     else:
         _require_manual_analysis_enabled()
     settings = get_settings()
+    max_queued = settings.openai_job_max_queued
+    if job_type == "earnings_impact":
+        # Scheduled pre-release work may fill the normal queue. Keep a small,
+        # quota-protected reserve so an explicit report analysis remains usable.
+        max_queued += ai_job_runtime.EARNINGS_MANUAL_QUEUE_RESERVE
     ai_job_runtime.validate_job_payload(job_type, payload)
     schema_version, schema_sha256 = ai_job_runtime.schema_identity(job_type)
     try:
@@ -283,7 +288,7 @@ def _create_job(
             prompt_version=_PROMPT_VERSIONS[job_type],
             schema_version=schema_version,
             schema_sha256=schema_sha256,
-            max_queued=settings.openai_job_max_queued,
+            max_queued=max_queued,
             submission_source="manual",
             priority=priority,
             force_retry=force_retry,
@@ -777,7 +782,11 @@ async def trigger_earnings_report_impact(
         "earnings_impact",
         payload,
         force_retry=force_retry,
-        priority=80 if current_request_is_owner() else 20,
+        priority=(
+            ai_job_runtime.EARNINGS_OWNER_PRIORITY
+            if current_request_is_owner()
+            else ai_job_runtime.EARNINGS_VISITOR_PRIORITY
+        ),
     )
     return JSONResponse(
         _public_earnings_report_status(repository, row),
@@ -803,7 +812,11 @@ async def create_earnings_impact_job(
         "earnings_impact",
         request_payload,
         force_retry=req.force,
-        priority=80 if owner else 20,
+        priority=(
+            ai_job_runtime.EARNINGS_OWNER_PRIORITY
+            if owner
+            else ai_job_runtime.EARNINGS_VISITOR_PRIORITY
+        ),
     )
     payload = _job_repository().public(
         row,
