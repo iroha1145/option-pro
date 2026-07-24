@@ -170,7 +170,7 @@ export interface BreakoutStatusFull extends BreakoutStatus {
   enabled: boolean;
   worker: { healthy: boolean; heartbeat_at: string };
   latest_completed_scan: { at: string; duration_ms: number; scanned: number; triggered: number } | null;
-  market_session: BreakoutSession;
+  market_session: BreakoutSession | null;
   next_session_at: string | null;
 }
 

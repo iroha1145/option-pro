@@ -74,6 +74,7 @@ def _worker_runtime(
     *,
     current: datetime,
     stale_after_seconds: float | None = None,
+    session_hint: str | None = None,
 ) -> dict[str, Any]:
     worker = status.get("worker")
     if not isinstance(worker, Mapping) or not worker.get("heartbeat_at"):
@@ -96,11 +97,24 @@ def _worker_runtime(
             "worker_status": worker_state,
             "heartbeat_age_seconds": None,
         }
-    stale_after = float(
-        stale_after_seconds
-        if stale_after_seconds is not None
-        else getattr(settings, "worker_health_stale_seconds", 120.0)
-    )
+    if stale_after_seconds is not None:
+        stale_after = float(stale_after_seconds)
+    else:
+        # The worker row heartbeats only when a scheduled scan runs, and the
+        # scan cadence is session-dependent (5/10/30 min). Between runs the
+        # silence is by design, so liveness must allow one full session
+        # interval plus the configured grace before declaring the heartbeat
+        # stale — otherwise the read surface reports a "degraded worker" for
+        # most of every healthy cycle. A genuinely dead worker is still
+        # caught: the completed-snapshot check uses the same session-aware
+        # bound and flags independently.
+        session = str(
+            stored_details.get("market_session") or session_hint or "closed"
+        )
+        stale_after = max(
+            float(getattr(settings, "worker_health_stale_seconds", 120.0)),
+            _snapshot_stale_after(settings, session),
+        )
     age = max(0.0, (current - heartbeat).total_seconds())
     if age > stale_after:
         issue = "worker_heartbeat_stale"
@@ -189,7 +203,14 @@ def assess_breakout_read_state(
         value = status.get("latest_completed_scan")
         snapshot = value if isinstance(value, Mapping) else None
 
-    worker = _worker_runtime(settings, status, current=current)
+    session_hint = (
+        str(snapshot.get("session"))
+        if isinstance(snapshot, Mapping) and snapshot.get("session")
+        else None
+    )
+    worker = _worker_runtime(
+        settings, status, current=current, session_hint=session_hint
+    )
     providers = _provider_states(status)
     details: dict[str, Any] = {
         **worker,
@@ -291,11 +312,18 @@ def check_breakout_health(
         )
 
     current = _now_utc(now)
+    # The container healthcheck stays intentionally stricter than the read
+    # surface: it keeps the flat configured threshold instead of the
+    # session-aware allowance used by assess_breakout_read_state.
     worker = _worker_runtime(
         settings,
         status,
         current=current,
-        stale_after_seconds=stale_after_seconds,
+        stale_after_seconds=(
+            stale_after_seconds
+            if stale_after_seconds is not None
+            else float(getattr(settings, "worker_health_stale_seconds", 120.0))
+        ),
     )
     worker_issue = worker.get("issue")
     if worker_issue == "worker_status_missing":

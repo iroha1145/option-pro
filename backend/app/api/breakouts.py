@@ -10,6 +10,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from app.services.breakouts.clock import MarketClock
 from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
 from app.services.breakouts.health import BreakoutReadState, assess_breakout_read_state
 from app.services.breakouts.models import (
@@ -741,6 +742,7 @@ def ticker_events(ticker: str) -> BreakoutTickerResponse:
 @router.get("/status", response_model=BreakoutStatusResponse)
 def status() -> BreakoutStatusResponse:
     settings = get_breakout_settings()
+    clock_snapshot = MarketClock().snapshot(_now())
     if not settings.enabled:
         return BreakoutStatusResponse(
             as_of=_now(),
@@ -837,15 +839,13 @@ def status() -> BreakoutStatusResponse:
         },
         runtime_status=read_state.status if read_state is not None else overall,
         runtime_reason=read_state.reason if read_state is not None else None,
-        market_session=(
-            read_state.details.get("market_session")
-            if read_state is not None
-            else None
-        ),
+        # The session chip must reflect the market NOW. Worker-stored details
+        # only carry a session while paused and lag scan cadence otherwise,
+        # so classify the current instant with the shared market clock.
+        market_session=clock_snapshot.session.value,
         next_session_at=(
-            read_state.details.get("next_session_at")
-            if read_state is not None
-            else None
+            (read_state.details.get("next_session_at") if read_state else None)
+            or clock_snapshot.next_transition
         ),
         failure_domain=(
             read_state.details.get("failure_domain")

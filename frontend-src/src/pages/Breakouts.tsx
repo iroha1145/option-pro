@@ -289,7 +289,7 @@ export default function Breakouts() {
           <span className="font-mono tnum">
             最近扫描 {status?.lastScanAt ? fmtTimeHHMMSS(new Date(status.lastScanAt)) : '—'}
           </span>
-          {status && <SessionChip session={status.market_session} />}
+          {status?.market_session && <SessionChip session={status.market_session} />}
           <span className="inline-flex items-center gap-1.5">
             <Icon name="command" size={13} className={status?.worker?.healthy ? 'text-up-600' : 'text-warn-600'} />
             Worker {status ? (status.worker?.healthy ? '正常' : '降级') : '—'}

@@ -317,6 +317,31 @@ def test_read_endpoints_are_active_with_fresh_worker_and_snapshot(tmp_path, monk
     assert payloads["events"]["events"][0]["ticker"] == "AAPL"
 
 
+def test_idle_gap_between_scheduled_scans_stays_active(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """A worker that only heartbeats at scan boundaries is healthy, not stale.
+
+    Regular-session cadence is one scan per scan_interval_regular_seconds
+    (default 300s); a heartbeat older than the flat 120s grace but younger
+    than interval+grace is the worker sleeping between runs by design.
+    """
+
+    path = tmp_path / "idle-gap.db"
+    repository = BreakoutRepository(path)
+    repository.initialize()
+    _publish(repository, NOW, [_event("event-idle", "AAPL", NOW, 91.0)])
+    _heartbeat(repository, NOW)
+    monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
+    monkeypatch.setattr(breakout_api, "_now", lambda: NOW + timedelta(seconds=290))
+
+    payloads = _read_statuses(_client())
+
+    assert {payload["status"] for payload in payloads.values()} == {"active"}
+    assert payloads["status"]["worker"]["health_reason"] == "fresh"
+
+
 def test_stale_worker_heartbeat_marks_reads_stale_without_hiding_snapshot(
     tmp_path,
     monkeypatch,
@@ -324,10 +349,15 @@ def test_stale_worker_heartbeat_marks_reads_stale_without_hiding_snapshot(
     path = tmp_path / "stale-heartbeat.db"
     repository = BreakoutRepository(path)
     repository.initialize()
-    _publish(repository, NOW, [_event("event-retained", "AAPL", NOW, 91.0)])
+    # Snapshot published later than the last heartbeat: the snapshot stays
+    # fresh while the heartbeat alone exceeds the session-aware allowance
+    # (regular interval 300s + grace 120s).
     _heartbeat(repository, NOW)
+    _publish(repository, NOW + timedelta(seconds=400), [
+        _event("event-retained", "AAPL", NOW, 91.0)
+    ])
     monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
-    monkeypatch.setattr(breakout_api, "_now", lambda: NOW + timedelta(seconds=121))
+    monkeypatch.setattr(breakout_api, "_now", lambda: NOW + timedelta(seconds=421))
 
     payloads = _read_statuses(_client())
 
@@ -409,10 +439,14 @@ def test_market_closed_api_is_paused_and_preserves_latest_completed_snapshot(
         assert payload["status"] == "paused"
         assert payload["runtime_status"] == "paused"
         assert payload["runtime_reason"] == "market_closed"
-        assert payload["market_session"] == "closed"
         assert payload["next_session_at"] == next_session.isoformat().replace(
             "+00:00", "Z"
         )
+    for payload in (empty_current, empty_events):
+        assert payload["market_session"] == "closed"
+    # /status reports the live market clock, not the worker's stored memory:
+    # NOW (2026-07-10 14:30Z) is 10:30 ET on a trading Friday.
+    assert status["market_session"] == "regular"
     assert empty_current["events"] == []
     assert empty_events["events"] == []
     assert empty_current["source_status"]["database"] == "active"

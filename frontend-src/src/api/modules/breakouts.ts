@@ -240,7 +240,8 @@ export function normalizeBreakoutStatus(raw: unknown): BreakoutStatus {
           triggered: pickN(scan, 'event_count', 'triggered') ?? 0,
         }
       : null,
-    market_session: marketSession && (SESSIONS as readonly string[]).includes(marketSession) ? marketSession : 'closed',
+    // 未知时段如实为 null——不能把「读不到」冒充成「休市」
+    market_session: marketSession && (SESSIONS as readonly string[]).includes(marketSession) ? marketSession : null,
     next_session_at: nextAt,
   } as unknown as BreakoutStatus;
 }
