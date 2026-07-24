@@ -359,11 +359,14 @@ export default function FilterWorkbench({
       <div className="my-4 h-px bg-line" aria-hidden="true" />
 
       {/* 行 3 · 板块 / 价格 / 成交额 / 扫描钮 */}
-      <motion.div variants={row} className="flex flex-wrap items-end gap-x-6 gap-y-3">
-        <div className="min-w-0 flex-1">
+      <motion.div variants={row} className="flex flex-wrap items-end gap-x-3 gap-y-3 sm:gap-x-6">
+        <div
+          data-screener-field="sectors"
+          className="w-full min-w-0 flex-none sm:w-auto sm:flex-1"
+        >
           <FieldLabel>板块（多选）</FieldLabel>
           {sectorOptions.length === 0 ? (
-            <div className="flex gap-2" aria-hidden="true">
+            <div className="flex flex-wrap gap-2" aria-hidden="true">
               {Array.from({ length: 5 }, (_, i) => (
                 <span key={i} className="skeleton-shimmer h-7 w-16 rounded-xs" />
               ))}
@@ -380,7 +383,7 @@ export default function FilterWorkbench({
                     transition={SPRING_POP}
                     aria-pressed={active}
                     className={cn(
-                      'flex h-7 items-center rounded-xs border px-2 text-caption transition-colors duration-fast',
+                      'flex h-7 shrink-0 items-center whitespace-nowrap rounded-xs border px-2 text-caption transition-colors duration-fast',
                       active
                         ? 'border-brand-400 bg-brand-100 text-brand-700'
                         : 'border-line bg-card text-ink-500 hover:border-brand-400/60 hover:text-brand-600',
@@ -393,7 +396,7 @@ export default function FilterWorkbench({
               {hiddenCount > 0 && (
                 <button
                   onClick={() => setShowAllSectors(true)}
-                  className="flex h-7 items-center rounded-xs border border-dashed border-line-strong px-2 font-mono text-caption text-ink-400 tnum transition-colors hover:text-brand-600"
+                  className="flex h-7 shrink-0 items-center whitespace-nowrap rounded-xs border border-dashed border-line-strong px-2 font-mono text-caption text-ink-400 tnum transition-colors hover:text-brand-600"
                 >
                   +{hiddenCount}
                 </button>
@@ -401,7 +404,7 @@ export default function FilterWorkbench({
               {showAllSectors && sectorOptions.length > SECTOR_COLLAPSE_AT && (
                 <button
                   onClick={() => setShowAllSectors(false)}
-                  className="flex h-7 items-center rounded-xs px-1.5 text-caption text-ink-400 transition-colors hover:text-ink-600"
+                  className="flex h-7 shrink-0 items-center whitespace-nowrap rounded-xs px-1.5 text-caption text-ink-400 transition-colors hover:text-ink-600"
                 >
                   收起
                 </button>
@@ -409,7 +412,7 @@ export default function FilterWorkbench({
             </div>
           )}
         </div>
-        <div>
+        <div data-screener-field="price">
           <FieldLabel>价格区间</FieldLabel>
           <div className="flex items-center gap-1.5">
             <PriceInput value={draft.priceMin} placeholder="最低" ariaLabel="最低价格" onCommit={(priceMin) => patch({ priceMin })} />
@@ -417,7 +420,7 @@ export default function FilterWorkbench({
             <PriceInput value={draft.priceMax} placeholder="最高" ariaLabel="最高价格" onCommit={(priceMax) => patch({ priceMax })} />
           </div>
         </div>
-        <div>
+        <div data-screener-field="dollar-volume">
           <FieldLabel>成交额下限</FieldLabel>
           <SelectField
             ariaLabel="成交额下限"
