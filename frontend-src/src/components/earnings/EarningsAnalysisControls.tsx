@@ -112,7 +112,7 @@ export default function EarningsAnalysisControls() {
       });
       setDoc(next);
       setError(null);
-      toast.success(nextEnabled ? '每日财报分析已开启' : '每日财报分析已关闭', '范围固定为未来 30 天');
+      toast.success(nextEnabled ? '每日财报分析已开启' : '每日财报分析已关闭', '范围固定为未来 5 天');
     } catch (cause) {
       if (cause instanceof ApiError && cause.code === 409) {
         toast.error('设置版本已变化', '已重新读取最新设置');
@@ -177,7 +177,7 @@ export default function EarningsAnalysisControls() {
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <h2 className="text-body-s font-medium text-ink-800">财报分析管理</h2>
               <span className="rounded-pill border border-line px-2 py-0.5 font-mono text-micro text-ink-400">
-                未来 30 天
+                未来 5 天
               </span>
             </div>
             <p className="mt-1 text-micro leading-5 text-ink-400">
@@ -211,7 +211,7 @@ export default function EarningsAnalysisControls() {
             type="button"
             onClick={() => void runNow()}
             disabled={!taskReady || running}
-            title={!taskReady ? '财报分析后台任务当前不可用' : '立即分析未来 30 天内尚未建立任务的财报'}
+            title={!taskReady ? '财报分析后台任务当前不可用' : '立即分析未来 5 天内尚未建立任务的财报'}
             className={cn(
               'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-caption font-medium transition-colors',
               taskReady && !running
@@ -226,7 +226,7 @@ export default function EarningsAnalysisControls() {
 
         <p className="mt-2 font-mono text-micro text-ink-400">
           {running
-            ? '正在检查并建立未来 30 天内尚未建立的分析任务…'
+            ? '正在检查并建立未来 5 天内尚未建立的分析任务…'
             : loading
             ? '读取运行状态…'
             : taskReady

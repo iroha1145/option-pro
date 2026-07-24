@@ -453,7 +453,7 @@ test('财报模型使用精确报告级接口、逐条进度和管理员批量�
   }
   assert.equal(controls.includes('自动分析设置已保存，但首次任务失败'), true);
   assert.equal(controls.includes('最近任务检查'), true);
-  assert.equal(controls.includes('未来 30 天'), true);
+  assert.equal(controls.includes('未来 5 天'), true);
 });
 
 test('访客能看到单股分析入口和终版状态', () => {
