@@ -343,18 +343,25 @@ def _is_heavy_api_path(path: str, method: str = "GET") -> bool:
 
 
 def _is_cached_market_read_path(path: str, method: str = "GET") -> bool:
-    """Identify bounded read endpoints already protected by server-side cache.
+    """Identify bounded UI reads already protected by server-side snapshots.
 
     A stock drawer fans out across quote, chart, signal, option and event
-    snapshots. Keeping these reads in their own finite bucket prevents normal
-    navigation from consuming the stricter mutation/provider-work budget.
+    snapshots, while every public research page loads several persisted read
+    endpoints together. Keeping those reads in their own finite bucket prevents
+    normal navigation from consuming the stricter mutation/provider-work
+    budget. State changes and private provider-work endpoints remain in their
+    original buckets.
     """
 
     if method.upper() not in {"GET", "HEAD"}:
         return False
-    return path in _CACHED_MARKET_READ_PATHS or any(
-        pattern.fullmatch(path) is not None
-        for pattern in _CACHED_MARKET_READ_PATTERNS
+    return (
+        _is_public_read_api_path(path)
+        or path in _CACHED_MARKET_READ_PATHS
+        or any(
+            pattern.fullmatch(path) is not None
+            for pattern in _CACHED_MARKET_READ_PATTERNS
+        )
     )
 
 
