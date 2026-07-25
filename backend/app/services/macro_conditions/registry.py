@@ -22,6 +22,13 @@ SCORING_VERSION = "optix-macro-score-v1"
 # --- Rolling windows and history requirements ------------------------------
 
 SCORE_WINDOW_YEARS = 5
+#: ``minimum_history`` counts valid values *of the factor on the daily score
+#: grid*, not raw source prints. A weekly-sourced factor is carried forward onto
+#: that grid, so its five-year window holds each weekly print about five times.
+#: Repeating every print the same number of times leaves the empirical
+#: distribution essentially unchanged, and after the eight-year backfill every
+#: factor has a full five-year window, so these floors only bind at the very
+#: start of history.
 DAILY_MINIMUM_HISTORY = 252
 WEEKLY_MINIMUM_HISTORY = 104
 RELATIVE_RETURN_WINDOW_DAYS = 63
