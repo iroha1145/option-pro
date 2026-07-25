@@ -785,6 +785,26 @@ class MacroRepository:
                 raise MacroSchemaError("macro ETF write failed") from exc
         return {"inserted": inserted, "unchanged": touched}
 
+    @staticmethod
+    def _etf_columns(connection: sqlite3.Connection) -> tuple[str, str]:
+        """(first-visible column, newest-revision column) for the shape on disk.
+
+        The migration runs in the worker, inside ``refresh()``. The API process
+        opens the same database read-only and ships in the same release, so
+        between a deploy and the worker next macro run a v2 read path would meet
+        a v1 table and the macro panel would report unavailable for hours.
+        Reading whichever shape is present removes that window instead of
+        relying on the two containers starting in a particular order.
+        """
+
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(macro_etf_observations)")
+        }
+        if "first_seen_at" in columns:
+            return "first_seen_at", "last_seen_at"
+        return "available_at", "available_at"
+
     def active_etf(self, symbol: str) -> list[dict[str, Any]]:
         """Latest recorded close per observation date, ascending by date.
 
@@ -797,17 +817,18 @@ class MacroRepository:
         """
 
         with self.read() as connection:
+            first_seen, newest = self._etf_columns(connection)
             rows = connection.execute(
-                """
+                f"""
                 SELECT o.observation_date, o.adjusted_close, o.provider,
-                       o.first_seen_at AS available_at, o.history_basis
+                       o.{first_seen} AS available_at, o.history_basis
                 FROM macro_etf_observations AS o
                 WHERE o.symbol=?
                   AND o.rowid = (
                       SELECT candidate.rowid FROM macro_etf_observations AS candidate
                       WHERE candidate.symbol = o.symbol
                         AND candidate.observation_date = o.observation_date
-                      ORDER BY candidate.last_seen_at DESC, candidate.rowid DESC
+                      ORDER BY candidate.{newest} DESC, candidate.rowid DESC
                       LIMIT 1
                   )
                 ORDER BY o.observation_date ASC

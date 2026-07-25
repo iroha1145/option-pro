@@ -638,3 +638,40 @@ def test_merged_rows_keep_the_basis_of_their_earliest_sighting(tmp_path) -> None
     assert backfilled["first_seen_at"] == "2026-07-20T22:00:00Z"
     assert backfilled["last_seen_at"] == "2026-07-22T22:00:00Z"
     assert merged["2026-07-21"]["history_basis"] == "local_point_in_time"
+
+
+def test_reads_work_against_a_v1_table_before_the_worker_migrates(tmp_path) -> None:
+    """The API ships with the migration but does not run it.
+
+    initialize() is only called inside refresh(), which lives in the worker. The
+    API process opens the same database read-only, so between a deploy and the
+    worker next macro run a v2-only read path would meet a v1 table and the
+    macro panel would report unavailable for hours. Reading whichever shape is
+    on disk removes that window rather than assuming a container start order.
+    """
+
+    from app.services.macro_conditions.repository import MacroRepository
+
+    database = tmp_path / "macro-conditions.db"
+    _v1_database(
+        database,
+        [
+            ("SPY", "2026-07-20", 500.0, "yahoo", "2026-07-20", "2026-07-20T22:00:00Z",
+             "2026-07-20T22:00:00Z", "local_point_in_time"),
+            ("SPY", "2026-07-21", 502.0, "yahoo", "2026-07-21", "2026-07-21T22:00:00Z",
+             "2026-07-21T22:00:00Z", "local_point_in_time"),
+        ],
+    )
+
+    # No initialize(): exactly the state the API sees straight after a deploy.
+    reader = MacroRepository(database, read_only=True)
+    rows = reader.active_etf("SPY")
+
+    assert [row["adjusted_close"] for row in rows] == [500.0, 502.0]
+    assert rows[0]["available_at"] == "2026-07-20T22:00:00Z"
+
+    # And the same reader keeps working once the worker has migrated.
+    MacroRepository(database).initialize()
+    migrated = MacroRepository(database, read_only=True).active_etf("SPY")
+    assert [row["adjusted_close"] for row in migrated] == [500.0, 502.0]
+    assert migrated[0]["available_at"] == "2026-07-20T22:00:00Z"
