@@ -172,24 +172,21 @@ function mapPull(body: unknown): StockPullResult {
 
 export const stocksApi = {
   /**
-   * 不传 tickers 时返回站点默认自选；传入时按给定代码构建
-   * （登录客户的个人自选走这条路径，后端同一端点已支持 ?tickers=）。
+   * 站点默认自选（覆盖全部板块成分）。
+   *
+   * 刻意不走 `?tickers=`：那条路径对非管理员只读已有快照，任意代码组合都
+   * 命不中快照而返回 503；让它去实时抓取又等于把供应商开销对所有注册用户
+   * 敞开。登录客户的个人自选改为在前端按本结果筛选。
    */
-  watchlist: (force = false, tickers?: readonly string[]): Promise<WatchlistItem[]> =>
+  watchlist: (force = false): Promise<WatchlistItem[]> =>
     mockOr(
       () => fx.getWatchlist(force),
-      () => {
-        const list = (tickers ?? []).filter(Boolean);
-        const path = tickers
-          ? `/stocks/watchlist?tickers=${encodeURIComponent(list.join(','))}`
-          : '/stocks/watchlist';
-        if (tickers && list.length === 0) return Promise.resolve([]);
-        return marketGet(path, {
+      () =>
+        marketGet('/stocks/watchlist', {
           ttlMs: 5_000,
           staleMs: 10 * 60_000,
           force,
-        }).then(mapWatchlist);
-      },
+        }).then(mapWatchlist),
     ),
   detail: (ticker: string, force = false): Promise<StockDetail> =>
     mockOr(

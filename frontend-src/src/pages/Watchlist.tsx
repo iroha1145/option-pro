@@ -372,15 +372,14 @@ export default function Watchlist() {
     };
   }, [isCustomer]);
 
-  const personalKey = myTickers ? myTickers.join(',') : '';
-  const fetchWatchlist = useCallback(
-    () => (isCustomer && myTickers ? stocksApi.watchlist(false, myTickers) : stocksApi.watchlist()),
-    // personalKey 参与依赖：个人列表变化后要重新取行情
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isCustomer, personalKey, myTickers],
-  );
+  /**
+   * 始终读站点默认自选（已缓存、对访客免费），个人列表在前端做筛选。
+   * 不能改用 ?tickers=：那条路径对非管理员只读已有快照，任意代码组合都拿不到
+   * 快照而返回 503，而让它去实时抓取等于把供应商开销对所有注册用户敞开。
+   */
+  const fetchWatchlist = useCallback(() => stocksApi.watchlist(), []);
 
-  const wl = usePolling(fetchWatchlist, 60_000, [isCustomer, personalKey]);
+  const wl = usePolling(fetchWatchlist, 60_000);
   const refreshWatchlist = wl.refresh;
 
   const onAddTicker = useCallback(async () => {
@@ -585,7 +584,20 @@ export default function Watchlist() {
 
   const loading = wl.loading;
   const err = wl.error;
-  const items = useMemo(() => wl.data ?? [], [wl.data]);
+  const items = useMemo(() => {
+    const all = wl.data ?? [];
+    if (!isCustomer || !myTickers) return all;
+    const bySymbol = new Map(all.map((row) => [row.ticker, row]));
+    // 按用户自己的排序输出；覆盖范围外的代码留到下方单独提示，不静默丢弃
+    return myTickers.map((symbol) => bySymbol.get(symbol)).filter((row): row is WatchlistItem => !!row);
+  }, [wl.data, isCustomer, myTickers]);
+
+  /** 用户加了但默认行情覆盖不到的代码——如实说明，不假装它不存在 */
+  const uncoveredTickers = useMemo(() => {
+    if (!isCustomer || !myTickers) return [];
+    const covered = new Set((wl.data ?? []).map((row) => row.ticker));
+    return myTickers.filter((symbol) => !covered.has(symbol));
+  }, [wl.data, isCustomer, myTickers]);
   const cardItems = useMemo(() => {
     if (!sort) return items;
     const direction = sort.desc ? -1 : 1;
@@ -734,6 +746,16 @@ export default function Watchlist() {
               )}
             </p>
           </div>
+
+          {uncoveredTickers.length > 0 && (
+            <p
+              className="mt-3 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-600"
+              role="status"
+            >
+              暂无行情：{uncoveredTickers.join('、')}
+              <span className="ml-1 text-ink-500">（不在当前覆盖范围内，可在个股页手动获取）</span>
+            </p>
+          )}
 
           <div className="mt-4">
             {loading ? (
