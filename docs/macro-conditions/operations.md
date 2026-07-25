@@ -3,11 +3,12 @@
 ## 1. 启用
 
 ```bash
-# 1) 在服务器上配置 FRED 密钥（从标准输入读，永不回显）
-#    set 会当场校验 FRED 的确切形态（32 位小写字母数字），不符合就报出实际长度并拒收。
-#    隐藏提示符不回显任何字符，盲输很容易重复粘贴；先确认长度更稳妥：
-#      read -rs -p 'FRED key: ' K; echo; echo "长度 = ${#K}"   # 必须是 32
-#      printf '%s\n' "$K" | ./personal.sh secrets set FRED_API_KEY && unset K
+# 1) 在服务器上配置 FRED 密钥（容器内 getpass 提示，永不回显）
+#    set 会当场校验 FRED 的确切形态（32 位小写字母数字），不符合就报出实际长度并拒收，
+#    所以隐藏提示符下重复粘贴不会被静默存入——直接照下面这样交互输入即可。
+#    不要把值管道喂给它：set 用 terminal_mode=auto（不传 -T），Compose 一旦检测到终端
+#    就向 Docker 申请 TTY，此时管道 stdin 会被拒绝并报
+#    “the input device is not a TTY”。管道只在完全没有终端时才成立（如 ssh host 'cmd'）。
 ./personal.sh secrets set FRED_API_KEY
 
 # 2) 确认已配置（只回布尔，不回值）

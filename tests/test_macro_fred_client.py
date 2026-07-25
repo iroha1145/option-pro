@@ -197,6 +197,35 @@ def test_unknown_units_are_never_silently_converted() -> None:
     assert scale_to_canonical("Index Jan 2006=100", "index") == 1.0
 
 
+def test_fred_spells_us_dollars_both_ways() -> None:
+    """FRED is not self-consistent about the ``U.S.`` abbreviation.
+
+    Production evidence: WALCL and WTREGEN report "Millions of U.S. Dollars"
+    while RRPONTSYD reports "Billions of US Dollars". Rejecting the period-less
+    spelling silently dropped every RRPONTSYD-derived factor, which pushed the
+    liquidity module under its floor and left the composite on 6 of 7 modules.
+    """
+
+    for spelling, expected in (
+        ("Billions of US Dollars", 1.0),
+        ("Billions of U.S. Dollars", 1.0),
+        ("Millions of US Dollars", 0.001),
+        ("Millions of U.S. Dollars", 0.001),
+        ("Trillions of US Dollars", 1_000.0),
+        ("Thousands of U.S. Dollars", 0.000_001),
+    ):
+        assert scale_to_canonical(spelling, "usd_amount") == expected
+
+    # Folding the abbreviation must not widen the match to unknown scales, and
+    # must not disturb the one family whose own spelling carries a period.
+    with pytest.raises(UnitsMismatch):
+        scale_to_canonical("Billions of Australian Dollars", "usd_amount")
+    with pytest.raises(UnitsMismatch):
+        scale_to_canonical("Zillions of US Dollars", "usd_amount")
+    assert scale_to_canonical("Dollars per Mil. BTU", "usd_per_mmbtu") == 1.0
+    assert scale_to_canonical("Dollars per Million BTU", "usd_per_mmbtu") == 1.0
+
+
 def test_frequency_rank_comparison() -> None:
     assert frequency_at_most("W", "W") is True
     assert frequency_at_most("M", "W") is True

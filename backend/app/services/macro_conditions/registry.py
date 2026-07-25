@@ -91,11 +91,17 @@ UnitsFamily = Literal[
 #: All money is normalised to USD billions. The multiplier is resolved from the
 #: FRED ``units`` metadata string at fetch time, never guessed from the series
 #: name — WALCL and RRPONTSYD do not publish in the same scale.
+#:
+#: Keys use the period-less ``us dollars`` spelling because FRED is not
+#: self-consistent: WALCL and WTREGEN say "Millions of U.S. Dollars" while
+#: RRPONTSYD says "Billions of US Dollars". :func:`_normalize_units` folds the
+#: abbreviation so both reach the same key. Only the abbreviation is folded —
+#: the scale word still has to match exactly, so an unknown scale keeps raising.
 _USD_UNITS_TO_BILLIONS: Mapping[str, float] = {
-    "trillions of u.s. dollars": 1_000.0,
-    "billions of u.s. dollars": 1.0,
-    "millions of u.s. dollars": 0.001,
-    "thousands of u.s. dollars": 0.000_001,
+    "trillions of us dollars": 1_000.0,
+    "billions of us dollars": 1.0,
+    "millions of us dollars": 0.001,
+    "thousands of us dollars": 0.000_001,
 }
 
 _PERCENT_UNITS = ("percent", "percent per annum", "percent, annual rate")
@@ -116,6 +122,18 @@ class UnitsMismatch(ValueError):
     """Raised when FRED metadata units do not belong to the expected family."""
 
 
+def _normalize_units(units: str) -> str:
+    """Lower-case, collapse whitespace, and fold FRED's ``U.S.``/``US`` variants.
+
+    Only that one abbreviation is rewritten. Stripping every period would also
+    hit ``dollars per mil. btu``, and widening the match any further would let a
+    genuinely unknown scale slip through as if it were recognised.
+    """
+
+    normalized = " ".join(str(units or "").strip().lower().split())
+    return normalized.replace("u.s.", "us")
+
+
 def scale_to_canonical(units: str, family: str) -> float:
     """Resolve the multiplier from FRED units text to the canonical unit.
 
@@ -123,7 +141,7 @@ def scale_to_canonical(units: str, family: str) -> float:
     scale mistake on a balance-sheet series would corrupt every liquidity score.
     """
 
-    normalized = " ".join(str(units or "").strip().lower().split())
+    normalized = _normalize_units(units)
     if not normalized:
         raise UnitsMismatch("missing units metadata")
     if family == "usd_amount":
