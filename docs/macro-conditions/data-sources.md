@@ -69,6 +69,11 @@ UI 的来源说明固定为：
 | `Millions of U.S. Dollars` | ÷ 1000 |
 | `Thousands of U.S. Dollars` | ÷ 1 000 000 |
 
+**`U.S.` 与 `US` 两种拼写都接受。** FRED 自己并不统一：`WALCL`、`WTREGEN` 报
+`Millions of U.S. Dollars`，而 `RRPONTSYD` 报 `Billions of US Dollars`。匹配前只把
+这一个缩写折叠（`u.s.` → `us`），**不做全局去点**——`Dollars per Mil. BTU` 的点是它
+自己单位的一部分。折叠仅限缩写，数量级词仍须精确匹配，未知量级照样拒绝。
+
 未识别的单位**直接拒绝**，不按 1.0 静默通过——余额类系列一个数量级的错误会污染
 全部流动性分数。因此 `WALCL` 与 `RRPONTSYD` 各自按自己的元数据换算，不共用假设。
 
