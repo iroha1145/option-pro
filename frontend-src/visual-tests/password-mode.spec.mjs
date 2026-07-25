@@ -10,9 +10,11 @@
 // - 访客标记：Navbar.tsx L145-150 的「登录」链接（to=/login）
 // - Owner 标记：Navbar 的「退出」按钮 + 读取真实后端可用性的 AI 徽标
 //   （fixture 可用时 title="分析服务可用"）
-// - 登录页：Login.tsx L370-381 密码输入（aria-label="访问密码"）、L396-421 提交按钮
-//   （idle 文案「登录」）、L424-433 状态行（tone=error 时 role="alert"；
-//   mapError L215-222：未知业务码 →「密码不正确」，渲染时追加「，请重试」）
+// - 登录页：账号功能上线后改为「用户名 + 密码」双字段（Login.tsx aria-label="用户名"
+//   与 aria-label="密码"，另有显示/隐藏密码切换按钮）。Owner 用保留用户名 admin
+//   登录（app/api/access.py::OWNER_USERNAME），其余用户名都是 Customer Account。
+//   提交按钮 idle 文案「登录」，状态行 tone=error 时 role="alert"；
+//   mapError 未知业务码 →「用户名或密码不正确」（现在不再追加「，请重试」）。
 // - 旧 spec 的 #owner-ai-toggle（runtime-settings 乐观锁 PUT + version_conflict 重试）
 //   在新 UI 无对应控件：AUDIT-live.md「当前无页面消费 settings/updateSettings/history/
 //   rollback」，Navbar 仅有只读 AI 徽标。该交互不移植（不伪造 UI）；owner 专属交互改由
@@ -24,6 +26,9 @@ import { join } from "node:path";
 
 
 const PASSWORD_BASE_URL = process.env.OPTIX_PASSWORD_BASE_URL || "https://127.0.0.1:8768";
+// Owner 以保留用户名登录（app/api/access.py::OWNER_USERNAME）；其余用户名都是
+// Customer Account。登录表单在账号功能上线后改成「用户名 + 密码」双字段。
+const OWNER_USERNAME = "admin";
 const OWNER_PASSWORD = "optix-browser-test-password-2026";
 const NOW = "2026-07-16T12:00:00Z";
 const SCREENSHOT_DIR = join(process.cwd(), "test-results", "visual-evidence");
@@ -252,7 +257,11 @@ test("password mode keeps public research readable and reserves owner controls f
   // 匿名 GET /api/access/status → {access_mode:"password", logged_in:false}
   const anonStatus = await page.request.get(`${PASSWORD_BASE_URL}/api/access/status`);
   expect(anonStatus.status()).toBe(200);
-  expect(await anonStatus.json()).toEqual({ access_mode: "password", logged_in: false });
+  expect(await anonStatus.json()).toEqual({
+    access_mode: "password",
+    logged_in: false,
+    account: { logged_in: false, username: null },
+  });
   // SPA 无扩展名深层路径由网关回退 index.html（公共只读文档面）
   const deepDocument = await page.request.get(`${PASSWORD_BASE_URL}/catalysts`);
   expect(deepDocument.status()).toBe(200);
@@ -290,7 +299,12 @@ test("password mode keeps public research readable and reserves owner controls f
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/login`);
   await expect(page.getByRole("heading", { name: "进入终端" })).toBeVisible();
 
-  const password = page.getByLabel("访问密码");
+  const username = page.getByLabel("用户名");
+  const password = page.getByLabel("密码", { exact: true });
+  // 「登录」这个可访问名同时属于登录/注册切换按钮，因此提交按钮按表单内的
+  // type=submit 定位，避免 strict mode 命中两个元素。
+  const submit = page.locator('form button[type="submit"]');
+  await expect(username).toHaveValue("");
   await expect(password).toHaveValue("");
   // 登录页（Layout 外）不得有任何浏览器存储痕迹
   expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 0, session: 0 });
@@ -300,10 +314,11 @@ test("password mode keeps public research readable and reserves owner controls f
     new URL(response.url()).pathname === "/api/access/login"
     && response.request().method() === "POST"
   ));
+  await username.fill(OWNER_USERNAME);
   await password.fill("wrong-password-for-e2e");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await submit.click();
   expect((await failedLogin).status()).toBe(401);
-  await expect(page.getByRole("alert")).toHaveText("密码不正确，请重试");
+  await expect(page.getByRole("alert")).toHaveText("用户名或密码不正确");
   await screenshot(page, "password-login-error");
 
   // 正确口令 → 200 + HttpOnly 会话 Cookie → SPA 回到 /watchlist
@@ -312,8 +327,9 @@ test("password mode keeps public research readable and reserves owner controls f
     && response.request().method() === "POST"
     && response.status() === 200
   ));
+  await username.fill(OWNER_USERNAME);
   await password.fill(OWNER_PASSWORD);
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await submit.click();
   const loginResponse = await loginResponsePromise;
   const setCookie = await loginResponse.headerValue("set-cookie");
   expect(setCookie).toMatch(/optix_owner_session=/i);
@@ -342,11 +358,22 @@ test("password mode keeps public research readable and reserves owner controls f
   ), OWNER_PASSWORD)).toBe(false);
 
   const ownerStatus = await page.request.get(`${PASSWORD_BASE_URL}/api/access/status`);
-  expect(await ownerStatus.json()).toEqual({ access_mode: "password", logged_in: true });
+  // Owner 会话不携带 Customer Account Cookie，因此 `account` 仍为假。
+  // 两种身份互不蕴含，这条精确断言正是那条边界的守卫。
+  expect(await ownerStatus.json()).toEqual({
+    access_mode: "password",
+    logged_in: true,
+    account: { logged_in: false, username: null },
+  });
 
   // ── Owner 壳与 owner 专属控件 ─────────────────────────────────────────────
   await expectOwnerShell(page);
-  await expect(page.getByTitle("强制刷新自选快照")).toBeEnabled();
+  // Owner 专属控件：Watchlist 页头的「强制刷新」。title 随身份切换
+  // （Owner「重新计算完整自选数据」/ 访客「登录 Owner 后可强制刷新」），
+  // 因此这里同时断言按钮可用与 Owner 版提示，等于验证了那条身份边界。
+  const forceRefresh = page.getByRole("button", { name: "强制刷新" });
+  await expect(forceRefresh).toBeEnabled();
+  await expect(forceRefresh).toHaveAttribute("title", "重新计算完整自选数据");
   await screenshot(page, "password-owner-watchlist");
 
   await page.getByRole("link", { name: "06 催化" }).click();

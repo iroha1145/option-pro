@@ -166,23 +166,10 @@ jobs:
       - name: Start backend and unified worker
         run: ./scripts/compose.sh up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180
 
-      - name: Capture Catalyst Desk and macro conditions visual evidence
-        env:
-          OPTIX_VISUAL_BASE_URL: http://127.0.0.1:2000
-        run: npm --prefix frontend-src run test:visual
-
-      - name: Upload visual evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: catalyst-desk-visual-evidence-${{ github.sha }}
-          path: |
-            frontend-src/test-results/visual-evidence/*.png
-            frontend-src/test-results/report/**
-            frontend-src/test-results/playwright/**
-          if-no-files-found: error
-          retention-days: 14
-
+      # 顺序刻意如此：确定性检查（就绪/Inventory、三个离线容器 smoke、
+      # 非 root 与 WAL 校验）全部排在浏览器取证之前。视觉步骤跑在 bash -e 下，
+      # 一次浏览器失败会中止整个 job；若它排在前面，上面这些检查会被 skipped，
+      # 等于被一个前端失败遮住。
       - name: Check local readiness and unified worker inventory
         shell: bash
         run: |
@@ -289,6 +276,23 @@ jobs:
           ./scripts/compose.sh exec -T backend python -c 'import sqlite3; from pathlib import Path; p=Path("/data/optix.db"); assert p.exists(); assert Path(str(p)+"-wal").exists(); assert Path(str(p)+"-shm").exists(); c=sqlite3.connect(f"file:{p}?mode=ro",uri=True); assert c.execute("PRAGMA journal_mode").fetchone()[0].lower()=="wal"; assert c.execute("SELECT COUNT(*) FROM deployment_wal_probe").fetchone()[0]==0; c.close()'
           wait "$probe_pid"
           ./scripts/compose.sh exec -T backend python -c 'import sqlite3; from pathlib import Path; p=Path("/data/optix.db"); c=sqlite3.connect(f"file:{p}?mode=ro",uri=True); assert c.execute("SELECT COUNT(*) FROM deployment_wal_probe").fetchone()[0]==1; c.close()'
+
+      - name: Capture Catalyst Desk and macro conditions visual evidence
+        env:
+          OPTIX_VISUAL_BASE_URL: http://127.0.0.1:2000
+        run: npm --prefix frontend-src run test:visual
+
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: catalyst-desk-visual-evidence-${{ github.sha }}
+          path: |
+            frontend-src/test-results/visual-evidence/*.png
+            frontend-src/test-results/report/**
+            frontend-src/test-results/playwright/**
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Show container logs after failure
         if: failure()
