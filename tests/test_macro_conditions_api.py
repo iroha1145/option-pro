@@ -60,7 +60,7 @@ def _seeded_store(tmp_path) -> MacroRepository:
     service = MacroConditionsService(repository, clock=fixed_clock())
     bundle, _summary = service.build_snapshot(as_of=AS_OF)
     assert bundle is not None
-    repository.publish(bundle)
+    repository.publish(bundle, run_id="mcr_test")
     return repository
 
 
