@@ -1430,16 +1430,39 @@ class AIJobRepository:
         *,
         analysis_stage: str | None = None,
         status: str | None = None,
+        legacy_report_date: str | None = None,
     ) -> dict[str, Any] | None:
+        """Find the newest job for one report.
+
+        ``legacy_report_date`` also matches analyses written before report ids
+        were bound to the payload. Those rows carry the earnings date but no
+        report id, so a strict match hides them: the reader loses an analysis
+        that already exists and the scheduler pays to produce it again. Pass it
+        only when the goal is to reuse existing work, never when deciding
+        whether new work may be enqueued.
+        """
+
         self.ensure_initialized()
         with self._connect() as connection:
             stage_filter = ""
             status_filter = ""
+            report_filter = "AND json_extract(j.payload_json,'$.report_id')=?"
             parameters: list[Any] = [
                 ticker.upper(),
                 report_id,
-                _iso(_utcnow() - timedelta(days=30)),
             ]
+            if legacy_report_date:
+                report_filter = """
+                  AND (
+                        json_extract(j.payload_json,'$.report_id')=?
+                        OR (
+                          json_extract(j.payload_json,'$.report_id') IS NULL
+                          AND json_extract(j.payload_json,'$.earnings_date')=?
+                        )
+                      )
+                """
+                parameters.append(legacy_report_date)
+            parameters.append(_iso(_utcnow() - timedelta(days=30)))
             if analysis_stage:
                 if analysis_stage == "pre_release":
                     # Jobs written before earnings stages were introduced are
@@ -1470,7 +1493,7 @@ class AIJobRepository:
                 JOIN ai_job_sources AS s ON s.job_id=j.job_id
                 WHERE j.job_type='earnings_impact'
                   AND upper(json_extract(j.payload_json,'$.ticker'))=?
-                  AND json_extract(j.payload_json,'$.report_id')=?
+                  {report_filter}
                   AND COALESCE(j.completed_at,j.updated_at,j.created_at)>=?
                   {stage_filter}
                   {status_filter}

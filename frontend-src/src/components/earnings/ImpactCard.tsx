@@ -38,6 +38,35 @@ const FAILED_STATUSES = new Set(['failed', 'cancelled', 'canceled', 'budget_bloc
 const isActive = (s: string) => ACTIVE_STATUSES.has(s);
 
 const BACKOFF_MS = [2000, 3000, 5000, 8000, 10000];
+
+/**
+ * 后端错误码 → 读者能看懂的说法。
+ * 后端的 error_code 是排查用的机器标识，直接渲染出来对普通读者毫无意义
+ * （线上曾长期显示「scheduled_analysis_disabled」）。认不出的码一律回落到
+ * 一句通用说明，绝不把原始码打到页面上。
+ */
+const ANALYSIS_ERROR_TEXT: Record<string, string> = {
+  scheduled_analysis_disabled: '自动分析当时处于关闭状态，这次没有执行',
+  manual_analysis_disabled: 'AI 分析已关闭',
+  daily_token_limit_reached: '今天的 AI 用量已用完，明天会自动重试',
+  daily_budget_reached: '今天的 AI 预算已用完，明天会自动重试',
+  daily_job_limit_reached: '今天的 AI 分析次数已用完，明天会自动重试',
+  global_concurrency_limit: '同时进行的分析过多，稍后会自动重试',
+  ai_job_queue_full: '排队的分析过多，稍后会自动重试',
+  runtime_configuration_changed: '分析配置已更新，需要重新生成',
+  runtime_settings_unavailable: '服务配置暂时读不到，稍后重试',
+  scheduled_window_changed_to_5_days: '财报关注范围已调整，这次分析不再需要',
+  provider_incomplete_max_output_tokens: '模型输出被截断，重新生成即可',
+  submission_outcome_unknown: '上一次提交结果不明，重新生成即可',
+  ai_job_payload_too_large: '这份财报数据过大，无法分析',
+  ai_job_result_too_large: '分析结果过大，无法保存',
+};
+
+function analysisErrorText(code: string | undefined | null): string {
+  const key = String(code ?? '').trim();
+  if (!key) return '';
+  return ANALYSIS_ERROR_TEXT[key] ?? '这次分析没有完成';
+}
 const FINAL_STAGES = new Set([
   'final',
   'finalized',
@@ -162,13 +191,11 @@ interface ImpactCardProps {
 
 function reportAnalysisNeedsPolling(value: EarningsReportAnalysis | null): boolean {
   if (!value) return false;
-  return isActive(normalizedStage(value.status))
-    || value.finalizationInProgress
-    || (
-      normalizedStage(value.analysisStage) === 'post_release_final'
-      && !value.final
-      && !value.locked
-    );
+  // 只在真的有任务在跑时才轮询。原先「阶段是 post_release_final 且未锁定」
+  // 也算，于是一条终态失败的最终分析会被无限轮询下去（线上 GOOGL 卡在
+  // 「重分析中」就是这条）。finalizationInProgress 由后端按「该报告是否有
+  // pending/queued/in_progress 的最终任务」算出，已经覆盖真正在跑的情况。
+  return isActive(normalizedStage(value.status)) || value.finalizationInProgress;
 }
 
 export default function ImpactCard({ ticker, row, onAnalyzed, className }: ImpactCardProps) {
@@ -207,7 +234,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
 
     setAnalysis(resolvedAnalysis);
     setImpact(resolvedResult);
-    setErrorMsg(resolvedAnalysis.errorCode ?? '');
+    setErrorMsg(analysisErrorText(resolvedAnalysis.errorCode));
     if (ticker) onAnalyzed(ticker, resolvedAnalysis);
     if (resolvedResult) {
       setPhase('ready');

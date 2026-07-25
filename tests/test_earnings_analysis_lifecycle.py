@@ -1065,3 +1065,296 @@ def test_scheduled_actuals_queue_final_and_lock_after_success(
     final = repository.public(repository.get_job(row["job_id"]))
     assert final["_locked"] is True
     assert final["_final"] is True
+
+
+def test_blocked_final_is_not_requeued_on_every_scheduled_cycle(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A budget-blocked finalization must not be duplicated each cycle.
+
+    Production enqueued 3,330 earnings jobs in one day — up to 36 identical
+    rows for a single report — because the "a row already exists" guard only
+    covered the pre-release stage. Every scheduled pass re-queued each
+    released report, and once the daily token budget was gone the duplicates
+    piled up as budget_blocked rows.
+
+    Payload deduplication cannot save this: ``market_cap`` rides along in the
+    analysis payload and moves with the price, so every cycle hashes to a
+    brand new job. The builder below drifts it the same way.
+    """
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    settings = _settings(repository.path)
+    effective = SimpleNamespace(
+        ai=SimpleNamespace(manual_analysis_enabled=True),
+        earnings=SimpleNamespace(
+            scheduled_analysis_enabled=True,
+            lookahead_days=30,
+        ),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "capability_status",
+        lambda _settings: {"supported": True, "status": "supported"},
+    )
+
+    scans = {"count": 0}
+
+    async def builder(_today):
+        scans["count"] += 1
+        return {
+            "data_limited": False,
+            "source_status": "active",
+            "earnings": [
+                {
+                    "ticker": "AAPL",
+                    "name": "Apple",
+                    "earnings_date": "2026-07-23",
+                    "days_until": -1,
+                    "year": 2026,
+                    "quarter": 2,
+                    "eps_estimate": 1.4,
+                    "eps_actual": 1.6,
+                    # Market cap moves with the price on every scan, so each
+                    # cycle would otherwise hash to a different job.
+                    "market_cap": 3_000_000_000_000 + scans["count"],
+                    "release_status": "released",
+                }
+            ],
+        }
+
+    now = datetime(2026, 7, 24, 9, 0, tzinfo=timezone.utc)
+    task = EarningsAnalysisTask(
+        "blocked-final",
+        settings=settings,
+        repository=repository,
+        builder=builder,
+        runtime_settings_reader=lambda: effective,
+        today=lambda: now.date(),
+        now=lambda: now,
+    )
+
+    pre, _ = _create(
+        repository,
+        normalize_earnings_analysis_payload(
+            {
+                "ticker": "AAPL",
+                "name": "Apple",
+                "earnings_date": "2026-07-23",
+                "year": 2026,
+                "quarter": 2,
+                "eps_estimate": 1.4,
+                "release_status": "scheduled",
+            },
+            analysis_stage="pre_release",
+        ),
+    )
+    claimed_pre = repository.claim_due("pre-release-worker", 60)
+    repository.complete(
+        claimed_pre["job_id"],
+        "pre-release-worker",
+        _result("AAPL"),
+        {},
+    )
+
+    first = asyncio.run(task())
+    assert first.details["queued"] == 1
+    final_row = repository.latest_for_ticker("earnings_impact", "AAPL")
+    assert json.loads(final_row["payload_json"])["analysis_stage"] == (
+        "post_release_final"
+    )
+
+    # The daily token budget runs out while the finalization is queued.
+    with repository._connect() as connection:  # noqa: SLF001 - test fixture
+        connection.execute(
+            """UPDATE ai_jobs
+                   SET status='budget_blocked',
+                       error_code='daily_token_limit_reached',
+                       updated_at=?, completed_at=?
+                 WHERE job_id=?""",
+            (now.isoformat(), now.isoformat(), final_row["job_id"]),
+        )
+        connection.commit()
+
+    for _ in range(3):
+        again = asyncio.run(task())
+        assert again.details["queued"] == 0
+        assert again.details["existing"] == 1
+
+    with repository._connect() as connection:  # noqa: SLF001 - test fixture
+        total = connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='earnings_impact'",
+        ).fetchone()[0]
+    assert total == 2  # the pre-release run plus exactly one finalization
+
+    # A new UTC day still lets the blocked finalization retry.
+    next_day = now + timedelta(days=1)
+    tomorrow = EarningsAnalysisTask(
+        "blocked-final-next-day",
+        settings=settings,
+        repository=repository,
+        builder=builder,
+        runtime_settings_reader=lambda: effective,
+        today=lambda: next_day.date(),
+        now=lambda: next_day,
+    )
+    assert asyncio.run(tomorrow()).details["queued"] == 1
+
+
+def test_failed_finalization_does_not_hide_the_completed_analysis(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The report endpoint must not present a dead end over a real result.
+
+    A finalization that never produced a result — budget blocked, or failed
+    terminally because the scheduled switch was off while it sat in the queue
+    — is the newest row for the report. Reporting that as the report's state
+    hid the completed pre-release analysis and left the card showing a raw
+    "scheduled_analysis_disabled" failure with a retry that changed nothing.
+    """
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    monkeypatch.setattr(ai, "_job_repository", lambda: repository)
+    monkeypatch.setattr(ai, "get_settings", lambda: _settings(repository.path))
+
+    pre, _ = _create(
+        repository,
+        normalize_earnings_analysis_payload(
+            {
+                "ticker": "AAPL",
+                "name": "Apple",
+                "earnings_date": "2026-07-23",
+                "year": 2026,
+                "quarter": 2,
+                "eps_estimate": 1.4,
+                "release_status": "scheduled",
+            },
+            analysis_stage="pre_release",
+        ),
+    )
+    claimed_pre = repository.claim_due("pre-release-worker", 60)
+    repository.complete(
+        claimed_pre["job_id"],
+        "pre-release-worker",
+        _result("AAPL"),
+        {},
+    )
+
+    final, _ = _create(repository, _final_payload())
+    claimed_final = repository.claim_due("final-worker", 60)
+    repository.fail(
+        claimed_final["job_id"],
+        "final-worker",
+        "scheduled_analysis_disabled",
+    )
+
+    newest = repository.latest_for_report(
+        "AAPL",
+        json.loads(final["payload_json"])["report_id"],
+    )
+    assert newest["job_id"] == final["job_id"]
+    assert newest["status"] == "failed"
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def bind_visitor_access(request, call_next):
+        with request_owner_access_context(False):
+            return await call_next(request)
+
+    app.include_router(ai.router)
+    client = TestClient(app, base_url="http://localhost")
+    response = client.get(
+        "/api/ai/earnings-impact/AAPL/reports/2026-07-23?year=2026&quarter=2",
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["error_code"] is None
+    assert body["result"] is not None
+    assert body["result"]["ticker"] == "AAPL"
+    assert body["_analysis_stage"] == "pre_release"
+    # The preliminary analysis is not the locked final one.
+    assert body["_final"] is False
+    assert body["_finalization_in_progress"] is False
+
+
+def test_report_lookup_can_reuse_analyses_written_before_report_ids(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Analyses predating report ids must stay reachable for one report.
+
+    Four production reports were stuck because their completed analysis was
+    written before report ids were bound to the payload. A strict report-id
+    match hid them, so the card showed a failure over a real result and the
+    scheduler kept skipping the finalization for want of a preliminary run.
+    """
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    monkeypatch.setattr(ai, "_job_repository", lambda: repository)
+    monkeypatch.setattr(ai, "get_settings", lambda: _settings(repository.path))
+
+    legacy_payload = normalize_earnings_analysis_payload(
+        {
+            "ticker": "AAPL",
+            "name": "Apple",
+            "earnings_date": "2026-07-23",
+            "eps_estimate": 1.4,
+            "release_status": "scheduled",
+        },
+        analysis_stage="pre_release",
+    )
+    legacy_payload.pop("report_id", None)  # written before report-id binding
+    legacy, _ = _create(repository, legacy_payload)
+    claimed = repository.claim_due("legacy-worker", 60)
+    repository.complete(claimed["job_id"], "legacy-worker", _result("AAPL"), {})
+
+    report_id = str(_final_payload()["report_id"])
+    # Strict matching still refuses the legacy row: enqueue decisions must not
+    # widen, or a report id typo would silently reuse an unrelated analysis.
+    assert repository.latest_for_report("AAPL", report_id) is None
+    reused = repository.latest_for_report(
+        "AAPL",
+        report_id,
+        analysis_stage="pre_release",
+        status="completed",
+        legacy_report_date="2026-07-23",
+    )
+    assert reused is not None
+    assert reused["job_id"] == legacy["job_id"]
+    # A different earnings date must not borrow it.
+    assert repository.latest_for_report(
+        "AAPL",
+        report_id,
+        status="completed",
+        legacy_report_date="2026-07-24",
+    ) is None
+
+    final, _ = _create(repository, _final_payload())
+    claimed_final = repository.claim_due("final-worker", 60)
+    repository.fail(
+        claimed_final["job_id"],
+        "final-worker",
+        "scheduled_analysis_disabled",
+    )
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def bind_visitor_access(request, call_next):
+        with request_owner_access_context(False):
+            return await call_next(request)
+
+    app.include_router(ai.router)
+    client = TestClient(app, base_url="http://localhost")
+    response = client.get(
+        "/api/ai/earnings-impact/AAPL/reports/2026-07-23?year=2026&quarter=2",
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["result"]["ticker"] == "AAPL"

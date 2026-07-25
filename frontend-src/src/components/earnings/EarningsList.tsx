@@ -90,10 +90,10 @@ function ExpectedMoveCell({ pct, index }: { pct: number | null; index: number })
 /* ---------------- AI 影响操作钮 ---------------- */
 function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => void }) {
   const ready = exBool(row, 'impactReady');
-  const stage = exStr(row, 'analysisStage');
   const locked = exBool(row, 'locked') === true || exBool(row, 'final') === true;
-  const finalizing = exBool(row, 'finalizationInProgress') === true
-    || stage === 'post_release_final';
+  // 只信后端算出的「确实有最终分析在跑」。原先只要阶段是 post_release_final
+  // 就写「重分析中」，一条失败或被预算挡下的最终任务会让这一行永远显示在跑。
+  const finalizing = exBool(row, 'finalizationInProgress') === true;
   const label = locked
     ? '查看最终'
     : finalizing

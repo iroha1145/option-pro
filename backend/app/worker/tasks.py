@@ -473,6 +473,10 @@ class EarningsAnalysisTask:
                     payload["report_id"],
                     analysis_stage="pre_release",
                     status="completed",
+                    # Analyses written before report ids were bound still
+                    # count as the preliminary run, otherwise a released
+                    # report can never finalize.
+                    legacy_report_date=payload.get("earnings_date"),
                 )
                 if not preliminary:
                     skipped_final_without_pre_release += 1
@@ -494,10 +498,17 @@ class EarningsAnalysisTask:
                     )
                 )
             )
-            if (
+            # Duplicate suppression has to cover the released stages too.
+            # Scoping it to pre-release let every scheduled cycle enqueue a
+            # fresh finalization for an already-queued or budget-blocked
+            # report: a single blocked attempt grew into dozens of identical
+            # rows per report and drained the daily token budget. A completed
+            # row still falls through so revised actuals can be re-analysed;
+            # create_job deduplicates when the payload hash is unchanged.
+            if latest and not retry_failed_report and (
                 analysis_stage == "pre_release"
-                and latest
-                and not retry_failed_report
+                or latest_status
+                in {"pending", "queued", "in_progress", "budget_blocked"}
             ):
                 existing += 1
                 continue

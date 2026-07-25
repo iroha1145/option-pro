@@ -559,6 +559,12 @@ async def _snapshot_bound_earnings_report(
     )
 
 
+"""Terminal job states that never produced a result to show."""
+_EARNINGS_RESULTLESS_TERMINAL_STATUSES = frozenset(
+    {"failed", "cancelled", "budget_blocked"}
+)
+
+
 def _public_earnings_report_status(
     repository: AIJobRepository,
     row: dict,
@@ -737,6 +743,21 @@ async def earnings_report_impact(
             },
             status_code=409,
         )
+    if str(row.get("status") or "") in _EARNINGS_RESULTLESS_TERMINAL_STATUSES:
+        # The newest row can be a finalization attempt that ended without a
+        # result (budget blocked, or terminally failed because the scheduled
+        # switch was off while it sat in the queue). Reporting that as the
+        # report's state hides an analysis the reader already has and turns
+        # the card into a dead end. Fall back to the newest completed run.
+        # Active attempts are left alone so the finalizing view still shows.
+        completed = repository.latest_for_report(
+            ticker,
+            report_id,
+            status="completed",
+            legacy_report_date=report_date,
+        )
+        if completed is not None:
+            row = completed
     return _public_earnings_report_status(
         repository,
         row,
