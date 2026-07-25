@@ -150,7 +150,7 @@ UI 上分数变化以**分数点**呈现（"−3.5 分"），不是百分比—�
 | `unavailable` | 没有任何可读的正式快照 |
 | `insufficient_history` | 数据存在，但 5 年分位历史不足 |
 
-错误码：`fred_api_key_missing`、`fred_rate_limited`、`fred_unavailable`、
+错误码：`fred_api_key_missing`、`fred_api_key_invalid`、`fred_rate_limited`、`fred_unavailable`、
 `fred_schema_mismatch`、`fred_units_mismatch`、`fred_response_too_large`、
 `etf_history_unavailable`、`macro_insufficient_history`、`macro_insufficient_modules`、
 `macro_refresh_in_progress`、`macro_refresh_cooldown`、`macro_store_unavailable`、

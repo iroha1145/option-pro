@@ -1083,3 +1083,50 @@ def test_every_registered_api_error_response_hides_secret_sentinels(
         assert all(sentinel not in caplog.text for sentinel in sentinels.values())
     finally:
         client.close()
+
+
+def test_setting_a_double_pasted_fred_key_fails_immediately(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A hidden prompt echoes nothing, so a double paste must fail at set time.
+
+    Storing 64 or 96 characters used to succeed and only surfaced later as FRED
+    rejecting every series, which reads like an upstream outage.
+    """
+
+    good = "46c5e88508f6d11303b6f0573d1afc0a".replace("46c5", "abcd")
+    assert len(good) == 32
+
+    # The exact shape is accepted.
+    assert personal_secrets._normalized_value("FRED_API_KEY", good) == good
+
+    for repeats in (2, 3):
+        with pytest.raises(ValueError) as excinfo:
+            personal_secrets._normalized_value("FRED_API_KEY", good * repeats)
+        message = str(excinfo.value)
+        assert "32 lower-case alphanumeric" in message
+        # The observed length is what makes a double paste obvious.
+        assert f"received {32 * repeats} characters" in message
+        # The value itself is never echoed back.
+        assert good not in message
+
+    for wrong in (good.upper(), good[:31], good[:31] + "-", good + "a"):
+        with pytest.raises(ValueError):
+            personal_secrets._normalized_value("FRED_API_KEY", wrong)
+
+
+def test_the_exact_shape_gate_only_applies_to_keys_that_document_one() -> None:
+    # Other secrets keep accepting their own opaque formats.
+    for key in ("MASSIVE_API_KEY", "MARKETDATA_TOKEN", "FINNHUB_API_KEY"):
+        value = "not-a-32-char-lowercase-alnum-token"
+        assert personal_secrets._normalized_value(key, value) == value
+    assert set(personal_secrets._EXACT_SHAPES) == {"FRED_API_KEY"}
+
+
+def test_validate_and_set_share_one_shape_predicate() -> None:
+    good = "abcd" + "e" * 28
+    assert len(good) == 32
+    assert personal_secrets._format_valid("FRED_API_KEY", good) is True
+    assert personal_secrets._format_valid("FRED_API_KEY", good * 3) is False
+    assert personal_secrets._format_valid("FRED_API_KEY", good.upper()) is False

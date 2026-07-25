@@ -141,8 +141,12 @@ relative_return_63d = 100 × [ ln(A_t / A_{t-63}) − ln(B_t / B_{t-63}) ]
 - `./personal.sh secrets set FRED_API_KEY`（从标准输入读，永不回显）
 - `./personal.sh secrets status` → `{"FRED_API_KEY": {"configured": true}}`
 - `./personal.sh secrets remove FRED_API_KEY`
-- 格式本地校验：FRED 签发的是 32 位小写字母数字；`validate` 只做本地格式与文件权限
-  检查（`local_validation_only`），不把 Key 放进任何 URL。
+- 格式本地校验：FRED 签发的是 32 位小写字母数字。**`set` 与 `validate` 共用同一个形态
+  断言**——`set` 时不符合就立即拒收并报出实际长度（重复粘贴会存进 64/96 个字符，过去
+  要等下一次刷新才以 24 个序列全失败的形式暴露）；`validate` 另做文件权限检查
+  （`local_validation_only`）。两者都不把 Key 放进任何 URL。
+- FRED 对形态错误或未注册的 key 回 HTTP 400，客户端映射为 `fred_api_key_invalid`
+  而不是 `fred_unavailable`——密钥问题与上游故障必须分开报。
 
 必须同步的五面镜子（漏一处 CI 或 CLI 就拒）：
 

@@ -4,6 +4,10 @@
 
 ```bash
 # 1) 在服务器上配置 FRED 密钥（从标准输入读，永不回显）
+#    set 会当场校验 FRED 的确切形态（32 位小写字母数字），不符合就报出实际长度并拒收。
+#    隐藏提示符不回显任何字符，盲输很容易重复粘贴；先确认长度更稳妥：
+#      read -rs -p 'FRED key: ' K; echo; echo "长度 = ${#K}"   # 必须是 32
+#      printf '%s\n' "$K" | ./personal.sh secrets set FRED_API_KEY && unset K
 ./personal.sh secrets set FRED_API_KEY
 
 # 2) 确认已配置（只回布尔，不回值）
@@ -155,6 +159,7 @@ print(repository.integrity_report())
 | `status=degraded` | `warnings` 会列出失败的 Series ID 与错误码 |
 | `status=stale` | 快照超过 7 天或数据超过 14 天；看最近一次 sync run 的 `status` |
 | `insufficient_history` | 数据存在但 5 年分位历史不足，等回填补齐 |
+| `fred_api_key_invalid` | FRED 拒绝了这把 key（HTTP 400）。**不是上游故障**：跑 `./personal.sh secrets validate` 看 `FRED_API_KEY` 的 `format_valid`；最常见原因是隐藏提示符不回显导致重复粘贴，存进了 64 或 96 个字符 |
 | `fred_rate_limited` | FRED 限流；客户端已尊重 `Retry-After`，等下一个时刻 |
 | `fred_units_mismatch` | FRED 改了单位元数据，需要更新 registry 的单位族并过测试 |
 | `etf_history_unavailable` | 看 Massive/Yahoo 是否可用；只影响相对收益类因子 |
