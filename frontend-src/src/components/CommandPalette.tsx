@@ -11,6 +11,7 @@ import { ApiError } from '@/api/client';
 import { stocksApi } from '@/api/modules/stocks';
 import { useAccess } from '@/hooks/useAccess';
 import { cn } from '@/lib/utils';
+import { pushRecent, readRecent } from '@/lib/recentTickers';
 import Icon, { type IconName } from '@/components/icons';
 import { NAV_ITEMS } from '@/components/Navbar';
 
@@ -32,26 +33,9 @@ interface Entry {
   action: () => void;
 }
 
-const RECENT_KEY = 'optix:recent-tickers';
+// 最近查看记录的读写与校验见 lib/recentTickers（审计 P1-09：一个损坏的本地
+// 存储值曾足以让整站白屏，校验逻辑不该藏在始终挂载的 UI 组件里）。
 
-// 供 Layout 写入最近查看记录；该纯函数不参与组件热更新。
-// eslint-disable-next-line react-refresh/only-export-components
-export function pushRecent(ticker: string) {
-  try {
-    const list = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') as string[];
-    const next = [ticker, ...list.filter((t) => t !== ticker)].slice(0, 5);
-    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
-  } catch {
-    /* ignore */
-  }
-}
-function readRecent(): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') as string[];
-  } catch {
-    return [];
-  }
-}
 
 function searchErrorText(error: unknown): string {
   if (error instanceof ApiError) {

@@ -12,7 +12,8 @@ import Footer from '@/components/Footer';
 import RouteErrorBoundary from '@/components/shared/RouteErrorBoundary';
 import PageFallback from '@/components/shared/PageFallback';
 import MobileDock from '@/components/MobileDock';
-import CommandPalette, { pushRecent } from '@/components/CommandPalette';
+import CommandPalette from '@/components/CommandPalette';
+import { pushRecent } from '@/lib/recentTickers';
 import Drawer from '@/components/Drawer';
 
 /* 抽屉体只在用户点开个股时才需要，独立分包 */

@@ -3,7 +3,9 @@ import { Navigate, Route, Routes } from 'react-router';
 import Layout from '@/components/Layout';
 import { AccessProvider } from '@/hooks/useAccess';
 import { ToastProvider } from '@/components/Toast';
+import AppErrorBoundary from '@/components/shared/AppErrorBoundary';
 import PageFallback from '@/components/shared/PageFallback';
+import NotFound from '@/pages/NotFound';
 
 /* 路由级代码分割：页面按需加载，echarts 等重依赖不进首屏包 */
 const Watchlist = lazy(() => import('@/pages/Watchlist'));
@@ -18,26 +20,32 @@ const Market = lazy(() => import('@/pages/Market'));
 
 export default function App() {
   return (
-    <AccessProvider>
-      <ToastProvider>
-        <Suspense fallback={<PageFallback />}>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route element={<Layout />}>
-              <Route index element={<Navigate to="/watchlist" replace />} />
-              <Route path="/watchlist" element={<Watchlist />} />
-              <Route path="/screener" element={<Screener />} />
-              <Route path="/breakouts" element={<Breakouts />} />
-              <Route path="/sectors" element={<Sectors />} />
-              <Route path="/earnings" element={<Earnings />} />
-              <Route path="/catalysts" element={<Catalysts />} />
-              <Route path="/market" element={<Market />} />
-              <Route path="/stock/:ticker" element={<StockDetail />} />
-              <Route path="*" element={<Navigate to="/watchlist" replace />} />
-            </Route>
-          </Routes>
-        </Suspense>
-      </ToastProvider>
-    </AccessProvider>
+    /* 顶级边界必须在 AccessProvider 之外：身份 Provider、命令面板与全局抽屉都在
+       路由错误边界的作用范围之外，它们抛异常时旧结构会整站白屏（审计 P1-09）。 */
+    <AppErrorBoundary>
+      <AccessProvider>
+        <ToastProvider>
+          <Suspense fallback={<PageFallback />}>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route element={<Layout />}>
+                <Route index element={<Navigate to="/watchlist" replace />} />
+                <Route path="/watchlist" element={<Watchlist />} />
+                <Route path="/screener" element={<Screener />} />
+                <Route path="/breakouts" element={<Breakouts />} />
+                <Route path="/sectors" element={<Sectors />} />
+                <Route path="/earnings" element={<Earnings />} />
+                <Route path="/catalysts" element={<Catalysts />} />
+                <Route path="/market" element={<Market />} />
+                <Route path="/stock/:ticker" element={<StockDetail />} />
+                {/* 未知路由显示 404，不再静默重定向到自选（审计 P3-6）：
+                    重定向会掩盖失效链接与部署缺页，也会让自动化测试看不出路由问题。 */}
+                <Route path="*" element={<NotFound />} />
+              </Route>
+            </Routes>
+          </Suspense>
+        </ToastProvider>
+      </AccessProvider>
+    </AppErrorBoundary>
   );
 }

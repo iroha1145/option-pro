@@ -50,13 +50,61 @@ _login_failures: dict[str, tuple[int, float, float]] = {}
 
 
 def _client_key(request: Request) -> str:
-    client = request.client
-    return client.host if client and client.host else "unknown"
+    """Rate-limit key for one visitor.
+
+    ``request.client.host`` is the socket peer, which behind nginx, Caddy or a
+    Cloudflare tunnel is the proxy container -- one bucket for every visitor on
+    the deployment, so ten wrong passwords from one person would put everyone
+    into the five-minute cooldown. Owner login already resolves the address
+    through the trusted-proxy allowlist; both identity systems now agree.
+    """
+
+    from app.api.access import _runtime
+
+    address = _runtime(request).request_address(request)
+    return str(address) if address is not None else "unknown"
 
 
 def _prune(bucket: dict, now: float) -> None:
-    if len(bucket) >= _RATE_BUCKET_LIMIT:
-        bucket.clear()
+    """Drop expired entries, then evict the oldest if still over capacity.
+
+    Clearing the whole table at the threshold wiped every visitor's cooldown at
+    once, which is exactly the state an attacker wants: fill the table, and the
+    next insert resets everyone's failure count.
+    """
+
+    if len(bucket) < _RATE_BUCKET_LIMIT:
+        return
+    for key, value in list(bucket.items()):
+        if _entry_expired(value, now):
+            del bucket[key]
+    overflow = len(bucket) - _RATE_BUCKET_LIMIT + 1
+    if overflow <= 0:
+        return
+    for key, _ in sorted(bucket.items(), key=lambda item: _entry_last_seen(item[1]))[
+        :overflow
+    ]:
+        del bucket[key]
+
+
+def _entry_last_seen(value: object) -> float:
+    """Newest activity stamp of a bucket entry, whatever its shape."""
+
+    if isinstance(value, list):
+        return max(value) if value else 0.0
+    if isinstance(value, tuple) and value:
+        # (count, started_at, blocked_until) -- a live cooldown outranks its start.
+        return max(float(part) for part in value[1:] if isinstance(part, (int, float)))
+    return 0.0
+
+
+def _entry_expired(value: object, now: float) -> bool:
+    if isinstance(value, list):
+        return not any(stamp > now - _REGISTER_WINDOW_SECONDS for stamp in value)
+    if isinstance(value, tuple) and len(value) == 3:
+        _count, started_at, blocked_until = value
+        return blocked_until <= now and started_at < now - _LOGIN_FAILURE_WINDOW_SECONDS
+    return False
 
 
 def enforce_registration_rate(request: Request) -> None:

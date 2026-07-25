@@ -4,6 +4,7 @@ import hashlib
 import json as _json_mod
 import os as _os
 import re as _re
+import threading
 import time as _time
 from collections import deque as _deque
 from pathlib import Path
@@ -116,6 +117,13 @@ app = FastAPI(
     title="Optix Pro Options Visualization API",
     description="Personal stock, options, signal, and market-data API.",
     version=_APP_VERSION,
+    # Documentation routes stay off in this deployment (audit P3-7). The gateway
+    # treats extension-less GETs as SPA documents, so /docs and /redoc would load
+    # their shell while /openapi.json stayed behind the access gate -- a half-open
+    # page that exposes an entry point and delivers nothing.
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 app.state.access_runtime = _ACCESS_RUNTIME
 
@@ -683,7 +691,40 @@ def _frontend_file_list() -> tuple[tuple[str, ...], list[str], bool]:
     return tuple(entries), [], True
 
 
-def _frontend_integrity() -> dict:
+def _frontend_manifest_signature() -> tuple:
+    """Cheap stamp that changes whenever the built frontend is replaced.
+
+    Two stat() calls, versus reading and hashing every file in the manifest.
+    A deploy rewrites both the manifest and index.html, so a changed stamp is
+    the signal to recompute; an unchanged stamp means the bytes on disk are the
+    ones we already hashed.
+    """
+
+    manifest_path = (
+        Path(_FRONTEND_MANIFEST_PATH)
+        if _FRONTEND_MANIFEST_PATH
+        else FRONTEND_DIR / _FRONTEND_MANIFEST_NAME
+    )
+    stamps: list[tuple] = []
+    for path in (manifest_path, FRONTEND_DIR / "index.html"):
+        # The full path, not just the name: FRONTEND_DIR is monkeypatched in
+        # tests, and two different directories that are both empty would
+        # otherwise produce the same stamp and serve each other's result.
+        key = str(path)
+        try:
+            stat = path.stat()
+        except OSError:
+            stamps.append((key, None))
+        else:
+            stamps.append((key, stat.st_mtime_ns, stat.st_size))
+    return tuple(stamps)
+
+
+_frontend_integrity_lock = threading.Lock()
+_frontend_integrity_cache: tuple[tuple, dict] | None = None
+
+
+def _compute_frontend_integrity() -> dict:
     digest = hashlib.sha256()
     required_files, missing, uses_manifest = _frontend_file_list()
     for relative_path in required_files:
@@ -704,6 +745,39 @@ def _frontend_integrity() -> dict:
         "missing": missing,
         "sha256": digest.hexdigest() if ready else None,
     }
+
+
+def _frontend_integrity() -> dict:
+    """Integrity of the built frontend, recomputed only when it changes.
+
+    ``/health`` and ``/ready`` are public and unauthenticated, and the API rate
+    limit only covers ``/api``. Hashing every built file per request turned a
+    probe that should be nearly free into a disk and CPU amplifier that any
+    anonymous caller could drive, and that gets slower exactly as the frontend
+    grows. The result is now keyed on the manifest stamp.
+    """
+
+    global _frontend_integrity_cache
+
+    signature = _frontend_manifest_signature()
+    cached = _frontend_integrity_cache
+    if cached is not None and cached[0] == signature:
+        return dict(cached[1])
+    with _frontend_integrity_lock:
+        cached = _frontend_integrity_cache
+        if cached is not None and cached[0] == signature:
+            return dict(cached[1])
+        payload = _compute_frontend_integrity()
+        _frontend_integrity_cache = (signature, payload)
+    return dict(payload)
+
+
+def reset_frontend_integrity_cache() -> None:
+    """Test hook: force the next probe to re-read the built files."""
+
+    global _frontend_integrity_cache
+    with _frontend_integrity_lock:
+        _frontend_integrity_cache = None
 
 
 def _runtime_payload(status: str, frontend: dict) -> dict:

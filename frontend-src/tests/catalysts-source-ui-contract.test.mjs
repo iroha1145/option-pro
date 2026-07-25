@@ -89,7 +89,7 @@ function loadCatalystsModule(responses = {}) {
         },
         idFromLocation: () => null,
         mockOr: (_mock, live) => live(),
-        notifyOwnerSessionInvalid: () => {},
+        notifyPrincipalInvalid: () => {},
         post: async () => ({}),
         postCreate: async () => ({ data: {}, location: null }),
         toQuery: (params) => new URLSearchParams(

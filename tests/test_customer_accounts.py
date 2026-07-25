@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ipaddress
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -440,3 +442,105 @@ def test_ensure_owner_account_is_idempotent(store: AccountStore) -> None:
     assert first == second
     store.add_ticker(first.user_id, "AAPL")
     assert store.watchlist(second.user_id) == ["AAPL"]
+
+
+# ---------------- rate-limit keying and capacity (audit P1-11) ----------------
+
+
+class _PeerAddress:
+    """Give the ASGI scope a real peer address, as a proxy deployment has."""
+
+    def __init__(self, app, address: str) -> None:
+        self.app = app
+        self.address = address
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http":
+            scope["client"] = (self.address, 50000)
+        await self.app(scope, receive, send)
+
+
+def test_rate_limit_key_follows_the_trusted_proxy_chain(
+    store: AccountStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Behind a proxy, two visitors must not share one bucket.
+
+    ``request.client.host`` is the proxy container, so keying on it gave every
+    visitor on the deployment a single bucket: five sign-ups from one person
+    closed registration for everyone. Owner login already resolves the address
+    through the trusted-proxy allowlist; both systems now agree.
+    """
+
+    from app import access as access_module
+
+    monkeypatch.setattr(access_module, "TRUST_PROXY_HEADERS", True)
+    monkeypatch.setattr(
+        access_module,
+        "TRUSTED_PROXY_NETWORKS",
+        (ipaddress.ip_network("127.0.0.1/32"),),
+    )
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def visitor_access(request, call_next):
+        with request_owner_access_context(False):
+            return await call_next(request)
+
+    app.include_router(accounts_api.router)
+    proxied = TestClient(
+        _PeerAddress(app, "127.0.0.1"),
+        base_url="https://localhost",
+    )
+
+    def register_as(address: str, name: str):
+        return proxied.post(
+            "/api/account/register",
+            json={"username": name, "password": "pw"},
+            headers={**HEADERS, "Content-Type": "application/json", "X-Forwarded-For": address},
+        )
+
+    for index in range(5):
+        assert register_as("203.0.113.9", f"first{index}").status_code == 201
+    assert register_as("203.0.113.9", "first5").status_code == 429
+    # A different visitor arrives through the same proxy and must be unaffected.
+    assert register_as("198.51.100.4", "second0").status_code == 201
+
+
+def test_bucket_overflow_evicts_instead_of_clearing_every_cooldown() -> None:
+    """Reaching capacity must not reset everyone's failure count.
+
+    ``bucket.clear()`` at the threshold meant an attacker could fill the table
+    and have the next insert wipe every active cooldown, including their own.
+    """
+
+    now = 1_000_000.0
+    bucket: dict[str, tuple[int, float, float]] = {}
+    # One live cooldown, plus enough long-expired entries to reach capacity.
+    bucket["victim"] = (10, now, now + accounts_api._LOGIN_COOLDOWN_SECONDS)
+    stale_start = now - accounts_api._LOGIN_FAILURE_WINDOW_SECONDS - 1
+    for index in range(accounts_api._RATE_BUCKET_LIMIT):
+        bucket[f"stale{index}"] = (1, stale_start - index, 0.0)
+
+    accounts_api._prune(bucket, now)
+
+    assert "victim" in bucket, "an active cooldown must survive pruning"
+    assert bucket["victim"] == (10, now, now + accounts_api._LOGIN_COOLDOWN_SECONDS)
+    assert len(bucket) < accounts_api._RATE_BUCKET_LIMIT
+
+
+def test_bucket_overflow_of_live_entries_drops_the_oldest_only() -> None:
+    now = 1_000_000.0
+    bucket: dict[str, list[float]] = {}
+    for index in range(accounts_api._RATE_BUCKET_LIMIT):
+        # All within the registration window, so nothing is expired and
+        # eviction has to choose which entry to drop.
+        bucket[f"live{index}"] = [now - index * 0.5]
+
+    accounts_api._prune(bucket, now)
+
+    assert len(bucket) == accounts_api._RATE_BUCKET_LIMIT - 1
+    assert "live0" in bucket, "the newest entry must be kept"
+    oldest = f"live{accounts_api._RATE_BUCKET_LIMIT - 1}"
+    assert oldest not in bucket, "eviction must start from the oldest entry"

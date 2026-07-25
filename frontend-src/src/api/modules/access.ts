@@ -69,24 +69,41 @@ async function liveStatus(): Promise<AccessStatus> {
  * 错误透传：client 统一抛 ApiError（bizCode: login_cooldown/https_required/
  * owner_login_required，retryAfter 取自 Retry-After 头或 body.retry_after），
  * 形状与 Login.tsx 的 mapError 消费一致。
+ *
+ * 写操作与状态校验必须分开（GPT-5.6-Pro 审计 P2-2）：旧写法是
+ * `post(...).then(liveStatus)`，随后那个 GET 一失败，整个登录 Promise 就 reject，
+ * 界面报「登录失败」——而 Cookie 其实已经写好了。写成功就是写成功，校验是可重试的
+ * 独立一步。
  */
 export const accessApi = {
   status: (): Promise<AccessStatus> =>
     mockOr(() => session.getAccess(), liveStatus),
   /** 用户名为 admin 时走管理员通道，其余走客户账号表。 */
-  login: (username: string, password: string): Promise<AccessStatus> =>
+  login: (username: string, password: string): Promise<void> =>
     mockOr(
-      () => session.login(password),
-      () => post('/access/login', { username, password }).then(liveStatus),
+      async () => {
+        await session.login(password);
+      },
+      async () => {
+        await post('/access/login', { username, password });
+      },
     ),
-  register: (username: string, password: string): Promise<AccessStatus> =>
+  register: (username: string, password: string): Promise<void> =>
     mockOr(
-      () => session.login(password),
-      () => post('/account/register', { username, password }).then(liveStatus),
+      async () => {
+        await session.login(password);
+      },
+      async () => {
+        await post('/account/register', { username, password });
+      },
     ),
-  logout: (): Promise<AccessStatus> =>
+  logout: (): Promise<void> =>
     mockOr(
-      () => session.logout(),
-      () => post('/access/logout').then(liveStatus),
+      async () => {
+        await session.logout();
+      },
+      async () => {
+        await post('/access/logout');
+      },
     ),
 };
