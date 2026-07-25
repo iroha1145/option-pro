@@ -20,7 +20,7 @@
 
 - `config/personal.toml`：访问模式、功能模式、调度、模型、预算与保留期；
 - `machine.env`：七项机器配置，包括统一数据目录；
-- `secrets.env`：五项服务端密钥。
+- `secrets.env`：七项服务端密钥。
 
 `.env` 只保留一个迁移版本的兼容用途。旧环境文件可先转换为人工核对草稿：
 
@@ -33,7 +33,7 @@ PYTHONPATH=backend python -m app.tools.migrate_personal_config \
 
 - `personal.toml`：访问模式、模型限制、调度与保留期等行为配置；
 - `machine.env`：`HOST_BIND`、`PORT`、`MACROLENS_URL`、`ALLOWED_HOSTS`、`TRUST_PROXY_HEADERS`、`TRUSTED_PROXY_CIDRS` 和 `DATA_DIR`；
-- `secrets.env`：`OPENAI_API_KEY`、`FINNHUB_API_KEY`、`MARKETDATA_TOKEN`、`INTERNAL_API_TOKEN` 和 `APP_PASSWORD_HASH`；
+- `secrets.env`：`OPENAI_API_KEY`、`FINNHUB_API_KEY`、`MARKETDATA_TOKEN`、`MASSIVE_API_KEY`、`FRED_API_KEY`、`INTERNAL_API_TOKEN` 和 `APP_PASSWORD_HASH`；
 - `migration-report.json`：只记录字段名称与迁移状态。
 
 后三个文件权限均为 `0600`。迁移报告只含 `mapped_keys`、`deprecated_keys`、`removed_keys`、`conflicting_keys`、`unmapped_keys`、`requires_owner_password` 和 `warnings`，不得出现值、值长度、摘要、网址或任何密钥片段。
