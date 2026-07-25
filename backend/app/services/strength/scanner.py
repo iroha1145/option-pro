@@ -1482,6 +1482,106 @@ _TIER_FLOORS: tuple[tuple[str, float], ...] = (
 )
 
 
+def _attach_macro_fit_shadow(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Attach a per-stock macro fit as shadow fields. Changes no production score.
+
+    The point of a stock-level fit is that one macro environment pushes
+    different sectors in different directions -- adding the same composite to
+    every row would shift the whole result set and reorder nothing. Sector
+    exposures live in a deterministic, versioned registry; no model infers them.
+
+    Everything here is additive and read by nobody: intrinsic strength, market
+    fit, profile fit and ranking_score are untouched, and the rows have already
+    been sorted. Until forward validation says otherwise, macro is an annotation.
+
+    Failure is silent by design: a screener scan must not fail because the macro
+    snapshot is unreadable. Rows simply carry no fit, which the interface shows
+    as "no macro read" rather than as neutral.
+    """
+
+    try:
+        from app.services.macro_conditions.exposures import EXPOSURE_VERSION
+        from app.services.macro_conditions.linkage import (
+            compute_macro_fit,
+            macro_technical_gap,
+            shadow_ranking_adjustment,
+            structural_macro_score,
+        )
+        from app.services.macro_conditions.repository import MacroRepository
+        from app.services.macro_conditions.service import (
+            MacroConditionsService,
+            MacroServiceConfig,
+        )
+    except Exception:
+        return {"available": False, "reason": "macro_module_unavailable"}
+
+    try:
+        from app.personal_config import get_personal_config
+        from app.data_paths import get_data_paths
+
+        # Read-only: constructing this must never create or migrate the file,
+        # and a screener scan must never trigger a macro fetch.
+        repository = MacroRepository(get_data_paths().macro_conditions_db, read_only=True)
+        service = MacroConditionsService(
+            repository,
+            config=MacroServiceConfig.from_personal_config(get_personal_config()),
+        )
+        inputs = service.linkage_inputs()
+    except Exception:
+        inputs = None
+    if not inputs:
+        return {"available": False, "reason": "macro_snapshot_unavailable"}
+
+    factors = inputs.get("factors") or []
+    structural = structural_macro_score(inputs.get("modules") or [])
+    # One fit per sector, not per row: the exposure profile is the sector's.
+    by_sector: dict[str, Any] = {}
+    scored = 0
+    for row in rows:
+        sector_id = row.get("primary_sector_id") or row.get("sector_id")
+        key = str(sector_id or "")
+        if key not in by_sector:
+            by_sector[key] = compute_macro_fit(factors, sector_id=sector_id or None)
+        fit = by_sector[key]
+        payload = fit.as_payload()
+        payload["ranking_score_macro_shadow"] = _shadow_ranking_score(
+            row.get("ranking_score"),
+            shadow_ranking_adjustment(fit),
+        )
+        payload["macro_technical_gap"] = macro_technical_gap(
+            row.get("market_fit_score"),
+            structural,
+        )
+        row.update(payload)
+        if fit.score is not None:
+            scored += 1
+
+    return {
+        "available": True,
+        "exposure_version": EXPOSURE_VERSION,
+        "macro_snapshot_date": inputs.get("snapshot_date"),
+        "macro_scoring_version": inputs.get("scoring_version"),
+        "macro_available_at": inputs.get("available_at"),
+        "structural_macro_score": structural,
+        "scored_rows": scored,
+        "sectors_without_exposure": sorted(
+            key for key, fit in by_sector.items() if fit.score is None
+        ),
+        # Stated so nobody has to infer it from the field names.
+        "affects_production_ranking": False,
+    }
+
+
+def _shadow_ranking_score(
+    ranking_score: Any,
+    adjustment: float,
+) -> Optional[float]:
+    base = _safe_float(ranking_score, 4)
+    if base is None:
+        return None
+    return round(max(0.0, min(100.0, base + adjustment)), 4)
+
+
 def _tier_distribution(rows: list[dict[str, Any]], timeframe: str) -> dict[str, int]:
     """S/A/B/C/D counts over every screened row.
 
@@ -1825,6 +1925,10 @@ def _scan_sync(
         marketdata_status = {"provider": "MarketData.app", "status": "skipped", "configured": False, "enriched": 0, "message": "单标的查询跳过期权增强"}
     _refresh_classifications(limited)
     _sort_scored(limited, timeframe)
+    # Shadow only, computed after the production ordering is fixed: attaching it
+    # earlier would invite it to leak into a sort key. Nothing below reads these
+    # fields, and _sort_scored has already run.
+    macro_linkage = _attach_macro_fit_shadow(limited)
     options_status = _combined_options_status(yahoo_options_status, marketdata_status)
     return {
         "as_of": _now_iso(),
@@ -1857,6 +1961,7 @@ def _scan_sync(
         # it got back -- 20 by default -- while displaying the real pool size
         # beside them, so "股票池 300 只" sat next to five tiers summing to 20.
         "tier_distribution": _tier_distribution(view_rows, timeframe),
+        "macro_linkage": macro_linkage,
         "skipped": skipped,
         "results": limited,
         "rows": limited,

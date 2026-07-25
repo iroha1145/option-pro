@@ -865,6 +865,56 @@ class MacroConditionsService:
     # AI context
     # ------------------------------------------------------------------
 
+    def linkage_inputs(self) -> Optional[dict[str, Any]]:
+        """Latest factor and module scores, for stock- and sector-level macro fit.
+
+        A bounded read of the published snapshot, nothing else -- the linkage is
+        deterministic arithmetic over these rows and must never trigger a fetch.
+        Returns ``None`` when there is no snapshot to read, so a caller that
+        cannot get macro context reports no fit rather than a neutral one.
+        """
+
+        try:
+            composite = self.repository.latest_composite()
+        except MacroError:
+            return None
+        if composite is None:
+            return None
+        snapshot_date = _as_date(composite["snapshot_date"])
+        if snapshot_date is None:
+            return None
+        try:
+            factors = self.repository.factors_at(snapshot_date)
+            modules = self.repository.modules_at(snapshot_date)
+        except MacroError:
+            return None
+        if not factors:
+            return None
+        return {
+            "snapshot_date": snapshot_date.isoformat(),
+            "scoring_version": composite.get("scoring_version"),
+            "available_at": composite.get("available_at"),
+            "data_through": composite.get("data_through"),
+            "factors": [
+                {
+                    "factor_id": row.get("factor_id"),
+                    "module_id": row.get("module_id"),
+                    "score": row.get("score"),
+                    "confidence": row.get("confidence"),
+                    "status": row.get("status"),
+                }
+                for row in factors
+            ],
+            "modules": [
+                {
+                    "module_id": row.get("module_id"),
+                    "score": row.get("score"),
+                    "status": row.get("status"),
+                }
+                for row in modules
+            ],
+        }
+
     def ai_context(self, *, key_configured: bool = True) -> Optional[dict[str, Any]]:
         """Compact macro block for the existing Market Focus analysis input.
 
