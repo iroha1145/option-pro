@@ -241,7 +241,13 @@ jobs:
           assert p["journal_mode"] == "wal", p
           assert p["integrity_check"] == "ok", p
           assert p["foreign_key_violations"] == 0, p
-          assert p["schema_version"] == "macro-conditions-v1", p
+          # Compare against the constant the code itself exports, not a literal
+          # here: a copy in this file goes stale on the next migration and fails
+          # the gate on the migration rather than on anything being wrong.
+          # NOTE: this block is inside a single-quoted shell string, so it must
+          # contain no apostrophe -- one closes the string and the rest of the
+          # Python is handed to bash.
+          assert p["schema_version"] == p["expected_schema_version"], p
           assert p["registered_factors"] == 30, p
           assert p["factor_rows"] == 30, p
           assert p["module_rows"] == 7, p

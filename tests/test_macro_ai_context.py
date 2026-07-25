@@ -32,7 +32,7 @@ def _service(tmp_path) -> MacroConditionsService:
     service = MacroConditionsService(repository, clock=fixed_clock())
     bundle, _summary = service.build_snapshot(as_of=AS_OF)
     assert bundle is not None
-    repository.publish(bundle)
+    repository.publish(bundle, run_id="mcr_test")
     return service
 
 
@@ -107,7 +107,7 @@ def test_a_stale_snapshot_is_labelled_stale_in_the_block(tmp_path) -> None:
     service = MacroConditionsService(repository, clock=fixed_clock())
     bundle, _summary = service.build_snapshot(as_of=AS_OF)
     assert bundle is not None
-    repository.publish(bundle)
+    repository.publish(bundle, run_id="mcr_test")
 
     # Read the same snapshot a month later: it is stale, and says so.
     later = MacroConditionsService(

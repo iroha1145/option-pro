@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import math
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from hashlib import sha256
@@ -43,7 +44,16 @@ from .models import (
 from .registry import SCORING_VERSION
 
 
-SCHEMA_VERSION = "macro-conditions-v1"
+#: v2 rekeys ETF observations on the value itself and adds the append-only
+#: publication log. v1 keyed ETF rows on ``available_at``, which is stamped at
+#: write time, so every refresh inserted a fresh row for an unchanged price --
+#: 8 symbols x ~252 sessions, twice a day, forever. And factor/module/composite
+#: rows were updated in place, so the store could answer "what does this past
+#: date recompute to today" but never "what was published on that date", which
+#: is the question a walk-forward test asks.
+SCHEMA_VERSION = "macro-conditions-v2"
+#: The version this database may be upgraded *from*.
+SCHEMA_VERSION_PREVIOUS = "macro-conditions-v1"
 
 HISTORY_BASIS_BACKFILL = "latest_revised_backfill"
 HISTORY_BASIS_LOCAL = "local_point_in_time"
@@ -87,17 +97,36 @@ _SCHEMA: tuple[str, ...] = (
         observation_date TEXT NOT NULL,
         adjusted_close REAL NOT NULL,
         provider TEXT NOT NULL,
+        value_hash TEXT NOT NULL,
         data_through TEXT NOT NULL,
         fetched_at TEXT NOT NULL,
-        available_at TEXT NOT NULL,
+        first_seen_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
         history_basis TEXT NOT NULL
             CHECK(history_basis IN ('latest_revised_backfill','local_point_in_time')),
-        PRIMARY KEY(symbol, observation_date, provider, available_at)
+        PRIMARY KEY(symbol, observation_date, provider, value_hash)
     )
     """,
     """
     CREATE INDEX IF NOT EXISTS idx_macro_etf_observations_lookup
-        ON macro_etf_observations(symbol, observation_date DESC, available_at DESC)
+        ON macro_etf_observations(symbol, observation_date DESC, last_seen_at DESC)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS macro_snapshot_publications (
+        publication_id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        snapshot_date TEXT NOT NULL,
+        scoring_version TEXT NOT NULL,
+        published_at TEXT NOT NULL,
+        available_at TEXT,
+        factor_payload_hash TEXT NOT NULL,
+        module_payload_hash TEXT NOT NULL,
+        composite_payload TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_macro_snapshot_publications_lookup
+        ON macro_snapshot_publications(snapshot_date DESC, published_at DESC)
     """,
     """
     CREATE TABLE IF NOT EXISTS macro_sync_runs (
@@ -238,6 +267,25 @@ def _storable(value: Any) -> Optional[float]:
     return number
 
 
+def _json_text(payload: Mapping[str, Any]) -> str:
+    """Compact, key-sorted JSON so two identical publications compare equal."""
+
+    body = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    if len(body.encode("utf-8")) > _MAX_JSON_BYTES:
+        raise MacroSchemaError("macro publication payload too large")
+    return body
+
+
+def _payload_hash(rows: Sequence[tuple]) -> str:
+    """Stable digest of a published payload, order-independent."""
+
+    body = "\n".join(
+        "|".join("" if part is None else str(part) for part in row)
+        for row in sorted(rows, key=lambda row: tuple(str(part) for part in row))
+    )
+    return sha256(body.encode("utf-8")).hexdigest()
+
+
 def _value_hash(value: Optional[float]) -> str:
     body = "null" if value is None else repr(float(value))
     return sha256(body.encode("utf-8")).hexdigest()[:32]
@@ -334,6 +382,9 @@ class MacroRepository:
             if mode != "wal":
                 raise MacroSchemaError(f"SQLite WAL mode is required, got {mode}")
             connection.execute("BEGIN IMMEDIATE")
+            # Before the CREATE IF NOT EXISTS pass: an existing v1 table would
+            # otherwise satisfy "IF NOT EXISTS" and silently keep its old shape.
+            self._upgrade_etf_observations_to_v2(connection)
             for statement in _SCHEMA:
                 connection.execute(statement)
             rows = connection.execute(
@@ -363,6 +414,130 @@ class MacroRepository:
             if connection.in_transaction:
                 connection.rollback()
             connection.close()
+
+    @staticmethod
+    def _upgrade_etf_observations_to_v2(connection: sqlite3.Connection) -> int:
+        """Rekey ETF observations on the value, collapsing duplicate prices.
+
+        v1 keyed rows on ``available_at``, which is stamped at write time, so
+        ``INSERT OR IGNORE`` never ignored anything: an unchanged price was
+        written again on every refresh -- 8 symbols x ~252 sessions, twice a day.
+        The table shape now mirrors ``macro_series_revisions``: identity is the
+        value, and re-seeing it only moves ``last_seen_at``.
+
+        Rows are collapsed by (symbol, observation_date, provider, value), which
+        is the same grouping the new primary key expresses, so this rewrite
+        cannot merge two genuinely different prices. ``first_seen_at`` keeps the
+        earliest ``available_at`` we ever recorded for that price -- discarding
+        it would move the point-in-time visibility of history that is already
+        stored, which is the one thing this table exists to preserve.
+
+        Returns the number of rows the collapse removed. Idempotent: a database
+        already on the v2 shape is left untouched.
+        """
+
+        tables = {
+            str(row["name"])
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        if "macro_etf_observations" not in tables:
+            return 0
+        columns = {
+            str(row["name"])
+            for row in connection.execute(
+                "PRAGMA table_info(macro_etf_observations)"
+            ).fetchall()
+        }
+        if "value_hash" in columns:
+            return 0
+        if "available_at" not in columns:
+            raise MacroSchemaError(
+                "macro_etf_observations has neither available_at nor value_hash"
+            )
+
+        before = int(
+            connection.execute(
+                "SELECT COUNT(*) AS n FROM macro_etf_observations"
+            ).fetchone()["n"]
+        )
+        # Group by exactly what the new primary key expresses, so the rewrite
+        # cannot merge two genuinely different prices.
+        #
+        # history_basis is *not* part of the grouping: the same price can appear
+        # once as a backfill and again as a live observation, and those are one
+        # price, not two. The merged row takes the basis of its earliest
+        # sighting, because first_seen_at comes from that sighting -- keeping the
+        # label attached to the timestamp it describes. Deciding it by insert
+        # order instead would be non-deterministic and would sometimes label a
+        # backfill-derived visibility as locally observed, which is the one
+        # distinction this whole storage design rests on.
+        rows = connection.execute(
+            """SELECT symbol, observation_date, adjusted_close, provider,
+                      MAX(data_through)   AS data_through,
+                      MIN(fetched_at)     AS fetched_at,
+                      MIN(available_at)   AS first_seen_at,
+                      MAX(available_at)   AS last_seen_at,
+                      (SELECT inner.history_basis
+                         FROM macro_etf_observations AS inner
+                        WHERE inner.symbol = outer.symbol
+                          AND inner.observation_date = outer.observation_date
+                          AND inner.provider = outer.provider
+                          AND inner.adjusted_close = outer.adjusted_close
+                        ORDER BY inner.available_at ASC, inner.rowid ASC
+                        LIMIT 1)  AS history_basis
+               FROM macro_etf_observations AS outer
+               GROUP BY symbol, observation_date, provider, adjusted_close"""
+        ).fetchall()
+
+        connection.execute("ALTER TABLE macro_etf_observations RENAME TO macro_etf_observations_v1")
+        connection.execute("DROP INDEX IF EXISTS idx_macro_etf_observations_lookup")
+        connection.execute(
+            """CREATE TABLE macro_etf_observations (
+                   symbol TEXT NOT NULL,
+                   observation_date TEXT NOT NULL,
+                   adjusted_close REAL NOT NULL,
+                   provider TEXT NOT NULL,
+                   value_hash TEXT NOT NULL,
+                   data_through TEXT NOT NULL,
+                   fetched_at TEXT NOT NULL,
+                   first_seen_at TEXT NOT NULL,
+                   last_seen_at TEXT NOT NULL,
+                   history_basis TEXT NOT NULL
+                       CHECK(history_basis IN ('latest_revised_backfill','local_point_in_time')),
+                   PRIMARY KEY(symbol, observation_date, provider, value_hash)
+               )"""
+        )
+        for row in rows:
+            connection.execute(
+                """INSERT INTO macro_etf_observations(
+                       symbol,observation_date,adjusted_close,provider,value_hash,
+                       data_through,fetched_at,first_seen_at,last_seen_at,history_basis
+                   ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    row["symbol"],
+                    row["observation_date"],
+                    row["adjusted_close"],
+                    row["provider"],
+                    _value_hash(row["adjusted_close"]),
+                    row["data_through"],
+                    row["fetched_at"],
+                    row["first_seen_at"],
+                    row["last_seen_at"],
+                    row["history_basis"],
+                ),
+            )
+        after = int(
+            connection.execute(
+                "SELECT COUNT(*) AS n FROM macro_etf_observations"
+            ).fetchone()["n"]
+        )
+        if after == 0 and before > 0:
+            # Never trade real history for a tidier table.
+            raise MacroSchemaError("macro ETF migration would have emptied the table")
+        connection.execute("DROP TABLE macro_etf_observations_v1")
+        return before - after
 
     def integrity_report(self) -> dict[str, Any]:
         with self.read() as connection:
@@ -556,48 +731,104 @@ class MacroRepository:
             raise MacroSchemaError("unsupported history basis")
         seen_at = observed_at or self._now_text()
         inserted = 0
+        touched = 0
         with self.write() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
                 for observation in observations:
+                    value = _storable(observation.adjusted_close)
+                    digest = _value_hash(value)
+                    # Identity is the value, mirroring macro_series_revisions.
+                    # Keying on the write-time stamp meant OR IGNORE never
+                    # ignored anything and an unchanged price was stored again
+                    # on every refresh (incremental review P2). Re-seeing a price
+                    # is not a revision; it only moves last_seen_at.
                     cursor = connection.execute(
-                        """INSERT OR IGNORE INTO macro_etf_observations(
-                               symbol,observation_date,adjusted_close,provider,
-                               data_through,fetched_at,available_at,history_basis
-                           ) VALUES(?,?,?,?,?,?,?,?)""",
+                        """UPDATE macro_etf_observations
+                           SET last_seen_at=?, data_through=?
+                           WHERE symbol=? AND observation_date=? AND provider=?
+                                 AND value_hash=?""",
+                        (
+                            seen_at,
+                            data_through.isoformat(),
+                            observation.symbol,
+                            observation.observation_date.isoformat(),
+                            observation.provider,
+                            digest,
+                        ),
+                    )
+                    if cursor.rowcount:
+                        touched += int(cursor.rowcount)
+                        continue
+                    connection.execute(
+                        """INSERT INTO macro_etf_observations(
+                               symbol,observation_date,adjusted_close,provider,value_hash,
+                               data_through,fetched_at,first_seen_at,last_seen_at,history_basis
+                           ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
                         (
                             observation.symbol,
                             observation.observation_date.isoformat(),
-                            _storable(observation.adjusted_close),
+                            value,
                             observation.provider,
+                            digest,
                             data_through.isoformat(),
+                            seen_at,
                             seen_at,
                             seen_at,
                             history_basis,
                         ),
                     )
-                    inserted += int(cursor.rowcount or 0)
+                    inserted += 1
                 connection.commit()
             except sqlite3.Error as exc:
                 connection.rollback()
                 raise MacroSchemaError("macro ETF write failed") from exc
-        return {"inserted": inserted}
+        return {"inserted": inserted, "unchanged": touched}
+
+    @staticmethod
+    def _etf_columns(connection: sqlite3.Connection) -> tuple[str, str]:
+        """(first-visible column, newest-revision column) for the shape on disk.
+
+        The migration runs in the worker, inside ``refresh()``. The API process
+        opens the same database read-only and ships in the same release, so
+        between a deploy and the worker next macro run a v2 read path would meet
+        a v1 table and the macro panel would report unavailable for hours.
+        Reading whichever shape is present removes that window instead of
+        relying on the two containers starting in a particular order.
+        """
+
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(macro_etf_observations)")
+        }
+        if "first_seen_at" in columns:
+            return "first_seen_at", "last_seen_at"
+        return "available_at", "available_at"
 
     def active_etf(self, symbol: str) -> list[dict[str, Any]]:
-        """Latest recorded close per observation date, ascending by date."""
+        """Latest recorded close per observation date, ascending by date.
+
+        ``available_at`` is kept in the projection under that name: it is the
+        moment this price first became visible, which is what the alignment
+        layer means by the field, and after the v2 rekey that value lives in
+        ``first_seen_at``. The newest *revision* is still chosen by
+        ``last_seen_at`` -- when a provider restates a close, the restated row is
+        the current one even though it was first seen later.
+        """
 
         with self.read() as connection:
+            first_seen, newest = self._etf_columns(connection)
             rows = connection.execute(
-                """
+                f"""
                 SELECT o.observation_date, o.adjusted_close, o.provider,
-                       o.available_at, o.history_basis
+                       o.{first_seen} AS available_at, o.history_basis
                 FROM macro_etf_observations AS o
                 WHERE o.symbol=?
                   AND o.rowid = (
                       SELECT candidate.rowid FROM macro_etf_observations AS candidate
                       WHERE candidate.symbol = o.symbol
                         AND candidate.observation_date = o.observation_date
-                      ORDER BY candidate.available_at DESC, candidate.rowid DESC
+                      ORDER BY candidate.{newest} DESC, candidate.rowid DESC
                       LIMIT 1
                   )
                 ORDER BY o.observation_date ASC
@@ -691,7 +922,7 @@ class MacroRepository:
 
     # -- snapshot publication ---------------------------------------------
 
-    def publish(self, bundle: SnapshotBundle) -> dict[str, int]:
+    def publish(self, bundle: SnapshotBundle, *, run_id: str) -> dict[str, int]:
         """Replace this scoring version's snapshots in one transaction.
 
         Rows are upserted rather than deleted-then-inserted, so a reader that
@@ -701,6 +932,9 @@ class MacroRepository:
 
         if bundle.scoring_version != SCORING_VERSION:
             raise MacroSchemaError("candidate scoring version does not match the code")
+        # A publication that cannot name its run is not evidence of anything.
+        if not run_id:
+            raise MacroSchemaError("publication requires the sync run that produced it")
         with self.write() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
@@ -819,6 +1053,7 @@ class MacroRepository:
                             composite.scoring_version,
                         ),
                     )
+                publications = self._record_publications(connection, bundle, run_id)
                 connection.commit()
             except sqlite3.Error as exc:
                 connection.rollback()
@@ -827,7 +1062,86 @@ class MacroRepository:
             "factors": len(bundle.factors),
             "modules": len(bundle.modules),
             "composites": len(bundle.composites),
+            "publications": publications,
         }
+
+    @staticmethod
+    def _record_publications(
+        connection: sqlite3.Connection,
+        bundle: SnapshotBundle,
+        run_id: str,
+    ) -> int:
+        """Append what was published, alongside the current-view upsert.
+
+        The snapshot tables answer "what does this date recompute to, given
+        everything known today". They cannot answer "what did the system publish
+        on that date", because a later refresh overwrites the row in place
+        (incremental review P1). A walk-forward test asks the second question,
+        and answering it with the first silently feeds the test revisions that
+        were not visible at the time.
+
+        This log is append-only and never read by the display path, so a
+        publication row can never change a score anyone already saw. It stores
+        payload hashes rather than the payloads: enough to prove which numbers
+        were published and to detect a rewrite, without a second copy of the
+        data to drift.
+        """
+
+        if not bundle.composites:
+            return 0
+        # One row per run, for the newest snapshot date in the bundle.
+        #
+        # A bundle carries the whole recomputed history grid; appending all of it
+        # on every run would copy ~2000 rows twice a day and would answer the
+        # wrong question anyway. "What did the system publish on that date" is
+        # about the snapshot that was current when the run finished. The earlier
+        # grid dates are recomputation, and they are already in the snapshot
+        # tables as the current view.
+        latest = max(bundle.composites, key=lambda row: _date_text(row.snapshot_date) or "")
+        recorded = 0
+        for composite in (latest,):
+            factor_rows = [
+                factor for factor in bundle.factors
+                if factor.snapshot_date == composite.snapshot_date
+            ]
+            module_rows = [
+                module for module in bundle.modules
+                if module.snapshot_date == composite.snapshot_date
+            ]
+            publication_id = f"mpb_{uuid.uuid4().hex}"
+            connection.execute(
+                """INSERT INTO macro_snapshot_publications(
+                       publication_id,run_id,snapshot_date,scoring_version,
+                       published_at,available_at,factor_payload_hash,
+                       module_payload_hash,composite_payload
+                   ) VALUES(?,?,?,?,?,?,?,?,?)""",
+                (
+                    publication_id,
+                    run_id,
+                    _date_text(composite.snapshot_date),
+                    composite.scoring_version,
+                    bundle.as_of,
+                    composite.available_at,
+                    _payload_hash(
+                        [(row.factor_id, row.score, row.status) for row in factor_rows]
+                    ),
+                    _payload_hash(
+                        [(row.module_id, row.score, row.status) for row in module_rows]
+                    ),
+                    _json_text(
+                        {
+                            "score": composite.score,
+                            "confidence": composite.confidence,
+                            "regime": composite.regime,
+                            "valid_module_count": composite.valid_module_count,
+                            "status": composite.status,
+                            "data_through": composite.data_through,
+                        }
+                    ),
+                ),
+            )
+            recorded += 1
+        return recorded
 
     # -- reads -------------------------------------------------------------
 

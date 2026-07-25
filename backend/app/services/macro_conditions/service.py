@@ -254,7 +254,7 @@ class MacroConditionsService:
                 if "macro_insufficient_modules" not in error_codes:
                     error_codes.append("macro_insufficient_modules")
             else:
-                self.repository.publish(bundle)
+                self.repository.publish(bundle, run_id=run_id)
                 published = True
 
         status = "succeeded"

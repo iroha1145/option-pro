@@ -98,6 +98,81 @@ Schema 已为未来追加 Vintage 留好位置：`macro_series_revisions` 的主
 
 ---
 
+## 5.1 发布记录（`macro_snapshot_publications`，schema v2）
+
+因子 / 模块 / 综合分三张快照表是**当前视图**：主键是
+`snapshot_date + id + scoring_version`，后续刷新用 `ON CONFLICT DO UPDATE`
+就地覆盖。它们能回答的是
+
+> 按今天已知的最新数据，某个历史日期重新计算出来是多少？
+
+不能回答
+
+> 2026 年 9 月 1 日当天，系统当时正式发布的分数是多少？
+
+前向验证问的是后一个问题，而用前一个答案回答它，等于把当时不可见的修订
+悄悄喂进检验。因此 v2 增加一张**只追加**的发布表：每次 `publish()` 记录一行，
+对应该次运行结束时最新的那个 `snapshot_date`。
+
+| 字段 | 含义 |
+| --- | --- |
+| `publication_id` | 本次发布的唯一标识 |
+| `run_id` | 产生它的同步运行；缺失直接拒绝写入 |
+| `snapshot_date` | 本次发布时最新的快照日 |
+| `published_at` | 发布时刻（bundle 的 `as_of`） |
+| `available_at` | 该快照可计算的时刻 |
+| `factor_payload_hash` / `module_payload_hash` | 当次发布的因子 / 模块取值摘要 |
+| `composite_payload` | 综合分、置信度、regime、状态、`data_through` |
+
+只记最新那一天，不记整段历史网格：bundle 里携带的历史区间是**重算**，
+它已经在快照表里作为当前视图存在；把它整段追加一遍既是重复存储，
+也回答不了「那天发布的是什么」。
+
+前向验证按 `published_at <= backtest_as_of` 取当时最后一次正式发布，
+而不是读今天重算后的历史行。
+
+这张表**不参与展示路径**，因此一条发布记录不可能改变任何人已经看到的分数。
+
+---
+
+## 5.2 ETF 观测的身份（schema v2）
+
+v1 的主键是 `(symbol, observation_date, provider, available_at)`，而
+`available_at` 是写入时刻 —— 于是 `INSERT OR IGNORE` 从来没有忽略过任何东西：
+同一个价格每次刷新都会重新落一行（8 只 ETF × 约 252 个交易日，每天两次）。
+
+v2 改成与 `macro_series_revisions` 同构：身份是**值本身**
+（`value_hash`），再次看到同一个价格只推进 `last_seen_at`；价格变化才追加
+一条新的 Revision。
+
+迁移按 `(symbol, observation_date, provider, adjusted_close)` 折叠 —— 也就是
+新主键表达的那组身份，因此不可能把两个真正不同的价格合成一个。
+`first_seen_at` 取历史上最早的那个 `available_at`：丢掉它等于改写已经存储的
+点时可见性，而那正是这张表存在的理由。
+
+`history_basis` **不参与分组**：同一个价格可能被十年回填记过一次、又被增量刷新
+重新读到一次，那是一个价格而不是两个。合并后的行取**最早那次记录**的
+`history_basis`，因为 `first_seen_at` 就来自那一次 —— 让标签跟着它描述的那个
+时间戳走。按插入顺序决定既不确定，也会把回填得来的可见性标成本地实测。
+
+一个真实后果：在当前生产库上，10,040 条合并后全部是
+`latest_revised_backfill`。原来那 22,240 条 `local_point_in_time` 标记都长在
+**重复行**上，它们的 `available_at` 只是后一次刷新的写入时刻，从来没有代表过
+一次新的首次可见。迁移把这件事如实暴露出来。上线之后真正新观测到的价格，
+仍然会正常记为 `local_point_in_time`。
+
+迁移是幂等的，并且在折叠后表为空而折叠前非空时直接失败，
+不会拿真实历史换一张更整齐的表。
+
+**部署顺序**：`initialize()` 只在 `refresh()` 里调用，而 `refresh()` 只跑在
+worker 里。API 进程以只读方式打开同一个库、并且和 worker 同一个版本发布 ——
+如果读取路径只认 v2，那么从部署完成到 worker 下一次宏观刷新之间（可能是几小时），
+宏观面板会一直显示不可用。因此 `active_etf` 按磁盘上**实际存在的列**读取：
+有 `first_seen_at` 就用 v2 口径，否则用 v1 的 `available_at`。
+这样不需要假设两个容器的启动顺序，窗口直接消失。
+
+---
+
 ## 6. 已知限制
 
 1. 上线时的 8 年历史是最新修订值回算的，因此上线初期的历史曲线全部是
