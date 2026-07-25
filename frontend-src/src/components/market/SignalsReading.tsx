@@ -49,10 +49,13 @@ function buildReading(
     parts.push(`主要观测项为${leading.map((metric) => `「${metric.label}」${metric.value}`).join('、')}。`);
   }
   if (indices?.length) {
-    const adv = indices.filter((q) => q.changePct >= 0).length;
+    /* 平盘不算上涨（审计 P2-4 同一口径）；这段文字会进 AI 上下文，口径必须准。 */
+    const adv = indices.filter((q) => q.changePct > 0).length;
+    const dec = indices.filter((q) => q.changePct < 0).length;
+    const flat = indices.length - adv - dec;
     const spx = indices.find((q) => q.code === 'SPX');
     parts.push(
-      `六大指数 ${adv} 涨 ${indices.length - adv} 跌` +
+      `六大指数 ${adv} 涨 ${dec} 跌${flat > 0 ? ` ${flat} 平` : ''}` +
         (spx ? `，标普 500 报 ${fmtPrice(spx.price)}（${fmtPct(spx.changePct)}）` : '') +
         '。',
     );

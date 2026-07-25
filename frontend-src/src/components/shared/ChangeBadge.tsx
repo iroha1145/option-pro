@@ -36,24 +36,54 @@ export default function ChangeBadge({
       </span>
     );
   }
-  const up = value >= 0;
+  /* 平盘是第三种事实，不是「涨」。旧写法 value >= 0 让 0.00% 显示绿色 ↑ 并读成
+     「涨 0.00%」（GPT-5.6-Pro 审计 P2-8）。 */
+  const direction = value > 0 ? 'up' : value < 0 ? 'down' : 'flat';
   const points = format === 'points';
+  const magnitude = points
+    ? `${Math.abs(value).toFixed(1)} ${pointsSuffix}`
+    : `${Math.abs(value).toFixed(2)}%`;
+  const label =
+    direction === 'flat'
+      ? points
+        ? `持平 0 ${pointsSuffix}`
+        : '持平 0.00%'
+      : points
+        ? `${direction === 'up' ? '上升' : '下降'} ${magnitude}`
+        : `${direction === 'up' ? '涨' : '跌'} ${magnitude}`;
+  const text = points
+    ? direction === 'flat'
+      ? `0.0 ${pointsSuffix}`
+      : `${fmtSigned(value, 1)} ${pointsSuffix}`
+    : direction === 'flat'
+      ? '0.00%'
+      : fmtPct(value);
   return (
     <span
       className={cn(
         'inline-flex items-center gap-1 rounded-xs font-mono tnum',
         size === 'md' ? 'px-1.5 py-0.5 text-[13px] leading-[18px]' : 'px-1 py-px text-micro',
-        up ? 'bg-up-50 text-up-700' : 'bg-down-50 text-down-700',
+        direction === 'up'
+          ? 'bg-up-50 text-up-700'
+          : direction === 'down'
+            ? 'bg-down-50 text-down-700'
+            : 'bg-paper-2 text-ink-500',
         className,
       )}
-      aria-label={
-        points
-          ? `${up ? '上升' : '下降'} ${Math.abs(value).toFixed(1)} ${pointsSuffix}`
-          : `${up ? '涨' : '跌'} ${Math.abs(value).toFixed(2)}%`
-      }
+      aria-label={label}
     >
-      <Icon name={up ? 'arrow-up-right' : 'arrow-down-right'} size={12} strokeWidth={1.45} />
-      {points ? `${fmtSigned(value, 1)} ${pointsSuffix}` : fmtPct(value)}
+      <Icon
+        name={
+          direction === 'up'
+            ? 'arrow-up-right'
+            : direction === 'down'
+              ? 'arrow-down-right'
+              : 'minus'
+        }
+        size={12}
+        strokeWidth={1.45}
+      />
+      {text}
     </span>
   );
 }

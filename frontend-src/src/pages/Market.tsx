@@ -55,7 +55,10 @@ export default function Market() {
   const strengthQ = usePolling(() => strengthApi.market(), 300_000);
 
   const status = statusQ.data;
-  const session: MarketSession = MARKET_TO_SESSION[status?.market ?? 'closed'] ?? 'closed';
+  /* 时段读不到时显示「时段未知」，不落回「休市」（审计 P2-9）：加载中或状态接口
+     异常都会被误读成真实休市，而休市会改变用户对盘中信号的解读。 */
+  const session: MarketSession | null =
+    status?.market ? MARKET_TO_SESSION[status.market] ?? null : null;
 
   /* 趋势偏向只依据六维 market_regime；接口没有全市场均分时不做近似替代。 */
   const mean = useMemo(() => (regimeQ.data ? regimeMean(regimeQ.data) : null), [regimeQ.data]);
@@ -80,7 +83,16 @@ export default function Market() {
         description="指数、形态与广度的全景。"
         meta={
           <>
-            <SessionLED session={session} label={SESSION_LABEL[status?.market ?? 'closed']} />
+            {session ? (
+              <SessionLED session={session} label={SESSION_LABEL[status!.market]} />
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="inline-block size-2 rounded-full bg-ink-300" aria-hidden="true" />
+                <span className="text-caption text-ink-400">
+                  {statusQ.loading ? '时段读取中…' : '时段未知'}
+                </span>
+              </span>
+            )}
             {indicesQ.lastUpdatedAt && (
               <span className="font-mono text-caption text-ink-400 tnum">
                 更新 {fmtTimeHHMMSS(indicesQ.lastUpdatedAt)}

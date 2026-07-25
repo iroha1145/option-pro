@@ -16,7 +16,8 @@ export interface OptionAlertInput {
   expiration: string;
   dte: number;
   volume: number;
-  open_interest: number;
+  /** 持仓量不可用时整个字段省略；后端已把它建模为可空，补 0 等于伪造事实。 */
+  open_interest?: number;
   implied_volatility?: number;
   premium_flow?: number;
   vol_oi_ratio?: number;

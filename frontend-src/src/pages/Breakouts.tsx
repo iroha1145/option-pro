@@ -290,9 +290,28 @@ export default function Breakouts() {
             最近扫描 {status?.lastScanAt ? fmtTimeHHMMSS(new Date(status.lastScanAt)) : '—'}
           </span>
           {status?.market_session && <SessionChip session={status.market_session} />}
+          {/* 扫描服务三态：正常 / 异常 / 状态未知。healthy === null 表示后端没有报告
+              worker（库不可用或 schema 不符），不能显示成正常，也不等于确认异常。 */}
           <span className="inline-flex items-center gap-1.5">
-            <Icon name="command" size={13} className={status?.worker?.healthy ? 'text-up-600' : 'text-warn-600'} />
-            扫描服务 {status ? (status.worker?.healthy ? '正常' : '异常') : '—'}
+            <Icon
+              name="command"
+              size={13}
+              className={
+                status?.worker?.healthy === true
+                  ? 'text-up-600'
+                  : status?.worker?.healthy === false
+                    ? 'text-warn-600'
+                    : 'text-ink-400'
+              }
+            />
+            扫描服务{' '}
+            {!status
+              ? '—'
+              : status.worker?.healthy === true
+                ? '正常'
+                : status.worker?.healthy === false
+                  ? '异常'
+                  : '状态未知'}
           </span>
           {nextCountdown && (
             <span className="font-mono tnum">

@@ -16,14 +16,18 @@ interface RankedAlert {
   alert: OptionAlertInput;
   severity: number;
   premium: number;
-  ratio: number;
+  /** 量持比；持仓量为 0 或不可用时没有比值可言，恒为 null（不是 0）。 */
+  ratio: number | null;
 }
 
-function finiteNonnegative(value: number): number | null {
-  return Number.isFinite(value) && value >= 0 ? value : null;
+function finiteNonnegative(value: number | null): number | null {
+  return value !== null && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-function midpoint(bid: number, ask: number): number | null {
+export function midpoint(
+  bid: number | null,
+  ask: number | null,
+): number | null {
   const safeBid = finiteNonnegative(bid);
   const safeAsk = finiteNonnegative(ask);
   if (safeBid === null || safeAsk === null || safeAsk < safeBid) return null;
@@ -31,12 +35,39 @@ function midpoint(bid: number, ask: number): number | null {
   return (safeBid + safeAsk) / 2;
 }
 
+/**
+ * 量持比的四种状态（GPT-5.6-Pro 审计 P1-03）。
+ * 旧实现把「持仓量为 0」折叠成比值 0，于是新挂牌合约、隔夜持仓量归零、大量新开仓
+ * 这类最值得关注的情况永远无法触发 ratio > 3。这里把它们分开：
+ * ratio 只在持仓量为正时有值，持仓量为 0 且有成交是独立的「新开仓候选」。
+ */
+export type VolOiState =
+  | { kind: 'ratio'; ratio: number }
+  | { kind: 'new_opening' }
+  | { kind: 'no_activity' }
+  | { kind: 'unavailable' };
+
+export function volOiState(
+  volume: number | null,
+  openInterest: number | null,
+): VolOiState {
+  const safeVolume = finiteNonnegative(volume);
+  const safeOpenInterest = finiteNonnegative(openInterest);
+  if (safeOpenInterest === null) return { kind: 'unavailable' };
+  if (safeOpenInterest > 0) {
+    if (safeVolume === null) return { kind: 'unavailable' };
+    return { kind: 'ratio', ratio: safeVolume / safeOpenInterest };
+  }
+  if (safeVolume === null) return { kind: 'unavailable' };
+  return safeVolume > 0 ? { kind: 'new_opening' } : { kind: 'no_activity' };
+}
+
 function moneyness(
   type: 'call' | 'put',
   strike: number,
-  spot: number,
+  spot: number | null,
 ): OptionAlertInput['moneyness'] {
-  if (!Number.isFinite(spot) || spot <= 0) return 'unavailable';
+  if (spot === null || !Number.isFinite(spot) || spot <= 0) return 'unavailable';
   if (strike === spot) return 'atm';
   if (type === 'call') return strike > spot ? 'otm' : 'itm';
   return strike < spot ? 'otm' : 'itm';
@@ -45,7 +76,7 @@ function moneyness(
 function buildLeg(
   row: OptionChainRow,
   type: 'call' | 'put',
-  spot: number,
+  spot: number | null,
   expiration: string,
   daysToExpiry: number,
 ): RankedAlert | null {
@@ -57,25 +88,35 @@ function buildLeg(
   const bid = type === 'call' ? row.callBid : row.putBid;
   const ask = type === 'call' ? row.callAsk : row.putAsk;
   const impliedVolatilityRaw = type === 'call' ? row.callIv : row.putIv;
-  const volume = Math.max(0, Math.round(finiteNonnegative(volumeRaw) ?? 0));
-  const openInterest = Math.max(
-    0,
-    Math.round(finiteNonnegative(openInterestRaw) ?? 0),
-  );
+  const volumeValue = finiteNonnegative(volumeRaw);
+  // 成交量缺失时无法判定异动；这与「成交量为 0」都不进入证据集，但原因不同。
+  if (volumeValue === null) return null;
+  const volume = Math.max(0, Math.round(volumeValue));
+  const openInterestValue = finiteNonnegative(openInterestRaw);
+  const openInterest =
+    openInterestValue === null ? null : Math.max(0, Math.round(openInterestValue));
   if (volume <= 0) return null;
 
-  const ratio = openInterest > 0 ? volume / openInterest : 0;
+  const state = volOiState(volume, openInterest);
+  const ratio = state.kind === 'ratio' ? state.ratio : null;
   const mid = midpoint(bid, ask);
   const premium = mid === null ? 0 : volume * mid * 100;
   const legMoneyness = moneyness(type, strike, spot);
   const distance =
-    Number.isFinite(spot) && spot > 0 ? Math.abs(strike - spot) / spot : 0;
+    spot !== null && Number.isFinite(spot) && spot > 0
+      ? Math.abs(strike - spot) / spot
+      : 0;
   const reasons: string[] = [];
   let severity = 0;
 
-  if (ratio >= 3) {
+  if (ratio !== null && ratio >= 3) {
     severity += 4;
     reasons.push(`成交量/持仓量 ${ratio.toFixed(1)} 倍`);
+  }
+  // 持仓量为 0 而当日有成交：全部是新开仓，量持比无穷大而不是 0。
+  if (state.kind === 'new_opening') {
+    severity += 4;
+    reasons.push(`持仓量为 0 且成交 ${volume} 张，全部为新开仓（量持比不适用）`);
   }
   if (volume >= 5_000) {
     severity += 3;
@@ -85,9 +126,13 @@ function buildLeg(
     severity += 2;
     reasons.push(`按买卖中价估算权利金 ${Math.round(premium)} 美元`);
   }
-  if (volume >= 1_000 && openInterest < 500) {
+  if (volume >= 1_000 && openInterest !== null && openInterest > 0 && openInterest < 500) {
     severity += 2;
     reasons.push('成交量较高且持仓量较低，待后续持仓量确认');
+  }
+  if (volume >= 1_000 && openInterest === null) {
+    severity += 1;
+    reasons.push('持仓量不可用，无法计算量持比');
   }
   if (legMoneyness === 'otm' && distance > 0.1 && volume >= 2_000) {
     severity += 1;
@@ -102,12 +147,14 @@ function buildLeg(
     expiration,
     dte: Math.max(0, Math.round(daysToExpiry)),
     volume,
-    open_interest: openInterest,
+    // 持仓量不可用时不发送该字段：后端已把它建模为可空，补 0 会让模型
+    // 把「没读到」当成「确实是 0」。
+    ...(openInterest !== null ? { open_interest: openInterest } : {}),
     ...(impliedVolatility !== null && impliedVolatility <= 100
       ? { implied_volatility: impliedVolatility }
       : {}),
     ...(premium > 0 ? { premium_flow: Math.round(premium) } : {}),
-    ...(openInterest > 0 ? { vol_oi_ratio: Number(ratio.toFixed(2)) } : {}),
+    ...(ratio !== null ? { vol_oi_ratio: Number(ratio.toFixed(2)) } : {}),
     reasons,
     signal: 'unknown',
     inferred_direction: 'unknown',
@@ -137,10 +184,14 @@ export function buildOptionAlertEvidence(
       )
       .filter((item): item is RankedAlert => item !== null),
   );
+  // 量持比缺失（新开仓或持仓量不可用）在同分位排在有比值的后面，而不是当成 0
+  // 参与大小比较 —— 后者会把「无比值」排到所有真实低比值之前。
+  const ratioRank = (item: RankedAlert): number =>
+    item.ratio === null ? -1 : item.ratio;
   ranked.sort(
     (left, right) =>
       right.severity - left.severity ||
-      right.ratio - left.ratio ||
+      ratioRank(right) - ratioRank(left) ||
       right.premium - left.premium ||
       right.alert.volume - left.alert.volume ||
       left.alert.strike - right.alert.strike ||

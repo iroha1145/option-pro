@@ -22,37 +22,81 @@ import { OPTION_SUPPORTED_LIST, optionsSupported } from '@/mocks/fixtures2';
 import { AI_DISCLAIMER, useAiJob } from './useAiJob';
 import {
   buildOptionAlertEvidence,
+  midpoint,
   parseOptionAlertResult,
+  volOiState,
   type OptionAlertResult,
+  type VolOiState,
 } from './optionAnalysis';
 import type { OptionChain, OptionChainRow } from '@/api/types';
 
+const NEW_YORK_DATE = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/New_York',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/**
+ * 到期天数按纽约交易日的日历差计算（GPT-5.6-Pro 审计 P2-33）。
+ * 旧实现把「到期日 + T16:00:00」交给 Date 解析，该串没有时区偏移，会按浏览器
+ * 本地时区理解：在东京看同一个到期日会少算一天。这里两端都取纽约日历日再相减。
+ */
 function dte(expiration: string): number {
-  return Math.max(0, Math.round((new Date(`${expiration}T16:00:00`).getTime() - Date.now()) / 86_400_000));
+  const expiryDay = Date.parse(`${expiration}T00:00:00Z`);
+  if (!Number.isFinite(expiryDay)) return 0;
+  const todayInNewYork = Date.parse(`${NEW_YORK_DATE.format(new Date())}T00:00:00Z`);
+  if (!Number.isFinite(todayInNewYork)) return 0;
+  return Math.max(0, Math.round((expiryDay - todayInNewYork) / 86_400_000));
 }
 
-const mid = (bid: number, ask: number) => (bid + ask) / 2;
+/** 缺失数值显「—」，不落回 0。 */
+const dash = (value: number | null, render: (n: number) => string): string =>
+  value === null ? '—' : render(value);
 
 interface RowMeta {
-  callRatio: number;
-  putRatio: number;
+  callVolOi: VolOiState;
+  putVolOi: VolOiState;
   callAlert: boolean;
   putAlert: boolean;
-  callPremium: number; // 美元，估算
-  putPremium: number;
+  callPremium: number | null; // 美元，估算
+  putPremium: number | null;
+}
+
+/** 量持比 > 3 或持仓量为 0 而有成交（全部新开仓）都算异动。 */
+function isAlerting(state: VolOiState): boolean {
+  return (
+    (state.kind === 'ratio' && state.ratio > 3) || state.kind === 'new_opening'
+  );
+}
+
+function premiumOf(
+  volume: number | null,
+  bid: number | null,
+  ask: number | null,
+): number | null {
+  const m = midpoint(bid, ask);
+  if (volume === null || m === null) return null;
+  return volume * m * 100;
 }
 
 function rowMeta(r: OptionChainRow): RowMeta {
-  const callRatio = r.callOi > 0 ? r.callVol / r.callOi : 0;
-  const putRatio = r.putOi > 0 ? r.putVol / r.putOi : 0;
+  const callVolOi = volOiState(r.callVol, r.callOi);
+  const putVolOi = volOiState(r.putVol, r.putOi);
   return {
-    callRatio,
-    putRatio,
-    callAlert: callRatio > 3,
-    putAlert: putRatio > 3,
-    callPremium: r.callVol * mid(r.callBid, r.callAsk) * 100,
-    putPremium: r.putVol * mid(r.putBid, r.putAsk) * 100,
+    callVolOi,
+    putVolOi,
+    callAlert: isAlerting(callVolOi),
+    putAlert: isAlerting(putVolOi),
+    callPremium: premiumOf(r.callVol, r.callBid, r.callAsk),
+    putPremium: premiumOf(r.putVol, r.putBid, r.putAsk),
   };
+}
+
+/** 异动角标文案：有比值显倍数，新开仓显 ∞（量持比不适用）。 */
+function volOiBadge(state: VolOiState): string | null {
+  if (state.kind === 'ratio') return state.ratio > 3 ? `${state.ratio.toFixed(1)}×` : null;
+  return state.kind === 'new_opening' ? '∞' : null;
 }
 
 const DIRECTION_META: Record<
@@ -146,7 +190,8 @@ function AiOptionInsight({
                   aiJobsApi.createOptionAlerts({
                     tickers: [ticker],
                     alerts: evidence,
-                    underlyingPrice: chain.spot,
+                    // 标的现价缺失时不发 0：契约里它是可选字段。
+                    ...(chain.spot !== null ? { underlyingPrice: chain.spot } : {}),
                     expiration,
                   }),
                 );
@@ -305,10 +350,13 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
   );
 
   const atmRef = useRef<HTMLTableRowElement>(null);
+  // 标的现价缺失时不猜平值行：旧实现把 spot 当 0，平值高亮会落在最低行权价上。
   const atmStrike = useMemo(() => {
     if (!chain || chain.rows.length === 0) return null;
+    const spot = chain.spot;
+    if (spot === null) return null;
     return chain.rows.reduce((best, r) =>
-      Math.abs(r.strike - chain.spot) < Math.abs(best - chain.spot) ? r.strike : best,
+      Math.abs(r.strike - spot) < Math.abs(best - spot) ? r.strike : best,
     chain.rows[0].strike);
   }, [chain]);
 
@@ -421,7 +469,13 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
         </label>
         {chain && (
           <p className="text-micro text-ink-400">
-            标的价 <span className="font-mono text-ink-600 tnum">{fmtPrice(chain.spot)}</span>
+            标的价{' '}
+            <span className="font-mono text-ink-600 tnum">
+              {dash(chain.spot, (n) => fmtPrice(n))}
+            </span>
+            {chain.spot === null && (
+              <span className="ml-1.5 text-ink-400">· 标的现价不可用，价内侧与平值行未标注</span>
+            )}
           </p>
         )}
       </div>
@@ -452,9 +506,14 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
                 {chain.rows.map((r) => {
                   const m = rowMeta(r);
                   const isAtm = r.strike === atmStrike;
-                  const callItm = r.strike < chain.spot;
-                  const putItm = r.strike > chain.spot;
+                  const callItm = chain.spot !== null && r.strike < chain.spot;
+                  const putItm = chain.spot !== null && r.strike > chain.spot;
                   const alert = m.callAlert || m.putAlert;
+                  const callBadge = volOiBadge(m.callVolOi);
+                  const putBadge = volOiBadge(m.putVolOi);
+                  const premiums = [m.callPremium, m.putPremium].filter(
+                    (value): value is number => value !== null,
+                  );
                   return (
                     <motion.tr
                       key={`${exp}-${r.strike}`}
@@ -467,23 +526,27 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
                       )}
                       title={
                         alert
-                          ? `成交异动 ${Math.max(m.callRatio, m.putRatio).toFixed(1)}× · 权利金流约 $${fmtCompact(
-                              Math.max(m.callPremium, m.putPremium),
-                            )}（估算）`
+                          ? `成交异动 ${callBadge ?? putBadge ?? ''}${
+                              premiums.length > 0
+                                ? ` · 权利金流约 $${fmtCompact(Math.max(...premiums))}（估算）`
+                                : ' · 权利金不可估算（缺买卖价）'
+                            }`
                           : undefined
                       }
                     >
                       {/* CALLS 侧 */}
                       <td className={cn('px-2 py-1.5', callItm && 'bg-paper-2')}>
-                        <span className="text-ink-800">{fmtCompact(r.callVol)}</span>
+                        <span className="text-ink-800">{dash(r.callVol, fmtCompact)}</span>
                         <span className="text-ink-300"> / </span>
-                        <span className="text-ink-500">{fmtCompact(r.callOi)}</span>
+                        <span className="text-ink-500">{dash(r.callOi, fmtCompact)}</span>
                       </td>
                       <td className={cn('px-2 py-1.5', callItm && 'bg-paper-2')}>
-                        <span className="text-ink-800">{fmtPrice(mid(r.callBid, r.callAsk))}</span>
-                        {m.callAlert && (
+                        <span className="text-ink-800">
+                          {dash(midpoint(r.callBid, r.callAsk), (n) => fmtPrice(n))}
+                        </span>
+                        {callBadge && (
                           <span className="ml-1.5 rounded-xs bg-warn-50 px-1 py-px text-[10px] font-medium text-warn-600">
-                            {m.callRatio.toFixed(1)}×
+                            {callBadge}
                           </span>
                         )}
                       </td>
@@ -499,17 +562,19 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
                       </td>
                       {/* PUTS 侧 */}
                       <td className={cn('px-2 py-1.5 text-right', putItm && 'bg-paper-2')}>
-                        {m.putAlert && (
+                        {putBadge && (
                           <span className="mr-1.5 rounded-xs bg-warn-50 px-1 py-px text-[10px] font-medium text-warn-600">
-                            {m.putRatio.toFixed(1)}×
+                            {putBadge}
                           </span>
                         )}
-                        <span className="text-ink-800">{fmtPrice(mid(r.putBid, r.putAsk))}</span>
+                        <span className="text-ink-800">
+                          {dash(midpoint(r.putBid, r.putAsk), (n) => fmtPrice(n))}
+                        </span>
                       </td>
                       <td className={cn('px-2 py-1.5 text-right', putItm && 'bg-paper-2')}>
-                        <span className="text-ink-800">{fmtCompact(r.putVol)}</span>
+                        <span className="text-ink-800">{dash(r.putVol, fmtCompact)}</span>
                         <span className="text-ink-300"> / </span>
-                        <span className="text-ink-500">{fmtCompact(r.putOi)}</span>
+                        <span className="text-ink-500">{dash(r.putOi, fmtCompact)}</span>
                         {alert && <Icon name="bolt" size={12} className="ml-1 inline text-warn-600" aria-label="成交异动" />}
                       </td>
                     </motion.tr>
@@ -522,7 +587,8 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
       </div>
 
       <p className="mt-2 text-micro text-ink-400">
-        浅底为价内（ITM）侧 · 异动标注 vol/oi &gt; 3（倍数为该侧比值）· 权利金按买卖中价估算 · 非收益承诺
+        浅底为价内（ITM）侧 · 异动标注 vol/oi &gt; 3（倍数为该侧比值）；持仓量为 0 而当日有成交标 ∞（全部新开仓）·
+        「—」表示上游未提供该字段，不代表 0 · 权利金按买卖中价估算 · 非收益承诺
       </p>
 
       <AiOptionInsight ticker={ticker} expiration={exp} chain={chain} />

@@ -57,7 +57,15 @@ function applyParams(rows: ScreenerRow[], p: ScanParams): ScreenerRow[] {
   const dir = p.order === 'asc' ? 1 : -1;
   out.sort((a, b) => {
     if (sort === 'ticker') return a.ticker.localeCompare(b.ticker) * dir;
-    if (sort === 'changePct') return ((a.changePct ?? 0) - (b.changePct ?? 0)) * dir;
+    if (sort === 'changePct') {
+      // 涨跌幅缺失稳定排在末尾，而不是当成 0% 混进真实平盘股票中间（审计 P2-14）。
+      const left = a.changePct;
+      const right = b.changePct;
+      if (left === null && right === null) return a.ticker.localeCompare(b.ticker);
+      if (left === null) return 1;
+      if (right === null) return -1;
+      return (left - right) * dir || a.ticker.localeCompare(b.ticker);
+    }
     return (a.strengthScore - b.strengthScore) * dir;
   });
   return out;
@@ -93,11 +101,12 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
     avgDollarVolume20d: pickN(r, 'avg_dollar_volume_20d'),
     band,
     // 兼容槽位（消费层优先 subscoreDims；此处仅按周期分近似填充，注释如实标注）
+    // 缺失保持 null：补 0 会让回退路径把「没有数据」画成「该项 0 分」。
     subscores: {
-      trend: dims[2].value ?? 0,
-      momentum: dims[0].value ?? 0,
-      volume: dims[1].value ?? 0,
-      volatility: dims[3].value ?? 0,
+      trend: dims[2].value,
+      momentum: dims[0].value,
+      volume: dims[1].value,
+      volatility: dims[3].value,
     },
     subscoreDims: dims,
     sparkline: [], // 契约 StrengthRow 无 sparkline（行展开按需拉日 K，见 RowExpansion）

@@ -1,6 +1,7 @@
 /** 状态 hero：数据源状态 / 热点计算 / 分析可用性 / 今日新闻（真实契约口径，不可用原因如实标注） */
 import { motion } from 'framer-motion';
 import { usePolling } from '@/hooks/usePolling';
+import { remoteState } from '@/hooks/remoteState';
 import { catalystsContract } from './api';
 import { Led } from './bits';
 import SourceNote from '@/components/shared/SourceNote';
@@ -40,9 +41,21 @@ export default function StatusHero() {
 
   const s = statusQ.data;
   const hs = hotStatusQ.data;
-  const loading = statusQ.loading && !s;
+  /* 状态读取失败与「采集暂停 / 热点 0 组 / 模型不可用」是三件不同的事（审计 P1-13）。
+     旧实现只有 loading 与「有数据」两种分支，于是接口失败会被画成真实业务状态。 */
+  const statusState = remoteState(statusQ);
+  const hotState = remoteState(hotStatusQ);
+  const loading = statusState === 'loading';
+  const statusUnread = statusState === 'error';
+  const hotUnread = hotState === 'error';
 
   const reason = s?.analysisReason ? ANALYSIS_REASON_CN[s.analysisReason] ?? { label: '模型分析不可用', tone: 'down' as const } : null;
+  const unreadCell = (
+    <div className="flex items-center gap-2">
+      <Led tone="warn" />
+      <span className="text-body-s font-medium text-ink-800">状态读取失败</span>
+    </div>
+  );
 
   return (
     <motion.section
@@ -56,6 +69,8 @@ export default function StatusHero() {
         <HeroCell label="数据源状态">
           {loading ? (
             <SkeletonBlock className="h-5 w-32" />
+          ) : statusUnread ? (
+            unreadCell
           ) : (
             <div className="flex items-center gap-2">
               <Led tone={s?.collecting ? 'up' : 'muted'} pulse={!!s?.collecting} />
@@ -82,8 +97,10 @@ export default function StatusHero() {
         </HeroCell>
 
         <HeroCell label="热点计算">
-          {hotStatusQ.loading && !hs ? (
+          {hotState === 'loading' ? (
             <SkeletonBlock className="h-5 w-28" />
+          ) : hotUnread ? (
+            unreadCell
           ) : hs?.state === 'computing' ? (
             <div className="flex items-center gap-2">
               <Led tone="warn" pulse />
@@ -106,6 +123,8 @@ export default function StatusHero() {
         <HeroCell label="分析可用性">
           {loading ? (
             <SkeletonBlock className="h-5 w-28" />
+          ) : statusUnread ? (
+            unreadCell
           ) : (
             <div className="flex items-center gap-2">
               {/* 「分析可用」是静态状态，不脉冲（脉冲只给真实进行中的任务） */}

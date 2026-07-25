@@ -11,13 +11,16 @@ import { cn } from '@/lib/utils';
 import type { IndexQuote } from '@/api/types';
 
 function TapeItem({ q, flash, onOpen }: { q: IndexQuote; flash: 'up' | 'down' | null; onOpen: (code: string) => void }) {
-  const up = q.changePct >= 0;
+  /* 平盘用中性色，不画成上涨（审计 P2-8 同一口径）。 */
+  const tone = q.changePct > 0 ? 'up' : q.changePct < 0 ? 'down' : 'flat';
   return (
     <button
       type="button"
       onClick={() => onOpen(q.code)}
       title={`查看大盘强弱 · ${q.code}`}
-      aria-label={`查看大盘强弱，${q.code} 最新价 ${fmtPrice(q.price)}，涨跌 ${fmtPct(q.changePct)}`}
+      aria-label={`查看大盘强弱，${q.code} 最新价 ${fmtPrice(q.price)}，${
+        tone === 'flat' ? '持平' : `涨跌 ${fmtPct(q.changePct)}`
+      }`}
       className={cn(
         'inline-flex cursor-pointer items-baseline gap-2 rounded-xs px-1 transition-colors duration-150 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
         flash === 'up' && 'animate-tick-flash-up',
@@ -26,7 +29,14 @@ function TapeItem({ q, flash, onOpen }: { q: IndexQuote; flash: 'up' | 'down' | 
     >
       <span className="font-mono text-caption font-semibold text-ink-800">{q.code}</span>
       <span className="font-mono text-caption text-ink-600 tnum">{fmtPrice(q.price)}</span>
-      <span className={cn('font-mono text-caption tnum', up ? 'text-up-700' : 'text-down-700')}>{fmtPct(q.changePct)}</span>
+      <span
+        className={cn(
+          'font-mono text-caption tnum',
+          tone === 'up' ? 'text-up-700' : tone === 'down' ? 'text-down-700' : 'text-ink-500',
+        )}
+      >
+        {tone === 'flat' ? '0.00%' : fmtPct(q.changePct)}
+      </span>
       <span className="ml-2 text-[8px] text-ink-300" aria-hidden="true">◆</span>
     </button>
   );
