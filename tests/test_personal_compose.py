@@ -125,13 +125,14 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
         "FINNHUB_API_KEY",
         "MARKETDATA_TOKEN",
         "MASSIVE_API_KEY",
+        "FRED_API_KEY",
         "INTERNAL_API_TOKEN",
         "APP_PASSWORD_HASH",
     ]
     all_keys = machine_keys + secret_keys
     assert len(machine_keys) == 7
-    assert len(secret_keys) == 6
-    assert len(all_keys) == 13
+    assert len(secret_keys) == 7
+    assert len(all_keys) == 14
     assert len(all_keys) == len(set(all_keys))
     assert not any(key.startswith("DEPLOY_" + "REQUIRE") for key in all_keys)
     assert not any(key.startswith("FOCUS_PRODUCER") for key in all_keys)

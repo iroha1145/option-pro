@@ -24,5 +24,8 @@ def settings_status() -> dict[str, object]:
         "openai": _configured("OPENAI_API_KEY"),
         "finnhub": _configured("FINNHUB_API_KEY"),
         "marketdata": _configured("MARKETDATA_TOKEN"),
+        # Only the boolean crosses the wire. No length, prefix, suffix, hash or
+        # last-four ever reaches the browser.
+        "fred": _configured("FRED_API_KEY"),
         "internal_api": _configured("INTERNAL_API_TOKEN"),
     }

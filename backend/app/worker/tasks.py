@@ -2164,6 +2164,7 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             "catalyst-cache": settings.macrolens_cache_db_path,
             "ai-jobs": settings.openai_job_db_path,
             "optix-worker": settings.optix_worker_db_path,
+            "macro-conditions": settings.macro_conditions_db_path,
         },
         destination=settings.optix_backup_dir,
         keep=config.storage.backup_keep,

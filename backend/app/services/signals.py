@@ -12,7 +12,17 @@ import yfinance as yf
 
 from app.services import massive
 
-_MASSIVE_PERIOD_DAYS = {"1y": 405, "2y": 770, "6mo": 200, "3mo": 105, "1mo": 40}
+_MASSIVE_PERIOD_DAYS = {
+    "1y": 405,
+    "2y": 770,
+    "6mo": 200,
+    "3mo": 105,
+    "1mo": 40,
+    # Long windows exist for the macro-conditions ETF proxies, which need a
+    # multi-year backfill. Existing callers keep their previous periods.
+    "5y": 1_890,
+    "10y": 3_720,
+}
 _YAHOO_TIMEOUT_SECONDS = 10
 
 _cache: OrderedDict[str, tuple[datetime, Any]] = OrderedDict()
@@ -216,6 +226,17 @@ def _history(symbol: str, period: str = "1y") -> pd.DataFrame:
         return _yahoo_history(symbol, period)
 
     return _cached(f"hist:{symbol}:{period}", 300, load)
+
+
+def daily_adjusted_history(symbol: str, period: str = "1y") -> pd.DataFrame:
+    """Public entry point for the Massive-first, Yahoo-fallback daily chain.
+
+    Both providers return split/dividend-adjusted closes, and the frame carries
+    the provider that actually served it in ``attrs["price_provider"]``. Callers
+    outside this module use this instead of building a second price chain.
+    """
+
+    return _history(symbol, period)
 
 
 def _bulk_history(symbols: list[str], period: str = "1y") -> dict[str, pd.DataFrame]:

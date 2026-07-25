@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 try:
     import tomllib
@@ -16,6 +16,10 @@ except ModuleNotFoundError:  # Python 3.10 compatibility for legacy deploy check
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PERSONAL_CONFIG_PATH = REPOSITORY_ROOT / "config" / "personal.toml"
 HOURLY_ANALYSIS_TIMES_ET = tuple(f"{hour:02d}:00" for hour in range(24))
+#: Mirror of ``app.services.macro_conditions.registry.SCORING_VERSION``. Kept as
+#: a literal so the config layer never imports the services layer; the two are
+#: asserted equal in tests.
+MACRO_SCORING_VERSION = "optix-macro-score-v1"
 _PRIVATE_NETWORK_ENVELOPES = tuple(
     ipaddress.ip_network(value)
     for value in (
@@ -142,6 +146,67 @@ class PublicHomeConfig(StrictConfigModel):
     failure_retry_seconds: int = Field(default=300, ge=60, le=3600)
 
 
+class MacroConfig(StrictConfigModel):
+    """Operator-tunable macro settings only.
+
+    Series identifiers, formulas, stale thresholds, minimum history, module
+    factor floors, regime cut-offs, the ON RRP risk curve, the 2% breakeven
+    target and every rolling window stay versioned constants in
+    ``app.services.macro_conditions.registry``. Making them configurable would
+    let a config edit silently change what a published score means.
+    """
+
+    enabled: bool = True
+    history_years: int = Field(default=8, ge=5, le=15)
+    score_window_years: int = Field(default=5, ge=3, le=10)
+    funding_ema_days: int = Field(default=5, ge=2, le=30)
+    refresh_times_et: list[str] = Field(
+        default_factory=lambda: ["08:30", "18:30"],
+        min_length=1,
+        max_length=12,
+    )
+    manual_refresh_cooldown_seconds: int = Field(default=300, ge=0, le=3600)
+    scoring_version: str = Field(default="optix-macro-score-v1", max_length=64)
+
+    @field_validator("refresh_times_et")
+    @classmethod
+    def validate_refresh_times(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for value in values:
+            parts = str(value).split(":")
+            if len(parts) != 2 or not all(
+                len(part) == 2 and part.isdigit() for part in parts
+            ):
+                raise ValueError("macro refresh times must use HH:MM")
+            hour, minute = (int(part) for part in parts)
+            if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+                raise ValueError("macro refresh times must be valid clock times")
+            item = f"{hour:02d}:{minute:02d}"
+            if item in normalized:
+                raise ValueError("macro refresh times must not repeat")
+            normalized.append(item)
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_windows(self) -> "MacroConfig":
+        if self.history_years < self.score_window_years:
+            raise ValueError(
+                "macro history_years must be at least score_window_years"
+            )
+        # The scoring version names an algorithm, not a preference. Config may
+        # only restate the version the code implements, never invent one.
+        # MACRO_SCORING_VERSION mirrors macro_conditions.registry.SCORING_VERSION;
+        # tests assert the two literals agree. The mirror keeps this module free
+        # of any app.services import, so a minimal deployment tree that carries
+        # only the config layer still validates.
+        if self.scoring_version != MACRO_SCORING_VERSION:
+            raise ValueError(
+                "macro scoring_version must equal the code constant "
+                f"{MACRO_SCORING_VERSION}"
+            )
+        return self
+
+
 class StorageConfig(StrictConfigModel):
     retention_days: int = Field(default=90, ge=1, le=3650)
     backup_keep: int = Field(default=7, ge=1, le=100)
@@ -154,6 +219,7 @@ class PersonalConfig(StrictConfigModel):
     catalyst: CatalystConfig = Field(default_factory=CatalystConfig)
     breakout: BreakoutConfig = Field(default_factory=BreakoutConfig)
     public_home: PublicHomeConfig = Field(default_factory=PublicHomeConfig)
+    macro: MacroConfig = Field(default_factory=MacroConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
 
     @property
