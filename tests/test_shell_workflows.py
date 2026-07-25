@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -31,7 +32,8 @@ WORKER_HEALTH = (
     '{"task_name":"focus_refresh"},'
     '{"task_name":"strength_refresh","enabled":true,"status":"idle","consecutive_failures":0},'
     '{"task_name":"breakout_refresh"},'
-    '{"task_name":"retention"}]}'
+    '{"task_name":"retention"},'
+    '{"task_name":"macro_conditions"}]}'
 )
 REMOVED_RUNTIME_KEYS = (
     "ACCESS_MODE",
@@ -1670,3 +1672,32 @@ def test_shell_entrypoints_stay_small_and_syntax_is_valid() -> None:
             text=True,
         )
         assert completed.returncode == 0, completed.stderr
+
+
+def test_deploy_expected_inventory_tracks_the_worker_itself() -> None:
+    """deploy.sh's expected set and this file's fixture must follow the worker.
+
+    macro_conditions was added to the worker but not to deploy.sh, so every
+    deploy afterwards was refused. Nothing caught it: the fixture here was
+    missing the task too, so the script and the test agreed with each other while
+    disagreeing with production. Deriving both from DEFAULT_TASK_NAMES is what
+    makes that class of drift impossible rather than merely unlikely.
+    """
+
+    from app.worker.tasks import DEFAULT_TASK_NAMES
+
+    script = (ROOT / "scripts" / "deploy.sh").read_text(encoding="utf-8")
+    expected_block = script.split("expected = {", 1)[1].split("}", 1)[0]
+    in_script = set(re.findall(r'"([a-z_]+)"', expected_block))
+    assert in_script == set(DEFAULT_TASK_NAMES), (
+        "deploy.sh's expected task set drifted from the worker. "
+        f"Missing: {sorted(set(DEFAULT_TASK_NAMES) - in_script)}. "
+        f"Unexpected: {sorted(in_script - set(DEFAULT_TASK_NAMES))}."
+    )
+
+    in_fixture = set(re.findall(r'"task_name":"([a-z_]+)"', WORKER_HEALTH))
+    assert in_fixture == set(DEFAULT_TASK_NAMES), (
+        "the WORKER_HEALTH fixture drifted from the worker. "
+        f"Missing: {sorted(set(DEFAULT_TASK_NAMES) - in_fixture)}. "
+        f"Unexpected: {sorted(in_fixture - set(DEFAULT_TASK_NAMES))}."
+    )
