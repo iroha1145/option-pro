@@ -1473,6 +1473,49 @@ def _refresh_classifications(rows: list[dict[str, Any]]) -> None:
         row["label"] = classification
 
 
+#: Tier cut-offs; must stay identical to ``tierOf`` in the screener's types.ts.
+_TIER_FLOORS: tuple[tuple[str, float], ...] = (
+    ("S", 90.0),
+    ("A", 80.0),
+    ("B", 70.0),
+    ("C", 60.0),
+)
+
+
+def _tier_distribution(rows: list[dict[str, Any]], timeframe: str) -> dict[str, int]:
+    """S/A/B/C/D counts over every screened row.
+
+    The screener needs a distribution that describes the candidate pool. Counting
+    the returned rows describes only the slice it asked for, which is why a pool
+    of 300 could show five tiers adding up to 20.
+
+    ``unscored`` is reported separately: a row whose score is missing is not a
+    D-tier stock, and folding it in would understate the weak tier while
+    overstating it at the same time.
+    """
+
+    field = f"score_{timeframe}" if timeframe in {"short", "mid", "long"} else "final_score"
+    counts = {name: 0 for name, _ in _TIER_FLOORS}
+    counts["D"] = 0
+    counts["unscored"] = 0
+    for row in rows:
+        score = _safe_float(row.get(field), 4)
+        if score is None and field != "final_score":
+            score = _safe_float(row.get("final_score"), 4)
+        if score is None:
+            counts["unscored"] += 1
+            continue
+        for name, floor in _TIER_FLOORS:
+            if score >= floor:
+                counts[name] += 1
+                break
+        else:
+            counts["D"] += 1
+    counts["scored"] = len(rows) - counts["unscored"]
+    counts["total"] = len(rows)
+    return counts
+
+
 def _sort_scored(rows: list[dict[str, Any]], timeframe: str) -> None:
     if timeframe in {"short", "mid", "long"}:
         key = f"score_{timeframe}"
@@ -1809,6 +1852,11 @@ def _scan_sync(
         "count": len(limited),
         "universe_count": len(tickers),
         "screened_count": len(view_rows),
+        # Distribution over the whole screened pool, not the ``top`` slice the
+        # caller receives. The screener drew its S/A/B/C/D counts from the rows
+        # it got back -- 20 by default -- while displaying the real pool size
+        # beside them, so "股票池 300 只" sat next to five tiers summing to 20.
+        "tier_distribution": _tier_distribution(view_rows, timeframe),
         "skipped": skipped,
         "results": limited,
         "rows": limited,

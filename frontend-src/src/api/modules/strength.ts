@@ -19,10 +19,29 @@ import type {
  * timeframe/profile/top/sector_id/min_price/min_avg_dollar_volume/include_options/universe
  * 为契约参数（api-contract §strength），live 原样下发。
  */
+/**
+ * 全候选池的分档分布（审计 P2-10）。
+ * 契约 tier_distribution 由后端在截取 top 之前统计；缺失时为 null —— 不能拿
+ * 返回的这几行去冒充整池分布。
+ */
+export interface TierDistribution {
+  S: number;
+  A: number;
+  B: number;
+  C: number;
+  D: number;
+  /** 分数缺失的行；它们不是 D 档。 */
+  unscored: number;
+  scored: number;
+  total: number;
+}
+
 export interface StrengthScanEnvelope {
   rows: ScreenerRow[];
   universeCount: number;
   screenedCount: number;
+  /** 后端统计的整池分档；旧快照没有这个字段时为 null。 */
+  tierDistribution: TierDistribution | null;
   stale: boolean;
   asOf: string | null;
   snapshotSavedAt: string | null;
@@ -139,12 +158,25 @@ function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelo
       rows: applyParams(rows, params),
       universeCount: pickN(env, 'universe_count', 'universeCount') ?? rows.length,
       screenedCount: pickN(env, 'screened_count', 'screenedCount') ?? rows.length,
+      tierDistribution: mapTierDistribution(env.tier_distribution ?? env.tierDistribution),
       stale: pickB(env, '_stale', 'stale') ?? false,
       asOf: pickS(env, 'as_of', 'score_data_through', 'data_through'),
       snapshotSavedAt: pickS(env, 'snapshot_saved_at'),
       priceProvider: pickS(asRec(sources.prices), 'provider'),
     };
   });
+}
+
+/** 契约 tier_distribution → UI；任一档缺失即整体判为不可用，不做部分拼装。 */
+function mapTierDistribution(raw: unknown): TierDistribution | null {
+  const r = asRec(raw);
+  if (Object.keys(r).length === 0) return null;
+  const keys = ['S', 'A', 'B', 'C', 'D', 'unscored', 'scored', 'total'] as const;
+  const values = keys.map((key) => pickN(r, key));
+  if (values.some((value) => value === null)) return null;
+  return Object.fromEntries(
+    keys.map((key, index) => [key, values[index] as number]),
+  ) as unknown as TierDistribution;
 }
 
 /** 契约 market_regime（六维分 + label + warnings）→ MarketRegimeInfo；缺失如实 null */
@@ -249,12 +281,21 @@ export const strengthApi = {
     ),
   scanEnvelope: (params: ScanParams = {}, force = false): Promise<StrengthScanEnvelope> =>
     mockOr(
-      () => {
+      (): StrengthScanEnvelope => {
         const all = fx.runStrengthScan();
+        // mock 下整池就是这批行，因此分布可以直接统计，不存在截断问题。
+        const counts = { S: 0, A: 0, B: 0, C: 0, D: 0 };
+        all.forEach((row) => {
+          const score = row.strengthScore;
+          const tier =
+            score >= 90 ? 'S' : score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 60 ? 'C' : 'D';
+          counts[tier] += 1;
+        });
         return {
           rows: applyParams(all, params),
           universeCount: all.length,
           screenedCount: all.length,
+          tierDistribution: { ...counts, unscored: 0, scored: all.length, total: all.length },
           stale: false,
           asOf: null,
           snapshotSavedAt: null,

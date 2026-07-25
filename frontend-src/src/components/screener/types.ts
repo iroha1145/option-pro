@@ -140,6 +140,29 @@ export interface CatalystSummary {
   pending?: number | null;
   /** 批量接口失败：如实显「—」（区别于真实 0） */
   failed?: boolean;
+  /**
+   * 本条摘要的取得时刻（审计 P2-12）。
+   *
+   * 旧实现只看键是否存在，成功、真实为 0、失败三种结果都会永久占住该键：当天
+   * 新出现的新闻不会进入已经看过的股票，除非整页刷新。有了时间戳就能按 TTL 过期。
+   */
+  fetchedAt?: number;
+}
+
+/** 催化摘要有效期；超过即视为需要重取。 */
+export const CATALYST_SUMMARY_TTL_MS = 5 * 60_000;
+
+export function catalystSummaryUsable(
+  summary: CatalystSummary | undefined,
+  now: number,
+): boolean {
+  if (!summary?.loaded) return false;
+  // 失败的条目不该占住键位阻止重试。
+  if (summary.failed) return false;
+  return (
+    summary.fetchedAt !== undefined
+    && now - summary.fetchedAt < CATALYST_SUMMARY_TTL_MS
+  );
 }
 
 export const EMPTY_CATALYST: CatalystSummary = {
