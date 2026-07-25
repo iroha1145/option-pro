@@ -154,6 +154,7 @@ def _payload(resource: str, now: float, *, price: float = 100.0) -> dict:
             "moving_average_scope": "regular_session_only",
             "as_of": _iso(now),
             "last_bar_at": _iso(timestamp),
+            "price_provider": "Massive",
             "source_status": "active",
             "visible": 120,
             "bars": [
@@ -2039,47 +2040,33 @@ def test_required_resources_survive_a_closed_weekend() -> None:
     )
 
 
-def test_overview_field_set_matches_what_the_builder_emits() -> None:
-    """The validator's field set must track the builder that feeds it.
+def test_declared_field_sets_match_the_fixture_payloads() -> None:
+    """Each field set must equal the payload shape the fixtures reproduce.
 
-    profile_provider was added to the overview payload in #47 but never added
-    here. _validate_overview requires an exact field-set match, so every
-    focus_overview refresh was rejected from that day on. Nothing noticed,
-    because the snapshot kept serving the entry written just before the change
-    until it aged past its limit -- which then read as an expiry bug.
+    The validators compare field sets with ==, so one field added to a builder
+    and not mirrored into the set rejects that resource on every refresh, for
+    ever. That happened twice in the same provider-attribution work:
+    profile_provider on the overview and price_provider on the chart. Both stayed
+    invisible because the snapshot kept serving the entry written before the
+    change, so the symptom read as an entry ageing out rather than a publish that
+    never succeeded.
 
-    Asserting against the literal the builder constructs keeps the two ends tied
-    without importing live market data into the test.
+    This is a weaker guard than diffing against the live builders -- _payload is
+    still hand-written -- but it closes the specific hole that let those two
+    through: a field can no longer be absent from the set *and* absent from the
+    fixtures, which is what made the suite agree with the bug.
     """
 
-    import ast
-    from pathlib import Path
+    from app.public_home_snapshot import _CHART_FIELDS, _OVERVIEW_FIELDS
 
-    from app.public_home_snapshot import _OVERVIEW_FIELDS
-
-    source = (
-        Path(__file__).resolve().parents[1] / "backend" / "app" / "api" / "stocks.py"
-    ).read_text(encoding="utf-8")
-    tree = ast.parse(source)
-
-    # The overview payload is the dict literal that carries price_provider and
-    # profile_provider together; no other literal in the module has both.
-    emitted: set[str] | None = None
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Dict):
-            continue
-        keys = {
-            key.value
-            for key in node.keys
-            if isinstance(key, ast.Constant) and isinstance(key.value, str)
-        }
-        if {"price_provider", "profile_provider"} <= keys:
-            emitted = keys
-            break
-
-    assert emitted is not None, "could not locate the overview payload literal"
-    assert emitted == set(_OVERVIEW_FIELDS), (
-        "the overview builder and _OVERVIEW_FIELDS drifted. "
-        f"Builder emits but validator rejects: {sorted(emitted - set(_OVERVIEW_FIELDS))}. "
-        f"Validator expects but builder omits: {sorted(set(_OVERVIEW_FIELDS) - emitted)}."
+    now = time.time()
+    assert set(_payload("focus_overview", now)) == set(_OVERVIEW_FIELDS), (
+        "_OVERVIEW_FIELDS and the overview fixture disagree. "
+        f"Fixture only: {sorted(set(_payload('focus_overview', now)) - set(_OVERVIEW_FIELDS))}. "
+        f"Field set only: {sorted(set(_OVERVIEW_FIELDS) - set(_payload('focus_overview', now)))}."
+    )
+    assert set(_payload("focus_chart", now)) == set(_CHART_FIELDS), (
+        "_CHART_FIELDS and the chart fixture disagree. "
+        f"Fixture only: {sorted(set(_payload('focus_chart', now)) - set(_CHART_FIELDS))}. "
+        f"Field set only: {sorted(set(_CHART_FIELDS) - set(_payload('focus_chart', now)))}."
     )

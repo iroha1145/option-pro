@@ -122,6 +122,10 @@ _OVERVIEW_FIELDS = {
     "year_low",
 }
 _CHART_FIELDS = {
+    # Same omission as profile_provider on the overview: the chart builder has
+    # attributed its price source since the provider work in #47/#49, but this
+    # set was never updated, so every chart entry failed the exact-match check.
+    "price_provider",
     "ticker",
     "range",
     "period",
