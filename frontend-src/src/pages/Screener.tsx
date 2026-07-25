@@ -40,6 +40,7 @@ import {
   PROFILE_CN,
   SORT_CN,
   TIMEFRAME_CN,
+  catalystSummaryUsable,
   countByTier,
   tierOf,
   type CatalystSummary,
@@ -53,6 +54,8 @@ import {
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const PAGE_SIZE = 20;
+/** 契约 /catalysts/tickers/batch 的匿名上限；超过就必须切片。 */
+const CATALYST_BATCH_SIZE = 20;
 
 type ScanState = 'idle' | 'scanning' | 'done' | 'error';
 
@@ -96,10 +99,27 @@ export default function Screener() {
   const profilesQ = usePolling(() => strengthApi.profilesMeta(), null);
   const profiles = profilesQ.data?.profiles ?? null;
 
+  /**
+   * 分档计数必须描述候选池，而不是这次返回的这几行（审计 P2-10）。
+   *
+   * 初次调用不传 top，后端默认只返回 20 条；旧实现拿这 20 行统计 S/A/B/C/D，却在
+   * 旁边展示真实股票池数量，于是出现「股票池 300 只，五档加起来 20 只」。后端现在
+   * 在截取 top 之前统计整池分布；旧快照没有该字段时回退到当前行并如实标注。
+   */
   const universe = useMemo(() => {
     const snapshotRows = universeQ.data?.rows ?? [];
+    const distribution = universeQ.data?.tierDistribution ?? null;
     return {
-      tierCounts: countByTier(snapshotRows.map((r) => r.strengthScore)),
+      tierCounts: distribution
+        ? {
+            all: distribution.total,
+            S: distribution.S,
+            A: distribution.A,
+            B: distribution.B,
+            C: distribution.C,
+          }
+        : countByTier(snapshotRows.map((r) => r.strengthScore)),
+      tierCountsCoverPool: distribution !== null,
       sectors: [...new Set(snapshotRows.map((r) => r.sector))].sort((a, b) => a.localeCompare(b, 'zh-CN')),
       count: universeQ.data?.universeCount ?? snapshotRows.length,
     };
@@ -251,12 +271,32 @@ export default function Screener() {
     return out;
   }, [filteredBase, applied.tier, applied.topN]);
 
+  /**
+   * 催化排序的前置条件（审计 P1-06）。
+   *
+   * 旧实现存在循环依赖：先排序 → 得到当前页 → 只为当前页拉催化摘要 → 再排序。
+   * 未访问过的股票默认时间 -1、影响分 0，于是同一份数据会因为用户翻过第几页而
+   * 得到不同排名；真正有重大新闻但初始强度不在第一页的股票永远进不了第一页。
+   *
+   * 因此：切到催化排序时先为全部候选股票批量取摘要，取齐之前不参与正式排名。
+   */
+  const catalystSortActive = sortMode !== 'deterministic';
+  const missingCatalystTickers = useMemo(() => {
+    if (!catalystSortActive) return [];
+    const now = Date.now();
+    return filtered
+      .map((row) => row.ticker)
+      .filter((ticker) => !catalystSummaryUsable(catalysts[ticker], now));
+  }, [catalystSortActive, filtered, catalysts]);
+  const preparingCatalystSort = catalystSortActive && missingCatalystTickers.length > 0;
+
   /* ---------------- 三态排序（deterministic / latest / impact） ---------------- */
   const sorted = useMemo(() => {
     const out = [...filtered];
     const byScore = (a: ScreenerRow, b: ScreenerRow) =>
       b.strengthScore - a.strengthScore || Math.abs(b.changePct ?? 0) - Math.abs(a.changePct ?? 0) || a.ticker.localeCompare(b.ticker);
-    if (sortMode === 'deterministic') {
+    // 摘要没取齐就维持确定性顺序：用缺失值排名会让结果取决于访问过哪些分页。
+    if (sortMode === 'deterministic' || preparingCatalystSort) {
       out.sort(byScore);
     } else if (sortMode === 'latest') {
       const ts = (r: ScreenerRow) => {
@@ -273,7 +313,7 @@ export default function Screener() {
       out.sort((a, b) => impact(b) - impact(a) || count(b) - count(a) || byScore(a, b));
     }
     return out;
-  }, [filtered, sortMode, catalysts]);
+  }, [filtered, sortMode, catalysts, preparingCatalystSort]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -282,36 +322,63 @@ export default function Screener() {
     [sorted, safePage],
   );
 
-  /* ---------------- 催化剂 72h 汇总（当前页 ≤20 只一次批量 POST；禁止逐行请求） ---------------- */
+  /* ---------------- 催化剂 72h 汇总（每批 ≤20 只；禁止逐行请求） ---------------- */
+  /** 分批抓取并合并；contract 每次最多 20 只，因此按 20 切片顺序发出。 */
+  const loadCatalystSummaries = useCallback(
+    async (tickers: string[], isCancelled: () => boolean) => {
+      for (let offset = 0; offset < tickers.length; offset += CATALYST_BATCH_SIZE) {
+        if (isCancelled()) return;
+        const slice = tickers.slice(offset, offset + CATALYST_BATCH_SIZE);
+        const fetchedAt = Date.now();
+        const patch: Record<string, CatalystSummary> = {};
+        try {
+          const map = await catalystsApi.batchSummaries72h(slice);
+          slice.forEach((t) => {
+            const s = map[t];
+            // 响应缺该股条目视作真实 0（契约 batch 对无新闻股返回空 items，同义）
+            patch[t] = s
+              ? { loaded: true, fetchedAt, ...s }
+              : { ...EMPTY_CATALYST, loaded: true, fetchedAt };
+          });
+        } catch {
+          // 批量接口失败：failed 标记 → 徽标如实显「—」（不显 0，不逐行重试）
+          slice.forEach((t) => {
+            patch[t] = { ...EMPTY_CATALYST, loaded: true, failed: true, fetchedAt };
+          });
+        }
+        if (isCancelled()) return;
+        catalystsRef.current = { ...catalystsRef.current, ...patch };
+        setCatalysts(catalystsRef.current);
+      }
+    },
+    [],
+  );
+
   const pageTickerKey = pageRows.map((r) => r.ticker).join(',');
   useEffect(() => {
     if (scanState !== 'done') return;
-    const tickers = pageTickerKey.split(',').filter((t) => t && catalystsRef.current[t] === undefined);
+    const now = Date.now();
+    const tickers = pageTickerKey
+      .split(',')
+      .filter((t) => t && !catalystSummaryUsable(catalystsRef.current[t], now));
     if (tickers.length === 0) return;
     let cancelled = false;
-    void (async () => {
-      const patch: Record<string, CatalystSummary> = {};
-      try {
-        const map = await catalystsApi.batchSummaries72h(tickers);
-        tickers.forEach((t) => {
-          const s = map[t];
-          // 响应缺该股条目视作真实 0（契约 batch 对无新闻股返回空 items，同义）
-          patch[t] = s ? { loaded: true, ...s } : { ...EMPTY_CATALYST, loaded: true };
-        });
-      } catch {
-        // 批量接口失败：failed 标记 → 徽标如实显「—」（不显 0，不逐行重试）
-        tickers.forEach((t) => {
-          patch[t] = { ...EMPTY_CATALYST, loaded: true, failed: true };
-        });
-      }
-      if (cancelled) return;
-      catalystsRef.current = { ...catalystsRef.current, ...patch };
-      setCatalysts(catalystsRef.current);
-    })();
+    void loadCatalystSummaries(tickers, () => cancelled);
     return () => {
       cancelled = true;
     };
-  }, [scanState, pageTickerKey]);
+  }, [scanState, pageTickerKey, loadCatalystSummaries]);
+
+  /* 催化排序：为全部候选股票取齐摘要，而不是只取当前页（审计 P1-06）。 */
+  const missingCatalystKey = missingCatalystTickers.join(',');
+  useEffect(() => {
+    if (scanState !== 'done' || !catalystSortActive || !missingCatalystKey) return;
+    let cancelled = false;
+    void loadCatalystSummaries(missingCatalystKey.split(','), () => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [scanState, catalystSortActive, missingCatalystKey, loadCatalystSummaries]);
 
   /* ---------------- 行展开 + 信号懒加载 ---------------- */
   const onToggle = useCallback((ticker: string) => {
@@ -382,6 +449,20 @@ export default function Screener() {
   /* ---------------- 派生展示数据 ---------------- */
   /* count-up 减量：命中数直接呈现终值 */
   const hitCount = filtered.length;
+
+  /**
+   * 客户端筛选的真实作用范围（审计 P1-05）。
+   *
+   * 后端把 top 硬限在 120，价格上限 / 多板块 / 分档 / 最低分都是客户端条件；
+   * 已评分候选超过返回行数时，这些条件只在前 N 名内生效，界面必须说清楚，
+   * 而不是让用户以为扫描是完整的。
+   */
+  const truncatedScope = useMemo(() => {
+    if (!scanMeta || rows === null) return null;
+    const returned = scanMeta.rows.length;
+    if (scanMeta.screenedCount <= returned) return null;
+    return { returned, screened: scanMeta.screenedCount };
+  }, [scanMeta, rows]);
   const hitsByTier = useMemo(() => {
     const acc: Record<Tier, number> = { S: 0, A: 0, B: 0, C: 0, D: 0 };
     filteredBase.forEach((r) => {
@@ -469,6 +550,22 @@ export default function Screener() {
                 {scanMeta && (
                   <span className="font-mono text-micro text-ink-400 tnum">
                     股票池 {scanMeta.universeCount} / 已评分 {scanMeta.screenedCount}
+                  </span>
+                )}
+                {/* 客户端条件只作用在后端返回的强度前 N 名上（审计 P1-05）：
+                    后端把 top 硬限在 120，因此候选池更大时结果不是全市场筛选。 */}
+                {truncatedScope && (
+                  <span
+                    className="rounded-xs bg-warn-50 px-1.5 py-px text-micro text-warn-600"
+                    title={`价格上限、多板块、分档与最低分是客户端条件，只能作用在后端返回的这 ${truncatedScope.returned} 行上；已评分候选共 ${truncatedScope.screened} 只。`}
+                  >
+                    仅在强度前 {truncatedScope.returned} 名内筛选
+                  </span>
+                )}
+                {preparingCatalystSort && (
+                  <span className="inline-flex items-center gap-1.5 rounded-xs bg-paper-2 px-1.5 py-px text-micro text-ink-500">
+                    <span className="size-2.5 animate-spin rounded-full border-[1.5px] border-brand-600/25 border-t-brand-600" aria-hidden="true" />
+                    正在准备排序数据 · 剩余 {missingCatalystTickers.length}
                   </span>
                 )}
                 {scanMeta?.stale && (

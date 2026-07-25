@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from copy import deepcopy
 from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -271,3 +272,84 @@ def test_view_variants_share_the_same_two_year_history_download(monkeypatch) -> 
     assert all(history is panel for _top, history in scan_calls)
     assert len(requested) == 1
     assert requested[0][1] == "2y"
+
+
+# ---------------- tier distribution covers the pool, not the slice ----------------
+
+
+def test_tier_distribution_counts_every_screened_row_not_just_top_n() -> None:
+    """The screener's S/A/B/C/D counts have to describe the candidate pool.
+
+    Counting the returned rows describes only the slice that was asked for,
+    which is why a pool of 300 could show five tiers adding up to 20 while the
+    real pool size was displayed right beside them (audit P2-10).
+    """
+
+    rows = [
+        {"ticker": "AAA", "final_score": 95.0},
+        {"ticker": "BBB", "final_score": 90.0},
+        {"ticker": "CCC", "final_score": 84.0},
+        {"ticker": "DDD", "final_score": 80.0},
+        {"ticker": "EEE", "final_score": 70.0},
+        {"ticker": "FFF", "final_score": 61.0},
+        {"ticker": "GGG", "final_score": 12.0},
+        {"ticker": "HHH", "final_score": None},
+    ]
+
+    distribution = scanner._tier_distribution(rows, "all")
+
+    assert distribution["S"] == 2, "90 is the S floor, not the top of A"
+    assert distribution["A"] == 2
+    assert distribution["B"] == 1
+    assert distribution["C"] == 1
+    assert distribution["D"] == 1
+    # A missing score is not a D-tier stock; folding it in would understate the
+    # weak tier and overstate it at the same time.
+    assert distribution["unscored"] == 1
+    assert distribution["scored"] == 7
+    assert distribution["total"] == len(rows)
+    assert (
+        distribution["S"]
+        + distribution["A"]
+        + distribution["B"]
+        + distribution["C"]
+        + distribution["D"]
+        + distribution["unscored"]
+        == len(rows)
+    )
+
+
+def test_tier_distribution_follows_the_requested_timeframe() -> None:
+    rows = [
+        {"ticker": "AAA", "score_short": 92.0, "final_score": 20.0},
+        {"ticker": "BBB", "score_short": None, "final_score": 88.0},
+    ]
+
+    short = scanner._tier_distribution(rows, "short")
+    assert short["S"] == 1, "the short-timeframe score decides the tier"
+    # A row without the timeframe score still has an overall score to fall back
+    # on; that is a real value, not a guess.
+    assert short["A"] == 1
+    assert short["unscored"] == 0
+
+    overall = scanner._tier_distribution(rows, "all")
+    assert overall["D"] == 1 and overall["A"] == 1
+
+
+def test_tier_floors_match_the_screener_ui() -> None:
+    """Two copies of the same thresholds is exactly how these drift apart."""
+
+    ui = (
+        Path(__file__).resolve().parents[1]
+        / "frontend-src"
+        / "src"
+        / "components"
+        / "screener"
+        / "types.ts"
+    ).read_text(encoding="utf-8")
+    body = ui.split("export function tierOf", 1)[1].split("}", 1)[0]
+    for name, floor in scanner._TIER_FLOORS:
+        assert f"score >= {int(floor)}) return '{name}'" in body, (
+            f"{name} floor {int(floor)} is not what tierOf uses; "
+            "the backend distribution and the UI would classify differently"
+        )

@@ -37,14 +37,23 @@ const TIER_OPTIONS: { value: TierFilter; label: string }[] = [
 function TierSegmented({
   value,
   counts,
+  coversPool,
   onChange,
 }: {
   value: TierFilter;
   counts: Record<TierFilter, number>;
+  /** 计数覆盖整个候选池时不加限定语；否则明确它只描述当前快照的行。 */
+  coversPool: boolean;
   onChange: (v: TierFilter) => void;
 }) {
+  const scopeNote = coversPool ? '已评分候选池' : '当前快照返回的行';
   return (
-    <div role="tablist" aria-label="强度分档" className="no-scrollbar inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-md border border-line bg-card-warm p-0.5">
+    <div
+      role="tablist"
+      aria-label={`强度分档 · 计数基于${scopeNote}`}
+      title={`分档计数基于${scopeNote}`}
+      className="no-scrollbar inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-md border border-line bg-card-warm p-0.5"
+    >
       {TIER_OPTIONS.map((o) => {
         const active = value === o.value;
         return (
@@ -217,7 +226,13 @@ export function ScanButton({
 interface FilterWorkbenchProps {
   draft: ScanFilters;
   onChange: (f: ScanFilters) => void;
-  universe: { tierCounts: Record<TierFilter, number>; sectors: string[]; count: number };
+  universe: {
+    tierCounts: Record<TierFilter, number>;
+    /** 计数是否覆盖整个候选池；false 时只描述当前快照返回的行（审计 P2-10）。 */
+    tierCountsCoverPool: boolean;
+    sectors: string[];
+    count: number;
+  };
   /** 板块选项：live 来自 /strength/profiles sectors（id+中文名，下发 id）；mock 回退扫描行 sector 名（id=name） */
   sectorOptions: SectorOption[];
   presets: StrengthProfile[] | null;
@@ -287,6 +302,7 @@ export default function FilterWorkbench({
           <TierSegmented
             value={draft.tier}
             counts={universe.tierCounts}
+            coversPool={universe.tierCountsCoverPool}
             onChange={(tier) => patch({ tier, presetId: null, minScore: null })}
           />
         </div>
