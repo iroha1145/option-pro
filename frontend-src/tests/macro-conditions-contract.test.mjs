@@ -477,7 +477,17 @@ test('the panel polls macro data at fifteen minutes, not sixty seconds', async (
     'utf8',
   );
   assert.match(text, /const POLL_MS = 15 \* 60 \* 1000;/);
-  assert.ok(!text.includes('60_000'), 'macro data is low frequency');
+  // 后台轮询必须是低频的：断言 usePolling 只用 POLL_MS，而不是「文件里不许出现
+  // 60_000」——后者会把用户主动刷新后的有界跟进也一并禁掉（审计 P2-26 要求的
+  // 正是那个跟进）。跟进有自己的间隔与上限，且只在动作未完成期间存在。
+  for (const call of text.match(/usePolling\([^;]*?\);/gs) ?? []) {
+    assert.ok(
+      call.includes('POLL_MS'),
+      `macro data is low frequency; unexpected polling interval in ${call}`,
+    );
+  }
+  assert.match(text, /const REFRESH_FOLLOW_INTERVAL_MS = 5_000;/);
+  assert.match(text, /const REFRESH_FOLLOW_TIMEOUT_MS = 3 \* 60_000;/);
   // 访客看不到 Owner 动作
   assert.match(text, /isOwner \?/);
   assert.match(text, /登录后可手动刷新/);

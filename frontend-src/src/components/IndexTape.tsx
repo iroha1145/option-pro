@@ -2,10 +2,11 @@
  * Index Tape（design.md §7.1）
  * 36px 指数跑马灯 marquee · hover 暂停 · 涨跌 tick-flash · 右侧固定「延迟行情」毛玻璃标签
  */
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo } from 'react';
 import { useNavigate } from 'react-router';
 import { marketApi } from '@/api/modules/market';
 import { usePolling } from '@/hooks/usePolling';
+import { useTickFlash } from '@/hooks/useTickFlash';
 import { fmtPct, fmtPrice } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { IndexQuote } from '@/api/types';
@@ -52,27 +53,16 @@ const TapeRow = memo(function TapeRow({ items, flashes, onOpen }: { items: Index
   );
 });
 
+const tapeKey = (q: IndexQuote) => q.code;
+const tapePrice = (q: IndexQuote) => q.price;
+
 export default function IndexTape() {
   const { data } = usePolling(() => marketApi.indices(), 60_000);
-  const [flashes, setFlashes] = useState<Record<string, 'up' | 'down'>>({});
-  const prevRef = useRef<Record<string, number>>({});
+  /* 闪烁定时器由 useTickFlash 单独持有：旧写法把定时器当 effect cleanup，
+     下一轮没有价格变化时状态就再也没人清除（审计 P2-5）。 */
+  const flashes = useTickFlash(data, tapeKey, tapePrice);
   const navigate = useNavigate();
   const openMarket = (code: string) => navigate(`/market?index=${encodeURIComponent(code)}`);
-
-  useEffect(() => {
-    if (!data) return;
-    const next: Record<string, 'up' | 'down'> = {};
-    data.forEach((q) => {
-      const prev = prevRef.current[q.code];
-      if (prev !== undefined && prev !== q.price) next[q.code] = q.price > prev ? 'up' : 'down';
-      prevRef.current[q.code] = q.price;
-    });
-    if (Object.keys(next).length) {
-      setFlashes(next);
-      const t = setTimeout(() => setFlashes({}), 700);
-      return () => clearTimeout(t);
-    }
-  }, [data]);
 
   const items = data ?? [];
 

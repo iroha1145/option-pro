@@ -34,10 +34,11 @@ const ANALYSIS_REASON_CN: Record<string, { label: string; tone: 'muted' | 'down'
   catalyst_disabled: { label: '催化剂模块未启用', tone: 'down' },
 };
 
-export default function StatusHero() {
-  const statusQ = usePolling(() => catalystsContract.status(), 45_000);
-  const hotStatusQ = usePolling(() => catalystsContract.hotspotsStatus(), 45_000);
-  const newsQ = usePolling(() => catalystsContract.newsToday(), 120_000);
+export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number }) {
+  /* refreshToken 参与依赖：页头「刷新」必须真的刷新这一栏（审计 P2-21）。 */
+  const statusQ = usePolling(() => catalystsContract.status(), 45_000, [refreshToken]);
+  const hotStatusQ = usePolling(() => catalystsContract.hotspotsStatus(), 45_000, [refreshToken]);
+  const newsQ = usePolling(() => catalystsContract.newsToday(), 120_000, [refreshToken]);
 
   const s = statusQ.data;
   const hs = hotStatusQ.data;

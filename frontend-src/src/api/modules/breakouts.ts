@@ -260,11 +260,44 @@ export const breakoutsApi = {
       () => fx2.getBreakoutsCurrent(),
       () => get('/breakouts/current').then((d) => unwrap(d, 'events').map(normalizeBreakoutEvent) as unknown as BreakoutSignal[]),
     ),
+  /**
+   * 与 current() 相同的数据，但保留快照的业务时间（审计 P2-16）。
+   *
+   * 页面此前用 usePolling.lastUpdatedAt 当「快照时间」，那是浏览器收到响应的时刻，
+   * 不是数据更新到了什么时候：重新读到一份旧快照也会显示成刚刚更新。
+   */
+  currentEnvelope: (): Promise<{ events: BreakoutSignal[]; asOf: string | null }> =>
+    mockOr(
+      async () => ({ events: await fx2.getBreakoutsCurrent(), asOf: null }),
+      () =>
+        get('/breakouts/current').then((d) => ({
+          events: unwrap(d, 'events').map(normalizeBreakoutEvent) as unknown as BreakoutSignal[],
+          asOf: pickS(asRec(d), 'as_of', 'asOf'),
+        })),
+    ),
   status: (): Promise<BreakoutStatus> =>
     mockOr(() => fx2.getBreakoutsStatus(), () => get('/breakouts/status').then(normalizeBreakoutStatus)),
-  events: (filters: BreakoutEventFilters = {}): Promise<{ items: BreakoutEvent[]; total: number; page: number }> =>
+  /**
+   * 历史事件分页。
+   *
+   * 契约不返回总数，旧实现于是用 `nextCursor ? page*pageSize+1 : …` 造了一个：
+   * 界面显示的「共 101 条」是拼出来的数字，而不是事实（审计 P2-19）。现在
+   * total 缺失就是 null，是否还有更多由 next_cursor 如实表达。
+   */
+  events: (
+    filters: BreakoutEventFilters = {},
+  ): Promise<{
+    items: BreakoutEvent[];
+    total: number | null;
+    hasMore: boolean;
+    nextCursor: string | null;
+    page: number;
+  }> =>
     mockOr(
-      () => fx2.getBreakoutEvents(filters.page ?? 1, filters.pageSize ?? 12),
+      async () => {
+        const mock = await fx2.getBreakoutEvents(filters.page ?? 1, filters.pageSize ?? 12);
+        return { ...mock, hasMore: false, nextCursor: null };
+      },
       // 契约：?lifecycle_state&limit&cursor → {events, next_cursor}；page/type/result 为 UI 侧概念，不下发
       () => {
         const page = filters.page ?? 1;
@@ -272,10 +305,14 @@ export const breakoutsApi = {
         const qs = toQuery({ lifecycle_state: filters.lifecycle_state, limit: pageSize, cursor: filters.cursor });
         return get(`/breakouts/events${qs ? `?${qs}` : ''}`).then((d) => {
           const events = unwrap(d, 'events', 'items').map(normalizeBreakoutEvent);
-          const nextCursor = asRec(d).next_cursor;
-          // 契约无 total：有 next_cursor 说明至少还有一页
-          const total = nextCursor ? page * pageSize + 1 : (page - 1) * pageSize + events.length;
-          return { items: events as unknown as BreakoutEvent[], total, page };
+          const nextCursor = pickS(asRec(d), 'next_cursor', 'nextCursor');
+          return {
+            items: events as unknown as BreakoutEvent[],
+            total: pickN(asRec(d), 'total', 'total_count'),
+            hasMore: nextCursor !== null,
+            nextCursor,
+            page,
+          };
         });
       },
     ),

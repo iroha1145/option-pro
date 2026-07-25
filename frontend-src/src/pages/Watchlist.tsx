@@ -14,6 +14,7 @@ import { marketApi } from '@/api/modules/market';
 import { runtimeApi } from '@/api/modules/runtime';
 import { ApiError } from '@/api/client';
 import { usePolling } from '@/hooks/usePolling';
+import { useTickFlash } from '@/hooks/useTickFlash';
 import { useAccess } from '@/hooks/useAccess';
 import { useNow } from '@/hooks/useNow';
 import { useToast } from '@/components/Toast';
@@ -69,6 +70,9 @@ function AdvanceDeclineBar({
     </div>
   );
 }
+
+const watchKey = (item: WatchlistItem) => item.ticker;
+const watchPrice = (item: WatchlistItem) => item.price;
 
 /* ---------------- B1 小件：平均强度 donut（72px，draw-line） ---------------- */
 function ScoreDonut({ score }: { score: number }) {
@@ -464,26 +468,19 @@ export default function Watchlist() {
   useEffect(() => {
     if (searchParams.get('force') !== '1') return;
     void onForceRefresh();
-    setSearchParams({}, { replace: true });
+    // 只删除 force 键：setSearchParams({}) 会把页面上其他查询参数一并清掉（审计 P2-7）。
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('force');
+        return next;
+      },
+      { replace: true },
+    );
   }, [onForceRefresh, searchParams, setSearchParams]);
 
-  /* 涨跌 tick-flash 差异检测 */
-  const [flashes, setFlashes] = useState<Record<string, 'up' | 'down'>>({});
-  const prevPrices = useRef<Record<string, number>>({});
-  useEffect(() => {
-    if (!wl.data) return;
-    const next: Record<string, 'up' | 'down'> = {};
-    wl.data.forEach((it) => {
-      const prev = prevPrices.current[it.ticker];
-      if (prev !== undefined && prev !== it.price) next[it.ticker] = it.price > prev ? 'up' : 'down';
-      prevPrices.current[it.ticker] = it.price;
-    });
-    if (Object.keys(next).length) {
-      setFlashes(next);
-      const t = setTimeout(() => setFlashes({}), 700);
-      return () => clearTimeout(t);
-    }
-  }, [wl.data]);
+  /* 涨跌 tick-flash：定时器由 useTickFlash 单独持有，避免闪烁态永久残留（审计 P2-5） */
+  const flashes = useTickFlash(wl.data, watchKey, watchPrice);
 
   /* 平盘单独计数：changePct >= 0 会把持平股票算进上涨家数（审计 P2-4）。
      涨跌幅缺失的行也不能算进任何一侧。 */
@@ -591,15 +588,34 @@ export default function Watchlist() {
         key: 'actions',
         title: '',
         align: 'right',
-        width: '48px',
-        render: () => (
-          <span className="inline-flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-400 opacity-0 transition-opacity duration-fast group-hover:opacity-100">
-            <Icon name="arrow-up-right" size={14} />
+        // 桌面表格此前只有「进入详情」箭头，删除入口只存在于卡片/移动布局，
+        // 同一功能在不同断点下能力不一致（审计 P2-6）。
+        width: canManageWatchlist ? '84px' : '48px',
+        render: (r) => (
+          <span className="inline-flex items-center justify-end gap-1">
+            {canManageWatchlist && (
+              <button
+                type="button"
+                title={`从自选移除 ${r.ticker}`}
+                aria-label={`从自选移除 ${r.ticker}`}
+                onClick={(event) => {
+                  // 行本身是「打开详情」的点击目标，删除必须先拦住冒泡。
+                  event.stopPropagation();
+                  void onRemoveTicker(r.ticker);
+                }}
+                className="inline-flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-400 opacity-0 transition-[opacity,color] duration-fast hover:border-down-600/40 hover:text-down-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30 group-hover:opacity-100"
+              >
+                <Icon name="x" size={13} />
+              </button>
+            )}
+            <span className="inline-flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-400 opacity-0 transition-opacity duration-fast group-hover:opacity-100">
+              <Icon name="arrow-up-right" size={14} />
+            </span>
           </span>
         ),
       },
     ],
-    [flashes, rowSignalsAvailable, rowStrengthAvailable],
+    [flashes, rowSignalsAvailable, rowStrengthAvailable, canManageWatchlist, onRemoveTicker],
   );
 
   const loading = wl.loading;

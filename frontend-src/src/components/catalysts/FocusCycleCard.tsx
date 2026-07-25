@@ -192,11 +192,12 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
   );
 }
 
-export default function FocusCycleCard() {
+export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: number } = {}) {
   const { isOwner } = useAccess();
   const toast = useToast();
-  const latestQ = usePolling(() => catalystsContract.latestFocusCycle(), null);
-  const prevQ = usePolling(() => catalystsContract.previousFocusCycle(), null);
+  /* refreshToken 参与依赖：页头「刷新」必须真的刷新焦点周期（审计 P2-21）。 */
+  const latestQ = usePolling(() => catalystsContract.latestFocusCycle(), null, [refreshToken]);
+  const prevQ = usePolling(() => catalystsContract.previousFocusCycle(), null, [refreshToken]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [job, setJob] = useState<FocusCycleJob | null>(null);

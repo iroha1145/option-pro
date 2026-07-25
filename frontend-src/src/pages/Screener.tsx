@@ -14,7 +14,7 @@ import { catalystsApi } from '@/api/modules/catalysts';
 import { signalsApi } from '@/api/modules/signals';
 import { runtimeApi, type StrengthRefreshParameters } from '@/api/modules/runtime';
 import { ApiError, isMock } from '@/api/client';
-import type { ScreenerRow, SectorOption, Signal, StrengthProfile } from '@/api/types';
+import type { ScreenerRow, SectorOption, StrengthProfile } from '@/api/types';
 import { usePolling } from '@/hooks/usePolling';
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/components/Toast';
@@ -44,6 +44,7 @@ import {
   countByTier,
   tierOf,
   type CatalystSummary,
+  type RowSignalsState,
   type DetailCache,
   type ScanFilters,
   type ScanHistoryEntry,
@@ -152,8 +153,8 @@ export default function Screener() {
   const detailsRef = useRef<DetailCache>({});
   const [catalysts, setCatalysts] = useState<Record<string, CatalystSummary>>({});
   const catalystsRef = useRef<Record<string, CatalystSummary>>({});
-  const [signalsMap, setSignalsMap] = useState<Record<string, Signal[]>>({});
-  const signalsRef = useRef<Record<string, Signal[]>>({});
+  const [signalsMap, setSignalsMap] = useState<Record<string, RowSignalsState>>({});
+  const signalsRef = useRef<Record<string, RowSignalsState>>({});
   const scanSeq = useRef(0);
 
   const dirty = scanState === 'done' && !filtersEqual(draft, applied);
@@ -384,15 +385,22 @@ export default function Screener() {
   const onToggle = useCallback((ticker: string) => {
     setExpanded((prev) => {
       const next = prev === ticker ? null : ticker;
+      // 失败不再写入空数组（审计 P2-13）：那与「真实没有信号」无法区分，而且会
+      // 永久占住该键，以后展开同一股票也不会重试。
       if (next && signalsRef.current[next] === undefined) {
+        signalsRef.current = { ...signalsRef.current, [next]: { state: 'loading' } };
+        setSignalsMap(signalsRef.current);
         signalsApi
           .stock(next)
           .then((sg) => {
-            signalsRef.current = { ...signalsRef.current, [next]: sg };
+            signalsRef.current = {
+              ...signalsRef.current,
+              [next]: { state: 'success', signals: sg },
+            };
             setSignalsMap(signalsRef.current);
           })
           .catch(() => {
-            signalsRef.current = { ...signalsRef.current, [next]: [] };
+            signalsRef.current = { ...signalsRef.current, [next]: { state: 'error' } };
             setSignalsMap(signalsRef.current);
           });
       }
@@ -471,10 +479,21 @@ export default function Screener() {
     return acc;
   }, [filteredBase]);
 
+  /**
+   * 评分说明必须描述实际使用的评分风格（审计 P2-11）。
+   *
+   * 实际扫描用的是 applied.profile；旧实现却按 applied.presetId 查找，presetId 为空
+   * （手动切换风格、未选预设）时直接回落到 profiles[0]，于是选了「进取」或「稳健」，
+   * 下面的评分方法与权重说明仍属于第一套配置。预设编号只用于识别快捷预设。
+   */
   const activeProfile: StrengthProfile | null = useMemo(() => {
     if (!profiles || profiles.length === 0) return null;
-    return profiles.find((p) => p.id === applied.presetId) ?? profiles[0];
-  }, [profiles, applied.presetId]);
+    return (
+      profiles.find((p) => p.id === applied.profile)
+      ?? profiles.find((p) => p.id === applied.presetId)
+      ?? null
+    );
+  }, [profiles, applied.profile, applied.presetId]);
 
   const chips = useMemo(
     () => buildChips(applied, profiles, sectorOptions, patchApplied),

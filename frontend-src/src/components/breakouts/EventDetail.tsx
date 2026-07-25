@@ -5,6 +5,7 @@
  */
 import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { ApiError } from '@/api/client';
 import { catalystsApi } from '@/api/modules/catalysts';
 import type { NewsItem } from '@/api/types';
 import { usePolling } from '@/hooks/usePolling';
@@ -175,9 +176,23 @@ interface EventDetailProps {
   onClose: () => void;
   onOpenTicker: (ticker: string) => void;
   onShowTickerEvents: (ticker: string) => void;
+  /**
+   * 补充详情加载失败（审计 P2-20）。
+   * 打开的是列表里已有的那条事件，因此这不是致命错误：如实说明补充字段没取到，
+   * 并给一次重试，而不是静默地把它当成「详情就是这样」。
+   */
+  detailError?: ApiError | null;
+  onRetryDetail?: () => void;
 }
 
-export default function EventDetail({ event, onClose, onOpenTicker, onShowTickerEvents }: EventDetailProps) {
+export default function EventDetail({
+  event,
+  onClose,
+  onOpenTicker,
+  onShowTickerEvents,
+  detailError = null,
+  onRetryDetail,
+}: EventDetailProps) {
   /* ESC 关闭 + 锁定滚动 */
   useEffect(() => {
     if (!event) return;
@@ -214,6 +229,21 @@ export default function EventDetail({ event, onClose, onOpenTicker, onShowTicker
             transition={{ type: 'spring', stiffness: 520, damping: 32 }}
             className="relative flex max-h-[88dvh] w-full max-w-[720px] flex-col overflow-hidden rounded-xl border border-line bg-card shadow-sh-3"
           >
+            {detailError && (
+              <div className="flex flex-wrap items-center gap-2 border-b border-warn-600/25 bg-warn-50 px-5 py-2 text-caption text-warn-600">
+                <Icon name="flag" size={13} />
+                <span>补充详情未能加载，以下为列表已有字段。</span>
+                {onRetryDetail && (
+                  <button
+                    type="button"
+                    onClick={onRetryDetail}
+                    className="font-medium underline underline-offset-2"
+                  >
+                    重试
+                  </button>
+                )}
+              </div>
+            )}
             {/* 头 */}
             <div className="flex items-center gap-3 border-b border-line px-5 py-4">
               <TickerLogo ticker={event.ticker} size={36} />

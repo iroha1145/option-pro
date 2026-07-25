@@ -516,3 +516,49 @@ def test_refresh_reports_worker_unavailable_without_a_live_worker(
         )
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "worker_unavailable"
+
+
+# ---------------- WAL-aware read cache (audit P2-25) ----------------
+
+
+def test_read_cache_notices_a_commit_that_only_touched_the_wal(tmp_path) -> None:
+    """A WAL commit must invalidate the cache even when the main file is unchanged.
+
+    The database runs in WAL mode, so a fresh commit may live only in the ``-wal``
+    sidecar. Stamping just the main file meant a manual refresh could be invisible
+    for the whole TTL: the writer had committed, and the reader kept serving the
+    previous snapshot.
+    """
+
+    from app.services.macro_conditions.service import cached_read, invalidate_read_cache
+
+    invalidate_read_cache()
+    database = tmp_path / "macro-conditions.db"
+    database.write_bytes(b"main")
+    wal = tmp_path / "macro-conditions.db-wal"
+    wal.write_bytes(b"first")
+
+    calls = {"count": 0}
+
+    def producer() -> int:
+        calls["count"] += 1
+        return calls["count"]
+
+    clock = {"now": 1_000.0}
+
+    first = cached_read(database, "composite", producer, now=lambda: clock["now"])
+    assert first == 1
+    assert cached_read(database, "composite", producer, now=lambda: clock["now"]) == 1, (
+        "an unchanged database must be served from the cache"
+    )
+
+    # The writer commits; only the WAL grows.
+    wal.write_bytes(b"first-and-second")
+    assert cached_read(database, "composite", producer, now=lambda: clock["now"]) == 2, (
+        "a WAL-only commit must invalidate the cache"
+    )
+
+    # A checkpoint removes the sidecar; that is another real change of state.
+    wal.unlink()
+    assert cached_read(database, "composite", producer, now=lambda: clock["now"]) == 3
+    invalidate_read_cache()

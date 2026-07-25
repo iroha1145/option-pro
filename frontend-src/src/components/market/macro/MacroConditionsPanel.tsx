@@ -6,7 +6,7 @@
  * insufficient_history —— 刷新失败保留旧面板、显示 Warning，不清空图表、不把旧值改成 0。
  * 手动刷新只对 Owner 显示；访客可读全部数据，但看不到也触发不了 Worker 动作。
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { macroApi, type MacroConditionsResponse } from '@/api/modules/macro';
 import { usePolling } from '@/hooks/usePolling';
@@ -23,6 +23,9 @@ import MacroHistoryChart, { HISTORY_RANGES, type HistoryRangeKey } from './Macro
 import ModuleGrid from './ModuleGrid';
 
 const POLL_MS = 15 * 60 * 1000;
+/* 手动刷新期间的跟进节奏与放弃跟进的上限（审计 P2-26）。 */
+const REFRESH_FOLLOW_INTERVAL_MS = 5_000;
+const REFRESH_FOLLOW_TIMEOUT_MS = 3 * 60_000;
 
 export const MACRO_SOURCE_NOTE =
   '宏观数据来自 FRED、纽约联储、联储理事会、芝加哥联储和 Cboe；跨资产代理使用 Option Pro 当前股票日线数据源。分数为过去 5 年历史分位，不是预测。';
@@ -80,12 +83,47 @@ export default function MacroConditionsPanel() {
   const conditionsQ = usePolling(() => macroApi.conditions(), POLL_MS);
   const historyQ = usePolling(() => macroApi.history(days), POLL_MS, [days]);
 
+  /**
+   * 手动刷新后短周期跟进（审计 P2-26）。
+   *
+   * 旧实现点完只记录动作的初始状态，既不轮询完成情况也不复位；而常规宏观轮询
+   * 间隔是 15 分钟，于是「队列中」「处理中」可以长时间挂在那里，看起来像卡住了。
+   * 这里在动作未完成期间每 5 秒读一次快照版本，版本一变即认定完成并停表。
+   */
+  const [refreshBaseline, setRefreshBaseline] = useState<string | null>(null);
+  useEffect(() => {
+    if (refreshPhase !== 'queued' && refreshPhase !== 'in_progress') return;
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      if (Date.now() - started > REFRESH_FOLLOW_TIMEOUT_MS) {
+        window.clearInterval(timer);
+        setRefreshPhase('idle');
+        setRefreshNote('刷新仍未在预期时间内完成，面板会在下一次轮询更新。');
+        return;
+      }
+      conditionsQ.refresh();
+    }, REFRESH_FOLLOW_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [refreshPhase, conditionsQ]);
+
+  /* 快照版本变化即表示刷新已落地，明确复位而不是让状态一直挂着。 */
+  const snapshotStamp = conditionsQ.data?.dataThrough ?? conditionsQ.data?.asOf ?? null;
+  useEffect(() => {
+    if (refreshPhase !== 'queued' && refreshPhase !== 'in_progress') return;
+    if (refreshBaseline === null || snapshotStamp === null) return;
+    if (snapshotStamp !== refreshBaseline) {
+      setRefreshPhase('idle');
+      setRefreshNote('宏观快照已更新。');
+    }
+  }, [snapshotStamp, refreshBaseline, refreshPhase]);
+
   const data = conditionsQ.data;
   const status = data?.status ?? 'unavailable';
 
   const onRefresh = useCallback(async () => {
     setRefreshPhase('sending');
     setRefreshNote(null);
+    setRefreshBaseline(snapshotStamp);
     try {
       const result = await macroApi.refresh();
       if (result.reason === 'cooldown') {
@@ -115,7 +153,7 @@ export default function MacroConditionsPanel() {
               : '刷新请求未成功。',
       );
     }
-  }, []);
+  }, [snapshotStamp]);
 
   /* 首次加载：骨架屏；已有数据时刷新失败保留旧面板。 */
   if (conditionsQ.loading && !data) {
@@ -250,6 +288,8 @@ export default function MacroConditionsPanel() {
         <div className="lg:col-span-7">
           <MacroHistoryChart
             points={historyQ.data?.points ?? []}
+            error={historyQ.error}
+            onRetry={historyQ.refresh}
             modules={data.modules}
             loading={historyQ.loading}
             range={range}
@@ -278,7 +318,7 @@ export default function MacroConditionsPanel() {
       </div>
 
       {/* F. 因子详情 */}
-      <FactorDetails modules={data.modules} />
+      <FactorDetails modules={data.modules} snapshotKey={snapshotStamp ?? ''} />
 
       {/* G. 来源说明 */}
       <SourceNote text={MACRO_SOURCE_NOTE} />

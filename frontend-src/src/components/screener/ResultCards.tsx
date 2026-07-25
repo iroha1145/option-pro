@@ -3,7 +3,7 @@
  * 卡内：代码 + 强度大分 + 分项微条 + 涨跌 + 催化剂徽标；点按展开 accordion 明细。
  */
 import { AnimatePresence, motion } from 'framer-motion';
-import type { ScreenerRow, Signal } from '@/api/types';
+import type { ScreenerRow } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { fmtPrice } from '@/lib/format';
 import Icon from '@/components/icons';
@@ -17,6 +17,7 @@ import {
   screenerStrengthPresentation,
   type CatalystSummary,
   type DetailCache,
+  type RowSignalsState,
 } from './types';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -28,7 +29,7 @@ export interface ResultCardsProps {
   catalysts: Record<string, CatalystSummary | undefined>;
   details: DetailCache;
   weights: { trend: number; momentum: number; volume: number; volatility: number } | null;
-  signals: Record<string, Signal[] | undefined>;
+  signals: Record<string, RowSignalsState | undefined>;
   onOpenDetail: (ticker: string) => void;
   animKey: string;
   /** 当前页码：入场 stagger 只在第一页触发 */

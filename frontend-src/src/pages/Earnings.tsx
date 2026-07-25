@@ -93,14 +93,36 @@ export default function Earnings() {
 
   /* 默认选中第一条「即将公布」（渲染期 adjust-state，避免 effect 级联；fixture 现含上月历史，跳过过去日期） */
   const [autoPicked, setAutoPicked] = useState(false);
+  const pickDefault = () =>
+    items.find((it) => daysUntil(it.date) === 0 && typeof it.epsActual === 'number')
+    ?? items.find((it) => daysUntil(it.date) === 0)
+    ?? items.find((it) => daysUntil(it.date) > 0)
+    ?? items[0];
   if (!autoPicked && !selectedTicker && items.length > 0) {
     setAutoPicked(true);
-    const firstRelevant =
-      items.find((it) => daysUntil(it.date) === 0 && typeof it.epsActual === 'number')
-      ?? items.find((it) => daysUntil(it.date) === 0)
-      ?? items.find((it) => daysUntil(it.date) > 0)
-      ?? items[0];
-    setSelectedTicker(firstRelevant.ticker);
+    setSelectedTicker(pickDefault().ticker);
+  }
+  /**
+   * 自动选中的股票在刷新后可能不再存在（审计 P2-29）。
+   *
+   * 旧实现只自动选一次：autoPicked 保持 true、selectedTicker 保留旧值，而对应行
+   * 已经变成 null，右侧分析卡于是收到「有股票代码、没有财报行」的不一致输入。
+   * 只在「这一条是我们自动选的」时重选，用户手动选的代码不会被悄悄改掉。
+   */
+  const [autoPickedTicker, setAutoPickedTicker] = useState<string | null>(null);
+  if (
+    autoPicked
+    && items.length > 0
+    && selectedTicker !== null
+    && selectedTicker === autoPickedTicker
+    && !items.some((it) => it.ticker === selectedTicker)
+  ) {
+    const replacement = pickDefault().ticker;
+    setAutoPickedTicker(replacement);
+    setSelectedTicker(replacement);
+  }
+  if (autoPicked && autoPickedTicker === null && selectedTicker !== null) {
+    setAutoPickedTicker(selectedTicker);
   }
 
   const onWeekChange = useCallback((dir: -1 | 1) => {
@@ -283,6 +305,23 @@ export default function Earnings() {
         description="一份财报落地，涟漪会沿着供应链传开。"
         meta={headerMeta}
       />
+
+      {/* 自动轮询失败但有旧数据时也要提示过期（审计 P2-30）：
+          旧实现只有手动刷新失败会设 failed_stale，30 分钟轮询失败时页面照常显示，
+          没有任何横幅，用户无从知道看到的是旧数据。 */}
+      {refreshStatus !== 'failed_stale' && q.error && items.length > 0 && (
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-md border border-warn-600/30 bg-warn-50 px-4 py-2.5">
+          <p className="text-caption text-warn-600">
+            自动刷新失败，当前显示的是上一次的数据，可能已经过时。
+          </p>
+          <button
+            onClick={q.refresh}
+            className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-600 transition-colors hover:bg-warn-600 hover:text-white"
+          >
+            重试
+          </button>
+        </div>
+      )}
 
       {/* failed_stale：失败带缓存 → _stale 横幅 */}
       {refreshStatus === 'failed_stale' && (
