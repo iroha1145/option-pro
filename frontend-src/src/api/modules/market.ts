@@ -72,7 +72,50 @@ function mapStatus(body: unknown): MarketStatus {
   };
 }
 
+/**
+ * 同一时刻只允许一个 /market/status 在飞，并把结果短暂共享。
+ * 只作用于这一个只读端点：它对所有调用方返回同一个全局事实，没有按用户或
+ * 按参数的差异，因此共享不会串数据。
+ */
+const STATUS_SHARE_MS = 2_000;
+let statusInFlight: Promise<MarketStatus> | null = null;
+let statusValue: { at: number; value: MarketStatus } | null = null;
+
+function sharedStatus(): Promise<MarketStatus> {
+  const now = Date.now();
+  if (statusValue && now - statusValue.at < STATUS_SHARE_MS) {
+    return Promise.resolve(statusValue.value);
+  }
+  if (statusInFlight) return statusInFlight;
+  const request = get('/market/status')
+    .then(mapStatus)
+    .then((value) => {
+      statusValue = { at: Date.now(), value };
+      return value;
+    })
+    .finally(() => {
+      if (statusInFlight === request) statusInFlight = null;
+    });
+  statusInFlight = request;
+  return request;
+}
+
+/** 测试用复位；生产依赖上面的有界过期。 */
+export function resetMarketStatusShare(): void {
+  statusInFlight = null;
+  statusValue = null;
+}
+
 export const marketApi = {
   indices: (): Promise<IndexQuote[]> => mockOr(() => fx.getIndices(), () => get('/market/indices').then(mapIndices)),
-  status: (): Promise<MarketStatus> => mockOr(() => fx.getMarketStatus(), () => get('/market/status').then(mapStatus)),
+  /**
+   * 市场时段。
+   *
+   * 页面上有三个各自独立的 usePolling 在拉这一个接口（Navbar、自选页两处），
+   * 实测首屏因此发出 3 次 /market/status。它们要的是同一个事实，所以在这里做
+   * 短窗口共享：并发调用共用同一个请求，2 秒内的重复调用复用同一份结果。
+   * 各自的轮询周期不变，因此「多久算过期」的语义没有改变。
+   */
+  status: (): Promise<MarketStatus> =>
+    mockOr(() => fx.getMarketStatus(), sharedStatus),
 };

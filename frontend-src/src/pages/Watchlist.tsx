@@ -14,6 +14,7 @@ import { marketApi } from '@/api/modules/market';
 import { runtimeApi } from '@/api/modules/runtime';
 import { ApiError } from '@/api/client';
 import { usePolling } from '@/hooks/usePolling';
+import { useProgressiveList } from '@/hooks/useProgressiveList';
 import { useTickFlash } from '@/hooks/useTickFlash';
 import { useAccess } from '@/hooks/useAccess';
 import { useNow } from '@/hooks/useNow';
@@ -281,6 +282,7 @@ function WatchCard({
   onRemove,
   showStrength,
   showSignals,
+  animateIn,
 }: {
   item: WatchlistItem;
   index: number;
@@ -289,13 +291,24 @@ function WatchCard({
   onRemove?: () => void;
   showStrength: boolean;
   showSignals: boolean;
+  /**
+   * 只有首屏那批卡片做入场动画。滚动后续批次时再逐张淡入，既看不到（它们是
+   * 在视口外挂载的），又要付出每张一次的动画与合成成本。
+   */
+  animateIn: boolean;
 }) {
   return (
     <motion.button
-      layout="position"
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.045, 0.5) }}
+      /* layout="position" 曾挂在每张卡上。它会为每个元素建一个 framer 投影节点并在
+         每次布局变化时重新测量 —— 214 张卡时 Style & Layout 达 1,285ms，且把
+         ~103K 的投影/拖拽代码拉进首屏包。入场淡入不需要它，hover 位移也不需要。 */
+      initial={animateIn ? { opacity: 0, y: 14 } : false}
+      animate={animateIn ? { opacity: 1, y: 0 } : undefined}
+      transition={
+        animateIn
+          ? { duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.045, 0.5) }
+          : undefined
+      }
       onClick={onClick}
       /* hover 上浮 -3px/240ms 走 whileHover（framer 入场后内联 transform:none 会压掉 CSS hover 位移），阴影用 CSS */
       whileHover={{ y: -3, transition: { duration: 0.24, ease: 'easeOut' } }}
@@ -655,6 +668,23 @@ export default function Watchlist() {
   }, [items, sort]);
   const statsLoading = signalsQ.loading || strengthQ.loading;
 
+  /**
+   * 渲染分批，数据不分批。
+   *
+   * cardItems 已经是**完整且排好序**的列表，上面的涨跌家数、平均强度、覆盖提示
+   * 也都基于它 —— 这里只决定一次挂载多少个 DOM 节点。滚到底部自动接着挂，
+   * 因此「这就是全部」的语义没有改变。
+   */
+  const FIRST_BATCH = 24;
+  const progressive = useProgressiveList(cardItems, { initial: FIRST_BATCH, step: 24 });
+  const renderedCards = progressive.visible;
+  // 桌面表格与移动卡片流是同一份数据的两种呈现，挂载批次必须一致，
+  // 否则同一个「加载更多」在两个断点下含义不同。
+  const renderedRows = useMemo(
+    () => (progressive.hasMore ? items.slice(0, renderedCards.length) : items),
+    [items, progressive.hasMore, renderedCards.length],
+  );
+
   return (
     <div>
       {/* B0 页头带 */}
@@ -686,9 +716,13 @@ export default function Watchlist() {
       {/* B1 概览统计条 */}
       <section className="mt-6" aria-label="市场概览">
         {statsLoading ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          /* 占位必须和真实内容占同样的空间。
+             旧写法在移动端是 grid-cols-1 —— 四张卡竖着堆起来，而真实内容是一行
+             横向滚动条（130px）。两者高度差直接产生 CLS 0.200，是这个页面最差的
+             一项指标。这里用与下方 motion.div 完全相同的布局类。 */
+          <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-1 no-scrollbar sm:grid sm:grid-cols-2 sm:overflow-visible xl:grid-cols-4">
             {Array.from({ length: 4 }, (_, i) => (
-              <SkeletonCard key={i} />
+              <SkeletonCard key={i} className="min-w-[220px] shrink-0 snap-start sm:min-w-0" />
             ))}
           </div>
         ) : (
@@ -872,7 +906,7 @@ export default function Watchlist() {
                 <div className="hidden md:block">
                   <DataTable
                     columns={columns}
-                    rows={items}
+                    rows={renderedRows}
                     rowKey={(r) => r.ticker}
                     onRowClick={(r) => openTicker(r.ticker)}
                     sort={sort}
@@ -881,11 +915,12 @@ export default function Watchlist() {
                 </div>
                 {/* 移动：表格转卡片流 */}
                 <div className="grid grid-cols-1 gap-3 md:hidden">
-                  {cardItems.map((it, i) => (
+                  {renderedCards.map((it, i) => (
                     <WatchCard
                       key={it.ticker}
                       item={it}
                       index={i}
+                      animateIn={i < FIRST_BATCH}
                       onClick={() => openTicker(it.ticker)}
                       onRemove={canManageWatchlist ? () => void onRemoveTicker(it.ticker) : undefined}
                       showStrength={rowStrengthAvailable}
@@ -896,17 +931,32 @@ export default function Watchlist() {
               </>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {cardItems.map((it, i) => (
+                {renderedCards.map((it, i) => (
                   <WatchCard
                     key={it.ticker}
                     item={it}
                     index={i}
+                    animateIn={i < FIRST_BATCH}
                     onClick={() => openTicker(it.ticker)}
                     onRemove={canManageWatchlist ? () => void onRemoveTicker(it.ticker) : undefined}
                     showStrength={rowStrengthAvailable}
                     showSignals={rowSignalsAvailable}
                   />
                 ))}
+              </div>
+            )}
+            {progressive.hasMore && (
+              <div ref={progressive.sentinelRef} className="mt-4 flex justify-center">
+                <button
+                  type="button"
+                  onClick={progressive.loadMore}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line-strong bg-card px-4 py-2 text-caption text-ink-600 transition-colors hover:bg-paper-2"
+                >
+                  加载更多
+                  <span className="font-mono text-micro text-ink-400 tnum">
+                    还有 {progressive.remaining} 只
+                  </span>
+                </button>
               </div>
             )}
           </div>
