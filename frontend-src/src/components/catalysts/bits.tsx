@@ -80,12 +80,14 @@ export function ConfidenceLabel({ value, className }: { value: number; className
 /* ---------------- 影响分「N · 非收益」 ---------------- */
 export function ImpactValue({ value, className, dash = '—' }: { value: number | null; className?: string; dash?: string }) {
   if (value === null || Number.isNaN(value)) {
-    return <span className={cn('font-mono text-micro text-ink-300', className)}>{dash}</span>;
+    return <span className={cn('shrink-0 font-mono text-micro text-ink-300', className)}>{dash}</span>;
   }
   const sign = value > 0 ? '+' : value < 0 ? '−' : '';
   const tone = value > 0.05 ? 'text-up-700' : value < -0.05 ? 'text-down-700' : 'text-ink-500';
   return (
-    <span className={cn('font-mono text-micro tnum', tone, className)}>
+    /* shrink-0 + nowrap：这是一个紧凑读数，「−4.00 · 非收益 ⓘ」被折成「非收 / 益」
+       就不再是一个可读的单位。三处调用方都把它放在一行里，都受益。 */
+    <span className={cn('shrink-0 whitespace-nowrap font-mono text-micro tnum', tone, className)}>
       {sign}
       {Math.abs(value).toFixed(2)} <span className="text-ink-400">· 非收益</span>
       <InfoHint hint={SCORE_HINTS.newsImpact} size={11} className="ml-1" />

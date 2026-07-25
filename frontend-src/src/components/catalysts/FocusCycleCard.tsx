@@ -148,32 +148,40 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: 0.2 + i * 0.05 }}
-              className="flex items-center gap-2.5 rounded-sm border border-line bg-card px-2.5 py-2"
+              /* 五个读数 + 一段说明在 360px 上放不进一行：窄屏让说明独占第二行拿到整宽，
+                 sm 起才合回一行。原先全塞一行，结果说明被压成「META…」，而唯一没有
+                 shrink-0 的偏向读数被折成「非收 / 益」。 */
+              className="flex flex-col gap-1 rounded-sm border border-line bg-card px-2.5 py-2 sm:flex-row sm:items-center sm:gap-2.5"
             >
-              <span className={cn('flex size-5 shrink-0 items-center justify-center rounded-xs', d.cls)}>
-                <Icon name={d.icon} size={12} />
+              <span className="flex min-w-0 items-center gap-2.5">
+                <span className={cn('flex size-5 shrink-0 items-center justify-center rounded-xs', d.cls)}>
+                  <Icon name={d.icon} size={12} />
+                </span>
+                <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{a.ticker}</span>
+                {a.insufficientEvidence ? (
+                  /* 后端在证据不足时强制 catalyst_bias 为 null。说「证据不足」，而不是画一个 0。 */
+                  <span className="shrink-0 whitespace-nowrap rounded-xs border border-line bg-paper-2 px-1.5 py-px text-micro text-ink-500">
+                    证据不足
+                  </span>
+                ) : (
+                  <ImpactValue value={a.catalystBias} />
+                )}
+                {a.confidence !== null && (
+                  <span className="shrink-0 whitespace-nowrap font-mono text-micro text-ink-400 tnum">
+                    置信 {Math.round(a.confidence * 100)}
+                    <span className="ml-0.5">· 非胜率</span>
+                  </span>
+                )}
+                {a.horizon && (
+                  <span className="shrink-0 whitespace-nowrap rounded-xs bg-paper-2 px-1.5 py-px text-micro text-ink-400">
+                    {HORIZON_LABEL[a.horizon]}
+                  </span>
+                )}
               </span>
-              <span className="font-mono text-caption font-semibold text-ink-800">{a.ticker}</span>
-              {a.insufficientEvidence ? (
-                /* 后端在证据不足时强制 catalyst_bias 为 null。说「证据不足」，而不是画一个 0。 */
-                <span className="shrink-0 rounded-xs border border-line bg-paper-2 px-1.5 py-px text-micro text-ink-500">
-                  证据不足
-                </span>
-              ) : (
-                <ImpactValue value={a.catalystBias} />
-              )}
-              {a.confidence !== null && (
-                <span className="shrink-0 font-mono text-micro text-ink-400 tnum">
-                  置信 {Math.round(a.confidence * 100)}
-                  <span className="ml-0.5">· 非胜率</span>
-                </span>
-              )}
-              {a.horizon && (
-                <span className="shrink-0 rounded-xs bg-paper-2 px-1.5 py-px text-micro text-ink-400">
-                  {HORIZON_LABEL[a.horizon]}
-                </span>
-              )}
-              <span className="min-w-0 flex-1 truncate text-micro text-ink-500" title={a.note}>
+              <span
+                className="min-w-0 flex-1 truncate text-micro leading-5 text-ink-500 sm:leading-normal"
+                title={a.note}
+              >
                 {a.note}
               </span>
             </motion.div>
