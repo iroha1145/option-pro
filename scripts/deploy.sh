@@ -174,6 +174,12 @@ expected = {
     "strength_refresh",
     "breakout_refresh",
     "retention",
+    # Added with the macro conditions worker task. Missing it here meant every
+    # deploy since then failed this gate; the failure stayed invisible because a
+    # degraded public_home tripped the earlier status check first, and the old
+    # catch-all message ("all twelve task types") read like stale wording rather
+    # than the accurate count it actually was.
+    "macro_conditions",
 }
 actual = {item.get("task_name") for item in payload.get("tasks", [])}
 tasks = {
