@@ -1866,3 +1866,126 @@ def test_frontend_default_focus_contract_matches_worker_snapshot() -> None:
         "range": "1d",
         "adjustment": "raw",
     }
+
+
+def test_release_gate_blocks_on_missing_but_not_on_stale(tmp_path, monkeypatch):
+    """A weekend-stale entry must not stall a rollout; a broken one must.
+
+    Public home data refreshes on a market-phase-aware cadence that runs to
+    hours while the market is closed. Three production rollouts sat for ~30
+    minutes waiting for one aged-out resource that was never going to refresh
+    inside the deploy window — and would have been just as stale afterwards.
+    Schema or parameter drift is the opposite: it means this build no longer
+    matches what is stored, and must stop the rollout.
+    """
+
+    import json
+    import time
+
+    from app.tools import verify_release_data as gate
+    from app.public_home_snapshot import (
+        PUBLIC_HOME_RESOURCE_ORDER,
+        PUBLIC_HOME_RESOURCE_SPECS,
+        public_home_resource_parameters,
+    )
+
+    now = 1_800_000_000.0
+    snapshot_path = tmp_path / "public-home.json"
+
+    def _entries(mutate=None):
+        built = {}
+        for resource in PUBLIC_HOME_RESOURCE_ORDER:
+            spec = PUBLIC_HOME_RESOURCE_SPECS[resource]
+            built[resource] = {
+                "schema": spec.schema,
+                "max_age": spec.max_age,
+                "parameters": public_home_resource_parameters(resource, now=now),
+                "saved_at": now - 10,
+                "payload": (
+                    {
+                        "data_limited": False,
+                        "source_status": "active",
+                        "providers": ["Finnhub"],
+                    }
+                    if resource == "earnings"
+                    else {}
+                ),
+            }
+        if mutate:
+            mutate(built)
+        return built
+
+    state = {"entries": _entries()}
+    monkeypatch.setattr(
+        gate,
+        "get_personal_config",
+        lambda: SimpleNamespace(access=SimpleNamespace(mode="password")),
+    )
+
+    import app.public_home_snapshot as snapshot_module
+
+    monkeypatch.setattr(
+        snapshot_module,
+        "read_public_home_entries",
+        lambda *args, **kwargs: state["entries"],
+    )
+
+    def _stub_backend():
+        import app.api.stocks as stocks_module
+        from app.data_paths import get_data_paths
+
+        monkeypatch.setattr(
+            stocks_module,
+            "_read_watchlist_snapshot",
+            lambda *a, **k: {"groups": []},
+        )
+        monkeypatch.setattr(
+            stocks_module,
+            "_read_stock_directory_snapshot",
+            lambda *a, **k: SimpleNamespace(
+                expires_at=now + 3600,
+                value={
+                    "provider": "Massive",
+                    "count": 2,
+                    "items": [{"ticker": "AAOI"}, {"ticker": "NBIS"}],
+                },
+            ),
+        )
+
+    _stub_backend()
+
+    # Everything fresh -> ready.
+    report = gate.release_data_report(now=now)
+    assert report["ready"] is True, report
+    assert report["missing"] == []
+    assert report["stale"] == []
+
+    # Aged past its window -> reported as stale, still ready.
+    state["entries"] = _entries(
+        lambda built: built["focus_overview"].__setitem__(
+            "saved_at",
+            now - PUBLIC_HOME_RESOURCE_SPECS["focus_overview"].max_age - 60,
+        )
+    )
+    report = gate.release_data_report(now=now)
+    assert report["stale"] == ["focus_overview"], report
+    assert report["missing"] == []
+    assert report["ready"] is True, "staleness must not block a rollout"
+
+    # Schema drift -> missing, blocks.
+    state["entries"] = _entries(
+        lambda built: built["focus_overview"].__setitem__("schema", "focus-overview-v1")
+    )
+    report = gate.release_data_report(now=now)
+    assert report["missing"] == ["focus_overview"], report
+    assert report["ready"] is False
+
+    # Absent entry -> missing, blocks.
+    state["entries"] = _entries(lambda built: built.pop("indices"))
+    report = gate.release_data_report(now=now)
+    assert "indices" in report["missing"]
+    assert report["ready"] is False
+
+    # The JSON stays parseable for the deploy script's grep.
+    assert json.loads(json.dumps(report))["missing"]
+    assert isinstance(time.time(), float)

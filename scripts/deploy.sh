@@ -230,19 +230,33 @@ verify_worker() {
 }
 
 verify_public_snapshots() {
+    # Each attempt spawns `compose exec`, which costs a couple of seconds on
+    # its own, so the real wall clock is roughly attempts x (exec + sleep).
+    # 60 attempts is about five minutes -- long enough for a freshly restarted
+    # worker to publish its first entries, short enough that a rollout never
+    # sits for half an hour.
+    #
+    # The gate blocks on `missing` (no usable entry, or a schema/parameter
+    # mismatch this build introduced) and not on `stale`. Staleness is
+    # governed by a market-phase-aware refresh cadence that runs to hours
+    # while the market is closed; waiting it out would stall every weekend
+    # rollout and would not make the data any fresher.
     local attempt report=""
-    for attempt in $(seq 1 450); do
+    for attempt in $(seq 1 60); do
         if report="$(
             compose exec -T worker \
                 python -m app.tools.verify_release_data 2>/dev/null
 )"; then
             printf '%s\n' "$report"
+            if printf '%s' "$report" | grep -q '"stale":\[[^]]'; then
+                printf 'Note: some public home data is past its refresh window; the worker will pick it up on its own schedule.\n' >&2
+            fi
             return
         fi
         sleep 2
     done
     printf '%s\n' "$report" >&2
-    fail "Public home snapshots were not generated and servable before the deployment deadline."
+    fail "Public home snapshots were missing or did not match this build before the deployment deadline."
 }
 
 main() {
