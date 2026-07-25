@@ -1,4 +1,5 @@
 export { marketApi } from './market';
+export { macroApi } from './macro';
 export { accessApi } from './access';
 export { stocksApi } from './stocks';
 export { signalsApi } from './signals';

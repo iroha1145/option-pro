@@ -33,6 +33,7 @@ SECRET_KEYS = (
     "FINNHUB_API_KEY",
     "MARKETDATA_TOKEN",
     "MASSIVE_API_KEY",
+    "FRED_API_KEY",
     "INTERNAL_API_TOKEN",
     "APP_PASSWORD_HASH",
 )
@@ -330,6 +331,13 @@ def _format_valid(key: str, value: str) -> bool:
     if any(character in value for character in _UNSAFE_TOKEN_CHARACTERS):
         return False
     if key == "OPENAI_API_KEY" and not value.startswith("sk-"):
+        return False
+    # FRED issues 32-character lower-case alphanumeric keys. Checking the shape
+    # locally keeps a typo from reaching the official API at all; the value is
+    # never echoed and never sent anywhere by this CLI.
+    if key == "FRED_API_KEY" and (
+        len(value) != 32 or not value.isalnum() or value != value.lower()
+    ):
         return False
     return True
 

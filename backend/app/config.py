@@ -161,6 +161,7 @@ class Settings(BaseSettings):
         max_length=4096,
     )
     _macrolens_cache_db_path_override: Path | None = PrivateAttr(default=None)
+    _macro_conditions_db_path_override: Path | None = PrivateAttr(default=None)
     _optix_worker_db_path_override: Path | None = PrivateAttr(default=None)
     _optix_worker_lock_path_override: Path | None = PrivateAttr(default=None)
     _breakout_db_path_override: Path | None = PrivateAttr(default=None)
@@ -183,6 +184,10 @@ class Settings(BaseSettings):
         repr=False,
     )
 
+    # Macro conditions reads FRED through the official HTTPS origin only. There
+    # is deliberately no FRED_BASE_URL setting and no proxy switch; tests
+    # replace the network with an injected transport instead.
+    fred_api_key: SecretStr = Field(default=SecretStr(""), alias="FRED_API_KEY")
     finnhub_api_key: str = Field(default="", alias="FINNHUB_API_KEY")
     finnhub_base_url: AnyHttpUrl = Field(default="https://finnhub.io/api/v1", alias="FINNHUB_BASE_URL")
     finnhub_enrich_limit: int = Field(default=20, alias="FINNHUB_ENRICH_LIMIT")
@@ -267,6 +272,7 @@ class Settings(BaseSettings):
         *,
         openai_job_db_path: str | Path | None = None,
         macrolens_cache_db_path: str | Path | None = None,
+        macro_conditions_db_path: str | Path | None = None,
         optix_worker_db_path: str | Path | None = None,
         optix_worker_lock_path: str | Path | None = None,
         breakout_db_path: str | Path | None = None,
@@ -306,6 +312,11 @@ class Settings(BaseSettings):
                 "macrolens_cache_db_path",
                 macrolens_cache_db_path,
             ),
+            (
+                "_macro_conditions_db_path_override",
+                "macro_conditions_db_path",
+                macro_conditions_db_path,
+            ),
             ("_optix_worker_db_path_override", "optix_worker_db_path", optix_worker_db_path),
             (
                 "_optix_worker_lock_path_override",
@@ -326,6 +337,13 @@ class Settings(BaseSettings):
     @property
     def macrolens_cache_db_path(self) -> Path:
         return self._macrolens_cache_db_path_override or get_data_paths().catalyst_cache_db
+
+    @property
+    def macro_conditions_db_path(self) -> Path:
+        return (
+            self._macro_conditions_db_path_override
+            or get_data_paths().macro_conditions_db
+        )
 
     @property
     def optix_worker_db_path(self) -> Path:
@@ -380,6 +398,10 @@ class Settings(BaseSettings):
     @property
     def personal_etl_enabled(self) -> bool:
         return bool(self.macrolens_url and self.internal_api_token.get_secret_value())
+
+    @property
+    def macro_conditions_configured(self) -> bool:
+        return bool(self.fred_api_key.get_secret_value().strip())
 
 
 @lru_cache

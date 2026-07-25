@@ -46,6 +46,7 @@ from app.api import (
     breakouts,
     catalysts,
     earnings,
+    macro_conditions,
     market,
     options,
     runtime_settings,
@@ -233,6 +234,10 @@ _PUBLIC_READ_API_PATHS = {
     "/api/sectors",
     "/api/market/indices",
     "/api/market/status",
+    # Optix 宏观环境 reads are bounded SQLite snapshot reads: no provider work,
+    # no worker action, no model spend. The refresh POST is deliberately absent.
+    "/api/macro/conditions",
+    "/api/macro/conditions/history",
     "/api/signals/market",
     "/api/catalysts/status",
     "/api/catalysts/feed",
@@ -256,6 +261,8 @@ _PUBLIC_READ_API_PATTERNS = tuple(
         r"^/api/options/[^/]+/(?:expirations|chain)$",
         r"^/api/sectors/[^/]+/(?:iv-ranking|heatmap)$",
         r"^/api/signals/stock/[^/]+$",
+        r"^/api/macro/conditions/modules/[a-z_]{1,32}$",
+        r"^/api/macro/conditions/factors/[a-z0-9_]{1,64}/history$",
         r"^/api/catalysts/news/[1-9][0-9]*$",
         r"^/api/catalysts/tickers/(?!batch$)[A-Z0-9][A-Z0-9.-]{0,19}$",
         r"^/api/strength/stocks/[^/]+$",
@@ -601,6 +608,9 @@ app.include_router(options.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(earnings.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(sectors.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(market.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+# Macro reads are public research content; the refresh route carries its own
+# owner and same-origin dependencies on top of this router-wide gate.
+app.include_router(macro_conditions.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(signals.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(ai.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(catalysts.router, dependencies=_PUBLIC_READ_DEPENDENCIES)

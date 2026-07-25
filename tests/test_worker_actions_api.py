@@ -32,6 +32,7 @@ def _live_repository(tmp_path, monkeypatch) -> tuple[WorkerStateRepository, int]
         "strength_refresh",
         "breakout_refresh",
         "earnings_analysis",
+        "macro_conditions",
         "retention",
     ):
         repository.record_task(

@@ -39,6 +39,7 @@ class DataPaths:
     root: Path
     ai_jobs_db: Path
     catalyst_cache_db: Path
+    macro_conditions_db: Path
     optix_db: Path
     worker_db: Path
     worker_lock: Path
@@ -56,6 +57,10 @@ def get_data_paths(value: str | Path | None = None) -> DataPaths:
         root=root,
         ai_jobs_db=root / "ai-jobs.db",
         catalyst_cache_db=root / "catalyst-cache.db",
+        # Macro history has a different lifecycle from breakout events, so it
+        # keeps its own file: independent backup, migration and retention
+        # without coupling to the breakout schema.
+        macro_conditions_db=root / "macro-conditions.db",
         optix_db=root / "optix.db",
         worker_db=root / "optix-worker.db",
         worker_lock=root / "optix-worker.lock",

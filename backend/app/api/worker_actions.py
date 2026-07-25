@@ -26,6 +26,7 @@ ActionType = Literal[
     "strength_refresh",
     "breakout_refresh",
     "earnings_analysis",
+    "macro_conditions",
     "retention",
 ]
 
@@ -34,6 +35,8 @@ _ACTION_TASKS: dict[str, str] = {
     "strength_refresh": "strength_refresh",
     "breakout_refresh": "breakout_refresh",
     "earnings_analysis": "earnings_analysis",
+    # Scheduled and manual macro refreshes deliberately share one task name.
+    "macro_conditions": "macro_conditions",
     "retention": "retention",
 }
 _ACTION_COOLDOWNS: dict[str, float] = {
@@ -41,6 +44,7 @@ _ACTION_COOLDOWNS: dict[str, float] = {
     "strength_refresh": 30.0,
     "breakout_refresh": 30.0,
     "earnings_analysis": 60.0,
+    "macro_conditions": 300.0,
     "retention": 300.0,
 }
 

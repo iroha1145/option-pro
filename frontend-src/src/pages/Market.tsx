@@ -1,7 +1,8 @@
 /**
  * §MKT 大盘强弱（/market，从指数 tape ?index= 进入）
- * B1 指数概览 6 卡 · B2 市场状态 · B3 形态六维 · B4 信号解读 · B5 强度分布 · B6 联动卡
- * 轮询：indices+status 60s / 形态+信号+强度 300s（visibility 暂停，usePolling）
+ * B1 指数概览 6 卡 · B2 市场状态 · B3 形态六维 · B4 宏观环境 · B5 信号解读
+ * B6 强度分布 · B7 联动卡
+ * 轮询：indices+status 60s / 形态+信号+强度 300s / 宏观 15min（visibility 暂停，usePolling）
  */
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router';
@@ -20,6 +21,7 @@ import RegimePanel, { regimeMean } from '@/components/market/RegimePanel';
 import SignalsReading, { type TrendBias } from '@/components/market/SignalsReading';
 import BreadthHistogram from '@/components/market/BreadthHistogram';
 import LinkCards from '@/components/market/LinkCards';
+import MacroConditionsPanel from '@/components/market/macro/MacroConditionsPanel';
 import SourceNote from '@/components/shared/SourceNote';
 
 const MARKET_TO_SESSION: Record<string, MarketSession> = {
@@ -119,7 +121,12 @@ export default function Market() {
         </div>
       </div>
 
-      {/* B4 信号解读 + B5 强度分布 */}
+      {/* B4 宏观环境（Optix 宏观环境 · 展示与研究用，不进入正式股票评分） */}
+      <section className="mt-8" aria-label="宏观环境">
+        <MacroConditionsPanel />
+      </section>
+
+      {/* B5 信号解读 + B6 强度分布 */}
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className={hasStrengthAggregate ? 'lg:col-span-8' : 'lg:col-span-12'}>
           <SignalsReading
@@ -147,7 +154,7 @@ export default function Market() {
         )}
       </div>
 
-      {/* B6 联动卡 */}
+      {/* B7 联动卡 */}
       <section className="mt-8" aria-label="联动视图">
         <p className="eyebrow mb-3">联动视图 · DRILL DOWN</p>
         <LinkCards />

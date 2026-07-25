@@ -74,6 +74,7 @@ def test_option_pro_secret_allowlist_is_exact() -> None:
         "FINNHUB_API_KEY",
         "MARKETDATA_TOKEN",
         "MASSIVE_API_KEY",
+        "FRED_API_KEY",
     }
     assert set(personal_secrets.SECRET_KEYS) == expected
     assert legacy_env_adapter.SECRET_KEYS == expected
@@ -102,6 +103,7 @@ def test_browser_settings_expose_only_option_pro_configuration_booleans(
         "MARKETDATA_TOKEN": "market-never-return-this",
         "INTERNAL_API_TOKEN": "internal-never-return-this",
         "MASSIVE_API_KEY": "not-an-option-pro-setting",
+        "FRED_API_KEY": "abcdef0123456789abcdef0123456789",
     }
     for key, value in values.items():
         monkeypatch.setenv(key, value)
@@ -111,6 +113,7 @@ def test_browser_settings_expose_only_option_pro_configuration_booleans(
         "openai": {"configured": True},
         "finnhub": {"configured": True},
         "marketdata": {"configured": True},
+        "fred": {"configured": True},
         "internal_api": {"configured": True},
     }
     serialized = json.dumps(report)
@@ -931,7 +934,10 @@ def test_shell_interface_never_passes_a_secret_value_to_python() -> None:
     assert '*name=rootless*) secret_container_user="0:0"' in script
     assert "Docker user namespace remapping" in script
     assert "Secret values must be entered through standard input." in script
-    assert "FINNHUB_API_KEY|MARKETDATA_TOKEN|MASSIVE_API_KEY|INTERNAL_API_TOKEN" in script
+    assert (
+        "FINNHUB_API_KEY|MARKETDATA_TOKEN|MASSIVE_API_KEY|FRED_API_KEY|INTERNAL_API_TOKEN"
+        in script
+    )
     assert "--force-recreate" in script
     assert ' restart "${running[@]}"' not in script
     assert '"$root/scripts/compose.sh" ps' in script

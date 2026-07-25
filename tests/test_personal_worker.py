@@ -48,6 +48,7 @@ SCHEDULED_TASK_NAMES = {
     "stock_directory",
     "public_home",
     "earnings_analysis",
+    "macro_conditions",
     "strength_refresh",
 }
 MANUAL_TASK_NAMES = {
@@ -132,6 +133,8 @@ def _worker_config(
         macrolens_url=url,
         macrolens_ca_bundle="",
         macrolens_cache_db_path=cache_path or tmp_path / "catalyst-cache.db",
+        macro_conditions_db_path=tmp_path / "macro-conditions.db",
+        fred_api_key=SecretStr(""),
         openai_job_db_path=ai_path or tmp_path / "ai-jobs.db",
         optix_worker_db_path=tmp_path / "optix-worker.db",
         optix_worker_lock_path=tmp_path / "optix-worker.lock",
@@ -1357,6 +1360,7 @@ def test_worker_once_records_scheduled_tasks_and_isolates_failure(
             lambda: success("earnings_analysis"),
             60,
         ),
+        TaskSpec("macro_conditions", lambda: success("macro_conditions"), 60),
         TaskSpec("strength_refresh", lambda: success("strength_refresh"), 60),
     )
     repository = WorkerStateRepository(tmp_path / "worker.db")
@@ -2999,6 +3003,7 @@ def test_default_task_inventory_and_maintenance_backup(
         "optix": tmp_path / "optix.db",
         "catalyst-cache": tmp_path / "catalyst-cache.db",
         "ai-jobs": tmp_path / "ai-jobs.db",
+        "macro-conditions": tmp_path / "macro-conditions.db",
         "backups": tmp_path / "backups",
     }
     worker_db = tmp_path / "optix-worker.db"
@@ -3065,8 +3070,9 @@ def test_default_task_inventory_and_maintenance_backup(
         "catalyst-cache",
         "ai-jobs",
         "optix-worker",
+        "macro-conditions",
     }
-    assert len(list((tmp_path / "backups").glob("*.sqlite3"))) == 4
+    assert len(list((tmp_path / "backups").glob("*.sqlite3"))) == 5
 
     private_config = worker_tasks.get_personal_config()
     password_config = private_config.model_copy(

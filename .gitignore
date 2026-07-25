@@ -24,6 +24,9 @@ build/
 output/
 .playwright-cli/
 frontend/test-results/
+# Playwright now writes under frontend-src/ (playwright.config.mjs outputDir);
+# CI uploads these as an artifact rather than committing them.
+frontend-src/test-results/
 config/migrated/
 config/secrets.env
 secrets.env

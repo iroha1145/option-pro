@@ -59,7 +59,11 @@ export default function Layout() {
 
   return (
     <ShellContext.Provider value={value}>
-      <div className="flex min-h-[100dvh] flex-col">
+      {/* overflow-x-clip：绝对定位的解释浮层即使处于 opacity-0 也占布局盒，
+          窄屏时会把文档撑出横向滚动条。clip 只裁剪绘制，不建立滚动容器、
+          不影响 sticky，也不裁剪 position:fixed 的 Dock 与抽屉；
+          InfoHint 自身已把可见浮层收敛在视口内，因此这里裁不到真实内容。 */}
+      <div className="flex min-h-[100dvh] flex-col overflow-x-clip">
         <Navbar onOpenPalette={openPalette} />
         <IndexTape />
         <main className="mx-auto w-full max-w-shell flex-1 px-4 pt-8 md:px-8">

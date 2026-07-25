@@ -39,6 +39,15 @@ earnings_seconds = 21600
 unusual_seconds = 1800
 failure_retry_seconds = 300
 
+[macro]
+enabled = true
+history_years = 8
+score_window_years = 5
+funding_ema_days = 5
+refresh_times_et = ["08:30", "18:30"]
+manual_refresh_cooldown_seconds = 300
+scoring_version = "optix-macro-score-v1"
+
 [storage]
 retention_days = 90
 backup_keep = 7

@@ -166,23 +166,10 @@ jobs:
       - name: Start backend and unified worker
         run: ./scripts/compose.sh up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180
 
-      - name: Capture Catalyst Desk visual evidence
-        env:
-          OPTIX_VISUAL_BASE_URL: http://127.0.0.1:2000
-        run: npm --prefix frontend-src run test:visual
-
-      - name: Upload visual evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: catalyst-desk-visual-evidence-${{ github.sha }}
-          path: |
-            frontend-src/test-results/visual-evidence/*.png
-            frontend-src/test-results/report/**
-            frontend-src/test-results/playwright/**
-          if-no-files-found: error
-          retention-days: 14
-
+      # 顺序刻意如此：确定性检查（就绪/Inventory、三个离线容器 smoke、
+      # 非 root 与 WAL 校验）全部排在浏览器取证之前。视觉步骤跑在 bash -e 下，
+      # 一次浏览器失败会中止整个 job；若它排在前面，上面这些检查会被 skipped，
+      # 等于被一个前端失败遮住。
       - name: Check local readiness and unified worker inventory
         shell: bash
         run: |
@@ -203,7 +190,7 @@ jobs:
           worker_ready=false
           for attempt in {1..30}; do
             if ./scripts/compose.sh exec -T worker python -m app.worker --healthcheck |
-              python -c 'import json,sys; p=json.load(sys.stdin); expected={"breakout","catalyst_sync","focus","ai_jobs","maintenance","stock_directory","public_home","earnings_analysis","focus_refresh","strength_refresh","breakout_refresh","retention"}; actual={x.get("task_name") for x in p.get("tasks",[])}; assert p.get("healthy") is True; assert p.get("schema_version")=="optix-worker-v2"; assert actual==expected'; then
+              python -c 'import json,sys; p=json.load(sys.stdin); expected={"breakout","catalyst_sync","focus","ai_jobs","maintenance","stock_directory","public_home","earnings_analysis","macro_conditions","focus_refresh","strength_refresh","breakout_refresh","retention"}; actual={x.get("task_name") for x in p.get("tasks",[])}; assert p.get("healthy") is True; assert p.get("schema_version")=="optix-worker-v2"; assert actual==expected'; then
               worker_ready=true
               break
             fi
@@ -234,6 +221,42 @@ jobs:
             worker python /ci-tests/container_personal_catalyst_smoke.py |
             python -c 'import json,sys; p=json.load(sys.stdin); assert p["status"]=="idle"; assert p["processed"]==["news","calendar","local_intelligence"]; assert p["model"]=="gpt-5.6-terra"; assert p["reasoning"]=="max"; assert p["max_concurrency"]==1; assert p["authorization_checked"] is True'
 
+      - name: Exercise Optix macro conditions with offline fixtures
+        shell: bash
+        run: |
+          # Fake FRED transport + synthetic ETF fixture. No real network, no real
+          # FRED key, no provider call: the whole refresh runs inside the image.
+          ./scripts/compose.sh run --rm --no-deps \
+            --env DATA_DIR=/data/container-macro-fixture \
+            --env PYTHONPATH=/app/backend \
+            --volume "${GITHUB_WORKSPACE}/tests:/ci-tests:ro" \
+            worker python /ci-tests/container_macro_conditions_smoke.py |
+            python -c '
+          import json, sys
+          p = json.load(sys.stdin)
+          assert p["task_status"] == "idle", p
+          assert p["published"] is True, p
+          assert p["series_succeeded"] == 24, p
+          assert p["series_failed"] == 0, p
+          assert p["journal_mode"] == "wal", p
+          assert p["integrity_check"] == "ok", p
+          assert p["foreign_key_violations"] == 0, p
+          assert p["schema_version"] == "macro-conditions-v1", p
+          assert p["registered_factors"] == 30, p
+          assert p["factor_rows"] == 30, p
+          assert p["module_rows"] == 7, p
+          assert p["total_modules"] == 7, p
+          assert p["scoring_version"] == "optix-macro-score-v1", p
+          assert p["composite_score_present"] is True, p
+          assert p["valid_module_count"] == 7, p
+          assert p["regime_present"] is True, p
+          assert p["history_basis"] == "latest_revised_backfill", p
+          assert p["api_status"] == "active", p
+          assert p["api_module_count"] == 7, p
+          assert p["ai_block_modules"] == 7, p
+          assert p["ai_block_bytes"] <= 4096, p
+          '
+
       - name: Verify non-root read-only runtime and shared SQLite WAL volume
         shell: bash
         run: |
@@ -253,6 +276,23 @@ jobs:
           ./scripts/compose.sh exec -T backend python -c 'import sqlite3; from pathlib import Path; p=Path("/data/optix.db"); assert p.exists(); assert Path(str(p)+"-wal").exists(); assert Path(str(p)+"-shm").exists(); c=sqlite3.connect(f"file:{p}?mode=ro",uri=True); assert c.execute("PRAGMA journal_mode").fetchone()[0].lower()=="wal"; assert c.execute("SELECT COUNT(*) FROM deployment_wal_probe").fetchone()[0]==0; c.close()'
           wait "$probe_pid"
           ./scripts/compose.sh exec -T backend python -c 'import sqlite3; from pathlib import Path; p=Path("/data/optix.db"); c=sqlite3.connect(f"file:{p}?mode=ro",uri=True); assert c.execute("SELECT COUNT(*) FROM deployment_wal_probe").fetchone()[0]==1; c.close()'
+
+      - name: Capture Catalyst Desk and macro conditions visual evidence
+        env:
+          OPTIX_VISUAL_BASE_URL: http://127.0.0.1:2000
+        run: npm --prefix frontend-src run test:visual
+
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: catalyst-desk-visual-evidence-${{ github.sha }}
+          path: |
+            frontend-src/test-results/visual-evidence/*.png
+            frontend-src/test-results/report/**
+            frontend-src/test-results/playwright/**
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Show container logs after failure
         if: failure()
