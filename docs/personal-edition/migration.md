@@ -112,7 +112,7 @@ curl --fail http://127.0.0.1:${PORT:-2000}/ready
 ./scripts/compose.sh exec -T worker python -m app.worker --healthcheck
 ```
 
-工作进程结果应且只应包含 `breakout`、`catalyst_sync`、`focus`、`ai_jobs`、`maintenance`、`public_home`、`focus_refresh`、`strength_refresh`、`breakout_refresh` 和 `retention`。
+工作进程结果应且只应包含 `breakout`、`catalyst_sync`、`focus`、`ai_jobs`、`maintenance`、`stock_directory`、`public_home`、`earnings_analysis`、`macro_conditions`、`focus_refresh`、`strength_refresh`、`breakout_refresh` 和 `retention`。
 
 ## 回滚
 

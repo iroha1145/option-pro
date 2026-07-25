@@ -56,15 +56,17 @@ chmod 600 .env machine.env secrets.env
 - `TRUSTED_PROXY_CIDRS`
 - `DATA_DIR`
 
-`secrets.env` 只保存五项服务端密钥：
+`secrets.env` 只保存七项服务端密钥：
 
 - `OPENAI_API_KEY`
 - `FINNHUB_API_KEY`
 - `MARKETDATA_TOKEN`
+- `MASSIVE_API_KEY`
+- `FRED_API_KEY`
 - `INTERNAL_API_TOKEN`
 - `APP_PASSWORD_HASH`
 
-进程已经导出的值优先级最高；`.env` 只保留一个版本迁移期的兼容用途，`machine.env` 只接收七个机器字段，`secrets.env` 只接收五个密钥。错放到其他文件的字段不会覆盖正式来源。
+进程已经导出的值优先级最高；`.env` 只保留一个版本迁移期的兼容用途，`machine.env` 只接收七个机器字段，`secrets.env` 只接收七个密钥。错放到其他文件的字段不会覆盖正式来源。
 
 旧名称 `MARKETDATA_API_TOKEN`、`MACROLENS_BASE_URL` 和 `MACROLENS_INTERNAL_TOKEN` 只供迁移工具识别。旧名与新名同时存在且值不一致时，迁移会停止，不会猜测采用哪一项。旧签名密钥、请求随机数（Nonce）、密钥编号（Key ID）、前一把密钥和浏览器令牌不会进入最终运行配置。
 
@@ -126,6 +128,8 @@ mode = "private_network"
 ./personal.sh secrets set OPENAI_API_KEY
 ./personal.sh secrets set FINNHUB_API_KEY
 ./personal.sh secrets set MARKETDATA_TOKEN
+./personal.sh secrets set MASSIVE_API_KEY
+./personal.sh secrets set FRED_API_KEY
 ./personal.sh secrets set INTERNAL_API_TOKEN
 ./personal.sh secrets set APP_PASSWORD_HASH
 ./personal.sh secrets remove OPENAI_API_KEY
@@ -143,14 +147,17 @@ curl --fail http://127.0.0.1:2000/ready
 ./scripts/compose.sh exec -T worker python -m app.worker --healthcheck
 ```
 
-统一工作进程应且只应报告十项任务：
+统一工作进程应且只应报告十三项任务：
 
 - `breakout`
 - `catalyst_sync`
 - `focus`
 - `ai_jobs`
 - `maintenance`
+- `stock_directory`
 - `public_home`
+- `earnings_analysis`
+- `macro_conditions`
 - `focus_refresh`
 - `strength_refresh`
 - `breakout_refresh`
@@ -164,6 +171,7 @@ curl --fail http://127.0.0.1:2000/ready
 
 - `optix.db`
 - `catalyst-cache.db`
+- `macro-conditions.db`
 - `public-home-snapshot-v1.json`
 - `ai-jobs.db`
 - `optix-worker.db`
@@ -176,6 +184,38 @@ curl --fail http://127.0.0.1:2000/ready
 ## 期权异动范围
 
 `GET /api/options/unusual` 不是全市场实时扫描。它只扫描 `NVDA`、`TSLA`、`AAPL`、`AMD`、`AMZN`、`META`、`MSFT`、`SPY`、`QQQ`、`GOOGL`，每个标的检查 Yahoo 返回的前两个到期日，结果缓存 120 秒并最多返回 50 条。
+
+## Optix 宏观环境
+
+`/market` 页第 B4 区块（六维形态之后、信号解读之前）展示 **Optix 宏观环境**：
+用 FRED、纽约联储、联储理事会、芝加哥联储、Cboe 的 24 个公开时间序列，加上 8 个走现有
+股票日线链的跨资产 ETF 代理，计算 30 个因子、7 个模块和一个等权综合分。
+
+**分数是过去 5 年的滚动历史分位，不是预测概率。** 高分表示当前金融环境相对自身历史
+更支持风险资产，不代表市场一定上涨，也不构成买入、卖出、仓位或目标价建议。
+历史区间按当前修订值回算，不是当时市场已知的分数；本地部署后每次实际抓取形成的快照
+才具备真实的点时语义。缺失的因子不会按中性 50 计入，而是移出权重重新归一。
+v1 只用于展示与研究，**不写入任何正式股票评分**。
+
+启用：
+
+```bash
+./personal.sh secrets set FRED_API_KEY   # 未配置时功能显示「未启用」，Worker 仍然健康
+```
+
+- 数据库：`macro-conditions.db`（独立于 `optix.db`，已进入自动备份与 Retention 前备份）
+- 工作进程任务：`macro_conditions`（定时与手动共用同一个任务）
+- 默认刷新时刻：每日 America/New_York `08:30` 与 `18:30`，手动刷新冷却 300 秒
+- 只读接口对匿名访客与 Customer Account 开放；手动刷新仅 Owner
+- 配置：`config/personal.toml` 的 `[macro]` 段
+
+详见 [docs/macro-conditions/](docs/macro-conditions/)：
+[架构](docs/macro-conditions/architecture.md) ·
+[数据源](docs/macro-conditions/data-sources.md) ·
+[30 个因子](docs/macro-conditions/factors.md) ·
+[评分](docs/macro-conditions/scoring.md) ·
+[点时语义](docs/macro-conditions/point-in-time.md) ·
+[运维](docs/macro-conditions/operations.md)
 
 ## 本地验证
 

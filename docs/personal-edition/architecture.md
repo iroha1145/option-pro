@@ -27,7 +27,7 @@ backend ── 同源 JSON 动作 ──> 本地任务队列
                                       └─> MacroLens 只读新闻 ETL
 ```
 
-Option Pro 常驻两个容器。`backend` 不运行长循环或付费任务；`worker` 持有唯一进程锁，在同一进程内隔离十类任务。私有网络模式运行五类定时与后台循环；密码模式再启用`public_home`，共六类。其余四类分别消费 `focus_refresh`、`strength_refresh`、`breakout_refresh` 和 `retention` 手动请求。某类任务失败时只更新自身状态并退避，不拖垮其他任务。
+Option Pro 常驻两个容器。`backend` 不运行长循环或付费任务；`worker` 持有唯一进程锁，在同一进程内隔离十三类任务。私有网络模式运行八类定时与后台循环（含 `macro_conditions`）；密码模式再启用`public_home`，共九类。其余四类分别消费 `focus_refresh`、`strength_refresh`、`breakout_refresh` 和 `retention` 手动请求。某类任务失败时只更新自身状态并退避，不拖垮其他任务。
 
 MacroLens 只提供原始新闻、来源标的和日历。它不能创建 Option Pro 的模型任务，也不能回调 Option Pro。新闻归并、简体中文标题与摘要、分析修订和热点周期全部保存在 Option Pro。
 

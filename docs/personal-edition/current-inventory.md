@@ -21,6 +21,7 @@
 | `ai_jobs` | 处理 Owner 已创建的模型任务 | 无密钥、超预算或无任务时不提交 |
 | `maintenance` | 备份、清理和完整性维护 | 只操作本地数据 |
 | `public_home` | 定时保存匿名首页所需的六类行情数据 | 单项失败保留上一份成功结果，不运行模型 |
+| `macro_conditions` | 拉取 FRED 与 ETF 代理，重算 Optix 宏观环境快照 | 定时与手动共用同一任务；无 FRED 密钥时报告 disabled 而不是失败；刷新失败保留上一份有效快照 |
 | `focus_refresh` | 消费 Owner 发起的焦点池立即刷新 | 复用同类在途请求，失败保留旧快照 |
 | `strength_refresh` | 消费 Owner 发起的强度雷达立即刷新 | 与其他手动工作分开报告运行状态 |
 | `breakout_refresh` | 消费 Owner 发起的突破雷达立即刷新 | 不把真实扫描当成健康检查 |
