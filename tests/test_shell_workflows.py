@@ -1701,3 +1701,30 @@ def test_deploy_expected_inventory_tracks_the_worker_itself() -> None:
         f"Missing: {sorted(set(DEFAULT_TASK_NAMES) - in_fixture)}. "
         f"Unexpected: {sorted(in_fixture - set(DEFAULT_TASK_NAMES))}."
     )
+
+
+def test_single_quoted_python_blocks_in_ci_contain_no_apostrophe() -> None:
+    """An apostrophe closes the shell string and hands the rest to bash.
+
+    The macro gate is written as ``python -c '<block>'``. A prose comment
+    inside that block containing "the code's own constant" terminated the
+    string, and every following line ran as a shell command -- the job failed
+    with ``assert: command not found`` rather than with anything about the
+    assertion. The failure names the wrong thing, so it is worth a guard.
+    """
+
+    import re
+    from pathlib import Path
+
+    workflow = (
+        Path(__file__).resolve().parents[1] / ".github" / "workflows" / "ci.yml"
+    ).read_text(encoding="utf-8")
+
+    blocks = re.findall(r"python -c '\n(.*?)\n\s*'", workflow, re.S)
+    assert blocks, "expected at least one single-quoted inline python block"
+    for block in blocks:
+        offenders = [line for line in block.splitlines() if "'" in line]
+        assert offenders == [], (
+            "apostrophe inside a single-quoted inline python block: "
+            f"{offenders}"
+        )
