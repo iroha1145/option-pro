@@ -27,6 +27,11 @@ export interface AccessStatus {
   /** 当前是否可立即创建新分析任务（忙碌/额度/配置均由后台判定）。 */
   aiAvailable: boolean;
   aiReason: string | null;
+  /**
+   * 已登录客户的用户名；未登录或以 admin 身份登录时为 null。
+   * 客户身份与管理员身份彼此独立，不能互相推导。
+   */
+  accountUsername: string | null;
 }
 
 /* ---------- 信号 / 强度 ---------- */

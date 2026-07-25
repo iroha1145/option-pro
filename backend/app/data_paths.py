@@ -47,6 +47,7 @@ class DataPaths:
     public_home_snapshot: Path
     backups_dir: Path
     runtime_settings: Path
+    accounts_db: Path
 
 
 def get_data_paths(value: str | Path | None = None) -> DataPaths:
@@ -63,6 +64,7 @@ def get_data_paths(value: str | Path | None = None) -> DataPaths:
         public_home_snapshot=root / "public-home-snapshot-v1.json",
         backups_dir=root / "backups",
         runtime_settings=root / "runtime-settings.json",
+        accounts_db=root / "accounts.db",
     )
 
 

@@ -542,9 +542,33 @@ def request_uses_https(request: Request) -> bool:
     )
 
 
-def require_same_origin_json(request: Request) -> None:
-    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
-    if content_type != "application/json":
+#: Content types a cross-origin HTML form can produce without a preflight.
+_FORM_CONTENT_TYPES = frozenset(
+    {
+        "application/x-www-form-urlencoded",
+        "multipart/form-data",
+        "text/plain",
+    }
+)
+
+
+def require_same_origin_request(request: Request) -> None:
+    """Same-origin proof without requiring a JSON body or owner access.
+
+    Bodyless mutations (DELETE, sign-out) need the CSRF guard but have no
+    content type to assert, and customer routes must not demand owner access
+    the way :func:`require_same_origin_action` does.
+
+    A body is still refused when it carries one of the simple form content
+    types: those are precisely what a cross-origin ``<form>`` can send, so
+    rejecting them keeps the same defence-in-depth as the JSON guard even
+    though no body is expected here.
+    """
+
+    content_type = (
+        request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    )
+    if content_type in _FORM_CONTENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail={"code": "json_required", "message": "JSON request required"},
@@ -567,6 +591,16 @@ def require_same_origin_json(request: Request) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": "same_origin_required", "message": "Same-origin request required"},
         )
+
+
+def require_same_origin_json(request: Request) -> None:
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content_type != "application/json":
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail={"code": "json_required", "message": "JSON request required"},
+        )
+    require_same_origin_request(request)
 
 
 def require_same_origin_action(request: Request) -> None:

@@ -4,14 +4,20 @@ import { asRec, pickB, pickS } from '../live';
 import * as session from '@/mocks/session';
 import type { AccessStatus } from '../types';
 
-/** 真实后端形状：{ access_mode: "password" | "private_network", logged_in: boolean } */
+/**
+ * 真实后端形状。`logged_in` 只表示管理员（admin）身份；
+ * `account` 是与之独立的客户会话，二者不能互相推导。
+ */
 interface LiveAccessStatus {
   access_mode: 'password' | 'private_network';
   logged_in: boolean;
+  account?: { logged_in?: boolean; username?: string | null } | null;
 }
 
 async function liveStatus(): Promise<AccessStatus> {
   const s = await get<LiveAccessStatus>('/access/status');
+  const accountUsername =
+    s.account?.logged_in === true && s.account.username ? String(s.account.username) : null;
   const owner = s.access_mode === 'private_network' || s.logged_in;
   if (!owner) {
     return {
@@ -19,6 +25,7 @@ async function liveStatus(): Promise<AccessStatus> {
       aiEnabled: false,
       aiAvailable: false,
       aiReason: 'owner_login_required',
+      accountUsername,
     };
   }
 
@@ -42,6 +49,7 @@ async function liveStatus(): Promise<AccessStatus> {
         : aiEnabled
           ? pickS(capability, 'status') ?? 'analysis_unavailable'
           : 'manual_analysis_disabled',
+      accountUsername,
     };
   } catch {
     // 登录身份仍以 access/status 为准；模型能力或运行设置探针失败时绝不显示假绿灯。
@@ -50,6 +58,7 @@ async function liveStatus(): Promise<AccessStatus> {
       aiEnabled: false,
       aiAvailable: false,
       aiReason: 'analysis_status_unavailable',
+      accountUsername,
     };
   }
 }
@@ -64,10 +73,16 @@ async function liveStatus(): Promise<AccessStatus> {
 export const accessApi = {
   status: (): Promise<AccessStatus> =>
     mockOr(() => session.getAccess(), liveStatus),
-  login: (password: string): Promise<AccessStatus> =>
+  /** 用户名为 admin 时走管理员通道，其余走客户账号表。 */
+  login: (username: string, password: string): Promise<AccessStatus> =>
     mockOr(
       () => session.login(password),
-      () => post('/access/login', { password }).then(liveStatus),
+      () => post('/access/login', { username, password }).then(liveStatus),
+    ),
+  register: (username: string, password: string): Promise<AccessStatus> =>
+    mockOr(
+      () => session.login(password),
+      () => post('/account/register', { username, password }).then(liveStatus),
     ),
   logout: (): Promise<AccessStatus> =>
     mockOr(

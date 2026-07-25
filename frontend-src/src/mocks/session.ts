@@ -4,6 +4,7 @@ import type { AccessStatus, RuntimeSettings } from '@/api/types';
 const session = {
   role: 'visitor' as AccessStatus['role'],
   aiEnabled: true,
+  username: null as string | null,
 };
 
 export function getAccess(): AccessStatus {
@@ -13,6 +14,7 @@ export function getAccess(): AccessStatus {
     aiEnabled: owner && session.aiEnabled,
     aiAvailable: owner && session.aiEnabled,
     aiReason: owner && session.aiEnabled ? null : owner ? 'analysis_trigger_disabled' : 'owner_login_required',
+    accountUsername: session.username,
   };
 }
 
@@ -25,6 +27,7 @@ export function login(password: string): AccessStatus {
 
 export function logout(): AccessStatus {
   session.role = 'visitor';
+  session.username = null;
   return getAccess();
 }
 

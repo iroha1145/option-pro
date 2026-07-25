@@ -21,6 +21,7 @@ from app.access import (
     require_owner_access,
     require_same_origin_action,
     require_same_origin_json,
+    require_same_origin_request,
 )
 import app.access as access_module
 from app.api import access as access_api
@@ -146,7 +147,26 @@ _SAME_ORIGIN_JSON_ONLY_OPERATIONS = {
     ("POST", "/api/ai/earnings-impact/{ticker}/reports/{report_date}"),
     ("POST", "/api/catalysts/tickers/batch"),
     ("POST", "/api/stocks/{ticker}/pull"),
+    # Customer account surface. Sign-up has to work before any session exists,
+    # and the watchlist writes resolve the caller's own account from its cookie
+    # and can only reach that account's rows — so they carry same-origin proof
+    # without demanding owner access.
+    ("POST", "/api/account/register"),
+    ("POST", "/api/account/watchlist"),
+    ("PUT", "/api/account/watchlist"),
 }
+
+#: Same category, but bodyless — there is no content type to assert, so these
+#: take the origin-only guard instead of the JSON one.
+_SAME_ORIGIN_REQUEST_ONLY_OPERATIONS = {
+    ("POST", "/api/account/logout"),
+    ("DELETE", "/api/account/watchlist/{ticker}"),
+}
+
+#: Every operation that is deliberately reachable without an owner session.
+_NON_OWNER_OPERATIONS = (
+    _SAME_ORIGIN_JSON_ONLY_OPERATIONS | _SAME_ORIGIN_REQUEST_ONLY_OPERATIONS
+)
 
 
 def _effective_fastapi_routes(app: FastAPI):
@@ -293,7 +313,13 @@ def test_password_mode_serves_public_reads_and_protects_owner_surfaces() -> None
         assert client.get("/api/market/status").status_code == 200
         status = client.get("/api/access/status")
         assert status.status_code == 200
-        assert status.json() == {"access_mode": "password", "logged_in": False}
+        # ``logged_in`` stays owner-only; the account block reports the
+        # separate customer session and is absent here.
+        assert status.json() == {
+            "access_mode": "password",
+            "logged_in": False,
+            "account": {"logged_in": False, "username": None},
+        }
 
         owner_page = client.get("/owner.html")
         assert owner_page.status_code == 303
@@ -390,7 +416,12 @@ def test_password_login_sets_strict_server_only_cookie_and_unlocks_owner_routes(
         assert client.get("/api/value").status_code == 200
         status = client.get("/api/access/status")
         assert status.status_code == 200
-        assert status.json() == {"access_mode": "password", "logged_in": True}
+        assert status.json() == {
+            "access_mode": "password",
+            "logged_in": True,
+            # An owner session does not imply a customer account.
+            "account": {"logged_in": False, "username": None},
+        }
 
 
 def test_a_new_owner_login_invalidates_the_previous_session() -> None:
@@ -1109,7 +1140,7 @@ def test_anonymous_requests_cannot_reach_any_owner_state_changing_route() -> Non
     operations = [
         (method, template)
         for method, template, _route in _real_body_operations()
-        if (method, template) not in _SAME_ORIGIN_JSON_ONLY_OPERATIONS
+        if (method, template) not in _NON_OWNER_OPERATIONS
     ]
     assert len(operations) >= 15
     assert ("PUT", "/api/runtime-settings") in operations
@@ -1153,14 +1184,21 @@ def test_every_real_body_route_declares_the_required_same_origin_dependency() ->
         if (method, path) in _SAME_ORIGIN_JSON_ONLY_OPERATIONS
     } == _SAME_ORIGIN_JSON_ONLY_OPERATIONS
 
+    assert {
+        (method, path)
+        for method, path, _route in operations
+        if (method, path) in _SAME_ORIGIN_REQUEST_ONLY_OPERATIONS
+    } == _SAME_ORIGIN_REQUEST_ONLY_OPERATIONS
+
     missing: list[tuple[str, str, str]] = []
     for method, path, route in operations:
         calls = set(_dependency_calls(route.dependant))
-        expected_dependency = (
-            require_same_origin_json
-            if (method, path) in _SAME_ORIGIN_JSON_ONLY_OPERATIONS
-            else require_same_origin_action
-        )
+        if (method, path) in _SAME_ORIGIN_REQUEST_ONLY_OPERATIONS:
+            expected_dependency = require_same_origin_request
+        elif (method, path) in _SAME_ORIGIN_JSON_ONLY_OPERATIONS:
+            expected_dependency = require_same_origin_json
+        else:
+            expected_dependency = require_same_origin_action
         if expected_dependency not in calls:
             missing.append((method, path, expected_dependency.__name__))
 

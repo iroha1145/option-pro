@@ -41,6 +41,7 @@ from app.access import (
 from app.deployment_boundary import canonicalize_hostname, normalize_allowed_hosts
 from app.api import (
     access,
+    accounts,
     ai,
     breakouts,
     catalysts,
@@ -277,6 +278,27 @@ _PASSWORD_ENTRY_PATHS = {
 _PASSWORD_ENTRY_PREFIXES = ("/assets/",)
 
 
+_ACCOUNT_API_PREFIX = "/api/account"
+
+
+def _is_account_api_request(path: str, method: str) -> bool:
+    """Customer account surface — it authenticates itself, so the owner gate
+    does not apply.
+
+    Sign-up and sign-in have to be reachable before any session exists, and the
+    watchlist routes resolve the caller's own account from its cookie and can
+    only ever touch that account's rows. Same-origin checks and per-IP rate
+    limits still apply on every route here; none of them read owner state or
+    spend provider budget.
+    """
+
+    if path != _ACCOUNT_API_PREFIX and not path.startswith(
+        _ACCOUNT_API_PREFIX + "/"
+    ):
+        return False
+    return method.upper() in {"GET", "HEAD", "POST", "PUT", "DELETE"}
+
+
 def _is_public_read_api_path(path: str) -> bool:
     return (
         path in _PUBLIC_READ_API_PATHS
@@ -292,6 +314,8 @@ def _is_public_read_request(path: str, method: str) -> bool:
     """Return whether password-mode visitors may use this bounded surface."""
 
     normalized_method = method.upper()
+    if _is_account_api_request(path, normalized_method):
+        return True
     if normalized_method in {"GET", "HEAD"}:
         return bool(
             path in _PUBLIC_DOCUMENT_PATHS
@@ -585,6 +609,9 @@ app.include_router(breakouts.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(worker_actions.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(runtime_settings.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(access.router)
+# No owner dependency: every account route authenticates the caller from its
+# own cookie and can only reach that caller's rows.
+app.include_router(accounts.router)
 app.include_router(settings.router)
 
 # Docker-compose runs from /app/backend; local runs may be from repo root.

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
 import { stocksApi } from '@/api/modules/stocks';
+import { accountApi } from '@/api/modules/account';
 import { signalsApi } from '@/api/modules/signals';
 import { strengthApi } from '@/api/modules/strength';
 import { marketApi } from '@/api/modules/market';
@@ -259,12 +260,15 @@ function WatchCard({
   item,
   index,
   onClick,
+  onRemove,
   showStrength,
   showSignals,
 }: {
   item: WatchlistItem;
   index: number;
   onClick: () => void;
+  /** 仅登录客户可移除自己的自选 */
+  onRemove?: () => void;
   showStrength: boolean;
   showSignals: boolean;
 }) {
@@ -275,8 +279,32 @@ function WatchCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.045, 0.5) }}
       onClick={onClick}
-      className="card-surface card-hover flex flex-col p-4 text-left"
+      className="group/card card-surface card-hover relative flex flex-col p-4 text-left"
     >
+      {onRemove && (
+        /* 卡片本身是 button，移除键用 span[role=button] 以免非法嵌套 */
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label={`将 ${item.ticker} 移出自选`}
+          title="移出自选"
+          onClick={(event) => {
+            event.stopPropagation();
+            event.preventDefault();
+            onRemove();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.stopPropagation();
+              event.preventDefault();
+              onRemove();
+            }
+          }}
+          className="absolute right-2 top-2 z-10 inline-flex size-6 cursor-pointer items-center justify-center rounded-xs text-ink-300 opacity-0 outline-none transition-[opacity,color] duration-fast hover:bg-paper-2 hover:text-down-700 focus-visible:opacity-100 group-hover/card:opacity-100"
+        >
+          <Icon name="x" size={13} />
+        </span>
+      )}
       <div className="flex items-center gap-2.5">
         <TickerLogo ticker={item.ticker} />
         <div className="min-w-0 flex-1">
@@ -308,7 +336,7 @@ function WatchCard({
 
 /* ================= 页面主体 ================= */
 export default function Watchlist() {
-  const { isVisitor, isOwner } = useAccess();
+  const { isVisitor, isOwner, isCustomer, username } = useAccess();
   const { openPalette, openTicker } = useShell();
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -317,10 +345,73 @@ export default function Watchlist() {
   const [sort, setSort] = useState<SortState | null>(null);
   const [forceRefreshing, setForceRefreshing] = useState(false);
 
-  const fetchWatchlist = useCallback(() => stocksApi.watchlist(), []);
+  /* 登录客户读自己那份自选；未登录仍是站点默认列表。 */
+  const [myTickers, setMyTickers] = useState<string[] | null>(null);
+  const [maxTickers, setMaxTickers] = useState(50);
+  const [addInput, setAddInput] = useState('');
+  const [savingTicker, setSavingTicker] = useState(false);
 
-  const wl = usePolling(fetchWatchlist, 60_000);
+  useEffect(() => {
+    if (!isCustomer) {
+      setMyTickers(null);
+      return;
+    }
+    let alive = true;
+    accountApi
+      .watchlist()
+      .then((data) => {
+        if (!alive) return;
+        setMyTickers(data.tickers);
+        setMaxTickers(data.maxTickers);
+      })
+      .catch(() => {
+        if (alive) setMyTickers([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [isCustomer]);
+
+  const personalKey = myTickers ? myTickers.join(',') : '';
+  const fetchWatchlist = useCallback(
+    () => (isCustomer && myTickers ? stocksApi.watchlist(false, myTickers) : stocksApi.watchlist()),
+    // personalKey 参与依赖：个人列表变化后要重新取行情
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isCustomer, personalKey, myTickers],
+  );
+
+  const wl = usePolling(fetchWatchlist, 60_000, [isCustomer, personalKey]);
   const refreshWatchlist = wl.refresh;
+
+  const onAddTicker = useCallback(async () => {
+    const symbol = addInput.trim().toUpperCase();
+    if (!symbol || savingTicker) return;
+    setSavingTicker(true);
+    try {
+      const next = await accountApi.add(symbol);
+      setMyTickers(next.tickers);
+      setMaxTickers(next.maxTickers);
+      setAddInput('');
+      toast.success('已加入自选', symbol);
+    } catch (error) {
+      toast.error('加入失败', error instanceof ApiError ? error.message : '请稍后再试');
+    } finally {
+      setSavingTicker(false);
+    }
+  }, [addInput, savingTicker, toast]);
+
+  const onRemoveTicker = useCallback(
+    async (symbol: string) => {
+      try {
+        const next = await accountApi.remove(symbol);
+        setMyTickers(next.tickers);
+        toast.info('已移出自选', symbol);
+      } catch (error) {
+        toast.error('移除失败', error instanceof ApiError ? error.message : '请稍后再试');
+      }
+    },
+    [toast],
+  );
   const signalsQ = usePolling(() => signalsApi.market(), 60_000);
   const strengthQ = usePolling(() => strengthApi.market(), 60_000);
   const statusQ = usePolling(() => marketApi.status(), 60_000);
@@ -519,6 +610,12 @@ export default function Watchlist() {
         description="你盯住的票，今天谁在动。"
         meta={
           <>
+            {username && (
+              <span className="hidden items-center gap-1.5 rounded-pill border border-line-strong bg-card px-2.5 py-1 text-caption text-ink-600 sm:inline-flex">
+                <Icon name="command" size={12} className="text-brand-600" />
+                {username}
+              </span>
+            )}
             <SessionLED session={statusQ.data?.session ?? 'closed'} label={statusQ.data?.label} />
             <span className="hidden font-mono text-data-m text-ink-600 tnum sm:inline" suppressHydrationWarning>
               {fmtNyTime(new Date(now))}
@@ -602,9 +699,36 @@ export default function Watchlist() {
                 onChange={setView}
               />
               <SortDropdown sort={sort} onChange={setSort} />
+              {isCustomer && (
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void onAddTicker();
+                  }}
+                  className="flex items-center gap-1.5"
+                >
+                  <input
+                    value={addInput}
+                    onChange={(event) => setAddInput(event.target.value)}
+                    placeholder="加自选"
+                    maxLength={12}
+                    aria-label="添加自选股票代码"
+                    className="h-8 w-[92px] rounded-sm border border-line-strong bg-card px-2 font-mono text-caption uppercase text-ink-800 outline-none transition-[border-color,box-shadow] duration-fast placeholder:font-sans placeholder:normal-case placeholder:text-ink-300 focus:border-brand-600 focus:shadow-focus-ring"
+                  />
+                  <button
+                    type="submit"
+                    disabled={savingTicker || !addInput.trim()}
+                    className="flex h-8 items-center gap-1 rounded-sm border border-line-strong bg-card px-2.5 text-caption text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Icon name="plus" size={13} />
+                    添加
+                  </button>
+                </form>
+              )}
             </div>
             <p className="w-full text-right text-caption text-ink-400 sm:w-auto">
               <span className="font-mono tnum">{items.length}</span> 只标的
+              {isCustomer && <span className="ml-1 text-ink-300">/ 上限 {maxTickers}</span>}
               {wl.lastUpdatedAt && (
                 <span className="ml-2 hidden font-mono text-micro tnum sm:inline">更新 {fmtTimeHHMMSS(wl.lastUpdatedAt)}</span>
               )}
@@ -640,8 +764,18 @@ export default function Watchlist() {
                 <EmptyState
                   image="/empty-watchlist.svg"
                   title="清单还是空的"
-                  description="按 ⌘K 搜索代码，加入你的第一只自选"
-                  footnote={isVisitor ? '当前为访客只读模式' : undefined}
+                  description={
+                    isCustomer
+                      ? '在上方输入股票代码，加入你的第一只自选'
+                      : '登录后可以把自选股保存在账号里，换设备也还在'
+                  }
+                  footnote={
+                    isCustomer
+                      ? `自选保存在账号 ${username} 下`
+                      : isVisitor
+                        ? '当前为访客只读模式'
+                        : undefined
+                  }
                   action={
                     <button
                       onClick={openPalette}
@@ -674,6 +808,7 @@ export default function Watchlist() {
                       item={it}
                       index={i}
                       onClick={() => openTicker(it.ticker)}
+                      onRemove={isCustomer ? () => void onRemoveTicker(it.ticker) : undefined}
                       showStrength={rowStrengthAvailable}
                       showSignals={rowSignalsAvailable}
                     />
@@ -688,6 +823,7 @@ export default function Watchlist() {
                     item={it}
                     index={i}
                     onClick={() => openTicker(it.ticker)}
+                    onRemove={isCustomer ? () => void onRemoveTicker(it.ticker) : undefined}
                     showStrength={rowStrengthAvailable}
                     showSignals={rowSignalsAvailable}
                   />

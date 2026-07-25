@@ -11,8 +11,13 @@ interface AccessContextValue {
   aiReason: string | null;
   isOwner: boolean;
   isVisitor: boolean;
+  /** 已登录客户的用户名；管理员或未登录时为 null。 */
+  username: string | null;
+  /** 是否为已登录的普通客户（与 isOwner 互不蕴含）。 */
+  isCustomer: boolean;
   loading: boolean;
-  login: (password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
+  register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -29,6 +34,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     aiEnabled: false,
     aiAvailable: false,
     aiReason: 'owner_login_required',
+    accountUsername: null,
   });
   const [loading, setLoading] = useState(true);
 
@@ -50,12 +56,14 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     if (status.role !== 'owner') return;
     const verify = () => void refresh().catch(() => undefined);
     const onInvalidated = () => {
-      setStatus({
+      setStatus((current) => ({
         role: 'visitor',
         aiEnabled: false,
         aiAvailable: false,
         aiReason: 'owner_login_required',
-      });
+        // 管理员会话失效不代表客户会话也失效；由随后的 refresh 校准。
+        accountUsername: current.accountUsername,
+      }));
       verify();
     };
     const onVisibility = () => {
@@ -73,8 +81,12 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     };
   }, [refresh, status.role]);
 
-  const login = useCallback(async (password: string) => {
-    setStatus(await accessApi.login(password));
+  const login = useCallback(async (username: string, password: string) => {
+    setStatus(await accessApi.login(username, password));
+  }, []);
+
+  const register = useCallback(async (username: string, password: string) => {
+    setStatus(await accessApi.register(username, password));
   }, []);
 
   const logout = useCallback(async () => {
@@ -89,12 +101,15 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       aiReason: status.aiReason,
       isOwner: status.role === 'owner',
       isVisitor: status.role !== 'owner',
+      username: status.accountUsername,
+      isCustomer: status.accountUsername !== null,
       loading,
       login,
+      register,
       logout,
       refresh,
     }),
-    [status, loading, login, logout, refresh],
+    [status, loading, login, register, logout, refresh],
   );
 
   return <AccessContext.Provider value={value}>{children}</AccessContext.Provider>;

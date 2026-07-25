@@ -1,0 +1,321 @@
+from __future__ import annotations
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.access import request_owner_access_context
+from app.api import access as access_api
+from app.api import accounts as accounts_api
+from app.services.accounts import (
+    AccountError,
+    AccountStore,
+    WATCHLIST_MAX_TICKERS,
+    hash_account_password,
+    set_account_store,
+    verify_account_password,
+)
+
+HEADERS = {"Origin": "https://localhost", "X-Optix-Action": "1"}
+
+
+@pytest.fixture()
+def store(tmp_path, monkeypatch: pytest.MonkeyPatch) -> AccountStore:
+    created = AccountStore(tmp_path / "accounts.db")
+    set_account_store(created)
+    accounts_api.reset_rate_limits()
+    yield created
+    set_account_store(None)
+    accounts_api.reset_rate_limits()
+
+
+@pytest.fixture()
+def client(store: AccountStore) -> TestClient:
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def visitor_access(request, call_next):
+        with request_owner_access_context(False):
+            return await call_next(request)
+
+    app.include_router(accounts_api.router)
+    app.include_router(access_api.router)
+    # base_url https so the HTTPS gate is satisfied the same way production is.
+    return TestClient(app, base_url="https://localhost")
+
+
+def _register(client: TestClient, username: str, password: str):
+    return client.post(
+        "/api/account/register",
+        json={"username": username, "password": password},
+        headers=HEADERS,
+    )
+
+
+# ---------------- password handling ----------------
+
+
+def test_passwords_are_hashed_with_owner_grade_stretching() -> None:
+    """No complexity floor, but a weak password still gets strong stretching."""
+
+    encoded = hash_account_password("a")
+    algorithm, iterations, salt, digest = encoded.split("$")
+    assert algorithm == "pbkdf2_sha256"
+    assert int(iterations) >= 240_000
+    assert salt and digest
+    # The stored value is a derivation, never the secret itself.
+    assert "a" not in (algorithm, iterations, salt, digest)
+    assert verify_account_password("a", encoded) is True
+    assert verify_account_password("b", encoded) is False
+    # Same salt, same password → same digest (the derivation is deterministic).
+    from app.services.accounts import _b64decode as decode
+
+    assert hash_account_password("a", salt=decode(salt)) == encoded
+
+
+def test_same_password_gets_a_distinct_salt() -> None:
+    assert hash_account_password("hunter2") != hash_account_password("hunter2")
+
+
+@pytest.mark.parametrize("password", ["", "x" * 257, "with\x00null", "line\nbreak"])
+def test_unstorable_passwords_are_refused(password: str) -> None:
+    with pytest.raises(AccountError):
+        hash_account_password(password)
+
+
+def test_short_and_simple_passwords_are_accepted(store: AccountStore) -> None:
+    """The product decision is no complexity requirement — honour it."""
+
+    session = store.register("shorty", "1")
+    assert session.account.username == "shorty"
+
+
+# ---------------- registration ----------------
+
+
+def test_register_signs_in_and_sets_an_httponly_cookie(client: TestClient) -> None:
+    response = _register(client, "alice", "pw")
+    assert response.status_code == 201
+    assert response.json()["username"] == "alice"
+    cookie = response.headers["set-cookie"]
+    assert accounts_api.ACCOUNT_COOKIE_NAME in cookie
+    assert "HttpOnly" in cookie
+    assert "Secure" in cookie
+    assert "SameSite=strict" in cookie
+    identity = client.get("/api/account/me").json()
+    assert identity["logged_in"] is True
+    assert identity["username"] == "alice"
+
+
+def test_usernames_are_unique_case_and_width_insensitively(client: TestClient) -> None:
+    assert _register(client, "Alice", "pw").status_code == 201
+    clash = _register(client, "alice", "other")
+    assert clash.status_code == 409
+    assert clash.json()["detail"]["code"] == "username_taken"
+    # Full-width characters normalise to the same key.
+    assert _register(client, "ａlice", "other").status_code == 409
+
+
+@pytest.mark.parametrize("username", ["admin", "Admin", "ADMIN", "owner", "root"])
+def test_reserved_usernames_cannot_be_registered(
+    client: TestClient,
+    username: str,
+) -> None:
+    response = _register(client, username, "pw")
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "username_reserved"
+
+
+def test_registration_is_rate_limited_per_client(client: TestClient) -> None:
+    for index in range(5):
+        assert _register(client, f"user{index}", "pw").status_code == 201
+    blocked = _register(client, "user5", "pw")
+    assert blocked.status_code == 429
+    assert blocked.json()["detail"]["code"] == "registration_rate_limited"
+
+
+def test_account_cap_closes_registration(tmp_path) -> None:
+    small = AccountStore(tmp_path / "accounts.db", max_accounts=1)
+    small.register("first", "pw")
+    with pytest.raises(AccountError) as excinfo:
+        small.register("second", "pw")
+    assert excinfo.value.code == "registration_closed"
+
+
+# ---------------- sign-in ----------------
+
+
+def test_customer_signs_in_through_the_shared_login_endpoint(
+    client: TestClient,
+    store: AccountStore,
+) -> None:
+    store.register("bob", "pw")
+    response = client.post(
+        "/api/access/login",
+        json={"username": "bob", "password": "pw"},
+        headers={**HEADERS, "Content-Type": "application/json"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    # A customer session must never claim owner access.
+    assert body["logged_in"] is False
+    assert body["account"] == {"logged_in": True, "username": "bob"}
+    assert accounts_api.ACCOUNT_COOKIE_NAME in response.headers["set-cookie"]
+    assert client.get("/api/account/me").json()["username"] == "bob"
+
+
+def test_customer_session_never_grants_owner_access(
+    client: TestClient,
+    store: AccountStore,
+) -> None:
+    store.register("carol", "pw")
+    client.post(
+        "/api/access/login",
+        json={"username": "carol", "password": "pw"},
+        headers={**HEADERS, "Content-Type": "application/json"},
+    )
+    from app.access import OWNER_COOKIE_NAME
+
+    assert client.get("/api/account/me").json()["username"] == "carol"
+    assert accounts_api.ACCOUNT_COOKIE_NAME in client.cookies
+    # The owner cookie is what every owner-gated route reads; signing in as a
+    # customer must never mint one.
+    assert OWNER_COOKIE_NAME not in client.cookies
+
+
+def test_wrong_password_and_unknown_user_are_indistinguishable(
+    client: TestClient,
+    store: AccountStore,
+) -> None:
+    store.register("dave", "pw")
+    wrong = client.post(
+        "/api/access/login",
+        json={"username": "dave", "password": "nope"},
+        headers={**HEADERS, "Content-Type": "application/json"},
+    )
+    missing = client.post(
+        "/api/access/login",
+        json={"username": "nobody", "password": "nope"},
+        headers={**HEADERS, "Content-Type": "application/json"},
+    )
+    assert wrong.status_code == missing.status_code == 401
+    assert wrong.json() == missing.json()
+
+
+def test_repeated_failures_trigger_a_cooldown(
+    client: TestClient,
+    store: AccountStore,
+) -> None:
+    store.register("erin", "pw")
+    for _ in range(10):
+        client.post(
+            "/api/access/login",
+            json={"username": "erin", "password": "wrong"},
+            headers={**HEADERS, "Content-Type": "application/json"},
+        )
+    blocked = client.post(
+        "/api/access/login",
+        json={"username": "erin", "password": "pw"},
+        headers={**HEADERS, "Content-Type": "application/json"},
+    )
+    assert blocked.status_code == 429
+    assert blocked.json()["detail"]["code"] == "login_cooldown"
+
+
+def test_logout_revokes_the_session(client: TestClient, store: AccountStore) -> None:
+    store.register("frank", "pw")
+    client.post(
+        "/api/access/login",
+        json={"username": "frank", "password": "pw"},
+        headers={**HEADERS, "Content-Type": "application/json"},
+    )
+    assert client.get("/api/account/me").json()["logged_in"] is True
+    assert client.post("/api/account/logout", headers=HEADERS).status_code == 200
+    assert client.get("/api/account/me").json()["logged_in"] is False
+
+
+def test_revoked_token_stops_resolving(store: AccountStore) -> None:
+    session = store.register("grace", "pw")
+    assert store.resolve_session(session.token) is not None
+    store.revoke_session(session.token)
+    assert store.resolve_session(session.token) is None
+
+
+def test_expired_session_is_rejected(tmp_path) -> None:
+    now = [1_000.0]
+    aging = AccountStore(tmp_path / "accounts.db", clock=lambda: now[0])
+    session = aging.register("heidi", "pw")
+    assert aging.resolve_session(session.token) is not None
+    now[0] += 31 * 24 * 60 * 60
+    assert aging.resolve_session(session.token) is None
+
+
+# ---------------- watchlist ----------------
+
+
+def test_watchlist_requires_a_session(client: TestClient) -> None:
+    assert client.get("/api/account/watchlist").status_code == 401
+
+
+def test_watchlist_round_trips_and_keeps_order(client: TestClient) -> None:
+    _register(client, "ivan", "pw")
+    add = client.post(
+        "/api/account/watchlist",
+        json={"ticker": "nvda"},
+        headers=HEADERS,
+    )
+    assert add.status_code == 200
+    assert add.json()["tickers"] == ["NVDA"]
+    client.post("/api/account/watchlist", json={"ticker": "AAPL"}, headers=HEADERS)
+    assert client.get("/api/account/watchlist").json()["tickers"] == ["NVDA", "AAPL"]
+    # Adding twice is a no-op rather than an error.
+    again = client.post(
+        "/api/account/watchlist",
+        json={"ticker": "NVDA"},
+        headers=HEADERS,
+    )
+    assert again.json()["tickers"] == ["NVDA", "AAPL"]
+    removed = client.delete("/api/account/watchlist/NVDA", headers=HEADERS)
+    assert removed.json()["tickers"] == ["AAPL"]
+
+
+def test_watchlist_rejects_malformed_tickers(client: TestClient) -> None:
+    _register(client, "judy", "pw")
+    response = client.post(
+        "/api/account/watchlist",
+        json={"ticker": "not a ticker"},
+        headers=HEADERS,
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "invalid_ticker"
+
+
+def test_watchlist_is_capped(store: AccountStore) -> None:
+    session = store.register("ken", "pw")
+    for index in range(WATCHLIST_MAX_TICKERS):
+        store.add_ticker(session.account.user_id, f"T{index:04d}")
+    with pytest.raises(AccountError) as excinfo:
+        store.add_ticker(session.account.user_id, "OVER")
+    assert excinfo.value.code == "watchlist_full"
+
+
+def test_watchlists_are_isolated_between_accounts(store: AccountStore) -> None:
+    first = store.register("leo", "pw")
+    second = store.register("mia", "pw")
+    store.add_ticker(first.account.user_id, "NVDA")
+    store.add_ticker(second.account.user_id, "TSLA")
+    assert store.watchlist(first.account.user_id) == ["NVDA"]
+    assert store.watchlist(second.account.user_id) == ["TSLA"]
+    # Removing another account's ticker cannot touch it.
+    store.remove_ticker(second.account.user_id, "NVDA")
+    assert store.watchlist(first.account.user_id) == ["NVDA"]
+
+
+def test_replace_watchlist_deduplicates_and_normalises(store: AccountStore) -> None:
+    session = store.register("nina", "pw")
+    result = store.replace_watchlist(
+        session.account.user_id,
+        ["msft", "MSFT", " aapl ", "^GSPC"],
+    )
+    assert result == ["MSFT", "AAPL", "^GSPC"]
+    assert store.watchlist(session.account.user_id) == ["MSFT", "AAPL", "^GSPC"]

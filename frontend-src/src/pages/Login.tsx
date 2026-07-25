@@ -169,10 +169,12 @@ type SubmitState = 'idle' | 'verifying' | 'success' | 'error';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, isOwner, loading } = useAccess();
+  const { login, register, isOwner, isCustomer, loading } = useAccess();
   const toast = useToast();
   const reduced = useReducedMotion();
 
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
@@ -182,10 +184,10 @@ export default function Login() {
   const [pwError, setPwError] = useState(false);
   const [serviceDown, setServiceDown] = useState(false);
 
-  /* 已登录 → 直接进工作台（无闪烁） */
+  /* 已登录（管理员或客户）→ 直接进工作台（无闪烁） */
   useEffect(() => {
-    if (!loading && isOwner) navigate('/watchlist', { replace: true });
-  }, [loading, isOwner, navigate]);
+    if (!loading && (isOwner || isCustomer)) navigate('/watchlist', { replace: true });
+  }, [loading, isOwner, isCustomer, navigate]);
 
   /* access/status 失败 → 顶部警告条 + 禁用 */
   useEffect(() => {
@@ -212,18 +214,43 @@ export default function Login() {
     window.setTimeout(() => setShake(false), 420);
   };
 
+  /* 账号相关的错误后端已给出中文说明，直接用；其余保持原有映射。 */
+  const ACCOUNT_ERROR_CODES = new Set([
+    'username_required',
+    'username_too_long',
+    'username_invalid_characters',
+    'username_reserved',
+    'username_taken',
+    'password_required',
+    'password_too_long',
+    'password_invalid_characters',
+    'registration_closed',
+    'invalid_credentials',
+  ]);
+
   const mapError = (e: unknown): { text: string; tone: 'error' | 'warn' } => {
     if (e instanceof ApiError) {
       if (e.bizCode === 'login_cooldown') return { text: '连续登录失败，请稍后再试', tone: 'warn' };
-      if (e.bizCode === 'https_required') return { text: '密码模式需 HTTPS', tone: 'warn' };
+      if (e.bizCode === 'registration_rate_limited') {
+        return { text: e.message || '注册过于频繁，请稍后再试', tone: 'warn' };
+      }
+      if (e.bizCode === 'https_required') return { text: e.message || '登录需要 HTTPS', tone: 'warn' };
+      if (e.bizCode && ACCOUNT_ERROR_CODES.has(e.bizCode)) {
+        return { text: e.message || '用户名或密码不正确', tone: 'error' };
+      }
       if (e.code === 429 || e.code >= 500) return { text: '服务暂时不可用，稍后重试', tone: 'warn' };
     }
-    return { text: '密码不正确', tone: 'error' };
+    return { text: mode === 'register' ? '注册失败，请重试' : '用户名或密码不正确', tone: 'error' };
   };
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (state === 'verifying' || state === 'success' || serviceDown) return;
+    if (!username.trim()) {
+      setStatusMsg({ text: '请输入用户名', tone: 'error' });
+      doShake();
+      return;
+    }
     if (!password.trim()) {
       setStatusMsg({ text: '请输入密码', tone: 'error' });
       setPwError(true);
@@ -234,9 +261,15 @@ export default function Login() {
     setState('verifying');
     setStatusMsg(null);
     try {
-      await login(password); // mock：任意非空密码 → owner
+      const name = username.trim();
+      if (mode === 'register') await register(name, password);
+      else await login(name, password);
       setState('success');
-      toast.success('欢迎回来', 'Owner 登录成功');
+      const isAdmin = name.toLowerCase() === 'admin';
+      toast.success(
+        mode === 'register' ? '账号已创建' : '欢迎回来',
+        isAdmin ? '管理员已登录' : `已登录 ${name}`,
+      );
       navigate('/watchlist', { replace: true });
     } catch (err) {
       setState('error');
@@ -247,7 +280,7 @@ export default function Login() {
     }
   };
 
-  if (loading || isOwner) {
+  if (loading || isOwner || isCustomer) {
     return (
       <div className="dot-grid-dense flex min-h-[100dvh] items-center justify-center bg-paper">
         <div className="size-8 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-label="加载中" />
@@ -344,8 +377,36 @@ export default function Login() {
               </span>
               <div>
                 <h2 className="font-display text-[22px] font-semibold leading-[28px] text-ink-900">进入终端</h2>
-                <p className="mt-0.5 text-caption text-ink-400">Owner 密码登录 · 访客可只读浏览</p>
+                <p className="mt-0.5 text-caption text-ink-400">登录后自选股保存在账号里 · 访客可只读浏览</p>
               </div>
+            </div>
+
+            {/* 登录 / 注册切换：滑动指示条，沿用页面既有动效曲线 */}
+            <div className="mt-5 grid grid-cols-2 rounded-sm border border-line-strong bg-card p-1">
+              {(['login', 'register'] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    setMode(value);
+                    setStatusMsg(null);
+                  }}
+                  aria-pressed={mode === value}
+                  className={cn(
+                    'relative h-8 rounded-xs text-caption font-medium transition-colors duration-fast',
+                    mode === value ? 'text-white' : 'text-ink-500 hover:text-ink-800',
+                  )}
+                >
+                  {mode === value && (
+                    <motion.span
+                      layoutId="login-mode-pill"
+                      className="absolute inset-0 rounded-xs bg-brand-600"
+                      transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                    />
+                  )}
+                  <span className="relative">{value === 'login' ? '登录' : '注册'}</span>
+                </button>
+              ))}
             </div>
 
             {serviceDown && (
@@ -354,9 +415,35 @@ export default function Login() {
               </p>
             )}
 
-            <form onSubmit={onSubmit} className="mt-6" noValidate>
+            <form onSubmit={onSubmit} className="mt-5" noValidate>
+              <label className="mb-4 block">
+                <span className="mb-1.5 block text-caption font-medium text-ink-500">用户名</span>
+                <div
+                  className={cn(
+                    'flex h-12 items-center gap-2 rounded-sm border border-line-strong bg-card px-3',
+                    'transition-[box-shadow,border-color] duration-fast',
+                    'focus-within:border-brand-600 focus-within:shadow-focus-ring',
+                  )}
+                >
+                  <Icon name="command" size={16} className="shrink-0 text-ink-400" />
+                  <input
+                    type="text"
+                    value={username}
+                    disabled={serviceDown || state === 'verifying' || state === 'success'}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder={mode === 'register' ? '起一个用户名' : '用户名'}
+                    maxLength={32}
+                    className="h-full min-w-0 flex-1 bg-transparent text-[16px] text-ink-800 outline-none placeholder:text-ink-300 disabled:opacity-60"
+                    autoComplete="username"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    aria-label="用户名"
+                  />
+                </div>
+              </label>
               <label className="block">
-                <span className="mb-1.5 block text-caption font-medium text-ink-500">访问密码</span>
+                <span className="mb-1.5 block text-caption font-medium text-ink-500">密码</span>
                 <div
                   className={cn(
                     'flex h-12 items-center gap-2 rounded-sm border bg-card px-3 transition-[box-shadow,border-color] duration-fast',
@@ -372,10 +459,10 @@ export default function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={(e) => setCapsLock(e.getModifierState?.('CapsLock') ?? false)}
                     onKeyUp={(e) => setCapsLock(e.getModifierState?.('CapsLock') ?? false)}
-                    placeholder="输入访问密码"
+                    placeholder={mode === 'register' ? '设置密码' : '输入密码'}
                     className="h-full min-w-0 flex-1 bg-transparent font-mono text-[16px] text-ink-800 outline-none placeholder:text-ink-300 disabled:opacity-60"
-                    autoComplete="current-password"
-                    aria-label="访问密码"
+                    autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                    aria-label="密码"
                   />
                   <button
                     type="button"
@@ -411,8 +498,10 @@ export default function Login() {
                 ) : state === 'success' ? (
                   <>
                     <Icon name="check" size={16} strokeWidth={1.8} />
-                    验证通过
+                    {mode === 'register' ? '已创建' : '验证通过'}
                   </>
+                ) : mode === 'register' ? (
+                  '注册并登录'
                 ) : (
                   '登录'
                 )}
@@ -427,7 +516,7 @@ export default function Login() {
                 )}
                 role={statusMsg?.tone === 'error' ? 'alert' : undefined}
               >
-                {statusMsg ? `${statusMsg.text}${statusMsg.tone === 'error' && statusMsg.text === '密码不正确' ? '，请重试' : ''}` : '·'}
+                {statusMsg ? statusMsg.text : '·'}
               </p>
             </form>
 
@@ -444,7 +533,11 @@ export default function Login() {
               以访客身份浏览（只读）
             </button>
 
-            <p className="mt-5 text-center text-micro text-ink-400">登录即同意研究用途条款 · 会话 7 天</p>
+            <p className="mt-5 text-center text-micro leading-[18px] text-ink-400">
+              {mode === 'register'
+                ? '账号只用于保存你的自选股，不改变数据权限'
+                : '登录即同意研究用途条款 · 登录状态保留 30 天'}
+            </p>
 
             <div className="mt-4 border-t border-line pt-3 text-center">
               <Link

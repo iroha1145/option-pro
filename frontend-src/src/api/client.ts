@@ -174,6 +174,10 @@ export function post<T>(path: string, body?: unknown) {
 export function put<T>(path: string, body?: unknown) {
   return request<T>(path, { method: 'PUT', body: body === undefined ? undefined : JSON.stringify(body) });
 }
+/** 无请求体的删除；同源守卫只看 Origin 与 X-Optix-Action 头。 */
+export function del<T>(path: string) {
+  return request<T>(path, { method: 'DELETE' });
+}
 
 /** mock 模式：250–700ms 随机延迟 */
 export function mockDelay(): Promise<void> {

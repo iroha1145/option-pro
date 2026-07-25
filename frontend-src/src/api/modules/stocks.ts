@@ -171,15 +171,25 @@ function mapPull(body: unknown): StockPullResult {
 }
 
 export const stocksApi = {
-  watchlist: (force = false): Promise<WatchlistItem[]> =>
+  /**
+   * 不传 tickers 时返回站点默认自选；传入时按给定代码构建
+   * （登录客户的个人自选走这条路径，后端同一端点已支持 ?tickers=）。
+   */
+  watchlist: (force = false, tickers?: readonly string[]): Promise<WatchlistItem[]> =>
     mockOr(
       () => fx.getWatchlist(force),
-      () =>
-        marketGet('/stocks/watchlist', {
+      () => {
+        const list = (tickers ?? []).filter(Boolean);
+        const path = tickers
+          ? `/stocks/watchlist?tickers=${encodeURIComponent(list.join(','))}`
+          : '/stocks/watchlist';
+        if (tickers && list.length === 0) return Promise.resolve([]);
+        return marketGet(path, {
           ttlMs: 5_000,
           staleMs: 10 * 60_000,
           force,
-        }).then(mapWatchlist),
+        }).then(mapWatchlist);
+      },
     ),
   detail: (ticker: string, force = false): Promise<StockDetail> =>
     mockOr(
