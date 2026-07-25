@@ -21,14 +21,18 @@ const YESTERDAY = "2026-07-23";
 const SECRET_PATTERN =
   /(?:sk-proj-[A-Za-z0-9_-]{20,}|OPENAI_API_KEY|FINNHUB_API_KEY|FRED_API_KEY|INTERNAL_API_TOKEN|APP_PASSWORD_HASH|macro-conditions\.db)/;
 
+// 合成数值，故意与任何第三方报告的示例分数都不相同（incremental review P3）。
+// Mock 文件声明「数值是合成的，不复制第三方报告示例分数」，而这里原本硬编码的
+// 七个分数与那份 PDF 完全一致 —— 不影响生产算法，但会让后来的人以为这些截图在
+// 复现别人的产品。改成另一组确定性合成值，注释与事实重新对上。
 const MODULES = [
-  { id: "liquidity", zh: "流动性", en: "LIQUIDITY", total: 5, floor: 3, score: 41.3 },
-  { id: "funding", zh: "融资", en: "FUNDING", total: 6, floor: 4, score: 79.4 },
-  { id: "treasury", zh: "国债", en: "TREASURY", total: 3, floor: 2, score: 54.1 },
-  { id: "rates", zh: "利率", en: "RATES", total: 3, floor: 2, score: 36.3 },
-  { id: "credit", zh: "信用", en: "CREDIT", total: 4, floor: 3, score: 68.2 },
-  { id: "risk", zh: "风险", en: "RISK", total: 4, floor: 3, score: 54.6 },
-  { id: "external", zh: "外部冲击", en: "EXTERNAL", total: 5, floor: 3, score: 42.8 },
+  { id: "liquidity", zh: "流动性", en: "LIQUIDITY", total: 5, floor: 3, score: 58.2 },
+  { id: "funding", zh: "融资", en: "FUNDING", total: 6, floor: 4, score: 33.7 },
+  { id: "treasury", zh: "国债", en: "TREASURY", total: 3, floor: 2, score: 71.9 },
+  { id: "rates", zh: "利率", en: "RATES", total: 3, floor: 2, score: 47.5 },
+  { id: "credit", zh: "信用", en: "CREDIT", total: 4, floor: 3, score: 62.4 },
+  { id: "risk", zh: "风险", en: "RISK", total: 4, floor: 3, score: 39.8 },
+  { id: "external", zh: "外部冲击", en: "EXTERNAL", total: 5, floor: 3, score: 66.1 },
 ];
 
 function moduleRows(overrides = {}) {

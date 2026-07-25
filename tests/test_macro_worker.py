@@ -394,3 +394,156 @@ def test_a_cancelled_refresh_still_lets_sqlite_finish_its_transaction(tmp_path) 
 def test_the_task_module_exports_the_macro_task() -> None:
     assert "MacroConditionsTask" in worker_tasks.__all__
     assert "seconds_until_next_et_slot" in worker_tasks.__all__
+
+
+# ---------------- Phase 0 data foundation (incremental review) ----------------
+
+
+def test_etf_backfill_is_decided_per_symbol_not_by_the_fred_table() -> None:
+    """One short ETF must be able to backfill on its own.
+
+    ``_needs_backfill`` looked only at whether the FRED series existed, so once
+    they did, every ETF request dropped from ten years to one. An ETF whose first
+    ten-year download failed then stayed on a single year of history forever --
+    still enough rows to clear the minimum sample count, so it produced a
+    "five-year percentile" computed against one year.
+    """
+
+    from datetime import date
+
+    from app.services.macro_conditions.registry import ETF_PROXIES
+    from app.services.macro_conditions.service import MacroConditionsService
+
+    required_start = date(2018, 7, 1)
+    symbols = [spec.symbol for spec in ETF_PROXIES]
+    coverage = {
+        symbol: {"earliest": "2016-01-04", "latest": "2026-07-24"}
+        for symbol in symbols
+    }
+    # One symbol only reaches back a year; the rest are complete.
+    coverage[symbols[0]] = {"earliest": "2025-07-01", "latest": "2026-07-24"}
+
+    short = MacroConditionsService._etf_symbols_needing_backfill(
+        None,  # type: ignore[arg-type]
+        coverage,
+        required_start=required_start,
+    )
+    assert short == {symbols[0]}, "only the short symbol should pay for ten years"
+
+    # A symbol with no rows at all is short too.
+    missing = dict(coverage)
+    del missing[symbols[1]]
+    short_again = MacroConditionsService._etf_symbols_needing_backfill(
+        None,  # type: ignore[arg-type]
+        missing,
+        required_start=required_start,
+    )
+    assert short_again == {symbols[0], symbols[1]}
+
+
+def test_series_presence_is_not_accepted_as_series_coverage() -> None:
+    """A series that exists but is too short still needs a backfill."""
+
+    from datetime import date
+
+    from app.services.macro_conditions.registry import FRED_SERIES
+    from app.services.macro_conditions.service import MacroConditionsService
+
+    required_start = date(2018, 7, 1)
+    complete = {
+        spec.series_id: {"earliest": "2016-01-04", "latest": "2026-07-24"}
+        for spec in FRED_SERIES
+        if spec.enabled
+    }
+    assert (
+        MacroConditionsService._needs_backfill(
+            None,  # type: ignore[arg-type]
+            complete,
+            required_start=required_start,
+        )
+        is False
+    )
+
+    short = dict(complete)
+    first = next(iter(short))
+    short[first] = {"earliest": "2025-07-01", "latest": "2026-07-24"}
+    assert (
+        MacroConditionsService._needs_backfill(
+            None,  # type: ignore[arg-type]
+            short,
+            required_start=required_start,
+        )
+        is True
+    ), "presence is not coverage"
+
+
+def test_rolling_window_visibility_is_the_latest_row_inside_it() -> None:
+    """A rolling window is not knowable until its last input was knowable.
+
+    Without this, a revision to an old observation moves the factor value while
+    its ``available_at`` still points at a moment before the revision existed --
+    harmless for today's display, poison for a walk-forward test.
+    """
+
+    from datetime import date
+
+    from app.services.macro_conditions.calculations import DerivedGrid, DerivedPoint
+
+    grid = [date(2026, 7, 20), date(2026, 7, 21), date(2026, 7, 22)]
+    points = [
+        DerivedPoint(1.0, date(2026, 7, 20), "2026-07-20T12:00:00Z", "local_point_in_time"),
+        # This middle row was revised today, long after its observation date.
+        DerivedPoint(2.0, date(2026, 7, 21), "2026-07-24T12:00:00Z", "local_point_in_time"),
+        DerivedPoint(3.0, date(2026, 7, 22), "2026-07-22T12:00:00Z", "local_point_in_time"),
+    ]
+    derived = DerivedGrid(grid, [p.value for p in points], points)
+
+    window = derived.trailing_valid_points(2, 3)
+    assert [p.value for p in window] == [1.0, 2.0, 3.0]
+    assert max(p.available_at for p in window) == "2026-07-24T12:00:00Z", (
+        "the revised row decides when the window became knowable"
+    )
+    # data_through still belongs to the newest row: the mean is current to today.
+    assert window[-1].observation_date == date(2026, 7, 22)
+
+    # A lagged read carries its own provenance, not today's.
+    earlier = derived.point_as_of(date(2026, 7, 21))
+    assert earlier is not None
+    assert earlier.available_at == "2026-07-24T12:00:00Z"
+
+
+def test_scoring_window_and_funding_ema_are_not_configurable() -> None:
+    """Both knobs changed meaning without changing scoring_version.
+
+    score_window_years moved the percentile window while the version name and
+    every UI string still said five years; funding_ema_days was never read at
+    all. An algorithm parameter change belongs to a new scoring version.
+    """
+
+    import pytest as _pytest
+    from pydantic import ValidationError
+
+    from app.personal_config import MacroConfig
+
+    assert MacroConfig().score_window_years == 5
+    assert MacroConfig().funding_ema_days == 5
+    with _pytest.raises(ValidationError):
+        MacroConfig(score_window_years=3)
+    with _pytest.raises(ValidationError):
+        MacroConfig(funding_ema_days=10)
+
+
+def test_weekly_minimum_history_counts_weekly_prints() -> None:
+    """104 grid points is five months of weekly prints, not 104 weeks."""
+
+    from app.services.macro_conditions.registry import (
+        WEEKLY_MINIMUM_HISTORY,
+        WEEKLY_MINIMUM_PRINTS,
+        WEEKLY_PRINTS_PER_GRID_YEAR,
+    )
+
+    assert WEEKLY_MINIMUM_PRINTS == 104
+    assert WEEKLY_MINIMUM_HISTORY == WEEKLY_MINIMUM_PRINTS * WEEKLY_PRINTS_PER_GRID_YEAR
+    assert WEEKLY_MINIMUM_HISTORY > 104, (
+        "the floor has to be expressed on the grid it is checked against"
+    )

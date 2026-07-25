@@ -104,7 +104,7 @@ def _fred_handler(request: httpx.Request) -> httpx.Response:
 class _SyntheticEtfProxy:
     """Stands in for the shared daily chain with a deterministic local series."""
 
-    def read(self, symbols=ETF_SYMBOLS, *, period: str = ""):
+    def read(self, symbols=ETF_SYMBOLS, *, period: str = "", periods=None):
         from app.services.macro_conditions.models import EtfObservation
 
         results: dict[str, tuple] = {}

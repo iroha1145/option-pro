@@ -145,7 +145,15 @@ class MacroConditionsService:
         run_id = f"mcr_{uuid.uuid4().hex}"
         self.repository.initialize()
         coverage = self.repository.series_coverage()
-        is_backfill = self._needs_backfill(coverage)
+        # Coverage is judged per source and against the history the scores need,
+        # not by "the FRED table is non-empty" (incremental review P1).
+        required_start = self._history_start(observed)
+        is_backfill = self._needs_backfill(coverage, required_start=required_start)
+        etf_coverage = self.repository.etf_coverage()
+        etf_backfill_symbols = self._etf_symbols_needing_backfill(
+            etf_coverage,
+            required_start=required_start,
+        )
         self.repository.start_sync_run(
             run_id,
             "initial_backfill" if is_backfill else trigger,
@@ -174,7 +182,7 @@ class MacroConditionsService:
                 "published": False,
             }
 
-        history_start = self._history_start(observed)
+        history_start = required_start
         cutoff = last_completed_trading_day(observed)
         fetch_start = (
             history_start
@@ -204,8 +212,17 @@ class MacroConditionsService:
             error_codes.append(exc.code)
             warnings.append(exc.code)
 
+        # Only the symbols that are actually short get the ten-year request; the
+        # rest stay on the cheap incremental read.
         etf_rows, etf_failed = self._proxy.read(
-            period=BACKFILL_PERIOD if is_backfill else INCREMENTAL_PERIOD,
+            periods={
+                spec.symbol: (
+                    BACKFILL_PERIOD
+                    if is_backfill or spec.symbol in etf_backfill_symbols
+                    else INCREMENTAL_PERIOD
+                )
+                for spec in ETF_PROXIES
+            },
         )
         for symbol, observations in etf_rows.items():
             self.repository.record_etf_observations(
@@ -315,11 +332,53 @@ class MacroConditionsService:
         anchor = min(latest) - timedelta(days=INCREMENTAL_REVISION_WINDOW_DAYS)
         return max(floor, anchor)
 
-    def _needs_backfill(self, coverage: Mapping[str, Mapping[str, Any]]) -> bool:
+    def _needs_backfill(
+        self,
+        coverage: Mapping[str, Mapping[str, Any]],
+        *,
+        required_start: date | None = None,
+    ) -> bool:
+        """Whether the FRED side still needs a full-history read.
+
+        Presence alone is not coverage (incremental review P1): a series that
+        exists but only reaches back one year cannot support a five-year
+        percentile. When ``required_start`` is given, each registered series must
+        also reach at least that far back.
+        """
+
         if not coverage:
             return True
         registered = {spec.series_id for spec in FRED_SERIES if spec.enabled}
-        return not registered.issubset(set(coverage))
+        if not registered.issubset(set(coverage)):
+            return True
+        if required_start is None:
+            return False
+        for series_id in registered:
+            earliest = _as_date(coverage[series_id].get("earliest"))
+            if earliest is None or earliest > required_start:
+                return True
+        return False
+
+    def _etf_symbols_needing_backfill(
+        self,
+        coverage: Mapping[str, Mapping[str, Any]],
+        *,
+        required_start: date,
+    ) -> set[str]:
+        """ETF symbols whose stored history does not reach ``required_start``.
+
+        Only the short ones get the ten-year request. Switching every symbol
+        together is what let one failed download hide behind seven healthy ones.
+        """
+
+        short: set[str] = set()
+        for spec in ETF_PROXIES:
+            symbol = spec.symbol
+            entry = coverage.get(symbol)
+            earliest = _as_date(entry.get("earliest")) if entry else None
+            if earliest is None or earliest > required_start:
+                short.add(symbol)
+        return short
 
     # ------------------------------------------------------------------
     # Snapshot construction
