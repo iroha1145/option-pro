@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from threading import Event
 
 import pytest
@@ -1314,3 +1316,58 @@ def test_frontend_integrity_and_host_validation_remain_fail_closed(
         _configured_allowed_hosts("127.0.0.1", "*.example.com")
     with pytest.raises(RuntimeError):
         _configured_allowed_hosts("127.0.0.1", "[[::1]]")
+
+
+def test_health_probe_does_not_rehash_the_frontend_per_request(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """The probe must not be a disk amplifier (audit P1-12).
+
+    ``/health`` and ``/ready`` are public and unauthenticated, and the API rate
+    limit only covers ``/api``. Reading and hashing every built file per request
+    let any anonymous caller drive disk and CPU, and got worse as the frontend
+    grew.
+    """
+
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    (frontend / "index.html").write_text("<html></html>", encoding="utf-8")
+    (frontend / "logo.svg").write_text("<svg/>", encoding="utf-8")
+    monkeypatch.setattr(main, "FRONTEND_DIR", frontend)
+    monkeypatch.setattr(main, "_FRONTEND_MANIFEST_PATH", "")
+    monkeypatch.setattr(main, "_FRONTEND_MANIFEST_REQUIRED", False)
+    main.reset_frontend_integrity_cache()
+
+    reads: list[str] = []
+    original_read_bytes = Path.read_bytes
+
+    def counting_read_bytes(self):
+        reads.append(str(self))
+        return original_read_bytes(self)
+
+    monkeypatch.setattr(Path, "read_bytes", counting_read_bytes)
+
+    first = main._frontend_integrity()
+    assert first["ready"] is True
+    assert len(first["sha256"]) == 64
+    after_first = len(reads)
+    assert after_first > 0, "the first call must actually hash the files"
+
+    for _ in range(20):
+        assert main._frontend_integrity() == first
+    assert len(reads) == after_first, (
+        "repeat probes must be served from the cache; "
+        f"{len(reads) - after_first} extra file reads happened"
+    )
+
+    # A deploy replaces the built files; the stamp changes and the digest is
+    # recomputed rather than served stale.
+    (frontend / "index.html").write_text("<html>v2</html>", encoding="utf-8")
+    stat = (frontend / "index.html").stat()
+    os.utime(frontend / "index.html", ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+    second = main._frontend_integrity()
+    assert len(reads) > after_first, "a changed frontend must be re-hashed"
+    assert second["sha256"] != first["sha256"]
+
+    main.reset_frontend_integrity_cache()

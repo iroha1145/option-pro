@@ -43,12 +43,60 @@ export class ApiError extends Error implements ApiErrorShape {
 
 const BASE = '/api';
 
-export const OWNER_SESSION_INVALID_EVENT = 'optix:owner-session-invalid';
+/**
+ * 任一主体（管理员或客户）会话失效（审计 P1-08）。
+ *
+ * 旧事件名只覆盖管理员，于是客户接口返回的 account_login_required 不触发任何
+ * 降级：页面继续显示客户用户名和自选管理按钮，请求持续 401。两种主体现在共用
+ * 同一条降级通路，由 AccessProvider 重新拉取 /access/status 得出权威结论。
+ */
+export const PRINCIPAL_INVALID_EVENT = 'optix:principal-invalid';
 
-export function notifyOwnerSessionInvalid(): void {
+/** 会让前端认定「当前主体已失效」的业务码。 */
+const PRINCIPAL_INVALID_CODES = new Set([
+  'owner_login_required',
+  'account_login_required',
+]);
+
+export function notifyPrincipalInvalid(): void {
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new Event(OWNER_SESSION_INVALID_EVENT));
+    window.dispatchEvent(new Event(PRINCIPAL_INVALID_EVENT));
   }
+}
+
+/**
+ * 单次请求超时（审计 P1-10）。
+ *
+ * fetch 没有默认超时，而 marketRead 会把同一路径的 Promise 放进 inFlight 共享；
+ * 半开连接或代理不终止请求时，该路径的所有页面会永远等同一个 Promise，手动刷新
+ * 也不会发起新请求，界面永久停在骨架屏且没有任何错误提示。
+ */
+export const REQUEST_TIMEOUT_MS = 20_000;
+
+/** 组合调用方 signal 与超时；返回的 dispose 必须在请求结束后调用。 */
+function withTimeout(
+  external: AbortSignal | null | undefined,
+  timeoutMs: number,
+): { signal: AbortSignal; dispose: () => void; timedOut: () => boolean } {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const onExternalAbort = () => controller.abort();
+  if (external) {
+    if (external.aborted) controller.abort();
+    else external.addEventListener('abort', onExternalAbort);
+  }
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timer);
+      if (external) external.removeEventListener('abort', onExternalAbort);
+    },
+    timedOut: () => timedOut,
+  };
 }
 
 function pick(obj: unknown, ...keys: string[]): unknown {
@@ -81,21 +129,43 @@ export function toQuery(params: Record<string, unknown>): string {
   return p.toString();
 }
 
+export interface RequestOptions extends RequestInit {
+  /** 覆盖默认超时；长任务轮询可单独放宽。传 0 表示不超时。 */
+  timeoutMs?: number;
+}
+
 /** live 模式请求（返回原始 Response 供需要读头的场景，如 202 Location） */
-export async function requestRaw(path: string, init?: RequestInit): Promise<Response> {
+export async function requestRaw(path: string, init?: RequestOptions): Promise<Response> {
   const method = (init?.method ?? 'GET').toUpperCase();
   const isWrite = method !== 'GET' && method !== 'HEAD';
-  const res = await fetch(`${BASE}${path}`, {
-    credentials: 'include',
-    redirect: 'error',
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      // 后端 require_same_origin_json：写操作必须带自定义头
-      ...(isWrite ? { 'X-Optix-Action': '1' } : {}),
-      ...(init?.headers ?? {}),
-    },
-  });
+  const { timeoutMs, signal: callerSignal, ...rest } = init ?? {};
+  const budget = timeoutMs ?? REQUEST_TIMEOUT_MS;
+  const timeout = budget > 0 ? withTimeout(callerSignal, budget) : null;
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      credentials: 'include',
+      redirect: 'error',
+      ...rest,
+      ...(timeout ? { signal: timeout.signal } : callerSignal ? { signal: callerSignal } : {}),
+      headers: {
+        'Content-Type': 'application/json',
+        // 后端 require_same_origin_json：写操作必须带自定义头
+        ...(isWrite ? { 'X-Optix-Action': '1' } : {}),
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch (error) {
+    if (timeout?.timedOut()) {
+      throw new ApiError(408, '请求超时，请重试', {
+        bizCode: 'request_timeout',
+        retryable: true,
+      });
+    }
+    throw error;
+  } finally {
+    timeout?.dispose();
+  }
   if (!res.ok) {
     let message = res.statusText || '请求失败';
     let bizCode: string | undefined;
@@ -120,15 +190,15 @@ export async function requestRaw(path: string, init?: RequestInit): Promise<Resp
     } catch {
       /* ignore */
     }
-    if (res.status === 401 && bizCode === 'owner_login_required') {
-      notifyOwnerSessionInvalid();
+    if (res.status === 401 && bizCode && PRINCIPAL_INVALID_CODES.has(bizCode)) {
+      notifyPrincipalInvalid();
     }
     throw new ApiError(res.status, message, { bizCode, retryable, retryAfter, payload });
   }
   return res;
 }
 
-export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestOptions): Promise<T> {
   const res = await requestRaw(path, init);
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -165,18 +235,28 @@ export function idFromLocation(location: string | null): string | null {
   return seg.length ? decodeURIComponent(seg[seg.length - 1]) : null;
 }
 
-export function get<T>(path: string) {
-  return request<T>(path, { method: 'GET' });
+/* 便捷封装一律透传 options：调用方需要能传 signal 与 timeoutMs，否则超时与
+   取消只对直接使用 request() 的少数路径生效。 */
+export function get<T>(path: string, options?: RequestOptions) {
+  return request<T>(path, { ...options, method: 'GET' });
 }
-export function post<T>(path: string, body?: unknown) {
-  return request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) });
+export function post<T>(path: string, body?: unknown, options?: RequestOptions) {
+  return request<T>(path, {
+    ...options,
+    method: 'POST',
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
 }
-export function put<T>(path: string, body?: unknown) {
-  return request<T>(path, { method: 'PUT', body: body === undefined ? undefined : JSON.stringify(body) });
+export function put<T>(path: string, body?: unknown, options?: RequestOptions) {
+  return request<T>(path, {
+    ...options,
+    method: 'PUT',
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
 }
 /** 无请求体的删除；同源守卫只看 Origin 与 X-Optix-Action 头。 */
-export function del<T>(path: string) {
-  return request<T>(path, { method: 'DELETE' });
+export function del<T>(path: string, options?: RequestOptions) {
+  return request<T>(path, { ...options, method: 'DELETE' });
 }
 
 /** mock 模式：250–700ms 随机延迟 */

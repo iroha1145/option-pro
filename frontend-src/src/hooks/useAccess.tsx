@@ -1,7 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { accessApi } from '@/api/modules/access';
-import { OWNER_SESSION_INVALID_EVENT } from '@/api/client';
+import { PRINCIPAL_INVALID_EVENT } from '@/api/client';
 import type { AccessRole, AccessStatus } from '@/api/types';
 
 interface AccessContextValue {
@@ -24,6 +24,13 @@ interface AccessContextValue {
    */
   canManageWatchlist: boolean;
   loading: boolean;
+  /**
+   * 身份服务本身读不到。
+   *
+   * visitor 不能兼任错误回退（审计 P2-1）：首次 /access/status 失败时旧实现直接
+   * 停在初始的 visitor 上，于是「身份服务不可用」被显示成「未登录」。
+   */
+  identityUnavailable: boolean;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -45,61 +52,112 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     accountUsername: null,
   });
   const [loading, setLoading] = useState(true);
+  const [identityUnavailable, setIdentityUnavailable] = useState(false);
 
-  const refresh = useCallback(async () => {
+  /**
+   * 身份世代（审计 P1-07）。
+   *
+   * 初始读取、窗口聚焦、页面重新可见、60 秒定时、登录、注册、登出都会并发地
+   * 请求身份状态，而任何「先发出、后返回」的响应都能直接覆盖较新的结果：聚焦时
+   * 那次慢响应可以在登录成功之后把界面打回访客态。这里给每次探测编号，只有当前
+   * 世代的结果允许写入；登录/注册/登出先递增世代，从而作废所有在途探测。
+   */
+  const generationRef = useRef(0);
+
+  const readInto = useCallback(async (generation: number) => {
     try {
-      setStatus(await accessApi.status());
+      const next = await accessApi.status();
+      if (generation !== generationRef.current) return;
+      setStatus(next);
+      setIdentityUnavailable(false);
+    } catch (error) {
+      if (generation !== generationRef.current) return;
+      // 身份读不到时保留当前已知身份并明确置错，而不是悄悄退回访客。
+      setIdentityUnavailable(true);
+      throw error;
     } finally {
-      setLoading(false);
+      if (generation === generationRef.current) setLoading(false);
     }
   }, []);
 
+  const refresh = useCallback(async () => {
+    await readInto(generationRef.current);
+  }, [readInto]);
+
+  /** 作废所有在途探测并开始新一轮读取。写操作之后必须走这条路径。 */
+  const invalidateAndRead = useCallback(() => {
+    generationRef.current += 1;
+    return readInto(generationRef.current);
+  }, [readInto]);
+
   useEffect(() => {
-    void refresh();
+    void refresh().catch(() => undefined);
   }, [refresh]);
 
   // backend 重启、新设备登录或会话过期后，旧 SPA 不能继续显示“已登录”。
   // 多数公开 GET 会以 visitor 身份返回 200，因此还需在重新聚焦/可见和定时点主动核验。
+  //
+  // 核验对「任一已登录主体」生效（审计 P1-08）：旧实现只在 role === 'owner' 时挂
+  // 定时器，普通客户的会话过期后界面会一直显示原用户名和自选管理入口，请求持续
+  // 401，只能靠用户手动刷新整页。
+  const hasPrincipal = status.role === 'owner' || status.accountUsername !== null;
   useEffect(() => {
-    if (status.role !== 'owner') return;
+    if (!hasPrincipal) return;
     const verify = () => void refresh().catch(() => undefined);
     const onInvalidated = () => {
+      // 只做降级提示，权威结论仍以随后的 /access/status 为准。
       setStatus((current) => ({
+        ...current,
         role: 'visitor',
         aiEnabled: false,
         aiAvailable: false,
         aiReason: 'owner_login_required',
-        // 管理员会话失效不代表客户会话也失效；由随后的 refresh 校准。
-        accountUsername: current.accountUsername,
       }));
       verify();
     };
     const onVisibility = () => {
       if (document.visibilityState === 'visible') verify();
     };
-    window.addEventListener(OWNER_SESSION_INVALID_EVENT, onInvalidated);
+    window.addEventListener(PRINCIPAL_INVALID_EVENT, onInvalidated);
     window.addEventListener('focus', verify);
     document.addEventListener('visibilitychange', onVisibility);
     const interval = window.setInterval(verify, 60_000);
     return () => {
-      window.removeEventListener(OWNER_SESSION_INVALID_EVENT, onInvalidated);
+      window.removeEventListener(PRINCIPAL_INVALID_EVENT, onInvalidated);
       window.removeEventListener('focus', verify);
       document.removeEventListener('visibilitychange', onVisibility);
       window.clearInterval(interval);
     };
-  }, [refresh, status.role]);
+  }, [refresh, hasPrincipal]);
 
-  const login = useCallback(async (username: string, password: string) => {
-    setStatus(await accessApi.login(username, password));
-  }, []);
+  /**
+   * 写操作成功即视为成功（审计 P2-2）。随后的状态校验独立进行：它失败只意味着
+   * 「暂时读不到身份」，不能把一次已经写好 Cookie 的登录报成登录失败。
+   */
+  const applyWrite = useCallback(
+    async (write: () => Promise<void>) => {
+      await write();
+      await invalidateAndRead().catch(() => undefined);
+    },
+    [invalidateAndRead],
+  );
 
-  const register = useCallback(async (username: string, password: string) => {
-    setStatus(await accessApi.register(username, password));
-  }, []);
+  const login = useCallback(
+    (username: string, password: string) =>
+      applyWrite(() => accessApi.login(username, password)),
+    [applyWrite],
+  );
 
-  const logout = useCallback(async () => {
-    setStatus(await accessApi.logout());
-  }, []);
+  const register = useCallback(
+    (username: string, password: string) =>
+      applyWrite(() => accessApi.register(username, password)),
+    [applyWrite],
+  );
+
+  const logout = useCallback(
+    () => applyWrite(() => accessApi.logout()),
+    [applyWrite],
+  );
 
   const value = useMemo<AccessContextValue>(
     () => ({
@@ -113,12 +171,13 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       isCustomer: status.accountUsername !== null,
       canManageWatchlist: status.accountUsername !== null || status.role === 'owner',
       loading,
+      identityUnavailable,
       login,
       register,
       logout,
       refresh,
     }),
-    [status, loading, login, register, logout, refresh],
+    [status, loading, identityUnavailable, login, register, logout, refresh],
   );
 
   return <AccessContext.Provider value={value}>{children}</AccessContext.Provider>;
