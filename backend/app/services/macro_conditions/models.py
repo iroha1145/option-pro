@@ -67,6 +67,7 @@ SyncTrigger = Literal["scheduled", "manual", "initial_backfill"]
 #: FRED problem must never be reported as a database problem.
 ERROR_CODES = (
     "fred_api_key_missing",
+    "fred_api_key_invalid",
     "fred_rate_limited",
     "fred_unavailable",
     "fred_schema_mismatch",

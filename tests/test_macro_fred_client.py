@@ -490,3 +490,79 @@ def test_incremental_refresh_is_idempotent(tmp_path) -> None:
         ).fetchone()[0]
     assert count == 3
     assert len(repository.active_series("SOFR")) == 3
+
+
+# ---------------------------------------------------------------------------
+# A rejected key must not look like an outage
+# ---------------------------------------------------------------------------
+
+
+def test_a_rejected_api_key_is_reported_as_a_key_problem_not_an_outage() -> None:
+    """FRED answers 400 for a malformed or unregistered key.
+
+    Both bodies below are the ones FRED actually returns; reporting them as
+    ``fred_unavailable`` sent an operator hunting a non-existent outage.
+    """
+
+    bodies = (
+        b'{"error_code":400,"error_message":"Bad Request.  The value for variable '
+        b'api_key is not registered.  Read https://fred.stlouisfed.org/docs/api/'
+        b'api_key.html for more information."}',
+        b'{"error_code":400,"error_message":"Bad Request.  The value for variable '
+        b'api_key is not a 32 character alpha-numeric lower-case string.  Read '
+        b'https://fred.stlouisfed.org/docs/api/api_key.html for more information."}',
+    )
+    for body in bodies:
+        attempts = 0
+
+        def handler(_request: httpx.Request, _body: bytes = body) -> httpx.Response:
+            nonlocal attempts
+            attempts += 1
+            return httpx.Response(
+                400,
+                content=_body,
+                headers={"Content-Type": "application/json"},
+            )
+
+        with _client(handler) as client:
+            with pytest.raises(MacroError) as excinfo:
+                client.metadata(WALCL)
+        assert excinfo.value.code == "fred_api_key_invalid"
+        # A rejected key is not retryable.
+        assert attempts == 1
+
+
+def test_other_client_errors_are_still_plain_unavailable() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            400,
+            content=b'{"error_code":400,"error_message":"Bad Request. Variable series_id is invalid."}',
+            headers={"Content-Type": "application/json"},
+        )
+
+    with _client(handler) as client:
+        with pytest.raises(MacroError) as excinfo:
+            client.metadata(WALCL)
+    assert excinfo.value.code == "fred_unavailable"
+
+
+def test_the_rejected_key_never_reaches_the_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            400,
+            content=b'{"error_code":400,"error_message":"Bad Request.  The value for '
+            b'variable api_key is not registered."}',
+            headers={"Content-Type": "application/json"},
+        )
+
+    caplog.set_level(logging.DEBUG, logger="optix.macro.fred")
+    with _client(handler) as client:
+        with pytest.raises(MacroError):
+            client.metadata(WALCL)
+    text = caplog.text
+    assert "fred_api_key_invalid" in text
+    assert KEY not in text
+    # The upstream body is never echoed, only the safe code.
+    assert "not registered" not in text

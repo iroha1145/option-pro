@@ -311,6 +311,36 @@ def _read_secret() -> str:
     return value
 
 
+def _fred_key_shape_valid(value: str) -> bool:
+    """FRED issues exactly 32 lower-case alphanumeric characters."""
+
+    return len(value) == 32 and value.isalnum() and value == value.lower()
+
+
+#: Secrets whose exact shape the issuing service documents. These are enforced at
+#: *set* time, not only by ``validate``: a hidden prompt echoes nothing, so a
+#: double-paste silently stores 64 or 96 characters and the mistake only surfaces
+#: later as an upstream rejection. Failing immediately, with the observed length,
+#: is far cheaper to diagnose. The message never contains the value itself.
+_EXACT_SHAPES: dict[str, tuple[object, str]] = {
+    "FRED_API_KEY": (
+        _fred_key_shape_valid,
+        "FRED_API_KEY must be exactly 32 lower-case alphanumeric characters",
+    ),
+}
+
+
+def _require_exact_shape(key: str, value: str) -> None:
+    entry = _EXACT_SHAPES.get(key)
+    if entry is None:
+        return
+    predicate, message = entry
+    if not predicate(value):  # type: ignore[operator]
+        # Reporting the observed length turns "it did not work" into an obvious
+        # double-paste; the secret itself is still never echoed.
+        raise ValueError(f"{message} (received {len(value)} characters)")
+
+
 def _normalized_value(key: str, value: str) -> str:
     if key == "APP_PASSWORD_HASH":
         if owner_password_hash_is_valid(value):
@@ -320,6 +350,7 @@ def _normalized_value(key: str, value: str) -> str:
         raise ValueError("secret value must use non-whitespace printable characters")
     if any(character in value for character in _UNSAFE_TOKEN_CHARACTERS):
         raise ValueError("secret value contains characters unsupported by secrets.env")
+    _require_exact_shape(key, value)
     return value
 
 
@@ -332,12 +363,8 @@ def _format_valid(key: str, value: str) -> bool:
         return False
     if key == "OPENAI_API_KEY" and not value.startswith("sk-"):
         return False
-    # FRED issues 32-character lower-case alphanumeric keys. Checking the shape
-    # locally keeps a typo from reaching the official API at all; the value is
-    # never echoed and never sent anywhere by this CLI.
-    if key == "FRED_API_KEY" and (
-        len(value) != 32 or not value.isalnum() or value != value.lower()
-    ):
+    entry = _EXACT_SHAPES.get(key)
+    if entry is not None and not entry[0](value):  # type: ignore[operator]
         return False
     return True
 

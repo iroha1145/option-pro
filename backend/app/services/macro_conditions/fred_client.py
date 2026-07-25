@@ -151,6 +151,17 @@ class FredClient:
                 delay if delay is not None else _BASE_BACKOFF_SECONDS,
             )
         if 400 <= status < 500:
+            # FRED answers 400 when the api_key is malformed or unregistered.
+            # Reporting that as "unavailable" sends the operator hunting an
+            # outage that is not happening, so give the key its own code.
+            # Only the presence of the marker is inspected; the upstream body is
+            # never logged or surfaced.
+            if status == 400 and b"api_key" in response.content[:1024]:
+                _redacted("fred rejected api key", series_id, "fred_api_key_invalid")
+                return (
+                    MacroError("fred_api_key_invalid", "FRED rejected the API key"),
+                    None,
+                )
             _redacted("fred rejected request", series_id, "fred_unavailable")
             return MacroError("fred_unavailable", "FRED rejected the request"), None
         if status >= 500:
