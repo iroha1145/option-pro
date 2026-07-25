@@ -436,4 +436,3 @@ Score Method 含义见 [评分](scoring.md)：
 - **新鲜度**：日度 7 自然日
 - **Formula Version**：`optix-macro-factor-v1`
 - **说明**：亨利枢纽天然气现货价（美元/百万英热）。该分数衡量能源成本压力，不是天然气产业景气度评分。
-
