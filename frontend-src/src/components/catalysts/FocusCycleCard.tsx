@@ -19,6 +19,14 @@ const DIR_ARROW: Record<NewsClassification, { icon: 'arrow-up-right' | 'arrow-do
   neutral: { icon: 'minus', cls: 'text-ink-500 bg-paper-2' },
 };
 
+/* 后端 horizon 枚举原样映射，不推断也不合并档位。 */
+const HORIZON_LABEL: Record<'intraday' | 'days' | 'weeks' | 'uncertain', string> = {
+  intraday: '日内',
+  days: '数日',
+  weeks: '数周',
+  uncertain: '跨度未定',
+};
+
 /* 周期阶段横向步进条：当前 brand 实心（静态，不脉冲）；已过实心灰；未来空心 */
 function StageStepper({ stage }: { stage: number }) {
   return (
@@ -146,7 +154,25 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
                 <Icon name={d.icon} size={12} />
               </span>
               <span className="font-mono text-caption font-semibold text-ink-800">{a.ticker}</span>
-              <ImpactValue value={a.impactScore} />
+              {a.insufficientEvidence ? (
+                /* 后端在证据不足时强制 catalyst_bias 为 null。说「证据不足」，而不是画一个 0。 */
+                <span className="shrink-0 rounded-xs border border-line bg-paper-2 px-1.5 py-px text-micro text-ink-500">
+                  证据不足
+                </span>
+              ) : (
+                <ImpactValue value={a.catalystBias} />
+              )}
+              {a.confidence !== null && (
+                <span className="shrink-0 font-mono text-micro text-ink-400 tnum">
+                  置信 {Math.round(a.confidence * 100)}
+                  <span className="ml-0.5">· 非胜率</span>
+                </span>
+              )}
+              {a.horizon && (
+                <span className="shrink-0 rounded-xs bg-paper-2 px-1.5 py-px text-micro text-ink-400">
+                  {HORIZON_LABEL[a.horizon]}
+                </span>
+              )}
               <span className="min-w-0 flex-1 truncate text-micro text-ink-500" title={a.note}>
                 {a.note}
               </span>

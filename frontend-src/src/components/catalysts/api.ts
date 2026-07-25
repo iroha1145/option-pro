@@ -237,13 +237,39 @@ function nCycleRecord(r: Rec): MarketFocusCycle {
     uncertainties: unwrap(result, 'market_uncertainties').length
       ? (result.market_uncertainties as unknown[]).filter((x): x is string => typeof x === 'string')
       : undefined,
-    assessments: assessments.map((a) => ({
-      ticker: pickS(a, 'ticker') ?? '',
-      name: pickS(a, 'name') ?? '',
-      direction: nClassification(a.direction ?? a.stance ?? a.classification),
-      impactScore: pickN(a, 'impactScore', 'impact_score') ?? 0,
-      note: pickS(a, 'note', 'note_zh', 'assessment_zh', 'reason', 'reason_zh') ?? '',
-    })),
+    /*
+     * 后端 MarketFocusTickerAssessment 的真实字段是 catalyst_bias(±100，证据不足时为
+     * null)/confidence(0–100)/horizon/summary/insufficient_evidence。此前这里读的是
+     * impact_score、direction、note —— 后端一个都不发，于是每行都落到默认值：偏向恒
+     * 0.00、方向恒中性、说明恒空。缺失必须显「—」而不是 0：把「没有结论」画成「结论
+     * 是中性」，比留空严重得多。
+     */
+    assessments: assessments.map((a) => {
+      const bias = pickN(a, 'catalyst_bias', 'catalystBias');
+      const insufficient = pickB(a, 'insufficient_evidence', 'insufficientEvidence') === true;
+      const confidence = pickN(a, 'confidence');
+      const horizon = pickS(a, 'horizon');
+      return {
+        ticker: pickS(a, 'ticker') ?? '',
+        name: pickS(a, 'name') ?? '',
+        direction:
+          bias === null || insufficient
+            ? 'neutral'
+            : bias > 0
+              ? 'bullish'
+              : bias < 0
+                ? 'bearish'
+                : 'neutral',
+        catalystBias: bias === null || insufficient ? null : fromBackendImpact(bias),
+        confidence: confidence === null ? null : confidence / 100,
+        horizon:
+          horizon === 'intraday' || horizon === 'days' || horizon === 'weeks' || horizon === 'uncertain'
+            ? horizon
+            : null,
+        insufficientEvidence: insufficient,
+        note: pickS(a, 'summary', 'summary_zh', 'note', 'note_zh') ?? '',
+      };
+    }),
   };
 }
 

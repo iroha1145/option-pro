@@ -60,7 +60,10 @@ def test_deployment_checks_only_the_unified_worker_inventory() -> None:
         "retention",
     ):
         assert f'"{task_name}"' in script
-    assert "all twelve task types" in script
+    # The gate must name the offending task rather than print one catch-all line
+    # for every rejection reason.
+    assert "task inventory mismatch" in script
+    assert "consecutive_failures=%d" in script
     assert "verify_public_snapshots" in script
     release_gate = (
         ROOT / "backend" / "app" / "tools" / "verify_release_data.py"

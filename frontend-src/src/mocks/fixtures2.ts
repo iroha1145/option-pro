@@ -1064,8 +1064,18 @@ export interface SourceHealth {
 export interface FocusCycleStockAssessment {
   ticker: string;
   name: string;
+  /** 由 catalystBias 的正负号推出；无偏向值时为 neutral。 */
   direction: NewsClassification;
-  impactScore: number;
+  /**
+   * 催化剂偏向，UI 刻度 ±5（后端 catalyst_bias 为 ±100，沿用催化剂域 ÷20 的换算，
+   * 与新闻分析里的影响分同一把尺子）。证据不足时后端强制为 null —— 此处保持 null
+   * 并显「证据不足」，绝不落成 0，那会把「没结论」显示成「结论是中性」。
+   */
+  catalystBias: number | null;
+  /** 0–1（后端 0–100）。标注「· 非胜率」。 */
+  confidence: number | null;
+  horizon: 'intraday' | 'days' | 'weeks' | 'uncertain' | null;
+  insufficientEvidence: boolean;
   note: string;
 }
 
@@ -1663,12 +1673,14 @@ export function getCatalystsSources(): SourceHealth[] {
 /* ---------------- 市场焦点周期 ---------------- */
 function buildCycle(seedNum: number, trigger: MarketFocusCycle['trigger'], generatedAt: Date, idSuffix: string): MarketFocusCycle {
   const r = new Rng(seedNum);
+  /* 最后一只故意是「证据不足」：那是后端真会出现的一种状态（catalyst_bias 为 null），
+     UI 必须显「证据不足」而不是 0.00，mock 里留一个样本守住这条路径。 */
   const assessments: FocusCycleStockAssessment[] = [
-    { ticker: 'NVDA', name: '英伟达', direction: 'bullish', impactScore: round2(r.float(2.4, 4.2)), note: '算力订单能见度延长，焦点周期核心受益标的' },
-    { ticker: 'TSM', name: '台积电', direction: 'bullish', impactScore: round2(r.float(1.2, 2.4)), note: '先进制程产能利用率维持满载，定价权稳固' },
-    { ticker: 'AMD', name: '超威半导体', direction: 'bullish', impactScore: round2(r.float(0.8, 1.8)), note: '加速卡份额提升预期，跟随主线但弹性次之' },
-    { ticker: 'SMCI', name: '超微电脑', direction: 'neutral', impactScore: round2(r.float(-0.4, 0.6)), note: '出货节奏与毛利率信号混杂，方向待确认' },
-    { ticker: 'INTC', name: '英特尔', direction: 'bearish', impactScore: -round2(r.float(0.6, 1.4)), note: '资本开支主线之外，相对资金吸引力下降' },
+    { ticker: 'NVDA', name: '英伟达', direction: 'bullish', catalystBias: round2(r.float(2.4, 4.2)), confidence: 0.82, horizon: 'days', insufficientEvidence: false, note: '算力订单能见度延长，焦点周期核心受益标的' },
+    { ticker: 'TSM', name: '台积电', direction: 'bullish', catalystBias: round2(r.float(1.2, 2.4)), confidence: 0.74, horizon: 'weeks', insufficientEvidence: false, note: '先进制程产能利用率维持满载，定价权稳固' },
+    { ticker: 'AMD', name: '超威半导体', direction: 'bullish', catalystBias: round2(r.float(0.8, 1.8)), confidence: 0.61, horizon: 'days', insufficientEvidence: false, note: '加速卡份额提升预期，跟随主线但弹性次之' },
+    { ticker: 'INTC', name: '英特尔', direction: 'bearish', catalystBias: -round2(r.float(0.6, 1.4)), confidence: 0.55, horizon: 'weeks', insufficientEvidence: false, note: '资本开支主线之外，相对资金吸引力下降' },
+    { ticker: 'SMCI', name: '超微电脑', direction: 'neutral', catalystBias: null, confidence: 0.3, horizon: 'uncertain', insufficientEvidence: true, note: '出货节奏与毛利率信号混杂，证据不足以给出偏向' },
   ];
   return {
     cycleId: `fc-${idSuffix}`,

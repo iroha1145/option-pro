@@ -1989,3 +1989,50 @@ def test_release_gate_blocks_on_missing_but_not_on_stale(tmp_path, monkeypatch):
     # The JSON stays parseable for the deploy script's grep.
     assert json.loads(json.dumps(report))["missing"]
     assert isinstance(time.time(), float)
+
+
+def test_required_resources_survive_a_closed_weekend() -> None:
+    """A required entry must not expire faster than the weekend refresh cadence.
+
+    While the market is closed the refresh backs off to roughly six hours, so any
+    required resource with a hard limit under ~3 days inevitably expires between
+    Friday's last success and Monday's open. focus_overview shipped at 24 hours:
+    every Saturday the snapshot lost a required entry, the worker reported
+    degraded, and deploy.sh's verify_worker gate refused the rollout.
+    """
+
+    from app.public_home_snapshot import (
+        PUBLIC_HOME_OPTIONAL_RESOURCE_ORDER,
+        PUBLIC_HOME_RESOURCE_ORDER,
+        PUBLIC_HOME_RESOURCE_SPECS,
+        public_home_resource_parameters,
+    )
+
+    weekend = 3 * 24 * 60 * 60
+    required = set(PUBLIC_HOME_RESOURCE_ORDER) - set(PUBLIC_HOME_OPTIONAL_RESOURCE_ORDER)
+    # A resource whose parameters move with the clock (earnings is keyed by
+    # market_date) is already invalidated by the parameter check, and a long hard
+    # limit would only let it serve last week's calendar. Its own limit does not
+    # govern weekend survival, so it is exempt -- detected, not hard-coded.
+    monday = 1_700_000_000.0
+    next_monday = monday + 7 * 24 * 60 * 60
+    date_keyed = {
+        resource
+        for resource in required
+        if public_home_resource_parameters(resource, now=monday)
+        != public_home_resource_parameters(resource, now=next_monday)
+    }
+    too_short = {
+        resource: PUBLIC_HOME_RESOURCE_SPECS[resource].max_age
+        for resource in sorted(required - date_keyed)
+        if resource in PUBLIC_HOME_RESOURCE_SPECS
+        and PUBLIC_HOME_RESOURCE_SPECS[resource].max_age < weekend
+    }
+    assert date_keyed == {"earnings"}, (
+        "date-keyed exemption drifted; re-check which resources vary with the clock: "
+        f"{sorted(date_keyed)}"
+    )
+    assert not too_short, (
+        "required public-home resources whose hard limit cannot span a weekend: "
+        f"{too_short}"
+    )

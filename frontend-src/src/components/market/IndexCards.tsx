@@ -22,14 +22,14 @@ const IndexCard = memo(function IndexCard({
   flash,
   focused,
   registerRef,
-  onSelect,
+  onOpen,
 }: {
   quote: IndexQuote;
   index: number;
   flash: 'up' | 'down' | undefined;
   focused: boolean;
   registerRef: (code: string, el: HTMLDivElement | null) => void;
-  onSelect: (code: string) => void;
+  onOpen: (code: string) => void;
 }) {
   /* 数据纪律：无有效价（live 快照缺失时映射为 0）显「—」，不显 0.00 */
   const hasPrice = Number.isFinite(quote.price) && quote.price > 0;
@@ -40,16 +40,18 @@ const IndexCard = memo(function IndexCard({
     [quote.code, quote.changePct],
   );
   return (
-    /* 选中同顶部指数 tape 一致（写 ?index=）。用真 button 而不是加 onClick 的
-       div：键盘可达、读屏能报出按下态，且 aria-pressed 让「已选中」不只靠颜色。 */
+    /* 用真 button 而不是加 onClick 的 div：键盘可达，读屏能报出这是可操作项。 */
     <motion.button
       type="button"
       ref={(el) => registerRef(quote.code, el as HTMLDivElement | null)}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.045, 0.4) }}
-      onClick={() => onSelect(quote.code)}
-      aria-pressed={focused}
+      /* 点卡片开该指数的详情抽屉——与全站「点代码开抽屉、保留上下文」一致。
+         这里不做「选中」：本页四个面板都是全市场读数，没有按指数的版本可切换，
+         留一个改不动数据的选中态等于承诺一个兑现不了的交互。?index= 仍然保留，
+         但只用于从顶部 tape 跳进来时高亮定位。 */
+      onClick={() => onOpen(quote.code)}
       /* 上浮 -3px/240ms 与自选卡、热点卡同一套手感；走 whileHover 而不是 CSS
          hover:-translate-y，因为入场动画结束后 framer 会留下内联 transform，
          把 CSS 位移压掉。 */
@@ -60,7 +62,7 @@ const IndexCard = memo(function IndexCard({
         'focus-visible:outline-none focus-visible:shadow-focus-ring',
         focused && 'shadow-[inset_2px_0_0_0_var(--brand-600),0_1px_2px_rgba(13,22,38,.05),inset_0_1px_0_rgba(255,255,255,.9)] ring-1 ring-brand-100',
       )}
-      aria-label={`${quote.name} ${quote.code}`}
+      aria-label={`${quote.name} ${quote.code} 详情`}
     >
       <div className="flex items-baseline justify-between gap-2">
         <p className="min-w-0">
@@ -94,7 +96,7 @@ export default function IndexCards({
   focus,
   onRetry,
   refreshing,
-  onSelect,
+  onOpen,
 }: {
   data: IndexQuote[] | null;
   loading: boolean;
@@ -102,7 +104,7 @@ export default function IndexCards({
   focus: string | null;
   onRetry: () => void;
   refreshing: boolean;
-  onSelect: (code: string) => void;
+  onOpen: (code: string) => void;
 }) {
   /* tick-flash 差异检测（60s 轮询） */
   const [flashes, setFlashes] = useState<Record<string, 'up' | 'down'>>({});
@@ -179,7 +181,7 @@ export default function IndexCards({
           flash={flashes[q.code]}
           focused={focus?.toUpperCase() === q.code}
           registerRef={registerRef}
-          onSelect={onSelect}
+          onOpen={onOpen}
         />
       ))}
     </div>

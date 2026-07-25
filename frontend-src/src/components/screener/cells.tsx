@@ -21,13 +21,16 @@ export function ScoreCell({ score, index }: { score: number; index: number }) {
   const strength = screenerStrengthPresentation(score);
   return (
     <span className="inline-flex items-center gap-2.5" title={`${strength.band} ${strength.label}`}>
+      {/* 固定宽度 + 右对齐 + 统一一位小数：分数字符数不一（84 是两位、84.4 是四位）
+          会把后面的横条推到各行不同的 x 上，整列看起来歪歪扭扭。tnum 只保证数字等宽，
+          管不了字符个数，所以既要定宽也要定小数位（JS 数字 84.0 会打印成 84）。 */}
       <span
         className={cn(
-          'font-mono text-[15px] leading-[20px] font-semibold tnum',
+          'w-[3.25rem] shrink-0 text-right font-mono text-[15px] leading-[20px] font-semibold tnum',
           strength.textClass,
         )}
       >
-        {score}
+        {score.toFixed(1)}
       </span>
       <span
         className="h-1 w-16 overflow-hidden rounded-pill bg-line"

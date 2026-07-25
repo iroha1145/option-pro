@@ -198,7 +198,13 @@ PUBLIC_HOME_RESOURCE_SPECS: dict[str, PublicHomeResourceSpec] = {
     # limits keep Friday's last successful research view available through a
     # weekend without ever presenting it as live data.
     "indices": PublicHomeResourceSpec("market-indices-v1", 4 * 24 * 60 * 60),
-    "focus_overview": PublicHomeResourceSpec("focus-overview-v2", 24 * 60 * 60),
+    # 7 days, not 24 hours: the market-phase-aware refresh backs off to roughly six
+    # hours once the market closes, so a 24-hour hard limit cannot survive a weekend.
+    # focus_overview is a *required* resource, so every Saturday it expired, the
+    # snapshot lost a required entry, the worker reported degraded and deploy.sh's
+    # verify_worker gate failed -- a weekend deploy could not pass. Its siblings on
+    # the same ticker already use 7 days, which is what the comment above intends.
+    "focus_overview": PublicHomeResourceSpec("focus-overview-v2", 7 * 24 * 60 * 60),
     "focus_chart": PublicHomeResourceSpec("focus-chart-v1", 7 * 24 * 60 * 60),
     "focus_signals": PublicHomeResourceSpec("focus-signals-v1", 7 * 24 * 60 * 60),
     "market_signals": PublicHomeResourceSpec("market-signals-v1", 7 * 24 * 60 * 60),

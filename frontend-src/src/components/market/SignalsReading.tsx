@@ -200,7 +200,10 @@ export default function SignalsReading({
         </div>
       </div>
 
-      <SourceNote className="mt-5" text="根据当前各项指标读数自动生成 · 不构成投资建议" />
+      <SourceNote
+        className="mt-5"
+        text="根据当前各项指标读数自动生成 · 解读对象为全市场，不区分指数 · 不构成投资建议"
+      />
     </section>
   );
 }

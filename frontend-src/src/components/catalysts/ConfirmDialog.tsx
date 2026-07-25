@@ -51,11 +51,14 @@ export default function ConfirmDialog({
             role="alertdialog"
             aria-modal="true"
             aria-label={title}
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.16 } }}
+            /* 水平居中交给 framer 的 x，不能用 Tailwind 的 -translate-x-1/2：动 scale 时
+               framer 写的内联 transform 会把那个 class 整个替换掉（实测 scale(0.96) 直接
+               顶掉 translateX(-200px)），400px 宽的对话框会稳定右偏 200px。 */
+            initial={{ opacity: 0, scale: 0.96, x: '-50%' }}
+            animate={{ opacity: 1, scale: 1, x: '-50%' }}
+            exit={{ opacity: 0, scale: 0.96, x: '-50%', transition: { duration: 0.16 } }}
             transition={{ type: 'spring', stiffness: 520, damping: 32 }}
-            className="fixed left-1/2 top-[24vh] z-[86] w-[400px] max-w-[calc(100vw-32px)] -translate-x-1/2 rounded-xl border border-line bg-card p-5 shadow-sh-3"
+            className="fixed left-1/2 top-[24vh] z-[86] w-[400px] max-w-[calc(100vw-32px)] rounded-xl border border-line bg-card p-5 shadow-sh-3"
           >
             <div className="flex items-start gap-3">
               <span

@@ -85,7 +85,8 @@ export default function ResultCards({
               <span className="mt-3 flex items-end justify-between gap-3">
                 <span>
                   <span className={cn('font-mono text-data-xl tnum', strength.textClass)}>
-                    {r.strengthScore}
+                    {/* 与表格列同口径的一位小数，避免 84 / 84.4 混排 */}
+                    {r.strengthScore.toFixed(1)}
                   </span>
                   <span className="ml-1.5 text-micro text-ink-400">
                     强度分 · {strength.band} {strength.label}
@@ -110,15 +111,19 @@ export default function ResultCards({
                   transition={{ duration: 0.7, ease: EASE_PAPER, delay: 0.15 + i * 0.03 }}
                   style={{ width: `${strengthWidth}%` }}
                 />
+                {/* 几何全部走 top/left，一点都不用 CSS transform：framer 为了动 scale
+                    会写内联 transform，把 Tailwind 的 -translate-y-1/2 整个覆盖掉，
+                    8px 的点就此丢掉垂直居中、稳定偏下 4px。scale 的 transform-origin
+                    默认在中心，所以缩放不会再移动位置。 */}
                 <motion.span
                   className={cn(
-                    'absolute top-1/2 size-2 -translate-y-1/2 rounded-full border-2 border-card shadow-sh-1',
+                    'absolute size-2 rounded-full border-2 border-card shadow-sh-1',
                     strength.barClass,
                   )}
                   initial={{ opacity: 0, scale: 0.65 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.26, ease: EASE_PAPER, delay: 0.72 + i * 0.03 }}
-                  style={{ left: `calc(${strengthWidth}% - 4px)` }}
+                  style={{ left: `calc(${strengthWidth}% - 4px)`, top: 'calc(50% - 4px)' }}
                   aria-hidden="true"
                 />
               </span>
