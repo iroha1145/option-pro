@@ -86,10 +86,11 @@ test('期权链保留真实来源并按 Retry-After 冷却重试', async () => {
 
   assert.match(api, /provider:\s*pickS\(r,\s*'provider'\)/);
   assert.match(api, /asOf:\s*pickS\(r,\s*'as_of',\s*'asOf'\)/);
-  assert.match(panel, /期权链来源：\$\{chain\.provider/);
+  assert.match(panel, /chain\.asOf \? ` · 更新于 \$\{fmtRelative\(chain\.asOf\)\}`/);
   assert.match(panel, /providerError\?\.retryAfter/);
   assert.match(panel, /disabled=\{retrySeconds > 0 \|\| retrying\}/);
-  assert.match(panel, /Yahoo\/yfinance 拉取/);
+  assert.match(panel, /期权数据暂时获取不到/);
+  assert.doesNotMatch(panel, /yfinance|Massive Stocks Starter/);
   assert.match(panel, /providerError\.code === 400[\s\S]*forceExpirationsRef\.current = true;[\s\S]*refreshExpirations\(\);[\s\S]*return;/);
   assert.match(api, /force:\s*readOptions\.force/);
 });

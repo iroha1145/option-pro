@@ -128,7 +128,7 @@ export default function ManualStockPull({
 
       {!running && !result && !error && (
         <p className="text-micro text-ink-500">
-          行情价格 Massive 优先，Yahoo 兜底（由 yfinance 拉取）
+          获取该股票的最新价格、日线与技术指标
         </p>
       )}
 

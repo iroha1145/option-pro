@@ -65,7 +65,7 @@ function buildReading(
     if (status.market === 'open') parts.push('盘中关注量能能否延续，追高注意回撤风险。');
     else if (status.market === 'premarket') parts.push('盘前流动性较薄，信号以开盘后确认为准。');
     else if (status.market === 'postmarket') parts.push('盘后留意财报与公告对明日开盘的传导。');
-    else parts.push('当前为最近交易日快照，待开盘后重新校准。');
+    else parts.push('当前为最近一个交易日的数据，开盘后会重新计算。');
   }
   return parts.join('');
 }
@@ -123,8 +123,8 @@ export default function SignalsReading({
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title={error?.code === 503 ? '快照暂不可用' : '加载失败'}
-          description={error ? error.message : '信号汇总未覆盖，留空而非编造'}
+          title={error?.code === 503 ? '数据暂不可用' : '加载失败'}
+          description={error ? error.message : '暂无信号汇总数据'}
           action={
             <button
               onClick={onRetry}
@@ -197,14 +197,14 @@ export default function SignalsReading({
               </span>
             </p>
           </div>
-          <p className="mt-1 text-micro text-ink-400">{bias?.basis ?? '依据不足，留空而非编造'}</p>
+          <p className="mt-1 text-micro text-ink-400">{bias?.basis ?? '依据不足，暂不给出判断'}</p>
           <blockquote className="mt-4 flex-1 rounded-lg border border-line bg-card-warm p-4">
             <p className="font-display text-[15px] leading-[26px] text-ink-800">{reading}</p>
           </blockquote>
         </div>
       </div>
 
-      <SourceNote className="mt-5" text="计算方式：由当前真实接口字段模板化生成 · 非投资建议" />
+      <SourceNote className="mt-5" text="根据当前各项指标读数自动生成 · 不构成投资建议" />
     </motion.section>
   );
 }

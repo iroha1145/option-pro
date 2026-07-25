@@ -2,7 +2,7 @@
  * B5 补充带：本月财报密度条（earnings.md）
  * 30 天横向迷你柱（每日财报数，brand-400，grow-bar 错峰）
  * hover 日 → 当日代码列表 tooltip；点击日 → 跳转该周并选中日格
- * 右侧 SourceNote 如实说明日历接口当前使用的上游数据源。
+ * 右侧 SourceNote 一行说明数据口径。
  */
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
@@ -97,7 +97,7 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
             <span>+30 天</span>
           </div>
         </div>
-        <SourceNote className="mt-4" text="数据：后端财报日历接口；缺失项不补造" />
+        <SourceNote className="mt-4" text="财报日程 · 以公司公告为准" />
       </div>
     </section>
   );

@@ -42,7 +42,7 @@ function ZoneBand({ ev }: { ev: BreakoutEventFull }) {
   if (!sz || !rz || !fin(sz.low) || !fin(sz.high) || !fin(rz.low) || !fin(rz.high) || !fin(ev.current_price)) {
     return (
       <p className="flex h-12 items-center justify-center rounded-md border border-line bg-card-warm text-caption text-ink-400">
-        接口未覆盖区带数据 · 留空而非编造
+        暂无区带数据
       </p>
     );
   }
@@ -151,7 +151,7 @@ function CatalystDigest({ ticker }: { ticker: string }) {
   return (
     <div>
       {items === null && !failed && <SkeletonText lines={3} />}
-      {failed && <p className="text-caption text-ink-400">催化剂快照暂不可用</p>}
+      {failed && <p className="text-caption text-ink-400">催化剂数据暂不可用</p>}
       {items !== null && items.length === 0 && <p className="text-caption text-ink-400">该股近 24h 暂无相关催化剂</p>}
       {items !== null &&
         items.map((n) => (

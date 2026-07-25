@@ -304,7 +304,7 @@ export default function FocusCycleCard() {
             <SkeletonText lines={3} className="mt-3" />
           </div>
         ) : latestQ.error ? (
-          <p className="text-body-s text-ink-500">焦点周期快照暂不可用 · 留空优于编造</p>
+          <p className="text-body-s text-ink-500">暂无焦点周期数据</p>
         ) : latestQ.data ? (
           <>
             {latestQ.data.stage !== null && <StageStepper stage={latestQ.data.stage} />}

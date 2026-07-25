@@ -305,11 +305,12 @@ test('财报日历保留全市场覆盖状态和真实供应方', () => {
     assert.equal(source.includes(field), true, `财报元数据缺少 ${field}`);
   }
   assert.equal(source.includes('mapUpcomingPayload'), true);
-  assert.equal(page.includes('全市场财报源暂时不完整'), true);
-  assert.equal(page.includes('未返回的公司不会用热门名单或估算值补齐'), true);
+  assert.equal(page.includes('财报数据暂时不完整'), true);
+  assert.equal(page.includes('缺失的公司不会用估算值顶替'), true);
   assert.equal(page.includes('const coverageLimited = q.data?.dataLimited === true;'), true);
   assert.equal(page.includes("q.data?.sourceStatus === 'degraded'"), false);
-  assert.equal(page.includes("q.data.providers.join(' + ')"), true);
+  /* providers 由 mapper 如实保留（上方字段断言），但不印供应商名给普通读者 */
+  assert.equal(page.includes("q.data.providers.join(' + ')"), false);
   assert.equal(page.includes('继续使用上一次完整日历'), true);
 });
 
@@ -477,10 +478,10 @@ test('财报组件不再伪造 Optix Research 来源', () => {
   for (const source of componentSources) {
     assert.equal(source.includes('Optix Research'), false);
   }
-  assert.equal(density.includes('后端财报日历接口'), true);
+  assert.equal(density.includes('财报日程 · 以公司公告为准'), true);
   assert.equal(density.includes('slice(0, MAX_TOOLTIP_TICKERS)'), true);
   assert.equal(density.includes('+{n - MAX_TOOLTIP_TICKERS}'), true);
-  assert.equal(card.includes('基于当前财报日历字段'), true);
+  assert.equal(card.includes('AI 依据本次财报日程生成'), true);
 });
 
 test('股票搜索失败显示明确错误态，不伪装成空结果', () => {

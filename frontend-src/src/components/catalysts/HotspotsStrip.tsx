@@ -122,7 +122,7 @@ export default function HotspotsStrip({ onOpenNews }: { onOpenNews: (newsId: str
           ) : null}
           {!listQ.loading && !computing && items.length === 0 && (
             <div className="flex w-full flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-card-warm py-8 text-center">
-              <p className="text-body-s text-ink-500">暂无热点分组 · 留空而非编造</p>
+              <p className="text-body-s text-ink-500">当前窗口暂无热点分组</p>
             </div>
           )}
           {!listQ.loading &&

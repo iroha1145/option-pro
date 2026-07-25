@@ -221,7 +221,7 @@ export default function Breakouts() {
     setScanning(true);
     try {
       await runtimeApi.workerAction('breakout_refresh');
-      toast.success('已请求刷新快照', 'Worker 已受理 breakout_refresh，完成后自动更新');
+      toast.success('已请求刷新', '扫描任务已受理，完成后自动更新');
       statusQ.refresh();
       window.setTimeout(() => {
         statusQ.refresh();
@@ -229,7 +229,7 @@ export default function Breakouts() {
         eventsQ.refresh();
       }, 10_000);
     } catch {
-      toast.error('触发失败', 'Worker 动作未被受理，请稍后重试');
+      toast.error('触发失败', '扫描任务未被受理，请稍后重试');
     } finally {
       window.setTimeout(() => setScanning(false), 700);
     }
@@ -276,11 +276,11 @@ export default function Breakouts() {
           </p>
           <h1 className="mt-2 font-display text-display-l text-ink-900">突破雷达</h1>
           <p className="mt-1.5 text-body-s text-ink-500">
-            全市场粗筛 → 点时复核 → 生命周期跟踪 · 快照 <span className="font-mono tnum">{snapshotAt}</span> ·{' '}
+            全市场粗筛 → 点时复核 → 生命周期跟踪 · 更新于 <span className="font-mono tnum">{snapshotAt}</span> ·{' '}
             <span className="font-mono tnum">{currentAll.length}</span> 条活跃事件
           </p>
         </div>
-        {/* 紧凑状态条：启用 LED · 最近扫描 · 时段 chip · Worker · 下次扫描倒计时 · 只看自选 */}
+        {/* 紧凑状态条：启用 LED · 最近扫描 · 时段 chip · 扫描服务 · 下次扫描倒计时 · 只看自选 */}
         <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 pb-1 text-caption text-ink-500">
           <span className="inline-flex items-center gap-1.5">
             <span className={cn('size-2 rounded-full', status?.enabled ? 'bg-up-600 animate-led-pulse' : 'bg-ink-300')} aria-hidden="true" />
@@ -292,7 +292,7 @@ export default function Breakouts() {
           {status?.market_session && <SessionChip session={status.market_session} />}
           <span className="inline-flex items-center gap-1.5">
             <Icon name="command" size={13} className={status?.worker?.healthy ? 'text-up-600' : 'text-warn-600'} />
-            Worker {status ? (status.worker?.healthy ? '正常' : '降级') : '—'}
+            扫描服务 {status ? (status.worker?.healthy ? '正常' : '异常') : '—'}
           </span>
           {nextCountdown && (
             <span className="font-mono tnum">
@@ -303,7 +303,7 @@ export default function Breakouts() {
         </div>
       </motion.header>
 
-      {/* 筛选行：状态 fchip 组 · 评分胶囊组 · ticker 聚焦 chip · owner 刷新快照 */}
+      {/* 筛选行：状态 fchip 组 · 评分胶囊组 · ticker 聚焦 chip · owner 立即扫描 */}
       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line pb-4">
         <span className="flex items-center gap-1.5 text-caption text-ink-400">
           <Icon name="filter-funnel" size={13} />
@@ -343,11 +343,11 @@ export default function Breakouts() {
             <button
               onClick={onRefreshSnapshot}
               disabled={scanning}
-              title="触发 worker breakout_refresh 动作"
+              title="立即触发一次突破扫描"
               className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
             >
               <Icon name="refresh" size={14} className={scanning ? 'animate-spin-once' : ''} />
-              刷新快照
+              立即扫描
             </button>
           )}
         </span>
@@ -382,8 +382,8 @@ export default function Breakouts() {
               <EmptyState
                 variant="error"
                 image="/empty-radar.svg"
-                title={currentError.code === 503 ? '扫描快照暂不可用' : '信号加载失败'}
-                description={currentError.code === 503 ? '接口未覆盖此能力，留空而非编造' : currentError.message}
+                title={currentError.code === 503 ? '扫描数据暂不可用' : '信号加载失败'}
+                description={currentError.code === 503 ? '稍后刷新再试' : currentError.message}
                 action={
                   <button
                     onClick={currentQ.refresh}
@@ -473,7 +473,7 @@ export default function Breakouts() {
         )}
       </section>
 
-      <SourceNote className="mt-8" text="数据：后端突破扫描任务 · 延迟行情" />
+      <SourceNote className="mt-8" text="突破扫描结果 · 行情为延迟数据" />
 
       {/* 事件详情模态（保留） */}
       <EventDetail

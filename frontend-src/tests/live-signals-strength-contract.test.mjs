@@ -44,7 +44,7 @@ test('watchlist refresh waits for the real worker action and follows both refres
   assert.match(watchlist, /runtimeApi\.workerAction\('focus_refresh'\)/);
   assert.match(watchlist, /runtimeApi\.waitForWorkerAction\(action\.requestId\)/);
   assert.match(watchlist, /spinning=\{forceRefreshing \|\| wl\.refreshing\}/);
-  assert.match(watchlist, /后台正在重建完整自选快照/);
+  assert.match(watchlist, /正在重新计算完整自选数据/);
   assert.doesNotMatch(watchlist, /setTimeout\(\(\) => setSpinning/);
   assert.doesNotMatch(watchlist, /已强制刷新自选快照/);
   assert.match(watchlist, /rowStrengthAvailable/);

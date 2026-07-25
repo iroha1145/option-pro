@@ -135,7 +135,7 @@ export default function Sectors() {
         <div>
           <p className="text-caption font-medium text-ink-700">收益统计周期</p>
           <p className="text-micro text-ink-400">
-            数值来自强度接口的板块成分聚合
+            数值由板块成分股汇总得出
           </p>
         </div>
         <Segmented
@@ -198,7 +198,7 @@ export default function Sectors() {
             <EmptyState
               image="/empty-chart.svg"
               title="暂无板块目录"
-              description="接口没有返回板块，不用空矩阵代替成功页面。"
+              description="暂时没有取到板块数据。"
             />
           </div>
         ) : (

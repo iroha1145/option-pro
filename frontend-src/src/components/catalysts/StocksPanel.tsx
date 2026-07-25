@@ -112,8 +112,8 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title={error.code === 503 ? '影响汇总快照不可用' : '加载失败'}
-          description={error.code === 503 ? '接口未覆盖此能力，留空而非编造' : error.message}
+          title={error.code === 503 ? '影响汇总暂不可用' : '加载失败'}
+          description={error.code === 503 ? '稍后刷新再试' : error.message}
         />
       );
     }

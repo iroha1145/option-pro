@@ -190,7 +190,7 @@ export async function mockOr<T>(fixture: () => T | Promise<T>, live: () => Promi
   return live();
 }
 
-/** mock 下抛 503（快照不可用） */
+/** mock 下抛 503（数据不可用） */
 export function unavailable(feature: string): never {
-  throw new ApiError(503, `${feature}快照暂不可用`);
+  throw new ApiError(503, `${feature}暂不可用`);
 }

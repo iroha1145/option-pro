@@ -173,7 +173,7 @@ function AiOptionInsight({
               {job.status === 'queued'
                 ? '排队中…'
                 : job.progress === null
-                  ? '模型正在处理 · 接口未提供百分比'
+                  ? '模型正在处理 · 暂无进度百分比'
                   : `解读中 ${Math.round(job.progress)}%`}
             </span>
             <button onClick={() => void cancel()} className="text-ink-400 hover:text-ink-600">取消任务</button>
@@ -245,7 +245,7 @@ function AiOptionInsight({
       {job?.status === 'succeeded' && !result && (
         <div className="mt-3 border-t border-ai-600/20 pt-3">
           <p className="text-caption text-down-700">
-            任务已完成，但服务没有返回符合期权解读契约的结构化结果。
+            分析已完成，但没有返回可展示的结果。
           </p>
           <button onClick={reset} className="mt-2 text-caption font-medium text-ai-600">
             重新生成
@@ -322,7 +322,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
     return (
       <EmptyState
         icon="doc-quote"
-        title="期权链快照未覆盖该标的"
+        title="该标的暂无期权数据"
         description={`支持标的：${OPTION_SUPPORTED_LIST}`}
         className="py-8"
       />
@@ -342,12 +342,12 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
             ? '登录状态已失效'
             : rateLimited
               ? '期权链请求较频繁'
-              : '期权链真实数据暂不可用'
+              : '期权数据暂不可用'
         }
         description={
           loginExpired
-            ? '请重新登录后读取期权链'
-            : `期权链由 Yahoo/yfinance 拉取；Massive Stocks Starter 股票订阅不包含期权行情${
+            ? '请重新登录后查看期权数据'
+            : `期权数据暂时获取不到${
                 retrySeconds > 0 ? ` · ${retrySeconds} 秒后可重试` : ''
               }`
         }
@@ -380,7 +380,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
   }
   const expList = Array.from(new Set(expirations ?? []));
   if (expList.length === 0) {
-    return <EmptyState icon="doc-quote" title="暂无到期日数据" description="期权到期日快照为空" className="py-8" />;
+    return <EmptyState icon="doc-quote" title="暂无到期日数据" description="暂未获取到该标的的期权到期日" className="py-8" />;
   }
 
   return (
@@ -411,9 +411,9 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
       {chain && (
         <SourceNote
           className="mt-2"
-          text={`期权链来源：${chain.provider ?? 'Yahoo/yfinance'}${
-            chain.asOf ? ` · 数据时间 ${fmtRelative(chain.asOf)}` : ''
-          }${chain.stale ? ' · 当前为最近一次可用快照' : ''}`}
+          text={`期权数据为延迟数据${
+            chain.asOf ? ` · 更新于 ${fmtRelative(chain.asOf)}` : ''
+          }${chain.stale ? ' · 暂未刷新，显示最近一次结果' : ''}`}
         />
       )}
 

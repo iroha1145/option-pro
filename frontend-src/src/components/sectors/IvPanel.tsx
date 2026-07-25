@@ -79,10 +79,6 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
     }
     return sorted;
   }, [data, desc]);
-  const priceProviders = useMemo(
-    () => Array.from(new Set(data.map((row) => row.priceProvider).filter((value): value is string => Boolean(value)))),
-    [data],
-  );
   return (
     <div className="card-surface p-4 md:p-6">
       {/* 头：标题 + 徽标 + 排序 */}
@@ -113,11 +109,11 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
       {/* 板块 pills（随 B1 联动，可手动改） */}
       <SectorChips sectors={sectors} value={sectorId} onChange={onSectorChange} className="mt-3" />
 
-      {/* 过期快照横幅 */}
+      {/* 数据未刷新横幅 */}
       {meta.stale && !loading && !error && (
         <div className="mt-3 flex items-center gap-2 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-600" role="status">
           <Icon name="clock-ny" size={14} />
-          过期快照 · 数据源未在最新周期更新，以下为最近一次可用数据
+          数据暂未刷新，以下为最近一次结果
         </div>
       )}
 
@@ -128,10 +124,10 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
         ) : error ? (
           <EmptyState
             image="/empty-chart.svg"
-            title={error.code === 503 ? 'IV 排名快照暂不可用' : 'IV 排名加载失败'}
+            title={error.code === 503 ? 'IV 排名暂不可用' : 'IV 排名加载失败'}
             description={
               error.code === 503
-                ? `Yahoo/yfinance 期权数据暂不可用${retrySeconds > 0 ? ` · ${retrySeconds} 秒后可重试` : ''}`
+                ? `期权数据暂时获取不到${retrySeconds > 0 ? ` · ${retrySeconds} 秒后可重试` : ''}`
                 : error.message
             }
             action={
@@ -147,7 +143,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
             }
           />
         ) : rows.length === 0 ? (
-          <EmptyState image="/empty-chart.svg" title="该板块暂无 IV 排名数据" description="留空优于编造" />
+          <EmptyState image="/empty-chart.svg" title="该板块暂无 IV 排名数据" />
         ) : (
           <table className="min-w-[420px] w-full border-collapse" aria-label="板块 IV 横截面排名表">
             <thead>
@@ -183,7 +179,6 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
                   </td>
                   <td
                     className="px-2 py-2 text-right font-mono text-data-m text-ink-800 tnum"
-                    title={r.priceProvider ? `价格来源：${r.priceProvider}` : undefined}
                   >
                     {r.price !== null ? fmtPrice(r.price) : <span className="text-ink-300">—</span>}
                   </td>
@@ -211,18 +206,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
 
       <SourceNote
         className="mt-4"
-        text={
-          `隐含波动率来源：${meta.providers.join(' + ') || 'Yahoo/yfinance'}；价格来源：${
-            priceProviders.join(' + ') || '接口未标注'
-          }；${
-            meta.snapshotSource === 'strength_worker' ||
-            meta.snapshotSource === 'sector_snapshot' ||
-            meta.snapshotSource === 'owner_live' ||
-            meta.snapshotSource === 'public_live'
-              ? '当前显示真实期权链快照'
-              : '当前显示实时返回结果'
-          }；板块排位是当前成分的横截面比较，不是历史 252 日百分位`
-        }
+        text="板块排位是同板块成分之间的横向比较，不是该股自己的历史高低位；期权与价格均为延迟数据"
       />
     </div>
   );

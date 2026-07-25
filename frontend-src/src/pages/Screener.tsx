@@ -161,7 +161,7 @@ export default function Screener() {
             payload: action,
           });
         }
-        if (!action.requestId) throw new ApiError(502, '后台扫描未返回 request_id');
+        if (!action.requestId) throw new ApiError(502, '扫描任务未能启动');
         if (action.status !== 'completed') await runtimeApi.waitForWorkerAction(action.requestId);
       };
 
@@ -340,14 +340,14 @@ export default function Screener() {
     try {
       const ok = await runScan(applied, { forceRefresh: true });
       if (!ok) {
-        toast.error('刷新失败', '后台扫描未完成，请查看结果区错误');
+        toast.error('刷新失败', '扫描未完成，请查看结果区的错误提示');
         return;
       }
-      toast.success('强度扫描完成', '已读取 worker 生成的精确参数快照');
+      toast.success('强度扫描完成', '已读取最新扫描结果');
       universeQ.refresh();
       marketQ.refresh();
     } catch (e) {
-      toast.error('触发失败', e instanceof ApiError ? e.message : 'worker 不可用');
+      toast.error('触发失败', e instanceof ApiError ? e.message : '扫描服务暂不可用');
     } finally {
       setRefreshingStrength(false);
     }
@@ -410,7 +410,7 @@ export default function Screener() {
         section="02"
         eyebrow="SCREENER · STRENGTH SCAN"
         title="选股扫描"
-        description="基于真实行情接口扫描主题股票池，快照来源与时效可追溯。"
+        description="按真实行情扫描主题股票池，可查看扫描时间与股票池规模。"
         meta={
           <>
             <span className="hidden text-right sm:block">
@@ -469,12 +469,11 @@ export default function Screener() {
                 {scanMeta && (
                   <span className="font-mono text-micro text-ink-400 tnum">
                     · 股票池 {scanMeta.universeCount} · 已评分 {scanMeta.screenedCount}
-                    {scanMeta.priceProvider ? ` · ${scanMeta.priceProvider}` : ''}
                   </span>
                 )}
                 {scanMeta?.stale && (
                   <span className="rounded-xs bg-warn-50 px-1.5 py-px text-micro text-warn-600">
-                    过期快照{scanMeta.snapshotSavedAt ? ` · ${new Date(scanMeta.snapshotSavedAt).toLocaleString('zh-CN')}` : ''}
+                    数据未刷新{scanMeta.snapshotSavedAt ? ` · ${new Date(scanMeta.snapshotSavedAt).toLocaleString('zh-CN')}` : ''}
                   </span>
                 )}
                 {chips.map((c) => (
@@ -549,8 +548,8 @@ export default function Screener() {
                   <EmptyState
                     variant="error"
                     image="/empty-chart.svg"
-                    title={scanError?.code === 503 ? '扫描快照不可用' : '扫描失败'}
-                    description={scanError?.code === 503 ? '留空优于编造' : scanError?.message}
+                    title={scanError?.code === 503 ? '扫描数据不可用' : '扫描失败'}
+                    description={scanError?.code === 503 ? '稍后刷新再试' : scanError?.message}
                     action={
                       <button
                         onClick={() => void runScan(applied)}
@@ -670,7 +669,7 @@ export default function Screener() {
           ) : marketQ.error ? (
             <div className="card-surface p-5">
               <p className="eyebrow">市场形态 · MARKET REGIME</p>
-              <p className="mt-3 text-body-s text-ink-500">{marketQ.error.code === 503 ? '快照暂不可用 · 留空优于编造' : marketQ.error.message}</p>
+              <p className="mt-3 text-body-s text-ink-500">{marketQ.error.code === 503 ? '数据暂不可用 · 稍后刷新再试' : marketQ.error.message}</p>
               <button
                 onClick={marketQ.refresh}
                 className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"

@@ -136,8 +136,8 @@ export default function IndexCards({
         <EmptyState
           variant="error"
           image="/empty-chart.svg"
-          title={error.code === 503 ? '快照暂不可用' : '加载失败'}
-          description={error.code === 503 ? '指数快照未覆盖，留空而非编造' : error.message}
+          title={error.code === 503 ? '数据暂不可用' : '加载失败'}
+          description={error.code === 503 ? '暂无指数数据' : error.message}
           action={
             <button
               onClick={onRetry}

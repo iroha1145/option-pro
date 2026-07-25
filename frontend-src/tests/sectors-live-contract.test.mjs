@@ -233,10 +233,14 @@ test('板块组件不再消费无后端依据的趋势、资金流和相关性�
   );
   assert.equal(ivPanel.includes('ivChange30d'), false);
   assert.equal(ivPanel.includes('基于 252 个交易日'), false);
-  assert.equal(ivPanel.includes("meta.snapshotSource === 'strength_worker'"), true);
-  assert.equal(ivPanel.includes("meta.snapshotSource === 'sector_snapshot'"), true);
-  assert.equal(ivPanel.includes('priceProvider'), true);
-  assert.equal(ivPanel.includes('meta.providers'), true);
+  /* 供应商名与内部来源标记不再印给普通读者。字段本身仍由 api 层如实保留
+     （见上方 mapper 断言），面板只呈现「板块内横向比较 + 延迟数据」这一条口径。 */
+  assert.equal(ivPanel.includes('meta.providers'), false);
+  assert.equal(ivPanel.includes('priceProvider'), false);
+  assert.equal(ivPanel.includes('meta.snapshotSource'), false);
+  assert.match(ivPanel, /板块排位是同板块成分之间的横向比较/);
+  /* stale 提示必须留着：数据没刷新要让人看见 */
+  assert.match(ivPanel, /meta\.stale/);
 });
 
 test('IV 排名等待真实板块目录，首屏不再请求旧占位编号', () => {

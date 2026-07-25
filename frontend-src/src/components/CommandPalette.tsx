@@ -180,7 +180,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
           id: 'f-refresh',
           group: '功能',
           title: '强制刷新自选',
-          hint: '重新拉取自选快照',
+          hint: '重新获取自选行情',
           icon: 'refresh',
           action: () => {
             onClose();

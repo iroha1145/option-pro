@@ -753,7 +753,7 @@ export const catalystsContract = {
           };
         });
         if (realStreams.length) return realStreams;
-        throw new ApiError(503, '后端未提供数据源健康快照');
+        throw new ApiError(503, '数据源状态暂不可用');
       },
     ),
   latestFocusCycle: (): Promise<MarketFocusCycle> =>

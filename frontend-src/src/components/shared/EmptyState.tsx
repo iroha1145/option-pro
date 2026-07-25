@@ -1,4 +1,4 @@
-/** EmptyState：手绘插画 + H3 + 说明 + 主按钮；503 变体「快照暂不可用 · 留空优于编造」 */
+/** EmptyState：手绘插画 + H3 + 说明 + 主按钮；503 变体附一行「稍后刷新再试」 */
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
@@ -27,7 +27,7 @@ export default function EmptyState({ image, icon, title, description, action, fo
       <h3 className="text-h3 text-ink-800">{title}</h3>
       {description && <p className="mt-1.5 max-w-[340px] text-body-s text-ink-500">{description}</p>}
       {variant === 'error' && (
-        <p className="mt-1 text-micro text-ink-400">接口未覆盖此能力，留空而非编造</p>
+        <p className="mt-1 text-micro text-ink-400">稍后刷新再试</p>
       )}
       {action && <div className="mt-5">{action}</div>}
       {footnote && <p className="mt-3 text-caption text-ink-400">{footnote}</p>}

@@ -88,7 +88,7 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
       .catch((error: unknown) => {
         if (!alive) return;
         setCloses(null);
-        setLoadError(error instanceof ApiError ? error.message : '日线接口暂未返回可用数据');
+        setLoadError(error instanceof ApiError ? error.message : '暂时取不到日线数据');
       });
     return () => {
       alive = false;
@@ -109,7 +109,7 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
       .then(setCloses)
       .catch((error: unknown) => {
         setCloses(null);
-        setLoadError(error instanceof ApiError ? error.message : '日线接口暂未返回可用数据');
+        setLoadError(error instanceof ApiError ? error.message : '暂时取不到日线数据');
       });
   };
 

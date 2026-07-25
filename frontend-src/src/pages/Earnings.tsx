@@ -249,7 +249,7 @@ export default function Earnings() {
       {isOwner && (
         <span className="flex items-center gap-2.5">
           {refreshStatus === 'failed_stale' && (
-            <span className="font-mono text-micro text-warn-600">刷新失败 · 缓存快照</span>
+            <span className="font-mono text-micro text-warn-600">刷新失败 · 显示已有数据</span>
           )}
           {refreshStatus === 'refreshed' && cooldownRemain <= 0 && q.lastUpdatedAt && (
             <span className="font-mono text-micro text-ink-400 tnum">已更新 {fmtTimeHHMMSS(q.lastUpdatedAt)}</span>
@@ -287,7 +287,7 @@ export default function Earnings() {
       {/* failed_stale：失败带缓存 → _stale 横幅 */}
       {refreshStatus === 'failed_stale' && (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-md border border-warn-600/30 bg-warn-50 px-4 py-2.5">
-          <p className="text-caption text-warn-600">刷新失败，当前展示缓存快照，数据可能已过期（_stale）。</p>
+          <p className="text-caption text-warn-600">刷新失败，当前显示的是上一次的数据，可能已经过时。</p>
           <button
             onClick={() => void onRefresh()}
             className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-600 transition-colors hover:bg-warn-600 hover:text-white"
@@ -303,14 +303,11 @@ export default function Earnings() {
           role="status"
         >
           <div>
-            <p className="text-caption font-medium text-warn-600">全市场财报源暂时不完整</p>
+            <p className="text-caption font-medium text-warn-600">财报数据暂时不完整</p>
             <p className="mt-0.5 text-micro text-ink-500">
-              当前仅显示已返回的 {items.length} 家公司，未返回的公司不会用热门名单或估算值补齐。
+              当前只显示已取到的 {items.length} 家公司；缺失的公司不会用估算值顶替。
             </p>
           </div>
-          <span className="font-mono text-micro text-ink-400">
-            {q.data?.providers.length ? q.data.providers.join(' + ') : '上游来源未返回'}
-          </span>
         </div>
       )}
 
@@ -333,12 +330,12 @@ export default function Earnings() {
             </div>
           </div>
         ) : error503 ? (
-          <section className="card-surface" aria-label="周历快照不可用">
+          <section className="card-surface" aria-label="周历数据不可用">
             <EmptyState
               variant="error"
               image="/empty-chart.svg"
-              title="日历快照不可用"
-              description={q.error?.message || '接口未覆盖此能力，留空而非编造'}
+              title="日历数据不可用"
+              description={q.error?.message || '稍后刷新再试'}
               action={
                 <button
                   onClick={q.refresh}
@@ -422,12 +419,12 @@ export default function Earnings() {
               <SkeletonRows rows={6} />
             </div>
           ) : error503 ? (
-            <section className="card-surface" aria-label="财报列表快照不可用">
+            <section className="card-surface" aria-label="财报列表不可用">
               <EmptyState
                 variant="error"
                 image="/empty-chart.svg"
-                title="财报列表快照不可用"
-                description="接口未覆盖此能力，留空而非编造"
+                title="财报列表不可用"
+                description="稍后刷新再试"
                 action={
                   <button
                     onClick={q.refresh}

@@ -94,7 +94,7 @@ function ForceRefreshButton({ onRefresh, spinning }: { onRefresh: () => void; sp
     <button
       onClick={isOwner ? onRefresh : undefined}
       disabled={!isOwner || spinning}
-      title={isOwner ? '强制刷新自选快照' : '登录 Owner 后可强制刷新'}
+      title={isOwner ? '重新计算完整自选数据' : '登录 Owner 后可强制刷新'}
       className={cn(
         'flex h-9 items-center gap-2 rounded-md border px-3 text-caption transition-colors duration-fast',
         isOwner
@@ -112,7 +112,7 @@ function ForceRefreshButton({ onRefresh, spinning }: { onRefresh: () => void; sp
 function SignalDistribution({ data }: { data: MarketSignalsSnapshot }) {
   return (
     <div className="card-surface p-5">
-      <p className="eyebrow">市场信号 · 实时指标快照</p>
+      <p className="eyebrow">市场信号 · 实时指标</p>
       <div className="mt-4 space-y-3">
         {data.metrics.slice(0, 8).map((metric) => (
           <div key={metric.key} className="grid grid-cols-[minmax(0,1fr)_56px] items-center gap-2">
@@ -332,22 +332,22 @@ export default function Watchlist() {
       return;
     }
     setForceRefreshing(true);
-    toast.info('正在刷新', '后台正在重建完整自选快照');
+    toast.info('正在刷新', '正在重新计算完整自选数据');
     try {
       const action = await runtimeApi.workerAction('focus_refresh');
       if (action.status !== 'completed') {
-        if (!action.requestId) throw new ApiError(502, '后台刷新未返回 request_id');
+        if (!action.requestId) throw new ApiError(502, '刷新任务未能启动');
         await runtimeApi.waitForWorkerAction(action.requestId);
       }
       // worker 原子写入后绕过浏览器短缓存读取一次同一路径；不再发送
       // 后端从未支持的 ?force=1 占位参数。
       await stocksApi.watchlist(true);
       refreshWatchlist();
-      toast.success('自选快照已更新', '已读取后台生成的真实行情快照');
+      toast.success('自选已更新', '已读取最新行情数据');
     } catch (error) {
       toast.error(
-        '自选快照刷新失败',
-        error instanceof ApiError ? error.message : '后台刷新暂不可用',
+        '自选刷新失败',
+        error instanceof ApiError ? error.message : '刷新暂时不可用',
       );
     } finally {
       setForceRefreshing(false);
@@ -621,8 +621,8 @@ export default function Watchlist() {
                 <EmptyState
                   variant="error"
                   image="/empty-chart.svg"
-                  title={err.code === 503 ? '快照暂不可用' : '加载失败'}
-                  description={err.code === 503 ? '留空优于编造' : err.message}
+                  title={err.code === 503 ? '数据暂不可用' : '加载失败'}
+                  description={err.code === 503 ? '稍后刷新再试' : err.message}
                   action={
                     <button
                       onClick={wl.refresh}

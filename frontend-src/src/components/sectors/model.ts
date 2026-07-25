@@ -195,7 +195,7 @@ export function toneOnColor(bg: string): 'light' | 'dark' {
 }
 
 export const SOURCE_STATUS_CN: Record<Exclude<SectorSourceStatus, 'active'>, string> = {
-  degraded: '数据源降级',
+  degraded: '数据不完整',
   stale: '数据过期',
   insufficient_data: '数据不足',
 };

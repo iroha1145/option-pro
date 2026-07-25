@@ -29,17 +29,17 @@ interface RegimeDim {
 function liveDims(r: MarketRegimeInfo): RegimeDim[] {
   const d: MarketRegimeDims = r.dims;
   return [
-    { key: 'index_trend', label: '指数趋势', en: 'INDEX TREND', value: d.indexTrend, hint: '契约 index_trend_score：指数层面趋势健康度。', hintKey: 'regimeTrend' },
-    { key: 'momentum', label: '市场动量', en: 'MOMENTUM', value: d.momentum, hint: '契约 market_momentum_score：动量资金活跃度。', hintKey: 'regimeMomentum' },
-    { key: 'breadth', label: '市场广度', en: 'BREADTH', value: d.breadth, hint: '契约 market_breadth_score：上涨扩散广度。', hintKey: 'regimeBreadth' },
-    { key: 'volume', label: '量能配合', en: 'VOLUME', value: d.volume, hint: '契约 market_volume_score：量能对趋势的确认度。', hintKey: 'regimeVolume' },
-    { key: 'risk_appetite', label: '风险偏好', en: 'RISK APPETITE', value: d.riskAppetite, hint: '契约 risk_appetite_score：资金追高风险意愿。', hintKey: 'regimeRiskAppetite' },
+    { key: 'index_trend', label: '指数趋势', en: 'INDEX TREND', value: d.indexTrend, hint: '指数整体的趋势健康程度。', hintKey: 'regimeTrend' },
+    { key: 'momentum', label: '市场动量', en: 'MOMENTUM', value: d.momentum, hint: '资金推动价格的力度强弱。', hintKey: 'regimeMomentum' },
+    { key: 'breadth', label: '市场广度', en: 'BREADTH', value: d.breadth, hint: '上涨在多少标的中扩散开来。', hintKey: 'regimeBreadth' },
+    { key: 'volume', label: '量能配合', en: 'VOLUME', value: d.volume, hint: '成交量对当前趋势的确认程度。', hintKey: 'regimeVolume' },
+    { key: 'risk_appetite', label: '风险偏好', en: 'RISK APPETITE', value: d.riskAppetite, hint: '资金愿意承担风险的程度。', hintKey: 'regimeRiskAppetite' },
     {
       key: 'risk_on_spread',
       label: '强弱价差',
       en: 'RISK-ON SPREAD',
       value: d.riskOnSpread,
-      hint: `契约 risk_on_spread_score：风险偏好强弱价差${r.spreadLabel ? `（${r.spreadLabel}）` : ''}。`,
+      hint: `进攻型与防守型资产之间的强弱差${r.spreadLabel ? `（${r.spreadLabel}）` : ''}。`,
       hintKey: 'regimeRiskOn',
     },
   ];
@@ -67,10 +67,10 @@ function deriveRegime(m: MarketStrength): RegimeDim[] {
   const clamp = (v: number) => Math.max(0, Math.min(100, Math.round(v)));
   return [
     { key: 'index_trend', label: '指数趋势', en: 'INDEX TREND', value: clamp(m.avgScore), hint: '全市场强度分均值，衡量指数层面趋势健康度。', hintKey: 'regimeTrend' },
-    { key: 'momentum', label: '市场动量', en: 'MOMENTUM', value: clamp(ge70 * 160), hint: '强度 ≥70 标的占比放大映射，刻画动量资金活跃度。', hintKey: 'regimeMomentum' },
+    { key: 'momentum', label: '市场动量', en: 'MOMENTUM', value: clamp(ge70 * 160), hint: '强度 ≥70 的标的占比，反映资金推动的力度。', hintKey: 'regimeMomentum' },
     { key: 'breadth', label: '市场广度', en: 'BREADTH', value: clamp(ge50 * 100), hint: '强度 ≥50 标的占全市场比例，越高说明上涨扩散越广。', hintKey: 'regimeBreadth' },
-    { key: 'volume', label: '量能配合', en: 'VOLUME', value: clamp(ge60 * 130), hint: '强度 ≥60 占比映射的资金参与度，配合趋势确认有效性。', hintKey: 'regimeVolume' },
-    { key: 'risk_appetite', label: '风险偏好', en: 'RISK APPETITE', value: clamp(m.avgScore * 0.8 + ge85 * 80), hint: '均值与 ≥85 高强度占比加权，反映资金追高风险意愿。', hintKey: 'regimeRiskAppetite' },
+    { key: 'volume', label: '量能配合', en: 'VOLUME', value: clamp(ge60 * 130), hint: '强度 ≥60 的标的占比，反映资金参与是否跟上趋势。', hintKey: 'regimeVolume' },
+    { key: 'risk_appetite', label: '风险偏好', en: 'RISK APPETITE', value: clamp(m.avgScore * 0.8 + ge85 * 80), hint: '强度均值与高强度标的占比加权，反映资金愿意承担多少风险。', hintKey: 'regimeRiskAppetite' },
     { key: 'risk_on_spread', label: '强弱价差', en: 'RISK-ON SPREAD', value: clamp(spread), hint: '高分组（≥70）与低分组（<40）均分之差，价差越大风格越极化。', hintKey: 'regimeRiskOn' },
   ];
 }
@@ -108,7 +108,7 @@ function RegimeBar({ dim, index }: { dim: RegimeDim; index: number }) {
         </p>
         <p className="mt-1.5 text-micro leading-[16px] text-ink-500">{dim.hint}</p>
         <p className="mt-1.5 font-mono text-caption text-brand-600 tnum">
-          {dim.value !== null ? `${Math.round(dim.value * 10) / 10} / 100` : '契约缺失 · 留空优于编造'}
+          {dim.value !== null ? `${Math.round(dim.value * 10) / 10} / 100` : '暂无数据'}
         </p>
       </div>
     </div>
@@ -160,7 +160,7 @@ export default function MarketRegimeCard({ market }: { market: MarketStrength })
       )}
       <SourceNote
         className="mt-4"
-        text={regime ? '来源：/strength/market · market_regime 快照 · 300s 轮询' : '推导自全市场强度分布 · 300s 轮询'}
+        text={regime ? '综合大盘趋势、动量与风险指标 · 每 5 分钟更新' : '由全市场强度分布推导 · 每 5 分钟更新'}
       />
     </div>
   );

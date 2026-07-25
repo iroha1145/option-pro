@@ -76,8 +76,8 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title={q.error.code === 503 ? '日历快照暂不可用' : '加载失败'}
-          description="接口未覆盖此能力，留空而非编造"
+          title={q.error.code === 503 ? '日历数据暂不可用' : '加载失败'}
+          description="稍后刷新再试"
           action={
             <button
               onClick={q.refresh}

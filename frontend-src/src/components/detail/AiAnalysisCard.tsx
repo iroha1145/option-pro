@@ -102,7 +102,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
                   {job.status === 'queued'
                     ? '排队中…'
                     : job.progress === null
-                      ? '模型正在处理 · 接口未提供百分比'
+                      ? '模型正在处理 · 暂无进度百分比'
                       : `模型分析中 ${Math.round(job.progress)}%`}
                 </span>
                 <button onClick={() => void cancel()} className="text-ink-400 transition-colors hover:text-ink-600">

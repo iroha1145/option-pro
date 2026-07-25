@@ -269,7 +269,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
           setErrorMsg(err.message || '公开分析入口暂不可用');
           setPhase('public-unavailable');
         } else if (err && err.code === 503) {
-          setErrorMsg(err.message || '快照暂不可用');
+          setErrorMsg(err.message || '数据暂不可用');
           setPhase('unavailable');
         } else {
           setErrorMsg(err?.message ?? '加载失败');
@@ -442,7 +442,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                 <h3 className="text-h3 text-ink-800">正在生成最终分析 · {ticker}</h3>
               </div>
               <p className="mt-2 text-caption leading-5 text-ink-500">
-                财报已经发布，后台正在把实际每股收益和营收纳入模型。完成后会自动锁定为最终分析。
+                财报已发布，正在把实际每股收益和营收纳入分析，完成后会自动更新为最终版本。
               </p>
               <div className="mt-4 h-1 overflow-hidden rounded-pill bg-line">
                 <motion.div
@@ -492,12 +492,12 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
               </span>
               <h3 className="mt-3 text-h3 text-ink-800">尚未生成 AI 影响</h3>
               <p className="mt-1 max-w-[280px] text-caption text-ink-500">
-                创建模型任务，分析 {ticker} 财报对关联标的的连锁影响。
+                分析 {ticker} 财报对关联标的的连锁影响。
               </p>
               {confirming ? (
                 <div className="mt-4 w-full rounded-md border border-ai-600/30 bg-ai-50 p-3 text-left">
                   <p className="text-caption text-ink-600">
-                    将按当前财报日期生成 {ticker} 的报告级分析；最终结果锁定后不会重复生成。
+                    将按本次财报日期生成 {ticker} 的分析；结果生成后不会重复计算。
                   </p>
                   <div className="mt-2.5 flex gap-2">
                     <button
@@ -543,7 +543,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                 <JobSteps analysis={analysis} />
               </div>
               <p className="mt-5 border-t border-line pt-3 text-micro leading-5 text-ink-400">
-                报告级状态会自动刷新；公开页面不显示任务编号、费用或取消入口。
+                分析完成后会自动显示，不用刷新页面。
               </p>
             </div>
           )}
@@ -571,8 +571,8 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
               <span className="flex size-12 items-center justify-center rounded-lg border border-line bg-card-warm text-ink-400">
                 <Icon name="doc-quote" size={22} />
               </span>
-              <h3 className="mt-3 text-h3 text-ink-800">快照暂不可用</h3>
-              <p className="mt-1 max-w-[260px] text-caption text-ink-500">{errorMsg || '接口未覆盖此能力，留空而非编造。'}</p>
+              <h3 className="mt-3 text-h3 text-ink-800">数据暂不可用</h3>
+              <p className="mt-1 max-w-[260px] text-caption text-ink-500">{errorMsg || '稍后刷新再试。'}</p>
               <button
                 onClick={() => {
                   if (!ticker) return;
@@ -679,7 +679,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                     );
                   })}
                 </div>
-                <SourceNote className="mt-3" text="模型生成 · 基于当前财报日历字段 · 仅供研究" />
+                <SourceNote className="mt-3" text="AI 依据本次财报日程生成 · 仅供研究参考" />
               </Section>
             </motion.div>
           )}

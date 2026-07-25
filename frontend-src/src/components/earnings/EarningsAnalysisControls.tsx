@@ -50,7 +50,7 @@ function summaryText(summary: EarningsRunSummary): string {
 async function requestEarningsAnalysis(): Promise<WorkerAction> {
   const action = await runtimeApi.workerAction('earnings_analysis');
   if (action.status === 'completed') return action;
-  if (!action.requestId) throw new Error('后台未返回任务编号');
+  if (!action.requestId) throw new Error('分析任务未能启动');
   return runtimeApi.waitForWorkerAction(action.requestId);
 }
 

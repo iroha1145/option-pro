@@ -56,7 +56,7 @@ export default function DetailBand({
       <div className="card-surface mt-6 p-4 md:p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-3">
           <div>
-            <p className="eyebrow">板块详情 · 接口聚合</p>
+            <p className="eyebrow">板块详情 · 成分股汇总</p>
             <h2 className="mt-1 font-display text-[18px] font-semibold leading-[24px] text-ink-900">
               {sector.name}
             </h2>
@@ -102,7 +102,7 @@ export default function DetailBand({
             <p className="eyebrow">强度领先标的</p>
             {sector.leaders.length === 0 ? (
               <p className="mt-3 text-body-s text-ink-400">
-                强度接口尚未返回领先标的。
+                暂无领先标的数据。
               </p>
             ) : (
               <ul className="mt-2 divide-y divide-line">
@@ -172,7 +172,7 @@ export default function DetailBand({
         >
           <Icon name="flag" size={13} className="mt-0.5 shrink-0" />
           <span>
-            当前接口未提供板块资金流、相关性和历史趋势，本页不推算这些指标。
+            本页暂不提供板块资金流、相关性与历史趋势。
           </span>
         </div>
       </div>

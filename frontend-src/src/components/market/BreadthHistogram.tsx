@@ -30,8 +30,8 @@ export default function BreadthHistogram({
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title={error?.code === 503 ? '快照暂不可用' : '加载失败'}
-          description={error ? error.message : '强度分布未覆盖，留空而非编造'}
+          title={error?.code === 503 ? '数据暂不可用' : '加载失败'}
+          description={error ? error.message : '暂无强度分布数据'}
           action={
             <button
               onClick={onRetry}

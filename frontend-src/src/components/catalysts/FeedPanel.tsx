@@ -241,8 +241,8 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title={error?.code === 503 ? '新闻快照不可用' : '加载失败'}
-          description={error?.code === 503 ? '接口未覆盖此能力，留空而非编造' : error?.message}
+          title={error?.code === 503 ? '新闻暂不可用' : '加载失败'}
+          description={error?.code === 503 ? '稍后刷新再试' : error?.message}
           action={
             <button
               onClick={() => void fetchFirst()}

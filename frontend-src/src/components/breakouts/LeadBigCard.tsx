@@ -267,7 +267,7 @@ function buildMiniOption(bars: Candle[]): ChartOption {
 function MiniKline({ ticker }: { ticker: string }) {
   const { data, error, loading, refresh } = usePolling(() => stocksApi.chart(ticker, '1d'), null, [ticker]);
   const option = useMemo(() => (data && data.candles.length > 1 ? buildMiniOption(data.candles) : null), [data]);
-  /* 突破标的常在焦点池外：503 快照未生成时可手动拉取（与详情页 ManualStockPull 同一预算通道） */
+  /* 突破标的常不在常规覆盖范围内：503 时可手动拉取（与详情页 ManualStockPull 同一预算通道） */
   const [pulling, setPulling] = useState(false);
   const [pullError, setPullError] = useState<string | null>(null);
   useEffect(() => {
@@ -305,10 +305,10 @@ function MiniKline({ ticker }: { ticker: string }) {
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-4 text-center">
           <img src="/empty-chart.svg" alt="" className="h-12 w-auto opacity-90" loading="lazy" />
           <p className="text-caption font-medium text-ink-600">
-            {snapshotMissing ? '当日K线快照未生成' : 'K线读取失败'}
+            {snapshotMissing ? '暂无当日 K 线' : 'K 线读取失败'}
           </p>
           <p className="text-micro text-ink-400">
-            {snapshotMissing ? '焦点池外标的，可手动拉取真实行情' : '日线行情暂不可用'}
+            {snapshotMissing ? '可点击下方按钮获取最新行情' : '日线行情暂不可用'}
           </p>
           {pullError && (
             <p role="alert" className="text-micro text-down-700">

@@ -22,10 +22,11 @@ function readTree(directory) {
   }).join('\n');
 }
 
-test('stock detail preserves and displays real quote providers', () => {
+test('stock detail keeps real provider fields in the data layer without printing them to readers', () => {
   assert.match(stocksSource, /priceProvider:\s*pickS\(r,\s*'priceProvider',\s*'price_provider'\)/);
   assert.match(stocksSource, /profileProvider:\s*pickS\(r,\s*'profileProvider',\s*'profile_provider'\)/);
-  assert.match(drawerSource, /detail\.priceProvider/);
-  assert.match(drawerSource, /detail\.profileProvider/);
+  /* 面向普通读者的详情页不印供应商名与库名，只保留「延迟行情」这一条口径 */
+  assert.doesNotMatch(drawerSource, /detail\.priceProvider|detail\.profileProvider/);
+  assert.match(drawerSource, /行情为延迟数据/);
   assert.equal(readTree(frontendRoot).includes('来源：Optix Research'), false);
 });

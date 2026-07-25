@@ -109,7 +109,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
         onUpdate(n);
       })
       .catch(() => {
-        if (!dead) setLoadError('详情不可用 · 快照暂不可用');
+        if (!dead) setLoadError('暂时打不开这条新闻的详情');
       });
     return () => {
       dead = true;
@@ -340,7 +340,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
                   ))}
                 </div>
                 <p className="mt-3 border-t border-line pt-2.5 font-mono text-micro text-ink-400 tnum">
-                  来源：Optix AI · {analysis.model} · 生成于{' '}
+                  AI 生成于{' '}
                   {new Date(analysis.generatedAt).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })}
                 </p>
               </motion.div>
@@ -351,7 +351,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
               <div className="mt-4 rounded-md border border-line bg-paper-2 p-4 text-center">
                 <Icon name="doc-quote" size={22} className="mx-auto text-ink-300" />
                 <p className="mt-2 text-body-s font-medium text-ink-800">信息不足 · 未调用模型</p>
-                <p className="mt-1 text-micro text-ink-400">规则判定该新闻缺乏可分析的实质信息，未产生模型费用</p>
+                <p className="mt-1 text-micro text-ink-400">这条新闻信息量不足，未做 AI 分析</p>
               </div>
             )}
 

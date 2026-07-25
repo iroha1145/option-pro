@@ -345,7 +345,7 @@ export default function KlineChart({
       {data?._stale && (
         <p className="mt-3 flex items-center gap-1.5 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">
           <Icon name="bell" size={13} />
-          数据快照已过期 · 展示最近可用数据（延迟行情）
+          数据暂未刷新 · 显示最近一次结果（延迟行情）
         </p>
       )}
 
@@ -368,7 +368,7 @@ export default function KlineChart({
               <EmptyState
                 variant="empty"
                 image="/empty-chart.svg"
-                title="快照不可用"
+                title="K 线暂不可用"
                 description={`${ticker} · ${CHART_RANGES.find((item) => item.value === range)?.label ?? range}数据暂不可用，其他周期仍可切换`}
                 action={
                   <button

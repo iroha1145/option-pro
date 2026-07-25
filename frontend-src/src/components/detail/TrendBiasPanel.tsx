@@ -24,7 +24,7 @@ const LABEL_STYLE: Record<StockTrendBiasView['trend_bias_label'], string> = {
 
 const STATUS_META: Record<StockTrendBiasView['trend_bias_status'], { text: string; cls: string } | null> = {
   ok: null,
-  degraded: { text: '数据降级 · 部分因子缺失', cls: 'border-warn-600/40 bg-warn-50 text-warn-600' },
+  degraded: { text: '部分指标缺失', cls: 'border-warn-600/40 bg-warn-50 text-warn-600' },
   insufficient_data: { text: '数据不足 · 结果仅供参考', cls: 'border-line-strong bg-card-warm text-ink-500' },
 };
 
@@ -110,7 +110,7 @@ export default function TrendBiasPanel({
   if (error || !data) {
     return (
       <p className="rounded-md border border-line bg-card-warm px-4 py-6 text-center text-body-s text-ink-400">
-        技术信号快照暂不可用 · 留空而非编造
+        暂无技术信号数据
       </p>
     );
   }
@@ -171,7 +171,7 @@ export default function TrendBiasPanel({
       )}
 
       <p className="mt-4 text-micro text-ink-400">
-        分项由接口实测信号归一化
+        分项由该股实测信号换算
         <InfoHint hint={SCORE_HINTS.trendBiasFactors} size={11} className="mx-0.5" />
         {' · 缺项显示 — · 非收益预测 · 更新于 '}
         <span className="font-mono tnum">{fmtTimeHHMMSS(new Date(data.as_of))}</span>

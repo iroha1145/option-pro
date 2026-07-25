@@ -151,7 +151,7 @@ export default function StatusHero() {
         </HeroCell>
       </div>
       <div className="px-5 pb-3">
-        <SourceNote text="采集状态来自后端新闻流与经济日历流；每条新闻展示原始文章来源；数据源卡的滞后表示数据新鲜度，不是接口耗时；影响分与置信度为模型估计" />
+        <SourceNote text="新闻与经济日历持续收录；每条新闻标注原始来源；滞后表示数据更新到了什么时候；影响分与置信度为 AI 估计" />
       </div>
     </motion.section>
   );

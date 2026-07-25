@@ -111,7 +111,7 @@ export function TierHistogram({
         <HatchLegend className="mt-3.5" actual="本次命中" estimate="全市场参照" />
       ) : (
         /* 契约无全市场直方图：只标注命中分布，参照留空优于编造 */
-        <p className="mt-3.5 text-micro text-ink-400">仅本次命中分布 · 契约未提供全市场参照</p>
+        <p className="mt-3.5 text-micro text-ink-400">仅统计本次筛选命中的标的</p>
       )}
     </div>
   );
@@ -142,7 +142,7 @@ export function MethodCard({ profile }: { profile: StrengthProfile | null }) {
           >
             {profile && !profile.weights ? (
               /* live 契约 /strength/profiles 仅返回枚举，无权重明细：隐藏权重条，不编造默认 25% */
-              <p className="mt-4 text-caption leading-[18px] text-ink-400">契约未提供权重明细 · 留空优于编造</p>
+              <p className="mt-4 text-caption leading-[18px] text-ink-400">该档位暂无权重明细</p>
             ) : (
               <div className="mt-4 space-y-2.5">
                 {SUBSCORE_META.map(({ key, label }, i) => {
@@ -169,10 +169,10 @@ export function MethodCard({ profile }: { profile: StrengthProfile | null }) {
             <p className="mt-3 text-caption leading-[18px] text-ink-500">
               {profile?.description ||
                 (profile && !profile.weights
-                  ? '偏好档位决定后端评分器的因子取舍，最终强度分 0–100，≥85 为高强度区。'
+                  ? '偏好档位决定评分时侧重哪些因子，最终强度分 0–100，≥85 为高强度区。'
                   : '最终强度分为四因子加权合成（0–100），≥85 为高强度区。')}
             </p>
-            <SourceNote className="mt-3" text="计算方法：后端强度评分配置" />
+            <SourceNote className="mt-3" text="权重取自当前选用的评分档位" />
           </motion.div>
         )}
       </AnimatePresence>

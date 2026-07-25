@@ -48,8 +48,8 @@ export default function RegimePanel({
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title="快照暂不可用"
-          description={error ? error.message : '接口未返回 market_regime 六维，留空而非编造'}
+          title="数据暂不可用"
+          description={error ? error.message : '暂无市场环境六维数据'}
           action={
             <button
               onClick={onRetry}

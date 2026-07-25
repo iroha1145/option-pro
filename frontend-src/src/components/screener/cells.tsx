@@ -90,7 +90,7 @@ export function CatalystBadge({ summary }: { summary: CatalystSummary | undefine
   if (summary.failed) {
     // 批量接口失败：如实「—」（区别于真实 0），不编造计数
     return (
-      <span className="font-mono text-caption text-ink-300 tnum" title="催化剂接口暂不可用" aria-label="催化剂数据不可用">
+      <span className="font-mono text-caption text-ink-300 tnum" title="催化剂数据暂不可用" aria-label="催化剂数据不可用">
         —
       </span>
     );

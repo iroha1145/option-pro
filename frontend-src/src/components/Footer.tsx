@@ -7,7 +7,7 @@ export default function Footer() {
       <div className="flex flex-col items-start gap-3 min-[360px]:flex-row min-[360px]:flex-wrap min-[360px]:items-center min-[360px]:justify-between">
         <SourceNote
           className="w-full min-[360px]:w-auto min-[360px]:min-w-0 min-[360px]:flex-1"
-          text="研究界面 · 延迟行情；具体来源以接口返回为准，不构成投资建议"
+          text="行情为延迟数据 · 仅供研究参考，不构成投资建议"
         />
         <p className="max-w-full break-words font-mono text-micro text-ink-300">
           OPTIX PRO · PAPER TERMINAL v2

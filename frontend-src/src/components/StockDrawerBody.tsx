@@ -125,8 +125,6 @@ function PriceHeader({ detail }: { detail: StockDetail }) {
 
       <p className="mt-2 text-micro text-ink-400">
         报价更新于 <span className="font-mono tnum">{fmtTimeHHMMSS(new Date(detail.updatedAt))}</span>
-        {' · '}
-        {detail.priceProvider ? `价格来源 ${detail.priceProvider}` : '价格来源未标注'}
         {' · 延迟行情'}
       </p>
     </motion.header>
@@ -260,7 +258,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
               : rateLimited
                 ? '请求较频繁'
                 : manualRecovery
-                  ? '该标的尚无完整快照'
+                  ? '该标的暂无完整数据'
                   : '行情服务暂不可用'
         }
         description={
@@ -269,8 +267,8 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
             : loginExpired
               ? '请重新登录后读取个股详情'
             : publicSnapshotMissing
-              ? '该股票尚无公开快照，可手动拉取真实行情、日线与技术信号'
-              : `${error?.message || '真实行情接口暂未返回可用数据'}${
+              ? '该股票暂无数据，可手动获取最新行情、日线与技术指标'
+              : `${error?.message || '暂时取不到该股票的行情数据'}${
                   error?.retryAfter ? ` · ${Math.ceil(error.retryAfter)} 秒后可重试` : ''
                 }`
         }
@@ -308,12 +306,12 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
     );
   }
 
-  /* 概览接口未覆盖（焦点池外）：基础行情来自强度扫描行快照，如实提示口径 */
+  /* 概览未覆盖该标的：基础行情来自强度扫描行，如实提示口径 */
   const scopeBanner = detail.snapshotScope === 'strength-row' && (
     <div className="mt-3 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2" role="status">
       <p className="flex items-start gap-2 text-caption leading-[18px] text-warn-600">
         <Icon name="flag" size={13} className="mt-px shrink-0" />
-        当前仅有扫描行保存快照，日线与技术信号仍按真实接口状态显示
+        当前只有筛选结果里的基础行情，日线与技术指标按实际情况显示
       </p>
       <ManualStockPull ticker={detail.ticker} onPulled={handlePulled} compact className="mt-2" />
     </div>
@@ -347,11 +345,9 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
     </div>
   );
   const providerNote = [
-    `价格来源：${detail.priceProvider ?? '接口未标注'}`,
-    `公司资料：${detail.profileProvider ?? '接口未标注'}`,
-    '延迟行情',
-    '影响分非收益',
-    '置信度非胜率',
+    '行情为延迟数据',
+    '影响分表示新闻方向，不是收益预测',
+    '置信度是模型的把握程度，不是胜率',
   ].join(' · ');
 
   if (layout === 'page') {

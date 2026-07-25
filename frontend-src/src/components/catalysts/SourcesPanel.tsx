@@ -35,8 +35,8 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title="数据源状态快照暂不可用"
-          description="接口未覆盖此能力，留空而非编造"
+          title="数据源状态暂不可用"
+          description="稍后刷新再试"
           action={
             <button
               onClick={q.refresh}
@@ -76,7 +76,7 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
                 )}
               >
                 <Led tone={s.status === 'active' ? 'up' : 'warn'} pulse={s.status === 'active'} className="size-1.5" />
-                {s.status === 'active' ? '正常' : '降级'}
+                {s.status === 'active' ? '正常' : '异常'}
               </span>
             </div>
             <div className="mt-4 grid grid-cols-3 gap-2 text-center">
@@ -101,7 +101,7 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
       </motion.div>
       <SourceNote
         className="mt-4"
-        text="数据滞后为状态读取时刻减去数据覆盖截止时刻，不代表接口请求耗时；条数按最近 24 小时的新闻入库时间或经济事件公布时间统计"
+        text="滞后表示数据更新到了什么时候，不是页面加载速度；条数按最近 24 小时收录的新闻与经济事件统计"
       />
     </div>
   );

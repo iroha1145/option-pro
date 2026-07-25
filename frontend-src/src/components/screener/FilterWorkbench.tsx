@@ -294,7 +294,7 @@ export default function FilterWorkbench({
         <div className="w-full min-w-0 sm:w-auto sm:flex-1">
           <FieldLabel>预设策略</FieldLabel>
           {presetsFailed ? (
-            <p className="flex h-8 items-center text-caption text-ink-400">预设不可用 · 已降级为静态分档</p>
+            <p className="flex h-8 items-center text-caption text-ink-400">预设暂不可用 · 使用默认分档</p>
           ) : presets === null ? (
             <div className="flex gap-2" aria-hidden="true">
               {Array.from({ length: 3 }, (_, i) => (

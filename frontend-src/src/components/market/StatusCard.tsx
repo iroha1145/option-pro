@@ -72,8 +72,8 @@ export default function StatusCard({
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title={error.code === 503 ? '快照暂不可用' : '加载失败'}
-          description={error.code === 503 ? '市场状态未覆盖，留空而非编造' : error.message}
+          title={error.code === 503 ? '数据暂不可用' : '加载失败'}
+          description={error.code === 503 ? '暂无市场状态数据' : error.message}
           action={
             <button
               onClick={onRetry}

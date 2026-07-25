@@ -116,7 +116,7 @@ function HeatTile({
         role="tooltip"
         className="glass pointer-events-none absolute -top-2 left-1/2 z-30 hidden w-48 -translate-x-1/2 -translate-y-full rounded-md border border-line p-2.5 text-left shadow-sh-2 md:group-hover:block md:group-focus-visible:block"
       >
-        <span className="eyebrow block">{sector.name} · 接口聚合</span>
+        <span className="eyebrow block">{sector.name} · 成分股汇总</span>
         <span className="mt-1.5 block space-y-1 text-micro">
           <span className="flex items-center justify-between gap-2">
             <span className="text-ink-500">平均强度</span>

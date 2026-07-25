@@ -35,7 +35,8 @@ test('stock pull UI reports truthful three-resource progress and persistence', a
   assert.match(control, /正在更新基础行情、日线与技术信号 · 共 3 项/);
   assert.match(control, /state\.ticker === ticker/);
   assert.match(control, /latestTickerRef\.current !== requestedTicker/);
-  assert.match(control, /Massive 优先，Yahoo 兜底/);
+  assert.match(control, /获取该股票的最新价格、日线与技术指标/);
+  assert.doesNotMatch(control, /Massive|yfinance|兜底/);
   assert.match(control, /cause\.retryAfter/);
   assert.equal(control.includes('if (!isOwner) return null'), false);
 });
@@ -55,7 +56,7 @@ test('manual pull refreshes the open detail, chart, and signal panels immediatel
 test('public breakout research pages and drawers expose the same manual recovery path', async () => {
   const drawer = await source('components/StockDrawerBody.tsx');
   const lead = await source('components/breakouts/LeadBigCard.tsx');
-  assert.match(drawer, /publicSnapshotMissing[\s\S]*可手动拉取真实行情、日线与技术信号/);
+  assert.match(drawer, /publicSnapshotMissing[\s\S]*可手动获取最新行情、日线与技术指标/);
   assert.match(drawer, /<ManualStockPull ticker=\{ticker\} onPulled=\{handlePulled\} \/>/);
   assert.equal(drawer.includes('isOwner'), false);
   assert.match(lead, /to=\{`\/stock\/\$\{encodeURIComponent\(e\.ticker\)\}`\}/);

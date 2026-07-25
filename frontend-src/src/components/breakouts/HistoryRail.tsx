@@ -124,8 +124,8 @@ export default function HistoryRail({ events, total, stale, loading, error, onRe
           <EmptyState
             variant="error"
             icon="doc-quote"
-            title={error.code === 503 ? '事件快照暂不可用' : '事件加载失败'}
-            description={error.code === 503 ? '留空优于编造' : error.message}
+            title={error.code === 503 ? '事件数据暂不可用' : '事件加载失败'}
+            description={error.code === 503 ? '稍后刷新再试' : error.message}
             action={
               <button
                 onClick={onRetry}
