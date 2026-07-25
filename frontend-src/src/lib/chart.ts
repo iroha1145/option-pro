@@ -43,21 +43,23 @@ export type ChartOption = ComposeOption<
 export const CH = {
   ink400: '#8A94B0',
   ink300: '#B7BFD3',
-  lineChart: '#EFEDE6',
+  lineChart: '#EDF0F4', // v8.1 随纸面降温
   brand600: '#2E46E0',
   brand500: '#3B59F2',
   brand400: '#6B82FF',
   up600: '#0E9F6E',
   down600: '#E5484D',
   warn600: '#E8930C',
-  ai600: '#7C5CFF',
+  ai600: '#0B7285', // v8.1 弃 AI 紫 → 青瓷 teal（与 CSS 变量一致）
 } as const;
 
 /* ---------- 通用配置 ---------- */
+/* 数据是读的：入场/更新动画统一 300ms cubicOut，range 切换不重复播长动画 */
 export const baseAnimation = {
-  animationDuration: 1000,
-  animationDurationUpdate: 400,
+  animationDuration: 300,
+  animationDurationUpdate: 300,
   animationEasing: 'cubicOut' as const,
+  animationEasingUpdate: 'cubicOut' as const,
 };
 
 export function baseGrid(overrides: Partial<GridComponentOption> = {}): GridComponentOption {
@@ -90,7 +92,8 @@ export function glassTooltip(overrides: Record<string, unknown> = {}) {
   return {
     trigger: 'axis' as const,
     backgroundColor: 'rgba(253,252,249,0.88)',
-    borderColor: '#E9E7E0',
+    /* tooltip 为 DOM 渲染：边框跟随 --line 令牌（线条细化后自动同步） */
+    borderColor: 'var(--line)',
     borderWidth: 1,
     padding: [8, 12],
     textStyle: { color: '#3D4A68', fontSize: 12, fontFamily: 'Inter, sans-serif' },

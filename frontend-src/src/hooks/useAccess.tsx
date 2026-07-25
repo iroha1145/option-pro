@@ -15,6 +15,14 @@ interface AccessContextValue {
   username: string | null;
   /** 是否为已登录的普通客户（与 isOwner 互不蕴含）。 */
   isCustomer: boolean;
+  /**
+   * 能否读写「我的自选」。
+   *
+   * 客户会话与 Owner 会话各自持有独立的一份自选，后端 /api/account/watchlist
+   * 两种主体都受理。不能只看 isCustomer：Owner 走口令登录、不持账号 cookie，
+   * accountUsername 恒为 null，于是整块自选管理 UI 会对唯一的真实用户隐身。
+   */
+  canManageWatchlist: boolean;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
@@ -103,6 +111,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       isVisitor: status.role !== 'owner',
       username: status.accountUsername,
       isCustomer: status.accountUsername !== null,
+      canManageWatchlist: status.accountUsername !== null || status.role === 'owner',
       loading,
       login,
       register,

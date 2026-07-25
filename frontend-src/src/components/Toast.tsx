@@ -1,6 +1,6 @@
 /**
  * Toast 系统（design.md §7.5）
- * 右上滑入 rise-in 320ms；r-md + sh-2；成功 up-600 / 失败 down-600 / 信息 brand-600 左竖条；4s 自动消隐。
+ * 右上滑入 enter 200ms ease-out / exit 130ms；r-md + sh-2；成功 up-600 / 失败 down-600 / 信息 brand-600 左竖条；4s 自动消隐。
  */
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -70,8 +70,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               layout="position"
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8, transition: { duration: 0.16 } }}
-              transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+              exit={{ opacity: 0, y: -8, transition: { duration: 0.13 } }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
               className="pointer-events-auto relative overflow-hidden rounded-md border border-line bg-card shadow-sh-2"
             >
               <span className={cn('absolute inset-y-0 left-0 w-[3px]', BAR[t.kind])} aria-hidden="true" />

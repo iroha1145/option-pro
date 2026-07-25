@@ -10,6 +10,7 @@ export default function PageFallback() {
         className="size-5 animate-spin rounded-full border-2 border-line border-t-brand-600"
         aria-hidden="true"
       />
+      <span className="ml-2.5 text-caption text-ink-400">加载中…</span>
     </div>
   );
 }

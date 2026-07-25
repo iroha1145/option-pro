@@ -135,7 +135,7 @@ function AiOptionInsight({
         <div className="mt-2.5">
           <p className="text-caption text-ink-600">
             将提交 {ticker} 当前到期日的 {evidence.length}{' '}
-            条真实异动证据、标的价和到期日，消耗 1 次模型额度。确认继续？
+            条真实异动证据、标的价和到期日，消耗 1 次模型额度，是否继续？
           </p>
           <div className="mt-2 flex gap-2">
             <button
@@ -153,7 +153,7 @@ function AiOptionInsight({
               }}
               className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white hover:brightness-105"
             >
-              确认生成
+              生成解读
             </button>
             <button
               onClick={() => setConfirming(false)}
@@ -181,7 +181,7 @@ function AiOptionInsight({
           {job.progress !== null && (
             <div className="mt-1.5 h-1 overflow-hidden rounded-pill bg-line">
               <div
-                className="h-full rounded-pill bg-ai-600 transition-all duration-ui"
+                className="h-full rounded-pill bg-ai-600 transition-[width] duration-ui"
                 style={{ width: `${job.progress}%` }}
               />
             </div>
@@ -380,7 +380,24 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
   }
   const expList = Array.from(new Set(expirations ?? []));
   if (expList.length === 0) {
-    return <EmptyState icon="doc-quote" title="暂无到期日数据" description="暂未获取到该标的的期权到期日" className="py-8" />;
+    return (
+      <EmptyState
+        icon="doc-quote"
+        title="暂无到期日数据"
+        description="暂未获取到该标的的期权到期日"
+        action={
+          <button
+            type="button"
+            onClick={() => refreshExpirations()}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105"
+          >
+            <Icon name="refresh" size={14} />
+            重新拉取
+          </button>
+        }
+        className="py-8"
+      />
+    );
   }
 
   return (

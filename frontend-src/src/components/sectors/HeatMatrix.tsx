@@ -1,7 +1,6 @@
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { fmtPct } from '@/lib/format';
-import { useCountUp } from '@/hooks/useCountUp';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import type { SectorVm } from './model';
 import { heatTone, periodLabel } from './model';
@@ -21,7 +20,8 @@ function HeatTile({
   onToggle: () => void;
 }) {
   const value = sector.avgReturn ?? 0;
-  const animated = useCountUp(value, 900);
+  /* count-up 减量：热力砖涨跌直接呈现终值 */
+  const animated = value;
   const tone = heatTone(value);
   const hasReturn = sector.avgReturn !== null;
   const leader = sector.leaders[0] ?? null;
@@ -41,7 +41,7 @@ function HeatTile({
       }}
       whileHover={{
         y: -3,
-        transition: { duration: 0.16, ease: [0.22, 1, 0.36, 1] },
+        transition: { duration: 0.24, ease: 'easeOut' },
       }}
       onClick={onToggle}
       aria-pressed={selected}
@@ -51,7 +51,7 @@ function HeatTile({
           : `${sector.name}暂无强度聚合`
       }
       className={cn(
-        'group relative h-[92px] overflow-visible rounded-md text-left shadow-sh-1 transition-shadow duration-fast hover:shadow-sh-2 md:h-[108px]',
+        'group relative h-[92px] overflow-visible rounded-md text-left shadow-sh-1 transition-shadow duration-[240ms] ease-out hover:shadow-sh-2 md:h-[108px]',
         selected && 'shadow-sh-2',
       )}
       style={{ backgroundColor: tone.bg }}
@@ -79,7 +79,7 @@ function HeatTile({
             {sector.name}
           </span>
           <span className={cn('hidden font-mono text-micro tnum md:inline', textSub)}>
-            {sector.coveredCount !== null ? `${sector.coveredCount}只` : '未覆盖'}
+            {sector.coveredCount !== null ? `${sector.coveredCount} 只` : '未覆盖'}
           </span>
         </span>
         <span>

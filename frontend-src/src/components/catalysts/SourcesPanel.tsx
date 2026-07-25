@@ -11,10 +11,10 @@ import { fmtRelative } from '@/lib/format';
 
 function formatDataLag(milliseconds: number | null): string {
   if (milliseconds === null) return '—';
-  if (milliseconds < 1_000) return '<1秒';
-  if (milliseconds < 60_000) return `${Math.round(milliseconds / 1_000)}秒`;
-  if (milliseconds < 3_600_000) return `${Math.round(milliseconds / 60_000)}分`;
-  return `${(milliseconds / 3_600_000).toFixed(milliseconds < 36_000_000 ? 1 : 0)}小时`;
+  if (milliseconds < 1_000) return '<1 秒';
+  if (milliseconds < 60_000) return `${Math.round(milliseconds / 1_000)} 秒`;
+  if (milliseconds < 3_600_000) return `${Math.round(milliseconds / 60_000)} 分`;
+  return `${(milliseconds / 3_600_000).toFixed(milliseconds < 36_000_000 ? 1 : 0)} 小时`;
 }
 
 export default function SourcesPanel({ refreshToken }: { refreshToken: number }) {
@@ -75,7 +75,8 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
                   s.status === 'active' ? 'bg-up-50 text-up-700' : 'bg-warn-50 text-warn-600',
                 )}
               >
-                <Led tone={s.status === 'active' ? 'up' : 'warn'} pulse={s.status === 'active'} className="size-1.5" />
+                {/* 源正常/异常是静态健康状态，不脉冲 */}
+                <Led tone={s.status === 'active' ? 'up' : 'warn'} className="size-1.5" />
                 {s.status === 'active' ? '正常' : '异常'}
               </span>
             </div>

@@ -17,7 +17,6 @@ import { ApiError, isMock } from '@/api/client';
 import type { ScreenerRow, SectorOption, Signal, StrengthProfile } from '@/api/types';
 import { usePolling } from '@/hooks/usePolling';
 import { useAccess } from '@/hooks/useAccess';
-import { useCountUp } from '@/hooks/useCountUp';
 import { useToast } from '@/components/Toast';
 import { useShell } from '@/components/Layout';
 import { cn } from '@/lib/utils';
@@ -381,7 +380,8 @@ export default function Screener() {
   );
 
   /* ---------------- 派生展示数据 ---------------- */
-  const hitCount = useCountUp(filtered.length, 900);
+  /* count-up 减量：命中数直接呈现终值 */
+  const hitCount = filtered.length;
   const hitsByTier = useMemo(() => {
     const acc: Record<Tier, number> = { S: 0, A: 0, B: 0, C: 0, D: 0 };
     filteredBase.forEach((r) => {
@@ -424,7 +424,7 @@ export default function Screener() {
               <button
                 onClick={() => void onStrengthRefresh()}
                 disabled={refreshingStrength || scanState === 'scanning'}
-                title="触发 worker strength_refresh（owner）"
+                title="手动触发一次强度扫描（需 Owner）"
                 className="flex h-9 items-center gap-2 rounded-md border border-line bg-card px-3 text-caption text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Icon name="refresh" size={15} className={refreshingStrength ? 'animate-spin-once' : ''} />
@@ -463,12 +463,12 @@ export default function Screener() {
             ) : scanState === 'done' || (scanState === 'error' && rows) ? (
               <>
                 <h2 className="font-display text-[18px] leading-[24px] text-ink-900">
-                  命中 <span className="font-mono tnum">{Math.round(hitCount)}</span> 只
+                  命中 <span className="font-mono tnum">{hitCount}</span> 只
                 </h2>
-                <span className="font-mono text-caption text-ink-400 tnum">· 耗时 {(scanDurationMs / 1000).toFixed(1)}s</span>
+                <span className="font-mono text-caption text-ink-400 tnum">耗时 {(scanDurationMs / 1000).toFixed(1)}s</span>
                 {scanMeta && (
                   <span className="font-mono text-micro text-ink-400 tnum">
-                    · 股票池 {scanMeta.universeCount} · 已评分 {scanMeta.screenedCount}
+                    股票池 {scanMeta.universeCount} / 已评分 {scanMeta.screenedCount}
                   </span>
                 )}
                 {scanMeta?.stale && (
@@ -642,6 +642,7 @@ export default function Screener() {
                     signals={signalsMap}
                     onOpenDetail={openTicker}
                     animKey={animKey}
+                    page={safePage}
                   />
                   {/* 移动端分页 */}
                   {totalPages > 1 && (

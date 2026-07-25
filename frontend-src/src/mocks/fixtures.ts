@@ -28,7 +28,7 @@ export const SIGNAL_LABELS: Record<SignalType, string> = {
   pullback: '回踩',
   'ma-touch': '触均线',
   gap: '跳空',
-  'iv-spike': 'IV异动',
+  'iv-spike': 'IV 异动',
 };
 const SIGNAL_TYPES = Object.keys(SIGNAL_LABELS) as SignalType[];
 
@@ -36,10 +36,10 @@ const infoOf = (t: string): TickerInfo => TICKER_POOL.find((x) => x.ticker === t
 
 /* ---------------- 指数 tape ---------------- */
 const INDEX_BASE: { code: string; name: string; base: number }[] = [
-  { code: 'SPX', name: '标普500', base: 5972.4 },
-  { code: 'NDX', name: '纳指100', base: 21468.2 },
+  { code: 'SPX', name: '标普 500', base: 5972.4 },
+  { code: 'NDX', name: '纳指 100', base: 21468.2 },
   { code: 'DJI', name: '道琼斯', base: 43828.1 },
-  { code: 'RUT', name: '罗素2000', base: 2382.6 },
+  { code: 'RUT', name: '罗素 2000', base: 2382.6 },
   { code: 'SOX', name: '费城半导体', base: 5124.7 },
   { code: 'VIX', name: '波动率指数', base: 14.86 },
 ];

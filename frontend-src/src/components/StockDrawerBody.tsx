@@ -86,7 +86,7 @@ function PriceHeader({ detail }: { detail: StockDetail }) {
             <span className="rounded-xs border border-line-strong bg-card-warm px-1.5 py-px text-micro text-ink-500">
               {detail.sector}
             </span>
-            {market && <SessionLED session={market.session} label={`${market.label} · 延迟15分钟`} />}
+            {market && <SessionLED session={market.session} label={`${market.label} · 延迟 15 分钟`} />}
           </div>
         </div>
         <div className="ml-auto text-right">

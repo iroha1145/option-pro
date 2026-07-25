@@ -2,6 +2,12 @@
 
 These sessions are strictly separate from the owner session. Nothing here can
 grant owner capability, and no owner-only route consults the account cookie.
+
+The watchlist routes are the one place both principals meet, and only in the
+inbound direction: an owner session may read and edit *its own* watchlist. That
+does not leak owner capability into this module -- the owner already holds every
+capability -- and without it the owner, who is the only account on a personal
+deployment, would be the one user unable to keep a watchlist.
 """
 
 from __future__ import annotations
@@ -15,6 +21,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.access import (
+    request_is_owner_session,
     request_uses_https,
     require_same_origin_json,
     require_same_origin_request,
@@ -176,14 +183,24 @@ def current_account(request: Request) -> Account | None:
     return get_account_store().resolve_session(token)
 
 
-def require_account(request: Request) -> Account:
+def require_watchlist_account(request: Request) -> Account:
+    """Resolve whichever principal owns the watchlist being addressed.
+
+    A customer cookie wins when present, so an owner who is also signed in as a
+    customer in the same browser still edits the customer list they can see. An
+    owner session otherwise resolves to the single reserved owner row. Order
+    matters only for that overlap; the two never share a list.
+    """
+
     account = current_account(request)
-    if account is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "account_login_required", "message": "请先登录"},
-        )
-    return account
+    if account is not None:
+        return account
+    if request_is_owner_session(request):
+        return get_account_store().ensure_owner_account()
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail={"code": "account_login_required", "message": "请先登录"},
+    )
 
 
 def attach_account_cookie(response: Response, token: str, max_age: int) -> None:
@@ -269,7 +286,7 @@ def logout(request: Request) -> Response:
 
 @router.get("/watchlist")
 def read_watchlist(request: Request) -> Response:
-    account = require_account(request)
+    account = require_watchlist_account(request)
     return JSONResponse(
         {
             "tickers": get_account_store().watchlist(account.user_id),
@@ -287,7 +304,7 @@ def replace_watchlist(
     request: Request,
     payload: Annotated[WatchlistRequest, Body()],
 ) -> Response:
-    account = require_account(request)
+    account = require_watchlist_account(request)
     try:
         tickers = get_account_store().replace_watchlist(
             account.user_id,
@@ -309,7 +326,7 @@ def add_watchlist_ticker(
     request: Request,
     payload: Annotated[TickerRequest, Body()],
 ) -> Response:
-    account = require_account(request)
+    account = require_watchlist_account(request)
     try:
         tickers = get_account_store().add_ticker(account.user_id, payload.ticker)
     except AccountError as exc:
@@ -328,7 +345,7 @@ def remove_watchlist_ticker(
     request: Request,
     ticker: Annotated[str, Path(min_length=1, max_length=16)],
 ) -> Response:
-    account = require_account(request)
+    account = require_watchlist_account(request)
     try:
         tickers = get_account_store().remove_ticker(account.user_id, ticker)
     except AccountError as exc:

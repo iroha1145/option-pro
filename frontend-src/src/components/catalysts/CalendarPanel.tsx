@@ -1,6 +1,5 @@
 /** calendar 面板：经济日历（impact 分级色条 + impact_zh + forecast/previous/actual，按日期分组） */
 import { useMemo } from 'react';
-import { motion } from 'framer-motion';
 import { usePolling } from '@/hooks/usePolling';
 import { browserCalendarQuery, catalystsContract } from './api';
 import type { EconomicEvent } from './api';
@@ -107,17 +106,14 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
               <span className="font-mono text-micro text-ink-400 tnum">{events.length} 项</span>
             </div>
             <div className="divide-y divide-line">
-              {events.map((ev, i) => {
+              {/* 后续区块 rise-in 减量：直接呈现 */}
+              {events.map((ev) => {
                 const s = IMPACT_STYLE[ev.impact];
                 const t = new Date(ev.scheduledAt);
                 const allDay = t.getHours() === 0 && t.getMinutes() === 0;
                 return (
-                  <motion.div
+                  <div
                     key={ev.eventId}
-                    initial={{ opacity: 0, y: 10 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, amount: 0.4 }}
-                    transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: Math.min(i * 0.03, 0.24) }}
                     className="flex items-stretch gap-3 px-5 py-3"
                   >
                     {/* 重要度分级色条 */}
@@ -148,7 +144,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                         </span>
                       </p>
                     </div>
-                  </motion.div>
+                  </div>
                 );
               })}
             </div>

@@ -49,18 +49,15 @@ export default function BreadthHistogram({
 
   const max = Math.max(...data.histogram, 1);
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 14 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.25 }}
-      transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
+    /* 后续区块 rise-in 减量：直接呈现 */
+    <section
       className="card-surface flex h-full flex-col p-5"
       aria-label="强度分布"
     >
       <div className="flex items-start justify-between">
         <p className="eyebrow">强度分布 · 全市场</p>
         <span className="inline-flex items-center gap-1 rounded-xs bg-up-50 px-1.5 py-0.5 font-mono text-micro text-up-700 tnum">
-          <Icon name="target" size={12} strokeWidth={1.8} />
+          <Icon name="target" size={12} strokeWidth={1.45} />
           ≥85 · {data.ge85Count} 只
         </span>
       </div>
@@ -109,6 +106,6 @@ export default function BreadthHistogram({
       <p className="mt-auto pt-4 text-micro text-ink-400">
         桶宽 10 分 · 色阶 &lt;50 弱 / 50–69 / 70–84 / ≥85 强
       </p>
-    </motion.section>
+    </section>
   );
 }

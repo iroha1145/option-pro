@@ -92,7 +92,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           {/* 滑动下划线指示器（2px × 24px，260ms） */}
           <span
             aria-hidden="true"
-            className="absolute bottom-0 h-0.5 w-6 rounded-full bg-brand-600 transition-all duration-ui ease-paper"
+            className="absolute bottom-0 h-0.5 w-6 rounded-full bg-brand-600 transition-[left,opacity] duration-ui ease-paper"
             style={indicator ? { left: indicator.left, opacity: 1 } : { opacity: 0 }}
           />
         </nav>
@@ -162,7 +162,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           ) : (
             <Link
               to="/login"
-              className="flex h-8 items-center rounded-md bg-brand-600 px-3.5 text-caption font-medium text-white shadow-sh-1 transition-[filter] duration-fast hover:brightness-105 active:brightness-95"
+              className="flex h-8 items-center rounded-md bg-brand-600 px-3.5 text-caption font-medium text-white shadow-sh-1 transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
             >
               登录
             </Link>

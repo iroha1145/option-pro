@@ -1,13 +1,19 @@
 /**
  * Drawer 基座（design.md §7.3）
- * 右侧 translateX(100%)→0 spring-gentle；背板 rgba(13,22,38,.28)+blur(2px) 200ms 淡入；ESC/点背板关闭。
- * 移动端变全屏 bottom sheet（顶部抓手 dots-grid）。
+ * 右侧 translateX(100%)→0 · iOS 感 cubic-bezier(.32,.72,0,1) 300ms（tween，不用 spring）；
+ * 背板 rgba(13,22,38,.45)+blur(2px) · 淡出 200ms；exit ≈ enter 的 65%（200ms）；ESC/点背板关闭。
+ * 移动端变全屏 bottom sheet（同曲线 translateY，顶部抓手 dots-grid）。
  */
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
+
+/** iOS 感抽屉缓动（--ease-drawer） */
+const EASE_DRAWER = [0.32, 0.72, 0, 1] as [number, number, number, number];
+const ENTER = { duration: 0.3, ease: EASE_DRAWER } as const;
+const EXIT = { duration: 0.2, ease: EASE_DRAWER } as const;
 
 interface DrawerProps {
   open: boolean;
@@ -42,7 +48,7 @@ export default function Drawer({ open, onClose, title, children, width = 560 }: 
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={onClose}
-            className="fixed inset-0 z-[70] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px]"
+            className="fixed inset-0 z-[70] bg-[rgba(13,22,38,.45)] backdrop-blur-[2px]"
             aria-hidden="true"
           />
           {/* 桌面右侧抽屉 */}
@@ -52,8 +58,8 @@ export default function Drawer({ open, onClose, title, children, width = 560 }: 
             aria-modal="true"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            exit={{ x: '100%', transition: EXIT }}
+            transition={ENTER}
             className="fixed inset-y-0 right-0 z-[71] hidden w-full flex-col border-l border-line bg-card shadow-sh-3 md:flex"
             style={{ maxWidth: width }}
           >
@@ -76,8 +82,8 @@ export default function Drawer({ open, onClose, title, children, width = 560 }: 
             aria-modal="true"
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            exit={{ y: '100%', transition: EXIT }}
+            transition={ENTER}
             className={cn('fixed inset-x-0 bottom-0 top-14 z-[71] flex flex-col rounded-t-xl border-t border-line bg-card pb-[env(safe-area-inset-bottom)] shadow-sh-3 md:hidden')}
           >
             <div className="flex flex-col items-center pb-1 pt-2 text-ink-300">

@@ -5,6 +5,7 @@
  *      → 生命周期步进条 → 4 评分条 + 贡献分段条 → 风险提醒 → 底部版本与按钮
  * 数据：breakouts/current 事件 + breakouts/events/{id} 详情补全（宽松字段合并，缺字段显「—」）
  * 动效：rise-in 进场 · count-up 优先级环 · grow-bar 错峰 · draw-line 环弧 · 现价 tick-flash
+ *      · 步进条节点 60ms 错峰入场 + 连接线渐进填充 400ms
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
@@ -80,14 +81,14 @@ function PriorityRing({ score }: { score: number }) {
     <div className="flex shrink-0 flex-col items-center" aria-label={`告警优先级 ${score}`}>
       <div className="relative size-[64px]">
         <svg viewBox="0 0 64 64" className="size-full -rotate-90" aria-hidden="true">
-          <circle cx="32" cy="32" r={r} fill="none" stroke="var(--line)" strokeWidth="5" />
+          <circle cx="32" cy="32" r={r} fill="none" stroke="var(--line)" strokeWidth="4.5" />
           <motion.circle
             cx="32"
             cy="32"
             r={r}
             fill="none"
             stroke="var(--brand-600)"
-            strokeWidth="5"
+            strokeWidth="4.5"
             strokeLinecap="round"
             strokeDasharray={c}
             initial={{ strokeDashoffset: c }}
@@ -138,14 +139,19 @@ function LifecycleStepper({ state }: { state: LifecycleState }) {
   const idx = terminal ? -1 : stepIndex(state);
   const pastTo = terminal ? 1 : idx - 1;
 
-  const node = (label: string, tone: 'past' | 'current' | 'future' | 'down' | 'ink-end', key: string) => (
+  /* hum-07 步骤徽章：当前态 brand 实心 + 同色系软晕；已过态实心灰蓝；未来态空心发丝圈 */
+  const node = (label: string, tone: 'past' | 'current' | 'future' | 'down' | 'ink-end', key: string, order: number) => (
     <div key={key} className="flex min-w-[44px] flex-col items-center">
-      <span
+      <motion.span
+        /* 柔和入场：节点按序 60ms 错峰 scale 0.8→1（仅首次挂载播放） */
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3, ease: EASE_PAPER, delay: order * 0.06 }}
         className={cn(
           'size-2.5 rounded-full',
-          tone === 'current' && 'bg-brand-600 ring-2 ring-brand-600/25 animate-led-pulse',
-          tone === 'past' && 'bg-brand-600',
-          tone === 'future' && 'border border-ink-300 bg-card',
+          tone === 'current' && 'bg-brand-600 ring-4 ring-brand-100',
+          tone === 'past' && 'bg-ink-300',
+          tone === 'future' && 'border border-line-strong bg-card',
           tone === 'down' && 'bg-down-600 ring-2 ring-down-600/25',
           tone === 'ink-end' && 'bg-ink-400 ring-2 ring-ink-400/25',
         )}
@@ -154,9 +160,8 @@ function LifecycleStepper({ state }: { state: LifecycleState }) {
       <span
         className={cn(
           'mt-1.5 whitespace-nowrap text-[10px] leading-[14px]',
-          tone === 'current' && 'font-semibold text-brand-600',
-          tone === 'past' && 'text-ink-400',
-          tone === 'future' && 'text-ink-300',
+          tone === 'current' && 'font-semibold text-brand-700',
+          (tone === 'past' || tone === 'future') && 'text-ink-400',
           tone === 'down' && 'font-semibold text-down-700',
           tone === 'ink-end' && 'font-semibold text-ink-500',
         )}
@@ -167,12 +172,12 @@ function LifecycleStepper({ state }: { state: LifecycleState }) {
   );
 
   const items: { el: ReturnType<typeof node>; passed: boolean }[] = STEPS.map((s, i) => ({
-    el: node(s.label, i === idx ? 'current' : i <= pastTo ? 'past' : 'future', s.key),
+    el: node(s.label, i === idx ? 'current' : i <= pastTo ? 'past' : 'future', s.key, i),
     passed: terminal ? i < STEPS.length - 1 : i < idx,
   }));
   if (terminal) {
     items.push({
-      el: node(LIFECYCLE_CN[terminal], terminal === 'FAILED' ? 'down' : 'ink-end', terminal),
+      el: node(LIFECYCLE_CN[terminal], terminal === 'FAILED' ? 'down' : 'ink-end', terminal, STEPS.length),
       passed: false,
     });
   }
@@ -183,7 +188,15 @@ function LifecycleStepper({ state }: { state: LifecycleState }) {
         <li key={i} className="flex flex-1 items-start last:flex-none">
           {it.el}
           {i < items.length - 1 && (
-            <span className={cn('mx-1 mt-[5px] h-px min-w-3 flex-1', it.passed ? 'bg-brand-400/60' : 'bg-line-strong')} aria-hidden="true" />
+            /* 渐进填充连接线：轨道 line 色，已过段 brand-600 随状态迁移 400ms ease-out 推进 */
+            <span className="relative mx-1 mt-[5px] h-px min-w-3 flex-1 bg-line" aria-hidden="true">
+              <motion.span
+                className="absolute inset-y-0 left-0 bg-brand-600"
+                initial={{ width: '0%' }}
+                animate={{ width: it.passed ? '100%' : '0%' }}
+                transition={{ duration: 0.4, ease: 'easeOut', delay: 0.24 + i * 0.06 }}
+              />
+            </span>
           )}
         </li>
       ))}
@@ -191,12 +204,20 @@ function LifecycleStepper({ state }: { state: LifecycleState }) {
   );
 }
 
-/* ---------------- K线迷你图（蜡烛 · 发丝网格 · 十字光标 · 诚实空态） ---------------- */
-function buildMiniOption(bars: Candle[]): ChartOption {
+/* ---------------- K线迷你图（15m 蜡烛最近 96 根 · 发丝网格 · 十字光标 · 诚实空态） ---------------- */
+/** mapBar 运行时携带契约 quote_only（可选字段，Candle 类型未声明，此处宽松扩展读取） */
+type MiniBar = Candle & { quote_only?: boolean };
+
+function buildMiniOption(bars: MiniBar[]): ChartOption {
   const labels = bars.map((b) => {
     const d = new Date(b.t);
     return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   });
+  /** tooltip 时间：15m 跨日数据需 M/DD 日期前缀，末根 quote_only 如实标注 */
+  const fmtBarTime = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.getMonth() + 1}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  };
   return {
     ...baseAnimation,
     grid: { left: 6, right: 6, top: 10, bottom: 4, containLabel: true },
@@ -224,7 +245,8 @@ function buildMiniOption(bars: Candle[]): ChartOption {
         crossStyle: { color: CH.ink300, width: 1, type: [3, 3] as number[] },
         label: {
           backgroundColor: 'rgba(253,252,249,.92)',
-          borderColor: '#E9E7E0',
+          /* DOM 渲染，跟随 --line 令牌 */
+          borderColor: 'var(--line)',
           borderWidth: 1,
           color: '#5A6788',
           fontFamily: MONO,
@@ -237,10 +259,9 @@ function buildMiniOption(bars: Candle[]): ChartOption {
         if (!b) return '';
         const chg = b.c - b.o;
         const color = chg >= 0 ? CH.up600 : CH.down600;
-        const d = new Date(b.t);
         return (
           `<div style="font-family:${MONO};font-size:12px;line-height:19px">` +
-          `<div style="color:#8A94B0">${pad2(d.getHours())}:${pad2(d.getMinutes())}</div>` +
+          `<div style="color:#8A94B0">${fmtBarTime(b.t)}${b.quote_only ? ' · 仅报价' : ''}</div>` +
           `开 ${b.o.toFixed(2)} · 高 ${b.h.toFixed(2)}<br/>低 ${b.l.toFixed(2)} · ` +
           `收 <b style="color:${color}">${b.c.toFixed(2)}</b></div>`
         );
@@ -249,13 +270,18 @@ function buildMiniOption(bars: Candle[]): ChartOption {
     series: [
       {
         type: 'candlestick' as const,
-        data: bars.map((b) => [b.o, b.c, b.l, b.h]),
+        /* 末根常为「仅报价」实时 bar（quote_only）：半透明如实标注，不当成已收齐 K 线 */
+        data: bars.map((b) =>
+          b.quote_only
+            ? { value: [b.o, b.c, b.l, b.h], itemStyle: { opacity: 0.45 } }
+            : [b.o, b.c, b.l, b.h],
+        ),
         itemStyle: {
           color: CH.up600,
           color0: CH.down600,
           borderColor: CH.up600,
           borderColor0: CH.down600,
-          borderWidth: 1.2,
+          borderWidth: 1,
         },
         barMaxWidth: 10,
         z: 3,
@@ -265,8 +291,12 @@ function buildMiniOption(bars: Candle[]): ChartOption {
 }
 
 function MiniKline({ ticker }: { ticker: string }) {
-  const { data, error, loading, refresh } = usePolling(() => stocksApi.chart(ticker, '1d'), null, [ticker]);
-  const option = useMemo(() => (data && data.candles.length > 1 ? buildMiniOption(data.candles) : null), [data]);
+  /* 15m 周期（与 StockChart['range'] 类型一致）+ 截取最近 96 根展示 */
+  const { data, error, loading, refresh } = usePolling(() => stocksApi.chart(ticker, '15m'), null, [ticker]);
+  const option = useMemo(() => {
+    if (!data || data.candles.length <= 1) return null;
+    return buildMiniOption(data.candles.slice(-96));
+  }, [data]);
   /* 突破标的常不在常规覆盖范围内：503 时可手动拉取（与详情页 ManualStockPull 同一预算通道） */
   const [pulling, setPulling] = useState(false);
   const [pullError, setPullError] = useState<string | null>(null);
@@ -308,7 +338,7 @@ function MiniKline({ ticker }: { ticker: string }) {
             {snapshotMissing ? '暂无当日 K 线' : 'K 线读取失败'}
           </p>
           <p className="text-micro text-ink-400">
-            {snapshotMissing ? '可点击下方按钮获取最新行情' : '日线行情暂不可用'}
+            {snapshotMissing ? '可点击下方按钮获取最新行情' : '分时行情暂不可用'}
           </p>
           {pullError && (
             <p role="alert" className="text-micro text-down-700">
@@ -320,7 +350,7 @@ function MiniKline({ ticker }: { ticker: string }) {
               <button
                 onClick={() => void pullAndReload()}
                 disabled={pulling}
-                className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-2.5 py-1 text-micro font-medium text-white transition-[filter,opacity] duration-fast hover:brightness-105 disabled:cursor-wait disabled:opacity-70"
+                className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-2.5 py-1 text-micro font-medium text-white transition-[background-color,opacity] duration-fast hover:bg-brand-700 disabled:cursor-wait disabled:opacity-70"
               >
                 {pulling && (
                   <span
@@ -340,7 +370,7 @@ function MiniKline({ ticker }: { ticker: string }) {
           </div>
         </div>
       ) : (
-        <ReactECharts option={option} ariaLabel={`${ticker} 当日迷你 K 线图`} />
+        <ReactECharts option={option} ariaLabel={`${ticker} 15 分钟迷你 K 线图`} />
       )}
     </div>
   );
@@ -366,7 +396,7 @@ function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
               {d.label}
               <InfoHint hint={d.hint} size={11} className="ml-0.5" />
             </span>
-            <div className="h-1 overflow-hidden rounded-pill bg-line">
+            <div className="h-[3px] overflow-hidden rounded-pill bg-line">
               <motion.div
                 className={cn('h-full origin-left rounded-pill', d.key === 'chase_risk_score' ? riskBarClass(v) : scoreBarClass(v))}
                 initial={{ scaleX: 0 }}
@@ -410,7 +440,7 @@ function ContributionBar({ ev }: { ev: BreakoutEventFull }) {
 
   return (
     <div aria-label="评分贡献分解">
-      <div className="flex h-1 overflow-hidden rounded-pill bg-line">
+      <div className="flex h-[3px] overflow-hidden rounded-pill bg-line">
         {parts.map((p, i) => (
           <motion.div
             key={p.d.key}
@@ -492,7 +522,8 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
     versions?: unknown;
     warnings?: unknown;
   };
-  const exchange = str(loose.exchange) ?? '—';
+  /* 交易所缺失时整项隐藏（不再显「—」占位） */
+  const exchange = str(loose.exchange);
   const scoreVersion = str(loose.score_version) ?? '—';
   /* market_shape：契约为对象 {state, rules:{state_label}, ...} → 取中文形态标签；字符串则原样 */
   const shapeRec = (loose.market_shape && typeof loose.market_shape === 'object' ? loose.market_shape : {}) as Record<string, unknown>;
@@ -531,17 +562,12 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
           {SESSION_CN[e.session]}
         </span>
         <span className="font-mono text-micro text-ink-400 tnum">{fmtRelative(e.triggered_at)}</span>
-        {/* lg 以上：meta 并入 chips 行 */}
-        <span className="hidden items-center gap-1.5 text-micro text-ink-500 lg:inline-flex">
-          <span className="text-ink-300" aria-hidden="true">·</span>
-          <span>{exchange}</span>
-          <span className="text-ink-300" aria-hidden="true">·</span>
+        {/* lg 以上：meta 并入 chips 行（空格分隔 inline 项，不再用 · 串） */}
+        <span className="hidden items-center gap-3 text-micro text-ink-500 lg:inline-flex">
+          {exchange && <span>{exchange}</span>}
           <span>{e.sector}</span>
-          <span className="text-ink-300" aria-hidden="true">·</span>
           <span className="font-mono tnum">跳空 {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
-          <span className="text-ink-300" aria-hidden="true">·</span>
           <span className="font-mono tnum">量能 {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
-          <span className="text-ink-300" aria-hidden="true">·</span>
           <span className="font-mono tnum">{fmtEventTime(e.event_at)} 美东</span>
         </span>
         <span className="ml-auto inline-flex items-center gap-1.5 rounded-pill border border-brand-400/50 bg-brand-50 px-2.5 py-1 text-micro font-medium text-brand-600">
@@ -557,20 +583,16 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
           <button
             onClick={() => openTicker(e.ticker)}
             aria-label={`打开 ${e.ticker} 个股详情抽屉`}
-            className="text-brand-600 underline-offset-4 transition-colors hover:text-brand-500 hover:underline"
+            className="text-brand-600 underline-offset-4 transition-colors hover:text-brand-700 hover:underline"
           >
             {e.ticker}
           </button>
         </h3>
-        <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-ink-500 lg:hidden">
-          <span>{exchange}</span>
-          <span className="text-ink-300" aria-hidden="true">·</span>
+        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-ink-500 lg:hidden">
+          {exchange && <span>{exchange}</span>}
           <span>{e.sector}</span>
-          <span className="text-ink-300" aria-hidden="true">·</span>
           <span className="font-mono tnum">跳空 {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
-          <span className="text-ink-300" aria-hidden="true">·</span>
           <span className="font-mono tnum">同时段量能 {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
-          <span className="text-ink-300" aria-hidden="true">·</span>
           <span className="font-mono tnum">事件时间 {fmtEventTime(e.event_at)} 美东</span>
         </p>
       </div>
@@ -668,7 +690,7 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
           </button>
           <Link
             to={`/stock/${encodeURIComponent(e.ticker)}`}
-            className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-caption font-medium text-white transition-[filter] duration-fast hover:brightness-105"
+            className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-caption font-medium text-white transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
           >
             打开研究页
             <Icon name="arrow-up-right" size={13} />

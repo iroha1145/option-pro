@@ -37,7 +37,7 @@ function IvRankBar({ rank, replayKey }: { rank: number; replayKey: string }) {
   return (
     <span className="inline-flex items-center gap-2">
       <span className="w-8 text-right font-mono text-body-s font-semibold text-ink-800 tnum">{rank}</span>
-      <span className="h-1 w-[100px] overflow-hidden rounded-pill bg-line" role="presentation">
+      <span className="h-[3px] w-[100px] overflow-hidden rounded-pill bg-line" role="presentation">
         <span
           key={replayKey}
           className="block h-full origin-left animate-grow-bar rounded-pill"
@@ -143,7 +143,21 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
             }
           />
         ) : rows.length === 0 ? (
-          <EmptyState image="/empty-chart.svg" title="该板块暂无 IV 排名数据" />
+          <EmptyState
+            image="/empty-chart.svg"
+            title="该板块暂无 IV 排名数据"
+            description="该板块成分暂无可用的期权样本，可切换板块或重新加载"
+            action={
+              <button
+                type="button"
+                onClick={onRetry}
+                className="flex min-h-11 items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105"
+              >
+                <Icon name="refresh" size={14} />
+                重新加载
+              </button>
+            }
+          />
         ) : (
           <table className="min-w-[420px] w-full border-collapse" aria-label="板块 IV 横截面排名表">
             <thead>

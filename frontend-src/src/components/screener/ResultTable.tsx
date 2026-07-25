@@ -1,7 +1,7 @@
 /**
  * B2 结果表（桌面 ≥768px）：紧凑 44px 行 · 发丝线 · 行展开 accordion（260ms）· 分页
  * 列：# / 代码 / 强度分 / 分项 / 价·涨跌 / 催化剂 72h / 成交额 / ▸
- * 行 stagger 45ms 首绘；排序切换 layout 重排 320ms；价格 tick-flash。
+ * 行 stagger 30ms 仅第一页入场（翻页直接呈现）；排序切换 layout 重排 320ms；价格 tick-flash。
  */
 import { Fragment } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -95,9 +95,9 @@ export default function ResultTable({
               <Fragment key={r.ticker}>
                 <motion.tr
                   layout="position"
-                  initial={{ opacity: 0, y: 14 }}
+                  initial={page === 1 ? { opacity: 0, y: 14 } : false}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.48, ease: EASE_PAPER, delay: Math.min(i * 0.045, 0.6), layout: { duration: 0.32, ease: EASE_PAPER } }}
+                  transition={{ duration: 0.4, ease: EASE_PAPER, delay: page === 1 ? Math.min(i * 0.03, 0.3) : 0, layout: { duration: 0.32, ease: EASE_PAPER } }}
                   onClick={() => onToggle(r.ticker)}
                   className={cn(
                     'group h-11 cursor-pointer border-b border-line transition-colors duration-fast hover:bg-paper-2',

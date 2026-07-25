@@ -2,7 +2,6 @@
  * B4 市场信号解读（signals/market）
  * 直接展示 signals 指标对象与 scores 聚合；接口未提供的时序统计不渲染。
  */
-import { motion } from 'framer-motion';
 import type { ApiError } from '@/api/client';
 import type { IndexQuote, MarketSignalsSnapshot } from '@/api/types';
 import type { MarketStatusDetail } from './api';
@@ -54,7 +53,7 @@ function buildReading(
     const spx = indices.find((q) => q.code === 'SPX');
     parts.push(
       `六大指数 ${adv} 涨 ${indices.length - adv} 跌` +
-        (spx ? `，标普500 报 ${fmtPrice(spx.price)}（${fmtPct(spx.changePct)}）` : '') +
+        (spx ? `，标普 500 报 ${fmtPrice(spx.price)}（${fmtPct(spx.changePct)}）` : '') +
         '。',
     );
   }
@@ -143,11 +142,8 @@ export default function SignalsReading({
   const reading = buildReading(signals, indices, regimeMean, status, bias);
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 14 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.25 }}
-      transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
+    /* 后续区块 rise-in 减量：直接呈现 */
+    <section
       className="card-surface flex h-full flex-col p-6"
       aria-label="市场信号解读"
     >
@@ -199,12 +195,12 @@ export default function SignalsReading({
           </div>
           <p className="mt-1 text-micro text-ink-400">{bias?.basis ?? '依据不足，暂不给出判断'}</p>
           <blockquote className="mt-4 flex-1 rounded-lg border border-line bg-card-warm p-4">
-            <p className="font-display text-[15px] leading-[26px] text-ink-800">{reading}</p>
+            <p className="font-quote text-[15px] leading-[26px] text-ink-800">{reading}</p>
           </blockquote>
         </div>
       </div>
 
       <SourceNote className="mt-5" text="根据当前各项指标读数自动生成 · 不构成投资建议" />
-    </motion.section>
+    </section>
   );
 }

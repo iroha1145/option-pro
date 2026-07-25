@@ -7,12 +7,12 @@ module.exports = {
       colors: {
         /* ---- Optix 纸面终端 tokens（design.md §1 精确 HEX）---- */
         paper: {
-          DEFAULT: '#F6F5F1', // --paper 页面主背景
-          2: '#FBFAF7',       // --paper-2 抬升区
+          DEFAULT: '#F6F7F9', // --paper 页面主背景（v8 降温：冷灰蓝纸面）
+          2: '#FAFBFC',       // --paper-2 抬升区
         },
         card: {
           DEFAULT: '#FFFFFF',
-          warm: '#FDFCF9',
+          warm: '#FBFCFD',
           foreground: '#0D1626',
         },
         ink: {
@@ -24,13 +24,14 @@ module.exports = {
           300: '#B7BFD3',
         },
         line: {
-          DEFAULT: '#E9E7E0',
-          strong: '#DBD8CE',
-          chart: '#EFEDE6',
+          DEFAULT: '#E9ECF1', // v8.1 随纸面降温：冷纸面配暖灰线会显脏，同族蓝灰
+          strong: '#DBE0E8',
+          chart: '#EDF0F4',
         },
+        /* 群青只做同色相深浅：hover 一律深一档 brand-700（#2338C8），不用更浅的 500/400 */
         brand: {
-          700: '#2338C8',
-          600: '#2E46E0',
+          700: '#2338C8', // hover / 按压态
+          600: '#2E46E0', // 主色（主按钮/激活态/关键数据）
           500: '#3B59F2',
           400: '#6B82FF',
           100: '#E4E9FF',
@@ -50,9 +51,11 @@ module.exports = {
           600: '#E8930C',
           50: '#FCF3E2',
         },
+        /* v8.1 弃「AI 紫」：紫+AI 是生成式设计最强签名。青瓷 teal（印刷第二油墨色），
+           与群青相距 60°+、与涨绿差 36°，不误读为行情方向。 */
         ai: {
-          600: '#7C5CFF',
-          50: '#F1EDFF',
+          600: '#0B7285',
+          50: '#E7F3F6',
         },
         /* ---- shadcn/ui 兼容令牌（ui/ 基座仍可用）---- */
         border: "hsl(var(--border))",
@@ -86,43 +89,46 @@ module.exports = {
         },
       },
       borderRadius: {
-        /* design.md §3.2 锐利收敛圆角 */
+        /* v8 清新回暖：chip/badge 4 · 按钮/输入 6 · 卡片/容器 12 · 抽屉/模态 16 */
         xs: '4px',
-        sm: '6px',
-        md: '8px',
+        sm: '4px',
+        md: '6px',
         lg: '12px',
         xl: '16px',
         '2xl': '20px',
         pill: '999px',
       },
       boxShadow: {
-        /* design.md §3.3 纸面抬升三层制 + 内高光 + 聚焦环 */
-        'sh-1': '0 1px 2px rgba(13,22,38,.05)',
-        'sh-2': '0 1px 2px rgba(13,22,38,.04), 0 8px 24px -12px rgba(13,22,38,.12)',
-        'sh-3': '0 2px 4px rgba(13,22,38,.05), 0 24px 48px -16px rgba(13,22,38,.20)',
-        'card': '0 1px 2px rgba(13,22,38,.05), inset 0 1px 0 rgba(255,255,255,.9)',
-        'card-hover': '0 1px 2px rgba(13,22,38,.04), 0 8px 24px -12px rgba(13,22,38,.12), inset 0 1px 0 rgba(255,255,255,.9)',
-        'inset-hi': 'inset 0 1px 0 rgba(255,255,255,.9)',
+        /* v8 清新：墨色 rgba(16,24,40,*) 三层制，更柔更大；内高光 .7 保持；聚焦环即时出现 */
+        'sh-1': '0 1px 2px rgba(16,24,40,.03)',
+        'sh-2': '0 1px 2px rgba(16,24,40,.03), 0 12px 32px -14px rgba(16,24,40,.10)',
+        'sh-3': '0 2px 4px rgba(16,24,40,.04), 0 24px 56px -16px rgba(16,24,40,.16)',
+        'card': '0 1px 2px rgba(16,24,40,.03), inset 0 1px 0 rgba(255,255,255,.7)',
+        'card-hover': '0 1px 2px rgba(16,24,40,.03), 0 12px 32px -14px rgba(16,24,40,.10), inset 0 1px 0 rgba(255,255,255,.7)',
+        'inset-hi': 'inset 0 1px 0 rgba(255,255,255,.7)',
         'focus-ring': '0 0 0 3px rgba(46,70,224,.18)',
-        xs: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+        xs: '0 1px 2px 0 rgba(16,24,40,.05)', // v8.1 纯黑→墨色，与三层制同源
       },
       fontFamily: {
-        /* 原版 option-pro 字体栈（系统字体，无 webfont） */
-        display: ['Georgia', '"Songti SC"', '"Noto Serif SC"', 'STSong', '"Times New Roman"', 'serif'],
+        /* v8：display 换系统 sans 栈（与 sans 相同但独立变量保留，大标不再用衬线） */
+        display: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', '"PingFang SC"', '"Hiragino Sans GB"', '"Noto Sans SC"', '"Microsoft YaHei UI"', 'sans-serif'],
+        /* 衬线只保留给「编辑式引文」场景：font-quote */
+        quote: ['Georgia', '"Songti SC"', '"Noto Serif SC"', 'serif'],
         sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', '"PingFang SC"', '"Hiragino Sans GB"', '"Noto Sans SC"', '"Microsoft YaHei UI"', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', '"SF Mono"', 'Menlo', 'Consolas', '"Liberation Mono"', 'monospace'],
       },
       fontSize: {
         /* design.md §2.2 字阶（size/lineHeight，weight 由工具类控制） */
-        'display-xl': ['56px', { lineHeight: '60px', fontWeight: '700', letterSpacing: '-0.01em' }],
-        'display-l': ['40px', { lineHeight: '46px', fontWeight: '700' }],
-        'display-m': ['28px', { lineHeight: '34px', fontWeight: '600' }],
+        /* v8 display 字阶：tracking -0.02em · lineHeight 1.15 · 700/700/600（sans 大标） */
+        'display-xl': ['56px', { lineHeight: '64px', fontWeight: '700', letterSpacing: '-0.02em' }],
+        'display-l': ['40px', { lineHeight: '46px', fontWeight: '700', letterSpacing: '-0.02em' }],
+        'display-m': ['28px', { lineHeight: '32px', fontWeight: '600', letterSpacing: '-0.02em' }],
         h2: ['20px', { lineHeight: '26px', fontWeight: '600' }],
         h3: ['15px', { lineHeight: '22px', fontWeight: '600' }],
         body: ['14px', { lineHeight: '22px', fontWeight: '400' }],
         'body-s': ['13px', { lineHeight: '20px', fontWeight: '400' }],
         caption: ['12px', { lineHeight: '16px', fontWeight: '500' }],
-        eyebrow: ['11px', { lineHeight: '14px', fontWeight: '600', letterSpacing: '0.14em' }],
+        eyebrow: ['11px', { lineHeight: '14px', fontWeight: '600', letterSpacing: '0.08em' }], // v8 字距收紧 0.14→0.08em
         'data-xxl': ['44px', { lineHeight: '48px', fontWeight: '500', letterSpacing: '-0.02em' }],
         'data-xl': ['30px', { lineHeight: '36px', fontWeight: '500' }],
         'data-l': ['20px', { lineHeight: '26px', fontWeight: '500' }],

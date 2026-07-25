@@ -52,11 +52,8 @@ export default function CompositeCard({
   const shown = hasScore ? animated : null;
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 14 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.3 }}
-      transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
+    /* 后续区块 rise-in 减量：直接呈现 */
+    <section
       className="card-surface flex h-full flex-col p-5"
       aria-label="宏观环境综合分"
     >
@@ -88,7 +85,7 @@ export default function CompositeCard({
         </div>
       </div>
 
-      <div className="mt-4 h-1.5 overflow-hidden rounded-pill bg-line" role="presentation">
+      <div className="mt-4 h-[3px] overflow-hidden rounded-pill bg-line" role="presentation">
         {hasScore && (
           <motion.div
             className={cn(
@@ -138,6 +135,6 @@ export default function CompositeCard({
           </>
         )}
       </p>
-    </motion.section>
+    </section>
   );
 }

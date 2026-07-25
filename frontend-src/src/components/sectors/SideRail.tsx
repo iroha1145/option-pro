@@ -86,7 +86,7 @@ function IvHeatCard({
         <button
           type="button"
           onClick={onOpenPalette}
-          aria-label="搜索并关注更多代码"
+          aria-label="搜索更多代码并加入自选"
           className="flex h-14 items-center justify-center rounded-md border border-dashed border-line-strong text-ink-400 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
         >
           <Icon name="plus" size={16} />

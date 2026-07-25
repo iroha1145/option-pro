@@ -3,7 +3,7 @@
  * 仅渲染除 lead 外的当日事件；3 列网格（md 2 列 / 移动单列），stagger 45ms
  * 小卡 = TickerLogo + 代码/名称 + 相对触发时间 · SETUP_CN+LIFECYCLE_CN chips · 现价/涨跌 tick-flash
  *       · rvol 量能徽标 · PriceScale 价格标尺 · 9 评分迷你条 · 强度条 + 证据 N 条
- * 交互：hover translateY(-2px)+sh-2（160ms）· 点击小卡开 EventDetail 模态
+ * 交互：hover translateY(-3px)+sh-2（240ms ease-out，全站统一 card-lift 参数）· 点击小卡开 EventDetail 模态
  *      · 点击 ticker 走 useShell().openTicker 个股抽屉（非全屏纪律）
  */
 import { useEffect, useRef } from 'react';
@@ -77,9 +77,11 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
       role="button"
       tabIndex={0}
       aria-label={`${ev.ticker} ${SETUP_CN[ev.setup_type] ?? ev.setup_type ?? ''} 信号卡，打开事件详情`}
+      /* hover 上浮走 whileHover（framer 入场后内联 transform:none 会压掉 CSS hover 位移），阴影用 CSS */
+      whileHover={{ y: -3, transition: { duration: 0.24, ease: 'easeOut' } }}
       className={cn(
         'card-surface cursor-pointer p-4',
-        'transition-[transform,box-shadow] duration-fast ease-paper hover:-translate-y-0.5 hover:shadow-sh-2',
+        'transition-shadow duration-[240ms] ease-out hover:shadow-sh-2',
         locate && 'bk-locate',
       )}
     >

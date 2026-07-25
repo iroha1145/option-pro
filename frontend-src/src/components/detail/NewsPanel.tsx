@@ -65,6 +65,14 @@ export default function NewsPanel({ ticker }: { ticker: string }) {
           image="/empty-news.svg"
           title="72 小时内无相关新闻"
           description="新的催化剂出现后将在电报纸上呈现"
+          action={
+            <Link
+              to={`/catalysts?ticker=${encodeURIComponent(ticker)}`}
+              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+            >
+              去催化剂页浏览新闻流
+            </Link>
+          }
           className="py-8"
         />
       ) : (

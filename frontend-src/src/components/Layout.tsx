@@ -70,10 +70,11 @@ export default function Layout() {
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
-              initial={{ opacity: 0, y: 10 }}
+              /* page-fade 转场：enter 240ms opacity + translateY(6px)，exit 120ms */
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, transition: { duration: 0.16 } }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              exit={{ opacity: 0, transition: { duration: 0.12 } }}
+              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
             >
               {/* 按路由重建的错误边界:页面崩溃显示错误卡而非白屏,切页自动复位 */}
               <RouteErrorBoundary>

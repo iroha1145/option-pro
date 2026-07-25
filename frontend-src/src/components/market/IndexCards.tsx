@@ -1,6 +1,6 @@
 /**
  * B1 指数概览（6 卡：SPX/NDX/DJI/RUT/SOX/VIX）
- * 名称+代码 · 价格 count-up · ChangeBadge · 当日 mini sparkline · tick-flash
+ * 名称+代码 · 价格直接呈现（tick-flash 提示更新）· ChangeBadge · 当日 mini sparkline
  * live 模式无指数 K 线端点 → 不渲染分时图模块
  * ?index= 指定的卡高亮（左缘 2px brand 条）并滚动定位
  */
@@ -9,7 +9,6 @@ import { motion } from 'framer-motion';
 import { isMock, type ApiError } from '@/api/client';
 import type { IndexQuote } from '@/api/types';
 import { getIndexIntraday } from '@/mocks/marketPulse';
-import { useCountUp } from '@/hooks/useCountUp';
 import { cn } from '@/lib/utils';
 import { fmtPrice } from '@/lib/format';
 import ChangeBadge from '@/components/shared/ChangeBadge';
@@ -23,28 +22,42 @@ const IndexCard = memo(function IndexCard({
   flash,
   focused,
   registerRef,
+  onSelect,
 }: {
   quote: IndexQuote;
   index: number;
   flash: 'up' | 'down' | undefined;
   focused: boolean;
   registerRef: (code: string, el: HTMLDivElement | null) => void;
+  onSelect: (code: string) => void;
 }) {
   /* 数据纪律：无有效价（live 快照缺失时映射为 0）显「—」，不显 0.00 */
   const hasPrice = Number.isFinite(quote.price) && quote.price > 0;
-  const price = useCountUp(hasPrice ? quote.price : 0, 900);
+  /* count-up 减量：指数卡价格直接呈现终值，更新反馈交给 tick-flash */
+  const price = hasPrice ? quote.price : 0;
   const spark = useMemo(
     () => (isMock ? getIndexIntraday(quote.code, quote.changePct) : null),
     [quote.code, quote.changePct],
   );
   return (
-    <motion.div
-      ref={(el) => registerRef(quote.code, el)}
+    /* 选中同顶部指数 tape 一致（写 ?index=）。用真 button 而不是加 onClick 的
+       div：键盘可达、读屏能报出按下态，且 aria-pressed 让「已选中」不只靠颜色。 */
+    <motion.button
+      type="button"
+      ref={(el) => registerRef(quote.code, el as HTMLDivElement | null)}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.045, 0.4) }}
+      onClick={() => onSelect(quote.code)}
+      aria-pressed={focused}
+      /* 上浮 -3px/240ms 与自选卡、热点卡同一套手感；走 whileHover 而不是 CSS
+         hover:-translate-y，因为入场动画结束后 framer 会留下内联 transform，
+         把 CSS 位移压掉。 */
+      whileHover={{ y: -3, transition: { duration: 0.24, ease: 'easeOut' } }}
       className={cn(
-        'card-surface relative overflow-hidden p-4',
+        'card-surface relative block w-full overflow-hidden p-4 text-left',
+        'transition-shadow duration-[240ms] ease-out hover:shadow-sh-2',
+        'focus-visible:outline-none focus-visible:shadow-focus-ring',
         focused && 'shadow-[inset_2px_0_0_0_var(--brand-600),0_1px_2px_rgba(13,22,38,.05),inset_0_1px_0_rgba(255,255,255,.9)] ring-1 ring-brand-100',
       )}
       aria-label={`${quote.name} ${quote.code}`}
@@ -70,7 +83,7 @@ const IndexCard = memo(function IndexCard({
           <Sparkline data={spark} width={132} height={30} change={quote.changePct} className="w-full" />
         </div>
       )}
-    </motion.div>
+    </motion.button>
   );
 });
 
@@ -81,6 +94,7 @@ export default function IndexCards({
   focus,
   onRetry,
   refreshing,
+  onSelect,
 }: {
   data: IndexQuote[] | null;
   loading: boolean;
@@ -88,6 +102,7 @@ export default function IndexCards({
   focus: string | null;
   onRetry: () => void;
   refreshing: boolean;
+  onSelect: (code: string) => void;
 }) {
   /* tick-flash 差异检测（60s 轮询） */
   const [flashes, setFlashes] = useState<Record<string, 'up' | 'down'>>({});
@@ -164,6 +179,7 @@ export default function IndexCards({
           flash={flashes[q.code]}
           focused={focus?.toUpperCase() === q.code}
           registerRef={registerRef}
+          onSelect={onSelect}
         />
       ))}
     </div>

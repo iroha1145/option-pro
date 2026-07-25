@@ -52,7 +52,7 @@ export default function ChangeBadge({
           : `${up ? '涨' : '跌'} ${Math.abs(value).toFixed(2)}%`
       }
     >
-      <Icon name={up ? 'arrow-up-right' : 'arrow-down-right'} size={12} strokeWidth={1.8} />
+      <Icon name={up ? 'arrow-up-right' : 'arrow-down-right'} size={12} strokeWidth={1.45} />
       {points ? `${fmtSigned(value, 1)} ${pointsSuffix}` : fmtPct(value)}
     </span>
   );

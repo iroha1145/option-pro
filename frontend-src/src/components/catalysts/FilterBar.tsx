@@ -151,10 +151,10 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
 
       <Segmented
         options={[
-          { value: '6', label: '6时' },
-          { value: '24', label: '24时' },
-          { value: '72', label: '3天' },
-          { value: '168', label: '7天' },
+          { value: '6', label: '6 时' },
+          { value: '24', label: '24 时' },
+          { value: '72', label: '3 天' },
+          { value: '168', label: '7 天' },
         ]}
         value={String(filters.windowHours)}
         onChange={(v) => set({ windowHours: Number(v) })}
@@ -208,7 +208,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
         >
           <span
             className={cn(
-              'absolute top-[2px] size-[14px] rounded-full bg-card shadow-sh-1 transition-all duration-ui ease-paper',
+              'absolute top-[2px] size-[14px] rounded-full bg-card shadow-sh-1 transition-[left] duration-ui ease-paper',
               filters.multiSourceOnly ? 'left-[16px]' : 'left-[2px]',
             )}
           />

@@ -55,7 +55,7 @@ export function ScoreBarsFull({ event, className }: { event: BreakoutEventFull; 
         return (
           <div key={d.key} className="grid grid-cols-[64px_1fr_30px] items-center gap-2.5">
             <span className="text-caption text-ink-500">{d.label}</span>
-            <div className="h-1 overflow-hidden rounded-pill bg-line">
+            <div className="h-[3px] overflow-hidden rounded-pill bg-line">
               {fin(v) && (
                 <motion.div
                   className={cn('h-full origin-left rounded-pill', barCls(d.key, v))}
@@ -82,7 +82,7 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
   if (rp && typeof rp === 'object' && 'kind' in rp && rp.kind === 'live') {
     const metrics = [
       { key: 'value', label: '持续分', value: rp.value },
-      { key: 'ratio10d', label: '10日占比', value: rp.ratio10d },
+      { key: 'ratio10d', label: '10 日占比', value: rp.ratio10d },
       { key: 'globalPercentile', label: '全局分位', value: rp.globalPercentile },
       { key: 'sectorPercentile', label: '板块分位', value: rp.sectorPercentile },
       { key: 'selfPercentile', label: '自身分位', value: rp.selfPercentile },
@@ -102,7 +102,7 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
         {metrics.map((metric, i) => (
           <div key={metric.key} className="grid grid-cols-[64px_1fr_38px] items-center gap-2.5">
             <span className="text-caption text-ink-500">{metric.label}</span>
-            <div className="h-1 overflow-hidden rounded-pill bg-line">
+            <div className="h-[3px] overflow-hidden rounded-pill bg-line">
               {fin(metric.value) && (
                 <motion.div
                   className={cn('h-full origin-left rounded-pill', scoreBarClass(metric.value))}
@@ -140,7 +140,7 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
         return (
           <div key={d.key} className="grid grid-cols-[64px_1fr_30px] items-center gap-2.5">
             <span className="text-caption text-ink-500">{d.label}</span>
-            <div className="h-1 overflow-hidden rounded-pill bg-line">
+            <div className="h-[3px] overflow-hidden rounded-pill bg-line">
               <motion.div
                 className={cn('h-full origin-left rounded-pill', scoreBarClass(v))}
                 initial={{ scaleX: 0 }}

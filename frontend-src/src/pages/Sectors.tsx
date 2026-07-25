@@ -198,7 +198,18 @@ export default function Sectors() {
             <EmptyState
               image="/empty-chart.svg"
               title="暂无板块目录"
-              description="暂时没有取到板块数据。"
+              description="板块目录暂时为空，重试可重新拉取。"
+              action={
+                <button
+                  type="button"
+                  onClick={retryOverview}
+                  disabled={catalogQ.refreshing || strengthQ.refreshing}
+                  className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
+                >
+                  <Icon name="refresh" size={14} />
+                  重试
+                </button>
+              }
             />
           </div>
         ) : (
@@ -244,7 +255,18 @@ export default function Sectors() {
                 variant="error"
                 icon="doc-quote"
                 title="IV 排名联动暂停"
-                description="板块目录不可用，无法确定查询范围。"
+                description="板块目录不可用，无法确定查询范围；恢复目录后自动继续。"
+                action={
+                  <button
+                    type="button"
+                    onClick={retryOverview}
+                    disabled={catalogQ.refreshing || strengthQ.refreshing}
+                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
+                  >
+                    <Icon name="refresh" size={14} />
+                    重试
+                  </button>
+                }
               />
             </div>
           ) : catalogQ.loading ? (
@@ -257,6 +279,17 @@ export default function Sectors() {
                 image="/empty-chart.svg"
                 title="暂无可查询的板块"
                 description="板块目录没有返回有效编号，未发起 IV 排名请求。"
+                action={
+                  <button
+                    type="button"
+                    onClick={retryOverview}
+                    disabled={catalogQ.refreshing || strengthQ.refreshing}
+                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
+                  >
+                    <Icon name="refresh" size={14} />
+                    重试
+                  </button>
+                }
               />
             </div>
           ) : (
@@ -284,7 +317,18 @@ export default function Sectors() {
                 variant="error"
                 icon="doc-quote"
                 title="IV 数据暂不可用"
-                description="板块目录不可用，保持空状态。"
+                description="板块目录不可用，保持空状态；恢复目录后自动继续。"
+                action={
+                  <button
+                    type="button"
+                    onClick={retryOverview}
+                    disabled={catalogQ.refreshing || strengthQ.refreshing}
+                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
+                  >
+                    <Icon name="refresh" size={14} />
+                    重试
+                  </button>
+                }
               />
             </div>
           ) : !catalogQ.loading && !ivSectorIdValid ? (
@@ -292,7 +336,18 @@ export default function Sectors() {
               <EmptyState
                 image="/empty-chart.svg"
                 title="暂无板块 IV 数据"
-                description="等待板块目录提供有效查询范围。"
+                description="等待板块目录提供有效查询范围，可重试拉取目录。"
+                action={
+                  <button
+                    type="button"
+                    onClick={retryOverview}
+                    disabled={catalogQ.refreshing || strengthQ.refreshing}
+                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
+                  >
+                    <Icon name="refresh" size={14} />
+                    重试
+                  </button>
+                }
               />
             </div>
           ) : (

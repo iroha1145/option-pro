@@ -33,6 +33,15 @@ _PASSWORD_HASH_LENGTH = 32
 #: The owner signs in under this name; it can never become a customer account.
 RESERVED_USERNAMES = frozenset({"admin", "administrator", "root", "owner", "optix"})
 
+#: The owner's watchlist rows need an ``accounts`` row to satisfy the foreign key,
+#: so the owner gets exactly one, provisioned on demand. The id deliberately does
+#: not use the ``usr_`` prefix that :meth:`AccountStore.register` mints, so it can
+#: never collide with a customer, and its username key is already reserved above,
+#: which makes "no customer can ever own this row" a UNIQUE-constraint guarantee
+#: rather than a code convention.
+OWNER_USER_ID = "own_local"
+OWNER_ACCOUNT_USERNAME = "admin"
+
 USERNAME_MAX_LENGTH = 32
 PASSWORD_MAX_LENGTH = 256
 WATCHLIST_MAX_TICKERS = 50
@@ -258,6 +267,50 @@ class AccountStore:
             connection.commit()
         account = Account(user_id=user_id, username=display, created_at=now_iso)
         return self._issue_session(account)
+
+    def ensure_owner_account(self) -> Account:
+        """Return the owner's watchlist principal, creating its row on first use.
+
+        The owner authenticates through ``APP_PASSWORD_HASH`` and never holds an
+        account cookie, so this row exists only to anchor watchlist rows against
+        the foreign key. Its password hash is derived from a secret that is
+        discarded immediately, so the customer login path cannot authenticate as
+        it even if the reserved-name guard were ever removed.
+        """
+
+        self.initialize()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT user_id, username, created_at FROM accounts WHERE user_id=?",
+                (OWNER_USER_ID,),
+            ).fetchone()
+            if row is not None:
+                connection.commit()
+                return Account(
+                    user_id=str(row[0]),
+                    username=str(row[1]),
+                    created_at=str(row[2]),
+                )
+            now_iso = _utcnow_iso()
+            connection.execute(
+                """INSERT INTO accounts
+                       (user_id, username, username_key, password_hash, created_at)
+                   VALUES (?,?,?,?,?)""",
+                (
+                    OWNER_USER_ID,
+                    OWNER_ACCOUNT_USERNAME,
+                    OWNER_ACCOUNT_USERNAME,
+                    hash_account_password(secrets.token_urlsafe(32)),
+                    now_iso,
+                ),
+            )
+            connection.commit()
+        return Account(
+            user_id=OWNER_USER_ID,
+            username=OWNER_ACCOUNT_USERNAME,
+            created_at=now_iso,
+        )
 
     def authenticate(self, username: str, password: str) -> SessionResult:
         try:
