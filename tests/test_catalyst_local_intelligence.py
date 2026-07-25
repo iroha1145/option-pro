@@ -3019,8 +3019,16 @@ def test_market_focus_payload_is_hash_bound_and_stays_immutable(tmp_path):
         expected_prepared_revision=prepared,
     )
     payload = _job_payload(ai, cycle["job_id"])
+    # No macro snapshot is reachable in this fixture, so the macro block is
+    # omitted from both the payload and the hashed input document.
+    assert "macro_conditions" not in payload
+    assert payload["input_schema_version"] == local_module.FOCUS_INPUT_SCHEMA_VERSION
     assert payload["input_hash"] == _canonical_hash(
-        {"prepared_revision": prepared, "events": payload["events"]}
+        {
+            "input_schema_version": local_module.FOCUS_INPUT_SCHEMA_VERSION,
+            "prepared_revision": prepared,
+            "events": payload["events"],
+        }
     )
     assert payload["allowed_event_group_ids"]
     assert payload["allowed_tickers"] == ["NVDA"]

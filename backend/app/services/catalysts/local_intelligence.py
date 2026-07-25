@@ -30,13 +30,57 @@ from app.services.ai_jobs.repository import AIJobRepository
 from .errors import CatalystError, InvalidCursorError
 
 
+def macro_conditions_context() -> dict[str, Any] | None:
+    """Read the compact Optix 宏观环境 block for the Market Focus input.
+
+    Deliberately failure-isolated: any problem reading the macro store returns
+    ``None`` so the focus cycle still builds its original input. Tests replace
+    this module attribute rather than the network.
+
+    Never returns a secret, the eight-year history, or any raw series — the macro
+    service caps the block at seven module scores plus three drivers per side.
+    """
+
+    try:
+        from app.config import get_settings
+        from app.data_paths import get_data_paths
+        from app.personal_config import get_personal_config
+        from app.services.macro_conditions.repository import MacroRepository
+        from app.services.macro_conditions.service import (
+            MacroConditionsService,
+            MacroServiceConfig,
+        )
+
+        settings = get_settings()
+        repository = MacroRepository(
+            get_data_paths().macro_conditions_db,
+            read_only=True,
+        )
+        service = MacroConditionsService(
+            repository,
+            config=MacroServiceConfig.from_personal_config(get_personal_config()),
+        )
+        return service.ai_context(
+            key_configured=settings.macro_conditions_configured
+        )
+    except Exception:
+        # A macro outage must never stop news-catalyst analysis.
+        return None
+
+
 Mode = Literal["off", "read", "manual", "scheduled"]
 SubmissionSource = Literal["manual", "scheduled"]
 MODEL = "gpt-5.6-terra"
 REASONING = "max"
 EXECUTION_MODE = "background"
 NEWS_PROMPT_VERSION = "news-impact-zh-cn-v6"
-FOCUS_PROMPT_VERSION = "market-focus-zh-cn-v5"
+# v6 adds the compact Optix 宏观环境 block to the Market Focus input. The output
+# schema is unchanged, so results produced under v5 stay readable exactly as
+# they were and no historical paid job is resubmitted.
+FOCUS_PROMPT_VERSION = "market-focus-zh-cn-v6"
+#: Version of the *input* document handed to Market Focus. Bumped whenever the
+#: shape of the payload changes, independently of the output schema.
+FOCUS_INPUT_SCHEMA_VERSION = "market-focus-input-v2"
 NEWS_RESULT_AUDIT_VERSION = "news-result-validation-v2"
 NEWS_PROMPT_FAMILY_RE = re.compile(r"^news-impact-zh-cn-v[1-9][0-9]*$")
 NEWS_SCHEMA_FAMILY_RE = re.compile(r"^news_impact_zh_cn_v[1-9][0-9]*$")
@@ -5711,19 +5755,33 @@ class LocalCatalystIntelligence:
             for item in items
         ]
         event_snapshot.extend(calendar_events)
-        input_hash = _sha({"prepared_revision": revision, "events": event_snapshot})
+        # Optix 宏观环境 context. Deterministic, bounded, read-only: the analysis
+        # receives already-computed scores and may not recompute or override
+        # them. Missing macro data omits the field rather than inventing values.
+        macro_context = macro_conditions_context()
+        input_document: dict[str, Any] = {
+            "input_schema_version": FOCUS_INPUT_SCHEMA_VERSION,
+            "prepared_revision": revision,
+            "events": event_snapshot,
+        }
+        if macro_context is not None:
+            input_document["macro_conditions"] = macro_context
+        input_hash = _sha(input_document)
         allowed_events = [str(item["event_group_id"]) for item in event_snapshot]
         allowed_tickers = sorted({ticker for item in items for ticker in item["validated_tickers"]})
         payload = {
             "cycle_id": cycle_id,
             "as_of": snapshot_as_of,
             "input_hash": input_hash,
+            "input_schema_version": FOCUS_INPUT_SCHEMA_VERSION,
             "prepared_revision": revision,
             "allowed_event_group_ids": allowed_events,
             "allowed_tickers": allowed_tickers,
             "events": event_snapshot,
             "force": bool(force),
         }
+        if macro_context is not None:
+            payload["macro_conditions"] = macro_context
         force_bucket = _minute_bucket(observed) if force else None
         if force_bucket is not None:
             payload["force_bucket"] = force_bucket

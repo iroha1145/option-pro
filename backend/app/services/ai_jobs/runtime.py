@@ -194,6 +194,17 @@ def build_runtime_request(job_type: str, payload: dict[str, Any]) -> RuntimeRequ
             "两个数组内部也不得包含重复编号。"
             "当输入标明没有新的重要事件时，no_new_material_catalyst必须为true，"
             "dominant_events必须为空。"
+            # Optix 宏观环境 context. The scores are already computed by
+            # deterministic code; the model reads them and may not recompute,
+            # adjust or re-rank them, and may not turn a percentile into a
+            # probability or a trade instruction.
+            "输入可能包含macro_conditions宏观环境块。该块的综合分、模块分和因子分数"
+            "全部由确定性代码计算完成，模型不得重新计算、修正、替换或重新排序，"
+            "也不得在缺失时补造分数。这些分数是过去5年的历史滚动分位，"
+            "不是预测概率、不是上涨概率，禁止据此输出买入、卖出、仓位或目标价指令；"
+            "引用时只能说明当前金融环境相对历史的松紧。"
+            "当macro_conditions.status为stale时必须明确说明宏观数据已陈旧；"
+            "当该块缺失时不得提及或推测宏观环境。"
         )
         use_web_search = False
         schema_name = "market_focus_zh_cn_v5"
