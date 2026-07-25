@@ -1,7 +1,7 @@
 /**
  * §03 突破雷达（原版布局 · Paper Terminal 皮肤）
- * 页头带：§03 眉题 + 衬线大标 + 副标（快照 HH:MM:SS · N 条活跃事件）+ 右侧紧凑状态条
- *        （扫描启用 LED / 最近扫描 / 市场时段 chip / Worker / 下次扫描倒计时 · 只看自选）
+ * 页头带：§03 眉题 + 衬线大标 + 副标（仅流程句）+ 右侧紧凑状态条
+ *        （扫描启用 LED / 快照与活跃条数 / 最近扫描 / 市场时段 chip / Worker / 下次扫描倒计时 · 只看自选）
  * 筛选行：状态 fchip 胶囊组 + 评分胶囊组 + ticker 聚焦 chip + owner「刷新快照」
  * 当日信号：左 7/12 lead 压缩大卡（不动）+ 右 5/12 吸顶 HistoryRail「历史事件回溯」压缩面板
  * 其下：SignalCards 个股小卡网格（当日其余事件，3 列 / 移动单列，V3 小卡结构恢复）
@@ -60,7 +60,7 @@ function FChip({ active, onClick, children, ariaLabel }: { active: boolean; onCl
       aria-pressed={active}
       aria-label={ariaLabel}
       className={cn(
-        'rounded-pill border px-2.5 py-1 text-micro font-medium transition-all duration-fast',
+        'rounded-pill border px-2.5 py-1 text-micro font-medium transition-[transform,color,background-color,border-color] duration-fast',
         active
           ? 'scale-[1.04] border-brand-600 bg-brand-600 text-white'
           : 'border-line bg-card text-ink-500 hover:border-brand-400 hover:text-brand-600',
@@ -275,16 +275,16 @@ export default function Breakouts() {
             <span className="eyebrow">BREAKOUT RADAR · INTRADAY</span>
           </p>
           <h1 className="mt-2 font-display text-display-l text-ink-900">突破雷达</h1>
-          <p className="mt-1.5 text-body-s text-ink-500">
-            全市场粗筛 → 点时复核 → 生命周期跟踪 · 更新于 <span className="font-mono tnum">{snapshotAt}</span> ·{' '}
-            <span className="font-mono tnum">{currentAll.length}</span> 条活跃事件
-          </p>
+          <p className="mt-1.5 text-body-s text-ink-500">全市场粗筛 → 点时复核 → 生命周期跟踪</p>
         </div>
-        {/* 紧凑状态条：启用 LED · 最近扫描 · 时段 chip · 扫描服务 · 下次扫描倒计时 · 只看自选 */}
+        {/* 紧凑状态条：启用 LED · 快照与活跃条数（副标合并至此去重）· 最近扫描 · 时段 chip · 扫描服务 · 下次扫描倒计时 · 只看自选 */}
         <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 pb-1 text-caption text-ink-500">
           <span className="inline-flex items-center gap-1.5">
             <span className={cn('size-2 rounded-full', status?.enabled ? 'bg-up-600 animate-led-pulse' : 'bg-ink-300')} aria-hidden="true" />
             {status ? (status.enabled ? '扫描已启用' : '扫描已暂停') : '状态读取中…'}
+          </span>
+          <span className="font-mono tnum">
+            快照 {snapshotAt} · <span className="text-ink-700">{currentAll.length}</span> 条活跃
           </span>
           <span className="font-mono tnum">
             最近扫描 {status?.lastScanAt ? fmtTimeHHMMSS(new Date(status.lastScanAt)) : '—'}
@@ -459,7 +459,7 @@ export default function Breakouts() {
                   <p className="text-body-s font-semibold text-ink-800">
                     其余当日信号 · <span className="font-mono tnum">{current.length - 1}</span>
                   </p>
-                  <p className="text-micro text-ink-400">点击小卡开事件详情 · 点击代码开右侧个股抽屉</p>
+                  <p className="text-micro text-ink-400">点击小卡查看事件详情 · 点击代码打开个股抽屉</p>
                 </div>
                 <SignalCards
                   events={current.slice(1)}

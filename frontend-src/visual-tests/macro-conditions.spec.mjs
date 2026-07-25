@@ -312,7 +312,7 @@ test.describe("macro conditions desktop", () => {
     await trigger.click();
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
     await expect(accordion.getByRole("columnheader", { name: "历史分位" })).toBeVisible();
-    await expect(accordion.getByRole("columnheader", { name: "7日原值变化" })).toBeVisible();
+    await expect(accordion.getByRole("columnheader", { name: "7 日原值变化" })).toBeVisible();
     await expect(accordion.getByText("融资因子 1").first()).toBeVisible();
     await expect(accordion.getByText("1.234 个百分点").first()).toBeVisible();
     await expectNoHorizontalOverflow(page);

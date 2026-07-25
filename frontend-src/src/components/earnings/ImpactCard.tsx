@@ -147,8 +147,9 @@ const RELATION_LABELS: Record<EarningsImpactRelation, string> = {
 function QuotedSummary({ text, onOpenTicker }: { text: string; onOpenTicker: (t: string) => void }) {
   const parts = text.split(/(\$[A-Z][A-Z0-9._]{0,11})/g);
   return (
-    <blockquote className="rounded-sm border-l-2 border-ai-600 bg-ai-50/50 py-3 pl-4 pr-3">
-      <p className="font-display text-[15px] leading-[26px] text-ink-800">
+    /* 引文左线是印刷传统，但引文线不该比正文响：满饱和彩条会读成「AI 装饰条」 */
+    <blockquote className="rounded-sm border-l-2 border-ai-600/40 bg-ai-50/50 py-3 pl-4 pr-3">
+      <p className="font-quote text-[15px] leading-[26px] text-ink-800">
         {parts.map((p, i) =>
           /^\$[A-Z]/.test(p) ? (
             <button
@@ -532,7 +533,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                       className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-ai-600 text-caption font-medium text-white transition-[filter] hover:brightness-105"
                     >
                       <Icon name="spark-ai" size={13} />
-                      确认生成
+                      生成分析
                     </button>
                     <button
                       onClick={() => setConfirming(false)}

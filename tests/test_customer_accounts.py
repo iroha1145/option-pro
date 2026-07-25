@@ -319,3 +319,124 @@ def test_replace_watchlist_deduplicates_and_normalises(store: AccountStore) -> N
     )
     assert result == ["MSFT", "AAPL", "^GSPC"]
     assert store.watchlist(session.account.user_id) == ["MSFT", "AAPL", "^GSPC"]
+
+
+# ---------------- owner watchlist ----------------
+#
+# The owner authenticates through APP_PASSWORD_HASH and never holds an account
+# cookie, so before these routes accepted an owner session the owner -- the only
+# account on a personal deployment -- was the one user who could not keep a
+# watchlist, and the UI hid the controls rather than showing buttons that 401.
+
+OWNER_PASSWORD = "owner-password-for-watchlist-tests"
+
+
+@pytest.fixture()
+def owner_client(store: AccountStore) -> TestClient:
+    from app.access import AccessConfig, OwnerAccessRuntime, hash_owner_password
+
+    app = FastAPI()
+    app.state.access_runtime = OwnerAccessRuntime(
+        AccessConfig(mode="password"),
+        password_hash=hash_owner_password(OWNER_PASSWORD),
+    )
+    app.include_router(accounts_api.router)
+    app.include_router(access_api.router)
+    return TestClient(app, base_url="https://localhost")
+
+
+def _owner_login(client: TestClient) -> None:
+    response = client.post(
+        "/api/access/login",
+        json={"password": OWNER_PASSWORD},
+        headers=HEADERS,
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_owner_session_can_keep_a_watchlist(owner_client: TestClient) -> None:
+    assert owner_client.get("/api/account/watchlist").status_code == 401
+
+    _owner_login(owner_client)
+    empty = owner_client.get("/api/account/watchlist")
+    assert empty.status_code == 200
+    assert empty.json()["tickers"] == []
+
+    added = owner_client.post(
+        "/api/account/watchlist",
+        json={"ticker": "nvda"},
+        headers=HEADERS,
+    )
+    assert added.status_code == 200
+    assert added.json()["tickers"] == ["NVDA"]
+    assert owner_client.get("/api/account/watchlist").json()["tickers"] == ["NVDA"]
+
+    removed = owner_client.delete("/api/account/watchlist/NVDA", headers=HEADERS)
+    assert removed.status_code == 200
+    assert removed.json()["tickers"] == []
+
+
+def test_owner_watchlist_is_not_a_customer_identity(owner_client: TestClient) -> None:
+    """Provisioning the owner's row must not make the owner look like a customer."""
+
+    _owner_login(owner_client)
+    owner_client.post(
+        "/api/account/watchlist",
+        json={"ticker": "MSFT"},
+        headers=HEADERS,
+    )
+    me = owner_client.get("/api/account/me")
+    assert me.status_code == 200
+    assert me.json() == {"logged_in": False, "username": None}
+
+
+def test_owner_and_customer_watchlists_stay_separate(
+    owner_client: TestClient,
+    store: AccountStore,
+) -> None:
+    _owner_login(owner_client)
+    owner_client.post(
+        "/api/account/watchlist",
+        json={"ticker": "OWNR"},
+        headers=HEADERS,
+    )
+
+    # A customer cookie on the same client wins over the owner session, so the
+    # list a signed-in customer edits is always the one they can see.
+    assert _register(owner_client, "dana", "pw-for-dana").status_code == 201
+    customer = owner_client.get("/api/account/watchlist")
+    assert customer.status_code == 200
+    assert customer.json()["tickers"] == []
+
+    added = owner_client.post(
+        "/api/account/watchlist",
+        json={"ticker": "CUST"},
+        headers=HEADERS,
+    )
+    assert added.json()["tickers"] == ["CUST"]
+
+    # The owner's own list is untouched by anything the customer did.
+    owner_client.cookies.delete(accounts_api.ACCOUNT_COOKIE_NAME)
+    assert owner_client.get("/api/account/watchlist").json()["tickers"] == ["OWNR"]
+
+
+def test_owner_row_cannot_be_claimed_by_registration(
+    owner_client: TestClient,
+    store: AccountStore,
+) -> None:
+    """The reserved username is the DB-level guarantee, not just a code check."""
+
+    _owner_login(owner_client)
+    owner_client.get("/api/account/watchlist")  # provisions the owner row
+
+    rejected = _register(owner_client, "admin", "pw-attempt")
+    assert rejected.status_code == 400
+    assert rejected.json()["detail"]["code"] == "username_reserved"
+
+
+def test_ensure_owner_account_is_idempotent(store: AccountStore) -> None:
+    first = store.ensure_owner_account()
+    second = store.ensure_owner_account()
+    assert first == second
+    store.add_ticker(first.user_id, "AAPL")
+    assert store.watchlist(second.user_id) == ["AAPL"]

@@ -16,18 +16,22 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
     <motion.button
       initial={{ opacity: 0, x: 24 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.05, 0.4) }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.05, 0.4) }}
+      /* hover 上浮 -3px/240ms 走 whileHover（framer 入场后内联 transform:none 会压掉 CSS hover 位移），阴影用 CSS */
+      whileHover={openable ? { y: -3, transition: { duration: 0.24, ease: 'easeOut' } } : undefined}
       onClick={onOpen}
       disabled={!openable}
-      className={`group relative flex w-[260px] shrink-0 snap-start flex-col rounded-lg border border-line bg-card p-4 pt-3 text-left shadow-sh-1 transition-all duration-ui ease-paper sm:w-[300px] ${
-        openable ? 'hover:-translate-y-0.5 hover:shadow-sh-2' : 'cursor-default'
+      className={`group relative flex w-[260px] shrink-0 snap-start flex-col rounded-lg border border-line bg-card p-4 pt-3 text-left shadow-sh-1 transition-shadow duration-[240ms] ease-out sm:w-[300px] ${
+        openable ? 'hover:shadow-sh-2' : 'cursor-default'
       }`}
     >
       {/* 顶边热度渐变条 */}
       <span
         aria-hidden="true"
         className="absolute inset-x-0 top-0 h-[2px] rounded-t-lg"
-        style={{ background: 'linear-gradient(90deg, #E8930C, #2E46E0)', opacity: Math.min(1, 0.35 + h.heat / 160) }}
+        /* v8.1：撤跨色渐变（违反自家「禁跨色渐变」纪律）。热度=温度，单一暖色即语义；
+           强度仍由 opacity 编码，数值另有 HeatMeter 承担。 */
+        style={{ background: '#E8930C', opacity: Math.min(1, 0.3 + h.heat / 140) }}
       />
       <div className="flex items-center gap-2">
         <span className="flex size-7 shrink-0 items-center justify-center rounded-sm bg-warn-50 text-warn-600">
@@ -57,7 +61,12 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
             </span>
           ))}
         </span>
-        {openable && <span className="shrink-0 text-micro text-ink-300 group-hover:text-brand-600">查看代表新闻 →</span>}
+        {openable && (
+          <span className="flex shrink-0 items-center gap-0.5 text-micro text-ink-300 group-hover:text-brand-600">
+            查看代表新闻
+            <Icon name="chevron-right" size={12} />
+          </span>
+        )}
       </div>
     </motion.button>
   );

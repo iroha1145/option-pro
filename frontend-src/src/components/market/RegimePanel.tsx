@@ -68,11 +68,8 @@ export default function RegimePanel({
   const mean = regimeMean(data);
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 14 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.3 }}
-      transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
+    /* 后续区块 rise-in 减量：直接呈现 */
+    <section
       className="card-surface flex h-full flex-col p-5"
       aria-label="市场形态六维"
     >
@@ -98,7 +95,7 @@ export default function RegimePanel({
                 </span>
                 <span className="font-mono text-data-m text-ink-800 tnum">{score}</span>
               </div>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-pill bg-line" role="presentation">
+              <div className="mt-1.5 h-[3px] overflow-hidden rounded-pill bg-line" role="presentation">
                 <motion.div
                   className={cn('h-full origin-left rounded-pill', strengthBarClass(score))}
                   initial={{ scaleX: 0 }}
@@ -120,6 +117,6 @@ export default function RegimePanel({
       <p className="mt-4 border-t border-line pt-3 text-micro text-ink-400">
         色阶：&lt;50 弱 · 50–69 中性 · 70–84 强 · ≥85 极强
       </p>
-    </motion.section>
+    </section>
   );
 }

@@ -19,7 +19,7 @@ const DIR_ARROW: Record<NewsClassification, { icon: 'arrow-up-right' | 'arrow-do
   neutral: { icon: 'minus', cls: 'text-ink-500 bg-paper-2' },
 };
 
-/* 周期阶段横向步进条：当前 brand 实心 + led-pulse；已过实心灰；未来空心 */
+/* 周期阶段横向步进条：当前 brand 实心（静态，不脉冲）；已过实心灰；未来空心 */
 function StageStepper({ stage }: { stage: number }) {
   return (
     <ol className="flex items-center" aria-label={`周期阶段 ${stage} / 4 · ${STAGES[stage - 1]}`}>
@@ -39,11 +39,8 @@ function StageStepper({ stage }: { stage: number }) {
               className="flex flex-col items-center gap-1"
             >
               {current ? (
-                <motion.span
-                  animate={{ boxShadow: ['0 0 0 0 rgba(46,70,224,.45)', '0 0 0 6px rgba(46,70,224,0)', '0 0 0 0 rgba(46,70,224,0)'] }}
-                  transition={{ duration: 1.5, ease: [0.45, 0, 0.15, 1], repeat: Infinity }}
-                  className="size-3 rounded-full border-2 border-brand-600 bg-brand-600"
-                />
+                /* 阶段位置是静态状态，不做循环脉冲（LED 脉冲只给真实进行中的任务） */
+                <span className="size-3 rounded-full border-2 border-brand-600 bg-brand-600" />
               ) : (
                 <span
                   className={cn(
@@ -118,7 +115,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
       {cycle.headline && <p className="mt-2.5 text-body-s font-medium text-ink-800">{cycle.headline}</p>}
       {/* serif 引文摘要 */}
       <blockquote className="mt-3 border-l-[3px] border-line-strong pl-3.5">
-        <p className={cn('font-display text-ink-800', compact ? 'text-[13px] leading-[22px]' : 'text-[15px] leading-[26px]')}>
+        <p className={cn('font-quote text-ink-800', compact ? 'text-[13px] leading-[22px]' : 'text-[15px] leading-[26px]')}>
           {cycle.summary}
         </p>
       </blockquote>
@@ -240,11 +237,8 @@ export default function FocusCycleCard() {
   const running = job && (job.status === 'queued' || job.status === 'in_progress');
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 14 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.2 }}
-      transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
+    /* 后续区块 rise-in 减量：直接呈现 */
+    <section
       aria-label="市场焦点周期"
       className="rounded-lg border border-brand-100 bg-brand-50/60 p-5 shadow-sh-1"
     >
@@ -291,7 +285,7 @@ export default function FocusCycleCard() {
             className="overflow-hidden"
           >
             <div className="mt-3 h-1 overflow-hidden rounded-pill bg-brand-100">
-              <div className="h-full rounded-pill bg-brand-600 transition-all duration-500" style={{ width: `${job.progress}%` }} />
+              <div className="h-full rounded-pill bg-brand-600 transition-[width] duration-500" style={{ width: `${job.progress}%` }} />
             </div>
           </motion.div>
         )}
@@ -351,10 +345,10 @@ export default function FocusCycleCard() {
         open={confirmOpen}
         title="触发新的市场焦点周期？"
         description="将基于当前热点准备区生成一次综合分析，消耗模型预算并计入每日额度；若当前版本已分析过，将明确重算一次。"
-        confirmLabel="确认触发"
+        confirmLabel="开始计算"
         onConfirm={() => void startJob()}
         onCancel={() => setConfirmOpen(false)}
       />
-    </motion.section>
+    </section>
   );
 }

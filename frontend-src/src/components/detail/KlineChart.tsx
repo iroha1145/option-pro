@@ -110,7 +110,7 @@ function buildOption(
           type: 'line' as const,
           data: closes,
           showSymbol: false,
-          lineStyle: { color: CH.brand500, width: 2 },
+          lineStyle: { color: CH.brand500, width: 1.5 },
           areaStyle: stippleAreaStyle(),
           endLabel: {
             show: true,
@@ -214,7 +214,7 @@ function buildOption(
         crossStyle: { color: CH.ink300, width: 1, type: [3, 3] as number[] },
         label: {
           backgroundColor: 'rgba(253,252,249,.92)',
-          borderColor: '#E9E7E0',
+          borderColor: '#E9ECF1', // v8.1 tooltip 边框随 line 降温（原 #E9E7E0 暖灰漏网）
           borderWidth: 1,
           color: '#5A6788',
           fontFamily: '"IBM Plex Mono", monospace',
@@ -256,7 +256,7 @@ function buildOption(
           color0: downFill,
           borderColor: upFill,
           borderColor0: downFill,
-          borderWidth: 1.2,
+          borderWidth: 1,
         },
         barMaxWidth: 14,
         z: 3,
@@ -324,7 +324,7 @@ export default function KlineChart({
   );
 
   return (
-    <section className={className} aria-label={`${ticker} K线图`}>
+    <section className={className} aria-label={`${ticker} K 线图`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Segmented
           options={CHART_RANGES}
@@ -334,7 +334,7 @@ export default function KlineChart({
         />
         <Segmented
           options={[
-            { value: 'candle' as ChartMode, label: 'K线' },
+            { value: 'candle' as ChartMode, label: 'K 线' },
             { value: 'area' as ChartMode, label: '面积' },
           ]}
           value={mode}
@@ -389,7 +389,7 @@ export default function KlineChart({
               exit={{ opacity: 0, transition: { duration: 0.16 } }}
               className="absolute inset-0"
             >
-              <ReactECharts option={option} ariaLabel={`${ticker} ${range} ${mode === 'candle' ? 'K线' : '面积'}图`} />
+              <ReactECharts option={option} ariaLabel={`${ticker} ${range} ${mode === 'candle' ? 'K 线' : '面积'}图`} />
             </motion.div>
           )}
         </AnimatePresence>

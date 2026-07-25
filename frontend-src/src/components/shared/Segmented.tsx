@@ -29,7 +29,7 @@ export default function Segmented<T extends string>({ options, value, onChange, 
     >
       <span
         aria-hidden="true"
-        className="absolute top-0.5 bottom-0.5 rounded-[6px] bg-card shadow-sh-1 transition-all duration-ui ease-paper"
+        className="absolute top-0.5 bottom-0.5 rounded-[4px] bg-card shadow-sh-1 transition-[left,width,opacity] duration-ui ease-paper"
         style={thumb ? { left: thumb.left, width: thumb.width } : { opacity: 0 }}
       />
       {options.map((o) => (
@@ -39,7 +39,7 @@ export default function Segmented<T extends string>({ options, value, onChange, 
           aria-selected={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
-            'relative z-10 rounded-[6px] px-3 py-1 text-caption font-medium transition-colors duration-fast',
+            'relative z-10 rounded-[4px] px-3 py-1 text-caption font-medium transition-colors duration-fast',
             value === o.value ? 'text-ink-800' : 'text-ink-400 hover:text-ink-600',
           )}
         >

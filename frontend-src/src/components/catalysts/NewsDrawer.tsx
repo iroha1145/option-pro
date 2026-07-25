@@ -271,7 +271,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
 
           {/* 摘要（serif 引文排版） */}
           <blockquote className="mt-4 border-l-[3px] border-line-strong pl-4">
-            <p className="font-display text-[15px] leading-[26px] text-ink-800">{item.summaryZh}</p>
+            <p className="font-quote text-[15px] leading-[26px] text-ink-800">{item.summaryZh}</p>
           </blockquote>
 
           {/* 关联代码 */}
@@ -332,7 +332,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
                 <p className="mt-3 text-body-s font-medium text-ink-800">{analysis.headlineSummary}</p>
                 {/* causal_summary serif 引文 */}
                 <blockquote className="mt-3 border-l-[3px] border-ai-600/40 pl-3.5">
-                  <p className="font-display text-[14px] leading-[24px] text-ink-800">{analysis.causalSummary}</p>
+                  <p className="font-quote text-[14px] leading-[24px] text-ink-800">{analysis.causalSummary}</p>
                 </blockquote>
                 <div className="mt-4 space-y-2">
                   {analysis.trustedStockImpacts.map((imp, i) => (
@@ -388,7 +388,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
                         className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
                       >
                         <Icon name="refresh" size={13} />
-                        {showFailed || showInsufficient ? '重试分析（force）' : '重新分析（force）'}
+                        {showFailed || showInsufficient ? '重试分析（强制）' : '重新分析（强制）'}
                       </button>
                     )}
                   </>
@@ -406,7 +406,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
         open={confirm === 'create'}
         title="生成 AI 分析？"
         description="将调用模型对该新闻进行情绪与影响分析，消耗模型预算并计入每日额度与任务上限。"
-        confirmLabel="确认生成"
+        confirmLabel="生成分析"
         onConfirm={() => void startAnalysis(false)}
         onCancel={() => setConfirm(null)}
       />
@@ -414,7 +414,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
         open={confirm === 'force'}
         title="强制重新分析？"
         description="将忽略既有结果重新调用模型，消耗模型预算并计入每日额度；后台可能因冷却或开关限制而拒绝。"
-        confirmLabel="确认重试"
+        confirmLabel="重新分析"
         onConfirm={() => void startAnalysis(true)}
         onCancel={() => setConfirm(null)}
       />
@@ -422,7 +422,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
         open={confirm === 'cancel'}
         title="取消分析任务？"
         description="任务取消后可重新发起；已产生的排队资源将释放。"
-        confirmLabel="确认取消"
+        confirmLabel="取消任务"
         danger
         onConfirm={() => void cancelJob()}
         onCancel={() => setConfirm(null)}

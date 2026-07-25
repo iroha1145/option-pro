@@ -151,7 +151,7 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
                 onClick={onNextWeek}
                 className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
               >
-                下周
+                查看下周
                 <Icon name="chevron-right" size={13} />
               </button>
             ) : undefined

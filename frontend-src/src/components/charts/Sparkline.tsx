@@ -57,7 +57,8 @@ const Sparkline = memo(function Sparkline({ data, width = 48, height = 20, chang
         strokeLinecap="round"
         strokeLinejoin="round"
         className="spark-draw"
-        style={{ strokeDasharray: 300, strokeDashoffset: 300 }}
+        /* 首绘 500ms（覆盖 index.css 的 700ms；reduced-motion 下 CSS !important 仍然生效） */
+        style={{ strokeDasharray: 300, strokeDashoffset: 300, animationDuration: '500ms' }}
       />
     </svg>
   );

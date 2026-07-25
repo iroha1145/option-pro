@@ -1,11 +1,10 @@
 /**
  * 技术信号 · trend_bias 面板（GET /api/signals/stock/{t} 完整形状）
- * 半环仪表（score count-up + draw-line）+ label（偏多/中性/偏空）+ status 可见
+ * 半环仪表（score 直接呈现 + draw-line）+ label（偏多/中性/偏空）+ status 可见
  * 分项条组（趋势/动量/量能/波动 grow-bar 错峰）+ 因子中文解读列表
  */
 import { motion } from 'framer-motion';
 import { usePolling } from '@/hooks/usePolling';
-import { useCountUp } from '@/hooks/useCountUp';
 import { strengthBarClass } from '@/components/shared/StrengthBar';
 import { SkeletonText } from '@/components/shared/Skeleton';
 import InfoHint from '@/components/shared/InfoHint';
@@ -44,7 +43,8 @@ function gaugeColor(score: number): string {
 function Gauge({ score, label }: { score: number; label: StockTrendBiasView['trend_bias_label'] }) {
   const R = 64;
   const C = Math.PI * R; // 半圆周长
-  const shown = useCountUp(score);
+  /* count-up 减量：非 hero 数字直接呈现终值 */
+  const shown = score;
   return (
     <div className="relative mx-auto w-[168px]">
       <svg viewBox="0 0 168 92" className="w-full" role="img" aria-label={`趋势偏向分 ${score}，${label}`}>

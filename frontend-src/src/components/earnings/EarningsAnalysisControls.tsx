@@ -168,7 +168,8 @@ export default function EarningsAnalysisControls() {
 
   return (
     <section className="card-surface overflow-hidden" aria-label="财报分析管理">
-      <div className="border-l-2 border-ai-600 px-4 py-3.5">
+      {/* v8.1 去左彩条（非引文语义的彩条卡是典型生成式装饰）；AI 归属已由图标章表达 */}
+      <div className="px-4 py-3.5">
         <div className="flex items-start gap-3">
           <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-ai-50 text-ai-600">
             <Icon name="spark-ai" size={15} />
@@ -220,7 +221,7 @@ export default function EarningsAnalysisControls() {
             )}
           >
             <Icon name="refresh" size={12} className={running ? 'animate-spin' : ''} />
-            {running ? '等待任务检查' : '立即分析新的财报'}
+            {running ? '正在检查任务…' : '立即分析新的财报'}
           </button>
         </div>
 

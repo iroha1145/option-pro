@@ -48,7 +48,7 @@ function AdvanceDeclineBar({ advancers, decliners }: { advancers: number; declin
         <span className="mx-1.5 text-ink-300">/</span>
         <span className="text-down-700">{decliners}</span>
       </p>
-      <div className="mt-2 flex h-1.5 w-full overflow-hidden rounded-pill bg-line" aria-hidden="true">
+      <div className="mt-2 flex h-[3px] w-full overflow-hidden rounded-pill bg-line" aria-hidden="true">
         <div className="h-full origin-left animate-grow-bar bg-up-600" style={{ width: `${(advancers / total) * 100}%` }} />
         <div className="h-full origin-right bg-down-600" style={{ width: `${(decliners / total) * 100}%` }} />
       </div>
@@ -279,7 +279,9 @@ function WatchCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.045, 0.5) }}
       onClick={onClick}
-      className="group/card card-surface card-hover relative flex flex-col p-4 text-left"
+      /* hover 上浮 -3px/240ms 走 whileHover（framer 入场后内联 transform:none 会压掉 CSS hover 位移），阴影用 CSS */
+      whileHover={{ y: -3, transition: { duration: 0.24, ease: 'easeOut' } }}
+      className="group/card card-surface relative flex flex-col p-4 text-left transition-shadow duration-[240ms] ease-out hover:shadow-sh-2"
     >
       {onRemove && (
         /* 卡片本身是 button，移除键用 span[role=button] 以免非法嵌套 */
@@ -336,7 +338,7 @@ function WatchCard({
 
 /* ================= 页面主体 ================= */
 export default function Watchlist() {
-  const { isVisitor, isOwner, isCustomer, username } = useAccess();
+  const { isVisitor, isOwner, canManageWatchlist, username } = useAccess();
   const { openPalette, openTicker } = useShell();
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -352,7 +354,7 @@ export default function Watchlist() {
   const [savingTicker, setSavingTicker] = useState(false);
 
   useEffect(() => {
-    if (!isCustomer) {
+    if (!canManageWatchlist) {
       setMyTickers(null);
       return;
     }
@@ -370,7 +372,7 @@ export default function Watchlist() {
     return () => {
       alive = false;
     };
-  }, [isCustomer]);
+  }, [canManageWatchlist]);
 
   /**
    * 始终读站点默认自选（已缓存、对访客免费），个人列表在前端做筛选。
@@ -584,20 +586,27 @@ export default function Watchlist() {
 
   const loading = wl.loading;
   const err = wl.error;
+  /**
+   * 个人自选为空时展示站点默认关注池，并由横幅明说这是默认池。
+   *
+   * 空列表直接渲染成空白页会让「还没添加过」和「加载失败」长得一模一样；
+   * 而不加标注地展示默认池，又等于把系统的池子冒充成用户自己的选择。
+   */
+  const showingDefaultPool = canManageWatchlist && myTickers !== null && myTickers.length === 0;
   const items = useMemo(() => {
     const all = wl.data ?? [];
-    if (!isCustomer || !myTickers) return all;
+    if (!canManageWatchlist || !myTickers || myTickers.length === 0) return all;
     const bySymbol = new Map(all.map((row) => [row.ticker, row]));
     // 按用户自己的排序输出；覆盖范围外的代码留到下方单独提示，不静默丢弃
     return myTickers.map((symbol) => bySymbol.get(symbol)).filter((row): row is WatchlistItem => !!row);
-  }, [wl.data, isCustomer, myTickers]);
+  }, [wl.data, canManageWatchlist, myTickers]);
 
   /** 用户加了但默认行情覆盖不到的代码——如实说明，不假装它不存在 */
   const uncoveredTickers = useMemo(() => {
-    if (!isCustomer || !myTickers) return [];
+    if (!canManageWatchlist || !myTickers) return [];
     const covered = new Set((wl.data ?? []).map((row) => row.ticker));
     return myTickers.filter((symbol) => !covered.has(symbol));
-  }, [wl.data, isCustomer, myTickers]);
+  }, [wl.data, canManageWatchlist, myTickers]);
   const cardItems = useMemo(() => {
     if (!sort) return items;
     const direction = sort.desc ? -1 : 1;
@@ -657,10 +666,10 @@ export default function Watchlist() {
           >
             {[
               ...(signalsQ.data?.topScore !== null && signalsQ.data?.topScore !== undefined
-                ? [<StatCard key="top-risk" label="顶部风险分" icon="flag" value={signalsQ.data.topScore} sub={signalsQ.data.topLabel ?? '市场信号模型'} />]
+                ? [<StatCard key="top-risk" label="顶部风险分" icon="flag" value={signalsQ.data.topScore} sub={signalsQ.data.topLabel ?? '市场信号模型'} className="card-lift" />]
                 : []),
               ...(signalsQ.data?.bottomScore !== null && signalsQ.data?.bottomScore !== undefined
-                ? [<StatCard key="bottom-repair" label="底部修复分" icon="target" value={signalsQ.data.bottomScore} sub={signalsQ.data.bottomLabel ?? '市场信号模型'} />]
+                ? [<StatCard key="bottom-repair" label="底部修复分" icon="target" value={signalsQ.data.bottomScore} sub={signalsQ.data.bottomLabel ?? '市场信号模型'} className="card-lift" />]
                 : []),
               <div key="ad" className="card-surface min-w-[220px] snap-start p-5 sm:min-w-0">
                 <div className="flex items-start justify-between">
@@ -711,7 +720,7 @@ export default function Watchlist() {
                 onChange={setView}
               />
               <SortDropdown sort={sort} onChange={setSort} />
-              {isCustomer && (
+              {canManageWatchlist && (
                 <form
                   onSubmit={(event) => {
                     event.preventDefault();
@@ -740,7 +749,7 @@ export default function Watchlist() {
             </div>
             <p className="w-full text-right text-caption text-ink-400 sm:w-auto">
               <span className="font-mono tnum">{items.length}</span> 只标的
-              {isCustomer && <span className="ml-1 text-ink-300">/ 上限 {maxTickers}</span>}
+              {canManageWatchlist && <span className="ml-1 text-ink-300">/ 上限 {maxTickers}</span>}
               {wl.lastUpdatedAt && (
                 <span className="ml-2 hidden font-mono text-micro tnum sm:inline">更新 {fmtTimeHHMMSS(wl.lastUpdatedAt)}</span>
               )}
@@ -754,6 +763,16 @@ export default function Watchlist() {
             >
               暂无行情：{uncoveredTickers.join('、')}
               <span className="ml-1 text-ink-500">（不在当前覆盖范围内，可在个股页手动获取）</span>
+            </p>
+          )}
+
+          {showingDefaultPool && (
+            <p
+              className="mt-3 rounded-md border border-line bg-paper-2 px-3 py-2 text-caption text-ink-500"
+              role="status"
+            >
+              你还没有自己的自选，下面是系统默认关注池。
+              <span className="ml-1 text-ink-400">上方输入代码即可开始建立自己的列表。</span>
             </p>
           )}
 
@@ -787,12 +806,12 @@ export default function Watchlist() {
                   image="/empty-watchlist.svg"
                   title="清单还是空的"
                   description={
-                    isCustomer
+                    canManageWatchlist
                       ? '在上方输入股票代码，加入你的第一只自选'
                       : '登录后可以把自选股保存在账号里，换设备也还在'
                   }
                   footnote={
-                    isCustomer
+                    canManageWatchlist
                       ? `自选保存在账号 ${username} 下`
                       : isVisitor
                         ? '当前为访客只读模式'
@@ -830,7 +849,7 @@ export default function Watchlist() {
                       item={it}
                       index={i}
                       onClick={() => openTicker(it.ticker)}
-                      onRemove={isCustomer ? () => void onRemoveTicker(it.ticker) : undefined}
+                      onRemove={canManageWatchlist ? () => void onRemoveTicker(it.ticker) : undefined}
                       showStrength={rowStrengthAvailable}
                       showSignals={rowSignalsAvailable}
                     />
@@ -845,7 +864,7 @@ export default function Watchlist() {
                     item={it}
                     index={i}
                     onClick={() => openTicker(it.ticker)}
-                    onRemove={isCustomer ? () => void onRemoveTicker(it.ticker) : undefined}
+                    onRemove={canManageWatchlist ? () => void onRemoveTicker(it.ticker) : undefined}
                     showStrength={rowStrengthAvailable}
                     showSignals={rowSignalsAvailable}
                   />

@@ -7,7 +7,6 @@
  */
 import { motion } from 'framer-motion';
 import type { MarketRegimeDims, MarketRegimeInfo, MarketStrength } from '@/api/types';
-import { useCountUp } from '@/hooks/useCountUp';
 import SourceNote from '@/components/shared/SourceNote';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS, type ScoreHintKey } from '@/lib/scoreHints';
@@ -76,7 +75,8 @@ function deriveRegime(m: MarketStrength): RegimeDim[] {
 }
 
 function RegimeBar({ dim, index }: { dim: RegimeDim; index: number }) {
-  const v = useCountUp(dim.value ?? 0, 900);
+  /* count-up 减量：六维条数值直接呈现终值 */
+  const v = dim.value ?? 0;
   return (
     <div className="group relative">
       <div className="flex items-center gap-3">

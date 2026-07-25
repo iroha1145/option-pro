@@ -108,9 +108,9 @@ export default function StatusHero() {
             <SkeletonBlock className="h-5 w-28" />
           ) : (
             <div className="flex items-center gap-2">
+              {/* 「分析可用」是静态状态，不脉冲（脉冲只给真实进行中的任务） */}
               <Led
                 tone={s?.analysisAvailable ? 'ai' : reason ? reason.tone : 'down'}
-                pulse={!!s?.analysisAvailable}
               />
               <span className="text-body-s font-medium text-ink-800">
                 {s?.analysisAvailable ? '模型分析可用' : reason ? reason.label : '模型分析不可用'}

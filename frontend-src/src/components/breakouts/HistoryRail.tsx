@@ -44,7 +44,7 @@ function hhmm(iso: string | null | undefined): string {
 function dayLabel(key: string): string {
   const d = new Date(`${key}T12:00:00`);
   const week = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()];
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${week}`;
+  return `${d.getMonth() + 1} 月 ${d.getDate()} 日 ${week}`;
 }
 
 interface HistoryRailProps {
@@ -140,6 +140,14 @@ export default function HistoryRail({ events, total, stale, loading, error, onRe
             image="/empty-radar.svg"
             title="暂无匹配的历史事件"
             description="放宽页头筛选条件，或等雷达下一轮扫描把事件沉淀到这里"
+            action={
+              <button
+                onClick={onRetry}
+                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+              >
+                重新加载
+              </button>
+            }
           />
         ) : (
           <div>
@@ -157,9 +165,10 @@ export default function HistoryRail({ events, total, stale, loading, error, onRe
                     return (
                       <motion.li
                         key={e.event_id}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.36, ease: EASE_PAPER, delay: Math.min(i * 0.03, 0.36) }}
+                        /* 繁忙长列表：transform 字符串写法；stagger ≤30ms 且仅第一页入场，加载更多直接呈现 */
+                        initial={i < PAGE ? { opacity: 0, transform: 'translateY(8px)' } : false}
+                        animate={{ opacity: 1, transform: 'translateY(0px)' }}
+                        transition={{ duration: 0.36, ease: EASE_PAPER, delay: i < PAGE ? Math.min(i * 0.03, 0.36) : 0 }}
                       >
                         <div
                           role="button"

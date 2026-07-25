@@ -39,7 +39,7 @@ function shiftMonth(key: string, delta: number): string {
 
 /** 'YYYY-MM' → '2026年7月' */
 function monthTitleCN(key: string): string {
-  return `${Number(key.slice(0, 4))}年${Number(key.slice(5, 7))}月`;
+  return `${Number(key.slice(0, 4))} 年 ${Number(key.slice(5, 7))} 月`;
 }
 
 export default function MonthCalendar({
@@ -166,7 +166,7 @@ export default function MonthCalendar({
             const shown = dayItems.slice(0, MAX_CHIPS);
             const extra = dayItems.length - shown.length;
             const dayNum = Number(date.slice(8, 10));
-            const label = date.slice(8, 10) === '01' ? `${Number(date.slice(5, 7))}月${dayNum}日` : String(dayNum);
+            const label = date.slice(8, 10) === '01' ? `${Number(date.slice(5, 7))} 月 ${dayNum} 日` : String(dayNum);
             return (
               <motion.div
                 key={date}

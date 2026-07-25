@@ -162,9 +162,9 @@ export function fmtMMDD(date: string): string {
   return `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
 }
 
-/** '2024-11-13' → '11月13日' */
+/** '2024-11-13' → '11 月 13 日' */
 export function fmtMDCN(date: string): string {
-  return `${Number(date.slice(5, 7))}月${Number(date.slice(8, 10))}日`;
+  return `${Number(date.slice(5, 7))} 月 ${Number(date.slice(8, 10))} 日`;
 }
 
 /** 周X（按 UTC 正午锚定） */

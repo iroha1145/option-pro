@@ -50,9 +50,12 @@ export function NewsRow({
   const bestImpact = a ? a.trustedStockImpacts.reduce((m, x) => (Math.abs(x.impactScore) > Math.abs(m?.impactScore ?? 0) ? x : m), a.trustedStockImpacts[0]) : null;
   return (
     <motion.article
+      /* 繁忙 feed 列表：stagger ≤30ms，仅第一页播放；y 写法以便 hover 上浮可组合（内联 transform 字符串会挡住 whileHover） */
       initial={animate ? { opacity: 0, y: 14 } : false}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.035, 0.42) }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: animate ? Math.min(index * 0.03, 0.3) : 0 }}
+      /* v8.1：行级去位移。上浮属于「卡片脱离纸面」的 elevation 隐喻——列表行无阴影无边界，
+         浮起没有语义；60 行高频扫视区满屏跳也违反动效克制。背景色 + 标题下划线两重反馈已够。 */
       className="group relative flex cursor-pointer gap-3 px-4 py-[18px] transition-colors duration-fast hover:bg-paper-2/70 sm:px-5"
       onClick={() => onOpen(item.newsId)}
       aria-label={item.titleZh}
@@ -277,7 +280,8 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
             aria-live="polite"
           >
             {items.map((it, i) => (
-              <NewsRow key={it.newsId} item={it} index={i} onOpen={onOpenNews} />
+              /* 游标分页追加的项不再播放入场 */
+              <NewsRow key={it.newsId} item={it} index={i} animate={i < PAGE_SIZE} onOpen={onOpenNews} />
             ))}
           </div>
           {/* 游标分页 */}

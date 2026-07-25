@@ -251,22 +251,20 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
     <AnimatePresence>
       {open && (
         <>
+          {/* 频率门禁：⌘K 为键盘高频动作，背板只保留 ≤80ms 淡入淡出 */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.16 }}
+            transition={{ duration: 0.08 }}
             className="fixed inset-0 z-[80] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px]"
             onClick={onClose}
           />
-          <motion.div
+          {/* 面板本体即时出现，无开/关动画 */}
+          <div
             role="dialog"
             aria-modal="true"
             aria-label="命令面板"
-            initial={{ opacity: 0, scale: 0.96, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: 4, transition: { duration: 0.12 } }}
-            transition={{ type: 'spring', stiffness: 520, damping: 32 }}
             className="fixed left-1/2 top-[18vh] z-[81] w-[640px] max-w-[calc(100vw-24px)] -translate-x-1/2 overflow-hidden rounded-lg border border-line-strong bg-card shadow-sh-3"
           >
             {/* 顶边 brand 发丝线（纸面卡片签名） */}
@@ -355,7 +353,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
               <span className="flex items-center gap-1.5"><Kbd>Enter</Kbd> 打开</span>
               <span className="flex items-center gap-1.5"><Kbd>Esc</Kbd> 关闭</span>
             </div>
-          </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>

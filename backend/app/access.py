@@ -484,13 +484,27 @@ def _runtime(request: Request) -> OwnerAccessRuntime:
     return runtime if isinstance(runtime, OwnerAccessRuntime) else get_access_runtime()
 
 
-def require_owner_access(request: Request) -> None:
+def request_is_owner_session(request: Request) -> bool:
+    """Boolean form of :func:`require_owner_access`.
+
+    For routes that treat an owner session as one acceptable principal among
+    several rather than a hard gate, so they can fall through to another check
+    instead of raising. Shares the ``request.state`` memo with the gate below so
+    both agree within a request and neither re-resolves the runtime.
+    """
+
     if getattr(request.state, "owner_access", False) is True:
+        return True
+    if _runtime(request).request_is_owner(request):
+        request.state.owner_access = True
+        return True
+    return False
+
+
+def require_owner_access(request: Request) -> None:
+    if request_is_owner_session(request):
         return
     runtime = _runtime(request)
-    if runtime.request_is_owner(request):
-        request.state.owner_access = True
-        return
     code = (
         "owner_login_required"
         if runtime.mode == "password"

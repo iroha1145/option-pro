@@ -31,8 +31,8 @@ function FactorTable({ factors }: { factors: MacroFactor[] }) {
             <th scope="col" className="w-[32%] pb-2 text-left font-medium">因子</th>
             <th scope="col" className="w-[18%] pb-2 text-right font-medium">当前值</th>
             <th scope="col" className="w-[12%] pb-2 text-right font-medium">历史分位</th>
-            <th scope="col" className="w-[15%] pb-2 text-right font-medium">7日原值变化</th>
-            <th scope="col" className="w-[12%] pb-2 text-right font-medium">7日分数变化</th>
+            <th scope="col" className="w-[15%] pb-2 text-right font-medium">7 日原值变化</th>
+            <th scope="col" className="w-[12%] pb-2 text-right font-medium">7 日分数变化</th>
             <th scope="col" className="w-[11%] pb-2 text-right font-medium">数据截止</th>
           </tr>
         </thead>

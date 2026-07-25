@@ -74,7 +74,7 @@ function LoginMotif({ className }: { className?: string }) {
 
         <g clipPath="url(#login-globe-clip)">
           <rect x="192" y="192" width="476" height="476" fill="url(#login-motif-dots)" />
-          <g stroke="#182338" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="#F6F5F1">
+          <g stroke="#182338" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="#F6F7F9">
             <path d="M300 300c34-26 84-30 112-12 20 13 14 38-6 48-26 13-20 40-44 52-22 11-52-2-62-26-9-21-18-44 0-62Z" />
             <path d="M430 480c26-10 58 0 64 24 5 22-14 44-38 42-22-2-38-22-36-42 1-10 4-19 10-24Z" />
             <path d="M500 330c30-16 72-12 90 10 14 18 2 42-22 48-28 7-62-6-72-28-5-11-3-23 4-30Z" />
@@ -110,7 +110,7 @@ function LoginMotif({ className }: { className?: string }) {
         />
         <g stroke="#2E46E0" strokeWidth="1.6">
           <path d="M486 512v-20M486 556v16" />
-          <rect x="476" y="492" width="20" height="64" rx="3" fill="#F6F5F1" />
+          <rect x="476" y="492" width="20" height="64" rx="3" fill="#F6F7F9" />
           <path d="M716 452v-18M716 508v14" />
           <rect x="706" y="434" width="20" height="74" rx="3" fill="#2E46E0" fillOpacity="0.14" />
         </g>
@@ -290,6 +290,12 @@ export default function Login() {
 
   return (
     <div id="login-root" className="dot-grid-dense relative min-h-[100dvh] overflow-hidden bg-paper">
+      {/* v8 清新：顶部右侧极淡 pastel 群青晕染（Tally 感，不动结构） */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        aria-hidden="true"
+        style={{ background: 'radial-gradient(60% 40% at 85% 0%, rgba(46,70,224,.05), transparent 70%)' }}
+      />
       {/* L0 主视觉层：桌面右下 40% / 移动顶部裁切 45% */}
       <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[52%] items-end justify-end opacity-90 lg:flex" aria-hidden="true">
         <LoginMotif className="w-[min(720px,100%)] translate-y-[6%]" />
@@ -315,7 +321,8 @@ export default function Login() {
           </motion.div>
 
           <h1 className="mt-10 font-display text-[40px] leading-[46px] font-bold text-ink-900 lg:text-display-xl">
-            <CharStagger text="把市场" delayBase={0.1} />
+            <CharStagger text="把" delayBase={0.1} />
+            <span className="marker"><CharStagger text="市场" delayBase={0.13} /></span>
             <br />
             <CharStagger text="讲给你听。" className="text-brand-600" delayBase={0.22} />
           </h1>
@@ -497,7 +504,7 @@ export default function Login() {
                   </>
                 ) : state === 'success' ? (
                   <>
-                    <Icon name="check" size={16} strokeWidth={1.8} />
+                    <Icon name="check" size={16} strokeWidth={1.45} />
                     {mode === 'register' ? '已创建' : '验证通过'}
                   </>
                 ) : mode === 'register' ? (

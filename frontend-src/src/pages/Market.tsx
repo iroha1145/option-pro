@@ -4,7 +4,7 @@
  * B6 强度分布 · B7 联动卡
  * 轮询：indices+status 60s / 形态+信号+强度 300s / 宏观 15min（visibility 暂停，usePolling）
  */
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { marketApi } from '@/api/modules/market';
 import { signalsApi } from '@/api/modules/signals';
@@ -39,8 +39,21 @@ const SESSION_LABEL: Record<string, string> = {
 };
 
 export default function Market() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const focus = searchParams.get('index');
+
+  /**
+   * 点卡片选中该指数，与顶部 tape 完全同一效果（都只写 ?index=）。
+   * replace 而非 push：在六张卡之间来回点不该塞满浏览器返回栈。
+   */
+  const selectIndex = useCallback(
+    (code: string) => {
+      const next = new URLSearchParams(searchParams);
+      next.set('index', code);
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
 
   /* 60s：指数 + 市场状态 */
   const indicesQ = usePolling(() => marketApi.indices(), 60_000);
@@ -96,6 +109,7 @@ export default function Market() {
           focus={focus}
           onRetry={indicesQ.refresh}
           refreshing={indicesQ.refreshing}
+          onSelect={selectIndex}
         />
       </section>
 

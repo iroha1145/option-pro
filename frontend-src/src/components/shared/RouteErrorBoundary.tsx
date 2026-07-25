@@ -28,11 +28,11 @@ export default class RouteErrorBoundary extends Component<Props, State> {
     if (!this.state.error) return this.props.children;
     return (
       <div className="mx-auto mt-10 max-w-xl rounded-lg border border-down-600/25 bg-down-50/60 p-6 text-center">
-        <p className="font-display text-[18px] font-semibold text-ink-900">页面渲染出错了</p>
+        <p className="font-display text-[18px] font-semibold text-ink-900">页面渲染中断</p>
         <p className="mt-2 break-all font-mono text-micro text-ink-500">
           {this.state.error.name}: {this.state.error.message}
         </p>
-        <p className="mt-1 text-micro text-ink-400">已拦截为错误卡而非白屏;控制台保留了完整堆栈。</p>
+        <p className="mt-1 text-micro text-ink-400">已拦截为错误卡以避免白屏；重新加载即可恢复，完整堆栈保留在控制台。</p>
         <button
           onClick={() => window.location.reload()}
           className="mt-4 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"

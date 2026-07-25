@@ -31,6 +31,8 @@ export interface ResultCardsProps {
   signals: Record<string, Signal[] | undefined>;
   onOpenDetail: (ticker: string) => void;
   animKey: string;
+  /** 当前页码：入场 stagger 只在第一页触发 */
+  page?: number;
 }
 
 export default function ResultCards({
@@ -43,6 +45,7 @@ export default function ResultCards({
   signals,
   onOpenDetail,
   animKey,
+  page = 1,
 }: ResultCardsProps) {
   return (
     <div className="grid grid-cols-1 gap-3" key={animKey}>
@@ -54,10 +57,12 @@ export default function ResultCards({
           <motion.div
             key={r.ticker}
             layout="position"
-            initial={{ opacity: 0, y: 14 }}
+            initial={page === 1 ? { opacity: 0, y: 14 } : false}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.48, ease: EASE_PAPER, delay: Math.min(i * 0.045, 0.6), layout: { duration: 0.32, ease: EASE_PAPER } }}
-            className="card-surface overflow-hidden"
+            transition={{ duration: 0.4, ease: EASE_PAPER, delay: page === 1 ? Math.min(i * 0.03, 0.3) : 0, layout: { duration: 0.32, ease: EASE_PAPER } }}
+            /* 可展开结果卡：hover 上浮 -3px/240ms（whileHover 避免入场后内联 transform 压掉 CSS 位移），阴影用 CSS */
+            whileHover={{ y: -3, transition: { duration: 0.24, ease: 'easeOut' } }}
+            className="card-surface overflow-hidden transition-shadow duration-[240ms] ease-out hover:shadow-sh-2"
           >
             <button
               onClick={() => onToggle(r.ticker)}
@@ -92,7 +97,7 @@ export default function ResultCards({
                 </span>
               </span>
               <span
-                className="relative mt-2.5 h-1 w-full rounded-pill bg-line"
+                className="relative mt-2.5 h-[3px] w-full rounded-pill bg-line"
                 role="presentation"
                 aria-hidden="true"
                 data-strength-band={strength.band}

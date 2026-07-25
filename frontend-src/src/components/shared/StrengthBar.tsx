@@ -1,6 +1,6 @@
 /**
  * StrengthBar（design.md §6-5）
- * 轨道 line 色 4px 圆角，填充 grow-bar；色阶 <50 ink-300 / 50–69 brand-400 / 70–84 brand-600 / ≥85 up-600
+ * 轨道 line 色 3px 圆角，填充 grow-bar；色阶 <50 ink-300 / 50–69 brand-400 / 70–84 brand-600 / ≥85 up-600
  */
 import { cn } from '@/lib/utils';
 
@@ -26,7 +26,7 @@ export default function StrengthBar({
   const valid = typeof score === 'number' && Number.isFinite(score);
   return (
     <span className={cn('inline-flex items-center gap-2', className)} aria-label={valid ? `强度分 ${score}` : '强度分缺失'}>
-      <span className="h-1 overflow-hidden rounded-pill bg-line" style={{ width }} role="presentation">
+      <span className="h-[3px] overflow-hidden rounded-pill bg-line" style={{ width }} role="presentation">
         {valid && (
           <span
             className={cn('block h-full origin-left rounded-pill animate-grow-bar', strengthBarClass(score))}

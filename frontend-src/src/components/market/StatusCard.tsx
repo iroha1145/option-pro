@@ -3,7 +3,6 @@
  * SessionLED+时段 · NY 时钟（秒级）· 下一开/收盘倒计时 · 时段说明
  * 字段对齐 contract market/status：market/phase/holiday/next_open/next_close，缺字段显示「—」
  */
-import { motion } from 'framer-motion';
 import type { ApiError } from '@/api/client';
 import type { MarketSession } from '@/api/types';
 import type { MarketStatusDetail } from './api';
@@ -92,11 +91,8 @@ export default function StatusCard({
 
   const session = MARKET_TO_SESSION[data.market] ?? 'closed';
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 14 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.3 }}
-      transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
+    /* 后续区块 rise-in 减量：直接呈现 */
+    <section
       className="card-surface flex h-full flex-col p-5"
       aria-label="市场状态"
     >
@@ -105,14 +101,14 @@ export default function StatusCard({
         <Icon name="clock-ny" size={18} className="text-ink-400" />
       </div>
       <div className="mt-4 flex items-center gap-2.5">
-        <SessionLED session={session} label={MARKET_LABEL[data.market]} />
+        <SessionLED session={session} showLabel={false} />
         <span className="font-display text-[20px] leading-[26px] text-ink-900">{MARKET_LABEL[data.market]}</span>
       </div>
       <div className="mt-3">
         <p className="font-mono text-data-xl text-ink-900 tnum" suppressHydrationWarning>
           {fmtNyTime(new Date(now))}
         </p>
-        <p className="mt-1 text-micro text-ink-400">纽约时间 ET · 秒级走字</p>
+        <p className="mt-1 text-micro text-ink-400">纽约时间（ET）· 每秒更新</p>
       </div>
       <div className="mt-4">
         <CountdownRow label="距下一开盘" at={data.next_open} now={now} />
@@ -125,6 +121,6 @@ export default function StatusCard({
       <p className="mt-3 text-caption text-ink-500">
         {data.phase ? (PHASE_LABEL[data.phase] ?? data.phase) : '—'}
       </p>
-    </motion.section>
+    </section>
   );
 }

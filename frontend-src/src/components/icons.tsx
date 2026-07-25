@@ -125,8 +125,14 @@ const PATHS: Record<IconName, ReactElement> = {
   'flame-line': (
     <path d="M12 21c3.9 0 6.4-2.5 6.4-6 0-2.9-1.9-4.9-3.4-6.8-.4 1.1-1.1 1.9-2.2 2.4.3-2.2-.6-5-3-7.1-.1 2.7-1.1 4-2.5 5.4C6 10.3 5.6 12 5.6 15c0 3.5 2.5 6 6.4 6Z" />
   ),
+  /* v8.1：弃四角星——「sparkle+AI」是生成式设计的头号刻板组合。
+     改「双弧夹核心点」：从信息流中聚焦提炼一个结论，正是本产品 AI 的职责。 */
   'spark-ai': (
-    <path d="M12 3.4c.7 4.6 3.9 7.8 8.6 8.6-4.7.8-7.9 4-8.6 8.6-.7-4.6-4-7.8-8.6-8.6 4.6-.8 7.9-4 8.6-8.6Z" />
+    <>
+      <path d="M8.2 4.9a9.7 9.7 0 0 0 0 14.2" />
+      <path d="M15.8 4.9a9.7 9.7 0 0 1 0 14.2" />
+      <circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none" />
+    </>
   ),
   shield: (
     <>
@@ -198,7 +204,7 @@ export function Icon({ name, size = 18, ...rest }: IconProps) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.6}
+      strokeWidth={1.45}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

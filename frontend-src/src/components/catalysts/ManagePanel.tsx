@@ -246,11 +246,8 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
   const dirty = !!doc && !!draft && (draft.manual !== (doc.toggles.manualAnalysisEnabled ?? false) || draft.scheduled !== (doc.toggles.scheduledAnalysisEnabled ?? false));
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 14 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.2 }}
-      transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
+    /* 后续区块 rise-in 减量：直接呈现 */
+    <section
       aria-label="催化剂管理面板"
       className="card-surface mt-6 overflow-hidden"
     >
@@ -269,7 +266,8 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
         <span className="flex items-center gap-2.5">
           {worker && (
             <span className="hidden items-center gap-1.5 font-mono text-micro text-ink-400 sm:flex">
-              <Led tone={worker.healthy ? 'up' : 'down'} pulse={worker.healthy} className="size-1.5" />
+              {/* worker 健康是静态状态，不脉冲 */}
+              <Led tone={worker.healthy ? 'up' : 'down'} className="size-1.5" />
               worker {worker.healthy ? '正常' : worker.status}
             </span>
           )}
@@ -351,6 +349,6 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.section>
+    </section>
   );
 }

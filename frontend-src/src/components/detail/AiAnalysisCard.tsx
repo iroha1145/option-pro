@@ -63,7 +63,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
           >
             <div className="mt-3 rounded-md bg-ai-50 px-3 py-2.5">
               <p className="text-caption text-ink-600">
-                将综合 {ticker} 的量价、趋势偏向与期权定价生成分析报告，消耗 1 次 AI 额度，确认继续？
+                将综合 {ticker} 的量价、趋势偏向与期权定价生成分析报告，消耗 1 次 AI 额度，是否继续？
               </p>
               <div className="mt-2 flex gap-2">
                 <button
@@ -73,7 +73,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
                   }}
                   className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white hover:brightness-105"
                 >
-                  确认分析
+                  开始分析
                 </button>
                 <button
                   onClick={() => setConfirming(false)}
@@ -112,7 +112,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
               {job.progress !== null && (
                 <div className="mt-1.5 h-1 overflow-hidden rounded-pill bg-line">
                   <div
-                    className="h-full rounded-pill bg-ai-600 transition-all duration-ui ease-paper"
+                    className="h-full rounded-pill bg-ai-600 transition-[width] duration-ui ease-paper"
                     style={{ width: `${job.progress}%` }}
                   />
                 </div>
