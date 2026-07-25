@@ -132,6 +132,7 @@ def _payload(resource: str, now: float, *, price: float = 100.0) -> dict:
             "open": price - 0.5,
             "as_of": _iso(now),
             "price_provider": "Massive",
+            "profile_provider": "Yahoo/yfinance",
             "description": "测试公司",
             "description_en": "Test company",
             "sic_description": "Semiconductors",
@@ -2035,4 +2036,50 @@ def test_required_resources_survive_a_closed_weekend() -> None:
     assert not too_short, (
         "required public-home resources whose hard limit cannot span a weekend: "
         f"{too_short}"
+    )
+
+
+def test_overview_field_set_matches_what_the_builder_emits() -> None:
+    """The validator's field set must track the builder that feeds it.
+
+    profile_provider was added to the overview payload in #47 but never added
+    here. _validate_overview requires an exact field-set match, so every
+    focus_overview refresh was rejected from that day on. Nothing noticed,
+    because the snapshot kept serving the entry written just before the change
+    until it aged past its limit -- which then read as an expiry bug.
+
+    Asserting against the literal the builder constructs keeps the two ends tied
+    without importing live market data into the test.
+    """
+
+    import ast
+    from pathlib import Path
+
+    from app.public_home_snapshot import _OVERVIEW_FIELDS
+
+    source = (
+        Path(__file__).resolve().parents[1] / "backend" / "app" / "api" / "stocks.py"
+    ).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    # The overview payload is the dict literal that carries price_provider and
+    # profile_provider together; no other literal in the module has both.
+    emitted: set[str] | None = None
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Dict):
+            continue
+        keys = {
+            key.value
+            for key in node.keys
+            if isinstance(key, ast.Constant) and isinstance(key.value, str)
+        }
+        if {"price_provider", "profile_provider"} <= keys:
+            emitted = keys
+            break
+
+    assert emitted is not None, "could not locate the overview payload literal"
+    assert emitted == set(_OVERVIEW_FIELDS), (
+        "the overview builder and _OVERVIEW_FIELDS drifted. "
+        f"Builder emits but validator rejects: {sorted(emitted - set(_OVERVIEW_FIELDS))}. "
+        f"Validator expects but builder omits: {sorted(set(_OVERVIEW_FIELDS) - emitted)}."
     )

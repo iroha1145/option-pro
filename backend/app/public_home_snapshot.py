@@ -107,6 +107,12 @@ _OVERVIEW_FIELDS = {
     "open",
     "as_of",
     "price_provider",
+    # Emitted by the overview builder since #47 but never listed here. Because
+    # _validate_overview requires an exact field-set match, every focus_overview
+    # refresh has been rejected since -- the snapshot kept serving the last entry
+    # written before that change until it aged out, which looked like an expiry
+    # problem rather than a publish problem.
+    "profile_provider",
     "description",
     "description_en",
     "sic_description",
@@ -462,6 +468,9 @@ def _validate_overview(payload: Mapping[str, Any]) -> bool:
             for field in ("description", "description_en", "sic_description")
         )
         and payload.get("price_provider") in {"Massive", "Yahoo/yfinance"}
+        # None when the profile lookup found nothing; the builder still returns a
+        # usable overview in that case, so it must not invalidate the entry.
+        and payload.get("profile_provider") in {None, "Yahoo/yfinance"}
         and _valid_iso_timestamp(payload.get("as_of"))
         and _string_or_none(payload.get("website"))
         and _string_or_none(payload.get("logo_url"))
