@@ -10,6 +10,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
 import { stocksApi } from '@/api/modules/stocks';
 import { useAccess } from '@/hooks/useAccess';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { cn } from '@/lib/utils';
 import { pushRecent, readRecent } from '@/lib/recentTickers';
 import Icon, { type IconName } from '@/components/icons';
@@ -70,7 +71,11 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
   const [searchError, setSearchError] = useState<string | null>(null);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  /* 焦点圈定 + 关闭后归还焦点（审计 P3-3）：旧实现只聚焦输入框，继续按 Tab 会
+     走进遮罩后方的页面，关闭后也不回到触发点。 */
+  const panelRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, open, { initialFocusRef: inputRef });
 
   /* 全局快捷键 ⌘K / Ctrl+K 由 Layout 绑定；此处处理打开后逻辑 */
   useEffect(() => {
@@ -246,6 +251,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
           />
           {/* 面板本体即时出现，无开/关动画 */}
           <div
+            ref={panelRef}
             role="dialog"
             aria-modal="true"
             aria-label="命令面板"

@@ -4,9 +4,10 @@
  * 背板 rgba(13,22,38,.45)+blur(2px) · 淡出 200ms；exit ≈ enter 的 65%（200ms）；ESC/点背板关闭。
  * 移动端变全屏 bottom sheet（同曲线 translateY，顶部抓手 dots-grid）。
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 
@@ -24,6 +25,11 @@ interface DrawerProps {
 }
 
 export default function Drawer({ open, onClose, title, children, width = 560 }: DrawerProps) {
+  /* 焦点圈定 + 关闭后归还焦点（审计 P3-2）：桌面与移动两块面板由 CSS 断点互斥，
+     包一层 display:contents 的容器，让圈定范围覆盖当前真正可见的那一块。 */
+  const panelsRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelsRef, open);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -51,6 +57,7 @@ export default function Drawer({ open, onClose, title, children, width = 560 }: 
             className="fixed inset-0 z-[70] bg-[rgba(13,22,38,.45)] backdrop-blur-[2px]"
             aria-hidden="true"
           />
+          <div ref={panelsRef} className="contents">
           {/* 桌面右侧抽屉 */}
           <motion.aside
             key="panel"
@@ -101,6 +108,7 @@ export default function Drawer({ open, onClose, title, children, width = 560 }: 
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
           </motion.aside>
+          </div>
         </>
       )}
     </AnimatePresence>

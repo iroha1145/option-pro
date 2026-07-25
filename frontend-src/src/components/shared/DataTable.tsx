@@ -1,5 +1,5 @@
 /** DataTable：发丝线行、r-lg 容器、表头 Eyebrow 化、行 hover paper-2 底、可排序 */
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
@@ -83,19 +83,26 @@ export default function DataTable<T>({
                 className={cn(
                   'border-b border-line px-4 py-2.5 text-eyebrow font-sans uppercase tracking-[0.14em] text-ink-400',
                   c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left',
-                  c.sortable && 'cursor-pointer select-none hover:text-ink-600 transition-colors duration-fast',
+                  c.sortable && 'select-none',
                 )}
-                onClick={c.sortable ? () => toggleSort(c.key) : undefined}
                 aria-sort={sort?.key === c.key ? (sort.desc ? 'descending' : 'ascending') : undefined}
               >
-                <span className="inline-flex items-center gap-1">
-                  {c.title}
-                  {c.sortable && (
+                {/* 排序必须是真正的按钮（审计 P3-1）：旧实现把 onClick 绑在 <th> 上，
+                    既不可聚焦也没有键盘事件，纯鼠标操作。 */}
+                {c.sortable ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleSort(c.key)}
+                    className="inline-flex items-center gap-1 rounded-xs transition-colors duration-fast hover:text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
+                  >
+                    {c.title}
                     <span className={cn('inline-flex transition-transform duration-200', sort?.key === c.key && !sort.desc && 'rotate-180', sort?.key !== c.key && 'opacity-30')}>
                       <Icon name="chevron-down" size={11} />
                     </span>
-                  )}
-                </span>
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1">{c.title}</span>
+                )}
               </th>
             ))}
           </tr>
@@ -109,9 +116,22 @@ export default function DataTable<T>({
                 layout="position"
                 transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
+                /* 可点击行同时可聚焦、可回车/空格触发（审计 P3-1）。 */
+                {...(onRowClick
+                  ? {
+                      tabIndex: 0,
+                      role: 'button' as const,
+                      onKeyDown: (event: ReactKeyboardEvent<HTMLTableRowElement>) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          onRowClick(row);
+                        }
+                      },
+                    }
+                  : {})}
                 className={cn(
                   'group border-b border-line last:border-0 transition-colors duration-fast',
-                  onRowClick && 'cursor-pointer',
+                  onRowClick && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/30',
                   'hover:bg-paper-2',
                   rowClassName?.(row),
                 )}

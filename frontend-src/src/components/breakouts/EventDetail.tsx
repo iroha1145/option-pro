@@ -3,12 +3,13 @@
  * 支撑/阻力区带可视化 · 区间持续指标 · transitions 生命周期轨迹
  * 评分条组 · 证据竖向时间线（stagger 30ms）· 内嵌该股催化剂摘要（catalystsApi.byTicker）
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
 import { catalystsApi } from '@/api/modules/catalysts';
 import type { NewsItem } from '@/api/types';
 import { usePolling } from '@/hooks/usePolling';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { cn } from '@/lib/utils';
 import { fmtPrice, fmtRelative } from '@/lib/format';
 import Icon from '@/components/icons';
@@ -193,6 +194,10 @@ export default function EventDetail({
   detailError = null,
   onRetryDetail,
 }: EventDetailProps) {
+  /* 焦点圈定 + 关闭后归还焦点（审计 P3-2 同一口径） */
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, event !== null);
+
   /* ESC 关闭 + 锁定滚动 */
   useEffect(() => {
     if (!event) return;
@@ -210,7 +215,7 @@ export default function EventDetail({
   return (
     <AnimatePresence>
       {event && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={`${event.ticker} 突破事件详情`}>
+        <div ref={panelRef} className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={`${event.ticker} 突破事件详情`}>
           <motion.div
             key="backdrop"
             initial={{ opacity: 0 }}
