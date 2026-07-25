@@ -158,8 +158,20 @@ class MacroConfig(StrictConfigModel):
 
     enabled: bool = True
     history_years: int = Field(default=8, ge=5, le=15)
-    score_window_years: int = Field(default=5, ge=3, le=10)
-    funding_ema_days: int = Field(default=5, ge=2, le=30)
+    #: Pinned, not configurable. The published score means "percentile within a
+    #: five-year window"; the UI, the API comments and the docs all say five
+    #: years, and ``scoring_version`` is a fixed literal. Letting config move the
+    #: window changed what a score meant while the version name stayed the same,
+    #: so history curves would silently mix algorithms and the AI input hash
+    #: would treat two different scores as the same one. A real 3y or 10y
+    #: variant has to arrive as optix-macro-score-v2-w3 / -w10, not as a config
+    #: edit (incremental review P1).
+    score_window_years: Literal[5] = 5
+    #: Likewise pinned. Module aggregation always read the registry's
+    #: ``ema_days=5`` for the funding module and never consulted this value, so
+    #: it was a knob that appeared to work and did nothing (incremental review
+    #: P2). An algorithm parameter change belongs to a new scoring version.
+    funding_ema_days: Literal[5] = 5
     refresh_times_et: list[str] = Field(
         default_factory=lambda: ["08:30", "18:30"],
         min_length=1,

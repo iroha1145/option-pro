@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import math
 from bisect import bisect_right
+from dataclasses import dataclass
 from datetime import date, timedelta
 from statistics import median
 from typing import Callable, Mapping, Optional, Sequence
@@ -237,16 +238,45 @@ class _Inputs:
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True, slots=True)
+class DerivedPoint:
+    """One intermediate value together with where it came from.
+
+    A derived series that stores only ``value`` cannot answer when its inputs
+    first became visible, so any rolling or lagged operation over it loses
+    point-in-time provenance (incremental review P1): a revision to an old
+    observation changes the factor value while its ``available_at`` still points
+    at a moment before that revision existed. That is harmless for today's
+    display and poison for a future walk-forward test, which is exactly the use
+    the point-in-time storage was built for.
+    """
+
+    value: float
+    observation_date: date
+    available_at: Optional[str]
+    history_basis: Optional[str]
+
+
 class DerivedGrid:
     """Grid-indexed intermediate values with as-of lookups of their own."""
 
-    __slots__ = ("grid", "values", "_last_valid")
+    __slots__ = ("grid", "values", "points", "_last_valid")
 
-    def __init__(self, grid: Sequence[date], values: Sequence[Optional[float]]) -> None:
+    def __init__(
+        self,
+        grid: Sequence[date],
+        values: Sequence[Optional[float]],
+        points: Sequence[Optional[DerivedPoint]] | None = None,
+    ) -> None:
         if len(grid) != len(values):
             raise ValueError("derived grid length mismatch")
+        if points is not None and len(points) != len(values):
+            raise ValueError("derived grid provenance length mismatch")
         self.grid = tuple(grid)
         self.values = tuple(values)
+        self.points: tuple[Optional[DerivedPoint], ...] = (
+            tuple(points) if points is not None else tuple(None for _ in values)
+        )
         last: list[Optional[int]] = []
         current: Optional[int] = None
         for index, value in enumerate(self.values):
@@ -281,17 +311,55 @@ class DerivedGrid:
         collected.reverse()
         return tuple(collected)
 
+    def point_as_of(self, when: date) -> Optional[DerivedPoint]:
+        """The as-of value together with its provenance."""
+
+        position = bisect_right(self.grid, when) - 1
+        if position < 0:
+            return None
+        resolved = self._last_valid[position]
+        return None if resolved is None else self.points[resolved]
+
+    def trailing_valid_points(
+        self,
+        index: int,
+        count: int,
+    ) -> tuple[DerivedPoint, ...]:
+        """Same selection as ``trailing_valid``, carrying provenance.
+
+        A rolling window's visibility is the *latest* first-visible time among
+        every row inside it, so the window has to be walked as points, not as
+        bare floats.
+        """
+
+        if not 0 <= index < len(self.values) or count <= 0:
+            return ()
+        collected: list[DerivedPoint] = []
+        for position in range(index, -1, -1):
+            point = self.points[position]
+            if point is None:
+                continue
+            collected.append(point)
+            if len(collected) == count:
+                break
+        collected.reverse()
+        return tuple(collected)
+
 
 def _net_liquidity_grid(
     grid: Sequence[date],
     series: Mapping[str, AsOfSeries],
 ) -> DerivedGrid:
     values: list[Optional[float]] = []
+    points: list[Optional[DerivedPoint]] = []
     for when in grid:
         walcl = series.get("WALCL")
         tga = series.get("WTREGEN")
         rrp = series.get("RRPONTSYD")
         parts = []
+        available: list[str] = []
+        basis: list[str] = []
+        observed: Optional[date] = None
         ok = True
         for source in (walcl, tga, rrp):
             if source is None:
@@ -302,8 +370,25 @@ def _net_liquidity_grid(
                 ok = False
                 break
             parts.append(lookup.value.value)
-        values.append(finite(parts[0] - parts[1] - parts[2]) if ok else None)
-    return DerivedGrid(grid, values)
+            available.append(lookup.value.available_at)
+            basis.append(lookup.value.history_basis)
+            # The combination is only as current as its oldest leg.
+            if observed is None or lookup.value.observation_date < observed:
+                observed = lookup.value.observation_date
+        value = finite(parts[0] - parts[1] - parts[2]) if ok else None
+        values.append(value)
+        points.append(
+            DerivedPoint(
+                value=value,
+                observation_date=observed,
+                # Visible only once the last of its three inputs was visible.
+                available_at=max(available) if available else None,
+                history_basis=combine_history_basis(basis),
+            )
+            if value is not None and observed is not None
+            else None
+        )
+    return DerivedGrid(grid, values, points)
 
 
 #: The five signed funding spreads whose cross-sectional dispersion feeds
@@ -322,8 +407,12 @@ def _funding_dispersion_grid(
     series: Mapping[str, AsOfSeries],
 ) -> DerivedGrid:
     values: list[Optional[float]] = []
+    points: list[Optional[DerivedPoint]] = []
     for when in grid:
         spreads: list[float] = []
+        available: list[str] = []
+        basis: list[str] = []
+        observed: Optional[date] = None
         for _name, first_id, second_id in _FUNDING_SPREAD_PAIRS:
             first = series.get(first_id)
             second = series.get(second_id)
@@ -336,11 +425,28 @@ def _funding_dispersion_grid(
             spread = finite(left.value.value - right.value.value)
             if spread is not None:
                 spreads.append(spread)
+                available.extend([left.value.available_at, right.value.available_at])
+                basis.extend([left.value.history_basis, right.value.history_basis])
+                for leg in (left.value, right.value):
+                    if observed is None or leg.observation_date < observed:
+                        observed = leg.observation_date
         if len(spreads) < FUNDING_FRAGMENTATION_MINIMUM_SPREADS:
             values.append(None)
+            points.append(None)
             continue
-        values.append(population_std(spreads))
-    return DerivedGrid(grid, values)
+        value = population_std(spreads)
+        values.append(value)
+        points.append(
+            DerivedPoint(
+                value=value,
+                observation_date=observed,
+                available_at=max(available) if available else None,
+                history_basis=combine_history_basis(basis),
+            )
+            if value is not None and observed is not None
+            else None
+        )
+    return DerivedGrid(grid, values, points)
 
 
 class _EtfPair:
@@ -486,12 +592,25 @@ def _net_liquidity_momentum(when, index, series, etfs, *, net_liquidity, **_extr
     value: Optional[float] = None
     if current is not None:
         target = when - timedelta(weeks=NET_LIQUIDITY_MOMENTUM_WEEKS)
-        previous = net_liquidity.as_of(target)
-        if previous is None:
+        earlier = net_liquidity.point_as_of(target)
+        if earlier is None:
             inputs.mark_missing("net_liquidity_13w_ago")
         else:
             inputs.mark_satisfied()
-            value = finite(current - previous)
+            value = finite(current - earlier.value)
+            # The 13-week-ago leg has its own first-visible time; without it a
+            # revision to that older reading would move this factor while its
+            # available_at still predated the revision (incremental review P1).
+            #
+            # Only visibility is folded in, not observation_date: data_through
+            # answers "what is this value current to", and the value is current
+            # to today's reading. Folding the older date in would report the
+            # factor as thirteen weeks stale, which is a different claim and a
+            # false one.
+            inputs.note_external(
+                available_at=earlier.available_at,
+                history_basis=earlier.history_basis,
+            )
     return inputs.point(
         "net_liquidity_momentum_13w", raw_value=value, score_value=value
     )
@@ -573,26 +692,29 @@ def _funding_fragmentation(when, index, series, etfs, *, dispersion, **_extra):
             "funding_fragmentation_21d", raw_value=None, score_value=None
         )
     inputs.mark_satisfied()
-    window = dispersion.trailing_valid(index, FUNDING_FRAGMENTATION_WINDOW)
+    window_points = dispersion.trailing_valid_points(
+        index,
+        FUNDING_FRAGMENTATION_WINDOW,
+    )
+    window = tuple(point.value for point in window_points)
     value = finite(math.fsum(window) / len(window)) if window else None
-    # Provenance comes from the freshest spread leg available today.
-    freshest: Optional[date] = None
+    # Visibility covers the whole 21-day window, not only today's legs
+    # (incremental review P1): the mean moves when any observation inside the
+    # window is revised, so the factor is not knowable until the last of those
+    # rows was knowable.
+    #
+    # data_through stays with the newest point in the window -- that is what the
+    # mean is current to. Taking the oldest row's date instead would report the
+    # factor as three weeks stale, which is a different claim and a false one.
     available: list[str] = []
     basis: list[str] = []
-    for _name, first_id, second_id in _FUNDING_SPREAD_PAIRS:
-        for series_id in (first_id, second_id):
-            source = series.get(series_id)
-            if source is None:
-                continue
-            lookup = source.at(when)
-            if not lookup.ok or lookup.value is None:
-                continue
-            if freshest is None or lookup.value.observation_date < freshest:
-                freshest = lookup.value.observation_date
-            available.append(lookup.value.available_at)
-            basis.append(lookup.value.history_basis)
+    for point in window_points:
+        if point.available_at:
+            available.append(point.available_at)
+        if point.history_basis:
+            basis.append(point.history_basis)
     inputs.note_external(
-        observation_date=freshest,
+        observation_date=window_points[-1].observation_date if window_points else None,
         available_at=max(available) if available else None,
         history_basis=combine_history_basis(basis),
     )

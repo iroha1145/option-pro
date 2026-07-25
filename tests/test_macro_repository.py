@@ -229,7 +229,7 @@ def test_a_failed_refresh_keeps_the_previous_snapshot_readable(tmp_path) -> None
 
 
 class _EmptyProxy:
-    def read(self, symbols=None, *, period=""):
+    def read(self, symbols=None, *, period="", periods=None):
         return {}, {}
 
 

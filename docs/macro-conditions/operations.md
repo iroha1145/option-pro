@@ -36,8 +36,8 @@
 [macro]
 enabled = true
 history_years = 8
-score_window_years = 5
-funding_ema_days = 5
+score_window_years = 5   # 固定值，不可配置
+funding_ema_days = 5     # 固定值，不可配置
 refresh_times_et = ["08:30", "18:30"]
 manual_refresh_cooldown_seconds = 300
 scoring_version = "optix-macro-score-v1"
@@ -47,7 +47,7 @@ scoring_version = "optix-macro-score-v1"
 
 1. `history_years >= score_window_years`
 2. `history_years` ∈ [5, 15]
-3. `score_window_years` ∈ [3, 10]
+3. `score_window_years` 与 `funding_ema_days` 只接受 5：它们命名的是算法，不是偏好。改窗口等于改变分数含义，必须伴随新的 `scoring_version`（如 optix-macro-score-v2-w3），而不是一次配置修改。
 4. `refresh_times_et` 必须是合法 `HH:MM`
 5. 时刻不允许重复
 6. `scoring_version` 必须等于代码常量，**不能通过配置伪造算法版本**

@@ -30,7 +30,15 @@ SCORE_WINDOW_YEARS = 5
 #: factor has a full five-year window, so these floors only bind at the very
 #: start of history.
 DAILY_MINIMUM_HISTORY = 252
-WEEKLY_MINIMUM_HISTORY = 104
+#: Weekly sources are carried forward onto the daily grid, so a floor expressed
+#: in grid points has to be multiplied by that carry-forward to mean what its
+#: name says (incremental review P2). 104 grid points is about five months of
+#: weekly prints, not 104 weeks, so the early history curve began scoring long
+#: before it had two years of independent observations behind it. The floor is
+#: now stated as "104 weekly prints, expressed on the daily grid".
+WEEKLY_PRINTS_PER_GRID_YEAR = 5
+WEEKLY_MINIMUM_PRINTS = 104
+WEEKLY_MINIMUM_HISTORY = WEEKLY_MINIMUM_PRINTS * WEEKLY_PRINTS_PER_GRID_YEAR
 RELATIVE_RETURN_WINDOW_DAYS = 63
 #: A 63-trading-day lookback needs 64 shared closes (t and t-63 inclusive).
 RELATIVE_RETURN_MINIMUM_OBSERVATIONS = 64

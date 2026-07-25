@@ -517,6 +517,31 @@ class MacroRepository:
             for row in rows
         }
 
+    def etf_coverage(self) -> dict[str, dict[str, Optional[str]]]:
+        """Earliest/latest observation per ETF symbol.
+
+        The backfill decision used to look only at FRED series (incremental
+        review P1): once those existed, every ETF request dropped from ten years
+        to one. An ETF whose first ten-year download failed therefore stayed on
+        one year of history forever -- long enough to clear the minimum sample
+        count, so it still produced a "historical percentile" computed against
+        a single year.
+        """
+
+        with self.read() as connection:
+            rows = connection.execute(
+                """SELECT symbol, MIN(observation_date) AS earliest,
+                          MAX(observation_date) AS latest
+                   FROM macro_etf_observations GROUP BY symbol"""
+            ).fetchall()
+        return {
+            str(row["symbol"]): {
+                "earliest": row["earliest"],
+                "latest": row["latest"],
+            }
+            for row in rows
+        }
+
     # -- ETF observations --------------------------------------------------
 
     def record_etf_observations(

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Iterable, Mapping, Sequence
 
 from app.services.market_calendar import ET, early_close_minutes, is_trading_day
 
@@ -91,10 +91,16 @@ class MarketProxyReader:
         symbols: Sequence[str] = ETF_SYMBOLS,
         *,
         period: str = BACKFILL_PERIOD,
+        periods: Mapping[str, str] | None = None,
     ) -> tuple[dict[str, tuple[EtfObservation, ...]], dict[str, str]]:
         """Return ``(observations_by_symbol, failures_by_symbol)``.
 
         A single missing ETF only affects the factors that require it.
+
+        ``periods`` gives a per-symbol window so a symbol whose stored history is
+        short can be backfilled on its own (incremental review P1). Switching
+        every symbol together meant one failed ten-year download stayed hidden
+        behind the others and never got another chance.
         """
 
         observed = self._now()
@@ -104,7 +110,7 @@ class MarketProxyReader:
         failures: dict[str, str] = {}
         for symbol in symbols:
             try:
-                frame = self._load(symbol, period)
+                frame = self._load(symbol, (periods or {}).get(symbol, period))
             except Exception:
                 # The shared chain already swallows provider errors and returns
                 # an empty frame; this guard is for unexpected local failures.
