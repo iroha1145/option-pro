@@ -146,11 +146,12 @@ interface FeedPanelProps {
   onOpenNews: (id: string) => void;
   patches: Record<string, CatalystNewsItem>;
   refreshToken: number;
-  onTotalChange: (total: number | null) => void;
+  /** 一轮加载的结果；ok=false 时父级不得更新「最后更新时间」（审计 P2-22）。 */
+  onFeedResult: (result: { total: number | null; ok: boolean }) => void;
   onClearFilters: () => void;
 }
 
-export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, onTotalChange, onClearFilters }: FeedPanelProps) {
+export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, onFeedResult, onClearFilters }: FeedPanelProps) {
   const [items, setItems] = useState<CatalystNewsItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('loading');
@@ -178,15 +179,15 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
       if (reqRef.current !== reqId) return;
       setItems(res.items);
       setNextCursor(res.nextCursor);
-      onTotalChange(res.total);
+      onFeedResult({ total: res.total, ok: true });
       setPhase('ready');
     } catch (e) {
       if (reqRef.current !== reqId) return;
       setError(e instanceof ApiError ? e : new ApiError(500, '加载失败'));
       setPhase('error');
-      onTotalChange(null);
+      onFeedResult({ total: null, ok: false });
     }
-  }, [onTotalChange]);
+  }, [onFeedResult]);
 
   /* 过滤变更：淡出 200ms → 骨架 → 新列表（呼吸式刷新） */
   const firstRun = useRef(true);
@@ -211,6 +212,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshToken]);
 
+  const [moreError, setMoreError] = useState<ApiError | null>(null);
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
     const reqId = reqRef.current;
@@ -220,8 +222,10 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
       if (reqRef.current !== reqId) return;
       setItems((prev) => [...prev, ...res.items.filter((n) => !prev.some((p) => p.newsId === n.newsId))]);
       setNextCursor(res.nextCursor);
-    } catch {
-      /* 加载更多失败保持现状 */
+      setMoreError(null);
+    } catch (error) {
+      // 增量请求的异常此前被吞掉，用户只会觉得按钮没有反应（审计 P2-24）。
+      setMoreError(error instanceof ApiError ? error : new ApiError(500, '加载更多失败'));
     } finally {
       setLoadingMore(false);
     }
@@ -297,6 +301,14 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
               </button>
             ) : (
               <p className="text-micro text-ink-300">已加载全部 {items.length} 条</p>
+            )}
+            {moreError && (
+              <p className="mt-1.5 text-micro text-down-700">
+                加载更多失败：{moreError.message} ·{' '}
+                <button type="button" onClick={() => void loadMore()} className="font-medium underline underline-offset-2">
+                  重试
+                </button>
+              </p>
             )}
           </div>
         </>

@@ -66,26 +66,33 @@ export interface EarningsCalendarResult {
  * snake_case 扩展字段原样保留供 exNum 读取。
  */
 export function mapUpcoming(body: unknown): EarningsItem[] {
-  return unwrap(body, 'earnings').map((r) => {
+  const rows: EarningsItem[] = [];
+  unwrap(body, 'earnings').forEach((r) => {
+    // 缺股票代码或财报日期的行无法定位到任何一场财报（审计 P2-31）：
+    // 补成空串会让空日期继续进入日期计算、分组与自动选中逻辑。
+    const rowTicker = pickS(r, 'ticker');
+    const rowDate = pickS(r, 'date', 'earnings_date');
+    if (!rowTicker || !rowDate) return;
     const rawTiming = pickS(r, 'timing', 'earnings_time');
     const timing: EarningsItem['timing'] = rawTiming === 'bmo' || rawTiming === 'amc' ? rawTiming : null;
     const rawMarketCap = pickN(r, 'marketCap', 'market_cap');
     const marketCap = rawMarketCap != null && rawMarketCap > 0 ? rawMarketCap : null;
-    return {
-      ...r,
+    rows.push({
+      ...(r as Record<string, unknown>),
       // 同时覆盖两种命名，避免旧响应里的 0 被扩展字段读取逻辑重新捡回。
       market_cap: marketCap,
       marketCap,
-      ticker: pickS(r, 'ticker') ?? '',
-      name: pickS(r, 'name') ?? '',
-      date: pickS(r, 'date', 'earnings_date') ?? '',
+      ticker: rowTicker,
+      name: pickS(r, 'name') ?? rowTicker,
+      date: rowDate,
       timing,
       epsEstimate: pickN(r, 'epsEstimate', 'eps_estimate'),
       epsActual: pickN(r, 'epsActual', 'eps_actual'),
       revEstimate: pickN(r, 'revEstimate', 'revenue_estimate'),
       revActual: pickN(r, 'revActual', 'revenue_actual'),
-    };
+    } as unknown as EarningsItem);
   });
+  return rows;
 }
 
 export function mapUpcomingPayload(body: unknown): EarningsCalendarResult {

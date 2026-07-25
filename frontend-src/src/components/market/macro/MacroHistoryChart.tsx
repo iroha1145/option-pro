@@ -4,6 +4,7 @@
  * Tooltip 显示 history_basis；latest_revised_backfill 区间用虚线段区分。
  */
 import { useMemo, useState } from 'react';
+import type { ApiError } from '@/api/client';
 import ReactECharts from '@/components/charts/ReactECharts';
 import { CH, baseAnimation, baseGrid, glassTooltip, valueAxis } from '@/lib/chart';
 import { cn } from '@/lib/utils';
@@ -45,12 +46,21 @@ const MODULE_LINE_COLORS: string[] = [
 
 export default function MacroHistoryChart({
   points,
+  error = null,
+  onRetry,
   modules,
   loading,
   range,
   onRangeChange,
 }: {
   points: MacroHistoryPoint[];
+  /**
+   * 历史查询失败（审计 P2-27）。
+   * error 此前没有传进来，只有 points=[] 与 loading，于是「没有历史数据」和
+   * 「历史接口坏了」渲染成同一个空图。
+   */
+  error?: ApiError | null;
+  onRetry?: () => void;
   modules: MacroModule[];
   loading: boolean;
   range: HistoryRangeKey;
@@ -205,6 +215,19 @@ export default function MacroHistoryChart({
       <div className="mt-4 h-[240px] w-full">
         {loading && points.length === 0 ? (
           <SkeletonBlock className="h-full w-full" />
+        ) : error && points.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
+            <p className="text-body-s text-warn-600">历史数据读取失败：{error.message}</p>
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+              >
+                重试
+              </button>
+            )}
+          </div>
         ) : points.length === 0 ? (
           <div className="flex h-full items-center justify-center px-4 text-center text-body-s text-ink-400">
             历史正在积累：本地快照攒够之后这里会显示综合分曲线。

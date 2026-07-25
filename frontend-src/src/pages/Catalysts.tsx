@@ -34,15 +34,40 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'sources', label: '数据源' },
 ];
 
+/* URL 参数必须逐项校验（审计 P2-23）：分类与状态此前用强制类型断言直接透传，
+   数值经 Number() 后未过滤 NaN —— 损坏的书签或手写查询串会让筛选器进入 UI
+   无法正常生成的状态。 */
+const CLASSIFICATIONS: readonly NewsClassification[] = ['bullish', 'bearish', 'neutral'];
+const ANALYSIS_STATUSES: readonly NewsAnalysisStatus[] = [
+  'pending',
+  'queued',
+  'in_progress',
+  'completed',
+  'insufficient_context',
+  'failed',
+];
+
+/** 落在 [min,max] 内的有限数；缺失或非法一律回退到 fallback，NaN 不得通过。 */
+function boundedNumber(raw: string | null, min: number, max: number, fallback: number): number {
+  if (raw === null || raw.trim() === '') return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
+function oneOf<T extends string>(raw: string | null, allowed: readonly T[]): '' | T {
+  return raw !== null && (allowed as readonly string[]).includes(raw) ? (raw as T) : '';
+}
+
 function parseFilters(sp: URLSearchParams): CatalystFilters {
   const w = Number(sp.get('window'));
   return {
-    ticker: sp.get('ticker') ?? '',
+    ticker: (sp.get('ticker') ?? '').slice(0, 12),
     windowHours: [6, 24, 72, 168].includes(w) ? w : DEFAULT_FILTERS.windowHours,
-    classification: (sp.get('cls') ?? '') as '' | NewsClassification,
-    analysisStatus: (sp.get('status') ?? '') as '' | NewsAnalysisStatus,
-    minConfidence: Math.min(90, Math.max(0, Number(sp.get('conf') ?? 0))) / 100,
-    minAbsImpact: Math.min(5, Math.max(0, Number(sp.get('impact') ?? 0))),
+    classification: oneOf(sp.get('cls'), CLASSIFICATIONS),
+    analysisStatus: oneOf(sp.get('status'), ANALYSIS_STATUSES),
+    minConfidence: boundedNumber(sp.get('conf'), 0, 90, 0) / 100,
+    minAbsImpact: boundedNumber(sp.get('impact'), 0, 5, 0),
     multiSourceOnly: sp.get('multi') === '1',
     themeId: sp.get('theme'),
   };
@@ -96,9 +121,11 @@ export default function Catalysts() {
   const onNewsUpdate = useCallback((item: CatalystNewsItem) => {
     setPatches((prev) => ({ ...prev, [item.newsId]: item }));
   }, []);
-  const onTotalChange = useCallback((n: number | null) => {
-    setTotal(n);
-    setLastLoadedAt(Date.now());
+  /* 只有真正成功的一轮才更新时间戳（审计 P2-22）：旧实现在失败分支也调用
+     onTotalChange(null)，于是用户看到一个很新的更新时间，而本轮数据根本没加载成功。 */
+  const onFeedResult = useCallback((result: { total: number | null; ok: boolean }) => {
+    setTotal(result.total);
+    if (result.ok) setLastLoadedAt(Date.now());
   }, []);
 
   /* 新闻详情抽屉 */
@@ -131,18 +158,20 @@ export default function Catalysts() {
         }
       />
 
-      {/* 状态 hero：数据源状态 / 热点计算 / 分析可用性 */}
-      <StatusHero />
+      {/* 状态 hero：数据源状态 / 热点计算 / 分析可用性
+          刷新令牌此前只传给四个标签内容，顶部采集状态、热点带与焦点周期不会
+          立即重新加载，按钮文案与实际刷新范围不一致（审计 P2-21）。 */}
+      <StatusHero refreshToken={refreshToken} />
 
       {/* Owner 专属：任务库真实计数，不以定时补间伪造单条进度 */}
       <AnalysisProgressCard />
 
       {/* B1 热点主题带（点击卡片打开代表新闻抽屉） */}
-      <HotspotsStrip onOpenNews={setSelectedNewsId} />
+      <HotspotsStrip onOpenNews={setSelectedNewsId} refreshToken={refreshToken} />
 
       {/* B2 市场焦点周期卡 */}
       <div className="mt-6">
-        <FocusCycleCard />
+        <FocusCycleCard refreshToken={refreshToken} />
       </div>
 
       {/* B2.5 管理面板（owner 专属：数据刷新 / 后台任务 / 运行设置） */}
@@ -190,7 +219,7 @@ export default function Catalysts() {
             onOpenNews={setSelectedNewsId}
             patches={patches}
             refreshToken={refreshToken}
-            onTotalChange={onTotalChange}
+            onFeedResult={onFeedResult}
             onClearFilters={clearFilters}
           />
         )}

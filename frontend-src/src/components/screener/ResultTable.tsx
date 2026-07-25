@@ -5,7 +5,7 @@
  */
 import { Fragment } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { ScreenerRow, Signal } from '@/api/types';
+import type { ScreenerRow } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { fmtCompact, fmtPrice } from '@/lib/format';
 import Icon from '@/components/icons';
@@ -15,7 +15,7 @@ import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
 import RowExpansion from './RowExpansion';
 import { CatalystBadge, ScoreCell, SubscoreTicks } from './cells';
-import { tierOf, TIER_RANGE, type CatalystSummary, type DetailCache } from './types';
+import { tierOf, TIER_RANGE, type CatalystSummary, type DetailCache, type RowSignalsState } from './types';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -31,7 +31,7 @@ export interface ResultTableProps {
   details: DetailCache;
   flashes: Record<string, 'up' | 'down'>;
   weights: { trend: number; momentum: number; volume: number; volatility: number } | null;
-  signals: Record<string, Signal[] | undefined>;
+  signals: Record<string, RowSignalsState | undefined>;
   onOpenDetail: (ticker: string) => void;
   /** 变化时重跑 stagger（扫描完成 / 翻页） */
   animKey: string;

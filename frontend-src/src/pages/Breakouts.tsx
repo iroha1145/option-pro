@@ -7,12 +7,14 @@
  * 其下：SignalCards 个股小卡网格（当日其余事件，3 列 / 移动单列，V3 小卡结构恢复）
  * 事件详情模态保留 · status/current 30s 轮询 · 空态/骨架/503/移动端单列
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { ApiError } from '@/api/client';
 import { breakoutsApi } from '@/api/modules/breakouts';
 import { runtimeApi } from '@/api/modules/runtime';
 import { stocksApi } from '@/api/modules/stocks';
 import { usePolling } from '@/hooks/usePolling';
+import { useTickFlash } from '@/hooks/useTickFlash';
 import { useNow } from '@/hooks/useNow';
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/components/Toast';
@@ -122,6 +124,11 @@ function SessionChip({ session }: { session: BreakoutSession }) {
 }
 
 /* ================= 页面主体 ================= */
+const HISTORY_PAGE_SIZE = 100;
+
+const breakoutKey = (ev: BreakoutCurrentEvent) => ev.ticker;
+const breakoutPrice = (ev: BreakoutCurrentEvent) => ev.current_price;
+
 export default function Breakouts() {
   const { isOwner } = useAccess();
   const { openTicker } = useShell();
@@ -130,13 +137,51 @@ export default function Breakouts() {
 
   /* 数据轮询：status 30s / current 30s（§11） */
   const statusQ = usePolling(() => breakoutsApi.status(), 30_000);
-  const currentQ = usePolling(() => breakoutsApi.current(), 30_000);
-  const eventsQ = usePolling(() => breakoutsApi.events({ page: 1, pageSize: 100 }), null);
+  const currentQ = usePolling(() => breakoutsApi.currentEnvelope(), 30_000);
+  const eventsQ = usePolling(() => breakoutsApi.events({ page: 1, pageSize: HISTORY_PAGE_SIZE }), null);
+  /* 历史事件此前固定只读第一页 100 条，界面还显示一个拼出来的「共 N 条」
+     （审计 P2-19）。现在按游标续读，并如实说明是否还有更多。 */
+  const [extraEvents, setExtraEvents] = useState<BreakoutEventFull[]>([]);
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
+  const [historyMoreError, setHistoryMoreError] = useState<ApiError | null>(null);
+  useEffect(() => {
+    // 首页重新加载后丢弃已续读的部分，避免与新首页重复。
+    setExtraEvents([]);
+    setHistoryCursor(eventsQ.data?.nextCursor ?? null);
+    setHistoryMoreError(null);
+  }, [eventsQ.data]);
+  const loadMoreHistory = useCallback(async () => {
+    if (!historyCursor || historyLoadingMore) return;
+    setHistoryLoadingMore(true);
+    setHistoryMoreError(null);
+    try {
+      const next = await breakoutsApi.events({
+        page: 1,
+        pageSize: HISTORY_PAGE_SIZE,
+        cursor: historyCursor,
+      });
+      setExtraEvents((prev) => [...prev, ...next.items.map(asFullEvent)]);
+      setHistoryCursor(next.nextCursor);
+    } catch (error) {
+      // 加载更多失败此前被吞掉，用户只会觉得按钮没反应（审计 P2-24 同型）。
+      setHistoryMoreError(error instanceof ApiError ? error : new ApiError(500, '加载更多失败'));
+    } finally {
+      setHistoryLoadingMore(false);
+    }
+  }, [historyCursor, historyLoadingMore]);
   const watchQ = usePolling(() => stocksApi.watchlist(), null);
 
   const status = asFullStatus(statusQ.data);
-  const currentAll = asCurrentEvents(currentQ.data);
-  const events = useMemo(() => (eventsQ.data?.items ?? []).map(asFullEvent), [eventsQ.data]);
+  /* 必须记忆化：useTickFlash 以这个数组为依赖，每次渲染都换新引用会让效应无限重跑。 */
+  const currentAll = useMemo(
+    () => asCurrentEvents(currentQ.data?.events ?? null),
+    [currentQ.data],
+  );
+  const events = useMemo(
+    () => [...(eventsQ.data?.items ?? []).map(asFullEvent), ...extraEvents],
+    [eventsQ.data, extraEvents],
+  );
 
   /* 筛选行状态：状态 / 评分 / ticker 聚焦 */
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
@@ -153,35 +198,28 @@ export default function Breakouts() {
 
   /* 只看自选 */
   const [onlyWatch, setOnlyWatch] = useState(false);
+  /* 自选还没到位时不能把它当成空集合（审计 P2-18）：watchQ 的 loading 与 error
+     被忽略、数据缺失回落为空 Set，开启「只看自选」会先给出一个假空态。 */
+  const watchReady = watchQ.data !== null;
+  const watchFailed = watchQ.error !== null && watchQ.data === null;
   const watchSet = useMemo(() => new Set((watchQ.data ?? []).map((w) => w.ticker)), [watchQ.data]);
+  const watchFilterPending = onlyWatch && !watchReady;
+  const matchWatch = (ticker: string) => !onlyWatch || !watchReady || watchSet.has(ticker);
   const current = useMemo(
-    () => currentAll.filter((e) => matchFilters(e) && (!onlyWatch || watchSet.has(e.ticker))),
+    () => currentAll.filter((e) => matchFilters(e) && matchWatch(e.ticker)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentAll, onlyWatch, watchSet, statusFilter, minScore, tickerFilter],
+    [currentAll, onlyWatch, watchSet, watchReady, statusFilter, minScore, tickerFilter],
   );
+  /* 「只看自选」此前只作用于当前突破卡片，历史事件仍展示全部股票 ——
+     同一个开关在一个页面里有两种语义（审计 P2-17）。 */
   const filteredEvents = useMemo(
-    () => events.filter(matchFilters),
+    () => events.filter((e) => matchFilters(e) && matchWatch(e.ticker)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [events, statusFilter, minScore, tickerFilter],
+    [events, onlyWatch, watchSet, watchReady, statusFilter, minScore, tickerFilter],
   );
 
-  /* 现价 tick-flash（轮询差异检测） */
-  const [flashes, setFlashes] = useState<Record<string, 'up' | 'down'>>({});
-  const prevPrices = useRef<Record<string, number>>({});
-  useEffect(() => {
-    if (!currentQ.data) return;
-    const next: Record<string, 'up' | 'down'> = {};
-    asCurrentEvents(currentQ.data).forEach((ev) => {
-      const prev = prevPrices.current[ev.ticker];
-      if (prev !== undefined && prev !== ev.current_price) next[ev.ticker] = ev.current_price > prev ? 'up' : 'down';
-      prevPrices.current[ev.ticker] = ev.current_price;
-    });
-    if (Object.keys(next).length) {
-      setFlashes(next);
-      const t = setTimeout(() => setFlashes({}), 700);
-      return () => clearTimeout(t);
-    }
-  }, [currentQ.data]);
+  /* 现价 tick-flash：定时器由 useTickFlash 单独持有（审计 P2-5） */
+  const flashes = useTickFlash(currentAll, breakoutKey, breakoutPrice);
 
   /* 详情模态 */
   const [selected, setSelected] = useState<BreakoutEventFull | null>(null);
@@ -195,15 +233,21 @@ export default function Breakouts() {
     if (locateTimer.current) clearTimeout(locateTimer.current);
     locateTimer.current = setTimeout(() => setLocateTicker(null), 2000);
   };
+  const [detailError, setDetailError] = useState<ApiError | null>(null);
   const openFromArchive = (ev: BreakoutEventFull) => {
     setSelected(ev);
+    setDetailError(null);
     /* 契约 GET /breakouts/events/{id}：详情到位后替换（mock 同形） */
     breakoutsApi
       .eventDetail(ev.event_id)
       .then((d) => {
         setSelected((prev) => (prev && prev.event_id === ev.event_id ? asFullDetail(d) : prev));
+        setDetailError(null);
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        // 详情失败此前被完全吞掉：界面既不报错也不给重试（审计 P2-20）。
+        setDetailError(error instanceof ApiError ? error : new ApiError(500, '详情加载失败'));
+      });
   };
 
   /* ticker 聚焦（详情「该代码全部事件」回填筛选行 chip，并滚动到历史回溯栏） */
@@ -244,14 +288,24 @@ export default function Breakouts() {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }, [status?.next_session_at, now]);
 
-  const snapshotAt = currentQ.lastUpdatedAt ? fmtTimeHHMMSS(currentQ.lastUpdatedAt) : '—';
+  /* 快照时间取契约 as_of（数据截至时间），读取时间单独显示（审计 P2-16）：
+     两者混用会把「重新读到一份旧快照」显示成「刚刚更新」。 */
+  const snapshotAt = currentQ.data?.asOf
+    ? fmtTimeHHMMSS(new Date(currentQ.data.asOf))
+    : '—';
+  const readAt = currentQ.lastUpdatedAt ? fmtTimeHHMMSS(currentQ.lastUpdatedAt) : '—';
   const currentError = currentQ.error && !currentQ.data ? currentQ.error : null;
 
   /* 历史事件回溯压缩面板（右栏吸顶 / 空态·错误态下整宽兜底，保持历史可访问） */
   const historyRailEl = (
     <HistoryRail
       events={filteredEvents}
-      total={eventsQ.data?.total ?? filteredEvents.length}
+      loadedCount={events.length}
+      total={eventsQ.data?.total ?? null}
+      serverHasMore={historyCursor !== null}
+      loadingServerMore={historyLoadingMore}
+      serverMoreError={historyMoreError}
+      onFetchMore={loadMoreHistory}
       stale={Boolean(eventsQ.error && events.length > 0)}
       loading={eventsQ.loading}
       error={events.length > 0 ? null : eventsQ.error}
@@ -284,7 +338,7 @@ export default function Breakouts() {
             {status ? (status.enabled ? '扫描已启用' : '扫描已暂停') : '状态读取中…'}
           </span>
           <span className="font-mono tnum">
-            快照 {snapshotAt} · <span className="text-ink-700">{currentAll.length}</span> 条活跃
+            数据截至 {snapshotAt} · 读取 {readAt} · <span className="text-ink-700">{currentAll.length}</span> 条活跃
           </span>
           <span className="font-mono tnum">
             最近扫描 {status?.lastScanAt ? fmtTimeHHMMSS(new Date(status.lastScanAt)) : '—'}
@@ -318,7 +372,15 @@ export default function Breakouts() {
               下次扫描 <span className="text-brand-600">{nextCountdown}</span>
             </span>
           )}
-          <WatchOnlyToggle value={onlyWatch} onChange={setOnlyWatch} />
+          <span className="inline-flex items-center gap-1.5">
+            <WatchOnlyToggle value={onlyWatch} onChange={setOnlyWatch} />
+            {/* 自选未就绪时说清楚过滤还没生效，而不是先给一个假空态（审计 P2-18） */}
+            {watchFilterPending && (
+              <span className="text-micro text-ink-400">
+                {watchFailed ? '自选读取失败 · 暂显示全部' : '自选加载中 · 暂显示全部'}
+              </span>
+            )}
+          </span>
         </div>
       </motion.header>
 
@@ -497,7 +559,12 @@ export default function Breakouts() {
       {/* 事件详情模态（保留） */}
       <EventDetail
         event={selected}
-        onClose={() => setSelected(null)}
+        detailError={detailError}
+        onRetryDetail={selected ? () => openFromArchive(selected) : undefined}
+        onClose={() => {
+          setSelected(null);
+          setDetailError(null);
+        }}
         onOpenTicker={(t) => {
           setSelected(null);
           openTicker(t);

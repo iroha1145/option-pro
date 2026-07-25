@@ -88,6 +88,9 @@ function strengthRowToDetail(env: Rec): StockDetail | null {
   };
 }
 
+/** 强度补充的独立截止时间；超过就先给核心行情，评分随下一次读取补齐。 */
+const STRENGTH_SUPPLEMENT_DEADLINE_MS = 4_000;
+
 export function getDetail(ticker: string, force = false): Promise<StockDetail> {
   const t = ticker.toUpperCase();
   return mockOr(
@@ -99,10 +102,18 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
       try {
         // 行情价格仍以 stocks 概览（Massive 主源）为准；强度快照只补其真实评分与缺失基本面。
         const detail = await stocksApi.detail(t, force);
-        const strengthBody = await marketGet(
-          `/strength/stocks/${encodeURIComponent(t)}`,
-          { ttlMs: 60_000, staleMs: 30 * 60_000, force },
-        ).catch(() => null);
+        // 可选补充不得拖住核心详情（审计 P2-32）：强度失败已经被捕获，但请求
+        // 缓慢或悬挂时整个详情对象仍会一直等它，界面继续显示骨架屏。给它一个
+        // 独立的截止时间，超时就先返回核心行情。
+        const strengthBody = await Promise.race([
+          marketGet(
+            `/strength/stocks/${encodeURIComponent(t)}`,
+            { ttlMs: 60_000, staleMs: 30 * 60_000, force },
+          ).catch(() => null),
+          new Promise<null>((resolve) => {
+            setTimeout(() => resolve(null), STRENGTH_SUPPLEMENT_DEADLINE_MS);
+          }),
+        ]);
         const strength = strengthBody !== null ? strengthRowToDetail(asRec(strengthBody)) : null;
         const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
         return {

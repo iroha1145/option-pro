@@ -3,7 +3,7 @@
  * - 分档：S≥90 / A 80–89 / B 70–79 / C 60–69（D<60 仅计入「全部」）
  * - 周期 short/mid/long/all · 偏好 conservative/balanced/aggressive（契约枚举）
  */
-import type { ScreenerRow, ScreenerSubscoreDim } from '@/api/types';
+import type { ScreenerRow, ScreenerSubscoreDim, Signal } from '@/api/types';
 
 export type Tier = 'S' | 'A' | 'B' | 'C' | 'D';
 export type TierFilter = 'all' | 'S' | 'A' | 'B' | 'C';
@@ -174,6 +174,17 @@ export const EMPTY_CATALYST: CatalystSummary = {
   latestAt: null,
   latestTitle: null,
 };
+
+/**
+ * 行展开的技术信号状态（审计 P2-13）。
+ *
+ * 旧实现在请求失败时写入空数组，与「真实没有信号」无法区分，而且会永久占住
+ * 该键，以后展开同一股票也不会重试。判别联合让四种情况各自可见。
+ */
+export type RowSignalsState =
+  | { state: 'loading' }
+  | { state: 'success'; signals: Signal[] }
+  | { state: 'error' };
 
 /** 成交额缓存（后端 avg_dollar_volume_20d）；dollarVolume null = 契约缺失 */
 export type DetailCache = Record<string, { dollarVolume: number | null } | undefined>;

@@ -90,9 +90,10 @@ function HotspotSkeleton({ i }: { i: number }) {
   );
 }
 
-export default function HotspotsStrip({ onOpenNews }: { onOpenNews: (newsId: string) => void }) {
-  const listQ = usePolling(() => catalystsContract.hotspots(), 120_000);
-  const statusQ = usePolling(() => catalystsContract.hotspotsStatus(), 45_000);
+export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpenNews: (newsId: string) => void; refreshToken?: number }) {
+  /* refreshToken 参与依赖：页头「刷新」必须真的刷新热点带（审计 P2-21）。 */
+  const listQ = usePolling(() => catalystsContract.hotspots(), 120_000, [refreshToken]);
+  const statusQ = usePolling(() => catalystsContract.hotspotsStatus(), 45_000, [refreshToken]);
 
   const computing = statusQ.data?.state === 'computing';
   const items = listQ.data ?? [];

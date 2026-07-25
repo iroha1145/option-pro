@@ -49,8 +49,18 @@ function dayLabel(key: string): string {
 
 interface HistoryRailProps {
   events: BreakoutEventFull[];
-  /** 服务端总数（eventsQ.data.total） */
-  total: number;
+  /** 已加载条数（筛选前）。 */
+  loadedCount: number;
+  /**
+   * 服务端总数；契约不返回时为 null（审计 P2-19）。
+   * 旧实现在缺失时用当前数组长度或 `page*pageSize+1` 补位，等于展示一个拼出来的数字。
+   */
+  total: number | null;
+  /** 服务端还有更多（next_cursor 非空）；与组件内的「本地展开」是两回事。 */
+  serverHasMore: boolean;
+  loadingServerMore: boolean;
+  serverMoreError: ApiError | null;
+  onFetchMore: () => void;
   /** 轮询过期（保留旧数据时出错） */
   stale: boolean;
   loading: boolean;
@@ -59,7 +69,20 @@ interface HistoryRailProps {
   onOpenDetail: (ev: BreakoutEventFull) => void;
 }
 
-export default function HistoryRail({ events, total, stale, loading, error, onRetry, onOpenDetail }: HistoryRailProps) {
+export default function HistoryRail({
+  events,
+  loadedCount,
+  total,
+  serverHasMore,
+  loadingServerMore,
+  serverMoreError,
+  onFetchMore,
+  stale,
+  loading,
+  error,
+  onRetry,
+  onOpenDetail,
+}: HistoryRailProps) {
   const [visible, setVisible] = useState(PAGE);
   const moreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -100,7 +123,10 @@ export default function HistoryRail({ events, total, stale, loading, error, onRe
       <div className="shrink-0 border-b border-line px-4 pb-2.5 pt-3.5">
         <p className="flex items-baseline justify-between gap-2">
           <span className="text-body-s font-semibold text-ink-900">
-            历史事件回溯 · <span className="font-mono tnum">共 {total} 条</span>
+            历史事件回溯 ·{' '}
+            <span className="font-mono tnum">
+              {total !== null ? `共 ${total} 条` : `已加载 ${loadedCount} 条${serverHasMore ? '+' : ''}`}
+            </span>
           </span>
           {stale && (
             <span className="rounded-xs border border-warn-600/40 bg-warn-50 px-1.5 py-px text-micro text-warn-600">已过期</span>
@@ -108,7 +134,7 @@ export default function HistoryRail({ events, total, stale, loading, error, onRe
         </p>
         <p className="mt-1 text-micro text-ink-400">
           按时间倒序
-          {events.length !== total && (
+          {events.length !== loadedCount && (
             <span className="font-mono tnum"> · 筛选出 {events.length} 条</span>
           )}
           <span className="mx-1 text-ink-300" aria-hidden="true">·</span>
@@ -214,8 +240,9 @@ export default function HistoryRail({ events, total, stale, loading, error, onRe
               </div>
             ))}
 
-            {/* 游标分页「加载更多 · 剩 N 条」 */}
-            <div className="flex items-center justify-center border-t border-line px-3 py-2.5">
+            {/* 两级「加载更多」：先展开已取回的，再向服务端续读（审计 P2-19）。
+                旧实现只有本地展开，服务端还有多少条完全不可见。 */}
+            <div className="flex flex-col items-center gap-1.5 border-t border-line px-3 py-2.5">
               {hasMore ? (
                 <button
                   onClick={onLoadMore}
@@ -226,8 +253,22 @@ export default function HistoryRail({ events, total, stale, loading, error, onRe
                   加载更多
                   <span className="font-mono text-micro text-ink-400 tnum">剩 {events.length - visible} 条</span>
                 </button>
+              ) : serverHasMore ? (
+                <button
+                  onClick={onFetchMore}
+                  disabled={loadingServerMore}
+                  className="flex items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
+                >
+                  {loadingServerMore && <span className="size-3.5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" />}
+                  继续读取更早事件
+                </button>
               ) : (
                 <p className="font-mono text-micro text-ink-300 tnum">已加载全部 {events.length} 条</p>
+              )}
+              {serverMoreError && (
+                <p className="text-micro text-down-700">
+                  加载更多失败：{serverMoreError.message}
+                </p>
               )}
             </div>
           </div>

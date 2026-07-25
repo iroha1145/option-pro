@@ -10,7 +10,7 @@ import { Link } from 'react-router';
 import { motion } from 'framer-motion';
 import { stocksApi } from '@/api/modules/stocks';
 import { ApiError } from '@/api/client';
-import type { ScreenerRow, Signal } from '@/api/types';
+import type { ScreenerRow } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { fmtCompact } from '@/lib/format';
 import Icon from '@/components/icons';
@@ -20,7 +20,9 @@ import { SkeletonBlock } from '@/components/shared/Skeleton';
 import { strengthBarClass } from '@/components/shared/StrengthBar';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
-import { subscoreDimsOf } from './types';
+import { subscoreDimsOf,
+  type RowSignalsState,
+} from './types';
 import ManualStockPull from '@/components/detail/ManualStockPull';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -151,7 +153,7 @@ export interface RowExpansionProps {
   row: ScreenerRow;
   weights: { trend: number; momentum: number; volume: number; volatility: number } | null;
   dollarVolume: number | null;
-  signals: Signal[] | null;
+  signals: RowSignalsState | null;
   onOpenDetail: (ticker: string) => void;
 }
 
@@ -220,16 +222,18 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
         </div>
         <div className="mt-3.5 border-t border-line pt-3">
           <p className="mb-1.5 text-micro text-ink-400">活跃信号</p>
-          {signals === null ? (
+          {signals === null || signals.state === 'loading' ? (
             <div className="flex gap-1.5" aria-hidden="true">
               <span className="skeleton-shimmer h-5 w-14 rounded-xs" />
               <span className="skeleton-shimmer h-5 w-14 rounded-xs" />
             </div>
-          ) : signals.length === 0 ? (
+          ) : signals.state === 'error' ? (
+            <p className="text-caption text-warn-600">信号读取失败 · 收起后重新展开可重试</p>
+          ) : signals.signals.length === 0 ? (
             <p className="text-caption text-ink-400">— 暂无信号</p>
           ) : (
             <span className="flex flex-wrap gap-1.5">
-              {signals.map((s, i) => (
+              {signals.signals.map((s, i) => (
                 <SignalChip key={i} type={s.type} label={s.label} />
               ))}
             </span>

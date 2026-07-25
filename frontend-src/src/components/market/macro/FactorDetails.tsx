@@ -46,9 +46,28 @@ function FactorTable({ factors }: { factors: MacroFactor[] }) {
   );
 }
 
-export default function FactorDetails({ modules }: { modules: MacroModule[] }) {
+/**
+ * @param snapshotKey 当前宏观快照的标识（dataThrough / asOf）。
+ *
+ * 因子详情此前只要成功写进本地 states 就永不失效（审计 P2-28）：父级宏观快照
+ * 更新后，展开的详情仍是上一份快照算出来的。缓存键必须包含快照标识。
+ */
+export default function FactorDetails({
+  modules,
+  snapshotKey = '',
+}: {
+  modules: MacroModule[];
+  snapshotKey?: string;
+}) {
   const [open, setOpen] = useState<MacroModuleId | null>(null);
   const [states, setStates] = useState<Record<string, ModuleState>>({});
+
+  /* 快照一变就丢弃全部详情缓存，让下一次展开重新取。 */
+  const [cachedSnapshot, setCachedSnapshot] = useState(snapshotKey);
+  if (cachedSnapshot !== snapshotKey) {
+    setCachedSnapshot(snapshotKey);
+    setStates({});
+  }
 
   const load = useCallback(async (moduleId: MacroModuleId) => {
     setStates((previous) => ({

@@ -909,16 +909,29 @@ def cached_read(
     The worker publishes in a different process from the API, so an in-process
     flag cannot be the invalidation signal. The file's ``mtime_ns``/size pair
     changes when a snapshot is published; a short TTL bounds the rest.
+
+    The database runs in WAL mode, so a fresh commit may live only in the
+    ``-wal`` sidecar while the main file is untouched (audit P2-25). Stamping
+    only the main file meant a manual refresh could be invisible for up to the
+    full TTL: the writer had committed, and the reader kept serving the previous
+    snapshot. The sidecars are part of the database's identity and are stamped
+    with it.
     """
 
     import time
 
     clock = now or time.monotonic
-    try:
-        stat = path.stat()
-        stamp = (stat.st_mtime_ns, stat.st_size)
-    except OSError:
-        stamp = (0, 0)
+    stamps: list[tuple] = []
+    for candidate in (path, Path(f"{path}-wal"), Path(f"{path}-shm")):
+        try:
+            stat = candidate.stat()
+        except OSError:
+            # A checkpointed database has no sidecar; absence is a real state
+            # and has to be distinguishable from any particular size.
+            stamps.append((candidate.name, None))
+        else:
+            stamps.append((candidate.name, stat.st_mtime_ns, stat.st_size))
+    stamp = tuple(stamps)
     moment = clock()
     cached = _READ_CACHE.get(key)
     if cached is not None:
