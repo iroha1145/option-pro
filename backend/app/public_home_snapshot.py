@@ -121,6 +121,18 @@ _OVERVIEW_FIELDS = {
     "year_high",
     "year_low",
 }
+# Third payload in the same provider-attribution change to carry price_provider
+# without the validator knowing. Named rather than inlined so the drift guard can
+# see it the way it sees the overview and chart sets.
+_SIGNALS_FIELDS = {
+    "ticker",
+    "price",
+    "price_provider",
+    "score",
+    "overall",
+    "signals",
+    "tags",
+}
 _CHART_FIELDS = {
     # Same omission as profile_provider on the overview: the chart builder has
     # attributed its price source since the provider work in #47/#49, but this
@@ -598,8 +610,9 @@ def _validate_signals(payload: Mapping[str, Any]) -> bool:
         ):
             return False
     return bool(
-        set(payload) == {"ticker", "price", "score", "overall", "signals", "tags"}
+        set(payload) == _SIGNALS_FIELDS
         and payload.get("ticker") == PUBLIC_HOME_DEFAULT_TICKER
+        and payload.get("price_provider") in {"Massive", "Yahoo/yfinance"}
         and _finite_number(payload.get("price"), minimum=0.0000001)
         and _finite_number(payload.get("score"), minimum=0)
         and float(payload.get("score")) <= 100
