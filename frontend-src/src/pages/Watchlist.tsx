@@ -39,17 +39,31 @@ import Sparkline from '@/components/charts/Sparkline';
 import Icon from '@/components/icons';
 
 /* ---------------- B1 小件：涨跌宽度比条 ---------------- */
-function AdvanceDeclineBar({ advancers, decliners }: { advancers: number; decliners: number }) {
-  const total = Math.max(1, advancers + decliners);
+function AdvanceDeclineBar({
+  advancers,
+  decliners,
+  unchanged,
+}: {
+  advancers: number;
+  decliners: number;
+  unchanged: number;
+}) {
+  const total = Math.max(1, advancers + decliners + unchanged);
   return (
     <div className="mt-2">
       <p className="font-mono text-data-xl tnum">
         <span className="text-up-700">{advancers}</span>
         <span className="mx-1.5 text-ink-300">/</span>
         <span className="text-down-700">{decliners}</span>
+        {unchanged > 0 && (
+          <span className="ml-1.5 align-middle text-caption text-ink-400">
+            · {unchanged} 平
+          </span>
+        )}
       </p>
       <div className="mt-2 flex h-[3px] w-full overflow-hidden rounded-pill bg-line" aria-hidden="true">
         <div className="h-full origin-left animate-grow-bar bg-up-600" style={{ width: `${(advancers / total) * 100}%` }} />
+        <div className="h-full bg-ink-300" style={{ width: `${(unchanged / total) * 100}%` }} />
         <div className="h-full origin-right bg-down-600" style={{ width: `${(decliners / total) * 100}%` }} />
       </div>
     </div>
@@ -471,11 +485,15 @@ export default function Watchlist() {
     }
   }, [wl.data]);
 
+  /* 平盘单独计数：changePct >= 0 会把持平股票算进上涨家数（审计 P2-4）。
+     涨跌幅缺失的行也不能算进任何一侧。 */
   const aggregates = useMemo(() => {
     const items = wl.data ?? [];
+    const known = items.filter((x) => Number.isFinite(x.changePct));
     return {
-      advancers: items.filter((x) => x.changePct >= 0).length,
-      decliners: items.filter((x) => x.changePct < 0).length,
+      advancers: known.filter((x) => x.changePct > 0).length,
+      decliners: known.filter((x) => x.changePct < 0).length,
+      unchanged: known.filter((x) => x.changePct === 0).length,
     };
   }, [wl.data]);
   const rowStrengthAvailable = useMemo(
@@ -676,7 +694,11 @@ export default function Watchlist() {
                   <p className="eyebrow">上涨 / 下跌</p>
                   <Icon name="candle" size={18} className="text-ink-400" />
                 </div>
-                <AdvanceDeclineBar advancers={aggregates.advancers} decliners={aggregates.decliners} />
+                <AdvanceDeclineBar
+                  advancers={aggregates.advancers}
+                  decliners={aggregates.decliners}
+                  unchanged={aggregates.unchanged}
+                />
               </div>,
               ...(strengthQ.data?.aggregateAvailable
                 ? [

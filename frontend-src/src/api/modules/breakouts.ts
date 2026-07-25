@@ -217,6 +217,11 @@ export function normalizeBreakoutStatus(raw: unknown): BreakoutStatus {
   const scan = asRec(r.latest_completed_scan);
   const workerBad = ['error', 'failed', 'down', 'stale', 'unhealthy'];
   const health = pickS(worker, 'health_status', 'status');
+  // 后端在库不可用或 schema 版本不符时明确回 worker: null（top-level status
+  // 也变成 unavailable）。此时既没有 error_code 也没有 health_status，旧写法
+  // 会得出 healthy=true，界面于是把「读不到扫描服务」画成「扫描服务正常」。
+  // 缺证据就是 null（GPT-5.6-Pro 审计 P1-13），由界面显示「状态未知」。
+  const workerReported = Object.keys(worker).length > 0;
   const scheduled = Date.parse(pickS(scan, 'scheduled_at') ?? '');
   const published = Date.parse(pickS(scan, 'published_at') ?? '');
   const nextAt = pickS(r, 'next_session_at') ?? pickS(asRec(worker.details), 'next_session_at');
@@ -229,7 +234,9 @@ export function normalizeBreakoutStatus(raw: unknown): BreakoutStatus {
     lastScanAt: pickS(worker, 'last_completed_at') ?? pickS(scan, 'published_at') ?? pickS(r, 'lastScanAt') ?? '',
     enabled: r.enabled === true,
     worker: {
-      healthy: worker.error_code == null && (health === null || !workerBad.includes(health)),
+      healthy: workerReported
+        ? worker.error_code == null && (health === null || !workerBad.includes(health))
+        : null,
       heartbeat_at: pickS(worker, 'heartbeat_at') ?? '',
     },
     latest_completed_scan: Object.keys(scan).length

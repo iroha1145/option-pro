@@ -122,7 +122,11 @@ class AlertItem(BaseModel):
     # market close, so DTE can legitimately contain a fractional day.
     dte: Optional[float] = Field(default=None, ge=0, le=3660)
     volume: int = Field(ge=0, le=2_000_000_000)
-    open_interest: int = Field(default=0, ge=0, le=2_000_000_000)
+    # Absent open interest stays absent. Defaulting it to 0 told the model the
+    # contract had no outstanding position when the provider simply did not
+    # report one, and 0 is also a meaningful value here (all volume is new
+    # opening), so the two cannot share a representation.
+    open_interest: Optional[int] = Field(default=None, ge=0, le=2_000_000_000)
     last_price: Optional[float] = Field(default=None, ge=0, le=10_000_000)
     implied_volatility: Optional[float] = Field(default=None, ge=0, le=100)
     premium_flow: Optional[float] = Field(default=None, ge=0, le=1_000_000_000_000_000)

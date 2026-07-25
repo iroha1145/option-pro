@@ -131,7 +131,16 @@ export interface ScreenerRow {
   /** 后端 avg_dollar_volume_20d；缺失时为 null，不用当日成交额冒充。 */
   avgDollarVolume20d?: number | null;
   band: StrengthBand;
-  subscores: { trend: number; momentum: number; volume: number; volatility: number };
+  /**
+   * 兼容槽位；分项缺失时为 null。补 0 会把「没有这一项数据」画成「该项 0 分」
+   * ——在评分界面里这两件事读起来完全相反（审计 P2-15）。
+   */
+  subscores: {
+    trend: number | null;
+    momentum: number | null;
+    volume: number | null;
+    volatility: number | null;
+  };
   /** live 契约分项（周期/质量分）：存在时 UI 优先消费；mock 不填，回退 subscores 四维 */
   subscoreDims?: ScreenerSubscoreDim[];
   sparkline: number[];
@@ -341,27 +350,37 @@ export interface CatalystsStatus {
 }
 
 /* ---------- 期权 ---------- */
+/**
+ * 期权数值字段一律可空（GPT-5.6-Pro 审计 P1-02）。
+ * 在行情界面里 `0` 与「上游没有给」是两个不同的事实：0 表示确有成交量／买价为零，
+ * null 表示该字段不可用。把缺失补成 0 会让 $0.00 报价、0 中间价和不存在的合约腿
+ * 看起来像真实数据，并继续流进异动判定与权利金估算。
+ * 标识字段（ticker / strike / expiration）缺失的记录直接丢弃，不构造替身。
+ */
 export interface UnusualOption {
   id: string;
   ticker: string;
   side: 'call' | 'put';
   strike: number;
   expiration: string;
-  volume: number;
-  openInterest: number;
-  premium: number;      // 万美元
+  volume: number | null;
+  openInterest: number | null;
+  premium: number | null;      // 万美元
   sentiment: NewsSentiment;
   at: string;
 }
 export interface OptionChainRow {
   strike: number;
-  callOi: number; callVol: number; callIv: number; callBid: number; callAsk: number;
-  putOi: number; putVol: number; putIv: number; putBid: number; putAsk: number;
+  callOi: number | null; callVol: number | null; callIv: number | null;
+  callBid: number | null; callAsk: number | null;
+  putOi: number | null; putVol: number | null; putIv: number | null;
+  putBid: number | null; putAsk: number | null;
 }
 export interface OptionChain {
   ticker: string;
   expiration: string;
-  spot: number;
+  /** 标的现价；缺失时为 null —— 平值判定与价内着色随之停用，而不是错落在 0 上。 */
+  spot: number | null;
   rows: OptionChainRow[];
   provider?: string | null;
   asOf?: string | null;
