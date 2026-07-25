@@ -94,28 +94,33 @@ function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => voi
   // 只信后端算出的「确实有最终分析在跑」。原先只要阶段是 post_release_final
   // 就写「重分析中」，一条失败或被预算挡下的最终任务会让这一行永远显示在跑。
   const finalizing = exBool(row, 'finalizationInProgress') === true;
-  const label = locked
-    ? '查看最终'
+  /* 这一列只有 96px：标签必须短且单行，四个汉字会折行把 h-7 撑破。
+     列头已经写着「AI 影响」，按钮不必再重复一遍，状态交给配色区分。 */
+  const [label, title] = locked
+    ? ['最终', '查看最终分析']
     : finalizing
-      ? '重分析中'
+      ? ['分析中', '最终分析生成中']
       : ready === true
-        ? '查看'
+        ? ['查看', '查看 AI 影响分析']
         : ready === false
-          ? '分析'
-          : 'AI 影响';
+          ? ['分析', '生成 AI 影响分析']
+          : ['AI 影响', 'AI 影响分析'];
   return (
     <button
       onClick={(e) => {
         e.stopPropagation();
         onSelect();
       }}
+      title={title}
       className={cn(
-        'inline-flex h-7 items-center gap-1 rounded-sm border px-2 text-caption transition-colors duration-fast',
-        ready === true
-          ? 'border-ai-600/40 bg-ai-50 text-ai-600 hover:bg-ai-600 hover:text-white'
-          : 'border-line bg-card text-ink-500 hover:border-ai-600/50 hover:text-ai-600',
+        'inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-sm border px-2 text-caption leading-none transition-colors duration-fast',
+        locked
+          ? 'border-ai-600 bg-ai-600 text-white hover:brightness-110'
+          : ready === true || finalizing
+            ? 'border-ai-600/40 bg-ai-50 text-ai-600 hover:bg-ai-600 hover:text-white'
+            : 'border-line bg-card text-ink-500 hover:border-ai-600/50 hover:text-ai-600',
       )}
-      aria-label={`${row.ticker} AI 影响分析`}
+      aria-label={`${row.ticker} ${title}`}
     >
       <Icon name="spark-ai" size={12} />
       {label}
@@ -157,9 +162,10 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
   }
 
   const hasExpectedMove = items.some((row) => exNum(row, 'expectedMovePct') != null);
+  /* 末列 96px：容得下「AI 影响」这一最宽标签且不折行（原 88px 会折） */
   const gridColumns = hasExpectedMove
-    ? 'md:grid-cols-[minmax(160px,1.4fr)_84px_minmax(140px,1.2fr)_96px_88px] 2xl:grid-cols-[minmax(170px,1.4fr)_84px_minmax(150px,1.2fr)_96px_92px_96px_88px]'
-    : 'md:grid-cols-[minmax(160px,1.4fr)_84px_minmax(140px,1.2fr)_88px] 2xl:grid-cols-[minmax(170px,1.4fr)_84px_minmax(150px,1.2fr)_96px_92px_88px]';
+    ? 'md:grid-cols-[minmax(150px,1.4fr)_84px_minmax(140px,1.2fr)_96px_96px] 2xl:grid-cols-[minmax(160px,1.4fr)_84px_minmax(150px,1.2fr)_96px_92px_96px_96px]'
+    : 'md:grid-cols-[minmax(150px,1.4fr)_84px_minmax(140px,1.2fr)_96px] 2xl:grid-cols-[minmax(160px,1.4fr)_84px_minmax(150px,1.2fr)_96px_92px_96px]';
 
   /* 按日期分组（升序） */
   const groups: { date: string; rows: EarningsRow[] }[] = [];

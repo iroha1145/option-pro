@@ -464,8 +464,10 @@ test('访客能看到单股分析入口和终版状态', () => {
   assert.equal(page.includes('登录后可用 AI 分析'), false);
   assert.equal(page.includes('单股分析可用'), true);
   assert.equal(list.includes('ready === false && !isOwner'), false);
-  assert.equal(list.includes("'查看最终'"), true);
-  assert.equal(list.includes("'重分析中'"), true);
+  /* 终版与重分析仍要各有可辨的状态，但标签必须短到能塞进 96px 的列里 */
+  assert.equal(list.includes("['最终', '查看最终分析']"), true);
+  assert.equal(list.includes("['分析中', '最终分析生成中']"), true);
+  assert.match(list, /whitespace-nowrap/);
 });
 
 test('财报组件不再伪造 Optix Research 来源', () => {
