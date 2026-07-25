@@ -308,7 +308,7 @@ def test_deploy_builds_only_current_services_and_verifies_both(tmp_path: Path) -
     assert "verify_public_snapshots" in script
     assert 'payload.get("status") != "ok"' in script
     assert '"ai_jobs",' in script
-    assert 'tasks[name].get("enabled") is not True' in script
+    assert 'task.get("enabled") is not True' in script
     release_gate = (
         root / "backend" / "app" / "tools" / "verify_release_data.py"
     ).read_text(encoding="utf-8")
@@ -496,17 +496,29 @@ def test_deploy_selects_machine_file_without_caller_exports(tmp_path: Path) -> N
     assert set(selected) == {".env,machine.env"}
 
 
-def test_deploy_requires_all_twelve_unified_task_types(tmp_path: Path) -> None:
+def test_deploy_requires_the_full_unified_task_inventory(tmp_path: Path) -> None:
+    """A short inventory is rejected, and the message names what is missing.
+
+    The payload has to satisfy every earlier gate, otherwise this never reaches
+    the inventory check at all. The previous version of this test omitted
+    ``status`` and so was rejected for that instead -- invisible while the script
+    reported one generic message for every rejection.
+    """
+
     root, environment = _deployment_root(tmp_path)
-    environment["FAKE_WORKER_HEALTH"] = (
-        '{"healthy":true,"schema_version":"optix-worker-v2",'
-        '"tasks":[{"task_name":"breakout"}]}'
-    )
+    payload = json.loads(WORKER_HEALTH)
+    payload["tasks"] = [
+        item for item in payload["tasks"] if item["task_name"] == "breakout"
+    ]
+    environment["FAKE_WORKER_HEALTH"] = json.dumps(payload, separators=(",", ":"))
 
     result = _run_deploy(root, environment)
 
     assert result.returncode != 0
-    assert "all twelve task types" in result.stderr
+    assert "task inventory mismatch" in result.stderr
+    # Naming the absent tasks is the whole point: "inventory is wrong" sends the
+    # operator reading code, "missing: [...]" sends them straight to the cause.
+    assert "catalyst_sync" in result.stderr
 
 
 def test_deploy_rejects_disabled_critical_worker_task(tmp_path: Path) -> None:
@@ -521,7 +533,8 @@ def test_deploy_rejects_disabled_critical_worker_task(tmp_path: Path) -> None:
     result = _run_deploy(root, environment)
 
     assert result.returncode != 0
-    assert "all twelve task types" in result.stderr
+    assert "ai_jobs" in result.stderr
+    assert "disabled" in result.stderr
 
 
 @pytest.mark.parametrize(

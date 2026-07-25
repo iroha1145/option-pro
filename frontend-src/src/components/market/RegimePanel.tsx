@@ -13,14 +13,27 @@ import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
 import { SkeletonCard } from '@/components/shared/Skeleton';
 
+/*
+ * tip 是悬停时的一句话摘要，必须与 SCORE_HINTS 里的算法说明同源——三条原先与代码
+ * 不符，且和紧挨着的 InfoHint 长说明自相矛盾：
+ *   · 指数趋势原写「20/50 日线」，实际是 50/200 日线；
+ *   · 市场广度原写「涨跌家数比与创新高/新低家数」——本系统没有任何个股家数数据，
+ *     真实算法是 11 个行业 ETF 站上 50/200 日线的比例 + RSP÷SPY、IWM÷SPY 相对强弱；
+ *   · 风险偏好原写「成长/小盘相对防御板块」，那是风险利差那一维干的事，
+ *     它自己看的是 VIX、信用价差、久期与回撤。
+ */
 const DIMS: { key: keyof MarketRegime; label: string; tip: string; hint: ScoreHint }[] = [
-  { key: 'index_trend_score', label: '指数趋势', tip: '主要指数相对关键均线（20/50 日）的位置与斜率，衡量大盘方向性。', hint: SCORE_HINTS.regimeTrend },
-  { key: 'market_momentum_score', label: '市场动量', tip: '全市场上涨动能与价格速率，动能衰竭常领先于指数见顶。', hint: SCORE_HINTS.regimeMomentum },
-  { key: 'market_breadth_score', label: '市场广度', tip: '涨跌家数比与创新高/新低家数，判断指数上涨是否有广度支撑。', hint: SCORE_HINTS.regimeBreadth },
-  { key: 'market_volume_score', label: '量能配合', tip: '成交量相对均量的放大程度，放量上行比缩量上行更可信。', hint: SCORE_HINTS.regimeVolume },
-  { key: 'risk_appetite_score', label: '风险偏好', tip: '成长/小盘相对防御板块的表现，反映资金的风险承担意愿。', hint: SCORE_HINTS.regimeRiskAppetite },
-  { key: 'risk_on_spread_score', label: '风险利差', tip: '风险资产与避险资产的相对强弱，利差走阔偏向 risk-on。', hint: SCORE_HINTS.regimeRiskOn },
+  { key: 'index_trend_score', label: '指数趋势', tip: 'SPY / QQQ / IWM / RSP 相对 50 与 200 日均线的位置，加 SPY 200 日线斜率。', hint: SCORE_HINTS.regimeTrend },
+  { key: 'market_momentum_score', label: '市场动量', tip: 'SPY / QQQ / IWM 的 20 日涨跌，加 QQQ−SPY、RSP−SPY 的 20 日相对差。', hint: SCORE_HINTS.regimeMomentum },
+  { key: 'market_breadth_score', label: '市场广度', tip: '11 个行业 ETF 中站上 50 / 200 日均线的比例，加等权对市值加权（RSP÷SPY）与小盘对大盘（IWM÷SPY）的 20 日相对强弱。', hint: SCORE_HINTS.regimeBreadth },
+  { key: 'market_volume_score', label: '量能配合', tip: 'SPY / QQQ 近 5 日方向与相对量能是否同向：放量上行加分，放量下行扣分。', hint: SCORE_HINTS.regimeVolume },
+  { key: 'risk_appetite_score', label: '风险偏好', tip: 'VIX 水平与一年分位、HYG−TLT 与 HYG−IEF 信用价差、10 年期利率变化、久期、SPY / QQQ 回撤。', hint: SCORE_HINTS.regimeRiskAppetite },
+  { key: 'risk_on_spread_score', label: '风险利差', tip: '十组进攻／防守资产对的 20 日相对价差（QQQ/SPY、SOXX/XLK、HYG/IEF、XLY/XLP 等）。', hint: SCORE_HINTS.regimeRiskOn },
 ];
+
+/** 面板级口径：说清这六个数算自什么、以及为什么它不随选中的指数变。 */
+const DIMS_SOURCE_NOTE =
+  '六维算自同一篮固定基准：SPY / QQQ / IWM / RSP、11 个行业 ETF、VIX、HYG / IEF / TLT / 10 年期、GLD、SOXX / SMH —— 是全市场读数，不区分指数。';
 
 function regimeMean(r: MarketRegime): number {
   return DIMS.reduce((s, d) => s + r[d.key], 0) / DIMS.length;
@@ -114,8 +127,9 @@ export default function RegimePanel({
           );
         })}
       </div>
-      <p className="mt-4 border-t border-line pt-3 text-micro text-ink-400">
+      <p className="mt-4 border-t border-line pt-3 text-micro leading-relaxed text-ink-400">
         色阶：&lt;50 弱 · 50–69 中性 · 70–84 强 · ≥85 极强
+        <span className="mt-1 block">{DIMS_SOURCE_NOTE}</span>
       </p>
     </section>
   );

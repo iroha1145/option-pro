@@ -190,26 +190,40 @@ critical = {
     "public_home",
     "strength_refresh",
 }
+# Print why before exiting. The caller used to report "did not report all twelve
+# task types" for every one of these, which sent the operator hunting a missing
+# task while the real cause was a single degraded one.
+import sys
+
+
+def reject(reason: str) -> None:
+    print(reason, file=sys.stderr)
+    raise SystemExit(1)
+
+
 if payload.get("healthy") is not True:
-    raise SystemExit(1)
+    reject("Worker reported healthy=%r." % (payload.get("healthy"),))
 if payload.get("status") != "ok":
-    raise SystemExit(1)
+    reject("Worker overall status is %r, expected 'ok'." % (payload.get("status"),))
 if payload.get("schema_version") != "optix-worker-v2":
-    raise SystemExit(1)
+    reject("Worker schema is %r, expected 'optix-worker-v2'." % (payload.get("schema_version"),))
 if actual != expected:
-    raise SystemExit(1)
-if any(
-    tasks[name].get("enabled") is not True
-    or tasks[name].get("status") in {
-        "disabled",
-        "degraded",
-        "failed",
-        "interrupted",
-    }
-    or int(tasks[name].get("consecutive_failures") or 0) != 0
-    for name in critical
-):
-    raise SystemExit(1)
+    reject(
+        "Worker task inventory mismatch. Missing: %s. Unexpected: %s."
+        % (sorted(expected - actual) or "none", sorted(actual - expected) or "none")
+    )
+for name in sorted(critical):
+    task = tasks[name]
+    failures = int(task.get("consecutive_failures") or 0)
+    if task.get("enabled") is not True:
+        reject("Critical task %s is disabled." % name)
+    if task.get("status") in {"disabled", "degraded", "failed", "interrupted"}:
+        reject(
+            "Critical task %s is %s (error_code=%s, consecutive_failures=%d)."
+            % (name, task.get("status"), task.get("error_code"), failures)
+        )
+    if failures != 0:
+        reject("Critical task %s has %d consecutive failures." % (name, failures))
 PY
 }
 
@@ -226,7 +240,8 @@ verify_worker() {
         sleep 2
     done
     printf '%s\n' "$payload" >&2
-    fail "Unified worker did not report all twelve task types."
+    # worker_payload_is_ready has already printed the specific reason to stderr.
+    fail "Unified worker never reached an acceptable state; see the reason above."
 }
 
 verify_public_snapshots() {
