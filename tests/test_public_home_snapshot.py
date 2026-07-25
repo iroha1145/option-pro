@@ -177,6 +177,7 @@ def _payload(resource: str, now: float, *, price: float = 100.0) -> dict:
         return {
             "ticker": "NVDA",
             "price": price,
+            "price_provider": "Massive",
             "score": 60,
             "overall": "bullish",
             "signals": {
@@ -1301,7 +1302,11 @@ def test_worker_default_signal_builder_bypasses_stale_public_snapshot(
     stored = stored_entry["payload"]
     assert stored_entry["saved_at"] == now
     assert stored["price"] == 222.0
-    assert set(stored) == {"ticker", "price", "score", "overall", "signals", "tags"}
+    # Reference the declared set rather than restating it: an inlined copy here
+    # is exactly the kind of mirror that let price_provider slip through.
+    from app.public_home_snapshot import _SIGNALS_FIELDS
+
+    assert set(stored) == set(_SIGNALS_FIELDS)
 
 
 def test_owner_endpoint_and_worker_share_live_signal_builder(
@@ -2057,7 +2062,11 @@ def test_declared_field_sets_match_the_fixture_payloads() -> None:
     fixtures, which is what made the suite agree with the bug.
     """
 
-    from app.public_home_snapshot import _CHART_FIELDS, _OVERVIEW_FIELDS
+    from app.public_home_snapshot import (
+        _CHART_FIELDS,
+        _OVERVIEW_FIELDS,
+        _SIGNALS_FIELDS,
+    )
 
     now = time.time()
     assert set(_payload("focus_overview", now)) == set(_OVERVIEW_FIELDS), (
@@ -2070,3 +2079,17 @@ def test_declared_field_sets_match_the_fixture_payloads() -> None:
         f"Fixture only: {sorted(set(_payload('focus_chart', now)) - set(_CHART_FIELDS))}. "
         f"Field set only: {sorted(set(_CHART_FIELDS) - set(_payload('focus_chart', now)))}."
     )
+    assert set(_payload("focus_signals", now)) == set(_SIGNALS_FIELDS), (
+        "_SIGNALS_FIELDS and the signals fixture disagree. "
+        f"Fixture only: {sorted(set(_payload('focus_signals', now)) - set(_SIGNALS_FIELDS))}. "
+        f"Field set only: {sorted(set(_SIGNALS_FIELDS) - set(_payload('focus_signals', now)))}."
+    )
+
+    # The provider-attribution change touched three payloads and no validator.
+    # Every per-ticker resource carries the attribution, so assert that rather
+    # than trusting the next reader to remember which three they were.
+    for resource in ("focus_overview", "focus_chart", "focus_signals"):
+        assert "price_provider" in _payload(resource, now), (
+            f"{resource} lost its price attribution; if that is deliberate, "
+            "drop it from the field set in the same change."
+        )
