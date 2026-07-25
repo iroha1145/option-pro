@@ -241,7 +241,10 @@ jobs:
           assert p["journal_mode"] == "wal", p
           assert p["integrity_check"] == "ok", p
           assert p["foreign_key_violations"] == 0, p
-          assert p["schema_version"] == "macro-conditions-v1", p
+          # Compare against the code's own constant, not a literal here: a copy
+          # in this file goes stale on the next migration and fails the gate on
+          # the migration rather than on anything being wrong.
+          assert p["schema_version"] == p["expected_schema_version"], p
           assert p["registered_factors"] == 30, p
           assert p["factor_rows"] == 30, p
           assert p["module_rows"] == 7, p

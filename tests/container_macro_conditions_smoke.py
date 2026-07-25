@@ -28,7 +28,7 @@ from app.services.macro_conditions.registry import (
     SCORING_VERSION,
     SERIES_BY_ID,
 )
-from app.services.macro_conditions.repository import MacroRepository
+from app.services.macro_conditions.repository import SCHEMA_VERSION, MacroRepository
 from app.worker.tasks import MacroConditionsTask
 
 
@@ -204,6 +204,11 @@ async def _run() -> dict:
         "integrity_check": integrity["integrity_check"],
         "foreign_key_violations": integrity["foreign_key_violations"],
         "schema_version": integrity["schema_version"],
+        # Reported so the gate can compare the running schema against the code's
+        # own constant instead of a literal copied into ci.yml -- that copy went
+        # stale the moment the version was bumped, and the gate failed on the
+        # migration rather than on anything being wrong.
+        "expected_schema_version": SCHEMA_VERSION,
         "registered_factors": len(FACTORS),
         "factor_rows": len(factors),
         "module_rows": len(modules),
