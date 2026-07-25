@@ -850,8 +850,12 @@ export default function Watchlist() {
 
           <div className="mt-4">
             {loading ? (
-              <div className="card-surface">
-                <SkeletonRows rows={6} />
+              /* 占位要把首屏那一段真正占满。
+                 追踪显示剩余的 CLS 0.186 就是这里：占位容器实测 153px，被 4,500px
+                 的真实列表替换，于是 y=670 到折线之间那一段可见区域的内容整体位移。
+                 min-h 让这段可见带在加载前后都是满的，替换时屏幕上没有东西移动。 */
+              <div className="card-surface min-h-[70vh]">
+                <SkeletonRows rows={10} />
               </div>
             ) : err ? (
               <div className="card-surface">
