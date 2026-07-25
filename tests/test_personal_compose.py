@@ -185,6 +185,7 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
         "stock_directory",
         "public_home",
         "earnings_analysis",
+        "macro_conditions",
         "focus_refresh",
         "strength_refresh",
         "breakout_refresh",

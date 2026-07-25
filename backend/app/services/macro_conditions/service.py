@@ -181,6 +181,9 @@ class MacroConditionsService:
             if is_backfill
             else self._incremental_start(coverage, floor=history_start)
         )
+        # Assigned up front: an upstream failure must still be able to summarise
+        # the run rather than raise on an unbound name.
+        fetched: dict[str, Any] = {}
         try:
             with client:
                 fetched, series_failed = client.fetch_many(

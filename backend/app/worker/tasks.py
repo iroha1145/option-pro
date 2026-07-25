@@ -2009,7 +2009,13 @@ def seconds_until_next_et_slot(
                 candidates.append(candidate)
     if not candidates:
         return default_seconds
-    delay = (min(candidates) - local).total_seconds()
+    # Subtract in UTC on purpose. Python ignores a shared tzinfo when
+    # subtracting two aware datetimes, so a same-zone subtraction returns the
+    # wall-clock difference and would fire an hour early on a daylight saving
+    # transition day. Converting first makes the delay real elapsed time.
+    delay = (
+        min(candidates).astimezone(timezone.utc) - local.astimezone(timezone.utc)
+    ).total_seconds()
     return max(1.0, min(86_400.0, delay))
 
 

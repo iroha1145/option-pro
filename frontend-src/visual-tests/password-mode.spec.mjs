@@ -196,7 +196,7 @@ function responseFor(pathname) {
   if (pathname === "/api/worker/status") {
     return {
       healthy: true,
-      tasks: ["focus_refresh", "strength_refresh", "breakout_refresh", "retention"].map(task_name => ({ task_name, enabled: true })),
+      tasks: ["focus_refresh", "strength_refresh", "breakout_refresh", "macro_conditions", "retention"].map(task_name => ({ task_name, enabled: true })),
     };
   }
   if (pathname === "/api/worker/actions") return { items: [] };
