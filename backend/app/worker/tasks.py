@@ -4,11 +4,12 @@ import asyncio
 import inspect
 import json
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 from app.data_paths import get_data_paths
 from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
@@ -26,6 +27,7 @@ DEFAULT_TASK_NAMES = (
     "stock_directory",
     "public_home",
     "earnings_analysis",
+    "macro_conditions",
     "focus_refresh",
     "strength_refresh",
     "breakout_refresh",
@@ -1971,6 +1973,171 @@ class BreakoutTask:
         )
 
 
+def seconds_until_next_et_slot(
+    now: datetime,
+    times_et: Sequence[str],
+    *,
+    default_seconds: float = 3_600.0,
+) -> float:
+    """Seconds to the next absolute America/New_York wall-clock slot.
+
+    Scheduling on absolute times rather than a fixed interval means the run
+    times never drift, and subtracting two zone-aware instants keeps daylight
+    saving transitions correct.
+    """
+
+    from zoneinfo import ZoneInfo
+
+    eastern = ZoneInfo("America/New_York")
+    local = now.astimezone(eastern)
+    candidates: list[datetime] = []
+    for value in times_et:
+        parts = str(value).split(":")
+        if len(parts) != 2 or not all(part.isdigit() for part in parts):
+            continue
+        hour, minute = (int(part) for part in parts)
+        if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+            continue
+        for offset in (0, 1):
+            candidate = (local + timedelta(days=offset)).replace(
+                hour=hour,
+                minute=minute,
+                second=0,
+                microsecond=0,
+            )
+            if candidate > local:
+                candidates.append(candidate)
+    if not candidates:
+        return default_seconds
+    delay = (min(candidates) - local).total_seconds()
+    return max(1.0, min(86_400.0, delay))
+
+
+class MacroConditionsTask:
+    """Optix 宏观环境 refresh — one task for both scheduled and manual runs.
+
+    A missing FRED key reports ``disabled`` with a specific reason rather than
+    failing, so the unified worker stays healthy while the feature is unconfigured.
+    A failed refresh leaves the previously published snapshot readable.
+    """
+
+    def __init__(
+        self,
+        owner_id: str,
+        *,
+        settings: Any | None = None,
+        personal_config: Any | None = None,
+        service_factory: Callable[..., Any] | None = None,
+        now: Callable[[], datetime] | None = None,
+    ) -> None:
+        self.owner_id = f"{owner_id}:macro"
+        self._settings = settings
+        self._personal_config = personal_config or get_personal_config()
+        self._service_factory = service_factory
+        self._now = now or (lambda: datetime.now(timezone.utc))
+        self._service: Any = None
+        # Only one macro refresh may run at a time inside this process; the
+        # worker action table enforces the same at the API boundary.
+        self._lock = threading.Lock()
+
+    def _config(self) -> Any:
+        return self._personal_config.macro
+
+    def _next_delay(self) -> float:
+        return seconds_until_next_et_slot(
+            self._now(),
+            tuple(self._config().refresh_times_et),
+        )
+
+    def _resolved_settings(self) -> Any:
+        if self._settings is not None:
+            return self._settings
+        from app.config import get_settings
+
+        return get_settings()
+
+    def _build_service(self) -> Any:
+        if self._service is not None:
+            return self._service
+        if self._service_factory is not None:
+            self._service = self._service_factory()
+            return self._service
+        from app.services.macro_conditions.repository import MacroRepository
+        from app.services.macro_conditions.service import (
+            MacroConditionsService,
+            MacroServiceConfig,
+        )
+
+        settings = self._resolved_settings()
+        repository = MacroRepository(settings.macro_conditions_db_path)
+        self._service = MacroConditionsService(
+            repository,
+            config=MacroServiceConfig.from_personal_config(self._personal_config),
+        )
+        return self._service
+
+    def _disabled(self, reason: str) -> TaskResult:
+        return TaskResult(
+            status="disabled",
+            details={"result": "disabled", "reason": reason},
+            next_delay_seconds=self._next_delay(),
+        )
+
+    async def _run(self, trigger: str) -> TaskResult:
+        config = self._config()
+        if not config.enabled:
+            return self._disabled("macro_disabled")
+        settings = self._resolved_settings()
+        if not bool(getattr(settings, "macro_conditions_configured", False)):
+            return self._disabled("fred_api_key_missing")
+        if not self._lock.acquire(blocking=False):
+            return TaskResult(
+                status="idle",
+                error_code="macro_refresh_in_progress",
+                details={"result": "skipped", "reason": "macro_refresh_in_progress"},
+                next_delay_seconds=self._next_delay(),
+            )
+        try:
+            service = self._build_service()
+            # SQLite plus one sequential upstream read: keep it off the loop.
+            outcome = await _call_local(service.refresh, trigger=trigger)
+        finally:
+            self._lock.release()
+        details = {
+            "result": str(outcome.get("status") or "unknown"),
+            "trigger": trigger,
+            "published": bool(outcome.get("published")),
+            "series_succeeded": int(outcome.get("series_succeeded") or 0),
+            "series_failed": int(outcome.get("series_failed") or 0),
+            "data_through": outcome.get("data_through"),
+            "composite_score": outcome.get("composite_score"),
+            "valid_module_count": outcome.get("valid_module_count"),
+            # Warnings name series ids and safe error codes only.
+            "warnings": list(outcome.get("warnings") or [])[:20],
+        }
+        error_codes = list(outcome.get("error_codes") or [])
+        if outcome.get("published") and not error_codes:
+            return TaskResult(
+                status="idle",
+                details=details,
+                next_delay_seconds=self._next_delay(),
+            )
+        return TaskResult(
+            status="degraded",
+            error_code=str(error_codes[0]) if error_codes else "macro_snapshot_unavailable",
+            details=details,
+            next_delay_seconds=self._next_delay(),
+        )
+
+    async def __call__(self) -> TaskResult:
+        return await self._run("scheduled")
+
+    async def run_for_actions(self, actions: Sequence[Mapping[str, Any]]) -> TaskResult:
+        """Owner-requested refresh. Shares this task and its exclusion lock."""
+
+        return await self._run("manual")
+
+
 class MaintenanceTask:
     def __init__(
         self,
@@ -2182,6 +2349,11 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         settings=settings,
         personal_config=config,
     )
+    macro_conditions = MacroConditionsTask(
+        owner_id,
+        settings=settings,
+        personal_config=config,
+    )
     return (
         TaskSpec(
             "breakout",
@@ -2256,6 +2428,19 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             max_backoff_seconds=3600.0,
         ),
         TaskSpec(
+            "macro_conditions",
+            macro_conditions,
+            # The loop re-arms on the next absolute America/New_York slot from
+            # every result, so this interval is only the first wake-up. The
+            # supervisor also wakes the loop early for a queued owner action, so
+            # scheduled and manual refreshes share this one task.
+            interval_seconds=3_600.0,
+            enabled=config.macro.enabled,
+            timeout_seconds=1_800.0,
+            failure_backoff_seconds=300.0,
+            max_backoff_seconds=3600.0,
+        ),
+        TaskSpec(
             "focus_refresh",
             FocusRefreshTask(),
             interval_seconds=86_400.0,
@@ -2297,6 +2482,7 @@ __all__ = [
     "EarningsAnalysisTask",
     "FocusTask",
     "FocusRefreshTask",
+    "MacroConditionsTask",
     "MaintenanceTask",
     "DEFAULT_TASK_NAMES",
     "PublicHomeTask",
@@ -2304,4 +2490,5 @@ __all__ = [
     "StockDirectoryTask",
     "StrengthRefreshTask",
     "build_default_tasks",
+    "seconds_until_next_et_slot",
 ]

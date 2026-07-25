@@ -48,6 +48,7 @@ SCHEDULED_TASK_NAMES = {
     "stock_directory",
     "public_home",
     "earnings_analysis",
+    "macro_conditions",
     "strength_refresh",
 }
 MANUAL_TASK_NAMES = {
@@ -1359,6 +1360,7 @@ def test_worker_once_records_scheduled_tasks_and_isolates_failure(
             lambda: success("earnings_analysis"),
             60,
         ),
+        TaskSpec("macro_conditions", lambda: success("macro_conditions"), 60),
         TaskSpec("strength_refresh", lambda: success("strength_refresh"), 60),
     )
     repository = WorkerStateRepository(tmp_path / "worker.db")
