@@ -70,7 +70,11 @@ export default function IndexTape() {
     <div className="marquee-track relative flex h-9 items-center overflow-hidden border-b border-line bg-paper-2/80">
       <div className="marquee-inner flex w-max animate-marquee items-center gap-8 whitespace-nowrap pl-4" aria-hidden={items.length === 0}>
         <TapeRow items={items} flashes={flashes} onOpen={openMarket} />
-        <TapeRow items={items} flashes={flashes} onOpen={openMarket} />
+        {/* 第二套只为无缝滚动存在：不能让键盘与读屏软件把每个指数访问两遍
+            （审计 P3-4）。aria-hidden 挡读屏，inert 挡 Tab 与点击。 */}
+        <div className="contents" aria-hidden="true" inert>
+          <TapeRow items={items} flashes={flashes} onOpen={openMarket} />
+        </div>
       </div>
       <span className="glass absolute right-0 top-0 z-10 flex h-full items-center border-l border-line px-3 text-micro font-medium text-ink-400">
         延迟行情
