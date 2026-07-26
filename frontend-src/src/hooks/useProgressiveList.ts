@@ -20,8 +20,6 @@ export interface ProgressiveList<T> {
   remaining: number;
   /** 挂载下一批。 */
   loadMore: () => void;
-  /** 一次性挂载全部（打印、Ctrl+F 查找等场景）。 */
-  loadAll: () => void;
   /**
    * 挂在列表末尾的哨兵元素上；进入视口即自动加载下一批。
    * 不支持 IntersectionObserver 时不会自动加载，此时「加载更多」按钮仍然可用。
@@ -54,8 +52,6 @@ export function useProgressiveList<T>(
     setLimit((current) => (current >= total ? current : current + step));
   }, [step, total]);
 
-  const loadAll = useCallback(() => setLimit(Number.MAX_SAFE_INTEGER), []);
-
   const sentinelRef = useCallback(
     (node: HTMLElement | null) => {
       observerRef.current?.disconnect();
@@ -85,7 +81,6 @@ export function useProgressiveList<T>(
     hasMore: limit < total,
     remaining: Math.max(0, total - limit),
     loadMore,
-    loadAll,
     sentinelRef,
   };
 }
