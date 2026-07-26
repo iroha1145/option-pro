@@ -58,8 +58,8 @@ function observedAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
   if (!Number.isFinite(ms) || ms < 0) return '—';
   const h = ms / 3_600_000;
-  if (h >= 1) return `${h >= 10 ? Math.round(h) : h.toFixed(1)} 小时前`;
-  return `${Math.max(1, Math.round(ms / 60_000))} 分钟前`;
+  if (h >= 1) return t('{n} 小时前', { n: h >= 10 ? Math.round(h) : h.toFixed(1) });
+  return t('{n} 分钟前', { n: Math.max(1, Math.round(ms / 60_000)) });
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -92,7 +92,7 @@ function MacroPriorityShadow({ ev }: { ev: BreakoutEventFull }) {
   return (
     <span
       className="flex items-center gap-1 text-micro text-ink-400"
-      title={`宏观适配 ${fit.toFixed(1)}（${tone ? t(MACRO_TONE_LABEL[tone]) : '—'}）。影子优先级 = 生产优先级 ${delta >= 0 ? '+' : '−'} ${Math.abs(delta).toFixed(1)}，上限 ±4。不改变突破质量分与事件生命周期。`}
+      title={t('宏观适配 {fit}（{tone}）。影子优先级 = 生产优先级 {sign} {delta}，上限 ±4。不改变突破质量分与事件生命周期。', { fit: fit.toFixed(1), tone: tone ? t(MACRO_TONE_LABEL[tone]) : '—', sign: delta >= 0 ? '+' : '−', delta: Math.abs(delta).toFixed(1) })}
     >
       <span>{t('宏观影子')}</span>
       <span className="font-mono tnum text-ink-600">{shadow.toFixed(1)}</span>
@@ -115,7 +115,7 @@ function PriorityRing({ score }: { score: number }) {
   const c = 2 * Math.PI * r;
   const frac = Math.max(0, Math.min(100, score)) / 100;
   return (
-    <div className="flex shrink-0 flex-col items-center" aria-label={`告警优先级 ${score}`}>
+    <div className="flex shrink-0 flex-col items-center" aria-label={t('告警优先级 {score}', { score })}>
       <div className="relative size-[64px]">
         <svg viewBox="0 0 64 64" className="size-full -rotate-90" aria-hidden="true">
           <circle cx="32" cy="32" r={r} fill="none" stroke="var(--line)" strokeWidth="4.5" />
@@ -220,7 +220,7 @@ function LifecycleStepper({ state }: { state: LifecycleState }) {
   }
 
   return (
-    <ol className="no-scrollbar flex items-start overflow-x-auto" aria-label={`生命周期：${LIFECYCLE_CN[state] ?? state}`}>
+    <ol className="no-scrollbar flex items-start overflow-x-auto" aria-label={t('生命周期：{state}', { state: LIFECYCLE_CN[state] ?? state })}>
       {items.map((it, i) => (
         <li key={i} className="flex flex-1 items-start last:flex-none">
           {it.el}
@@ -299,8 +299,8 @@ function buildMiniOption(bars: MiniBar[]): ChartOption {
         return (
           `<div style="font-family:${MONO};font-size:12px;line-height:19px">` +
           `<div style="color:#8A94B0">${fmtBarTime(b.t)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
-          `开 ${b.o.toFixed(2)} · 高 ${b.h.toFixed(2)}<br/>低 ${b.l.toFixed(2)} · ` +
-          `收 <b style="color:${color}">${b.c.toFixed(2)}</b></div>`
+          `${t('开 {o}', { o: b.o.toFixed(2) })} · ${t('高 {h}', { h: b.h.toFixed(2) })}<br/>${t('低 {l}', { l: b.l.toFixed(2) })} · ` +
+          `${t('收 {c}', { c: `<b style="color:${color}">${b.c.toFixed(2)}</b>` })}</div>`
         );
       },
     }),
@@ -407,7 +407,7 @@ function MiniKline({ ticker }: { ticker: string }) {
           </div>
         </div>
       ) : (
-        <ReactECharts option={option} ariaLabel={`${ticker} 15 分钟迷你 K 线图`} />
+        <ReactECharts option={option} ariaLabel={t('{ticker} 15 分钟迷你 K 线图', { ticker })} />
       )}
     </div>
   );
@@ -578,7 +578,7 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.56, ease: EASE_PAPER }}
-      aria-label={`${e.ticker} ${SETUP_CN[e.setup_type] ?? e.setup_type ?? ''} 首要信号大卡`}
+      aria-label={t('{ticker} {setup} 首要信号大卡', { ticker: e.ticker, setup: SETUP_CN[e.setup_type] ?? e.setup_type ?? '' })}
       className={cn('card-surface p-5', locate && 'bk-locate')}
     >
       {/* 顶行：状态 chips + 相对时间（lg 合并 meta 行）· 右侧首要信号徽章 */}

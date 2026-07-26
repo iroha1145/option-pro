@@ -122,7 +122,7 @@ export default function WeekScrubber({
                   role="button"
                   tabIndex={0}
                   aria-pressed={isSelected}
-                  aria-label={`${weekdayCN(date)} ${fmtMMDD(date)}，${dayItems.length} 条财报`}
+                  aria-label={__t('{weekday} {md}，{n} 条财报', { weekday: weekdayCN(date), md: fmtMMDD(date), n: dayItems.length })}
                   onClick={() => onSelectDay(isSelected ? null : date)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -170,7 +170,7 @@ export default function WeekScrubber({
                                 e.stopPropagation();
                                 onSelectTicker(it.ticker, date);
                               }}
-                              aria-label={`${it.ticker} ${timingLabel(it.timing)}财报，查看 AI 影响`}
+                              aria-label={__t('{ticker} {timing}财报，查看 AI 影响', { ticker: it.ticker, timing: timingLabel(it.timing) })}
                               className={cn(
                                 'flex h-6 items-center gap-1 rounded-xs border-l-2 px-1 transition-[transform,background-color] duration-fast hover:-translate-y-px',
                                 active
@@ -196,7 +196,7 @@ export default function WeekScrubber({
 
                   {/* 每日数量 */}
                   <span className="mt-1 font-mono text-[10px] leading-4 text-ink-300 tnum">
-                    {dayItems.length > 0 ? `${dayItems.length} 条` : ''}
+                    {dayItems.length > 0 ? __t('{n} 条', { n: dayItems.length }) : ''}
                   </span>
                 </motion.div>
               );

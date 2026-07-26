@@ -279,6 +279,9 @@ test('驱动因素映射同时接受新旧两种形状（部署窗口）', () =>
     pickS: (r, ...keys) => {
       for (const k of keys) if (typeof r[k] === 'string' && r[k]) return r[k];
       return null;
+    }, pickLabel: (r, ...keys) => {
+      for (const k of keys) if (typeof r[k] === 'string' && r[k]) return r[k];
+      return null;
     },
     map: null,
   };

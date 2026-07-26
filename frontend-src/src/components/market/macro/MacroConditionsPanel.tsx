@@ -110,7 +110,7 @@ export default function MacroConditionsPanel({
       if (Date.now() - started > REFRESH_FOLLOW_TIMEOUT_MS) {
         window.clearInterval(timer);
         setRefreshPhase('idle');
-        setRefreshNote('刷新仍未在预期时间内完成，面板会在下一次轮询更新。');
+        setRefreshNote(t('刷新仍未在预期时间内完成，面板会在下一次轮询更新。'));
         return;
       }
       conditionsQ.refresh();
@@ -125,7 +125,7 @@ export default function MacroConditionsPanel({
     if (refreshBaseline === null || snapshotStamp === null) return;
     if (snapshotStamp !== refreshBaseline) {
       setRefreshPhase('idle');
-      setRefreshNote('宏观快照已更新。');
+      setRefreshNote(t('宏观快照已更新。'));
     }
   }, [snapshotStamp, refreshBaseline, refreshPhase]);
 
@@ -142,15 +142,15 @@ export default function MacroConditionsPanel({
         setRefreshPhase('cooldown');
         setRefreshNote(
           result.cooldownSeconds
-            ? `刷新冷却中，${Math.round(result.cooldownSeconds)} 秒内只允许一次。`
+            ? t('刷新冷却中，{n} 秒内只允许一次。', { n: Math.round(result.cooldownSeconds) })
             : t('刷新冷却中。'),
         );
       } else if (result.reason === 'already_running') {
         setRefreshPhase('in_progress');
-        setRefreshNote('已有一次宏观刷新在进行，本次复用同一任务。');
+        setRefreshNote(t('已有一次宏观刷新在进行，本次复用同一任务。'));
       } else {
         setRefreshPhase('queued');
-        setRefreshNote('已排入 Worker 队列，完成后面板会在下一次轮询更新。');
+        setRefreshNote(t('已排入 Worker 队列，完成后面板会在下一次轮询更新。'));
       }
     } catch (error) {
       setRefreshPhase('failed');
@@ -273,7 +273,7 @@ export default function MacroConditionsPanel({
       {data.warnings.length > 0 && status !== 'active' && (
         <p className="rounded-md border border-warn-600 bg-warn-50 px-3 py-2 text-micro leading-relaxed text-warn-600">
           {t('上游告警：')}{data.warnings.slice(0, 4).join('、')}
-          {data.warnings.length > 4 ? ` 等 ${data.warnings.length} 项` : ''}{t('。 面板继续显示上一份有效快照。')}
+          {data.warnings.length > 4 ? t(' 等 {count} 项', { count: data.warnings.length }) : ''}{t('。 面板继续显示上一份有效快照。')}
         </p>
       )}
 
@@ -342,7 +342,7 @@ export default function MacroConditionsPanel({
       <SourceNote text={MACRO_SOURCE_NOTE} />
       <p className="-mt-2 text-micro leading-relaxed text-ink-400">
         {t('「按当前修订值回算」的历史区间使用今天能看到的最新修订数据，不代表当时市场已知的分数； 本地部署后每次实际抓取形成的快照才具备真实的点时语义。')}
-        {data.scoringVersion ? ` 评分版本 ${data.scoringVersion}。` : ''}
+        {data.scoringVersion ? t(' 评分版本 {version}。', { version: data.scoringVersion }) : ''}
       </p>
     </div>
   );

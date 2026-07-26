@@ -219,7 +219,7 @@ export default function ResultTable({
       {/* 分档角标说明 + 分页 */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-card-warm px-4 py-2.5">
         <p className="font-mono text-micro text-ink-400 tnum">
-          {t('每页 20 · 分档')} {rows.length > 0 ? `${tierOf(rows[0].strengthScore)}–${tierOf(rows[rows.length - 1].strengthScore)}（${TIER_RANGE[tierOf(rows[0].strengthScore)]}）` : '—'}
+          {t('每页 20 · 分档')} {rows.length > 0 ? t('{tierA}–{tierB}（{range}）', { tierA: tierOf(rows[0].strengthScore), tierB: tierOf(rows[rows.length - 1].strengthScore), range: TIER_RANGE[tierOf(rows[0].strengthScore)] }) : '—'}
         </p>
         <nav className="flex items-center gap-1" aria-label={t("分页")}>
           <button

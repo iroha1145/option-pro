@@ -160,7 +160,7 @@ function AiOptionInsight({
             disabled={!hasEvidence}
             title={
               hasEvidence
-                ? `使用当前期权链的 ${evidence.length} 条异动证据`
+                ? t('使用当前期权链的 {n} 条异动证据', { n: evidence.length })
                 : t('当前期权链没有达到异动阈值的合约')
             }
             className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white transition-[filter] duration-fast hover:brightness-105 disabled:cursor-not-allowed disabled:bg-ink-300"
@@ -220,7 +220,7 @@ function AiOptionInsight({
                 ? t('排队中…')
                 : job.progress === null
                   ? t('模型正在处理 · 暂无进度百分比')
-                  : `解读中 ${Math.round(job.progress)}%`}
+                  : t('解读中 {pct}%', { pct: Math.round(job.progress) })}
             </span>
             <button onClick={() => void cancel()} className="text-ink-400 hover:text-ink-600">{t('取消任务')}</button>
           </div>
@@ -372,7 +372,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
       <EmptyState
         icon="doc-quote"
         title={t("该标的暂无期权数据")}
-        description={`支持标的：${OPTION_SUPPORTED_LIST}`}
+        description={t('支持标的：{list}', { list: OPTION_SUPPORTED_LIST })}
         className="py-8"
       />
     );
@@ -396,7 +396,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
         description={
           loginExpired
             ? t('请重新登录后查看期权数据')
-            : `期权数据暂时获取不到${
+            : `${t('期权数据暂时获取不到')}${
                 retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''
               }`
         }
@@ -483,8 +483,8 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
       {chain && (
         <SourceNote
           className="mt-2"
-          text={`期权数据为延迟数据${
-            chain.asOf ? ` · 更新于 ${fmtRelative(chain.asOf)}` : ''
+          text={`${t('期权数据为延迟数据')}${
+            chain.asOf ? t(' · 更新于 {time}', { time: fmtRelative(chain.asOf) }) : ''
           }${chain.stale ? t(' · 暂未刷新，显示最近一次结果') : ''}`}
         />
       )}
@@ -527,9 +527,9 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
                       )}
                       title={
                         alert
-                          ? `成交异动 ${callBadge ?? putBadge ?? ''}${
+                          ? `${t('成交异动 {badge}', { badge: callBadge ?? putBadge ?? '' })}${
                               premiums.length > 0
-                                ? ` · 权利金流约 $${fmtCompact(Math.max(...premiums))}（估算）`
+                                ? t(' · 权利金流约 ${amount}（估算）', { amount: fmtCompact(Math.max(...premiums)) })
                                 : t(' · 权利金不可估算（缺买卖价）')
                             }`
                           : undefined

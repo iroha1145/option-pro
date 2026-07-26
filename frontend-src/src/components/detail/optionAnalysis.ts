@@ -112,20 +112,20 @@ function buildLeg(
 
   if (ratio !== null && ratio >= 3) {
     severity += 4;
-    reasons.push(`成交量/持仓量 ${ratio.toFixed(1)} 倍`);
+    reasons.push(t('成交量/持仓量 {ratio} 倍', { ratio: ratio.toFixed(1) }));
   }
   // 持仓量为 0 而当日有成交：全部是新开仓，量持比无穷大而不是 0。
   if (state.kind === 'new_opening') {
     severity += 4;
-    reasons.push(`持仓量为 0 且成交 ${volume} 张，全部为新开仓（量持比不适用）`);
+    reasons.push(t('持仓量为 0 且成交 {volume} 张，全部为新开仓（量持比不适用）', { volume }));
   }
   if (volume >= 5_000) {
     severity += 3;
-    reasons.push(`成交量 ${volume} 张`);
+    reasons.push(t('成交量 {volume} 张', { volume }));
   }
   if (premium >= 500_000) {
     severity += 2;
-    reasons.push(`按买卖中价估算权利金 ${Math.round(premium)} 美元`);
+    reasons.push(t('按买卖中价估算权利金 {premium} 美元', { premium: Math.round(premium) }));
   }
   if (volume >= 1_000 && openInterest !== null && openInterest > 0 && openInterest < 500) {
     severity += 2;
@@ -137,7 +137,7 @@ function buildLeg(
   }
   if (legMoneyness === 'otm' && distance > 0.1 && volume >= 2_000) {
     severity += 1;
-    reasons.push(`深度虚值约 ${(distance * 100).toFixed(0)}%`);
+    reasons.push(t('深度虚值约 {pct}%', { pct: (distance * 100).toFixed(0) }));
   }
   if (reasons.length === 0) return null;
 

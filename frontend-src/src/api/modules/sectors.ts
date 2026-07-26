@@ -1,6 +1,6 @@
 /** 板块域：真实目录、强度聚合与板块内 IV 横截面。 */
 import { get, mockOr, toQuery } from '../client';
-import { asRec, pickB, pickN, pickS, unwrap, type Rec } from '../live';
+import { asRec, pickB, pickN, pickS, pickLabel, unwrap, type Rec } from '../live';
 import { mapMacroFitDrivers } from '../macroFields';
 import type { MacroFitDriver } from '@/lib/macroFit';
 import * as fx2 from '@/mocks/fixtures2';
@@ -101,7 +101,7 @@ export function mapSectorCatalog(payload: unknown): SectorCatalogItem[] {
               .filter(Boolean);
       return {
         id: pickS(raw, 'id', 'sector_id') ?? '',
-        name: pickS(raw, 'name', 'sector_name') ?? '',
+        name: pickLabel(raw, 'name', 'sector_name') ?? '',
         tickers: tickers.length > 0 ? tickers : fixtureTickers,
       };
     })
@@ -128,7 +128,7 @@ function mapStrengthRow(raw: Rec, requestedPeriod: SectorPeriod): SectorStrength
     : [];
   return {
     sectorId,
-    name: pickS(raw, 'name', 'sector_name') ?? sectorId,
+    name: pickLabel(raw, 'name', 'sector_name') ?? sectorId,
     count: pickN(raw, 'count'),
     period,
     periodDays: pickN(raw, 'period_days'),
@@ -180,7 +180,7 @@ export function mapSectorIvRankingEnvelope(payload: unknown): SectorIvRankingEnv
       if (!ticker) return null;
       return {
         ticker,
-        name: pickS(raw, 'name') ?? ticker,
+        name: pickLabel(raw, 'name') ?? ticker,
         price: pickN(raw, 'price'),
         priceProvider: pickS(raw, 'price_provider', 'priceProvider'),
         sectorIvRank: pickN(raw, 'sector_iv_rank', 'sectorIvRank', 'ivPercentile'),
@@ -194,7 +194,7 @@ export function mapSectorIvRankingEnvelope(payload: unknown): SectorIvRankingEnv
   const sourceStatus = stale ? 'stale' : normalizeStatus(envelope.source_status);
   return {
     sectorId: pickS(envelope, 'sector_id') ?? '',
-    sectorName: pickS(envelope, 'sector_name') ?? '',
+    sectorName: pickLabel(envelope, 'sector_name') ?? '',
     rows,
     sourceStatus,
     stale,

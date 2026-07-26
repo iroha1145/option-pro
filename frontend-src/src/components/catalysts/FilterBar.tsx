@@ -282,7 +282,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
 function CountNote({ total, filtered }: { total: number | null; filtered: boolean }) {
   return (
     <p className="font-mono text-micro text-ink-400 tnum">
-      {total === null ? '—' : `${total} 条`}
+      {total === null ? '—' : t('{n} 条', { n: total })}
       {filtered && total !== null && <span className="text-ink-300"> {t('· 已过滤')}</span>}
     </p>
   );

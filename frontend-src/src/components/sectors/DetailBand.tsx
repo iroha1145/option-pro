@@ -52,7 +52,7 @@ export default function DetailBand({
       exit={{ height: 0, opacity: 0 }}
       transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
       className="overflow-hidden"
-      aria-label={`${sector.name} 板块详情`}
+      aria-label={t('{name} 板块详情', { name: sector.name })}
     >
       <div className="card-surface mt-6 p-4 md:p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-3">
@@ -73,7 +73,7 @@ export default function DetailBand({
 
         <dl className="mt-4 grid grid-cols-3 gap-2 sm:gap-4">
           <Metric
-            label={`${periodLabel(sector.period)}平均收益`}
+            label={t('{period}平均收益', { period: periodLabel(sector.period) })}
             value={sector.avgReturn !== null ? fmtPct(sector.avgReturn) : '—'}
             tone={
               sector.avgReturn === null

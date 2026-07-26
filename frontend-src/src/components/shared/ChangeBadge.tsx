@@ -47,7 +47,7 @@ export default function ChangeBadge({
   const label =
     direction === 'flat'
       ? points
-        ? `持平 0 ${pointsSuffix}`
+        ? t('持平 0 {suffix}', { suffix: pointsSuffix })
         : t('持平 0.00%')
       : points
         ? `${direction === 'up' ? t('上升') : t('下降')} ${magnitude}`

@@ -63,7 +63,7 @@ const IndexCard = memo(function IndexCard({
         'focus-visible:outline-none focus-visible:shadow-focus-ring',
         focused && 'shadow-[inset_2px_0_0_0_var(--brand-600),0_1px_2px_rgba(13,22,38,.05),inset_0_1px_0_rgba(255,255,255,.9)] ring-1 ring-brand-100',
       )}
-      aria-label={`${quote.name} ${quote.code} 详情`}
+      aria-label={t('{name} {code} 详情', { name: quote.name, code: quote.code })}
     >
       <div className="flex items-baseline justify-between gap-2">
         <p className="min-w-0">

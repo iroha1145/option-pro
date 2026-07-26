@@ -7,15 +7,15 @@ import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
 import SourceNote from '@/components/shared/SourceNote';
 import { cn } from '@/lib/utils';
-import { fmtRelative } from '@/lib/format';
+import { fmtRelativeShort } from '@/lib/format';
 import { t } from '../../i18n/core.ts';
 
 function formatDataLag(milliseconds: number | null): string {
   if (milliseconds === null) return '—';
   if (milliseconds < 1_000) return t('<1 秒');
-  if (milliseconds < 60_000) return `${Math.round(milliseconds / 1_000)} 秒`;
-  if (milliseconds < 3_600_000) return `${Math.round(milliseconds / 60_000)} 分`;
-  return `${(milliseconds / 3_600_000).toFixed(milliseconds < 36_000_000 ? 1 : 0)} 小时`;
+  if (milliseconds < 60_000) return t('{n} 秒', { n: Math.round(milliseconds / 1_000) });
+  if (milliseconds < 3_600_000) return t('{n} 分', { n: Math.round(milliseconds / 60_000) });
+  return t('{n} 小时', { n: (milliseconds / 3_600_000).toFixed(milliseconds < 36_000_000 ? 1 : 0) });
 }
 
 export default function SourcesPanel({ refreshToken }: { refreshToken: number }) {
@@ -92,7 +92,7 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
               </div>
               <div>
                 <p className="font-mono text-data-l text-ink-900 tnum" suppressHydrationWarning>
-                  {fmtRelative(s.lastFetchedAt).replace(' 分钟前', 'm').replace(' 小时前', 'h').replace(' 天前', 'd')}
+                  {fmtRelativeShort(s.lastFetchedAt)}
                 </p>
                 <p className="mt-0.5 text-micro text-ink-400">{t('最近抓取')}</p>
               </div>

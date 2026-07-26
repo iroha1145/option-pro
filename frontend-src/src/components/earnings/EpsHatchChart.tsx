@@ -74,7 +74,7 @@ export default function EpsHatchChart({ items, title = t('EPS 预期 vs 实际')
       <div className="mt-3 h-[240px]">
         <ReactECharts
           option={option}
-          ariaLabel={`EPS 预期与实际对照柱状图，共 ${rows.length} 只标的，斜纹为预估值，实心为实际值`}
+          ariaLabel={t('EPS 预期与实际对照柱状图，共 {n} 只标的，斜纹为预估值，实心为实际值', { n: rows.length })}
         />
       </div>
       <p className="mt-2 border-t border-line pt-2.5 text-micro text-ink-400">

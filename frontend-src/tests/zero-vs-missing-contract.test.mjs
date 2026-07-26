@@ -72,6 +72,12 @@ function loadModule(relativePath, extraRequires = {}) {
         if (typeof value === 'string' && value) return value;
       }
       return null;
+    }, pickLabel: (row, ...keys) => {
+      for (const key of keys) {
+        const value = asRec(row)[key];
+        if (typeof value === 'string' && value) return value;
+      }
+      return null;
     },
     unwrap: (body, ...keys) => {
       if (Array.isArray(body)) return body;

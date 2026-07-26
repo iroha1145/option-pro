@@ -15,7 +15,7 @@ export default function NotFound() {
     <EmptyState
       icon="search"
       title={t("页面不存在")}
-      description={`没有找到 ${location.pathname} 对应的页面。链接可能已失效或地址输入有误。`}
+      description={t('没有找到 {path} 对应的页面。链接可能已失效或地址输入有误。', { path: location.pathname })}
       action={
         <Link
           to="/watchlist"

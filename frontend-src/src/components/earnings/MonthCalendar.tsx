@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import type { EarningsRow } from './types';
 import { addDays, etToday, fmtMDCN, weekStartMonday } from './types';
-import { t } from '../../i18n/core.ts';
+import { t, getLocale } from '../../i18n/core.ts';
 
 interface MonthCalendarProps {
   items: EarningsRow[];
@@ -42,7 +42,17 @@ function shiftMonth(key: string, delta: number): string {
 
 /** 'YYYY-MM' → '2026年7月' */
 function monthTitleCN(key: string): string {
-  return `${Number(key.slice(0, 4))} 年 ${Number(key.slice(5, 7))} 月`;
+  const year = Number(key.slice(0, 4));
+  const mo = Number(key.slice(5, 7));
+  const locale = getLocale();
+  // 各语言的自然「年月」写法：en「Jul 2026」· ja「2026年7月」· zh「2026 年 7 月」。
+  if (locale === 'en') {
+    return new Date(Date.UTC(year, mo - 1, 1)).toLocaleDateString('en-US', {
+      year: 'numeric', month: 'short', timeZone: 'UTC',
+    });
+  }
+  if (locale === 'ja') return `${year}年${mo}月`;
+  return `${year} 年 ${mo} 月`;
 }
 
 export default function MonthCalendar({
@@ -169,14 +179,14 @@ export default function MonthCalendar({
             const shown = dayItems.slice(0, MAX_CHIPS);
             const extra = dayItems.length - shown.length;
             const dayNum = Number(date.slice(8, 10));
-            const label = date.slice(8, 10) === '01' ? `${Number(date.slice(5, 7))} 月 ${dayNum} 日` : String(dayNum);
+            const label = date.slice(8, 10) === '01' ? fmtMDCN(date) : String(dayNum);
             return (
               <motion.div
                 key={date}
                 role="button"
                 tabIndex={0}
                 aria-pressed={isSelected}
-                aria-label={`${fmtMDCN(date)}，${dayItems.length} 条财报`}
+                aria-label={t('{md}，{n} 条财报', { md: fmtMDCN(date), n: dayItems.length })}
                 onClick={() => onSelectDay(isSelected ? null : date)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -223,7 +233,7 @@ export default function MonthCalendar({
                           e.stopPropagation();
                           onSelectTicker(it.ticker, date);
                         }}
-                        aria-label={`${it.ticker} ${timingLabel(it.timing)}财报，查看 AI 影响`}
+                        aria-label={t('{ticker} {timing}财报，查看 AI 影响', { ticker: it.ticker, timing: timingLabel(it.timing) })}
                         className={cn(
                           'flex h-5 items-center gap-1 rounded-xs px-1 transition-colors duration-fast',
                           active ? 'bg-brand-100' : 'hover:bg-brand-50',

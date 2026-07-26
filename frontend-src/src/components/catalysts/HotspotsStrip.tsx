@@ -135,7 +135,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
               <span className="size-5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-hidden="true" />
               <p className="mt-2.5 text-body-s font-medium text-ink-800">{__t('热点计算中…')}</p>
               <p className="mt-1 font-mono text-micro text-ink-400 tnum">
-                {statusQ.data?.etaSeconds != null ? `预计 ${statusQ.data.etaSeconds}s` : __t('请稍候')}
+                {statusQ.data?.etaSeconds != null ? __t('预计 {n}s', { n: statusQ.data.etaSeconds }) : __t('请稍候')}
               </p>
             </div>
           ) : null}

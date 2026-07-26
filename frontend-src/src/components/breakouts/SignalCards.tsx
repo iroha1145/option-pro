@@ -77,7 +77,7 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
       }}
       role="button"
       tabIndex={0}
-      aria-label={`${ev.ticker} ${SETUP_CN[ev.setup_type] ?? ev.setup_type ?? ''} 信号卡，打开事件详情`}
+      aria-label={t('{ticker} {setup} 信号卡，打开事件详情', { ticker: ev.ticker, setup: SETUP_CN[ev.setup_type] ?? ev.setup_type ?? '' })}
       /* hover 上浮走 whileHover（framer 入场后内联 transform:none 会压掉 CSS hover 位移），阴影用 CSS */
       whileHover={{ y: -3, transition: { duration: 0.24, ease: 'easeOut' } }}
       className={cn(

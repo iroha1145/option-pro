@@ -111,7 +111,7 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
   const t = ticker.toUpperCase();
   return mockOr(
     () => {
-      if (!fx.hasTicker(t)) throw new ApiError(404, `代码 ${t} 不存在`);
+      if (!fx.hasTicker(t)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: t }));
       return fx.getStockDetail(t);
     },
     async () => {
@@ -189,7 +189,7 @@ export function getDetailChart(ticker: string, range: ChartRange, force = false)
   const t = ticker.toUpperCase();
   return mockOr(
     () => {
-      if (!fx.hasTicker(t)) throw new ApiError(404, `代码 ${t} 不存在`);
+      if (!fx.hasTicker(t)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: t }));
       return fx.getStockChartEx(t, range);
     },
     // 契约 range ∈ 5m|15m|1h|1d|1w：界面与后端周期一一对应。
@@ -437,7 +437,7 @@ export function getTrendBias(ticker: string, force = false): Promise<StockTrendB
   const t = ticker.toUpperCase();
   return mockOr<StockTrendBiasView>(
     () => {
-      if (!fx.hasTicker(t)) throw new ApiError(404, `代码 ${t} 不存在`);
+      if (!fx.hasTicker(t)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: t }));
       return mapTrendBiasResponse(fx.getStockTrendBias(t), t);
     },
     () =>
@@ -454,7 +454,7 @@ export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
   const t = ticker.toUpperCase();
   return mockOr(
     () => {
-      if (!fx.hasTicker(t)) throw new ApiError(404, `代码 ${t} 不存在`);
+      if (!fx.hasTicker(t)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: t }));
       const d = fx.getStockDetail(t);
       const b = fx.getStockTrendBias(t);
       // mock 模式下模拟「模型写的分析正文」，与真实 AI 输出同样不做界面翻译（如实保留原文）。

@@ -269,7 +269,7 @@ export default function Login() {
       const isAdmin = name.toLowerCase() === 'admin';
       toast.success(
         mode === 'register' ? t('账号已创建') : t('欢迎回来'),
-        isAdmin ? t('管理员已登录') : `已登录 ${name}`,
+        isAdmin ? t('管理员已登录') : t('已登录 {name}', { name }),
       );
       navigate('/watchlist', { replace: true });
     } catch (err) {

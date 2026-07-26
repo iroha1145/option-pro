@@ -60,7 +60,7 @@ function ZoneBand({ ev }: { ev: BreakoutEventFull }) {
   const zw = (a: number, b: number) => Math.max(1.5, x(b) - x(a));
 
   return (
-    <div aria-label={`支撑区 ${fmtPrice(sz.low)} 至 ${fmtPrice(sz.high)}，阻力区 ${fmtPrice(rz.low)} 至 ${fmtPrice(rz.high)}`}>
+    <div aria-label={__t('支撑区 {szLow} 至 {szHigh}，阻力区 {rzLow} 至 {rzHigh}', { szLow: fmtPrice(sz.low), szHigh: fmtPrice(sz.high), rzLow: fmtPrice(rz.low), rzHigh: fmtPrice(rz.high) })}>
       <div className="relative h-12 rounded-md border border-line bg-card-warm">
         {/* 支撑区带 */}
         <div
@@ -216,7 +216,7 @@ export default function EventDetail({
   return (
     <AnimatePresence>
       {event && (
-        <div ref={panelRef} className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={`${event.ticker} 突破事件详情`}>
+        <div ref={panelRef} className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={__t('{ticker} 突破事件详情', { ticker: event.ticker })}>
           <motion.div
             key="backdrop"
             initial={{ opacity: 0 }}

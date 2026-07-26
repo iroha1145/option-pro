@@ -120,7 +120,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             <Icon name="search" size={16} />
           </button>
 
-          <span className="hidden items-center gap-2 md:flex" aria-label={`市场时段：${status?.label ?? t('休市')}`}>
+          <span className="hidden items-center gap-2 md:flex" aria-label={t('市场时段：{label}', { label: status?.label ?? t('休市') })}>
             <SessionDot session={session} />
             <NyClock />
           </span>

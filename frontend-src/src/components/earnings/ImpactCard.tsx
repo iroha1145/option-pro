@@ -157,7 +157,7 @@ function QuotedSummary({ text, onOpenTicker }: { text: string; onOpenTicker: (t:
               key={i}
               onClick={() => onOpenTicker(p.slice(1))}
               className="font-semibold text-brand-600 underline decoration-brand-400/50 decoration-dotted underline-offset-4 transition-colors hover:text-brand-700"
-              aria-label={`查看 ${p.slice(1)} 详情`}
+              aria-label={__t('查看 {name} 详情', { name: p.slice(1) })}
             >
               {p}
             </button>
@@ -275,7 +275,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
   const loadImpact = useCallback(
     async (t: string): Promise<EarningsReportAnalysis | null> => {
       if (!reportDate) {
-        setErrorMsg('当前日历行缺少财报日期，无法绑定精确报告');
+        setErrorMsg(__t('当前日历行缺少财报日期，无法绑定精确报告'));
         setPhase('unavailable');
         return null;
       }
@@ -358,7 +358,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
       const next = await loadImpact(ticker);
       setPollAttempt((value) => value + 1);
       if (next?.result && !reportAnalysisNeedsPolling(next)) {
-        toast.success(`${ticker} AI 影响分析已生成`);
+        toast.success(__t('{ticker} AI 影响分析已生成', { ticker }));
       }
     }, delay);
     return () => window.clearTimeout(timer);
@@ -389,7 +389,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
       } else if (err?.bizCode === 'earnings_finalization_in_progress') {
         setPhase('finalizing');
       } else if (err?.code === 429) {
-        toast.error(__t('AI 任务队列已满'), `约 ${err.retryAfter ?? 60}s 后重试`);
+        toast.error(__t('AI 任务队列已满'), __t('约 {n}s 后重试', { n: err.retryAfter ?? 60 }));
       } else if (err?.code === 401) {
         setErrorMsg(err.message || __t('公开分析入口暂不可用'));
         setPhase('public-unavailable');
@@ -459,7 +459,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
             <LockedPanel
               iconClass="text-ink-300"
               title={__t("公开分析入口暂不可用")}
-              description={errorMsg || `${ticker ?? __t('该标的')} 的模型任务暂时无法提交，请稍后重试。`}
+              description={errorMsg || __t('{name} 的模型任务暂时无法提交，请稍后重试。', { name: ticker ?? __t('该标的') })}
             />
           )}
 
@@ -645,7 +645,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                 </div>
                 <p className="mt-1 font-mono text-micro text-ink-400">
                   {impact.outputLanguage}
-                  {impact.reportDate ? ` · 财报日 ${impact.reportDate}` : ''}
+                  {impact.reportDate ? __t(' · 财报日 {date}', { date: impact.reportDate }) : ''}
                 </p>
                 {isImpactFinalizing(impact) && !isFinalImpact(impact) && (
                   <div className="mt-3 rounded-md border border-ai-600/25 bg-ai-50 px-3 py-2.5" role="status" aria-live="polite">
@@ -692,7 +692,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                       <button
                         key={`${item.ticker}-${item.relation}`}
                         onClick={() => openTicker(item.ticker)}
-                        aria-label={`查看 ${item.ticker}：${meta.label}`}
+                        aria-label={__t('查看 {ticker}：{label}', { ticker: item.ticker, label: meta.label })}
                         className="w-full rounded-md border border-line bg-card-warm p-3 text-left transition-colors hover:border-brand-400/50 hover:bg-card"
                       >
                         <span className="flex min-w-0 items-center gap-2">

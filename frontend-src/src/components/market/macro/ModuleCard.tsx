@@ -58,7 +58,7 @@ export default function ModuleCard({
         <span className="font-mono text-micro text-ink-400 tnum">
           {module.validFactorCount === null
             ? t('有效因子 —')
-            : `有效因子 ${module.validFactorCount}/${module.totalFactorCount ?? '—'}`}
+            : t('有效因子 {valid}/{total}', { valid: module.validFactorCount, total: module.totalFactorCount ?? '—' })}
         </span>
       </div>
       <p className="mt-2 font-mono text-micro text-ink-400 tnum">

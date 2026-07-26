@@ -101,8 +101,8 @@ function buildOption(
           return (
             `<div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:19px">` +
             `<div style="color:#8A94B0">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
-            `<div>收 <b style="color:${color}">${fmtPrice(b.c)}</b></div>` +
-            `<div>量 ${fmtCompact(b.v)}</div></div>`
+            `<div>${t('收 {c}', { c: `<b style="color:${color}">${fmtPrice(b.c)}</b>` })}</div>` +
+            `<div>${t('量 {v}', { v: fmtCompact(b.v) })}</div></div>`
           );
         },
       }),
@@ -129,7 +129,7 @@ function buildOption(
                   data: [{ yAxis: prevClose }],
                   lineStyle: { color: CH.ink400, width: 1, type: [6, 4] as number[] },
                   label: {
-                    formatter: `昨收 ${fmtPrice(prevClose)}`,
+                    formatter: t('昨收 {p}', { p: fmtPrice(prevClose) }),
                     color: CH.ink400,
                     fontSize: 10,
                     fontFamily: '"IBM Plex Mono", monospace',
@@ -326,7 +326,7 @@ export default function KlineChart({
   );
 
   return (
-    <section className={className} aria-label={`${ticker} K 线图`}>
+    <section className={className} aria-label={t('{ticker} K 线图', { ticker })}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Segmented
           options={CHART_RANGES}
@@ -371,7 +371,7 @@ export default function KlineChart({
                 variant="empty"
                 image="/empty-chart.svg"
                 title={t("K 线暂不可用")}
-                description={`${ticker} · ${CHART_RANGES.find((item) => item.value === range)?.label ?? range}数据暂不可用，其他周期仍可切换`}
+                description={t('{ticker} · {range}数据暂不可用，其他周期仍可切换', { ticker, range: CHART_RANGES.find((item) => item.value === range)?.label ?? range })}
                 action={
                   <button
                     onClick={refresh}
@@ -391,7 +391,7 @@ export default function KlineChart({
               exit={{ opacity: 0, transition: { duration: 0.16 } }}
               className="absolute inset-0"
             >
-              <ReactECharts option={option} ariaLabel={`${ticker} ${range} ${mode === 'candle' ? t('K 线') : t('面积')}图`} />
+              <ReactECharts option={option} ariaLabel={t('{ticker} {range} {mode}图', { ticker, range, mode: mode === 'candle' ? t('K 线') : t('面积') })} />
             </motion.div>
           )}
         </AnimatePresence>

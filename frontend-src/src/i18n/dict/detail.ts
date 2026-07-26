@@ -33,10 +33,10 @@ export const DETAIL: Dict = {
   '开始分析': ['Start analysis', '分析開始'],
   '去登录': ['Sign in', 'サインイン'],
   '将综合': ['This will combine price/volume action, trend bias, and options pricing for', '銘柄'],
-  '的量价、趋势偏向与期权定价生成分析报告，消耗 1 次 AI 额度，是否继续？': ['into one analysis report, using 1 AI credit. Continue?', 'の値動き・トレンド偏向・オプション価格を総合し、分析レポートを生成します。AIクレジットを1回消費しますが、よろしいですか？'],
+  '的量价、趋势偏向与期权定价生成分析报告，消耗 1 次 AI 额度，是否继续？': ['into one analysis report, using 1 AI credit. Continue?', 'の値動き・出来高、トレンドバイアス、オプション価格を総合し、分析レポートを生成します。AIクレジットを1回消費しますが、よろしいですか？'],
   '排队中…': ['Queued…', 'キュー待ち…'],
   '模型正在处理 · 暂无进度百分比': ['Model is processing · No progress percentage available', 'モデル処理中 · 進捗率は未取得'],
-  '任务已完成，但未返回可显示的结构化摘要': ['Task completed, but returned no displayable structured summary', 'タスクは完了しましたが、表示可能な構造化サマリーが返されませんでした。'],
+  '任务已完成，但未返回可显示的结构化摘要': ['Task completed, but returned no displayable structured summary', 'ジョブは完了しましたが、表示可能な構造化サマリーが返されませんでした。'],
 
   /* src/components/detail/KeyStats.tsx */
   '今开': ['Open', '始値'],
@@ -48,7 +48,7 @@ export const DETAIL: Dict = {
   '52 周区间': ['52W Range', '52週レンジ'],
 
   /* src/components/detail/KlineChart.tsx */
-  ' · <span style="color:#E8930C">仅报价</span>': [' · <span style="color:#E8930C">Quote only</span>', ' · <span style="color:#E8930C">気配値のみ</span>'],
+  ' · <span style="color:#E8930C">仅报价</span>': [' · <span style="color:#E8930C">Quote only</span>', ' · <span style="color:#E8930C">現在値のみ</span>'],
   '开': ['Open', '始値'],
   '收': ['Close', '終値'],
   '涨跌': ['Chg', '騰落'],
@@ -57,13 +57,13 @@ export const DETAIL: Dict = {
   '面积': ['Area', '面グラフ'],
   '数据暂未刷新 · 显示最近一次结果（延迟行情）': ['Data hasn\'t refreshed yet · showing the last available result (delayed quotes)', 'データ未更新 · 直近の結果を表示（遅延データ）'],
   'K 线暂不可用': ['Candlestick chart unavailable', 'ローソク足チャートは利用できません'],
-  '为仅报价 bar': ['is a quote-only bar', '気配値のみのバー'],
+  '为仅报价 bar': ['is a quote-only bar', '現在値のみのバー'],
   '已收齐': ['closed', '確定'],
   '共 {n} 根 · 末根{status}': ['{n} bars total · last bar {status}', '合計{n}本 · 最終足は{status}'],
 
   /* src/components/detail/ManualStockPull.tsx */
   '日线': ['Daily', '日足'],
-  '基础行情': ['Basic quote', '基本相場'],
+  '基础行情': ['Basic quote', '基本株価データ'],
   '技术信号': ['Technical signals', 'テクニカルシグナル'],
   '拉取失败': ['Pull failed', '取得失敗'],
   '已拉取，保存失败': ['Pulled, but failed to save', '取得済み、保存に失敗'],
@@ -71,7 +71,7 @@ export const DETAIL: Dict = {
   '重新拉取': ['Pull again', '再取得'],
   '拉取真实数据': ['Pull live data', '実データを取得'],
   '获取该股票的最新价格、日线与技术指标': ['Fetch this stock\'s latest price, daily bars, and technical indicators', 'この銘柄の最新価格・日足・テクニカル指標を取得します'],
-  '正在更新基础行情、日线与技术信号 · 共 3 项': ['Updating basic quote, daily bars, and technical signals · 3 items total', '基本相場・日足・テクニカルシグナルを更新中 · 全3項目'],
+  '正在更新基础行情、日线与技术信号 · 共 3 项': ['Updating basic quote, daily bars, and technical signals · 3 items total', '基本株価データ・日足・テクニカルシグナルを更新中 · 全3項目'],
   '已完成': ['Done', '完了'],
   ' · 服务器保存失败，重启后可能失效': [' · Server-side save failed — may not survive a restart', ' · サーバー側保存に失敗、再起動後に失われる可能性があります'],
 
@@ -91,31 +91,31 @@ export const DETAIL: Dict = {
   '证据一致性中等': ['Medium evidence consistency', '根拠の一貫性：中'],
   '证据一致性低': ['Low evidence consistency', '根拠の一貫性：低'],
   'AI 期权解读': ['AI options insight', 'AIオプション解読'],
-  '当前期权链没有达到异动阈值的合约': ['No contracts in the current chain meet the unusual-activity threshold', '現在のオプションチェーンに取引急増のしきい値を満たす契約がありません'],
+  '当前期权链没有达到异动阈值的合约': ['No contracts in the current chain meet the unusual-activity threshold', '現在のオプションチェーンに取引急増のしきい値を満たす銘柄がありません'],
   '生成解读': ['Generate insight', '解読生成'],
   '暂无异动': ['No unusual activity', '取引急増なし'],
-  '当前到期日没有达到成交量、成交量/持仓量或估算权利金阈值的合约，未创建付费任务。': ['This expiration has no contracts meeting the volume, volume/open-interest, or estimated-premium thresholds, so no paid task was created.', 'この満期には、出来高・出来高/建玉比率・推定プレミアムのいずれのしきい値も満たす契約がなく、有料タスクは作成されませんでした。'],
+  '当前到期日没有达到成交量、成交量/持仓量或估算权利金阈值的合约，未创建付费任务。': ['This expiration has no contracts meeting the volume, volume/open-interest, or estimated-premium thresholds, so no paid task was created.', 'この限月には、出来高・出来高/建玉比率・推定プレミアムのいずれのしきい値も満たす銘柄がなく、有料ジョブは作成されませんでした。'],
   '将提交': ['This will submit real unusual-activity evidence for', '実際の取引急増の根拠を送信します。対象：'],
-  '当前到期日的': ['— current expiration,', 'の現在の満期。件数：'],
-  '条真实异动证据、标的价和到期日，消耗 1 次模型额度，是否继续？': ['pieces total, plus the underlying price and expiration date — using 1 model credit. Continue?', '件。加えて原資産価格と満期日も送信します。モデルクレジットを1回消費しますが、よろしいですか？'],
-  '任务失败：': ['Task failed: ', 'タスク失敗：'],
-  '缺少成交主动方，方向不可判定': ['Missing the trade\'s aggressor side, so direction can\'t be determined', '取引の仕掛け側が不明なため、方向を判定できません'],
+  '当前到期日的': ['— current expiration,', 'の現在の限月。件数：'],
+  '条真实异动证据、标的价和到期日，消耗 1 次模型额度，是否继续？': ['pieces total, plus the underlying price and expiration date — using 1 model credit. Continue?', '件。加えて原資産価格と限月も送信します。モデルクレジットを1回消費しますが、よろしいですか？'],
+  '任务失败：': ['Task failed: ', 'ジョブ失敗：'],
+  '缺少成交主动方，方向不可判定': ['Missing the trade\'s aggressor side, so direction can\'t be determined', '約定の主導側が不明なため、方向を判定できません'],
   '关键行权价': ['Key strikes', '注目の権利行使価格'],
   '风险说明：': ['Risk note: ', 'リスク注記：'],
-  '· 到期': ['· Expiration', '· 満期'],
+  '· 到期': ['· Expiration', '· 限月'],
   '· 输入证据': ['· Evidence input', '· 入力根拠'],
   '重新生成': ['Regenerate', '再生成'],
   '分析已完成，但没有返回可展示的结果。': ['Analysis finished, but returned no displayable result.', '分析は完了しましたが、表示可能な結果が返されませんでした。'],
-  '任务': ['Task ', 'タスク'],
+  '任务': ['Task ', 'ジョブ'],
   '该标的暂无期权数据': ['No options data for this ticker', 'この銘柄のオプションデータはありません'],
   '期权链请求较频繁': ['Too many options-chain requests', 'オプションチェーンのリクエストが多すぎます'],
   '期权数据暂不可用': ['Options data temporarily unavailable', 'オプションデータは一時的に利用できません'],
   '请重新登录后查看期权数据': ['Sign in again to view options data', 'オプションデータを見るには、もう一度サインインしてください'],
-  '暂无到期日数据': ['No expiration data', '満期日データがありません'],
-  '暂未获取到该标的的期权到期日': ['Couldn\'t fetch expiration dates for this ticker', 'この銘柄の満期日を取得できませんでした'],
-  '选择到期日': ['Select expiration', '満期日を選択'],
+  '暂无到期日数据': ['No expiration data', '限月データがありません'],
+  '暂未获取到该标的的期权到期日': ['Couldn\'t fetch expiration dates for this ticker', 'この銘柄の限月を取得できませんでした'],
+  '选择到期日': ['Select expiration', '限月を選択'],
   '标的价': ['Underlying price', '原資産価格'],
-  '· 标的现价不可用，价内侧与平值行未标注': ['· Underlying price unavailable — the ITM side and ATM row aren\'t marked', '· 原資産の現在値が取得できないため、ITM側とATM行は表示されません'],
+  '· 标的现价不可用，价内侧与平值行未标注': ['· Underlying price unavailable — the ITM side and ATM row aren\'t marked', '· 原資産の現在値が取得できないため、ITM側とATM行はマークされません'],
   ' · 暂未刷新，显示最近一次结果': [' · not yet refreshed — showing the last available result', ' · 未更新、直近の結果を表示'],
   'CALLS · 量/持 · 权利金': ['CALLS · Vol/OI · Premium', 'CALLS · 出来高/建玉 · プレミアム'],
   '行权价': ['Strike', '権利行使価格'],
@@ -124,7 +124,7 @@ export const DETAIL: Dict = {
   '成交异动': ['Unusual activity', '取引急増'],
   '浅底为价内（ITM）侧 · 异动标注 vol/oi &gt; 3（倍数为该侧比值）；持仓量为 0 而当日有成交标 ∞（全部新开仓）· 「—」表示上游未提供该字段，不代表 0 · 权利金按买卖中价估算 · 非收益承诺': [
     'Shaded background = the in-the-money (ITM) side · unusual-activity flag when vol/oi > 3 (the multiple is that side\'s ratio); open interest of 0 with same-day trading is flagged ∞ (entirely new positions) · "—" means the upstream feed didn\'t provide this field — it isn\'t 0 · premium is estimated from the bid/ask midpoint · not a promise of returns',
-    '背景が薄い方が価内（ITM）側 · 出来高/建玉比が3倍を超えると取引急増マーク（倍率はその側の比率）。建玉が0で当日約定があれば∞（すべて新規建玉）· 「—」は上流フィードがこの項目を提供しなかったことを示し、0 を意味しません · プレミアムは買値・売値の中値で推定 · リターンを約束するものではありません',
+    '背景が薄い方がイン・ザ・マネー（ITM）側 · 出来高/建玉比が3倍を超えると取引急増マーク（倍率はその側の比率）。建玉が0で当日約定があれば∞（すべて新規建玉）· 「—」は上流フィードがこの項目を提供しなかったことを示し、0を意味しません · プレミアムは買値・売値の中値で推定 · リターンを約束するものではありません',
   ],
 
   /* src/components/detail/SignalList.tsx */
@@ -135,7 +135,7 @@ export const DETAIL: Dict = {
   /* src/components/detail/TrendBiasPanel.tsx */
   '部分指标缺失': ['Some indicators missing', '一部指標が欠測'],
   '数据不足 · 结果仅供参考': ['Insufficient data · Result for reference only', 'データ不足 · 結果は参考値です'],
-  '趋势偏向分数据不足': ['Trend bias score data insufficient', 'トレンド偏向スコアのデータ不足'],
+  '趋势偏向分数据不足': ['Trend bias score data insufficient', 'トレンドバイアススコアのデータ不足'],
   '暂无技术信号数据': ['No technical signal data', 'テクニカルシグナルのデータがありません'],
   '暂无可展示的真实信号因子': ['No real signal factors to show', '表示できる実測シグナル要因がありません'],
   '分项由该股实测信号换算': ['Sub-scores are derived from this stock\'s measured signals', '各項目はこの銘柄の実測シグナルから算出'],
@@ -148,12 +148,12 @@ export const DETAIL: Dict = {
   '周线': ['Weekly', '週足'],
 
   /* src/components/detail/optionAnalysis.ts */
-  '成交量较高且持仓量较低，待后续持仓量确认': ['Volume is relatively high while open interest is relatively low — pending open-interest confirmation', '出来高が高い一方で建玉が少なく、建玉の確認待ち'],
+  '成交量较高且持仓量较低，待后续持仓量确认': ['Volume is relatively high while open interest is relatively low — pending open-interest confirmation', '出来高が多い一方で建玉が少なく、建玉の確認待ち'],
   '持仓量不可用，无法计算量持比': ['Open interest unavailable — can\'t compute the volume/open-interest ratio', '建玉が取得できないため、出来高/建玉比を計算できません'],
-  '缺少成交主动方，无法判断真实交易方向': ['Missing the trade\'s aggressor side — can\'t determine the actual trade direction', '取引の仕掛け側が不明なため、実際の取引方向を判定できません'],
+  '缺少成交主动方，无法判断真实交易方向': ['Missing the trade\'s aggressor side — can\'t determine the actual trade direction', '約定の主導側が不明なため、実際の取引方向を判定できません'],
 
   /* src/components/detail/useAiJob.ts */
-  '任务查询失败': ['Failed to check task status', 'タスクの状態確認に失敗しました'],
+  '任务查询失败': ['Failed to check task status', 'ジョブの状態確認に失敗しました'],
   'AI 输出仅供研究 · 影响分为方向性估计 · 非收益预测 · 置信度非胜率': ['AI output is for research only · Impact score is a directional estimate, not a return forecast · Confidence is not a win rate', 'AI出力は研究目的のみです · インパクトスコアは方向性の推定であり、リターン予測ではありません · 信頼度は勝率ではありません'],
 
   /* src/pages/StockDetail.tsx */

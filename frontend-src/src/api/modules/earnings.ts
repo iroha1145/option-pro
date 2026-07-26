@@ -1,6 +1,6 @@
 /** 财报域：upcoming / refresh / AI 影响分析 */
 import { get, post, mockOr, toQuery } from '../client';
-import { asRec, pickN, pickS, unwrap } from '../live';
+import { asRec, pickN, pickS, pickLabel, unwrap } from '../live';
 import * as fx2 from '@/mocks/fixtures2';
 import type { EarningsItem } from '../types';
 import { t } from '../../i18n/core.ts';
@@ -84,7 +84,7 @@ export function mapUpcoming(body: unknown): EarningsItem[] {
       market_cap: marketCap,
       marketCap,
       ticker: rowTicker,
-      name: pickS(r, 'name') ?? rowTicker,
+      name: pickLabel(r, 'name') ?? rowTicker,
       date: rowDate,
       timing,
       epsEstimate: pickN(r, 'epsEstimate', 'eps_estimate'),
@@ -156,7 +156,7 @@ export function normalizeLiveEarningsImpact(body: unknown): EarningsImpactResult
   const impacted = rawImpacted.map((value) => {
     const item = asRec(value);
     const itemTicker = pickS(item, 'ticker');
-    const name = pickS(item, 'name');
+    const name = pickLabel(item, 'name');
     const relation = pickS(item, 'relation');
     const direction = pickS(item, 'direction');
     const reason = pickS(item, 'reason');
@@ -269,7 +269,7 @@ function normalizeMockEarningsImpact(body: unknown): EarningsImpactResult {
         const change = pickN(item, 'changePct', 'change_pct');
         return {
           ticker: (pickS(item, 'ticker') ?? '').toUpperCase(),
-          name: pickS(item, 'name') ?? pickS(item, 'ticker') ?? '',
+          name: pickLabel(item, 'name') ?? pickS(item, 'ticker') ?? '',
           relation: 'opposing',
           direction: change == null ? 'mixed' : change > 0 ? 'bullish' : change < 0 ? 'bearish' : 'mixed',
           reason: pickS(item, 'reason', 'relation') ?? t('本地演示关联项'),

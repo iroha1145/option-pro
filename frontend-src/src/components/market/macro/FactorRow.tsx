@@ -32,7 +32,7 @@ function StatusNote({ factor }: { factor: MacroFactor }) {
   return (
     <span className="text-micro text-warn-600">
       {label}
-      {detail ? `（${detail}）` : ''}
+      {detail ? t('（{detail}）', { detail }) : ''}
     </span>
   );
 }

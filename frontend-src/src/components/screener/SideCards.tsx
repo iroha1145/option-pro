@@ -63,7 +63,7 @@ export function TierHistogram({
               animate={{ scale: active ? 1.04 : 1 }}
               transition={SPRING_POP}
               aria-pressed={active}
-              title={selectable ? `只看 ${t} 档` : __t('D 档（<60）计入「全部」')}
+              title={selectable ? __t('只看 {tier} 档', { tier: t }) : __t('D 档（<60）计入「全部」')}
               className={cn(
                 'group relative flex h-full flex-1 flex-col items-center justify-end gap-1 rounded-t-[4px] border-b-2 pb-0.5 transition-colors duration-fast',
                 active ? 'border-brand-600 bg-brand-50' : 'border-transparent hover:bg-paper-2',

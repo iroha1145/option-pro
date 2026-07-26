@@ -39,7 +39,7 @@ function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) 
         className="relative h-1.5 w-28 rounded-pill"
         style={{ background: 'linear-gradient(90deg, rgba(229,72,77,.35), rgba(233,231,224,.6) 50%, rgba(14,159,110,.35))' }}
         role="img"
-        aria-label={`净影响 ${sign}${Math.abs(value).toFixed(2)}（非收益）`}
+        aria-label={t('净影响 {sign}{value}（非收益）', { sign, value: Math.abs(value).toFixed(2) })}
       >
         <span className="absolute left-1/2 top-1/2 h-2.5 w-px -translate-x-1/2 -translate-y-1/2 bg-ink-300" aria-hidden="true" />
         <span
@@ -125,7 +125,7 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
           title={t("当前窗口暂无已分析出方向性影响的股票")}
           description={
             rows && rows.length > 0
-              ? `${rows.length} 只候选股票的新闻尚未分析或影响为中性，暂不上榜`
+              ? t('{n} 只候选股票的新闻尚未分析或影响为中性，暂不上榜', { n: rows.length })
               : t('放宽时间窗或清除过滤后重试')
           }
         />
@@ -141,7 +141,7 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
             transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(i * 0.035, 0.42) }}
             onClick={() => navigate(`/stock/${r.ticker}`)}
             className="group flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 text-left transition-colors duration-fast hover:bg-paper-2/70 sm:px-5"
-            aria-label={`查看 ${r.ticker} 股票详情`}
+            aria-label={t('查看 {ticker} 股票详情', { ticker: r.ticker })}
           >
             <span className="flex min-w-0 flex-1 items-center gap-2.5 sm:w-40 sm:flex-none">
               <TickerLogo ticker={r.ticker} size={28} />

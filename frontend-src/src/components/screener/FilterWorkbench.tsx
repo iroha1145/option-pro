@@ -51,8 +51,8 @@ function TierSegmented({
   return (
     <div
       role="tablist"
-      aria-label={`强度分档 · 计数基于${scopeNote}`}
-      title={`分档计数基于${scopeNote}`}
+      aria-label={__t('强度分档 · 计数基于{scope}', { scope: scopeNote })}
+      title={__t('分档计数基于{scope}', { scope: scopeNote })}
       className="no-scrollbar inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-md border border-line bg-card-warm p-0.5"
     >
       {TIER_OPTIONS.map((o) => {

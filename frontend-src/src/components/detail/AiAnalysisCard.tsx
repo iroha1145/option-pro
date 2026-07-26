@@ -104,7 +104,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
                     ? t('排队中…')
                     : job.progress === null
                       ? t('模型正在处理 · 暂无进度百分比')
-                      : `模型分析中 ${Math.round(job.progress)}%`}
+                      : t('模型分析中 {pct}%', { pct: Math.round(job.progress) })}
                 </span>
                 <button onClick={() => void cancel()} className="text-ink-400 transition-colors hover:text-ink-600">
                   {t('取消任务')}

@@ -60,12 +60,52 @@ function classify(node) {
   if (ts.isImportDeclaration(p) || ts.isExportDeclaration(p) || ts.isImportTypeNode(p)) return 'unsafe';
   if (ts.isCallExpression(p)) {
     const fnText = p.expression.getText();
-    if (/localeCompare|includes|indexOf|startsWith|endsWith|has|get|set|delete|split|replace|match|test|Set$|Map$/.test(fnText))
+    // 锚定到方法名末段，避免 `setRefreshNote`/`getStatus` 这类业务函数因子串
+    // 命中 `set`/`get` 被误判为「安全位置」而放走其中文参数（曾漏包一批 setter）。
+    if (/(^|\.)(localeCompare|includes|indexOf|startsWith|endsWith|has|get|set|delete|split|replace|match|test|Set|Map)$/.test(fnText))
       return 'unsafe';
     return 'display';
   }
   return 'display';
 }
+
+/**
+ * 该节点是否位于「按 locale 分支产出各语言自然写法」的函数内——这类模板串
+ * （en「7/26」· ja「7月26日」· zh「7 月 26 日」）是有意的，不该被 t() 包。
+ * 判据：最近的函数体文本里出现 getLocale()。见 HistoryRail.dayLabel、
+ * earnings/types.fmtMDCN、MonthCalendar 的年月标题。
+ */
+function inLocaleBranch(node) {
+  for (let p = node.parent; p; p = p.parent) {
+    if (
+      ts.isFunctionDeclaration(p) ||
+      ts.isFunctionExpression(p) ||
+      ts.isArrowFunction(p) ||
+      ts.isMethodDeclaration(p)
+    ) {
+      if (/getLocale\s*\(/.test(p.getText())) return true;
+    }
+  }
+  return false;
+}
+
+/** 是否在 throw 语句内——诊断性 Error（数据损坏时抛给开发者，非 UI 文案）不翻译。 */
+function inThrow(node) {
+  for (let p = node.parent; p; p = p.parent) if (ts.isThrowStatement(p)) return true;
+  return false;
+}
+
+/**
+ * 模板串按 file:line 豁免：detail/api.ts 的 signalReading / createSignalAnalysisJob
+ * 生成的是 mock 模式下的「模型分析正文」，与真实 AI 输出一样刻意不翻译（同 KNOWN_
+ * TYPE_DISCRIMINANTS 第 2 类）。行号来自这些 mock 拼接语句。
+ */
+const KNOWN_TEMPLATE_EXEMPT_LINES = new Set([
+  'components/detail/api.ts:324',
+  'components/detail/api.ts:463',
+  'components/detail/api.ts:464',
+  'components/detail/api.ts:465',
+]);
 
 // ── 收集 dict/*.ts 里的全部词条（跳过 types.ts / index.ts 本身） ────────────
 const dictFiles = (await readdir(dictDir)).filter((f) => /\.ts$/.test(f) && !['types.ts', 'index.ts'].includes(f));
@@ -184,6 +224,15 @@ for (const file of allFiles) {
       !KNOWN_TYPE_DISCRIMINANTS.has(`${rel}:${lineOf(node)} ${node.text}`)
     ) {
       (isExempt ? mocksGaps : unsafeDisplayGaps).push({ file: rel, line: lineOf(node), text: node.text });
+    } else if (ts.isTemplateExpression(node) && !inLocaleBranch(node) && !inThrow(node)) {
+      // 带插值的模板串 `前缀${x}后缀`：codemod 只看纯字面量，看不到 head/middle/
+      // tail 段——一批「市场时段：${label}」「前往${label}页」式漏包正藏在这里。
+      const parts = [node.head, ...node.templateSpans.map((s) => s.literal)];
+      for (const part of parts) {
+        if (CJK.test(part.text) && part.text.trim() && !KNOWN_TEMPLATE_EXEMPT_LINES.has(`${rel}:${lineOf(part)}`)) {
+          (isExempt ? mocksGaps : unsafeDisplayGaps).push({ file: rel, line: lineOf(part), text: part.text.trim() });
+        }
+      }
     }
     ts.forEachChild(node, visit);
   })(sf);
@@ -195,6 +244,19 @@ test('every t(msgid) call site has a non-empty EN + JA dictionary entry', () => 
     if (!merged.has(msgid)) missing.push(`${JSON.stringify(msgid)} — first used at ${sites[0].file}:${sites[0].line}`);
   }
   assert.deepEqual(missing, [], `${missing.length} msgid(s) called via t() have no dictionary entry`);
+});
+
+test('每个含 {占位符} 的词条都有字面 t() 调用点（漏接线的机器可查信号）', () => {
+  // 带占位符的词条只可能经字面 t('…{n}…', {…}) 使用，不可能来自 t(动态变量)。
+  // 因此「词条在、字面调用不在」= 接线漏了（fmtRelative 的 '{n} 分钟前' 一族、
+  // '市场时段：{label}' 都曾这样漏掉）。companies/mocks 是动态数据源，豁免。
+  const orphaned = [];
+  for (const [msgid, meta] of merged) {
+    if (!/\{[a-zA-Z_]\w*\}/.test(msgid)) continue;
+    if (meta.file === 'companies.ts' || meta.file === 'mocks.ts') continue;
+    if (!calledMsgids.has(msgid)) orphaned.push(`${JSON.stringify(msgid)} (${meta.file})`);
+  }
+  assert.deepEqual(orphaned, [], `${orphaned.length} 个占位符词条没有任何字面 t() 调用点——可能是接线遗漏`);
 });
 
 test('no un-wrapped Chinese literal remains in a display position outside src/mocks/', () => {

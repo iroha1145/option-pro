@@ -110,7 +110,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
         onUpdate(n);
       })
       .catch(() => {
-        if (!dead) setLoadError('暂时打不开这条新闻的详情');
+        if (!dead) setLoadError(__t('暂时打不开这条新闻的详情'));
       });
     return () => {
       dead = true;

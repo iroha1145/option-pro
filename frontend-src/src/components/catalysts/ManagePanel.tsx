@@ -50,7 +50,7 @@ const TASK_CN: Record<string, string> = {
 
 function errText(e: unknown): string {
   if (e instanceof ApiError) {
-    const cooldown = e.retryAfter != null ? `（${Math.ceil(e.retryAfter)}s 后可重试）` : '';
+    const cooldown = e.retryAfter != null ? __t('（{n}s 后可重试）', { n: Math.ceil(e.retryAfter) }) : '';
     return `${e.message}${cooldown}`;
   }
   return e instanceof Error ? e.message : __t('请求失败');
@@ -150,7 +150,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       setBusyOp(`r-${op}`);
       try {
         const t = await adminApi.catalystRefresh(op);
-        toast.info(`${label}刷新已入队`, t.reason ?? undefined);
+        toast.info(__t('{label}刷新已入队', { label }), t.reason ?? undefined);
         // 轻量轮询（最多 5 次），完成后刷新页面数据
         if (t.requestId) {
           for (let i = 0; i < 5; i += 1) {
@@ -158,12 +158,12 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
             try {
               const st = await adminApi.catalystRefreshStatus(t.requestId);
               if (st.status === 'completed') {
-                toast.success(`${label}刷新完成`);
+                toast.success(__t('{label}刷新完成', { label }));
                 onDataRefreshed?.();
                 break;
               }
               if (st.status === 'failed') {
-                toast.error(`${label}刷新失败`, st.reason ?? undefined);
+                toast.error(__t('{label}刷新失败', { label }), st.reason ?? undefined);
                 break;
               }
             } catch {
@@ -172,7 +172,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
           }
         }
       } catch (e) {
-        toast.error(`${label}刷新未受理`, errText(e));
+        toast.error(__t('{label}刷新未受理', { label }), errText(e));
       } finally {
         setBusyOp(null);
       }
@@ -185,12 +185,12 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       setBusyOp(`w-${action}`);
       try {
         const t = await adminApi.workerAction(action);
-        if (t.reason === 'cooldown') toast.info(`${label}仍在冷却`, __t('稍后自动执行或重试'));
-        else if (t.reason === 'already_running') toast.info(`${label}正在执行`, __t('复用现有任务'));
-        else toast.success(`${label}刷新已入队`);
+        if (t.reason === 'cooldown') toast.info(__t('{label}仍在冷却', { label }), __t('稍后自动执行或重试'));
+        else if (t.reason === 'already_running') toast.info(__t('{label}正在执行', { label }), __t('复用现有任务'));
+        else toast.success(__t('{label}刷新已入队', { label }));
         adminApi.workerStatus().then(setWorker, () => undefined);
       } catch (e) {
-        toast.error(`${label}未受理`, errText(e));
+        toast.error(__t('{label}未受理', { label }), errText(e));
       } finally {
         setBusyOp(null);
       }
@@ -208,7 +208,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       });
       setDoc(next);
       setDraft({ manual: next.toggles.manualAnalysisEnabled ?? false, scheduled: next.toggles.scheduledAnalysisEnabled ?? false });
-      toast.success(__t('运行设置已保存'), `版本 v${next.version}`);
+      toast.success(__t('运行设置已保存'), __t('版本 v{version}', { version: next.version }));
     } catch (e) {
       if (e instanceof ApiError && (e.bizCode === 'version_conflict' || e.code === 409)) {
         toast.error(__t('设置已被其他会话修改'), __t('已重新载入最新版本'));
@@ -234,7 +234,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       const next = await adminApi.rollbackRuntimeSettings(doc.version, prev.version);
       setDoc(next);
       setDraft({ manual: next.toggles.manualAnalysisEnabled ?? false, scheduled: next.toggles.scheduledAnalysisEnabled ?? false });
-      toast.success(`已回滚到 v${prev.version}`, `当前版本 v${next.version}`);
+      toast.success(__t('已回滚到 v{version}', { version: prev.version }), __t('当前版本 v{version}', { version: next.version }));
     } catch (e) {
       toast.error(__t('回滚失败'), errText(e));
     } finally {
@@ -315,7 +315,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                 ) : null}
               </SectionCard>
 
-              <SectionCard title={__t("运行设置")} hint={doc ? `版本 v${doc.version} · 乐观锁保护` : __t('正在读取运行设置')}>
+              <SectionCard title={__t("运行设置")} hint={doc ? __t('版本 v{version} · 乐观锁保护', { version: doc.version }) : __t('正在读取运行设置')}>
                 {docErr ? (
                   <p className="text-micro text-ink-400">{__t('运行设置不可用 ·')} {docErr}</p>
                 ) : draft ? (

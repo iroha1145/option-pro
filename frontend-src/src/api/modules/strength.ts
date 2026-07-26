@@ -2,7 +2,7 @@
 import { get, mockOr, toQuery } from '../client';
 import { sharedGlobalGet } from '../sharedRead';
 import { marketGet } from '../marketRead';
-import { asRec, pickB, pickN, pickS, unwrap, type Rec } from '../live';
+import { asRec, pickB, pickN, pickS, pickLabel, unwrap, type Rec } from '../live';
 import { mapMacroFitDrivers } from '../macroFields';
 import * as fx from '@/mocks/fixtures';
 import type {
@@ -113,8 +113,8 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
   ];
   return {
     ticker,
-    name: pickS(r, 'name') ?? ticker,
-    sector: pickS(r, 'sector_name', 'primary_sector_name', 'sector') ?? '',
+    name: pickLabel(r, 'name') ?? ticker,
+    sector: pickLabel(r, 'sector_name', 'primary_sector_name', 'sector') ?? '',
     sectorId: pickS(r, 'sector_id', 'primary_sector_id') ?? undefined,
     price,
     // 契约键为 change_pct；缺失如实为 null（UI 显「—」，不显 +0.00%）
@@ -257,8 +257,8 @@ function mapProfiles(d: unknown): StrengthProfile[] {
     const hasW = ['trend', 'momentum', 'volume', 'volatility'].some((k) => pickN(w, k) !== null);
     return {
       id: pickS(p, 'id') ?? '',
-      name: pickS(p, 'name') ?? '',
-      description: pickS(p, 'description') ?? '',
+      name: pickLabel(p, 'name') ?? '',
+      description: pickLabel(p, 'description') ?? '',
       ...(hasW
         ? {
             weights: {
@@ -276,7 +276,7 @@ function mapProfiles(d: unknown): StrengthProfile[] {
 /** 契约 sectors:[{id,name}]（中文名）→ SectorOption[]；live 板块过滤下发 id */
 function mapSectors(d: unknown): SectorOption[] {
   return unwrap(d, 'sectors')
-    .map((s) => ({ id: pickS(s, 'id', 'sector_id') ?? '', name: pickS(s, 'name') ?? '' }))
+    .map((s) => ({ id: pickS(s, 'id', 'sector_id') ?? '', name: pickLabel(s, 'name') ?? '' }))
     .filter((s) => s.id !== '' && s.name !== '');
 }
 

@@ -132,7 +132,7 @@ export default function HistoryRail({
           <span className="text-body-s font-semibold text-ink-900">
             {t('历史事件回溯 ·')}{' '}
             <span className="font-mono tnum">
-              {total !== null ? `共 ${total} 条` : `已加载 ${loadedCount} 条${serverHasMore ? '+' : ''}`}
+              {total !== null ? t('共 {n} 条', { n: total }) : t('已加载 {n} 条{suffix}', { n: loadedCount, suffix: serverHasMore ? '+' : '' })}
             </span>
           </span>
           {stale && (
@@ -213,7 +213,11 @@ export default function HistoryRail({
                               onOpenDetail(e);
                             }
                           }}
-                          aria-label={`${e.ticker} ${SETUP_CN[e.setup_type] ?? e.setup_type ?? ''}，${LIFECYCLE_CN[e.lifecycle_state] ?? e.lifecycle_state ?? ''}，打开事件详情`}
+                          aria-label={t('{ticker} {setup}，{state}，打开事件详情', {
+                            ticker: e.ticker,
+                            setup: SETUP_CN[e.setup_type] ?? e.setup_type ?? '',
+                            state: LIFECYCLE_CN[e.lifecycle_state] ?? e.lifecycle_state ?? '',
+                          })}
                           className="flex min-h-[52px] cursor-pointer items-center gap-2.5 px-3 py-1.5 transition-colors duration-fast hover:bg-paper-2"
                         >
                           {/* 时间 */}

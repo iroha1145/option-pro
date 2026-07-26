@@ -47,6 +47,9 @@ function liveHelpers() {
     pickS: (row, ...keys) => {
       for (const key of keys) if (typeof row[key] === 'string' && row[key]) return row[key];
       return null;
+    }, pickLabel: (row, ...keys) => {
+      for (const key of keys) if (typeof row[key] === 'string' && row[key]) return row[key];
+      return null;
     },
   };
 }

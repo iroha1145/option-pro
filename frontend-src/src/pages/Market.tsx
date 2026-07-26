@@ -66,7 +66,7 @@ export default function Market() {
   const bias: TrendBias | null = useMemo(() => {
     const classify = (v: number): TrendBias['label'] => (v >= 60 ? '偏多' : v <= 40 ? '偏空' : '中性');
     if (mean !== null) {
-      return { label: classify(mean), basis: `推导依据：六维形态均值 ${mean.toFixed(1)}（≥60 偏多 · ≤40 偏空）` };
+      return { label: classify(mean), basis: t('推导依据：六维形态均值 {mean}（≥60 偏多 · ≤40 偏空）', { mean: mean.toFixed(1) }) };
     }
     return null;
   }, [mean]);

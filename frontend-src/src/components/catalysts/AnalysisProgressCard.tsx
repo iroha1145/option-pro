@@ -32,12 +32,12 @@ function progressHeadline(progress: NewsAnalysisProgress): string {
   if (progress.status === 'completed') return t('最近一批任务已结束');
   if (progress.currentIndex !== null) {
     return progress.currentPhase === 'provider_queued'
-      ? `第 ${progress.currentIndex} / ${progress.total} 条已提交，等待供应方执行`
-      : `正在处理第 ${progress.currentIndex} / ${progress.total} 条`;
+      ? t('第 {index} / {total} 条已提交，等待供应方执行', { index: progress.currentIndex, total: progress.total })
+      : t('正在处理第 {index} / {total} 条', { index: progress.currentIndex, total: progress.total });
   }
-  if (progress.inProgress > 1) return `${progress.inProgress} 条任务正在处理`;
+  if (progress.inProgress > 1) return t('{n} 条任务正在处理', { n: progress.inProgress });
   if (progress.awaitingValidation > 0 && progress.waiting === 0) {
-    return `${progress.awaitingValidation} 条结果等待简体中文校验`;
+    return t('{n} 条结果等待简体中文校验', { n: progress.awaitingValidation });
   }
   return t('任务正在队列中推进');
 }
@@ -110,7 +110,7 @@ function OwnerAnalysisProgressCard() {
         </div>
         <p className="font-mono text-micro text-ink-400 tnum">
           {sourceLabel}
-          {progress.lastUpdatedAt ? ` · 更新 ${fmtRelative(progress.lastUpdatedAt)}` : ''}
+          {progress.lastUpdatedAt ? t(' · 更新 {time}', { time: fmtRelative(progress.lastUpdatedAt) }) : ''}
         </p>
       </div>
 

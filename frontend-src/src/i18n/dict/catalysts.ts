@@ -98,7 +98,7 @@ export const CATALYSTS: Dict = {
   '发酵': ['Building', '醸成'],
   '主升': ['Surging', '本格上昇'],
   '退潮': ['Fading', '沈静化'],
-  '日内': ['Intraday', '当日中'],
+  '日内': ['Intraday', '日中'],
   '数日': ['A few days', '数日'],
   '数周': ['A few weeks', '数週間'],
   '跨度未定': ['Timeframe unclear', '期間未定'],
@@ -115,7 +115,7 @@ export const CATALYSTS: Dict = {
   '启动': ['Started', '開始'],
   '· 生成': ['· generated', '· 生成'],
   '· 样本': ['· sample', '· サンプル'],
-  '证据不足': ['Insufficient evidence', '証拠不足'],
+  '证据不足': ['Insufficient evidence', '根拠不足'],
   '置信': ['Confidence', '信頼度'],
   '焦点周期计算已提交': ['Focus cycle submitted', 'フォーカスサイクルの計算を送信しました'],
   '完成后自动刷新': ["This will refresh automatically when it's done", '完了後に自動的に更新されます'],
@@ -144,7 +144,7 @@ export const CATALYSTS: Dict = {
   '触发新的市场焦点周期？': ['Trigger a new market focus cycle?', '新しい市場フォーカスサイクルを実行しますか？'],
   '将基于当前热点准备区生成一次综合分析，消耗模型预算并计入每日额度；若当前版本已分析过，将明确重算一次。': [
     'This runs one comprehensive analysis based on the current hotspot staging area. It consumes model budget and counts toward the daily quota; if this version has already been analyzed, it will force a one-time recompute.',
-    '現在のホットスポット準備エリアをもとに、総合分析を1回実行します。モデル予算を消費し、1日の上限にも加算されます。このバージョンがすでに分析済みの場合は、明示的に1回だけ再計算します。',
+    '現在の注目テーマ準備エリアをもとに、総合分析を1回実行します。モデル予算を消費し、1日の上限にも加算されます。このバージョンがすでに分析済みの場合は、改めて1回だけ再計算します。',
   ],
   '开始计算': ['Start', '計算を開始'],
 
@@ -159,7 +159,7 @@ export const CATALYSTS: Dict = {
   '热点主题带，可横向滚动': ['Hotspot theme strip, scroll horizontally', '注目テーマ帯、横スクロール可能'],
   '热点计算中…': ['Computing hotspots…', '注目テーマを計算中…'],
   '请稍候': ['Please wait', 'しばらくお待ちください'],
-  '当前窗口暂无热点分组': ['No hotspot groups in the current window', '現在のウィンドウには注目テーマがありません'],
+  '当前窗口暂无热点分组': ['No hotspot groups in the current window', '現在の時間枠には注目テーマがありません'],
 
   /* ---------------- ManagePanel.tsx ---------------- */
   '新闻流': ['News feed', 'ニュースフィード'],
@@ -197,7 +197,7 @@ export const CATALYSTS: Dict = {
   '后台任务': ['Background jobs', 'バックグラウンドジョブ'],
   '进入统一后台队列；重复点击复用现有任务（30s 冷却）': [
     'Enters the shared background queue; clicking again reuses the existing job (30s cooldown)',
-    '共通のバックグラウンドキューに入ります。連続クリックは既存ジョブを再利用します（30秒のクールダウン）',
+    '共通のバックグラウンドキューに入ります。連続クリック時は既存のジョブを再利用します（30秒のクールダウン）',
   ],
   '后台状态不可用 ·': ['Background status unavailable ·', 'バックグラウンド状態を取得できません ·'],
   '运行设置': ['Runtime settings', '実行設定'],
@@ -212,7 +212,7 @@ export const CATALYSTS: Dict = {
 
   /* ---------------- NewsDrawer.tsx ---------------- */
   '机制 ·': ['Mechanism ·', 'メカニズム ·'],
-  '任务排队中': ['Job queued', 'ジョブ待機中'],
+  '任务排队中': ['Job queued', 'ジョブはキュー待ち'],
   '模型分析中': ['Model analyzing', 'モデル分析中'],
   '等待服务端状态': ['Waiting for server status', 'サーバー状態を待機中'],
   'AI 分析已完成': ['AI analysis complete', 'AI分析が完了しました'],
@@ -258,7 +258,7 @@ export const CATALYSTS: Dict = {
   '取消分析任务？': ['Cancel the analysis job?', '分析ジョブを取消しますか？'],
   '任务取消后可重新发起；已产生的排队资源将释放。': [
     'You can resubmit after cancelling; any queued resources already used will be released.',
-    'キャンセル後に再度実行できます。すでに確保されていたキュー資源は解放されます。',
+    'キャンセル後に再度実行できます。すでに確保されていたキューリソースは解放されます。',
   ],
 
   /* ---------------- SourcesPanel.tsx ---------------- */
@@ -276,7 +276,7 @@ export const CATALYSTS: Dict = {
   '需 Owner 登录': ['Owner sign-in required', 'オーナーのサインインが必要です'],
   '未配置模型密钥': ['Model API key not configured', 'モデルAPIキー未設定'],
   '运行设置不可用': ['Runtime settings unavailable', '実行設定を取得できません'],
-  '只读模式': ['Read-only mode', '閲覧のみモード'],
+  '只读模式': ['Read-only mode', '閲覧専用モード'],
   '手动分析已关闭': ['Manual analysis is off', '手動分析は無効です'],
   '后台 worker 不可用': ['Background worker unavailable', 'バックグラウンドワーカーを利用できません'],
   '今日 Token 预算已用完': ["Today's token budget is used up", '本日のトークン予算を使い切りました'],
@@ -304,7 +304,7 @@ export const CATALYSTS: Dict = {
   '条 / 24h': ['/ 24h', '件 / 24h'],
   '新闻与经济日历持续收录；每条新闻标注原始来源；滞后表示数据更新到了什么时候；影响分与置信度为 AI 估计': [
     'News and the economic calendar are continuously collected; each item is tagged with its original source; lag shows how current the data is; impact and confidence scores are AI estimates.',
-    'ニュースと経済カレンダーは継続的に収集されています。各ニュースには元のソースが付記されます。遅延はデータがいつまで更新されているかを示します。影響スコアと信頼度はAIによる推定値です。',
+    'ニュースと経済カレンダーは継続的に収集されています。各ニュースには元のソースが付記されます。遅延はデータがいつまで更新されているかを示します。インパクトスコアと信頼度はAIによる推定値です。',
   ],
 
   /* ---------------- StocksPanel.tsx ---------------- */
@@ -313,7 +313,7 @@ export const CATALYSTS: Dict = {
   '影响汇总暂不可用': ['Impact summary unavailable', 'インパクト集計を取得できません'],
   '当前窗口暂无已分析出方向性影响的股票': [
     'No stocks with directional impact analyzed in the current window',
-    '現在のウィンドウでは、方向性のある影響が分析された銘柄はありません',
+    '現在の時間枠では、方向性のある影響が分析された銘柄はありません',
   ],
   '放宽时间窗或清除过滤后重试': [
     'Widen the time window or clear filters, then try again',
@@ -359,7 +359,7 @@ export const CATALYSTS: Dict = {
   '中文标题等待生成': ['Chinese title pending generation', '中国語タイトルは生成待ちです'],
   '中文摘要等待生成': ['Chinese summary pending generation', '中国語要約は生成待ちです'],
   '热点标题等待中文分析': ['Hotspot title awaiting Chinese analysis', '注目テーマのタイトルは中国語分析待ちです'],
-  '组事件': ['event groups', 'イベントグループ'],
+  '组事件': ['event groups', '件のイベントグループ'],
   '新闻采集流': ['News collection stream', 'ニュース収集ストリーム'],
   '经济日历流': ['Economic calendar stream', '経済カレンダーストリーム'],
   '并购': ['M&A', 'M&A'],
@@ -379,7 +379,7 @@ export const CATALYSTS: Dict = {
   '任务创建响应缺少 job_id': ['Job creation response is missing job_id', 'ジョブ作成レスポンスに job_id がありません'],
 
   /* ---------------- bits.tsx ---------------- */
-  '过期': ['Stale', '古い'],
+  '过期': ['Stale', '期限切れ'],
 
   /* ---------------- focusCycleRequest.ts ---------------- */
   '市场焦点周期编号无效': ['Invalid market focus cycle ID', '市場フォーカスサイクルIDが無効です'],

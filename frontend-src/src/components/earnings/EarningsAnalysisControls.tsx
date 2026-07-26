@@ -45,7 +45,7 @@ function readRunSummary(action: WorkerAction): EarningsRunSummary | null {
 }
 
 function summaryText(summary: EarningsRunSummary): string {
-  return `范围内 ${summary.eligible} · 新建 ${summary.queued} · 已存在 ${summary.existing} · 无效 ${summary.invalid}`;
+  return t('范围内 {eligible} · 新建 {queued} · 已存在 {existing} · 无效 {invalid}', { eligible: summary.eligible, queued: summary.queued, existing: summary.existing, invalid: summary.invalid });
 }
 
 async function requestEarningsAnalysis(): Promise<WorkerAction> {

@@ -51,7 +51,7 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                   key={d.date}
                   role="listitem"
                   onClick={() => onJumpDay(d.date)}
-                  aria-label={`${fmtMDCN(d.date)} ${weekdayCN(d.date)}，${n} 条财报，跳转`}
+                  aria-label={t('{date} {weekday}，{n} 条财报，跳转', { date: fmtMDCN(d.date), weekday: weekdayCN(d.date), n })}
                   className="group relative flex h-full min-w-0 flex-1 items-end"
                 >
                   {/* tooltip：当日代码列表 */}

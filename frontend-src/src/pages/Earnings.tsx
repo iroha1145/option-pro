@@ -139,7 +139,7 @@ export default function Earnings() {
     if (refreshing) return;
     if (cooldownRemain > 0) {
       setRefreshStatus('cooldown');
-      toast.info(`刷新冷却中，${cooldownRemain}s 后可再次刷新`);
+      toast.info(t('刷新冷却中，{n}s 后可再次刷新', { n: cooldownRemain }));
       return;
     }
     setRefreshing(true);
@@ -155,12 +155,12 @@ export default function Earnings() {
       }
       if (fresh.refreshStatus === 'cooldown') {
         setRefreshStatus('cooldown');
-        toast.info(`刷新冷却中，${retrySeconds}s 后可再次刷新`);
+        toast.info(t('刷新冷却中，{n}s 后可再次刷新', { n: retrySeconds }));
         return;
       }
       setRefreshStatus('refreshed');
       setFlashSignal((s) => s + 1);
-      toast.success(`日历已更新 · ${fresh.items.length} 条`);
+      toast.success(t('日历已更新 · {n} 条', { n: fresh.items.length }));
     } catch (e) {
       // 失败且带缓存 → _stale 横幅（failed_stale）；无缓存走 503 空态
       if (q.data) {
@@ -280,7 +280,7 @@ export default function Earnings() {
           <button
             onClick={() => void onRefresh()}
             disabled={refreshing || cooldownRemain > 0}
-            title={cooldownRemain > 0 ? `冷却中，${cooldownRemain}s 后可刷新` : t('手动刷新财报日历')}
+            title={cooldownRemain > 0 ? t('冷却中，{n}s 后可刷新', { n: cooldownRemain }) : t('手动刷新财报日历')}
             className={cn(
               'flex h-9 items-center gap-2 rounded-md border px-3 text-caption transition-colors duration-fast',
               refreshing || cooldownRemain > 0

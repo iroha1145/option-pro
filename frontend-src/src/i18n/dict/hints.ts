@@ -25,13 +25,13 @@ export const HINTS: Dict = {
   '中期分（0–100）': ['Mid-term score (0–100)', '中期スコア（0–100）'],
   '五项加权：63 日收益 28%、相对 SPY 63 日强度 27%、均线多头排列 20%、距 50 日均线 15%、MACD 方向 10%。衡量约一个季度维度的动量与相对强弱。': [
     'Five weighted inputs: 63-day return 28%, 63-day relative strength versus SPY 27%, bullish moving-average alignment 20%, distance from the 50-day MA 15%, MACD direction 10%. It measures momentum and relative strength over roughly one quarter.',
-    '5項目の加重：63日リターン 28%、SPY に対する63日相対強度 27%、移動平均の上昇配列 20%、50日移動平均との乖離 15%、MACD の方向 10%。約1四半期のスパンでのモメンタムと相対的な強さを測ります。',
+    '5項目の加重：63日リターン 28%、SPY に対する63日相対強度 27%、移動平均線の順配列（パーフェクトオーダー） 20%、50日移動平均との乖離 15%、MACD の方向 10%。約1四半期のスパンでのモメンタムと相対的な強さを測ります。',
   ],
 
   '长期分（0–100）': ['Long-term score (0–100)', '長期スコア（0–100）'],
   '五项加权：126 日收益 26%、距 200 日均线 24%、252 日收益 22%、距历史高点距离 18%、均线排列 10%。高分代表长期趋势完好且接近前高。': [
     'Five weighted inputs: 126-day return 26%, distance from the 200-day MA 24%, 252-day return 22%, distance from the all-time high 18%, moving-average alignment 10%. A high score means the long-term trend is intact and price is close to its prior high.',
-    '5項目の加重：126日リターン 26%、200日移動平均との乖離 24%、252日リターン 22%、過去最高値からの距離 18%、移動平均の配列 10%。高スコアは長期トレンドが崩れておらず、前回高値に近いことを意味します。',
+    '5項目の加重：126日リターン 26%、200日移動平均との乖離 24%、252日リターン 22%、過去最高値からの距離 18%、移動平均線の順配列 10%。高スコアは長期トレンドが崩れておらず、前回高値に近いことを意味します。',
   ],
 
   '突破质量（0–100）': ['Breakout quality (0–100)', 'ブレイクアウトの質（0–100）'],
@@ -94,8 +94,8 @@ export const HINTS: Dict = {
 
   '风险偏好（0–100）': ['Risk appetite (0–100)', 'リスク選好（0–100）'],
   '八项加权：VIX 水平 18% 与一年分位 7%、HYG−TLT 15% 与 HYG−IEF 10% 信用价差、10 年期利率 20 日变化 10%、IEF−TLT 久期 10%、SPY 回撤 18%、QQQ 回撤 12%。VIX>25、信用走弱、深回撤等极端另计罚分（罚分再以 35% 折入总分）。': [
-    'Eight weighted inputs: VIX level 18% and its one-year percentile 7%, the HYG−TLT 15% and HYG−IEF 10% credit spreads, the 20-day change in the 10-year yield 10%, IEF−TLT duration 10%, SPY drawdown 18%, QQQ drawdown 12%. Extremes such as VIX above 25, deteriorating credit, and deep drawdowns are counted as a separate penalty, which is folded into the total at 35%.',
-    '8項目の加重：VIX の水準 18% と1年パーセンタイル 7%、HYG−TLT 15% と HYG−IEF 10% のクレジット・スプレッド、10年金利の20日変化 10%、IEF−TLT のデュレーション 10%、SPY のドローダウン 18%、QQQ のドローダウン 12%。VIX が25超、クレジットの悪化、深いドローダウンといった極端な状態は別途ペナルティとして計上し、35%を総合スコアに反映します。',
+    'Eight weighted inputs: VIX level 18% and its one-year percentile 7%, the credit spreads HYG−TLT (15%) and HYG−IEF (10%), the 20-day change in the 10-year yield 10%, IEF−TLT duration 10%, SPY drawdown 18%, QQQ drawdown 12%. Extremes such as VIX above 25, deteriorating credit, and deep drawdowns are counted as a separate penalty, which is folded into the total at 35%.',
+    '8項目の加重：VIX の水準 18% と1年パーセンタイル 7%、HYG−TLT 15% と HYG−IEF 10% のクレジット・スプレッド、10年金利の20日変化 10%、IEF−TLT のデュレーション 10%、SPY のドローダウン 18%、QQQ のドローダウン 12%。VIX が25超、クレジットの悪化、深いドローダウンといった極端な状態は別途ペナルティとして計上し、その35%相当を総合スコアから差し引きます。',
   ],
 
   '突破质量 · 基底（0–100）': ['Breakout quality · base (0–100)', 'ブレイクアウトの質 · ベース（0–100）'],
@@ -112,11 +112,11 @@ export const HINTS: Dict = {
 
   '数据可信度（0–100）': ['Data reliability (0–100)', 'データの信頼性（0–100）'],
   '衡量这条信号背后的数据完整度：基底/确认/流动性三族的数据覆盖率均值，再与市场形态置信度按 3:1 合成；缺市场形态时整体打 85 折。它不评价股票好坏，只评价证据是否齐全。': [
-    'Measures how complete the data behind this signal is: the mean data coverage of the base, confirmation, and liquidity families, blended 3:1 with market-shape confidence. When market shape is missing, the whole score is scaled to 85%. It does not judge the stock — only whether the evidence is complete.',
-    'このシグナルの裏側にあるデータの完全性を測ります：ベース・確認・流動性の3ファミリーのデータカバレッジの平均を取り、市場フォーメーションの信頼度と3:1で合成します。市場フォーメーションが欠ける場合は全体を85%に縮めます。銘柄の良し悪しではなく、証拠が揃っているかだけを評価します。',
+    'Measures how complete the data behind this signal is: the mean data coverage of the base, confirmation, and liquidity families, blended 3:1 with market-regime confidence. When the market regime is missing, the whole score is scaled to 85%. It does not judge the stock — only whether the evidence is complete.',
+    'このシグナルの裏側にあるデータの完全性を測ります：ベース・確認・流動性の3ファミリーのデータカバレッジの平均を取り、市場レジームの信頼度と3:1で合成します。市場レジームが欠ける場合は全体を85%に縮めます。銘柄の良し悪しではなく、証拠が揃っているかだけを評価します。',
   ],
 
-  '追高风险（0–100，越高越危险）': ['Chase risk (0–100, higher is riskier)', '追いかけリスク（0–100、高いほど危険）'],
+  '追高风险（0–100，越高越危险）': ['Chase risk (0–100, higher is riskier)', '高値追いリスク（0–100、高いほど危険）'],
   '与其他分数方向相反：距枢轴价的涨幅 30%、距 VWAP 20%、跳空/ATR 15%、上影线 15%、短线加速 10%、流动性风险 10%。超过 50 的部分会按 25% 直接从优先级分里扣除。': [
     'This score runs in the opposite direction from the others: gain from the pivot price 30%, distance from VWAP 20%, gap/ATR 15%, upper wick 15%, short-term acceleration 10%, liquidity risk 10%. Whatever exceeds 50 is deducted from the priority score at 25%.',
     '他のスコアとは向きが逆です：ピボット価格からの上昇率 30%、VWAP との乖離 20%、ギャップ/ATR 15%、上ヒゲ 15%、短期の加速 10%、流動性リスク 10%。50を超えた分は25%換算で優先度スコアから直接差し引かれます。',
@@ -125,7 +125,7 @@ export const HINTS: Dict = {
   '优先级分（0–100）': ['Priority score (0–100)', '優先度スコア（0–100）'],
   '排序用总分：突破质量 35% + 个股强度 25% + 市场契合 15% + 板块契合 10% + 数据可信度 10% + 事件新鲜度 5%，再减去追高罚分（0.25 × max(追高风险−50, 0)）。': [
     'The total used for ranking: breakout quality 35% + stock strength 25% + market fit 15% + sector fit 10% + data reliability 10% + event freshness 5%, minus the chase penalty (0.25 × max(chase risk − 50, 0)).',
-    '並び替えに使う総合スコア：ブレイクアウトの質 35% + 個別銘柄の強度 25% + 市場適合度 15% + セクター適合度 10% + データの信頼性 10% + イベントの新しさ 5%。そこから追いかけペナルティ（0.25 × max(追いかけリスク−50, 0)）を差し引きます。',
+    '並び替えに使う総合スコア：ブレイクアウトの質 35% + 個別銘柄の強度 25% + 市場適合度 15% + セクター適合度 10% + データの信頼性 10% + イベントの新しさ 5%。そこから高値追いペナルティ（0.25 × max(高値追いリスク−50, 0)）を差し引きます。',
   ],
 
   '突破质量 · 综合（0–100）': ['Breakout quality · composite (0–100)', 'ブレイクアウトの質 · 総合（0–100）'],
@@ -187,13 +187,13 @@ export const HINTS: Dict = {
   '顶部风险分（0–100）': ['Topping-risk score (0–100)', '天井リスク・スコア（0–100）'],
   '把各指标的「顶部证据分」按六类因子加权聚合：价格过热（均线距离/RSI/20 日涨幅）、宽度背离、期权情绪（VIX 及分位）、波动拐点、利率压力、信用风险。分档解读：<20 顶部风险低，40+ 需要停止追高，60+ 阶段性顶部风险高，80+ 极端过热。': [
     'Aggregates each indicator’s top-evidence score across six factor groups: price overheating (MA distance / RSI / 20-day gain), breadth divergence, options sentiment (VIX and its percentile), volatility inflection, rate pressure, and credit risk. Reading the bands: below 20 topping risk is low, 40+ means stop chasing, 60+ means an interim top is a real risk, and 80+ is extreme overheating.',
-    '各指標の「天井証拠スコア」を6つの因子グループで加重集約します：価格の過熱（移動平均との乖離／RSI／20日上昇率）、市場の広がりのダイバージェンス、オプション・センチメント（VIX とそのパーセンタイル）、ボラティリティの転換、金利の圧力、クレジットリスク。目安：20未満は天井リスクが低い、40以上は追いかけを止めるべき水準、60以上は当面の天井リスクが高い、80以上は極端な過熱です。',
+    '各指標の「天井証拠スコア」を6つの因子グループで加重集約します：価格の過熱（移動平均との乖離／RSI／20日上昇率）、市場の広がりのダイバージェンス、オプション・センチメント（VIX とそのパーセンタイル）、ボラティリティの転換、金利の圧力、クレジットリスク。目安：20未満は天井リスクが低い、40以上は高値追いを控えるべき水準、60以上は当面の天井リスクが高い、80以上は極端な過熱です。',
   ],
 
   '底部修复分（0–100）': ['Bottom-formation score (0–100)', '底打ちスコア（0–100）'],
   '各指标「底部证据分」的加权聚合：恐慌释放（VIX）、技术收复（均线/RSI）、宽度修复、波动回落等。分档解读：<20 没有底部迹象，40+ 开始出现底部条件，60+ 阶段性底部概率较高，80+ 恐慌释放充分（仍需价格确认）。': [
     'A weighted aggregate of each indicator’s bottom-evidence score: panic washout (VIX), technical recovery (MA / RSI), breadth repair, cooling volatility, and so on. Reading the bands: below 20 there is no sign of a bottom, 40+ the conditions are starting to appear, 60+ an interim bottom is fairly likely, and 80+ panic has been fully flushed out — price confirmation is still required.',
-    '各指標の「底証拠スコア」を加重集約します：パニックの消化（VIX）、テクニカルの回復（移動平均／RSI）、市場の広がりの改善、ボラティリティの低下など。目安：20未満は底の兆しなし、40以上は底の条件が出始めた状態、60以上は当面の底である可能性が高い、80以上はパニックが十分に消化された状態です（それでも価格による確認は必要）。',
+    '各指標の「底証拠スコア」を加重集約します：パニック売りの一巡（VIX）、テクニカルの回復（移動平均／RSI）、市場の広がりの改善、ボラティリティの低下など。目安：20未満は底の兆しなし、40以上は底の条件が出始めた状態、60以上は当面の底である可能性が高い、80以上はパニック売りが出尽くした状態です（それでも価格による確認は必要）。',
   ],
 
   '数据质量（0–100%）': ['Data quality (0–100%)', 'データ品質（0–100%）'],
@@ -358,11 +358,11 @@ export const HINTS: Dict = {
   /* ---- Optix 宏观环境（30 因子 / 7 模块，registry.py description_zh 镜像） ---- */
   '缺失或过期的因子不会按中性 50 计入，而是移出权重重新归一并压低置信度；有效因子不足门槛时该模块不出分。': [
     'Factors that are missing or stale are not scored as a neutral 50 — they are dropped from the weighting, the rest are renormalized, and confidence is lowered; a module publishes no score at all once too few of its factors are valid.',
-    'データが欠けている、または古くなった因子は中立の50点として扱わず、ウェイトから外して残りを再正規化し、信頼度を引き下げます。有効な因子が閾値を下回るモジュールはスコアを出しません。',
+    'データが欠けている、または古くなったファクターは中立の50点として扱わず、ウェイトから外して残りを再正規化し、信頼度を引き下げます。有効なファクターが閾値を下回るモジュールはスコアを出しません。',
   ],
   '分数是过去 5 年的历史分位，不是预测概率，也不构成买入、卖出、仓位或目标价建议。': [
     'The score is a five-year historical percentile, not a predicted probability, and it is not a buy, sell, position-sizing, or price-target recommendation.',
-    'このスコアは過去5年間の履歴パーセンタイルであり、予測確率ではありません。売買、ポジションサイズ、目標株価の推奨でもありません。',
+    'このスコアは過去5年間のヒストリカル・パーセンタイルであり、予測確率ではありません。売買、ポジションサイズ、目標株価の推奨でもありません。',
   ],
   '宏观环境综合分（0–100 分）': ['Macro composite score (0–100)', 'マクロ環境総合スコア（0–100点）'],
   '综合分 = 7 个模块中有效模块分数的等权均值，至少 5 个模块有效才出正式分。分数越高表示当前金融环境相对过去 5 年更支持风险资产，不代表市场一定上涨。': [
@@ -372,123 +372,125 @@ export const HINTS: Dict = {
   '宏观置信度（0–1）': ['Macro confidence (0–1)', 'マクロ信頼度（0–1）'],
   '置信度 = 有效模块占 7 个模块的比例 × 这些模块内部有效因子覆盖率的均值。它衡量数据覆盖，不是准确率。': [
     'Confidence = the share of the 7 modules that are valid × the average factor-coverage rate within those modules. It measures data coverage, not accuracy.',
-    '信頼度 = 7モジュールのうち有効なモジュールの比率 × それらのモジュール内部の因子カバレッジ率の平均です。これはデータのカバレッジを表すもので、精度ではありません。',
+    '信頼度 = 7モジュールのうち有効なモジュールの比率 × それらのモジュール内部のファクターのカバレッジ率の平均です。これはデータのカバレッジを表すもので、精度ではありません。',
   ],
   '环境标签': ['Regime label', '環境ラベル'],
   '按综合分切分：<30 明显收紧 · 30–45 偏紧 · 45–55 中性 · 55–70 偏松 · ≥70 明显宽松。标签只描述相对历史的环境松紧。': [
-    'Bucketed by the composite score: below 30 clearly tight, 30–45 leaning tight, 45–55 neutral, 55–70 leaning loose, 70 and above clearly loose. The label only describes conditions relative to history, not a forecast.',
-    '総合スコアで区分します：30未満は明確な引き締め、30〜45はやや引き締め、45〜55は中立、55〜70はやや緩和、70以上は明確な緩和。このラベルは過去と比べた環境の緩さ・引き締まりを説明するものです。',
+    'Bucketed by the composite score: below 30 "Clearly tight", 30–45 "Somewhat tight", 45–55 "Neutral", 55–70 "Somewhat loose", 70 and above "Clearly loose". The label only describes conditions relative to history, not a forecast.',
+    '総合スコアで区分します：30未満は「明確に引き締め的」、30〜45は「やや引き締め的」、45〜55は「中立」、55〜70は「やや緩和的」、70以上は「明確に緩和的」。このラベルは過去と比べた環境の緩さ・引き締まりを説明するものです。',
   ],
-  '历史基础': ['History basis', '履歴の基準'],
+  '历史基础': ['History basis', '履歴データの種別'],
   '「按当前修订值回算」表示这段历史用今天能看到的最新修订数据回算，不是当时市场已知的分数；「本地点时快照」表示功能上线后本地实际抓取形成的不可变快照。': [
-    '"Recomputed on current revisions" means this stretch of history is calculated from today\'s latest revised data, not the score the market actually knew at the time. "Local point-in-time snapshot" means an immutable snapshot actually captured locally after this feature went live.',
-    '「現在の改定値で再計算」は、この履歴が本日時点で見られる最新の改定データを使って再計算されたものであり、当時市場が知っていたスコアではないことを意味します。「ローカル時点スナップショット」は、本機能の稼働後にローカルで実際に取得された不変のスナップショットを指します。',
+    '"Recomputed on latest revisions" means this stretch of history is calculated from today\'s latest revised data, not the score the market actually knew at the time. "Local point-in-time snapshot" means an immutable snapshot actually captured locally after this feature went live.',
+    '「最新修正値による遡及計算」は、この履歴が本日時点で参照できる最新の修正済みデータを使って再計算されたものであり、当時市場が知っていたスコアではないことを意味します。「ローカル時点スナップショット」は、本機能の稼働後にローカルで実際に取得された不変のスナップショットを指します。',
   ],
   '流动性 · LIQUIDITY（0–100 分）': ['Liquidity (0–100)', '流動性 · LIQUIDITY（0–100点）'],
   '模块分 = 该模块内有效因子分数的等权均值，共 5 个因子，至少 3 个有效才出分。': [
     'Module score = the equal-weighted average of its valid factor scores. This module has 5 factors and needs at least 3 valid to publish a score.',
-    'モジュールスコア = モジュール内の有効な因子スコアの均等加重平均です。このモジュールは因子5つのうち、最低3つが有効な場合にスコアを出します。',
+    'モジュールスコア = モジュール内の有効なファクタースコアの均等加重平均です。このモジュールはファクター5つのうち、最低3つが有効な場合にスコアを出します。',
   ],
-  '融资 · FUNDING（0–100 分）': ['Funding (0–100)', '融資 · FUNDING（0–100点）'],
+  '融资 · FUNDING（0–100 分）': ['Funding (0–100)', 'ファンディング · FUNDING（0–100点）'],
   '模块分 = 该模块内有效因子分数的等权均值，共 6 个因子，至少 4 个有效才出分；该模块的日度原始分再经 EMA(5) 平滑（alpha = 2/(5+1)）。': [
     'Module score = the equal-weighted average of its valid factor scores. This module has 6 factors and needs at least 4 valid to publish a score; its daily raw score is then smoothed with an EMA(5) (alpha = 2/(5+1)).',
-    'モジュールスコア = モジュール内の有効な因子スコアの均等加重平均です。このモジュールは因子6つのうち、最低4つが有効な場合にスコアを出します。日次の生スコアはさらに EMA(5)（alpha = 2/(5+1)）で平滑化します。',
+    'モジュールスコア = モジュール内の有効なファクタースコアの均等加重平均です。このモジュールはファクター6つのうち、最低4つが有効な場合にスコアを出します。日次の生スコアはさらに EMA(5)（alpha = 2/(5+1)）で平滑化します。',
   ],
   '国债 · TREASURY（0–100 分）': ['Treasury (0–100)', '国債 · TREASURY（0–100点）'],
   '模块分 = 该模块内有效因子分数的等权均值，共 3 个因子，至少 2 个有效才出分。': [
     'Module score = the equal-weighted average of its valid factor scores. This module has 3 factors and needs at least 2 valid to publish a score.',
-    'モジュールスコア = モジュール内の有効な因子スコアの均等加重平均です。このモジュールは因子3つのうち、最低2つが有効な場合にスコアを出します。',
+    'モジュールスコア = モジュール内の有効なファクタースコアの均等加重平均です。このモジュールはファクター3つのうち、最低2つが有効な場合にスコアを出します。',
   ],
-  '利率 · RATES（0–100 分）': ['Rates (0–100)', '利率 · RATES（0–100点）'],
-  '信用 · CREDIT（0–100 分）': ['Credit (0–100)', '信用 · CREDIT（0–100点）'],
+  '利率 · RATES（0–100 分）': ['Rates (0–100)', '金利 · RATES（0–100点）'],
+  '信用 · CREDIT（0–100 分）': ['Credit (0–100)', 'クレジット · CREDIT（0–100点）'],
   '模块分 = 该模块内有效因子分数的等权均值，共 4 个因子，至少 3 个有效才出分。': [
     'Module score = the equal-weighted average of its valid factor scores. This module has 4 factors and needs at least 3 valid to publish a score.',
-    'モジュールスコア = モジュール内の有効な因子スコアの均等加重平均です。このモジュールは因子4つのうち、最低3つが有効な場合にスコアを出します。',
+    'モジュールスコア = モジュール内の有効なファクタースコアの均等加重平均です。このモジュールはファクター4つのうち、最低3つが有効な場合にスコアを出します。',
   ],
   '风险 · RISK（0–100 分）': ['Risk (0–100)', 'リスク · RISK（0–100点）'],
   '外部冲击 · EXTERNAL（0–100 分）': ['External shocks (0–100)', '外部ショック · EXTERNAL（0–100点）'],
 
-  '联储净流动性（0–100 分）': ['Fed net liquidity (0–100)', 'FRB 純流動性（0–100点）'],
+  '联储净流动性（0–100 分）': ['Fed net liquidity (0–100)', 'FRB純流動性（0–100点）'],
   '联储总资产减去财政部一般账户与隔夜逆回购余额，单位十亿美元。数值越高表示可用于金融体系的储备越多。': [
     "The Fed's total assets minus the Treasury General Account and overnight reverse-repo balances, in billions of dollars. A higher value means more reserves are available to the financial system.",
-    'FRB の総資産から財務省一般勘定（TGA）と翌日物リバースレポ（ON RRP）残高を差し引いたもので、単位は十億ドルです。数値が高いほど、金融システムで使える準備金が多いことを意味します。',
+    'FRB の総資産から財務省一般勘定（TGA）と翌日物リバースレポ（ON RRP）残高を差し引いたもので、単位は十億ドルです。数値が高いほど、金融システムで使える準備預金が多いことを意味します。',
   ],
   '方向：原值越高分数越高（在过去 5 年分位中的位置）。评分方式：5 年滚动历史分位。': [
     'Direction: a higher raw value scores higher (its position within the five-year percentile). Method: rolling five-year historical percentile.',
-    '方向性：原数値が高いほどスコアが高くなります（過去5年のパーセンタイル内での位置）。算出方法：5年ローリングの履歴パーセンタイル。',
+    '方向性：原数値が高いほどスコアが高くなります（過去5年のパーセンタイル内での位置）。算出方法：5年ローリングのヒストリカル・パーセンタイル。',
   ],
-  '银行准备金（0–100 分）': ['Bank reserves (0–100)', '銀行準備金（0–100点）'],
+  '银行准备金（0–100 分）': ['Bank reserves (0–100)', '銀行の準備預金（0–100点）'],
   '存放在联储的银行准备金余额，单位十亿美元。准备金充裕时融资市场承压概率较低。': [
     "Bank reserve balances held at the Fed, in billions of dollars. Ample reserves make funding-market stress less likely.",
-    'FRB に預けられている銀行準備金の残高で、単位は十億ドルです。準備金が潤沢なときは、資金調達市場がストレスにさらされる可能性が低くなります。',
+    'FRB に預けられている銀行の準備預金残高で、単位は十億ドルです。準備預金が潤沢なときは、資金調達市場がストレスにさらされる可能性が低くなります。',
   ],
   '净流动性 13 周动量（0–100 分）': ['Net liquidity 13-week momentum (0–100)', '純流動性13週モメンタム（0–100点）'],
   '当前联储净流动性减去约 13 周前的净流动性（按 as-of 对齐取最近可用观察，不要求日期完全相同），单位十亿美元。': [
     "Current Fed net liquidity minus net liquidity from roughly 13 weeks earlier (aligned as-of the nearest available observation, not requiring an exact date match), in billions of dollars.",
     '現在の FRB 純流動性から約13週間前の純流動性を差し引いたもので（as-of で最も近い観測値に合わせ、日付の完全一致は求めません）、単位は十億ドルです。',
   ],
-  'TGA 偏离一年中位数（0–100 分）': ['TGA deviation from its one-year median (0–100)', 'TGA の1年中央値からの乖離（0–100点）'],
+  'TGA 偏离一年中位数（0–100 分）': ['TGA deviation from its one-year median (0–100)', 'TGAの1年中央値からの乖離（0–100点）'],
   '财政部一般账户余额减去最近 52 个周度观察的滚动中位数，单位十亿美元。负值表示 TGA 低于一年中位数，对应更多现金留在市场。': [
     "The Treasury General Account balance minus the rolling median of the last 52 weekly observations, in billions of dollars. A negative value means the TGA is below its one-year median, which leaves more cash in the market.",
     '財務省一般勘定（TGA）残高から直近52週間の観測値のローリング中央値を差し引いたもので、単位は十億ドルです。マイナス値は TGA が1年中央値を下回っていることを示し、より多くの資金が市場に残っている状態に対応します。',
   ],
   '方向：原值越低分数越高（在过去 5 年分位中的位置）。评分方式：5 年滚动历史分位（取反）。': [
     'Direction: a lower raw value scores higher (its position within the five-year percentile). Method: rolling five-year historical percentile, inverted.',
-    '方向性：原数値が低いほどスコアが高くなります（過去5年のパーセンタイル内での位置）。算出方法：5年ローリングの履歴パーセンタイル（反転）。',
+    '方向性：原数値が低いほどスコアが高くなります（過去5年のパーセンタイル内での位置）。算出方法：5年ローリングのヒストリカル・パーセンタイル（反転）。',
   ],
   '隔夜逆回购缓冲风险（0–100 分）': ['Overnight reverse-repo buffer risk (0–100)', '翌日物リバースレポ・バッファーリスク（0–100点）'],
   '以 ON RRP 余额衡量的缓冲耗尽风险：risk = (1 − clip(余额/1000 亿, 0, 1))²，分数 = 100 × (1 − risk)。该因子直接给分，不再做历史分位。': [
     'Buffer-depletion risk measured from the ON RRP balance: risk = (1 − clip(balance / $100B, 0, 1))², score = 100 × (1 − risk). This factor is scored directly, with no historical percentile applied.',
-    'ON RRP 残高で測るバッファー枯渇リスクです：risk = (1 − clip(残高/1000億ドル, 0, 1))²、スコア = 100 × (1 − risk)。この因子は直接スコア化され、履歴パーセンタイルは適用しません。',
+    'ON RRP 残高で測るバッファー枯渇リスクです：risk = (1 − clip(残高/1000億ドル, 0, 1))²、スコア = 100 × (1 − risk)。このファクターは直接スコア化され、ヒストリカル・パーセンタイルは適用しません。',
   ],
+  /* 源文括注「（在过去 5 年分位中的位置）」与 direct_score「不做历史分位」自相矛盾；
+     EN/JA 刻意未译该括注，待上游修正中文源文后再对齐，勿当作漏译回填。 */
   '方向：原值越低分数越高（在过去 5 年分位中的位置）。评分方式：注册公式直接给出 0–100 分，不做历史分位。': [
     'Direction: a lower raw value scores higher. Method: the registry formula outputs a 0–100 score directly, with no historical percentile.',
-    '方向性：原数値が低いほどスコアが高くなります。算出方法：レジストリの計算式が0〜100点を直接算出し、履歴パーセンタイルは適用しません。',
+    '方向性：原数値が低いほどスコアが高くなります。算出方法：レジストリの計算式が0〜100点を直接算出し、ヒストリカル・パーセンタイルは適用しません。',
   ],
-  '抵押品回购摩擦（0–100 分）': ['Collateralized repo friction (0–100)', '担保レポの摩擦（0–100点）'],
+  '抵押品回购摩擦（0–100 分）': ['Collateral repo friction (0–100)', '担保レポ・フリクション（0–100点）'],
   'SOFR 减 OBFR，单位百分点。评分用其绝对值：偏离越小，担保与无担保隔夜市场越一致。界面同时显示带符号原值。': [
     'SOFR minus OBFR, in percentage points. Scored on its absolute value: the smaller the gap, the more closely the secured and unsecured overnight markets agree. The interface also shows the signed raw value.',
     'SOFR から OBFR を差し引いたもので、単位はパーセンテージポイントです。絶対値でスコア化し、乖離が小さいほど担保付きと無担保の翌日物市場が整合していることを示します。画面には符号付きの原数値も表示します。',
   ],
-  '利率走廊摩擦（SOFR−IORB）（0–100 分）': ['Rate-corridor friction (SOFR−IORB) (0–100)', '金利コリドーの摩擦（SOFR−IORB）（0–100点）'],
+  '利率走廊摩擦（SOFR−IORB）（0–100 分）': ['Rate corridor friction (SOFR−IORB) (0–100)', '金利コリドー・フリクション（SOFR−IORB）（0–100点）'],
   'SOFR 减准备金余额利率，单位百分点。评分用绝对值：越贴近走廊中枢越健康。界面同时显示带符号原值。': [
     'SOFR minus the interest rate on reserve balances, in percentage points. Scored on its absolute value: the closer to the middle of the corridor, the healthier. The interface also shows the signed raw value.',
-    'SOFR から準備金付利（IORB）を差し引いたもので、単位はパーセンテージポイントです。絶対値でスコア化し、コリドーの中心に近いほど健全とみなします。画面には符号付きの原数値も表示します。',
+    'SOFR から準備預金付利（IORB）を差し引いたもので、単位はパーセンテージポイントです。絶対値でスコア化し、コリドーの中心に近いほど健全とみなします。画面には符号付きの原数値も表示します。',
   ],
-  '利率走廊摩擦（SOFR−ON RRP）（0–100 分）': ['Rate-corridor friction (SOFR−ON RRP) (0–100)', '金利コリドーの摩擦（SOFR−ON RRP）（0–100点）'],
+  '利率走廊摩擦（SOFR−ON RRP）（0–100 分）': ['Rate corridor friction (SOFR−ON RRP) (0–100)', '金利コリドー・フリクション（SOFR−ON RRP）（0–100点）'],
   'SOFR 减隔夜逆回购中标利率，单位百分点。评分用绝对值，衡量对走廊下沿的偏离。界面同时显示带符号原值。': [
     'SOFR minus the ON RRP award rate, in percentage points. Scored on its absolute value, measuring deviation from the floor of the corridor. The interface also shows the signed raw value.',
     'SOFR から ON RRP 落札金利を差し引いたもので、単位はパーセンテージポイントです。絶対値でスコア化し、コリドー下限からの乖離を測ります。画面には符号付きの原数値も表示します。',
   ],
-  'EFFR−IORB 价差（0–100 分）': ['EFFR−IORB spread (0–100)', 'EFFR−IORB スプレッド（0–100点）'],
+  'EFFR−IORB 价差（0–100 分）': ['EFFR−IORB spread (0–100)', 'EFFR−IORBスプレッド（0–100点）'],
   '联邦基金有效利率减准备金余额利率，单位百分点。评分用绝对值，衡量政策利率传导是否顺畅。界面同时显示带符号原值。': [
     'The effective federal funds rate minus the interest rate on reserve balances, in percentage points. Scored on its absolute value, measuring how smoothly the policy rate is transmitting. The interface also shows the signed raw value.',
-    'フェデラルファンド実効金利（EFFR）から準備金付利（IORB）を差し引いたもので、単位はパーセンテージポイントです。絶対値でスコア化し、政策金利の伝達が円滑かを測ります。画面には符号付きの原数値も表示します。',
+    'フェデラルファンド実効金利（EFFR）から準備預金付利（IORB）を差し引いたもので、単位はパーセンテージポイントです。絶対値でスコア化し、政策金利の伝達が円滑かを測ります。画面には符号付きの原数値も表示します。',
   ],
-  '商业票据−国库券价差（0–100 分）': ['Commercial paper−T-bill spread (0–100)', 'CP−国庫短期証券スプレッド（0–100点）'],
+  '商业票据−国库券价差（0–100 分）': ['CP−T-bill spread (0–100)', 'CP−Tビル・スプレッド（0–100点）'],
   '3 个月金融商业票据利率减 3 个月国库券贴现率，单位百分点。评分只取正值部分：正价差扩大代表短期信用融资变贵。界面同时显示带符号原值。': [
     'The 3-month financial commercial paper rate minus the 3-month T-bill discount rate, in percentage points. Only the positive part is scored: a widening positive spread means short-term credit funding is getting more expensive. The interface also shows the signed raw value.',
-    '3ヶ月物金融 CP レートから3ヶ月物国庫短期証券の割引率を差し引いたもので、単位はパーセンテージポイントです。プラスの部分のみをスコア化し、正のスプレッド拡大は短期信用の調達コスト上昇を示します。画面には符号付きの原数値も表示します。',
+    '3ヶ月物金融 CP レートから3ヶ月物Tビル（米財務省短期証券）の割引率を差し引いたもので、単位はパーセンテージポイントです。プラスの部分のみをスコア化し、正のスプレッド拡大は短期信用の調達コスト上昇を示します。画面には符号付きの原数値も表示します。',
   ],
-  '融资分化度（21 日）（0–100 分）': ['Funding dispersion, 21-day (0–100)', '資金調達市場の分散度（21日）（0–100点）'],
+  '融资分化度（21 日）（0–100 分）': ['Funding dispersion (21-day) (0–100)', 'ファンディング分断度（21日）（0–100点）'],
   '每日先算五个带符号融资价差的总体标准差（至少 4 个价差可用才计算），再取最近 21 个有效值的均值，单位百分点。数值越低表示各融资市场越同步。': [
     'Each day, first computes the population standard deviation of the five signed funding spreads (requiring at least 4 available), then averages the last 21 valid daily values, in percentage points. A lower value means funding markets are moving more in sync.',
-    '毎日、符号付きの資金調達スプレッド5本の母標準偏差を計算し（利用可能なスプレッドが最低4本必要）、直近21営業日の有効値の平均を取ります。単位はパーセンテージポイントです。数値が低いほど、各資金調達市場の動きが揃っていることを示します。',
+    '毎日、符号付きの資金調達スプレッド5本の母標準偏差を計算し（利用可能なスプレッドが最低4本必要）、直近の有効値21個の平均を取ります。単位はパーセンテージポイントです。数値が低いほど、各資金調達市場の動きが揃っていることを示します。',
   ],
   '30 年−10 年期限斜率（0–100 分）': ['30Y−10Y term slope (0–100)', '30年−10年ターム・スロープ（0–100点）'],
   '30 年期减 10 年期国债收益率，单位百分点。这是 Optix 对曲线长端斜率的代理，不是学术期限溢价模型。': [
     'The 30-year minus the 10-year Treasury yield, in percentage points. This is Optix’s proxy for the slope of the long end of the curve, not an academic term-premium model.',
     '30年債利回りから10年債利回りを差し引いたもので、単位はパーセンテージポイントです。これはイールドカーブの長期ゾーンの傾きに対する Optix 独自のプロキシであり、学術的なタームプレミアム・モデルではありません。',
   ],
-  '10 年期利率波动（21 日）（0–100 分）': ['10-year yield volatility, 21-day (0–100)', '10年金利ボラティリティ（21日）（0–100点）'],
+  '10 年期利率波动（21 日）（0–100 分）': ['10Y yield volatility (21-day) (0–100)', '10年金利ボラティリティ（21日）（0–100点）'],
   '最近 21 个有效日度变化的总体标准差，单位百分点，不做年化。数值越低表示长端定价越稳定。': [
     'The population standard deviation of the last 21 valid daily changes, in percentage points, not annualized. A lower value means long-end pricing is more stable.',
-    '直近21営業日の有効な日次変化の母標準偏差で、単位はパーセンテージポイント、年率換算は行いません。数値が低いほど、長期金利の価格形成が安定していることを示します。',
+    '直近の有効な日次変化21個の母標準偏差で、単位はパーセンテージポイント、年率換算は行いません。数値が低いほど、長期金利の価格形成が安定していることを示します。',
   ],
-  '曲线曲率绝对值（0–100 分）': ['Absolute curve curvature (0–100)', 'カーブ曲率の絶対値（0–100点）'],
+  '曲线曲率绝对值（0–100 分）': ['Curve curvature (absolute value) (0–100)', 'カーブ曲率の絶対値（0–100点）'],
   'abs(2×10 年 − 2 年 − 30 年)，单位百分点。这是 Optix 自定义的 2s10s30s 蝶式曲率代理，数值越小代表曲线形态越常规。': [
     'abs(2 × 10-year − 2-year − 30-year), in percentage points. This is Optix’s own 2s10s30s butterfly-curvature proxy; a smaller value means a more conventional curve shape.',
-    'abs(2×10年 − 2年 − 30年) で、単位はパーセンテージポイントです。これは Optix 独自の 2s10s30s バタフライ曲率プロキシで、数値が小さいほどカーブの形状がより通常的であることを示します。',
+    'abs(2×10年 − 2年 − 30年) で、単位はパーセンテージポイントです。これは Optix 独自の 2s10s30s バタフライ曲率プロキシで、数値が小さいほどカーブの形状が標準的であることを示します。',
   ],
   '实际利率水平（0–100 分）': ['Real rate level (0–100)', '実質金利水準（0–100点）'],
   '0.6×5 年期实际收益率 + 0.4×10 年期实际收益率，单位百分点。实际利率越低，对风险资产估值的压制越小。': [
@@ -500,26 +502,26 @@ export const HINTS: Dict = {
     'The 10-year minus the 5-year real yield, in percentage points. A positive slope typically corresponds to richer pricing of long-term growth.',
     '10年実質利回りから5年実質利回りを差し引いたもので、単位はパーセンテージポイントです。プラスの傾きは、通常、長期成長への織り込みが強いことに対応します。',
   ],
-  '10 年期通胀预期（0–100 分）': ['10-year inflation expectations (0–100)', '10年期待インフレ率（0–100点）'],
+  '10 年期通胀预期（0–100 分）': ['10Y breakeven inflation (0–100)', '10年ブレークイーブン・インフレ率（0–100点）'],
   '显示 10 年期 Breakeven 原值，评分用其与 2% 的绝对偏离：越贴近 2% 得分越高。界面同时显示原值与偏离。': [
     'Displays the raw 10-year breakeven value; scored on its absolute deviation from 2% — the closer to 2%, the higher the score. The interface shows both the raw value and the deviation.',
     '10年ブレークイーブン・インフレ率の原数値を表示し、2%からの絶対乖離でスコア化します。2%に近いほど高スコアです。画面には原数値と乖離幅の両方を表示します。',
   ],
   '方向：越接近目标值分数越高（对偏离取过去 5 年分位）。评分方式：先算与目标的距离，再取 5 年滚动历史分位（取反）。': [
     'Direction: the closer to the target value, the higher the score (the deviation is put through the five-year percentile). Method: compute the distance from the target, then take the rolling five-year historical percentile, inverted.',
-    '方向性：目標値に近いほどスコアが高くなります（乖離を過去5年のパーセンタイルに変換）。算出方法：まず目標との距離を計算し、5年ローリングの履歴パーセンタイル（反転）を取ります。',
+    '方向性：目標値に近いほどスコアが高くなります（乖離を過去5年のパーセンタイルに変換）。算出方法：まず目標との距離を計算し、5年ローリングのヒストリカル・パーセンタイル（反転）を取ります。',
   ],
-  '全国金融条件指数（0–100 分）': ['National Financial Conditions Index (0–100)', '全米金融環境指数（0–100点）'],
+  '全国金融条件指数（0–100 分）': ['National Financial Conditions Index (NFCI) (0–100)', '全米金融環境指数（NFCI）（0–100点）'],
   '芝加哥联储 NFCI 原值（指数点）。零为长期均值，正值代表金融条件收紧，故数值越低得分越高。': [
     "The Chicago Fed's raw NFCI value (index points). Zero is the long-run average and positive values mean tighter financial conditions, so a lower value scores higher.",
     'シカゴ連銀 NFCI の原数値（指数ポイント）です。ゼロが長期平均で、プラス値は金融環境の引き締まりを意味するため、数値が低いほど高スコアになります。',
   ],
-  '高收益债相对强度（0–100 分）': ['High-yield relative strength (0–100)', 'ハイイールド債の相対強度（0–100点）'],
+  '高收益债相对强度（0–100 分）': ['High-yield credit relative strength (0–100)', 'ハイイールド債の相対強度（0–100点）'],
   'HYG 相对 IEI 的 63 交易日对数收益差×100，单位百分点。至少需要 64 个共同有效交易日。数值越高代表高收益信用风险偏好越强。': [
     'The 63-trading-day log-return spread of HYG over IEI × 100, in percentage points, requiring at least 64 shared valid trading days. A higher value means stronger appetite for high-yield credit risk.',
     'HYG の IEI に対する63営業日対数リターン差×100で、単位はパーセンテージポイントです。共通の有効営業日が最低64日必要です。数値が高いほど、ハイイールド信用リスクへの選好が強いことを示します。',
   ],
-  '投资级债相对强度（0–100 分）': ['Investment-grade relative strength (0–100)', '投資適格債の相対強度（0–100点）'],
+  '投资级债相对强度（0–100 分）': ['Investment-grade credit relative strength (0–100)', '投資適格債の相対強度（0–100点）'],
   'LQD 相对 IEF 的 63 交易日对数收益差×100，单位百分点。至少需要 64 个共同有效交易日。': [
     'The 63-trading-day log-return spread of LQD over IEF × 100, in percentage points, requiring at least 64 shared valid trading days.',
     'LQD の IEF に対する63営業日対数リターン差×100で、単位はパーセンテージポイントです。共通の有効営業日が最低64日必要です。',
@@ -529,15 +531,15 @@ export const HINTS: Dict = {
     'The 63-trading-day log-return spread of KRE over SPY × 100, in percentage points. Regional-bank weakness often coincides with tightening credit supply.',
     'KRE の SPY に対する63営業日対数リターン差×100で、単位はパーセンテージポイントです。地方銀行の軟調は、しばしば信用供給の収縮と同時に起こります。',
   ],
-  'VIX 波动率（0–100 分）': ['VIX volatility (0–100)', 'VIX ボラティリティ（0–100点）'],
+  'VIX 波动率（0–100 分）': ['VIX volatility (0–100)', 'VIXボラティリティ（0–100点）'],
   'VIX 收盘值（指数点）。数值越低表示期权市场定价的短期波动越低。': [
     'The VIX closing value (index points). A lower value means the options market is pricing in lower near-term volatility.',
     'VIX の終値（指数ポイント）です。数値が低いほど、オプション市場が織り込む短期ボラティリティが低いことを示します。',
   ],
-  'VIX 期限结构（0–100 分）': ['VIX term structure (0–100)', 'VIX 期間構造（0–100点）'],
+  'VIX 期限结构（0–100 分）': ['VIX term structure (0–100)', 'VIX期間構造（0–100点）'],
   'VIX 除以 3 个月 VIX（VXV）。VXV 小于或等于零时视为缺失。比值越低（曲线越正向）表示近端压力越小。': [
     'VIX divided by the 3-month VIX (VXV). Treated as missing when VXV is zero or negative. A lower ratio (a more upward-sloping curve) means less near-term stress.',
-    'VIX を3ヶ月 VIX（VXV）で割った値です。VXV がゼロ以下の場合は欠損として扱います。比率が低い（カーブがより順イールド）ほど、近い将来のストレスが小さいことを示します。',
+    'VIX を3ヶ月 VIX（VXV）で割った値です。VXV がゼロ以下の場合は欠損として扱います。比率が低い（カーブが期先高＝コンタンゴ気味）ほど、近い将来のストレスが小さいことを示します。',
   ],
   '风险资产相对避险资产（0–100 分）': ['Risk assets vs. safe havens (0–100)', 'リスク資産の対安全資産相対強度（0–100点）'],
   'SPY 相对 TLT 的 63 交易日对数收益差×100，单位百分点。数值越高代表资金更偏好风险资产。': [
@@ -554,20 +556,20 @@ export const HINTS: Dict = {
     "The Fed's broad nominal dollar index (index points). A stronger dollar typically tightens global dollar liquidity, so a lower value scores higher.",
     'FRB の名目広義ドル指数（指数ポイント）です。ドル高は通常、世界のドル流動性を引き締めるため、数値が低いほど高スコアになります。',
   ],
-  '美元已实现波动（63 日）（0–100 分）': ['Dollar realized volatility, 63-day (0–100)', '米ドル実現ボラティリティ（63日）（0–100点）'],
+  '美元已实现波动（63 日）（0–100 分）': ['Dollar realized volatility (63-day) (0–100)', '米ドル実現ボラティリティ（63日）（0–100点）'],
   '美元指数最近 63 个有效日对数收益率的总体标准差×√252，无量纲比值。数值越低表示汇率环境越平稳。': [
     'The population standard deviation of the dollar index’s last 63 valid daily log returns × √252, a dimensionless ratio. A lower value means a calmer currency environment.',
-    'ドル指数の直近63営業日の有効な対数リターンの母標準偏差×√252で、無次元の比率です。数値が低いほど、為替環境が落ち着いていることを示します。',
+    'ドル指数の直近の有効な対数リターン63個の母標準偏差×√252で、無次元の比率です。数値が低いほど、為替環境が落ち着いていることを示します。',
   ],
-  'WTI 原油价格（0–100 分）': ['WTI crude price (0–100)', 'WTI 原油価格（0–100点）'],
+  'WTI 原油价格（0–100 分）': ['WTI crude oil price (0–100)', 'WTI原油価格（0–100点）'],
   'WTI 现货价（美元/桶）。该分数衡量能源成本压力，不代表油价低就一定利好经济增长。': [
     'The WTI spot price (US dollars per barrel). This score measures energy-cost pressure — it does not mean a lower oil price is automatically good for economic growth.',
     'WTI 現物価格（米ドル/バレル）です。このスコアはエネルギーコストの圧力を測るものであり、原油価格が低いことが必ずしも経済成長にとって好材料とは限りません。',
   ],
-  '原油波动率偏离（0–100 分）': ['Crude volatility deviation (0–100)', '原油ボラティリティ乖離（0–100点）'],
+  '原油波动率偏离（0–100 分）': ['Oil volatility deviation (0–100)', '原油ボラティリティ乖離（0–100点）'],
   'max(OVX − 最近 252 个有效观察的滚动中位数, 0)，单位指数点。只在原油波动率高于自身一年中位数时计入压力。': [
     'max(OVX − the rolling median of the last 252 valid observations, 0), in index points. Pressure is counted only when crude volatility is above its own one-year median.',
-    'max(OVX − 直近252営業日の有効観測値のローリング中央値, 0) で、単位は指数ポイントです。原油ボラティリティが自身の1年中央値を上回る場合のみ、圧力として計上します。',
+    'max(OVX − 直近の有効観測値252個のローリング中央値, 0) で、単位は指数ポイントです。原油ボラティリティが自身の1年中央値を上回る場合のみ、圧力として計上します。',
   ],
   '天然气价格（0–100 分）': ['Natural gas price (0–100)', '天然ガス価格（0–100点）'],
   '亨利枢纽天然气现货价（美元/百万英热）。该分数衡量能源成本压力，不是天然气产业景气度评分。': [

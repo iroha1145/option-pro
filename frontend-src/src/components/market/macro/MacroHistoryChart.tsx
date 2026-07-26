@@ -156,8 +156,8 @@ export default function MacroHistoryChart({
           return [
             date,
             ...lines,
-            regime ? `环境：${regime}` : '',
-            basis ? `历史基础：${BASIS_LABEL[basis] ?? basis}` : '',
+            regime ? t('环境：{regime}', { regime }) : '',
+            basis ? t('历史基础：{basis}', { basis: BASIS_LABEL[basis] ?? basis }) : '',
           ]
             .filter(Boolean)
             .join('<br/>');

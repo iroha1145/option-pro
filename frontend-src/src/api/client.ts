@@ -274,8 +274,3 @@ export async function mockOr<T>(fixture: () => T | Promise<T>, live: () => Promi
   }
   return live();
 }
-
-/** mock 下抛 503（数据不可用） */
-export function unavailable(feature: string): never {
-  throw new ApiError(503, `${feature}暂不可用`);
-}

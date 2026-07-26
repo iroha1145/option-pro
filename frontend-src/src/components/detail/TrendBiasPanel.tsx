@@ -48,7 +48,7 @@ function Gauge({ score, label }: { score: number; label: StockTrendBiasView['tre
   const shown = score;
   return (
     <div className="relative mx-auto w-[168px]">
-      <svg viewBox="0 0 168 92" className="w-full" role="img" aria-label={`趋势偏向分 ${score}，${t(label)}`}>
+      <svg viewBox="0 0 168 92" className="w-full" role="img" aria-label={t('趋势偏向分 {score}，{label}', { score, label: t(label) })}>
         <path d={`M 20 84 A ${R} ${R} 0 0 1 148 84`} fill="none" stroke="var(--line)" strokeWidth="10" strokeLinecap="round" />
         <motion.path
           d={`M 20 84 A ${R} ${R} 0 0 1 148 84`}
@@ -81,7 +81,7 @@ function MissingGauge({ label }: { label: StockTrendBiasView['trend_bias_label']
       </svg>
       <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
         <span className="font-mono text-data-xl text-ink-400 tnum">—</span>
-        <span className={cn('mt-0.5 rounded-xs px-1.5 py-px text-caption font-medium', LABEL_STYLE[label])}>{label}</span>
+        <span className={cn('mt-0.5 rounded-xs px-1.5 py-px text-caption font-medium', LABEL_STYLE[label])}>{t(label)}</span>
       </div>
     </div>
   );

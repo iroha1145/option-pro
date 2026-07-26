@@ -103,7 +103,7 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
   const title = hasSpark
     ? t('近 5 日 · 点阵面积')
     : Array.isArray(closes)
-      ? `近 ${closes.length} 日 · 点阵面积`
+      ? t('近 {count} 日 · 点阵面积', { count: closes.length })
       : t('日线 · 点阵面积');
 
   const refreshAfterPull = () => {

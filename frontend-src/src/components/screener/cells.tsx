@@ -36,7 +36,7 @@ export function ScoreCell({ score, index }: { score: number; index: number }) {
       <span
         className="h-1 w-16 overflow-hidden rounded-pill bg-line"
         role="progressbar"
-        aria-label={`强度分 ${score}，${strength.band} ${strength.label}`}
+        aria-label={t('强度分 {score}，{band} {label}', { score, band: strength.band, label: strength.label })}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={score}

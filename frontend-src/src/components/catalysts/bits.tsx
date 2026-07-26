@@ -114,7 +114,7 @@ export function TickerChip({ ticker, onClick, className }: { ticker: string; onC
 /* ---------------- 热度计（5 段弧条，grow-bar  stagger） ---------------- */
 export function HeatMeter({ level, heat, className }: { level: number; heat: number; className?: string }) {
   return (
-    <span className={cn('inline-flex items-end gap-[3px]', className)} role="img" aria-label={`热度 ${heat}，${level} / 5 段`}>
+    <span className={cn('inline-flex items-end gap-[3px]', className)} role="img" aria-label={t('热度 {heat}，{level} / 5 段', { heat, level })}>
       {Array.from({ length: 5 }, (_, i) => (
         <motion.span
           key={i}

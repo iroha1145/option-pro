@@ -4,7 +4,7 @@
  * api/types 为精简子集 —— mock 经 fixtures2 扩展下发；live 缺失时一律留空「—」。
  */
 import type { EarningsImpact, EarningsItem } from '@/api/types';
-import { t } from '../../i18n/core.ts';
+import { t, getLocale } from '../../i18n/core.ts';
 
 /** upcoming 行（契约扩展字段可选，兼容 snake_case 下发） */
 export interface EarningsRow extends EarningsItem {
@@ -163,9 +163,17 @@ export function fmtMMDD(date: string): string {
   return `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
 }
 
-/** '2024-11-13' → '11 月 13 日' */
+/**
+ * '2024-11-13' → 各语言的自然月日写法（en「11/13」· ja「11月13日」· zh「11 月 13 日」）。
+ * 函数名保留 CN 后缀是历史原因；三种写法互不通用，不能共享模板（同 HistoryRail.dayLabel）。
+ */
 export function fmtMDCN(date: string): string {
-  return `${Number(date.slice(5, 7))} 月 ${Number(date.slice(8, 10))} 日`;
+  const mo = Number(date.slice(5, 7));
+  const day = Number(date.slice(8, 10));
+  const locale = getLocale();
+  if (locale === 'en') return `${mo}/${day}`;
+  if (locale === 'ja') return `${mo}月${day}日`;
+  return `${mo} 月 ${day} 日`;
 }
 
 /** 周X（按 UTC 正午锚定） */
@@ -179,6 +187,6 @@ export function relativeDayCN(date: string): string {
   if (d === 0) return t('今天');
   if (d === 1) return t('明天');
   if (d === 2) return t('后天');
-  if (d < 0) return `${-d} 天前`;
+  if (d < 0) return t('{n} 天前', { n: -d });
   return weekdayCN(date);
 }

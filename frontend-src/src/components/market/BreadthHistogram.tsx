@@ -91,7 +91,7 @@ export default function BreadthHistogram({
                   viewport={{ once: true, amount: 0.4 }}
                   transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: i * 0.04 }}
                   style={{ height: `${Math.max(4, (n / max) * 96)}px` }}
-                  aria-label={`强度 ${i * 10}–${i === 9 ? 100 : i * 10 + 9}：${n} 只`}
+                  aria-label={t('强度 {lo}–{hi}：{n} 只', { lo: i * 10, hi: i === 9 ? 100 : i * 10 + 9, n })}
                 />
               </div>
             );

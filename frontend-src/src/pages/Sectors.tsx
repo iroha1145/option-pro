@@ -117,7 +117,7 @@ export default function Sectors() {
           <>
             <span className="hidden font-mono text-micro text-ink-400 tnum sm:inline">
               {strengthEnvelope.asOf
-                ? `统计截至 ${fmtRelative(strengthEnvelope.asOf)}`
+                ? t('统计截至 {time}', { time: fmtRelative(strengthEnvelope.asOf) })
                 : t('统计时间 —')}
             </span>
             <Segmented

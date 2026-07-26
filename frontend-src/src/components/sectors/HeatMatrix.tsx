@@ -48,8 +48,8 @@ function HeatTile({
       aria-pressed={selected}
       aria-label={
         hasReturn
-          ? `${sector.name}${periodLabel(sector.period)}平均收益 ${sector.avgReturn?.toFixed(2)}%，平均强度 ${sector.avgStrength ?? t('暂无')}`
-          : `${sector.name}暂无强度聚合`
+          ? t('{name}{period}平均收益 {ret}%，平均强度 {strength}', { name: sector.name, period: periodLabel(sector.period), ret: sector.avgReturn?.toFixed(2), strength: sector.avgStrength ?? t('暂无') })
+          : t('{name}暂无强度聚合', { name: sector.name })
       }
       className={cn(
         'group relative h-[92px] overflow-visible rounded-md text-left shadow-sh-1 transition-shadow duration-[240ms] ease-out hover:shadow-sh-2 md:h-[108px]',
@@ -80,7 +80,7 @@ function HeatTile({
             {sector.name}
           </span>
           <span className={cn('hidden font-mono text-micro tnum md:inline', textSub)}>
-            {sector.coveredCount !== null ? `${sector.coveredCount} 只` : t('未覆盖')}
+            {sector.coveredCount !== null ? t('{n} 只', { n: sector.coveredCount }) : t('未覆盖')}
           </span>
         </span>
         <span>
@@ -93,7 +93,7 @@ function HeatTile({
             {hasReturn ? fmtPct(animated) : '—'}
           </span>
           <span className={cn('block text-micro', textSub)}>
-            {periodLabel(sector.period)}{t('平均收益')}
+            {t('{period}平均收益', { period: periodLabel(sector.period) })}
           </span>
         </span>
       </span>

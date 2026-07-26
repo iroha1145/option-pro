@@ -85,7 +85,7 @@ function ScoreDonut({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-4">
       <p className="font-mono text-data-xl text-ink-900 tnum">{score.toFixed(1)}</p>
-      <svg width="72" height="72" viewBox="0 0 72 72" aria-label={`平均强度分 ${score.toFixed(1)}`}>
+      <svg width="72" height="72" viewBox="0 0 72 72" aria-label={t('平均强度分 {score}', { score: score.toFixed(1) })}>
         <circle cx="36" cy="36" r={R} fill="none" stroke="var(--line)" strokeWidth="6" />
         <motion.circle
           cx="36"
@@ -321,7 +321,7 @@ function WatchCard({
         <span
           role="button"
           tabIndex={0}
-          aria-label={`将 ${item.ticker} 移出自选`}
+          aria-label={t('将 {ticker} 移出自选', { ticker: item.ticker })}
           title={t("移出自选")}
           onClick={(event) => {
             event.stopPropagation();
@@ -930,7 +930,7 @@ export default function Watchlist() {
                   }
                   footnote={
                     canManageWatchlist
-                      ? `自选保存在账号 ${username} 下`
+                      ? t('自选保存在账号 {username} 下', { username })
                       : isVisitor
                         ? t('当前为访客只读模式')
                         : undefined

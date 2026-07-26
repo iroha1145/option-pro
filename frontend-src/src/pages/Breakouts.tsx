@@ -402,7 +402,7 @@ export default function Breakouts() {
         <div className="flex items-center gap-1" role="group" aria-label={__t("评分筛选")}>
           <span className="mr-0.5 text-caption text-ink-400">{__t('评分')}</span>
           {SCORE_CAPS.map((c) => (
-            <FChip key={c.value} active={minScore === c.value} onClick={() => setMinScore(c.value)} ariaLabel={`评分${c.label}`}>
+            <FChip key={c.value} active={minScore === c.value} onClick={() => setMinScore(c.value)} ariaLabel={__t('评分{label}', { label: c.label })}>
               {c.label}
             </FChip>
           ))}
@@ -410,7 +410,7 @@ export default function Breakouts() {
         {tickerFilter && (
           <button
             onClick={() => setTickerFilter('')}
-            aria-label={`清除代码聚焦 ${tickerFilter}`}
+            aria-label={__t('清除代码聚焦 {ticker}', { ticker: tickerFilter })}
             className="inline-flex items-center gap-1 rounded-pill border border-brand-400/60 bg-brand-50 px-2.5 py-1 font-mono text-micro font-medium text-brand-600 transition-colors tnum hover:border-brand-600"
           >
             {tickerFilter}

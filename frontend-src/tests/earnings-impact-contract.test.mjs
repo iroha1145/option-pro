@@ -61,6 +61,11 @@ function loadNormalizer() {
             if (typeof row[key] === 'string' && row[key]) return row[key];
           }
           return null;
+        }, pickLabel: (row, ...keys) => {
+          for (const key of keys) {
+            if (typeof row[key] === 'string' && row[key]) return row[key];
+          }
+          return null;
         },
         unwrap: (body, ...keys) => {
           if (Array.isArray(body)) return body;
@@ -111,6 +116,11 @@ function loadUpcomingMapper() {
           return null;
         },
         pickS: (row, ...keys) => {
+          for (const key of keys) {
+            if (typeof row[key] === 'string' && row[key]) return row[key];
+          }
+          return null;
+        }, pickLabel: (row, ...keys) => {
           for (const key of keys) {
             if (typeof row[key] === 'string' && row[key]) return row[key];
           }
@@ -242,6 +252,11 @@ test('财报日程不把缺失或未知时间伪装成盘前', () => {
         asRec,
         pickN: () => null,
         pickS: (row, ...keys) => {
+          for (const key of keys) {
+            if (typeof row[key] === 'string' && row[key]) return row[key];
+          }
+          return null;
+        }, pickLabel: (row, ...keys) => {
           for (const key of keys) {
             if (typeof row[key] === 'string' && row[key]) return row[key];
           }

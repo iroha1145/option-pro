@@ -37,8 +37,8 @@ export const WATCHLIST: Dict = {
   '加自选': ['Add ticker', 'ティッカーを追加'],
   '添加自选股票代码': ['Add a ticker to your watchlist', '自選銘柄のティッカーを追加'],
   '添加': ['Add', '追加'],
-  '只标的': ['tickers', '銘柄'],
-  '/ 上限': ['/ limit', '/ 上限'],
+  '只标的': ['ticker||tickers', '銘柄'],
+  '/ 上限': ['/ max', '/ 上限'],
 
   /* ---------------- 增删自选：toast ---------------- */
   '移出自选': ['Remove from watchlist', '自選から削除'],
@@ -86,7 +86,7 @@ export const WATCHLIST: Dict = {
     'サインインすると自選銘柄がアカウントに保存され、別の端末でも引き継がれます。',
   ],
   '搜索代码': ['Search tickers', 'ティッカーを検索'],
-  '还有': ['Another ', 'あと'],
+  '还有': ['Another', 'あと'],
 
   /* ---------------- 表格列标题 ---------------- */
   '最新价': ['Last price', '現在値'],

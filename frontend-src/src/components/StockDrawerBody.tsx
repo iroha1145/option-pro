@@ -88,7 +88,7 @@ function PriceHeader({ detail }: { detail: StockDetail }) {
             <span className="rounded-xs border border-line-strong bg-card-warm px-1.5 py-px text-micro text-ink-500">
               {detail.sector}
             </span>
-            {market && <SessionLED session={market.session} label={`${market.label} · 延迟 15 分钟`} />}
+            {market && <SessionLED session={market.session} label={t('{label} · 延迟 15 分钟', { label: market.label })} />}
           </div>
         </div>
         <div className="ml-auto text-right">
@@ -274,7 +274,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
         }
         description={
           is404
-            ? `${ticker} 不在当前股票目录中`
+            ? t('{ticker} 不在当前股票目录中', { ticker })
             : loginExpired
               ? __t('请重新登录后读取个股详情')
             : publicSnapshotMissing

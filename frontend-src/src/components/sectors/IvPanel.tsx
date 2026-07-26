@@ -96,7 +96,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
             type="button"
             onClick={() => setDesc((v) => !v)}
             className="flex h-7 items-center gap-1 rounded-md border border-line bg-card px-2 text-caption text-ink-500 transition-colors duration-fast hover:border-line-strong hover:text-ink-800"
-            aria-label={`切换排序，当前板块排位${desc ? t('降序') : t('升序')}`}
+            aria-label={t('切换排序，当前板块排位{order}', { order: desc ? t('降序') : t('升序') })}
           >
             <Icon name={desc ? 'arrow-down' : 'arrow-up'} size={12} />
             {t('排位')}{desc ? t('降序') : t('升序')}
@@ -128,7 +128,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
             title={error.code === 503 ? t('IV 排名暂不可用') : t('IV 排名加载失败')}
             description={
               error.code === 503
-                ? `期权数据暂时获取不到${retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''}`
+                ? `${t('期权数据暂时获取不到')}${retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''}`
                 : error.message
             }
             action={

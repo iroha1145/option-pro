@@ -22,7 +22,7 @@ export const ACCOUNT: Dict = {
     '価格がブレイクした瞬間、もうレーダーに映っている。',
   ],
   '热力、强度、IV 排名，一屏定位资金方向。': [
-    "Heat, strength, IV rank, all on one screen — see where the money's moving.",
+    "Heat, strength, and IV rankings on one screen — see where the money's moving.",
     'ヒート・強度・IVランキングを一画面に。資金の向かう先が見える。',
   ],
   '财报 AI': ['Earnings AI', '決算 AI'],
@@ -33,7 +33,7 @@ export const ACCOUNT: Dict = {
 
   /* ---------------- L1 副文 / 脚注免责声明 ---------------- */
   '突破雷达、强度选股、板块透视、财报 AI、新闻催化剂 —— 一套终端，看懂今晚的美股。数据延迟 15 分钟，仅供研究参考。': [
-    "Breakout radar, strength screener, sector X-ray, earnings AI, news catalysts — one terminal to make sense of tonight's US market. Quotes delayed 15 minutes, for research reference only.",
+    "Breakout radar, strength screener, sector X-ray, earnings AI, news catalysts — one terminal to make sense of tonight's US market. Quotes delayed 15 minutes, for research purposes only.",
     'ブレイクアウト・レーダー、強度スクリーナー、セクター透視、決算 AI、ニュース・カタリスト——1つの端末で今晩の米国株を読み解く。データは15分遅延、調査参考用です。',
   ],
   '交互研究版 · 延迟行情 · 不构成投资建议 ◆': [
@@ -44,7 +44,7 @@ export const ACCOUNT: Dict = {
   /* ---------------- L2 登录卡：标题 / 切换 / 表单 ---------------- */
   '进入终端': ['Enter the terminal', '端末に入る'],
   '登录后自选股保存在账号里 · 访客可只读浏览': [
-    'Sign in to save your watchlist to your account · Visitors get read-only access',
+    'Sign in to save your watchlist to your account · Guests get read-only access',
     'サインインすると自選銘柄がアカウントに保存されます · ゲストは閲覧のみ',
   ],
   '注册': ['Sign up', '新規登録'],
@@ -65,7 +65,7 @@ export const ACCOUNT: Dict = {
   '验证通过': ['Verified', '確認完了'],
   '注册并登录': ['Sign up & sign in', '登録してサインイン'],
   '或': ['or', 'または'],
-  '以访客身份浏览（只读）': ['Browse as a visitor (read-only)', 'ゲストとして利用（閲覧のみ）'],
+  '以访客身份浏览（只读）': ['Browse as a guest (read-only)', 'ゲストとして利用（閲覧のみ）'],
   '账号只用于保存你的自选股，不改变数据权限': [
     "Your account only saves your watchlist — it doesn't change your data access.",
     'アカウントは自選銘柄の保存だけに使い、データへのアクセス権限は変わりません。',

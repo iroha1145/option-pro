@@ -61,7 +61,7 @@ function IvHeatCard({
                     transition: { duration: 0.16, ease: [0.22, 1, 0.36, 1] },
                   }}
                   onClick={() => onOpenTicker(row.ticker)}
-                  aria-label={`${row.ticker} 板块 IV 排位 ${row.rank}，打开详情`}
+                  aria-label={t('{ticker} 板块 IV 排位 {rank}，打开详情', { ticker: row.ticker, rank: row.rank })}
                   className="flex h-14 flex-col items-center justify-center gap-0.5 rounded-md shadow-sh-1 transition-shadow duration-fast hover:shadow-sh-2"
                   style={{ backgroundColor: background }}
                 >
@@ -158,7 +158,7 @@ function CoverageCard({
       </dl>
 
       <p className="mt-3 text-micro leading-5 text-ink-400">
-        {meta.asOf ? `数据时间 ${fmtRelative(meta.asOf)}。` : t('数据时间暂缺。')}
+        {meta.asOf ? t('数据时间 {time}。', { time: fmtRelative(meta.asOf) }) : t('数据时间暂缺。')}
         {t('排位只比较当前板块成分的 ATM IV，不代表一年历史百分位。')}
       </p>
     </div>

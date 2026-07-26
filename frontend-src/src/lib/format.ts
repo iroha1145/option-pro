@@ -45,11 +45,28 @@ export function fmtRelative(iso: string | null | undefined): string {
   if (!Number.isFinite(diff)) return '—';
   const min = Math.floor(diff / 60_000);
   if (min < 1) return t('刚刚');
-  if (min < 60) return `${min} 分钟前`;
+  if (min < 60) return t('{n} 分钟前', { n: min });
   const h = Math.floor(min / 60);
-  if (h < 24) return `${h} 小时前`;
+  if (h < 24) return t('{n} 小时前', { n: h });
   const d = Math.floor(h / 24);
-  return `${d} 天前`;
+  return t('{n} 天前', { n: d });
+}
+
+/**
+ * 紧凑相对时间（如 5m / 3h / 2d）。字母单位与语言无关，供来源卡等窄栏使用。
+ * 早先 SourcesPanel 对 fmtRelative 的输出做 .replace(' 分钟前','m')，那在英/日
+ * 界面下拿不到中文单位而失效——改为独立函数从源头产出，不再依赖措辞。
+ */
+export function fmtRelativeShort(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(diff)) return '—';
+  const min = Math.floor(diff / 60_000);
+  if (min < 1) return t('刚刚');
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
 }
 
 export function fmtCountdown(targetIso: string, now: number): string {

@@ -157,7 +157,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
           group: '功能',
           no: n.no,
           title: n.label,
-          hint: `前往${n.label}页`,
+          hint: __t('前往{label}页', { label: n.label }),
           icon: 'chevron-right',
           action: () => {
             onClose();

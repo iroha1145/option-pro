@@ -603,7 +603,7 @@ export default function Screener() {
                 {truncatedScope && (
                   <span
                     className="rounded-xs bg-warn-50 px-1.5 py-px text-micro text-warn-600"
-                    title={`价格上限、多板块、分档与最低分是客户端条件，只能作用在后端返回的这 ${truncatedScope.returned} 行上；已评分候选共 ${truncatedScope.screened} 只。`}
+                    title={__t('价格上限、多板块、分档与最低分是客户端条件，只能作用在后端返回的这 {returned} 行上；已评分候选共 {screened} 只。', { returned: truncatedScope.returned, screened: truncatedScope.screened })}
                   >
                     {__t('仅在强度前')} {truncatedScope.returned} {__t('名内筛选')}
                   </span>
@@ -625,7 +625,7 @@ export default function Screener() {
                     className="inline-flex items-center gap-1 rounded-xs border border-line bg-card-warm px-1.5 py-0.5 text-micro text-ink-500"
                   >
                     {c.label}
-                    <button onClick={c.onRemove} aria-label={`移除条件 ${c.label}`} className="text-ink-300 transition-colors hover:text-down-600">
+                    <button onClick={c.onRemove} aria-label={__t('移除条件 {label}', { label: c.label })} className="text-ink-300 transition-colors hover:text-down-600">
                       <Icon name="x" size={10} />
                     </button>
                   </span>
@@ -646,7 +646,7 @@ export default function Screener() {
                   });
                   setPage(1);
                 }}
-                title={`${__t(MACRO_SHADOW_HINT.title)}：${__t(MACRO_SHADOW_HINT.body)}${__t(MACRO_SHADOW_HINT.note)}`}
+                title={__t('{title}：{body}{note}', { title: __t(MACRO_SHADOW_HINT.title), body: __t(MACRO_SHADOW_HINT.body), note: __t(MACRO_SHADOW_HINT.note) })}
                 className={cn(
                   'flex h-8 items-center gap-1.5 rounded-pill border px-3 text-caption transition-colors duration-fast',
                   showMacro
@@ -914,9 +914,9 @@ function buildChips(
   patch: (p: Partial<ScanFilters>) => void,
 ): EchoChip[] {
   const chips: EchoChip[] = [];
-  if (f.tier !== 'all') chips.push({ key: 'tier', label: `${f.tier} 档`, onRemove: () => patch({ tier: 'all' }) });
-  if (f.timeframe !== 'all') chips.push({ key: 'tf', label: `周期 ${TIMEFRAME_CN[f.timeframe]}`, onRemove: () => patch({ timeframe: 'all' }) });
-  if (f.profile !== 'balanced') chips.push({ key: 'pf', label: `偏好 ${PROFILE_CN[f.profile]}`, onRemove: () => patch({ profile: 'balanced' }) });
+  if (f.tier !== 'all') chips.push({ key: 'tier', label: __t('{tier} 档', { tier: f.tier }), onRemove: () => patch({ tier: 'all' }) });
+  if (f.timeframe !== 'all') chips.push({ key: 'tf', label: __t('周期 {tf}', { tf: TIMEFRAME_CN[f.timeframe] }), onRemove: () => patch({ timeframe: 'all' }) });
+  if (f.profile !== 'balanced') chips.push({ key: 'pf', label: __t('偏好 {profile}', { profile: PROFILE_CN[f.profile] }), onRemove: () => patch({ profile: 'balanced' }) });
   if (f.topN > 0) chips.push({ key: 'top', label: `Top ${f.topN}`, onRemove: () => patch({ topN: 0 }) });
   f.sectors.forEach((s) =>
     chips.push({
@@ -929,30 +929,30 @@ function buildChips(
   if (f.priceMin != null || f.priceMax != null) {
     const lo = f.priceMin != null ? `$${f.priceMin}` : '—';
     const hi = f.priceMax != null ? `$${f.priceMax}` : '—';
-    chips.push({ key: 'price', label: `价格 ${lo}–${hi}`, onRemove: () => patch({ priceMin: null, priceMax: null }) });
+    chips.push({ key: 'price', label: __t('价格 {lo}–{hi}', { lo, hi }), onRemove: () => patch({ priceMin: null, priceMax: null }) });
   }
   if (f.minDollarVol > 0) {
     const opt = DOLLAR_VOL_OPTIONS.find((o) => o.value === f.minDollarVol);
-    chips.push({ key: 'dv', label: `成交额 ${opt?.label ?? `≥${fmtCompact(f.minDollarVol)}`}`, onRemove: () => patch({ minDollarVol: 0 }) });
+    chips.push({ key: 'dv', label: __t('成交额 {v}', { v: opt?.label ?? `≥${fmtCompact(f.minDollarVol)}` }), onRemove: () => patch({ minDollarVol: 0 }) });
   }
-  if (f.minScore != null) chips.push({ key: 'ms', label: `强度 ≥${f.minScore}`, onRemove: () => patch({ minScore: null }) });
+  if (f.minScore != null) chips.push({ key: 'ms', label: __t('强度 ≥{n}', { n: f.minScore }), onRemove: () => patch({ minScore: null }) });
   if (f.presetId) {
     const name = profiles?.find((p) => p.id === f.presetId)?.name ?? f.presetId;
-    chips.push({ key: 'preset', label: `预设 ${name}`, onRemove: () => patch({ presetId: null }) });
+    chips.push({ key: 'preset', label: __t('预设 {name}', { name }), onRemove: () => patch({ presetId: null }) });
   }
   return chips;
 }
 
 function summarizeFilters(f: ScanFilters): string {
   const parts: string[] = [];
-  if (f.tier !== 'all') parts.push(`${f.tier} 档`);
+  if (f.tier !== 'all') parts.push(__t('{tier} 档', { tier: f.tier }));
   if (f.timeframe !== 'all') parts.push(TIMEFRAME_CN[f.timeframe]);
   parts.push(PROFILE_CN[f.profile]);
   if (f.topN > 0) parts.push(`Top ${f.topN}`);
-  if (f.sectors.length > 0) parts.push(`板块 ${f.sectors.length} 项`);
+  if (f.sectors.length > 0) parts.push(__t('板块 {n} 项', { n: f.sectors.length }));
   if (f.priceMin != null || f.priceMax != null) parts.push(__t('价格区间'));
-  if (f.minDollarVol > 0) parts.push(`成交额≥${fmtCompact(f.minDollarVol)}`);
-  if (f.minScore != null) parts.push(`强度≥${f.minScore}`);
+  if (f.minDollarVol > 0) parts.push(__t('成交额≥{v}', { v: fmtCompact(f.minDollarVol) }));
+  if (f.minScore != null) parts.push(__t('强度≥{n}', { n: f.minScore }));
   return parts.join(' · ') || __t('默认条件');
 }
 

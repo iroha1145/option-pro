@@ -31,7 +31,7 @@ const HORIZON_LABEL: Record<'intraday' | 'days' | 'weeks' | 'uncertain', string>
 /* 周期阶段横向步进条：当前 brand 实心（静态，不脉冲）；已过实心灰；未来空心 */
 function StageStepper({ stage }: { stage: number }) {
   return (
-    <ol className="flex items-center" aria-label={`周期阶段 ${stage} / 4 · ${STAGES[stage - 1]}`}>
+    <ol className="flex items-center" aria-label={t('周期阶段 {stage} / 4 · {name}', { stage, name: STAGES[stage - 1] })}>
       {STAGES.map((label, i) => {
         const idx = i + 1;
         const past = idx < stage;

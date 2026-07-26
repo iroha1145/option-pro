@@ -10,7 +10,7 @@ import type { MarketRegimeDims, MarketRegimeInfo, MarketStrength } from '@/api/t
 import SourceNote from '@/components/shared/SourceNote';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS, type ScoreHintKey } from '@/lib/scoreHints';
-import { t } from '../../i18n/core.ts';
+import { t, getLocale } from '../../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -39,7 +39,9 @@ function liveDims(r: MarketRegimeInfo): RegimeDim[] {
       label: t('强弱价差'),
       en: 'RISK-ON SPREAD',
       value: d.riskOnSpread,
-      hint: `进攻型与防守型资产之间的强弱差${r.spreadLabel ? `（${r.spreadLabel}）` : ''}。`,
+      hint: r.spreadLabel
+        ? t('进攻型与防守型资产之间的强弱差（{label}）。', { label: r.spreadLabel })
+        : t('进攻型与防守型资产之间的强弱差。'),
       hintKey: 'regimeRiskOn',
     },
   ];
@@ -105,7 +107,7 @@ function RegimeBar({ dim, index }: { dim: RegimeDim; index: number }) {
       <div className="glass pointer-events-none absolute -top-2 left-16 z-20 hidden w-56 -translate-y-full rounded-md border border-line p-3 shadow-sh-2 group-hover:block">
         <p className="flex items-baseline justify-between">
           <span className="text-caption font-semibold text-ink-800">{dim.label}</span>
-          <span className="font-mono text-micro text-ink-400">{dim.en}</span>
+          {getLocale() === 'zh' && <span className="font-mono text-micro text-ink-400">{dim.en}</span>}
         </p>
         <p className="mt-1.5 text-micro leading-[16px] text-ink-500">{dim.hint}</p>
         <p className="mt-1.5 font-mono text-caption text-brand-600 tnum">

@@ -20,6 +20,7 @@ import { CATALYSTS } from './catalysts.ts';
 import { DETAIL } from './detail.ts';
 import { ACCOUNT } from './account.ts';
 import { WATCHLIST } from './watchlist.ts';
+import { WIRED } from './wired.ts';
 import { MOCKS } from './mocks.ts';
 import type { Dict } from './types.ts';
 
@@ -37,5 +38,6 @@ export const DICT: Dict = {
   ...DETAIL,
   ...ACCOUNT,
   ...WATCHLIST,
+  ...WIRED,
   ...MOCKS,
 };

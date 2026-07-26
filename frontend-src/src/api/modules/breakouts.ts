@@ -1,7 +1,7 @@
 /** 突破雷达域 */
 import { get, mockOr, toQuery } from '../client';
 import { marketGet } from '../marketRead';
-import { asRec, num, pickN, pickS, str, unwrap, type Rec } from '../live';
+import { asRec, num, pickN, pickS, pickLabel, str, unwrap, type Rec } from '../live';
 import { mapMacroFitDrivers } from '../macroFields';
 import * as fx2 from '@/mocks/fixtures2';
 import { SIGNAL_LABELS } from '@/lib/signalLabels';
@@ -154,7 +154,7 @@ export function normalizeBreakoutEvent(raw: unknown): BreakoutSignal & BreakoutE
     /* ---- BreakoutSignal / BreakoutEvent 精简字段（旧组件仍消费：SidebarEvents 等） ---- */
     id: eventId,
     ticker,
-    name: pickS(r, 'name') ?? ticker,
+    name: pickLabel(r, 'name') ?? ticker,
     type,
     label: SIGNAL_LABELS[type],
     price: currentPrice,
@@ -166,7 +166,7 @@ export function normalizeBreakoutEvent(raw: unknown): BreakoutSignal & BreakoutE
     /* ---- 契约全字段（页面按 BreakoutEventFull 读取） ---- */
     event_id: eventId,
     exchange: pickS(r, 'exchange'),
-    sector: pickS(r, 'sector') ?? '',
+    sector: pickLabel(r, 'sector') ?? '',
     session: sessionRaw && (SESSIONS as readonly string[]).includes(sessionRaw) ? sessionRaw : 'closed',
     setup_type: setup,
     lifecycle_state: lifecycle ?? '',

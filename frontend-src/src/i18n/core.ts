@@ -136,6 +136,9 @@ export function hasTranslation(msgid: string, code: Locale = current): boolean {
 function applyHtmlLang(code: Locale): void {
   if (typeof document === 'undefined') return;
   document.documentElement.lang = localeMeta(code).tag;
+  // 浏览器标签页标题随语言走：index.html 的静态 <title> 是加载前的中文兜底，
+  // 脚本就绪后按当前语言覆盖（切换语言会整页重载，重载后此处再次生效）。
+  document.title = t('Optix Pro — 投资研究工作台');
 }
 
 applyHtmlLang(current);
