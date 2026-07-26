@@ -83,6 +83,15 @@ export const CHROME: Dict = {
   ],
   '行情为延迟数据 · 仅供研究参考': ['Quotes are delayed · for research only', '相場データは遅延 · 調査目的のみ'],
   '延迟行情': ['Delayed quotes', '遅延データ'],
+  '查看大盘强弱 · {code}': ['View market strength · {code}', '市場の強弱を見る · {code}'],
+  '查看大盘强弱，{code} 最新价 {price}，{flat}': [
+    'View market strength, {code} latest price {price}, {flat}',
+    '市場の強弱を見る、{code}現在値{price}、{flat}',
+  ],
+  '查看大盘强弱，{code} 最新价 {price}，涨跌 {pct}': [
+    'View market strength, {code} latest price {price}, change {pct}',
+    '市場の強弱を見る、{code}現在値{price}、騰落率{pct}',
+  ],
 
   /* 通用空态 / 错误态 */
   '稍后刷新再试': ['Refresh and try again later', '後で更新して再試行してください'],

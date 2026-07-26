@@ -19,10 +19,12 @@ function TapeItem({ q, flash, onOpen }: { q: IndexQuote; flash: 'up' | 'down' | 
     <button
       type="button"
       onClick={() => onOpen(q.code)}
-      title={`查看大盘强弱 · ${q.code}`}
-      aria-label={`查看大盘强弱，${q.code} 最新价 ${fmtPrice(q.price)}，${
-        tone === 'flat' ? t('持平') : `涨跌 ${fmtPct(q.changePct)}`
-      }`}
+      title={t('查看大盘强弱 · {code}', { code: q.code })}
+      aria-label={
+        tone === 'flat'
+          ? t('查看大盘强弱，{code} 最新价 {price}，{flat}', { code: q.code, price: fmtPrice(q.price), flat: t('持平') })
+          : t('查看大盘强弱，{code} 最新价 {price}，涨跌 {pct}', { code: q.code, price: fmtPrice(q.price), pct: fmtPct(q.changePct) })
+      }
       className={cn(
         'inline-flex cursor-pointer items-baseline gap-2 rounded-xs px-1 transition-colors duration-150 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
         flash === 'up' && 'animate-tick-flash-up',

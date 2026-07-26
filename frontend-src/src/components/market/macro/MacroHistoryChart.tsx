@@ -120,7 +120,7 @@ export default function MacroHistoryChart({
     shownModules.forEach((moduleId) => {
       const colorIndex = MACRO_MODULE_ORDER.indexOf(moduleId);
       series.push({
-        name: modules.find((item) => item.moduleId === moduleId)?.nameZh ?? moduleId,
+        name: t(modules.find((item) => item.moduleId === moduleId)?.nameZh ?? moduleId),
         type: 'line',
         data: points.map((point) => point.moduleScores[moduleId] ?? null),
         showSymbol: false,
@@ -261,7 +261,7 @@ export default function MacroHistoryChart({
                     : 'border-line text-ink-400 hover:text-ink-600 focus-visible:text-ink-600',
                 )}
               >
-                {module.nameZh}
+                {t(module.nameZh)}
               </button>
             );
           })}

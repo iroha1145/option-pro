@@ -222,6 +222,7 @@ export const MACRO: Dict = {
   '信用': ['Credit', 'クレジット'],
   '风险': ['Risk', 'リスク'],
   '外部冲击': ['External shocks', '外部ショック'],
+  '{name} 模块': ['{name} module', '{name}モジュール'],
   '十亿美元': ['USD bn', '10億ドル'],
   '银行准备金': ['Bank reserves', '銀行準備金'],
   '净流动性 13 周动量': ['Net liquidity 13-week momentum', '純流動性13週モメンタム'],

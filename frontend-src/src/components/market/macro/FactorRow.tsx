@@ -19,7 +19,7 @@ function FactorName({ factor }: { factor: MacroFactor }) {
   const hint = MACRO_FACTOR_HINTS[factor.factorId];
   return (
     <span className="flex min-w-0 items-center gap-1">
-      <span className="truncate text-ink-700">{factor.nameZh}</span>
+      <span className="truncate text-ink-700">{t(factor.nameZh)}</span>
       {hint && <InfoHint hint={hint} side="bottom" align="start" size={12} />}
     </span>
   );

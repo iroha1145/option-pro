@@ -24,12 +24,12 @@ export default function ModuleCard({
     /* 后续区块 rise-in 减量：直接呈现 */
     <article
       className="card-surface flex min-w-0 flex-col p-4"
-      aria-label={`${module.nameZh} 模块`}
+      aria-label={t('{name} 模块', { name: t(module.nameZh) })}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="flex items-center gap-1 truncate text-h3 text-ink-800">
-            {module.nameZh}
+            {t(module.nameZh)}
             {hint && <InfoHint hint={hint} side="bottom" align="start" size={12} />}
           </p>
           <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-ink-400">

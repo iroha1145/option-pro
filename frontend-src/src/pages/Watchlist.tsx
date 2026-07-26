@@ -146,9 +146,9 @@ function SignalDistribution({ data }: { data: MarketSignalsSnapshot }) {
       <p className="mt-4 text-micro text-ink-400">
         {t('顶部风险')}
         <InfoHint hint={SCORE_HINTS.readingTop} align="start" size={11} className="mx-0.5" />
-        {` ${data.topScore ?? '—'} · 底部修复`}
+        {` ${data.topScore ?? '—'} · ${t('底部修复')}`}
         <InfoHint hint={SCORE_HINTS.readingBottom} size={11} className="mx-0.5" />
-        {` ${data.bottomScore ?? '—'} · 数据质量`}
+        {` ${data.bottomScore ?? '—'} · ${t('数据质量')}`}
         <InfoHint hint={SCORE_HINTS.readingDataQuality} align="end" size={11} className="mx-0.5" />
         {` ${data.dataQuality ?? '—'}`}
       </p>

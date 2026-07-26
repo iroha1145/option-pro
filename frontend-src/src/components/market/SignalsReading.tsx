@@ -37,17 +37,20 @@ function buildReading(
   const parts: string[] = [];
   if (signals.topScore !== null || signals.bottomScore !== null) {
     const scores = [
-      signals.topScore !== null ? `顶部风险 ${signals.topScore}` : null,
-      signals.bottomScore !== null ? `底部修复 ${signals.bottomScore}` : null,
+      signals.topScore !== null ? t('顶部风险 {score}', { score: signals.topScore }) : null,
+      signals.bottomScore !== null ? t('底部修复 {score}', { score: signals.bottomScore }) : null,
     ].filter(Boolean);
-    parts.push(`市场信号模型当前评分为${scores.join(t('，'))}。`);
+    parts.push(t('市场信号模型当前评分为{scores}。', { scores: scores.join(t('，')) }));
   }
   const leading = [...signals.metrics]
     .filter((metric) => metric.topScore !== null || metric.bottomScore !== null)
     .sort((a, b) => Math.max(b.topScore ?? 0, b.bottomScore ?? 0) - Math.max(a.topScore ?? 0, a.bottomScore ?? 0))
     .slice(0, 2);
   if (leading.length) {
-    parts.push(`主要观测项为${leading.map((metric) => `「${metric.label}」${metric.value}`).join('、')}。`);
+    const items = leading
+      .map((metric) => t('「{label}」{value}', { label: metric.label, value: metric.value }))
+      .join(t('、'));
+    parts.push(t('主要观测项为{items}。', { items }));
   }
   if (indices?.length) {
     /* 平盘不算上涨（审计 P2-4 同一口径）；这段文字会进 AI 上下文，口径必须准。 */
@@ -56,13 +59,18 @@ function buildReading(
     const flat = indices.length - adv - dec;
     const spx = indices.find((q) => q.code === 'SPX');
     parts.push(
-      `六大指数 ${adv} 涨 ${dec} 跌${flat > 0 ? ` ${flat} 平` : ''}` +
-        (spx ? `，标普 500 报 ${fmtPrice(spx.price)}（${fmtPct(spx.changePct)}）` : '') +
-        '。',
+      t('六大指数 {adv} 涨 {dec} 跌', { adv, dec }) +
+        (flat > 0 ? t(' {flat} 平', { flat }) : '') +
+        (spx ? t('，标普 500 报 {price}（{pct}）', { price: fmtPrice(spx.price), pct: fmtPct(spx.changePct) }) : '') +
+        t('。'),
     );
   }
   if (regimeMean !== null) {
-    parts.push(`六维市场形态均值 ${regimeMean.toFixed(1)}${bias ? `，形态偏向「${bias.label}」` : ''}。`);
+    parts.push(
+      t('六维市场形态均值 {mean}', { mean: regimeMean.toFixed(1) }) +
+        (bias ? t('，形态偏向「{label}」', { label: t(bias.label) }) : '') +
+        t('。'),
+    );
   }
   if (status) {
     if (status.market === 'open') parts.push(t('盘中关注量能能否延续，追高注意回撤风险。'));

@@ -73,7 +73,7 @@ export default function CompositeCard({
         <div className="flex flex-col gap-1 pb-1.5">
           {composite.regime ? (
             <span className="flex items-center gap-1 self-start rounded-xs border border-line bg-paper-2 px-2 py-0.5 text-caption text-ink-700">
-              {composite.regime}
+              {t(composite.regime)}
               <InfoHint hint={SCORE_HINTS_MACRO.macroRegime} side="top" align="start" size={11} />
             </span>
           ) : (

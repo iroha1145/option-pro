@@ -43,6 +43,18 @@ export const MARKET: Dict = {
 
   /* src/components/market/SignalsReading.tsx */
   '，': [', ', '、'],
+  '、': [', ', '、'],
+  '。': ['.', '。'],
+  '顶部风险 {score}': ['Topping risk {score}', '天井リスク {score}'],
+  '底部修复 {score}': ['Bottom formation {score}', '底打ち {score}'],
+  '市场信号模型当前评分为{scores}。': ['The market signal model currently scores: {scores}.', '市場シグナルモデルの現在のスコアは{scores}。'],
+  '「{label}」{value}': ['{label} ({value})', '「{label}」{value}'],
+  '主要观测项为{items}。': ['Key observations: {items}.', '主な観測項目は{items}。'],
+  '六大指数 {adv} 涨 {dec} 跌': ['{adv} of 6 major indices up, {dec} down', '主要6指数は{adv}上昇・{dec}下落'],
+  ' {flat} 平': [', {flat} unchanged', '・{flat}変わらず'],
+  '，标普 500 报 {price}（{pct}）': [', S&P 500 at {price} ({pct})', '、S&P500は{price}（{pct}）'],
+  '六维市场形态均值 {mean}': ['Six-factor regime average {mean}', '6因子レジーム平均 {mean}'],
+  '，形态偏向「{label}」': [', bias skews {label}', '、バイアスは「{label}」'],
   '盘中关注量能能否延续，追高注意回撤风险。': ['Intraday, watch whether volume follow-through holds up — chasing highs here carries drawdown risk.', '取引時間中は出来高の続伸を確認し、高値を追う場合はドローダウンのリスクに注意。'],
   '盘前流动性较薄，信号以开盘后确认为准。': ['Pre-market liquidity is thin — treat signals as provisional until confirmed after the open.', 'プレマーケットは流動性が薄く、シグナルは寄り付き後の確認を優先。'],
   '盘后留意财报与公告对明日开盘的传导。': ['After hours, watch how earnings and announcements carry through into tomorrow’s open.', '時間外取引では決算や発表が翌日の寄り付きにどう波及するかに注意。'],

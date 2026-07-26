@@ -124,7 +124,7 @@ export default function FactorDetails({
                   )}
                 />
                 <span className="min-w-0 flex-1 truncate text-body-s text-ink-800">
-                  {module.nameZh}
+                  {t(module.nameZh)}
                   <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-ink-400">
                     {module.nameEn}
                   </span>

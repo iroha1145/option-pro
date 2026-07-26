@@ -73,11 +73,11 @@ export function getMarketStatus(): MarketStatus {
   const mins = ny.getHours() * 60 + ny.getMinutes();
   const isWeekday = day >= 1 && day <= 5;
   let session: MarketStatus['session'] = 'closed';
-  let label = '休市';
+  let label = __t('休市');
   if (isWeekday) {
-    if (mins >= 240 && mins < 570) { session = 'premarket'; label = '盘前'; }
-    else if (mins >= 570 && mins < 960) { session = 'regular'; label = '盘中'; }
-    else if (mins >= 960 && mins < 1200) { session = 'afterhours'; label = '盘后'; }
+    if (mins >= 240 && mins < 570) { session = 'premarket'; label = __t('盘前'); }
+    else if (mins >= 570 && mins < 960) { session = 'regular'; label = __t('盘中'); }
+    else if (mins >= 960 && mins < 1200) { session = 'afterhours'; label = __t('盘后'); }
   }
   let nextEvent: MarketStatus['nextEvent'] = null;
   if (isWeekday) {
