@@ -215,6 +215,35 @@ test('共享的市场时段请求在并发调用下只发一次', async () => {
   const beforeBoth = calls;
   await Promise.all([marketApi.status(), marketApi.indices()]);
   assert.equal(calls, beforeBoth + 2, '不同端点必须各发各的');
+
+  // 身份切换必须作废共享读：/strength/market 对访客和 owner 返回的不是同一份
+  // 数据（访客读落库的公开快照，owner 实时算），2 秒窗口足以让登录后的第一次
+  // 读取复用上一个身份那份。
+  const { dropSharedReads } = sharedModule.exports;
+  assert.equal(typeof dropSharedReads, 'function', 'sharedRead 没有导出 dropSharedReads');
+  await marketApi.status();
+  const beforeDrop = calls;
+  await marketApi.status();
+  assert.equal(calls, beforeDrop, '窗口内本该复用');
+  dropSharedReads();
+  await marketApi.status();
+  assert.equal(calls, beforeDrop + 1, '身份切换后仍然复用了上一个身份的响应');
+});
+
+test('身份变化才作废共享读，每次探测都清会废掉共享窗口', async () => {
+  // 身份不只在登录/登出时变：会话过期是由 60 秒定时或重新聚焦那次核验发现的，
+  // 没有任何本地写操作，那条路径同样要作废。但只在**变了**的时候作废 ——
+  // 每次探测都清一遍会让一个轮询周期里三个组件各发一次 /market/status。
+  const hook = codeOf(await source('hooks/useAccess.tsx'));
+  assert.match(hook, /import \{ dropSharedReads \} from '@\/api\/sharedRead'/);
+  // 写操作路径（登录/注册/登出）：写完到状态读回来之间也不能有窗口。
+  assert.match(hook, /generationRef\.current \+= 1;[\s\S]{0,400}?dropSharedReads\(\);/);
+  // 核验路径：只有身份真的变了才清。
+  assert.match(
+    hook,
+    /if \(identityRef\.current !== null && identityRef\.current !== identity\) \{\s*dropSharedReads\(\);/,
+    '核验路径要么不作废共享读，要么每次探测都清 —— 两者都不对',
+  );
 });
 
 /* ---------- 分批发生在排序之后（review 发现的真实缺陷） ---------- */
