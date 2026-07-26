@@ -13,6 +13,14 @@ const impactCardPath = path.join(root, 'src', 'components', 'earnings', 'ImpactC
 const earningsPagePath = path.join(root, 'src', 'pages', 'Earnings.tsx');
 const newsPanelPath = path.join(root, 'src', 'components', 'detail', 'NewsPanel.tsx');
 
+/**
+ * i18n/core 的最小桩：这些测试断言的是数据归一逻辑，不是翻译本身，回退原文即可
+ * （与真实 t() 在 zh 语言下的行为一致），{n} 占位符按真实 core.ts 同款规则替换。
+ */
+function stubT(msgid, vars) {
+  return vars ? msgid.replace(/\{(\w+)\}/g, (whole, key) => (vars[key] === undefined || vars[key] === null ? whole : String(vars[key]))) : msgid;
+}
+
 function loadEarningsModule(
   onGet = () => Promise.resolve({}),
   onPost = () => Promise.resolve({}),
@@ -69,6 +77,7 @@ function loadEarningsModule(
         };
       }
       if (id === '@/mocks/fixtures2') return {};
+      if (id === '../../i18n/core.ts') return { t: stubT };
       throw new Error(`unexpected import: ${id}`);
     },
   });

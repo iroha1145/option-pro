@@ -61,7 +61,7 @@ test('自选页在完整列表上排序与统计，只对渲染切片分批', as
   // 还有剩余时必须给出可见的继续加载入口
   assert.match(page, /progressive\.hasMore/);
   assert.match(page, /加载更多/);
-  assert.match(page, /还有 \{progressive\.remaining\} 只/);
+  assert.match(page, /\{t\('还有'\)\} \{progressive\.remaining\} \{t\('只'\)\}/);
 });
 
 test('桌面表格与移动卡片流用同一批次', async () => {

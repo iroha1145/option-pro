@@ -59,7 +59,7 @@ test('四处闪烁实现收敛到同一个 hook', async () => {
 
 test('桌面表格提供删除入口，且不会误触打开详情', async () => {
   const page = codeOf(await source('pages/Watchlist.tsx'));
-  assert.match(page, /从自选移除 \$\{r\.ticker\}/);
+  assert.match(page, /从自选移除 \{ticker\}', \{ ticker: r\.ticker \}/);
   assert.match(page, /event\.stopPropagation\(\);\s*\n\s*void onRemoveTicker\(r\.ticker\);/);
 });
 
@@ -94,7 +94,7 @@ test('突破快照时间取契约 as_of，读取时间单独显示', async () =>
   assert.match(api, /currentEnvelope:/);
   assert.match(api, /asOf: pickS\(asRec\(d\), 'as_of', 'asOf'\)/);
   assert.match(page, /snapshotAt = currentQ\.data\?\.asOf/);
-  assert.match(page, /数据截至 \{snapshotAt\} · 读取 \{readAt\}/);
+  assert.match(page, /\{__t\('数据截至'\)\} \{snapshotAt\} \{__t\('· 读取'\)\} \{readAt\}/);
 });
 
 /* ---------------- P2-17 / P2-18：只看自选 ---------------- */
@@ -126,7 +126,7 @@ test('详情与加载更多的失败都会显示出来', async () => {
   assert.doesNotMatch(page, /\.catch\(\(\) => undefined\);/);
   assert.match(detail, /补充详情未能加载/);
   assert.doesNotMatch(feed, /catch \{\s*\n\s*\} finally/);
-  assert.match(feed, /加载更多失败：\{moreError\.message\}/);
+  assert.match(feed, /\{__t\('加载更多失败：'\)\}\{moreError\.message\}/);
 });
 
 /* ---------------- P2-21 / P2-22 / P2-23：催化页 ---------------- */

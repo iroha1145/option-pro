@@ -61,7 +61,13 @@ export function detectLocale(tags: readonly (string | undefined)[]): Locale {
 }
 
 function detectFromNavigator(): Locale {
-  if (typeof navigator === 'undefined') return 'en';
+  // 判「没有浏览器」不能只看 navigator：Node 21+ 自带一个全局 navigator
+  // （navigator.language 恒为 "en-US"，与真实用户毫无关系），用它判断会把
+  // 「压根没有浏览器」误判成「浏览器报告英文」。window 仍然是浏览器独有的，
+  // 本文件别处（setLocale/applyHtmlLang）已经用它做过同样的判断，这里同口径。
+  // 没有浏览器时回退中文原文，呼应 t() 本身「缺译时如实回退中文」的原则——
+  // 本项目测试套件大量直接 import 源码跑真实逻辑，用中文原文当基准。
+  if (typeof window === 'undefined') return 'zh';
   return detectLocale([navigator.language, ...(navigator.languages ?? [])]);
 }
 
