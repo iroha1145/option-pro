@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import type { EarningsRow } from './types';
 import { addDays, etToday, fmtMDCN, weekStartMonday } from './types';
+import { t } from '@/i18n/core';
 
 interface MonthCalendarProps {
   items: EarningsRow[];
@@ -22,7 +23,9 @@ interface MonthCalendarProps {
   onSelectTicker: (ticker: string, date: string) => void;
 }
 
-const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'] as const;
+/* 完整「周X」作为独立词条（而不是「周」+ 单字拼接）：英文 Mon–Sun、日文 月–日
+   各自是自足的星期缩写，前缀拼接会拼出 "WeekMon"/"週月" 这种破损文案。 */
+const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'] as const;
 const MAX_CHIPS = 3;
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -140,7 +143,7 @@ export default function MonthCalendar({
             key={w}
             className={cn('py-1.5 text-center font-mono text-micro', i >= 5 ? 'text-ink-300' : 'text-ink-400')}
           >
-            周{w}
+            {t(w)}
           </span>
         ))}
       </div>

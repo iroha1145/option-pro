@@ -11,6 +11,7 @@ import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { useRetryCountdown } from '@/hooks/useRetryCountdown';
+import { t } from '@/i18n/core';
 import SectorChips from './SectorChips';
 import type { IvMetaVm, IvRowVm } from './model';
 import { SOURCE_STATUS_CN, ivRankColor } from './model';
@@ -127,7 +128,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
             title={error.code === 503 ? 'IV 排名暂不可用' : 'IV 排名加载失败'}
             description={
               error.code === 503
-                ? `期权数据暂时获取不到${retrySeconds > 0 ? ` · ${retrySeconds} 秒后可重试` : ''}`
+                ? `期权数据暂时获取不到${retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''}`
                 : error.message
             }
             action={
@@ -138,7 +139,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
                 className="flex min-h-11 items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
               >
                 <Icon name="refresh" size={14} />
-                {retrySeconds > 0 ? `${retrySeconds} 秒后重试` : '重试'}
+                {retrySeconds > 0 ? t('{n} 秒后重试', { n: retrySeconds }) : '重试'}
               </button>
             }
           />

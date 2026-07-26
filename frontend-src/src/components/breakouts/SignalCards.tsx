@@ -19,6 +19,7 @@ import PriceScale from './PriceScale';
 import { ScoreBarsMini } from './ScoreBars';
 import { LIFECYCLE_CHIP_CLASS, LIFECYCLE_CN, LIFECYCLE_TONE, SETUP_CN } from './types';
 import type { BreakoutCurrentEvent } from './types';
+import { t } from '@/i18n/core';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -94,7 +95,7 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
               e.stopPropagation();
               openTicker(ev.ticker);
             }}
-            aria-label={`打开 ${ev.ticker} 个股详情抽屉`}
+            aria-label={t('打开 {ticker} 个股详情抽屉', { ticker: ev.ticker })}
             className="font-mono text-body-s font-semibold text-ink-800 underline-offset-2 transition-colors hover:text-brand-600 hover:underline"
           >
             {ev.ticker}

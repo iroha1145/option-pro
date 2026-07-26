@@ -38,6 +38,7 @@ import {
   scoreBarClass,
 } from './types';
 import type { BreakoutCurrentEvent, BreakoutEventFull, BreakoutSession, LifecycleState } from './types';
+import { t } from '@/i18n/core';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const MONO = '"IBM Plex Mono", monospace';
@@ -353,7 +354,7 @@ function MiniKline({ ticker }: { ticker: string }) {
     } catch (cause) {
       setPullError(
         cause instanceof ApiError
-          ? `${cause.message}${cause.retryAfter ? ` · ${cause.retryAfter} 秒后可重试` : ''}`
+          ? `${cause.message}${cause.retryAfter ? t(' · {n} 秒后可重试', { n: cause.retryAfter }) : ''}`
           : '拉取失败，请稍后重试',
       );
     } finally {
@@ -618,7 +619,7 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
           {e.name}{' '}
           <button
             onClick={() => openTicker(e.ticker)}
-            aria-label={`打开 ${e.ticker} 个股详情抽屉`}
+            aria-label={t('打开 {ticker} 个股详情抽屉', { ticker: e.ticker })}
             className="text-brand-600 underline-offset-4 transition-colors hover:text-brand-700 hover:underline"
           >
             {e.ticker}

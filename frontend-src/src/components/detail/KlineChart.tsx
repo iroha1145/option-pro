@@ -18,6 +18,7 @@ import { fmtCompact, fmtPrice } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { CHART_RANGES, DEFAULT_CHART_RANGE, getDetailChart, type ChartRange } from './api';
 import type { ChartBarEx } from '@/mocks/fixtures';
+import { t } from '@/i18n/core';
 
 type ChartMode = 'candle' | 'area';
 
@@ -398,7 +399,12 @@ export default function KlineChart({
 
       <p className={cn('mt-2 flex items-center justify-between text-micro text-ink-400')}>
         <span className="font-mono tnum">
-          {data ? `共 ${data.bars.length} 根 · 末根${data.bars[data.bars.length - 1]?.quote_only ? '为仅报价 bar' : '已收齐'}` : ' '}
+          {data
+            ? t('共 {n} 根 · 末根{status}', {
+                n: data.bars.length,
+                status: data.bars[data.bars.length - 1]?.quote_only ? t('为仅报价 bar') : t('已收齐'),
+              })
+            : ' '}
         </span>
         <span className="font-mono tnum">{data ? `as of ${new Date(data.as_of).toLocaleString('zh-CN', { hour12: false })}` : ''}</span>
       </p>

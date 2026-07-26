@@ -37,6 +37,7 @@ import AiAnalysisCard from '@/components/detail/AiAnalysisCard';
 import ManualStockPull from '@/components/detail/ManualStockPull';
 import KeyStats from '@/components/detail/KeyStats';
 import type { StockDetail } from '@/api/types';
+import { t } from '@/i18n/core';
 
 type TabKey = 'signals' | 'options' | 'news';
 
@@ -279,7 +280,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
             : publicSnapshotMissing
               ? '该股票暂无数据，可手动获取最新行情、日线与技术指标'
               : `${error?.message || '暂时取不到该股票的行情数据'}${
-                  error?.retryAfter ? ` · ${Math.ceil(error.retryAfter)} 秒后可重试` : ''
+                  error?.retryAfter ? t(' · {n} 秒后可重试', { n: Math.ceil(error.retryAfter) }) : ''
                 }`
         }
         action={

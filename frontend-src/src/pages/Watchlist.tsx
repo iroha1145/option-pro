@@ -40,6 +40,7 @@ import SessionLED, { SessionDot } from '@/components/shared/SessionLED';
 import { SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
 import Icon from '@/components/icons';
+import { t } from '@/i18n/core';
 
 /* ---------------- B1 小件：涨跌宽度比条 ---------------- */
 function AdvanceDeclineBar({
@@ -626,8 +627,8 @@ export default function Watchlist() {
             {canManageWatchlist && (
               <button
                 type="button"
-                title={`从自选移除 ${r.ticker}`}
-                aria-label={`从自选移除 ${r.ticker}`}
+                title={t('从自选移除 {ticker}', { ticker: r.ticker })}
+                aria-label={t('从自选移除 {ticker}', { ticker: r.ticker })}
                 onClick={(event) => {
                   // 行本身是「打开详情」的点击目标，删除必须先拦住冒泡。
                   event.stopPropagation();

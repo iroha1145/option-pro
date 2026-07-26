@@ -29,6 +29,7 @@ import {
   type VolOiState,
 } from './optionAnalysis';
 import type { OptionChain, OptionChainRow } from '@/api/types';
+import { t } from '@/i18n/core';
 
 const NEW_YORK_DATE = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/New_York',
@@ -396,7 +397,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
           loginExpired
             ? '请重新登录后查看期权数据'
             : `期权数据暂时获取不到${
-                retrySeconds > 0 ? ` · ${retrySeconds} 秒后可重试` : ''
+                retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''
               }`
         }
         action={
@@ -417,7 +418,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
             >
               <Icon name="refresh" size={14} />
-              {retrying ? '正在重试' : retrySeconds > 0 ? `${retrySeconds} 秒后重试` : '重试'}
+              {retrying ? '正在重试' : retrySeconds > 0 ? t('{n} 秒后重试', { n: retrySeconds }) : '重试'}
             </button>
           )
         }

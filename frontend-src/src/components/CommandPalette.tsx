@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { pushRecent, readRecent } from '@/lib/recentTickers';
 import Icon, { type IconName } from '@/components/icons';
 import { NAV_ITEMS } from '@/components/Navbar';
+import { t } from '@/i18n/core';
 
 interface PaletteProps {
   open: boolean;
@@ -42,7 +43,7 @@ function searchErrorText(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === 429) {
       return error.retryAfter
-        ? `搜索请求较多，请 ${Math.ceil(error.retryAfter)} 秒后重试`
+        ? t('搜索请求较多，请 {n} 秒后重试', { n: Math.ceil(error.retryAfter) })
         : '搜索请求较多，请稍后重试';
     }
     if (error.code === 401) return '登录状态已失效，请重新登录';

@@ -4,6 +4,7 @@ import { stocksApi } from '@/api/modules/stocks';
 import type { StockPullResource, StockPullResult } from '@/api/types';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
+import { t } from '@/i18n/core';
 
 const RESOURCE_LABELS: Array<{
   key: keyof StockPullResult['resources'];
@@ -18,8 +19,8 @@ function resourceSummary(resource: StockPullResource): string {
   if (resource.status === 'failed') return '拉取失败';
   if (resource.status === 'unavailable') return '暂无数据';
   if (!resource.persisted) return '已拉取，保存失败';
-  if (resource.barCount !== undefined) return `${resource.barCount} 根`;
-  if (resource.metricCount !== undefined) return `${resource.metricCount} 项`;
+  if (resource.barCount !== undefined) return t('{n} 根', { n: resource.barCount });
+  if (resource.metricCount !== undefined) return t('{n} 项', { n: resource.metricCount });
   return resource.provider || '已更新';
 }
 
@@ -87,7 +88,7 @@ export default function ManualStockPull({
         running: false,
         result: null,
         error: cause instanceof ApiError
-          ? `${cause.message}${cause.retryAfter ? ` · ${cause.retryAfter} 秒后可重试` : ''}`
+          ? `${cause.message}${cause.retryAfter ? t(' · {n} 秒后可重试', { n: cause.retryAfter }) : ''}`
           : '拉取失败，请稍后重试',
       });
     } finally {

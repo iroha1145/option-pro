@@ -148,6 +148,12 @@ export const CHROME: Dict = {
 
   /* 请求 / 会话边界 */
   '请求超时，请重试': ['Request timed out. Please try again.', 'リクエストがタイムアウトしました。もう一度お試しください。'],
+  ' · {n} 秒后可重试': [' · retry in {n}s', ' · {n}秒後に再試行可能'],
+  '{n} 秒后重试': ['Retry in {n}s', '{n}秒後に再試行'],
+  '{n} 根': ['{n} bars', '{n}本'],
+  '{n} 项': ['{n} items', '{n}件'],
+  '打开 {ticker} 个股详情抽屉': ['Open the {ticker} detail panel', '{ticker}の詳細パネルを開く'],
+  '从自选移除 {ticker}': ['Remove {ticker} from the watchlist', '{ticker}をウォッチリストから削除'],
   '任务创建响应缺少 job_id（body 与 Location 头均未提供）': [
     'The job-creation response is missing a job_id (neither the body nor the Location header provided one).',
     'ジョブ作成レスポンスに job_id がありません（本文にも Location ヘッダーにも含まれていません）。',

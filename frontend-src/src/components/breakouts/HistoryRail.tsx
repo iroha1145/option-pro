@@ -16,6 +16,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import { LIFECYCLE_CN, LIFECYCLE_TONE, SETUP_CN } from './types';
 import type { BreakoutEventFull, LifecycleTone } from './types';
+import { getLocale, t } from '@/i18n/core';
 
 const PAGE = 12;
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -43,7 +44,13 @@ function hhmm(iso: string | null | undefined): string {
 
 function dayLabel(key: string): string {
   const d = new Date(`${key}T12:00:00`);
-  const week = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()];
+  const weekZh = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()];
+  const week = t(weekZh);
+  const locale = getLocale();
+  // en：紧凑数字日期 + 缩写星期（"7/26 Sun"）；ja：原生日期写法（"7月26日（日）"）；
+  // zh：保留原版空格分词，三种语言各自的自然写法互不通用，不能共享一个模板。
+  if (locale === 'en') return `${d.getMonth() + 1}/${d.getDate()} ${week}`;
+  if (locale === 'ja') return `${d.getMonth() + 1}月${d.getDate()}日（${week}）`;
   return `${d.getMonth() + 1} 月 ${d.getDate()} 日 ${week}`;
 }
 
