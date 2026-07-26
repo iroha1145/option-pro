@@ -580,3 +580,20 @@ def test_an_unknown_ticker_resolves_to_no_sector_rather_than_a_default() -> None
     assert primary_sector_id("NOTATICKER") is None
     assert primary_sector_id("") is None
     assert primary_sector_id(None) is None
+
+
+def test_the_reader_can_be_read_more_than_once_per_request() -> None:
+    """Factors must be a re-iterable sequence, not a one-shot iterator.
+
+    Three surfaces ask the same reader for different sectors. A generator would
+    be exhausted by the first question, and every sector after it would score
+    None -- which looks exactly like honest "coverage too thin" and would never
+    fail a test that only checks the first fit.
+    """
+
+    reader = _reader()
+    assert isinstance(reader.factors, tuple), "factors must be a sequence"
+    scores = [reader.fit_for(sector).score for sector in ("energy", "airlines", "software")]
+    assert all(score is not None for score in scores), (
+        f"a later sector lost its factors: {scores}"
+    )
