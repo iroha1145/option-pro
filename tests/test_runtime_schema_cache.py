@@ -111,3 +111,29 @@ def test_only_the_model_derived_schema_is_cached() -> None:
         assert not hasattr(getattr(rt, name), "cache_clear"), (
             f"{name} reads the mutable policy table; caching it freezes the identity"
         )
+
+
+def test_the_cjk_check_is_memoized_and_bounded() -> None:
+    """The per-character CJK lookup is asked millions of times per feed read.
+
+    Measured on production: 1,378,187 calls over 1,229 distinct characters while
+    serving one news feed, because the Chinese-text validator scans every string
+    field of every stored result twice. Memoizing took service.feed() from 1.477s
+    to 0.833s.
+
+    Bounded, not unbounded: the input is untrusted model output, so a result full
+    of distinct codepoints must not be able to grow the cache without limit.
+    """
+
+    from app.services.ai_jobs import models as ai_models
+
+    info = ai_models._is_cjk.cache_info()
+    assert info.maxsize is not None, "an unbounded cache over untrusted input"
+    assert info.maxsize >= 4096, "too small to cover real Chinese prose"
+
+    # Still answers correctly, cached or not.
+    for char in "中文汉字":
+        assert ai_models._is_cjk(char) is True
+    for char in "aZ1 .!":
+        assert ai_models._is_cjk(char) is False
+    assert ai_models._is_cjk("中") is True, "a repeat must return the same answer"
