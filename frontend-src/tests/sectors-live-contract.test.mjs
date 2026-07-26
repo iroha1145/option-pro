@@ -55,11 +55,11 @@ function liveHelpers() {
  */
 function loadRealMacroDriverMapper() {
   const source = fs.readFileSync(
-    path.resolve(here, '../src/api/modules/strength.ts'),
+    path.resolve(here, '../src/api/macroFields.ts'),
     'utf8',
   );
   const start = source.indexOf('export function mapMacroFitDrivers');
-  assert.ok(start > 0, 'strength.ts 里找不到 mapMacroFitDrivers');
+  assert.ok(start > 0, 'macroFields.ts 里找不到 mapMacroFitDrivers');
   const end = source.indexOf('\n}', start) + 2;
   const body = source
     .slice(start, end)
@@ -95,7 +95,7 @@ function loadSectorsModule(responses = {}) {
       };
     }
     if (id === '../live') return liveHelpers();
-    if (id === './strength') {
+    if (id === '../macroFields') {
       // 加载真实实现，而不是替身：这个映射器决定宏观驱动因素长什么样，
       // 换成假的等于让测试同意任何形状。
       return { mapMacroFitDrivers: loadRealMacroDriverMapper() };

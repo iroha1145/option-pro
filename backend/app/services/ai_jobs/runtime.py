@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 from app.services.ai_jobs.models import (
@@ -106,9 +107,33 @@ def _shared_instructions() -> str:
     )
 
 
+@lru_cache(maxsize=None)
+def _validation_schema_json(job_type: str) -> str:
+    """The result model's JSON schema, generated once per job type.
+
+    Generating it costs ~2.7ms and the value is a pure function of the model
+    class -- it can only change when the code changes. The news feed asked for it
+    three times per item (schema_identity, max_input_tokens_for and
+    max_tool_calls_for each rebuild the request), which is where 2.9 of that
+    endpoint's 4.6 seconds went: 342 schema generations to serve 114 items.
+
+    Cached as a *string*, not as a dict. Callers put this dict straight into a
+    paid API request payload, and handing every caller the same mutable object
+    invites one of them to corrupt it for all the others. json.loads costs
+    0.055ms -- fifty times cheaper than regenerating -- and returns a fresh
+    object each time, so the cache cannot be written through.
+    """
+
+    return json.dumps(
+        result_model_for(job_type).model_json_schema(mode="validation"),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
 def build_runtime_request(job_type: str, payload: dict[str, Any]) -> RuntimeRequest:
-    model = result_model_for(job_type)
-    schema = model.model_json_schema(mode="validation")
+    schema = json.loads(_validation_schema_json(job_type))
     common = _shared_instructions()
     if job_type == "earnings_impact":
         earnings_stage = str(
@@ -222,6 +247,21 @@ def build_runtime_request(job_type: str, payload: dict[str, Any]) -> RuntimeRequ
 
 
 def schema_identity(job_type: str) -> tuple[str, str]:
+    """The runtime contract's identity hash for a job type.
+
+    Deliberately **not** memoized, even though the feed reads it once per item.
+    It folds in ``max_output_tokens_for``, which reads the mutable module policy
+    table, and the identity is required to move when that policy moves -- a
+    stored job produced under a different policy must not keep looking current.
+    Caching it froze the hash across a policy change (caught by
+    test_runtime_policy_changes_schema_identity).
+
+    The expensive part -- generating the JSON schema, three times per call via
+    this function, max_input_tokens_for and max_tool_calls_for -- is cached in
+    _validation_schema_json instead, because a model class cannot change at
+    runtime. That is where the cost was.
+    """
+
     request = build_runtime_request(job_type, {})
     identity = {
         "instructions": request.instructions,

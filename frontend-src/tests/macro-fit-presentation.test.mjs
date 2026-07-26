@@ -264,7 +264,7 @@ test('驱动因素映射同时接受新旧两种形状（部署窗口）', () =>
   // 磁盘快照在 Worker 重跑之前仍是裸 id 数组。丢成空列表会让面板说
   // 「各宏观因子方向不明显」—— 那是一句关于数据的判断，不是「读不到名字」。
   const source = readFileSync(
-    resolve(repoRoot, 'frontend-src/src/api/modules/strength.ts'),
+    resolve(repoRoot, 'frontend-src/src/api/macroFields.ts'),
     'utf8',
   );
   const start = source.indexOf('export function mapMacroFitDrivers');
@@ -302,4 +302,42 @@ test('驱动因素映射同时接受新旧两种形状（部署窗口）', () =>
   assert.deepEqual(plain(map(['', '  ', null, 42, {}])), []);
   assert.deepEqual(plain(map(null)), []);
   assert.deepEqual(plain(map('not-an-array')), []);
+});
+
+test('个股宏观适配读的是概览端点，不是只覆盖前 20 名的强度端点', () => {
+  // /strength/stocks/{t} 只回答公开快照 top 切片里的代码，其余一律 404。拿它当
+  // 主源时 AMD、SLB 等约 190 只票明明算得出分，抽屉上却写着「暂无宏观读数」。
+  const stocks = readFileSync(
+    resolve(repoRoot, 'frontend-src/src/api/modules/stocks.ts'),
+    'utf8',
+  );
+  assert.match(stocks, /macroFit: pickN\(r, 'macro_fit_shadow'\)/,
+    '概览映射没有读取 macro_fit_shadow');
+
+  const detail = readFileSync(
+    resolve(repoRoot, 'frontend-src/src/components/detail/api.ts'),
+    'utf8',
+  );
+  const code = detail.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  // 概览优先、扫描行兜底。这一条正好表达了意图：概览必须排在前面。
+  assert.match(
+    code,
+    /macroFit: detail\.macroFit \?\? strength\?\.macroFit \?\? null/,
+    '抽屉的宏观适配不是以概览为主源',
+  );
+});
+
+test('mock 映射表不住在 lib/macroFit 之外的第二处', () => {
+  // 驱动因素映射只有一份实现，四个消费方都从 api/macroFields 引入 ——
+  // 挂在 strength.ts 上会让另外三个 chunk 为一个函数拖上 mock fixture。
+  const shared = readFileSync(
+    resolve(repoRoot, 'frontend-src/src/api/macroFields.ts'),
+    'utf8',
+  );
+  assert.match(shared, /export function mapMacroFitDrivers/);
+  const strength = readFileSync(
+    resolve(repoRoot, 'frontend-src/src/api/modules/strength.ts'),
+    'utf8',
+  );
+  assert.doesNotMatch(strength, /export function mapMacroFitDrivers/);
 });

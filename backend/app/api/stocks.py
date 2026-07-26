@@ -2475,6 +2475,69 @@ async def stock_logo(ticker: str):
     )
 
 
+def _attach_macro_fit(symbol: str, payload: Any) -> Any:
+    """Add the stock's macro fit (shadow) to an overview payload.
+
+    This lives on the overview endpoint rather than on /strength/stocks/{t}
+    because the drawer always calls the overview, while /strength/stocks/{t}
+    only answers for tickers inside the public snapshot's top slice -- it 404s
+    for everything else, so sourcing the fit there left AMD, SLB and ~190 other
+    tickers reading "no macro read" when the fit was perfectly computable.
+
+    Attached outside the 60s price cache so a fresh macro publication is not
+    held behind a quote cache entry, and so the cached value written for
+    public_home stays exactly what it was before.
+
+    Shadow only, and per *sector*: the exposure profile belongs to the sector,
+    not the stock. Failure degrades to "no read" -- never to a neutral 50, and
+    never to an error, because a quote must not fail over an annotation.
+    """
+
+    if not isinstance(payload, dict):
+        return payload
+    try:
+        from app.services.macro_conditions.linkage import factor_driver
+        from app.services.macro_conditions.linkage_reader import load_macro_fit_reader
+        from app.services.sectors import primary_sector_id
+    except Exception:
+        return payload
+
+    blank = {
+        "macro_fit_shadow": None,
+        "macro_fit_confidence": None,
+        "macro_tailwind": None,
+        "macro_supporting_factors": [],
+        "macro_opposing_factors": [],
+    }
+    try:
+        sector_id = primary_sector_id(symbol)
+        if sector_id is None:
+            return {**payload, **blank, "macro_shadow_status": "sector_unclassified"}
+        reader = load_macro_fit_reader()
+        if not reader.available:
+            return {**payload, **blank, "macro_shadow_status": str(reader.reason or "unavailable")}
+        fit = reader.fit_for(sector_id)
+        if fit.score is None:
+            return {
+                **payload,
+                **blank,
+                "macro_fit_confidence": round(fit.confidence, 4),
+                "macro_shadow_status": "exposure_coverage_low",
+            }
+        return {
+            **payload,
+            "macro_fit_shadow": fit.score,
+            "macro_fit_confidence": round(fit.confidence, 4),
+            "macro_fit_version": fit.version,
+            "macro_tailwind": fit.tailwind,
+            "macro_supporting_factors": [factor_driver(f) for f in fit.supporting],
+            "macro_opposing_factors": [factor_driver(f) for f in fit.opposing],
+            "macro_shadow_status": "ok",
+        }
+    except Exception:
+        return {**payload, **blank, "macro_shadow_status": "unavailable"}
+
+
 @router.get("/{ticker}")
 async def stock_overview(ticker: str):
     owner = current_request_is_owner()
@@ -2491,14 +2554,17 @@ async def stock_overview(ticker: str):
             ),
         )
         if disk_result is not None:
-            return _sanitize(disk_result)
+            return _attach_macro_fit(symbol, _sanitize(disk_result))
     try:
-        return await _stale_while_revalidate_endpoint(
-            key,
-            60,
-            30 * 60,
-            lambda: _stock_overview_impl(ticker),
-            allow_refresh=owner,
+        return _attach_macro_fit(
+            symbol,
+            await _stale_while_revalidate_endpoint(
+                key,
+                60,
+                30 * 60,
+                lambda: _stock_overview_impl(ticker),
+                allow_refresh=owner,
+            ),
         )
     except HTTPException as exc:
         if owner or not _is_public_snapshot_unavailable(exc):
@@ -2511,7 +2577,7 @@ async def stock_overview(ticker: str):
         )
         if result is None:
             raise exc
-        return _sanitize(result)
+        return _attach_macro_fit(symbol, _sanitize(result))
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Stock data is currently unavailable") from exc
 

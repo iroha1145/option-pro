@@ -2,6 +2,7 @@
 import { mockOr, post } from '../client';
 import { marketGet, resetMarketReadPaths } from '../marketRead';
 import { asRec, pickN, pickS, unwrap, type Rec } from '../live';
+import { mapMacroFitDrivers } from '../macroFields';
 import * as fx from '@/mocks/fixtures';
 import type {
   Candle,
@@ -127,6 +128,16 @@ function mapStockDetail(body: unknown): StockDetail {
     range52w: yearLow !== null && yearHigh !== null ? [yearLow, yearHigh] : ((null as unknown) as [number, number]),
     priceProvider: pickS(r, 'priceProvider', 'price_provider'),
     profileProvider: pickS(r, 'profileProvider', 'profile_provider'),
+    /* 宏观适配（影子字段）来自概览端点本身。
+       曾经取自 /strength/stocks/{t}，但那个端点只回答公开快照 top 切片里的代码，
+       其余一律 404 —— 于是 AMD、SLB 等约 190 只票明明算得出分，界面上却写着
+       「暂无宏观读数」。概览是抽屉必然会调的那次请求。 */
+    macroFit: pickN(r, 'macro_fit_shadow'),
+    macroTailwind: pickS(r, 'macro_tailwind'),
+    macroFitConfidence: pickN(r, 'macro_fit_confidence'),
+    macroSupporting: mapMacroFitDrivers(r.macro_supporting_factors),
+    macroOpposing: mapMacroFitDrivers(r.macro_opposing_factors),
+    macroShadowStatus: pickS(r, 'macro_shadow_status'),
   };
 }
 

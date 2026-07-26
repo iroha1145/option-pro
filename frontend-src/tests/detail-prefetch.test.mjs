@@ -111,10 +111,16 @@ test('没有在 loading 分支里另挂一个 KlineChart', () => {
   );
 });
 
-test('详情合并保留宏观影子字段，缺失时保持 null 而不是中性', () => {
+test('详情合并以概览为宏观主源，缺失时保持 null 而不是中性', () => {
+  // 这一条原先钉的是「只从扫描行取」。那是错的：/strength/stocks/{t} 只回答公开
+  // 快照 top 切片里的代码，其余 404 —— AMD、SLB 等约 190 只票于是显示「暂无宏观
+  // 读数」，而分数明明算得出来。概览是抽屉必然会调的那次请求，所以它才是主源。
   const code = codeOf(detailApi);
-  assert.match(code, /macroFit: strength\?\.macroFit \?\? null/);
-  assert.match(code, /macroTailwind: strength\?\.macroTailwind \?\? null/);
-  // 补充这一路超时会让 strength 为 null；此时不能出现一个凭空的 50。
+  assert.match(code, /macroFit: detail\.macroFit \?\? strength\?\.macroFit \?\? null/);
+  assert.match(
+    code,
+    /macroTailwind: detail\.macroTailwind \?\? strength\?\.macroTailwind \?\? null/,
+  );
+  // 两边都没有时保持 null。补充这一路超时会让 strength 为 null，此时不能凭空出 50。
   assert.doesNotMatch(code, /macroFit:[^\n]*\?\?\s*50/);
 });

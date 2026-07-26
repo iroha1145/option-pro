@@ -12,7 +12,7 @@ import { marketGet } from '@/api/marketRead';
 import { asRec, pickN, pickS, unwrap, type Rec } from '@/api/live';
 import { ma20Of, mapBar } from '@/api/modules/stocks';
 import { stocksApi } from '@/api/modules/stocks';
-import { mapMacroFitDrivers } from '@/api/modules/strength';
+import { mapMacroFitDrivers } from '@/api/macroFields';
 import { postAiJob } from '@/api/modules/ai-jobs';
 import * as fx from '@/mocks/fixtures';
 import * as fx2 from '@/mocks/fixtures2';
@@ -148,15 +148,22 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
           marketCap: finite(detail.marketCap) ? detail.marketCap : strength?.marketCap ?? detail.marketCap,
           pe: detail.pe ?? strength?.pe ?? null,
           snapshotScope: 'full' as const,
-          // 概览接口没有宏观字段，只有扫描行有。补充这一路超时或失败时 strength 为
-          // null，这些字段就保持 undefined —— 抽屉会显示「暂无宏观读数」，
-          // 而不是一个凭空的中性分。
-          macroFit: strength?.macroFit ?? null,
-          macroTailwind: strength?.macroTailwind ?? null,
-          macroFitConfidence: strength?.macroFitConfidence ?? null,
-          macroSupporting: strength?.macroSupporting ?? [],
-          macroOpposing: strength?.macroOpposing ?? [],
+          // 宏观适配以**概览**为主源：概览对每只在主题表里的票都算得出，而
+          // /strength/stocks/{t} 只回答公开快照 top 切片里的代码，其余 404 ——
+          // 之前拿它当主源，AMD、SLB 等约 190 只票就都显示「暂无宏观读数」。
+          //
+          // 扫描行只补概览没有的那一个字段（技术 − 结构性宏观的差值，它需要该股的
+          // 市场适配分，概览里没有）。两边都没有就保持 null，不兜中性。
+          macroFit: detail.macroFit ?? strength?.macroFit ?? null,
+          macroTailwind: detail.macroTailwind ?? strength?.macroTailwind ?? null,
+          macroFitConfidence:
+            detail.macroFitConfidence ?? strength?.macroFitConfidence ?? null,
+          macroSupporting:
+            (detail.macroSupporting?.length ? detail.macroSupporting : strength?.macroSupporting) ?? [],
+          macroOpposing:
+            (detail.macroOpposing?.length ? detail.macroOpposing : strength?.macroOpposing) ?? [],
           macroTechnicalGap: strength?.macroTechnicalGap ?? null,
+          macroShadowStatus: detail.macroShadowStatus ?? strength?.macroShadowStatus ?? null,
         };
       } catch (e) {
         // 只有明确的公开快照边界才允许回退扫描行；供应方错误不能被伪装成基础行情成功。

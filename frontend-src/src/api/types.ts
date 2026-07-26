@@ -218,6 +218,8 @@ export interface StockDetail extends WatchlistItem {
   macroSupporting?: MacroFitDriver[];
   macroOpposing?: MacroFitDriver[];
   macroTechnicalGap?: number | null;
+  /** 后端 macro_shadow_status：区分「没快照」「未归板块」「暴露观测不足」。 */
+  macroShadowStatus?: string | null;
 }
 
 export interface StockPullResource {
