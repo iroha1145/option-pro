@@ -14,6 +14,7 @@ import { usePolling } from '@/hooks/usePolling';
 import { fmtNyTime } from '@/lib/format';
 import Icon from '@/components/icons';
 import { SessionDot } from '@/components/shared/SessionLED';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 export const NAV_ITEMS = [
   { no: '01', label: '自选', path: '/watchlist' },
@@ -150,6 +151,8 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
               AI
             </span>
           )}
+
+          <LanguageSwitcher className="hidden md:block" />
 
           {isOwner ? (
             <button
