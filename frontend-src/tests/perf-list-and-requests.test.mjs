@@ -102,14 +102,16 @@ test('概览统计条的占位与真实内容布局一致', async () => {
 
 /* ---------- 请求共享不改变语义 ---------- */
 
-test('市场时段共享同一请求，且只共享这一个只读端点', async () => {
+test('全局只读端点共享同一请求，窗口足够短', async () => {
   const market = codeOf(await source('api/modules/market.ts'));
-  assert.match(market, /statusInFlight/);
-  assert.match(market, /STATUS_SHARE_MS/);
-  assert.match(market, /sharedStatus\(\)/);
-  // 共享窗口必须是短的：它替代不了轮询，只压掉同一时刻的重复
-  const window = Number(/STATUS_SHARE_MS = ([\d_]+)/.exec(market)[1].replace(/_/g, ''));
-  assert.ok(window > 0 && window <= 5000, `共享窗口 ${window}ms 过长，会掩盖真实的时段切换`);
+  assert.match(market, /shareGlobalRead/);
+  assert.match(market, /sharedStatus/);
+  // 指数也接进来：常驻的 IndexTape 与大盘页会同时要同一份数据
+  assert.match(market, /sharedIndices/);
+  assert.match(market, /indices: \(\): Promise<IndexQuote\[\]> => mockOr\(\(\) => fx\.getIndices\(\), sharedIndices\)/);
+  // 共享窗口必须短：它替代不了轮询，只压掉同一时刻的重复
+  const window = Number(/SHARE_WINDOW_MS = ([\d_]+)/.exec(market)[1].replace(/_/g, ''));
+  assert.ok(window > 0 && window <= 5000, `共享窗口 ${window}ms 过长，会掩盖真实的状态切换`);
 });
 
 test('共享的市场时段请求在并发调用下只发一次', async () => {
@@ -172,6 +174,18 @@ test('共享的市场时段请求在并发调用下只发一次', async () => {
   resetMarketStatusShare();
   await marketApi.status();
   assert.equal(calls, 2, '复位后必须重新发出请求');
+
+  // 指数走同一套：常驻 IndexTape 与大盘页并发时也只发一次。
+  resetMarketStatusShare();
+  const before = calls;
+  await Promise.all([marketApi.indices(), marketApi.indices()]);
+  assert.equal(calls, before + 1, '两个并发的指数调用者只应发一次请求');
+
+  // 两个端点的共享互不干扰
+  resetMarketStatusShare();
+  const beforeBoth = calls;
+  await Promise.all([marketApi.status(), marketApi.indices()]);
+  assert.equal(calls, beforeBoth + 2, '不同端点必须各发各的');
 });
 
 /* ---------- 分批发生在排序之后（review 发现的真实缺陷） ---------- */
@@ -255,4 +269,24 @@ test('列表高度保留对 loading/error/empty/list 一视同仁', async () => 
   // 外壳带 min-h，而不是只有 loading 分支带
   assert.match(page, /<div className="mt-4 min-h-\[70vh\]">/);
   assert.doesNotMatch(page, /<div className="card-surface min-h-\[70vh\]">/);
+});
+
+/* ---------- 个股详情：核心行情与强度补充并行 ---------- */
+
+test('详情与强度补充同时发出，不是首尾相接', async () => {
+  const api = codeOf(await source('components/detail/api.ts'));
+
+  // 两个 Promise 必须在 await 之前就创建出来
+  const detailIdx = api.indexOf('const detailPromise = stocksApi.detail(t, force);');
+  const strengthIdx = api.indexOf('const strengthPromise = Promise.race([');
+  const firstAwait = api.indexOf('await detailPromise');
+  assert.ok(detailIdx > 0 && strengthIdx > 0, '两条请求都要提前发起');
+  assert.ok(
+    detailIdx < firstAwait && strengthIdx < firstAwait,
+    '两个请求都必须在第一个 await 之前发起，否则仍是串行',
+  );
+  // 旧写法：先 await 详情，再去要强度
+  assert.doesNotMatch(api, /const detail = await stocksApi\.detail\(t, force\);/);
+  // 回退路径复用已经在飞的那次请求
+  assert.match(api, /\(await strengthPromise\) \?\?/);
 });
