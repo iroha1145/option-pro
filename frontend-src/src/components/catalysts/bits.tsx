@@ -78,7 +78,25 @@ export function ConfidenceLabel({ value, className }: { value: number; className
 }
 
 /* ---------------- 影响分「N · 非收益」 ---------------- */
-export function ImpactValue({ value, className, dash = '—' }: { value: number | null; className?: string; dash?: string }) {
+export function ImpactValue({
+  value,
+  className,
+  dash = '—',
+  bare = false,
+}: {
+  value: number | null;
+  className?: string;
+  dash?: string;
+  /**
+   * 只给数字，不带「· 非收益」后缀，也不带自己的 ⓘ。
+   *
+   * 给同一行里已经有一个合并说明的调用方用（焦点周期的逐股评估）。同一行挂两个
+   * ⓘ、外加两句常驻免责声明，读者要读四样东西才看到两个数 —— 那时候后缀不是在
+   * 提醒什么，只是噪声。说明本身不能丢，所以调用方必须自己给出，见
+   * SCORE_HINTS.focusCycleAssessment。
+   */
+  bare?: boolean;
+}) {
   if (value === null || Number.isNaN(value)) {
     return <span className={cn('shrink-0 font-mono text-micro text-ink-300', className)}>{dash}</span>;
   }
@@ -89,8 +107,14 @@ export function ImpactValue({ value, className, dash = '—' }: { value: number 
        就不再是一个可读的单位。三处调用方都把它放在一行里，都受益。 */
     <span className={cn('shrink-0 whitespace-nowrap font-mono text-micro tnum', tone, className)}>
       {sign}
-      {Math.abs(value).toFixed(2)} <span className="text-ink-400">· 非收益</span>
-      <InfoHint hint={SCORE_HINTS.newsImpact} size={11} className="ml-1" />
+      {Math.abs(value).toFixed(2)}
+      {!bare && (
+        <>
+          {' '}
+          <span className="text-ink-400">· 非收益</span>
+          <InfoHint hint={SCORE_HINTS.newsImpact} size={11} className="ml-1" />
+        </>
+      )}
     </span>
   );
 }
