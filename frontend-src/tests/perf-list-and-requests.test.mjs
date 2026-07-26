@@ -40,8 +40,8 @@ test('渐进列表的契约：前缀切片，且给得出剩余数量', async ()
   assert.match(source, /limit >= total \? items :/);
   // 剩余数量必须可见，否则用户无从知道「这不是全部」
   assert.match(source, /remaining: Math\.max\(0, total - limit\)/);
-  // 数据集变化要退回首批，否则新列表会被上一份的滚动进度一次性全挂
-  assert.match(source, /setLimit\(initial\);/);
+  // 条数变化只夹紧，不回退（见下方专门的用例）
+  assert.match(source, /current > total && total > 0/);
   // 不支持 IntersectionObserver 时必须仍可手动加载
   assert.match(source, /typeof IntersectionObserver === 'undefined'/);
 });
@@ -67,7 +67,8 @@ test('自选页在完整列表上排序与统计，只对渲染切片分批', as
 test('桌面表格与移动卡片流用同一批次', async () => {
   const page = codeOf(await source('pages/Watchlist.tsx'));
   assert.match(page, /rows=\{renderedRows\}/);
-  assert.match(page, /renderedCards\.length/);
+  // 同一个切片对象：两个断点下「加载更多」含义必须一致
+  assert.match(page, /const renderedRows = renderedCards;/);
 });
 
 /* ---------- 不再为每张卡建投影节点 ---------- */
@@ -171,4 +172,46 @@ test('共享的市场时段请求在并发调用下只发一次', async () => {
   resetMarketStatusShare();
   await marketApi.status();
   assert.equal(calls, 2, '复位后必须重新发出请求');
+});
+
+/* ---------- 分批发生在排序之后（review 发现的真实缺陷） ---------- */
+
+test('桌面表格拿到的是排序后的切片，不是未排序列表的前 N 条', async () => {
+  const page = codeOf(await source('pages/Watchlist.tsx'));
+
+  // DataTable 内部还会按 sort 再排一次。如果喂给它未排序的前 N 条，
+  // 「涨幅优先」看到的就是「任意前 24 只里涨得最多的」，而不是
+  // 「涨得最多的 24 只」—— 局部样本冒充完整结果。
+  assert.doesNotMatch(
+    page,
+    /items\.slice\(0, renderedCards\.length\)/,
+    '表格不能拿未排序的 items 切片',
+  );
+  assert.match(page, /const renderedRows = renderedCards;/);
+  // renderedCards 来自 cardItems（已排序）
+  assert.match(page, /useProgressiveList\(cardItems/);
+});
+
+test('DataTable 确实会内部排序，所以切片顺序有意义', async () => {
+  const table = await source('components/shared/DataTable.tsx');
+  // 这条断言存在的意义：一旦 DataTable 改成不排序，上面那条的理由就变了
+  assert.match(table, /const sorted = useMemo\(/);
+  assert.match(table, /\[\.\.\.rows\]\.sort\(/);
+});
+
+/* ---------- 后台刷新不能收回用户已经加载的内容 ---------- */
+
+test('条数变化时夹紧上限，而不是退回首批', async () => {
+  const hook = codeOf(await source('hooks/useProgressiveList.ts'));
+
+  // 列表每 60 秒轮询。原先「条数一变就 setLimit(initial)」会让已经加载到
+  // 96 条的人被打回 24 条：页面高度少掉约一万两千像素，滚动位置被夹到底，
+  // 人被甩到列表的另一处。
+  assert.doesNotMatch(
+    hook,
+    /useEffect\(\(\) => \{\s*setLimit\(initial\);\s*\}/,
+    '不能因为条数变化就回退到首批',
+  );
+  assert.match(hook, /current > total && total > 0/);
+  assert.match(hook, /Math\.max\(initial, total\)/);
 });

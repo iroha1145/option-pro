@@ -37,12 +37,18 @@ export function useProgressiveList<T>(
   const observerRef = useRef<IntersectionObserver | null>(null);
   const total = items.length;
 
-  // 数据集换了（切换用户自选、刷新拿到新列表）就退回首批，
-  // 否则上一份列表滚到 200 条的状态会让新列表一次性全挂。
-  const identity = total;
+  /**
+   * 只夹紧，不回退。
+   *
+   * 原先是「条数一变就退回首批」。但这个列表每 60 秒轮询一次：只要覆盖范围或
+   * 用户自选变动一条，已经加载到 96 条的人就会被打回 24 条 —— 页面高度瞬间少掉
+   * 约一万两千像素，浏览器把滚动位置夹到底，人直接被甩到列表的另一处。
+   *
+   * 用户要过的东西不该被一次后台刷新收回去；需要的只是别超过现有总数。
+   */
   useEffect(() => {
-    setLimit(initial);
-  }, [identity, initial]);
+    setLimit((current) => (current > total && total > 0 ? Math.max(initial, total) : current));
+  }, [total, initial]);
 
   const loadMore = useCallback(() => {
     setLimit((current) => (current >= total ? current : current + step));
