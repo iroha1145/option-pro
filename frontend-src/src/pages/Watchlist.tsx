@@ -678,12 +678,13 @@ export default function Watchlist() {
   const FIRST_BATCH = 24;
   const progressive = useProgressiveList(cardItems, { initial: FIRST_BATCH, step: 24 });
   const renderedCards = progressive.visible;
-  // 桌面表格与移动卡片流是同一份数据的两种呈现，挂载批次必须一致，
-  // 否则同一个「加载更多」在两个断点下含义不同。
-  const renderedRows = useMemo(
-    () => (progressive.hasMore ? items.slice(0, renderedCards.length) : items),
-    [items, progressive.hasMore, renderedCards.length],
-  );
+  // 桌面表格与移动卡片流是同一份数据的两种呈现，用同一个切片。
+  //
+  // 这里必须是**排好序之后**的切片。之前我传的是 items.slice(...) —— 未排序的
+  // 前 N 条，而 DataTable 内部还会再排一次，于是选「涨幅优先」看到的是
+  // 「任意前 24 只里涨得最多的」而不是「涨得最多的 24 只」。那正是把局部样本
+  // 冒充成完整结果，和这次审计要修的是同一类错误。
+  const renderedRows = renderedCards;
 
   return (
     <div>
