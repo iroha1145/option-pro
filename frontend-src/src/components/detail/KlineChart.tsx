@@ -16,7 +16,7 @@ import { usePolling } from '@/hooks/usePolling';
 import { baseAnimation, CH, glassTooltip, stippleAreaStyle, type ChartOption } from '@/lib/chart';
 import { fmtCompact, fmtPrice } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import { CHART_RANGES, getDetailChart, type ChartRange } from './api';
+import { CHART_RANGES, DEFAULT_CHART_RANGE, getDetailChart, type ChartRange } from './api';
 import type { ChartBarEx } from '@/mocks/fixtures';
 
 type ChartMode = 'candle' | 'area';
@@ -304,8 +304,9 @@ export default function KlineChart({
   refreshVersion?: number;
 }) {
   // Daily bars are the reliable default covered by Massive Stocks Starter;
-  // intraday intervals remain available on demand.
-  const [range, setRange] = useState<ChartRange>('1d');
+  // intraday intervals remain available on demand. The default lives in ./api so
+  // the prefetch and this component request the same URL.
+  const [range, setRange] = useState<ChartRange>(DEFAULT_CHART_RANGE);
   const [mode, setMode] = useState<ChartMode>('candle');
   const seenRefreshVersion = useRef(refreshVersion);
   const { data, error, loading, refresh } = usePolling(

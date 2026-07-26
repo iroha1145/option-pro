@@ -43,6 +43,20 @@ TAILWIND_STRONG = 65.0
 TAILWIND_WEAK = 35.0
 
 
+def factor_driver(factor_id: str) -> dict[str, str]:
+    """A driver as ``{factor_id, label}``.
+
+    The label is resolved here, from the registry, rather than mapped again in
+    the interface. A second copy of "factor id -> Chinese name" in the frontend
+    would keep rendering the old name -- or the bare id -- after a rename, and
+    nothing would fail.
+    """
+
+    spec = FACTORS_BY_ID.get(factor_id)
+    label = getattr(spec, "display_name_zh", "") or factor_id
+    return {"factor_id": factor_id, "label": label}
+
+
 @dataclass(frozen=True, slots=True)
 class MacroFit:
     """One stock's or sector's macro fit, plus why."""
@@ -64,8 +78,8 @@ class MacroFit:
             "macro_fit_confidence": round(self.confidence, 4),
             "macro_fit_version": self.version,
             "macro_tailwind": self.tailwind,
-            "macro_supporting_factors": list(self.supporting),
-            "macro_opposing_factors": list(self.opposing),
+            "macro_supporting_factors": [factor_driver(f) for f in self.supporting],
+            "macro_opposing_factors": [factor_driver(f) for f in self.opposing],
             "macro_fit_effective_weight": round(self.effective_weight, 4),
         }
 
@@ -298,6 +312,7 @@ __all__ = [
     "MacroFit",
     "UNAVAILABLE",
     "compute_macro_fit",
+    "factor_driver",
     "macro_technical_gap",
     "shadow_alert_priority_adjustment",
     "shadow_ranking_adjustment",

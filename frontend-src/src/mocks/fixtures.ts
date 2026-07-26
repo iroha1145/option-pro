@@ -229,6 +229,25 @@ export function runStrengthScan(): ScreenerRow[] {
         volatility: Math.round(r.normal(55, 16, 10, 95)),
       },
       sparkline: makeSparkline(r, changePct, 24),
+      /* 宏观适配：合成值，与任何第三方报告的示例分数无关。刻意让每 7 只里有 1 只
+         没有读数，这样「没读到」这条路径在 mock 模式下也看得见 —— 它和「中性」
+         显示得完全不同，这正是需要被看到的差别。 */
+      ...(i % 7 === 3
+        ? { macroFit: null, macroTailwind: null, macroFitConfidence: null }
+        : (() => {
+            const fit = round2(r.normal(52, 19, 8, 94));
+            return {
+              macroFit: fit,
+              macroTailwind: fit >= 65 ? '顺风' : fit <= 35 ? '逆风' : '中性',
+              macroFitConfidence: round2(r.float(0.62, 1)),
+              macroSupporting: [
+                { factor_id: 'fed_net_liquidity', label: '联储净流动性' },
+                { factor_id: 'risk_vs_safe', label: '风险资产相对避险' },
+              ],
+              macroOpposing: [{ factor_id: 'real_rate_level', label: '实际利率水平' }],
+              macroTechnicalGap: round2(r.float(-28, 28)),
+            };
+          })()),
     };
     return row;
   });

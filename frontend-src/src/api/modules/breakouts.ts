@@ -2,6 +2,7 @@
 import { get, mockOr, toQuery } from '../client';
 import { marketGet } from '../marketRead';
 import { asRec, num, pickN, pickS, str, unwrap, type Rec } from '../live';
+import { mapMacroFitDrivers } from './strength';
 import * as fx2 from '@/mocks/fixtures2';
 import { SIGNAL_LABELS } from '@/mocks/fixtures';
 import type { BreakoutEvent, BreakoutEventDetail, BreakoutSignal, BreakoutStatus, SignalType } from '../types';
@@ -194,6 +195,14 @@ export function normalizeBreakoutEvent(raw: unknown): BreakoutSignal & BreakoutE
     market_fit_score: pickN(r, 'market_fit_score'),
     alert_priority_score: pickN(r, 'alert_priority_score'),
     data_confidence_score: pickN(r, 'data_confidence_score'),
+    /* 宏观影子字段：只标注提醒优先级，不改动上面任何一个质量分，也不影响事件生命周期。 */
+    macro_fit_score: pickN(r, 'macro_fit_score'),
+    macro_tailwind: pickS(r, 'macro_tailwind'),
+    macro_priority_adjustment_shadow: pickN(r, 'macro_priority_adjustment_shadow'),
+    alert_priority_macro_shadow: pickN(r, 'alert_priority_macro_shadow'),
+    macro_shadow_status: pickS(r, 'macro_shadow_status'),
+    macro_supporting_factors: mapMacroFitDrivers(r.macro_supporting_factors),
+    macro_opposing_factors: mapMacroFitDrivers(r.macro_opposing_factors),
     range_persistence: rangePersistence,
     contribution_breakdown: normContribution(r.contribution_breakdown),
     configured_weights: r.configured_weights ?? null,

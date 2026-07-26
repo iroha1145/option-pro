@@ -212,6 +212,8 @@ function buildDrivers(): { improving: MacroDriver[]; deteriorating: MacroDriver[
   };
 }
 
+const STRUCTURAL_MOCK_MODULES = ['liquidity', 'funding', 'treasury', 'rates'];
+
 export function getMacroConditions(): MacroConditionsResponse {
   return {
     status: 'active',
@@ -231,6 +233,17 @@ export function getMacroConditions(): MacroConditionsResponse {
       formattedScore: `${MOCK_COMPOSITE_SCORE.toFixed(1)} 分`,
     },
     modules: MOCK_MODULES,
+    /* 结构性宏观 = 流动性/融资/国债/利率。信用与风险读的是技术形态用的同一批工具，
+       不计入，否则同一个信号换两个名字计两次权 —— 与后端 STRUCTURAL_MODULES 同义。 */
+    structuralScore: (() => {
+      const scored = MOCK_MODULES.filter(
+        (m) => STRUCTURAL_MOCK_MODULES.includes(m.moduleId) && m.score !== null,
+      );
+      return scored.length === 0
+        ? null
+        : round2(scored.reduce((sum, m) => sum + (m.score ?? 0), 0) / scored.length);
+    })(),
+    structuralModules: [...STRUCTURAL_MOCK_MODULES],
     drivers: buildDrivers(),
     warnings: [MOCK_REASON],
     sources: ['合成 mock 数据 · 不是真实来源'],

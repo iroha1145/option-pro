@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Any
 
 SECTORS: dict[str, dict[str, Any]] = {
@@ -28,3 +29,40 @@ SECTORS: dict[str, dict[str, Any]] = {
     "industrials":          {"name": "工业制造",   "tickers": ["CAT", "DE", "HON", "GE", "MMM", "UPS", "FDX", "EMR", "ETN", "ITW"]},
     "etfs":                 {"name": "宽基 ETF",  "tickers": ["SPY", "QQQ", "IWM", "DIA", "VTI", "VOO", "ARKK", "SOXX", "XLF", "XLE", "GLD", "TLT"]},
 }
+
+
+@lru_cache(maxsize=1)
+def _primary_sector_index() -> dict[str, str]:
+    """Ticker -> the sector id it is filed under, first listing wins.
+
+    The map above holds investment *themes*, not an authoritative primary-sector
+    classification, and 17 of its tickers appear under two themes (NVDA is both
+    semiconductors and AI/cloud). "First listing" is deterministic -- the dict
+    keeps its authored order -- but for those tickers the choice is arbitrary in
+    meaning, not just in order. Consumers that attach anything sector-specific to
+    a ticker inherit that limitation; it is not introduced here.
+    """
+
+    index: dict[str, str] = {}
+    for sector_id, sector in SECTORS.items():
+        for ticker in sector["tickers"]:
+            symbol = str(ticker).upper().strip()
+            if not symbol or "." in symbol:
+                # Same exclusion the strength universe applies: keep this US-only
+                # and out of mixed exchange suffixes.
+                continue
+            index.setdefault(symbol, sector_id)
+    return index
+
+
+def primary_sector_id(ticker: Any) -> str | None:
+    """This ticker's sector id, or None when it is outside the theme map.
+
+    None means "not classified here" and must not be read as a sector. A caller
+    that needs a sector profile reports nothing for these tickers.
+    """
+
+    symbol = str(ticker or "").upper().strip()
+    if not symbol:
+        return None
+    return _primary_sector_index().get(symbol)

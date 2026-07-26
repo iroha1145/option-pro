@@ -21,6 +21,7 @@ import DriverList from './DriverList';
 import FactorDetails from './FactorDetails';
 import MacroHistoryChart, { HISTORY_RANGES, type HistoryRangeKey } from './MacroHistoryChart';
 import ModuleGrid from './ModuleGrid';
+import MacroTechnicalMatrix from '@/components/market/MacroTechnicalMatrix';
 
 const POLL_MS = 15 * 60 * 1000;
 /* 手动刷新期间的跟进节奏与放弃跟进的上限（审计 P2-26）。 */
@@ -69,7 +70,17 @@ function DisabledNotice({ reason }: { reason: string | null }) {
   );
 }
 
-export default function MacroConditionsPanel() {
+/**
+ * 技术侧分数由 /market 页传入，而不是本组件自己再拉一次 /strength/market：
+ * 那会为了一张展示卡多发一次请求，而调用方本来就已经有这个数。
+ */
+interface MacroConditionsPanelProps {
+  technicalScore?: number | null;
+}
+
+export default function MacroConditionsPanel({
+  technicalScore = null,
+}: MacroConditionsPanelProps = {}) {
   const { isOwner } = useAccess();
   const [range, setRange] = useState<HistoryRangeKey>('1Y');
   const [refreshPhase, setRefreshPhase] = useState<RefreshPhase>('idle');
@@ -300,6 +311,13 @@ export default function MacroConditionsPanel() {
 
       {/* D. 七模块网格 */}
       <ModuleGrid modules={data.modules} />
+
+      {/* D2. 技术 × 结构性宏观二维状态（增量任务 Phase 1，仅展示） */}
+      <MacroTechnicalMatrix
+        technical={technicalScore ?? null}
+        structural={data.structuralScore}
+        structuralModules={data.structuralModules}
+      />
 
       {/* E. 驱动因素 */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

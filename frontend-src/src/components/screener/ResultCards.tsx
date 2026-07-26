@@ -10,6 +10,7 @@ import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import InfoHint from '@/components/shared/InfoHint';
+import MacroFitBadge from '@/components/shared/MacroFitBadge';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import RowExpansion from './RowExpansion';
 import { CatalystBadge, SubscoreTicks } from './cells';
@@ -34,6 +35,8 @@ export interface ResultCardsProps {
   animKey: string;
   /** 当前页码：入场 stagger 只在第一页触发 */
   page?: number;
+  /** 与桌面端可选列同一个开关 */
+  showMacro?: boolean;
 }
 
 export default function ResultCards({
@@ -47,6 +50,7 @@ export default function ResultCards({
   onOpenDetail,
   animKey,
   page = 1,
+  showMacro = false,
 }: ResultCardsProps) {
   return (
     <div className="grid grid-cols-1 gap-3" key={animKey}>
@@ -130,7 +134,15 @@ export default function ResultCards({
               </span>
               <span className="mt-3 flex items-center justify-between border-t border-line pt-3">
                 <SubscoreTicks row={r} />
-                <CatalystBadge summary={catalysts[r.ticker]} />
+                <span className="flex items-center gap-1.5">
+                  {/* 开关是用户自己打开的，所以「无读数」也要显示出来。只在有分数时
+                      才出现，等于让「列关着」和「这只票没读数」长得一样 —— 那正是这
+                      整个字段想避免的含混。 */}
+                  {showMacro && (
+                    <MacroFitBadge score={r.macroFit} tailwind={r.macroTailwind} compact />
+                  )}
+                  <CatalystBadge summary={catalysts[r.ticker]} />
+                </span>
               </span>
             </button>
             <AnimatePresence>

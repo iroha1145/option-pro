@@ -3,6 +3,7 @@ import { get, mockOr, toQuery } from '../client';
 import { sharedGlobalGet } from '../sharedRead';
 import { marketGet } from '../marketRead';
 import { asRec, pickB, pickN, pickS, unwrap, type Rec } from '../live';
+import type { MacroFitDriver } from '@/lib/macroFit';
 import * as fx from '@/mocks/fixtures';
 import type {
   MarketRegimeInfo,
@@ -96,6 +97,29 @@ function applyParams(rows: ScreenerRow[], p: ScanParams): ScreenerRow[] {
  * 关键对齐：change_pct（非 changePct/change_percent）· sector_name/sector_id ·
  * 分项 = 契约周期/质量分 score_short/score_mid/score_long/breakout_quality_score（subscoreDims 携带真实标签）。
  */
+/**
+ * 宏观驱动因素：后端下发 {factor_id, label}，中文名由 registry 解析。
+ *
+ * 前端刻意不留一份 id → 中文名的映射表：那是同一个事实的第二份拷贝，改名之后
+ * 界面会继续显示旧名字（或者裸 id），而且什么都不会失败。
+ */
+export function mapMacroFitDrivers(raw: unknown): MacroFitDriver[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    // 部署窗口：磁盘上的快照在 Worker 重跑之前仍是旧形状（裸因子 id 数组）。
+    // 那时显示 id 是诚实的 —— 那正是旧快照携带的全部信息；而丢成空列表会让面板
+    // 说「各宏观因子方向不明显」，那是一句关于数据的判断，不是「读不到名字」。
+    if (typeof item === 'string') {
+      const id = item.trim();
+      return id ? [{ factor_id: id, label: id }] : [];
+    }
+    const rec = asRec(item);
+    const factorId = pickS(rec, 'factor_id');
+    if (!factorId) return [];
+    return [{ factor_id: factorId, label: pickS(rec, 'label') ?? factorId }];
+  });
+}
+
 function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
   const ticker = pickS(r, 'ticker');
   const score = pickN(r, 'strengthScore', 'final_score', 'strength_score', 'score');
@@ -130,6 +154,14 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
     },
     subscoreDims: dims,
     sparkline: [], // 契约 StrengthRow 无 sparkline（行展开按需拉日 K，见 RowExpansion）
+    // 影子字段：缺失一律保持 null / 空数组，绝不兜成 50 或「中性」。后端在覆盖度
+    // 不足时返回 null 正是为了区分「说不出来」和「中性」，前端补一手就白做了。
+    macroFit: pickN(r, 'macro_fit_shadow'),
+    macroTailwind: pickS(r, 'macro_tailwind'),
+    macroFitConfidence: pickN(r, 'macro_fit_confidence'),
+    macroSupporting: mapMacroFitDrivers(r.macro_supporting_factors),
+    macroOpposing: mapMacroFitDrivers(r.macro_opposing_factors),
+    macroTechnicalGap: pickN(r, 'macro_technical_gap'),
   };
 }
 

@@ -96,6 +96,19 @@ class BreakoutEventResponse(_ResponseModel):
     missing_components: list[str]
     score_version: str
     market_shape: dict[str, Any]
+    # Shadow only. macro_fit_score is the stock's macro fit; the adjustment is
+    # what it *would* move alert_priority_score by, capped at +/-4, and
+    # alert_priority_macro_shadow is that arithmetic applied. alert_priority_score
+    # itself, every quality score and the event lifecycle are untouched -- a
+    # macro headwind never deletes or downgrades a real breakout event.
+    macro_fit_score: Optional[float] = Field(default=None, ge=0, le=100)
+    macro_fit_confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    macro_tailwind: Optional[str] = None
+    macro_priority_adjustment_shadow: Optional[float] = None
+    alert_priority_macro_shadow: Optional[float] = Field(default=None, ge=0, le=100)
+    macro_supporting_factors: list[dict[str, str]] = Field(default_factory=list)
+    macro_opposing_factors: list[dict[str, str]] = Field(default_factory=list)
+    macro_shadow_status: str = "unavailable"
     warnings: list[str]
     source_status: dict[str, Any]
     provenance: dict[str, Any]
@@ -204,12 +217,102 @@ def _event_time(value: Any) -> datetime:
     return parsed
 
 
+def _macro_reader() -> Any:
+    """One read of the published macro snapshot, shared by every event on the page.
+
+    Reading per event would open the same file fifty times for one request and
+    could straddle a publication, so two events in one list would be annotated
+    against two different macro environments.
+
+    Returns None when macro is not readable at all. Failure is never fatal: these
+    are shadow annotations, and an unreadable macro snapshot is not a reason to
+    fail a breakout page.
+    """
+
+    try:
+        from app.services.macro_conditions.linkage_reader import load_macro_fit_reader
+    except Exception:
+        return None
+    try:
+        return load_macro_fit_reader()
+    except Exception:
+        return None
+
+
+def _macro_shadow(
+    reader: Any,
+    ticker: str,
+    alert_priority: Optional[float],
+) -> dict[str, Any]:
+    """Shadow macro fields for one event. Moves no production score.
+
+    ``macro_shadow_status`` is reported rather than inferred from nulls, because
+    "no macro snapshot", "this ticker is outside the theme map" and "this
+    sector's exposure profile is too thinly observed to score" are three
+    different facts and all three would otherwise look like a missing number.
+    """
+
+    blank = {
+        "macro_fit_score": None,
+        "macro_fit_confidence": None,
+        "macro_tailwind": None,
+        "macro_priority_adjustment_shadow": None,
+        "alert_priority_macro_shadow": None,
+        "macro_supporting_factors": [],
+        "macro_opposing_factors": [],
+    }
+    if reader is None:
+        return {**blank, "macro_shadow_status": "unavailable"}
+    if not getattr(reader, "available", False):
+        return {**blank, "macro_shadow_status": str(reader.reason or "unavailable")}
+
+    try:
+        from app.services.macro_conditions.linkage import (
+            factor_driver,
+            shadow_alert_priority_adjustment,
+        )
+        from app.services.sectors import primary_sector_id
+    except Exception:
+        return {**blank, "macro_shadow_status": "unavailable"}
+
+    sector_id = primary_sector_id(ticker)
+    if sector_id is None:
+        # Outside the theme map: there is no exposure profile to apply. Falling
+        # back to a market-wide fit would give every unclassified ticker the same
+        # tilt, which is the failure this whole registry exists to avoid.
+        return {**blank, "macro_shadow_status": "sector_unclassified"}
+
+    fit = reader.fit_for(sector_id)
+    if fit.score is None:
+        return {
+            **blank,
+            "macro_fit_confidence": round(fit.confidence, 4),
+            "macro_shadow_status": "exposure_coverage_low",
+        }
+
+    adjustment = shadow_alert_priority_adjustment(fit)
+    shadow_priority: Optional[float] = None
+    if alert_priority is not None:
+        shadow_priority = round(max(0.0, min(100.0, alert_priority + adjustment)), 3)
+    return {
+        "macro_fit_score": fit.score,
+        "macro_fit_confidence": round(fit.confidence, 4),
+        "macro_tailwind": fit.tailwind,
+        "macro_priority_adjustment_shadow": adjustment,
+        "alert_priority_macro_shadow": shadow_priority,
+        "macro_supporting_factors": [factor_driver(f) for f in fit.supporting],
+        "macro_opposing_factors": [factor_driver(f) for f in fit.opposing],
+        "macro_shadow_status": "ok",
+    }
+
+
 def _public_event(
     settings: BreakoutSettings,
     stored: dict[str, Any],
     *,
     default_session: Optional[str] = None,
     observed_at: Optional[datetime] = None,
+    macro: Any = None,
 ) -> BreakoutEventResponse:
     features = dict(stored.get("features") or {})
     structure = dict(stored.get("structure") or {})
@@ -255,9 +358,10 @@ def _public_event(
         0.0,
         (now_utc - last_seen_at.astimezone(timezone.utc)).total_seconds(),
     )
+    ticker = normalize_ticker(stored.get("ticker"))
     return BreakoutEventResponse(
         event_id=str(stored.get("event_id") or ""),
-        ticker=normalize_ticker(stored.get("ticker")),
+        ticker=ticker,
         name=stored.get("name"),
         exchange=stored.get("exchange"),
         asset_type=str(stored.get("asset_type") or "unknown"),
@@ -345,6 +449,7 @@ def _public_event(
             "rules": dict(quality.get("market_shape_rules") or {}),
             "version": quality.get("market_shape_version", MARKET_SHAPE_VERSION),
         },
+        **_macro_shadow(macro, ticker, _finite(scores.get("alert_priority_score"))),
         warnings=[str(item) for item in list(stored.get("warnings") or [])],
         source_status={
             "discovery": quality.get("discovery_source", "unavailable"),
@@ -472,6 +577,7 @@ def _root_from_scan(
     response_time = _event_time(as_of)
     requested_at = _now()
     scan_session = str(scan.get("session") or provider.get("session") or "") or None
+    macro = _macro_reader()
     return BreakoutRootResponse(
         as_of=response_time,
         session=scan_session,
@@ -491,6 +597,7 @@ def _root_from_scan(
                 dict(item),
                 default_session=scan_session,
                 observed_at=requested_at,
+                macro=macro,
             )
             for item in list(scan.get("events") or [])
         ],
@@ -636,6 +743,7 @@ def events(
         if page.get("scan_run_id") or read_state.status == "paused"
         else "unavailable"
     )
+    macro = _macro_reader()
     return BreakoutEventPageResponse(
         as_of=_now(),
         session=session,
@@ -648,7 +756,7 @@ def events(
             "freshness": dict(read_state.details),
         },
         events=[
-            _public_event(settings, dict(item), default_session=session)
+            _public_event(settings, dict(item), default_session=session, macro=macro)
             for item in list(page.get("events") or [])
         ],
         scan_run_id=page.get("scan_run_id"),
@@ -680,7 +788,7 @@ def event_detail(event_id: str) -> BreakoutEventDetailResponse:
         raise HTTPException(status_code=503, detail="Breakout database is unavailable")
     if event is None:
         raise HTTPException(status_code=404, detail="Breakout event not found")
-    public_event = _public_event(settings, dict(event))
+    public_event = _public_event(settings, dict(event), macro=_macro_reader())
     return BreakoutEventDetailResponse(
         as_of=_now(),
         status="active",
@@ -729,12 +837,13 @@ def ticker_events(ticker: str) -> BreakoutTickerResponse:
             events=[],
             current_state=None,
         )
+    macro = _macro_reader() if items else None
     return BreakoutTickerResponse(
         as_of=_now(),
         status="active" if items else "empty",
         versions=_versions(settings),
         ticker=symbol,
-        events=[_public_event(settings, dict(item)) for item in items],
+        events=[_public_event(settings, dict(item), macro=macro) for item in items],
         current_state=str(items[0].get("lifecycle_state")) if items else None,
     )
 

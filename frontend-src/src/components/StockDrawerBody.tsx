@@ -23,10 +23,11 @@ import SignalChip from '@/components/shared/SignalChip';
 import SourceNote from '@/components/shared/SourceNote';
 import EmptyState from '@/components/shared/EmptyState';
 import InfoHint from '@/components/shared/InfoHint';
+import MacroFitPanel from '@/components/shared/MacroFitPanel';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
-import { getDetail } from '@/components/detail/api';
+import { getDetail, prefetchStockDetailPanels } from '@/components/detail/api';
 import KlineChart from '@/components/detail/KlineChart';
 import TrendBiasPanel from '@/components/detail/TrendBiasPanel';
 import SignalList from '@/components/detail/SignalList';
@@ -210,6 +211,15 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
     60_000,
     [ticker, dataRevision],
   );
+  // K 线和信号面板都挂在下面的 `loading` 分支之后，可它们各取各的数据，详情对象里
+  // 一个字段都不用 —— 于是两段互不依赖的往返被排成了串行：先等详情，再开始要 bars。
+  //
+  // 这里只把请求提前发出。面板挂载时命中的是 marketGet 的 in-flight promise 或它的
+  // 缓存，请求总数不变，只是早了一个往返。换成「在 loading 分支里也挂一个 KlineChart」
+  // 反而会出问题：两个分支的树结构不同，React 会卸载重挂，那次轮询就真的发两遍。
+  useEffect(() => {
+    prefetchStockDetailPanels(ticker);
+  }, [ticker]);
   const [tabState, setTabState] = useState<{ ticker: string; tab: TabKey }>({
     ticker,
     tab: 'signals',
@@ -331,6 +341,18 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
           {tab === 'signals' && (
             <div className="space-y-6">
               <TrendBiasPanel ticker={detail.ticker} refreshVersion={dataRevision} />
+              {/* 宏观适配放在信号页而不是关键数据侧栏：抽屉形态没有侧栏，放这里两种
+                  布局共用一处。措辞说「该板块」—— 暴露画像是板块级的。 */}
+              <div className="card-surface p-5">
+                <MacroFitPanel
+                  score={detail.macroFit}
+                  tailwind={detail.macroTailwind}
+                  confidence={detail.macroFitConfidence}
+                  supporting={detail.macroSupporting}
+                  opposing={detail.macroOpposing}
+                  technicalGap={detail.macroTechnicalGap}
+                />
+              </div>
               <div>
                 <p className="eyebrow mb-3">RECENT SIGNALS</p>
                 <SignalList ticker={detail.ticker} refreshVersion={dataRevision} />

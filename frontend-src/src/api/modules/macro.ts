@@ -131,6 +131,16 @@ export interface MacroConditionsResponse {
   historyBasis: MacroHistoryBasis | null;
   composite: MacroComposite | null;
   modules: MacroModule[];
+  /**
+   * 结构性宏观（流动性/融资/国债/利率）的加权均值，由后端 linkage 计算。
+   *
+   * 刻意不在前端按模块名重算：「哪些模块算结构性」的第二份定义会和后端
+   * STRUCTURAL_MODULES 悄悄漂移，两个面板就会互相矛盾。信用与风险被排除，
+   * 因为它们和技术形态读的是同一批工具（HYG/LQD/KRE/VIX/SPY-TLT/IWM-SPY），
+   * 再算一遍等于同一个信号换两个名字计两次权。
+   */
+  structuralScore: number | null;
+  structuralModules: string[];
   drivers: { improving: MacroDriver[]; deteriorating: MacroDriver[] };
   warnings: string[];
   sources: string[];
@@ -323,6 +333,8 @@ export function mapConditions(body: unknown): MacroConditionsResponse {
         (a, b) =>
           MACRO_MODULE_ORDER.indexOf(a.moduleId) - MACRO_MODULE_ORDER.indexOf(b.moduleId),
       ),
+    structuralScore: pickN(r, 'structural_score'),
+    structuralModules: mapStrings(r.structural_modules),
     drivers: {
       improving: unwrap(drivers.improving, 'improving')
         .map(mapDriver)

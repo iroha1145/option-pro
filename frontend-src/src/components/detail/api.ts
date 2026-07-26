@@ -12,6 +12,7 @@ import { marketGet } from '@/api/marketRead';
 import { asRec, pickN, pickS, unwrap, type Rec } from '@/api/live';
 import { ma20Of, mapBar } from '@/api/modules/stocks';
 import { stocksApi } from '@/api/modules/stocks';
+import { mapMacroFitDrivers } from '@/api/modules/strength';
 import { postAiJob } from '@/api/modules/ai-jobs';
 import * as fx from '@/mocks/fixtures';
 import * as fx2 from '@/mocks/fixtures2';
@@ -24,6 +25,13 @@ import type {
 } from '@/mocks/fixtures';
 
 export type ChartRange = StockChart['range'];
+/**
+ * K 线打开时的默认周期。
+ *
+ * 导出是为了预取能命中**同一个 URL**：写死两份，预取一个周期、图表要另一个，
+ * 就白发一次请求 —— 这个优化会变成它想修的那个问题。
+ */
+export const DEFAULT_CHART_RANGE: ChartRange = '1d';
 export const CHART_RANGES: { value: ChartRange; label: string }[] = [
   { value: '5m', label: '5分' },
   { value: '15m', label: '15分' },
@@ -85,6 +93,13 @@ function strengthRowToDetail(env: Rec): StockDetail | null {
     priceProvider: pickS(row, 'price_provider'),
     profileProvider: null,
     snapshotScope: 'strength-row',
+    // 宏观适配影子字段：与选股表同源（同一份扫描行），缺失保持 null。
+    macroFit: pickN(row, 'macro_fit_shadow'),
+    macroTailwind: pickS(row, 'macro_tailwind'),
+    macroFitConfidence: pickN(row, 'macro_fit_confidence'),
+    macroSupporting: mapMacroFitDrivers(row.macro_supporting_factors),
+    macroOpposing: mapMacroFitDrivers(row.macro_opposing_factors),
+    macroTechnicalGap: pickN(row, 'macro_technical_gap'),
   };
 }
 
@@ -133,6 +148,15 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
           marketCap: finite(detail.marketCap) ? detail.marketCap : strength?.marketCap ?? detail.marketCap,
           pe: detail.pe ?? strength?.pe ?? null,
           snapshotScope: 'full' as const,
+          // 概览接口没有宏观字段，只有扫描行有。补充这一路超时或失败时 strength 为
+          // null，这些字段就保持 undefined —— 抽屉会显示「暂无宏观读数」，
+          // 而不是一个凭空的中性分。
+          macroFit: strength?.macroFit ?? null,
+          macroTailwind: strength?.macroTailwind ?? null,
+          macroFitConfidence: strength?.macroFitConfidence ?? null,
+          macroSupporting: strength?.macroSupporting ?? [],
+          macroOpposing: strength?.macroOpposing ?? [],
+          macroTechnicalGap: strength?.macroTechnicalGap ?? null,
         };
       } catch (e) {
         // 只有明确的公开快照边界才允许回退扫描行；供应方错误不能被伪装成基础行情成功。
@@ -437,4 +461,26 @@ export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
     // 契约：owner+SO → 202 + Location（job_id 可能仅在 Location 头）
     () => postAiJob(`/signals/stock/${encodeURIComponent(t)}/ai-analysis`, { force: false }),
   );
+}
+
+/**
+ * 预取详情面板必然会要的两个只读快照。
+ *
+ * K 线自己取自己的 bars，详情对象里一个字段都不用；但它挂在 `loading` 分支之后，
+ * 详情请求回来之前根本没被挂上 —— 两段互不依赖的往返被排成了串行。信号面板同理，
+ * 而且 TrendBiasPanel 和 SignalList 读的是同一个 `/signals/stock/{t}`。
+ *
+ * 这里只是把请求**提前发出**，不是新增请求：图表和信号挂载时命中的是 marketGet 的
+ * in-flight promise 或它 60 秒的缓存，所以请求总数不变，只是早了一个往返。
+ *
+ * 刻意不 force：强制读会消耗 owner 手动拉取后那一次性的退避豁免，把它花在预取上，
+ * 真正要用它的那次读取就没得用了。
+ *
+ * 失败在这里吞掉。预取不是数据来源 —— 各面板自己那次调用共享的是同一个 promise，
+ * 该失败照样失败，错误态仍由面板自己呈现。
+ */
+export function prefetchStockDetailPanels(ticker: string): void {
+  const t = ticker.toUpperCase();
+  void getDetailChart(t, DEFAULT_CHART_RANGE).catch(() => {});
+  void getTrendBias(t).catch(() => {});
 }

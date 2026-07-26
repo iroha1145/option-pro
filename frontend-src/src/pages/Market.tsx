@@ -140,7 +140,9 @@ export default function Market() {
 
       {/* B4 宏观环境（Optix 宏观环境 · 展示与研究用，不进入正式股票评分） */}
       <section className="mt-8" aria-label="宏观环境">
-        <MacroConditionsPanel />
+        {/* 技术侧分数由这里传下去：本页已经有形态六维均值，面板不必为一张展示卡
+            再拉一次 /strength/market。 */}
+        <MacroConditionsPanel technicalScore={mean} />
       </section>
 
       {/* B5 信号解读 + B6 强度分布 */}

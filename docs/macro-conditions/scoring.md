@@ -231,3 +231,66 @@ MacroFit*  = 50 + (MacroFit_i - 50) · confidence_i
 `macro_technical_gap = 技术市场适配 - 结构性宏观`：
 差值大为正说明价格跑在环境前面，大为负说明宏观先行改善而价格没跟上。
 任一侧缺失时为 null，而不是 0。
+
+### 一次快照读，三个消费方共享（`linkage_reader.py`）
+
+选股行、板块雷达、突破列表要的是同样三件东西：已发布的宏观快照、按板块的一份
+适配分、结构性综合分。各自开一次仓库不只是重复读同一个文件，还可能**跨过一次
+发布** —— 同一个页面上的三块面板于是会描述两个不同的宏观环境。因此每个请求
+构造一个 `MacroFitReader`，`fit_for(sector_id)` 按板块记忆化。
+
+只读到底：这里任何路径都不得创建、迁移或刷新宏观库。一次选股扫描或一次突破页
+加载**永远不能触发 FRED 抓取**。所有失败都降级成「没有读数」而不是抛出 ——
+这些字段是别人页面上的注解，宏观快照读不出来不构成让那个页面失败的理由。
+
+### 板块宏观适配
+
+`/api/strength/sectors` 每行附加 `macro_sector_fit` / `macro_sector_tailwind` /
+`macro_sector_fit_confidence` / `macro_sector_supporting_factors` /
+`macro_sector_opposing_factors`。
+
+与 `avg_strength` **并列，绝不混入它**：两者不一致的板块（技术强而宏观逆风、
+宏观先改善而价格没跟上）正是这张表值得看的地方，合成一个数字正好把它们藏掉。
+排序不变。
+
+### 突破提醒优先级影子
+
+`/api/breakouts/*` 每个事件附加 `macro_fit_score` /
+`macro_priority_adjustment_shadow`（±4 上限）/ `alert_priority_macro_shadow` /
+`macro_supporting_factors` / `macro_opposing_factors` / `macro_shadow_status`。
+
+**读取时计算，不落库。** 带 `macro_snapshot_id` 的持久化属于 Phase 2。
+
+`alert_priority_score` 本身、`base_quality_score`、`breakout_confirmation_score`、
+`liquidity_quality_score`、`breakout_quality_score`、`chase_risk_score` 以及事件
+生命周期一律不动：**宏观逆风不会删除、降级或推迟一个真实发生的突破事件。**
+
+`macro_shadow_status` 把三件都会让分数为 null 的事分开：
+
+| 状态 | 含义 |
+| --- | --- |
+| `ok` | 有分数 |
+| `macro_snapshot_unavailable` | 还没有已发布的宏观快照 |
+| `sector_unclassified` | 这只票不在主题表里，没有暴露画像可用 |
+| `exposure_coverage_low` | 该板块声明的暴露观测不足，不给分 |
+
+少了这个字段，三件不同的事在 API 上长得一模一样。
+
+个股的板块解析走 `app.services.sectors.primary_sector_id()`，与强度池自己的
+`primary_sector_id` 同一约定（有测试断言两者一致，而不是假设一致）。
+**已知限制**：主题表里 213 只票有 17 只属于两个主题（例如 NVDA 同时在半导体与
+AI/云），「首次出现者胜」是确定的但在**语义上是任意的**，这 17 只票拿到的是其中
+一个主题的暴露画像。改成跨主题合成 β 会改变 `macro-linkage-v1` 的含义，按本文
+自己的规矩要一并升版本，因此留给后续。
+
+### 界面口径
+
+- 选股表的宏观适配是**可选列，默认关**，并配顺风/中性/逆风筛选；默认排序仍是
+  确定性排序，宏观不出现在任何排序键里。没有读数的行被筛选**排除**而不是当中性
+  留下，并明确说出被排除多少只。
+- 二维象限（技术 × 结构性宏观）以 **50 分**为界，而顺风/逆风的分界线是
+  **65 / 35**。两套线不同，所以象限措辞用「偏强 / 偏弱」而不复用「顺风 / 逆风」：
+  否则一个 53 分的读数会在徽标上显示「中性」、正下方象限说「宏观顺风」。
+- 驱动因素由后端下发 `{factor_id, label}`，中文名在 registry 解析。前端刻意不留
+  第二份 id → 中文名的映射表：那样因子改名之后界面会继续显示旧名字，而且什么都
+  不会失败。
