@@ -19,6 +19,9 @@ macro context reports nothing, never 50 -- 50 is a claim about the environment.
 
 from __future__ import annotations
 
+import os
+import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 
@@ -76,9 +79,89 @@ def unavailable_reader(reason: str) -> MacroFitReader:
     return MacroFitReader(available=False, reason=reason)
 
 
-def load_macro_fit_reader() -> MacroFitReader:
-    """Open the published snapshot read-only. Never raises, never fetches."""
+#: The published snapshot is reused between calls while the file is unchanged.
+#: A stock drawer opens this reader once per request, and every open used to run
+#: three SQLite queries for a snapshot that is republished twice a day.
+_CACHE_MAX_AGE_SECONDS = 30.0
+_cache_lock = threading.Lock()
+_cached: Optional[tuple[Any, float, MacroFitReader]] = None
 
+
+def _snapshot_fingerprint() -> Optional[tuple[Any, ...]]:
+    """Size and mtime of the database and its WAL, or None if unreadable.
+
+    The WAL is included because a publication commits there first: the main
+    file's mtime can lag a write that is already visible to readers. None means
+    "do not cache" -- a missing database is exactly the state that must be
+    re-checked, since the worker may be creating it right now.
+    """
+
+    try:
+        from app.data_paths import get_data_paths
+
+        path = str(get_data_paths().macro_conditions_db)
+    except Exception:
+        return None
+    parts: list[Any] = []
+    for candidate in (path, f"{path}-wal"):
+        try:
+            stat = os.stat(candidate)
+            parts.append((stat.st_size, stat.st_mtime_ns))
+        except OSError:
+            # A missing WAL is normal (checkpointed); a missing database is not.
+            if candidate == path:
+                return None
+            parts.append(None)
+    return tuple(parts)
+
+
+def reset_macro_fit_reader_cache() -> None:
+    """Drop the memoized snapshot.
+
+    Production does not need to call this -- a publication changes the file's
+    size and mtime, which invalidates the entry on its own. It exists so tests
+    can start from a known state instead of inheriting another test's snapshot.
+    """
+
+    global _cached
+    with _cache_lock:
+        _cached = None
+
+
+def load_macro_fit_reader() -> MacroFitReader:
+    """Open the published snapshot read-only. Never raises, never fetches.
+
+    Memoized on the database's size and mtime, with a short maximum age as a
+    backstop for a write that somehow lands inside one mtime tick. The returned
+    reader is shared between callers and must be treated as read-only; its
+    ``fit_for`` memoization is a pure derivation of ``factors``, so a race
+    between threads costs a duplicate computation and nothing else.
+    """
+
+    global _cached
+    fingerprint = _snapshot_fingerprint()
+    now = time.monotonic()
+    if fingerprint is not None:
+        with _cache_lock:
+            if _cached is not None:
+                cached_fingerprint, loaded_at, reader = _cached
+                if (
+                    cached_fingerprint == fingerprint
+                    and now - loaded_at < _CACHE_MAX_AGE_SECONDS
+                ):
+                    return reader
+
+    reader = _load_macro_fit_reader_uncached()
+
+    # Only a real snapshot is worth holding. Caching "unavailable" would keep
+    # answering "no macro read" for 30s after the worker publishes one.
+    if fingerprint is not None and reader.available:
+        with _cache_lock:
+            _cached = (fingerprint, now, reader)
+    return reader
+
+
+def _load_macro_fit_reader_uncached() -> MacroFitReader:
     try:
         from app.data_paths import get_data_paths
         from app.personal_config import get_personal_config
@@ -118,5 +201,6 @@ __all__ = [
     "REASON_SNAPSHOT",
     "MacroFitReader",
     "load_macro_fit_reader",
+    "reset_macro_fit_reader_cache",
     "unavailable_reader",
 ]

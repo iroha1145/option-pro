@@ -830,6 +830,10 @@ export default function Screener() {
                     onOpenDetail={openTicker}
                     animKey={animKey}
                     page={safePage}
+                    /* 移动端也要给：漏掉它的话「宏观顺风」筛选照样生效、列表照样
+                       被过滤，但卡片上一个宏观读数都不显示 —— 用户看不出这些票
+                       为什么留下来了。 */
+                    showMacro={showMacro}
                   />
                   {/* 移动端分页 */}
                   {totalPages > 1 && (

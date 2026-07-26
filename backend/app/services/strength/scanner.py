@@ -2618,6 +2618,10 @@ async def stock_strength(ticker: str, profile: str = "balanced") -> dict[str, An
                 "ticker": symbol,
                 "row": row,
                 "market_regime": payload["market_regime"],
+                # Same reason as the public branch of GET /strength/stocks/{t}:
+                # the row's macro shadow fields belong to a specific snapshot,
+                # and the drawer shows them beside a live one.
+                "macro_linkage": payload.get("macro_linkage"),
             }
     raise KeyError(symbol)
 

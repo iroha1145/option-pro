@@ -641,3 +641,209 @@ def test_an_unclassified_ticker_says_so_on_the_overview() -> None:
     assert out["macro_shadow_status"] == "sector_unclassified"
     assert out["macro_fit_shadow"] is None
     assert out["macro_tailwind"] is None, "no read must not read as neutral"
+
+
+def test_the_overview_names_the_snapshot_its_reading_came_from(monkeypatch) -> None:
+    """A reading without provenance cannot be paired with anything.
+
+    The drawer shows this fit beside a technical-minus-macro gap that comes from
+    the persisted strength scan, and a scan can be hours older than the latest
+    publication. Both numbers can be individually right and still not describe
+    one moment; the interface can only tell if each says which snapshot it is.
+    """
+
+    from app.api import stocks as stocks_api
+
+    reader = _reader()
+    monkeypatch.setattr(
+        "app.services.macro_conditions.linkage_reader.load_macro_fit_reader",
+        lambda: reader,
+    )
+    out = stocks_api._attach_macro_fit("AMD", {"ticker": "AMD", "price": 1.0})
+
+    assert out["macro_shadow_status"] == "ok"
+    assert out["macro_snapshot_date"] == "2026-07-24"
+    assert out["macro_scoring_version"] == "optix-macro-score-v1"
+    assert out["exposure_version"] == EXPOSURE_VERSION
+
+
+def test_the_overview_names_the_snapshot_even_when_coverage_is_too_thin(
+    monkeypatch,
+) -> None:
+    """"Coverage too thin" is still a reading *of a snapshot*."""
+
+    from app.api import stocks as stocks_api
+
+    # One factor only: enough to publish, not enough to score a sector.
+    reader = _reader(factors=_rows(vix=90.0))
+    monkeypatch.setattr(
+        "app.services.macro_conditions.linkage_reader.load_macro_fit_reader",
+        lambda: reader,
+    )
+    out = stocks_api._attach_macro_fit("AMD", {"ticker": "AMD", "price": 1.0})
+
+    assert out["macro_shadow_status"] == "exposure_coverage_low"
+    assert out["macro_fit_shadow"] is None, "no read must not read as neutral"
+    assert out["macro_snapshot_date"] == "2026-07-24"
+
+
+def test_the_overview_macro_read_does_not_run_on_the_event_loop(
+    monkeypatch,
+) -> None:
+    """SQLite must not be opened on the loop thread.
+
+    GET /api/stocks/{ticker} is an ``async def``. The macro read opens the
+    database and runs three queries -- cheap on an idle disk, but run inline it
+    blocks *every* unrelated request on the loop when the disk is busy, the WAL
+    is contended or the volume stalls.
+    """
+
+    import asyncio
+    import threading
+
+    from app.api import stocks as stocks_api
+
+    seen: dict[str, int] = {}
+
+    def record(symbol: str, payload):
+        seen["thread"] = threading.get_ident()
+        return {**payload, "marker": symbol}
+
+    monkeypatch.setattr(stocks_api, "_attach_macro_fit", record)
+
+    async def scenario():
+        seen["loop"] = threading.get_ident()
+        return await stocks_api._attach_macro_fit_async("AMD", {"price": 1.0})
+
+    out = asyncio.run(scenario())
+
+    assert out == {"price": 1.0, "marker": "AMD"}, "the wrapper changed the payload"
+    assert seen["thread"] != seen["loop"], (
+        "the macro read ran on the event loop thread"
+    )
+    assert asyncio.iscoroutinefunction(stocks_api._attach_macro_fit_async)
+
+
+# ---------------- one snapshot read, not one per drawer open ----------------
+
+
+def test_the_reader_is_reused_while_the_database_is_unchanged(monkeypatch) -> None:
+    """Opening a drawer must not re-read the snapshot every time.
+
+    The macro snapshot is republished twice a day. Every stock drawer used to
+    run three SQLite queries for it.
+    """
+
+    from app.services.macro_conditions import linkage_reader
+
+    calls = {"n": 0}
+    built = _reader()
+
+    def fake_load():
+        calls["n"] += 1
+        return built
+
+    linkage_reader.reset_macro_fit_reader_cache()
+    monkeypatch.setattr(linkage_reader, "_load_macro_fit_reader_uncached", fake_load)
+    monkeypatch.setattr(linkage_reader, "_snapshot_fingerprint", lambda: ("size", 1))
+
+    first = linkage_reader.load_macro_fit_reader()
+    second = linkage_reader.load_macro_fit_reader()
+
+    assert first is second, "the snapshot was re-read for an unchanged database"
+    assert calls["n"] == 1
+
+
+def test_a_republished_snapshot_invalidates_the_reader(monkeypatch) -> None:
+    """A new publication must be visible immediately, not in 30 seconds."""
+
+    from app.services.macro_conditions import linkage_reader
+
+    fingerprint = {"value": ("size", 1)}
+    calls = {"n": 0}
+
+    def fake_load():
+        calls["n"] += 1
+        return _reader(snapshot_date=f"2026-07-2{calls['n']}")
+
+    linkage_reader.reset_macro_fit_reader_cache()
+    monkeypatch.setattr(linkage_reader, "_load_macro_fit_reader_uncached", fake_load)
+    monkeypatch.setattr(
+        linkage_reader, "_snapshot_fingerprint", lambda: fingerprint["value"]
+    )
+
+    first = linkage_reader.load_macro_fit_reader()
+    fingerprint["value"] = ("size", 2)  # the worker published
+    second = linkage_reader.load_macro_fit_reader()
+
+    assert first is not second
+    assert second.snapshot_date != first.snapshot_date
+    assert calls["n"] == 2
+
+
+def test_an_unreadable_snapshot_is_never_cached(monkeypatch) -> None:
+    """Caching "unavailable" would keep answering "no macro read" after a publish.
+
+    A missing database is exactly the state that must be re-checked: the worker
+    may be creating it right now.
+    """
+
+    from app.services.macro_conditions import linkage_reader
+
+    calls = {"n": 0}
+
+    def fake_load():
+        calls["n"] += 1
+        return linkage_reader.unavailable_reader(linkage_reader.REASON_SNAPSHOT)
+
+    linkage_reader.reset_macro_fit_reader_cache()
+    monkeypatch.setattr(linkage_reader, "_load_macro_fit_reader_uncached", fake_load)
+    monkeypatch.setattr(linkage_reader, "_snapshot_fingerprint", lambda: ("size", 1))
+
+    assert linkage_reader.load_macro_fit_reader().available is False
+    assert linkage_reader.load_macro_fit_reader().available is False
+    assert calls["n"] == 2, "an unavailable reader was cached"
+    linkage_reader.reset_macro_fit_reader_cache()
+
+
+def test_a_database_that_cannot_be_stated_is_never_cached(monkeypatch) -> None:
+    """No fingerprint, no caching -- not even for a snapshot that did load."""
+
+    from app.services.macro_conditions import linkage_reader
+
+    calls = {"n": 0}
+
+    def fake_load():
+        calls["n"] += 1
+        return _reader()
+
+    linkage_reader.reset_macro_fit_reader_cache()
+    monkeypatch.setattr(linkage_reader, "_load_macro_fit_reader_uncached", fake_load)
+    monkeypatch.setattr(linkage_reader, "_snapshot_fingerprint", lambda: None)
+
+    assert linkage_reader.load_macro_fit_reader().available is True
+    assert linkage_reader.load_macro_fit_reader().available is True
+    assert calls["n"] == 2, "cached a snapshot whose freshness cannot be checked"
+    linkage_reader.reset_macro_fit_reader_cache()
+
+
+def test_the_per_ticker_strength_endpoint_names_its_macro_snapshot() -> None:
+    """The scan row's shadow fields belong to a specific snapshot.
+
+    Without this the drawer cannot tell whether the row's gap and the live fit
+    describe the same moment, and it would show a precise-looking number built
+    from two different macro environments.
+    """
+
+    import inspect
+
+    from app.api import strength as strength_api
+    from app.services.strength import scanner
+
+    for source in (
+        inspect.getsource(strength_api.stock),
+        inspect.getsource(scanner.stock_strength),
+    ):
+        assert '"macro_linkage": payload.get("macro_linkage")' in source, (
+            "the per-ticker envelope drops the macro provenance the drawer needs"
+        )
