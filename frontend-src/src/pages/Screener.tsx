@@ -21,6 +21,12 @@ import { useToast } from '@/components/Toast';
 import { useShell } from '@/components/Layout';
 import { cn } from '@/lib/utils';
 import { fmtCompact, fmtTimeHHMMSS } from '@/lib/format';
+import {
+  MACRO_SHADOW_TITLE_ATTR,
+  MACRO_TONE_LABEL,
+  macroToneOf,
+  type MacroTone,
+} from '@/lib/macroFit';
 import Icon from '@/components/icons';
 import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';
@@ -144,6 +150,10 @@ export default function Screener() {
   const [scanDurationMs, setScanDurationMs] = useState(0);
   const [history, setHistory] = useState<ScanHistoryEntry[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>('deterministic');
+  // 宏观适配是**可选列**，默认关：它是影子字段，不该占据默认视图。开关同时决定
+  // 是否显示分档筛选 —— 一个不显示的列没法解释筛掉的行是按什么筛的。
+  const [showMacro, setShowMacro] = useState(false);
+  const [macroToneFilter, setMacroToneFilter] = useState<MacroTone | 'all'>('all');
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [flashes, setFlashes] = useState<Record<string, 'up' | 'down'>>({});
@@ -268,9 +278,16 @@ export default function Screener() {
   const filtered = useMemo(() => {
     let out = filteredBase;
     if (applied.tier !== 'all') out = out.filter((r) => tierOf(r.strengthScore) === applied.tier);
+    // 宏观分档筛选。刻意在 tier 之后、topN 之前，和其他客户端条件同一层。
+    //
+    // 没有宏观读数的行会被这个筛选**排除**，而不是当成中性留下 —— 留下就等于宣称
+    // 它是中性，而后端返回 null 正是为了不说这句话。上面的提示会说明少了多少行。
+    if (macroToneFilter !== 'all') {
+      out = out.filter((r) => macroToneOf(r.macroFit, r.macroTailwind) === macroToneFilter);
+    }
     if (applied.topN > 0) out = out.slice(0, applied.topN);
     return out;
-  }, [filteredBase, applied.tier, applied.topN]);
+  }, [filteredBase, applied.tier, applied.topN, macroToneFilter]);
 
   /**
    * 催化排序的前置条件（审计 P1-06）。
@@ -281,6 +298,15 @@ export default function Screener() {
    *
    * 因此：切到催化排序时先为全部候选股票批量取摘要，取齐之前不参与正式排名。
    */
+  /** 宏观筛选打开时被排除的行数：算在 tier 之后、宏观之前的那一层上。 */
+  const macroUnreadCount = useMemo(() => {
+    const tierPool =
+      applied.tier === 'all'
+        ? filteredBase
+        : filteredBase.filter((r) => tierOf(r.strengthScore) === applied.tier);
+    return tierPool.filter((r) => macroToneOf(r.macroFit, r.macroTailwind) === null).length;
+  }, [filteredBase, applied.tier]);
+
   const catalystSortActive = sortMode !== 'deterministic';
   const missingCatalystTickers = useMemo(() => {
     if (!catalystSortActive) return [];
@@ -607,7 +633,44 @@ export default function Screener() {
             ) : (
               <h2 className="font-display text-[18px] leading-[24px] text-ink-900">扫描结果</h2>
             )}
-            <div className="ml-auto">
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {/* 可选列开关。关掉时同时清掉宏观筛选：否则行会按一个看不见的条件被筛掉。 */}
+              <button
+                type="button"
+                aria-pressed={showMacro}
+                onClick={() => {
+                  setShowMacro((on) => {
+                    if (on) setMacroToneFilter('all');
+                    return !on;
+                  });
+                  setPage(1);
+                }}
+                title={MACRO_SHADOW_TITLE_ATTR}
+                className={cn(
+                  'flex h-8 items-center gap-1.5 rounded-pill border px-3 text-caption transition-colors duration-fast',
+                  showMacro
+                    ? 'border-brand-600 bg-brand-100 font-medium text-brand-700'
+                    : 'border-line bg-card text-ink-500 hover:border-line-strong hover:text-ink-800',
+                )}
+              >
+                <Icon name="layers" size={13} />
+                宏观适配
+              </button>
+              {showMacro && (
+                <Segmented<MacroTone | 'all'>
+                  options={[
+                    { value: 'all' as const, label: '全部' },
+                    { value: 'tailwind' as const, label: MACRO_TONE_LABEL.tailwind },
+                    { value: 'neutral' as const, label: MACRO_TONE_LABEL.neutral },
+                    { value: 'headwind' as const, label: MACRO_TONE_LABEL.headwind },
+                  ]}
+                  value={macroToneFilter}
+                  onChange={(value) => {
+                    setMacroToneFilter(value);
+                    setPage(1);
+                  }}
+                />
+              )}
               <Segmented<SortMode>
                 options={(['deterministic', 'latest', 'impact'] as const).map((v) => ({ value: v, label: SORT_CN[v] }))}
                 value={sortMode}
@@ -615,6 +678,12 @@ export default function Screener() {
               />
             </div>
           </div>
+          {/* 宏观筛选会排除没有读数的行；数量说清楚，别让人以为那些股票不存在。 */}
+          {showMacro && macroToneFilter !== 'all' && macroUnreadCount > 0 && (
+            <p className="mt-2 text-micro text-ink-400">
+              {macroUnreadCount} 只无宏观读数，已排除（不按中性计）
+            </p>
+          )}
 
           {/* 结果主体 */}
           <div className="mt-4">
@@ -698,6 +767,7 @@ export default function Screener() {
                         signals={signalsMap}
                         onOpenDetail={openTicker}
                         animKey={animKey}
+                        showMacro={showMacro}
                         stale
                       />
                     </div>
@@ -745,6 +815,7 @@ export default function Screener() {
                     signals={signalsMap}
                     onOpenDetail={openTicker}
                     animKey={animKey}
+                    showMacro={showMacro}
                   />
                 </div>
                 <div className={cn('md:hidden', scanState === 'scanning' && 'opacity-60')}>

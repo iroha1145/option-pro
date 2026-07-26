@@ -12,6 +12,7 @@ import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import InfoHint from '@/components/shared/InfoHint';
+import MacroFitBadge from '@/components/shared/MacroFitBadge';
 import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
 import RowExpansion from './RowExpansion';
 import { CatalystBadge, ScoreCell, SubscoreTicks } from './cells';
@@ -36,6 +37,8 @@ export interface ResultTableProps {
   /** 变化时重跑 stagger（扫描完成 / 翻页） */
   animKey: string;
   stale?: boolean;
+  /** 可选列：宏观适配（影子字段，不参与排序） */
+  showMacro?: boolean;
 }
 
 const HEADS: { label: string; align?: 'right' | 'center'; width?: string; hint?: ScoreHint }[] = [
@@ -48,6 +51,18 @@ const HEADS: { label: string; align?: 'right' | 'center'; width?: string; hint?:
   { label: '成交额', align: 'right' },
   { label: '', width: '40px' },
 ];
+
+/** 宏观列插在强度分之后：它读起来是强度分的背景，不是又一个价格字段。 */
+const MACRO_HEAD_INDEX = 3;
+
+function headsFor(showMacro: boolean) {
+  if (!showMacro) return HEADS;
+  return [
+    ...HEADS.slice(0, MACRO_HEAD_INDEX),
+    { label: '宏观适配', hint: undefined },
+    ...HEADS.slice(MACRO_HEAD_INDEX),
+  ];
+}
 
 export default function ResultTable({
   rows,
@@ -65,13 +80,15 @@ export default function ResultTable({
   onOpenDetail,
   animKey,
   stale = false,
+  showMacro = false,
 }: ResultTableProps) {
+  const heads = headsFor(showMacro);
   return (
     <div className={cn('card-surface overflow-hidden', stale && 'opacity-60')}>
       <table className="w-full border-collapse">
         <thead>
           <tr className="bg-card-warm">
-            {HEADS.map((h, i) => (
+            {heads.map((h, i) => (
               <th
                 key={i}
                 style={h.width ? { width: h.width } : undefined}
@@ -121,6 +138,12 @@ export default function ResultTable({
                   <td className="px-3 py-2">
                     <ScoreCell score={r.strengthScore} index={i} />
                   </td>
+                  {/* 宏观适配（可选列） */}
+                  {showMacro && (
+                    <td className="px-3 py-2">
+                      <MacroFitBadge score={r.macroFit} tailwind={r.macroTailwind} compact />
+                    </td>
+                  )}
                   {/* 分项微条 */}
                   <td className="px-3 py-2">
                     <SubscoreTicks row={r} />
@@ -165,7 +188,7 @@ export default function ResultTable({
                 <AnimatePresence>
                   {isOpen && (
                     <tr key={`${r.ticker}-exp`}>
-                      <td colSpan={HEADS.length} className="p-0">
+                      <td colSpan={heads.length} className="p-0">
                         <motion.div
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: 'auto', opacity: 1 }}

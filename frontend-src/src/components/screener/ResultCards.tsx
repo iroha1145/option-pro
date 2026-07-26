@@ -10,6 +10,7 @@ import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import InfoHint from '@/components/shared/InfoHint';
+import MacroFitBadge from '@/components/shared/MacroFitBadge';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import RowExpansion from './RowExpansion';
 import { CatalystBadge, SubscoreTicks } from './cells';
@@ -34,6 +35,8 @@ export interface ResultCardsProps {
   animKey: string;
   /** 当前页码：入场 stagger 只在第一页触发 */
   page?: number;
+  /** 与桌面端可选列同一个开关 */
+  showMacro?: boolean;
 }
 
 export default function ResultCards({
@@ -47,6 +50,7 @@ export default function ResultCards({
   onOpenDetail,
   animKey,
   page = 1,
+  showMacro = false,
 }: ResultCardsProps) {
   return (
     <div className="grid grid-cols-1 gap-3" key={animKey}>
@@ -130,7 +134,14 @@ export default function ResultCards({
               </span>
               <span className="mt-3 flex items-center justify-between border-t border-line pt-3">
                 <SubscoreTicks row={r} />
-                <CatalystBadge summary={catalysts[r.ticker]} />
+                <span className="flex items-center gap-1.5">
+                  {/* 移动端没有「可选列」的位置，宏观徽标跟着卡片走：只在真有读数时
+                      出现，没读数时不占位，免得每张卡片都挂一个「无读数」。 */}
+                  {showMacro && typeof r.macroFit === 'number' && (
+                    <MacroFitBadge score={r.macroFit} tailwind={r.macroTailwind} compact />
+                  )}
+                  <CatalystBadge summary={catalysts[r.ticker]} />
+                </span>
               </span>
             </button>
             <AnimatePresence>

@@ -16,6 +16,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 
 from .alignment import AsOfSeries, build_grid, etf_from_rows, series_from_rows
 from .calculations import compute_factor_points
+from .linkage import STRUCTURAL_MODULES, structural_macro_score
 from .formatting import (
     format_change,
     format_value,
@@ -616,6 +617,16 @@ class MacroConditionsService:
                 "formatted_score": format_value(composite.get("score"), "score"),
             },
             "modules": [self._module_payload(row) for row in modules],
+            # Structural macro = liquidity/funding/treasury/rates only. Credit and
+            # risk are priced off the same instruments the technical market regime
+            # already reads (HYG, LQD, KRE, VIX, SPY/TLT, IWM/SPY), so counting
+            # them again would weight one signal twice under two names.
+            #
+            # Computed here rather than in the interface: a second copy of "which
+            # modules are structural" would drift from linkage.STRUCTURAL_MODULES
+            # silently, and the two panels would disagree with each other.
+            "structural_score": structural_macro_score(modules),
+            "structural_modules": list(STRUCTURAL_MODULES),
             "drivers": drivers,
             "warnings": warnings,
             "sources": list(SOURCE_ATTRIBUTIONS),

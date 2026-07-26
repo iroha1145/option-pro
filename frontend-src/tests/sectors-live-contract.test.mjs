@@ -47,6 +47,31 @@ function liveHelpers() {
   };
 }
 
+/**
+ * 从 api/modules/strength.ts 里取出真实的 mapMacroFitDrivers。
+ *
+ * 整个 strength 模块要一堆依赖，而这里只需要那一个纯函数，所以单独编译并跑一遍
+ * 它的函数体 —— 拿到的是真代码，不是替身。
+ */
+function loadRealMacroDriverMapper() {
+  const source = fs.readFileSync(
+    path.resolve(here, '../src/api/modules/strength.ts'),
+    'utf8',
+  );
+  const start = source.indexOf('export function mapMacroFitDrivers');
+  assert.ok(start > 0, 'strength.ts 里找不到 mapMacroFitDrivers');
+  const end = source.indexOf('\n}', start) + 2;
+  const body = source
+    .slice(start, end)
+    .replace('export function', 'function');
+  const compiled = ts.transpileModule(body, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const sandbox = { asRec: liveHelpers().asRec, pickS: liveHelpers().pickS, result: null };
+  vm.runInNewContext(`${compiled}; result = mapMacroFitDrivers;`, sandbox);
+  return sandbox.result;
+}
+
 function loadSectorsModule(responses = {}) {
   const source = fs.readFileSync(modulePath, 'utf8');
   const compiled = ts.transpileModule(source, {
@@ -70,6 +95,11 @@ function loadSectorsModule(responses = {}) {
       };
     }
     if (id === '../live') return liveHelpers();
+    if (id === './strength') {
+      // 加载真实实现，而不是替身：这个映射器决定宏观驱动因素长什么样，
+      // 换成假的等于让测试同意任何形状。
+      return { mapMacroFitDrivers: loadRealMacroDriverMapper() };
+    }
     if (id === '@/mocks/fixtures2') {
       return {
         getSectors: () => [],

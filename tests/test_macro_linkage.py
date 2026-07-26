@@ -338,3 +338,245 @@ def test_shadow_ranking_score_stays_inside_the_score_range() -> None:
     assert scanner._shadow_ranking_score(1.0, -3.0) == 0.0
     assert scanner._shadow_ranking_score(None, 3.0) is None
     assert scanner._shadow_ranking_score(70.0, 0.0) == 70.0
+
+
+# ---------------- one snapshot read, shared by every surface ----------------
+
+
+def _all_factor_rows(score: float, confidence: float = 1.0) -> tuple[dict, ...]:
+    """Every registered factor at one score, so a fit is fully observed."""
+
+    return tuple(
+        {
+            "factor_id": spec.factor_id,
+            "module_id": spec.module_id,
+            "score": score,
+            "confidence": confidence,
+        }
+        for spec in FACTORS
+    )
+
+
+def _reader(score: float = 90.0, **overrides):
+    from app.services.macro_conditions.linkage_reader import MacroFitReader
+
+    fields = {
+        "available": True,
+        "snapshot_date": "2026-07-24",
+        "scoring_version": "optix-macro-score-v1",
+        "available_at": "2026-07-24T22:30:00+00:00",
+        "structural_score": score,
+        "factors": _all_factor_rows(score),
+    }
+    fields.update(overrides)
+    return MacroFitReader(**fields)
+
+
+def test_the_reader_memoizes_one_fit_per_sector_not_per_row() -> None:
+    """A page of fifty events in one sector must not recompute fifty fits."""
+
+    reader = _reader()
+    first = reader.fit_for("energy")
+    again = reader.fit_for("energy")
+    assert first is again, "the same sector must return the identical fit object"
+    assert reader.fit_for("airlines") is not first
+
+
+def test_an_unavailable_reader_answers_every_sector_with_no_fit() -> None:
+    from app.services.macro_conditions.linkage_reader import unavailable_reader
+
+    reader = unavailable_reader("macro_snapshot_unavailable")
+    fit = reader.fit_for("energy")
+    assert fit.score is None
+    assert fit.tailwind is None, "no read must not be dressed up as neutral"
+    assert reader.reason == "macro_snapshot_unavailable"
+
+
+def test_the_reader_reports_which_snapshot_produced_a_fit() -> None:
+    provenance = _reader().provenance()
+    assert provenance["exposure_version"] == EXPOSURE_VERSION
+    assert provenance["macro_snapshot_date"] == "2026-07-24"
+    assert provenance["macro_scoring_version"] == "optix-macro-score-v1"
+    assert provenance["macro_available_at"]
+
+
+# ---------------- the sector radar gains a field, not a new ranking ----------------
+
+
+def test_sector_radar_adds_macro_fit_without_touching_technical_strength() -> None:
+    """macro_sector_fit sits beside avg_strength; it never blends into it.
+
+    The interesting sectors are the ones where the two disagree, so folding them
+    into a single number would hide exactly the cases worth looking at.
+    """
+
+    from app.services.strength import scanner
+
+    rows = [
+        {"ticker": "XOM", "sector_id": "energy", "final_score": 71.0, "return_63d": 0.08},
+        {"ticker": "CVX", "sector_id": "energy", "final_score": 65.0, "return_63d": 0.04},
+        {"ticker": "DAL", "sector_id": "airlines", "final_score": 58.0, "return_63d": 0.02},
+    ]
+    plain = scanner._sector_strength([dict(row) for row in rows])
+    with_macro = scanner._sector_strength([dict(row) for row in rows], reader=_reader())
+
+    assert [s["sector_id"] for s in plain] == [s["sector_id"] for s in with_macro], (
+        "macro must not reorder the sector radar"
+    )
+    for before, after in zip(plain, with_macro):
+        assert before["avg_strength"] == after["avg_strength"]
+        assert before["avg_return"] == after["avg_return"]
+        assert before["leaders"] == after["leaders"]
+        assert before["macro_sector_fit"] is None, "no reader means no fit, not 50"
+        assert after["macro_sector_fit"] is not None
+
+    by_id = {s["sector_id"]: s for s in with_macro}
+    # High oil scores as supportive-for-risk, which is a headwind for producers
+    # and a tailwind for airlines. One environment, two directions.
+    assert by_id["energy"]["macro_sector_fit"] < 50 < by_id["airlines"]["macro_sector_fit"]
+    assert (
+        by_id["energy"]["macro_sector_tailwind"]
+        != by_id["airlines"]["macro_sector_tailwind"]
+    )
+    assert by_id["airlines"]["macro_sector_tailwind"] == "顺风"
+    assert by_id["energy"]["macro_sector_opposing_factors"]
+    assert by_id["energy"]["macro_sector_fit_confidence"] == 1.0
+
+
+def test_sector_radar_reports_no_fit_rather_than_neutral_for_a_basket() -> None:
+    from app.services.strength import scanner
+
+    rows = [{"ticker": "SPY", "sector_id": "etfs", "final_score": 60.0, "return_63d": 0.03}]
+    sectors = scanner._sector_strength(rows, reader=_reader())
+
+    assert sectors[0]["macro_sector_fit"] is None
+    assert sectors[0]["macro_sector_tailwind"] is None
+    assert sectors[0]["macro_sector_supporting_factors"] == []
+
+
+# ---------------- breakouts get a shadow priority, nothing else ----------------
+
+
+def test_breakout_shadow_moves_priority_only_and_within_its_cap() -> None:
+    """The breakout contract: quality evidence and the lifecycle stay put.
+
+    base_quality, confirmation, liquidity, breakout_quality and chase_risk are
+    technical evidence about the setup. Macro says nothing about any of them, so
+    it may only annotate the alert priority -- and only in a shadow field.
+    """
+
+    from app.api import breakouts
+
+    shadow = breakouts._macro_shadow(_reader(), "DAL", 70.0)
+
+    assert shadow["macro_shadow_status"] == "ok"
+    assert shadow["macro_fit_score"] is not None
+    assert abs(shadow["macro_priority_adjustment_shadow"]) <= BREAKOUT_PRIORITY_SHADOW_CAP
+    assert shadow["alert_priority_macro_shadow"] == pytest.approx(
+        70.0 + shadow["macro_priority_adjustment_shadow"], abs=1e-6
+    )
+    assert set(shadow) == {
+        "macro_fit_score",
+        "macro_fit_confidence",
+        "macro_tailwind",
+        "macro_priority_adjustment_shadow",
+        "alert_priority_macro_shadow",
+        "macro_supporting_factors",
+        "macro_opposing_factors",
+        "macro_shadow_status",
+    }, "the shadow may not write any production score"
+
+
+def test_breakout_shadow_priority_stays_inside_the_score_range() -> None:
+    from app.api import breakouts
+
+    high = breakouts._macro_shadow(_reader(), "DAL", 99.0)
+    assert 0.0 <= high["alert_priority_macro_shadow"] <= 100.0
+    low = breakouts._macro_shadow(_reader(score=5.0), "DAL", 1.0)
+    assert 0.0 <= low["alert_priority_macro_shadow"] <= 100.0
+
+
+def test_breakout_shadow_without_a_priority_reports_the_fit_and_no_shadow() -> None:
+    """A priority that was never computed must not be invented from the adjustment."""
+
+    from app.api import breakouts
+
+    shadow = breakouts._macro_shadow(_reader(), "DAL", None)
+    assert shadow["macro_fit_score"] is not None
+    assert shadow["alert_priority_macro_shadow"] is None
+
+
+def test_breakout_shadow_distinguishes_its_three_ways_of_having_no_answer() -> None:
+    """Three different facts must not collapse into one missing number.
+
+    "no snapshot", "this ticker is not in the theme map" and "this sector's
+    exposure profile is too thinly observed" all leave macro_fit_score null, and
+    a reader of the API cannot tell them apart without being told.
+    """
+
+    from app.api import breakouts
+    from app.services.macro_conditions.linkage_reader import unavailable_reader
+
+    no_snapshot = breakouts._macro_shadow(
+        unavailable_reader("macro_snapshot_unavailable"), "DAL", 70.0
+    )
+    assert no_snapshot["macro_shadow_status"] == "macro_snapshot_unavailable"
+
+    unclassified = breakouts._macro_shadow(_reader(), "NOTATICKER", 70.0)
+    assert unclassified["macro_shadow_status"] == "sector_unclassified"
+
+    # SPY is in the theme map but sits in the basket sector, which carries no
+    # exposure profile at all.
+    basket = breakouts._macro_shadow(_reader(), "SPY", 70.0)
+    assert basket["macro_shadow_status"] == "exposure_coverage_low"
+
+    thin = breakouts._macro_shadow(
+        _reader(factors=_all_factor_rows(90.0)[:1]), "DAL", 70.0
+    )
+    assert thin["macro_shadow_status"] == "exposure_coverage_low"
+
+    for shadow in (no_snapshot, unclassified, basket, thin):
+        assert shadow["macro_fit_score"] is None
+        assert shadow["alert_priority_macro_shadow"] is None
+        assert shadow["macro_tailwind"] is None
+
+
+def test_breakout_shadow_never_raises_when_macro_is_missing_entirely() -> None:
+    """A breakout page must render when the macro module is not installed."""
+
+    from app.api import breakouts
+
+    shadow = breakouts._macro_shadow(None, "DAL", 70.0)
+    assert shadow["macro_shadow_status"] == "unavailable"
+    assert shadow["macro_fit_score"] is None
+
+
+# ---------------- one ticker, one sector, everywhere ----------------
+
+
+def test_the_shared_ticker_sector_resolution_matches_the_strength_universe() -> None:
+    """Two conventions for "which sector is this ticker in" would show two fits.
+
+    The breakout shadow resolves a ticker through app.services.sectors while the
+    screener resolves it through the strength universe's own metadata. These are
+    separate code paths over the same map, so they are asserted to agree rather
+    than assumed to.
+    """
+
+    from app.services.sectors import primary_sector_id
+    from app.services.strength.scanner import _theme_universe
+
+    tickers, metadata = _theme_universe()
+    assert tickers, "the universe must not be empty"
+    for ticker in tickers:
+        assert primary_sector_id(ticker) == metadata[ticker]["primary_sector_id"], (
+            f"{ticker} resolves to two different sectors"
+        )
+
+
+def test_an_unknown_ticker_resolves_to_no_sector_rather_than_a_default() -> None:
+    from app.services.sectors import primary_sector_id
+
+    assert primary_sector_id("NOTATICKER") is None
+    assert primary_sector_id("") is None
+    assert primary_sector_id(None) is None

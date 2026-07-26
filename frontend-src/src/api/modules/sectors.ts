@@ -1,6 +1,8 @@
 /** 板块域：真实目录、强度聚合与板块内 IV 横截面。 */
 import { get, mockOr, toQuery } from '../client';
 import { asRec, pickB, pickN, pickS, unwrap, type Rec } from '../live';
+import { mapMacroFitDrivers } from './strength';
+import type { MacroFitDriver } from '@/lib/macroFit';
 import * as fx2 from '@/mocks/fixtures2';
 import type { IvRankRow, Sector } from '../types';
 
@@ -28,6 +30,15 @@ export interface SectorStrengthRow {
   avgReturn6mo: number | null;
   avgStrength: number | null;
   leaders: SectorStrengthLeader[];
+  /**
+   * 宏观适配（影子字段）：与 avgStrength 并列，绝不混入它。
+   * 两者不一致的板块正是值得看的，混成一个数就把它们藏掉了。null = 没读到。
+   */
+  macroFit: number | null;
+  macroTailwind: string | null;
+  macroFitConfidence: number | null;
+  macroSupporting: MacroFitDriver[];
+  macroOpposing: MacroFitDriver[];
 }
 
 export interface SectorStrengthEnvelope {
@@ -127,6 +138,11 @@ function mapStrengthRow(raw: Rec, requestedPeriod: SectorPeriod): SectorStrength
     avgReturn6mo: pickN(raw, 'avg_return_6mo'),
     avgStrength: pickN(raw, 'avg_strength'),
     leaders,
+    macroFit: pickN(raw, 'macro_sector_fit'),
+    macroTailwind: pickS(raw, 'macro_sector_tailwind'),
+    macroFitConfidence: pickN(raw, 'macro_sector_fit_confidence'),
+    macroSupporting: mapMacroFitDrivers(raw.macro_sector_supporting_factors),
+    macroOpposing: mapMacroFitDrivers(raw.macro_sector_opposing_factors),
   };
 }
 

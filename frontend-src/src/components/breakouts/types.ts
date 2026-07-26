@@ -4,6 +4,7 @@
  * 页面经 breakoutsApi 获取后按此结构读取。
  */
 import type { BreakoutEvent, BreakoutEventDetail, BreakoutSignal, BreakoutStatus } from '@/api/types';
+import type { MacroFitDriver } from '@/lib/macroFit';
 
 /* ---------------- 枚举（契约） ---------------- */
 export type LifecycleState =
@@ -160,6 +161,19 @@ export interface BreakoutEventFull extends BreakoutEventDetail {
   data_confidence_score: number;
   range_persistence: RangePersistence | RangePersistenceLive | null;
   transitions: BreakoutTransition[];
+  /**
+   * 宏观影子字段（macro-linkage-v1）。只标注提醒优先级，上限 ±4。
+   *
+   * 上面每一个质量分和事件生命周期都不受它影响 —— 宏观逆风不会删除、不会降级、
+   * 也不会推迟一个真实发生的突破事件。null 表示没读到，macro_shadow_status 说明原因。
+   */
+  macro_fit_score: number | null;
+  macro_tailwind: string | null;
+  macro_priority_adjustment_shadow: number | null;
+  alert_priority_macro_shadow: number | null;
+  macro_shadow_status: string | null;
+  macro_supporting_factors: MacroFitDriver[];
+  macro_opposing_factors: MacroFitDriver[];
 }
 
 /** 当日信号（/breakouts/current 的 events[]，叠加 BreakoutSignal 展示字段） */

@@ -25,6 +25,7 @@ import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { fmtPrice, fmtRelative } from '@/lib/format';
+import { MACRO_TONE_LABEL, macroToneOf } from '@/lib/macroFit';
 import { baseAnimation, CH, glassTooltip, type ChartOption } from '@/lib/chart';
 import {
   asFullDetail,
@@ -70,6 +71,41 @@ const SESSION_DOT: Record<BreakoutSession, string> = {
   postmarket: 'bg-ai-600',
   closed: 'bg-ink-400',
 };
+
+/* ---------------- 宏观影子优先级 ---------------- */
+/**
+ * 「如果宏观接入正式评分，这个提醒优先级会变成多少」。
+ *
+ * 环上的分数是生产值，这里显示的是影子值和差额，两者并排就能看出宏观改变了多少。
+ * 上限 ±4，且不改动任何质量分或事件生命周期 —— 宏观逆风不会删除一个真实突破。
+ *
+ * 没有读数就不渲染：在这张已经很密的卡上，一个「暂无」比不显示更吵，而具体原因
+ * 在个股抽屉的宏观块里说得清楚。
+ */
+function MacroPriorityShadow({ ev }: { ev: BreakoutEventFull }) {
+  const shadow = num(ev.alert_priority_macro_shadow);
+  const delta = num(ev.macro_priority_adjustment_shadow);
+  const fit = num(ev.macro_fit_score);
+  if (shadow === null || delta === null || fit === null) return null;
+  const tone = macroToneOf(fit, ev.macro_tailwind);
+  return (
+    <span
+      className="flex items-center gap-1 text-micro text-ink-400"
+      title={`宏观适配 ${fit.toFixed(1)}（${tone ? MACRO_TONE_LABEL[tone] : '—'}）。影子优先级 = 生产优先级 ${delta >= 0 ? '+' : '−'} ${Math.abs(delta).toFixed(1)}，上限 ±4。不改变突破质量分与事件生命周期。`}
+    >
+      <span>宏观影子</span>
+      <span className="font-mono tnum text-ink-600">{shadow.toFixed(1)}</span>
+      <span
+        className={cn(
+          'font-mono tnum',
+          delta > 0 ? 'text-up-700' : delta < 0 ? 'text-down-700' : 'text-ink-400',
+        )}
+      >
+        {delta > 0 ? '+' : ''}{delta.toFixed(1)}
+      </span>
+    </span>
+  );
+}
 
 /* ---------------- 告警优先级环（64px 紧凑版：轨道 line + brand-600 弧 draw-line + count-up） ---------------- */
 function PriorityRing({ score }: { score: number }) {
@@ -635,8 +671,11 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
             <p className="mt-0.5 font-mono text-data-l text-ink-900 tnum">{invalid !== null ? fmtPrice(invalid) : '—'}</p>
           </div>
         </div>
-        <div className="flex items-center justify-center rounded-md border border-line bg-card-warm px-3 py-1.5">
+        <div className="flex flex-col items-center justify-center gap-1.5 rounded-md border border-line bg-card-warm px-3 py-1.5">
           <PriorityRing score={num(e.alert_priority_score) ?? 0} />
+          {/* 宏观影子：显示的是「如果接入，优先级会变成多少」，环上的分数不变。
+              上限 ±4；突破质量、确认、流动性、追高风险和事件生命周期一律不动。 */}
+          <MacroPriorityShadow ev={e} />
         </div>
       </div>
 

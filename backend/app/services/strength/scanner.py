@@ -1482,7 +1482,34 @@ _TIER_FLOORS: tuple[tuple[str, float], ...] = (
 )
 
 
-def _attach_macro_fit_shadow(rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _load_macro_reader() -> Any:
+    """The published macro snapshot, or a reader that reports why there is none.
+
+    One reader is shared by the row-level shadow fields and the sector radar so
+    both describe the same snapshot. Two independent reads could straddle a
+    publication and put two different macro environments on one page.
+    """
+
+    try:
+        from app.services.macro_conditions.linkage_reader import (
+            REASON_MODULE,
+            load_macro_fit_reader,
+            unavailable_reader,
+        )
+    except Exception:
+        return None
+    try:
+        return load_macro_fit_reader()
+    except Exception:
+        # load_macro_fit_reader already swallows its own failures; this only
+        # covers an import-time surprise in a dependency it reaches lazily.
+        return unavailable_reader(REASON_MODULE)
+
+
+def _attach_macro_fit_shadow(
+    rows: list[dict[str, Any]],
+    reader: Any = None,
+) -> dict[str, Any]:
     """Attach a per-stock macro fit as shadow fields. Changes no production score.
 
     The point of a stock-level fit is that one macro environment pushes
@@ -1500,49 +1527,31 @@ def _attach_macro_fit_shadow(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """
 
     try:
-        from app.services.macro_conditions.exposures import EXPOSURE_VERSION
         from app.services.macro_conditions.linkage import (
-            compute_macro_fit,
             macro_technical_gap,
             shadow_ranking_adjustment,
-            structural_macro_score,
-        )
-        from app.services.macro_conditions.repository import MacroRepository
-        from app.services.macro_conditions.service import (
-            MacroConditionsService,
-            MacroServiceConfig,
         )
     except Exception:
         return {"available": False, "reason": "macro_module_unavailable"}
 
-    try:
-        from app.personal_config import get_personal_config
-        from app.data_paths import get_data_paths
+    if reader is None:
+        reader = _load_macro_reader()
+    if reader is None:
+        return {"available": False, "reason": "macro_module_unavailable"}
+    if not reader.available:
+        return {"available": False, "reason": reader.reason}
 
-        # Read-only: constructing this must never create or migrate the file,
-        # and a screener scan must never trigger a macro fetch.
-        repository = MacroRepository(get_data_paths().macro_conditions_db, read_only=True)
-        service = MacroConditionsService(
-            repository,
-            config=MacroServiceConfig.from_personal_config(get_personal_config()),
-        )
-        inputs = service.linkage_inputs()
-    except Exception:
-        inputs = None
-    if not inputs:
-        return {"available": False, "reason": "macro_snapshot_unavailable"}
-
-    factors = inputs.get("factors") or []
-    structural = structural_macro_score(inputs.get("modules") or [])
-    # One fit per sector, not per row: the exposure profile is the sector's.
-    by_sector: dict[str, Any] = {}
+    structural = reader.structural_score
     scored = 0
+    # Tracked here, not read back off the reader's cache: the reader is shared
+    # with the sector radar, so its cache answers "every sector anyone asked
+    # about", and this field means "the sectors these rows are in".
+    uncovered: set[str] = set()
     for row in rows:
         sector_id = row.get("primary_sector_id") or row.get("sector_id")
-        key = str(sector_id or "")
-        if key not in by_sector:
-            by_sector[key] = compute_macro_fit(factors, sector_id=sector_id or None)
-        fit = by_sector[key]
+        fit = reader.fit_for(sector_id)
+        if fit.score is None:
+            uncovered.add(str(sector_id or ""))
         payload = fit.as_payload()
         payload["ranking_score_macro_shadow"] = _shadow_ranking_score(
             row.get("ranking_score"),
@@ -1558,15 +1567,10 @@ def _attach_macro_fit_shadow(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
     return {
         "available": True,
-        "exposure_version": EXPOSURE_VERSION,
-        "macro_snapshot_date": inputs.get("snapshot_date"),
-        "macro_scoring_version": inputs.get("scoring_version"),
-        "macro_available_at": inputs.get("available_at"),
+        **reader.provenance(),
         "structural_macro_score": structural,
         "scored_rows": scored,
-        "sectors_without_exposure": sorted(
-            key for key, fit in by_sector.items() if fit.score is None
-        ),
+        "sectors_without_exposure": sorted(uncovered),
         # Stated so nobody has to infer it from the field names.
         "affects_production_ranking": False,
     }
@@ -1639,7 +1643,28 @@ def _sort_scored(rows: list[dict[str, Any]], timeframe: str) -> None:
     )
 
 
-def _sector_strength(rows: list[dict[str, Any]], period: str = "3mo") -> list[dict[str, Any]]:
+def _macro_driver(factor_id: str) -> dict[str, str]:
+    """Resolve a driver's display name, falling back to the bare id."""
+
+    try:
+        from app.services.macro_conditions.linkage import factor_driver
+    except Exception:
+        return {"factor_id": factor_id, "label": factor_id}
+    return factor_driver(factor_id)
+
+
+def _sector_strength(
+    rows: list[dict[str, Any]],
+    period: str = "3mo",
+    reader: Any = None,
+) -> list[dict[str, Any]]:
+    """Per-sector technical strength, plus macro fit as a separate field.
+
+    ``macro_sector_fit`` never touches ``avg_strength`` or the ordering. The two
+    are different measurements and the interesting sectors are the ones where
+    they disagree -- blending them into one number would hide exactly those.
+    """
+
     if period not in SECTOR_PERIOD_DAYS:
         raise ValueError(f"Unsupported sector period: {period}")
     grouped: dict[str, list[dict[str, Any]]] = {}
@@ -1656,6 +1681,7 @@ def _sector_strength(rows: list[dict[str, Any]], period: str = "3mo") -> list[di
         final = [x.get("final_score") for x in items if x.get("final_score") is not None]
         leaders = sorted(items, key=lambda x: x.get("final_score") or 0, reverse=True)[:4]
         selected_return = period_averages[period]
+        fit = reader.fit_for(sid) if reader is not None and reader.available else None
         sectors.append({
             "sector_id": sid,
             "id": sid,
@@ -1672,6 +1698,19 @@ def _sector_strength(rows: list[dict[str, Any]], period: str = "3mo") -> list[di
             "avg_return_3m": period_averages["3mo"],
             "avg_strength": round(sum(final) / len(final), 1) if final else None,
             "leaders": [{"ticker": x["ticker"], "score": x["final_score"]} for x in leaders],
+            # None means "no macro read", never neutral. A sector whose exposure
+            # profile is too thinly observed carries no fit rather than a 50.
+            "macro_sector_fit": fit.score if fit else None,
+            "macro_sector_tailwind": fit.tailwind if fit else None,
+            "macro_sector_fit_confidence": (
+                round(fit.confidence, 4) if fit else None
+            ),
+            "macro_sector_supporting_factors": (
+                [_macro_driver(f) for f in fit.supporting] if fit else []
+            ),
+            "macro_sector_opposing_factors": (
+                [_macro_driver(f) for f in fit.opposing] if fit else []
+            ),
         })
     sectors.sort(
         key=lambda sector: (
@@ -1928,7 +1967,11 @@ def _scan_sync(
     # Shadow only, computed after the production ordering is fixed: attaching it
     # earlier would invite it to leak into a sort key. Nothing below reads these
     # fields, and _sort_scored has already run.
-    macro_linkage = _attach_macro_fit_shadow(limited)
+    macro_reader = _load_macro_reader()
+    macro_linkage = _attach_macro_fit_shadow(limited, macro_reader)
+    # Built here rather than inline in the payload below so the sector radar and
+    # the row-level shadow fields provably describe the same snapshot read.
+    sector_rows = _sector_strength(scored, reader=macro_reader)
     options_status = _combined_options_status(yahoo_options_status, marketdata_status)
     return {
         "as_of": _now_iso(),
@@ -1965,7 +2008,7 @@ def _scan_sync(
         "skipped": skipped,
         "results": limited,
         "rows": limited,
-        "sectors": _sector_strength(scored),
+        "sectors": sector_rows,
         "data_sources": {
             "prices": {
                 "provider": price_source.get("provider") or "Yahoo/yfinance",

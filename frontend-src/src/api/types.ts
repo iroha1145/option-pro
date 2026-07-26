@@ -1,4 +1,5 @@
 /** API 契约类型（与后端 REST 形状 1:1 对齐，info.md §3） */
+import type { MacroFitDriver } from '@/lib/macroFit';
 
 /* ---------- 市场 ---------- */
 export interface IndexQuote {
@@ -144,6 +145,20 @@ export interface ScreenerRow {
   /** live 契约分项（周期/质量分）：存在时 UI 优先消费；mock 不填，回退 subscores 四维 */
   subscoreDims?: ScreenerSubscoreDim[];
   sparkline: number[];
+  /**
+   * 宏观适配（影子字段，macro-linkage-v1）。
+   *
+   * 不参与排序、不改 strengthScore —— 后端 macro_linkage.affects_production_ranking
+   * 为 false，这里的字段只是把同一个事实带到界面上。null 表示**没读到**，不是中性：
+   * 覆盖度不足时后端返回 null 而不是 50，前端也不许兜成 50。
+   */
+  macroFit?: number | null;
+  macroTailwind?: string | null;
+  macroFitConfidence?: number | null;
+  macroSupporting?: MacroFitDriver[];
+  macroOpposing?: MacroFitDriver[];
+  /** 技术市场适配 − 结构性宏观。正数＝价格跑在环境前面。 */
+  macroTechnicalGap?: number | null;
 }
 
 /** 契约 /strength/profiles 的板块字典（{id,name}，name 为中文） */
@@ -192,6 +207,17 @@ export interface StockDetail extends WatchlistItem {
    * 由 /strength/stocks/{t} 回退基础行情（仅价/涨跌/市值等，其余如实留空）。
    */
   snapshotScope?: 'full' | 'strength-row';
+  /**
+   * 宏观适配（影子字段）。来自 /strength/stocks/{t} 的扫描行，和选股表同一份读数，
+   * 因此是**板块级**的暴露画像，不是对这一只票单独算的。缺失保持 undefined/null，
+   * 不兜 50。
+   */
+  macroFit?: number | null;
+  macroTailwind?: string | null;
+  macroFitConfidence?: number | null;
+  macroSupporting?: MacroFitDriver[];
+  macroOpposing?: MacroFitDriver[];
+  macroTechnicalGap?: number | null;
 }
 
 export interface StockPullResource {

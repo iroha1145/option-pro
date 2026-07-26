@@ -10,6 +10,7 @@ import type {
   SectorStrengthRow,
 } from '@/api/modules/sectors';
 import { heatColor } from '@/lib/chart';
+import type { MacroFitDriver } from '@/lib/macroFit';
 
 export interface SectorVm {
   id: string;
@@ -27,6 +28,12 @@ export interface SectorVm {
   leaders: SectorStrengthLeader[];
   asOf: string | null;
   strengthCovered: boolean;
+  /** 宏观适配（影子字段）：与 avgStrength 并列，不参与任何排序。null = 没读到。 */
+  macroFit: number | null;
+  macroTailwind: string | null;
+  macroFitConfidence: number | null;
+  macroSupporting: MacroFitDriver[];
+  macroOpposing: MacroFitDriver[];
 }
 
 export interface IvRowVm {
@@ -86,6 +93,11 @@ function makeSectorVm(
     leaders: strength?.leaders ?? [],
     asOf: envelope.asOf,
     strengthCovered: strength !== undefined,
+    macroFit: strength?.macroFit ?? null,
+    macroTailwind: strength?.macroTailwind ?? null,
+    macroFitConfidence: strength?.macroFitConfidence ?? null,
+    macroSupporting: strength?.macroSupporting ?? [],
+    macroOpposing: strength?.macroOpposing ?? [],
   };
 }
 
