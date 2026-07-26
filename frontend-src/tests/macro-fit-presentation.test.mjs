@@ -259,3 +259,47 @@ test('50 分正好落在象限的强侧，与顺风分档的中性不冲突', ()
   assert.equal(macroFit.macroTone(50), 'neutral');
   // 这两句同时为真才是对的：象限说的是「相对 50 的哪一边」，分档说的是「够不够强」。
 });
+
+test('驱动因素映射同时接受新旧两种形状（部署窗口）', () => {
+  // 磁盘快照在 Worker 重跑之前仍是裸 id 数组。丢成空列表会让面板说
+  // 「各宏观因子方向不明显」—— 那是一句关于数据的判断，不是「读不到名字」。
+  const source = readFileSync(
+    resolve(repoRoot, 'frontend-src/src/api/modules/strength.ts'),
+    'utf8',
+  );
+  const start = source.indexOf('export function mapMacroFitDrivers');
+  assert.ok(start > 0);
+  const body = source.slice(start, source.indexOf('\n}', start) + 2)
+    .replace('export function', 'function');
+  const compiled = ts.transpileModule(body, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const sandbox = {
+    asRec: (v) => (v !== null && typeof v === 'object' && !Array.isArray(v) ? v : {}),
+    pickS: (r, ...keys) => {
+      for (const k of keys) if (typeof r[k] === 'string' && r[k]) return r[k];
+      return null;
+    },
+    map: null,
+  };
+  vm.runInNewContext(`${compiled}; map = mapMacroFitDrivers;`, sandbox);
+  const map = sandbox.map;
+
+  // vm 里造出来的对象和这个 realm 的 Object 不同源，deepStrictEqual 会因此失败；
+  // 比较 JSON 就绕开了 realm，比较的仍是实际内容。
+  const plain = (value) => JSON.parse(JSON.stringify(value));
+
+  // 新形状
+  assert.deepEqual(plain(map([{ factor_id: 'wti_oil', label: 'WTI 原油' }])), [
+    { factor_id: 'wti_oil', label: 'WTI 原油' },
+  ]);
+  // 旧形状：显示 id，那正是旧快照携带的全部信息
+  assert.deepEqual(plain(map(['real_rate_level', 'wti_oil'])), [
+    { factor_id: 'real_rate_level', label: 'real_rate_level' },
+    { factor_id: 'wti_oil', label: 'wti_oil' },
+  ]);
+  // 垃圾输入不产出条目
+  assert.deepEqual(plain(map(['', '  ', null, 42, {}])), []);
+  assert.deepEqual(plain(map(null)), []);
+  assert.deepEqual(plain(map('not-an-array')), []);
+});

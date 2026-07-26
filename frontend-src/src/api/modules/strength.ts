@@ -106,6 +106,13 @@ function applyParams(rows: ScreenerRow[], p: ScanParams): ScreenerRow[] {
 export function mapMacroFitDrivers(raw: unknown): MacroFitDriver[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((item) => {
+    // 部署窗口：磁盘上的快照在 Worker 重跑之前仍是旧形状（裸因子 id 数组）。
+    // 那时显示 id 是诚实的 —— 那正是旧快照携带的全部信息；而丢成空列表会让面板
+    // 说「各宏观因子方向不明显」，那是一句关于数据的判断，不是「读不到名字」。
+    if (typeof item === 'string') {
+      const id = item.trim();
+      return id ? [{ factor_id: id, label: id }] : [];
+    }
     const rec = asRec(item);
     const factorId = pickS(rec, 'factor_id');
     if (!factorId) return [];
