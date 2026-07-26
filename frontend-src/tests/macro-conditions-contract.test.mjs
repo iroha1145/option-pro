@@ -52,6 +52,14 @@ function liveHelpers() {
 }
 
 /**
+ * i18n/core 的最小桩：本测试断言的是数据映射/归一逻辑，不是翻译本身，回退原文
+ * 即可（与真实 t() 在 zh 语言下的行为一致），{n} 占位符按真实 core.ts 同款规则替换。
+ */
+function stubT(msgid, vars) {
+  return vars ? msgid.replace(/\{(\w+)\}/g, (whole, key) => (vars[key] === undefined || vars[key] === null ? whole : String(vars[key]))) : msgid;
+}
+
+/**
  * 把一个使用 `@/` 别名的 TS 模块转译后在**当前 realm** 内求值。
  *
  * 刻意不用 vm.createContext：新 context 有自己的 intrinsics，模块里创建的对象
@@ -115,6 +123,7 @@ const {
 } = MACRO_API;
 
 const HINTS = loadModule('lib/scoreHints.ts', (id) => {
+  if (id === '../i18n/core.ts') return { t: stubT };
   throw new Error(`unexpected import: ${id}`);
 });
 const { MACRO_FACTOR_HINTS, MACRO_MODULE_HINTS, SCORE_HINTS_MACRO } = HINTS;

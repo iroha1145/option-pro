@@ -7,15 +7,16 @@ import { cn } from '@/lib/utils';
 import type { NewsAnalysisStatus, NewsClassification } from './api';
 import { catalystsContract } from './api';
 import { DEFAULT_FILTERS, type CatalystFilters } from './filters';
+import { t } from '../../i18n/core.ts';
 
 const STATUS_OPTIONS: { value: '' | NewsAnalysisStatus; label: string }[] = [
-  { value: '', label: '全部状态' },
-  { value: 'pending', label: '未分析' },
-  { value: 'queued', label: '排队中' },
-  { value: 'in_progress', label: '分析中' },
-  { value: 'completed', label: '已分析' },
-  { value: 'insufficient_context', label: '信息不足' },
-  { value: 'failed', label: '分析失败' },
+  { value: '', label: t('全部状态') },
+  { value: 'pending', label: t('未分析') },
+  { value: 'queued', label: t('排队中') },
+  { value: 'in_progress', label: t('分析中') },
+  { value: 'completed', label: t('已分析') },
+  { value: 'insufficient_context', label: t('信息不足') },
+  { value: 'failed', label: t('分析失败') },
 ];
 
 function StatusDropdown({ value, onChange }: { value: '' | NewsAnalysisStatus; onChange: (v: '' | NewsAnalysisStatus) => void }) {
@@ -137,13 +138,13 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
           <input
             value={filters.ticker}
             onChange={(e) => set({ ticker: e.target.value.toUpperCase().replace(/[^A-Z0-9.^-]/g, '').slice(0, 12) })}
-            placeholder="代码过滤"
+            placeholder={t("代码过滤")}
             className="h-8 w-28 rounded-md border border-line bg-card pl-7 pr-2 font-mono text-caption text-ink-800 placeholder:text-ink-300 focus:border-brand-400 focus:outline-none"
-            aria-label="按代码过滤"
+            aria-label={t("按代码过滤")}
           />
         </div>
         {filters.ticker && (
-          <button onClick={() => set({ ticker: '' })} className="rounded-sm p-1 text-ink-400 hover:text-ink-600" aria-label="清除代码过滤">
+          <button onClick={() => set({ ticker: '' })} className="rounded-sm p-1 text-ink-400 hover:text-ink-600" aria-label={t("清除代码过滤")}>
             <Icon name="x" size={12} />
           </button>
         )}
@@ -151,10 +152,10 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
 
       <Segmented
         options={[
-          { value: '6', label: '6 时' },
-          { value: '24', label: '24 时' },
-          { value: '72', label: '3 天' },
-          { value: '168', label: '7 天' },
+          { value: '6', label: t('6 时') },
+          { value: '24', label: t('24 时') },
+          { value: '72', label: t('3 天') },
+          { value: '168', label: t('7 天') },
         ]}
         value={String(filters.windowHours)}
         onChange={(v) => set({ windowHours: Number(v) })}
@@ -162,10 +163,10 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
 
       <Segmented
         options={[
-          { value: '', label: '全部' },
-          { value: 'bullish', label: '利多' },
-          { value: 'bearish', label: '利空' },
-          { value: 'neutral', label: '中性' },
+          { value: '', label: t('全部') },
+          { value: 'bullish', label: t('利多') },
+          { value: 'bearish', label: t('利空') },
+          { value: 'neutral', label: t('中性') },
         ]}
         value={filters.classification}
         onChange={(v) => set({ classification: v as '' | NewsClassification })}
@@ -174,22 +175,22 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
       <StatusDropdown value={filters.analysisStatus} onChange={(v) => set({ analysisStatus: v })} />
 
       <LabeledSlider
-        label="置信度 ≥"
+        label={t("置信度 ≥")}
         value={Math.round(filters.minConfidence * 100)}
         min={0}
         max={90}
         step={5}
-        format={(v) => (v > 0 ? `${v}%` : '不限')}
+        format={(v) => (v > 0 ? `${v}%` : t('不限'))}
         onChange={(v) => set({ minConfidence: v / 100 })}
       />
 
       <LabeledSlider
-        label="影响分 ≥"
+        label={t("影响分 ≥")}
         value={filters.minAbsImpact}
         min={0}
         max={5}
         step={0.5}
-        format={(v) => (v > 0 ? v.toFixed(1) : '不限')}
+        format={(v) => (v > 0 ? v.toFixed(1) : t('不限'))}
         onChange={(v) => set({ minAbsImpact: v })}
       />
 
@@ -213,7 +214,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
             )}
           />
         </span>
-        <span className={cn('whitespace-nowrap text-micro', filters.multiSourceOnly ? 'text-ink-800' : 'text-ink-400')}>多源确认</span>
+        <span className={cn('whitespace-nowrap text-micro', filters.multiSourceOnly ? 'text-ink-800' : 'text-ink-400')}>{t('多源确认')}</span>
       </button>
 
       {activeCount > 0 && (
@@ -222,7 +223,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
           className="flex items-center gap-1 rounded-md border border-line bg-card px-2 py-1.5 text-micro text-ink-500 transition-colors duration-fast hover:border-down-600/40 hover:text-down-700"
         >
           <Icon name="x" size={11} />
-          清除过滤
+          {t('清除过滤')}
         </button>
       )}
     </>
@@ -241,7 +242,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
           )}
         >
           <Icon name="filter-funnel" size={14} />
-          筛选{activeCount > 0 ? ` · ${activeCount}` : ''}
+          {t('筛选')}{activeCount > 0 ? ` · ${activeCount}` : ''}
           <Icon name="chevron-down" size={12} className={cn('transition-transform duration-200', mobileOpen && 'rotate-180')} />
         </button>
         <CountNote total={total} filtered={filtered} />
@@ -267,8 +268,8 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
         >
           <span className="inline-flex items-center gap-1.5 rounded-pill bg-brand-100 px-2.5 py-1 text-caption font-medium text-brand-700">
             <Icon name="flame-line" size={12} />
-            主题：{catalystsContract.themeName(filters.themeId)}
-            <button onClick={() => set({ themeId: null })} aria-label="清除主题过滤" className="rounded-full p-0.5 hover:bg-brand-200/60">
+            {t('主题：')}{catalystsContract.themeName(filters.themeId)}
+            <button onClick={() => set({ themeId: null })} aria-label={t("清除主题过滤")} className="rounded-full p-0.5 hover:bg-brand-200/60">
               <Icon name="x" size={11} />
             </button>
           </span>
@@ -282,7 +283,7 @@ function CountNote({ total, filtered }: { total: number | null; filtered: boolea
   return (
     <p className="font-mono text-micro text-ink-400 tnum">
       {total === null ? '—' : `${total} 条`}
-      {filtered && total !== null && <span className="text-ink-300"> · 已过滤</span>}
+      {filtered && total !== null && <span className="text-ink-300"> {t('· 已过滤')}</span>}
     </p>
   );
 }

@@ -1,7 +1,8 @@
 /** HatchLegend：▨ 预估 / ▮ 实际 图注（§6-3） */
 import { cn } from '@/lib/utils';
+import { t } from '../../i18n/core.ts';
 
-export default function HatchLegend({ className, actual = '实际', estimate = '预估' }: { className?: string; actual?: string; estimate?: string }) {
+export default function HatchLegend({ className, actual = t('实际'), estimate = t('预估') }: { className?: string; actual?: string; estimate?: string }) {
   return (
     <span className={cn('inline-flex items-center gap-3 text-micro text-ink-400', className)}>
       <span className="inline-flex items-center gap-1">

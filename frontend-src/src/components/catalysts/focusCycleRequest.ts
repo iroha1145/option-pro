@@ -1,3 +1,4 @@
+import { t } from '../../i18n/core.ts';
 export interface FocusCycleRequestBody {
   trigger: 'manual';
   expected_prepared_revision?: number;
@@ -19,7 +20,7 @@ export function buildFocusCycleRequestBody(
   if (retryCycleId) {
     const normalized = retryCycleId.trim();
     if (!/^mfc_[0-9a-f]{32}$/.test(normalized)) {
-      throw new Error('市场焦点周期编号无效');
+      throw new Error(t('市场焦点周期编号无效'));
     }
     body.retry_cycle_id = normalized;
     return body;
@@ -40,7 +41,7 @@ export function buildFocusCycleRequestBody(
 export function focusCyclePollPath(cycleId: string): string {
   const normalized = cycleId.trim();
   if (!/^mfc_[0-9a-f]{32}$/.test(normalized)) {
-    throw new Error('市场焦点周期编号无效');
+    throw new Error(t('市场焦点周期编号无效'));
   }
   return `/catalysts/market-focus-cycles/${encodeURIComponent(normalized)}`;
 }

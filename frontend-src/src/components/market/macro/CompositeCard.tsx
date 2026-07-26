@@ -11,11 +11,12 @@ import ChangeBadge from '@/components/shared/ChangeBadge';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS_MACRO } from '@/lib/scoreHints';
 import type { MacroComposite, MacroConditionsResponse } from '@/api/modules/macro';
+import { t } from '../../../i18n/core.ts';
 
 const HISTORY_BASIS_LABEL: Record<string, string> = {
-  latest_revised_backfill: '历史区间按当前修订值回算',
-  local_point_in_time: '本地点时快照',
-  mixed: '混合：部分区间按当前修订值回算',
+  latest_revised_backfill: t('历史区间按当前修订值回算'),
+  local_point_in_time: t('本地点时快照'),
+  mixed: t('混合：部分区间按当前修订值回算'),
 };
 
 function StatLine({
@@ -55,12 +56,12 @@ export default function CompositeCard({
     /* 后续区块 rise-in 减量：直接呈现 */
     <section
       className="card-surface flex h-full flex-col p-5"
-      aria-label="宏观环境综合分"
+      aria-label={t("宏观环境综合分")}
     >
       <div className="flex items-start justify-between gap-3">
-        <p className="eyebrow">综合分 · COMPOSITE</p>
+        <p className="eyebrow">{t('综合分 · COMPOSITE')}</p>
         <span className="flex items-center gap-1 text-micro text-ink-400">
-          历史分位
+          {t('历史分位')}
           <InfoHint hint={SCORE_HINTS_MACRO.macroComposite} side="bottom" align="end" size={11} />
         </span>
       </div>
@@ -76,10 +77,10 @@ export default function CompositeCard({
               <InfoHint hint={SCORE_HINTS_MACRO.macroRegime} side="top" align="start" size={11} />
             </span>
           ) : (
-            <span className="self-start text-caption text-ink-400">环境标签暂不可用</span>
+            <span className="self-start text-caption text-ink-400">{t('环境标签暂不可用')}</span>
           )}
           <span className="flex items-center gap-1.5 text-micro text-ink-400">
-            7 日变化
+            {t('7 日变化')}
             <ChangeBadge value={composite.scoreChange7d} size="sm" format="points" />
           </span>
         </div>
@@ -103,7 +104,7 @@ export default function CompositeCard({
 
       <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
         <StatLine
-          label="置信度"
+          label={t("置信度")}
           hintKey="macroConfidence"
           value={
             typeof composite.confidence === 'number'
@@ -112,19 +113,18 @@ export default function CompositeCard({
           }
         />
         <StatLine
-          label="有效模块"
+          label={t("有效模块")}
           value={
             composite.validModuleCount === null
               ? '—'
               : `${composite.validModuleCount} / ${composite.totalModuleCount ?? 7}`
           }
         />
-        <StatLine label="数据截止" value={dataThrough ?? '—'} />
+        <StatLine label={t("数据截止")} value={dataThrough ?? '—'} />
       </div>
 
       <p className="mt-4 border-t border-line pt-3 text-micro leading-relaxed text-ink-400">
-        分数是过去 5 年的历史分位，不是预测。高分表示当前金融环境相对历史更支持风险资产，
-        不代表市场一定上涨，也不构成买入、卖出、仓位或目标价建议。
+        {t('分数是过去 5 年的历史分位，不是预测。高分表示当前金融环境相对历史更支持风险资产， 不代表市场一定上涨，也不构成买入、卖出、仓位或目标价建议。')}
         {historyBasis && (
           <>
             {' '}

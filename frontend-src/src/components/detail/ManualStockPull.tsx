@@ -4,24 +4,24 @@ import { stocksApi } from '@/api/modules/stocks';
 import type { StockPullResource, StockPullResult } from '@/api/types';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
-import { t } from '@/i18n/core';
+import { t } from '../../i18n/core.ts';
 
 const RESOURCE_LABELS: Array<{
   key: keyof StockPullResult['resources'];
   label: string;
 }> = [
-  { key: 'overview', label: '基础行情' },
-  { key: 'dailyChart', label: '日线' },
-  { key: 'signals', label: '技术信号' },
+  { key: 'overview', label: t('基础行情') },
+  { key: 'dailyChart', label: t('日线') },
+  { key: 'signals', label: t('技术信号') },
 ];
 
 function resourceSummary(resource: StockPullResource): string {
-  if (resource.status === 'failed') return '拉取失败';
-  if (resource.status === 'unavailable') return '暂无数据';
-  if (!resource.persisted) return '已拉取，保存失败';
+  if (resource.status === 'failed') return t('拉取失败');
+  if (resource.status === 'unavailable') return t('暂无数据');
+  if (!resource.persisted) return t('已拉取，保存失败');
   if (resource.barCount !== undefined) return t('{n} 根', { n: resource.barCount });
   if (resource.metricCount !== undefined) return t('{n} 项', { n: resource.metricCount });
-  return resource.provider || '已更新';
+  return resource.provider || t('已更新');
 }
 
 export default function ManualStockPull({
@@ -89,7 +89,7 @@ export default function ManualStockPull({
         result: null,
         error: cause instanceof ApiError
           ? `${cause.message}${cause.retryAfter ? t(' · {n} 秒后可重试', { n: cause.retryAfter }) : ''}`
-          : '拉取失败，请稍后重试',
+          : t('拉取失败，请稍后重试'),
       });
     } finally {
       if (
@@ -124,12 +124,12 @@ export default function ManualStockPull({
         ) : (
           <Icon name="refresh" size={13} />
         )}
-        {running ? '正在拉取真实数据' : result ? '重新拉取' : '拉取真实数据'}
+        {running ? t('正在拉取真实数据') : result ? t('重新拉取') : t('拉取真实数据')}
       </button>
 
       {!running && !result && !error && (
         <p className="text-micro text-ink-500">
-          获取该股票的最新价格、日线与技术指标
+          {t('获取该股票的最新价格、日线与技术指标')}
         </p>
       )}
 
@@ -138,7 +138,7 @@ export default function ManualStockPull({
           <div className="mt-2 h-1.5 overflow-hidden rounded-pill bg-brand-100">
             <span className="block h-full w-full animate-pulse rounded-pill bg-brand-500" />
           </div>
-          <p className="mt-1.5 text-micro text-ink-500">正在更新基础行情、日线与技术信号 · 共 3 项</p>
+          <p className="mt-1.5 text-micro text-ink-500">{t('正在更新基础行情、日线与技术信号 · 共 3 项')}</p>
         </div>
       )}
 
@@ -151,8 +151,8 @@ export default function ManualStockPull({
       {result && !running && (
         <div role="status" aria-live="polite" className="space-y-1.5">
           <p className={cn('text-caption font-medium', result.status === 'completed' ? 'text-up-700' : 'text-warn-600')}>
-            已完成 {availableCount}/3
-            {result.persistenceStatus === 'failed' ? ' · 服务器保存失败，重启后可能失效' : ''}
+            {t('已完成')} {availableCount}/3
+            {result.persistenceStatus === 'failed' ? t(' · 服务器保存失败，重启后可能失效') : ''}
           </p>
           <div className="flex flex-wrap gap-1.5">
             {RESOURCE_LABELS.map(({ key, label }) => {

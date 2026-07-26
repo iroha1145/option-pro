@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { accessApi } from '@/api/modules/access';
 import { PRINCIPAL_INVALID_EVENT } from '@/api/client';
 import type { AccessRole, AccessStatus } from '@/api/types';
+import { t } from '../i18n/core.ts';
 
 interface AccessContextValue {
   role: AccessRole;
@@ -187,6 +188,6 @@ export function AccessProvider({ children }: { children: ReactNode }) {
 // eslint-disable-next-line react-refresh/only-export-components
 export function useAccess(): AccessContextValue {
   const ctx = useContext(AccessContext);
-  if (!ctx) throw new Error('useAccess 必须在 <AccessProvider> 内使用');
+  if (!ctx) throw new Error(t('useAccess 必须在 <AccessProvider> 内使用'));
   return ctx;
 }

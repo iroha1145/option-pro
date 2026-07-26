@@ -11,7 +11,9 @@
  * - AI 生成的正文（新闻分析、财报影响、焦点周期摘要、期权解读…）一律不进词典、
  *   不经 t()：那是模型当次写下的内容而非界面文案，翻译会失真，如实保留原文。
  */
-import { DICT } from './dict';
+// 完整相对路径 + 扩展名（而不是 './dict' 目录导入）：node --experimental-strip-types
+// 跑测试时按 ES 模块规范解析，不会像 Vite/CommonJS 那样把目录自动接到 index.ts。
+import { DICT } from './dict/index.ts';
 
 export type Locale = 'zh' | 'en' | 'ja';
 

@@ -1,5 +1,6 @@
 /** 静态数据池：代码池 / 中文名 / 板块 / 新闻句式（真实风格） */
 
+import { t } from '../i18n/core.ts';
 export interface TickerInfo {
   ticker: string;
   name: string;
@@ -22,57 +23,57 @@ export const SECTORS = [
 ] as const;
 
 export const TICKER_POOL: TickerInfo[] = [
-  { ticker: 'NVDA', name: '英伟达', sector: '半导体', base: 178.4 },
-  { ticker: 'TSLA', name: '特斯拉', sector: '可选消费', base: 246.8 },
-  { ticker: 'AAPL', name: '苹果', sector: '信息技术', base: 232.1 },
-  { ticker: 'AMD', name: '超威半导体', sector: '半导体', base: 162.3 },
-  { ticker: 'MSFT', name: '微软', sector: '信息技术', base: 428.5 },
-  { ticker: 'META', name: 'Meta 平台', sector: '通信服务', base: 585.2 },
-  { ticker: 'AMZN', name: '亚马逊', sector: '可选消费', base: 205.7 },
-  { ticker: 'GOOGL', name: '谷歌 A', sector: '通信服务', base: 178.9 },
-  { ticker: 'AVGO', name: '博通', sector: '半导体', base: 172.6 },
-  { ticker: 'SMCI', name: '超微电脑', sector: '信息技术', base: 42.8 },
-  { ticker: 'TSM', name: '台积电', sector: '半导体', base: 196.4 },
-  { ticker: 'ARM', name: 'Arm 控股', sector: '半导体', base: 138.2 },
-  { ticker: 'MU', name: '美光科技', sector: '半导体', base: 108.6 },
-  { ticker: 'INTC', name: '英特尔', sector: '半导体', base: 23.4 },
-  { ticker: 'NFLX', name: '奈飞', sector: '通信服务', base: 912.3 },
-  { ticker: 'CRM', name: '赛富时', sector: '信息技术', base: 332.8 },
+  { ticker: 'NVDA', name: t('英伟达'), sector: '半导体', base: 178.4 },
+  { ticker: 'TSLA', name: t('特斯拉'), sector: '可选消费', base: 246.8 },
+  { ticker: 'AAPL', name: t('苹果'), sector: '信息技术', base: 232.1 },
+  { ticker: 'AMD', name: t('超威半导体'), sector: '半导体', base: 162.3 },
+  { ticker: 'MSFT', name: t('微软'), sector: '信息技术', base: 428.5 },
+  { ticker: 'META', name: t('Meta 平台'), sector: '通信服务', base: 585.2 },
+  { ticker: 'AMZN', name: t('亚马逊'), sector: '可选消费', base: 205.7 },
+  { ticker: 'GOOGL', name: t('谷歌 A'), sector: '通信服务', base: 178.9 },
+  { ticker: 'AVGO', name: t('博通'), sector: '半导体', base: 172.6 },
+  { ticker: 'SMCI', name: t('超微电脑'), sector: '信息技术', base: 42.8 },
+  { ticker: 'TSM', name: t('台积电'), sector: '半导体', base: 196.4 },
+  { ticker: 'ARM', name: t('Arm 控股'), sector: '半导体', base: 138.2 },
+  { ticker: 'MU', name: t('美光科技'), sector: '半导体', base: 108.6 },
+  { ticker: 'INTC', name: t('英特尔'), sector: '半导体', base: 23.4 },
+  { ticker: 'NFLX', name: t('奈飞'), sector: '通信服务', base: 912.3 },
+  { ticker: 'CRM', name: t('赛富时'), sector: '信息技术', base: 332.8 },
   { ticker: 'PLTR', name: 'Palantir', sector: '信息技术', base: 78.5 },
   { ticker: 'COIN', name: 'Coinbase', sector: '金融', base: 264.9 },
   { ticker: 'HOOD', name: 'Robinhood', sector: '金融', base: 46.2 },
-  { ticker: 'SPY', name: '标普 500 ETF', sector: '金融', base: 596.4 },
-  { ticker: 'QQQ', name: '纳指 100 ETF', sector: '金融', base: 524.8 },
-  { ticker: 'ORCL', name: '甲骨文', sector: '信息技术', base: 176.3 },
+  { ticker: 'SPY', name: t('标普 500 ETF'), sector: '金融', base: 596.4 },
+  { ticker: 'QQQ', name: t('纳指 100 ETF'), sector: '金融', base: 524.8 },
+  { ticker: 'ORCL', name: t('甲骨文'), sector: '信息技术', base: 176.3 },
   { ticker: 'ADBE', name: 'Adobe', sector: '信息技术', base: 468.1 },
   { ticker: 'NOW', name: 'ServiceNow', sector: '信息技术', base: 985.4 },
   { ticker: 'SHOP', name: 'Shopify', sector: '信息技术', base: 112.7 },
-  { ticker: 'UBER', name: '优步', sector: '工业', base: 72.4 },
-  { ticker: 'ABNB', name: '爱彼迎', sector: '可选消费', base: 131.6 },
+  { ticker: 'UBER', name: t('优步'), sector: '工业', base: 72.4 },
+  { ticker: 'ABNB', name: t('爱彼迎'), sector: '可选消费', base: 131.6 },
   { ticker: 'DASH', name: 'DoorDash', sector: '可选消费', base: 178.3 },
-  { ticker: 'LLY', name: '礼来', sector: '医疗保健', base: 782.5 },
-  { ticker: 'UNH', name: '联合健康', sector: '医疗保健', base: 512.8 },
-  { ticker: 'JPM', name: '摩根大通', sector: '金融', base: 244.6 },
-  { ticker: 'V', name: '维萨', sector: '金融', base: 309.2 },
-  { ticker: 'XOM', name: '埃克森美孚', sector: '能源', base: 118.4 },
-  { ticker: 'CVX', name: '雪佛龙', sector: '能源', base: 152.7 },
-  { ticker: 'CAT', name: '卡特彼勒', sector: '工业', base: 368.9 },
-  { ticker: 'GE', name: 'GE 航空航天', sector: '工业', base: 186.2 },
-  { ticker: 'DE', name: '迪尔', sector: '工业', base: 452.3 },
-  { ticker: 'WMT', name: '沃尔玛', sector: '必需消费', base: 92.8 },
-  { ticker: 'COST', name: '好市多', sector: '必需消费', base: 928.4 },
-  { ticker: 'PG', name: '宝洁', sector: '必需消费', base: 168.5 },
-  { ticker: 'KO', name: '可口可乐', sector: '必需消费', base: 68.9 },
-  { ticker: 'NEE', name: '新纪元能源', sector: '公用事业', base: 76.3 },
-  { ticker: 'SO', name: '南方电力', sector: '公用事业', base: 88.1 },
-  { ticker: 'LIN', name: '林德', sector: '原材料', base: 462.7 },
-  { ticker: 'FCX', name: '自由港麦克莫兰', sector: '原材料', base: 44.6 },
-  { ticker: 'MRVL', name: '迈威尔科技', sector: '半导体', base: 72.8 },
+  { ticker: 'LLY', name: t('礼来'), sector: '医疗保健', base: 782.5 },
+  { ticker: 'UNH', name: t('联合健康'), sector: '医疗保健', base: 512.8 },
+  { ticker: 'JPM', name: t('摩根大通'), sector: '金融', base: 244.6 },
+  { ticker: 'V', name: t('维萨'), sector: '金融', base: 309.2 },
+  { ticker: 'XOM', name: t('埃克森美孚'), sector: '能源', base: 118.4 },
+  { ticker: 'CVX', name: t('雪佛龙'), sector: '能源', base: 152.7 },
+  { ticker: 'CAT', name: t('卡特彼勒'), sector: '工业', base: 368.9 },
+  { ticker: 'GE', name: t('GE 航空航天'), sector: '工业', base: 186.2 },
+  { ticker: 'DE', name: t('迪尔'), sector: '工业', base: 452.3 },
+  { ticker: 'WMT', name: t('沃尔玛'), sector: '必需消费', base: 92.8 },
+  { ticker: 'COST', name: t('好市多'), sector: '必需消费', base: 928.4 },
+  { ticker: 'PG', name: t('宝洁'), sector: '必需消费', base: 168.5 },
+  { ticker: 'KO', name: t('可口可乐'), sector: '必需消费', base: 68.9 },
+  { ticker: 'NEE', name: t('新纪元能源'), sector: '公用事业', base: 76.3 },
+  { ticker: 'SO', name: t('南方电力'), sector: '公用事业', base: 88.1 },
+  { ticker: 'LIN', name: t('林德'), sector: '原材料', base: 462.7 },
+  { ticker: 'FCX', name: t('自由港麦克莫兰'), sector: '原材料', base: 44.6 },
+  { ticker: 'MRVL', name: t('迈威尔科技'), sector: '半导体', base: 72.8 },
   { ticker: 'SNOW', name: 'Snowflake', sector: '信息技术', base: 168.3 },
   { ticker: 'DDOG', name: 'Datadog', sector: '信息技术', base: 128.9 },
 ];
 
-export const NEWS_SOURCES = ['华尔街日报', '彭博社', '路透社', 'CNBC', 'MarketWatch', '巴伦周刊', '金融时报', '雅虎财经'];
+export const NEWS_SOURCES = [t('华尔街日报'), t('彭博社'), t('路透社'), 'CNBC', 'MarketWatch', t('巴伦周刊'), t('金融时报'), t('雅虎财经')];
 
 const NEWS_TEMPLATES: { title: string; summary: string }[] = [
   { title: '{t} 盘前异动，成交量放大至日均两倍', summary: '市场人士指出，{t} 盘前成交明显放大，机构买单集中在开盘前半小时，短线资金快速涌入。' },
@@ -93,12 +94,12 @@ const NEWS_TEMPLATES: { title: string; summary: string }[] = [
 ];
 
 const HOTSPOTS = [
-  { theme: 'AI 算力资本开支', tickers: ['NVDA', 'AMD', 'AVGO', 'TSM', 'MU'] },
-  { theme: '大型科技股财报季', tickers: ['AAPL', 'MSFT', 'META', 'GOOGL', 'AMZN'] },
-  { theme: '降息预期与利率路径', tickers: ['SPY', 'QQQ', 'JPM', 'V'] },
-  { theme: '电动车价格战升级', tickers: ['TSLA'] },
-  { theme: '加密资产回暖', tickers: ['COIN', 'HOOD'] },
-  { theme: '减肥药产业链', tickers: ['LLY', 'UNH'] },
+  { theme: t('AI 算力资本开支'), tickers: ['NVDA', 'AMD', 'AVGO', 'TSM', 'MU'] },
+  { theme: t('大型科技股财报季'), tickers: ['AAPL', 'MSFT', 'META', 'GOOGL', 'AMZN'] },
+  { theme: t('降息预期与利率路径'), tickers: ['SPY', 'QQQ', 'JPM', 'V'] },
+  { theme: t('电动车价格战升级'), tickers: ['TSLA'] },
+  { theme: t('加密资产回暖'), tickers: ['COIN', 'HOOD'] },
+  { theme: t('减肥药产业链'), tickers: ['LLY', 'UNH'] },
 ] as const;
 
 export { NEWS_TEMPLATES, HOTSPOTS };

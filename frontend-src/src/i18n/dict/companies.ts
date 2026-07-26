@@ -89,7 +89,7 @@ export const COMPANIES: Dict = {
   '瓦莱罗能源': ['Valero Energy', 'バレロ・エナジー'],
   '西方石油': ['Occidental Petroleum', 'オクシデンタル・ペトロリアム'],
   '德文能源': ['Devon Energy', 'デボン・エナジー'],
-  '摩根大通': ['JPMorgan Chase', 'JP モルガン・チェース'],
+  '摩根大通': ['JPMorgan Chase', 'JPモルガン・チェース'],
   '高盛': ['Goldman Sachs', 'ゴールドマン・サックス'],
   '摩根士丹利': ['Morgan Stanley', 'モルガン・スタンレー'],
   'Visa': ['Visa', 'ビザ'],

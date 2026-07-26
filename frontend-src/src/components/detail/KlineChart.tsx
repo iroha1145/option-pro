@@ -18,7 +18,7 @@ import { fmtCompact, fmtPrice } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { CHART_RANGES, DEFAULT_CHART_RANGE, getDetailChart, type ChartRange } from './api';
 import type { ChartBarEx } from '@/mocks/fixtures';
-import { t } from '@/i18n/core';
+import { t } from '../../i18n/core.ts';
 
 type ChartMode = 'candle' | 'area';
 
@@ -100,7 +100,7 @@ function buildOption(
           const color = chg >= 0 ? CH.up600 : CH.down600;
           return (
             `<div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:19px">` +
-            `<div style="color:#8A94B0">${barTooltipTitle(b.t, range)}${b.quote_only ? ' · 仅报价' : ''}</div>` +
+            `<div style="color:#8A94B0">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
             `<div>收 <b style="color:${color}">${fmtPrice(b.c)}</b></div>` +
             `<div>量 ${fmtCompact(b.v)}</div></div>`
           );
@@ -235,13 +235,13 @@ function buildOption(
           `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#8A94B0">${k}</span><span>${v}</span></div>`;
         return (
           `<div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:19px;min-width:150px">` +
-          `<div style="color:#8A94B0;margin-bottom:2px">${barTooltipTitle(b.t, range)}${b.quote_only ? ' · <span style="color:#E8930C">仅报价</span>' : ''}</div>` +
-          row('开', fmtPrice(b.o)) +
-          row('高', fmtPrice(b.h)) +
-          row('低', fmtPrice(b.l)) +
-          row('收', `<b style="color:${color}">${fmtPrice(b.c)}</b>`) +
-          row('涨跌', `<span style="color:${color}">${sign}${Math.abs(chg).toFixed(2)} (${sign}${Math.abs(pct).toFixed(2)}%)</span>`) +
-          row('量', fmtCompact(b.v)) +
+          `<div style="color:#8A94B0;margin-bottom:2px">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · <span style="color:#E8930C">仅报价</span>') : ''}</div>` +
+          row(t('开'), fmtPrice(b.o)) +
+          row(t('高'), fmtPrice(b.h)) +
+          row(t('低'), fmtPrice(b.l)) +
+          row(t('收'), `<b style="color:${color}">${fmtPrice(b.c)}</b>`) +
+          row(t('涨跌'), `<span style="color:${color}">${sign}${Math.abs(chg).toFixed(2)} (${sign}${Math.abs(pct).toFixed(2)}%)</span>`) +
+          row(t('量'), fmtCompact(b.v)) +
           `</div>`
         );
       },
@@ -336,8 +336,8 @@ export default function KlineChart({
         />
         <Segmented
           options={[
-            { value: 'candle' as ChartMode, label: 'K 线' },
-            { value: 'area' as ChartMode, label: '面积' },
+            { value: 'candle' as ChartMode, label: t('K 线') },
+            { value: 'area' as ChartMode, label: t('面积') },
           ]}
           value={mode}
           onChange={setMode}
@@ -347,7 +347,7 @@ export default function KlineChart({
       {data?._stale && (
         <p className="mt-3 flex items-center gap-1.5 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">
           <Icon name="bell" size={13} />
-          数据暂未刷新 · 显示最近一次结果（延迟行情）
+          {t('数据暂未刷新 · 显示最近一次结果（延迟行情）')}
         </p>
       )}
 
@@ -370,14 +370,14 @@ export default function KlineChart({
               <EmptyState
                 variant="empty"
                 image="/empty-chart.svg"
-                title="K 线暂不可用"
+                title={t("K 线暂不可用")}
                 description={`${ticker} · ${CHART_RANGES.find((item) => item.value === range)?.label ?? range}数据暂不可用，其他周期仍可切换`}
                 action={
                   <button
                     onClick={refresh}
                     className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] duration-fast hover:brightness-105"
                   >
-                    重试
+                    {t('重试')}
                   </button>
                 }
                 className="py-6"
@@ -391,7 +391,7 @@ export default function KlineChart({
               exit={{ opacity: 0, transition: { duration: 0.16 } }}
               className="absolute inset-0"
             >
-              <ReactECharts option={option} ariaLabel={`${ticker} ${range} ${mode === 'candle' ? 'K 线' : '面积'}图`} />
+              <ReactECharts option={option} ariaLabel={`${ticker} ${range} ${mode === 'candle' ? t('K 线') : t('面积')}图`} />
             </motion.div>
           )}
         </AnimatePresence>

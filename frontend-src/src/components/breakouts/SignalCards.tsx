@@ -19,7 +19,7 @@ import PriceScale from './PriceScale';
 import { ScoreBarsMini } from './ScoreBars';
 import { LIFECYCLE_CHIP_CLASS, LIFECYCLE_CN, LIFECYCLE_TONE, SETUP_CN } from './types';
 import type { BreakoutCurrentEvent } from './types';
-import { t } from '@/i18n/core';
+import { t } from '../../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -40,7 +40,7 @@ function ChipRow({ ev }: { ev: BreakoutCurrentEvent }) {
         {LIFECYCLE_CN[ev.lifecycle_state] ?? ev.lifecycle_state ?? '—'}
       </span>
       <span className="ml-auto inline-flex items-center gap-1 rounded-xs border border-warn-600/40 bg-warn-50 px-1.5 py-px font-mono text-micro leading-[16px] text-warn-600 tnum">
-        量能 {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}
+        {t('量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}
       </span>
     </div>
   );
@@ -145,7 +145,7 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
         {(ev.evidence ?? []).length > 0 && (
           <span className="inline-flex items-center gap-1 text-micro text-ink-400">
             <Icon name="doc-quote" size={12} />
-            证据 {(ev.evidence ?? []).length} 条
+            {t('证据')} {(ev.evidence ?? []).length} {t('条')}
           </span>
         )}
       </div>

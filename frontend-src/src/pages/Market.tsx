@@ -24,6 +24,7 @@ import BreadthHistogram from '@/components/market/BreadthHistogram';
 import LinkCards from '@/components/market/LinkCards';
 import MacroConditionsPanel from '@/components/market/macro/MacroConditionsPanel';
 import SourceNote from '@/components/shared/SourceNote';
+import { t } from '../i18n/core.ts';
 
 const MARKET_TO_SESSION: Record<string, MarketSession> = {
   open: 'regular',
@@ -33,10 +34,10 @@ const MARKET_TO_SESSION: Record<string, MarketSession> = {
 };
 
 const SESSION_LABEL: Record<string, string> = {
-  open: '盘中',
-  premarket: '盘前',
-  postmarket: '盘后',
-  closed: '休市',
+  open: t('盘中'),
+  premarket: t('盘前'),
+  postmarket: t('盘后'),
+  closed: t('休市'),
 };
 
 export default function Market() {
@@ -79,8 +80,8 @@ export default function Market() {
       <PageHeader
         section="MKT"
         eyebrow="MARKET PULSE · INDEX & BREADTH"
-        title="大盘强弱"
-        description="指数、形态与广度的全景。"
+        title={t("大盘强弱")}
+        description={t("指数、形态与广度的全景。")}
         meta={
           <>
             {session ? (
@@ -89,13 +90,13 @@ export default function Market() {
               <span className="inline-flex items-center gap-1.5">
                 <span className="inline-block size-2 rounded-full bg-ink-300" aria-hidden="true" />
                 <span className="text-caption text-ink-400">
-                  {statusQ.loading ? '时段读取中…' : '时段未知'}
+                  {statusQ.loading ? t('时段读取中…') : t('时段未知')}
                 </span>
               </span>
             )}
             {indicesQ.lastUpdatedAt && (
               <span className="font-mono text-caption text-ink-400 tnum">
-                更新 {fmtTimeHHMMSS(indicesQ.lastUpdatedAt)}
+                {t('更新')} {fmtTimeHHMMSS(indicesQ.lastUpdatedAt)}
               </span>
             )}
           </>
@@ -103,8 +104,8 @@ export default function Market() {
       />
 
       {/* B1 指数概览 */}
-      <section className="mt-6" aria-label="指数概览">
-        <p className="eyebrow mb-3">指数概览 · INDEX OVERVIEW（延迟行情）</p>
+      <section className="mt-6" aria-label={t("指数概览")}>
+        <p className="eyebrow mb-3">{t('指数概览 · INDEX OVERVIEW（延迟行情）')}</p>
         <IndexCards
           data={indicesQ.data}
           loading={indicesQ.loading}
@@ -139,7 +140,7 @@ export default function Market() {
       </div>
 
       {/* B4 宏观环境（Optix 宏观环境 · 展示与研究用，不进入正式股票评分） */}
-      <section className="mt-8" aria-label="宏观环境">
+      <section className="mt-8" aria-label={t("宏观环境")}>
         {/* 技术侧分数由这里传下去：本页已经有形态六维均值，面板不必为一张展示卡
             再拉一次 /strength/market。 */}
         <MacroConditionsPanel technicalScore={mean} />
@@ -174,8 +175,8 @@ export default function Market() {
       </div>
 
       {/* B7 联动卡 */}
-      <section className="mt-8" aria-label="联动视图">
-        <p className="eyebrow mb-3">联动视图 · DRILL DOWN</p>
+      <section className="mt-8" aria-label={t("联动视图")}>
+        <p className="eyebrow mb-3">{t('联动视图 · DRILL DOWN')}</p>
         <LinkCards />
       </section>
 

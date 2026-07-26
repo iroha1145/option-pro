@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { ScoreHint } from '@/lib/scoreHints';
+import { t } from '../../i18n/core.ts';
 
 /** 浮层最大宽度（px），与下方 maxWidth 内联样式保持同一常量。 */
 const TOOLTIP_MAX_WIDTH = 300;
@@ -124,7 +125,7 @@ export default function InfoHint({
         ref={triggerRef}
         role="button"
         tabIndex={0}
-        aria-label={`${hint.title}：查看评分说明`}
+        aria-label={t('{title}：查看评分说明', { title: t(hint.title) })}
         className={cn(
           'inline-flex cursor-help items-center rounded-full text-ink-300 outline-none transition-colors duration-fast',
           'hover:text-brand-600 focus-visible:text-brand-600',
@@ -175,13 +176,13 @@ export default function InfoHint({
               }
         }
       >
-        <span className="block text-caption font-semibold text-ink-800">{hint.title}</span>
+        <span className="block text-caption font-semibold text-ink-800">{t(hint.title)}</span>
         <span className="mt-1 block whitespace-normal text-micro leading-relaxed text-ink-600">
-          {hint.body}
+          {t(hint.body)}
         </span>
         {hint.note && (
           <span className="mt-1 block whitespace-normal text-micro leading-relaxed text-ink-400">
-            {hint.note}
+            {t(hint.note)}
           </span>
         )}
       </span>

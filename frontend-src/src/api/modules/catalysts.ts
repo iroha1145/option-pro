@@ -3,6 +3,7 @@ import { get, post, mockOr, toQuery } from '../client';
 import { asRec, pickB, pickN, pickS, unwrap } from '../live';
 import * as fx2 from '@/mocks/fixtures2';
 import type { CatalystsStatus, FocusCycle, Hotspot, NewsItem, NewsSentiment } from '../types';
+import { t as __t } from '../../i18n/core.ts';
 
 /**
  * 72h 窗口逐股催化剂计数（选股页行内徽标消费）
@@ -238,7 +239,7 @@ export const catalystsApi = {
             theme: pickS(r, 'theme') ?? '',
             startedAt: pickS(r, 'startedAt', 'started_at') ?? '',
             days: pickN(r, 'days') ?? 0,
-            stage: (pickS(r, 'stage') as FocusCycle['stage']) ?? '发酵',
+            stage: (pickS(r, 'stage') as FocusCycle['stage']) ?? __t('发酵'),
             summary: pickS(r, 'summary') ?? '',
           };
         }),

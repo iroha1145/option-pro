@@ -23,6 +23,7 @@ import type {
   StockTrendBias,
   TrendBiasFactor,
 } from '@/mocks/fixtures';
+import { t as __t } from '../../i18n/core.ts';
 
 export type ChartRange = StockChart['range'];
 /**
@@ -33,11 +34,11 @@ export type ChartRange = StockChart['range'];
  */
 export const DEFAULT_CHART_RANGE: ChartRange = '1d';
 export const CHART_RANGES: { value: ChartRange; label: string }[] = [
-  { value: '5m', label: '5分' },
-  { value: '15m', label: '15分' },
-  { value: '1h', label: '1小时' },
-  { value: '1d', label: '日线' },
-  { value: '1w', label: '周线' },
+  { value: '5m', label: __t('5分') },
+  { value: '15m', label: __t('15分') },
+  { value: '1h', label: __t('1小时') },
+  { value: '1d', label: __t('日线') },
+  { value: '1w', label: __t('周线') },
 ];
 
 /** 契约 {bars:[{t,o,h,l,c,v,quote_only}], as_of, _stale?} → StockChartEx（字段名 1:1） */
@@ -226,22 +227,22 @@ const FACTOR_SIGNALS: {
 }[] = [
   {
     key: 'trend',
-    label: '趋势',
+    label: __t('趋势'),
     candidates: ['relative_strength_spy', 'sma50_dist', 'sma20_dist'],
   },
   {
     key: 'momentum',
-    label: '动量',
+    label: __t('动量'),
     candidates: ['rsi14', 'macd_hist', 'return_20d'],
   },
   {
     key: 'volume',
-    label: '量能',
+    label: __t('量能'),
     candidates: ['obv_divergence', 'volume_zscore', '_volume_ratio'],
   },
   {
     key: 'volatility',
-    label: '波动',
+    label: __t('波动'),
     candidates: ['atr_percentile', 'atm_iv_percent'],
   },
 ];
@@ -456,6 +457,7 @@ export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
       if (!fx.hasTicker(t)) throw new ApiError(404, `代码 ${t} 不存在`);
       const d = fx.getStockDetail(t);
       const b = fx.getStockTrendBias(t);
+      // mock 模式下模拟「模型写的分析正文」，与真实 AI 输出同样不做界面翻译（如实保留原文）。
       const ivTone = d.ivPercentile >= 60 ? '偏贵' : d.ivPercentile <= 40 ? '相对便宜' : '中性';
       const text =
         `${t} 模型分析完成：趋势偏向分 ${b.trend_bias_score}（${b.trend_bias_label}），` +

@@ -9,6 +9,7 @@ import ReactECharts from '@/components/charts/ReactECharts';
 import HatchLegend from '@/components/shared/HatchLegend';
 import { CH, baseAnimation, baseGrid, categoryAxis, glassTooltip, hatchDecal, valueAxis, type ChartOption } from '@/lib/chart';
 import type { EarningsRow } from './types';
+import { t } from '../../i18n/core.ts';
 
 interface EpsHatchChartProps {
   items: EarningsRow[];
@@ -17,7 +18,7 @@ interface EpsHatchChartProps {
 
 const MAX_BARS = 10;
 
-export default function EpsHatchChart({ items, title = 'EPS 预期 vs 实际' }: EpsHatchChartProps) {
+export default function EpsHatchChart({ items, title = t('EPS 预期 vs 实际') }: EpsHatchChartProps) {
   const rows = useMemo(
     () => items.filter((r) => r.epsEstimate != null || r.epsActual != null).slice(0, MAX_BARS),
     [items],
@@ -30,13 +31,13 @@ export default function EpsHatchChart({ items, title = 'EPS 预期 vs 实际' }:
       ...baseAnimation,
       grid: baseGrid({ top: 20, bottom: 4 }),
       tooltip: glassTooltip({
-        valueFormatter: (v: unknown) => (typeof v === 'number' ? `$${v.toFixed(2)}` : '未公布'),
+        valueFormatter: (v: unknown) => (typeof v === 'number' ? `$${v.toFixed(2)}` : t('未公布')),
       }),
       xAxis: categoryAxis(rows.map((r) => r.ticker)),
       yAxis: valueAxis(),
       series: [
         {
-          name: '预估 EPS',
+          name: t('预估 EPS'),
           type: 'bar',
           data: ests,
           barWidth: 13,
@@ -49,7 +50,7 @@ export default function EpsHatchChart({ items, title = 'EPS 预期 vs 实际' }:
           animationDelay: (idx: number) => idx * 70,
         },
         {
-          name: '实际 EPS',
+          name: t('实际 EPS'),
           type: 'bar',
           data: acts,
           barWidth: 13,
@@ -65,10 +66,10 @@ export default function EpsHatchChart({ items, title = 'EPS 预期 vs 实际' }:
   const hasActual = rows.some((r) => r.epsActual != null);
 
   return (
-    <section className="card-surface p-5" aria-label="EPS 预期与实际对照图">
+    <section className="card-surface p-5" aria-label={t("EPS 预期与实际对照图")}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="eyebrow">{title}</p>
-        <HatchLegend estimate="预估" actual="实际" />
+        <HatchLegend estimate={t("预估")} actual={t("实际")} />
       </div>
       <div className="mt-3 h-[240px]">
         <ReactECharts
@@ -77,7 +78,7 @@ export default function EpsHatchChart({ items, title = 'EPS 预期 vs 实际' }:
         />
       </div>
       <p className="mt-2 border-t border-line pt-2.5 text-micro text-ink-400">
-        {hasActual ? '斜纹为共识预估，实心为已公布实际值；未公布标的实际列留空。' : '本组标的均待公布，实际值披露后以实心柱呈现。'}
+        {hasActual ? t('斜纹为共识预估，实心为已公布实际值；未公布标的实际列留空。') : t('本组标的均待公布，实际值披露后以实心柱呈现。')}
       </p>
     </section>
   );

@@ -122,8 +122,10 @@ export const DETAIL: Dict = {
   '权利金 · 量/持 · PUTS': ['Premium · Vol/OI · PUTS', 'プレミアム · 出来高/建玉 · PUTS'],
   ' · 权利金不可估算（缺买卖价）': [' · Premium not estimable (missing bid/ask)', ' · プレミアムは推定不可（気配値なし）'],
   '成交异动': ['Unusual activity', '取引急増'],
-  '浅底为价内（ITM）侧 · 异动标注 vol/oi &gt; 3（倍数为该侧比值）；持仓量为 0 而当日有成交标 ∞（全部新开仓）·': ['Shaded background = the in-the-money (ITM) side · unusual-activity flag when vol/oi > 3 (the multiple is that side\'s ratio); open interest of 0 with same-day trading is flagged ∞ (entirely new positions) ·', '背景が薄い方が価内（ITM）側 · 出来高/建玉比が3倍を超えると取引急増マーク（倍率はその側の比率）。建玉が0で当日約定があれば∞（すべて新規建玉）·'],
-  '        「—」表示上游未提供该字段，不代表 0 · 权利金按买卖中价估算 · 非收益承诺': [' "—" means the upstream feed didn\'t provide this field — it isn\'t 0 · premium is estimated from the bid/ask midpoint · not a promise of returns', ' 「—」は上流フィードがこの項目を提供しなかったことを示し、0 を意味しません · プレミアムは買値・売値の中値で推定 · リターンを約束するものではありません'],
+  '浅底为价内（ITM）侧 · 异动标注 vol/oi &gt; 3（倍数为该侧比值）；持仓量为 0 而当日有成交标 ∞（全部新开仓）· 「—」表示上游未提供该字段，不代表 0 · 权利金按买卖中价估算 · 非收益承诺': [
+    'Shaded background = the in-the-money (ITM) side · unusual-activity flag when vol/oi > 3 (the multiple is that side\'s ratio); open interest of 0 with same-day trading is flagged ∞ (entirely new positions) · "—" means the upstream feed didn\'t provide this field — it isn\'t 0 · premium is estimated from the bid/ask midpoint · not a promise of returns',
+    '背景が薄い方が価内（ITM）側 · 出来高/建玉比が3倍を超えると取引急増マーク（倍率はその側の比率）。建玉が0で当日約定があれば∞（すべて新規建玉）· 「—」は上流フィードがこの項目を提供しなかったことを示し、0 を意味しません · プレミアムは買値・売値の中値で推定 · リターンを約束するものではありません',
+  ],
 
   /* src/components/detail/SignalList.tsx */
   '已达成': ['Hit', '達成'],

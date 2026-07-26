@@ -39,7 +39,9 @@ function parse(file, text) {
 function classify(node) {
   const p = node.parent;
   if (!p) return 'unknown';
-  if (ts.isCallExpression(p) && p.expression.getText() === 't' && p.arguments[0] === node) return 'already-wrapped';
+  // `t` is imported as `__t` in files that already bind their own local `t`
+  // (e.g. a Date instance) — see the codemod's bindsIdentifier() for why.
+  if (ts.isCallExpression(p) && /^(t|__t)$/.test(p.expression.getText()) && p.arguments[0] === node) return 'already-wrapped';
   if ((ts.isPropertyAssignment(p) || ts.isPropertySignature(p)) && p.name === node) return 'unsafe';
   if (ts.isComputedPropertyName(p)) return 'unsafe';
   if (ts.isElementAccessExpression(p) && p.argumentExpression === node) return 'unsafe';
@@ -99,6 +101,59 @@ test('dict/*.ts 词条之间没有同 msgid 不同译文的冲突', () => {
   );
 });
 
+/**
+ * 人工核实过的白名单：这些中文字面量故意不包 t()，两类原因，都不是遗漏。
+ *
+ * 1. 字面量联合类型的判别值——TS 类型系统要求精确匹配某个具体字符串，t() 返回
+ *    宽泛 string 会让类型检查失败；真正的展示翻译发生在各自的渲染处（已验证）：
+ *    - CommandPalette.tsx 的 `group` 字段 → 渲染处 `{__t(g.name)}`（line 312）
+ *    - detail/api.ts 的 TrendBiasLabel 内部值 → TrendBiasPanel.tsx 用 `{t(label)}` 渲染
+ *    - Market.tsx 的 TrendBias['label'] 内部值 → SignalsReading.tsx 用 `{t(bias.label)}` 渲染
+ *
+ * 2. mock 模式下模拟「模型写的分析正文」（detail/api.ts 的 createSignalAnalysisJob），
+ *    住在 mocks/ 目录之外，但和真实 AI 输出一样不该翻译——codemod 的 mocks 白名单
+ *    只按路径过滤，看不到这种「不在 mocks/ 但同样是 AI 模拟内容」的情况。
+ *
+ * codemod 只看语法位置，两种情况都看不出来，所以需要这份人工核实过的白名单，
+ * 而不是放宽通用规则掩盖真正遗漏的包裹。
+ */
+const KNOWN_TYPE_DISCRIMINANTS = new Set([
+  'components/CommandPalette.tsx:142 股票',
+  'components/CommandPalette.tsx:152 最近',
+  'components/CommandPalette.tsx:157 功能',
+  'components/CommandPalette.tsx:171 功能',
+  'components/CommandPalette.tsx:182 功能',
+  'components/CommandPalette.tsx:194 功能',
+  'components/detail/api.ts:386 数据不足',
+  'components/detail/api.ts:388 偏多',
+  'components/detail/api.ts:390 偏空',
+  'components/detail/api.ts:391 中性',
+  'pages/Market.tsx:67 偏多',
+  'pages/Market.tsx:67 偏空',
+  'pages/Market.tsx:67 中性',
+  'components/detail/api.ts:461 偏贵',
+  'components/detail/api.ts:461 相对便宜',
+  'components/detail/api.ts:461 中性',
+  'components/detail/api.ts:466 近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。',
+  'components/detail/api.ts:467 以上为方向性研究结论，非收益预测。',
+  // `t(macroMissingReason(status) ?? '暂无宏观读数')` — the literal is the right
+  // operand of `??`, not itself t()'s direct argument, so the classifier can't see
+  // that the whole expression is covered by the outer call. It is (verified by hand).
+  'components/shared/MacroFitBadge.tsx:37 暂无宏观读数',
+  'components/shared/MacroFitPanel.tsx:93 暂无宏观读数',
+]);
+
+/**
+ * lib/macroFit.ts is deliberately dependency-free — tests/macro-fit-presentation
+ * .test.mjs asserts this by giving its sandbox no `require` at all, on purpose (see
+ * that file's own comment: a broken import there is "a useful reminder, not an
+ * obstacle to work around"). Its Chinese literals therefore stay unwrapped in the
+ * source; translation happens at each render site instead (MacroFitBadge.tsx,
+ * MacroFitPanel.tsx, MacroTechnicalMatrix.tsx, SectorList.tsx, Screener.tsx,
+ * LeadBigCard.tsx all wrap the values macroFit.ts exports before displaying them).
+ */
+const IMPORT_FREE_FILES = new Set(['lib/macroFit.ts']);
+
 // ── 扫描 src 里每一处 t('...') 调用，确认 msgid 都在词典里 ──────────────────
 const allFiles = (await walk(srcDir)).filter((f) => !f.includes(`${path.sep}i18n${path.sep}`));
 
@@ -108,26 +163,27 @@ const mocksGaps = [];
 
 for (const file of allFiles) {
   const rel = path.relative(srcDir, file).split(path.sep).join('/');
-  const isMocks = rel.startsWith('mocks/');
+  const isExempt = rel.startsWith('mocks/') || IMPORT_FREE_FILES.has(rel);
   const text = await readFile(file, 'utf8');
   const sf = parse(file, text);
   const lineOf = (n) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
 
   (function visit(node) {
-    if (ts.isCallExpression(node) && node.expression.getText() === 't' && node.arguments[0]) {
+    if (ts.isCallExpression(node) && /^(t|__t)$/.test(node.expression.getText()) && node.arguments[0]) {
       const arg = node.arguments[0];
       if (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg)) {
         if (!calledMsgids.has(arg.text)) calledMsgids.set(arg.text, []);
         calledMsgids.get(arg.text).push({ file: rel, line: lineOf(arg) });
       }
     } else if (ts.isJsxText(node) && CJK.test(node.text) && node.text.trim()) {
-      (isMocks ? mocksGaps : unsafeDisplayGaps).push({ file: rel, line: lineOf(node), text: node.text.trim() });
+      (isExempt ? mocksGaps : unsafeDisplayGaps).push({ file: rel, line: lineOf(node), text: node.text.trim() });
     } else if (
       (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
       CJK.test(node.text) &&
-      classify(node) === 'display'
+      classify(node) === 'display' &&
+      !KNOWN_TYPE_DISCRIMINANTS.has(`${rel}:${lineOf(node)} ${node.text}`)
     ) {
-      (isMocks ? mocksGaps : unsafeDisplayGaps).push({ file: rel, line: lineOf(node), text: node.text });
+      (isExempt ? mocksGaps : unsafeDisplayGaps).push({ file: rel, line: lineOf(node), text: node.text });
     }
     ts.forEachChild(node, visit);
   })(sf);
@@ -150,12 +206,13 @@ test('no un-wrapped Chinese literal remains in a display position outside src/mo
   );
 });
 
-test('src/mocks/ has no NEW untranslated display strings beyond the known AI-content exclusions', () => {
+test('exempt paths (src/mocks/, import-free files) have no untracked untranslated strings', () => {
   // mocks/ intentionally leaves AI-simulated prose untranslated (see dict/mocks.ts's own
-  // header comment for the exclusion rationale) — this test only prints a visibility count,
-  // it does not fail the suite, since new demo fixtures legitimately add new Chinese text.
+  // header comment); lib/macroFit.ts is intentionally import-free (see IMPORT_FREE_FILES
+  // above). This test only prints a visibility count, it does not fail the suite, since
+  // new demo fixtures or macroFit additions legitimately add new Chinese text over time.
   if (mocksGaps.length > 0) {
-    console.log(`[i18n] ${mocksGaps.length} untranslated Chinese literal(s) remain in src/mocks/ (expected — AI-simulated content, or not yet triaged).`);
+    console.log(`[i18n] ${mocksGaps.length} untranslated Chinese literal(s) remain in exempt paths (mocks/ AI content, or lib/macroFit.ts's deliberate zero-import rule).`);
   }
   assert.ok(true);
 });

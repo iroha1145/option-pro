@@ -10,6 +10,7 @@ import {
   ivRankColor,
   toneOnColor,
 } from './model';
+import { t } from '../../i18n/core.ts';
 
 function IvHeatCard({
   rows,
@@ -33,7 +34,7 @@ function IvHeatCard({
   return (
     <div className="card-surface p-5">
       <div className="flex items-center justify-between">
-        <p className="eyebrow">当前 IV 横截面 · 高位</p>
+        <p className="eyebrow">{t('当前 IV 横截面 · 高位')}</p>
         <Icon name="flame-line" size={16} className="text-ink-400" />
       </div>
       <div className="mt-4 grid grid-cols-3 gap-2">
@@ -86,14 +87,14 @@ function IvHeatCard({
         <button
           type="button"
           onClick={onOpenPalette}
-          aria-label="搜索更多代码并加入自选"
+          aria-label={t("搜索更多代码并加入自选")}
           className="flex h-14 items-center justify-center rounded-md border border-dashed border-line-strong text-ink-400 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
         >
           <Icon name="plus" size={16} />
         </button>
       </div>
       {!loading && top.length === 0 && (
-        <p className="mt-3 text-micro text-ink-400">当前没有可用的 IV 样本。</p>
+        <p className="mt-3 text-micro text-ink-400">{t('当前没有可用的 IV 样本。')}</p>
       )}
     </div>
   );
@@ -114,14 +115,14 @@ function CoverageCard({
   const highest = ranked[0] ?? null;
   const lowest = ranked[ranked.length - 1] ?? null;
   const statusLabel =
-    meta.status === 'active' ? '数据正常' : SOURCE_STATUS_CN[meta.status];
+    meta.status === 'active' ? t('数据正常') : SOURCE_STATUS_CN[meta.status];
 
   return (
     <div className="card-surface p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="eyebrow">IV 数据覆盖</p>
-          <h3 className="mt-1 text-h3 text-ink-800">{sector?.name ?? '所选板块'}</h3>
+          <p className="eyebrow">{t('IV 数据覆盖')}</p>
+          <h3 className="mt-1 text-h3 text-ink-800">{sector?.name ?? t('所选板块')}</h3>
         </div>
         <span
           className={cn(
@@ -137,19 +138,19 @@ function CoverageCard({
 
       <dl className="mt-4 divide-y divide-line">
         <div className="flex items-center justify-between py-2.5">
-          <dt className="text-caption text-ink-500">成功样本</dt>
+          <dt className="text-caption text-ink-500">{t('成功样本')}</dt>
           <dd className="font-mono text-data-m text-ink-800 tnum">
             {meta.successCount ?? rows.length} / {meta.requestedCount ?? '—'}
           </dd>
         </div>
         <div className="flex items-center justify-between py-2.5">
-          <dt className="text-caption text-ink-500">横截面最高</dt>
+          <dt className="text-caption text-ink-500">{t('横截面最高')}</dt>
           <dd className="font-mono text-data-m text-ink-800 tnum">
             {highest ? `${highest.ticker} · ${highest.rank.toFixed(1)}` : '—'}
           </dd>
         </div>
         <div className="flex items-center justify-between py-2.5">
-          <dt className="text-caption text-ink-500">横截面最低</dt>
+          <dt className="text-caption text-ink-500">{t('横截面最低')}</dt>
           <dd className="font-mono text-data-m text-ink-800 tnum">
             {lowest ? `${lowest.ticker} · ${lowest.rank.toFixed(1)}` : '—'}
           </dd>
@@ -157,8 +158,8 @@ function CoverageCard({
       </dl>
 
       <p className="mt-3 text-micro leading-5 text-ink-400">
-        {meta.asOf ? `数据时间 ${fmtRelative(meta.asOf)}。` : '数据时间暂缺。'}
-        排位只比较当前板块成分的 ATM IV，不代表一年历史百分位。
+        {meta.asOf ? `数据时间 ${fmtRelative(meta.asOf)}。` : t('数据时间暂缺。')}
+        {t('排位只比较当前板块成分的 ATM IV，不代表一年历史百分位。')}
       </p>
     </div>
   );

@@ -57,7 +57,7 @@ export const MACRO: Dict = {
   '7 日变化': ['7-day change', '7日間の変化'],
   '有效模块': ['Valid modules', '有効モジュール'],
   '数据截止': ['Data as of', 'データ基準日'],
-  '分数是过去 5 年的历史分位，不是预测。高分表示当前金融环境相对历史更支持风险资产，\n        不代表市场一定上涨，也不构成买入、卖出、仓位或目标价建议。': [
+  '分数是过去 5 年的历史分位，不是预测。高分表示当前金融环境相对历史更支持风险资产， 不代表市场一定上涨，也不构成买入、卖出、仓位或目标价建议。': [
     "The score is a historical percentile over the past 5 years, not a forecast. A high score means the current financial environment is more supportive of risk assets relative to history — it doesn't mean the market will necessarily rise, and it is not a buy, sell, position, or price-target recommendation.",
     'このスコアは過去5年間のヒストリカル・パーセンタイルであり、予測ではありません。高スコアは現在の金融環境が過去と比べて相対的にリスク資産を支持しやすいことを示すものであり、相場が必ず上昇することを意味せず、買い・売り・ポジション・目標株価のいずれの推奨も構成しません。',
   ],
@@ -116,7 +116,7 @@ export const MACRO: Dict = {
   ],
   '登录后可手动刷新': ['Sign in to refresh manually', 'ログインすると手動更新が可能です'],
   '上游告警：': ['Upstream warnings: ', 'アップストリーム警告：'],
-  '。\n          面板继续显示上一份有效快照。': [
+  '。 面板继续显示上一份有效快照。': [
     '. The panel continues to show the last valid snapshot.',
     '。パネルには直近の有効なスナップショットが引き続き表示されます。',
   ],
@@ -137,7 +137,7 @@ export const MACRO: Dict = {
     "No comparable 7-day historical snapshot, or no factors declined this period. When there's nothing to compare against, this is left blank rather than shown as 0.",
     '比較可能な7日前のヒストリカル・スナップショットがないか、今期スコアが下落したファクターがありません。比較対象がない場合は空欄のままとし、0とは表示しません。',
   ],
-  '「按当前修订值回算」的历史区间使用今天能看到的最新修订数据，不代表当时市场已知的分数；\n        本地部署后每次实际抓取形成的快照才具备真实的点时语义。': [
+  '「按当前修订值回算」的历史区间使用今天能看到的最新修订数据，不代表当时市场已知的分数； 本地部署后每次实际抓取形成的快照才具备真实的点时语义。': [
     'Historical ranges labeled "recomputed on latest revisions" use the most recent revised data available today — they do not represent the score as known to the market at the time. Only the snapshots actually captured live after this feature launched carry true point-in-time meaning.',
     '「最新修正値による遡及計算」とラベル表示された履歴期間は、本日時点で参照できる最新の修正済みデータを使って計算したものであり、当時市場が実際に知り得たスコアではありません。本機能の稼働後にローカルで実際に取得して作成されたスナップショットのみが、真の時点データとしての意味を持ちます。',
   ],

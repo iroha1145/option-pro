@@ -15,6 +15,7 @@ import type {
   StrengthProfile,
   StrengthProfilesMeta,
 } from '../types';
+import { t } from '../../i18n/core.ts';
 
 /**
  * 扫描参数：band/sector/minScore/sort/order 为 UI 侧筛选（live 下客户端套用）；
@@ -105,10 +106,10 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
   if (!ticker || score === null || price === null) return null;
   const band: StrengthBand = score >= 85 ? 'strong' : score >= 60 ? 'mid' : 'weak';
   const dims: ScreenerSubscoreDim[] = [
-    { key: 'score_short', label: '短期', value: pickN(r, 'score_short') },
-    { key: 'score_mid', label: '中期', value: pickN(r, 'score_mid') },
-    { key: 'score_long', label: '长期', value: pickN(r, 'score_long') },
-    { key: 'breakout_quality_score', label: '突破质量', value: pickN(r, 'breakout_quality_score') },
+    { key: 'score_short', label: t('短期'), value: pickN(r, 'score_short') },
+    { key: 'score_mid', label: t('中期'), value: pickN(r, 'score_mid') },
+    { key: 'score_long', label: t('长期'), value: pickN(r, 'score_long') },
+    { key: 'breakout_quality_score', label: t('突破质量'), value: pickN(r, 'breakout_quality_score') },
   ];
   return {
     ticker,
@@ -235,9 +236,9 @@ function mapMarket(d: unknown): MarketStrength {
 
 /** 契约 profile 枚举 → 中文名（与 screener PROFILE_CN 同口径） */
 const PROFILE_NAME_CN: Record<string, string> = {
-  conservative: '稳健',
-  balanced: '均衡',
-  aggressive: '进取',
+  conservative: t('稳健'),
+  balanced: t('均衡'),
+  aggressive: t('进取'),
 };
 
 /**

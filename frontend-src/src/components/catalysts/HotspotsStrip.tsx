@@ -10,6 +10,7 @@ import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import Icon from '@/components/icons';
 import { fmtRelative } from '@/lib/format';
+import { t as __t } from '../../i18n/core.ts';
 
 function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onOpen: () => void }) {
   const openable = !!h.representative?.newsId;
@@ -51,7 +52,7 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
           <TickerChip key={t} ticker={t} />
         ))}
         <span className="ml-auto font-mono text-micro text-ink-400 tnum">
-          {h.newsCount} {h.countKind === 'sources' ? '源' : '条'}
+          {h.newsCount} {h.countKind === 'sources' ? __t('源') : __t('条')}
         </span>
       </div>
       <div className="mt-2 flex items-center justify-between gap-2 border-t border-line pt-2">
@@ -64,7 +65,7 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
         </span>
         {openable && (
           <span className="flex shrink-0 items-center gap-0.5 text-micro text-ink-300 group-hover:text-brand-600">
-            查看代表新闻
+            {__t('查看代表新闻')}
             <Icon name="chevron-right" size={12} />
           </span>
         )}
@@ -100,19 +101,19 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
   const items = listQ.data ?? [];
 
   return (
-    <section className="mt-6" aria-label="热点主题带">
+    <section className="mt-6" aria-label={__t("热点主题带")}>
       <div className="flex items-baseline justify-between">
         <div className="flex items-baseline gap-3">
           <p className="eyebrow">
-            HOT THEMES · 热点带
+            {__t('HOT THEMES · 热点带')}
             <InfoHint hint={SCORE_HINTS.hotScore} side="bottom" size={12} className="ml-1" />
           </p>
-          <h2 className="text-h2 text-ink-900">市场在交易什么故事</h2>
+          <h2 className="text-h2 text-ink-900">{__t('市场在交易什么故事')}</h2>
         </div>
         {statusQ.data && (
           <p className="hidden items-center gap-1.5 text-micro text-ink-400 sm:flex">
             <Led tone={statusQ.data.scanning ? 'brand' : 'muted'} pulse={statusQ.data.scanning} className="size-1.5" />
-            热点扫描 {statusQ.data.scanning ? '活跃' : '已暂停'} · {fmtRelative(statusQ.data.updatedAt)}
+            {__t('热点扫描')} {statusQ.data.scanning ? __t('活跃') : __t('已暂停')} · {fmtRelative(statusQ.data.updatedAt)}
           </p>
         )}
       </div>
@@ -123,7 +124,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
       <HorizontalScroller
         className="-mx-4 mt-4 md:-mx-8"
         scrollerClassName="px-4 pb-2 md:px-8"
-        label="热点主题带，可横向滚动"
+        label={__t("热点主题带，可横向滚动")}
       >
         <div className="flex snap-x snap-mandatory gap-3">
           {listQ.loading && items.length === 0 ? (
@@ -132,15 +133,15 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
             /* hotspots/status 计算中：带首卡替换为状态卡 */
             <div className="flex w-[260px] shrink-0 snap-start flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-card-warm p-4 text-center sm:w-[300px]">
               <span className="size-5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-hidden="true" />
-              <p className="mt-2.5 text-body-s font-medium text-ink-800">热点计算中…</p>
+              <p className="mt-2.5 text-body-s font-medium text-ink-800">{__t('热点计算中…')}</p>
               <p className="mt-1 font-mono text-micro text-ink-400 tnum">
-                {statusQ.data?.etaSeconds != null ? `预计 ${statusQ.data.etaSeconds}s` : '请稍候'}
+                {statusQ.data?.etaSeconds != null ? `预计 ${statusQ.data.etaSeconds}s` : __t('请稍候')}
               </p>
             </div>
           ) : null}
           {!listQ.loading && !computing && items.length === 0 && (
             <div className="flex w-full flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-card-warm py-8 text-center">
-              <p className="text-body-s text-ink-500">当前窗口暂无热点分组</p>
+              <p className="text-body-s text-ink-500">{__t('当前窗口暂无热点分组')}</p>
             </div>
           )}
           {!listQ.loading &&

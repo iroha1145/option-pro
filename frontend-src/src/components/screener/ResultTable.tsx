@@ -18,6 +18,7 @@ import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
 import RowExpansion from './RowExpansion';
 import { CatalystBadge, ScoreCell, SubscoreTicks } from './cells';
 import { tierOf, TIER_RANGE, type CatalystSummary, type DetailCache, type RowSignalsState } from './types';
+import { t } from '../../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -44,12 +45,12 @@ export interface ResultTableProps {
 
 const HEADS: { label: string; align?: 'right' | 'center'; width?: string; hint?: ScoreHint }[] = [
   { label: '#', width: '36px' },
-  { label: '代码' },
-  { label: '强度分', hint: SCORE_HINTS.strengthComposite },
-  { label: '分项' },
-  { label: '价 / 涨跌', align: 'right' },
-  { label: '催化剂 · 72H' },
-  { label: '成交额', align: 'right' },
+  { label: t('代码') },
+  { label: t('强度分'), hint: SCORE_HINTS.strengthComposite },
+  { label: t('分项') },
+  { label: t('价 / 涨跌'), align: 'right' },
+  { label: t('催化剂 · 72H') },
+  { label: t('成交额'), align: 'right' },
   { label: '', width: '40px' },
 ];
 
@@ -61,7 +62,7 @@ function headsFor(showMacro: boolean) {
   return [
     ...HEADS.slice(0, MACRO_HEAD_INDEX),
     // 带上口径说明：一个 0–100 的分数放在强度分旁边，默认会被当成评分的一部分。
-    { label: '宏观适配', hint: MACRO_SHADOW_HINT },
+    { label: t('宏观适配'), hint: MACRO_SHADOW_HINT },
     ...HEADS.slice(MACRO_HEAD_INDEX),
   ];
 }
@@ -218,13 +219,13 @@ export default function ResultTable({
       {/* 分档角标说明 + 分页 */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-card-warm px-4 py-2.5">
         <p className="font-mono text-micro text-ink-400 tnum">
-          每页 20 · 分档 {rows.length > 0 ? `${tierOf(rows[0].strengthScore)}–${tierOf(rows[rows.length - 1].strengthScore)}（${TIER_RANGE[tierOf(rows[0].strengthScore)]}）` : '—'}
+          {t('每页 20 · 分档')} {rows.length > 0 ? `${tierOf(rows[0].strengthScore)}–${tierOf(rows[rows.length - 1].strengthScore)}（${TIER_RANGE[tierOf(rows[0].strengthScore)]}）` : '—'}
         </p>
-        <nav className="flex items-center gap-1" aria-label="分页">
+        <nav className="flex items-center gap-1" aria-label={t("分页")}>
           <button
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
-            aria-label="上一页"
+            aria-label={t("上一页")}
             className="flex size-7 items-center justify-center rounded-sm border border-line text-ink-500 transition-colors hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Icon name="chevron-right" size={13} className="rotate-180" />
@@ -245,7 +246,7 @@ export default function ResultTable({
           <button
             onClick={() => onPageChange(page + 1)}
             disabled={page >= totalPages}
-            aria-label="下一页"
+            aria-label={t("下一页")}
             className="flex size-7 items-center justify-center rounded-sm border border-line text-ink-500 transition-colors hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Icon name="chevron-right" size={13} />

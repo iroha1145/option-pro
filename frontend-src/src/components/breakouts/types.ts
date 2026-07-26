@@ -5,6 +5,7 @@
  */
 import type { BreakoutEvent, BreakoutEventDetail, BreakoutSignal, BreakoutStatus } from '@/api/types';
 import type { MacroFitDriver } from '@/lib/macroFit';
+import { t } from '../../i18n/core.ts';
 
 /* ---------------- 枚举（契约） ---------------- */
 export type LifecycleState =
@@ -19,36 +20,36 @@ export type BreakoutSession = 'premarket' | 'regular' | 'postmarket' | 'closed';
 
 /* ---------------- 中文映射（契约 §2 枚举→中文） ---------------- */
 export const LIFECYCLE_CN: Record<LifecycleState, string> = {
-  DISCOVERED: '已发现',
-  WATCHING: '观察中',
-  TRIGGERED: '已触发',
-  CONFIRMED: '已确认',
-  HOLDING: '持有中',
-  RETESTING: '回踩中',
-  RETEST_HELD: '回踩企稳',
-  REACCELERATING: '再加速',
-  EXTENDED: '过热延伸',
-  FAILED: '已失效',
-  EXPIRED: '已过期',
+  DISCOVERED: t('已发现'),
+  WATCHING: t('观察中'),
+  TRIGGERED: t('已触发'),
+  CONFIRMED: t('已确认'),
+  HOLDING: t('持有中'),
+  RETESTING: t('回踩中'),
+  RETEST_HELD: t('回踩企稳'),
+  REACCELERATING: t('再加速'),
+  EXTENDED: t('过热延伸'),
+  FAILED: t('已失效'),
+  EXPIRED: t('已过期'),
 };
 
 export const SETUP_CN: Record<SetupType, string> = {
-  DAILY_BASE_BREAKOUT: '日线基底突破',
-  OPENING_RANGE_BREAKOUT: '开盘区间突破',
-  PREMARKET_GAP: '盘前跳空',
-  GAP_AND_GO: '跳空续攻',
-  GAP_HOLD: '跳空企稳',
-  GAP_FADE: '跳空回落',
-  RETEST_BREAKOUT: '回踩突破',
-  MOMENTUM_SPIKE: '动量急拉',
-  RECOVERY_BREAKOUT: '修复突破',
+  DAILY_BASE_BREAKOUT: t('日线基底突破'),
+  OPENING_RANGE_BREAKOUT: t('开盘区间突破'),
+  PREMARKET_GAP: t('盘前跳空'),
+  GAP_AND_GO: t('跳空续攻'),
+  GAP_HOLD: t('跳空企稳'),
+  GAP_FADE: t('跳空回落'),
+  RETEST_BREAKOUT: t('回踩突破'),
+  MOMENTUM_SPIKE: t('动量急拉'),
+  RECOVERY_BREAKOUT: t('修复突破'),
 };
 
 export const SESSION_CN: Record<BreakoutSession, string> = {
-  premarket: '盘前',
-  regular: '盘中',
-  postmarket: '盘后',
-  closed: '休市',
+  premarket: t('盘前'),
+  regular: t('盘中'),
+  postmarket: t('盘后'),
+  closed: t('休市'),
 };
 
 export const LIFECYCLE_LIST = Object.keys(LIFECYCLE_CN) as LifecycleState[];
@@ -79,15 +80,15 @@ export const LIFECYCLE_CHIP_CLASS: Record<LifecycleTone, string> = {
 
 /* ---------------- 评分套组 ---------------- */
 export const SCORE_DEFS = [
-  { key: 'intrinsic_strength_score', label: '内在强度' },
-  { key: 'base_quality_score', label: '基底质量' },
-  { key: 'breakout_confirmation_score', label: '突破确认' },
-  { key: 'liquidity_quality_score', label: '流动性' },
-  { key: 'chase_risk_score', label: '追高风险' },
-  { key: 'sector_fit_score', label: '板块契合' },
-  { key: 'market_fit_score', label: '市场契合' },
-  { key: 'alert_priority_score', label: '警示优先级' },
-  { key: 'data_confidence_score', label: '数据置信' },
+  { key: 'intrinsic_strength_score', label: t('内在强度') },
+  { key: 'base_quality_score', label: t('基底质量') },
+  { key: 'breakout_confirmation_score', label: t('突破确认') },
+  { key: 'liquidity_quality_score', label: t('流动性') },
+  { key: 'chase_risk_score', label: t('追高风险') },
+  { key: 'sector_fit_score', label: t('板块契合') },
+  { key: 'market_fit_score', label: t('市场契合') },
+  { key: 'alert_priority_score', label: t('警示优先级') },
+  { key: 'data_confidence_score', label: t('数据置信') },
 ] as const;
 export type ScoreKey = (typeof SCORE_DEFS)[number]['key'];
 
@@ -111,11 +112,11 @@ export interface RangePersistenceLive {
   status: string;
 }
 export const RANGE_PERSISTENCE_DEFS = [
-  { key: 'trend', label: '趋势持续' },
-  { key: 'hold', label: '区间保持' },
-  { key: 'volatility', label: '波动稳定' },
-  { key: 'volume', label: '量能延续' },
-  { key: 'participation', label: '参与广度' },
+  { key: 'trend', label: t('趋势持续') },
+  { key: 'hold', label: t('区间保持') },
+  { key: 'volatility', label: t('波动稳定') },
+  { key: 'volume', label: t('量能延续') },
+  { key: 'participation', label: t('参与广度') },
 ] as const;
 
 /* ---------------- 富事件形状 ---------------- */
@@ -217,18 +218,18 @@ export function riskBarClass(score: number): string {
 
 /** 板块 → 雷达 12 槽位缩写（外环刻度文字） */
 export const RADAR_SECTORS: { match: string[]; label: string }[] = [
-  { match: ['信息技术'], label: '科技' },
-  { match: ['半导体'], label: '半导体' },
-  { match: ['通信服务'], label: '通信' },
-  { match: ['可选消费'], label: '可选' },
-  { match: ['必需消费'], label: '必需' },
-  { match: ['医疗保健'], label: '医疗' },
-  { match: ['金融'], label: '金融' },
-  { match: ['能源'], label: '能源' },
-  { match: ['工业'], label: '工业' },
-  { match: ['原材料'], label: '材料' },
-  { match: ['公用事业'], label: '公用' },
-  { match: [], label: '其他' },
+  { match: [t('信息技术')], label: t('科技') },
+  { match: [t('半导体')], label: t('半导体') },
+  { match: [t('通信服务')], label: t('通信') },
+  { match: [t('可选消费')], label: t('可选') },
+  { match: [t('必需消费')], label: t('必需') },
+  { match: [t('医疗保健')], label: t('医疗') },
+  { match: [t('金融')], label: t('金融') },
+  { match: [t('能源')], label: t('能源') },
+  { match: [t('工业')], label: t('工业') },
+  { match: [t('原材料')], label: t('材料') },
+  { match: [t('公用事业')], label: t('公用') },
+  { match: [], label: t('其他') },
 ];
 
 export function sectorSlotIndex(sector: string): number {

@@ -22,6 +22,7 @@ import type {
   UnusualOption,
   WorkerTask,
 } from '@/api/types';
+import { t as __t } from '../i18n/core.ts';
 
 const pickTicker = (r: Rng) => TICKER_POOL[r.int(0, TICKER_POOL.length - 1)];
 
@@ -159,7 +160,7 @@ function buildTransitions(r: Rng, finalState: string, triggerISO: string): { sta
   const uniq = chain.filter((s, i) => chain.indexOf(s) === i);
   return uniq.map((state, i) => {
     const at = i === 0 ? t0 - r.int(70, 130) * 60_000 : i === 1 ? t0 - r.int(25, 55) * 60_000 : t0 + (i - 2) * r.int(8, 22) * 60_000;
-    const note = state === 'TRIGGERED' ? '价格越过触发位' : state === 'FAILED' ? '跌得失效价，信号作废' : state === 'EXPIRED' ? '超时未延续，归档' : undefined;
+    const note = state === 'TRIGGERED' ? __t('价格越过触发位') : state === 'FAILED' ? __t('跌得失效价，信号作废') : state === 'EXPIRED' ? __t('超时未延续，归档') : undefined;
     return { state, at: new Date(at).toISOString(), note };
   });
 }
@@ -366,7 +367,7 @@ export function getBreakoutEventDetail(id: string): BreakoutEventDetail {
   if (cur) return cur as unknown as BreakoutEventDetail;
   const found = breakoutEvents.find((e) => idOf(e).id === id || idOf(e).event_id === id);
   if (found) return found;
-  throw new ApiError(404, '突破事件不存在');
+  throw new ApiError(404, __t('突破事件不存在'));
 }
 
 export function getBreakoutsByTicker(ticker: string): BreakoutEvent[] {
@@ -621,22 +622,22 @@ export const getEarningsRefreshCount = () => earningsRefreshCount;
 /** 连锁反应关系图谱（真实风格供应链叙事） */
 const IMPACT_RELATIONS: Record<string, { ticker: string; relation: string }[]> = {
   NVDA: [
-    { ticker: 'SMCI', relation: '服务器整机' },
-    { ticker: 'TSM', relation: '晶圆代工' },
-    { ticker: 'MU', relation: 'HBM 供应' },
-    { ticker: 'ARM', relation: 'IP 授权' },
+    { ticker: 'SMCI', relation: __t('服务器整机') },
+    { ticker: 'TSM', relation: __t('晶圆代工') },
+    { ticker: 'MU', relation: __t('HBM 供应') },
+    { ticker: 'ARM', relation: __t('IP 授权') },
   ],
   MSFT: [
-    { ticker: 'NVDA', relation: '算力供应链' },
-    { ticker: 'ORCL', relation: '云基建' },
-    { ticker: 'CRM', relation: '企业软件' },
-    { ticker: 'PLTR', relation: '数据平台' },
+    { ticker: 'NVDA', relation: __t('算力供应链') },
+    { ticker: 'ORCL', relation: __t('云基建') },
+    { ticker: 'CRM', relation: __t('企业软件') },
+    { ticker: 'PLTR', relation: __t('数据平台') },
   ],
   TSLA: [
-    { ticker: 'UBER', relation: '出行生态' },
-    { ticker: 'DASH', relation: '消费景气' },
+    { ticker: 'UBER', relation: __t('出行生态') },
+    { ticker: 'DASH', relation: __t('消费景气') },
     { ticker: 'ABNB', relation: '可选消费' },
-    { ticker: 'AMZN', relation: '大盘成长联动' },
+    { ticker: 'AMZN', relation: __t('大盘成长联动') },
   ],
 };
 
@@ -662,7 +663,7 @@ export function getEarningsImpact(ticker: string): EarningsImpactEx {
   const move = expectedMoveOf(t);
   const relations = IMPACT_RELATIONS[t] ?? TICKER_POOL.filter((x) => x.sector === info.sector && x.ticker !== t)
     .slice(0, 4)
-    .map((x) => ({ ticker: x.ticker, relation: '同板块联动' }));
+    .map((x) => ({ ticker: x.ticker, relation: __t('同板块联动') }));
   const rr = new Rng(9090 + t.length * 13 + t.charCodeAt(0));
   const related = relations.map((rel) => {
     const relInfo = TICKER_POOL.find((x) => x.ticker === rel.ticker);
@@ -758,7 +759,7 @@ export function getCatalystsCalendar(): { date: string; items: { kind: string; l
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(Date.now() + i * 86_400_000);
     const items = [
-      { kind: 'macro', label: r.pick(['CPI 数据公布', 'FOMC 会议纪要', '初请失业金人数', 'PPI 数据公布', '零售销售月率']) },
+      { kind: 'macro', label: r.pick([__t('CPI 数据公布'), __t('FOMC 会议纪要'), __t('初请失业金人数'), __t('PPI 数据公布'), __t('零售销售月率')]) },
       ...(r.chance(0.6) ? [{ kind: 'earnings', label: `${pickTicker(r).ticker} 财报` }] : []),
     ];
     return { date: d.toISOString().slice(0, 10), items };
@@ -768,7 +769,7 @@ export function getCatalystsCalendar(): { date: string; items: { kind: string; l
 export function getLatestFocusCycle(): FocusCycle {
   return {
     id: 'fc-1',
-    theme: 'AI 算力资本开支',
+    theme: __t('AI 算力资本开支'),
     startedAt: new Date(Date.now() - 19 * 86_400_000).toISOString(),
     days: 19,
     stage: '主升',
@@ -874,7 +875,7 @@ export function createAiJob(kind: AiJob['kind'], payloadLabel = ''): AiJob {
 
 export function getAiJob(id: string): AiJob {
   const job = jobs.get(id);
-  if (!job) throw new ApiError(404, '任务不存在', { bizCode: 'job_not_found' });
+  if (!job) throw new ApiError(404, __t('任务不存在'), { bizCode: 'job_not_found' });
   const age = Date.now() - job._born;
   if (job.status === 'queued' && age > 1200) job.status = 'running';
   if (job.status === 'running') {
@@ -882,7 +883,7 @@ export function getAiJob(id: string): AiJob {
     if (age > 5200) {
       job.status = 'succeeded';
       job.progress = 100;
-      job.result = job.result || 'AI 分析完成：综合基本面、量价与期权定价，详见结果正文。';
+      job.result = job.result || __t('AI 分析完成：综合基本面、量价与期权定价，详见结果正文。');
       // 财报影响任务成功 → 该标的分析缓存就绪（409 analysis_required 解除）
       if (job.kind === 'earnings-impact' && job._ticker) markImpactAnalyzed(job._ticker);
     }
@@ -906,8 +907,8 @@ export function cancelAiJob(id: string): AiJob {
 /* ---------------- Worker 心跳 ---------------- */
 export function getWorkerStatus(): WorkerTask[] {
   const names = [
-    '指数行情采集', '自选股快照', '强度分计算', '突破扫描', '板块聚合',
-    '财报日历同步', '新闻抓取', '热点聚类', '期权异动', 'AI 任务调度',
+    __t('指数行情采集'), __t('自选股快照'), __t('强度分计算'), '突破扫描', __t('板块聚合'),
+    __t('财报日历同步'), __t('新闻抓取'), __t('热点聚类'), __t('期权异动'), __t('AI 任务调度'),
   ];
   const r = new Rng(24680);
   return names.map((name, i) => ({
@@ -915,7 +916,7 @@ export function getWorkerStatus(): WorkerTask[] {
     name,
     status: r.chance(0.85) ? 'ok' : r.chance(0.7) ? 'degraded' : 'down',
     lastBeatAt: new Date(Date.now() - r.int(4, 90) * 1000).toISOString(),
-    note: r.pick(['运行正常', '延迟略高于均值', '队列积压清理中', '等待下一周期']),
+    note: r.pick([__t('运行正常'), __t('延迟略高于均值'), __t('队列积压清理中'), __t('等待下一周期')]),
   }));
 }
 
@@ -1171,12 +1172,12 @@ interface ThemeDef {
 }
 
 const THEME_DEFS: ThemeDef[] = [
-  { id: 'theme-ai-capex', theme: 'AI 算力资本开支', keywords: ['算力', '资本开支', '数据中心'], tickers: ['NVDA', 'AMD', 'AVGO', 'TSM', 'MU'] },
-  { id: 'theme-megacap-earnings', theme: '大型科技股财报季', keywords: ['财报', '指引', '利润率'], tickers: ['AAPL', 'MSFT', 'META', 'GOOGL', 'AMZN'] },
-  { id: 'theme-rate-path', theme: '降息预期与利率路径', keywords: ['降息', 'CPI', '美债收益率'], tickers: ['SPY', 'QQQ', 'JPM', 'V'] },
-  { id: 'theme-ev-price-war', theme: '电动车价格战升级', keywords: ['降价', '毛利率', '交付量'], tickers: ['TSLA', 'UBER'] },
-  { id: 'theme-crypto-rebound', theme: '加密资产回暖', keywords: ['比特币', 'ETF 流入', '合规'], tickers: ['COIN', 'HOOD'] },
-  { id: 'theme-glp1', theme: '减肥药产业链', keywords: ['GLP-1', '产能', '渠道'], tickers: ['LLY', 'UNH'] },
+  { id: 'theme-ai-capex', theme: __t('AI 算力资本开支'), keywords: [__t('算力'), __t('资本开支'), __t('数据中心')], tickers: ['NVDA', 'AMD', 'AVGO', 'TSM', 'MU'] },
+  { id: 'theme-megacap-earnings', theme: __t('大型科技股财报季'), keywords: ['财报', '指引', __t('利润率')], tickers: ['AAPL', 'MSFT', 'META', 'GOOGL', 'AMZN'] },
+  { id: 'theme-rate-path', theme: __t('降息预期与利率路径'), keywords: [__t('降息'), 'CPI', __t('美债收益率')], tickers: ['SPY', 'QQQ', 'JPM', 'V'] },
+  { id: 'theme-ev-price-war', theme: __t('电动车价格战升级'), keywords: [__t('降价'), __t('毛利率'), __t('交付量')], tickers: ['TSLA', 'UBER'] },
+  { id: 'theme-crypto-rebound', theme: __t('加密资产回暖'), keywords: [__t('比特币'), __t('ETF 流入'), __t('合规')], tickers: ['COIN', 'HOOD'] },
+  { id: 'theme-glp1', theme: __t('减肥药产业链'), keywords: ['GLP-1', __t('产能'), __t('渠道')], tickers: ['LLY', 'UNH'] },
 ];
 
 interface NewsTpl {
@@ -1276,8 +1277,8 @@ function buildAnalysisResult(
 ): NewsImpactResult {
   const seed = newsId.split('').reduce((a, c) => a + c.charCodeAt(0), 0) * 131;
   const r = new Rng(seed);
-  const mechanisms = ['资本开支传导', '供应链定价权', '利润率重估', '估值倍数变化', '订单能见度改善', '利率敏感性', '成本转嫁能力', '需求弹性'];
-  const horizons = ['盘中', '1–3 天', '1–2 周'];
+  const mechanisms = [__t('资本开支传导'), __t('供应链定价权'), __t('利润率重估'), __t('估值倍数变化'), __t('订单能见度改善'), __t('利率敏感性'), __t('成本转嫁能力'), __t('需求弹性')];
+  const horizons = ['盘中', __t('1–3 天'), __t('1–2 周')];
   const confidence = round4(r.float(0.56, 0.93));
   const impacts: TrustedStockImpact[] = tickers.map((t, i) => {
     const base = dir === 'bullish' ? r.float(0.6, 4.6) : dir === 'bearish' ? -r.float(0.6, 4.6) : r.float(-0.9, 0.9);
@@ -1389,7 +1390,7 @@ function applyJobTerminal(rec: AnalysisJobRec) {
   if (!item) return;
   const meta = newsMeta.get(rec.newsId);
   if (rec.status === 'completed') {
-    const themeLabel = THEME_DEFS.find((t) => t.id === item.themeIds[0])?.theme ?? '市场焦点';
+    const themeLabel = THEME_DEFS.find((t) => t.id === item.themeIds[0])?.theme ?? __t('市场焦点');
     item.analysis = buildAnalysisResult(item.newsId, item.titleZh, item.sourceTickers, meta?.dir ?? 'neutral', themeLabel, new Date().toISOString());
     item.analysisStatus = 'completed';
   } else if (rec.status === 'insufficient_context') {
@@ -1420,7 +1421,7 @@ function advanceAnalysisJob(rec: AnalysisJobRec): NewsAnalysisJob {
         rec.error = null;
       } else if (meta?.flaky && !rec.force) {
         rec.status = 'failed';
-        rec.error = '模型输出校验失败，可带 force 重试';
+        rec.error = __t('模型输出校验失败，可带 force 重试');
       } else {
         rec.status = 'completed';
         rec.error = null;
@@ -1464,7 +1465,7 @@ function ensureDemoJob() {
 
 export function createNewsAnalysisJob(newsId: string, force = false): NewsAnalysisJob {
   const item = newsById.get(newsId);
-  if (!item) throw new Error('新闻不存在');
+  if (!item) throw new Error(__t('新闻不存在'));
   const now = new Date().toISOString();
   const rec: AnalysisJobRec = {
     jobId: `ajob-${Date.now().toString(36)}-${analysisJobs.size + 1}`,
@@ -1488,13 +1489,13 @@ export function createNewsAnalysisJob(newsId: string, force = false): NewsAnalys
 export function getNewsAnalysisJob(jobId: string): NewsAnalysisJob {
   ensureDemoJob();
   const rec = analysisJobs.get(jobId);
-  if (!rec) throw new Error('任务不存在');
+  if (!rec) throw new Error(__t('任务不存在'));
   return advanceAnalysisJob(rec);
 }
 
 export function cancelNewsAnalysisJob(jobId: string): NewsAnalysisJob {
   const rec = analysisJobs.get(jobId);
-  if (!rec) throw new Error('任务不存在');
+  if (!rec) throw new Error(__t('任务不存在'));
   if (rec.status === 'queued' || rec.status === 'in_progress') {
     rec.status = 'cancelled';
     rec.cancellable = false;
@@ -1554,7 +1555,7 @@ export function getCatalystsFeedV2(q: CatalystFeedQuery = {}): {
 export function getNewsDetailV2(newsId: string): CatalystNewsItem {
   ensureDemoJob();
   const item = newsById.get(newsId);
-  if (!item) throw new Error('新闻不存在');
+  if (!item) throw new Error(__t('新闻不存在'));
   syncNewsJob(item);
   return item;
 }
@@ -1611,21 +1612,21 @@ export function getCatalystsStatusV2(): CatalystsStatusDetail {
 /* ---------------- 经济日历 ---------------- */
 export function getEconomicCalendar(): EconomicEvent[] {
   const defs: { d: number; h: number; m: number; title: string; impact: EconomicEvent['impact']; f: string; p: string; a: string | null }[] = [
-    { d: -1, h: 8, m: 30, title: '纽约联储制造业指数', impact: 'low', f: '8.0', p: '6.6', a: '12.9' },
-    { d: 0, h: 8, m: 30, title: 'CPI 月率（10 月）', impact: 'high', f: '0.2%', p: '0.3%', a: null },
-    { d: 0, h: 21, m: 0, title: '美联储理事沃勒讲话', impact: 'medium', f: '—', p: '—', a: null },
-    { d: 1, h: 8, m: 30, title: '初请失业金人数', impact: 'medium', f: '22.5 万', p: '22.1 万', a: null },
-    { d: 1, h: 10, m: 0, title: '密歇根大学消费者信心指数', impact: 'medium', f: '71.0', p: '70.5', a: null },
-    { d: 2, h: 8, m: 30, title: 'PPI 月率（10 月）', impact: 'medium', f: '0.2%', p: '0.1%', a: null },
-    { d: 2, h: 14, m: 0, title: 'FOMC 会议纪要', impact: 'high', f: '—', p: '—', a: null },
-    { d: 3, h: 8, m: 30, title: '零售销售月率（10 月）', impact: 'high', f: '0.4%', p: '0.6%', a: null },
-    { d: 3, h: 21, m: 0, title: '美联储主席鲍威尔讲话', impact: 'high', f: '—', p: '—', a: null },
-    { d: 4, h: 0, m: 0, title: '感恩节 · 美股休市', impact: 'holiday', f: '—', p: '—', a: null },
-    { d: 5, h: 8, m: 30, title: '非农就业人口变动（11 月）', impact: 'high', f: '18.5 万', p: '17.2 万', a: null },
-    { d: 5, h: 8, m: 30, title: '失业率（11 月）', impact: 'medium', f: '4.1%', p: '4.1%', a: null },
-    { d: 6, h: 10, m: 0, title: 'ISM 制造业 PMI（11 月）', impact: 'medium', f: '47.8', p: '47.2', a: null },
+    { d: -1, h: 8, m: 30, title: __t('纽约联储制造业指数'), impact: 'low', f: '8.0', p: '6.6', a: '12.9' },
+    { d: 0, h: 8, m: 30, title: __t('CPI 月率（10 月）'), impact: 'high', f: '0.2%', p: '0.3%', a: null },
+    { d: 0, h: 21, m: 0, title: __t('美联储理事沃勒讲话'), impact: 'medium', f: '—', p: '—', a: null },
+    { d: 1, h: 8, m: 30, title: __t('初请失业金人数'), impact: 'medium', f: __t('22.5 万'), p: __t('22.1 万'), a: null },
+    { d: 1, h: 10, m: 0, title: __t('密歇根大学消费者信心指数'), impact: 'medium', f: '71.0', p: '70.5', a: null },
+    { d: 2, h: 8, m: 30, title: __t('PPI 月率（10 月）'), impact: 'medium', f: '0.2%', p: '0.1%', a: null },
+    { d: 2, h: 14, m: 0, title: __t('FOMC 会议纪要'), impact: 'high', f: '—', p: '—', a: null },
+    { d: 3, h: 8, m: 30, title: __t('零售销售月率（10 月）'), impact: 'high', f: '0.4%', p: '0.6%', a: null },
+    { d: 3, h: 21, m: 0, title: __t('美联储主席鲍威尔讲话'), impact: 'high', f: '—', p: '—', a: null },
+    { d: 4, h: 0, m: 0, title: __t('感恩节 · 美股休市'), impact: 'holiday', f: '—', p: '—', a: null },
+    { d: 5, h: 8, m: 30, title: __t('非农就业人口变动（11 月）'), impact: 'high', f: __t('18.5 万'), p: __t('17.2 万'), a: null },
+    { d: 5, h: 8, m: 30, title: __t('失业率（11 月）'), impact: 'medium', f: '4.1%', p: '4.1%', a: null },
+    { d: 6, h: 10, m: 0, title: __t('ISM 制造业 PMI（11 月）'), impact: 'medium', f: '47.8', p: '47.2', a: null },
   ];
-  const impactZhMap: Record<EconomicEvent['impact'], string> = { high: '高', medium: '中', low: '低', holiday: '休市' };
+  const impactZhMap: Record<EconomicEvent['impact'], string> = { high: '高', medium: __t('中'), low: '低', holiday: '休市' };
   return defs
     .map((e, i) => {
       const base = new Date();
@@ -1635,7 +1636,7 @@ export function getEconomicCalendar(): EconomicEvent[] {
         e.a !== null ? 'released' : at.getTime() <= Date.now() ? 'awaiting_source' : 'scheduled';
       return {
         eventId: `ev-${100 + i}`,
-        country: '美国',
+        country: __t('美国'),
         title: e.title,
         impact: e.impact,
         impactZh: impactZhMap[e.impact],
@@ -1653,11 +1654,11 @@ export function getEconomicCalendar(): EconomicEvent[] {
 export function getCatalystsSources(): SourceHealth[] {
   const r = new Rng(31337);
   const defs: { name: string; degraded?: boolean }[] = [
-    { name: '路透社' },
-    { name: '彭博社' },
+    { name: __t('路透社') },
+    { name: __t('彭博社') },
     { name: 'CNBC' },
-    { name: '华尔街日报' },
-    { name: '巴伦周刊' },
+    { name: __t('华尔街日报') },
+    { name: __t('巴伦周刊') },
     { name: 'MarketWatch', degraded: true },
   ];
   return defs.map((d, i) => ({
@@ -1666,7 +1667,7 @@ export function getCatalystsSources(): SourceHealth[] {
     latencyMs: d.degraded ? Math.round(r.float(2400, 3800)) : Math.round(r.float(220, 980)),
     lastFetchedAt: new Date(Date.now() - (40 + i * 26) * 1000).toISOString(),
     itemsToday: Math.round(r.float(6, 26)),
-    note: d.degraded ? '数据覆盖时间落后，采集流处于降级状态' : '运行正常',
+    note: d.degraded ? __t('数据覆盖时间落后，采集流处于降级状态') : __t('运行正常'),
   }));
 }
 
@@ -1676,11 +1677,11 @@ function buildCycle(seedNum: number, trigger: MarketFocusCycle['trigger'], gener
   /* 最后一只故意是「证据不足」：那是后端真会出现的一种状态（catalyst_bias 为 null），
      UI 必须显「证据不足」而不是 0.00，mock 里留一个样本守住这条路径。 */
   const assessments: FocusCycleStockAssessment[] = [
-    { ticker: 'NVDA', name: '英伟达', direction: 'bullish', catalystBias: round2(r.float(2.4, 4.2)), confidence: 0.82, horizon: 'days', insufficientEvidence: false, note: '算力订单能见度延长，焦点周期核心受益标的' },
-    { ticker: 'TSM', name: '台积电', direction: 'bullish', catalystBias: round2(r.float(1.2, 2.4)), confidence: 0.74, horizon: 'weeks', insufficientEvidence: false, note: '先进制程产能利用率维持满载，定价权稳固' },
-    { ticker: 'AMD', name: '超威半导体', direction: 'bullish', catalystBias: round2(r.float(0.8, 1.8)), confidence: 0.61, horizon: 'days', insufficientEvidence: false, note: '加速卡份额提升预期，跟随主线但弹性次之' },
-    { ticker: 'INTC', name: '英特尔', direction: 'bearish', catalystBias: -round2(r.float(0.6, 1.4)), confidence: 0.55, horizon: 'weeks', insufficientEvidence: false, note: '资本开支主线之外，相对资金吸引力下降' },
-    { ticker: 'SMCI', name: '超微电脑', direction: 'neutral', catalystBias: null, confidence: 0.3, horizon: 'uncertain', insufficientEvidence: true, note: '出货节奏与毛利率信号混杂，证据不足以给出偏向' },
+    { ticker: 'NVDA', name: __t('英伟达'), direction: 'bullish', catalystBias: round2(r.float(2.4, 4.2)), confidence: 0.82, horizon: 'days', insufficientEvidence: false, note: '算力订单能见度延长，焦点周期核心受益标的' },
+    { ticker: 'TSM', name: __t('台积电'), direction: 'bullish', catalystBias: round2(r.float(1.2, 2.4)), confidence: 0.74, horizon: 'weeks', insufficientEvidence: false, note: '先进制程产能利用率维持满载，定价权稳固' },
+    { ticker: 'AMD', name: __t('超威半导体'), direction: 'bullish', catalystBias: round2(r.float(0.8, 1.8)), confidence: 0.61, horizon: 'days', insufficientEvidence: false, note: '加速卡份额提升预期，跟随主线但弹性次之' },
+    { ticker: 'INTC', name: __t('英特尔'), direction: 'bearish', catalystBias: -round2(r.float(0.6, 1.4)), confidence: 0.55, horizon: 'weeks', insufficientEvidence: false, note: '资本开支主线之外，相对资金吸引力下降' },
+    { ticker: 'SMCI', name: __t('超微电脑'), direction: 'neutral', catalystBias: null, confidence: 0.3, horizon: 'uncertain', insufficientEvidence: true, note: '出货节奏与毛利率信号混杂，证据不足以给出偏向' },
   ];
   return {
     cycleId: `fc-${idSuffix}`,
@@ -1740,7 +1741,7 @@ export function triggerFocusCycle(): FocusCycleJob {
 
 export function getFocusCycleJob(jobId: string): FocusCycleJob {
   const rec = focusJobs.get(jobId);
-  if (!rec) throw new Error('任务不存在');
+  if (!rec) throw new Error(__t('任务不存在'));
   const age = Date.now() - rec._born;
   if (rec.status === 'queued' || rec.status === 'in_progress') {
     if (age < 1300) {

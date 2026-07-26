@@ -18,6 +18,7 @@ import type {
   StrengthProfile,
   WatchlistItem,
 } from '@/api/types';
+import { t as __t } from '../i18n/core.ts';
 
 const rng = new Rng(20240521);
 
@@ -30,12 +31,12 @@ const infoOf = (t: string): TickerInfo => TICKER_POOL.find((x) => x.ticker === t
 
 /* ---------------- 指数 tape ---------------- */
 const INDEX_BASE: { code: string; name: string; base: number }[] = [
-  { code: 'SPX', name: '标普 500', base: 5972.4 },
-  { code: 'NDX', name: '纳指 100', base: 21468.2 },
+  { code: 'SPX', name: __t('标普 500'), base: 5972.4 },
+  { code: 'NDX', name: __t('纳指 100'), base: 21468.2 },
   { code: 'DJI', name: '道琼斯', base: 43828.1 },
-  { code: 'RUT', name: '罗素 2000', base: 2382.6 },
+  { code: 'RUT', name: __t('罗素 2000'), base: 2382.6 },
   { code: 'SOX', name: '费城半导体', base: 5124.7 },
-  { code: 'VIX', name: '波动率指数', base: 14.86 },
+  { code: 'VIX', name: __t('波动率指数'), base: 14.86 },
 ];
 
 interface QuoteState { price: number; prevClose: number }
@@ -195,9 +196,9 @@ export function getMarketStrength(): MarketStrength {
 
 export function getStrengthProfiles(): StrengthProfile[] {
   return [
-    { id: 'balanced', name: '均衡动量', description: '趋势/动量/量能/波动均衡加权，适合大多数市况。', weights: { trend: 30, momentum: 30, volume: 20, volatility: 20 } },
-    { id: 'breakout', name: '突破猎手', description: '加重动量与量能，捕捉放量突破早期的标的。', weights: { trend: 20, momentum: 40, volume: 30, volatility: 10 } },
-    { id: 'lowvol', name: '低波稳健', description: '偏好低波动与趋势延续，回撤优先。', weights: { trend: 40, momentum: 15, volume: 10, volatility: 35 } },
+    { id: 'balanced', name: __t('均衡动量'), description: __t('趋势/动量/量能/波动均衡加权，适合大多数市况。'), weights: { trend: 30, momentum: 30, volume: 20, volatility: 20 } },
+    { id: 'breakout', name: __t('突破猎手'), description: __t('加重动量与量能，捕捉放量突破早期的标的。'), weights: { trend: 20, momentum: 40, volume: 30, volatility: 10 } },
+    { id: 'lowvol', name: __t('低波稳健'), description: __t('偏好低波动与趋势延续，回撤优先。'), weights: { trend: 40, momentum: 15, volume: 10, volatility: 35 } },
   ];
 }
 
@@ -236,7 +237,7 @@ export function runStrengthScan(): ScreenerRow[] {
               macroFitConfidence: round2(r.float(0.62, 1)),
               macroSupporting: [
                 { factor_id: 'fed_net_liquidity', label: '联储净流动性' },
-                { factor_id: 'risk_vs_safe', label: '风险资产相对避险' },
+                { factor_id: 'risk_vs_safe', label: __t('风险资产相对避险') },
               ],
               macroOpposing: [{ factor_id: 'real_rate_level', label: '实际利率水平' }],
               macroTechnicalGap: round2(r.float(-28, 28)),
@@ -416,14 +417,14 @@ export function getStockTrendBias(ticker: string): StockTrendBias {
   const factors: TrendBiasFactor[] = [
     {
       key: 'trend',
-      label: '趋势结构',
+      label: __t('趋势结构'),
       tone: toneOf(scores.trend),
       reading:
         scores.trend >= 60
-          ? '价格站上 MA20，短均线呈多头排列，趋势分偏强'
+          ? __t('价格站上 MA20，短均线呈多头排列，趋势分偏强')
           : scores.trend <= 40
-            ? '价格跌破 MA20，均线拐头向下，趋势分偏弱'
-            : '价格围绕 MA20 反复，趋势方向尚未确认',
+            ? __t('价格跌破 MA20，均线拐头向下，趋势分偏弱')
+            : __t('价格围绕 MA20 反复，趋势方向尚未确认'),
     },
     {
       key: 'momentum',
@@ -431,10 +432,10 @@ export function getStockTrendBias(ticker: string): StockTrendBias {
       tone: toneOf(scores.momentum),
       reading:
         scores.momentum >= 60
-          ? '动量读数上行，近端斜率加速，追涨情绪占优'
+          ? __t('动量读数上行，近端斜率加速，追涨情绪占优')
           : scores.momentum <= 40
-            ? '动量读数回落，近端斜率走弱，注意回撤风险'
-            : '动量读数走平，多空力量暂时均衡',
+            ? __t('动量读数回落，近端斜率走弱，注意回撤风险')
+            : __t('动量读数走平，多空力量暂时均衡'),
     },
     {
       key: 'volume',
@@ -442,21 +443,21 @@ export function getStockTrendBias(ticker: string): StockTrendBias {
       tone: toneOf(scores.volume),
       reading:
         scores.volume >= 60
-          ? '成交较 20 日均量明显放大，量能配合价格方向'
+          ? __t('成交较 20 日均量明显放大，量能配合价格方向')
           : scores.volume <= 40
-            ? '成交较 20 日均量萎缩，方向缺乏量能确认'
-            : '量能维持在常态区间，未见异常放量',
+            ? __t('成交较 20 日均量萎缩，方向缺乏量能确认')
+            : __t('量能维持在常态区间，未见异常放量'),
     },
     {
       key: 'volatility',
-      label: '波动定价',
+      label: __t('波动定价'),
       tone: toneOf(scores.volatility),
       reading:
         scores.volatility >= 60
-          ? 'IV 百分位偏高，期权定价隐含较大波动预期'
+          ? __t('IV 百分位偏高，期权定价隐含较大波动预期')
           : scores.volatility <= 40
-            ? 'IV 百分位偏低，期权定价相对便宜'
-            : 'IV 百分位处于中位，波动定价中性',
+            ? __t('IV 百分位偏低，期权定价相对便宜')
+            : __t('IV 百分位处于中位，波动定价中性'),
     },
   ];
   return {

@@ -1,5 +1,6 @@
 /** 数字 / 时间格式化（等宽数字场景统一走这里） */
 
+import { t } from '../i18n/core.ts';
 export function fmtPrice(n: number, digits = 2): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
@@ -43,7 +44,7 @@ export function fmtRelative(iso: string | null | undefined): string {
   const diff = Date.now() - new Date(iso).getTime();
   if (!Number.isFinite(diff)) return '—';
   const min = Math.floor(diff / 60_000);
-  if (min < 1) return '刚刚';
+  if (min < 1) return t('刚刚');
   if (min < 60) return `${min} 分钟前`;
   const h = Math.floor(min / 60);
   if (h < 24) return `${h} 小时前`;

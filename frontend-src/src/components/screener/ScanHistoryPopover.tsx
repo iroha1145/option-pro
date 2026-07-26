@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import Icon from '@/components/icons';
 import type { ScanHistoryEntry } from './types';
+import { t } from '../../i18n/core.ts';
 
 const SPRING_POP = { type: 'spring', stiffness: 520, damping: 32 } as const;
 
@@ -43,22 +44,22 @@ export default function ScanHistoryPopover({ history }: { history: ScanHistoryEn
         )}
       >
         <Icon name="clock-ny" size={14} />
-        扫描历史
+        {t('扫描历史')}
       </button>
       <AnimatePresence>
         {open && (
           <motion.div
             role="dialog"
-            aria-label="最近扫描记录"
+            aria-label={t("最近扫描记录")}
             initial={{ opacity: 0, scale: 0.96, y: -4 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: -4, transition: { duration: 0.16 } }}
             transition={SPRING_POP}
             className="absolute right-0 top-11 z-40 w-[320px] origin-top-right rounded-md border border-line bg-card p-2 shadow-sh-2"
           >
-            <p className="px-2 pb-1.5 pt-1 eyebrow">最近 5 次扫描</p>
+            <p className="px-2 pb-1.5 pt-1 eyebrow">{t('最近 5 次扫描')}</p>
             {history.length === 0 ? (
-              <p className="px-2 py-4 text-center text-caption text-ink-400">尚无扫描记录</p>
+              <p className="px-2 py-4 text-center text-caption text-ink-400">{t('尚无扫描记录')}</p>
             ) : (
               <ul className="divide-y divide-line">
                 {history.slice(0, 5).map((h, i) => (
@@ -68,7 +69,7 @@ export default function ScanHistoryPopover({ history }: { history: ScanHistoryEn
                       {h.summary}
                     </span>
                     <span className="shrink-0 rounded-xs bg-brand-50 px-1.5 py-px font-mono text-micro text-brand-700 tnum">
-                      {h.count} 只
+                      {h.count} {t('只')}
                     </span>
                   </li>
                 ))}

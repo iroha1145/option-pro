@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '@/api/client';
+import { t } from '../i18n/core.ts';
 
 export interface PollingState<T> {
   data: T | null;
@@ -40,7 +41,7 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number | nu
       setLastUpdatedAt(Date.now());
     } catch (e) {
       if (!activeGenerationsRef.current.has(generation) || generation !== generationRef.current) return;
-      setError(e instanceof ApiError ? e : new ApiError(500, e instanceof Error ? e.message : '未知错误'));
+      setError(e instanceof ApiError ? e : new ApiError(500, e instanceof Error ? e.message : t('未知错误')));
     } finally {
       inFlightGenerationsRef.current.delete(generation);
       if (activeGenerationsRef.current.has(generation) && generation === generationRef.current) {

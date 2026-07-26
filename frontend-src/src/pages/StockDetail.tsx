@@ -7,6 +7,7 @@ import { useNavigate, useParams } from 'react-router';
 import StockDrawerBody from '@/components/StockDrawerBody';
 import PageHeader from '@/components/shared/PageHeader';
 import Icon from '@/components/icons';
+import { t as __t } from '../i18n/core.ts';
 
 export default function StockDetail() {
   const { ticker = '' } = useParams();
@@ -27,7 +28,7 @@ export default function StockDetail() {
         section="STK"
         eyebrow={`STOCK · $${t}`}
         title={t}
-        description="行情、技术信号、期权链与相关新闻的全上下文视图 · 数据延迟 15 分钟"
+        description={__t("行情、技术信号、期权链与相关新闻的全上下文视图 · 数据延迟 15 分钟")}
         meta={
           <button
             type="button"
@@ -35,7 +36,7 @@ export default function StockDetail() {
             className="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-card px-3 py-1.5 text-caption font-medium text-ink-600 transition-colors duration-fast hover:bg-paper-2 hover:text-ink-800"
           >
             <Icon name="chevron-right" size={14} className="rotate-180" />
-            返回
+            {__t('返回')}
           </button>
         }
       />

@@ -24,14 +24,15 @@ import SourcesPanel from '@/components/catalysts/SourcesPanel';
 import NewsDrawer from '@/components/catalysts/NewsDrawer';
 import { clearCatalystReadCache } from '@/components/catalysts/api';
 import type { CatalystNewsItem, NewsAnalysisStatus, NewsClassification } from '@/components/catalysts/api';
+import { t as __t } from '../i18n/core.ts';
 
 type TabId = 'feed' | 'stocks' | 'calendar' | 'sources';
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'feed', label: '新闻流' },
-  { id: 'stocks', label: '股票影响' },
-  { id: 'calendar', label: '经济日历' },
-  { id: 'sources', label: '数据源' },
+  { id: 'feed', label: __t('新闻流') },
+  { id: 'stocks', label: __t('股票影响') },
+  { id: 'calendar', label: __t('经济日历') },
+  { id: 'sources', label: __t('数据源') },
 ];
 
 /* URL 参数必须逐项校验（审计 P2-23）：分类与状态此前用强制类型断言直接透传，
@@ -137,22 +138,22 @@ export default function Catalysts() {
       <PageHeader
         section="06"
         eyebrow="CATALYSTS · NEWS FLOW"
-        title="新闻催化剂"
-        description="每一条新闻，都是一次重新定价的开始。"
+        title={__t("新闻催化剂")}
+        description={__t("每一条新闻，都是一次重新定价的开始。")}
         meta={
           <>
             {lastLoadedAt && (
               <span className="hidden font-mono text-micro text-ink-400 tnum sm:inline" suppressHydrationWarning>
-                更新 {fmtTimeHHMMSS(lastLoadedAt)}
+                {__t('更新')} {fmtTimeHHMMSS(lastLoadedAt)}
               </span>
             )}
             <button
               onClick={onRefresh}
               className="flex h-9 items-center gap-2 rounded-md border border-line bg-card px-3 text-caption text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
-              title="刷新本页数据"
+              title={__t("刷新本页数据")}
             >
               <Icon name="refresh" size={15} className={spinning ? 'animate-spin-once' : ''} />
-              刷新
+              {__t('刷新')}
             </button>
           </>
         }
@@ -179,7 +180,7 @@ export default function Catalysts() {
 
 
       {/* 标签页（URL 同步 ?tab=） */}
-      <div className="no-scrollbar mt-8 flex items-center gap-1 overflow-x-auto border-b border-line" role="tablist" aria-label="催化剂视图">
+      <div className="no-scrollbar mt-8 flex items-center gap-1 overflow-x-auto border-b border-line" role="tablist" aria-label={__t("催化剂视图")}>
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -202,7 +203,7 @@ export default function Catalysts() {
           </button>
         ))}
         {tab === 'feed' && total !== null && (
-          <span className="ml-auto shrink-0 pb-1 font-mono text-micro text-ink-400 tnum">{total} 条</span>
+          <span className="ml-auto shrink-0 pb-1 font-mono text-micro text-ink-400 tnum">{total} {__t('条')}</span>
         )}
       </div>
 

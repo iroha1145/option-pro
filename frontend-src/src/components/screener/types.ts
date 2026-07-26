@@ -4,6 +4,7 @@
  * - 周期 short/mid/long/all · 偏好 conservative/balanced/aggressive（契约枚举）
  */
 import type { ScreenerRow, ScreenerSubscoreDim, Signal } from '@/api/types';
+import { t as __t } from '../../i18n/core.ts';
 
 export type Tier = 'S' | 'A' | 'B' | 'C' | 'D';
 export type TierFilter = 'all' | 'S' | 'A' | 'B' | 'C';
@@ -12,22 +13,22 @@ export type ProfilePref = 'conservative' | 'balanced' | 'aggressive';
 export type SortMode = 'deterministic' | 'latest' | 'impact';
 
 export const TIMEFRAME_CN: Record<Timeframe, string> = {
-  short: '短期',
-  mid: '中期',
-  long: '长期',
-  all: '全部周期',
+  short: __t('短期'),
+  mid: __t('中期'),
+  long: __t('长期'),
+  all: __t('全部周期'),
 };
 
 export const PROFILE_CN: Record<ProfilePref, string> = {
-  conservative: '稳健',
-  balanced: '均衡',
-  aggressive: '进取',
+  conservative: __t('稳健'),
+  balanced: __t('均衡'),
+  aggressive: __t('进取'),
 };
 
 export const SORT_CN: Record<SortMode, string> = {
-  deterministic: '确定性',
-  latest: '最新催化',
-  impact: '影响力',
+  deterministic: __t('确定性'),
+  latest: __t('最新催化'),
+  impact: __t('影响力'),
 };
 
 export function tierOf(score: number): Tier {
@@ -73,21 +74,21 @@ export interface ScreenerStrengthPresentation {
 
 export function screenerStrengthPresentation(score: number): ScreenerStrengthPresentation {
   if (score >= 90) {
-    return { band: 'S', tone: 's', label: '顶尖', barClass: 'bg-up-700', textClass: 'text-up-700' };
+    return { band: 'S', tone: 's', label: __t('顶尖'), barClass: 'bg-up-700', textClass: 'text-up-700' };
   }
   if (score >= 85) {
-    return { band: 'A', tone: 'a-high', label: '极强', barClass: 'bg-up-600', textClass: 'text-up-700' };
+    return { band: 'A', tone: 'a-high', label: __t('极强'), barClass: 'bg-up-600', textClass: 'text-up-700' };
   }
   if (score >= 80) {
-    return { band: 'A', tone: 'a', label: '强势', barClass: 'bg-brand-600', textClass: 'text-brand-700' };
+    return { band: 'A', tone: 'a', label: __t('强势'), barClass: 'bg-brand-600', textClass: 'text-brand-700' };
   }
   if (score >= 70) {
-    return { band: 'B', tone: 'b', label: '较强', barClass: 'bg-brand-400', textClass: 'text-brand-700' };
+    return { band: 'B', tone: 'b', label: __t('较强'), barClass: 'bg-brand-400', textClass: 'text-brand-700' };
   }
   if (score >= 60) {
-    return { band: 'C', tone: 'c', label: '观察', barClass: 'bg-warn-600', textClass: 'text-warn-600' };
+    return { band: 'C', tone: 'c', label: __t('观察'), barClass: 'bg-warn-600', textClass: 'text-warn-600' };
   }
-  return { band: 'D', tone: 'd', label: '偏弱', barClass: 'bg-ink-300', textClass: 'text-ink-600' };
+  return { band: 'D', tone: 'd', label: __t('偏弱'), barClass: 'bg-ink-300', textClass: 'text-ink-600' };
 }
 
 /** 筛选条件（draft = 工作台编辑中；applied = 上次扫描快照） */
@@ -199,10 +200,10 @@ export interface ScanHistoryEntry {
 
 /** 分项元数据（mock ScreenerRow.subscores 键 → 中文名；live 行自带 subscoreDims 真实标签） */
 export const SUBSCORE_META: { key: keyof ScreenerRow['subscores']; label: string }[] = [
-  { key: 'trend', label: '趋势' },
-  { key: 'momentum', label: '动量' },
-  { key: 'volume', label: '量能' },
-  { key: 'volatility', label: '波动' },
+  { key: 'trend', label: __t('趋势') },
+  { key: 'momentum', label: __t('动量') },
+  { key: 'volume', label: __t('量能') },
+  { key: 'volatility', label: __t('波动') },
 ];
 
 /**
@@ -218,11 +219,11 @@ export const TOPN_OPTIONS: { value: number; label: string }[] = [
   { value: 10, label: 'Top 10' },
   { value: 20, label: 'Top 20' },
   { value: 40, label: 'Top 40' },
-  { value: 0, label: '最多 120' },
+  { value: 0, label: __t('最多 120') },
 ];
 
 export const DOLLAR_VOL_OPTIONS: { value: number; label: string }[] = [
-  { value: 0, label: '不限成交额' },
+  { value: 0, label: __t('不限成交额') },
   { value: DEFAULT_MIN_DOLLAR_VOLUME, label: '≥ 10M' },
   { value: 5e8, label: '≥ 500M' },
   { value: 1e9, label: '≥ 1B' },

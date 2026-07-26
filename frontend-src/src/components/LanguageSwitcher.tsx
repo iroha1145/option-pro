@@ -6,8 +6,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { LOCALES, getLocale, setLocale } from '@/i18n/core';
-import { t } from '@/i18n/core';
+import { LOCALES, getLocale, setLocale } from '../i18n/core.ts';
+import { t } from '../i18n/core.ts';
 import Icon from '@/components/icons';
 
 const SPRING_POP = { type: 'spring', stiffness: 520, damping: 32 } as const;

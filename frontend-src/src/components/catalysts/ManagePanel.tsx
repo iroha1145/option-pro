@@ -21,30 +21,31 @@ import { Led } from './bits';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { fmtRelative } from '@/lib/format';
+import { t as __t } from '../../i18n/core.ts';
 
 const REFRESH_OPS: { op: RefreshOperation; label: string }[] = [
-  { op: 'news', label: '新闻流' },
-  { op: 'calendar', label: '经济日历' },
-  { op: 'source_health', label: '源健康' },
+  { op: 'news', label: __t('新闻流') },
+  { op: 'calendar', label: __t('经济日历') },
+  { op: 'source_health', label: __t('源健康') },
 ];
 
 const WORKER_ACTIONS: { action: WorkerActionType; label: string }[] = [
-  { action: 'focus_refresh', label: '焦点股票池' },
-  { action: 'strength_refresh', label: '强势雷达' },
-  { action: 'breakout_refresh', label: '突破雷达' },
+  { action: 'focus_refresh', label: __t('焦点股票池') },
+  { action: 'strength_refresh', label: __t('强势雷达') },
+  { action: 'breakout_refresh', label: __t('突破雷达') },
 ];
 
 const TASK_CN: Record<string, string> = {
-  breakout: '突破扫描',
-  catalyst_sync: '催化剂同步',
-  focus: '焦点池',
-  ai_jobs: 'AI 任务',
-  maintenance: '维护',
-  public_home: '公共快照',
-  focus_refresh: '焦点刷新',
-  strength_refresh: '强势刷新',
-  breakout_refresh: '突破刷新',
-  retention: '数据保留',
+  breakout: __t('突破扫描'),
+  catalyst_sync: __t('催化剂同步'),
+  focus: __t('焦点池'),
+  ai_jobs: __t('AI 任务'),
+  maintenance: __t('维护'),
+  public_home: __t('公共快照'),
+  focus_refresh: __t('焦点刷新'),
+  strength_refresh: __t('强势刷新'),
+  breakout_refresh: __t('突破刷新'),
+  retention: __t('数据保留'),
 };
 
 function errText(e: unknown): string {
@@ -52,7 +53,7 @@ function errText(e: unknown): string {
     const cooldown = e.retryAfter != null ? `（${Math.ceil(e.retryAfter)}s 后可重试）` : '';
     return `${e.message}${cooldown}`;
   }
-  return e instanceof Error ? e.message : '请求失败';
+  return e instanceof Error ? e.message : __t('请求失败');
 }
 
 function SectionCard({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
@@ -184,8 +185,8 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       setBusyOp(`w-${action}`);
       try {
         const t = await adminApi.workerAction(action);
-        if (t.reason === 'cooldown') toast.info(`${label}仍在冷却`, '稍后自动执行或重试');
-        else if (t.reason === 'already_running') toast.info(`${label}正在执行`, '复用现有任务');
+        if (t.reason === 'cooldown') toast.info(`${label}仍在冷却`, __t('稍后自动执行或重试'));
+        else if (t.reason === 'already_running') toast.info(`${label}正在执行`, __t('复用现有任务'));
         else toast.success(`${label}刷新已入队`);
         adminApi.workerStatus().then(setWorker, () => undefined);
       } catch (e) {
@@ -207,13 +208,13 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       });
       setDoc(next);
       setDraft({ manual: next.toggles.manualAnalysisEnabled ?? false, scheduled: next.toggles.scheduledAnalysisEnabled ?? false });
-      toast.success('运行设置已保存', `版本 v${next.version}`);
+      toast.success(__t('运行设置已保存'), `版本 v${next.version}`);
     } catch (e) {
       if (e instanceof ApiError && (e.bizCode === 'version_conflict' || e.code === 409)) {
-        toast.error('设置已被其他会话修改', '已重新载入最新版本');
+        toast.error(__t('设置已被其他会话修改'), __t('已重新载入最新版本'));
         void loadOwnerState();
       } else {
-        toast.error('保存失败', errText(e));
+        toast.error(__t('保存失败'), errText(e));
       }
     } finally {
       setSaving(false);
@@ -227,7 +228,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       const history = await adminApi.runtimeHistory();
       const prev = history.filter((h) => !h.current && h.version < doc.version).sort((a, b) => b.version - a.version)[0];
       if (!prev) {
-        toast.info('没有可回滚的历史版本');
+        toast.info(__t('没有可回滚的历史版本'));
         return;
       }
       const next = await adminApi.rollbackRuntimeSettings(doc.version, prev.version);
@@ -235,7 +236,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       setDraft({ manual: next.toggles.manualAnalysisEnabled ?? false, scheduled: next.toggles.scheduledAnalysisEnabled ?? false });
       toast.success(`已回滚到 v${prev.version}`, `当前版本 v${next.version}`);
     } catch (e) {
-      toast.error('回滚失败', errText(e));
+      toast.error(__t('回滚失败'), errText(e));
     } finally {
       setSaving(false);
     }
@@ -248,7 +249,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
   return (
     /* 后续区块 rise-in 减量：直接呈现 */
     <section
-      aria-label="催化剂管理面板"
+      aria-label={__t("催化剂管理面板")}
       className="card-surface mt-6 overflow-hidden"
     >
       <button
@@ -260,7 +261,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
           <Icon name="shield" size={15} className="text-brand-600" />
           <span>
             <span className="eyebrow block">OWNER CONSOLE</span>
-            <span className="text-body-s font-medium text-ink-800">管理面板 · 数据刷新 / 后台任务 / 运行设置</span>
+            <span className="text-body-s font-medium text-ink-800">{__t('管理面板 · 数据刷新 / 后台任务 / 运行设置')}</span>
           </span>
         </span>
         <span className="flex items-center gap-2.5">
@@ -268,7 +269,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
             <span className="hidden items-center gap-1.5 font-mono text-micro text-ink-400 sm:flex">
               {/* worker 健康是静态状态，不脉冲 */}
               <Led tone={worker.healthy ? 'up' : 'down'} className="size-1.5" />
-              worker {worker.healthy ? '正常' : worker.status}
+              worker {worker.healthy ? __t('正常') : worker.status}
             </span>
           )}
           <Icon name="chevron-down" size={15} className={cn('text-ink-400 transition-transform duration-ui', open && 'rotate-180')} />
@@ -285,7 +286,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
             className="overflow-hidden"
           >
             <div className="grid grid-cols-1 gap-3 border-t border-line px-5 py-4 lg:grid-cols-3">
-              <SectionCard title="数据刷新" hint="只重拉所选数据，不触发模型任务，不占用 AI 预算">
+              <SectionCard title={__t("数据刷新")} hint={__t("只重拉所选数据，不触发模型任务，不占用 AI 预算")}>
                 <div className="flex flex-wrap gap-2">
                   {REFRESH_OPS.map((o) => (
                     <ActionButton key={o.op} label={o.label} busy={busyOp === `r-${o.op}`} onClick={() => void runRefresh(o.op, o.label)} />
@@ -293,14 +294,14 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                 </div>
               </SectionCard>
 
-              <SectionCard title="后台任务" hint="进入统一后台队列；重复点击复用现有任务（30s 冷却）">
+              <SectionCard title={__t("后台任务")} hint={__t("进入统一后台队列；重复点击复用现有任务（30s 冷却）")}>
                 <div className="flex flex-wrap gap-2">
                   {WORKER_ACTIONS.map((a) => (
                     <ActionButton key={a.action} label={a.label} busy={busyOp === `w-${a.action}`} onClick={() => void runWorkerAction(a.action, a.label)} />
                   ))}
                 </div>
                 {workerErr ? (
-                  <p className="mt-3 text-micro text-ink-400">后台状态不可用 · {workerErr}</p>
+                  <p className="mt-3 text-micro text-ink-400">{__t('后台状态不可用 ·')} {workerErr}</p>
                 ) : worker && worker.tasks.length > 0 ? (
                   <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1">
                     {worker.tasks.map((t) => (
@@ -314,20 +315,20 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                 ) : null}
               </SectionCard>
 
-              <SectionCard title="运行设置" hint={doc ? `版本 v${doc.version} · 乐观锁保护` : '正在读取运行设置'}>
+              <SectionCard title={__t("运行设置")} hint={doc ? `版本 v${doc.version} · 乐观锁保护` : __t('正在读取运行设置')}>
                 {docErr ? (
-                  <p className="text-micro text-ink-400">运行设置不可用 · {docErr}</p>
+                  <p className="text-micro text-ink-400">{__t('运行设置不可用 ·')} {docErr}</p>
                 ) : draft ? (
                   <div className="space-y-2">
-                    <Toggle label="允许手动分析" value={draft.manual} onChange={(v) => setDraft({ ...draft, manual: v })} />
-                    <Toggle label="定时分析" value={draft.scheduled} onChange={(v) => setDraft({ ...draft, scheduled: v })} />
+                    <Toggle label={__t("允许手动分析")} value={draft.manual} onChange={(v) => setDraft({ ...draft, manual: v })} />
+                    <Toggle label={__t("定时分析")} value={draft.scheduled} onChange={(v) => setDraft({ ...draft, scheduled: v })} />
                     <div className="flex items-center justify-end gap-2 pt-1">
                       <button
                         onClick={() => void rollback()}
                         disabled={saving}
                         className="rounded-md border border-line bg-card px-2.5 py-1.5 text-caption text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-50"
                       >
-                        回滚上一版
+                        {__t('回滚上一版')}
                       </button>
                       <button
                         onClick={() => void saveSettings()}
@@ -337,12 +338,12 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                           dirty ? 'bg-brand-600 hover:brightness-105' : 'bg-ink-300',
                         )}
                       >
-                        {saving ? '保存中…' : '保存设置'}
+                        {saving ? __t('保存中…') : __t('保存设置')}
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-micro text-ink-400">正在读取…</p>
+                  <p className="text-micro text-ink-400">{__t('正在读取…')}</p>
                 )}
               </SectionCard>
             </div>

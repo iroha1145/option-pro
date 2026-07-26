@@ -37,6 +37,7 @@ import {
   prioritizeEarningsRows,
   weekStartMonday,
 } from '@/components/earnings/types';
+import { t } from '../i18n/core.ts';
 
 const REFRESH_COOLDOWN_S = 60;
 const LIST_PAGE_SIZE = 24;
@@ -149,7 +150,7 @@ export default function Earnings() {
       setCooldownUntil(Date.now() + retrySeconds * 1000);
       if (fresh.refreshStatus === 'failed_stale') {
         setRefreshStatus('failed_stale');
-        toast.info('上游刷新失败，继续使用上一次完整日历');
+        toast.info(t('上游刷新失败，继续使用上一次完整日历'));
         return;
       }
       if (fresh.refreshStatus === 'cooldown') {
@@ -165,7 +166,7 @@ export default function Earnings() {
       if (q.data) {
         setRefreshStatus('failed_stale');
       } else {
-        toast.error('刷新失败', e instanceof ApiError ? e.message : undefined);
+        toast.error(t('刷新失败'), e instanceof ApiError ? e.message : undefined);
       }
     } finally {
       setRefreshing(false);
@@ -236,19 +237,19 @@ export default function Earnings() {
         className="flex items-center gap-2"
         aria-label={
           aiAvailable
-            ? 'AI 分析可用'
+            ? t('AI 分析可用')
             : aiEnabled
-              ? 'AI 分析暂不可用'
+              ? t('AI 分析暂不可用')
               : isOwner
-                ? 'AI 分析未开启'
-                : '单股分析可用'
+                ? t('AI 分析未开启')
+                : t('单股分析可用')
         }
       >
         {aiAvailable ? (
           <>
             <PulseDot className="bg-ai-600" size={8} />
             <Icon name="spark-ai" size={15} className="text-ai-600" />
-            <span className="text-caption text-ai-600">AI 可用</span>
+            <span className="text-caption text-ai-600">{t('AI 可用')}</span>
           </>
         ) : aiEnabled ? (
           <>
@@ -256,30 +257,30 @@ export default function Earnings() {
             <Icon name="spark-ai" size={15} className="text-warn-600" />
             <span className="text-caption text-warn-600">
               {['analysis_in_progress', 'global_concurrency_limit', 'queue_busy'].includes(aiReason ?? '')
-                ? 'AI 处理中'
-                : 'AI 暂不可用'}
+                ? t('AI 处理中')
+                : t('AI 暂不可用')}
             </span>
           </>
         ) : (
           <>
             <span className="size-2 rounded-full bg-ink-300" aria-hidden="true" />
             <Icon name="spark-ai" size={15} className="text-ink-300" />
-            <span className="text-caption text-ink-400">{isOwner ? 'AI 未开启' : '单股分析可用'}</span>
+            <span className="text-caption text-ink-400">{isOwner ? t('AI 未开启') : t('单股分析可用')}</span>
           </>
         )}
       </span>
       {isOwner && (
         <span className="flex items-center gap-2.5">
           {refreshStatus === 'failed_stale' && (
-            <span className="font-mono text-micro text-warn-600">刷新失败 · 显示已有数据</span>
+            <span className="font-mono text-micro text-warn-600">{t('刷新失败 · 显示已有数据')}</span>
           )}
           {refreshStatus === 'refreshed' && cooldownRemain <= 0 && q.lastUpdatedAt && (
-            <span className="font-mono text-micro text-ink-400 tnum">已更新 {fmtTimeHHMMSS(q.lastUpdatedAt)}</span>
+            <span className="font-mono text-micro text-ink-400 tnum">{t('已更新')} {fmtTimeHHMMSS(q.lastUpdatedAt)}</span>
           )}
           <button
             onClick={() => void onRefresh()}
             disabled={refreshing || cooldownRemain > 0}
-            title={cooldownRemain > 0 ? `冷却中，${cooldownRemain}s 后可刷新` : '手动刷新财报日历'}
+            title={cooldownRemain > 0 ? `冷却中，${cooldownRemain}s 后可刷新` : t('手动刷新财报日历')}
             className={cn(
               'flex h-9 items-center gap-2 rounded-md border px-3 text-caption transition-colors duration-fast',
               refreshing || cooldownRemain > 0
@@ -288,7 +289,7 @@ export default function Earnings() {
             )}
           >
             <Icon name="refresh" size={15} className={refreshing ? 'animate-spin-once' : ''} />
-            {refreshing ? '刷新中' : cooldownRemain > 0 ? <span className="font-mono tnum">{cooldownRemain}s</span> : '刷新日历'}
+            {refreshing ? t('刷新中') : cooldownRemain > 0 ? <span className="font-mono tnum">{cooldownRemain}s</span> : t('刷新日历')}
           </button>
         </span>
       )}
@@ -301,8 +302,8 @@ export default function Earnings() {
       <PageHeader
         section="05"
         eyebrow="EARNINGS · AI IMPACT"
-        title="财报日历"
-        description="一份财报落地，涟漪会沿着供应链传开。"
+        title={t("财报日历")}
+        description={t("一份财报落地，涟漪会沿着供应链传开。")}
         meta={headerMeta}
       />
 
@@ -312,13 +313,13 @@ export default function Earnings() {
       {refreshStatus !== 'failed_stale' && q.error && items.length > 0 && (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-md border border-warn-600/30 bg-warn-50 px-4 py-2.5">
           <p className="text-caption text-warn-600">
-            自动刷新失败，当前显示的是上一次的数据，可能已经过时。
+            {t('自动刷新失败，当前显示的是上一次的数据，可能已经过时。')}
           </p>
           <button
             onClick={q.refresh}
             className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-600 transition-colors hover:bg-warn-600 hover:text-white"
           >
-            重试
+            {t('重试')}
           </button>
         </div>
       )}
@@ -326,12 +327,12 @@ export default function Earnings() {
       {/* failed_stale：失败带缓存 → _stale 横幅 */}
       {refreshStatus === 'failed_stale' && (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-md border border-warn-600/30 bg-warn-50 px-4 py-2.5">
-          <p className="text-caption text-warn-600">刷新失败，当前显示的是上一次的数据，可能已经过时。</p>
+          <p className="text-caption text-warn-600">{t('刷新失败，当前显示的是上一次的数据，可能已经过时。')}</p>
           <button
             onClick={() => void onRefresh()}
             className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-600 transition-colors hover:bg-warn-600 hover:text-white"
           >
-            重试
+            {t('重试')}
           </button>
         </div>
       )}
@@ -342,9 +343,9 @@ export default function Earnings() {
           role="status"
         >
           <div>
-            <p className="text-caption font-medium text-warn-600">财报数据暂时不完整</p>
+            <p className="text-caption font-medium text-warn-600">{t('财报数据暂时不完整')}</p>
             <p className="mt-0.5 text-micro text-ink-500">
-              当前只显示已取到的 {items.length} 家公司；缺失的公司不会用估算值顶替。
+              {t('当前只显示已取到的')} {items.length} {t('家公司；缺失的公司不会用估算值顶替。')}
             </p>
           </div>
         </div>
@@ -353,7 +354,7 @@ export default function Earnings() {
       {/* B1 周历 scrubber */}
       <div className="mt-6">
         {loading ? (
-          <div className="card-surface overflow-hidden" aria-label="周历加载中">
+          <div className="card-surface overflow-hidden" aria-label={t("周历加载中")}>
             <div className="flex h-11 items-center justify-center border-b border-line">
               <SkeletonBlock className="h-3 w-40" />
             </div>
@@ -369,12 +370,12 @@ export default function Earnings() {
             </div>
           </div>
         ) : error503 ? (
-          <section className="card-surface" aria-label="周历数据不可用">
+          <section className="card-surface" aria-label={t("周历数据不可用")}>
             <EmptyState
               variant="error"
               image="/empty-chart.svg"
-              title="日历数据不可用"
-              description={q.error?.message || '稍后刷新再试'}
+              title={t("日历数据不可用")}
+              description={q.error?.message || t('稍后刷新再试')}
               action={
                 <button
                   onClick={q.refresh}
@@ -382,7 +383,7 @@ export default function Earnings() {
                   className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
                 >
                   {q.refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
-                  重试
+                  {t('重试')}
                 </button>
               }
             />
@@ -394,8 +395,8 @@ export default function Earnings() {
               <p className="eyebrow">EARNINGS CALENDAR · ET</p>
               <Segmented
                 options={[
-                  { value: 'week' as const, label: '周' },
-                  { value: 'month' as const, label: '月' },
+                  { value: 'week' as const, label: t('周') },
+                  { value: 'month' as const, label: t('月') },
                 ]}
                 value={calView}
                 onChange={setCalView}
@@ -450,7 +451,7 @@ export default function Earnings() {
           完整桌面表有 7 个数据列，7/5 分栏会在 2xl 表格断点把 AI 操作列裁掉。 */}
       <div
         className="mt-6 grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-12"
-        aria-label="财报主体"
+        aria-label={t("财报主体")}
       >
         <div className="min-w-0 space-y-6 xl:col-span-8">
           {loading ? (
@@ -458,19 +459,19 @@ export default function Earnings() {
               <SkeletonRows rows={6} />
             </div>
           ) : error503 ? (
-            <section className="card-surface" aria-label="财报列表不可用">
+            <section className="card-surface" aria-label={t("财报列表不可用")}>
               <EmptyState
                 variant="error"
                 image="/empty-chart.svg"
-                title="财报列表不可用"
-                description="稍后刷新再试"
+                title={t("财报列表不可用")}
+                description={t("稍后刷新再试")}
                 action={
                   <button
                     onClick={q.refresh}
                     disabled={q.refreshing}
                     className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
                   >
-                    重试
+                    {t('重试')}
                   </button>
                 }
               />
@@ -481,14 +482,14 @@ export default function Earnings() {
               {selectedDay && (
                 <div className="flex items-center justify-between">
                   <p className="text-caption text-ink-500">
-                    已筛选 <span className="font-mono text-brand-600">{fmtMDCN(selectedDay)}</span> 当日财报
+                    {t('已筛选')} <span className="font-mono text-brand-600">{fmtMDCN(selectedDay)}</span> {t('当日财报')}
                   </p>
                   <button
                     onClick={() => setSelectedDay(null)}
                     className="flex items-center gap-1 rounded-sm border border-line bg-card px-2 py-1 text-caption text-ink-500 transition-colors hover:text-ink-800"
                   >
                     <Icon name="x" size={12} />
-                    清除筛选
+                    {t('清除筛选')}
                   </button>
                 </div>
               )}
@@ -502,15 +503,15 @@ export default function Earnings() {
               {visibleItems.length < filteredItems.length && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-card px-4 py-3">
                   <p className="text-caption text-ink-500">
-                    已显示 <span className="font-mono text-ink-800 tnum">{visibleItems.length}</span>
+                    {t('已显示')} <span className="font-mono text-ink-800 tnum">{visibleItems.length}</span>
                     {' / '}
-                    <span className="font-mono text-ink-800 tnum">{filteredItems.length}</span> 条
+                    <span className="font-mono text-ink-800 tnum">{filteredItems.length}</span> {t('条')}
                   </p>
                   <button
                     onClick={() => setVisibleLimit((limit) => limit + LIST_PAGE_SIZE)}
                     className="h-8 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
                   >
-                    显示更多 · {Math.min(LIST_PAGE_SIZE, filteredItems.length - visibleItems.length)} 条
+                    {t('显示更多 ·')} {Math.min(LIST_PAGE_SIZE, filteredItems.length - visibleItems.length)} {t('条')}
                   </button>
                 </div>
               )}
@@ -520,7 +521,7 @@ export default function Earnings() {
                     onClick={() => setVisibleLimit(LIST_PAGE_SIZE)}
                     className="h-8 px-2 text-caption text-ink-400 transition-colors hover:text-brand-600"
                   >
-                    收起至前 {LIST_PAGE_SIZE} 条
+                    {t('收起至前')} {LIST_PAGE_SIZE} {t('条')}
                   </button>
                 </div>
               )}

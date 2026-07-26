@@ -13,6 +13,7 @@ import {
   subscoreDimsOf,
   type CatalystSummary,
 } from './types';
+import { t } from '../../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -62,7 +63,7 @@ export function ScoreCell({ score, index }: { score: number; index: number }) {
 export function SubscoreTicks({ row }: { row: ScreenerRow }) {
   const dims = subscoreDimsOf(row);
   return (
-    <span className="group relative inline-flex items-center gap-1" aria-label="分项强度">
+    <span className="group relative inline-flex items-center gap-1" aria-label={t("分项强度")}>
       {dims.map(({ key, value }) => (
         <span key={key} className="inline-block h-[3px] w-[14px] overflow-hidden rounded-full bg-line" aria-hidden="true">
           {value !== null && (
@@ -93,21 +94,21 @@ export function CatalystBadge({ summary }: { summary: CatalystSummary | undefine
   if (summary.failed) {
     // 批量接口失败：如实「—」（区别于真实 0），不编造计数
     return (
-      <span className="font-mono text-caption text-ink-300 tnum" title="催化剂数据暂不可用" aria-label="催化剂数据不可用">
+      <span className="font-mono text-caption text-ink-300 tnum" title={t("催化剂数据暂不可用")} aria-label={t("催化剂数据不可用")}>
         —
       </span>
     );
   }
   if (summary.count === 0) {
     return (
-      <span className="font-mono text-caption text-ink-300 tnum" aria-label="72 小时内无催化剂">
+      <span className="font-mono text-caption text-ink-300 tnum" aria-label={t("72 小时内无催化剂")}>
         0
       </span>
     );
   }
   const net = summary.pos - summary.neg;
   const tone = net > 0 ? 'text-up-700 bg-up-50' : net < 0 ? 'text-down-700 bg-down-50' : 'text-ink-500 bg-card-warm';
-  const label = net > 0 ? '利多' : net < 0 ? '利空' : '中性';
+  const label = net > 0 ? t('利多') : net < 0 ? t('利空') : t('中性');
   const countText = `${summary.count}${summary.hasMore ? '+' : ''}`;
   return (
     <span className="group relative inline-flex">
@@ -118,15 +119,15 @@ export function CatalystBadge({ summary }: { summary: CatalystSummary | undefine
       </span>
       <span className="glass pointer-events-none absolute -top-2 right-0 z-20 hidden w-60 -translate-y-full rounded-md border border-line p-3 shadow-sh-2 group-hover:block">
         <span className="block text-micro text-ink-500">
-          72h 窗口 · 利多 <span className="font-mono text-up-700 tnum">{summary.pos}</span>
-          {' · '}利空 <span className="font-mono text-down-700 tnum">{summary.neg}</span>
+          {t('72h 窗口 · 利多')} <span className="font-mono text-up-700 tnum">{summary.pos}</span>
+          {' · '}{t('利空')} <span className="font-mono text-down-700 tnum">{summary.neg}</span>
           {summary.pending != null ? (
             <>
-              {' · '}待分析 <span className="font-mono tnum">{summary.pending}</span>
+              {' · '}{t('待分析')} <span className="font-mono tnum">{summary.pending}</span>
             </>
           ) : (
             <>
-              {' · '}中性 <span className="font-mono tnum">{summary.neu}</span>
+              {' · '}{t('中性')} <span className="font-mono tnum">{summary.neu}</span>
             </>
           )}
         </span>

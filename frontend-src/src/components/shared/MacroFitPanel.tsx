@@ -14,6 +14,7 @@ import {
   macroMissingReason,
   type MacroFitDriver,
 } from '@/lib/macroFit';
+import { t } from '../../i18n/core.ts';
 
 interface Props {
   score: number | null | undefined;
@@ -38,14 +39,14 @@ export default function MacroFitPanel({
   status,
   bare = false,
 }: Props) {
-  const positive = driverText(supporting);
-  const negative = driverText(opposing);
+  const positive = driverText(supporting, t);
+  const negative = driverText(opposing, t);
   const hasScore = typeof score === 'number' && Number.isFinite(score);
   return (
     <div>
       {!bare && (
         <p className="eyebrow">
-          宏观适配 · MACRO FIT
+          {t('宏观适配 · MACRO FIT')}
           <InfoHint hint={MACRO_SHADOW_HINT} side="bottom" size={11} className="ml-1" />
         </p>
       )}
@@ -54,7 +55,7 @@ export default function MacroFitPanel({
           <MacroFitBadge score={score} tailwind={tailwind} status={status} />
           {hasScore && typeof confidence === 'number' && (
             <span className="font-mono text-micro text-ink-400 tnum">
-              置信度 {Math.round(confidence * 100)}%
+              {t('置信度')} {Math.round(confidence * 100)}%
             </span>
           )}
         </div>
@@ -62,37 +63,37 @@ export default function MacroFitPanel({
           <>
             {positive && (
               <p className="text-caption leading-[18px] text-ink-600">
-                <span className="text-up-700">正面</span>：{positive}
+                <span className="text-up-700">{t('正面')}</span>{t('：')}{positive}
               </p>
             )}
             {negative && (
               <p className="text-caption leading-[18px] text-ink-600">
-                <span className="text-down-700">负面</span>：{negative}
+                <span className="text-down-700">{t('负面')}</span>{t('：')}{negative}
               </p>
             )}
             {!positive && !negative && (
-              <p className="text-caption text-ink-400">该板块各宏观因子方向不明显</p>
+              <p className="text-caption text-ink-400">{t('该板块各宏观因子方向不明显')}</p>
             )}
             {typeof technicalGap === 'number' && Number.isFinite(technicalGap) && (
               <p className="text-micro text-ink-400">
-                技术 − 结构性宏观 ={' '}
+                {t('技术 − 结构性宏观 =')}{' '}
                 <span className="font-mono tnum">
                   {technicalGap > 0 ? '+' : ''}{technicalGap.toFixed(1)}
                 </span>
                 {technicalGap > 20
-                  ? ' · 价格明显跑在环境前面'
+                  ? t(' · 价格明显跑在环境前面')
                   : technicalGap < -20
-                    ? ' · 宏观先行改善，价格未跟上'
+                    ? t(' · 宏观先行改善，价格未跟上')
                     : ''}
               </p>
             )}
           </>
         ) : (
           <p className="text-caption text-ink-400">
-            {macroMissingReason(status) ?? '暂无宏观读数'} · 不按中性计
+            {t(macroMissingReason(status) ?? '暂无宏观读数')} {t('· 不按中性计')}
           </p>
         )}
-        <p className="text-micro text-ink-300">影子字段 · 不参与排名</p>
+        <p className="text-micro text-ink-300">{t('影子字段 · 不参与排名')}</p>
       </div>
     </div>
   );

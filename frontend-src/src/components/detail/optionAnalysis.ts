@@ -1,5 +1,6 @@
 import type { OptionAlertInput } from '../../api/modules/ai-jobs.ts';
 import type { OptionChain, OptionChainRow } from '../../api/types.ts';
+import { t } from '../../i18n/core.ts';
 
 export interface OptionAlertResult {
   output_language: 'zh-CN';
@@ -128,11 +129,11 @@ function buildLeg(
   }
   if (volume >= 1_000 && openInterest !== null && openInterest > 0 && openInterest < 500) {
     severity += 2;
-    reasons.push('成交量较高且持仓量较低，待后续持仓量确认');
+    reasons.push(t('成交量较高且持仓量较低，待后续持仓量确认'));
   }
   if (volume >= 1_000 && openInterest === null) {
     severity += 1;
-    reasons.push('持仓量不可用，无法计算量持比');
+    reasons.push(t('持仓量不可用，无法计算量持比'));
   }
   if (legMoneyness === 'otm' && distance > 0.1 && volume >= 2_000) {
     severity += 1;
@@ -163,7 +164,7 @@ function buildLeg(
     direction_confidence: 0,
     direction_status: 'unavailable_without_trade_side',
     direction_deprecated: true,
-    direction_note: '缺少成交主动方，无法判断真实交易方向',
+    direction_note: t('缺少成交主动方，无法判断真实交易方向'),
   };
   return { alert, severity, premium, ratio };
 }

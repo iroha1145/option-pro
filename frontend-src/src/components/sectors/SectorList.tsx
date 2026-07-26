@@ -14,6 +14,7 @@ import {
 import Icon from '@/components/icons';
 import type { SectorVm } from './model';
 import { periodLabel } from './model';
+import { t } from '../../i18n/core.ts';
 
 interface SectorListProps {
   sectors: SectorVm[];
@@ -30,7 +31,7 @@ export default function SectorList({
     () => [
       {
         key: 'name',
-        title: '板块',
+        title: t('板块'),
         sortable: true,
         sortValue: (row) => row.name,
         render: (row) => (
@@ -46,7 +47,7 @@ export default function SectorList({
       },
       {
         key: 'avgReturn',
-        title: '平均收益',
+        title: t('平均收益'),
         align: 'right',
         sortable: true,
         sortValue: (row) => row.avgReturn ?? -Infinity,
@@ -71,7 +72,7 @@ export default function SectorList({
         key: 'strength',
         title: (
           <>
-            平均强度
+            {t('平均强度')}
             <InfoHint hint={SCORE_HINTS.avgStrength} side="bottom" size={11} />
           </>
         ),
@@ -90,7 +91,7 @@ export default function SectorList({
         key: 'macroFit',
         title: (
           <>
-            宏观适配
+            {t('宏观适配')}
             <InfoHint hint={MACRO_SHADOW_HINT} side="bottom" size={11} />
           </>
         ),
@@ -106,7 +107,7 @@ export default function SectorList({
               <MacroFitBadge score={row.macroFit} tailwind={row.macroTailwind} compact />
               {quadrant && (
                 <span className="text-micro text-ink-400">
-                  {MACRO_QUADRANT_LABEL[quadrant]}
+                  {t(MACRO_QUADRANT_LABEL[quadrant])}
                 </span>
               )}
             </span>
@@ -115,7 +116,7 @@ export default function SectorList({
       },
       {
         key: 'coverage',
-        title: '统计覆盖',
+        title: t('统计覆盖'),
         align: 'right',
         sortable: true,
         sortValue: (row) => row.coveredCount ?? -1,
@@ -127,7 +128,7 @@ export default function SectorList({
       },
       {
         key: 'leaders',
-        title: '强度领先',
+        title: t('强度领先'),
         render: (row) =>
           row.leaders.length > 0 ? (
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1">

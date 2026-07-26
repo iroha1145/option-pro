@@ -6,12 +6,13 @@ import ChangeBadge from '@/components/shared/ChangeBadge';
 import InfoHint from '@/components/shared/InfoHint';
 import { MACRO_FACTOR_HINTS } from '@/lib/scoreHints';
 import type { MacroFactor } from '@/api/modules/macro';
+import { t } from '../../../i18n/core.ts';
 
 const STATUS_LABEL: Record<MacroFactor['status'], string> = {
   ok: '',
-  stale: '数据陈旧',
-  missing: '数据缺失',
-  insufficient_history: '历史不足',
+  stale: t('数据陈旧'),
+  missing: t('数据缺失'),
+  insufficient_history: t('历史不足'),
 };
 
 function FactorName({ factor }: { factor: MacroFactor }) {
@@ -60,7 +61,7 @@ export function FactorTableRow({ factor }: { factor: MacroFactor }) {
         </span>
         {factor.formattedSignedValue && factor.formattedSignedValue !== factor.formattedValue && (
           <span className="mt-0.5 block font-mono text-micro text-ink-400 tnum">
-            带符号 {factor.formattedSignedValue}
+            {t('带符号')} {factor.formattedSignedValue}
           </span>
         )}
       </td>
@@ -94,25 +95,25 @@ export function FactorCard({ factor }: { factor: MacroFactor }) {
       </div>
       <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
         <div className="min-w-0">
-          <dt className="text-micro text-ink-400">当前值</dt>
+          <dt className="text-micro text-ink-400">{t('当前值')}</dt>
           <dd className="truncate font-mono text-micro text-ink-700 tnum">
             {factor.formattedValue ?? '—'}
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="text-micro text-ink-400">7 日原值变化</dt>
+          <dt className="text-micro text-ink-400">{t('7 日原值变化')}</dt>
           <dd className="truncate font-mono text-micro text-ink-700 tnum">
             {factor.formattedRawChange7d ?? '—'}
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="text-micro text-ink-400">7 日分数变化</dt>
+          <dt className="text-micro text-ink-400">{t('7 日分数变化')}</dt>
           <dd>
             <ChangeBadge value={factor.scoreChange7d} size="sm" format="points" />
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="text-micro text-ink-400">数据截止</dt>
+          <dt className="text-micro text-ink-400">{t('数据截止')}</dt>
           <dd className="truncate font-mono text-micro text-ink-400 tnum">
             {factor.dataThrough ?? '—'}
           </dd>

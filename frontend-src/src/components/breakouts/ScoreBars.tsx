@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { SCORE_DEFS, riskBarClass, scoreBarClass } from './types';
 import type { BreakoutEventFull, RangePersistence } from './types';
+import { t } from '../../i18n/core.ts';
 
 function barCls(key: string, v: number): string {
   return key === 'chase_risk_score' ? riskBarClass(v) : scoreBarClass(v);
@@ -19,7 +20,7 @@ const disp = (v: unknown): string => (fin(v) ? String(Math.round(v)) : '—');
 
 export function ScoreBarsMini({ event, className }: { event: BreakoutEventFull; className?: string }) {
   return (
-    <div className={cn('grid grid-cols-3 gap-x-3 gap-y-1.5', className)} aria-label="评分套组">
+    <div className={cn('grid grid-cols-3 gap-x-3 gap-y-1.5', className)} aria-label={t("评分套组")}>
       {SCORE_DEFS.map((d, i) => {
         const v = event[d.key];
         return (
@@ -49,7 +50,7 @@ export function ScoreBarsMini({ event, className }: { event: BreakoutEventFull; 
 
 export function ScoreBarsFull({ event, className }: { event: BreakoutEventFull; className?: string }) {
   return (
-    <div className={cn('space-y-2', className)} aria-label="评分套组">
+    <div className={cn('space-y-2', className)} aria-label={t("评分套组")}>
       {SCORE_DEFS.map((d, i) => {
         const v = event[d.key];
         return (
@@ -81,22 +82,22 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
   const rp = event.range_persistence as BreakoutEventFull['range_persistence'] | null | undefined;
   if (rp && typeof rp === 'object' && 'kind' in rp && rp.kind === 'live') {
     const metrics = [
-      { key: 'value', label: '持续分', value: rp.value },
-      { key: 'ratio10d', label: '10 日占比', value: rp.ratio10d },
-      { key: 'globalPercentile', label: '全局分位', value: rp.globalPercentile },
-      { key: 'sectorPercentile', label: '板块分位', value: rp.sectorPercentile },
-      { key: 'selfPercentile', label: '自身分位', value: rp.selfPercentile },
+      { key: 'value', label: t('持续分'), value: rp.value },
+      { key: 'ratio10d', label: t('10 日占比'), value: rp.ratio10d },
+      { key: 'globalPercentile', label: t('全局分位'), value: rp.globalPercentile },
+      { key: 'sectorPercentile', label: t('板块分位'), value: rp.sectorPercentile },
+      { key: 'selfPercentile', label: t('自身分位'), value: rp.selfPercentile },
     ] as const;
     const statusCn: Record<string, string> = {
-      active: '有效',
-      warming_up: '积累中',
-      insufficient_history: '历史不足',
-      unavailable: '暂不可用',
+      active: t('有效'),
+      warming_up: t('积累中'),
+      insufficient_history: t('历史不足'),
+      unavailable: t('暂不可用'),
     };
     return (
-      <div className={cn('space-y-2', className)} aria-label="区间持续指标">
+      <div className={cn('space-y-2', className)} aria-label={t("区间持续指标")}>
         <div className="mb-2 flex items-center justify-between rounded-sm bg-card-warm px-2.5 py-1.5">
-          <span className="text-caption text-ink-500">状态</span>
+          <span className="text-caption text-ink-500">{t('状态')}</span>
           <span className="font-mono text-caption text-ink-700">{statusCn[rp.status] ?? rp.status}</span>
         </div>
         {metrics.map((metric, i) => (
@@ -117,7 +118,7 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
           </div>
         ))}
         <p className="pt-1 text-right font-mono text-micro text-ink-400 tnum">
-          5 日斜率 {fin(rp.slope5d) ? `${rp.slope5d >= 0 ? '+' : ''}${rp.slope5d.toFixed(2)}` : '—'}
+          {t('5 日斜率')} {fin(rp.slope5d) ? `${rp.slope5d >= 0 ? '+' : ''}${rp.slope5d.toFixed(2)}` : '—'}
         </p>
       </div>
     );
@@ -126,15 +127,15 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
   const hasDims = legacy && RANGE_PERSISTENCE_DEFS.every((d) => fin(legacy[d.key]));
   if (!hasDims) {
     return (
-      <div className={cn('space-y-2', className)} aria-label="区间持续指标">
+      <div className={cn('space-y-2', className)} aria-label={t("区间持续指标")}>
         <p className="flex h-[104px] items-center justify-center rounded-md border border-line bg-card-warm text-caption text-ink-400">
-          区间持续指标暂不可用
+          {t('区间持续指标暂不可用')}
         </p>
       </div>
     );
   }
   return (
-    <div className={cn('space-y-2', className)} aria-label="区间持续五维">
+    <div className={cn('space-y-2', className)} aria-label={t("区间持续五维")}>
       {RANGE_PERSISTENCE_DEFS.map((d, i) => {
         const v = legacy[d.key];
         return (

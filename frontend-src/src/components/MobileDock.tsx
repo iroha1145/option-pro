@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import { useAccess } from '@/hooks/useAccess';
 import Icon, { type IconName } from '@/components/icons';
 import Segmented from '@/components/shared/Segmented';
-import { LOCALES, getLocale, setLocale, t } from '@/i18n/core';
+import { LOCALES, getLocale, setLocale, t } from '../i18n/core.ts';
 
 /* setLocale() 整页重载才会切语言，模块级常量在加载期求值一次即可，不需要每次渲染重算 */
 const DOCK_ITEMS: { label: string; path: string; icon: IconName }[] = [

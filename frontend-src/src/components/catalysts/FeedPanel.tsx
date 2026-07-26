@@ -13,6 +13,7 @@ import type { CatalystNewsItem } from './api';
 import type { CatalystFilters } from './filters';
 import { toFeedQuery } from './filters';
 import { AnalysisStatusChip, ClassificationChip, ConfidenceLabel, ImpactValue, StaleChip, TickerChip } from './bits';
+import { t as __t } from '../../i18n/core.ts';
 
 const PAGE_SIZE = 12;
 
@@ -68,8 +69,8 @@ export function NewsRow({
           <span aria-hidden="true">·</span>
           <span className="font-mono tnum">{fmtRelative(item.publishedAt)}</span>
           {item.sourceCount > 1 && (
-            <span className="rounded-xs bg-paper-2 px-1 py-px font-mono text-[10px] text-ink-400" title="多源确认条数">
-              {item.sourceCount} 源
+            <span className="rounded-xs bg-paper-2 px-1 py-px font-mono text-[10px] text-ink-400" title={__t("多源确认条数")}>
+              {item.sourceCount} {__t('源')}
             </span>
           )}
           {item.isStale && <StaleChip />}
@@ -103,7 +104,7 @@ export function NewsRow({
       <div className="flex w-8 shrink-0 items-start justify-end">
         <span
           className="flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ai-600 opacity-0 shadow-sh-1 transition-opacity duration-fast group-hover:opacity-100"
-          title="查看 / 生成 AI 分析"
+          title={__t("查看 / 生成 AI 分析")}
           aria-hidden="true"
         >
           <Icon name="spark-ai" size={14} />
@@ -183,7 +184,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
       setPhase('ready');
     } catch (e) {
       if (reqRef.current !== reqId) return;
-      setError(e instanceof ApiError ? e : new ApiError(500, '加载失败'));
+      setError(e instanceof ApiError ? e : new ApiError(500, __t('加载失败')));
       setPhase('error');
       onFeedResult({ total: null, ok: false });
     }
@@ -225,7 +226,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
       setMoreError(null);
     } catch (error) {
       // 增量请求的异常此前被吞掉，用户只会觉得按钮没有反应（审计 P2-24）。
-      setMoreError(error instanceof ApiError ? error : new ApiError(500, '加载更多失败'));
+      setMoreError(error instanceof ApiError ? error : new ApiError(500, __t('加载更多失败')));
     } finally {
       setLoadingMore(false);
     }
@@ -248,23 +249,23 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title={error?.code === 503 ? '新闻暂不可用' : '加载失败'}
-          description={error?.code === 503 ? '稍后刷新再试' : error?.message}
+          title={error?.code === 503 ? __t('新闻暂不可用') : __t('加载失败')}
+          description={error?.code === 503 ? __t('稍后刷新再试') : error?.message}
           action={
             <button
               onClick={() => void fetchFirst()}
               className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
             >
               <Icon name="refresh" size={14} />
-              重试
+              {__t('重试')}
             </button>
           }
         />
       ) : items.length === 0 ? (
         <EmptyState
           image="/empty-news.svg"
-          title={hasFilters ? '这个角度暂时没有新闻' : '暂时没有新闻'}
-          description={hasFilters ? '放宽过滤条件，或清除后查看全量新闻流' : '新闻采集恢复后将自动出现在这里'}
+          title={hasFilters ? __t('这个角度暂时没有新闻') : __t('暂时没有新闻')}
+          description={hasFilters ? __t('放宽过滤条件，或清除后查看全量新闻流') : __t('新闻采集恢复后将自动出现在这里')}
           action={
             hasFilters ? (
               <button
@@ -272,7 +273,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
                 className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
               >
                 <Icon name="x" size={13} />
-                清除过滤
+                {__t('清除过滤')}
               </button>
             ) : undefined
           }
@@ -297,16 +298,16 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
                 className="inline-flex items-center gap-2 rounded-md border border-line bg-card px-4 py-2 text-caption font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
               >
                 {loadingMore && <span className="size-3.5 animate-spin rounded-full border-2 border-ink-200 border-t-brand-600" aria-hidden="true" />}
-                加载更多
+                {__t('加载更多')}
               </button>
             ) : (
-              <p className="text-micro text-ink-300">已加载全部 {items.length} 条</p>
+              <p className="text-micro text-ink-300">{__t('已加载全部')} {items.length} {__t('条')}</p>
             )}
             {moreError && (
               <p className="mt-1.5 text-micro text-down-700">
-                加载更多失败：{moreError.message} ·{' '}
+                {__t('加载更多失败：')}{moreError.message} ·{' '}
                 <button type="button" onClick={() => void loadMore()} className="font-medium underline underline-offset-2">
-                  重试
+                  {__t('重试')}
                 </button>
               </p>
             )}

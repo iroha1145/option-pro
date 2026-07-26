@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import SourceNote from '@/components/shared/SourceNote';
 import type { EarningsRow } from './types';
 import { addDays, etToday, fmtMDCN, fmtMMDD, weekdayCN } from './types';
+import { t } from '../../i18n/core.ts';
 
 interface DensityStripProps {
   items: EarningsRow[];
@@ -37,11 +38,11 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
   const max = Math.max(...days.map((d) => d.rows.length), 1);
 
   return (
-    <section className="card-surface p-5" aria-label="本月财报密度">
+    <section className="card-surface p-5" aria-label={t("本月财报密度")}>
       <div className="min-w-0">
         <div className="w-full min-w-0">
-          <p className="eyebrow">本月财报密度 · 未来 30 天</p>
-          <div className="mt-3 flex h-16 items-end gap-[3px]" role="list" aria-label="每日财报数量">
+          <p className="eyebrow">{t('本月财报密度 · 未来 30 天')}</p>
+          <div className="mt-3 flex h-16 items-end gap-[3px]" role="list" aria-label={t("每日财报数量")}>
             {days.map((d, i) => {
               const n = d.rows.length;
               const isToday = i === 0;
@@ -59,7 +60,7 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                       {fmtMMDD(d.date)} {weekdayCN(d.date)}
                     </span>
                     {n === 0 ? (
-                      <span className="block text-[10px] text-ink-300">无财报</span>
+                      <span className="block text-[10px] text-ink-300">{t('无财报')}</span>
                     ) : (
                       <span className="mt-0.5 flex flex-wrap gap-1">
                         {d.rows.slice(0, MAX_TOOLTIP_TICKERS).map((r) => (
@@ -92,12 +93,12 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
             })}
           </div>
           <div className="mt-1.5 flex justify-between font-mono text-[9px] text-ink-300">
-            <span>今天</span>
-            <span>+15 天</span>
-            <span>+30 天</span>
+            <span>{t('今天')}</span>
+            <span>{t('+15 天')}</span>
+            <span>{t('+30 天')}</span>
           </div>
         </div>
-        <SourceNote className="mt-4" text="财报日程 · 以公司公告为准" />
+        <SourceNote className="mt-4" text={t("财报日程 · 以公司公告为准")} />
       </div>
     </section>
   );

@@ -8,6 +8,7 @@ import ChangeBadge from '@/components/shared/ChangeBadge';
 import InfoHint from '@/components/shared/InfoHint';
 import { MACRO_MODULE_HINTS } from '@/lib/scoreHints';
 import type { MacroModule } from '@/api/modules/macro';
+import { t } from '../../../i18n/core.ts';
 
 export default function ModuleCard({
   module,
@@ -56,16 +57,16 @@ export default function ModuleCard({
         <ChangeBadge value={module.scoreChange7d} size="sm" format="points" />
         <span className="font-mono text-micro text-ink-400 tnum">
           {module.validFactorCount === null
-            ? '有效因子 —'
+            ? t('有效因子 —')
             : `有效因子 ${module.validFactorCount}/${module.totalFactorCount ?? '—'}`}
         </span>
       </div>
       <p className="mt-2 font-mono text-micro text-ink-400 tnum">
-        截止 {module.dataThrough ?? '—'}
+        {t('截止')} {module.dataThrough ?? '—'}
       </p>
       {!hasScore && (
         <p className="mt-2 text-micro leading-relaxed text-ink-400">
-          有效因子不足 {module.minimumValidFactors ?? ''} 个门槛，本模块不出分（不按 50 补齐）。
+          {t('有效因子不足')} {module.minimumValidFactors ?? ''} {t('个门槛，本模块不出分（不按 50 补齐）。')}
         </p>
       )}
     </article>

@@ -17,6 +17,7 @@ import { useToast } from '@/components/Toast';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import type { IconName } from '@/components/icons';
+import { t } from '../i18n/core.ts';
 
 /* ---------------- L0 主视觉（内联 login-motif + K 线循环） ---------------- */
 const MOTIF_STYLE = `
@@ -148,9 +149,9 @@ function CharStagger({ text, className, delayBase = 0 }: { text: string; classNa
 }
 
 const FEATURES: { icon: IconName; title: string; desc: string }[] = [
-  { icon: 'radar', title: '突破雷达', desc: '价格越界的瞬间，已经在你的雷达上。' },
-  { icon: 'layers', title: '板块透视', desc: '热力、强度、IV 排名，一屏定位资金方向。' },
-  { icon: 'spark-ai', title: '财报 AI', desc: '财报落地前，先看清涟漪往哪传。' },
+  { icon: 'radar', title: t('突破雷达'), desc: t('价格越界的瞬间，已经在你的雷达上。') },
+  { icon: 'layers', title: t('板块透视'), desc: t('热力、强度、IV 排名，一屏定位资金方向。') },
+  { icon: 'spark-ai', title: t('财报 AI'), desc: t('财报落地前，先看清涟漪往哪传。') },
 ];
 
 /* ---------------- 眼睛切换（手绘细线，与图标库同工艺） ---------------- */
@@ -230,29 +231,29 @@ export default function Login() {
 
   const mapError = (e: unknown): { text: string; tone: 'error' | 'warn' } => {
     if (e instanceof ApiError) {
-      if (e.bizCode === 'login_cooldown') return { text: '连续登录失败，请稍后再试', tone: 'warn' };
+      if (e.bizCode === 'login_cooldown') return { text: t('连续登录失败，请稍后再试'), tone: 'warn' };
       if (e.bizCode === 'registration_rate_limited') {
-        return { text: e.message || '注册过于频繁，请稍后再试', tone: 'warn' };
+        return { text: e.message || t('注册过于频繁，请稍后再试'), tone: 'warn' };
       }
-      if (e.bizCode === 'https_required') return { text: e.message || '登录需要 HTTPS', tone: 'warn' };
+      if (e.bizCode === 'https_required') return { text: e.message || t('登录需要 HTTPS'), tone: 'warn' };
       if (e.bizCode && ACCOUNT_ERROR_CODES.has(e.bizCode)) {
-        return { text: e.message || '用户名或密码不正确', tone: 'error' };
+        return { text: e.message || t('用户名或密码不正确'), tone: 'error' };
       }
-      if (e.code === 429 || e.code >= 500) return { text: '服务暂时不可用，稍后重试', tone: 'warn' };
+      if (e.code === 429 || e.code >= 500) return { text: t('服务暂时不可用，稍后重试'), tone: 'warn' };
     }
-    return { text: mode === 'register' ? '注册失败，请重试' : '用户名或密码不正确', tone: 'error' };
+    return { text: mode === 'register' ? t('注册失败，请重试') : t('用户名或密码不正确'), tone: 'error' };
   };
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (state === 'verifying' || state === 'success' || serviceDown) return;
     if (!username.trim()) {
-      setStatusMsg({ text: '请输入用户名', tone: 'error' });
+      setStatusMsg({ text: t('请输入用户名'), tone: 'error' });
       doShake();
       return;
     }
     if (!password.trim()) {
-      setStatusMsg({ text: '请输入密码', tone: 'error' });
+      setStatusMsg({ text: t('请输入密码'), tone: 'error' });
       setPwError(true);
       doShake();
       window.setTimeout(() => setPwError(false), 1200);
@@ -267,8 +268,8 @@ export default function Login() {
       setState('success');
       const isAdmin = name.toLowerCase() === 'admin';
       toast.success(
-        mode === 'register' ? '账号已创建' : '欢迎回来',
-        isAdmin ? '管理员已登录' : `已登录 ${name}`,
+        mode === 'register' ? t('账号已创建') : t('欢迎回来'),
+        isAdmin ? t('管理员已登录') : `已登录 ${name}`,
       );
       navigate('/watchlist', { replace: true });
     } catch (err) {
@@ -283,7 +284,7 @@ export default function Login() {
   if (loading || isOwner || isCustomer) {
     return (
       <div className="dot-grid-dense flex min-h-[100dvh] items-center justify-center bg-paper">
-        <div className="size-8 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-label="加载中" />
+        <div className="size-8 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-label={t("加载中")} />
       </div>
     );
   }
@@ -321,10 +322,10 @@ export default function Login() {
           </motion.div>
 
           <h1 className="mt-10 font-display text-[40px] leading-[46px] font-bold text-ink-900 lg:text-display-xl">
-            <CharStagger text="把" delayBase={0.1} />
-            <span className="marker"><CharStagger text="市场" delayBase={0.13} /></span>
+            <CharStagger text={t("把")} delayBase={0.1} />
+            <span className="marker"><CharStagger text={t("市场")} delayBase={0.13} /></span>
             <br />
-            <CharStagger text="讲给你听。" className="text-brand-600" delayBase={0.22} />
+            <CharStagger text={t("讲给你听。")} className="text-brand-600" delayBase={0.22} />
           </h1>
 
           <motion.p
@@ -333,7 +334,7 @@ export default function Login() {
             transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
             className="mt-5 max-w-[460px] text-[15px] leading-[26px] text-ink-600 max-lg:line-clamp-2"
           >
-            突破雷达、强度选股、板块透视、财报 AI、新闻催化剂 —— 一套终端，看懂今晚的美股。数据延迟 15 分钟，仅供研究参考。
+            {t('突破雷达、强度选股、板块透视、财报 AI、新闻催化剂 —— 一套终端，看懂今晚的美股。数据延迟 15 分钟，仅供研究参考。')}
           </motion.p>
 
           {/* 特性三行（移动：横滑 chips） */}
@@ -363,7 +364,7 @@ export default function Login() {
             transition={{ duration: 0.56, delay: 0.9 }}
             className="mt-10 border-t border-line pt-4 text-caption text-ink-400"
           >
-            交互研究版 · 延迟行情 · 不构成投资建议 ◆
+            {t('交互研究版 · 延迟行情 · 不构成投资建议 ◆')}
           </motion.p>
         </div>
 
@@ -383,8 +384,8 @@ export default function Login() {
                 <Icon name="command" size={20} />
               </span>
               <div>
-                <h2 className="font-display text-[22px] font-semibold leading-[28px] text-ink-900">进入终端</h2>
-                <p className="mt-0.5 text-caption text-ink-400">登录后自选股保存在账号里 · 访客可只读浏览</p>
+                <h2 className="font-display text-[22px] font-semibold leading-[28px] text-ink-900">{t('进入终端')}</h2>
+                <p className="mt-0.5 text-caption text-ink-400">{t('登录后自选股保存在账号里 · 访客可只读浏览')}</p>
               </div>
             </div>
 
@@ -411,20 +412,20 @@ export default function Login() {
                       transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
                     />
                   )}
-                  <span className="relative">{value === 'login' ? '登录' : '注册'}</span>
+                  <span className="relative">{value === 'login' ? t('登录') : t('注册')}</span>
                 </button>
               ))}
             </div>
 
             {serviceDown && (
               <p className="mt-4 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">
-                无法连接服务，登录暂不可用
+                {t('无法连接服务，登录暂不可用')}
               </p>
             )}
 
             <form onSubmit={onSubmit} className="mt-5" noValidate>
               <label className="mb-4 block">
-                <span className="mb-1.5 block text-caption font-medium text-ink-500">用户名</span>
+                <span className="mb-1.5 block text-caption font-medium text-ink-500">{t('用户名')}</span>
                 <div
                   className={cn(
                     'flex h-12 items-center gap-2 rounded-sm border border-line-strong bg-card px-3',
@@ -438,19 +439,19 @@ export default function Login() {
                     value={username}
                     disabled={serviceDown || state === 'verifying' || state === 'success'}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder={mode === 'register' ? '起一个用户名' : '用户名'}
+                    placeholder={mode === 'register' ? t('起一个用户名') : t('用户名')}
                     maxLength={32}
                     className="h-full min-w-0 flex-1 bg-transparent text-[16px] text-ink-800 outline-none placeholder:text-ink-300 disabled:opacity-60"
                     autoComplete="username"
                     autoCapitalize="off"
                     autoCorrect="off"
                     spellCheck={false}
-                    aria-label="用户名"
+                    aria-label={t("用户名")}
                   />
                 </div>
               </label>
               <label className="block">
-                <span className="mb-1.5 block text-caption font-medium text-ink-500">密码</span>
+                <span className="mb-1.5 block text-caption font-medium text-ink-500">{t('密码')}</span>
                 <div
                   className={cn(
                     'flex h-12 items-center gap-2 rounded-sm border bg-card px-3 transition-[box-shadow,border-color] duration-fast',
@@ -466,23 +467,23 @@ export default function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={(e) => setCapsLock(e.getModifierState?.('CapsLock') ?? false)}
                     onKeyUp={(e) => setCapsLock(e.getModifierState?.('CapsLock') ?? false)}
-                    placeholder={mode === 'register' ? '设置密码' : '输入密码'}
+                    placeholder={mode === 'register' ? t('设置密码') : t('输入密码')}
                     className="h-full min-w-0 flex-1 bg-transparent font-mono text-[16px] text-ink-800 outline-none placeholder:text-ink-300 disabled:opacity-60"
                     autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-                    aria-label="密码"
+                    aria-label={t("密码")}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPw((v) => !v)}
                     className="shrink-0 rounded-xs p-1 text-ink-400 transition-colors hover:text-ink-600"
-                    aria-label={showPw ? '隐藏密码' : '显示密码'}
+                    aria-label={showPw ? t('隐藏密码') : t('显示密码')}
                   >
                     <EyeIcon off={!showPw} />
                   </button>
                 </div>
               </label>
               <p className={cn('mt-1.5 h-4 text-caption text-warn-600 transition-opacity', capsLock ? 'opacity-100' : 'opacity-0')}>
-                Caps Lock 已开启
+                {t('Caps Lock 已开启')}
               </p>
 
               <button
@@ -500,17 +501,17 @@ export default function Login() {
                 {state === 'verifying' ? (
                   <>
                     <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />
-                    验证中…
+                    {t('验证中…')}
                   </>
                 ) : state === 'success' ? (
                   <>
                     <Icon name="check" size={16} strokeWidth={1.45} />
-                    {mode === 'register' ? '已创建' : '验证通过'}
+                    {mode === 'register' ? t('已创建') : t('验证通过')}
                   </>
                 ) : mode === 'register' ? (
-                  '注册并登录'
+                  t('注册并登录')
                 ) : (
-                  '登录'
+                  t('登录')
                 )}
               </button>
 
@@ -530,20 +531,20 @@ export default function Login() {
             {/* 访客入口 */}
             <div className="mt-2 flex items-center gap-3">
               <span className="h-px flex-1 bg-line" />
-              <span className="text-caption text-ink-400">或</span>
+              <span className="text-caption text-ink-400">{t('或')}</span>
               <span className="h-px flex-1 bg-line" />
             </div>
             <button
               onClick={() => navigate('/watchlist')}
               className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-md border border-line-strong bg-transparent text-body-s font-medium text-ink-600 transition-colors duration-fast hover:bg-paper-2 hover:text-ink-800"
             >
-              以访客身份浏览（只读）
+              {t('以访客身份浏览（只读）')}
             </button>
 
             <p className="mt-5 text-center text-micro leading-[18px] text-ink-400">
               {mode === 'register'
-                ? '账号只用于保存你的自选股，不改变数据权限'
-                : '登录即同意研究用途条款 · 登录状态保留 30 天'}
+                ? t('账号只用于保存你的自选股，不改变数据权限')
+                : t('登录即同意研究用途条款 · 登录状态保留 30 天')}
             </p>
 
             <div className="mt-4 border-t border-line pt-3 text-center">
@@ -552,7 +553,7 @@ export default function Login() {
                 className="inline-flex items-center gap-1 text-caption font-medium text-brand-600 transition-colors hover:text-brand-700"
               >
                 <Icon name="chevron-right" size={13} className="rotate-180" />
-                返回公开研究页面
+                {t('返回公开研究页面')}
               </Link>
             </div>
           </motion.div>

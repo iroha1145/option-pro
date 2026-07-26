@@ -25,6 +25,7 @@ import { subscoreDimsOf,
   type RowSignalsState,
 } from './types';
 import ManualStockPull from '@/components/detail/ManualStockPull';
+import { t } from '../../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -91,7 +92,7 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
       .catch((error: unknown) => {
         if (!alive) return;
         setCloses(null);
-        setLoadError(error instanceof ApiError ? error.message : '暂时取不到日线数据');
+        setLoadError(error instanceof ApiError ? error.message : t('暂时取不到日线数据'));
       });
     return () => {
       alive = false;
@@ -100,10 +101,10 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
   }, [row.ticker, hasSpark]);
 
   const title = hasSpark
-    ? '近 5 日 · 点阵面积'
+    ? t('近 5 日 · 点阵面积')
     : Array.isArray(closes)
       ? `近 ${closes.length} 日 · 点阵面积`
-      : '日线 · 点阵面积';
+      : t('日线 · 点阵面积');
 
   const refreshAfterPull = () => {
     setCloses(undefined);
@@ -112,7 +113,7 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
       .then(setCloses)
       .catch((error: unknown) => {
         setCloses(null);
-        setLoadError(error instanceof ApiError ? error.message : '暂时取不到日线数据');
+        setLoadError(error instanceof ApiError ? error.message : t('暂时取不到日线数据'));
       });
   };
 
@@ -126,7 +127,7 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
           /* 接口拿不到日线：如实留空，严禁 Infinity/编造 */
           <div className="flex min-h-[96px] flex-col items-center justify-center gap-1.5 text-center">
             <Icon name="candle" size={16} className="text-ink-300" />
-            <p className="text-caption text-ink-400">{loadError ?? '日线数据暂不可用'}</p>
+            <p className="text-caption text-ink-400">{loadError ?? t('日线数据暂不可用')}</p>
             <ManualStockPull ticker={row.ticker} onPulled={refreshAfterPull} compact />
           </div>
         ) : (
@@ -140,8 +141,8 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
               className="w-full"
             />
             <div className="mt-2 flex items-center justify-between font-mono text-micro text-ink-400 tnum">
-              <span>低 {Math.min(...closes).toFixed(1)}</span>
-              <span>高 {Math.max(...closes).toFixed(1)}</span>
+              <span>{t('低')} {Math.min(...closes).toFixed(1)}</span>
+              <span>{t('高')} {Math.max(...closes).toFixed(1)}</span>
             </div>
           </>
         )}
@@ -167,7 +168,7 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
     <div className="grid grid-cols-1 gap-x-8 gap-y-5 border-t border-line bg-card-warm/60 px-4 py-4 md:grid-cols-3">
       {/* ① 分项强度 breakdown（与行内微条同源） */}
       <div>
-        <p className="eyebrow">分项强度 · BREAKDOWN</p>
+        <p className="eyebrow">{t('分项强度 · BREAKDOWN')}</p>
         <div className="mt-3 space-y-2.5">
           {dims.map(({ key, label, value }, i) => {
             const w = weightOf(key);
@@ -196,7 +197,7 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
             );
           })}
         </div>
-        {weights && <p className="mt-2.5 text-micro text-ink-400">权重来自当前评分方法（右侧栏）</p>}
+        {weights && <p className="mt-2.5 text-micro text-ink-400">{t('权重来自当前评分方法（右侧栏）')}</p>}
         {/* 宏观适配放在分项下面：它是这些分数的背景，不是其中一项。 */}
         <div className="mt-4 border-t border-line pt-3">
           <MacroFitPanel
@@ -215,34 +216,34 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
 
       {/* ③ 操作 + 信号 + 成交额 */}
       <div>
-        <p className="eyebrow">操作与信号</p>
+        <p className="eyebrow">{t('操作与信号')}</p>
         <div className="mt-3 flex flex-col items-start gap-2">
           <button
             onClick={() => onOpenDetail(row.ticker)}
             className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
           >
             <Icon name="arrow-up-right" size={13} />
-            打开详情
+            {t('打开详情')}
           </button>
           <Link
             to="/breakouts"
             className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
           >
             <Icon name="radar" size={13} />
-            相关突破事件
+            {t('相关突破事件')}
           </Link>
         </div>
         <div className="mt-3.5 border-t border-line pt-3">
-          <p className="mb-1.5 text-micro text-ink-400">活跃信号</p>
+          <p className="mb-1.5 text-micro text-ink-400">{t('活跃信号')}</p>
           {signals === null || signals.state === 'loading' ? (
             <div className="flex gap-1.5" aria-hidden="true">
               <span className="skeleton-shimmer h-5 w-14 rounded-xs" />
               <span className="skeleton-shimmer h-5 w-14 rounded-xs" />
             </div>
           ) : signals.state === 'error' ? (
-            <p className="text-caption text-warn-600">信号读取失败 · 收起后重新展开可重试</p>
+            <p className="text-caption text-warn-600">{t('信号读取失败 · 收起后重新展开可重试')}</p>
           ) : signals.signals.length === 0 ? (
-            <p className="text-caption text-ink-400">— 暂无信号</p>
+            <p className="text-caption text-ink-400">{t('— 暂无信号')}</p>
           ) : (
             <span className="flex flex-wrap gap-1.5">
               {signals.signals.map((s, i) => (
@@ -252,7 +253,7 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
           )}
         </div>
         <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
-          <span className="text-micro text-ink-400">美元成交额（推导）</span>
+          <span className="text-micro text-ink-400">{t('美元成交额（推导）')}</span>
           <span className="font-mono text-data-m text-ink-800 tnum">
             {dollarVolume === null ? '—' : fmtCompact(dollarVolume)}
           </span>

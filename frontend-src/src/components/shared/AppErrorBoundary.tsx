@@ -9,6 +9,7 @@
  * 所以用内联样式渲染，保证任何情况下都能显示出来。
  */
 import { Component, type ReactNode } from 'react';
+import { t } from '../../i18n/core.ts';
 
 interface Props {
   children: ReactNode;
@@ -48,7 +49,7 @@ export default class AppErrorBoundary extends Component<Props, State> {
           textAlign: 'center',
         }}
       >
-        <p style={{ fontSize: '18px', fontWeight: 600 }}>应用启动中断</p>
+        <p style={{ fontSize: '18px', fontWeight: 600 }}>{t('应用启动中断')}</p>
         <p
           style={{
             marginTop: '.5rem',
@@ -61,7 +62,7 @@ export default class AppErrorBoundary extends Component<Props, State> {
           {error.name}: {error.message}
         </p>
         <p style={{ marginTop: '.25rem', fontSize: '12px', color: '#8a8a95' }}>
-          已拦截为错误卡以避免白屏；完整堆栈保留在控制台。若反复出现，可清除本站的本地存储后重试。
+          {t('已拦截为错误卡以避免白屏；完整堆栈保留在控制台。若反复出现，可清除本站的本地存储后重试。')}
         </p>
         <div
           style={{
@@ -85,7 +86,7 @@ export default class AppErrorBoundary extends Component<Props, State> {
               cursor: 'pointer',
             }}
           >
-            重新加载
+            {t('重新加载')}
           </button>
           <button
             type="button"
@@ -107,7 +108,7 @@ export default class AppErrorBoundary extends Component<Props, State> {
               cursor: 'pointer',
             }}
           >
-            清除本地存储并重载
+            {t('清除本地存储并重载')}
           </button>
         </div>
       </div>

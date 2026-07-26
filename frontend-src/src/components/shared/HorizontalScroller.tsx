@@ -19,6 +19,7 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import { computeScrollEdges } from '@/lib/scrollEdges';
+import { t } from '../../i18n/core.ts';
 
 interface Props {
   children: ReactNode;
@@ -90,7 +91,7 @@ export default function HorizontalScroller({
     return (
       <button
         type="button"
-        aria-label={side === 'left' ? '向左滚动' : '向右滚动'}
+        aria-label={side === 'left' ? t('向左滚动') : t('向右滚动')}
         onClick={() => nudge(side === 'left' ? -1 : 1)}
         className={cn(
           // 触屏直接划就行，按钮只给指针设备。

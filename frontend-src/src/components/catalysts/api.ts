@@ -34,6 +34,7 @@ import {
   buildFocusCycleRequestBody,
   focusCyclePollPath,
 } from '@/components/catalysts/focusCycleRequest';
+import { t as __t } from '../../i18n/core.ts';
 
 export type {
   CatalystFeedQuery,
@@ -126,7 +127,7 @@ function nAnalysisStatus(v: unknown): CatalystNewsItem['analysisStatus'] {
   return 'pending';
 }
 
-const WAITING_ZH = new Set(['中文标题等待生成', '中文摘要等待生成', '热点标题等待中文分析']);
+const WAITING_ZH = new Set([__t('中文标题等待生成'), __t('中文摘要等待生成'), __t('热点标题等待中文分析')]);
 const usefulZh = (value: string | null): string | null => (value && !WAITING_ZH.has(value) ? value : null);
 
 function nNewsItem(r: Rec): CatalystNewsItem {
@@ -230,7 +231,7 @@ function nCycleRecord(r: Rec): MarketFocusCycle {
     trigger: pickS(r, 'trigger') === 'manual' || pickB(r, 'force') === true ? 'manual' : 'scheduled',
     model: pickS(r, 'model') ?? '',
     newsCount: pickN(r, 'newsCount', 'news_count') ?? pickN(r, 'event_group_count') ?? 0,
-    sampleLabel: pickN(r, 'newsCount', 'news_count') !== null ? '条' : '组事件',
+    sampleLabel: pickN(r, 'newsCount', 'news_count') !== null ? __t('条') : __t('组事件'),
     status: pickS(r, 'status'),
     summary: pickS(result, 'summary_zh', 'market_summary') ?? pickS(r, 'summary') ?? '',
     headline: pickS(result, 'headline_summary'),
@@ -295,8 +296,8 @@ function nCycle(raw: unknown): MarketFocusCycle {
 }
 
 const STREAM_CN: Record<string, string> = {
-  news: '新闻采集流',
-  calendar: '经济日历流',
+  news: __t('新闻采集流'),
+  calendar: __t('经济日历流'),
 };
 
 function nStream(key: string, raw: unknown): CatalystStreamHealth | null {
@@ -359,14 +360,14 @@ function nStatus(d: unknown): CatalystsStatusDetail {
 }
 
 const EVENT_TYPE_CN: Record<string, string> = {
-  merger: '并购',
-  earnings: '财报',
-  product: '产品',
-  regulatory: '监管',
-  macro: '宏观',
-  guidance: '指引',
-  legal: '法务',
-  calendar: '日历',
+  merger: __t('并购'),
+  earnings: __t('财报'),
+  product: __t('产品'),
+  regulatory: __t('监管'),
+  macro: __t('宏观'),
+  guidance: __t('指引'),
+  legal: __t('法务'),
+  calendar: __t('日历'),
 };
 
 function nHotspot(r: Rec): HotspotGroup {
@@ -377,7 +378,7 @@ function nHotspot(r: Rec): HotspotGroup {
     const eventType = pickS(r, 'event_type');
     const repTitle =
       usefulZh(pickS(r, 'representative_title', 'summary_zh')) ??
-      (eventType ? EVENT_TYPE_CN[eventType] ?? eventType : '新闻热点');
+      (eventType ? EVENT_TYPE_CN[eventType] ?? eventType : __t('新闻热点'));
     return {
       hotspotId: pickS(r, 'event_group_id') ?? '',
       theme: repTitle || '—',
@@ -759,8 +760,8 @@ export const catalystsContract = {
         if (fromStatus.length) return fromStatus;
         const streams = asRec(asRec(statusBody).streams);
         const streamNames: Record<string, string> = {
-          news: '新闻采集流',
-          calendar: '经济日历流',
+          news: __t('新闻采集流'),
+          calendar: __t('经济日历流'),
         };
         const realStreams = Object.entries(streams).map(([key, raw]) => {
           const r = asRec(raw);
@@ -774,12 +775,12 @@ export const catalystsContract = {
             lastFetchedAt: pickS(r, 'last_success_at', 'data_through') ?? '',
             itemsToday: pickN(r, 'items_last_24h', 'itemsLast24h'),
             note: active
-              ? '后台采集流最近一次执行成功'
-              : pickS(r, 'last_error_code') ?? '后台采集流状态异常',
+              ? __t('后台采集流最近一次执行成功')
+              : pickS(r, 'last_error_code') ?? __t('后台采集流状态异常'),
           };
         });
         if (realStreams.length) return realStreams;
-        throw new ApiError(503, '数据源状态暂不可用');
+        throw new ApiError(503, __t('数据源状态暂不可用'));
       },
     ),
   latestFocusCycle: (): Promise<MarketFocusCycle> =>
@@ -789,7 +790,7 @@ export const catalystsContract = {
       cachedGet('/catalysts/market-focus-cycles/latest').then((data) => {
         const previous = asRec(asRec(data).previous_successful_cycle);
         if (!Object.keys(previous).length) {
-          throw new ApiError(404, '暂无更早的成功焦点周期', {
+          throw new ApiError(404, __t('暂无更早的成功焦点周期'), {
             bizCode: 'previous_focus_cycle_not_found',
           });
         }
@@ -912,7 +913,7 @@ export const catalystsContract = {
         postCreate(`/catalysts/news/${encodeURIComponent(newsId)}/analysis`, { force }).then(({ data, location }) => {
           clearCatalystReadCache();
           const job = nAnalysisJob(data, idFromLocation(location));
-          if (!job.jobId) throw new ApiError(502, '任务创建响应缺少 job_id', { payload: data });
+          if (!job.jobId) throw new ApiError(502, __t('任务创建响应缺少 job_id'), { payload: data });
           if (!job.newsId) job.newsId = newsId;
           return job;
         }),

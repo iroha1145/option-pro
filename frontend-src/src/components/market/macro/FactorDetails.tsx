@@ -12,6 +12,7 @@ import { SkeletonRows } from '@/components/shared/Skeleton';
 import { MACRO_MODULE_HINTS } from '@/lib/scoreHints';
 import InfoHint from '@/components/shared/InfoHint';
 import { FactorCard, FactorTableRow } from './FactorRow';
+import { t } from '../../../i18n/core.ts';
 
 interface ModuleState {
   loading: boolean;
@@ -25,15 +26,15 @@ function FactorTable({ factors }: { factors: MacroFactor[] }) {
   return (
     <div className="hidden md:block">
       <table className="w-full table-fixed border-collapse text-body-s">
-        <caption className="sr-only">因子当前值、历史分位与 7 日变化</caption>
+        <caption className="sr-only">{t('因子当前值、历史分位与 7 日变化')}</caption>
         <thead>
           <tr className="text-micro text-ink-400">
-            <th scope="col" className="w-[32%] pb-2 text-left font-medium">因子</th>
-            <th scope="col" className="w-[18%] pb-2 text-right font-medium">当前值</th>
-            <th scope="col" className="w-[12%] pb-2 text-right font-medium">历史分位</th>
-            <th scope="col" className="w-[15%] pb-2 text-right font-medium">7 日原值变化</th>
-            <th scope="col" className="w-[12%] pb-2 text-right font-medium">7 日分数变化</th>
-            <th scope="col" className="w-[11%] pb-2 text-right font-medium">数据截止</th>
+            <th scope="col" className="w-[32%] pb-2 text-left font-medium">{t('因子')}</th>
+            <th scope="col" className="w-[18%] pb-2 text-right font-medium">{t('当前值')}</th>
+            <th scope="col" className="w-[12%] pb-2 text-right font-medium">{t('历史分位')}</th>
+            <th scope="col" className="w-[15%] pb-2 text-right font-medium">{t('7 日原值变化')}</th>
+            <th scope="col" className="w-[12%] pb-2 text-right font-medium">{t('7 日分数变化')}</th>
+            <th scope="col" className="w-[11%] pb-2 text-right font-medium">{t('数据截止')}</th>
           </tr>
         </thead>
         <tbody>
@@ -85,7 +86,7 @@ export default function FactorDetails({
         ...previous,
         [moduleId]: {
           loading: false,
-          error: error instanceof ApiError ? error.message : '因子详情暂不可用',
+          error: error instanceof ApiError ? error.message : t('因子详情暂不可用'),
           factors: previous[moduleId]?.factors ?? [],
         },
       }));
@@ -99,7 +100,7 @@ export default function FactorDetails({
   if (!modules.length) return null;
 
   return (
-    <div className="card-surface divide-y divide-line" aria-label="因子详情">
+    <div className="card-surface divide-y divide-line" aria-label={t("因子详情")}>
       {modules.map((module) => {
         const expanded = open === module.moduleId;
         const state = states[module.moduleId] ?? EMPTY;
@@ -155,7 +156,7 @@ export default function FactorDetails({
                         onClick={() => void load(module.moduleId)}
                         className="ml-2 text-brand-600 underline underline-offset-2"
                       >
-                        重试
+                        {t('重试')}
                       </button>
                     </p>
                   )}
@@ -170,7 +171,7 @@ export default function FactorDetails({
                     </>
                   )}
                   {!state.loading && !state.error && state.factors.length === 0 && (
-                    <p className="py-2 text-body-s text-ink-400">该模块暂无因子快照。</p>
+                    <p className="py-2 text-body-s text-ink-400">{t('该模块暂无因子快照。')}</p>
                   )}
                 </>
               )}

@@ -6,10 +6,11 @@ import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/components/Toast';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
+import { t } from '../../i18n/core.ts';
 
 function errorText(error: unknown): string {
   if (error instanceof ApiError) return error.message;
-  return error instanceof Error ? error.message : '请求失败';
+  return error instanceof Error ? error.message : t('请求失败');
 }
 
 interface EarningsRunSummary {
@@ -50,7 +51,7 @@ function summaryText(summary: EarningsRunSummary): string {
 async function requestEarningsAnalysis(): Promise<WorkerAction> {
   const action = await runtimeApi.workerAction('earnings_analysis');
   if (action.status === 'completed') return action;
-  if (!action.requestId) throw new Error('分析任务未能启动');
+  if (!action.requestId) throw new Error(t('分析任务未能启动'));
   return runtimeApi.waitForWorkerAction(action.requestId);
 }
 
@@ -97,7 +98,7 @@ export default function EarningsAnalysisControls() {
     const action = await requestEarningsAnalysis();
     const summary = readRunSummary(action);
     setLastRun(summary);
-    setLastRunNote(summary ? null : '任务已完成，但后台未返回逐项汇总');
+    setLastRunNote(summary ? null : t('任务已完成，但后台未返回逐项汇总'));
     void adminApi.workerStatus().then(setWorker).catch(() => undefined);
     return summary;
   };
@@ -112,15 +113,15 @@ export default function EarningsAnalysisControls() {
       });
       setDoc(next);
       setError(null);
-      toast.success(nextEnabled ? '每日财报分析已开启' : '每日财报分析已关闭', '范围固定为未来 5 天');
+      toast.success(nextEnabled ? t('每日财报分析已开启') : t('每日财报分析已关闭'), t('范围固定为未来 5 天'));
     } catch (cause) {
       if (cause instanceof ApiError && cause.code === 409) {
-        toast.error('设置版本已变化', '已重新读取最新设置');
+        toast.error(t('设置版本已变化'), t('已重新读取最新设置'));
         await load();
       } else {
         const message = errorText(cause);
         setError(message);
-        toast.error('保存失败', message);
+        toast.error(t('保存失败'), message);
       }
       return;
     } finally {
@@ -133,14 +134,14 @@ export default function EarningsAnalysisControls() {
       const summary = await completeAnalysis();
       setError(null);
       if (summary) {
-        toast.success('首次财报任务检查已完成', summaryText(summary));
+        toast.success(t('首次财报任务检查已完成'), summaryText(summary));
       } else {
-        toast.info('首次财报任务检查已完成', '后台未返回逐项汇总');
+        toast.info(t('首次财报任务检查已完成'), t('后台未返回逐项汇总'));
       }
     } catch (cause) {
       const message = errorText(cause);
       setError(message);
-      toast.error('自动分析设置已保存，但首次任务失败', message);
+      toast.error(t('自动分析设置已保存，但首次任务失败'), message);
     } finally {
       setRunning(false);
     }
@@ -152,22 +153,22 @@ export default function EarningsAnalysisControls() {
     try {
       const summary = await completeAnalysis();
       if (summary) {
-        toast.success('财报任务检查已完成', summaryText(summary));
+        toast.success(t('财报任务检查已完成'), summaryText(summary));
       } else {
-        toast.info('财报任务检查已完成', '后台未返回逐项汇总');
+        toast.info(t('财报任务检查已完成'), t('后台未返回逐项汇总'));
       }
       setError(null);
     } catch (cause) {
       const message = errorText(cause);
       setError(message);
-      toast.error('财报分析失败', message);
+      toast.error(t('财报分析失败'), message);
     } finally {
       setRunning(false);
     }
   };
 
   return (
-    <section className="card-surface overflow-hidden" aria-label="财报分析管理">
+    <section className="card-surface overflow-hidden" aria-label={t("财报分析管理")}>
       {/* v8.1 去左彩条（非引文语义的彩条卡是典型生成式装饰）；AI 归属已由图标章表达 */}
       <div className="px-4 py-3.5">
         <div className="flex items-start gap-3">
@@ -176,13 +177,13 @@ export default function EarningsAnalysisControls() {
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <h2 className="text-body-s font-medium text-ink-800">财报分析管理</h2>
+              <h2 className="text-body-s font-medium text-ink-800">{t('财报分析管理')}</h2>
               <span className="rounded-pill border border-line px-2 py-0.5 font-mono text-micro text-ink-400">
-                未来 5 天
+                {t('未来 5 天')}
               </span>
             </div>
             <p className="mt-1 text-micro leading-5 text-ink-400">
-              每只新增财报只建立一个持久任务；重复执行会跳过同一代码、同一财报日。
+              {t('每只新增财报只建立一个持久任务；重复执行会跳过同一代码、同一财报日。')}
             </p>
           </div>
         </div>
@@ -206,13 +207,13 @@ export default function EarningsAnalysisControls() {
               className={cn('size-2 rounded-full', enabled ? 'bg-ai-600' : 'bg-ink-300')}
               aria-hidden="true"
             />
-            每日自动分析
+            {t('每日自动分析')}
           </button>
           <button
             type="button"
             onClick={() => void runNow()}
             disabled={!taskReady || running}
-            title={!taskReady ? '财报分析后台任务当前不可用' : '立即分析未来 5 天内尚未建立任务的财报'}
+            title={!taskReady ? t('财报分析后台任务当前不可用') : t('立即分析未来 5 天内尚未建立任务的财报')}
             className={cn(
               'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-caption font-medium transition-colors',
               taskReady && !running
@@ -221,24 +222,24 @@ export default function EarningsAnalysisControls() {
             )}
           >
             <Icon name="refresh" size={12} className={running ? 'animate-spin' : ''} />
-            {running ? '正在检查任务…' : '立即分析新的财报'}
+            {running ? t('正在检查任务…') : t('立即分析新的财报')}
           </button>
         </div>
 
         <p className="mt-2 font-mono text-micro text-ink-400">
           {running
-            ? '正在检查并建立未来 5 天内尚未建立的分析任务…'
+            ? t('正在检查并建立未来 5 天内尚未建立的分析任务…')
             : loading
-            ? '读取运行状态…'
+            ? t('读取运行状态…')
             : taskReady
               ? enabled
-                ? '自动任务已开启'
-                : '自动任务已关闭，仍可手动执行'
-              : '后台任务不可用'}
+                ? t('自动任务已开启')
+                : t('自动任务已关闭，仍可手动执行')
+              : t('后台任务不可用')}
         </p>
         {(lastRun || lastRunNote) && (
           <p className="mt-2 border-t border-line pt-2 text-micro text-ink-500" role="status" aria-live="polite">
-            <span className="mr-2 text-ink-300">最近任务检查</span>
+            <span className="mr-2 text-ink-300">{t('最近任务检查')}</span>
             {lastRun ? summaryText(lastRun) : lastRunNote}
           </p>
         )}

@@ -36,22 +36,23 @@ import type {
   BreakoutSession,
   LifecycleState,
 } from '@/components/breakouts/types';
+import { t as __t } from '../i18n/core.ts';
 
 /* ---------------- 筛选维度（fchip 胶囊组） ---------------- */
 type StatusFilter = 'ALL' | LifecycleState;
 const STATUS_CAPS: { value: StatusFilter; label: string }[] = [
-  { value: 'ALL', label: '全部' },
-  { value: 'WATCHING', label: '观察中' },
-  { value: 'TRIGGERED', label: '已触发' },
-  { value: 'CONFIRMED', label: '已确认' },
-  { value: 'HOLDING', label: '保持中' },
-  { value: 'RETESTING', label: '回踩中' },
-  { value: 'FAILED', label: '突破失败' },
+  { value: 'ALL', label: __t('全部') },
+  { value: 'WATCHING', label: __t('观察中') },
+  { value: 'TRIGGERED', label: __t('已触发') },
+  { value: 'CONFIRMED', label: __t('已确认') },
+  { value: 'HOLDING', label: __t('保持中') },
+  { value: 'RETESTING', label: __t('回踩中') },
+  { value: 'FAILED', label: __t('突破失败') },
 ];
 const SCORE_CAPS = [
-  { value: 0, label: '不限' },
-  { value: 65, label: '65 分以上' },
-  { value: 80, label: '80 分以上' },
+  { value: 0, label: __t('不限') },
+  { value: 65, label: __t('65 分以上') },
+  { value: 80, label: __t('80 分以上') },
 ];
 
 /* ---------------- fchip 胶囊（选中 spring-pop 1.04） ---------------- */
@@ -95,7 +96,7 @@ function WatchOnlyToggle({ value, onChange }: { value: boolean; onChange: (v: bo
           aria-hidden="true"
         />
       </motion.span>
-      只看自选
+      {__t('只看自选')}
     </button>
   );
 }
@@ -108,10 +109,10 @@ const SESSION_DOT: Record<BreakoutSession, string> = {
   closed: 'bg-ink-400',
 };
 const SESSION_TEXT: Record<BreakoutSession, string> = {
-  premarket: '盘前',
-  regular: '盘中',
-  postmarket: '盘后',
-  closed: '休市',
+  premarket: __t('盘前'),
+  regular: __t('盘中'),
+  postmarket: __t('盘后'),
+  closed: __t('休市'),
 };
 
 function SessionChip({ session }: { session: BreakoutSession }) {
@@ -165,7 +166,7 @@ export default function Breakouts() {
       setHistoryCursor(next.nextCursor);
     } catch (error) {
       // 加载更多失败此前被吞掉，用户只会觉得按钮没反应（审计 P2-24 同型）。
-      setHistoryMoreError(error instanceof ApiError ? error : new ApiError(500, '加载更多失败'));
+      setHistoryMoreError(error instanceof ApiError ? error : new ApiError(500, __t('加载更多失败')));
     } finally {
       setHistoryLoadingMore(false);
     }
@@ -246,7 +247,7 @@ export default function Breakouts() {
       })
       .catch((error: unknown) => {
         // 详情失败此前被完全吞掉：界面既不报错也不给重试（审计 P2-20）。
-        setDetailError(error instanceof ApiError ? error : new ApiError(500, '详情加载失败'));
+        setDetailError(error instanceof ApiError ? error : new ApiError(500, __t('详情加载失败')));
       });
   };
 
@@ -265,7 +266,7 @@ export default function Breakouts() {
     setScanning(true);
     try {
       await runtimeApi.workerAction('breakout_refresh');
-      toast.success('已请求刷新', '扫描任务已受理，完成后自动更新');
+      toast.success(__t('已请求刷新'), __t('扫描任务已受理，完成后自动更新'));
       statusQ.refresh();
       window.setTimeout(() => {
         statusQ.refresh();
@@ -273,7 +274,7 @@ export default function Breakouts() {
         eventsQ.refresh();
       }, 10_000);
     } catch {
-      toast.error('触发失败', '扫描任务未被受理，请稍后重试');
+      toast.error(__t('触发失败'), __t('扫描任务未被受理，请稍后重试'));
     } finally {
       window.setTimeout(() => setScanning(false), 700);
     }
@@ -328,20 +329,20 @@ export default function Breakouts() {
             <span className="font-mono text-caption font-semibold text-brand-600">§03</span>
             <span className="eyebrow">BREAKOUT RADAR · INTRADAY</span>
           </p>
-          <h1 className="mt-2 font-display text-display-l text-ink-900">突破雷达</h1>
-          <p className="mt-1.5 text-body-s text-ink-500">全市场粗筛 → 点时复核 → 生命周期跟踪</p>
+          <h1 className="mt-2 font-display text-display-l text-ink-900">{__t('突破雷达')}</h1>
+          <p className="mt-1.5 text-body-s text-ink-500">{__t('全市场粗筛 → 点时复核 → 生命周期跟踪')}</p>
         </div>
         {/* 紧凑状态条：启用 LED · 快照与活跃条数（副标合并至此去重）· 最近扫描 · 时段 chip · 扫描服务 · 下次扫描倒计时 · 只看自选 */}
         <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 pb-1 text-caption text-ink-500">
           <span className="inline-flex items-center gap-1.5">
             <span className={cn('size-2 rounded-full', status?.enabled ? 'bg-up-600 animate-led-pulse' : 'bg-ink-300')} aria-hidden="true" />
-            {status ? (status.enabled ? '扫描已启用' : '扫描已暂停') : '状态读取中…'}
+            {status ? (status.enabled ? __t('扫描已启用') : __t('扫描已暂停')) : __t('状态读取中…')}
           </span>
           <span className="font-mono tnum">
-            数据截至 {snapshotAt} · 读取 {readAt} · <span className="text-ink-700">{currentAll.length}</span> 条活跃
+            {__t('数据截至')} {snapshotAt} {__t('· 读取')} {readAt} · <span className="text-ink-700">{currentAll.length}</span> {__t('条活跃')}
           </span>
           <span className="font-mono tnum">
-            最近扫描 {status?.lastScanAt ? fmtTimeHHMMSS(new Date(status.lastScanAt)) : '—'}
+            {__t('最近扫描')} {status?.lastScanAt ? fmtTimeHHMMSS(new Date(status.lastScanAt)) : '—'}
           </span>
           {status?.market_session && <SessionChip session={status.market_session} />}
           {/* 扫描服务三态：正常 / 异常 / 状态未知。healthy === null 表示后端没有报告
@@ -358,18 +359,18 @@ export default function Breakouts() {
                     : 'text-ink-400'
               }
             />
-            扫描服务{' '}
+            {__t('扫描服务')}{' '}
             {!status
               ? '—'
               : status.worker?.healthy === true
-                ? '正常'
+                ? __t('正常')
                 : status.worker?.healthy === false
-                  ? '异常'
-                  : '状态未知'}
+                  ? __t('异常')
+                  : __t('状态未知')}
           </span>
           {nextCountdown && (
             <span className="font-mono tnum">
-              下次扫描 <span className="text-brand-600">{nextCountdown}</span>
+              {__t('下次扫描')} <span className="text-brand-600">{nextCountdown}</span>
             </span>
           )}
           <span className="inline-flex items-center gap-1.5">
@@ -377,7 +378,7 @@ export default function Breakouts() {
             {/* 自选未就绪时说清楚过滤还没生效，而不是先给一个假空态（审计 P2-18） */}
             {watchFilterPending && (
               <span className="text-micro text-ink-400">
-                {watchFailed ? '自选读取失败 · 暂显示全部' : '自选加载中 · 暂显示全部'}
+                {watchFailed ? __t('自选读取失败 · 暂显示全部') : __t('自选加载中 · 暂显示全部')}
               </span>
             )}
           </span>
@@ -388,9 +389,9 @@ export default function Breakouts() {
       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line pb-4">
         <span className="flex items-center gap-1.5 text-caption text-ink-400">
           <Icon name="filter-funnel" size={13} />
-          筛选
+          {__t('筛选')}
         </span>
-        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="状态筛选">
+        <div className="flex flex-wrap items-center gap-1" role="group" aria-label={__t("状态筛选")}>
           {STATUS_CAPS.map((c) => (
             <FChip key={c.value} active={statusFilter === c.value} onClick={() => setStatusFilter(c.value)}>
               {c.label}
@@ -398,8 +399,8 @@ export default function Breakouts() {
           ))}
         </div>
         <span className="hidden h-4 w-px bg-line-strong sm:block" aria-hidden="true" />
-        <div className="flex items-center gap-1" role="group" aria-label="评分筛选">
-          <span className="mr-0.5 text-caption text-ink-400">评分</span>
+        <div className="flex items-center gap-1" role="group" aria-label={__t("评分筛选")}>
+          <span className="mr-0.5 text-caption text-ink-400">{__t('评分')}</span>
           {SCORE_CAPS.map((c) => (
             <FChip key={c.value} active={minScore === c.value} onClick={() => setMinScore(c.value)} ariaLabel={`评分${c.label}`}>
               {c.label}
@@ -418,31 +419,31 @@ export default function Breakouts() {
         )}
         <span className="ml-auto flex items-center gap-3">
           {statusQ.lastUpdatedAt && (
-            <span className="font-mono text-micro text-ink-400 tnum">更新 {fmtTimeHHMMSS(statusQ.lastUpdatedAt)}</span>
+            <span className="font-mono text-micro text-ink-400 tnum">{__t('更新')} {fmtTimeHHMMSS(statusQ.lastUpdatedAt)}</span>
           )}
           {isOwner && (
             <button
               onClick={onRefreshSnapshot}
               disabled={scanning}
-              title="立即触发一次突破扫描"
+              title={__t("立即触发一次突破扫描")}
               className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
             >
               <Icon name="refresh" size={14} className={scanning ? 'animate-spin-once' : ''} />
-              立即扫描
+              {__t('立即扫描')}
             </button>
           )}
         </span>
       </div>
 
       {/* 当日信号：左大面板（lead 压缩大卡）+ 右吸顶栏（事件队列 + 生命周期分布） */}
-      <section className="mt-8" aria-label="当日信号">
+      <section className="mt-8" aria-label={__t("当日信号")}>
         <div className="mb-4 flex items-end justify-between border-b border-line pb-3">
           <div>
             <p className="eyebrow">TODAY&apos;S SIGNALS</p>
-            <h2 className="mt-1 text-h2 text-ink-900">当日信号</h2>
+            <h2 className="mt-1 text-h2 text-ink-900">{__t('当日信号')}</h2>
           </div>
           <p className="font-mono text-caption text-ink-400 tnum">
-            {current.length} 个活跃{onlyWatch ? ' · 只看自选' : ''}
+            {current.length} {__t('个活跃')}{onlyWatch ? __t(' · 只看自选') : ''}
           </p>
         </div>
         {currentQ.loading ? (
@@ -463,14 +464,14 @@ export default function Breakouts() {
               <EmptyState
                 variant="error"
                 image="/empty-radar.svg"
-                title={currentError.code === 503 ? '扫描数据暂不可用' : '信号加载失败'}
-                description={currentError.code === 503 ? '稍后刷新再试' : currentError.message}
+                title={currentError.code === 503 ? __t('扫描数据暂不可用') : __t('信号加载失败')}
+                description={currentError.code === 503 ? __t('稍后刷新再试') : currentError.message}
                 action={
                   <button
                     onClick={currentQ.refresh}
                     className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
                   >
-                    重试
+                    {__t('重试')}
                   </button>
                 }
               />
@@ -484,13 +485,13 @@ export default function Breakouts() {
             <div className="card-surface">
               <EmptyState
                 image="/empty-radar.svg"
-                title={statusFilter !== 'ALL' || minScore > 0 || tickerFilter ? '没有符合筛选的信号' : '雷达在转，信号还没来'}
+                title={statusFilter !== 'ALL' || minScore > 0 || tickerFilter ? __t('没有符合筛选的信号') : __t('雷达在转，信号还没来')}
                 description={
                   statusFilter !== 'ALL' || minScore > 0 || tickerFilter
-                    ? '放宽筛选条件，或清除代码聚焦试试'
+                    ? __t('放宽筛选条件，或清除代码聚焦试试')
                     : onlyWatch
-                      ? '自选池本轮暂无触发，试试关闭「只看自选」'
-                      : '下一轮扫描在冷却结束后自动开始'
+                      ? __t('自选池本轮暂无触发，试试关闭「只看自选」')
+                      : __t('下一轮扫描在冷却结束后自动开始')
                 }
                 action={
                   <button
@@ -498,7 +499,7 @@ export default function Breakouts() {
                     className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
                   >
                     <Icon name="clock-ny" size={14} />
-                    看看历史事件
+                    {__t('看看历史事件')}
                   </button>
                 }
               />
@@ -538,9 +539,9 @@ export default function Breakouts() {
               <div className="mt-6">
                 <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2">
                   <p className="text-body-s font-semibold text-ink-800">
-                    其余当日信号 · <span className="font-mono tnum">{current.length - 1}</span>
+                    {__t('其余当日信号 ·')} <span className="font-mono tnum">{current.length - 1}</span>
                   </p>
-                  <p className="text-micro text-ink-400">点击小卡查看事件详情 · 点击代码打开个股抽屉</p>
+                  <p className="text-micro text-ink-400">{__t('点击小卡查看事件详情 · 点击代码打开个股抽屉')}</p>
                 </div>
                 <SignalCards
                   events={current.slice(1)}
@@ -554,7 +555,7 @@ export default function Breakouts() {
         )}
       </section>
 
-      <SourceNote className="mt-8" text="突破扫描结果 · 行情为延迟数据" />
+      <SourceNote className="mt-8" text={__t("突破扫描结果 · 行情为延迟数据")} />
 
       {/* 事件详情模态（保留） */}
       <EventDetail

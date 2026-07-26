@@ -2,6 +2,9 @@
 import type { Dict } from './types';
 
 export const CHROME: Dict = {
+  /* InfoHint（评分口径浮层，几乎每个分数旁边都有一个） */
+  '{title}：查看评分说明': ['{title}: view scoring methodology', '{title}：スコア算出方法を見る'],
+
   /* 导航与页面名 */
   '自选': ['Watchlist', 'ウォッチリスト'],
   '选股': ['Screener', 'スクリーナー'],

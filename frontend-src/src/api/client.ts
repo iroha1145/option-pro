@@ -6,6 +6,7 @@
  * 错误形状统一 { code, message }；503 → UI 显示「快照不可用」空态。
  */
 
+import { t } from '../i18n/core.ts';
 export type ApiMode = 'mock' | 'live';
 
 export const API_MODE: ApiMode =
@@ -157,7 +158,7 @@ export async function requestRaw(path: string, init?: RequestOptions): Promise<R
     });
   } catch (error) {
     if (timeout?.timedOut()) {
-      throw new ApiError(408, '请求超时，请重试', {
+      throw new ApiError(408, t('请求超时，请重试'), {
         bizCode: 'request_timeout',
         retryable: true,
       });
@@ -167,7 +168,7 @@ export async function requestRaw(path: string, init?: RequestOptions): Promise<R
     timeout?.dispose();
   }
   if (!res.ok) {
-    let message = res.statusText || '请求失败';
+    let message = res.statusText || t('请求失败');
     let bizCode: string | undefined;
     let retryable: boolean | undefined;
     let retryAfter: number | undefined;

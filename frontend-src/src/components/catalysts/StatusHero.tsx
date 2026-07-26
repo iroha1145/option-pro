@@ -8,6 +8,7 @@ import SourceNote from '@/components/shared/SourceNote';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { fmtRelative } from '@/lib/format';
+import { t } from '../../i18n/core.ts';
 
 function HeroCell({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -20,18 +21,18 @@ function HeroCell({ label, children }: { label: string; children: React.ReactNod
 
 /** 分析不可用原因 → 中文（对齐 personal_service.analysis_availability 的真实原因码；未知码给通用文案） */
 const ANALYSIS_REASON_CN: Record<string, { label: string; tone: 'muted' | 'down' | 'warn' }> = {
-  owner_login_required: { label: '需 Owner 登录', tone: 'muted' },
-  not_configured: { label: '未配置模型密钥', tone: 'down' },
-  ai_not_configured: { label: '未配置模型密钥', tone: 'down' },
-  settings_unavailable: { label: '运行设置不可用', tone: 'down' },
-  read_only_mode: { label: '只读模式', tone: 'muted' },
-  manual_analysis_disabled: { label: '手动分析已关闭', tone: 'muted' },
-  worker_unavailable: { label: '后台 worker 不可用', tone: 'down' },
-  daily_token_limit: { label: '今日 Token 预算已用完', tone: 'warn' },
-  daily_budget_usd_reached: { label: '今日预算已用完', tone: 'warn' },
-  analysis_in_progress: { label: '分析任务进行中', tone: 'warn' },
-  cooldown_active: { label: '冷却中', tone: 'warn' },
-  catalyst_disabled: { label: '催化剂模块未启用', tone: 'down' },
+  owner_login_required: { label: t('需 Owner 登录'), tone: 'muted' },
+  not_configured: { label: t('未配置模型密钥'), tone: 'down' },
+  ai_not_configured: { label: t('未配置模型密钥'), tone: 'down' },
+  settings_unavailable: { label: t('运行设置不可用'), tone: 'down' },
+  read_only_mode: { label: t('只读模式'), tone: 'muted' },
+  manual_analysis_disabled: { label: t('手动分析已关闭'), tone: 'muted' },
+  worker_unavailable: { label: t('后台 worker 不可用'), tone: 'down' },
+  daily_token_limit: { label: t('今日 Token 预算已用完'), tone: 'warn' },
+  daily_budget_usd_reached: { label: t('今日预算已用完'), tone: 'warn' },
+  analysis_in_progress: { label: t('分析任务进行中'), tone: 'warn' },
+  cooldown_active: { label: t('冷却中'), tone: 'warn' },
+  catalyst_disabled: { label: t('催化剂模块未启用'), tone: 'down' },
 };
 
 export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number }) {
@@ -50,11 +51,11 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
   const statusUnread = statusState === 'error';
   const hotUnread = hotState === 'error';
 
-  const reason = s?.analysisReason ? ANALYSIS_REASON_CN[s.analysisReason] ?? { label: '模型分析不可用', tone: 'down' as const } : null;
+  const reason = s?.analysisReason ? ANALYSIS_REASON_CN[s.analysisReason] ?? { label: t('模型分析不可用'), tone: 'down' as const } : null;
   const unreadCell = (
     <div className="flex items-center gap-2">
       <Led tone="warn" />
-      <span className="text-body-s font-medium text-ink-800">状态读取失败</span>
+      <span className="text-body-s font-medium text-ink-800">{t('状态读取失败')}</span>
     </div>
   );
 
@@ -63,11 +64,11 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
-      aria-label="数据源状态"
+      aria-label={t("数据源状态")}
       className="card-surface mt-6"
     >
       <div className="flex flex-col divide-y divide-line sm:flex-row sm:divide-x sm:divide-y-0">
-        <HeroCell label="数据源状态">
+        <HeroCell label={t("数据源状态")}>
           {loading ? (
             <SkeletonBlock className="h-5 w-32" />
           ) : statusUnread ? (
@@ -76,17 +77,17 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
             <div className="flex items-center gap-2">
               <Led tone={s?.collecting ? 'up' : 'muted'} pulse={!!s?.collecting} />
               <span className="text-body-s font-medium text-ink-800">
-                {s?.collecting ? '采集中' : '已暂停'}
-                {s?.collecting && s.intervalMinutes != null && <span className="text-ink-500"> · 每 {s.intervalMinutes} 分钟</span>}
+                {s?.collecting ? t('采集中') : t('已暂停')}
+                {s?.collecting && s.intervalMinutes != null && <span className="text-ink-500"> {t('· 每')} {s.intervalMinutes} {t('分钟')}</span>}
               </span>
               <span className="font-mono text-micro text-ink-400 tnum">
-                {s && s.sourcesTotal > 0 ? `${s.sourcesActive}/${s.sourcesTotal} ${s.streams?.length ? '流' : '源'}` : ''}
+                {s && s.sourcesTotal > 0 ? `${s.sourcesActive}/${s.sourcesTotal} ${s.streams?.length ? t('流') : t('源')}` : ''}
               </span>
             </div>
           )}
           {s && (
             <p className="mt-1 flex flex-wrap items-center gap-x-2.5 font-mono text-micro text-ink-400 tnum">
-              <span>上次采集 {fmtRelative(s.lastCrawlAt)}</span>
+              <span>{t('上次采集')} {fmtRelative(s.lastCrawlAt)}</span>
               {s.streams?.map((st) => (
                 <span key={st.name} className="inline-flex items-center gap-1">
                   <Led tone={st.ok ? 'up' : 'down'} className="size-1.5" />
@@ -97,7 +98,7 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
           )}
         </HeroCell>
 
-        <HeroCell label="热点计算">
+        <HeroCell label={t("热点计算")}>
           {hotState === 'loading' ? (
             <SkeletonBlock className="h-5 w-28" />
           ) : hotUnread ? (
@@ -105,23 +106,23 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
           ) : hs?.state === 'computing' ? (
             <div className="flex items-center gap-2">
               <Led tone="warn" pulse />
-              <span className="text-body-s font-medium text-ink-800">热点计算中…</span>
+              <span className="text-body-s font-medium text-ink-800">{t('热点计算中…')}</span>
               {hs.etaSeconds != null && (
-                <span className="font-mono text-micro text-ink-400 tnum">预计 {hs.etaSeconds}s</span>
+                <span className="font-mono text-micro text-ink-400 tnum">{t('预计')} {hs.etaSeconds}s</span>
               )}
             </div>
           ) : (
             <div className="flex items-center gap-2">
               <Led tone={hs?.scanning ? 'brand' : 'muted'} pulse={!!hs?.scanning} />
               <span className="text-body-s font-medium text-ink-800">
-                {hs?.scanning ? '已就绪' : '已暂停'} · <span className="font-mono tnum">{hs?.groupCount ?? 0}</span> 组热点
+                {hs?.scanning ? t('已就绪') : t('已暂停')} · <span className="font-mono tnum">{hs?.groupCount ?? 0}</span> {t('组热点')}
               </span>
             </div>
           )}
-          {hs && <p className="mt-1 font-mono text-micro text-ink-400 tnum">更新 {fmtRelative(hs.updatedAt)}</p>}
+          {hs && <p className="mt-1 font-mono text-micro text-ink-400 tnum">{t('更新')} {fmtRelative(hs.updatedAt)}</p>}
         </HeroCell>
 
-        <HeroCell label="分析可用性">
+        <HeroCell label={t("分析可用性")}>
           {loading ? (
             <SkeletonBlock className="h-5 w-28" />
           ) : statusUnread ? (
@@ -133,7 +134,7 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
                 tone={s?.analysisAvailable ? 'ai' : reason ? reason.tone : 'down'}
               />
               <span className="text-body-s font-medium text-ink-800">
-                {s?.analysisAvailable ? '模型分析可用' : reason ? reason.label : '模型分析不可用'}
+                {s?.analysisAvailable ? t('模型分析可用') : reason ? reason.label : t('模型分析不可用')}
               </span>
               <Icon name="spark-ai" size={14} className="text-ai-600" />
             </div>
@@ -142,36 +143,36 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
             <p className="mt-1 font-mono text-micro text-ink-400 tnum">
               {s.analysisModel ? (
                 <>
-                  模型 {s.analysisModel}
+                  {t('模型')} {s.analysisModel}
                   {s.analysisReasoning ? ` · ${s.analysisReasoning}` : ''}
                 </>
               ) : s.queueDepth != null ? (
                 <>
-                  队列 {s.queueDepth} · 已分析 <span className="text-ink-600">{s.analyzedToday ?? 0}</span>
+                  {t('队列')} {s.queueDepth} {t('· 已分析')} <span className="text-ink-600">{s.analyzedToday ?? 0}</span>
                 </>
               ) : null}
             </p>
           )}
         </HeroCell>
 
-        <HeroCell label="今日新闻">
+        <HeroCell label={t("今日新闻")}>
           {newsQ.loading && !newsQ.data ? (
             <SkeletonBlock className="h-7 w-16" />
           ) : (
             <p className="font-mono text-data-l text-ink-900 tnum">
               {newsQ.data ? `${newsQ.data.count}${newsQ.data.saturated ? '+' : ''}` : '—'}
-              <span className="ml-1.5 text-micro font-normal text-ink-400">条 / 24h</span>
+              <span className="ml-1.5 text-micro font-normal text-ink-400">{t('条 / 24h')}</span>
             </p>
           )}
           {newsQ.data && (
             <p className="mt-0.5 font-mono text-micro text-ink-400 tnum">
-              已分析 <span className="text-ink-600">{newsQ.data.analyzed}</span> 条
+              {t('已分析')} <span className="text-ink-600">{newsQ.data.analyzed}</span> {t('条')}
             </p>
           )}
         </HeroCell>
       </div>
       <div className="px-5 pb-3">
-        <SourceNote text="新闻与经济日历持续收录；每条新闻标注原始来源；滞后表示数据更新到了什么时候；影响分与置信度为 AI 估计" />
+        <SourceNote text={t("新闻与经济日历持续收录；每条新闻标注原始来源；滞后表示数据更新到了什么时候；影响分与置信度为 AI 估计")} />
       </div>
     </motion.section>
   );

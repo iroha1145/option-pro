@@ -3,6 +3,7 @@ import { get, post, mockOr, toQuery } from '../client';
 import { asRec, pickN, pickS, unwrap } from '../live';
 import * as fx2 from '@/mocks/fixtures2';
 import type { EarningsItem } from '../types';
+import { t } from '../../i18n/core.ts';
 
 export type EarningsImpactRelation = 'competitor' | 'supplier' | 'customer' | 'etf' | 'opposing';
 export type EarningsImpactDirection = 'bullish' | 'bearish' | 'mixed';
@@ -149,7 +150,7 @@ export function normalizeLiveEarningsImpact(body: unknown): EarningsImpactResult
   const reportDate = pickS(row, 'reportDate', 'report_date', '_report_date');
 
   if (outputLanguage !== 'zh-CN' || !ticker || !summary || !expectation || !rawImpacted) {
-    throw new Error('财报影响分析返回字段不完整');
+    throw new Error(t('财报影响分析返回字段不完整'));
   }
 
   const impacted = rawImpacted.map((value) => {
@@ -168,7 +169,7 @@ export function normalizeLiveEarningsImpact(body: unknown): EarningsImpactResult
       || !DIRECTIONS.has(direction as EarningsImpactDirection)
       || !reason
     ) {
-      throw new Error('财报影响分析的关联标的字段不完整');
+      throw new Error(t('财报影响分析的关联标的字段不完整'));
     }
     return {
       ticker: itemTicker.toUpperCase(),
@@ -256,7 +257,7 @@ function normalizeMockEarningsImpact(body: unknown): EarningsImpactResult {
   } catch {
     const row = asRec(body);
     const ticker = pickS(row, 'ticker') ?? '';
-    const summary = pickS(row, 'summary') ?? '暂无分析摘要';
+    const summary = pickS(row, 'summary') ?? t('暂无分析摘要');
     const related = Array.isArray(row.related) ? row.related : [];
     return {
       outputLanguage: 'zh-CN',
@@ -271,7 +272,7 @@ function normalizeMockEarningsImpact(body: unknown): EarningsImpactResult {
           name: pickS(item, 'name') ?? pickS(item, 'ticker') ?? '',
           relation: 'opposing',
           direction: change == null ? 'mixed' : change > 0 ? 'bullish' : change < 0 ? 'bearish' : 'mixed',
-          reason: pickS(item, 'reason', 'relation') ?? '本地演示关联项',
+          reason: pickS(item, 'reason', 'relation') ?? t('本地演示关联项'),
         };
       }),
     };
@@ -285,7 +286,7 @@ export const earningsApi = {
         items: fx2.getEarningsUpcoming(),
         dataLimited: false,
         sourceStatus: 'active',
-        providers: ['本地演示数据'],
+        providers: [t('本地演示数据')],
         asOf: new Date().toISOString(),
         refreshStatus: null,
         refreshRetryAfterSeconds: null,
@@ -299,7 +300,7 @@ export const earningsApi = {
         items: fx2.refreshEarningsUpcoming(),
         dataLimited: false,
         sourceStatus: 'active',
-        providers: ['本地演示数据'],
+        providers: [t('本地演示数据')],
         asOf: new Date().toISOString(),
         refreshStatus: 'refreshed',
         refreshRetryAfterSeconds: 60,

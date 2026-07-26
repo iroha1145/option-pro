@@ -4,6 +4,7 @@ import { fmtPct } from '@/lib/format';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import type { SectorVm } from './model';
 import { heatTone, periodLabel } from './model';
+import { t } from '../../i18n/core.ts';
 
 const GRID_CLASS =
   'grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3 xl:grid-cols-6';
@@ -47,7 +48,7 @@ function HeatTile({
       aria-pressed={selected}
       aria-label={
         hasReturn
-          ? `${sector.name}${periodLabel(sector.period)}平均收益 ${sector.avgReturn?.toFixed(2)}%，平均强度 ${sector.avgStrength ?? '暂无'}`
+          ? `${sector.name}${periodLabel(sector.period)}平均收益 ${sector.avgReturn?.toFixed(2)}%，平均强度 ${sector.avgStrength ?? t('暂无')}`
           : `${sector.name}暂无强度聚合`
       }
       className={cn(
@@ -79,7 +80,7 @@ function HeatTile({
             {sector.name}
           </span>
           <span className={cn('hidden font-mono text-micro tnum md:inline', textSub)}>
-            {sector.coveredCount !== null ? `${sector.coveredCount} 只` : '未覆盖'}
+            {sector.coveredCount !== null ? `${sector.coveredCount} 只` : t('未覆盖')}
           </span>
         </span>
         <span>
@@ -92,7 +93,7 @@ function HeatTile({
             {hasReturn ? fmtPct(animated) : '—'}
           </span>
           <span className={cn('block text-micro', textSub)}>
-            {periodLabel(sector.period)}平均收益
+            {periodLabel(sector.period)}{t('平均收益')}
           </span>
         </span>
       </span>
@@ -116,16 +117,16 @@ function HeatTile({
         role="tooltip"
         className="glass pointer-events-none absolute -top-2 left-1/2 z-30 hidden w-48 -translate-x-1/2 -translate-y-full rounded-md border border-line p-2.5 text-left shadow-sh-2 md:group-hover:block md:group-focus-visible:block"
       >
-        <span className="eyebrow block">{sector.name} · 成分股汇总</span>
+        <span className="eyebrow block">{sector.name} {t('· 成分股汇总')}</span>
         <span className="mt-1.5 block space-y-1 text-micro">
           <span className="flex items-center justify-between gap-2">
-            <span className="text-ink-500">平均强度</span>
+            <span className="text-ink-500">{t('平均强度')}</span>
             <span className="font-mono text-ink-800 tnum">
               {sector.avgStrength?.toFixed(1) ?? '—'}
             </span>
           </span>
           <span className="flex items-center justify-between gap-2">
-            <span className="text-ink-500">强度领先</span>
+            <span className="text-ink-500">{t('强度领先')}</span>
             <span className="font-mono font-semibold text-ink-800">
               {leader
                 ? `${leader.ticker} ${leader.score?.toFixed(1) ?? '—'}`
@@ -133,7 +134,7 @@ function HeatTile({
             </span>
           </span>
           <span className="flex items-center justify-between gap-2 border-t border-line pt-1">
-            <span className="text-ink-500">统计覆盖</span>
+            <span className="text-ink-500">{t('统计覆盖')}</span>
             <span className="font-mono text-ink-800 tnum">
               {sector.coveredCount ?? '—'} / {sector.memberCount}
             </span>
@@ -156,7 +157,7 @@ export default function HeatMatrix({
   onSelect,
 }: HeatMatrixProps) {
   return (
-    <div className={GRID_CLASS} role="group" aria-label="板块平均收益热力矩阵">
+    <div className={GRID_CLASS} role="group" aria-label={t("板块平均收益热力矩阵")}>
       {sectors.map((sector, index) => (
         <HeatTile
           key={sector.id}

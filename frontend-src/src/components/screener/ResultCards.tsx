@@ -20,6 +20,7 @@ import {
   type DetailCache,
   type RowSignalsState,
 } from './types';
+import { t } from '../../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -94,7 +95,7 @@ export default function ResultCards({
                     {r.strengthScore.toFixed(1)}
                   </span>
                   <span className="ml-1.5 text-micro text-ink-400">
-                    强度分 · {strength.band} {strength.label}
+                    {t('强度分 ·')} {strength.band} {strength.label}
                     <InfoHint hint={SCORE_HINTS.strengthComposite} size={11} className="ml-1" />
                   </span>
                 </span>

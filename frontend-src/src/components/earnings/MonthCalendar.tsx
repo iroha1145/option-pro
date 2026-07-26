@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import type { EarningsRow } from './types';
 import { addDays, etToday, fmtMDCN, weekStartMonday } from './types';
-import { t } from '@/i18n/core';
+import { t } from '../../i18n/core.ts';
 
 interface MonthCalendarProps {
   items: EarningsRow[];
@@ -25,12 +25,12 @@ interface MonthCalendarProps {
 
 /* 完整「周X」作为独立词条（而不是「周」+ 单字拼接）：英文 Mon–Sun、日文 月–日
    各自是自足的星期缩写，前缀拼接会拼出 "WeekMon"/"週月" 这种破损文案。 */
-const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'] as const;
+const WEEKDAYS = [t('周一'), t('周二'), t('周三'), t('周四'), t('周五'), t('周六'), t('周日')] as const;
 const MAX_CHIPS = 3;
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
 const timingLabel = (timing: EarningsRow['timing']) => (
-  timing === 'bmo' ? '盘前' : timing === 'amc' ? '盘后' : '时间待定'
+  timing === 'bmo' ? t('盘前') : timing === 'amc' ? t('盘后') : t('时间待定')
 );
 
 /** 'YYYY-MM' 加减月（UTC 锚定） */
@@ -104,14 +104,14 @@ export default function MonthCalendar({
   };
 
   return (
-    <section className="card-surface overflow-hidden" aria-label="月历">
+    <section className="card-surface overflow-hidden" aria-label={t("月历")}>
       {/* 头部：‹ › + Serif 月标题 + 今天 */}
       <div className="flex h-12 items-center justify-between border-b border-line px-4">
         <button
           onClick={() => goMonth(-1)}
           disabled={cursor <= minMonth}
           className="flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-500 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-ink-500"
-          aria-label="上个月"
+          aria-label={t("上个月")}
         >
           <Icon name="chevron-right" size={14} className="rotate-180" />
         </button>
@@ -123,14 +123,14 @@ export default function MonthCalendar({
             onClick={goToday}
             className="rounded-sm border border-line bg-card px-2 py-1 text-caption text-ink-500 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
           >
-            今天
+            {t('今天')}
           </button>
         </div>
         <button
           onClick={() => goMonth(1)}
           disabled={cursor >= maxMonth}
           className="flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-500 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-ink-500"
-          aria-label="下个月"
+          aria-label={t("下个月")}
         >
           <Icon name="chevron-right" size={14} />
         </button>
@@ -208,7 +208,7 @@ export default function MonthCalendar({
                   >
                     {label}
                   </span>
-                  {isToday && <span className="size-1.5 rounded-full bg-brand-600" aria-label="今天" />}
+                  {isToday && <span className="size-1.5 rounded-full bg-brand-600" aria-label={t("今天")} />}
                 </div>
 
                 {/* 桌面 chips（≤3 + 折叠 +N），无财报留白 */}

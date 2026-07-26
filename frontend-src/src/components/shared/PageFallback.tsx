@@ -10,18 +10,19 @@
  * 代价是快速加载时会短暂看到一段空白，但它随即被更高的真实内容取代，
  * 屏幕上不会跳动 —— 这正是想要的结果。
  */
+import { t } from '../../i18n/core.ts';
 export default function PageFallback() {
   return (
     <div
       className="flex min-h-screen items-start justify-center pt-[20vh]"
       role="status"
-      aria-label="页面加载中"
+      aria-label={t("页面加载中")}
     >
       <span
         className="size-5 animate-spin rounded-full border-2 border-line border-t-brand-600"
         aria-hidden="true"
       />
-      <span className="ml-2.5 text-caption text-ink-400">加载中…</span>
+      <span className="ml-2.5 text-caption text-ink-400">{t('加载中…')}</span>
     </div>
   );
 }

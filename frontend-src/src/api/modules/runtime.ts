@@ -4,6 +4,7 @@ import { asRec, pickN } from '../live';
 import * as session from '@/mocks/session';
 import * as fx2 from '@/mocks/fixtures2';
 import type { RuntimeHistoryEntry, RuntimeSettings, WorkerTask } from '../types';
+import { t } from '../../i18n/core.ts';
 
 /** 契约 GET /api/runtime-settings → {version, settings:{ai,catalyst}, updated_at} */
 interface LiveSettingsEnvelope {
@@ -109,10 +110,10 @@ export const runtimeApi = {
       const action = await runtimeApi.workerActionStatus(requestId);
       if (action.status === 'completed') return action;
       if (action.status === 'failed' || action.status === 'cancelled' || action.status === 'canceled') {
-        throw new ApiError(503, action.errorCode ?? '后台扫描失败', { bizCode: action.errorCode ?? undefined, payload: action });
+        throw new ApiError(503, action.errorCode ?? t('后台扫描失败'), { bizCode: action.errorCode ?? undefined, payload: action });
       }
       await new Promise((resolve) => window.setTimeout(resolve, 1_500));
     }
-    throw new ApiError(504, '后台扫描等待超时', { bizCode: 'worker_action_timeout' });
+    throw new ApiError(504, t('后台扫描等待超时'), { bizCode: 'worker_action_timeout' });
   },
 };

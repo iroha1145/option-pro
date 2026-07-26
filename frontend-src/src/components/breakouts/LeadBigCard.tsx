@@ -38,7 +38,7 @@ import {
   scoreBarClass,
 } from './types';
 import type { BreakoutCurrentEvent, BreakoutEventFull, BreakoutSession, LifecycleState } from './types';
-import { t } from '@/i18n/core';
+import { t } from '../../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const MONO = '"IBM Plex Mono", monospace';
@@ -92,9 +92,9 @@ function MacroPriorityShadow({ ev }: { ev: BreakoutEventFull }) {
   return (
     <span
       className="flex items-center gap-1 text-micro text-ink-400"
-      title={`宏观适配 ${fit.toFixed(1)}（${tone ? MACRO_TONE_LABEL[tone] : '—'}）。影子优先级 = 生产优先级 ${delta >= 0 ? '+' : '−'} ${Math.abs(delta).toFixed(1)}，上限 ±4。不改变突破质量分与事件生命周期。`}
+      title={`宏观适配 ${fit.toFixed(1)}（${tone ? t(MACRO_TONE_LABEL[tone]) : '—'}）。影子优先级 = 生产优先级 ${delta >= 0 ? '+' : '−'} ${Math.abs(delta).toFixed(1)}，上限 ±4。不改变突破质量分与事件生命周期。`}
     >
-      <span>宏观影子</span>
+      <span>{t('宏观影子')}</span>
       <span className="font-mono tnum text-ink-600">{shadow.toFixed(1)}</span>
       <span
         className={cn(
@@ -138,7 +138,7 @@ function PriorityRing({ score }: { score: number }) {
         </div>
       </div>
       <span className="mt-0.5 whitespace-nowrap text-[10px] leading-[13px] text-ink-400">
-        告警优先级
+        {t('告警优先级')}
         <InfoHint hint={SCORE_HINTS.breakoutPriority} side="top" align="end" size={11} className="ml-0.5" />
       </span>
     </div>
@@ -147,11 +147,11 @@ function PriorityRing({ score }: { score: number }) {
 
 /* ---------------- 生命周期步进条（五节点 + FAILED/EXPIRED 末端标记） ---------------- */
 const STEPS = [
-  { key: 'DISCOVERED', label: '已发现' },
-  { key: 'TRIGGERED', label: '已触发' },
-  { key: 'CONFIRMED', label: '已确认' },
-  { key: 'HOLDING', label: '保持中' },
-  { key: 'RETESTING', label: '回踩中' },
+  { key: 'DISCOVERED', label: t('已发现') },
+  { key: 'TRIGGERED', label: t('已触发') },
+  { key: 'CONFIRMED', label: t('已确认') },
+  { key: 'HOLDING', label: t('保持中') },
+  { key: 'RETESTING', label: t('回踩中') },
 ] as const;
 
 function stepIndex(state: LifecycleState): number {
@@ -298,7 +298,7 @@ function buildMiniOption(bars: MiniBar[]): ChartOption {
         const color = chg >= 0 ? CH.up600 : CH.down600;
         return (
           `<div style="font-family:${MONO};font-size:12px;line-height:19px">` +
-          `<div style="color:#8A94B0">${fmtBarTime(b.t)}${b.quote_only ? ' · 仅报价' : ''}</div>` +
+          `<div style="color:#8A94B0">${fmtBarTime(b.t)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
           `开 ${b.o.toFixed(2)} · 高 ${b.h.toFixed(2)}<br/>低 ${b.l.toFixed(2)} · ` +
           `收 <b style="color:${color}">${b.c.toFixed(2)}</b></div>`
         );
@@ -355,7 +355,7 @@ function MiniKline({ ticker }: { ticker: string }) {
       setPullError(
         cause instanceof ApiError
           ? `${cause.message}${cause.retryAfter ? t(' · {n} 秒后可重试', { n: cause.retryAfter }) : ''}`
-          : '拉取失败，请稍后重试',
+          : t('拉取失败，请稍后重试'),
       );
     } finally {
       setPulling(false);
@@ -372,10 +372,10 @@ function MiniKline({ ticker }: { ticker: string }) {
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-4 text-center">
           <img src="/empty-chart.svg" alt="" className="h-12 w-auto opacity-90" loading="lazy" />
           <p className="text-caption font-medium text-ink-600">
-            {snapshotMissing ? '暂无当日 K 线' : 'K 线读取失败'}
+            {snapshotMissing ? t('暂无当日 K 线') : t('K 线读取失败')}
           </p>
           <p className="text-micro text-ink-400">
-            {snapshotMissing ? '可点击下方按钮获取最新行情' : '分时行情暂不可用'}
+            {snapshotMissing ? t('可点击下方按钮获取最新行情') : t('分时行情暂不可用')}
           </p>
           {pullError && (
             <p role="alert" className="text-micro text-down-700">
@@ -395,14 +395,14 @@ function MiniKline({ ticker }: { ticker: string }) {
                     aria-hidden="true"
                   />
                 )}
-                {pulling ? '正在拉取' : '拉取行情'}
+                {pulling ? t('正在拉取') : t('拉取行情')}
               </button>
             )}
             <button
               onClick={refresh}
               className="rounded-md border border-line bg-card px-2.5 py-1 text-micro font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
             >
-              重试
+              {t('重试')}
             </button>
           </div>
         </div>
@@ -415,15 +415,15 @@ function MiniKline({ ticker }: { ticker: string }) {
 
 /* ---------------- 四维评分条（grow-bar 错峰 + Mono 值） ---------------- */
 const BIG_SCORES = [
-  { key: 'base_quality_score', label: '突破质量', hint: SCORE_HINTS.breakoutBase },
-  { key: 'breakout_confirmation_score', label: '确认强度', hint: SCORE_HINTS.breakoutConfirmation },
-  { key: 'data_confidence_score', label: '数据可信度', hint: SCORE_HINTS.breakoutDataConfidence },
-  { key: 'chase_risk_score', label: '追高风险', hint: SCORE_HINTS.breakoutChaseRisk },
+  { key: 'base_quality_score', label: t('突破质量'), hint: SCORE_HINTS.breakoutBase },
+  { key: 'breakout_confirmation_score', label: t('确认强度'), hint: SCORE_HINTS.breakoutConfirmation },
+  { key: 'data_confidence_score', label: t('数据可信度'), hint: SCORE_HINTS.breakoutDataConfidence },
+  { key: 'chase_risk_score', label: t('追高风险'), hint: SCORE_HINTS.breakoutChaseRisk },
 ] as const;
 
 function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
   return (
-    <div className="space-y-2" aria-label="四维评分">
+    <div className="space-y-2" aria-label={t("四维评分")}>
       {BIG_SCORES.map((d, i) => {
         const raw = num(ev[d.key]);
         const v = raw ?? 0;
@@ -453,11 +453,11 @@ function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
 
 /* ---------------- 贡献分段条（5 段一整条 + 图例；无 contribution_breakdown 时按权重×评分推导） ---------------- */
 const CONTRIB_DEFS = [
-  { key: 'breakout_quality', label: '突破质量', cls: 'bg-brand-600', scoreKey: 'base_quality_score', weight: 0.3 },
-  { key: 'intrinsic_strength', label: '内在强度', cls: 'bg-brand-400', scoreKey: 'intrinsic_strength_score', weight: 0.25 },
-  { key: 'sector_fit', label: '板块契合', cls: 'bg-up-600', scoreKey: 'sector_fit_score', weight: 0.15 },
-  { key: 'market_fit', label: '市场契合', cls: 'bg-ai-600', scoreKey: 'market_fit_score', weight: 0.15 },
-  { key: 'data_confidence', label: '数据置信', cls: 'bg-ink-300', scoreKey: 'data_confidence_score', weight: 0.15 },
+  { key: 'breakout_quality', label: t('突破质量'), cls: 'bg-brand-600', scoreKey: 'base_quality_score', weight: 0.3 },
+  { key: 'intrinsic_strength', label: t('内在强度'), cls: 'bg-brand-400', scoreKey: 'intrinsic_strength_score', weight: 0.25 },
+  { key: 'sector_fit', label: t('板块契合'), cls: 'bg-up-600', scoreKey: 'sector_fit_score', weight: 0.15 },
+  { key: 'market_fit', label: t('市场契合'), cls: 'bg-ai-600', scoreKey: 'market_fit_score', weight: 0.15 },
+  { key: 'data_confidence', label: t('数据置信'), cls: 'bg-ink-300', scoreKey: 'data_confidence_score', weight: 0.15 },
 ] as const;
 
 function ContributionBar({ ev }: { ev: BreakoutEventFull }) {
@@ -476,7 +476,7 @@ function ContributionBar({ ev }: { ev: BreakoutEventFull }) {
   }, [ev]);
 
   return (
-    <div aria-label="评分贡献分解">
+    <div aria-label={t("评分贡献分解")}>
       <div className="flex h-[3px] overflow-hidden rounded-pill bg-line">
         {parts.map((p, i) => (
           <motion.div
@@ -500,7 +500,7 @@ function ContributionBar({ ev }: { ev: BreakoutEventFull }) {
         ))}
         {derived && (
           <li className="rounded-xs border border-line-strong bg-card-warm px-1.5 py-px text-[10px] leading-[14px] text-ink-400">
-            推导
+            {t('推导')}
           </li>
         )}
       </ul>
@@ -603,13 +603,13 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
         <span className="hidden items-center gap-3 text-micro text-ink-500 lg:inline-flex">
           {exchange && <span>{exchange}</span>}
           <span>{e.sector}</span>
-          <span className="font-mono tnum">跳空 {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
-          <span className="font-mono tnum">量能 {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
-          <span className="font-mono tnum">{fmtEventTime(e.event_at)} 美东</span>
+          <span className="font-mono tnum">{t('跳空')} {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
+          <span className="font-mono tnum">{t('量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
+          <span className="font-mono tnum">{fmtEventTime(e.event_at)} {t('美东')}</span>
         </span>
         <span className="ml-auto inline-flex items-center gap-1.5 rounded-pill border border-brand-400/50 bg-brand-50 px-2.5 py-1 text-micro font-medium text-brand-600">
           <Icon name="radar" size={12} />
-          首要信号
+          {t('首要信号')}
         </span>
       </div>
 
@@ -628,9 +628,9 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
         <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-ink-500 lg:hidden">
           {exchange && <span>{exchange}</span>}
           <span>{e.sector}</span>
-          <span className="font-mono tnum">跳空 {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
-          <span className="font-mono tnum">同时段量能 {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
-          <span className="font-mono tnum">事件时间 {fmtEventTime(e.event_at)} 美东</span>
+          <span className="font-mono tnum">{t('跳空')} {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
+          <span className="font-mono tnum">{t('同时段量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
+          <span className="font-mono tnum">{t('事件时间')} {fmtEventTime(e.event_at)} {t('美东')}</span>
         </p>
       </div>
 
@@ -643,7 +643,7 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
       <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:items-stretch">
         <div className="grid flex-1 grid-cols-1 gap-2.5 sm:grid-cols-3">
           <div className="rounded-md border border-line bg-card-warm px-3 py-2">
-            <p className="text-micro text-ink-400">当前价</p>
+            <p className="text-micro text-ink-400">{t('当前价')}</p>
             <p className="mt-0.5 flex items-center gap-2">
               <span
                 className={cn(
@@ -660,14 +660,14 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
           <div className="rounded-md border border-line bg-card-warm px-3 py-2">
             <p className="flex items-center gap-1 text-micro text-ink-400">
               <Icon name="flag" size={11} className="text-brand-600" />
-              突破枢轴
+              {t('突破枢轴')}
             </p>
             <p className="mt-0.5 font-mono text-data-l text-ink-900 tnum">{num(e.pivot_price) !== null ? fmtPrice(e.pivot_price) : '—'}</p>
           </div>
           <div className="rounded-md border border-line bg-card-warm px-3 py-2">
             <p className="flex items-center gap-1 text-micro text-ink-400">
               <Icon name="shield" size={11} className="text-down-600" />
-              失效位置
+              {t('失效位置')}
             </p>
             <p className="mt-0.5 font-mono text-data-l text-ink-900 tnum">{invalid !== null ? fmtPrice(invalid) : '—'}</p>
           </div>
@@ -687,13 +687,13 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
 
       {/* 4 评分条 + 贡献分段条 */}
       <div className="mt-4 grid grid-cols-1 gap-4 border-t border-line pt-3 lg:grid-cols-2">
-        <section aria-label="四维评分">
-          <p className="eyebrow mb-2">四维评分</p>
+        <section aria-label={t("四维评分")}>
+          <p className="eyebrow mb-2">{t('四维评分')}</p>
           <BigScoreBars ev={e} />
         </section>
-        <section aria-label="评分贡献" className="lg:border-l lg:border-line lg:pl-4">
+        <section aria-label={t("评分贡献")} className="lg:border-l lg:border-line lg:pl-4">
           <p className="eyebrow mb-2">
-            评分贡献
+            {t('评分贡献')}
             <InfoHint hint={SCORE_HINTS.breakoutPriority} size={12} className="ml-1" />
           </p>
           <ContributionBar ev={e} />
@@ -702,7 +702,7 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
 
       {/* 风险提醒 */}
       {warnings.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5" aria-label="风险提醒">
+        <div className="mt-3 flex flex-wrap gap-1.5" aria-label={t("风险提醒")}>
           {warnings.map((w, i) => (
             <span
               key={i}
@@ -718,7 +718,7 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
       {/* 底行：版本信息 + 操作按钮（「打开研究页」保留全屏 /stock/:t） */}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-t border-line pt-3">
         <p className="font-mono text-micro text-ink-400 tnum">
-          评分 {scoreVersion} · 形态 {shapeTxt} · 观测 {observedAgo(e.event_at)}
+          {t('评分')} {scoreVersion} {t('· 形态')} {shapeTxt} {t('· 观测')} {observedAgo(e.event_at)}
         </p>
         <div className="flex items-center gap-2">
           <button
@@ -726,13 +726,13 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
             className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
           >
             <Icon name="doc-quote" size={13} />
-            查看完整证据
+            {t('查看完整证据')}
           </button>
           <Link
             to={`/stock/${encodeURIComponent(e.ticker)}`}
             className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-caption font-medium text-white transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
           >
-            打开研究页
+            {t('打开研究页')}
             <Icon name="arrow-up-right" size={13} />
           </Link>
         </div>

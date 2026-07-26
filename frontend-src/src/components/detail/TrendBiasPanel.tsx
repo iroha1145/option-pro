@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import { getTrendBias, type StockTrendBiasView } from './api';
 import type { TrendBiasFactor } from '@/mocks/fixtures';
+import { t } from '../../i18n/core.ts';
 
 const LABEL_STYLE: Record<StockTrendBiasView['trend_bias_label'], string> = {
   偏多: 'bg-up-50 text-up-700',
@@ -23,8 +24,8 @@ const LABEL_STYLE: Record<StockTrendBiasView['trend_bias_label'], string> = {
 
 const STATUS_META: Record<StockTrendBiasView['trend_bias_status'], { text: string; cls: string } | null> = {
   ok: null,
-  degraded: { text: '部分指标缺失', cls: 'border-warn-600/40 bg-warn-50 text-warn-600' },
-  insufficient_data: { text: '数据不足 · 结果仅供参考', cls: 'border-line-strong bg-card-warm text-ink-500' },
+  degraded: { text: t('部分指标缺失'), cls: 'border-warn-600/40 bg-warn-50 text-warn-600' },
+  insufficient_data: { text: t('数据不足 · 结果仅供参考'), cls: 'border-line-strong bg-card-warm text-ink-500' },
 };
 
 const TONE_DOT: Record<TrendBiasFactor['tone'], string> = {
@@ -47,7 +48,7 @@ function Gauge({ score, label }: { score: number; label: StockTrendBiasView['tre
   const shown = score;
   return (
     <div className="relative mx-auto w-[168px]">
-      <svg viewBox="0 0 168 92" className="w-full" role="img" aria-label={`趋势偏向分 ${score}，${label}`}>
+      <svg viewBox="0 0 168 92" className="w-full" role="img" aria-label={`趋势偏向分 ${score}，${t(label)}`}>
         <path d={`M 20 84 A ${R} ${R} 0 0 1 148 84`} fill="none" stroke="var(--line)" strokeWidth="10" strokeLinecap="round" />
         <motion.path
           d={`M 20 84 A ${R} ${R} 0 0 1 148 84`}
@@ -64,7 +65,7 @@ function Gauge({ score, label }: { score: number; label: StockTrendBiasView['tre
       <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
         <span className="font-mono text-data-xl text-ink-900 tnum">{Math.round(shown)}</span>
         <span className="mt-0.5 flex items-center gap-1">
-          <span className={cn('rounded-xs px-1.5 py-px text-caption font-medium', LABEL_STYLE[label])}>{label}</span>
+          <span className={cn('rounded-xs px-1.5 py-px text-caption font-medium', LABEL_STYLE[label])}>{t(label)}</span>
           <InfoHint hint={SCORE_HINTS.trendBias} side="bottom" size={11} />
         </span>
       </div>
@@ -74,7 +75,7 @@ function Gauge({ score, label }: { score: number; label: StockTrendBiasView['tre
 
 function MissingGauge({ label }: { label: StockTrendBiasView['trend_bias_label'] }) {
   return (
-    <div className="relative mx-auto w-[168px]" role="img" aria-label="趋势偏向分数据不足">
+    <div className="relative mx-auto w-[168px]" role="img" aria-label={t("趋势偏向分数据不足")}>
       <svg viewBox="0 0 168 92" className="w-full" aria-hidden="true">
         <path d="M 20 84 A 64 64 0 0 1 148 84" fill="none" stroke="var(--line)" strokeWidth="10" strokeLinecap="round" />
       </svg>
@@ -87,10 +88,10 @@ function MissingGauge({ label }: { label: StockTrendBiasView['trend_bias_label']
 }
 
 const SUBSCORES: { key: keyof StockTrendBiasView['scores']; label: string }[] = [
-  { key: 'trend', label: '趋势' },
-  { key: 'momentum', label: '动量' },
-  { key: 'volume', label: '量能' },
-  { key: 'volatility', label: '波动' },
+  { key: 'trend', label: t('趋势') },
+  { key: 'momentum', label: t('动量') },
+  { key: 'volume', label: t('量能') },
+  { key: 'volatility', label: t('波动') },
 ];
 
 export default function TrendBiasPanel({
@@ -110,7 +111,7 @@ export default function TrendBiasPanel({
   if (error || !data) {
     return (
       <p className="rounded-md border border-line bg-card-warm px-4 py-6 text-center text-body-s text-ink-400">
-        暂无技术信号数据
+        {t('暂无技术信号数据')}
       </p>
     );
   }
@@ -166,14 +167,14 @@ export default function TrendBiasPanel({
         </ul>
       ) : (
         <p className="mt-5 border-t border-line pt-4 text-center text-body-s text-ink-400">
-          暂无可展示的真实信号因子
+          {t('暂无可展示的真实信号因子')}
         </p>
       )}
 
       <p className="mt-4 text-micro text-ink-400">
-        分项由该股实测信号换算
+        {t('分项由该股实测信号换算')}
         <InfoHint hint={SCORE_HINTS.trendBiasFactors} size={11} className="mx-0.5" />
-        {' · 缺项显示 — · 非收益预测 · 更新于 '}
+        {t(' · 缺项显示 — · 非收益预测 · 更新于 ')}
         <span className="font-mono tnum">{fmtTimeHHMMSS(new Date(data.as_of))}</span>
       </p>
     </div>

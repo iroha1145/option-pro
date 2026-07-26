@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { pushRecent, readRecent } from '@/lib/recentTickers';
 import Icon, { type IconName } from '@/components/icons';
 import { NAV_ITEMS } from '@/components/Navbar';
-import { t } from '@/i18n/core';
+import { t, t as __t } from '../i18n/core.ts';
 
 interface PaletteProps {
   open: boolean;
@@ -44,15 +44,15 @@ function searchErrorText(error: unknown): string {
     if (error.code === 429) {
       return error.retryAfter
         ? t('搜索请求较多，请 {n} 秒后重试', { n: Math.ceil(error.retryAfter) })
-        : '搜索请求较多，请稍后重试';
+        : __t('搜索请求较多，请稍后重试');
     }
-    if (error.code === 401) return '登录状态已失效，请重新登录';
-    if (error.code === 503) return '股票目录暂不可用，请稍后重试';
-    return error.message || '股票搜索失败，请稍后重试';
+    if (error.code === 401) return __t('登录状态已失效，请重新登录');
+    if (error.code === 503) return __t('股票目录暂不可用，请稍后重试');
+    return error.message || __t('股票搜索失败，请稍后重试');
   }
   return error instanceof Error && error.message
     ? error.message
-    : '股票搜索失败，请稍后重试';
+    : __t('股票搜索失败，请稍后重试');
 }
 
 function Kbd({ children }: { children: React.ReactNode }) {
@@ -149,7 +149,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
       );
     } else {
       readRecent().forEach((t) =>
-        list.push({ id: `r-${t}`, group: '最近', title: t, mono: true, hint: '最近查看', icon: 'clock-ny', action: () => pickTicker(t) }),
+        list.push({ id: `r-${t}`, group: '最近', title: t, mono: true, hint: __t('最近查看'), icon: 'clock-ny', action: () => pickTicker(t) }),
       );
       NAV_ITEMS.forEach((n) =>
         list.push({
@@ -169,8 +169,8 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
         list.push({
           id: 'f-refresh',
           group: '功能',
-          title: '强制刷新自选',
-          hint: '重新获取自选行情',
+          title: __t('强制刷新自选'),
+          hint: __t('重新获取自选行情'),
           icon: 'refresh',
           action: () => {
             onClose();
@@ -180,8 +180,8 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
         list.push({
           id: 'f-logout',
           group: '功能',
-          title: '退出 Owner 登录',
-          hint: '结束本机会话',
+          title: __t('退出 Owner 登录'),
+          hint: __t('结束本机会话'),
           icon: 'shield',
           action: () => {
             onClose();
@@ -192,8 +192,8 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
         list.push({
           id: 'f-login',
           group: '功能',
-          title: '登录 Owner',
-          hint: '解锁写操作与 AI 分析',
+          title: __t('登录 Owner'),
+          hint: __t('解锁写操作与 AI 分析'),
           icon: 'shield',
           action: () => {
             onClose();
@@ -255,7 +255,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
             ref={panelRef}
             role="dialog"
             aria-modal="true"
-            aria-label="命令面板"
+            aria-label={__t("命令面板")}
             className="fixed left-1/2 top-[18vh] z-[81] w-[640px] max-w-[calc(100vw-24px)] -translate-x-1/2 overflow-hidden rounded-lg border border-line-strong bg-card shadow-sh-3"
           >
             {/* 顶边 brand 发丝线（纸面卡片签名） */}
@@ -271,12 +271,12 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                   setActive(0);
                 }}
                 onKeyDown={onKeyDown}
-                placeholder="搜索股票代码、名称或功能…"
+                placeholder={__t("搜索股票代码、名称或功能…")}
                 className="h-full flex-1 bg-transparent text-body text-ink-800 outline-none placeholder:text-ink-300 focus-visible:!shadow-none"
-                aria-label="搜索股票或功能"
+                aria-label={__t("搜索股票或功能")}
               />
               {searching ? (
-                <span className="size-4 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-label="搜索中" />
+                <span className="size-4 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-label={__t("搜索中")} />
               ) : (
                 <Kbd>ESC</Kbd>
               )}
@@ -286,7 +286,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
               {searching && flat.length === 0 && (
                 <div className="flex flex-col items-center py-10 text-center" role="status">
                   <span className="size-5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-hidden="true" />
-                  <p className="mt-3 text-body-s text-ink-400">正在搜索股票目录…</p>
+                  <p className="mt-3 text-body-s text-ink-400">{__t('正在搜索股票目录…')}</p>
                 </div>
               )}
               {!searching && searchError && (
@@ -294,22 +294,22 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                   <span className="flex size-9 items-center justify-center rounded-full bg-down-50 text-down-700">
                     <Icon name="x" size={15} />
                   </span>
-                  <p className="mt-3 text-body-s font-medium text-ink-700">搜索未完成</p>
+                  <p className="mt-3 text-body-s font-medium text-ink-700">{__t('搜索未完成')}</p>
                   <p className="mt-1 max-w-sm text-micro leading-5 text-ink-400">{searchError}</p>
                 </div>
               )}
               {!searching && !searchError && flat.length === 0 && (
                 <div className="flex flex-col items-center py-10 text-center">
                   <Icon name="search" size={30} className="text-ink-300" />
-                  <p className="mt-3 text-body-s text-ink-400">没有匹配的结果</p>
+                  <p className="mt-3 text-body-s text-ink-400">{__t('没有匹配的结果')}</p>
                   <p className="mt-1 text-micro text-ink-300">
-                    试试代码 <span className="font-mono">NVDA</span> 或中文名（英伟达）
+                    {__t('试试代码')} <span className="font-mono">NVDA</span> {__t('或中文名（英伟达）')}
                   </p>
                 </div>
               )}
               {groups.map((g) => (
                 <div key={g.name}>
-                  <p className="eyebrow px-4 pb-1 pt-2.5">{g.name}</p>
+                  <p className="eyebrow px-4 pb-1 pt-2.5">{__t(g.name)}</p>
                   {g.items.map((e) => (
                     <button
                       key={e.id}
@@ -340,9 +340,9 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
             </div>
 
             <div className="flex items-center gap-3 border-t border-line bg-card-warm px-4 py-2 text-micro text-ink-400">
-              <span className="flex items-center gap-1.5"><Kbd>↑↓</Kbd> 选择</span>
-              <span className="flex items-center gap-1.5"><Kbd>Enter</Kbd> 打开</span>
-              <span className="flex items-center gap-1.5"><Kbd>Esc</Kbd> 关闭</span>
+              <span className="flex items-center gap-1.5"><Kbd>↑↓</Kbd> {__t('选择')}</span>
+              <span className="flex items-center gap-1.5"><Kbd>Enter</Kbd> {__t('打开')}</span>
+              <span className="flex items-center gap-1.5"><Kbd>Esc</Kbd> {__t('关闭')}</span>
             </div>
           </div>
         </>

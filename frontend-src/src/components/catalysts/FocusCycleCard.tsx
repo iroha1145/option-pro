@@ -11,8 +11,9 @@ import ConfirmDialog from './ConfirmDialog';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
+import { t } from '../../i18n/core.ts';
 
-const STAGES = ['萌芽', '发酵', '主升', '退潮'] as const;
+const STAGES = [t('萌芽'), t('发酵'), t('主升'), t('退潮')] as const;
 const DIR_ARROW: Record<NewsClassification, { icon: 'arrow-up-right' | 'arrow-down-right' | 'minus'; cls: string }> = {
   bullish: { icon: 'arrow-up-right', cls: 'text-up-700 bg-up-50' },
   bearish: { icon: 'arrow-down-right', cls: 'text-down-700 bg-down-50' },
@@ -21,10 +22,10 @@ const DIR_ARROW: Record<NewsClassification, { icon: 'arrow-up-right' | 'arrow-do
 
 /* 后端 horizon 枚举原样映射，不推断也不合并档位。 */
 const HORIZON_LABEL: Record<'intraday' | 'days' | 'weeks' | 'uncertain', string> = {
-  intraday: '日内',
-  days: '数日',
-  weeks: '数周',
-  uncertain: '跨度未定',
+  intraday: t('日内'),
+  days: t('数日'),
+  weeks: t('数周'),
+  uncertain: t('跨度未定'),
 };
 
 /* 周期阶段横向步进条：当前 brand 实心（静态，不脉冲）；已过实心灰；未来空心 */
@@ -78,14 +79,14 @@ function fmtCycleDate(iso: string, withTime: boolean): string {
 }
 
 const CYCLE_STATUS_CN: Record<string, string> = {
-  preparing: '等待提交',
-  pending: '排队中',
-  in_progress: '计算中',
-  queued: '排队中',
-  cancel_requested: '取消中',
-  cancelled: '已取消',
-  canceled: '已取消',
-  failed: '失败',
+  preparing: t('等待提交'),
+  pending: t('排队中'),
+  in_progress: t('计算中'),
+  queued: t('排队中'),
+  cancel_requested: t('取消中'),
+  cancelled: t('已取消'),
+  canceled: t('已取消'),
+  failed: t('失败'),
 };
 
 function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; compact?: boolean }) {
@@ -95,7 +96,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
       {cycle.latestAttempt && (
         <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-sm border border-warn-600/30 bg-warn-50 px-3 py-2 text-micro text-warn-700">
           <Led tone="warn" className="size-1.5" />
-          <span>最近一次更新失败，当前展示上次成功结果</span>
+          <span>{t('最近一次更新失败，当前展示上次成功结果')}</span>
           <span className="font-mono text-warn-600 tnum">
             {cycle.latestAttempt.cycleId} · {fmtCycleDate(cycle.latestAttempt.startedAt, true)}
           </span>
@@ -112,12 +113,12 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
           </span>
         )}
         <span className="font-mono text-micro text-ink-400 tnum">
-          {cycle.cycleId} · {cycle.trigger === 'manual' ? '手动触发' : '定时生成'} · {cycle.model}
+          {cycle.cycleId} · {cycle.trigger === 'manual' ? t('手动触发') : t('定时生成')} · {cycle.model}
         </span>
       </div>
       <p className="mt-1 font-mono text-micro text-ink-400 tnum">
-        启动 {fmtCycleDate(cycle.startedAt, false)} · 生成 {fmtCycleDate(cycle.generatedAt, true)} · 样本 {cycle.newsCount}{' '}
-        {cycle.sampleLabel ?? '条'}
+        {t('启动')} {fmtCycleDate(cycle.startedAt, false)} {t('· 生成')} {fmtCycleDate(cycle.generatedAt, true)} {t('· 样本')} {cycle.newsCount}{' '}
+        {cycle.sampleLabel ?? t('条')}
       </p>
       {/* 一句话结论（live headline_summary） */}
       {cycle.headline && <p className="mt-2.5 text-body-s font-medium text-ink-800">{cycle.headline}</p>}
@@ -161,15 +162,15 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
                 {a.insufficientEvidence ? (
                   /* 后端在证据不足时强制 catalyst_bias 为 null。说「证据不足」，而不是画一个 0。 */
                   <span className="shrink-0 whitespace-nowrap rounded-xs border border-line bg-paper-2 px-1.5 py-px text-micro text-ink-500">
-                    证据不足
+                    {t('证据不足')}
                   </span>
                 ) : (
                   <ImpactValue value={a.catalystBias} />
                 )}
                 {a.confidence !== null && (
                   <span className="shrink-0 whitespace-nowrap font-mono text-micro text-ink-400 tnum">
-                    置信 {Math.round(a.confidence * 100)}
-                    <span className="ml-0.5">· 非胜率</span>
+                    {t('置信')} {Math.round(a.confidence * 100)}
+                    <span className="ml-0.5">{t('· 非胜率')}</span>
                   </span>
                 )}
                 {a.horizon && (
@@ -225,7 +226,7 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
         );
       const j = await catalystsContract.triggerFocusCycle(failedCycleId);
       setJob(j);
-      toast.info('焦点周期计算已提交', '完成后自动刷新');
+      toast.info(t('焦点周期计算已提交'), t('完成后自动刷新'));
       stopPoll();
       if (!j.cycleId) {
         // 202 已受理但响应未携带周期编号：延迟拉取 latest 兜底，不误报失败
@@ -241,7 +242,7 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
           stopPoll();
           latestQ.refresh();
           setJob(null);
-          toast.error('焦点周期仍在处理中', '稍后刷新页面可继续查看结果');
+          toast.error(t('焦点周期仍在处理中'), t('稍后刷新页面可继续查看结果'));
           return;
         }
         try {
@@ -250,10 +251,10 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
           if (next.status === 'completed' || next.status === 'failed') {
             stopPoll();
             if (next.status === 'completed') {
-              toast.success('新焦点周期已生成');
+              toast.success(t('新焦点周期已生成'));
               latestQ.refresh();
             } else {
-              toast.error('焦点周期计算失败', '请稍后重试');
+              toast.error(t('焦点周期计算失败'), t('请稍后重试'));
             }
             window.setTimeout(() => setJob(null), 1200);
           }
@@ -261,11 +262,11 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
           stopPoll();
           setJob(null);
           latestQ.refresh();
-          toast.error('焦点周期状态读取失败', error instanceof Error ? error.message : '请稍后刷新页面');
+          toast.error(t('焦点周期状态读取失败'), error instanceof Error ? error.message : t('请稍后刷新页面'));
         }
       }, 2000);
     } catch (e) {
-      toast.error('提交失败', e instanceof Error ? e.message : undefined);
+      toast.error(t('提交失败'), e instanceof Error ? e.message : undefined);
     }
   }, [latestQ, stopPoll, toast]);
 
@@ -274,11 +275,11 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
   return (
     /* 后续区块 rise-in 减量：直接呈现 */
     <section
-      aria-label="市场焦点周期"
+      aria-label={t("市场焦点周期")}
       className="rounded-lg border border-brand-100 bg-brand-50/60 p-5 shadow-sh-1"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="eyebrow">FOCUS CYCLE · 市场焦点周期</p>
+        <p className="eyebrow">{t('FOCUS CYCLE · 市场焦点周期')}</p>
         {isOwner ? (
           <button
             onClick={() => setConfirmOpen(true)}
@@ -293,19 +294,19 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
             {running ? (
               <>
                 <Led tone="brand" pulse className="size-1.5" />
-                周期计算中{job.progress !== null ? ` ${job.progress}%` : ''}
+                {t('周期计算中')}{job.progress !== null ? ` ${job.progress}%` : ''}
               </>
             ) : (
               <>
                 <Icon name="spark-ai" size={14} className="text-ai-600" />
                 {latestQ.data?.latestAttempt || latestQ.data?.status === 'failed'
-                  ? '重试焦点周期'
-                  : '触发新周期'}
+                  ? t('重试焦点周期')
+                  : t('触发新周期')}
               </>
             )}
           </button>
         ) : (
-          <span className="text-micro text-ink-400">登录后可手动触发新周期</span>
+          <span className="text-micro text-ink-400">{t('登录后可手动触发新周期')}</span>
         )}
       </div>
 
@@ -333,7 +334,7 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
             <SkeletonText lines={3} className="mt-3" />
           </div>
         ) : latestQ.error ? (
-          <p className="text-body-s text-ink-500">暂无焦点周期数据</p>
+          <p className="text-body-s text-ink-500">{t('暂无焦点周期数据')}</p>
         ) : latestQ.data ? (
           <>
             {latestQ.data.stage !== null && <StageStepper stage={latestQ.data.stage} />}
@@ -354,7 +355,7 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
           >
             <span className="flex items-center gap-1.5">
               <Icon name="doc-quote" size={13} className="text-ink-400" />
-              与上一成功周期对照 · {prevQ.data.dominantEvent}
+              {t('与上一成功周期对照 ·')} {prevQ.data.dominantEvent}
             </span>
             <Icon name="chevron-down" size={14} className={cn('transition-transform duration-ui', historyOpen && 'rotate-180')} />
           </button>
@@ -378,9 +379,9 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
 
       <ConfirmDialog
         open={confirmOpen}
-        title="触发新的市场焦点周期？"
-        description="将基于当前热点准备区生成一次综合分析，消耗模型预算并计入每日额度；若当前版本已分析过，将明确重算一次。"
-        confirmLabel="开始计算"
+        title={t("触发新的市场焦点周期？")}
+        description={t("将基于当前热点准备区生成一次综合分析，消耗模型预算并计入每日额度；若当前版本已分析过，将明确重算一次。")}
+        confirmLabel={t("开始计算")}
         onConfirm={() => void startJob()}
         onCancel={() => setConfirmOpen(false)}
       />
