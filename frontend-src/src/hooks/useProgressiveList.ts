@@ -21,6 +21,14 @@ export interface ProgressiveList<T> {
   /** 挂载下一批。 */
   loadMore: () => void;
   /**
+   * 一次性挂载全部。
+   *
+   * 打印用：只挂了 24 张卡时，打印出来的也只有 24 张 —— 数据在内存里，
+   * 但纸上没有。浏览器原生查找（⌘F）同样只能找到已挂载的部分，那个限制
+   * 无法在页面里可靠拦截，因此不在这里假装解决。
+   */
+  loadAll: () => void;
+  /**
    * 挂在列表末尾的哨兵元素上；进入视口即自动加载下一批。
    * 不支持 IntersectionObserver 时不会自动加载，此时「加载更多」按钮仍然可用。
    */
@@ -47,6 +55,8 @@ export function useProgressiveList<T>(
   useEffect(() => {
     setLimit((current) => (current > total && total > 0 ? Math.max(initial, total) : current));
   }, [total, initial]);
+
+  const loadAll = useCallback(() => setLimit(Number.MAX_SAFE_INTEGER), []);
 
   const loadMore = useCallback(() => {
     setLimit((current) => (current >= total ? current : current + step));
@@ -81,6 +91,7 @@ export function useProgressiveList<T>(
     hasMore: limit < total,
     remaining: Math.max(0, total - limit),
     loadMore,
+    loadAll,
     sentinelRef,
   };
 }

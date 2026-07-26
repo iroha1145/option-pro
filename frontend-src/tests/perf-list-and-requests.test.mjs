@@ -215,3 +215,44 @@ test('条数变化时夹紧上限，而不是退回首批', async () => {
   assert.match(hook, /current > total && total > 0/);
   assert.match(hook, /Math\.max\(initial, total\)/);
 });
+
+/* ---------- 个人自选的加载 / 失败 / 真空三态 ---------- */
+
+test('个人自选读取失败不能冒充成空自选', async () => {
+  const page = codeOf(await source('pages/Watchlist.tsx'));
+
+  // 旧写法 .catch(() => setMyTickers([])) 让请求失败长得和「还没建过自选」
+  // 一模一样：横幅说「你还没有自己的自选」，下面照常摆默认池。
+  assert.doesNotMatch(page, /if \(alive\) setMyTickers\(\[\]\);/);
+  assert.match(page, /setPersonalState\('error'\)/);
+  // 只有成功读到空列表才算「还没建过」
+  assert.match(page, /personalState === 'ready' && myTickers !== null && myTickers\.length === 0/);
+  // 失败要说出来并可重试
+  assert.match(page, /读不到你的自选列表/);
+  assert.match(page, /setPersonalReloadToken/);
+});
+
+test('个人自选还没读回来时算加载中，不先摆默认池', async () => {
+  const page = codeOf(await source('pages/Watchlist.tsx'));
+  assert.match(page, /wl\.loading \|\| \(canManageWatchlist && personalState === 'loading'\)/);
+});
+
+/* ---------- 打印挂载全部 ---------- */
+
+test('打印前挂载全部，且不假称解决了浏览器查找', async () => {
+  const page = codeOf(await source('pages/Watchlist.tsx'));
+  const hook = await source('hooks/useProgressiveList.ts');
+  assert.match(page, /addEventListener\('beforeprint', loadAllForPrint\)/);
+  assert.match(page, /removeEventListener\('beforeprint', loadAllForPrint\)/);
+  // 注释里必须承认 ⌘F 的限制没有解决，而不是留下一个做不到的承诺
+  assert.match(hook, /无法在页面里可靠拦截/);
+});
+
+/* ---------- 高度保留放在共用外壳 ---------- */
+
+test('列表高度保留对 loading/error/empty/list 一视同仁', async () => {
+  const page = await source('pages/Watchlist.tsx');
+  // 外壳带 min-h，而不是只有 loading 分支带
+  assert.match(page, /<div className="mt-4 min-h-\[70vh\]">/);
+  assert.doesNotMatch(page, /<div className="card-surface min-h-\[70vh\]">/);
+});

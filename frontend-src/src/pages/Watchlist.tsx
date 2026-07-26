@@ -15,6 +15,7 @@ import { runtimeApi } from '@/api/modules/runtime';
 import { ApiError } from '@/api/client';
 import { usePolling } from '@/hooks/usePolling';
 import { useProgressiveList } from '@/hooks/useProgressiveList';
+import { sortWatchlistItems } from './watchlistSort';
 import { useTickFlash } from '@/hooks/useTickFlash';
 import { useAccess } from '@/hooks/useAccess';
 import { useNow } from '@/hooks/useNow';
@@ -380,6 +381,14 @@ export default function Watchlist() {
 
   /* 登录客户读自己那份自选；未登录仍是站点默认列表。 */
   const [myTickers, setMyTickers] = useState<string[] | null>(null);
+  /**
+   * 个人自选的读取状态。
+   *
+   * 只有 'ready' 且 tickers 为空才是「真的没有自选」；'loading' 期间不能先摆出
+   * 默认池冒充这个人的列表，'error' 也不能降级成空列表。
+   */
+  const [personalState, setPersonalState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [personalReloadToken, setPersonalReloadToken] = useState(0);
   const [maxTickers, setMaxTickers] = useState(50);
   const [addInput, setAddInput] = useState('');
   const [savingTicker, setSavingTicker] = useState(false);
@@ -387,23 +396,31 @@ export default function Watchlist() {
   useEffect(() => {
     if (!canManageWatchlist) {
       setMyTickers(null);
+      setPersonalState('idle');
       return;
     }
     let alive = true;
+    setPersonalState('loading');
     accountApi
       .watchlist()
       .then((data) => {
         if (!alive) return;
         setMyTickers(data.tickers);
         setMaxTickers(data.maxTickers);
+        setPersonalState('ready');
       })
       .catch(() => {
-        if (alive) setMyTickers([]);
+        // 失败不能写成空列表。旧写法 setMyTickers([]) 让一次请求失败长得和
+        // 「这个人还没建过自选」一模一样：横幅会说「你还没有自己的自选」，
+        // 下面照常摆出默认池 —— 把读不到说成了一个事实。
+        if (!alive) return;
+        setMyTickers(null);
+        setPersonalState('error');
       });
     return () => {
       alive = false;
     };
-  }, [canManageWatchlist]);
+  }, [canManageWatchlist, personalReloadToken]);
 
   /**
    * 始终读站点默认自选（已缓存、对访客免费），个人列表在前端做筛选。
@@ -631,7 +648,10 @@ export default function Watchlist() {
     [flashes, rowSignalsAvailable, rowStrengthAvailable, canManageWatchlist, onRemoveTicker],
   );
 
-  const loading = wl.loading;
+  // 个人自选还没读回来时同样算加载中：先摆出默认池、再换成个人列表，
+  // 等于让登录用户短暂看到一份不属于他的清单。
+  const loading = wl.loading || (canManageWatchlist && personalState === 'loading');
+  const personalFailed = canManageWatchlist && personalState === 'error';
   const err = wl.error;
   /**
    * 个人自选为空时展示站点默认关注池，并由横幅明说这是默认池。
@@ -639,7 +659,10 @@ export default function Watchlist() {
    * 空列表直接渲染成空白页会让「还没添加过」和「加载失败」长得一模一样；
    * 而不加标注地展示默认池，又等于把系统的池子冒充成用户自己的选择。
    */
-  const showingDefaultPool = canManageWatchlist && myTickers !== null && myTickers.length === 0;
+  // 只有成功读到空列表才是「还没建过自选」。读失败时 myTickers 为 null，
+  // 这里必须为 false，否则失败会被写成一句关于用户的事实。
+  const showingDefaultPool =
+    canManageWatchlist && personalState === 'ready' && myTickers !== null && myTickers.length === 0;
   const items = useMemo(() => {
     const all = wl.data ?? [];
     if (!canManageWatchlist || !myTickers || myTickers.length === 0) return all;
@@ -654,18 +677,9 @@ export default function Watchlist() {
     const covered = new Set((wl.data ?? []).map((row) => row.ticker));
     return myTickers.filter((symbol) => !covered.has(symbol));
   }, [wl.data, canManageWatchlist, myTickers]);
-  const cardItems = useMemo(() => {
-    if (!sort) return items;
-    const direction = sort.desc ? -1 : 1;
-    return [...items].sort((left, right) => {
-      if (sort.key === 'ticker') {
-        return left.ticker.localeCompare(right.ticker) * direction;
-      }
-      const leftValue = sort.key === 'strength' ? left.strengthScore : left.changePct;
-      const rightValue = sort.key === 'strength' ? right.strengthScore : right.changePct;
-      return (leftValue - rightValue) * direction;
-    });
-  }, [items, sort]);
+  // 唯一排序实现见 watchlistSort：卡片、表格与渐进切片必须消费同一份排序结果，
+  // 否则「先切片再排序」会把局部样本冒充成完整结果。
+  const cardItems = useMemo(() => sortWatchlistItems(items, sort), [items, sort]);
   const statsLoading = signalsQ.loading || strengthQ.loading;
 
   /**
@@ -685,6 +699,15 @@ export default function Watchlist() {
   // 「任意前 24 只里涨得最多的」而不是「涨得最多的 24 只」。那正是把局部样本
   // 冒充成完整结果，和这次审计要修的是同一类错误。
   const renderedRows = renderedCards;
+
+  /* 打印前挂载全部：否则打出来的只有当前已经滚动加载的那几十张卡。
+     浏览器原生查找的同类限制没有可靠拦截点，不在这里假装解决。 */
+  const loadAllForPrint = progressive.loadAll;
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.addEventListener('beforeprint', loadAllForPrint);
+    return () => window.removeEventListener('beforeprint', loadAllForPrint);
+  }, [loadAllForPrint]);
 
   return (
     <div>
@@ -839,6 +862,22 @@ export default function Watchlist() {
             </p>
           )}
 
+          {personalFailed && (
+            <p
+              className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-600"
+              role="status"
+            >
+              读不到你的自选列表，下面显示的是系统默认关注池。
+              <button
+                type="button"
+                onClick={() => setPersonalReloadToken((n) => n + 1)}
+                className="rounded-xs border border-warn-600/30 px-2 py-0.5 font-medium text-warn-600 transition-colors hover:bg-warn-600/10"
+              >
+                重试
+              </button>
+            </p>
+          )}
+
           {showingDefaultPool && (
             <p
               className="mt-3 rounded-md border border-line bg-paper-2 px-3 py-2 text-caption text-ink-500"
@@ -849,13 +888,14 @@ export default function Watchlist() {
             </p>
           )}
 
-          <div className="mt-4">
+          {/* 高度保留放在所有状态共用的外壳上。
+              之前只加在 loading 分支：接口一旦返回错误、空列表，或个人自选很短，
+              那个 70vh 会被一张很矮的状态卡取代，侧栏和页脚整体上移 —— 同一种
+              位移换了个触发条件。真正的路由级 CLS 由 PageFallback 处理，这里
+              负责的是数据状态之间的切换。 */}
+          <div className="mt-4 min-h-[70vh]">
             {loading ? (
-              /* 占位要把首屏那一段真正占满。
-                 追踪显示剩余的 CLS 0.186 就是这里：占位容器实测 153px，被 4,500px
-                 的真实列表替换，于是 y=670 到折线之间那一段可见区域的内容整体位移。
-                 min-h 让这段可见带在加载前后都是满的，替换时屏幕上没有东西移动。 */
-              <div className="card-surface min-h-[70vh]">
+              <div className="card-surface">
                 <SkeletonRows rows={10} />
               </div>
             ) : err ? (
