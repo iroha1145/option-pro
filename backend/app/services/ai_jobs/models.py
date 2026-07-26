@@ -5,6 +5,7 @@ import json
 import re
 import unicodedata
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Iterable, Literal, Optional
 
@@ -860,7 +861,22 @@ _CJK_RANGES = (
 )
 
 
+@lru_cache(maxsize=8192)
 def _is_cjk(char: str) -> bool:
+    """Whether one character is CJK. Memoized -- it is a pure range lookup.
+
+    The Chinese-text validator asks this twice per character of every string
+    field of every stored result, and the feed validates 112 results on read.
+    Measured on production: 1,378,187 calls over 1,229 distinct characters, and
+    caching them took service.feed() from 1.477s to 0.833s.
+
+    Bounded rather than unbounded: the input is untrusted model output, so an
+    adversarial result full of distinct codepoints must not be able to grow this
+    without limit. 8192 comfortably covers real Chinese prose -- the whole feed
+    used 1,229 entries -- and _CJK_RANGES is a module constant, so nothing about
+    the answer can change at runtime.
+    """
+
     codepoint = ord(char)
     return any(start <= codepoint <= end for start, end in _CJK_RANGES)
 
