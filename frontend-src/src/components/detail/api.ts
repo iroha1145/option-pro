@@ -100,11 +100,81 @@ function strengthRowToDetail(env: Rec): StockDetail | null {
     macroSupporting: mapMacroFitDrivers(row.macro_supporting_factors),
     macroOpposing: mapMacroFitDrivers(row.macro_opposing_factors),
     macroTechnicalGap: pickN(row, 'macro_technical_gap'),
+    // 这一行的影子字段是对着哪一期宏观快照算的（信封顶层 macro_linkage）。
+    macroSnapshotDate: pickS(asRec(env.macro_linkage), 'macro_snapshot_date'),
   };
 }
 
 /** 强度补充的独立截止时间；超过就先给核心行情，评分随下一次读取补齐。 */
 const STRENGTH_SUPPLEMENT_DEADLINE_MS = 4_000;
+
+/**
+ * 强度补充这一路的结果，**带上它为什么是这个结果**。
+ *
+ * 原来失败和超时都被折成 `null`，于是 503 回退分支只能重发一次请求来区分两者 ——
+ * 而明确 404 的端点重发一次还是 404，纯属白跑。超时才值得再要一次：那次请求可能
+ * 还在飞，marketGet 会让它们共用同一个 in-flight promise。
+ */
+type StrengthSupplement =
+  | { kind: 'ok'; body: unknown }
+  | { kind: 'failed' }
+  | { kind: 'timeout' };
+
+/** 抽屉里那组宏观影子字段。 */
+type MacroFields = Pick<
+  StockDetail,
+  | 'macroFit'
+  | 'macroTailwind'
+  | 'macroFitConfidence'
+  | 'macroSupporting'
+  | 'macroOpposing'
+  | 'macroTechnicalGap'
+  | 'macroShadowStatus'
+  | 'macroSnapshotDate'
+>;
+
+/**
+ * 合并概览与扫描行的宏观影子字段。
+ *
+ * 两条规则，都是「不要把两份读数拼成一份」：
+ *
+ * 1. **概览一旦回答了，它就是权威**，不再逐字段回填扫描行。逐字段 `??` 会犯两个
+ *    方向相反的错：概览说「本次没有读数」（macro_snapshot_unavailable /
+ *    exposure_coverage_low）时，上一次扫描的旧分被复活；概览说「本期没有负面
+ *    因子」时，空数组长度为 0，旧的负面因子被补回来。两者都是拿一份已经不成立的
+ *    解释冒充当前读数 —— 后端专门为此返回 null 而不是 50，前端不能在这里抵消掉。
+ *    概览必然带 macro_shadow_status（四种取值都写），所以它非空就等于「答过了」；
+ *    只有对接不带这个字段的旧后端时才整组回退扫描行。
+ *
+ * 2. **差值只在同期时才显示。** macroFit 来自实时概览，macroTechnicalGap 只有落库的
+ *    扫描行算得出（它要该股的 market_fit_score）。扫描可能比最新一期宏观旧几个
+ *    小时；两个数字各自都对，凑在一起却不是同一个测量时点。
+ *
+ * 导出是为了能真的跑它 —— 这条规则值得用行为断言钉住，而不是用正则看一眼源码。
+ */
+export function mergeMacroFields(
+  detail: Partial<MacroFields>,
+  strength: Partial<MacroFields> | null,
+): MacroFields {
+  const overviewAnswered =
+    detail.macroShadowStatus !== null && detail.macroShadowStatus !== undefined;
+  const source = overviewAnswered ? detail : strength;
+  const gapIsSameSnapshot =
+    // 概览没答 → 分数和差值都出自同一行，同期是构造保证的。
+    !overviewAnswered
+    || (strength?.macroSnapshotDate != null
+      && detail.macroSnapshotDate === strength.macroSnapshotDate);
+  return {
+    macroFit: source?.macroFit ?? null,
+    macroTailwind: source?.macroTailwind ?? null,
+    macroFitConfidence: source?.macroFitConfidence ?? null,
+    macroSupporting: source?.macroSupporting ?? [],
+    macroOpposing: source?.macroOpposing ?? [],
+    macroSnapshotDate: source?.macroSnapshotDate ?? null,
+    macroTechnicalGap: gapIsSameSnapshot ? strength?.macroTechnicalGap ?? null : null,
+    macroShadowStatus: detail.macroShadowStatus ?? strength?.macroShadowStatus ?? null,
+  };
+}
 
 export function getDetail(ticker: string, force = false): Promise<StockDetail> {
   const t = ticker.toUpperCase();
@@ -124,21 +194,22 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
       // 悬挂时整个详情对象仍会一直等它。截止时间从**发起时刻**起算，
       // 这也是并行之后才成立的口径。
       const detailPromise = stocksApi.detail(t, force);
-      const strengthPromise = Promise.race([
-        marketGet(
-          `/strength/stocks/${encodeURIComponent(t)}`,
-          { ttlMs: 60_000, staleMs: 30 * 60_000, force },
-        ).catch(() => null),
-        new Promise<null>((resolve) => {
-          setTimeout(() => resolve(null), STRENGTH_SUPPLEMENT_DEADLINE_MS);
+      const supplementUrl = `/strength/stocks/${encodeURIComponent(t)}`;
+      const supplementPromise: Promise<StrengthSupplement> = Promise.race([
+        marketGet(supplementUrl, { ttlMs: 60_000, staleMs: 30 * 60_000, force })
+          .then((body): StrengthSupplement => ({ kind: 'ok', body }))
+          .catch((): StrengthSupplement => ({ kind: 'failed' })),
+        new Promise<StrengthSupplement>((resolve) => {
+          setTimeout(() => resolve({ kind: 'timeout' }), STRENGTH_SUPPLEMENT_DEADLINE_MS);
         }),
       ]);
 
       try {
         // 行情价格仍以 stocks 概览（Massive 主源）为准；强度快照只补其真实评分与缺失基本面。
         const detail = await detailPromise;
-        const strengthBody = await strengthPromise;
-        const strength = strengthBody !== null ? strengthRowToDetail(asRec(strengthBody)) : null;
+        const supplement = await supplementPromise;
+        const strength =
+          supplement.kind === 'ok' ? strengthRowToDetail(asRec(supplement.body)) : null;
         const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
         return {
           ...detail,
@@ -151,32 +222,23 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
           // 宏观适配以**概览**为主源：概览对每只在主题表里的票都算得出，而
           // /strength/stocks/{t} 只回答公开快照 top 切片里的代码，其余 404 ——
           // 之前拿它当主源，AMD、SLB 等约 190 只票就都显示「暂无宏观读数」。
-          //
-          // 扫描行只补概览没有的那一个字段（技术 − 结构性宏观的差值，它需要该股的
-          // 市场适配分，概览里没有）。两边都没有就保持 null，不兜中性。
-          macroFit: detail.macroFit ?? strength?.macroFit ?? null,
-          macroTailwind: detail.macroTailwind ?? strength?.macroTailwind ?? null,
-          macroFitConfidence:
-            detail.macroFitConfidence ?? strength?.macroFitConfidence ?? null,
-          macroSupporting:
-            (detail.macroSupporting?.length ? detail.macroSupporting : strength?.macroSupporting) ?? [],
-          macroOpposing:
-            (detail.macroOpposing?.length ? detail.macroOpposing : strength?.macroOpposing) ?? [],
-          macroTechnicalGap: strength?.macroTechnicalGap ?? null,
-          macroShadowStatus: detail.macroShadowStatus ?? strength?.macroShadowStatus ?? null,
+          // 整组字段同源同期，规则见 mergeMacroFields。
+          ...mergeMacroFields(detail, strength),
         };
       } catch (e) {
         // 只有明确的公开快照边界才允许回退扫描行；供应方错误不能被伪装成基础行情成功。
         if (!(e instanceof ApiError) || e.code !== 503 || e.bizCode !== 'public_snapshot_unavailable') throw e;
         // 上面已经发出去的那次强度请求可以直接复用，不必再发一次。
-        // 它超时会解析成 null，此时才真的重新要一次。
-        const body =
-          (await strengthPromise) ??
-          (await marketGet(
-            `/strength/stocks/${encodeURIComponent(t)}`,
-            { ttlMs: 60_000, staleMs: 30 * 60_000, force },
-          ).catch(() => null));
-        const fallback = body !== null ? strengthRowToDetail(asRec(body)) : null;
+        // **只有超时**才值得重发：那次请求可能还在飞，marketGet 会让两者共用同一个
+        // in-flight promise。明确失败（404 / 503）重发一次结果一样，纯属白跑。
+        const supplement = await supplementPromise;
+        const retried =
+          supplement.kind === 'timeout'
+            ? await marketGet(supplementUrl, { ttlMs: 60_000, staleMs: 30 * 60_000, force })
+                .then((body): StrengthSupplement => ({ kind: 'ok', body }))
+                .catch((): StrengthSupplement => ({ kind: 'failed' }))
+            : supplement;
+        const fallback = retried.kind === 'ok' ? strengthRowToDetail(asRec(retried.body)) : null;
         if (fallback === null) throw e;
         return fallback;
       }

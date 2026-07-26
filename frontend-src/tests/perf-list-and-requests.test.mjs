@@ -282,13 +282,26 @@ test('个人自选还没读回来时算加载中，不先摆默认池', async ()
 
 /* ---------- 打印挂载全部 ---------- */
 
-test('打印前挂载全部，且不假称解决了浏览器查找', async () => {
+test('打印前挂载全部，打印后还回去，且不假称解决了浏览器查找', async () => {
   const page = codeOf(await source('pages/Watchlist.tsx'));
-  const hook = await source('hooks/useProgressiveList.ts');
-  assert.match(page, /addEventListener\('beforeprint', loadAllForPrint\)/);
-  assert.match(page, /removeEventListener\('beforeprint', loadAllForPrint\)/);
+  const hook = codeOf(await source('hooks/useProgressiveList.ts'));
+  assert.match(page, /addEventListener\('beforeprint', prepareForPrint\)/);
+  assert.match(page, /removeEventListener\('beforeprint', prepareForPrint\)/);
+
+  // 打印结束必须还回上限。不还的话两百多张卡会一直挂在 DOM 里，这一轮渐进挂载
+  // 的收益到下次整页刷新前都作废 —— 等于打印一次就把优化撤销了。
+  assert.match(page, /addEventListener\('afterprint', restoreAfterPrint\)/);
+  assert.match(page, /removeEventListener\('afterprint', restoreAfterPrint\)/);
+
+  // 必须同步提交。beforeprint 返回后浏览器可能立刻截取打印文档，而普通 setState
+  // 在 React 里是异步提交的 —— 纸上仍然只有已挂载的那 24 张。
+  assert.match(hook, /flushSync\(\(\) => setLimit\(Number\.MAX_SAFE_INTEGER\)\)/);
+  assert.match(hook, /import \{ flushSync \} from 'react-dom'/);
+  // 直接挂 loadAll 就是原来那个错法：上限永久留在「全部」上。
+  assert.doesNotMatch(page, /addEventListener\('beforeprint', (?:loadAll|progressive\.loadAll)/);
+
   // 注释里必须承认 ⌘F 的限制没有解决，而不是留下一个做不到的承诺
-  assert.match(hook, /无法在页面里可靠拦截/);
+  assert.match(await source('hooks/useProgressiveList.ts'), /无法在页面里可靠拦截/);
 });
 
 /* ---------- 高度保留放在共用外壳 ---------- */
@@ -307,7 +320,7 @@ test('详情与强度补充同时发出，不是首尾相接', async () => {
 
   // 两个 Promise 必须在 await 之前就创建出来
   const detailIdx = api.indexOf('const detailPromise = stocksApi.detail(t, force);');
-  const strengthIdx = api.indexOf('const strengthPromise = Promise.race([');
+  const strengthIdx = api.indexOf('const supplementPromise: Promise<StrengthSupplement> = Promise.race([');
   const firstAwait = api.indexOf('await detailPromise');
   assert.ok(detailIdx > 0 && strengthIdx > 0, '两条请求都要提前发起');
   assert.ok(
@@ -317,5 +330,22 @@ test('详情与强度补充同时发出，不是首尾相接', async () => {
   // 旧写法：先 await 详情，再去要强度
   assert.doesNotMatch(api, /const detail = await stocksApi\.detail\(t, force\);/);
   // 回退路径复用已经在飞的那次请求
-  assert.match(api, /\(await strengthPromise\) \?\?/);
+  assert.match(api, /const supplement = await supplementPromise;/);
+});
+
+test('强度补充明确失败时不重发；只有超时才重发', async () => {
+  // 原来失败和超时都被折成 null，于是回退分支靠「是不是 null」决定要不要再要一次
+  // —— 一个刚刚 404 的端点于是又被请求一遍，第二次还是 404。超时才值得重发：
+  // 那次请求可能还在飞，marketGet 会让两者共用同一个 in-flight promise。
+  const api = codeOf(await source('components/detail/api.ts'));
+  assert.match(api, /kind: 'ok'/);
+  assert.match(api, /kind: 'timeout'/);
+  assert.match(api, /kind: 'failed'/);
+  assert.match(
+    api,
+    /supplement\.kind === 'timeout'\s*\?\s*await marketGet\(supplementUrl/,
+    '回退分支没有把重发限制在超时这一种情况上',
+  );
+  // 失败也被折成 null 的旧写法不能再出现。
+  assert.doesNotMatch(api, /\)\.catch\(\(\) => null\),?\s*\n\s*new Promise<null>/);
 });

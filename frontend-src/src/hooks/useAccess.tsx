@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react';
 import { accessApi } from '@/api/modules/access';
 import { PRINCIPAL_INVALID_EVENT } from '@/api/client';
+import { dropSharedReads } from '@/api/sharedRead';
 import type { AccessRole, AccessStatus } from '@/api/types';
 
 interface AccessContextValue {
@@ -87,6 +88,10 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   /** 作废所有在途探测并开始新一轮读取。写操作之后必须走这条路径。 */
   const invalidateAndRead = useCallback(() => {
     generationRef.current += 1;
+    // 共享读缓存也一起作废：/strength/market 对访客和 owner 返回的不是同一份
+    // 数据（访客读公开快照，owner 实时算），2 秒的共享窗口足以让登录成功后的
+    // 第一次读取复用上一个身份那份。
+    dropSharedReads();
     return readInto(generationRef.current);
   }, [readInto]);
 

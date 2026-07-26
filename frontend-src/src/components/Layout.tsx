@@ -10,6 +10,7 @@ import Navbar from '@/components/Navbar';
 import IndexTape from '@/components/IndexTape';
 import Footer from '@/components/Footer';
 import RouteErrorBoundary from '@/components/shared/RouteErrorBoundary';
+import InlineFallback from '@/components/shared/InlineFallback';
 import PageFallback from '@/components/shared/PageFallback';
 import MobileDock from '@/components/MobileDock';
 import CommandPalette from '@/components/CommandPalette';
@@ -111,7 +112,9 @@ export default function Layout() {
         }
       >
         {drawerTicker && (
-          <Suspense fallback={<PageFallback />}>
+          /* 抽屉内部用 InlineFallback：PageFallback 是整屏高的（为了压路由级 CLS），
+             搬进抽屉只会先撑出一大片空白。 */
+          <Suspense fallback={<InlineFallback />}>
             <StockDrawerBody ticker={drawerTicker} />
           </Suspense>
         )}
