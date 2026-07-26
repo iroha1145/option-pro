@@ -51,9 +51,9 @@ test('预取取的正是 K 线和信号那两个端点', () => {
   const code = codeOf(detailApi);
   const fn = code.slice(code.indexOf('export function prefetchStockDetailPanels'));
   assert.ok(fn.length > 0, '找不到 prefetchStockDetailPanels');
-  assert.match(fn, /getDetailChart\(t, DEFAULT_CHART_RANGE\)/);
+  assert.match(fn, /getDetailChart\(symbol, DEFAULT_CHART_RANGE\)/);
   // TrendBiasPanel 与 SignalList 读的是同一个 /signals/stock/{t}，一次预取覆盖两者。
-  assert.match(fn, /getTrendBias\(t\)/);
+  assert.match(fn, /getTrendBias\(symbol\)/);
 });
 
 test('预取不 force：强制读会消耗 owner 手动拉取后那一次性的退避豁免', () => {

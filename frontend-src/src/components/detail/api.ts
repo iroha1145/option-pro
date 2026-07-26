@@ -6,6 +6,11 @@
  * - POST /api/signals/stock/{t}/ai-analysis（signal_analysis 任务，202）
  * - GET /api/strength/stocks/{t}（概览 503 时的基础行情回退：扫描行快照，匿名可用）
  * mock 模式下代码不存在抛 404（整页形态 404 空态）。
+ *
+ * 大写后的代码在本文件里一律叫 `symbol`，**不要改回 `t`**。翻译函数按惯例也叫 `t`，
+ * 这里每个函数都以 `const t = ticker.toUpperCase()` 开头，两者一撞，函数体内的
+ * `t('…')` 就是 “t is not a function” —— 而且是运行时才炸，类型检查看不出来
+ * （`t` 确实存在，只是变成了 string）。名字长两个字母换掉这个雷。
  */
 import { ApiError, mockOr } from '@/api/client';
 import { marketGet } from '@/api/marketRead';
@@ -177,11 +182,11 @@ export function mergeMacroFields(
 }
 
 export function getDetail(ticker: string, force = false): Promise<StockDetail> {
-  const t = ticker.toUpperCase();
+  const symbol = ticker.toUpperCase();
   return mockOr(
     () => {
-      if (!fx.hasTicker(t)) throw new ApiError(404, `代码 ${t} 不存在`);
-      return fx.getStockDetail(t);
+      if (!fx.hasTicker(symbol)) throw new ApiError(404, `代码 ${symbol} 不存在`);
+      return fx.getStockDetail(symbol);
     },
     async () => {
       // 两个请求互不依赖，同时发出。
@@ -193,8 +198,8 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
       // 可选补充不得拖住核心详情（审计 P2-32）：失败已经被捕获，但请求缓慢或
       // 悬挂时整个详情对象仍会一直等它。截止时间从**发起时刻**起算，
       // 这也是并行之后才成立的口径。
-      const detailPromise = stocksApi.detail(t, force);
-      const supplementUrl = `/strength/stocks/${encodeURIComponent(t)}`;
+      const detailPromise = stocksApi.detail(symbol, force);
+      const supplementUrl = `/strength/stocks/${encodeURIComponent(symbol)}`;
       const supplementPromise: Promise<StrengthSupplement> = Promise.race([
         marketGet(supplementUrl, { ttlMs: 60_000, staleMs: 30 * 60_000, force })
           .then((body): StrengthSupplement => ({ kind: 'ok', body }))
@@ -247,19 +252,19 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
 }
 
 export function getDetailChart(ticker: string, range: ChartRange, force = false): Promise<StockChartEx> {
-  const t = ticker.toUpperCase();
+  const symbol = ticker.toUpperCase();
   return mockOr(
     () => {
-      if (!fx.hasTicker(t)) throw new ApiError(404, `代码 ${t} 不存在`);
-      return fx.getStockChartEx(t, range);
+      if (!fx.hasTicker(symbol)) throw new ApiError(404, `代码 ${symbol} 不存在`);
+      return fx.getStockChartEx(symbol, range);
     },
     // 契约 range ∈ 5m|15m|1h|1d|1w：界面与后端周期一一对应。
     () =>
       marketGet(
-        `/stocks/${encodeURIComponent(t)}/chart?range=${range}&adjustment=raw`,
+        `/stocks/${encodeURIComponent(symbol)}/chart?range=${range}&adjustment=raw`,
         { ttlMs: 60_000, staleMs: 60 * 60_000, force },
       ).then((d) =>
-        mapChartEx(d, t, range),
+        mapChartEx(d, symbol, range),
       ),
   );
 }
@@ -495,32 +500,32 @@ export function mapTrendBiasResponse(body: unknown, ticker: string): StockTrendB
 }
 
 export function getTrendBias(ticker: string, force = false): Promise<StockTrendBiasView> {
-  const t = ticker.toUpperCase();
+  const symbol = ticker.toUpperCase();
   return mockOr<StockTrendBiasView>(
     () => {
-      if (!fx.hasTicker(t)) throw new ApiError(404, `代码 ${t} 不存在`);
-      return mapTrendBiasResponse(fx.getStockTrendBias(t), t);
+      if (!fx.hasTicker(symbol)) throw new ApiError(404, `代码 ${symbol} 不存在`);
+      return mapTrendBiasResponse(fx.getStockTrendBias(symbol), symbol);
     },
     () =>
-      marketGet(`/signals/stock/${encodeURIComponent(t)}`, {
+      marketGet(`/signals/stock/${encodeURIComponent(symbol)}`, {
         ttlMs: 60_000,
         staleMs: 30 * 60_000,
         force,
-      }).then((body) => mapTrendBiasResponse(body, t)),
+      }).then((body) => mapTrendBiasResponse(body, symbol)),
   );
 }
 
 /** signal_analysis 任务（owner）；轮询/取消复用 aiJobsApi.get / cancel */
 export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
-  const t = ticker.toUpperCase();
+  const symbol = ticker.toUpperCase();
   return mockOr(
     () => {
-      if (!fx.hasTicker(t)) throw new ApiError(404, `代码 ${t} 不存在`);
-      const d = fx.getStockDetail(t);
-      const b = fx.getStockTrendBias(t);
+      if (!fx.hasTicker(symbol)) throw new ApiError(404, `代码 ${symbol} 不存在`);
+      const d = fx.getStockDetail(symbol);
+      const b = fx.getStockTrendBias(symbol);
       const ivTone = d.ivPercentile >= 60 ? '偏贵' : d.ivPercentile <= 40 ? '相对便宜' : '中性';
       const text =
-        `${t} 模型分析完成：趋势偏向分 ${b.trend_bias_score}（${b.trend_bias_label}），` +
+        `${symbol} 模型分析完成：趋势偏向分 ${b.trend_bias_score}（${b.trend_bias_label}），` +
         `分项读数 趋势 ${b.scores.trend} / 动量 ${b.scores.momentum} / 量能 ${b.scores.volume} / 波动 ${b.scores.volatility}。` +
         `现价 ${d.price.toFixed(2)} 美元，IV 百分位 ${d.ivPercentile}%，期权定价${ivTone}。` +
         `近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。` +
@@ -528,7 +533,7 @@ export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
       return fx2.createAiJob('signal-analysis' as AiJob['kind'], text);
     },
     // 契约：owner+SO → 202 + Location（job_id 可能仅在 Location 头）
-    () => postAiJob(`/signals/stock/${encodeURIComponent(t)}/ai-analysis`, { force: false }),
+    () => postAiJob(`/signals/stock/${encodeURIComponent(symbol)}/ai-analysis`, { force: false }),
   );
 }
 
@@ -549,7 +554,7 @@ export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
  * 该失败照样失败，错误态仍由面板自己呈现。
  */
 export function prefetchStockDetailPanels(ticker: string): void {
-  const t = ticker.toUpperCase();
-  void getDetailChart(t, DEFAULT_CHART_RANGE).catch(() => {});
-  void getTrendBias(t).catch(() => {});
+  const symbol = ticker.toUpperCase();
+  void getDetailChart(symbol, DEFAULT_CHART_RANGE).catch(() => {});
+  void getTrendBias(symbol).catch(() => {});
 }

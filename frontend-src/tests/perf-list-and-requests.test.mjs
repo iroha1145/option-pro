@@ -348,7 +348,7 @@ test('详情与强度补充同时发出，不是首尾相接', async () => {
   const api = codeOf(await source('components/detail/api.ts'));
 
   // 两个 Promise 必须在 await 之前就创建出来
-  const detailIdx = api.indexOf('const detailPromise = stocksApi.detail(t, force);');
+  const detailIdx = api.indexOf('const detailPromise = stocksApi.detail(symbol, force);');
   const strengthIdx = api.indexOf('const supplementPromise: Promise<StrengthSupplement> = Promise.race([');
   const firstAwait = api.indexOf('await detailPromise');
   assert.ok(detailIdx > 0 && strengthIdx > 0, '两条请求都要提前发起');
