@@ -5,7 +5,8 @@
  * 注：脚手架 src/api/modules/market.ts 为精简形状且按约束不可改动，
  *     本网关复用 client 的 mockOr/get 模式，不改动 api 层。
  */
-import { get, mockOr } from '@/api/client';
+import {mockOr} from '@/api/client';
+import { sharedGlobalGet } from '@/api/sharedRead';
 import * as pulse from '@/mocks/marketPulse';
 import type { MarketRegime, MarketStatusDetail } from '@/mocks/marketPulse';
 
@@ -35,7 +36,7 @@ export const marketPulseApi = {
     mockOr(
       () => pulse.getMarketStatusDetail(),
       async () => {
-        const raw = await get<RawMarketStatus>('/market/status');
+        const raw = await sharedGlobalGet<RawMarketStatus>('/market/status');
         return {
           market: normalizeMarketState(raw?.market),
           phase: raw?.phase ?? null,
@@ -54,7 +55,7 @@ export const marketPulseApi = {
     mockOr(
       () => pulse.getMarketRegime(),
       async () => {
-        const raw = await get<{ market_regime?: MarketRegime | null }>('/strength/market');
+        const raw = await sharedGlobalGet<{ market_regime?: MarketRegime | null }>('/strength/market');
         return raw?.market_regime ?? null;
       },
     ),

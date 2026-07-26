@@ -1,5 +1,6 @@
 /** 强度域：GET /api/strength/market · /profiles · /scan?params */
 import { get, mockOr, toQuery } from '../client';
+import { sharedGlobalGet } from '../sharedRead';
 import { marketGet } from '../marketRead';
 import { asRec, pickB, pickN, pickS, unwrap, type Rec } from '../live';
 import * as fx from '@/mocks/fixtures';
@@ -270,7 +271,7 @@ function mapSectors(d: unknown): SectorOption[] {
 }
 
 export const strengthApi = {
-  market: (): Promise<MarketStrength> => mockOr(() => fx.getMarketStrength(), () => get('/strength/market').then(mapMarket)),
+  market: (): Promise<MarketStrength> => mockOr(() => fx.getMarketStrength(), () => sharedGlobalGet<unknown>('/strength/market').then(mapMarket)),
   profiles: (): Promise<StrengthProfile[]> =>
     mockOr(() => fx.getStrengthProfiles(), () => get('/strength/profiles').then(mapProfiles)),
   /** profiles + 板块字典一次取齐（mock 无板块字典 → sectors:[]，消费层回退扫描行 sector 名） */

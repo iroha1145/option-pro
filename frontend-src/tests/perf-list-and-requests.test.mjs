@@ -102,16 +102,27 @@ test('概览统计条的占位与真实内容布局一致', async () => {
 
 /* ---------- 请求共享不改变语义 ---------- */
 
-test('全局只读端点共享同一请求，窗口足够短', async () => {
+test('共享落在原始响应层，覆盖所有拉同一端点的模块', async () => {
+  const shared = codeOf(await source('api/sharedRead.ts'));
   const market = codeOf(await source('api/modules/market.ts'));
-  assert.match(market, /shareGlobalRead/);
-  assert.match(market, /sharedStatus/);
-  // 指数也接进来：常驻的 IndexTape 与大盘页会同时要同一份数据
-  assert.match(market, /sharedIndices/);
-  assert.match(market, /indices: \(\): Promise<IndexQuote\[\]> => mockOr\(\(\) => fx\.getIndices\(\), sharedIndices\)/);
-  // 共享窗口必须短：它替代不了轮询，只压掉同一时刻的重复
-  const window = Number(/SHARE_WINDOW_MS = ([\d_]+)/.exec(market)[1].replace(/_/g, ''));
-  assert.ok(window > 0 && window <= 5000, `共享窗口 ${window}ms 过长，会掩盖真实的状态切换`);
+  const strength = codeOf(await source('api/modules/strength.ts'));
+  const pulse = codeOf(await source('components/market/api.ts'));
+
+  // 第一版共享的是映射结果，只覆盖得了同一个模块内的调用；
+  // components/market/api.ts 用自己的 mapper 拉同样的端点，于是 /market 页
+  // 仍然有两次 /market/status 和两次 /strength/market。
+  assert.match(market, /sharedGlobalGet<unknown>\('\/market\/status'\)/);
+  assert.match(market, /sharedGlobalGet<unknown>\('\/market\/indices'\)/);
+  assert.match(strength, /sharedGlobalGet<unknown>\('\/strength\/market'\)/);
+  assert.match(pulse, /sharedGlobalGet<RawMarketStatus>\('\/market\/status'\)/);
+  assert.match(pulse, /sharedGlobalGet<\{ market_regime[^}]*\}>\('\/strength\/market'\)/);
+
+  // 白名单：不在名单里的路径直接放行，避免有人把按用户变化的接口塞进来
+  assert.match(shared, /const SHAREABLE = new Set/);
+  assert.match(shared, /if \(!SHAREABLE\.has\(path\)\) \{/);
+  // 窗口必须短：替代不了轮询，只压掉同一时刻的重复
+  const window = Number(/SHARE_WINDOW_MS = ([\d_]+)/.exec(shared)[1].replace(/_/g, ''));
+  assert.ok(window > 0 && window <= 5000, `共享窗口 ${window}ms 过长`);
 });
 
 test('共享的市场时段请求在并发调用下只发一次', async () => {
@@ -128,20 +139,37 @@ test('共享的市场时段请求在并发调用下只发一次', async () => {
 
   let calls = 0;
   const asRec = (v) => (v !== null && typeof v === 'object' && !Array.isArray(v) ? v : {});
+
+  // 真实请求桩：解析要跨一次微任务，否则并发根本不会重叠。
+  const clientStub = {
+    get: async () => {
+      calls += 1;
+      await new Promise((r) => setTimeout(r, 5));
+      return { market: 'open', session: 'regular', label: '盘中' };
+    },
+    mockOr: (_fixture, live) => live(),
+    toQuery: () => '',
+    isMock: false,
+  };
+
+  // 加载**真实**的 sharedRead：去重逻辑就在它里面，桩掉它这条测试就没有意义了。
+  const sharedSrc = ts.transpileModule(
+    fs.readFileSync(path.join(src, 'api', 'sharedRead.ts'), 'utf8'),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+  ).outputText;
+  const sharedModule = { exports: {} };
+  vm.runInNewContext(sharedSrc, {
+    module: sharedModule,
+    exports: sharedModule.exports,
+    require: () => clientStub,
+    Date, Promise, Map, Set, Object, Number, String, Boolean,
+  });
+
   const module = { exports: {} };
   const require = (id) => {
+    if (id === '../sharedRead' || id === './sharedRead') return sharedModule.exports;
     if (id === '../client' || id === './client') {
-      return {
-        get: async () => {
-          calls += 1;
-          // 与真实请求一样：解析要跨一次微任务，否则并发根本不会重叠。
-          await new Promise((r) => setTimeout(r, 5));
-          return { market: 'open', session: 'regular', label: '盘中' };
-        },
-        mockOr: (_fixture, live) => live(),
-        toQuery: () => '',
-        isMock: false,
-      };
+      return clientStub;
     }
     if (id === '../live' || id === './live') {
       return {
@@ -160,6 +188,7 @@ test('共享的市场时段请求在并发调用下只发一次', async () => {
   });
 
   const { marketApi, resetMarketStatusShare } = module.exports;
+  assert.equal(typeof resetMarketStatusShare, 'function');
   resetMarketStatusShare();
   const [a, b, c] = await Promise.all([
     marketApi.status(),

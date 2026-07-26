@@ -4,6 +4,7 @@
  */
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import HorizontalScroller from '@/components/shared/HorizontalScroller';
 
 interface SectorChipsProps {
   sectors: { id: string; name: string }[];
@@ -13,12 +14,12 @@ interface SectorChipsProps {
 }
 
 export default function SectorChips({ sectors, value, onChange, className }: SectorChipsProps) {
+  /* 11 个板块在窄容器里会溢出（实测 2117px 轨道 / 643px 视口，藏掉 1474px），
+     而滚动条是隐藏的 —— 和热点带同一个问题：桌面端鼠标无从滚动，也看不出右边
+     还有。滚动交给 HorizontalScroller，role="tablist" 留在真正装 tab 的元素上。 */
   return (
-    <div
-      role="tablist"
-      aria-label="板块切换"
-      className={cn('flex gap-1.5 overflow-x-auto py-0.5 no-scrollbar', className)}
-    >
+    <HorizontalScroller className={className} scrollerClassName="py-0.5">
+      <div role="tablist" aria-label="板块切换" className="flex gap-1.5">
       {sectors.map((s) => {
         const active = s.id === value;
         return (
@@ -42,6 +43,7 @@ export default function SectorChips({ sectors, value, onChange, className }: Sec
           </motion.button>
         );
       })}
-    </div>
+      </div>
+    </HorizontalScroller>
   );
 }

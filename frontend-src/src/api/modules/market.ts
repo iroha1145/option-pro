@@ -1,5 +1,6 @@
 /** 市场域：GET /api/market/indices · GET /api/market/status */
-import { get, mockOr } from '../client';
+import {mockOr} from '../client';
+import { resetSharedReads, sharedGlobalGet } from '../sharedRead';
 import { asRec, pickN, pickS, unwrap } from '../live';
 import * as fx from '@/mocks/fixtures';
 import type { IndexQuote, MarketSession, MarketStatus } from '../types';
@@ -72,58 +73,17 @@ function mapStatus(body: unknown): MarketStatus {
   };
 }
 
-/**
- * 全局只读端点的短窗口共享。
- *
- * 首屏上有多个互不知情的组件在拉同一个接口：/market/status 被 Navbar 与自选页
- * 拉三次；/market/indices 被常驻的 IndexTape 和大盘页各拉一次。它们要的是同一个
- * 事实，没必要各发一次。
- *
- * **只能用于对所有调用方返回同一份全局数据的只读端点。** 任何按用户、按参数
- * 变化的接口都不能进来 —— 那会把一个人的数据发给另一个人。窗口刻意很短：
- * 它替代不了轮询，只压掉同一时刻的重复；各组件自己的轮询周期完全不变，
- * 因此「多久算过期」的语义没有改变。
- */
-const SHARE_WINDOW_MS = 2_000;
-
-interface Share<T> {
-  inFlight: Promise<T> | null;
-  value: { at: number; value: T } | null;
-}
-
-function shareGlobalRead<T>(share: Share<T>, load: () => Promise<T>): Promise<T> {
-  const now = Date.now();
-  if (share.value && now - share.value.at < SHARE_WINDOW_MS) {
-    return Promise.resolve(share.value.value);
-  }
-  if (share.inFlight) return share.inFlight;
-  const request = load()
-    .then((value) => {
-      share.value = { at: Date.now(), value };
-      return value;
-    })
-    .finally(() => {
-      if (share.inFlight === request) share.inFlight = null;
-    });
-  share.inFlight = request;
-  return request;
-}
-
-const statusShare: Share<MarketStatus> = { inFlight: null, value: null };
-const indicesShare: Share<IndexQuote[]> = { inFlight: null, value: null };
-
+/* 共享落在原始响应层（api/sharedRead）：components/market/api.ts 用自己的
+   mapper 拉同一批端点，只共享映射结果覆盖不到它。 */
 const sharedStatus = (): Promise<MarketStatus> =>
-  shareGlobalRead(statusShare, () => get('/market/status').then(mapStatus));
+  sharedGlobalGet<unknown>('/market/status').then(mapStatus);
 
 const sharedIndices = (): Promise<IndexQuote[]> =>
-  shareGlobalRead(indicesShare, () => get('/market/indices').then(mapIndices));
+  sharedGlobalGet<unknown>('/market/indices').then(mapIndices);
 
-/** 测试用复位；生产依赖上面的有界过期。 */
+/** 测试用复位；生产依赖有界过期。 */
 export function resetMarketStatusShare(): void {
-  statusShare.inFlight = null;
-  statusShare.value = null;
-  indicesShare.inFlight = null;
-  indicesShare.value = null;
+  resetSharedReads();
 }
 
 export const marketApi = {
