@@ -78,3 +78,13 @@ test('热点带用上了这个组件', async () => {
   // 原来那层裸的 overflow-x-auto 不该再留着
   assert.doesNotMatch(strip, /className="-mx-4 mt-4 overflow-x-auto/);
 });
+
+test('板块 chip 条也用上了这个组件，且 tablist 语义留在原处', async () => {
+  const chips = await source('components/sectors/SectorChips.tsx');
+  // 实测 /sectors 上这条 chip 带藏掉 1474px（2117 轨道 / 643 视口）且没有任何控件
+  assert.match(chips, /<HorizontalScroller/);
+  // role="tablist" 必须留在真正装 tab 的元素上，不能挪到滚动容器
+  assert.match(chips, /<div role="tablist" aria-label="板块切换" className="flex gap-1\.5">/);
+  // 原来那层裸的 overflow-x-auto 不该再留着
+  assert.doesNotMatch(chips, /overflow-x-auto py-0\.5 no-scrollbar/);
+});
