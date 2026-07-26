@@ -2,9 +2,9 @@
 import { get, mockOr, toQuery } from '../client';
 import { marketGet } from '../marketRead';
 import { asRec, num, pickN, pickS, str, unwrap, type Rec } from '../live';
-import { mapMacroFitDrivers } from './strength';
+import { mapMacroFitDrivers } from '../macroFields';
 import * as fx2 from '@/mocks/fixtures2';
-import { SIGNAL_LABELS } from '@/mocks/fixtures';
+import { SIGNAL_LABELS } from '@/lib/signalLabels';
 import type { BreakoutEvent, BreakoutEventDetail, BreakoutSignal, BreakoutStatus, SignalType } from '../types';
 
 export interface BreakoutEventFilters {

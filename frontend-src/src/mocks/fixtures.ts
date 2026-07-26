@@ -12,7 +12,6 @@ import type {
   MarketStrength,
   ScreenerRow,
   Signal,
-  SignalType,
   StockChart,
   StockDetail,
   StockSearchResult,
@@ -22,15 +21,10 @@ import type {
 
 const rng = new Rng(20240521);
 
-export const SIGNAL_LABELS: Record<SignalType, string> = {
-  breakout: '突破',
-  volume: '放量',
-  pullback: '回踩',
-  'ma-touch': '触均线',
-  gap: '跳空',
-  'iv-spike': 'IV 异动',
-};
-const SIGNAL_TYPES = Object.keys(SIGNAL_LABELS) as SignalType[];
+/* live 也要读的标签搬到了 @/lib/signalLabels：留在这里会把整个 fixture 模块钉在
+   live 依赖图里。这里重新导出，mock 侧的既有引用不必改。 */
+export { SIGNAL_LABELS, SIGNAL_TYPES } from '@/lib/signalLabels';
+import { SIGNAL_LABELS, SIGNAL_TYPES } from '@/lib/signalLabels';
 
 const infoOf = (t: string): TickerInfo => TICKER_POOL.find((x) => x.ticker === t) ?? TICKER_POOL[0];
 

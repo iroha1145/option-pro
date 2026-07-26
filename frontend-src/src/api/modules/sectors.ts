@@ -1,7 +1,7 @@
 /** 板块域：真实目录、强度聚合与板块内 IV 横截面。 */
 import { get, mockOr, toQuery } from '../client';
 import { asRec, pickB, pickN, pickS, unwrap, type Rec } from '../live';
-import { mapMacroFitDrivers } from './strength';
+import { mapMacroFitDrivers } from '../macroFields';
 import type { MacroFitDriver } from '@/lib/macroFit';
 import * as fx2 from '@/mocks/fixtures2';
 import type { IvRankRow, Sector } from '../types';

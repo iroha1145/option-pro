@@ -351,6 +351,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
                   supporting={detail.macroSupporting}
                   opposing={detail.macroOpposing}
                   technicalGap={detail.macroTechnicalGap}
+                  status={detail.macroShadowStatus}
                 />
               </div>
               <div>

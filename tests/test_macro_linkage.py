@@ -597,3 +597,47 @@ def test_the_reader_can_be_read_more_than_once_per_request() -> None:
     assert all(score is not None for score in scores), (
         f"a later sector lost its factors: {scores}"
     )
+
+
+# ---------------- the drawer reads the endpoint it actually calls ----------------
+
+
+def test_the_overview_endpoint_carries_the_macro_fit() -> None:
+    """The drawer's macro fit must not hang off an endpoint that 404s.
+
+    It first read /strength/stocks/{ticker}, which only answers for tickers
+    inside the public snapshot's top slice. Every other ticker 404'd, so ~190 of
+    213 showed "no macro read" for a fit that was perfectly computable. The
+    overview is the request the drawer always makes.
+    """
+
+    from app.api.stocks import _attach_macro_fit
+
+    quote = {"ticker": "AMD", "price": 123.45, "change_percent": 1.2}
+    out = _attach_macro_fit("AMD", quote)
+
+    # The quote is untouched; macro is purely additive.
+    for key, value in quote.items():
+        assert out[key] == value
+    assert "macro_shadow_status" in out, "the reason must be stated, not inferred"
+    assert set(quote) <= set(out)
+
+
+def test_the_overview_annotation_never_breaks_a_quote() -> None:
+    """A quote must not fail, or change shape, because of an annotation."""
+
+    from app.api.stocks import _attach_macro_fit
+
+    # Not a dict: pass it straight through rather than guessing a shape.
+    assert _attach_macro_fit("AMD", "not-a-dict") == "not-a-dict"
+    assert _attach_macro_fit("AMD", None) is None
+    assert _attach_macro_fit("AMD", [1, 2]) == [1, 2]
+
+
+def test_an_unclassified_ticker_says_so_on_the_overview() -> None:
+    from app.api.stocks import _attach_macro_fit
+
+    out = _attach_macro_fit("NOTATICKER", {"ticker": "NOTATICKER", "price": 1.0})
+    assert out["macro_shadow_status"] == "sector_unclassified"
+    assert out["macro_fit_shadow"] is None
+    assert out["macro_tailwind"] is None, "no read must not read as neutral"
