@@ -146,6 +146,49 @@ export const CHROME: Dict = {
   '本地演示关联项': ['Local demo related item', 'ローカルデモの関連項目'],
   '本地演示数据': ['Local demo data', 'ローカルデモデータ'],
 
+  /* 请求 / 会话边界 */
+  '请求超时，请重试': ['Request timed out. Please try again.', 'リクエストがタイムアウトしました。もう一度お試しください。'],
+  '任务创建响应缺少 job_id（body 与 Location 头均未提供）': [
+    'The job-creation response is missing a job_id (neither the body nor the Location header provided one).',
+    'ジョブ作成レスポンスに job_id がありません（本文にも Location ヘッダーにも含まれていません）。',
+  ],
+  'useShell 必须在 <Layout> 内使用': ['useShell must be used within <Layout>', 'useShell は <Layout> の内部でのみ使用できます'],
+  'useToast 必须在 <ToastProvider> 内使用': ['useToast must be used within <ToastProvider>', 'useToast は <ToastProvider> の内部でのみ使用できます'],
+  'useAccess 必须在 <AccessProvider> 内使用': ['useAccess must be used within <AccessProvider>', 'useAccess は <AccessProvider> の内部でのみ使用できます'],
+
+  /* 指数条 / 涨跌徽章 */
+  '持平': ['Flat', '横ばい'],
+  '分': ['pts', 'pt'],
+  '持平 0.00%': ['Flat 0.00%', '横ばい 0.00%'],
+  '上升': ['Up', '上昇'],
+  '下降': ['Down', '下落'],
+
+  /* 应用级错误边界 */
+  '应用启动中断': ['The app failed to start', 'アプリの起動が中断されました'],
+  '已拦截为错误卡以避免白屏；完整堆栈保留在控制台。若反复出现，可清除本站的本地存储后重试。': [
+    'Caught and shown as an error card instead of a blank screen; the full stack trace is in the console. If this keeps happening, try clearing this site’s local storage and reloading.',
+    '白画面にせずエラーカードとして表示しています。完全なスタックトレースはコンソールに出力済みです。繰り返し発生する場合は、このサイトのローカルストレージを消去してから再試行してください。',
+  ],
+  '清除本地存储并重载': ['Clear local storage and reload', 'ローカルストレージを消去して再読み込み'],
+  '页面渲染中断': ['This page stopped rendering', 'このページの表示が中断されました'],
+  '已拦截为错误卡以避免白屏；重新加载即可恢复，完整堆栈保留在控制台。': [
+    'Caught and shown as an error card instead of a blank screen; reload to recover, and the full stack trace is in the console.',
+    '白画面にせずエラーカードとして表示しています。再読み込みで復帰できます。完全なスタックトレースはコンソールに出力済みです。',
+  ],
+  '加载中…': ['Loading…', '読み込み中…'],
+
+  /* 横向滚动条 */
+  '向左滚动': ['Scroll left', '左へスクロール'],
+  '向右滚动': ['Scroll right', '右へスクロール'],
+
+  /* 信号类型标签（signalLabels.ts；与突破雷达页共用同一套中文原文） */
+  '突破': ['Breakout', 'ブレイクアウト'],
+  '放量': ['Volume surge', '出来高急増'],
+  '回踩': ['Pullback', '押し目'],
+  '触均线': ['MA touch', '移動平均タッチ'],
+  '跳空': ['Gap', 'ギャップ'],
+  'IV 异动': ['IV spike', 'IV急変'],
+
   /* 语言切换器 */
   '语言': ['Language', '言語'],
   '界面语言': ['Interface language', '表示言語'],
