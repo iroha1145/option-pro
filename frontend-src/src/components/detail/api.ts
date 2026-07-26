@@ -99,21 +99,30 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
       return fx.getStockDetail(t);
     },
     async () => {
+      // 两个请求互不依赖，同时发出。
+      //
+      // 之前是串行：先 await 核心行情，再去要强度补充 —— 两段往返首尾相接，
+      // 而强度这一路根本不需要前一路的结果。并行之后总时长是两者的较大值，
+      // 不再是两者之和。
+      //
+      // 可选补充不得拖住核心详情（审计 P2-32）：失败已经被捕获，但请求缓慢或
+      // 悬挂时整个详情对象仍会一直等它。截止时间从**发起时刻**起算，
+      // 这也是并行之后才成立的口径。
+      const detailPromise = stocksApi.detail(t, force);
+      const strengthPromise = Promise.race([
+        marketGet(
+          `/strength/stocks/${encodeURIComponent(t)}`,
+          { ttlMs: 60_000, staleMs: 30 * 60_000, force },
+        ).catch(() => null),
+        new Promise<null>((resolve) => {
+          setTimeout(() => resolve(null), STRENGTH_SUPPLEMENT_DEADLINE_MS);
+        }),
+      ]);
+
       try {
         // 行情价格仍以 stocks 概览（Massive 主源）为准；强度快照只补其真实评分与缺失基本面。
-        const detail = await stocksApi.detail(t, force);
-        // 可选补充不得拖住核心详情（审计 P2-32）：强度失败已经被捕获，但请求
-        // 缓慢或悬挂时整个详情对象仍会一直等它，界面继续显示骨架屏。给它一个
-        // 独立的截止时间，超时就先返回核心行情。
-        const strengthBody = await Promise.race([
-          marketGet(
-            `/strength/stocks/${encodeURIComponent(t)}`,
-            { ttlMs: 60_000, staleMs: 30 * 60_000, force },
-          ).catch(() => null),
-          new Promise<null>((resolve) => {
-            setTimeout(() => resolve(null), STRENGTH_SUPPLEMENT_DEADLINE_MS);
-          }),
-        ]);
+        const detail = await detailPromise;
+        const strengthBody = await strengthPromise;
         const strength = strengthBody !== null ? strengthRowToDetail(asRec(strengthBody)) : null;
         const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
         return {
@@ -128,10 +137,14 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
       } catch (e) {
         // 只有明确的公开快照边界才允许回退扫描行；供应方错误不能被伪装成基础行情成功。
         if (!(e instanceof ApiError) || e.code !== 503 || e.bizCode !== 'public_snapshot_unavailable') throw e;
-        const body = await marketGet(
-          `/strength/stocks/${encodeURIComponent(t)}`,
-          { ttlMs: 60_000, staleMs: 30 * 60_000, force },
-        ).catch(() => null);
+        // 上面已经发出去的那次强度请求可以直接复用，不必再发一次。
+        // 它超时会解析成 null，此时才真的重新要一次。
+        const body =
+          (await strengthPromise) ??
+          (await marketGet(
+            `/strength/stocks/${encodeURIComponent(t)}`,
+            { ttlMs: 60_000, staleMs: 30 * 60_000, force },
+          ).catch(() => null));
         const fallback = body !== null ? strengthRowToDetail(asRec(body)) : null;
         if (fallback === null) throw e;
         return fallback;

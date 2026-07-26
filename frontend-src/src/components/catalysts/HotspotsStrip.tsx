@@ -5,6 +5,7 @@ import { catalystsContract } from './api';
 import type { HotspotGroup } from './api';
 import { HeatMeter, Led, TickerChip } from './bits';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
+import HorizontalScroller from '@/components/shared/HorizontalScroller';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import Icon from '@/components/icons';
@@ -116,7 +117,14 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
         )}
       </div>
 
-      <div className="-mx-4 mt-4 overflow-x-auto px-4 pb-2 no-scrollbar md:-mx-8 md:px-8">
+      {/* 8 张 260px 的卡合计约 2200px，一定溢出。滚动条是藏起来的，触屏能划，
+          桌面端普通鼠标却完全无从滚动 —— 最右边那张永远半截，也看不出右边还有没有。
+          HorizontalScroller 补上渐隐遮罩与左右按钮，触屏行为不变。 */}
+      <HorizontalScroller
+        className="-mx-4 mt-4 md:-mx-8"
+        scrollerClassName="px-4 pb-2 md:px-8"
+        label="热点主题带，可横向滚动"
+      >
         <div className="flex snap-x snap-mandatory gap-3">
           {listQ.loading && items.length === 0 ? (
             [0, 1, 2].map((i) => <HotspotSkeleton key={i} i={i} />)
@@ -148,7 +156,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
               />
             ))}
         </div>
-      </div>
+      </HorizontalScroller>
     </section>
   );
 }
