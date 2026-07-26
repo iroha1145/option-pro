@@ -778,7 +778,15 @@ def test_read_mode_never_creates_paid_jobs_and_uses_source_text_fallback(tmp_pat
     result = intelligence.reconcile(allow_scheduled_jobs=True)
     feed = intelligence.feed(as_of=now, limit=10)
     detail = intelligence.news(10, as_of=now)
-    hotspots = intelligence.hotspots(limit=10, now=now)
+    # 热点的观察时点必须取真实当下，不能沿用 now。
+    #
+    # `now` 被 replace(microsecond=0) 截到整秒 —— 最多往前挪了 999ms。而热点修订的
+    # prepared_at 是 reconcile() 用 _utc_now() 现盖的（reconcile 没有时钟参数），
+    # hotspots 又按 `prepared_at <= 观察时点` 过滤。只要 reconcile 跨过一次整秒边界，
+    # 这条修订就整个不可见，items 为空，下面第一条断言以 IndexError 挂掉。
+    # 本机 reconcile 约 50ms，所以只有起始小数部分落在那一小段里才会中；CI 上机器
+    # 更慢，窗口更宽，于是表现为随机失败（同一个提交 push 挂、pull_request 过）。
+    hotspots = intelligence.hotspots(limit=10, now=datetime.now(timezone.utc))
 
     with sqlite3.connect(ai.path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0] == 0
