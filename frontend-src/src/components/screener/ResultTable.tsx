@@ -13,6 +13,7 @@ import TickerLogo from '@/components/shared/TickerLogo';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import InfoHint from '@/components/shared/InfoHint';
 import MacroFitBadge from '@/components/shared/MacroFitBadge';
+import { MACRO_SHADOW_HINT } from '@/lib/macroFit';
 import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
 import RowExpansion from './RowExpansion';
 import { CatalystBadge, ScoreCell, SubscoreTicks } from './cells';
@@ -59,7 +60,8 @@ function headsFor(showMacro: boolean) {
   if (!showMacro) return HEADS;
   return [
     ...HEADS.slice(0, MACRO_HEAD_INDEX),
-    { label: '宏观适配', hint: undefined },
+    // 带上口径说明：一个 0–100 的分数放在强度分旁边，默认会被当成评分的一部分。
+    { label: '宏观适配', hint: MACRO_SHADOW_HINT },
     ...HEADS.slice(MACRO_HEAD_INDEX),
   ];
 }

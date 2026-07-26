@@ -135,9 +135,10 @@ export default function ResultCards({
               <span className="mt-3 flex items-center justify-between border-t border-line pt-3">
                 <SubscoreTicks row={r} />
                 <span className="flex items-center gap-1.5">
-                  {/* 移动端没有「可选列」的位置，宏观徽标跟着卡片走：只在真有读数时
-                      出现，没读数时不占位，免得每张卡片都挂一个「无读数」。 */}
-                  {showMacro && typeof r.macroFit === 'number' && (
+                  {/* 开关是用户自己打开的，所以「无读数」也要显示出来。只在有分数时
+                      才出现，等于让「列关着」和「这只票没读数」长得一样 —— 那正是这
+                      整个字段想避免的含混。 */}
+                  {showMacro && (
                     <MacroFitBadge score={r.macroFit} tailwind={r.macroTailwind} compact />
                   )}
                   <CatalystBadge summary={catalysts[r.ticker]} />

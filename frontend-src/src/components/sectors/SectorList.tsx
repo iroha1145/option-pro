@@ -101,12 +101,9 @@ export default function SectorList({
           const quadrant = macroQuadrant(row.avgStrength, row.macroFit);
           return (
             <span className="flex flex-col items-start gap-0.5">
-              <MacroFitBadge
-                score={row.macroFit}
-                tailwind={row.macroTailwind}
-                status={row.strengthCovered ? undefined : 'macro_snapshot_unavailable'}
-                compact
-              />
+              {/* 不传 status：strengthCovered 为 false 只说明这个板块没有强度聚合，
+                  并不等于「宏观快照缺失」。不知道原因就别编一个具体原因。 */}
+              <MacroFitBadge score={row.macroFit} tailwind={row.macroTailwind} compact />
               {quadrant && (
                 <span className="text-micro text-ink-400">
                   {MACRO_QUADRANT_LABEL[quadrant]}
