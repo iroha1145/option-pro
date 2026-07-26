@@ -1,0 +1,88 @@
+import type { Dict } from './types';
+
+export const MARKET: Dict = {
+  /* src/components/market/BreadthHistogram.tsx */
+  '加载失败': ['Failed to load', '読み込みに失敗'],
+  '数据暂不可用': ['Data temporarily unavailable', 'データは一時的に利用できません'],
+  '暂无强度分布数据': ['No strength-distribution data available', '強度分布データがありません'],
+  '强度分布': ['Strength distribution', '強度分布'],
+  '强度分布 · 全市场': ['Strength distribution · market-wide', '強度分布 · 全市場'],
+  '只': ['stocks', '銘柄'],
+  '均值': ['Average', '平均'],
+  '桶宽 10 分 · 色阶 &lt;50 弱 / 50–69 / 70–84 / ≥85 强': ['Bucket width 10 points · color scale &lt;50 weak / 50–69 / 70–84 / ≥85 strong', 'バケット幅10点 · 色分け &lt;50 弱 / 50–69 / 70–84 / ≥85 強'],
+  '统计范围为扫描股票池全体，不区分指数。': ['Covers the full scanned stock universe, not broken down by index.', '集計範囲はスキャン対象銘柄プール全体で、指数区分はありません。'],
+
+  /* src/components/market/IndexCards.tsx */
+  '暂无指数数据': ['No index data available', '指数データがありません'],
+
+  /* src/components/market/LinkCards.tsx */
+  '突破雷达': ['Breakout radar', 'ブレイクアウト・レーダー'],
+  '板块透视': ['Sector X-ray', 'セクター透視'],
+  '十一大板块热力矩阵与 IV 排名，看资金在哪个赛道抱团。': ['An 11-sector heatmap matrix with IV rankings — see which theme money is crowding into.', '11大セクターのヒートマップとIVランキングで、資金がどのテーマに集まっているかを確認できます。'],
+  '当日突破信号与事件时间线，追踪生命周期状态迁移。': ['Today’s breakout signals and event timeline — track lifecycle state transitions.', '当日のブレイクアウト・シグナルとイベントタイムラインで、ライフサイクルの状態遷移を追跡できます。'],
+
+  /* src/components/market/RegimePanel.tsx */
+  '指数趋势': ['Index trend', '指数トレンド'],
+  'SPY / QQQ / IWM / RSP 相对 50 与 200 日均线的位置，加 SPY 200 日线斜率。': ['The position of SPY / QQQ / IWM / RSP relative to their 50- and 200-day moving averages, plus the slope of SPY’s 200-day MA.', 'SPY / QQQ / IWM / RSP の50日・200日移動平均線に対する位置に、SPY の200日線の傾きを加えたもの。'],
+  '市场动量': ['Market momentum', '市場モメンタム'],
+  'SPY / QQQ / IWM 的 20 日涨跌，加 QQQ−SPY、RSP−SPY 的 20 日相对差。': ['The 20-day change in SPY / QQQ / IWM, plus the 20-day relative spreads QQQ−SPY and RSP−SPY.', 'SPY / QQQ / IWM の20日騰落率に、QQQ−SPY と RSP−SPY の20日相対差を加えたもの。'],
+  '市场广度': ['Market breadth', '市場の広がり'],
+  '11 个行业 ETF 中站上 50 / 200 日均线的比例，加等权对市值加权（RSP÷SPY）与小盘对大盘（IWM÷SPY）的 20 日相对强弱。': ['The share of the 11 sector ETFs above their 50- and 200-day MAs, plus the 20-day relative strength of equal-weight versus cap-weight (RSP÷SPY) and small-cap versus large-cap (IWM÷SPY).', '11業種 ETF のうち50日・200日移動平均線を上回る比率に、均等ウェイト対時価総額ウェイト（RSP÷SPY）と小型株対大型株（IWM÷SPY）の20日相対強弱を加えたもの。'],
+  '量能配合': ['Volume confirmation', '出来高の裏付け'],
+  'SPY / QQQ 近 5 日方向与相对量能是否同向：放量上行加分，放量下行扣分。': ['Whether the 5-day direction of SPY / QQQ agrees with relative volume: rising on expanding volume adds points, falling on expanding volume subtracts.', 'SPY / QQQ の直近5日の方向と相対出来高が一致しているか：出来高増を伴う上昇は加点、出来高増を伴う下落は減点。'],
+  '风险偏好': ['Risk appetite', 'リスク選好'],
+  'VIX 水平与一年分位、HYG−TLT 与 HYG−IEF 信用价差、10 年期利率变化、久期、SPY / QQQ 回撤。': ['VIX level and its one-year percentile, the HYG−TLT and HYG−IEF credit spreads, the change in the 10-year yield, duration, and SPY / QQQ drawdowns.', 'VIX の水準と1年パーセンタイル、HYG−TLT と HYG−IEF のクレジット・スプレッド、10年金利の変化、デュレーション、SPY / QQQ のドローダウン。'],
+  '风险利差': ['Offense/defense spread', '攻守スプレッド'],
+  '十组进攻／防守资产对的 20 日相对价差（QQQ/SPY、SOXX/XLK、HYG/IEF、XLY/XLP 等）。': ['The 20-day relative spread across ten offense/defense asset pairs (QQQ/SPY, SOXX/XLK, HYG/IEF, XLY/XLP, and others).', '攻め／守りの資産ペア10組の20日相対スプレッド（QQQ/SPY、SOXX/XLK、HYG/IEF、XLY/XLP など）。'],
+  '六维算自同一篮固定基准：SPY / QQQ / IWM / RSP、11 个行业 ETF、VIX、HYG / IEF / TLT / 10 年期、GLD、SOXX / SMH —— 是全市场读数，不区分指数。': ['All six dimensions are computed from the same fixed benchmark basket (SPY / QQQ / IWM / RSP, the 11 sector ETFs, VIX, HYG / IEF / TLT / the 10-year yield, GLD, SOXX / SMH) — a market-wide reading, not broken down by index.', '六維はすべて同一の固定ベンチマーク・バスケット（SPY / QQQ / IWM / RSP、11業種 ETF、VIX、HYG / IEF / TLT / 10年債、GLD、SOXX / SMH）から算出する全市場の読み値で、指数区分はありません。'],
+  '暂无市场环境六维数据': ['No market-regime data available', '市場環境六軸データがありません'],
+  '市场形态六维': ['Six-dimension market regime', '市場環境六軸'],
+  '市场形态六维 · MARKET REGIME': ['Market regime', '市場環境六軸 · MARKET REGIME'],
+  '综合均值': ['Composite average', '総合平均'],
+  '色阶：&lt;50 弱 · 50–69 中性 · 70–84 强 · ≥85 极强': ['Color scale: &lt;50 weak · 50–69 neutral · 70–84 strong · ≥85 very strong', '色分け：&lt;50 弱 · 50–69 中立 · 70–84 強 · ≥85 極強'],
+
+  /* src/components/market/SignalsReading.tsx */
+  '，': [', ', '、'],
+  '盘中关注量能能否延续，追高注意回撤风险。': ['Intraday, watch whether volume follow-through holds up — chasing highs here carries drawdown risk.', '取引時間中は出来高の続伸を確認し、高値を追う場合はドローダウンのリスクに注意。'],
+  '盘前流动性较薄，信号以开盘后确认为准。': ['Pre-market liquidity is thin — treat signals as provisional until confirmed after the open.', 'プレマーケットは流動性が薄く、シグナルは寄り付き後の確認を優先。'],
+  '盘后留意财报与公告对明日开盘的传导。': ['After hours, watch how earnings and announcements carry through into tomorrow’s open.', '時間外取引では決算や発表が翌日の寄り付きにどう波及するかに注意。'],
+  '当前为最近一个交易日的数据，开盘后会重新计算。': ['This reflects the most recent trading day’s data and will be recalculated after the next open.', '現在は直近営業日のデータで、次の取引開始後に再計算されます。'],
+  '未评分': ['Not scored', '未評価'],
+  '右列：指标值 · 顶部风险分 / 底部修复分': ['Right column: indicator value · topping-risk score / bottom-formation score', '右列：指標値 · 天井リスク・スコア / 底打ちスコア'],
+  '暂无信号汇总数据': ['No signal summary data available', 'シグナル集計データがありません'],
+  '市场信号解读': ['Market signals reading', '市場シグナル解読'],
+  '市场信号解读 · SIGNALS READING': ['Signals reading', '市場シグナル解読 · SIGNALS READING'],
+  '数据质量': ['Data quality', 'データ品質'],
+  '趋势偏向': ['Trend bias', 'トレンド・バイアス'],
+  '依据不足，暂不给出判断': ['Insufficient basis for a call right now', '根拠不足のため判定を保留します'],
+  '根据当前各项指标读数自动生成 · 解读对象为全市场，不区分指数 · 不构成投资建议': ['Auto-generated from current indicator readings · Market-wide, not broken down by index · Not investment advice', '現在の各指標の読み値から自動生成 · 対象は全市場で、指数区分はありません · 投資助言ではありません'],
+
+  /* src/components/market/StatusCard.tsx */
+  '常规交易时段 · 9:30–16:00 ET': ['Regular trading hours · 9:30–16:00 ET', '通常取引時間 · 9:30–16:00 ET'],
+  '盘前交易 · 流动性较薄，报价点差偏大': ['Pre-market trading · thin liquidity, wider bid-ask spreads', 'プレマーケット取引 · 流動性が薄く、スプレッドが広がりやすい'],
+  '盘后交易 · 留意财报与公告驱动': ['After-hours trading · watch for earnings and announcement-driven moves', '時間外取引 · 決算や発表による値動きに注意'],
+  '隔夜休市 · 等待下一交易时段': ['Overnight closed · awaiting the next session', 'オーバーナイト休場 · 次のセッションを待機'],
+  '周末休市 · 等待下一个交易日': ['Weekend closed · awaiting the next trading day', '週末休場 · 次の取引日を待機'],
+  '节假日休市': ['Holiday closed', '祝日休場'],
+  '暂无市场状态数据': ['No market status data available', '市場状況データがありません'],
+  '市场状态': ['Market status', '市場状況'],
+  '市场状态 · MARKET STATUS': ['Market status', '市場状況 · MARKET STATUS'],
+  '纽约时间（ET）· 每秒更新': ['New York time (ET) · updates every second', 'ニューヨーク時間（ET）· 1秒ごとに更新'],
+  '距下一开盘': ['Until next open', '次の取引開始まで'],
+  '距下一收盘': ['Until next close', '次の取引終了まで'],
+  '节假日': ['Holiday', '祝日'],
+
+  /* src/pages/Market.tsx */
+  '更新': ['Updated', '更新'],
+  '偏多': ['Bullish', '強気'],
+  '偏空': ['Bearish', '弱気'],
+  '大盘强弱': ['Market strength', '地合いの強弱'],
+  '指数、形态与广度的全景。': ['A full picture of indices, regime, and breadth.', '指数・市場環境・広がりを一望できます。'],
+  '时段读取中…': ['Loading session…', 'セッション取得中…'],
+  '时段未知': ['Session unknown', 'セッション不明'],
+  '指数概览': ['Index overview', '指数概況'],
+  '指数概览 · INDEX OVERVIEW（延迟行情）': ['Index overview (delayed quotes)', '指数概況 · INDEX OVERVIEW（遅延データ）'],
+  '宏观环境': ['Macro conditions', 'マクロ環境'],
+  '联动视图': ['Drill down', '連動ビュー'],
+  '联动视图 · DRILL DOWN': ['Drill down', '連動ビュー · DRILL DOWN'],
+};
