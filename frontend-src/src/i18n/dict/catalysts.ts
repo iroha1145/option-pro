@@ -392,4 +392,9 @@ export const CATALYSTS: Dict = {
   '刷新本页数据': ["Refresh this page's data", 'このページのデータを更新'],
   '刷新': ['Refresh', '更新'],
   '催化剂视图': ['Catalysts view', 'カタリストビュー'],
+  '本窗口暂无经济事件': ['No economic events in this window', 'この期間に経済イベントはありません'],
+  '切换时间范围或稍后再看': ['Switch the time range or check back later', '期間を切り替えるか、後でもう一度ご確認ください'],
+  '已过期 · 刷新失败，展示上次结果': ['Stale · refresh failed, showing the last result', '期限切れ · 更新に失敗したため、前回の結果を表示しています'],
+  '热点数据读取失败': ['Failed to load hotspot data', 'ホットテーマデータの読み込みに失敗しました'],
+  '是读取失败，不代表市场没有热点': ['This is a load failure — it does not mean the market has no hot themes', '読み込みに失敗しただけで、市場にホットテーマがないという意味ではありません'],
 };

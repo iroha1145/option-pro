@@ -185,4 +185,10 @@ export const DETAIL: Dict = {
   '{n} 个交易日': ['{n} trading day||{n} trading days', '{n} 営業日'],
   '{pct}（{abs}）': ['{pct} ({abs})', '{pct}（{abs}）'],
   '{n} 根 · 跨 {d} 个交易日': ['{n} bar across {d} trading days||{n} bars across {d} trading days', '{n} 本 · {d} 営業日にわたる'],
+  '突破事件读取失败': ['Failed to load breakout events', 'ブレイクアウトイベントの読み込みに失敗しました'],
+  '暂无突破事件记录 · 雷达仍在盯': ['No breakout events on record · Radar is still watching', 'ブレイクアウトイベントの記録はまだありません · レーダーは監視中'],
+  '新闻数据读取失败': ['Failed to load news data', 'ニュースデータの読み込みに失敗しました'],
+  '是读取失败，不代表该股近期没有新闻': ['This is a load failure — it does not mean the stock has had no recent news', '読み込みに失敗しただけで、この銘柄に最近ニュースがないという意味ではありません'],
+  '信号数据读取失败': ['Failed to load signal data', 'シグナルデータの読み込みに失敗しました'],
+  '是读取失败，不代表该股没有信号': ['This is a load failure — it does not mean the stock has no signals', '読み込みに失敗しただけで、この銘柄にシグナルがないという意味ではありません'],
 };

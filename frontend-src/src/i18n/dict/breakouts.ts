@@ -225,4 +225,5 @@ export const BREAKOUTS: Dict = {
     'カードをクリックしてイベント詳細を表示 · 銘柄コードをクリックして個別銘柄ドロワーを開く',
   ],
   '突破扫描结果 · 行情为延迟数据': ['Breakout scan results · quotes are delayed', 'ブレイクアウトスキャン結果 · 相場は遅延データです'],
+  '告警优先级数据不足': ['Alert priority: insufficient data', 'アラート優先度：データ不足'],
 };

@@ -119,8 +119,21 @@ export function TierHistogram({
 }
 
 /* ---------------- 评分方法卡（可折叠） ---------------- */
-export function MethodCard({ profile }: { profile: StrengthProfile | null }) {
+export function MethodCard({
+  profile,
+  loading = false,
+  error = false,
+  onRetry,
+}: {
+  profile: StrengthProfile | null;
+  /** /strength/profiles 仍在首取（此时 profile 必为 null） */
+  loading?: boolean;
+  /** /strength/profiles 请求失败（此时 profile 必为 null） */
+  error?: boolean;
+  onRetry?: () => void;
+}) {
   const [open, setOpen] = useState(true);
+  const profileUnknown = profile === null;
   return (
     <div className="card-surface p-5">
       <button
@@ -128,7 +141,16 @@ export function MethodCard({ profile }: { profile: StrengthProfile | null }) {
         aria-expanded={open}
         className="flex w-full items-center justify-between"
       >
-        <span className="eyebrow">{__t('评分方法 ·')} {profile ? profile.name : __t('默认权重')}</span>
+        <span className="eyebrow">
+          {__t('评分方法 ·')}{' '}
+          {profile
+            ? profile.name
+            : loading
+              ? __t('读取中')
+              : error
+                ? __t('档位未知')
+                : __t('默认权重')}
+        </span>
         <Icon name="chevron-down" size={14} className={cn('text-ink-400 transition-transform duration-200', open && 'rotate-180')} />
       </button>
       <AnimatePresence initial={false}>
@@ -141,27 +163,51 @@ export function MethodCard({ profile }: { profile: StrengthProfile | null }) {
             transition={{ duration: 0.26, ease: EASE_PAPER }}
             className="overflow-hidden"
           >
-            {profile && !profile.weights ? (
-              /* live 契约 /strength/profiles 仅返回枚举，无权重明细：隐藏权重条，不编造默认 25% */
+            {profileUnknown && loading ? (
+              <div className="mt-4 space-y-2.5" aria-hidden="true">
+                {SUBSCORE_META.map(({ key }) => (
+                  <span key={key} className="skeleton-shimmer block h-3 w-full rounded-xs" />
+                ))}
+              </div>
+            ) : profileUnknown && error ? (
+              <div className="mt-4">
+                <p className="text-caption leading-[18px] text-ink-500">
+                  {__t('评分档位读取失败，无法显示当前权重。')}
+                </p>
+                {onRetry && (
+                  <button
+                    onClick={onRetry}
+                    className="mt-2 flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+                  >
+                    <Icon name="refresh" size={12} />
+                    {__t('重试')}
+                  </button>
+                )}
+              </div>
+            ) : !profile?.weights ? (
+              /* live 契约 /strength/profiles 仅返回枚举，无权重明细；profile 为
+               * null（档位不在枚举里）同样不编造默认 25%（审计 2.1.1/2.1.4） */
               <p className="mt-4 text-caption leading-[18px] text-ink-400">{__t('该档位暂无权重明细')}</p>
             ) : (
               <div className="mt-4 grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2.5">
                 {SUBSCORE_META.map(({ key, label }, i) => {
-                  const w = profile?.weights?.[key] ?? 25;
+                  const w = profile.weights?.[key] ?? null;
                   return (
                     <div key={key} className="col-span-3 grid grid-cols-subgrid items-center gap-x-2.5">
                       <span className="text-caption text-ink-500">{label}</span>
                       <span className="h-1.5 overflow-hidden rounded-pill bg-line" role="presentation">
-                        <motion.span
-                          className="block h-full origin-left rounded-pill bg-brand-500"
-                          initial={{ scaleX: 0 }}
-                          whileInView={{ scaleX: 1 }}
-                          viewport={{ once: true, amount: 0.4 }}
-                          transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.05 }}
-                          style={{ width: `${w}%` }}
-                        />
+                        {w !== null && (
+                          <motion.span
+                            className="block h-full origin-left rounded-pill bg-brand-500"
+                            initial={{ scaleX: 0 }}
+                            whileInView={{ scaleX: 1 }}
+                            viewport={{ once: true, amount: 0.4 }}
+                            transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.05 }}
+                            style={{ width: `${w}%` }}
+                          />
+                        )}
                       </span>
-                      <span className="text-right font-mono text-caption text-ink-800 tnum">{w}%</span>
+                      <span className="text-right font-mono text-caption text-ink-800 tnum">{w !== null ? `${w}%` : '—'}</span>
                     </div>
                   );
                 })}
@@ -169,11 +215,13 @@ export function MethodCard({ profile }: { profile: StrengthProfile | null }) {
             )}
             <p className="mt-3 text-caption leading-[18px] text-ink-500">
               {profile?.description ||
-                (profile && !profile.weights
-                  ? __t('偏好档位决定评分时侧重哪些因子，最终强度分 0–100，≥85 为高强度区。')
-                  : __t('最终强度分为四因子加权合成（0–100），≥85 为高强度区。'))}
+                (profile?.weights
+                  ? __t('最终强度分为四因子加权合成（0–100），≥85 为高强度区。')
+                  : __t('偏好档位决定评分时侧重哪些因子，最终强度分 0–100，≥85 为高强度区。'))}
             </p>
-            <SourceNote className="mt-3" text={__t("权重取自当前选用的评分档位")} />
+            {profile?.weights && (
+              <SourceNote className="mt-3" text={__t("权重取自当前选用的评分档位")} />
+            )}
           </motion.div>
         )}
       </AnimatePresence>

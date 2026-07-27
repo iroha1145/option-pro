@@ -60,7 +60,7 @@ export function ScoreCell({ score, index }: { score: number; index: number }) {
  * 数据源与展开区 BREAKDOWN 同源（subscoreDimsOf：live 契约周期分 / mock 四维），
  * 单项缺失（null）如实空轨道，tooltip 该项显「—」——不再出现整排占位。
  * -------------------------------------------------------------------------- */
-export function SubscoreTicks({ row }: { row: ScreenerRow }) {
+export function SubscoreTicks({ row, tipSide = 'top' }: { row: ScreenerRow; tipSide?: 'top' | 'bottom' }) {
   const dims = subscoreDimsOf(row);
   return (
     <span className="group relative inline-flex items-center gap-1" aria-label={t("分项强度")}>
@@ -74,7 +74,14 @@ export function SubscoreTicks({ row }: { row: ScreenerRow }) {
           )}
         </span>
       ))}
-      <span className="glass pointer-events-none absolute -top-2 left-1/2 z-20 hidden w-40 -translate-x-1/2 -translate-y-full rounded-md border border-line p-2.5 shadow-sh-2 group-hover:block">
+      {/* 表格容器是 overflow-x-auto 滚动盒，浮层无法越过其上边缘——前几行
+        * 朝下展开，其余朝上（审计 2.4.8）。 */}
+      <span
+        className={cn(
+          'glass pointer-events-none absolute left-1/2 z-20 hidden w-40 -translate-x-1/2 rounded-md border border-line p-2.5 shadow-sh-2 group-hover:block',
+          tipSide === 'top' ? '-top-2 -translate-y-full' : '-bottom-2 translate-y-full',
+        )}
+      >
         {dims.map(({ key, label, value }) => (
           <span key={key} className="flex items-center justify-between py-0.5 text-micro">
             <span className="text-ink-500">{label}</span>
@@ -87,7 +94,7 @@ export function SubscoreTicks({ row }: { row: ScreenerRow }) {
 }
 
 /* ---------------- 催化剂汇总（72h 窗口）：有数显数 · 0 显 0 · 接口失败显「—」 ---------------- */
-export function CatalystBadge({ summary }: { summary: CatalystSummary | undefined }) {
+export function CatalystBadge({ summary, tipSide = 'top' }: { summary: CatalystSummary | undefined; tipSide?: 'top' | 'bottom' }) {
   if (!summary || !summary.loaded) {
     return <span className="skeleton-shimmer inline-block h-5 w-16 rounded-xs" aria-hidden="true" />;
   }
@@ -117,7 +124,12 @@ export function CatalystBadge({ summary }: { summary: CatalystSummary | undefine
         {label}
         <span className="font-mono tnum">{countText}</span>
       </span>
-      <span className="glass pointer-events-none absolute -top-2 right-0 z-20 hidden w-60 -translate-y-full rounded-md border border-line p-3 shadow-sh-2 group-hover:block">
+      <span
+        className={cn(
+          'glass pointer-events-none absolute right-0 z-20 hidden w-60 rounded-md border border-line p-3 shadow-sh-2 group-hover:block',
+          tipSide === 'top' ? '-top-2 -translate-y-full' : '-bottom-2 translate-y-full',
+        )}
+      >
         <span className="block text-micro text-ink-500">
           {t('72h 窗口 · 利多')} <span className="font-mono text-up-700 tnum">{summary.pos}</span>
           {' · '}{t('利空')} <span className="font-mono text-down-700 tnum">{summary.neg}</span>

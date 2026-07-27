@@ -137,6 +137,7 @@ export const CHROME: Dict = {
   '盘前': ['Pre-market', 'プレマーケット'],
   '盘后': ['After-hours', '時間外取引'],
   '休市': ['Closed', '休場'],
+  '未知': ['Unknown', '不明'],
   '市场时段：{label}': ['Market session: {label}', '市場セッション：{label}'],
 
   /* 强度分项与预设 */

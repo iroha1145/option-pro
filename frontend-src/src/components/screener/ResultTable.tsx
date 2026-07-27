@@ -87,7 +87,10 @@ export default function ResultTable({
 }: ResultTableProps) {
   const heads = headsFor(showMacro);
   return (
-    <div className={cn('card-surface overflow-hidden', stale && 'opacity-60')}>
+    // overflow-x-auto 与 shared/DataTable 同口径（审计 2.4.1）：8–9 个数据列在
+    // 1024–1280px 视口下超出 col-span-8，overflow-hidden 会把「成交额」列
+    // 直接裁掉且没有任何滚动出口。
+    <div className={cn('card-surface overflow-x-auto overscroll-x-contain', stale && 'opacity-60')}>
       <table className="w-full border-collapse">
         <thead>
           <tr className="bg-card-warm">
@@ -149,7 +152,7 @@ export default function ResultTable({
                   )}
                   {/* 分项微条 */}
                   <td className="px-3 py-2">
-                    <SubscoreTicks row={r} />
+                    <SubscoreTicks row={r} tipSide={i < 3 ? 'bottom' : 'top'} />
                   </td>
                   {/* 价 / 涨跌 */}
                   <td className="px-3 py-2 text-right">
@@ -169,7 +172,7 @@ export default function ResultTable({
                   </td>
                   {/* 催化剂 72h */}
                   <td className="px-3 py-2">
-                    <CatalystBadge summary={catalysts[r.ticker]} />
+                    <CatalystBadge summary={catalysts[r.ticker]} tipSide={i < 3 ? 'bottom' : 'top'} />
                   </td>
                   {/* 成交额 */}
                   <td className="px-3 py-2 text-right font-mono text-body-s text-ink-600 tnum">

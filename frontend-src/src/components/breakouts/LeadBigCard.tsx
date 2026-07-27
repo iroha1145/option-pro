@@ -109,32 +109,42 @@ function MacroPriorityShadow({ ev }: { ev: BreakoutEventFull }) {
 }
 
 /* ---------------- 告警优先级环（64px 紧凑版：轨道 line + brand-600 弧 draw-line + count-up） ---------------- */
-function PriorityRing({ score }: { score: number }) {
-  const v = useCountUp(score, 900);
+function PriorityRing({ score }: { score: number | null }) {
+  /* score=null 表示后端判定 insufficient_data（算不出来）。渲染成「0」会被
+     读成「优先级极低」并据此排除信号（审计 2.1.13）——同卡其他缺失字段
+     都显「—」，这里保持一致。 */
+  const v = useCountUp(score ?? 0, 900);
   const r = 24;
   const c = 2 * Math.PI * r;
-  const frac = Math.max(0, Math.min(100, score)) / 100;
+  const frac = score === null ? 0 : Math.max(0, Math.min(100, score)) / 100;
   return (
-    <div className="flex shrink-0 flex-col items-center" aria-label={t('告警优先级 {score}', { score })}>
+    <div
+      className="flex shrink-0 flex-col items-center"
+      aria-label={score === null ? t('告警优先级数据不足') : t('告警优先级 {score}', { score })}
+    >
       <div className="relative size-[64px]">
         <svg viewBox="0 0 64 64" className="size-full -rotate-90" aria-hidden="true">
           <circle cx="32" cy="32" r={r} fill="none" stroke="var(--line)" strokeWidth="4.5" />
-          <motion.circle
-            cx="32"
-            cy="32"
-            r={r}
-            fill="none"
-            stroke="var(--brand-600)"
-            strokeWidth="4.5"
-            strokeLinecap="round"
-            strokeDasharray={c}
-            initial={{ strokeDashoffset: c }}
-            animate={{ strokeDashoffset: c * (1 - frac) }}
-            transition={{ duration: 1.1, ease: EASE_PAPER }}
-          />
+          {score !== null && (
+            <motion.circle
+              cx="32"
+              cy="32"
+              r={r}
+              fill="none"
+              stroke="var(--brand-600)"
+              strokeWidth="4.5"
+              strokeLinecap="round"
+              strokeDasharray={c}
+              initial={{ strokeDashoffset: c }}
+              animate={{ strokeDashoffset: c * (1 - frac) }}
+              transition={{ duration: 1.1, ease: EASE_PAPER }}
+            />
+          )}
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="font-mono text-[15px] font-medium leading-[20px] text-ink-900 tnum">{Math.round(v)}</span>
+          <span className="font-mono text-[15px] font-medium leading-[20px] text-ink-900 tnum">
+            {score === null ? '—' : Math.round(v)}
+          </span>
         </div>
       </div>
       <span className="mt-0.5 whitespace-nowrap text-[10px] leading-[13px] text-ink-400">
@@ -428,7 +438,6 @@ function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
     <div className="grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2" aria-label={t("四维评分")}>
       {BIG_SCORES.map((d, i) => {
         const raw = num(ev[d.key]);
-        const v = raw ?? 0;
         return (
           <div key={d.key} className="col-span-3 grid grid-cols-subgrid items-center gap-x-2.5">
             <span className="whitespace-nowrap text-caption text-ink-500">
@@ -436,14 +445,18 @@ function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
               <InfoHint hint={d.hint} size={11} className="ml-0.5" />
             </span>
             <div className="h-[3px] overflow-hidden rounded-pill bg-line">
-              <motion.div
-                className={cn('h-full origin-left rounded-pill', d.key === 'chase_risk_score' ? riskBarClass(v) : scoreBarClass(v))}
-                initial={{ scaleX: 0 }}
-                whileInView={{ scaleX: 1 }}
-                viewport={{ once: true, amount: 0.4 }}
-                transition={{ duration: 0.7, ease: EASE_PAPER, delay: 0.1 + i * 0.06 }}
-                style={{ width: `${Math.max(3, Math.min(100, v))}%` }}
-              />
+              {/* 缺失值保持空轨道，与 ScoreBars 的 fin(v) 口径一致（审计 2.2.15）：
+                * 3% 的实心条会被读成「有分，只是很低」，与右侧的「—」矛盾。 */}
+              {raw !== null && (
+                <motion.div
+                  className={cn('h-full origin-left rounded-pill', d.key === 'chase_risk_score' ? riskBarClass(raw) : scoreBarClass(raw))}
+                  initial={{ scaleX: 0 }}
+                  whileInView={{ scaleX: 1 }}
+                  viewport={{ once: true, amount: 0.4 }}
+                  transition={{ duration: 0.7, ease: EASE_PAPER, delay: 0.1 + i * 0.06 }}
+                  style={{ width: `${Math.max(3, Math.min(100, raw))}%` }}
+                />
+              )}
             </div>
             <span className="text-right font-mono text-caption text-ink-600 tnum">{raw !== null ? raw.toFixed(1) : '—'}</span>
           </div>
@@ -675,7 +688,7 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
           </div>
         </div>
         <div className="flex flex-col items-center justify-center gap-1.5 rounded-md border border-line bg-card-warm px-3 py-1.5">
-          <PriorityRing score={num(e.alert_priority_score) ?? 0} />
+          <PriorityRing score={num(e.alert_priority_score)} />
           {/* 宏观影子：显示的是「如果接入，优先级会变成多少」，环上的分数不变。
               上限 ±4；突破质量、确认、流动性、追高风险和事件生命周期一律不动。 */}
           <MacroPriorityShadow ev={e} />

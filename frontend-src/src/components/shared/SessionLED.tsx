@@ -10,10 +10,20 @@ const SESSION_STYLE: Record<MarketSession, { dot: string; text: string }> = {
   closed: { dot: 'bg-ink-400', text: t('休市') },
 };
 
-export function SessionDot({ session, className }: { session: MarketSession; className?: string }) {
+/**
+ * `session === null` 表示「时段读不到」（状态接口未返回或失败）。它与「休市」
+ * 是两回事：休市会改变用户对盘中信号的解读，所以未知态用更浅的灰点、不闪烁、
+ * 文字明说未知（审计 P2-9 / 2026-07-27 审计 2.2.1）。
+ */
+export function SessionDot({ session, className }: { session: MarketSession | null; className?: string }) {
   return (
     <span
-      className={cn('inline-block size-2 rounded-full', SESSION_STYLE[session].dot, session !== 'closed' && 'animate-led-pulse', className)}
+      className={cn(
+        'inline-block size-2 rounded-full',
+        session === null ? 'bg-ink-300' : SESSION_STYLE[session].dot,
+        session !== null && session !== 'closed' && 'animate-led-pulse',
+        className,
+      )}
       aria-hidden="true"
     />
   );
@@ -24,12 +34,27 @@ export default function SessionLED({
   label,
   className,
   showLabel = true,
+  loading = false,
 }: {
-  session: MarketSession;
+  session: MarketSession | null;
   label?: string;
   className?: string;
   showLabel?: boolean;
+  /** 状态接口仍在首取（仅影响未知态的文字） */
+  loading?: boolean;
 }) {
+  if (session === null) {
+    return (
+      <span className={cn('inline-flex items-center gap-1.5', className)}>
+        <SessionDot session={null} />
+        {showLabel && (
+          <span className="text-caption text-ink-400">
+            {loading ? t('时段读取中…') : t('时段未知')}
+          </span>
+        )}
+      </span>
+    );
+  }
   const s = SESSION_STYLE[session];
   return (
     <span className={cn('inline-flex items-center gap-1.5', className)}>

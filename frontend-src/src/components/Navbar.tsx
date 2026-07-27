@@ -41,7 +41,8 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
   const navigate = useNavigate();
   const location = useLocation();
   const { data: status } = usePolling(() => marketApi.status(), 60_000);
-  const session = status?.session ?? 'closed';
+  // 读不到时段时点是浅灰「未知」而不是「休市」（与审计 2.2.1 同根因）
+  const session = status?.session ?? null;
 
   const navRef = useRef<HTMLElement>(null);
   const [indicator, setIndicator] = useState<{ left: number } | null>(null);
@@ -120,7 +121,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             <Icon name="search" size={16} />
           </button>
 
-          <span className="hidden items-center gap-2 md:flex" aria-label={t('市场时段：{label}', { label: status?.label ?? t('休市') })}>
+          <span className="hidden items-center gap-2 md:flex" aria-label={t('市场时段：{label}', { label: status?.label ?? t('未知') })}>
             <SessionDot session={session} />
             <NyClock />
           </span>

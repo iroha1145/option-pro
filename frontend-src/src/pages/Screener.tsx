@@ -875,7 +875,12 @@ export default function Screener() {
             <SkeletonCard />
           )}
           <TierHistogram hits={hitsByTier} market={marketQ.data} activeTier={draft.tier} onSelect={onTierFromHistogram} />
-          <MethodCard profile={activeProfile} />
+          <MethodCard
+            profile={activeProfile}
+            loading={profilesQ.loading}
+            error={!!profilesQ.error}
+            onRetry={profilesQ.refresh}
+          />
           <AnimatePresence>
             {scanState === 'done' && sorted.length === 0 && (
               <motion.div

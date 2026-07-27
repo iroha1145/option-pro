@@ -15,11 +15,16 @@ import { t } from '../../i18n/core.ts';
 function IvHeatCard({
   rows,
   loading,
+  error = false,
+  onRetry,
   onOpenTicker,
   onOpenPalette,
 }: {
   rows: IvRowVm[];
   loading: boolean;
+  /** /sectors/{id}/iv-ranking 请求失败且无任何数据（审计 2.2.8） */
+  error?: boolean;
+  onRetry?: () => void;
   onOpenTicker: (ticker: string) => void;
   onOpenPalette: () => void;
 }) {
@@ -94,7 +99,21 @@ function IvHeatCard({
         </button>
       </div>
       {!loading && top.length === 0 && (
-        <p className="mt-3 text-micro text-ink-400">{t('当前没有可用的 IV 样本。')}</p>
+        error ? (
+          <p className="mt-3 flex items-center gap-2 text-micro text-ink-400">
+            {t('IV 数据读取失败——是读不到，不是该板块没有样本。')}
+            {onRetry && (
+              <button
+                onClick={onRetry}
+                className="rounded-md border border-line px-2 py-0.5 text-micro text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+              >
+                {t('重试')}
+              </button>
+            )}
+          </p>
+        ) : (
+          <p className="mt-3 text-micro text-ink-400">{t('当前没有可用的 IV 样本。')}</p>
+        )
       )}
     </div>
   );
@@ -104,18 +123,24 @@ function CoverageCard({
   sector,
   rows,
   meta,
+  error = false,
 }: {
   sector: SectorVm | null;
   rows: IvRowVm[];
   meta: IvMetaVm;
+  /** 请求失败且无数据：覆盖数显示「—」而不是伪造的「0 / —」（审计 2.2.8） */
+  error?: boolean;
 }) {
   const ranked = rows
     .filter((row): row is IvRowVm & { rank: number } => row.rank !== null)
     .sort((left, right) => right.rank - left.rank);
   const highest = ranked[0] ?? null;
   const lowest = ranked[ranked.length - 1] ?? null;
-  const statusLabel =
-    meta.status === 'active' ? t('数据正常') : SOURCE_STATUS_CN[meta.status];
+  const statusLabel = error
+    ? t('读取失败')
+    : meta.status === 'active'
+      ? t('数据正常')
+      : SOURCE_STATUS_CN[meta.status];
 
   return (
     <div className="card-surface p-5">
@@ -140,7 +165,9 @@ function CoverageCard({
         <div className="flex items-center justify-between py-2.5">
           <dt className="text-caption text-ink-500">{t('成功样本')}</dt>
           <dd className="font-mono text-data-m text-ink-800 tnum">
-            {meta.successCount ?? rows.length} / {meta.requestedCount ?? '—'}
+            {error && meta.successCount === null
+              ? '— / —'
+              : `${meta.successCount ?? rows.length} / ${meta.requestedCount ?? '—'}`}
           </dd>
         </div>
         <div className="flex items-center justify-between py-2.5">
@@ -171,6 +198,9 @@ interface SideRailProps {
   meta: IvMetaVm;
   loading: boolean;
   ivLoading: boolean;
+  /** IV 请求失败且无数据（审计 2.2.8：错误不冒充空态） */
+  ivError?: boolean;
+  onIvRetry?: () => void;
   onOpenTicker: (ticker: string) => void;
   onOpenPalette: () => void;
 }
@@ -181,6 +211,8 @@ export default function SideRail({
   meta,
   loading,
   ivLoading,
+  ivError = false,
+  onIvRetry,
   onOpenTicker,
   onOpenPalette,
 }: SideRailProps) {
@@ -200,10 +232,12 @@ export default function SideRail({
       <IvHeatCard
         rows={rows}
         loading={ivLoading}
+        error={ivError}
+        onRetry={onIvRetry}
         onOpenTicker={onOpenTicker}
         onOpenPalette={onOpenPalette}
       />
-      <CoverageCard sector={sector} rows={rows} meta={meta} />
+      <CoverageCard sector={sector} rows={rows} meta={meta} error={ivError} />
     </div>
   );
 }

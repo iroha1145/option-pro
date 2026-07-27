@@ -91,6 +91,20 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
     );
   }
 
+  if (groups.length === 0) {
+    /* 成功但为空（假期/无事件窗口）需要空态（审计 2.2.16）：一张空白塌陷的
+       卡片没法区分「没有事件」和「渲染坏了」。 */
+    return (
+      <div className="card-surface">
+        <EmptyState
+          icon="doc-quote"
+          title={__t('本窗口暂无经济事件')}
+          description={__t('切换时间范围或稍后再看')}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="card-surface overflow-hidden">
       {groups.map(([date, events], gi) => {

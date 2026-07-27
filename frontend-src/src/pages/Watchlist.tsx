@@ -134,7 +134,9 @@ function ForceRefreshButton({ onRefresh, spinning }: { onRefresh: () => void; sp
 function SignalDistribution({ data }: { data: MarketSignalsSnapshot }) {
   return (
     <div className="card-surface p-5">
-      <p className="eyebrow">{t('市场信号 · 实时指标')}</p>
+      {/* 「实时指标」与全站「延迟 15 分钟」口径冲突（审计 2.3.6）——这些是
+        * 市场信号模型基于延迟行情算出的读数。 */}
+      <p className="eyebrow">{t('市场信号 · 模型指标')}</p>
       <div className="mt-4 space-y-3">
         {data.metrics.slice(0, 8).map((metric) => (
           <div key={metric.key} className="grid grid-cols-[minmax(0,1fr)_56px] items-center gap-2">
@@ -192,15 +194,24 @@ function StrengthHistogram({ histogram }: { histogram: number[] }) {
 
 /* ---------------- B3 小件：市场时钟 ---------------- */
 function MarketClockCard() {
-  const { data: status } = usePolling(() => marketApi.status(), 60_000);
+  const { data: status, loading } = usePolling(() => marketApi.status(), 60_000);
   const now = useNow(1000);
-  const session = status?.session ?? 'closed';
+  /* 时段读不到 ≠ 休市（审计 2.2.1）：状态接口失败时如实显示「时段未知」，
+     不把一次读取失败写成确定的收盘事实。 */
+  const session = status?.session ?? null;
   return (
     <div className="card-surface p-5">
       <p className="eyebrow">{t('市场时钟 · 纽约')}</p>
       <div className="mt-3 flex items-center gap-2.5">
         <SessionDot session={session} />
-        <span className="font-display text-[20px] leading-[26px] text-ink-900">{status?.label ?? t('休市')}</span>
+        <span
+          className={cn(
+            'font-display text-[20px] leading-[26px]',
+            status?.label ? 'text-ink-900' : 'text-ink-400',
+          )}
+        >
+          {status?.label ?? (loading ? t('时段读取中…') : t('时段未知'))}
+        </span>
       </div>
       <p className="mt-2 font-mono text-data-l text-ink-800 tnum" suppressHydrationWarning>
         {fmtNyTime(new Date(now))}
@@ -681,7 +692,9 @@ export default function Watchlist() {
   // 唯一排序实现见 watchlistSort：卡片、表格与渐进切片必须消费同一份排序结果，
   // 否则「先切片再排序」会把局部样本冒充成完整结果。
   const cardItems = useMemo(() => sortWatchlistItems(items, sort), [items, sort]);
-  const statsLoading = signalsQ.loading || strengthQ.loading;
+  /* 「上涨/下跌」卡读的是 wl（自选行情），骨架条件必须包含它——否则
+     signals/strength 先返回时会把还没读到的自选渲染成「0 / 0」（审计 2.2.11）。 */
+  const statsLoading = signalsQ.loading || strengthQ.loading || (wl.loading && !wl.data);
 
   /**
    * 渲染分批，数据不分批。
@@ -734,7 +747,11 @@ export default function Watchlist() {
                 {username}
               </span>
             )}
-            <SessionLED session={statusQ.data?.session ?? 'closed'} label={statusQ.data?.label} />
+            <SessionLED
+              session={statusQ.data?.session ?? null}
+              label={statusQ.data?.label}
+              loading={statusQ.loading}
+            />
             <span className="hidden font-mono text-data-m text-ink-600 tnum sm:inline" suppressHydrationWarning>
               {fmtNyTime(new Date(now))}
             </span>
@@ -777,11 +794,16 @@ export default function Watchlist() {
                   <p className="eyebrow">{t('上涨 / 下跌')}</p>
                   <Icon name="candle" size={18} className="text-ink-400" />
                 </div>
-                <AdvanceDeclineBar
-                  advancers={aggregates.advancers}
-                  decliners={aggregates.decliners}
-                  unchanged={aggregates.unchanged}
-                />
+                {wl.data === null ? (
+                  /* 自选行情读取失败：0/0 看起来像全体持平（审计 2.2.11） */
+                  <p className="mt-4 text-caption text-ink-400">{t('自选行情读取失败，涨跌家数不可用')}</p>
+                ) : (
+                  <AdvanceDeclineBar
+                    advancers={aggregates.advancers}
+                    decliners={aggregates.decliners}
+                    unchanged={aggregates.unchanged}
+                  />
+                )}
               </div>,
               ...(strengthQ.data?.aggregateAvailable
                 ? [
@@ -1020,8 +1042,22 @@ export default function Watchlist() {
         <aside className="grid grid-cols-1 gap-4 self-start md:grid-cols-2 lg:sticky lg:top-[116px] lg:col-span-4 lg:grid-cols-1" aria-label={t("侧栏")}>
           {signalsQ.data ? (
             <SignalDistribution data={signalsQ.data} />
-          ) : (
+          ) : signalsQ.loading ? (
             <SkeletonCard />
+          ) : (
+            /* 失败 ≠ 永远加载中（审计 2.2.12）：骨架屏无限闪动会被读成
+               「正在加载」，这里如实报错并给重试。 */
+            <div className="card-surface p-5">
+              <p className="eyebrow">{t('市场信号 · 模型指标')}</p>
+              <p className="mt-3 text-caption text-ink-400">{t('市场信号读取失败')}</p>
+              <button
+                onClick={signalsQ.refresh}
+                className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+              >
+                <Icon name="refresh" size={13} />
+                {t('重试')}
+              </button>
+            </div>
           )}
           {strengthQ.data?.aggregateAvailable && strengthQ.data.histogram.length > 0 ? (
             <StrengthHistogram histogram={strengthQ.data.histogram} />

@@ -204,4 +204,7 @@ export const SCREENER: Dict = {
   '当前条件过严，没有标的进入结果集。': ['Your filters are too strict — no names made it into the result set.', '現在の条件が厳しすぎるため、結果セットに入る銘柄がありません。'],
   '放宽一档试试': ['Try loosening one tier', '階層を一段階緩めてみる'],
   '默认条件': ['Default filters', 'デフォルト条件'],
+  '读取中': ['Loading', '読み込み中'],
+  '档位未知': ['Profile unknown', 'プロファイル不明'],
+  '评分档位读取失败，无法显示当前权重。': ['Failed to load scoring profiles; current weights cannot be shown.', 'スコアリングプロファイルの読み込みに失敗したため、現在のウェイトを表示できません。'],
 };
