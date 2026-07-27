@@ -22,11 +22,14 @@ interface DrawerProps {
   open: boolean;
   onClose: () => void;
   title?: ReactNode;
+  /** dialog 的可访问名（审计 2.5.4）：title 是任意节点、不参与名字计算，
+      读屏没有它只能念出一个匿名 "dialog"。 */
+  label?: string;
   children: ReactNode;
   width?: number;
 }
 
-export default function Drawer({ open, onClose, title, children, width = 560 }: DrawerProps) {
+export default function Drawer({ open, onClose, title, label, children, width = 560 }: DrawerProps) {
   /* 单实例（审计 2.6.5）：以前桌面/移动两块面板同时挂载、仅靠 CSS 断点互斥，
      children 整棵渲染两遍——组件各自持有独立定时器与图表实例，framer 的
      layoutId 也在两棵树里撞名；DOM 中还同时存在两个 aria-modal dialog。
@@ -69,6 +72,7 @@ export default function Drawer({ open, onClose, title, children, width = 560 }: 
               key="panel"
               role="dialog"
               aria-modal="true"
+              aria-label={label}
               initial={isMobile ? { y: '100%' } : { x: '100%' }}
               animate={isMobile ? { y: 0, x: 0 } : { x: 0, y: 0 }}
               exit={isMobile ? { y: '100%', transition: EXIT } : { x: '100%', transition: EXIT }}

@@ -397,4 +397,5 @@ export const CATALYSTS: Dict = {
   '已过期 · 刷新失败，展示上次结果': ['Stale · refresh failed, showing the last result', '期限切れ · 更新に失敗したため、前回の結果を表示しています'],
   '热点数据读取失败': ['Failed to load hotspot data', 'ホットテーマデータの読み込みに失敗しました'],
   '是读取失败，不代表市场没有热点': ['This is a load failure — it does not mean the market has no hot themes', '読み込みに失敗しただけで、市場にホットテーマがないという意味ではありません'],
+  '新闻详情': ['News detail', 'ニュース詳細'],
 };

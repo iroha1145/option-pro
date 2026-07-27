@@ -228,6 +228,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
         if (!confirm) onClose(); // 确认弹窗开启时 ESC/背板仅关弹窗
       }}
       width={640}
+      label={__t('新闻详情')}
       title={
         <span className="flex items-center gap-2">
           <Icon name="bolt" size={16} className="text-brand-600" />
