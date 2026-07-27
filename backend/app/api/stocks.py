@@ -2269,11 +2269,13 @@ async def _build_stock_signals(ticker: str) -> dict[str, Any]:
             if massive_provider.configured():
                 massive_symbol = massive_provider.to_symbol(symbol)
                 if massive_symbol is not None and not massive_symbol.startswith("I:"):
+                    # 技术指标需要拆股复权序列;Polygon 语义的 adjusted=false
+                    # 会让拆股票的均线/量比在断崖两侧全部失真。
                     hist = _massive_chart_history(
                         massive_provider,
                         massive_symbol,
                         "1d",
-                        adjusted=False,
+                        adjusted=True,
                     )
                     if hist is not None and not hist.empty:
                         price_provider = "Massive"
@@ -3087,8 +3089,11 @@ async def _stock_chart_impl(ticker: str, range: str, adjustment: str = "raw"):
             if massive_provider.configured():
                 massive_symbol = massive_provider.to_symbol(symbol)
                 if massive_symbol is not None:
+                    # Massive 的 adjusted=false 是 Polygon 语义:连拆股都不复权,
+                    # 历史K线在拆股日会出现假断崖。始终按拆股复权取数,与 Yahoo
+                    # auto_adjust=False(拆股已调、分红不调)的 raw 语义对齐。
                     hist = _massive_chart_history(
-                        massive_provider, massive_symbol, range, auto_adjust
+                        massive_provider, massive_symbol, range, adjusted=True
                     )
                     if hist is not None and not hist.empty:
                         price_provider = "Massive"
