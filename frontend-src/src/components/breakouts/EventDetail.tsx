@@ -61,28 +61,31 @@ function ZoneBand({ ev }: { ev: BreakoutEventFull }) {
 
   return (
     <div aria-label={__t('支撑区 {szLow} 至 {szHigh}，阻力区 {rzLow} 至 {rzHigh}', { szLow: fmtPrice(sz.low), szHigh: fmtPrice(sz.high), rzLow: fmtPrice(rz.low), rzHigh: fmtPrice(rz.high) })}>
-      <div className="relative h-12 rounded-md border border-line bg-card-warm">
+      {/* 竖线一律用「实体宽度 + 自身平移一半」对中：border-l 的线画在盒左缘
+          右侧（中心 = left + 半线宽），而绝对定位子元素的包含块又是排除边框的
+          padding box——菱形帽再偏一截。两笔小账加起来，针和帽各歪 1–2px。 */}
+      <div className="relative h-12 rounded-md border border-line bg-card-warm shadow-inset-hi">
         {/* 支撑区带 */}
         <div
-          className="absolute inset-y-1 rounded-xs border border-up-600/30 bg-up-600/10"
+          className="absolute inset-y-1 rounded-xs border border-up-600/30 bg-up-600/10 shadow-zone"
           style={{ left: `${x(sz.low)}%`, width: `${zw(sz.low, sz.high)}%` }}
         />
         {/* 阻力区带 */}
         <div
-          className="absolute inset-y-1 rounded-xs border border-down-600/30 bg-down-600/10"
+          className="absolute inset-y-1 rounded-xs border border-down-600/30 bg-down-600/10 shadow-zone"
           style={{ left: `${x(rz.low)}%`, width: `${zw(rz.low, rz.high)}%` }}
         />
-        {/* 枢轴虚线 */}
+        {/* 枢轴虚线（dashed 只能靠 border 画，平移半个线宽对中） */}
         {fin(ev.pivot_price) && (
-          <div className="absolute inset-y-0 border-l border-dashed border-ink-400" style={{ left: `${x(ev.pivot_price)}%` }} aria-hidden="true" />
+          <div className="absolute inset-y-0 -translate-x-[0.5px] border-l border-dashed border-ink-400" style={{ left: `${x(ev.pivot_price)}%` }} aria-hidden="true" />
         )}
         {/* 失效价 */}
         {fin(ev.invalidation_price) && (
-          <div className="absolute inset-y-0 border-l border-down-600/70" style={{ left: `${x(ev.invalidation_price)}%` }} aria-hidden="true" />
+          <div className="absolute inset-y-0 w-px -translate-x-1/2 bg-down-600/70" style={{ left: `${x(ev.invalidation_price)}%` }} aria-hidden="true" />
         )}
         {/* 现价竖针 */}
-        <div className="absolute inset-y-0 border-l-2 border-brand-600" style={{ left: `${x(ev.current_price)}%` }} aria-hidden="true">
-          <span className="absolute -top-1 left-1/2 size-1.5 -translate-x-1/2 rotate-45 bg-brand-600" />
+        <div className="absolute inset-y-0 w-[2px] -translate-x-1/2 bg-brand-600 shadow-[0_1px_2px_rgba(16,24,40,.25)]" style={{ left: `${x(ev.current_price)}%` }} aria-hidden="true">
+          <span className="absolute -top-1 left-1/2 size-1.5 -translate-x-1/2 rotate-45 bg-brand-600 shadow-[0_0_0_1.5px_#fff,0_1px_2px_rgba(16,24,40,.3)]" />
         </div>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-0.5 font-mono text-micro text-ink-500 tnum">

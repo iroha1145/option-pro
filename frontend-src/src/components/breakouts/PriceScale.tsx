@@ -35,6 +35,10 @@ interface MarkerDef {
 const fin = (v: number | null | undefined): v is number => typeof v === 'number' && Number.isFinite(v);
 const edgeAnchor = (pct: number): string =>
   pct < 12 ? 'translate-x-0 text-left' : pct > 88 ? '-translate-x-full text-right' : '-translate-x-1/2 text-center';
+/** flag 的视觉锚点是旗杆（glyph x=5.4/24），不是图标盒中心：按盒居中时旗杆
+    悬在刻度点左侧 ~28% 图标宽、什么都不指。把盒右移这个量，杆尖正好戳在
+    刻度点上（地图图钉惯例），旗身自然向右飘。 */
+const FLAG_POLE_ANCHOR = (12 - 5.4) / 24;
 
 export default function PriceScale({ invalidation, trigger, target, current, large = false, flash = null, className }: PriceScaleProps) {
   /* 首绘 700ms / 轮询 400ms（hooks 必须在任何 early return 之前） */
@@ -83,14 +87,27 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
     >
       {/* marker 图标行 */}
       <div className="relative h-4">
-        {markers.map((m) => (
-          <span key={m.key} className="absolute -translate-x-1/2" style={{ left: `${x(m.value)}%` }}>
-            <Icon name={m.icon} size={large ? 15 : 12} className={m.iconCls} />
-          </span>
-        ))}
+        {markers.map((m) => {
+          const iconPx = large ? 15 : 12;
+          return (
+            <span
+              key={m.key}
+              className="absolute"
+              style={{
+                left: `${x(m.value)}%`,
+                transform:
+                  m.icon === 'flag'
+                    ? `translateX(calc(-50% + ${(FLAG_POLE_ANCHOR * iconPx).toFixed(2)}px))`
+                    : 'translateX(-50%)',
+              }}
+            >
+              <Icon name={m.icon} size={iconPx} className={m.iconCls} />
+            </span>
+          );
+        })}
       </div>
       {/* 轨道 + 游标 */}
-      <div className="relative mt-1 h-1 rounded-pill" style={{ background: 'linear-gradient(90deg, var(--down-600), var(--ink-300) 50%, var(--up-600))', opacity: 0.85 }}>
+      <div className="relative mt-1 h-1 rounded-pill shadow-zone" style={{ background: 'linear-gradient(90deg, var(--down-600), var(--ink-300) 50%, var(--up-600))', opacity: 0.85 }}>
         {markers.map((m) => (
           <span
             key={m.key}
@@ -105,14 +122,14 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
           transition={{ duration: mounted.current ? 0.4 : 0.7, ease: [0.16, 1, 0.3, 1] }}
           className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
         >
-          <span className="block size-2.5 rotate-45 rounded-[2px] bg-brand-600 shadow-[0_0_0_2px_#fff]" aria-hidden="true" />
+          <span className="block size-2.5 rotate-45 rounded-[2px] bg-brand-600 shadow-[0_0_0_2px_#fff,0_1px_3px_rgba(16,24,40,.35)]" aria-hidden="true" />
         </motion.span>
       </div>
       {/* 标注行 */}
       {large ? (
         <div className="relative mt-2 h-8">
           {labelMarkers.map((m) => (
-            <span key={m.key} className={cn('absolute', edgeAnchor(x(m.value)))} style={{ left: `${x(m.value)}%` }}>
+            <span key={m.key} className={cn('absolute whitespace-nowrap', edgeAnchor(x(m.value)))} style={{ left: `${x(m.value)}%` }}>
               <span className="block text-[10px] leading-[14px] text-ink-400">{m.label}</span>
               <span className="block font-mono text-micro leading-[14px] text-ink-600 tnum">{fmtPrice(m.value)}</span>
             </span>
@@ -121,7 +138,10 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
             initial={{ left: `${x(cursorFrom)}%` }}
             animate={{ left: `${x(current)}%` }}
             transition={{ duration: mounted.current ? 0.4 : 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className={cn('absolute', edgeAnchor(x(current)))}
+            /* whitespace-nowrap：贴右缘时 abspos 盒的收缩宽度被「left 到容器右缘
+               的剩余空间」卡住，-translate-x-full 是布局后才平移救不回宽度——
+               「触发 / 现价」会被折成两行、价格顶到第三行，与对侧标注错层。 */
+            className={cn('absolute whitespace-nowrap', edgeAnchor(x(current)))}
           >
             <span className="block text-[10px] leading-[14px] text-brand-600">
               {nearbyMarker ? t('{marker} / 现价', { marker: nearbyMarker.label }) : t('现价')}
@@ -143,7 +163,7 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
             initial={{ left: `${x(cursorFrom)}%` }}
             animate={{ left: `${x(current)}%` }}
             transition={{ duration: mounted.current ? 0.4 : 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className={cn('absolute', edgeAnchor(x(current)))}
+            className={cn('absolute whitespace-nowrap', edgeAnchor(x(current)))}
           >
             <span
               className={cn(
