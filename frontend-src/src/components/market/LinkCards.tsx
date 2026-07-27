@@ -11,7 +11,8 @@ const CARDS: { to: string; icon: IconName; title: string; en: string; desc: stri
     icon: 'layers',
     title: t('板块透视'),
     en: 'SECTORS',
-    desc: t('十一大板块热力矩阵与 IV 排名，看资金在哪个赛道抱团。'),
+    /* 后端目录是 24 个可重叠的主题板块，不是 GICS 十一行业（审计 2.1.16） */
+    desc: t('主题板块热力矩阵与 IV 排名，看资金在哪个赛道抱团。'),
   },
   {
     to: '/breakouts',

@@ -62,9 +62,7 @@ export const EARNINGS: Dict = {
   'AI 影响分析': ["AI impact analysis", "AI 影響分析"],
   '即将公布': ["Upcoming earnings", "決算発表予定"],
   '当日无财报': ["No earnings that day", "その日の決算なし"],
-  '本周清淡': ["Quiet week", "今週は閑散"],
   '选中的日期没有财报安排，切换日格或查看下周。': ["No earnings scheduled for the selected date. Switch days or check next week.", "選択した日には決算の予定がありません。日付を変えるか、来週を確認してください。"],
-  '本周期没有财报安排，跳到下周看看。': ["No earnings scheduled this week. Jump to next week.", "今週は決算の予定がありません。来週を見てみましょう。"],
   '查看下周': ["View next week", "来週を見る"],
   '时间': ["Time", "時間"],
   'EPS 预期 vs 实际': ["EPS est. vs. actual", "EPS予想 vs 実績"],
@@ -205,4 +203,6 @@ export const EARNINGS: Dict = {
   '已显示': ["Showing", "表示中"],
   '显示更多 ·': ["Show more ·", "もっと見る ·"],
   '收起至前': ["Collapse to first", "折りたたみ: 先頭"],
+  '近一个月暂无财报': ['No earnings in the next month', '今後1か月間に決算はありません'],
+  '未来 30 天没有已安排的财报，稍后再来看看。': ['No earnings are scheduled in the next 30 days — check back later.', '今後30日間に予定されている決算はありません。後でもう一度ご確認ください。'],
 };

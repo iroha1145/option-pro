@@ -134,9 +134,25 @@ function PriceHeader({ detail }: { detail: StockDetail }) {
 }
 
 /* ---------------- Tab 头（2px 指示条滑动） ---------------- */
-function TabHeader({ tab, onChange }: { tab: TabKey; onChange: (t: TabKey) => void }) {
+function TabHeader({
+  tab,
+  onChange,
+  pageLayout = false,
+}: {
+  tab: TabKey;
+  onChange: (t: TabKey) => void;
+  /** 整页形态：sticky 参考的是视口，需让出 sticky Navbar 的高度（审计 2.4.2）。
+      抽屉形态 sticky 相对抽屉滚动容器，保持 top-0。 */
+  pageLayout?: boolean;
+}) {
   return (
-    <div role="tablist" className="sticky top-0 z-10 flex gap-1 border-b border-line bg-card/95 backdrop-blur-sm">
+    <div
+      role="tablist"
+      className={cn(
+        'sticky z-10 flex gap-1 border-b border-line bg-card/95 backdrop-blur-sm',
+        pageLayout ? 'top-12 md:top-16' : 'top-0',
+      )}
+    >
       {TABS.map((t) => (
         <button
           key={t.key}
@@ -348,7 +364,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
 
   const tabs = (
     <div className={layout === 'page' ? 'mt-8' : 'mt-6'}>
-      <TabHeader tab={tab} onChange={setTab} />
+      <TabHeader tab={tab} onChange={setTab} pageLayout={layout === 'page'} />
       <AnimatePresence mode="wait">
         <motion.div
           key={tab}

@@ -268,9 +268,11 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
           )}
         </div>
         <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
-          <span className="text-micro text-ink-400">{t('美元成交额（推导）')}</span>
+          {/* 数字直接取后端 avg_dollar_volume_20d：既不是「推导」，也不是当日
+              成交额（审计 2.3.2）。 */}
+          <span className="text-micro text-ink-400">{t('20 日均美元成交额')}</span>
           <span className="font-mono text-data-m text-ink-800 tnum">
-            {dollarVolume === null ? '—' : fmtCompact(dollarVolume)}
+            {dollarVolume === null ? '—' : `$${fmtCompact(dollarVolume)}`}
           </span>
         </div>
       </div>

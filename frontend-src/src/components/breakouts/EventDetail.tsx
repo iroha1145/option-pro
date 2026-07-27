@@ -155,7 +155,8 @@ function CatalystDigest({ ticker }: { ticker: string }) {
     <div>
       {items === null && !failed && <SkeletonText lines={3} />}
       {failed && <p className="text-caption text-ink-400">{__t('催化剂数据暂不可用')}</p>}
-      {items !== null && items.length === 0 && <p className="text-caption text-ink-400">{__t('该股近 24h 暂无相关催化剂')}</p>}
+      {/* 实际请求窗口是 72 小时（catalysts.ts window_hours=72），口径对齐（审计 2.3.3） */}
+      {items !== null && items.length === 0 && <p className="text-caption text-ink-400">{__t('该股近 72 小时暂无相关催化剂')}</p>}
       {items !== null &&
         items.map((n) => (
           <div key={n.id} className="flex items-start gap-2 border-b border-line py-2 last:border-b-0">

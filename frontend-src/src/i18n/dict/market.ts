@@ -18,7 +18,6 @@ export const MARKET: Dict = {
   /* src/components/market/LinkCards.tsx */
   '突破雷达': ['Breakout radar', 'ブレイクアウト・レーダー'],
   '板块透视': ['Sector X-ray', 'セクター透視'],
-  '十一大板块热力矩阵与 IV 排名，看资金在哪个赛道抱团。': ['An 11-sector heatmap with IV rankings — see which theme money is crowding into.', '11大セクターのヒートマップとIVランキングで、資金がどのテーマに集まっているかを確認できます。'],
   '当日突破信号与事件时间线，追踪生命周期状态迁移。': ["Today's breakout signals and event timeline — track lifecycle state transitions.", '当日のブレイクアウト・シグナルとイベントタイムラインで、ライフサイクルの状態遷移を追跡できます。'],
 
   /* src/components/market/RegimePanel.tsx */
@@ -50,7 +49,6 @@ export const MARKET: Dict = {
   '市场信号模型当前评分为{scores}。': ['Current market signal model scores: {scores}.', '市場シグナルモデルの現在のスコアは{scores}。'],
   '「{label}」{value}': ['{label} ({value})', '「{label}」{value}'],
   '主要观测项为{items}。': ['Key observations: {items}.', '主な観測項目は{items}。'],
-  '六大指数 {adv} 涨 {dec} 跌': ['{adv} of 6 major indices up, {dec} down', '主要6指数は{adv}上昇・{dec}下落'],
   ' {flat} 平': [', {flat} unchanged', '・{flat}変わらず'],
   '，标普 500 报 {price}（{pct}）': [', S&P 500 at {price} ({pct})', '、S&P500は{price}（{pct}）'],
   '六维市场形态均值 {mean}': ['Six-factor regime average {mean}', '6因子レジーム平均 {mean}'],
@@ -98,4 +96,6 @@ export const MARKET: Dict = {
   '联动视图': ['Drill-down', '連動ビュー'],
   '联动视图 · DRILL DOWN': ['Drill-down', '連動ビュー · DRILL DOWN'],
   '接口返回了空列表，稍后刷新再试': ['The API returned an empty list — refresh again later', 'APIが空のリストを返しました。しばらくしてから再度お試しください'],
+  '主题板块热力矩阵与 IV 排名，看资金在哪个赛道抱团。': ['Theme-sector heat matrix and IV rankings — see which lanes money is crowding into.', 'テーマ別セクターのヒートマトリクスとIVランキングで、資金がどのテーマに集中しているかを見る。'],
+  '{n} 个主要指数 {adv} 涨 {dec} 跌': ['{adv} of {n} major indices up, {dec} down', '主要{n}指数中 {adv} 上昇・{dec} 下落'],
 };

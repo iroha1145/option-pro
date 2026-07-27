@@ -174,7 +174,8 @@ export default function HeatMatrix({
 export function HeatMatrixSkeleton() {
   return (
     <div className={GRID_CLASS} aria-hidden="true">
-      {Array.from({ length: 11 }, (_, index) => (
+      {/* 骨架数与真实目录（24 主题）对齐，避免加载完成时布局跳变（审计 2.1.16） */}
+      {Array.from({ length: 24 }, (_, index) => (
         <SkeletonBlock
           key={index}
           className="h-[92px] rounded-md md:h-[108px]"

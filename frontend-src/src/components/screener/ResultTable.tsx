@@ -50,7 +50,9 @@ const HEADS: { label: string; align?: 'right' | 'center'; width?: string; hint?:
   { label: t('分项') },
   { label: t('价 / 涨跌'), align: 'right' },
   { label: t('催化剂 · 72H') },
-  { label: t('成交额'), align: 'right' },
+  /* 数字是后端 avg_dollar_volume_20d（20 个交易日的平均美元成交额），不是
+     当日成交额——列头如实限定口径（审计 2.3.2） */
+  { label: t('20日均额'), align: 'right' },
   { label: '', width: '40px' },
 ];
 
@@ -122,8 +124,19 @@ export default function ResultTable({
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.4, ease: EASE_PAPER, delay: page === 1 ? Math.min(i * 0.03, 0.3) : 0, layout: { duration: 0.32, ease: EASE_PAPER } }}
                   onClick={() => onToggle(r.ticker)}
+                  /* 可点击行同时可聚焦、可回车/空格展开——与 shared/DataTable 的
+                     P3-1 口径一致（审计 2.5.1）；aria-expanded 挂在 role=button 上才有效。 */
+                  tabIndex={0}
+                  role="button"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      onToggle(r.ticker);
+                    }
+                  }}
                   className={cn(
                     'group h-11 cursor-pointer border-b border-line transition-colors duration-fast hover:bg-paper-2',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/30',
                     isOpen && 'bg-paper-2',
                   )}
                   aria-expanded={isOpen}
@@ -174,9 +187,9 @@ export default function ResultTable({
                   <td className="px-3 py-2">
                     <CatalystBadge summary={catalysts[r.ticker]} tipSide={i < 3 ? 'bottom' : 'top'} />
                   </td>
-                  {/* 成交额 */}
+                  {/* 20 日平均美元成交额 */}
                   <td className="px-3 py-2 text-right font-mono text-body-s text-ink-600 tnum">
-                    {dvPending ? <span className="text-ink-300">…</span> : dv === null || dv === undefined ? '—' : fmtCompact(dv)}
+                    {dvPending ? <span className="text-ink-300">…</span> : dv === null || dv === undefined ? '—' : `$${fmtCompact(dv)}`}
                   </td>
                   {/* 展开 */}
                   <td className="px-3 py-2 text-right">
