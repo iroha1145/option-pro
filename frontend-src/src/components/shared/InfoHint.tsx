@@ -54,6 +54,10 @@ export default function InfoHint({
   const rootRef = useRef<HTMLSpanElement | null>(null);
   const triggerRef = useRef<HTMLSpanElement | null>(null);
   const tooltipId = useId();
+  /* CSS 在 hover/focus-within 时就会显示浮层；aria 必须与真实显示一致，
+     否则键盘用户聚焦时读屏（与 Playwright 的可访问树查询）都拿不到它。 */
+  const [focused, setFocused] = useState(false);
+  const exposed = open || focused;
   const [offsetLeft, setOffsetLeft] = useState<number | null>(null);
 
   /**
@@ -128,7 +132,9 @@ export default function InfoHint({
         tabIndex={0}
         aria-label={t('{title}：查看评分说明', { title: t(hint.title) })}
         aria-expanded={open}
-        aria-describedby={open ? tooltipId : undefined}
+        aria-describedby={exposed ? tooltipId : undefined}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         className={cn(
           'inline-flex cursor-help items-center rounded-full text-ink-300 outline-none transition-colors duration-fast',
           'hover:text-brand-600 focus-visible:text-brand-600',
@@ -156,8 +162,9 @@ export default function InfoHint({
         id={tooltipId}
         role="tooltip"
         /* 收起时移出可访问性树（审计 2.5.10）：opacity-0 的常驻节点会被读屏
-           当正文连读，每个 InfoHint 的几十字算法说明全部混进页面内容。 */
-        aria-hidden={!open}
+           当正文连读，每个 InfoHint 的几十字算法说明全部混进页面内容。
+           聚焦或点开即恢复暴露，与 CSS 的显示条件一一对应。 */
+        aria-hidden={!exposed}
         className={cn(
           'pointer-events-none absolute z-50 w-max rounded-md border border-line bg-card px-3 py-2.5 text-left shadow-sh-3',
           'opacity-0 transition-opacity duration-fast',

@@ -526,7 +526,7 @@ export default function Login() {
                   statusMsg?.tone === 'warn' ? 'text-warn-600' : 'text-down-700',
                   !statusMsg && 'opacity-0',
                 )}
-                role="status"
+                role={statusMsg?.tone === 'error' ? 'alert' : 'status'}
                 aria-live={statusMsg?.tone === 'error' ? 'assertive' : 'polite'}
               >
                 {statusMsg ? statusMsg.text : '·'}
