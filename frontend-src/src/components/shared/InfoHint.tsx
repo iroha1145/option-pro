@@ -5,18 +5,39 @@
  * - 触发器是 span[role=button] 而非 <button>：评分常渲染在可点击行（motion.button）
  *   内部，真按钮会形成非法嵌套（TickerChip 同款教训）
  * - 点击/键盘触发要 stopPropagation，避免误触所在行的跳转
- * - 悬停/focus-within 用 CSS 显示；触屏无 hover，用受控 open 点按切换
+ * - 触屏无 hover，用受控 open 点按切换
  * - 文案来自 lib/scoreHints（源自后端真实算法），本组件不编内容
+ *
+ * 浮层挂在 document.body（portal + position:fixed），不留在触发点旁边：
+ * 读数几乎都在 `card-surface overflow-hidden` 之类的裁剪盒里，同层的绝对定位
+ * 浮层会被祖先的 overflow 直接切掉——z-index 对 overflow 裁剪无效，堆叠顺序
+ * 再高也救不回来。列表首行的说明因此被削去半截（新闻流实拍）。挂到 body 之后
+ * 裁剪盒管不着它，方向也能按视口剩余空间自动翻面。
  */
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import type { ScoreHint } from '@/lib/scoreHints';
 import { t } from '../../i18n/core.ts';
 
 /** 浮层最大宽度（px），与下方 maxWidth 内联样式保持同一常量。 */
 const TOOLTIP_MAX_WIDTH = 300;
-/** 浮层与视口左右边缘至少保留的间距（px）。 */
+/** 浮层与视口边缘至少保留的间距（px）。 */
 const VIEWPORT_GUTTER = 8;
+/** 浮层与触发点之间的间隙（px）。 */
+const TRIGGER_GAP = 6;
+/**
+ * 抽屉 70/71、命令面板 80/81、确认对话框 85/86 之上，Toast 90 之下：
+ * 说明浮层要盖住它所在的层，但不该盖住系统级提示。
+ */
+const TOOLTIP_Z_INDEX = 88;
 
 function InfoGlyph({ size = 13 }: { size?: number }) {
   return (
@@ -51,60 +72,72 @@ export default function InfoHint({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
   const rootRef = useRef<HTMLSpanElement | null>(null);
   const triggerRef = useRef<HTMLSpanElement | null>(null);
+  const tooltipRef = useRef<HTMLSpanElement | null>(null);
   const tooltipId = useId();
-  /* CSS 在 hover/focus-within 时就会显示浮层；aria 必须与真实显示一致，
-     否则键盘用户聚焦时读屏（与 Playwright 的可访问树查询）都拿不到它。 */
-  const [focused, setFocused] = useState(false);
-  const exposed = open || focused;
-  const [offsetLeft, setOffsetLeft] = useState<number | null>(null);
+  /* 浮层挂在 body，CSS 的 group-hover/focus-within 够不着它，显示条件收归 state。
+     aria 与真实显示一一对应：键盘用户聚焦时读屏（与 Playwright 的可访问树查询）
+     都必须拿得到它。 */
+  const exposed = open || focused || hovered;
+  const [coords, setCoords] = useState<{ left: number; top: number } | null>(null);
 
   /**
-   * 水平位置按视口收敛。
+   * 按视口摆位：水平夹在视口内，垂直空间不够就翻面。
    *
-   * 浮层是绝对定位、锚定在触发点上，窄屏（320px）时 start/center/end 三种对齐
-   * 都可能越过视口边缘：即使处于 opacity-0 也仍占布局盒，会把文档撑出横向滚动。
-   * 这里只用「触发点位置」计算——浮层宽度是确定的 min(300, 视口宽 − 2×gutter)，
-   * 不需要测量浮层本身，因此不会出现先错位再纠正的闪烁。
-   * align 仍是首选对齐；空间足够时结果与原来逐像素一致，宽屏观感不变。
+   * 水平只用触发点算——浮层宽度是确定的 min(300, 视口宽 − 2×gutter)。垂直必须
+   * 量浮层自身高度（文案长短差很多），所以先渲染再定位，未定位时保持透明，
+   * 避免先闪到错位置。
    */
-  const measure = useCallback(() => {
+  const place = useCallback(() => {
     const node = triggerRef.current;
-    const root = rootRef.current;
-    if (!node || !root || typeof window === 'undefined') return;
+    const tip = tooltipRef.current;
+    if (!node || !tip || typeof window === 'undefined') return;
     const trigger = node.getBoundingClientRect();
-    const origin = root.getBoundingClientRect();
-    // 处于 hidden 子树（如未展开的 Accordion）时 rect 全为 0，此时算出的偏移量
-    // 在真正显示后会整体错位。保持未测量状态，交给类名兜底，等显示时再量。
+    // 处于 hidden 子树（如未展开的 Accordion）时 rect 全为 0，算出来会整体错位。
     if (trigger.width === 0 && trigger.height === 0) return;
-    const viewport = document.documentElement.clientWidth;
-    const width = Math.min(TOOLTIP_MAX_WIDTH, viewport - VIEWPORT_GUTTER * 2);
+
+    const viewportWidth = document.documentElement.clientWidth;
+    const viewportHeight = document.documentElement.clientHeight;
+    const width = Math.min(TOOLTIP_MAX_WIDTH, viewportWidth - VIEWPORT_GUTTER * 2);
     const preferred =
       align === 'start'
         ? trigger.left
         : align === 'end'
           ? trigger.right - width
           : trigger.left + trigger.width / 2 - width / 2;
-    const highest = Math.max(VIEWPORT_GUTTER, viewport - width - VIEWPORT_GUTTER);
-    const clamped = Math.min(Math.max(preferred, VIEWPORT_GUTTER), highest);
-    setOffsetLeft(clamped - origin.left);
-  }, [align]);
+    const rightmost = Math.max(VIEWPORT_GUTTER, viewportWidth - width - VIEWPORT_GUTTER);
+    const left = Math.min(Math.max(preferred, VIEWPORT_GUTTER), rightmost);
 
+    const height = tip.offsetHeight;
+    const aboveTop = trigger.top - TRIGGER_GAP - height;
+    const belowTop = trigger.bottom + TRIGGER_GAP;
+    const fitsAbove = aboveTop >= VIEWPORT_GUTTER;
+    const fitsBelow = belowTop + height <= viewportHeight - VIEWPORT_GUTTER;
+    const placeAbove = side === 'top' ? fitsAbove || !fitsBelow : !fitsBelow && fitsAbove;
+    // 两侧都塞不下（浮层比视口还高）时夹回视口，宁可盖住触发点也不出屏。
+    const lowest = Math.max(VIEWPORT_GUTTER, viewportHeight - height - VIEWPORT_GUTTER);
+    const top = Math.min(Math.max(placeAbove ? aboveTop : belowTop, VIEWPORT_GUTTER), lowest);
+
+    setCoords({ left, top });
+  }, [align, side]);
+
+  /* 显示期间跟住触发点：页面滚动、窗口缩放、上方内容变高都会让它移动。 */
   useLayoutEffect(() => {
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [measure]);
-
-  /**
-   * 再在「即将显示」时量一次。
-   *
-   * 存下来的是相对触发点的偏移量，而页面后续的重排（图表渲染完、上方内容变高、
-   * 字体加载）会让触发点自己移动，只在挂载时量会漂移。悬停/聚焦时重量一次，
-   * 保证读者真正看到浮层的那一刻位置是准的。
-   */
-  const remeasure = useCallback(() => measure(), [measure]);
+    if (!exposed) {
+      setCoords(null);
+      return;
+    }
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [exposed, place]);
 
   /* 触屏点按打开后，点页面其他位置应关闭 */
   useEffect(() => {
@@ -121,10 +154,12 @@ export default function InfoHint({
   return (
     <span
       ref={rootRef}
-      className={cn('group/hint relative inline-flex align-middle', className)}
-      onMouseEnter={remeasure}
-      onFocusCapture={remeasure}
-      onMouseLeave={() => setOpen(false)}
+      className={cn('relative inline-flex align-middle', className)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => {
+        setHovered(false);
+        setOpen(false);
+      }}
     >
       <span
         ref={triggerRef}
@@ -158,48 +193,43 @@ export default function InfoHint({
         <InfoGlyph size={size} />
       </span>
 
-      <span
-        id={tooltipId}
-        role="tooltip"
-        /* 收起时移出可访问性树（审计 2.5.10）：opacity-0 的常驻节点会被读屏
-           当正文连读，每个 InfoHint 的几十字算法说明全部混进页面内容。
-           聚焦或点开即恢复暴露，与 CSS 的显示条件一一对应。 */
-        aria-hidden={!exposed}
-        className={cn(
-          'pointer-events-none absolute z-50 w-max rounded-md border border-line bg-card px-3 py-2.5 text-left shadow-sh-3',
-          'opacity-0 transition-opacity duration-fast',
-          'group-hover/hint:pointer-events-auto group-hover/hint:opacity-100',
-          'group-focus-within/hint:pointer-events-auto group-focus-within/hint:opacity-100',
-          open && 'pointer-events-auto opacity-100',
-          side === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5',
-          // 首帧（尚未测量）用类名按 align 摆位，避免闪到左上角。
-          offsetLeft === null && align === 'center' && 'left-1/2 -translate-x-1/2',
-          offsetLeft === null && align === 'start' && 'left-0',
-          offsetLeft === null && align === 'end' && 'right-0',
+      {/* 收起时整个移出 DOM（审计 2.5.10）：常驻的 opacity-0 节点会被读屏当正文
+          连读，每个 InfoHint 的几十字算法说明全部混进页面内容。 */}
+      {exposed &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <span
+            ref={tooltipRef}
+            id={tooltipId}
+            role="tooltip"
+            /* pointer-events-none：浮层已不是触发器的后代，可交互时鼠标移进去会
+               先触发根节点的 mouseleave 而闪烁。说明是只读文本，不需要指针。 */
+            className={cn(
+              'pointer-events-none fixed w-max rounded-md border border-line bg-card px-3 py-2.5 text-left shadow-sh-3',
+              'transition-opacity duration-fast',
+              coords ? 'opacity-100' : 'opacity-0',
+            )}
+            style={{
+              zIndex: TOOLTIP_Z_INDEX,
+              left: coords?.left ?? 0,
+              top: coords?.top ?? 0,
+              maxWidth: `min(${TOOLTIP_MAX_WIDTH}px, calc(100vw - ${
+                VIEWPORT_GUTTER * 2
+              }px))`,
+            }}
+          >
+            <span className="block text-caption font-semibold text-ink-800">{t(hint.title)}</span>
+            <span className="mt-1 block whitespace-normal text-micro leading-relaxed text-ink-600">
+              {t(hint.body)}
+            </span>
+            {hint.note && (
+              <span className="mt-1 block whitespace-normal text-micro leading-relaxed text-ink-400">
+                {t(hint.note)}
+              </span>
+            )}
+          </span>,
+          document.body,
         )}
-        style={
-          offsetLeft === null
-            ? { maxWidth: TOOLTIP_MAX_WIDTH }
-            : {
-                left: offsetLeft,
-                right: 'auto',
-                transform: 'none',
-                maxWidth: `min(${TOOLTIP_MAX_WIDTH}px, calc(100vw - ${
-                  VIEWPORT_GUTTER * 2
-                }px))`,
-              }
-        }
-      >
-        <span className="block text-caption font-semibold text-ink-800">{t(hint.title)}</span>
-        <span className="mt-1 block whitespace-normal text-micro leading-relaxed text-ink-600">
-          {t(hint.body)}
-        </span>
-        {hint.note && (
-          <span className="mt-1 block whitespace-normal text-micro leading-relaxed text-ink-400">
-            {t(hint.note)}
-          </span>
-        )}
-      </span>
     </span>
   );
 }
