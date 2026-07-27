@@ -423,12 +423,12 @@ const BIG_SCORES = [
 
 function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
   return (
-    <div className="space-y-2" aria-label={t("四维评分")}>
+    <div className="grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2" aria-label={t("四维评分")}>
       {BIG_SCORES.map((d, i) => {
         const raw = num(ev[d.key]);
         const v = raw ?? 0;
         return (
-          <div key={d.key} className="grid grid-cols-[64px_1fr_36px] items-center gap-2.5">
+          <div key={d.key} className="col-span-3 grid grid-cols-subgrid items-center gap-x-2.5">
             <span className="whitespace-nowrap text-caption text-ink-500">
               {d.label}
               <InfoHint hint={d.hint} size={11} className="ml-0.5" />

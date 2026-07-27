@@ -82,7 +82,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
               data-active={location.pathname.startsWith(item.path)}
               className={({ isActive }) =>
                 cn(
-                  'flex h-full items-center gap-1.5 px-3.5 text-body-s transition-colors duration-fast',
+                  'flex h-full items-center gap-1.5 whitespace-nowrap px-2.5 text-body-s transition-colors duration-fast 2xl:px-3.5',
                   isActive ? 'font-medium text-brand-600' : 'text-ink-500 hover:text-ink-800',
                 )
               }

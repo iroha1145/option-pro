@@ -140,7 +140,8 @@ export function driverText(
 ): string | null {
   if (!drivers || drivers.length === 0) return null;
   const names = drivers.map((d) => translate(d.label || d.factor_id)).filter(Boolean);
-  return names.length > 0 ? names.join('、') : null;
+  // 连接符同样过 translate：中文顿号夹在英文因子名之间就是乱码观感。
+  return names.length > 0 ? names.join(translate('、')) : null;
 }
 
 /**

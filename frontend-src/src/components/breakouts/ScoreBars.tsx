@@ -50,12 +50,12 @@ export function ScoreBarsMini({ event, className }: { event: BreakoutEventFull; 
 
 export function ScoreBarsFull({ event, className }: { event: BreakoutEventFull; className?: string }) {
   return (
-    <div className={cn('space-y-2', className)} aria-label={t("评分套组")}>
+    <div className={cn('grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2', className)} aria-label={t("评分套组")}>
       {SCORE_DEFS.map((d, i) => {
         const v = event[d.key];
         return (
-          <div key={d.key} className="grid grid-cols-[64px_1fr_30px] items-center gap-2.5">
-            <span className="text-caption text-ink-500">{d.label}</span>
+          <div key={d.key} className="col-span-3 grid grid-cols-subgrid items-center gap-x-2.5">
+            <span className="whitespace-nowrap text-caption text-ink-500">{d.label}</span>
             <div className="h-[3px] overflow-hidden rounded-pill bg-line">
               {fin(v) && (
                 <motion.div
@@ -95,14 +95,14 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
       unavailable: t('暂不可用'),
     };
     return (
-      <div className={cn('space-y-2', className)} aria-label={t("区间持续指标")}>
-        <div className="mb-2 flex items-center justify-between rounded-sm bg-card-warm px-2.5 py-1.5">
+      <div className={cn('grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2', className)} aria-label={t("区间持续指标")}>
+        <div className="col-span-3 flex items-center justify-between rounded-sm bg-card-warm px-2.5 py-1.5">
           <span className="text-caption text-ink-500">{t('状态')}</span>
           <span className="font-mono text-caption text-ink-700">{statusCn[rp.status] ?? rp.status}</span>
         </div>
         {metrics.map((metric, i) => (
-          <div key={metric.key} className="grid grid-cols-[64px_1fr_38px] items-center gap-2.5">
-            <span className="text-caption text-ink-500">{metric.label}</span>
+          <div key={metric.key} className="col-span-3 grid grid-cols-subgrid items-center gap-x-2.5">
+            <span className="whitespace-nowrap text-caption text-ink-500">{metric.label}</span>
             <div className="h-[3px] overflow-hidden rounded-pill bg-line">
               {fin(metric.value) && (
                 <motion.div
@@ -135,12 +135,12 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
     );
   }
   return (
-    <div className={cn('space-y-2', className)} aria-label={t("区间持续五维")}>
+    <div className={cn('grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2', className)} aria-label={t("区间持续五维")}>
       {RANGE_PERSISTENCE_DEFS.map((d, i) => {
         const v = legacy[d.key];
         return (
-          <div key={d.key} className="grid grid-cols-[64px_1fr_30px] items-center gap-2.5">
-            <span className="text-caption text-ink-500">{d.label}</span>
+          <div key={d.key} className="col-span-3 grid grid-cols-subgrid items-center gap-x-2.5">
+            <span className="whitespace-nowrap text-caption text-ink-500">{d.label}</span>
             <div className="h-[3px] overflow-hidden rounded-pill bg-line">
               <motion.div
                 className={cn('h-full origin-left rounded-pill', scoreBarClass(v))}

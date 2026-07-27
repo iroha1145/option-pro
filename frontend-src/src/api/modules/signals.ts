@@ -1,7 +1,7 @@
 /** 信号域：GET /api/signals/market · GET /api/signals/stock/{t} */
 import { get, mockOr } from '../client';
 import { marketGet } from '../marketRead';
-import { asRec, pickN, pickS } from '../live';
+import { asRec, pickLabel, pickN, pickS } from '../live';
 import * as fx from '@/mocks/fixtures';
 import type { MarketSignalsSnapshot, Signal, SignalType } from '../types';
 import { t } from '../../i18n/core.ts';
@@ -49,7 +49,8 @@ export function mapMarketSignals(d: unknown): MarketSignalsSnapshot {
     if (value === null) return [];
     return [{
       key,
-      label: pickS(metric, 'label') ?? key,
+      // 后端下发中文指标名；经同一张词典本地化，缺译回退原文
+      label: pickLabel(metric, 'label') ?? key,
       value,
       topScore: pickN(metric, 'top_score', 'topScore'),
       bottomScore: pickN(metric, 'bottom_score', 'bottomScore'),
@@ -59,8 +60,8 @@ export function mapMarketSignals(d: unknown): MarketSignalsSnapshot {
     metrics,
     topScore: pickN(scores, 'top_score', 'topScore'),
     bottomScore: pickN(scores, 'bottom_score', 'bottomScore'),
-    topLabel: pickS(scores, 'top_label', 'topLabel'),
-    bottomLabel: pickS(scores, 'bottom_label', 'bottomLabel'),
+    topLabel: pickLabel(scores, 'top_label', 'topLabel'),
+    bottomLabel: pickLabel(scores, 'bottom_label', 'bottomLabel'),
     dataQuality: pickN(scores, 'data_quality', 'dataQuality'),
     sourceStatus: pickS(source, 'value'),
     asOf: pickS(env, 'as_of', 'asOf'),

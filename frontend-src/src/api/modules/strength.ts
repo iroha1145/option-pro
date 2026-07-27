@@ -190,16 +190,32 @@ function mapTierDistribution(raw: unknown): TierDistribution | null {
   ) as unknown as TierDistribution;
 }
 
+/**
+ * 后端 warnings 里两条是拼出来的（资产对名 + 固定后缀、缺失键列表 + 固定前缀），
+ * 整句进词典永远缺译。按这两个稳定模式拆出参数走插值词条；其余整句查表，
+ * 缺译回退原文——与 t() 全站口径一致。
+ */
+function localizeRegimeWarning(warning: string): string {
+  const weak = /^(.+)偏弱，强势未充分扩散$/.exec(warning);
+  if (weak) return t('{name}偏弱，强势未充分扩散', { name: weak[1] });
+  const missing = /^可选市场数据不完整：(.+)$/.exec(warning);
+  if (missing) return t('可选市场数据不完整：{list}', { list: missing[1] });
+  return t(warning);
+}
+
 /** 契约 market_regime（六维分 + label + warnings）→ MarketRegimeInfo；缺失如实 null */
 function mapRegime(env: Rec): MarketRegimeInfo | null {
   const regime = asRec(env.market_regime);
   if (Object.keys(regime).length === 0) return null;
   return {
     score: pickN(regime, 'score', 'partial_score'),
-    label: pickS(regime, 'label'),
-    spreadLabel: pickS(regime, 'risk_on_spread_label'),
+    // label / spreadLabel 是后端下发的中文档位名，经词典本地化
+    label: pickLabel(regime, 'label'),
+    spreadLabel: pickLabel(regime, 'risk_on_spread_label'),
     warnings: Array.isArray(regime.warnings)
-      ? (regime.warnings as unknown[]).filter((x): x is string => typeof x === 'string')
+      ? (regime.warnings as unknown[])
+          .filter((x): x is string => typeof x === 'string')
+          .map(localizeRegimeWarning)
       : [],
     dims: {
       indexTrend: pickN(regime, 'index_trend_score'),

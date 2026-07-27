@@ -14,6 +14,18 @@
  */
 
 import { t } from '../i18n/core.ts';
+import { MACRO_SHADOW_HINT } from './macroFit';
+/**
+ * MACRO_SHADOW_HINT 的本地化视图。macroFit.ts 刻意零依赖（其测试沙箱不给
+ * require，引入 t 会当场炸），所以翻译发生在这里——消费方一律用这个而不是
+ * 直接用原对象。msgid 即原中文，词条在 dict/wired.ts。
+ */
+export const macroShadowHint = (): ScoreHint => ({
+  title: t(MACRO_SHADOW_HINT.title),
+  body: t(MACRO_SHADOW_HINT.body),
+  note: t(MACRO_SHADOW_HINT.note),
+});
+
 export interface ScoreHint {
   title: string;
   body: string;

@@ -127,6 +127,11 @@ const {
 
 const HINTS = loadModule('lib/scoreHints.ts', (id) => {
   if (id === '../i18n/core.ts') return { t: stubT };
+  // scoreHints 现在给 MACRO_SHADOW_HINT 提供本地化视图（macroFit 本身保持零依赖，
+  // 翻译只能发生在消费侧）。macroFit 是自包含纯模块，这里加载真实实现。
+  if (id === './macroFit') return loadModule('lib/macroFit.ts', () => {
+    throw new Error('macroFit 必须保持零依赖');
+  });
   throw new Error(`unexpected import: ${id}`);
 });
 const { MACRO_FACTOR_HINTS, MACRO_MODULE_HINTS, SCORE_HINTS_MACRO } = HINTS;

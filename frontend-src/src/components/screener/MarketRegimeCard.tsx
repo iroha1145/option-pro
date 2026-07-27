@@ -81,9 +81,8 @@ function RegimeBar({ dim, index }: { dim: RegimeDim; index: number }) {
   /* count-up 减量：六维条数值直接呈现终值 */
   const v = dim.value ?? 0;
   return (
-    <div className="group relative">
-      <div className="flex items-center gap-3">
-        <span className="w-16 shrink-0 whitespace-nowrap text-caption text-ink-500">
+    <div className="group relative col-span-3 grid grid-cols-subgrid items-center gap-x-3">
+        <span className="whitespace-nowrap text-caption text-ink-500">
           {dim.label}
           <InfoHint hint={SCORE_HINTS[dim.hintKey]} side="bottom" size={11} className="ml-0.5" />
         </span>
@@ -99,11 +98,10 @@ function RegimeBar({ dim, index }: { dim: RegimeDim; index: number }) {
             />
           )}
         </span>
-        <span className="w-8 shrink-0 text-right font-mono text-caption text-ink-800 tnum">
+        <span className="text-right font-mono text-caption text-ink-800 tnum">
           {dim.value !== null ? Math.round(v) : '—'}
         </span>
-      </div>
-      {/* 毛玻璃 tooltip */}
+      {/* 毛玻璃 tooltip（绝对定位，不占网格槽位） */}
       <div className="glass pointer-events-none absolute -top-2 left-16 z-20 hidden w-56 -translate-y-full rounded-md border border-line p-3 shadow-sh-2 group-hover:block">
         <p className="flex items-baseline justify-between">
           <span className="text-caption font-semibold text-ink-800">{dim.label}</span>
@@ -144,7 +142,7 @@ export default function MarketRegimeCard({ market }: { market: MarketStrength })
           )}
         </p>
       )}
-      <div className="mt-4 space-y-3">
+      <div className="mt-4 grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-3">
         {dims.map((d, i) => (
           <RegimeBar key={d.key} dim={d} index={i} />
         ))}

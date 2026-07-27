@@ -160,4 +160,75 @@ export const WIRED: Dict = {
   '评分{label}': ['Score {label}', 'スコア {label}'],
   '清除代码聚焦 {ticker}': ['Clear ticker focus {ticker}', 'ティッカー絞り込み {ticker} を解除'],
   '{title}：{body}{note}': ['{title}: {body}{note}', '{title}：{body}{note}'],
+
+  // ── 后端下发：市场信号指标名（services/signals.py 的 add() 清单）──────────
+  'SPY距20日线偏离%': ['SPY vs 20-day MA %', 'SPY 20日線乖離%'],
+  'SPY距50日线偏离%': ['SPY vs 50-day MA %', 'SPY 50日線乖離%'],
+  'SPY距200日线偏离%': ['SPY vs 200-day MA %', 'SPY 200日線乖離%'],
+  'SPY RSI(14)': ['SPY RSI(14)', 'SPY RSI(14)'],
+  'SPY 20日涨幅%': ['SPY 20-day return %', 'SPY 20日騰落率%'],
+  '等权重/SPY 5日相对强弱%': ['Equal-weight vs SPY, 5-day %', '均等加重/SPY 5日相対強弱%'],
+  '小盘/SPY 5日相对强弱%': ['Small caps vs SPY, 5-day %', '小型株/SPY 5日相対強弱%'],
+  'QQQ/SPY 5日相对强弱%': ['QQQ vs SPY, 5-day %', 'QQQ/SPY 5日相対強弱%'],
+  '板块ETF在50日线上方%': ['Sector ETFs above 50-day MA %', '50日線超えセクターETF%'],
+  'VIX': ['VIX', 'VIX'],
+  'VIX 1年分位%': ['VIX 1-year percentile %', 'VIX 1年パーセンタイル%'],
+  'VIX 5日变化%': ['VIX 5-day change %', 'VIX 5日変化%'],
+  '信用风险(HYG/TLT) 20日变化%': ['Credit risk (HYG/TLT), 20-day change %', '信用リスク(HYG/TLT) 20日変化%'],
+  '10年期收益率%': ['10-year yield %', '10年債利回り%'],
+  '10Y收益率20日变化': ['10Y yield, 20-day change', '10年債利回り 20日変化'],
+  '20日涨幅%': ['20-day return %', '20日騰落率%'],
+  '相对强弱(vs SPY)%': ['Relative strength vs SPY %', '相対強弱（対SPY）%'],
+  'MACD柱状图方向': ['MACD histogram direction', 'MACDヒストグラム方向'],
+  '成交量Z分数': ['Volume z-score', '出来高Zスコア'],
+  '收盘位于当日区间%': ['Close within day range %', '当日レンジ内終値位置%'],
+
+  // ── 后端下发：顶部/底部结论档位（services/scoring.py::_level）────────────
+  '顶部风险低': ['Top risk low', '天井リスク低'],
+  '正常震荡风险': ['Normal churn risk', '通常の変動リスク'],
+  '需要停止追高': ['Stop chasing highs', '高値追いは停止'],
+  '阶段性顶部风险高': ['Elevated interim-top risk', '一時的天井リスク高'],
+  '极端过热，等待反转确认': ['Extremely overheated — wait for reversal confirmation', '極端な過熱、反転確認待ち'],
+  '没有底部迹象': ['No bottoming signs', '底打ちの兆候なし'],
+  '可能只是超跌': ['Possibly just oversold', '単なる売られ過ぎの可能性'],
+  '开始出现底部条件': ['Bottoming conditions emerging', '底打ち条件が出現中'],
+  '阶段性底部概率较高': ['Interim bottom likely', '一時的底打ちの可能性高'],
+  '恐慌释放充分，仍需价格确认': ['Panic fully released — price confirmation still needed', 'パニックは十分放出、価格確認は必要'],
+
+  // ── 后端下发：市场形态档位与风险偏好档位 ─────────────────────────────────
+  '强风险偏好': ['Strong risk appetite', '強いリスク選好'],
+  '温和偏强': ['Mildly constructive', 'やや強気'],
+  '中性震荡': ['Neutral churn', '中立レンジ'],
+  '弱势高风险': ['Weak, high risk', '弱含み・高リスク'],
+  '风险偏好扩散': ['Risk appetite broadening', 'リスク選好が拡大'],
+  '风险偏好温和': ['Risk appetite moderate', 'リスク選好は穏やか'],
+  '风险偏好中性': ['Risk appetite neutral', 'リスク選好は中立'],
+  '风险偏好偏弱': ['Risk appetite weak', 'リスク選好は弱い'],
+  '相对抗跌，非进攻领先': ['Defensive resilience, not offensive leadership', '相対的に下げ渋り、攻めの主導ではない'],
+  '防御资金增强': ['Defensive flows strengthening', 'ディフェンシブ資金が増勢'],
+
+  // ── 后端下发：市场形态 warnings（两条按稳定模式插值，其余整句）────────────
+  '{name}偏弱，强势未充分扩散': ['{name} lagging — strength not broadening', '{name}が弱く、強さが十分に波及していません'],
+  '可选市场数据不完整：{list}': ['Optional market data incomplete: {list}', '任意の市場データが不完全：{list}'],
+  '市场宽度偏弱，突破型信号已降权': ['Market breadth weak — breakout signals down-weighted', '市場の広がりが弱く、ブレイクアウト系シグナルの比重を引き下げ'],
+  '波动或信用压力偏高，期权热度已降权': ['Volatility or credit stress elevated — options-heat down-weighted', 'ボラティリティまたは信用ストレスが高く、オプション過熱度の比重を引き下げ'],
+  '风险偏好价差偏弱，突破与期权信号已降权': ['Risk-on spread weak — breakout and options signals down-weighted', 'リスクオン・スプレッドが弱く、ブレイクアウトとオプション系シグナルの比重を引き下げ'],
+  '风险偏好价差支持进攻型强势股': ['Risk-on spread supports offensive leaders', 'リスクオン・スプレッドが攻めの主導株を支持'],
+  'SOXX/XLK走强，半导体相对科技板块领先': ['SOXX/XLK strengthening — semis leading tech', 'SOXX/XLKが強含み、半導体がテック比で主導'],
+  'HYG/IEF偏弱，信用风险偏好不足': ['HYG/IEF weak — credit risk appetite lacking', 'HYG/IEFが弱く、信用リスク選好が不足'],
+
+  // ── 其它接线 ─────────────────────────────────────────────────────────────
+  '、': [', ', '、'],
+  '公开快照暂无该股票的日线图 · 可手动拉取': ["The saved public snapshot doesn't include this stock's daily chart · pull live data manually", '保存済み公開スナップショットにこの銘柄の日足がありません · 手動で取得できます'],
+  '数据不足': ['Insufficient data', 'データ不足'],
+  '宏观适配（0–100）': ['Macro fit (0–100)', 'マクロ適合度（0–100）'],
+  '当前宏观环境与该股票所属板块暴露画像的匹配度：把每个宏观因子的历史分位中心化后，按该板块对这个因子的确定性暴露加权。65 以上记顺风，35 以下记逆风。': [
+    "How well the current macro environment matches this stock's sector exposure profile: each macro factor's historical percentile is centred, then weighted by the sector's signed exposure to that factor. 65+ counts as a tailwind, 35 and below as a headwind.",
+    '現在のマクロ環境と、この銘柄が属するセクターのエクスポージャー・プロファイルとの適合度です。各マクロ因子の過去パーセンタイルを中心化し、そのセクターの当該因子への符号付きエクスポージャーで加重します。65以上は追い風、35以下は向かい風とみなします。',
+  ],
+  '影子字段：不参与排名，不改变强度分、突破质量分或事件生命周期。覆盖度不足时不给分，也不按中性 50 计。分数是历史分位，不是预测。': [
+    'Shadow field: it does not enter the ranking and changes neither strength scores, breakout quality, nor event lifecycles. With insufficient coverage no score is given — never a neutral 50. The score is a historical percentile, not a forecast.',
+    'シャドウフィールド：ランキングには入らず、強度スコア・ブレイクアウト品質・イベントのライフサイクルも変えません。カバレッジ不足時はスコアを出さず、中立の50とも見なしません。スコアは過去パーセンタイルであり、予測ではありません。',
+  ],
 };
+
