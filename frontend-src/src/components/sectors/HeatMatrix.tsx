@@ -23,8 +23,10 @@ function HeatTile({
   const value = sector.avgReturn ?? 0;
   /* count-up 减量：热力砖涨跌直接呈现终值 */
   const animated = value;
-  const tone = heatTone(value);
   const hasReturn = sector.avgReturn !== null;
+  /* 缺数不能与「真实持平」同色（审计 2.1.17）：热力图的主要读法就是扫颜色，
+     avgReturn 为 null 的砖底色换成中性纸面+虚线边，一眼可辨「没数据」。 */
+  const tone = hasReturn ? heatTone(value) : { bg: 'var(--card-warm, #FBFCFD)', dark: false };
   const leader = sector.leaders[0] ?? null;
   const textMain = tone.dark ? 'text-white' : 'text-ink-800';
   const textSub = tone.dark ? 'text-white/75' : 'text-ink-500';
@@ -53,6 +55,7 @@ function HeatTile({
       }
       className={cn(
         'group relative h-[92px] overflow-visible rounded-md text-left shadow-sh-1 transition-shadow duration-[240ms] ease-out hover:shadow-sh-2 md:h-[108px]',
+        !hasReturn && 'border border-dashed border-line-strong',
         selected && 'shadow-sh-2',
       )}
       style={{ backgroundColor: tone.bg }}

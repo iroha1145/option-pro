@@ -2,7 +2,7 @@
  * 移动端底部 Dock（design.md §7.4）
  * 64px + safe-area 毛玻璃；中央雷达凸起 44px 圆钮；「更多」上弹 sheet（spring-gentle）。
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -29,6 +29,21 @@ export default function MobileDock() {
   const navigate = useNavigate();
   const { isOwner } = useAccess();
   const [moreOpen, setMoreOpen] = useState(false);
+
+  /* 「更多」sheet 声明了 aria-modal，就要有配套行为（审计 2.5.5）：
+     Escape 可关 + 打开期间锁背景滚动。 */
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMoreOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [moreOpen]);
 
   const renderItem = (item: (typeof DOCK_ITEMS)[number]) => {
     const active = location.pathname.startsWith(item.path);

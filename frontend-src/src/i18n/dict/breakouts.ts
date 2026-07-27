@@ -79,7 +79,6 @@ export const BREAKOUTS: Dict = {
   '市场契合': ['Market fit', '市場適合度'],
   '数据置信': ['Data confidence', 'データ信頼度'],
   '评分贡献分解': ['Score contribution breakdown', 'スコア寄与度の内訳'],
-  '推导': ['Derived', '算出'],
   '美东': ['ET', '米東部時間'],
   '首要信号': ['Top signal', 'トップシグナル'],
   '同时段量能': ['Time-of-day RVOL', '同時間帯の出来高倍率'],
@@ -226,4 +225,6 @@ export const BREAKOUTS: Dict = {
   '突破扫描结果 · 行情为延迟数据': ['Breakout scan results · quotes are delayed', 'ブレイクアウトスキャン結果 · 相場は遅延データです'],
   '告警优先级数据不足': ['Alert priority: insufficient data', 'アラート優先度：データ不足'],
   '该股近 72 小时暂无相关催化剂': ['No catalysts for this stock in the past 72 hours', '直近72時間、この銘柄に関連するカタリストなし'],
+  '事件新鲜度': ['Event freshness', 'イベント鮮度'],
+  '评分构成不可用（数据不足）': ['Score breakdown unavailable (insufficient data)', 'スコア構成は利用できません（データ不足）'],
 };

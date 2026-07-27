@@ -74,7 +74,7 @@ function ActionButton({ label, busy, onClick }: { label: string; busy: boolean; 
       className={cn(
         'flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-caption font-medium transition-colors duration-fast',
         busy
-          ? 'cursor-wait border-brand-200 bg-brand-50 text-brand-600'
+          ? 'cursor-wait border-brand-400 bg-brand-50 text-brand-600'
           : 'border-line bg-card text-ink-600 hover:border-brand-400 hover:text-brand-600',
       )}
     >

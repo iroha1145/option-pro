@@ -228,6 +228,16 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
     el?.scrollIntoView({ block: 'nearest' });
   }, [clampedActive]);
 
+  /* 面板打开时锁背景滚动（审计 2.2.14）：与 Drawer 同口径，滚轮不再穿透
+     到背后的页面。 */
+  useEffect(() => {
+    if (!open) return;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [open]);
+
   /* 分组渲染 */
   const groups: { name: string; items: (Entry & { idx: number })[] }[] = [];
   flat.forEach((e, idx) => {
@@ -256,6 +266,9 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
             role="dialog"
             aria-modal="true"
             aria-label={__t("命令面板")}
+            /* 键盘逻辑挂在面板上（审计 2.2.13）：焦点 Tab 进结果按钮后，
+               ↑↓/Enter/Esc 依然生效（事件冒泡到这里统一处理）。 */
+            onKeyDown={onKeyDown}
             className="fixed left-1/2 top-[18vh] z-[81] w-[640px] max-w-[calc(100vw-24px)] -translate-x-1/2 overflow-hidden rounded-lg border border-line-strong bg-card shadow-sh-3"
           >
             {/* 顶边 brand 发丝线（纸面卡片签名） */}
@@ -270,9 +283,12 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                   setSearchError(null);
                   setActive(0);
                 }}
-                onKeyDown={onKeyDown}
                 placeholder={__t("搜索股票代码、名称或功能…")}
                 className="h-full flex-1 bg-transparent text-body text-ink-800 outline-none placeholder:text-ink-300 focus-visible:!shadow-none"
+                role="combobox"
+                aria-expanded={flat.length > 0}
+                aria-controls="command-palette-listbox"
+                aria-activedescendant={flat.length ? `command-palette-option-${clampedActive}` : undefined}
                 aria-label={__t("搜索股票或功能")}
               />
               {searching ? (
@@ -282,7 +298,9 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
               )}
             </div>
 
-            <div ref={listRef} className="max-h-[46vh] overflow-y-auto py-1.5">
+            {/* listbox/option + activedescendant（审计 2.5.3）：读屏跟随高亮播报，
+                不再只有肉眼可见的背景色变化 */}
+            <div id="command-palette-listbox" role="listbox" ref={listRef} className="max-h-[46vh] overflow-y-auto py-1.5">
               {searching && flat.length === 0 && (
                 <div className="flex flex-col items-center py-10 text-center" role="status">
                   <span className="size-5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-hidden="true" />
@@ -313,6 +331,9 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                   {g.items.map((e) => (
                     <button
                       key={e.id}
+                      id={`command-palette-option-${e.idx}`}
+                      role="option"
+                      aria-selected={e.idx === clampedActive}
                       data-idx={e.idx}
                       onClick={e.action}
                       onMouseEnter={() => setActive(e.idx)}

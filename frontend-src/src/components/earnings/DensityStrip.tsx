@@ -54,8 +54,19 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                   aria-label={t('{date} {weekday}，{n} 条财报，跳转', { date: fmtMDCN(d.date), weekday: weekdayCN(d.date), n })}
                   className="group relative flex h-full min-w-0 flex-1 items-end"
                 >
-                  {/* tooltip：当日代码列表 */}
-                  <span className="glass pointer-events-none absolute -top-2 left-1/2 z-20 hidden w-max max-w-[180px] -translate-x-1/2 -translate-y-full rounded-md border border-line px-2.5 py-1.5 text-left shadow-sh-2 group-hover:block">
+                  {/* tooltip：当日代码列表。首/尾三分之一改为贴边对齐（审计 2.4.6）：
+                      纯居中在窄屏上会把浮层伸出视口，Layout 的 overflow-x-clip
+                      只裁不滚，看不全当天的代码。 */}
+                  <span
+                    className={cn(
+                      'glass pointer-events-none absolute -top-2 z-20 hidden w-max max-w-[180px] -translate-y-full rounded-md border border-line px-2.5 py-1.5 text-left shadow-sh-2 group-hover:block',
+                      i < days.length / 3
+                        ? 'left-0'
+                        : i >= (days.length * 2) / 3
+                          ? 'right-0'
+                          : 'left-1/2 -translate-x-1/2',
+                    )}
+                  >
                     <span className="block font-mono text-[10px] text-ink-500">
                       {fmtMMDD(d.date)} {weekdayCN(d.date)}
                     </span>

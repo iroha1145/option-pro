@@ -418,7 +418,7 @@ export default function Login() {
             </div>
 
             {serviceDown && (
-              <p className="mt-4 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">
+              <p role="status" className="mt-4 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">
                 {t('无法连接服务，登录暂不可用')}
               </p>
             )}
@@ -516,13 +516,18 @@ export default function Login() {
               </button>
 
               {/* 状态行（预留 20px 避免跳动） */}
+              {/* 常驻 live region（审计 2.5.11）：节点先于内容存在，冷却/HTTPS/
+                  服务不可用等 warn 语调的提示也会被播报；在已存在节点上动态
+                  挂 role=alert 往往不触发播报，所以 role 恒为 status、错误
+                  升为 assertive。 */}
               <p
                 className={cn(
                   'mt-3 h-5 text-caption',
                   statusMsg?.tone === 'warn' ? 'text-warn-600' : 'text-down-700',
                   !statusMsg && 'opacity-0',
                 )}
-                role={statusMsg?.tone === 'error' ? 'alert' : undefined}
+                role="status"
+                aria-live={statusMsg?.tone === 'error' ? 'assertive' : 'polite'}
               >
                 {statusMsg ? statusMsg.text : '·'}
               </p>
