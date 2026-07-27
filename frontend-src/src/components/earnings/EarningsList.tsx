@@ -5,6 +5,7 @@
  *     预期波动仅在至少一条真实数值存在时出现 · AI 影响钮
  * days_until=0「今天」高亮 · 行 stagger 40ms · 斜纹柱对 grow 错峰 700ms · <md 转卡片流
  */
+import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { fmtCompact } from '@/lib/format';
@@ -136,10 +137,50 @@ interface EarningsListProps {
   onSelectTicker: (ticker: string) => void;
   onNextWeek?: () => void;
   filteredByDay: boolean;
+  /** 重点模式把非重点公司滤掉了：空态要说清是「被模式过滤」而非「没有财报」 */
+  featuredFilteredEmpty?: boolean;
+  onShowAll?: () => void;
 }
 
-export default function EarningsList({ items, selectedTicker, onSelectTicker, onNextWeek, filteredByDay }: EarningsListProps) {
+export default function EarningsList({
+  items,
+  selectedTicker,
+  onSelectTicker,
+  onNextWeek,
+  filteredByDay,
+  featuredFilteredEmpty = false,
+  onShowAll,
+}: EarningsListProps) {
+  /* 从日历点入非重点公司时选中行可能在视口外：温和地滚到就近可见位置。
+     hooks 必须先于任何提前 return。 */
+  const selectedRowRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    selectedRowRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [selectedTicker]);
+
   if (items.length === 0) {
+    if (featuredFilteredEmpty) {
+      return (
+        <section className="card-surface" aria-label={t("即将公布")}>
+          <EmptyState
+            image="/empty-chart.svg"
+            title={filteredByDay ? t('当日没有重点公司财报') : t('当前范围内没有重点公司财报')}
+            description={t('财报仍在——切到「全部公司」查看全市场日历。')}
+            action={
+              onShowAll ? (
+                <button
+                  onClick={onShowAll}
+                  className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+                >
+                  {t('查看全部公司')}
+                  <Icon name="chevron-right" size={13} />
+                </button>
+              ) : undefined
+            }
+          />
+        </section>
+      );
+    }
     return (
       <section className="card-surface" aria-label={t("即将公布")}>
         <EmptyState
@@ -231,6 +272,7 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
               rowIndex += 1;
               const i = rowIndex;
               const selected = selectedTicker === row.ticker;
+              const rowRef = selected ? selectedRowRef : undefined;
               const est = row.epsEstimate;
               const act = row.epsActual;
               const sector = exStr(row, 'sector');
@@ -238,7 +280,7 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
               const marketCap = exNum(row, 'marketCap');
               const move = exNum(row, 'expectedMovePct');
               return (
-                <div key={row.ticker}>
+                <div key={row.ticker} ref={rowRef}>
                   {/* 桌面行 */}
                   <motion.div
                     role="button"

@@ -273,6 +273,9 @@ def _payload(resource: str, now: float, *, price: float = 100.0) -> dict:
                     "revenue_estimate": 1_000_000.0,
                     "revenue_actual": None,
                     "market_cap": 2_000_000.0,
+                    "market_cap_source": "yahoo_info",
+                    "market_cap_as_of": _iso(now),
+                    "market_cap_status": "active",
                     "sector": "Technology",
                     "earnings_date_source": "calendar",
                     "estimate_source": "calendar",
@@ -282,13 +285,20 @@ def _payload(resource: str, now: float, *, price: float = 100.0) -> dict:
                     "year": None,
                     "source_status": "active",
                     "observed_at": _iso(now),
+                    "public_featured": True,
+                    "featured_reasons": ["earnings_pool"],
+                    "calendar_sources": ["yahoo"],
+                    "calendar_date_status": "single_source",
+                    "calendar_conflict": None,
                     "expected_move_pct": 7.5,
                     "expected_move_expiration": (
                         market_date + timedelta(days=7)
                     ).isoformat(),
                     "expected_move_source": "Yahoo/yfinance options",
                     "expected_move_observed_at": _iso(now),
-                    "expected_move_source_status": "active",
+                    "expected_move_underlying_price": 100.0,
+                    "expected_move_method": "atm_straddle_mid",
+                    "expected_move_status": "active",
                 }
             ],
             "attempted": 1,
@@ -553,11 +563,14 @@ def test_earnings_snapshot_accepts_finnhub_actuals_and_real_expected_move() -> N
             "release_status": "released",
             "quarter": 2,
             "year": 2026,
+            "calendar_sources": ["finnhub_calendar"],
             "expected_move_pct": None,
             "expected_move_expiration": None,
             "expected_move_source": None,
             "expected_move_observed_at": None,
-            "expected_move_source_status": None,
+            "expected_move_underlying_price": None,
+            "expected_move_method": None,
+            "expected_move_status": None,
         }
     )
     payload["providers"] = ["Finnhub"]

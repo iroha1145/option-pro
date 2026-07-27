@@ -45,6 +45,15 @@ earnings_seconds = 21600
 unusual_seconds = 1800
 failure_retry_seconds = 300
 
+[earnings]
+# 财报页「重点公司」：市值 ≥ 门槛，或属于公共关注池，或属于账号自选。
+# market_cap 缺失表示 unknown，不参与门槛判断。
+featured_market_cap_usd = 20000000000.0
+# 单次刷新最多为多少家重点公司计算预期波动（期权链逐家计价）；0 = 关闭。
+expected_move_enrich_limit = 120
+# 批量市值的持久缓存天数（市值为慢变量，由 Worker 低频刷新）。
+market_cap_cache_days = 3
+
 [macro]
 enabled = true
 history_years = 8

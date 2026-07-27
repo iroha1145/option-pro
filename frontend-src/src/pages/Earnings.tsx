@@ -9,6 +9,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { earningsApi } from '@/api/modules/earnings';
 import type { EarningsReportAnalysis } from '@/api/modules/earnings';
+import { accountApi } from '@/api/modules/account';
 import { ApiError } from '@/api/client';
 import { useAccess } from '@/hooks/useAccess';
 import { useNow } from '@/hooks/useNow';
@@ -29,12 +30,15 @@ import ImpactCard from '@/components/earnings/ImpactCard';
 import EarningsAnalysisControls from '@/components/earnings/EarningsAnalysisControls';
 import DensityStrip from '@/components/earnings/DensityStrip';
 import PulseDot from '@/components/earnings/PulseDot';
-import type { EarningsRow } from '@/components/earnings/types';
+import type { EarningsListMode, EarningsRow } from '@/components/earnings/types';
 import {
-  daysUntil,
+  computeEarningsListState,
   etToday,
   fmtMDCN,
-  prioritizeEarningsRows,
+  isFeaturedRow,
+  pickDefaultEarningsRow,
+  planTickerSelection,
+  resolveFeaturedSelection,
   weekStartMonday,
 } from '@/components/earnings/types';
 import { t } from '../i18n/core.ts';
@@ -48,12 +52,23 @@ function reportAnalysisKey(ticker: string, reportDate: string): string {
 }
 
 export default function Earnings() {
-  const { isOwner, aiEnabled, aiAvailable, aiReason } = useAccess();
+  const { isOwner, aiEnabled, aiAvailable, aiReason, canManageWatchlist } = useAccess();
   const toast = useToast();
   const now = useNow(1000);
 
   /* 数据（契约 TTL：earnings 1800s） */
   const q = usePolling(() => earningsApi.upcoming(), 1_800_000);
+  /* 账号自选进入重点公司（账号上下文，只在本端合并，不进公共快照）。
+     访客/未登录 resolve(null)：不发任何请求。 */
+  const watchlistQ = usePolling(
+    () => (canManageWatchlist ? accountApi.watchlist() : Promise.resolve(null)),
+    null,
+    [canManageWatchlist],
+  );
+  const personalTickers = useMemo(
+    () => new Set((watchlistQ.data?.tickers ?? []).map((v) => v.toUpperCase())),
+    [watchlistQ.data],
+  );
   const [reportAnalysisStates, setReportAnalysisStates] = useState<Record<string, EarningsReportAnalysis>>({});
   const items = useMemo(
     () => ((q.data?.items ?? []) as unknown as EarningsRow[]).map((row) => {
@@ -85,6 +100,9 @@ export default function Earnings() {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [flashSignal, setFlashSignal] = useState(0);
+  /* 列表模式：重点公司（默认）/ 全部公司。只过滤「即将公布」列表；
+     周历/月历/密度条/统计恒用完整 allItems。 */
+  const [listMode, setListMode] = useState<EarningsListMode>('featured');
 
   /* owner 刷新：60s 冷却 + refreshed/cooldown/failed_stale 三态 */
   const [refreshStatus, setRefreshStatus] = useState<RefreshStatus>(null);
@@ -92,13 +110,15 @@ export default function Earnings() {
   const [refreshing, setRefreshing] = useState(false);
   const cooldownRemain = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
 
-  /* 默认选中第一条「即将公布」（渲染期 adjust-state，避免 effect 级联；fixture 现含上月历史，跳过过去日期） */
+  /* 默认选中第一条「即将公布」（渲染期 adjust-state，避免 effect 级联；fixture 现含上月历史，跳过过去日期）。
+     重点模式下默认候选来自重点列表——刚打开页面不该选中一只看不见的票。 */
   const [autoPicked, setAutoPicked] = useState(false);
-  const pickDefault = () =>
-    items.find((it) => daysUntil(it.date) === 0 && typeof it.epsActual === 'number')
-    ?? items.find((it) => daysUntil(it.date) === 0)
-    ?? items.find((it) => daysUntil(it.date) > 0)
-    ?? items[0];
+  const defaultCandidates = useMemo(() => {
+    if (listMode !== 'featured') return items;
+    const featured = items.filter((it) => isFeaturedRow(it, personalTickers));
+    return featured.length > 0 ? featured : items;
+  }, [items, listMode, personalTickers]);
+  const pickDefault = () => pickDefaultEarningsRow(defaultCandidates) ?? items[0];
   if (!autoPicked && !selectedTicker && items.length > 0) {
     setAutoPicked(true);
     setSelectedTicker(pickDefault().ticker);
@@ -173,13 +193,51 @@ export default function Earnings() {
     }
   }, [refreshing, cooldownRemain, q, toast]);
 
-  /* 联动选择 */
+  /* 联动选择。从月历/周历/任意入口点到非重点公司时：自动切「全部公司」、
+     保留并选中日期与代码、重置渐进额度（listScope 变化自动归位），选中行
+     由 computeEarningsListState 强制挂载可见。 */
   const onSelectDay = useCallback((date: string | null) => setSelectedDay(date), []);
-  const onSelectTickerFromChip = useCallback((ticker: string, date: string) => {
-    setSelectedDay(date);
-    setSelectedTicker(ticker);
-  }, []);
-  const onSelectTickerFromRow = useCallback((ticker: string) => setSelectedTicker(ticker), []);
+  const selectTicker = useCallback(
+    (ticker: string) => {
+      const plan = planTickerSelection({
+        items,
+        mode: listMode,
+        personalTickers,
+        ticker,
+      });
+      if (plan.switched) setListMode(plan.mode);
+      setSelectedTicker(ticker);
+    },
+    [items, listMode, personalTickers],
+  );
+  const onSelectTickerFromChip = useCallback(
+    (ticker: string, date: string) => {
+      setSelectedDay(date);
+      selectTicker(ticker);
+    },
+    [selectTicker],
+  );
+  const onSelectTickerFromRow = useCallback(
+    (ticker: string) => selectTicker(ticker),
+    [selectTicker],
+  );
+  const onListModeChange = useCallback(
+    (mode: EarningsListMode) => {
+      setListMode(mode);
+      if (mode === 'featured') {
+        /* 切回重点时不留下孤儿选中：非重点的选中换成重点默认候选 */
+        setSelectedTicker((current) =>
+          resolveFeaturedSelection({
+            items,
+            selectedDay,
+            personalTickers,
+            selectedTicker: current,
+          }),
+        );
+      }
+    },
+    [items, selectedDay, personalTickers],
+  );
   const onReportAnalysis = useCallback((ticker: string, analysis: EarningsReportAnalysis) => {
     if (!analysis.reportDate) return;
     const key = reportAnalysisKey(ticker, analysis.reportDate);
@@ -199,29 +257,31 @@ export default function Earnings() {
   );
 
   /* 默认列表只挂载最近三天至未来 30 天，并按 24 条收纳。
-     点选单日后也保持同一上限，避免财报密集日一次生成数百行 DOM。 */
-  const filteredItems = useMemo(
-    () => (
-      selectedDay
-        ? items.filter((it) => it.date === selectedDay)
-        : items.filter((it) => {
-            const distance = daysUntil(it.date);
-            return distance >= -3 && distance <= 30;
-          })
-    ),
-    [items, selectedDay],
-  );
-  const listScope = selectedDay ?? 'rolling-window';
+     点选单日后也保持同一上限，避免财报密集日一次生成数百行 DOM。
+     切换列表模式同样重置渐进额度（listScope 含 mode）。 */
+  const listScope = `${listMode}|${selectedDay ?? 'rolling-window'}`;
   const [visibleLimit, setVisibleLimit] = useState(LIST_PAGE_SIZE);
   const [previousListScope, setPreviousListScope] = useState(listScope);
   if (listScope !== previousListScope) {
     setPreviousListScope(listScope);
     setVisibleLimit(LIST_PAGE_SIZE);
   }
-  const visibleItems = useMemo(
-    () => prioritizeEarningsRows(filteredItems, visibleLimit),
-    [filteredItems, visibleLimit],
+  const listState = useMemo(
+    () =>
+      computeEarningsListState({
+        items,
+        selectedDay,
+        mode: listMode,
+        personalTickers,
+        visibleLimit,
+        selectedTicker,
+      }),
+    [items, selectedDay, listMode, personalTickers, visibleLimit, selectedTicker],
   );
+  const filteredItems = listState.listItems;
+  const visibleItems = listState.visibleItems;
+  /* selectedRow 恒从完整 allItems 解析：右侧影响卡必须拿到完整 EarningsRow，
+     与列表筛选模式无关。 */
   const selectedRow = useMemo(
     () => items.find((item) => item.ticker === selectedTicker) ?? null,
     [items, selectedTicker],
@@ -478,27 +538,46 @@ export default function Earnings() {
             </section>
           ) : (
             <>
-              {/* 日筛选提示 */}
-              {selectedDay && (
-                <div className="flex items-center justify-between">
-                  <p className="text-caption text-ink-500">
-                    {t('已筛选')} <span className="font-mono text-brand-600">{fmtMDCN(selectedDay)}</span> {t('当日财报')}
-                  </p>
-                  <button
-                    onClick={() => setSelectedDay(null)}
-                    className="flex items-center gap-1 rounded-sm border border-line bg-card px-2 py-1 text-caption text-ink-500 transition-colors hover:text-ink-800"
-                  >
-                    <Icon name="x" size={12} />
-                    {t('清除筛选')}
-                  </button>
-                </div>
-              )}
+              {/* 列表工具区：重点/全部模式（计数随当前日期范围）+ 日筛选提示。
+                  模式只过滤下方列表；周历/月历/密度条/统计恒用完整数据。 */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Segmented
+                  options={[
+                    {
+                      value: 'featured' as const,
+                      label: `${t('重点公司')} ${listState.featuredCount}`,
+                    },
+                    {
+                      value: 'all' as const,
+                      label: `${t('全部公司')} ${listState.allCount}`,
+                    },
+                  ]}
+                  value={listMode}
+                  onChange={onListModeChange}
+                />
+                {selectedDay && (
+                  <div className="flex items-center gap-2">
+                    <p className="text-caption text-ink-500">
+                      {t('已筛选')} <span className="font-mono text-brand-600">{fmtMDCN(selectedDay)}</span> {t('当日财报')}
+                    </p>
+                    <button
+                      onClick={() => setSelectedDay(null)}
+                      className="flex items-center gap-1 rounded-sm border border-line bg-card px-2 py-1 text-caption text-ink-500 transition-colors hover:text-ink-800"
+                    >
+                      <Icon name="x" size={12} />
+                      {t('清除筛选')}
+                    </button>
+                  </div>
+                )}
+              </div>
               <EarningsList
                 items={visibleItems}
                 selectedTicker={selectedTicker}
                 onSelectTicker={onSelectTickerFromRow}
                 onNextWeek={() => onWeekChange(1)}
                 filteredByDay={selectedDay != null}
+                featuredFilteredEmpty={listMode === 'featured' && listState.allCount > 0}
+                onShowAll={() => onListModeChange('all')}
               />
               {visibleItems.length < filteredItems.length && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-card px-4 py-3">

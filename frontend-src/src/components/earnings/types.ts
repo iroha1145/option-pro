@@ -14,6 +14,137 @@ export interface EarningsRow extends EarningsItem {
   sector?: string;
   expectedMovePct?: number | null;
   impactReady?: boolean;
+  /** 后端公共重点标注（市值门槛 / 公共关注池）；账号自选在前端合并 */
+  publicFeatured?: boolean;
+}
+
+/** 列表模式：重点公司（默认）/ 全部公司 */
+export type EarningsListMode = 'featured' | 'all';
+
+/**
+ * 重点公司 = 后端公共标注（市值 ≥ 门槛 或 公共关注池）∪ 当前账号自选。
+ * market_cap 缺失表示 unknown，绝不当小公司证据——unknown 行不因此进入
+ * 也不因此被排除，一切以显式标注与账号自选为准。
+ */
+export function isFeaturedRow(
+  row: EarningsRow,
+  personalTickers: ReadonlySet<string>,
+): boolean {
+  if (exBool(row, 'publicFeatured') === true) return true;
+  return personalTickers.has(row.ticker.toUpperCase());
+}
+
+/** 默认选中策略（原 Earnings.tsx pickDefault，抽出以便按模式复用与测试） */
+export function pickDefaultEarningsRow(rows: EarningsRow[]): EarningsRow | null {
+  return (
+    rows.find((it) => daysUntil(it.date) === 0 && typeof it.epsActual === 'number')
+    ?? rows.find((it) => daysUntil(it.date) === 0)
+    ?? rows.find((it) => daysUntil(it.date) > 0)
+    ?? rows[0]
+    ?? null
+  );
+}
+
+export interface EarningsListState {
+  /** 周历/月历/密度条/全部统计恒用完整 allItems——模式只过滤列表 */
+  calendarItems: EarningsRow[];
+  /** 当前日期范围（选中日 或 -3..+30 滚动窗口）内的全部行 */
+  baseItems: EarningsRow[];
+  featuredCount: number;
+  allCount: number;
+  /** 模式过滤后的列表行 */
+  listItems: EarningsRow[];
+  /** 渐进挂载切片；选中行若在 listItems 内则强制挂载可见 */
+  visibleItems: EarningsRow[];
+}
+
+/**
+ * 财报列表的派生状态（纯函数：页面与行为测试共用同一实现）。
+ * - 两种模式共享同一 baseItems；计数按当前日期范围计算，与列表范围一致；
+ * - selectedTicker 属于 listItems 但被渐进额度挤出时，强制并入 visibleItems
+ *  （保持原始顺序），保证「点击后行已挂载并可见」。
+ */
+export function computeEarningsListState(input: {
+  items: EarningsRow[];
+  selectedDay: string | null;
+  mode: EarningsListMode;
+  personalTickers: ReadonlySet<string>;
+  visibleLimit: number;
+  selectedTicker: string | null;
+}): EarningsListState {
+  const { items, selectedDay, mode, personalTickers, visibleLimit, selectedTicker } = input;
+  const baseItems = selectedDay
+    ? items.filter((it) => it.date === selectedDay)
+    : items.filter((it) => {
+        const distance = daysUntil(it.date);
+        return distance >= -3 && distance <= 30;
+      });
+  const featuredItems = baseItems.filter((it) => isFeaturedRow(it, personalTickers));
+  const listItems = mode === 'featured' ? featuredItems : baseItems;
+  let visibleItems = prioritizeEarningsRows(listItems, visibleLimit);
+  if (
+    selectedTicker
+    && listItems.some((it) => it.ticker === selectedTicker)
+    && !visibleItems.some((it) => it.ticker === selectedTicker)
+  ) {
+    const visibleSet = new Set(visibleItems);
+    visibleItems = listItems.filter(
+      (it) => visibleSet.has(it) || it.ticker === selectedTicker,
+    );
+  }
+  return {
+    calendarItems: items,
+    baseItems,
+    featuredCount: featuredItems.length,
+    allCount: baseItems.length,
+    listItems,
+    visibleItems,
+  };
+}
+
+/**
+ * 点击某只股票时的模式流转：重点模式下点到非重点公司 → 自动切「全部公司」，
+ * 不认识的代码（不在 allItems 里）保持现状，交由调用方照常选中。
+ */
+export function planTickerSelection(input: {
+  items: EarningsRow[];
+  mode: EarningsListMode;
+  personalTickers: ReadonlySet<string>;
+  ticker: string;
+}): { mode: EarningsListMode; switched: boolean } {
+  const { items, mode, personalTickers, ticker } = input;
+  if (mode === 'all') return { mode, switched: false };
+  const row = items.find((it) => it.ticker === ticker);
+  if (row && !isFeaturedRow(row, personalTickers)) {
+    return { mode: 'all', switched: true };
+  }
+  return { mode, switched: false };
+}
+
+/**
+ * 切回「重点公司」时的孤儿处理：当前选中不是重点公司 → 换成重点列表的
+ * 默认候选（选中日优先，其次滚动窗口），没有候选则清空选择。
+ * 绝不留下「selectedTicker 存在但列表行不存在」的状态。
+ */
+export function resolveFeaturedSelection(input: {
+  items: EarningsRow[];
+  selectedDay: string | null;
+  personalTickers: ReadonlySet<string>;
+  selectedTicker: string | null;
+}): string | null {
+  const { items, selectedDay, personalTickers, selectedTicker } = input;
+  if (selectedTicker === null) return null;
+  const current = items.find((it) => it.ticker === selectedTicker);
+  if (current && isFeaturedRow(current, personalTickers)) return selectedTicker;
+  const { listItems } = computeEarningsListState({
+    items,
+    selectedDay,
+    mode: 'featured',
+    personalTickers,
+    visibleLimit: Number.MAX_SAFE_INTEGER,
+    selectedTicker: null,
+  });
+  return pickDefaultEarningsRow(listItems)?.ticker ?? null;
 }
 
 /** AI 影响结果（扩展：生成时间 / 历史均值 / 置信度） */
@@ -45,7 +176,7 @@ export function exStr(
 }
 export function exBool(
   row: EarningsRow,
-  camel: 'impactReady' | 'locked' | 'final' | 'finalizationInProgress',
+  camel: 'impactReady' | 'locked' | 'final' | 'finalizationInProgress' | 'publicFeatured',
 ): boolean | null {
   const record = row as unknown as Record<string, unknown>;
   const snake = camel.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
@@ -125,9 +256,16 @@ const etFmt = new Intl.DateTimeFormat('en-CA', {
   day: '2-digit',
 });
 
-/** 今日（ET）YYYY-MM-DD */
+/** 今日（ET）YYYY-MM-DD。
+ * 按秒记忆化：daysUntil 在筛选/排序里逐行调用，Intl.format 每次 ~0.03ms，
+ * 4000 行的派生状态会烧掉数百毫秒——同一秒内答案不会变。 */
+let etTodayCache: { at: number; value: string } | null = null;
 export function etToday(): string {
-  return etFmt.format(new Date());
+  const at = Date.now();
+  if (etTodayCache && at - etTodayCache.at < 1000) return etTodayCache.value;
+  const value = etFmt.format(new Date(at));
+  etTodayCache = { at, value };
+  return value;
 }
 
 /** date('YYYY-MM-DD') → 距 ET 今日的天数（0=今天） */

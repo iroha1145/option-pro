@@ -154,6 +154,26 @@ class PublicHomeConfig(StrictConfigModel):
     failure_retry_seconds: int = Field(default=300, ge=60, le=3600)
 
 
+class EarningsConfig(StrictConfigModel):
+    """财报页「重点公司」与增强预算的部署期配置。
+
+    - featured_market_cap_usd：重点公司的市值门槛（美元）。market_cap 缺失表示
+      unknown，不参与门槛判断（unknown ≠ small）；公共关注池与账号自选不受
+      门槛影响。
+    - expected_move_enrich_limit：单次刷新最多为多少家重点公司计算预期波动
+      （期权链请求逐家计价，必须有硬上限）。0 表示关闭预期波动增强。
+    - market_cap_cache_days：批量市值的持久缓存天数（市值是慢变量，低频刷新）。
+    """
+
+    featured_market_cap_usd: float = Field(
+        default=20_000_000_000.0,
+        ge=100_000_000.0,
+        le=10_000_000_000_000.0,
+    )
+    expected_move_enrich_limit: int = Field(default=120, ge=0, le=500)
+    market_cap_cache_days: int = Field(default=3, ge=1, le=30)
+
+
 class MacroConfig(StrictConfigModel):
     """Operator-tunable macro settings only.
 
@@ -239,6 +259,7 @@ class PersonalConfig(StrictConfigModel):
     catalyst: CatalystConfig = Field(default_factory=CatalystConfig)
     breakout: BreakoutConfig = Field(default_factory=BreakoutConfig)
     public_home: PublicHomeConfig = Field(default_factory=PublicHomeConfig)
+    earnings: EarningsConfig = Field(default_factory=EarningsConfig)
     macro: MacroConfig = Field(default_factory=MacroConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
 

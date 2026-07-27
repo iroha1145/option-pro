@@ -372,9 +372,16 @@ test('财报页面保留近期已公布结果并默认收纳长列表', () => {
   const page = fs.readFileSync(pageSourcePath, 'utf8');
   const list = fs.readFileSync(listSourcePath, 'utf8');
 
-  assert.equal(page.includes('distance >= -3 && distance <= 30'), true);
+  // 滚动窗口与渐进裁切迁入 components/earnings/types.ts 的
+  // computeEarningsListState（重点/全部双模式与页面共用同一实现）。
+  const typesSource = fs.readFileSync(
+    path.join(path.dirname(listSourcePath), 'types.ts'),
+    'utf8',
+  );
+  assert.equal(typesSource.includes('distance >= -3 && distance <= 30'), true);
+  assert.equal(typesSource.includes('prioritizeEarningsRows(listItems, visibleLimit)'), true);
   assert.equal(page.includes('const LIST_PAGE_SIZE = 24'), true);
-  assert.equal(page.includes('prioritizeEarningsRows(filteredItems, visibleLimit)'), true);
+  assert.equal(page.includes('computeEarningsListState({'), true);
   assert.equal(page.includes('visibleItems.length < filteredItems.length'), true);
   assert.equal(page.includes("{t('显示更多 ·')} {Math.min(LIST_PAGE_SIZE"), true);
   assert.equal(page.includes("{t('收起至前')} {LIST_PAGE_SIZE} {t('条')}"), true);

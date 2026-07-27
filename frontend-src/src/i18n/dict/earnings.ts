@@ -205,4 +205,10 @@ export const EARNINGS: Dict = {
   '收起至前': ["Collapse to first", "折りたたみ: 先頭"],
   '近一个月暂无财报': ['No earnings in the next month', '今後1か月間に決算はありません'],
   '未来 30 天没有已安排的财报，稍后再来看看。': ['No earnings are scheduled in the next 30 days — check back later.', '今後30日間に予定されている決算はありません。後でもう一度ご確認ください。'],
+  '重点公司': ['Featured', '注目企業'],
+  '全部公司': ['All companies', '全企業'],
+  '当日没有重点公司财报': ['No featured-company earnings that day', 'その日に注目企業の決算はありません'],
+  '当前范围内没有重点公司财报': ['No featured-company earnings in this range', 'この範囲に注目企業の決算はありません'],
+  '财报仍在——切到「全部公司」查看全市场日历。': ['The earnings are still there — switch to "All companies" for the full-market calendar.', '決算自体はあります。「全企業」に切り替えると全市場のカレンダーを確認できます。'],
+  '查看全部公司': ['View all companies', '全企業を見る'],
 };

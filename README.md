@@ -56,17 +56,22 @@ chmod 600 .env machine.env secrets.env
 - `TRUSTED_PROXY_CIDRS`
 - `DATA_DIR`
 
-`secrets.env` 只保存七项服务端密钥：
+`secrets.env` 只保存八项服务端密钥：
 
 - `OPENAI_API_KEY`
 - `FINNHUB_API_KEY`
 - `MARKETDATA_TOKEN`
 - `MASSIVE_API_KEY`
+- `FMP_API_KEY`
 - `FRED_API_KEY`
 - `INTERNAL_API_TOKEN`
 - `APP_PASSWORD_HASH`
 
-进程已经导出的值优先级最高；`.env` 只保留一个版本迁移期的兼容用途，`machine.env` 只接收七个机器字段，`secrets.env` 只接收七个密钥。错放到其他文件的字段不会覆盖正式来源。
+进程已经导出的值优先级最高；`.env` 只保留一个版本迁移期的兼容用途，`machine.env` 只接收七个机器字段，`secrets.env` 只接收八个密钥。错放到其他文件的字段不会覆盖正式来源。
+
+`FMP_API_KEY`（Financial Modeling Prep）是可选的第二财报日历来源与批量市值来源：
+未配置时财报页完全走 Finnhub 主源，不影响启动与刷新；配置后双日历交叉验证
+（日期冲突显式标注，不静默合并），市值批量补全并持久缓存，由 Worker 低频刷新。
 
 旧名称 `MARKETDATA_API_TOKEN`、`MACROLENS_BASE_URL` 和 `MACROLENS_INTERNAL_TOKEN` 只供迁移工具识别。旧名与新名同时存在且值不一致时，迁移会停止，不会猜测采用哪一项。旧签名密钥、请求随机数（Nonce）、密钥编号（Key ID）、前一把密钥和浏览器令牌不会进入最终运行配置。
 
@@ -148,6 +153,7 @@ mode = "private_network"
 ./personal.sh secrets set FINNHUB_API_KEY
 ./personal.sh secrets set MARKETDATA_TOKEN
 ./personal.sh secrets set MASSIVE_API_KEY
+./personal.sh secrets set FMP_API_KEY
 ./personal.sh secrets set FRED_API_KEY
 ./personal.sh secrets set INTERNAL_API_TOKEN
 ./personal.sh secrets set APP_PASSWORD_HASH
