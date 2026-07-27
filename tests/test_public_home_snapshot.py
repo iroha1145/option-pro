@@ -570,7 +570,8 @@ def test_earnings_snapshot_accepts_finnhub_actuals_and_real_expected_move() -> N
             "expected_move_observed_at": None,
             "expected_move_underlying_price": None,
             "expected_move_method": None,
-            "expected_move_status": None,
+            # 已发布的行不做预期波动增强，但状态必须落着，不允许 None
+            "expected_move_status": "not_enriched",
         }
     )
     payload["providers"] = ["Finnhub"]
@@ -579,6 +580,22 @@ def test_earnings_snapshot_accepts_finnhub_actuals_and_real_expected_move() -> N
 
     assert validated["earnings"][0]["eps_actual"] == 0.42
     assert validated["providers"] == ["Finnhub"]
+
+
+def test_missing_expected_move_status_rejected(tmp_path: Path) -> None:
+    """构建端丢状态（None）不能进公开快照：released/未增强也必须写 not_enriched。"""
+    now = _regular_time()
+    payload = _payload("earnings", now)
+    payload["earnings"][0]["expected_move_pct"] = None
+    payload["earnings"][0]["expected_move_expiration"] = None
+    payload["earnings"][0]["expected_move_source"] = None
+    payload["earnings"][0]["expected_move_observed_at"] = None
+    payload["earnings"][0]["expected_move_underlying_price"] = None
+    payload["earnings"][0]["expected_move_method"] = None
+    payload["earnings"][0]["expected_move_status"] = None
+
+    with pytest.raises(ValueError):
+        validate_public_home_payload("earnings", payload)
 
 
 def test_five_thousand_earnings_rows_fit_public_snapshot_limit(

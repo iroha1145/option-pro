@@ -168,6 +168,27 @@ def test_unknown_market_cap_is_not_treated_as_small(isolated_build) -> None:
     assert payload["succeeded"] == 1
 
 
+def test_released_row_keeps_not_enriched_status(isolated_build) -> None:
+    """已发布的行不做增强，但状态必须落 not_enriched——None 过不了公开快照校验。"""
+    released = {
+        **_calendar_row("DONE", days=-2),
+        "eps_actual": 1.31,
+        "timing": None,
+    }
+    payload = isolated_build(
+        finnhub_rows=[released],
+        profiles={"DONE": {"market_cap": 30_000_000_000.0, "name": "Done Co"}},
+    )
+    row = payload["earnings"][0]
+    assert row["release_status"] == "released"
+    # 即便是重点公司（若未发布本应进入增强名单），released 也要显式落状态
+    assert row["public_featured"] is True
+    assert row["expected_move_pct"] is None
+    assert row["expected_move_status"] == "not_enriched"
+    # 端到端：构建产物直接通过收紧后的公开快照校验（不再容忍 None 状态）
+    validate_public_home_payload("earnings", payload)
+
+
 def test_pool_member_below_threshold_stays_featured(
     isolated_build,
     monkeypatch: pytest.MonkeyPatch,

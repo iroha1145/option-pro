@@ -977,15 +977,14 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
                 move is None
                 and (
                     any(value is not None for value in move_metadata)
+                    # 每行必有状态：released/未增强/失败分别为 not_enriched 或
+                    # unavailable:*；None 意味着构建端丢了状态，拒绝发布。
                     or not (
-                        row.get("expected_move_status") is None
-                        or (
-                            isinstance(row.get("expected_move_status"), str)
-                            and _EARNINGS_EXPECTED_MOVE_STATUS_PATTERN.fullmatch(
-                                row["expected_move_status"]
-                            )
-                            is not None
+                        isinstance(row.get("expected_move_status"), str)
+                        and _EARNINGS_EXPECTED_MOVE_STATUS_PATTERN.fullmatch(
+                            row["expected_move_status"]
                         )
+                        is not None
                     )
                 )
             )
