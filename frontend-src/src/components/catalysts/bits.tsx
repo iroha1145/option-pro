@@ -68,17 +68,31 @@ export function AnalysisStatusChip({ status, className }: { status: NewsAnalysis
   );
 }
 
-/* ---------------- 置信度「N% · 非胜率」 ---------------- */
-export function ConfidenceLabel({ value, className }: { value: number; className?: string }) {
+/* ---------------- 置信度「N%」 ---------------- */
+export function ConfidenceLabel({
+  value,
+  className,
+  bare = false,
+}: {
+  value: number;
+  className?: string;
+  /**
+   * 只给数字，不带自己的 ⓘ。
+   *
+   * 给同一行里已经有一个合并说明的调用方用（新闻流的逐条评估）。「置信不是胜率」
+   * 这句声明不能丢，所以调用方必须自己给出，见 SCORE_HINTS.newsAssessment。
+   */
+  bare?: boolean;
+}) {
   return (
     <span className={cn('font-mono text-micro text-ink-500 tnum', className)}>
-      {(value * 100).toFixed(0)}% <span className="text-ink-400">{t('· 非胜率')}</span>
-      <InfoHint hint={SCORE_HINTS.newsConfidence} size={11} className="ml-1" />
+      {(value * 100).toFixed(0)}%
+      {!bare && <InfoHint hint={SCORE_HINTS.newsConfidence} size={11} className="ml-1" />}
     </span>
   );
 }
 
-/* ---------------- 影响分「N · 非收益」 ---------------- */
+/* ---------------- 影响分「N」 ---------------- */
 export function ImpactValue({
   value,
   className,
@@ -89,12 +103,11 @@ export function ImpactValue({
   className?: string;
   dash?: string;
   /**
-   * 只给数字，不带「· 非收益」后缀，也不带自己的 ⓘ。
+   * 只给数字，不带自己的 ⓘ。
    *
-   * 给同一行里已经有一个合并说明的调用方用（焦点周期的逐股评估）。同一行挂两个
-   * ⓘ、外加两句常驻免责声明，读者要读四样东西才看到两个数 —— 那时候后缀不是在
-   * 提醒什么，只是噪声。说明本身不能丢，所以调用方必须自己给出，见
-   * SCORE_HINTS.focusCycleAssessment。
+   * 给同一行里已经有一个合并说明的调用方用（焦点周期的逐股评估、新闻流的逐条
+   * 评估）。同一行挂两个 ⓘ，读者要读四样东西才看到两个数。说明本身不能丢，
+   * 所以调用方必须自己给出，见 SCORE_HINTS.focusCycleAssessment / newsAssessment。
    */
   bare?: boolean;
 }) {
@@ -104,18 +117,11 @@ export function ImpactValue({
   const sign = value > 0 ? '+' : value < 0 ? '−' : '';
   const tone = value > 0.05 ? 'text-up-700' : value < -0.05 ? 'text-down-700' : 'text-ink-500';
   return (
-    /* shrink-0 + nowrap：这是一个紧凑读数，「−4.00 · 非收益 ⓘ」被折成「非收 / 益」
-       就不再是一个可读的单位。三处调用方都把它放在一行里，都受益。 */
+    /* shrink-0 + nowrap：这是一个紧凑读数，「−4.00 ⓘ」不该被折行拆开。 */
     <span className={cn('shrink-0 whitespace-nowrap font-mono text-micro tnum', tone, className)}>
       {sign}
       {Math.abs(value).toFixed(2)}
-      {!bare && (
-        <>
-          {' '}
-          <span className="text-ink-400">{t('· 非收益')}</span>
-          <InfoHint hint={SCORE_HINTS.newsImpact} size={11} className="ml-1" />
-        </>
-      )}
+      {!bare && <InfoHint hint={SCORE_HINTS.newsImpact} size={11} className="ml-1" />}
     </span>
   );
 }

@@ -6,8 +6,10 @@ import { useShell } from '@/components/Layout';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
+import InfoHint from '@/components/shared/InfoHint';
 import { cn } from '@/lib/utils';
 import { fmtRelative } from '@/lib/format';
+import { SCORE_HINTS } from '@/lib/scoreHints';
 import { catalystsContract } from './api';
 import type { CatalystNewsItem } from './api';
 import type { CatalystFilters } from './filters';
@@ -94,8 +96,15 @@ export function NewsRow({
           {a && (
             <>
               <ClassificationChip classification={a.classification} />
-              <ConfidenceLabel value={a.confidence} />
-              {bestImpact && <ImpactValue value={bestImpact.impactScore} />}
+              {/* 置信与影响共用一条说明（SCORE_HINTS.newsAssessment）。原先两个读数
+                  后面各挂一句常驻免责声明（「· 非胜率」「· 非收益」）、又各带一个 ⓘ，
+                  每条新闻重复一遍、又解释不了自己。声明留着，收进这一个 ⓘ。
+                  三者同处一个 flex 单元：换行时一起走，ⓘ 不会被甩到下一行。 */}
+              <span className="flex shrink-0 items-center gap-x-2 whitespace-nowrap">
+                <ConfidenceLabel value={a.confidence} bare />
+                {bestImpact && <ImpactValue value={bestImpact.impactScore} bare />}
+                <InfoHint hint={SCORE_HINTS.newsAssessment} size={11} />
+              </span>
             </>
           )}
         </div>

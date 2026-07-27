@@ -587,4 +587,19 @@ export const HINTS: Dict = {
     'Both are model judgments, not price/volume computations: the bias is not a return forecast, and the confidence is not a win rate.',
     'どちらもモデルの判断であり、価格・出来高からの計算値ではありません：バイアスはリターン予測ではなく、信頼度は勝率ではありません。',
   ],
+
+  /* ── 新闻流逐条评估（置信 + 影响合并说明，「· 非胜率」「· 非收益」后缀收进 ⓘ） ── */
+  '置信与影响（AI 判断）': ['Confidence & impact (AI judgment)', '信頼度とインパクト（AI 判断）'],
+  '置信是模型对自己这次判断的把握程度（0–100），置信低通常意味着新闻信息量不足或含糊，应降低参考权重。影响分是模型对相关个股的方向 × 强度估计，界面按 ±5 显示：正=利多、负=利空，绝对值代表预期影响幅度。': [
+    "Confidence is how sure the model is about this particular judgment (0–100); low confidence usually means the news was thin or ambiguous, so give it less weight. The impact score is the model's direction × strength estimate for the affected stock, shown on a ±5 scale: positive = bullish, negative = bearish, and the magnitude reflects the expected impact.",
+    '信頼度はモデルが今回の判断にどれだけ確信を持っているか（0–100）で、低い場合はニュースの情報量が乏しい・曖昧であることが多く、参考度を下げるべきです。インパクトスコアは関連銘柄に対するモデルの方向×強度の推定で、±5 スケールで表示します：プラス=強気、マイナス=弱気、絶対値は想定インパクトの大きさです。',
+  ],
+  '两者都是模型判断，不是量价计算：置信不是胜率，影响分不是收益预测。': [
+    'Both are model judgments, not price/volume computations: the confidence is not a win rate, and the impact score is not a return forecast.',
+    'どちらもモデルの判断であり、価格・出来高からの計算値ではありません：信頼度は勝率ではなく、インパクトスコアはリターン予測ではありません。',
+  ],
+  '它是模型对自己判断的把握，不是胜率。': [
+    "It is how sure the model is about its own judgment, not a win rate.",
+    'モデルが自らの判断にどれだけ確信を持っているかであり、勝率ではありません。',
+  ],
 };
