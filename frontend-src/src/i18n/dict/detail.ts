@@ -183,5 +183,6 @@ export const DETAIL: Dict = {
   '测量已失效（数据已更新）': ['Measurement invalidated (data refreshed)', '計測は無効になりました（データ更新）'],
   '{n} 周': ['{n} wk||{n} wks', '{n} 週'],
   '{n} 个交易日': ['{n} trading day||{n} trading days', '{n} 営業日'],
+  '{pct}（{abs}）': ['{pct} ({abs})', '{pct}（{abs}）'],
   '{n} 根 · 跨 {d} 个交易日': ['{n} bar across {d} trading days||{n} bars across {d} trading days', '{n} 本 · {d} 営業日にわたる'],
 };

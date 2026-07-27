@@ -621,7 +621,7 @@ export default function KlineChart({
                   measurement.isDrawdown ? 'text-down-600' : 'text-up-600',
                 )}
               >
-                {fmtPct(measurement.changePct)}（{fmtSigned(measurement.changeAbs)}）
+                {t('{pct}（{abs}）', { pct: fmtPct(measurement.changePct), abs: fmtSigned(measurement.changeAbs) })}
               </span>
               <span className="font-mono tnum text-ink-400">
                 {fmtPrice(measurement.startPrice)} → {fmtPrice(measurement.endPrice)}
