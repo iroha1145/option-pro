@@ -309,7 +309,7 @@ export const CATALYSTS: Dict = {
 
   /* ---------------- StocksPanel.tsx ---------------- */
   '· 非收益': ['· not a return', '· リターンではありません'],
-  '净影响分 · 非收益': ['Net impact score · not a return', 'ネット・インパクトスコア · リターンではありません'],
+  '净影响分': ['Net impact score', 'ネット・インパクトスコア'],
   '影响汇总暂不可用': ['Impact summary unavailable', 'インパクト集計を取得できません'],
   '当前窗口暂无已分析出方向性影响的股票': [
     'No stocks with directional impact analyzed in the current window',
@@ -323,7 +323,7 @@ export const CATALYSTS: Dict = {
   '来源数': ['Source count', 'ソース数'],
   '最新新闻': ['Latest news', '最新ニュース'],
   '相关新闻数': ['Related news count', '関連ニュース数'],
-  '净影响 · 非收益': ['Net impact · not a return', 'ネット・インパクト · リターンではありません'],
+  '净影响': ['Net impact', 'ネット・インパクト'],
   '多/空/中': ['Bull/Bear/Neu', '強気/弱気/中立'],
   '来源': ['Source', 'ソース'],
   '最新': ['Latest', '最新'],

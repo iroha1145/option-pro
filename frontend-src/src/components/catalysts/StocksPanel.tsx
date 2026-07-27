@@ -19,11 +19,28 @@ import { t } from '../../i18n/core.ts';
 
 const RANGE = 5; // 净影响映射区间 ±5
 
+/**
+ * 窄屏（<sm）不渲染列头，读数会变成一个没有名字的数字。
+ *
+ * 原先靠「· 非收益」后缀兼当标签：每行重复一遍，却既没说清这个数是什么，
+ * 也解释不了自己。改成真正的标签 + 一个 ⓘ；宽屏交给列头的同一个 ⓘ，
+ * 不必每行重复。
+ */
+function NetImpactLabel() {
+  return (
+    <span className="flex shrink-0 items-center gap-1 text-micro text-ink-400 sm:hidden">
+      {t('净影响')}
+      <InfoHint hint={SCORE_HINTS.netImpact} size={11} />
+    </span>
+  );
+}
+
 /* 净影响渐变条：轨道 down→纸→up 渐变 + 零点刻度 + 指针 */
 function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) {
   if (analyzed === 0) {
     return (
       <div className="flex items-center gap-2">
+        <NetImpactLabel />
         <div className="h-1.5 w-28 rounded-pill bg-line" aria-hidden="true" />
         <span className="font-mono text-micro text-ink-300">—</span>
       </div>
@@ -35,11 +52,12 @@ function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) 
   const sign = value > 0 ? '+' : value < 0 ? '−' : '';
   return (
     <div className="flex items-center gap-2.5">
+      <NetImpactLabel />
       <div
         className="relative h-1.5 w-28 rounded-pill"
         style={{ background: 'linear-gradient(90deg, rgba(229,72,77,.35), rgba(233,231,224,.6) 50%, rgba(14,159,110,.35))' }}
         role="img"
-        aria-label={t('净影响 {sign}{value}（非收益）', { sign, value: Math.abs(value).toFixed(2) })}
+        aria-label={t('净影响 {sign}{value}', { sign, value: Math.abs(value).toFixed(2) })}
       >
         <span className="absolute left-1/2 top-1/2 h-2.5 w-px -translate-x-1/2 -translate-y-1/2 bg-ink-300" aria-hidden="true" />
         <span
@@ -58,10 +76,9 @@ function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) 
           />
         </span>
       </div>
-      <span className={cn('font-mono text-data-m tnum', tone)} title={t("净影响分 · 非收益")}>
+      <span className={cn('font-mono text-data-m tnum', tone)} title={t("净影响分")}>
         {sign}
         {Math.abs(value).toFixed(2)}
-        <span className="ml-1 text-micro font-normal text-ink-400">{t('· 非收益')}</span>
       </span>
     </div>
   );
@@ -188,7 +205,7 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
       <div className="hidden grid-cols-none items-center border-b border-line px-5 py-2.5 sm:flex">
         <p className="w-40 eyebrow">{t('代码')}</p>
         <p className="min-w-[180px] flex-1 eyebrow">
-          {t('净影响 · 非收益')}
+          {t('净影响')}
           <InfoHint hint={SCORE_HINTS.netImpact} side="bottom" size={11} className="ml-1" />
         </p>
         <p className="hidden eyebrow md:block">{t('多/空/中')}</p>

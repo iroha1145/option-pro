@@ -172,7 +172,11 @@ export const HINTS: Dict = {
     '今回の判断に対する AI モデル自身の確度です（モデル出力は0–100）。信頼度が低い場合、ニュースの情報量が乏しいか曖昧であることが多く、参考度合いを下げるべきです。',
   ],
 
-  '净影响（−5 ～ +5 · 非收益）': ['Net impact (−5 to +5 · not a return)', 'ネット・インパクト（−5 〜 +5 · リターンではありません）'],
+  '净影响（−5 ～ +5）': ['Net impact (−5 to +5)', 'ネット・インパクト（−5 〜 +5）'],
+  '它是新闻面的方向倾向，不是收益预测。': [
+    'It is the directional lean of the news flow, not a return forecast.',
+    'ニュースフローの方向性の傾きであり、リターン予測ではありません。',
+  ],
   '把窗口内该股全部已分析新闻的影响分聚合成一个净方向：正=利多证据占优，负=利空占优。它衡量新闻面的倾向强度，与股价涨跌幅无关。': [
     'Aggregates the impact scores of every analyzed news item for the stock within the window into a single net direction: positive means bullish evidence dominates, negative means bearish. It measures how the news flow leans, not how far the share price moved.',
     '対象期間内に分析済みのニュースのインパクトスコアを集約し、1つのネット方向にまとめます。プラスは好材料の証拠が優勢、マイナスは悪材料が優勢です。ニュースフローの傾きの強さを示すもので、株価の騰落率とは無関係です。',

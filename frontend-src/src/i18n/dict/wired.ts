@@ -55,7 +55,7 @@ export const WIRED: Dict = {
   '{n} 秒': ['{n}s', '{n}秒'],
   '{n} 分': ['{n}m', '{n}分'],
   '{n} 小时': ['{n}h', '{n}時間'],
-  '净影响 {sign}{value}（非收益）': ['Net impact {sign}{value} (not a return)', '純影響 {sign}{value}（リターンではありません）'],
+  '净影响 {sign}{value}': ['Net impact {sign}{value}', '純影響 {sign}{value}'],
   '{n} 只候选股票的新闻尚未分析或影响为中性，暂不上榜': ['News for {n} candidate stock is unanalyzed or neutral, not yet ranked||News for {n} candidate stocks is unanalyzed or neutral, not yet ranked', '{n}銘柄の候補はニュース未分析または影響が中立のため、まだランク外です'],
   '查看 {ticker} 股票详情': ['View {ticker} stock details', '{ticker} の株式詳細を見る'],
 
