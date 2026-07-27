@@ -97,4 +97,5 @@ export const MARKET: Dict = {
   '宏观环境': ['Macro conditions', 'マクロ環境'],
   '联动视图': ['Drill-down', '連動ビュー'],
   '联动视图 · DRILL DOWN': ['Drill-down', '連動ビュー · DRILL DOWN'],
+  '接口返回了空列表，稍后刷新再试': ['The API returned an empty list — refresh again later', 'APIが空のリストを返しました。しばらくしてから再度お試しください'],
 };

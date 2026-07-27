@@ -170,7 +170,29 @@ export default function IndexCards({
       </div>
     );
   }
-  if (!data?.length) return null;
+  if (!data?.length) {
+    /* 成功但 0 条也要留空态（审计 2.2.19）：外层固定渲染了「指数概览」小标题，
+       返回 null 会留下一个指向空无一物的标题。 */
+    return (
+      <div className="card-surface">
+        <EmptyState
+          image="/empty-chart.svg"
+          title={t('暂无指数数据')}
+          description={t('接口返回了空列表，稍后刷新再试')}
+          action={
+            <button
+              onClick={onRetry}
+              disabled={refreshing}
+              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
+            >
+              {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+              {t('重试')}
+            </button>
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">

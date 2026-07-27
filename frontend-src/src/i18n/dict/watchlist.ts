@@ -103,4 +103,7 @@ export const WATCHLIST: Dict = {
   '距': ['Until ', '次の'],
   '开盘': ['Open', '寄り付き'],
   '收盘': ['Close', '大引け'],
+  '市场信号 · 模型指标': ['Market signals · model metrics', '市場シグナル · モデル指標'],
+  '自选行情读取失败，涨跌家数不可用': ['Watchlist quotes failed to load; advance/decline counts unavailable', 'ウォッチリストの相場取得に失敗したため、騰落銘柄数は利用できません'],
+  '市场信号读取失败': ['Failed to load market signals', '市場シグナルの読み込みに失敗しました'],
 };

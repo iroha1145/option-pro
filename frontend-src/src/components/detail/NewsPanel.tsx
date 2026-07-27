@@ -27,7 +27,8 @@ const MAX_ITEMS = 5;
 
 export default function NewsPanel({ ticker }: { ticker: string }) {
   const { isOwner } = useAccess();
-  const { data: news, loading } = usePolling(() => catalystsApi.byTicker(ticker), null, [ticker]);
+  const newsQ = usePolling(() => catalystsApi.byTicker(ticker), null, [ticker]);
+  const { data: news, loading, error } = newsQ;
   const { data: impact } = usePolling(
     () => isOwner ? earningsApi.impact(ticker) : Promise.resolve(null),
     null,
@@ -36,6 +37,28 @@ export default function NewsPanel({ ticker }: { ticker: string }) {
   const now = useNow(60_000);
 
   if (loading) return <SkeletonText lines={6} className="py-2" />;
+
+  /* 请求失败 ≠ 「72 小时内无相关新闻」（审计 2.2.4）：错误态如实说明并给
+     重试入口，不把读取失败断言成该股没有新闻。 */
+  if (error && !news) {
+    return (
+      <EmptyState
+        variant="error"
+        icon="doc-quote"
+        title={t('新闻数据读取失败')}
+        description={t('是读取失败，不代表该股近期没有新闻')}
+        action={
+          <button
+            onClick={newsQ.refresh}
+            className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+          >
+            {t('重试')}
+          </button>
+        }
+        className="py-8"
+      />
+    );
+  }
 
   const items: NewsItem[] = (news ?? [])
     .filter((n) => now - new Date(n.publishedAt).getTime() < WINDOW_MS)

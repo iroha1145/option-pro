@@ -99,6 +99,10 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
 
   const computing = statusQ.data?.state === 'computing';
   const items = listQ.data ?? [];
+  /* 四态（审计 2.2.3）：首取失败是「读不到」，不是「暂无热点分组」；
+     轮询失败但有旧数据时继续展示旧卡片并明确标注已过期。 */
+  const listFailed = !!listQ.error && listQ.data === null;
+  const listStale = !!listQ.error && listQ.data !== null;
 
   return (
     <section className="mt-6" aria-label={__t("热点主题带")}>
@@ -110,12 +114,19 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
           </p>
           <h2 className="text-h2 text-ink-900">{__t('市场在交易什么故事')}</h2>
         </div>
-        {statusQ.data && (
-          <p className="hidden items-center gap-1.5 text-micro text-ink-400 sm:flex">
-            <Led tone={statusQ.data.scanning ? 'brand' : 'muted'} pulse={statusQ.data.scanning} className="size-1.5" />
-            {__t('热点扫描')} {statusQ.data.scanning ? __t('活跃') : __t('已暂停')} · {fmtRelative(statusQ.data.updatedAt)}
-          </p>
-        )}
+        <span className="flex items-center gap-2">
+          {listStale && (
+            <span className="rounded-xs border border-warn-600/30 bg-warn-50 px-1.5 py-0.5 text-micro text-warn-600">
+              {__t('已过期 · 刷新失败，展示上次结果')}
+            </span>
+          )}
+          {statusQ.data && (
+            <p className="hidden items-center gap-1.5 text-micro text-ink-400 sm:flex">
+              <Led tone={statusQ.data.scanning ? 'brand' : 'muted'} pulse={statusQ.data.scanning} className="size-1.5" />
+              {__t('热点扫描')} {statusQ.data.scanning ? __t('活跃') : __t('已暂停')} · {fmtRelative(statusQ.data.updatedAt)}
+            </p>
+          )}
+        </span>
       </div>
 
       {/* 8 张 260px 的卡合计约 2200px，一定溢出。滚动条是藏起来的，触屏能划，
@@ -139,7 +150,19 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
               </p>
             </div>
           ) : null}
-          {!listQ.loading && !computing && items.length === 0 && (
+          {!listQ.loading && !computing && listFailed && (
+            <div className="flex w-full flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-card-warm py-8 text-center">
+              <p className="text-body-s text-ink-500">{__t('热点数据读取失败')}</p>
+              <p className="mt-1 text-micro text-ink-400">{__t('是读取失败，不代表市场没有热点')}</p>
+              <button
+                onClick={listQ.refresh}
+                className="mt-3 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+              >
+                {__t('重试')}
+              </button>
+            </div>
+          )}
+          {!listQ.loading && !computing && !listFailed && items.length === 0 && (
             <div className="flex w-full flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-card-warm py-8 text-center">
               <p className="text-body-s text-ink-500">{__t('当前窗口暂无热点分组')}</p>
             </div>

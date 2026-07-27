@@ -1,11 +1,14 @@
 /**
  * 信号卡列表（stock-detail.md T1）：stocks/{t}/signals + breakouts/tickers/{t}
- * 类型 chip + 触发价 Mono + 状态章 + 相对时间；空态「近期无信号 · 雷达仍在盯」
+ * 类型 chip + 触发价 Mono + 状态章 + 相对时间；空态「近期无信号 · 雷达仍在盯」。
+ * loading / error / empty 三态分开（审计 2.2.5/2.2.6）：首帧不闪空态文案，
+ * 请求失败明说「读不到」并给重试，不冒充「确实没有信号」。
  */
 import { usePolling } from '@/hooks/usePolling';
 import { signalsApi } from '@/api/modules/signals';
 import { breakoutsApi } from '@/api/modules/breakouts';
 import SignalChip from '@/components/shared/SignalChip';
+import { SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { fmtPrice, fmtRelative } from '@/lib/format';
@@ -24,17 +27,42 @@ export default function SignalList({
   ticker: string;
   refreshVersion?: number;
 }) {
-  const { data: signals } = usePolling(
+  const signalsQ = usePolling(
     () => signalsApi.stock(ticker),
     null,
     [ticker, refreshVersion],
   );
-  const { data: events } = usePolling(() => breakoutsApi.byTicker(ticker), null, [ticker]);
+  const eventsQ = usePolling(() => breakoutsApi.byTicker(ticker), null, [ticker]);
+  const signals = signalsQ.data;
+  const events = eventsQ.data;
 
   const hasSignals = (signals?.length ?? 0) > 0;
   const hasEvents = (events?.length ?? 0) > 0;
 
   if (!hasSignals && !hasEvents) {
+    if (signalsQ.loading || eventsQ.loading) {
+      return <SkeletonText lines={4} className="py-2" />;
+    }
+    const failed = (signalsQ.error && !signals) || (eventsQ.error && !events);
+    if (failed) {
+      return (
+        <div className="flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-8 text-center">
+          <Icon name="doc-quote" size={26} className="text-ink-300" />
+          <p className="mt-3 text-body-s font-medium text-ink-600">{t('信号数据读取失败')}</p>
+          <p className="mt-1 text-caption text-ink-400">{t('是读取失败，不代表该股没有信号')}</p>
+          <button
+            onClick={() => {
+              signalsQ.refresh();
+              eventsQ.refresh();
+            }}
+            className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+          >
+            <Icon name="refresh" size={13} />
+            {t('重试')}
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-8 text-center">
         <Icon name="radar" size={28} className="text-ink-300" />

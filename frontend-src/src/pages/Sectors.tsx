@@ -7,7 +7,7 @@ import {
 } from '@/api/modules/sectors';
 import { usePolling } from '@/hooks/usePolling';
 import { useShell } from '@/components/Layout';
-import { fmtRelative } from '@/lib/format';
+import { fmtRelative, fmtTimeHHMMSS } from '@/lib/format';
 import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';
 import EmptyState from '@/components/shared/EmptyState';
@@ -157,7 +157,15 @@ export default function Sectors() {
         >
           <Icon name="flag" size={14} className="mt-0.5 shrink-0" />
           <span>
-            {t('板块目录已加载，但收益与强度聚合暂不可用；缺失位置保持为空。')}
+            {/* 横幅必须与页面事实一致（审计 2.2.10）：usePolling 失败不清空旧数据，
+              * 有旧快照时下面显示的是上次成功的数值，要说「已过期」而不是「留空」。 */}
+            {strengthQ.data
+              ? t('强度聚合刷新失败：下方显示的是上次成功的数值（已过期{time}）。', {
+                  time: strengthQ.lastUpdatedAt
+                    ? ` · ${fmtTimeHHMMSS(strengthQ.lastUpdatedAt)}`
+                    : '',
+                })
+              : t('板块目录已加载，但收益与强度聚合暂不可用；缺失位置保持为空。')}
           </span>
           <button
             type="button"
@@ -358,6 +366,8 @@ export default function Sectors() {
               meta={ivMeta}
               loading={catalogQ.loading}
               ivLoading={ivQ.loading}
+              ivError={!!ivQ.error && !ivQ.data}
+              onIvRetry={ivQ.refresh}
               onOpenTicker={openTicker}
               onOpenPalette={openPalette}
             />

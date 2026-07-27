@@ -147,32 +147,41 @@ export default function Market() {
       </section>
 
       {/* B5 信号解读 + B6 强度分布 */}
-      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <div className={hasStrengthAggregate ? 'lg:col-span-8' : 'lg:col-span-12'}>
-          <SignalsReading
-            signals={signalsQ.data}
-            loading={signalsQ.loading}
-            error={signalsQ.error}
-            onRetry={signalsQ.refresh}
-            refreshing={signalsQ.refreshing}
-            indices={indicesQ.data}
-            regimeMean={mean}
-            status={status}
-            bias={bias}
-          />
-        </div>
-        {hasStrengthAggregate && (
-          <div className="lg:col-span-4">
-            <BreadthHistogram
-              data={strengthQ.data}
-              loading={strengthQ.loading}
-              error={strengthQ.error}
-              onRetry={strengthQ.refresh}
-              refreshing={strengthQ.refreshing}
-            />
+      {/* 加载中与失败也要挂载 B6（审计 2.2.9）：否则组件自带的骨架与
+        * 错误态+重试永远走不到，失败时整块静默消失、布局悄悄重排。只有
+        * 后端明确说「无聚合数据」（成功但 aggregateAvailable=false）才收起。 */}
+      {(() => {
+        const showStrengthPanel =
+          strengthQ.loading || !!strengthQ.error || hasStrengthAggregate;
+        return (
+          <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
+            <div className={showStrengthPanel ? 'lg:col-span-8' : 'lg:col-span-12'}>
+              <SignalsReading
+                signals={signalsQ.data}
+                loading={signalsQ.loading}
+                error={signalsQ.error}
+                onRetry={signalsQ.refresh}
+                refreshing={signalsQ.refreshing}
+                indices={indicesQ.data}
+                regimeMean={mean}
+                status={status}
+                bias={bias}
+              />
+            </div>
+            {showStrengthPanel && (
+              <div className="lg:col-span-4">
+                <BreadthHistogram
+                  data={strengthQ.data}
+                  loading={strengthQ.loading}
+                  error={strengthQ.error}
+                  onRetry={strengthQ.refresh}
+                  refreshing={strengthQ.refreshing}
+                />
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        );
+      })()}
 
       {/* B7 联动卡 */}
       <section className="mt-8" aria-label={t("联动视图")}>

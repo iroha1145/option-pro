@@ -164,16 +164,34 @@ function TabHeader({ tab, onChange }: { tab: TabKey; onChange: (t: TabKey) => vo
 
 /* ---------------- 侧栏：相关突破事件（≤3） ---------------- */
 function SidebarEvents({ ticker }: { ticker: string }) {
-  const { data } = usePolling(() => breakoutsApi.byTicker(ticker), null, [ticker]);
+  const { data, loading, error, refresh } = usePolling(() => breakoutsApi.byTicker(ticker), null, [ticker]);
   const items = (data ?? []).slice(0, 3);
+  /* loading / error / empty 分开（审计 2.2.2）；空态文案不再写「近 72 小时」——
+     后端按 last_seen_at 返回全部历史事件的最近 50 条，没有时间窗（审计 2.3.1）。 */
   return (
     <div className="card-surface p-5">
       <p className="eyebrow">BREAKOUT EVENTS</p>
       <h3 className="mt-1.5 text-h3 text-ink-900">{__t('相关突破事件')}</h3>
-      {items.length === 0 ? (
+      {loading && !data ? (
+        <div className="mt-3 space-y-2" aria-hidden="true">
+          <span className="skeleton-shimmer block h-4 w-full rounded-xs" />
+          <span className="skeleton-shimmer block h-4 w-2/3 rounded-xs" />
+        </div>
+      ) : error && !data ? (
+        <p className="mt-3 flex items-center gap-2 text-body-s text-ink-400">
+          <Icon name="doc-quote" size={16} className="text-ink-300" />
+          {__t('突破事件读取失败')}
+          <button
+            onClick={refresh}
+            className="ml-auto rounded-md border border-line px-2 py-0.5 text-micro text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+          >
+            {__t('重试')}
+          </button>
+        </p>
+      ) : items.length === 0 ? (
         <p className="mt-3 flex items-center gap-2 text-body-s text-ink-400">
           <Icon name="radar" size={16} className="text-ink-300" />
-          {__t('近 72 小时无事件 · 雷达仍在盯')}
+          {__t('暂无突破事件记录 · 雷达仍在盯')}
         </p>
       ) : (
         <ul className="mt-3 space-y-2.5">

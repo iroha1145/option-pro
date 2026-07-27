@@ -87,4 +87,7 @@ export const SECTORS: Dict = {
   '板块目录不可用，保持空状态；恢复目录后自动继续。': ['The sector directory is unavailable, so this stays empty; it will resume automatically once the directory recovers.', 'セクターリストが利用できないため、空の状態のままです。リストが復旧すると自動的に再開します。'],
   '暂无板块 IV 数据': ['No sector IV data yet', 'セクター IV データはまだありません'],
   '等待板块目录提供有效查询范围，可重试拉取目录。': ['Waiting for the sector directory to provide a valid query scope; you can retry fetching the directory.', 'セクターリストが有効な照会範囲を返すのを待っています。リストの再取得を再試行できます。'],
+  'IV 数据读取失败——是读不到，不是该板块没有样本。': ['Failed to load IV data — it could not be read; it does not mean this sector has no samples.', 'IVデータの読み込みに失敗しました。読み取れなかっただけで、このセクターにサンプルがないという意味ではありません。'],
+  '读取失败': ['Load failed', '読み込み失敗'],
+  '强度聚合刷新失败：下方显示的是上次成功的数值（已过期{time}）。': ['Strength aggregate refresh failed: the numbers below are from the last successful load (stale{time}).', '強度集計の更新に失敗しました。以下は前回成功時の数値です（期限切れ{time}）。'],
 };
