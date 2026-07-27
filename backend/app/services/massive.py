@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 import re
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
@@ -486,6 +487,153 @@ def snapshot_batch(symbols: list[str]) -> dict[str, dict[str, Any]]:
                 "as_of": as_of,
             }
     return out
+
+
+def reference_ticker_detail(ticker: str) -> dict[str, Any]:
+    """单只代码的参考详情（含 market_cap）。
+
+    仅用于小规模补缺（财报市值增强的兜底），批量场景必须走 FMP 批量接口；
+    调用方自己限流限量。
+    """
+
+    symbol = to_symbol(ticker)
+    if symbol is None:
+        raise MassiveError("unsupported symbol shape", code="not_found")
+    payload = _get(f"/v3/reference/tickers/{symbol}")
+    results = payload.get("results")
+    if not isinstance(results, dict):
+        raise MassiveError("unexpected reference detail shape", code="protocol")
+    return {
+        "ticker": symbol,
+        "market_cap": _finite(results.get("market_cap")),
+        "name": str(results.get("name") or "").strip() or None,
+    }
+
+
+# ── 期权（Options 计划才可用）───────────────────────────────
+# 当前生产密钥是 Stocks Starter，没有期权权限：第一次 401/403 之后在进程内
+# 记住「无权限」，之后的调用直接短路，不再对每只股票各探测一次。
+_options_plan_denied_until = 0.0
+_OPTIONS_PLAN_DENIED_TTL = 6 * 60 * 60.0
+
+
+def options_capability_known_denied() -> bool:
+    return time.time() < _options_plan_denied_until
+
+
+def _remember_options_plan_denied() -> None:
+    global _options_plan_denied_until
+    _options_plan_denied_until = time.time() + _OPTIONS_PLAN_DENIED_TTL
+
+
+def option_expirations(
+    ticker: str,
+    *,
+    date_gte: str,
+    date_lte: str,
+) -> list[str]:
+    """列出窗口内的到期日（合约参考端点，一页即够本用途）。"""
+
+    if options_capability_known_denied():
+        raise MassiveError("options not in plan (cached)", code="plan", status=403)
+    symbol = to_symbol(ticker)
+    if symbol is None:
+        raise MassiveError("unsupported symbol shape", code="not_found")
+    try:
+        payload = _get(
+            "/v3/reference/options/contracts",
+            {
+                "underlying_ticker": symbol,
+                "expiration_date.gte": date_gte,
+                "expiration_date.lte": date_lte,
+                "expired": "false",
+                "limit": 1000,
+                "sort": "expiration_date",
+            },
+        )
+    except MassiveError as error:
+        if error.code == "plan":
+            _remember_options_plan_denied()
+        raise
+    results = payload.get("results")
+    if not isinstance(results, list):
+        raise MassiveError("unexpected contracts payload shape", code="protocol")
+    expirations: list[str] = []
+    for row in results:
+        if not isinstance(row, dict):
+            continue
+        value = str(row.get("expiration_date") or "").strip()
+        if value and value not in expirations:
+            expirations.append(value)
+    return expirations
+
+
+def option_chain_snapshot(ticker: str, expiration: str) -> dict[str, Any]:
+    """单个到期日的期权链快照，归一为财报预期波动所需的最小形状。
+
+    返回 {underlying_price, as_of, calls:[{strike,bid,ask,midpoint}], puts:[...]}。
+    报价缺 bid/ask 的合约直接丢弃——宽价差与 last-price 伪报价由上层拒绝。
+    """
+
+    if options_capability_known_denied():
+        raise MassiveError("options not in plan (cached)", code="plan", status=403)
+    symbol = to_symbol(ticker)
+    if symbol is None:
+        raise MassiveError("unsupported symbol shape", code="not_found")
+    try:
+        payload = _get(
+            f"/v3/snapshot/options/{symbol}",
+            {"expiration_date": expiration, "limit": 250},
+        )
+    except MassiveError as error:
+        if error.code == "plan":
+            _remember_options_plan_denied()
+        raise
+    results = payload.get("results")
+    if not isinstance(results, list):
+        raise MassiveError("unexpected options snapshot shape", code="protocol")
+    underlying_price: float | None = None
+    observed_at: str | None = None
+    calls: list[dict[str, Any]] = []
+    puts: list[dict[str, Any]] = []
+    for row in results:
+        if not isinstance(row, dict):
+            continue
+        details = row.get("details") if isinstance(row.get("details"), dict) else {}
+        quote = row.get("last_quote") if isinstance(row.get("last_quote"), dict) else {}
+        asset = (
+            row.get("underlying_asset")
+            if isinstance(row.get("underlying_asset"), dict)
+            else {}
+        )
+        if underlying_price is None:
+            underlying_price = _finite(asset.get("price"))
+        if observed_at is None:
+            observed_at = _epoch_iso(quote.get("last_updated")) or _epoch_iso(
+                row.get("last_updated")
+            )
+        strike = _finite(details.get("strike_price"))
+        bid = _finite(quote.get("bid"))
+        ask = _finite(quote.get("ask"))
+        if strike is None or bid is None or ask is None:
+            continue
+        side = str(details.get("contract_type") or "").lower()
+        contract = {
+            "strike": strike,
+            "bid": bid,
+            "ask": ask,
+            "midpoint": round((bid + ask) / 2, 4),
+        }
+        if side == "call":
+            calls.append(contract)
+        elif side == "put":
+            puts.append(contract)
+    return {
+        "underlying_price": underlying_price,
+        "as_of": observed_at,
+        "calls": calls,
+        "puts": puts,
+    }
 
 
 def close() -> None:

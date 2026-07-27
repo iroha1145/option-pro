@@ -74,6 +74,7 @@ def test_option_pro_secret_allowlist_is_exact() -> None:
         "FINNHUB_API_KEY",
         "MARKETDATA_TOKEN",
         "MASSIVE_API_KEY",
+        "FMP_API_KEY",
         "FRED_API_KEY",
     }
     assert set(personal_secrets.SECRET_KEYS) == expected
@@ -935,7 +936,7 @@ def test_shell_interface_never_passes_a_secret_value_to_python() -> None:
     assert "Docker user namespace remapping" in script
     assert "Secret values must be entered through standard input." in script
     assert (
-        "FINNHUB_API_KEY|MARKETDATA_TOKEN|MASSIVE_API_KEY|FRED_API_KEY|INTERNAL_API_TOKEN"
+        "FINNHUB_API_KEY|MARKETDATA_TOKEN|MASSIVE_API_KEY|FMP_API_KEY|FRED_API_KEY|INTERNAL_API_TOKEN"
         in script
     )
     assert "--force-recreate" in script

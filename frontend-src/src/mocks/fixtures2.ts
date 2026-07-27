@@ -509,7 +509,12 @@ export interface EarningsItemEx extends EarningsItem {
   sector: string;
   expectedMovePct: number | null;  // 预期波动 %（2.8–11.5）
   impactReady: boolean;            // 是否已有 AI 影响分析缓存
+  publicFeatured: boolean;         // 公共重点标注（演示按固定池，留几只非重点走流转）
+  featuredReasons: string[];
 }
+
+/** 演示模式的非重点池：让「点非重点公司自动切全部」的流转有真实入口 */
+const MOCK_NON_FEATURED = new Set(['TSM', 'ORCL', 'JPM', 'UNH', 'COST', 'CRM', 'NFLX']);
 
 /** AI 影响分析扩展：生成时间 / 历史均值对照 / 模型置信度（UI 必须标注「· 非胜率」） */
 export interface EarningsImpactEx extends EarningsImpact {
@@ -608,6 +613,9 @@ export function getEarningsUpcoming(): EarningsItemEx[] {
       sector: info?.sector ?? '—',
       expectedMovePct: expectedMoveOf(e.ticker),
       impactReady: analyzedTickers.has(e.ticker),
+      // 无市值来源时重点标注只走「公共池」理由（market_cap unknown ≠ small）。
+      publicFeatured: !MOCK_NON_FEATURED.has(e.ticker),
+      featuredReasons: MOCK_NON_FEATURED.has(e.ticker) ? [] : ['earnings_pool'],
     };
   });
 }

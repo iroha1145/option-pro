@@ -74,7 +74,7 @@ MacroLens 只提供原始新闻、来源标的和日历。它不能创建 Option
 - `INTERNAL_API_TOKEN`
 - `APP_PASSWORD_HASH`
 
-`.env` 只保留一个迁移版本的兼容用途。进程已经导出的值优先级最高；`machine.env` 只提供七个机器字段，`secrets.env` 只提供七个密钥，错放字段不能覆盖正式来源。各业务模块接收同一个类型化配置对象，不再自行解释零散环境开关。
+`.env` 只保留一个迁移版本的兼容用途。进程已经导出的值优先级最高；`machine.env` 只提供七个机器字段，`secrets.env` 只提供八个密钥，错放字段不能覆盖正式来源。各业务模块接收同一个类型化配置对象，不再自行解释零散环境开关。
 
 MacroLens 连接只使用正式名称 `MACROLENS_URL` 和 `INTERNAL_API_TOKEN`。旧名称只由迁移工具识别；个人版运行链不再保留签名密钥、密钥编号（Key ID）、请求随机数（Nonce）或前一把密钥。
 

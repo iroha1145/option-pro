@@ -167,6 +167,9 @@ _EARNINGS_ROW_FIELDS = {
     "revenue_estimate",
     "revenue_actual",
     "market_cap",
+    "market_cap_source",
+    "market_cap_as_of",
+    "market_cap_status",
     "sector",
     "earnings_date_source",
     "estimate_source",
@@ -176,12 +179,30 @@ _EARNINGS_ROW_FIELDS = {
     "year",
     "source_status",
     "observed_at",
+    "public_featured",
+    "featured_reasons",
+    "calendar_sources",
+    "calendar_date_status",
+    "calendar_conflict",
     "expected_move_pct",
     "expected_move_expiration",
     "expected_move_source",
     "expected_move_observed_at",
-    "expected_move_source_status",
+    "expected_move_underlying_price",
+    "expected_move_method",
+    "expected_move_status",
 }
+_EARNINGS_CALENDAR_SOURCES = {"yahoo", "finnhub_calendar", "fmp_calendar"}
+_EARNINGS_MARKET_CAP_SOURCES = {"yahoo_info", "fmp_profile", "massive_reference"}
+_EARNINGS_EXPECTED_MOVE_SOURCES = {
+    "Yahoo/yfinance options",
+    "MarketData.app options",
+    "Massive options",
+}
+_EARNINGS_EXPECTED_MOVE_STATUS_PATTERN = re.compile(
+    r"^(?:not_enriched|unavailable:[a-z_]+)$"
+)
+_EARNINGS_FEATURED_REASONS = {"market_cap", "earnings_pool"}
 _UNUSUAL_ROW_FIELDS = {
     "ticker",
     "contract_ticker",
@@ -234,7 +255,10 @@ PUBLIC_HOME_RESOURCE_SPECS: dict[str, PublicHomeResourceSpec] = {
         "breakout-lead-chart-v1",
         7 * 24 * 60 * 60,
     ),
-    "earnings": PublicHomeResourceSpec("earnings-upcoming-v2", 30 * 60 * 60),
+    # v3（2026-07-27 财报页升级）：市值来源三元组、公共重点标注、双日历
+    # 交叉验证与 provider 化预期波动。改行形状必须 bump schema，旧条目
+    # 在 worker 下一次成功刷新前按不可用处理。
+    "earnings": PublicHomeResourceSpec("earnings-upcoming-v3", 30 * 60 * 60),
     "unusual": PublicHomeResourceSpec("options-unusual-v1", 4 * 24 * 60 * 60),
 }
 
@@ -398,6 +422,12 @@ def _payload_timestamps_fit_entry(
             for row in payload.get("earnings", [])
             if isinstance(row, Mapping)
             and row.get("expected_move_observed_at") is not None
+        )
+        iso_values.extend(
+            row.get("market_cap_as_of")
+            for row in payload.get("earnings", [])
+            if isinstance(row, Mapping)
+            and row.get("market_cap_as_of") is not None
         )
     return bool(
         all(
@@ -742,6 +772,77 @@ def _validate_market_signals(payload: Mapping[str, Any]) -> bool:
     )
 
 
+def _valid_earnings_market_cap_fields(row: Mapping[str, Any]) -> bool:
+    """market_cap 有值 ⇔ 来源三元组完整；缺失 ⇔ 明确的 unavailable（unknown）。"""
+
+    market_cap = row.get("market_cap")
+    source = row.get("market_cap_source")
+    as_of = row.get("market_cap_as_of")
+    status = row.get("market_cap_status")
+    if market_cap is None:
+        return source is None and as_of is None and status == "unavailable"
+    return (
+        source in _EARNINGS_MARKET_CAP_SOURCES
+        and _valid_iso_timestamp(as_of)
+        and status in {"active", "cached"}
+    )
+
+
+def _valid_earnings_featured_fields(row: Mapping[str, Any]) -> bool:
+    """公共重点标注只允许公共理由；账号自选绝不进入共享快照。"""
+
+    featured = row.get("public_featured")
+    reasons = row.get("featured_reasons")
+    if not isinstance(featured, bool) or not isinstance(reasons, list):
+        return False
+    if len(set(reasons)) != len(reasons):
+        return False
+    if not set(reasons).issubset(_EARNINGS_FEATURED_REASONS):
+        return False
+    if featured != bool(reasons):
+        return False
+    # 市值理由必须有已知市值背书（门槛值属部署配置，这里只做结构一致性）。
+    if "market_cap" in reasons and row.get("market_cap") is None:
+        return False
+    return True
+
+
+def _valid_earnings_calendar_fields(row: Mapping[str, Any]) -> bool:
+    """日历来源与日期冲突必须可识别，不允许静默覆盖。"""
+
+    sources = row.get("calendar_sources")
+    status = row.get("calendar_date_status")
+    conflict = row.get("calendar_conflict")
+    if (
+        not isinstance(sources, list)
+        or not sources
+        or len(set(sources)) != len(sources)
+        or not set(sources).issubset(_EARNINGS_CALENDAR_SOURCES)
+    ):
+        return False
+    if status not in {"single_source", "confirmed", "conflict"}:
+        return False
+    if status in {"confirmed", "conflict"} and len(sources) < 2:
+        return False
+    if status == "single_source" and len(sources) != 1:
+        return False
+    if status != "conflict":
+        return conflict is None
+    if not isinstance(conflict, Mapping) or not conflict:
+        return False
+    for key, value in conflict.items():
+        if key not in _EARNINGS_CALENDAR_SOURCES or key not in sources:
+            return False
+        try:
+            date.fromisoformat(str(value))
+        except ValueError:
+            return False
+        # 冲突记录的是「与主日期不同」的次源日期，静默相等没有意义。
+        if str(value) == str(row.get("earnings_date")):
+            return False
+    return True
+
+
 def _validate_earnings(payload: Mapping[str, Any]) -> bool:
     rows = payload.get("earnings")
     attempted = payload.get("attempted")
@@ -766,10 +867,10 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
         or not isinstance(succeeded, int)
         or not 1 <= succeeded == len(rows) <= attempted <= 10_000
         or not isinstance(providers, list)
-        or not 1 <= len(providers) <= 2
+        or not 1 <= len(providers) <= 3
         or not all(isinstance(item, str) for item in providers)
         or len(set(providers)) != len(providers)
-        or not set(providers).issubset({"Finnhub", "Yahoo Finance"})
+        or not set(providers).issubset({"Finnhub", "Yahoo Finance", "FMP"})
         or not _valid_iso_timestamp(payload.get("as_of"))
     ):
         return False
@@ -780,7 +881,8 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
             row.get("expected_move_expiration"),
             row.get("expected_move_source"),
             row.get("expected_move_observed_at"),
-            row.get("expected_move_source_status"),
+            row.get("expected_move_underlying_price"),
+            row.get("expected_move_method"),
         ) if isinstance(row, dict) else ()
         actual_present = bool(
             isinstance(row, dict)
@@ -815,16 +917,25 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
             )
             or not isinstance(row.get("sector"), str)
             or row.get("earnings_date_source")
-            not in {"calendar", "earnings_dates", "finnhub_calendar"}
+            not in {"calendar", "earnings_dates", "finnhub_calendar", "fmp_calendar"}
             or row.get("estimate_source")
-            not in {None, "calendar", "earnings_dates", "finnhub_calendar"}
+            not in {
+                None,
+                "calendar",
+                "earnings_dates",
+                "finnhub_calendar",
+                "fmp_calendar",
+            }
             or row.get("actual_source")
-            not in {None, "earnings_dates", "finnhub_calendar"}
+            not in {None, "earnings_dates", "finnhub_calendar", "fmp_calendar"}
             or row.get("release_status")
             not in {"scheduled", "released", "reported_pending_actual"}
             or actual_present != (row.get("release_status") == "released")
             or (actual_present and row.get("actual_source") is None)
             or (not actual_present and row.get("actual_source") is not None)
+            or not _valid_earnings_market_cap_fields(row)
+            or not _valid_earnings_featured_fields(row)
+            or not _valid_earnings_calendar_fields(row)
             or (
                 row.get("quarter") is not None
                 and (
@@ -849,16 +960,35 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
                     not _finite_number(move, minimum=0.0000001)
                     or float(move) > 200
                     or not isinstance(row.get("expected_move_expiration"), str)
-                    or not isinstance(row.get("expected_move_source"), str)
                     or row.get("expected_move_source")
-                    != "Yahoo/yfinance options"
+                    not in _EARNINGS_EXPECTED_MOVE_SOURCES
                     or not _valid_iso_timestamp(
                         row.get("expected_move_observed_at")
                     )
-                    or row.get("expected_move_source_status") != "active"
+                    or not _finite_number(
+                        row.get("expected_move_underlying_price"),
+                        minimum=0.0000001,
+                    )
+                    or row.get("expected_move_method") != "atm_straddle_mid"
+                    or row.get("expected_move_status") != "active"
                 )
             )
-            or (move is None and any(value is not None for value in move_metadata))
+            or (
+                move is None
+                and (
+                    any(value is not None for value in move_metadata)
+                    or not (
+                        row.get("expected_move_status") is None
+                        or (
+                            isinstance(row.get("expected_move_status"), str)
+                            and _EARNINGS_EXPECTED_MOVE_STATUS_PATTERN.fullmatch(
+                                row["expected_move_status"]
+                            )
+                            is not None
+                        )
+                    )
+                )
+            )
         ):
             return False
         try:
@@ -869,6 +999,8 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
             return False
         if row.get("earnings_date_source") == "finnhub_calendar":
             contributing_providers.add("Finnhub")
+        elif row.get("earnings_date_source") == "fmp_calendar":
+            contributing_providers.add("FMP")
         else:
             contributing_providers.add("Yahoo Finance")
     failed_symbols = payload.get("failed_symbols")

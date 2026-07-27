@@ -120,12 +120,15 @@ def test_expected_move_keeps_real_chain_provenance_and_rejects_stale_data(
         "amc",
     )
 
+    # v3：provider 化后额外携带 underlying、method 与统一的 status 字段。
     assert result == {
         "expected_move_pct": 7.5,
         "expected_move_expiration": "2026-08-07",
         "expected_move_source": "Yahoo/yfinance options",
         "expected_move_observed_at": "2026-07-23T20:15:00Z",
-        "expected_move_source_status": "active",
+        "expected_move_underlying_price": 100.0,
+        "expected_move_method": "atm_straddle_mid",
+        "expected_move_status": "active",
     }
 
     monkeypatch.setattr(
@@ -133,6 +136,8 @@ def test_expected_move_keeps_real_chain_provenance_and_rejects_stale_data(
         "get_option_chain",
         lambda _ticker, _expiration: {**chain, "_stale": True},
     )
+    # 陈旧链不再是静默空结果：失败原因可识别（stale_quote），
+    # 值本身保持缺失，不用 last price 或 0 伪装成功。
     assert (
         _REAL_EXPECTED_MOVE_FOR_REPORT(
             "TEST",
@@ -140,7 +145,7 @@ def test_expected_move_keeps_real_chain_provenance_and_rejects_stale_data(
             date(2026, 7, 23),
             "amc",
         )
-        == {}
+        == {"expected_move_status": "unavailable:stale_quote"}
     )
 
 
@@ -1027,7 +1032,9 @@ def test_expected_move_uses_final_finnhub_report_date_and_timing(
             "expected_move_expiration": "2026-08-14",
             "expected_move_source": "Yahoo/yfinance options",
             "expected_move_observed_at": "2026-07-23T20:15:00Z",
-            "expected_move_source_status": "active",
+            "expected_move_underlying_price": 100.0,
+            "expected_move_method": "atm_straddle_mid",
+            "expected_move_status": "active",
         }
 
     monkeypatch.setattr(earnings, "EARNINGS_TICKERS", ["FINAL"])
@@ -1044,7 +1051,12 @@ def test_expected_move_uses_final_finnhub_report_date_and_timing(
     assert row["earnings_date"] == "2026-08-12"
     assert row["expected_move_pct"] == 6.4
     assert row["expected_move_expiration"] == "2026-08-14"
-    assert row["expected_move_source_status"] == "active"
+    assert row["expected_move_status"] == "active"
+    assert row["expected_move_method"] == "atm_straddle_mid"
+    # FINAL 市值 200 亿（Yahoo info）→ 门槛与公共池双重理由
+    assert row["public_featured"] is True
+    assert row["featured_reasons"] == ["market_cap", "earnings_pool"]
+    assert row["market_cap_source"] == "yahoo_info"
 
 
 def test_explicit_refresh_is_bounded_and_replaces_the_cached_snapshot(

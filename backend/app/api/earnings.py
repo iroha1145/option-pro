@@ -50,6 +50,7 @@ EARNINGS_TICKERS = [
 ]
 
 
+from app.services import earnings_enrichment
 from app.services.utils import sanitize as _sanitize
 
 MARKET_TZ = ZoneInfo("America/New_York")
@@ -78,6 +79,9 @@ _EARNINGS_OUTPUT_FIELDS = (
     "revenue_estimate",
     "revenue_actual",
     "market_cap",
+    "market_cap_source",
+    "market_cap_as_of",
+    "market_cap_status",
     "sector",
     "earnings_date_source",
     "estimate_source",
@@ -87,11 +91,18 @@ _EARNINGS_OUTPUT_FIELDS = (
     "year",
     "source_status",
     "observed_at",
+    "public_featured",
+    "featured_reasons",
+    "calendar_sources",
+    "calendar_date_status",
+    "calendar_conflict",
     "expected_move_pct",
     "expected_move_expiration",
     "expected_move_source",
     "expected_move_observed_at",
-    "expected_move_source_status",
+    "expected_move_underlying_price",
+    "expected_move_method",
+    "expected_move_status",
 )
 
 
@@ -613,6 +624,36 @@ def _normalize_earnings_output_row(value: Mapping[str, Any]) -> dict[str, Any]:
     ):
         actual_source = value.get("earnings_date_source")
     expected_move = value.get("expected_move_pct")
+    featured_reasons = [
+        reason
+        for reason in (value.get("featured_reasons") or [])
+        if reason in {"market_cap", "earnings_pool"}
+    ]
+    calendar_sources = [
+        source
+        for source in (value.get("calendar_sources") or [])
+        if source in {"yahoo", "finnhub_calendar", "fmp_calendar"}
+    ]
+    if not calendar_sources:
+        # 单一来源的行也要有可追溯的日历来源标注。
+        date_source = value.get("earnings_date_source")
+        calendar_sources = [
+            "fmp_calendar"
+            if date_source == "fmp_calendar"
+            else "finnhub_calendar"
+            if date_source == "finnhub_calendar"
+            else "yahoo"
+        ]
+    calendar_date_status = value.get("calendar_date_status")
+    if calendar_date_status not in {"single_source", "confirmed", "conflict"}:
+        calendar_date_status = (
+            "confirmed" if len(calendar_sources) > 1 else "single_source"
+        )
+    calendar_conflict = (
+        value.get("calendar_conflict")
+        if calendar_date_status == "conflict"
+        else None
+    )
     normalized = {
         "ticker": str(value.get("ticker") or "").strip().upper(),
         "name": str(value.get("name") or value.get("ticker") or "").strip(),
@@ -626,6 +667,18 @@ def _normalize_earnings_output_row(value: Mapping[str, Any]) -> dict[str, Any]:
         "revenue_estimate": value.get("revenue_estimate"),
         "revenue_actual": revenue_actual,
         "market_cap": market_cap,
+        "market_cap_source": (
+            value.get("market_cap_source") if market_cap is not None else None
+        ),
+        "market_cap_as_of": (
+            value.get("market_cap_as_of") if market_cap is not None else None
+        ),
+        # market_cap 缺失表示 unknown（不能当小公司证据），状态如实标注。
+        "market_cap_status": (
+            str(value.get("market_cap_status") or "active")
+            if market_cap is not None
+            else "unavailable"
+        ),
         "sector": str(value.get("sector") or ""),
         "earnings_date_source": value.get("earnings_date_source"),
         "estimate_source": value.get("estimate_source"),
@@ -635,6 +688,11 @@ def _normalize_earnings_output_row(value: Mapping[str, Any]) -> dict[str, Any]:
         "year": value.get("year"),
         "source_status": str(value.get("source_status") or "active"),
         "observed_at": value.get("observed_at"),
+        "public_featured": bool(value.get("public_featured")),
+        "featured_reasons": featured_reasons,
+        "calendar_sources": calendar_sources,
+        "calendar_date_status": calendar_date_status,
+        "calendar_conflict": calendar_conflict,
         "expected_move_pct": expected_move,
         "expected_move_expiration": (
             value.get("expected_move_expiration")
@@ -651,59 +709,36 @@ def _normalize_earnings_output_row(value: Mapping[str, Any]) -> dict[str, Any]:
             if expected_move is not None
             else None
         ),
-        "expected_move_source_status": (
-            value.get("expected_move_source_status")
+        "expected_move_underlying_price": (
+            value.get("expected_move_underlying_price")
             if expected_move is not None
             else None
+        ),
+        "expected_move_method": (
+            value.get("expected_move_method")
+            if expected_move is not None
+            else None
+        ),
+        "expected_move_status": (
+            "active"
+            if expected_move is not None
+            else value.get("expected_move_status")
         ),
     }
     return {field: normalized[field] for field in _EARNINGS_OUTPUT_FIELDS}
 
 
-def _option_mark(contract: Any) -> float | None:
-    if not isinstance(contract, dict):
-        return None
-    for field in ("midpoint", "mid", "last_price"):
-        value = _to_optional_float(contract.get(field))
-        if value is not None and value > 0:
-            return value
-    return None
-
-
 def _expected_move_from_chain_snapshot(snapshot: Any) -> float | None:
-    """Calculate the at-the-money straddle move from one real option chain."""
+    """Calculate the at-the-money straddle move from one real option chain.
+
+    委托共享实现（app.services.earnings_enrichment）：只认 bid/ask 派生的
+    报价中值，宽价差按低质量报价拒绝，绝不用 last price 伪装成功。
+    """
 
     if not isinstance(snapshot, dict):
         return None
-    underlying = _to_optional_float(snapshot.get("underlying_price"))
-    if underlying is None or underlying <= 0:
-        return None
-    calls = {
-        strike: row
-        for row in snapshot.get("calls") or []
-        if isinstance(row, dict)
-        and (strike := _to_optional_float(row.get("strike"))) is not None
-        and _option_mark(row) is not None
-    }
-    puts = {
-        strike: row
-        for row in snapshot.get("puts") or []
-        if isinstance(row, dict)
-        and (strike := _to_optional_float(row.get("strike"))) is not None
-        and _option_mark(row) is not None
-    }
-    common_strikes = set(calls).intersection(puts)
-    if not common_strikes:
-        return None
-    strike = min(common_strikes, key=lambda value: abs(value - underlying))
-    call_mark = _option_mark(calls[strike])
-    put_mark = _option_mark(puts[strike])
-    if call_mark is None or put_mark is None:
-        return None
-    move = (call_mark + put_mark) / underlying * 100
-    if not math.isfinite(move) or move <= 0 or move > 200:
-        return None
-    return round(move, 2)
+    move = earnings_enrichment.compute_straddle_move(snapshot)
+    return None if move is None else move["move_pct"]
 
 
 def _expected_move_for_report(
@@ -712,56 +747,24 @@ def _expected_move_for_report(
     today: date,
     timing: str | None,
 ) -> dict[str, Any]:
-    """Read one bounded real option chain for an upcoming earnings release."""
+    """Resolve one report's expected move through the provider priority chain.
+
+    Massive Options（有权限时）→ MarketData（已配置时）→ Yahoo/yfinance 兜底；
+    第一个成功值胜出，不做多来源平均。返回值直接就是行字段增量。
+    """
 
     days_until = (report_date - today).days
     if not 0 <= days_until <= EXPECTED_MOVE_LOOKAHEAD_DAYS:
         return {}
     try:
-        from app.services import yahoo as yahoo_provider
-
-        expirations = yahoo_provider.get_expirations_snapshot(ticker).get(
-            "expirations",
-            [],
+        return earnings_enrichment.expected_move_for_report(
+            ticker,
+            report_date,
+            today,
+            timing,
         )
-        candidates: list[tuple[date, str]] = []
-        minimum_expiration = (
-            report_date
-            if timing == "bmo"
-            else report_date + timedelta(days=1)
-        )
-        for raw in expirations:
-            parsed = _coerce_date(raw)
-            if (
-                parsed is not None
-                and minimum_expiration <= parsed
-                <= report_date + timedelta(days=EXPECTED_MOVE_MAX_EXPIRY_GAP_DAYS)
-            ):
-                candidates.append((parsed, str(raw)))
-        if not candidates:
-            return {}
-        _expiration_date, expiration = min(candidates, key=lambda item: item[0])
-        chain = yahoo_provider.get_option_chain(ticker, expiration)
-        if (
-            bool(chain.get("_stale"))
-            or chain.get("source_status") not in {None, "active"}
-        ):
-            return {}
-        expected_move = _expected_move_from_chain_snapshot(chain)
-        if expected_move is None:
-            return {}
-        observed_at = chain.get("as_of")
-        if not isinstance(observed_at, str) or not observed_at:
-            return {}
-        return {
-            "expected_move_pct": expected_move,
-            "expected_move_expiration": expiration,
-            "expected_move_source": "Yahoo/yfinance options",
-            "expected_move_observed_at": observed_at,
-            "expected_move_source_status": "active",
-        }
     except Exception:
-        return {}
+        return {"expected_move_status": "unavailable:provider_error"}
 
 
 @router.get("/upcoming")
@@ -897,6 +900,15 @@ async def refresh_upcoming_earnings():
 async def _build_upcoming_earnings(today: date):
     sem = asyncio.Semaphore(8)
     finnhub_task = asyncio.create_task(_fetch_finnhub_earnings(today))
+    # FMP 是可选的第二日历来源：未配置时立即以 not_configured 短路，
+    # 不产生任何请求，也不会影响 Finnhub 主路径。
+    fmp_task = asyncio.create_task(
+        earnings_enrichment.fetch_fmp_calendar(
+            today,
+            lookback_days=RECENT_EARNINGS_LOOKBACK_DAYS,
+            lookahead_days=FINNHUB_EARNINGS_LOOKAHEAD_DAYS,
+        )
+    )
 
     async def fetch_one(ticker: str):
         def _work():
@@ -1030,12 +1042,20 @@ async def _build_upcoming_earnings(today: date):
 
     results = await asyncio.gather(*[fetch_one(t) for t in EARNINGS_TICKERS], return_exceptions=True)
     finnhub_result = await finnhub_task
+    fmp_result = await fmp_task
     finnhub_rows = (
         list(finnhub_result.get("rows") or [])
         if isinstance(finnhub_result, Mapping)
         else []
     )
     finnhub_selected = _select_finnhub_rows(finnhub_rows, today)
+    fmp_rows = (
+        list(fmp_result.get("rows") or [])
+        if isinstance(fmp_result, Mapping)
+        else []
+    )
+    # FMP 行与 Finnhub 行同形状，复用同一套「近发布优先/最近未来」选择规则。
+    fmp_selected = _select_finnhub_rows(fmp_rows, today)
     completed = [r for r in results if isinstance(r, dict)]
     succeeded = [r for r in completed if r.get("ok")]
     failed_symbols = [
@@ -1044,15 +1064,20 @@ async def _build_upcoming_earnings(today: date):
         if (
             (not isinstance(result, dict) or not result.get("ok"))
             and ticker not in finnhub_selected
+            and ticker not in fmp_selected
         )
     ]
-    if not succeeded and not finnhub_selected:
+    if not succeeded and not finnhub_selected and not fmp_selected:
         raise HTTPException(status_code=503, detail="Earnings data is currently unavailable")
     earnings_by_ticker = {
         str(result["data"].get("ticker")): dict(result["data"])
         for result in succeeded
         if isinstance(result.get("data"), dict)
     }
+    for row in earnings_by_ticker.values():
+        row["calendar_sources"] = ["yahoo"]
+        row["calendar_date_status"] = "single_source"
+        row["calendar_conflict"] = None
     observed_at = datetime.now(MARKET_TZ).isoformat()
     for ticker, finnhub in finnhub_selected.items():
         existing = earnings_by_ticker.get(ticker, {})
@@ -1079,6 +1104,9 @@ async def _build_upcoming_earnings(today: date):
             "release_status": release_status,
             "source_status": "active",
             "observed_at": observed_at,
+            "calendar_sources": ["finnhub_calendar"],
+            "calendar_date_status": "single_source",
+            "calendar_conflict": None,
             **(
                 {
                     "expected_move_pct": None,
@@ -1090,10 +1118,126 @@ async def _build_upcoming_earnings(today: date):
                 else {}
             ),
         }
+
+    # ── FMP 合并：交叉验证既有行的日期，补充 Finnhub 没覆盖的公司 ──
+    for ticker, fmp_row in fmp_selected.items():
+        existing = earnings_by_ticker.get(ticker)
+        fmp_date = str(fmp_row.get("earnings_date") or "")
+        if existing is not None:
+            sources = list(existing.get("calendar_sources") or [])
+            if "fmp_calendar" not in sources:
+                sources.append("fmp_calendar")
+            existing["calendar_sources"] = sources
+            existing_date = str(existing.get("earnings_date") or "")
+            if existing_date == fmp_date:
+                existing["calendar_date_status"] = "confirmed"
+                existing["calendar_conflict"] = None
+            else:
+                # 日期冲突必须可识别：主源（Finnhub/Yahoo）日期保留，
+                # 次源日期原样记录，绝不静默合并成一条无法追踪的记录。
+                existing["calendar_date_status"] = "conflict"
+                existing["calendar_conflict"] = {"fmp_calendar": fmp_date}
+            # 主源缺失的预期值可由次源补上（来源标注跟着换）。
+            for field in ("eps_estimate", "revenue_estimate"):
+                if existing.get(field) is None and fmp_row.get(field) is not None:
+                    existing[field] = fmp_row[field]
+                    existing["estimate_source"] = (
+                        existing.get("estimate_source") or "fmp_calendar"
+                    )
+            continue
+        release_status = (
+            "released"
+            if fmp_row.get("eps_actual") is not None
+            or fmp_row.get("revenue_actual") is not None
+            else "reported_pending_actual"
+            if int(fmp_row.get("days_until") or 0) < 0
+            else "scheduled"
+        )
+        earnings_by_ticker[ticker] = {
+            **fmp_row,
+            "ticker": ticker,
+            "name": ticker,
+            "market_cap": None,
+            "sector": "",
+            "earnings_date_source": "fmp_calendar",
+            "estimate_source": (
+                "fmp_calendar"
+                if fmp_row.get("eps_estimate") is not None
+                or fmp_row.get("revenue_estimate") is not None
+                else None
+            ),
+            "actual_source": (
+                "fmp_calendar" if release_status == "released" else None
+            ),
+            "release_status": release_status,
+            "source_status": "active",
+            "observed_at": observed_at,
+            "calendar_sources": ["fmp_calendar"],
+            "calendar_date_status": "single_source",
+            "calendar_conflict": None,
+        }
     earnings = list(earnings_by_ticker.values())
 
+    # ── 市值：批量 + 持久缓存（Worker 低频刷新；绝不逐家请求资料） ──
+    config = get_personal_config()
+    market_caps = await earnings_enrichment.resolve_market_caps(
+        earnings,
+        cache_days=int(config.earnings.market_cap_cache_days),
+    )
+    for item in earnings:
+        ticker = str(item.get("ticker") or "").upper()
+        resolution = market_caps.get(ticker) or {
+            "market_cap": None,
+            "source": None,
+            "as_of": None,
+            "status": "unavailable",
+        }
+        item["market_cap"] = resolution["market_cap"]
+        item["market_cap_source"] = resolution["source"]
+        item["market_cap_as_of"] = resolution["as_of"]
+        item["market_cap_status"] = resolution["status"]
+        if not item.get("name") or item.get("name") == ticker:
+            profile_name = resolution.get("name")
+            if isinstance(profile_name, str) and profile_name:
+                item["name"] = profile_name
+
+    # ── 重点公司（公共部分）：市值门槛 或 公共关注池。
+    #    账号自选属于账号上下文，由前端合并，绝不进入共享快照。 ──
+    threshold = float(config.earnings.featured_market_cap_usd)
+    public_pool = frozenset(EARNINGS_TICKERS)
+    for item in earnings:
+        featured, reasons = earnings_enrichment.featured_flags(
+            str(item.get("ticker") or "").upper(),
+            _to_optional_float(item.get("market_cap")),
+            threshold=threshold,
+            public_pool=public_pool,
+        )
+        item["public_featured"] = featured
+        item["featured_reasons"] = reasons
+
+    # ── 预期波动：只增强重点公司，且单次刷新有硬上限。
+    #    日历覆盖本身绝不因增强预算而缩水。 ──
     expected_move_sem = asyncio.Semaphore(4)
-    expected_move_tickers = frozenset(EARNINGS_TICKERS)
+    enrich_limit = int(config.earnings.expected_move_enrich_limit)
+    enrich_candidates = [
+        item
+        for item in earnings
+        if item.get("release_status") == "scheduled"
+        and bool(item.get("public_featured"))
+        and (report := _coerce_date(item.get("earnings_date"))) is not None
+        and 0 <= (report - today).days <= EXPECTED_MOVE_LOOKAHEAD_DAYS
+    ]
+    enrich_candidates.sort(
+        key=lambda item: (
+            int(item.get("days_until") or 999),
+            -(_to_optional_float(item.get("market_cap")) or 0.0),
+            str(item.get("ticker") or ""),
+        )
+    )
+    enrich_targets = {
+        str(item.get("ticker") or "")
+        for item in enrich_candidates[: max(0, enrich_limit)]
+    }
 
     async def attach_expected_move(item: dict[str, Any]) -> None:
         for field in (
@@ -1101,15 +1245,15 @@ async def _build_upcoming_earnings(today: date):
             "expected_move_expiration",
             "expected_move_source",
             "expected_move_observed_at",
-            "expected_move_source_status",
+            "expected_move_underlying_price",
+            "expected_move_method",
+            "expected_move_status",
         ):
             item.pop(field, None)
         if item.get("release_status") != "scheduled":
             return
-        # Full-market Finnhub coverage can contain thousands of reports.
-        # Yahoo option lookups remain bounded to the curated liquid universe;
-        # calendar coverage itself is never reduced by this enrichment limit.
-        if str(item.get("ticker") or "") not in expected_move_tickers:
+        if str(item.get("ticker") or "") not in enrich_targets:
+            item["expected_move_status"] = "not_enriched"
             return
         report_date = _coerce_date(item.get("earnings_date"))
         if report_date is None:
@@ -1139,7 +1283,9 @@ async def _build_upcoming_earnings(today: date):
         )
     )
     earnings = earnings[:MAX_EARNINGS_OUTPUT_ROWS]
-    attempted_symbols = set(EARNINGS_TICKERS).union(finnhub_selected)
+    attempted_symbols = (
+        set(EARNINGS_TICKERS).union(finnhub_selected).union(fmp_selected)
+    )
     finnhub_contributed = any(
         item.get("earnings_date_source") == "finnhub_calendar"
         for item in earnings
@@ -1148,11 +1294,16 @@ async def _build_upcoming_earnings(today: date):
         item.get("earnings_date_source") in {"calendar", "earnings_dates"}
         for item in earnings
     )
+    fmp_contributed = any(
+        item.get("earnings_date_source") == "fmp_calendar"
+        for item in earnings
+    )
     providers = [
         name
         for name, contributed in (
             ("Finnhub", finnhub_contributed),
             ("Yahoo Finance", yahoo_contributed),
+            ("FMP", fmp_contributed),
         )
         if contributed
     ]
@@ -1162,10 +1313,16 @@ async def _build_upcoming_earnings(today: date):
         or not finnhub_result.get("succeeded")
         or finnhub_result.get("truncated")
     )
-    # Finnhub is the full-market source for the visible -3..+30 day window.
-    # Yahoo is a curated 180-day enrichment only, so a failed Yahoo profile
-    # must not downgrade an otherwise complete full-market calendar.
-    data_limited = finnhub_limited
+    fmp_complete = bool(
+        isinstance(fmp_result, Mapping)
+        and fmp_result.get("configured")
+        and fmp_result.get("succeeded")
+    )
+    # Finnhub is the primary full-market source for the visible -3..+30 day
+    # window; FMP is an optional second full-market calendar. Coverage is
+    # limited only when neither full-market source completed. Yahoo is a
+    # curated 180-day enrichment and never downgrades the calendar.
+    data_limited = finnhub_limited and not fmp_complete
     return _sanitize({
         "earnings": earnings,
         "attempted": len(attempted_symbols),
