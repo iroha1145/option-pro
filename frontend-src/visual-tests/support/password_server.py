@@ -93,6 +93,7 @@ def main() -> None:
             "INTERNAL_API_TOKEN",
             "APP_PASSWORD_HASH",
             "MASSIVE_API_KEY",
+            "FMP_API_KEY",
             "NEWSAPI_API_KEY",
             "GNEWS_API_KEY",
             "MARKETDATA_TOKEN",

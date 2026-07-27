@@ -110,8 +110,18 @@ for (const viewport of EARNINGS_DESKTOP_VIEWPORTS) {
   test.describe(`earnings desktop layout ${viewport.width}x${viewport.height}`, () => {
     test.use({ viewport });
 
-    test("keeps every earnings column and the analysis rail fully visible", async ({ page }) => {
+    test("keeps every earnings column and the analysis rail fully visible", async ({ page, request }) => {
       test.setTimeout(60_000);
+      // 财报列表需要真实 /api/earnings/upcoming（CI 的 :2000 后端提供）。
+      // 本地默认的 python http.server 静态取证服务器没有 API，会 404 →
+      // 页面如实渲染错误态，这不是布局回归——显式跳过而不是假红。
+      const probe = await request
+        .get("/api/earnings/upcoming", { timeout: 45_000 })
+        .catch(() => null);
+      test.skip(
+        !probe || !probe.ok(),
+        "需要真实后端提供 /api/earnings/upcoming（静态取证服务器无 API）",
+      );
       await openEarnings(page, viewport.width);
 
       const subject = page.locator('[aria-label="财报主体"]');
@@ -131,13 +141,21 @@ for (const viewport of EARNINGS_DESKTOP_VIEWPORTS) {
         "EPS 预期 vs 实际",
         "营收预期",
         "市值",
-        "预期波动",
         "AI 影响",
       ]) {
         await expect(header.getByText(column, { exact: true })).toBeVisible();
       }
       const rowAction = list.getByRole("button", { name: / AI 影响分析$/ }).first();
       await expect(rowAction).toBeVisible();
+      // 「预期波动」列跟随数据出现（EarningsList：至少一行有真实数值才渲染整列）。
+      // 直板口径只认 bid/ask 中价：周末/盘后全部报价失效时列会整体消失，这是
+      // 产品行为不是布局回归。两个方向互证：列头与 ±x.x% 数值单元格同生同灭。
+      const moveHeader = header.getByText("预期波动", { exact: true });
+      if ((await list.getByText(/^±\d+(\.\d+)?%$/).count()) > 0) {
+        await expect(moveHeader).toBeVisible();
+      } else {
+        await expect(moveHeader).toHaveCount(0);
+      }
 
       await expect
         .poll(() =>

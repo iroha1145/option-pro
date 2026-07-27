@@ -1250,13 +1250,17 @@ async def _build_upcoming_earnings(today: date):
             "expected_move_status",
         ):
             item.pop(field, None)
+        # 已发布/无日期的行同样落「not_enriched」：每行必有状态，
+        # None 会被公开快照校验拒绝（不能靠校验器留活口掩盖丢状态）。
         if item.get("release_status") != "scheduled":
+            item["expected_move_status"] = "not_enriched"
             return
         if str(item.get("ticker") or "") not in enrich_targets:
             item["expected_move_status"] = "not_enriched"
             return
         report_date = _coerce_date(item.get("earnings_date"))
         if report_date is None:
+            item["expected_move_status"] = "not_enriched"
             return
         timing = str(item.get("timing") or "").lower()
         if timing not in {"bmo", "amc"}:
