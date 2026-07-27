@@ -86,12 +86,16 @@ function WatchOnlyToggle({ value, onChange }: { value: boolean; onChange: (v: bo
       <motion.span
         whileTap={{ scale: 1.06 }}
         transition={{ type: 'spring', stiffness: 520, damping: 32 }}
-        className={cn('relative h-5 w-9 rounded-pill transition-colors duration-ui', value ? 'bg-brand-600' : 'bg-line-strong')}
+        /* shrink-0：flex 行挤压下轨道不得缩窄（缩到 21px 时 knob 直接飞出压住标签） */
+        className={cn('relative h-5 w-9 shrink-0 rounded-pill transition-colors duration-ui', value ? 'bg-brand-600' : 'bg-line-strong')}
       >
+        {/* left 显式锚定（与 ManagePanel/FilterBar 同范式）：绝对定位不写 left 时
+            静态位置生效，而 button 的 UA text-align:center 会把基准推到轨道正中，
+            translate 再叠加就双重偏移 */}
         <span
           className={cn(
-            'absolute top-0.5 size-4 rounded-full bg-white shadow-sh-1 transition-transform duration-ui ease-paper',
-            value ? 'translate-x-[18px]' : 'translate-x-0.5',
+            'absolute top-0.5 size-4 rounded-full bg-white shadow-knob transition-[left] duration-ui ease-paper',
+            value ? 'left-[18px]' : 'left-0.5',
           )}
           aria-hidden="true"
         />

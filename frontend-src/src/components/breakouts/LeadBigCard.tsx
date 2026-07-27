@@ -230,7 +230,9 @@ function LifecycleStepper({ state }: { state: LifecycleState }) {
   }
 
   return (
-    <ol className="no-scrollbar flex items-start overflow-x-auto" aria-label={t('生命周期：{state}', { state: LIFECYCLE_CN[state] ?? state })}>
+    /* overflow-x-auto 会把 overflow-y 一并钳成 auto：当前态圆点贴容器顶，
+       ring-4 软晕上沿会被裁平。pt-1.5 给光晕让出裁剪盒内空间，-mt-1.5 抵消外部布局。 */
+    <ol className="no-scrollbar -mt-1.5 flex items-start overflow-x-auto pt-1.5" aria-label={t('生命周期：{state}', { state: LIFECYCLE_CN[state] ?? state })}>
       {items.map((it, i) => (
         <li key={i} className="flex flex-1 items-start last:flex-none">
           {it.el}

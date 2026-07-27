@@ -211,13 +211,13 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
       >
         <span
           className={cn(
-            'relative h-[18px] w-8 rounded-pill transition-colors duration-ui',
+            'relative h-[18px] w-8 shrink-0 rounded-pill transition-colors duration-ui',
             filters.multiSourceOnly ? 'bg-brand-600' : 'bg-ink-300',
           )}
         >
           <span
             className={cn(
-              'absolute top-[2px] size-[14px] rounded-full bg-card shadow-sh-1 transition-[left] duration-ui ease-paper',
+              'absolute top-[2px] size-[14px] rounded-full bg-card shadow-knob transition-[left] duration-ui ease-paper',
               filters.multiSourceOnly ? 'left-[16px]' : 'left-[2px]',
             )}
           />

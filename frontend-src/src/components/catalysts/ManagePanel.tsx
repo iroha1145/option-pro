@@ -102,7 +102,7 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
       >
         <span
           className={cn(
-            'absolute top-0.5 size-3 rounded-full bg-white transition-[left] duration-fast',
+            'absolute top-0.5 size-3 rounded-full bg-white shadow-knob transition-[left] duration-fast',
             value ? 'left-[14px]' : 'left-0.5',
           )}
         />
