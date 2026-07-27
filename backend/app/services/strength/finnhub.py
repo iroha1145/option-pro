@@ -161,7 +161,9 @@ def enrich_rows_with_finnhub(rows: list[dict[str, Any]], settings: Settings | No
                     if quality_score is not None:
                         row["fundamental_score"] = quality_score
                         row.setdefault("breakdown", {})["fundamental"] = quality_score
-                        row["data_quality"] = max(int(row.get("data_quality") or 0), 92)
+                        # data_quality 是价格/量能因子的真实覆盖率（ranking
+                        # confidence）。基本面补充不填补任何价格因子，禁止
+                        # 借此把整行「数据质量」抬到高位掩盖缺失。
                     row.setdefault("data_sources", {})["fundamentals"] = "Finnhub"
                     enriched += 1
                 except Exception:

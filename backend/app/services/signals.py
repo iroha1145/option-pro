@@ -410,11 +410,25 @@ def compute_macd_histogram(close: pd.Series) -> float | None:
     return _safe_float(slope, 4)
 
 
-def _percentile_rank(series: pd.Series, value: float | None) -> float | None:
+def _percentile_rank(
+    series: pd.Series,
+    value: float | None,
+    *,
+    window: int = 252,
+    min_samples: int = 60,
+) -> float | None:
+    """Percentile of ``value`` within the trailing ``window`` observations.
+
+    调用点的标签写的是「1年分位」——分布就必须取最近约一年（252 根），
+    且样本太少（不足一个季度）时宁可缺失，也不在七八个观测里排名。
+    """
+
     if value is None or series is None:
         return None
     clean = series.dropna()
-    if clean.empty:
+    if window and window > 0:
+        clean = clean.tail(window)
+    if len(clean) < max(int(min_samples), 1):
         return None
     return _safe_float((clean <= value).mean() * 100, 1)
 

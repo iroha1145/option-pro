@@ -61,6 +61,9 @@ STRENGTH_CACHE_TTL_SECONDS = 900
 MARKET_STRENGTH_CACHE_TTL_SECONDS = 900
 STRENGTH_HISTORY_PERIOD = "2y"
 _YAHOO_HISTORY_DOWNLOAD_ATTEMPTS = 2
+# 「52 周高位」的最低样本量：一年约 252 个交易日，放 12 根余量容忍
+# 数据源对首尾少量交易日的裁剪；再短就不构成「一年」。
+_MIN_52W_HISTORY_BARS = 240
 INTRINSIC_STRENGTH_VERSION = STRENGTH_SCORE_VERSION
 _NEW_YORK = ZoneInfo("America/New_York")
 
@@ -924,7 +927,10 @@ def _feature_row(ticker: str, hist: pd.DataFrame, spy: pd.DataFrame, sector_meta
         if latest_volume is not None and avg_vol20 is not None and avg_vol20 > 0
         else None
     )
-    high_52w = _safe_float(close.tail(252).max() if len(close) >= 120 else close.max(), 4)
+    # 52 周高位要求接近一整年的真实样本（一年约 252 个交易日，留少量
+    # 假日/数据源裁剪余量）。不足一年时宁可缺失，也不用短历史最高价冒充
+    # ——那会给上市不久的标的打出字面不成立的「接近52周高位」。
+    high_52w = _safe_float(close.tail(252).max(), 4) if len(close) >= _MIN_52W_HISTORY_BARS else None
     high_3m = _safe_float(close.tail(63).max(), 4)
     vol_price_match = compute_vol_price_match(hist)
     price_action = compute_price_action(hist)
@@ -1226,11 +1232,14 @@ def _score_rows(
     market: dict[str, Any],
     profile: str,
     min_avg_dollar_volume: float,
+    price_provider: str = "Yahoo/yfinance",
 ) -> list[dict[str, Any]]:
     """Add market/profile/ranking layers without changing intrinsic scores.
 
     ``min_avg_dollar_volume`` remains in the public signature for compatibility,
     but page filter thresholds are deliberately excluded from every score.
+    ``price_provider`` is the batch download's real provider label so row-level
+    provenance stops claiming Yahoo when the bars came from Massive/Stooq.
     """
 
     del min_avg_dollar_volume
@@ -1445,8 +1454,8 @@ def _score_rows(
                 "reason": "option data is not part of strength ranking",
             },
             "data_sources": {
-                "prices": "Yahoo/yfinance",
-                "technicals": "Yahoo/yfinance",
+                "prices": price_provider,
+                "technicals": price_provider,
                 "fundamentals": "not_configured",
                 "options": "not_used_for_scoring",
             },
@@ -1667,11 +1676,18 @@ def _sector_strength(
 
     if period not in SECTOR_PERIOD_DAYS:
         raise ValueError(f"Unsupported sector period: {period}")
+    # 与板块「筛选」共用同一套成员口径：按完整 theme_ids 归组。主题分组
+    # 本就允许成分重叠（BABA 同属 social_internet 与 china_adr），若只按
+    # 首个主题归组，靠后的主题（china_adr/crypto/retail…）的均值与领涨股
+    # 只剩「没被更靠前主题抢走」的残余子集，与筛选出来的成员列表对不上。
     grouped: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
-        sid = row.get("sector_id")
-        if sid:
-            grouped.setdefault(sid, []).append(row)
+        theme_ids = row.get("theme_ids") or (
+            [row.get("sector_id")] if row.get("sector_id") else []
+        )
+        for sid in dict.fromkeys(theme_ids):
+            if sid:
+                grouped.setdefault(sid, []).append(row)
     sectors = []
     for sid, items in grouped.items():
         period_averages: dict[str, float | None] = {}
@@ -1902,7 +1918,13 @@ def _scan_sync(
         item["universe_as_of"] = universe_as_of
         item["universe_member"] = True
     _attach_canonical_ranks(intrinsic_rows)
-    scored = _score_rows(intrinsic_rows, market, profile, min_avg_dollar_volume)
+    scored = _score_rows(
+        intrinsic_rows,
+        market,
+        profile,
+        min_avg_dollar_volume,
+        price_provider=str(price_source.get("provider") or "Yahoo/yfinance"),
+    )
     for item in scored:
         shadow = item.get("range_persistence_shadow") or {}
         item["range_persistence_mode"] = breakout_settings.range_persistence_mode

@@ -116,6 +116,7 @@ export const EARNINGS: Dict = {
   '交易所交易基金': ["ETF", "ETF"],
   '反向关联': ["Opposing", "逆相関"],
   '公开分析入口暂不可用': ["Public analysis access unavailable", "公開分析へのアクセスは利用できません"],
+  '生成分析需要 Owner 登录；已有分析仍可浏览': ["Generating a new analysis requires the owner to sign in; existing analyses stay readable", "新しい分析の生成にはオーナーのサインインが必要です。既存の分析は引き続き閲覧できます"],
   'AI 任务队列已满': ["AI job queue full", "AI ジョブキューが満杯です"],
   '选择一只标的': ["Select a ticker", "銘柄を選択"],
   '点击周历 chip 或列表行，查看该财报的 AI 连锁影响分析。': ["Click a week-calendar chip or a list row to view that report's AI ripple-impact analysis.", "週間カレンダーのチップまたは一覧の行をクリックすると、その決算の AI 連鎖影響分析を確認できます。"],

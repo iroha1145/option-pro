@@ -69,9 +69,12 @@ def _clamp(value: float, lo: float = 0.0, hi: float = 100.0) -> float:
 
 
 def _empty(status: str, label: str) -> dict[str, Any]:
+    # 数据不足时 score 必须是 None：这个字典会原样进入 API 行与
+    # breakdown.price_action_detail，50.0 会被快照/AI 上下文当成
+    # 真实的「中性价格行为分」。评分侧本就按 status 把非 active 挡在外面。
     return {
         "status": status,
-        "score": 50.0,
+        "score": None,
         "structure": status,
         "structure_label": label,
         "swing_high": None,

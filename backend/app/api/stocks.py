@@ -2330,10 +2330,11 @@ async def _build_stock_signals(ticker: str) -> dict[str, Any]:
             if ema20 is None or sma50 is None or price is None:
                 raise RuntimeError(f"Technical indicators unavailable for {symbol}")
 
-            # Volume
+            # Volume — 20 日均量为 0/NaN（停牌、指数类符号、数据缺口）时
+            # 量比不可计算；1.0 占位会显示成「量比 1.00 · 正常」的假读数。
             avg_vol = _safe_number(volume.rolling(20).mean().iloc[-1]) or 0.0
             cur_vol = _safe_number(volume.iloc[-1]) or 0.0
-            vol_ratio = cur_vol / avg_vol if avg_vol > 0 else 1.0
+            vol_ratio = cur_vol / avg_vol if avg_vol > 0 else None
 
             signals = {
                 "rsi": {
@@ -2356,11 +2357,19 @@ async def _build_stock_signals(ticker: str) -> dict[str, Any]:
                     "signal": "above" if price > sma50 else "below",
                     "label": "SMA(50)",
                 },
-                "volume": {
-                    "value": round(vol_ratio, 2),
-                    "signal": "spike" if vol_ratio > 2 else "high" if vol_ratio > 1.5 else "normal",
-                    "label": "Volume",
-                },
+                "volume": (
+                    {
+                        "value": round(vol_ratio, 2),
+                        "signal": "spike" if vol_ratio > 2 else "high" if vol_ratio > 1.5 else "normal",
+                        "label": "Volume",
+                    }
+                    if vol_ratio is not None
+                    else {
+                        "value": None,
+                        "signal": "unavailable",
+                        "label": "Volume",
+                    }
+                ),
             }
 
             # Score: 0-100
@@ -2390,7 +2399,7 @@ async def _build_stock_signals(ticker: str) -> dict[str, Any]:
             tags = [
                 "MOMENTUM" if abs(current_rsi - 50) > 15 else None,
                 "TREND" if sma50 and abs(price - sma50) / sma50 > 0.05 else None,
-                "VOLUME" if vol_ratio > 1.5 else None,
+                "VOLUME" if vol_ratio is not None and vol_ratio > 1.5 else None,
             ]
 
             return {

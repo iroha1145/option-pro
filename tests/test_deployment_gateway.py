@@ -47,8 +47,8 @@ class _PeerAddress:
         await self.app(scope, receive, send)
 
 
-def _runtime(mode: str, *, clock=None) -> OwnerAccessRuntime:
-    config = AccessConfig(mode=mode)
+def _runtime(mode: str, *, clock=None, **config_kwargs) -> OwnerAccessRuntime:
+    config = AccessConfig(mode=mode, **config_kwargs)
     kwargs = {
         "password_hash": hash_owner_password(PASSWORD)
         if mode == "password"
@@ -350,7 +350,10 @@ def test_password_mode_serves_public_reads_and_protects_owner_surfaces() -> None
 def test_password_visitor_stock_pull_is_same_origin_and_rate_limited(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runtime = _runtime("password")
+    # 访客拉取默认关闭；本测试验证的是 owner 打开 visitor_live_pulls 之后，
+    # 同源校验与每票冷却仍然完整生效。默认关闭的行为见
+    # tests/test_visitor_action_boundaries.py。
+    runtime = _runtime("password", visitor_live_pulls=True)
     app = FastAPI()
     app.state.access_runtime = runtime
     app.include_router(
@@ -969,9 +972,11 @@ def test_production_validation_errors_never_echo_submitted_password() -> None:
         ("GET", "/api/strength/scan", True),
         ("GET", "/api/breakouts/current", True),
         ("GET", "/api/ai/earnings-impact/AAPL/reports/2026-07-23", True),
-        ("POST", "/api/ai/earnings-impact/AAPL/reports/2026-07-23", True),
+        # 两个访客可发起的 POST 面默认关闭，需 [access] 开关显式打开
+        # （见 test_visitor_action_flags_open_exactly_the_declared_posts）。
+        ("POST", "/api/ai/earnings-impact/AAPL/reports/2026-07-23", False),
         ("POST", "/api/catalysts/tickers/batch", True),
-        ("POST", "/api/stocks/AAOI/pull", True),
+        ("POST", "/api/stocks/AAOI/pull", False),
         # SPA(BrowserRouter):无扩展名路径回退到 index.html 壳,匿名可读
         ("GET", "/index.html/extra", True),
         ("GET", "/staticity/js/deck-app.js", False),
@@ -1004,6 +1009,38 @@ def test_public_read_paths_match_only_exact_paths_or_path_segments(
     expected: bool,
 ) -> None:
     assert main._is_public_read_request(path, method) is expected
+
+
+def test_visitor_action_flags_open_exactly_the_declared_posts() -> None:
+    """两个开关只打开各自声明的 POST 面，互不越界，也不影响 GET 清单。"""
+
+    earnings_post = ("POST", "/api/ai/earnings-impact/AAPL/reports/2026-07-23")
+    pull_post = ("POST", "/api/stocks/AAOI/pull")
+
+    assert main._is_public_read_request(
+        earnings_post[1], earnings_post[0], visitor_ai_actions=True
+    )
+    assert not main._is_public_read_request(
+        earnings_post[1], earnings_post[0], visitor_live_pulls=True
+    )
+    assert main._is_public_read_request(
+        pull_post[1], pull_post[0], visitor_live_pulls=True
+    )
+    assert not main._is_public_read_request(
+        pull_post[1], pull_post[0], visitor_ai_actions=True
+    )
+    # 开关不放大其他 POST 面
+    for blocked in (
+        "/api/stocks/AAOI/pull/",
+        "/api/ai/jobs/earnings-impact",
+        "/api/worker/actions/focus_refresh",
+    ):
+        assert not main._is_public_read_request(
+            blocked,
+            "POST",
+            visitor_ai_actions=True,
+            visitor_live_pulls=True,
+        )
 
 
 @pytest.mark.parametrize(

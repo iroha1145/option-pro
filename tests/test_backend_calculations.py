@@ -571,7 +571,11 @@ def test_yahoo_option_heat_does_not_inject_a_fake_iv_value_when_missing() -> Non
     assert scored["option_pool_iv_rank"] is None
     assert scored["iv_rank"] is None
     assert scored["iv_label"] == "隐波缺失"
-    assert scored["option_heat_score"] == 50.0
+    # 单票池没有可辩护的横截面分位：热度分如实缺失而不是伪造 50 中位
+    # （与 scanner._pct_rank 的口径一致，审计 2.1.12）。
+    assert scored["option_heat_score"] is None
+    assert scored["source_status"] == "insufficient_data"
+    assert "volume_rank" in scored["heat_missing_components"]
 
 
 def test_marketdata_option_heat_reweights_missing_iv_and_preserves_real_iv() -> None:

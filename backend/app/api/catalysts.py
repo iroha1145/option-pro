@@ -19,6 +19,7 @@ from pydantic import (
 
 from app.access import (
     current_request_is_owner,
+    request_allows_visitor_live_pulls,
     require_owner_access,
     require_same_origin_action,
     require_same_origin_json,
@@ -407,6 +408,7 @@ def ticker_catalyst_batch(
 
 @router.get("/calendar")
 async def catalyst_calendar(
+    request: Request,
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
     timezone_offset_minutes: int = Query(default=0, ge=-840, le=840),
@@ -442,11 +444,17 @@ async def catalyst_calendar(
         # Explicit point-in-time queries must stay historically reproducible.
         if as_of is not None:
             return payload
+        # 访客默认不触发对 TradingView 的外部补全请求（只复用进程内的
+        # 新鲜缓存）；Owner 或配置开启 visitor_live_pulls 时才实际外呼。
         return await enrich_recent_actuals(
             payload,
             date_from=start_date,
             date_to=end_date,
             as_of=observed,
+            allow_fetch=(
+                current_request_is_owner()
+                or request_allows_visitor_live_pulls(request)
+            ),
         )
     except CatalystError as error:
         _raise_safe(error)

@@ -72,3 +72,25 @@
   看涨或看跌合约类型也不代表成交方向，缺少主动买卖方时方向保持未知。Yahoo 与
   MarketData.app 的期权热度在隐含波动率缺失时移除该分量，并按其余有效证据重新
   归一化，不再注入 0.35、50 分或“中性隐波”。
+
+## 特征口径 v3（strength-features-v3，2026-07-27 审计批）
+
+评分公式不变，特征提取口径收紧，旧快照行值不可与 v3 混排对比：
+
+- 52 周高位（`high_52w` / `ath_proximity`）要求至少 240 根真实日线；不足一年
+  时缺失并按缺失重新配权，不再用短历史最高价冒充，「接近52周高位」标签随之
+  不再对上市不久的标的出现。
+- 量价匹配（`vol_price_match`）把缺失成交量的交易日整行剔除后再取中位数，
+  不再把「没观测到」当「零成交」计入真空判定。
+- 期权热度：无成交、无持仓、无横截面样本（单票池）时分量如实缺失，剩余
+  有效权重不足则整个 `option_heat_score` 为 `null` 且 `source_status`
+  标 `insufficient_data`；put/call 在 call 侧为零时为 `null`，不再输出 99.0。
+- `price_action` 数据不足时 `score` 为 `null`（原为 50.0 占位）。
+- 板块聚合（`/api/strength/sectors` 与扫描信封 `sectors`）改按完整
+  `theme_ids` 归组，与板块筛选共用同一套成员口径；重叠主题的成员会同时计入
+  其所属的每个主题。
+- 市场广度（`sectors_above_50dma` / `sectors_above_200dma`）要求至少
+  `ceil(11×0.6)=7` 只行业 ETF 有数据，低于门槛读数缺失并记入
+  `optional_missing`。
+- 行级 `data_sources.prices/technicals` 使用批量下载的真实数据源标签。
+- Finnhub 基本面补充不再抬高整行 `data_quality`。

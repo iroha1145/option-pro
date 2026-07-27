@@ -13,7 +13,11 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from app.access import current_request_is_owner, public_snapshot_unavailable
+from app.access import (
+    current_request_is_owner,
+    public_snapshot_unavailable,
+    request_allows_visitor_live_pulls,
+)
 from app.data_paths import get_data_paths
 from app.services import massive, yahoo
 from app.services.request_security import request_client_ip
@@ -300,7 +304,9 @@ def _rank_iv_rows(sector_id: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
     for row in valid_rows:
         iv = float(row["iv"])
         if len(iv_values) == 1:
-            sector_rank = 50.0
+            # 单个样本没有可辩护的板块内分位——50.0 会被当成「真的居中」。
+            # 绝对 IV 照常给出，分位留空由界面渲染「—」。
+            sector_rank = None
         else:
             below = sum(1 for candidate in iv_values if candidate < iv)
             tied = sum(1 for candidate in iv_values if candidate == iv)
@@ -312,7 +318,7 @@ def _rank_iv_rows(sector_id: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
             "price": row.get("price"),
             "price_provider": row.get("price_provider"),
             "atm_iv_percent": atm_iv_percent,
-            "sector_iv_rank": round(sector_rank, 1),
+            "sector_iv_rank": round(sector_rank, 1) if sector_rank is not None else None,
             "iv_rank": None,
             "iv_percentile": None,
             # Deprecated aliases retain their true unit: current absolute IV%.
@@ -323,7 +329,10 @@ def _rank_iv_rows(sector_id: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
             "as_of": row.get("as_of"),
         })
     rankings.sort(
-        key=lambda ranking: (ranking["sector_iv_rank"], ranking["atm_iv_percent"]),
+        key=lambda ranking: (
+            ranking["sector_iv_rank"] if ranking["sector_iv_rank"] is not None else -1.0,
+            ranking["atm_iv_percent"],
+        ),
         reverse=True,
     )
 
@@ -733,6 +742,7 @@ async def _request_iv_payload(
     sector_id: str,
     *,
     public_client_id: str | None = None,
+    visitor_live_allowed: bool = False,
 ) -> dict[str, Any]:
     """Resolve cached IV first, then perform one protected Yahoo cold scan.
 
@@ -772,11 +782,14 @@ async def _request_iv_payload(
         else None
     )
     # A visitor can keep using an honestly marked stale provider snapshot.
-    # Only a truly empty cold cache starts new Yahoo work; this preserves the
-    # public read boundary during upstream outages while removing the old
-    # permanent 503 for sectors that never had a snapshot.
     if not owner and fallback is not None:
         return fallback
+    # Visitors only start new Yahoo work when the owner opted in via
+    # ``access.visitor_live_pulls``. By default a sector without any saved
+    # snapshot answers 503 to visitors instead of spending provider quota —
+    # the snapshot appears once the owner (or worker) has looked at it.
+    if not owner and not visitor_live_allowed:
+        raise public_snapshot_unavailable(f"sector {sector_id} IV ranking")
 
     retry_after = _sector_iv_failure_retry_after(key)
     if retry_after is not None:
@@ -856,6 +869,7 @@ async def iv_ranking(sector_id: str, request: Request):
             public_client_id=(
                 None if current_request_is_owner() else request_client_ip(request)
             ),
+            visitor_live_allowed=request_allows_visitor_live_pulls(request),
         )
     except HTTPException:
         raise
@@ -874,6 +888,7 @@ async def heatmap(sector_id: str, request: Request):
             public_client_id=(
                 None if current_request_is_owner() else request_client_ip(request)
             ),
+            visitor_live_allowed=request_allows_visitor_live_pulls(request),
         )
     except HTTPException:
         raise

@@ -310,6 +310,8 @@ class OwnerAccessRuntime:
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.mode: Literal["private_network", "password"] = config.mode
+        self.visitor_live_pulls = bool(config.visitor_live_pulls)
+        self.visitor_ai_actions = bool(config.visitor_ai_actions)
         self._networks = tuple(
             ipaddress.ip_network(value, strict=False)
             for value in config.allowed_private_cidrs
@@ -484,6 +486,27 @@ def _runtime(request: Request) -> OwnerAccessRuntime:
     return runtime if isinstance(runtime, OwnerAccessRuntime) else get_access_runtime()
 
 
+def request_allows_visitor_live_pulls(request: Request | None) -> bool:
+    """Whether password-mode visitors may start bounded live provider work.
+
+    Reads the app-injected runtime when the request carries one (HTTP path and
+    tests that install ``app.state.access_runtime``), and falls back to the
+    deployment config for bare, directly constructed requests.
+    """
+
+    runtime: OwnerAccessRuntime | None = None
+    if request is not None:
+        try:
+            candidate = getattr(request.app.state, "access_runtime", None)
+        except (AttributeError, KeyError):
+            candidate = None
+        if isinstance(candidate, OwnerAccessRuntime):
+            runtime = candidate
+    if runtime is None:
+        return bool(get_personal_config().access.visitor_live_pulls)
+    return runtime.visitor_live_pulls
+
+
 def request_is_owner_session(request: Request) -> bool:
     """Boolean form of :func:`require_owner_access`.
 
@@ -533,6 +556,7 @@ async def require_public_read_or_owner_access(
     )
     public_stock_pull = (
         method == "POST"
+        and runtime.visitor_live_pulls
         and is_public_stock_pull_path(request.url.path)
     )
     if runtime.mode == "password" and (
@@ -630,6 +654,7 @@ def require_same_origin_action(request: Request) -> None:
     if (
         not owner_access
         and method == "POST"
+        and _runtime(request).visitor_ai_actions
         and is_public_earnings_impact_action_path(path)
     ):
         require_same_origin_json(request)
