@@ -701,14 +701,22 @@ export default function Watchlist() {
   // 冒充成完整结果，和这次审计要修的是同一类错误。
   const renderedRows = renderedCards;
 
-  /* 打印前挂载全部：否则打出来的只有当前已经滚动加载的那几十张卡。
+  /* 打印前挂载全部，打印后还回去。
+     前者：否则打出来的只有当前已经滚动加载的那几十张卡（而且必须同步提交，
+     浏览器可能在 beforeprint 返回后立刻截取打印文档）。
+     后者：不还的话两百多张卡会一直挂在 DOM 里，这一轮渐进挂载的收益到下次整页
+     刷新前都作废。
      浏览器原生查找的同类限制没有可靠拦截点，不在这里假装解决。 */
-  const loadAllForPrint = progressive.loadAll;
+  const { prepareForPrint, restoreAfterPrint } = progressive;
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.addEventListener('beforeprint', loadAllForPrint);
-    return () => window.removeEventListener('beforeprint', loadAllForPrint);
-  }, [loadAllForPrint]);
+    window.addEventListener('beforeprint', prepareForPrint);
+    window.addEventListener('afterprint', restoreAfterPrint);
+    return () => {
+      window.removeEventListener('beforeprint', prepareForPrint);
+      window.removeEventListener('afterprint', restoreAfterPrint);
+    };
+  }, [prepareForPrint, restoreAfterPrint]);
 
   return (
     <div>

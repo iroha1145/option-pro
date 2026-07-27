@@ -9,7 +9,9 @@ import type { FocusCycleJob, MarketFocusCycle, NewsClassification } from './api'
 import { ImpactValue, Led } from './bits';
 import ConfirmDialog from './ConfirmDialog';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
+import InfoHint from '@/components/shared/InfoHint';
 import Icon from '@/components/icons';
+import { SCORE_HINTS } from '@/lib/scoreHints';
 import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
 
@@ -165,12 +167,15 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
                     {t('证据不足')}
                   </span>
                 ) : (
-                  <ImpactValue value={a.catalystBias} />
+                  <ImpactValue value={a.catalystBias} bare />
                 )}
                 {a.confidence !== null && (
-                  <span className="shrink-0 whitespace-nowrap font-mono text-micro text-ink-400 tnum">
+                  /* 偏向与置信共用一条说明（见 SCORE_HINTS.focusCycleAssessment）。
+                     原先两个读数后面各挂一句常驻免责声明（「· 非收益」「· 非胜率」），
+                     每行重复、又解释不了自己。声明留着，但收进这一个 ⓘ。 */
+                  <span className="flex shrink-0 items-center whitespace-nowrap font-mono text-micro text-ink-400 tnum">
                     {t('置信')} {Math.round(a.confidence * 100)}
-                    <span className="ml-0.5">{t('· 非胜率')}</span>
+                    <InfoHint hint={SCORE_HINTS.focusCycleAssessment} size={11} className="ml-1" />
                   </span>
                 )}
                 {a.horizon && (

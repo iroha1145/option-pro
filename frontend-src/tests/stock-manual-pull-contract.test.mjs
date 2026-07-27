@@ -66,7 +66,7 @@ test('public breakout research pages and drawers expose the same manual recovery
 test('live trend bias maps optional signal fields and renders missing data without inventing values', async () => {
   const detailApi = await source('components/detail/api.ts');
   const trend = await source('components/detail/TrendBiasPanel.tsx');
-  assert.match(detailApi, /mapTrendBiasResponse\(body, t\)/);
+  assert.match(detailApi, /mapTrendBiasResponse\(body, symbol\)/);
   assert.match(detailApi, /asRec\(raw\.scores\)/);
   assert.match(detailApi, /asRec\(body\.signals\)/);
   assert.match(detailApi, /trendBiasScore === null \|\| rawStatus === 'insufficient_data'/);

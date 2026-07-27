@@ -215,6 +215,35 @@ test('共享的市场时段请求在并发调用下只发一次', async () => {
   const beforeBoth = calls;
   await Promise.all([marketApi.status(), marketApi.indices()]);
   assert.equal(calls, beforeBoth + 2, '不同端点必须各发各的');
+
+  // 身份切换必须作废共享读：/strength/market 对访客和 owner 返回的不是同一份
+  // 数据（访客读落库的公开快照，owner 实时算），2 秒窗口足以让登录后的第一次
+  // 读取复用上一个身份那份。
+  const { dropSharedReads } = sharedModule.exports;
+  assert.equal(typeof dropSharedReads, 'function', 'sharedRead 没有导出 dropSharedReads');
+  await marketApi.status();
+  const beforeDrop = calls;
+  await marketApi.status();
+  assert.equal(calls, beforeDrop, '窗口内本该复用');
+  dropSharedReads();
+  await marketApi.status();
+  assert.equal(calls, beforeDrop + 1, '身份切换后仍然复用了上一个身份的响应');
+});
+
+test('身份变化才作废共享读，每次探测都清会废掉共享窗口', async () => {
+  // 身份不只在登录/登出时变：会话过期是由 60 秒定时或重新聚焦那次核验发现的，
+  // 没有任何本地写操作，那条路径同样要作废。但只在**变了**的时候作废 ——
+  // 每次探测都清一遍会让一个轮询周期里三个组件各发一次 /market/status。
+  const hook = codeOf(await source('hooks/useAccess.tsx'));
+  assert.match(hook, /import \{ dropSharedReads \} from '@\/api\/sharedRead'/);
+  // 写操作路径（登录/注册/登出）：写完到状态读回来之间也不能有窗口。
+  assert.match(hook, /generationRef\.current \+= 1;[\s\S]{0,400}?dropSharedReads\(\);/);
+  // 核验路径：只有身份真的变了才清。
+  assert.match(
+    hook,
+    /if \(identityRef\.current !== null && identityRef\.current !== identity\) \{\s*dropSharedReads\(\);/,
+    '核验路径要么不作废共享读，要么每次探测都清 —— 两者都不对',
+  );
 });
 
 /* ---------- 分批发生在排序之后（review 发现的真实缺陷） ---------- */
@@ -282,13 +311,26 @@ test('个人自选还没读回来时算加载中，不先摆默认池', async ()
 
 /* ---------- 打印挂载全部 ---------- */
 
-test('打印前挂载全部，且不假称解决了浏览器查找', async () => {
+test('打印前挂载全部，打印后还回去，且不假称解决了浏览器查找', async () => {
   const page = codeOf(await source('pages/Watchlist.tsx'));
-  const hook = await source('hooks/useProgressiveList.ts');
-  assert.match(page, /addEventListener\('beforeprint', loadAllForPrint\)/);
-  assert.match(page, /removeEventListener\('beforeprint', loadAllForPrint\)/);
+  const hook = codeOf(await source('hooks/useProgressiveList.ts'));
+  assert.match(page, /addEventListener\('beforeprint', prepareForPrint\)/);
+  assert.match(page, /removeEventListener\('beforeprint', prepareForPrint\)/);
+
+  // 打印结束必须还回上限。不还的话两百多张卡会一直挂在 DOM 里，这一轮渐进挂载
+  // 的收益到下次整页刷新前都作废 —— 等于打印一次就把优化撤销了。
+  assert.match(page, /addEventListener\('afterprint', restoreAfterPrint\)/);
+  assert.match(page, /removeEventListener\('afterprint', restoreAfterPrint\)/);
+
+  // 必须同步提交。beforeprint 返回后浏览器可能立刻截取打印文档，而普通 setState
+  // 在 React 里是异步提交的 —— 纸上仍然只有已挂载的那 24 张。
+  assert.match(hook, /flushSync\(\(\) => setLimit\(Number\.MAX_SAFE_INTEGER\)\)/);
+  assert.match(hook, /import \{ flushSync \} from 'react-dom'/);
+  // 直接挂 loadAll 就是原来那个错法：上限永久留在「全部」上。
+  assert.doesNotMatch(page, /addEventListener\('beforeprint', (?:loadAll|progressive\.loadAll)/);
+
   // 注释里必须承认 ⌘F 的限制没有解决，而不是留下一个做不到的承诺
-  assert.match(hook, /无法在页面里可靠拦截/);
+  assert.match(await source('hooks/useProgressiveList.ts'), /无法在页面里可靠拦截/);
 });
 
 /* ---------- 高度保留放在共用外壳 ---------- */
@@ -306,8 +348,8 @@ test('详情与强度补充同时发出，不是首尾相接', async () => {
   const api = codeOf(await source('components/detail/api.ts'));
 
   // 两个 Promise 必须在 await 之前就创建出来
-  const detailIdx = api.indexOf('const detailPromise = stocksApi.detail(t, force);');
-  const strengthIdx = api.indexOf('const strengthPromise = Promise.race([');
+  const detailIdx = api.indexOf('const detailPromise = stocksApi.detail(symbol, force);');
+  const strengthIdx = api.indexOf('const supplementPromise: Promise<StrengthSupplement> = Promise.race([');
   const firstAwait = api.indexOf('await detailPromise');
   assert.ok(detailIdx > 0 && strengthIdx > 0, '两条请求都要提前发起');
   assert.ok(
@@ -317,5 +359,22 @@ test('详情与强度补充同时发出，不是首尾相接', async () => {
   // 旧写法：先 await 详情，再去要强度
   assert.doesNotMatch(api, /const detail = await stocksApi\.detail\(t, force\);/);
   // 回退路径复用已经在飞的那次请求
-  assert.match(api, /\(await strengthPromise\) \?\?/);
+  assert.match(api, /const supplement = await supplementPromise;/);
+});
+
+test('强度补充明确失败时不重发；只有超时才重发', async () => {
+  // 原来失败和超时都被折成 null，于是回退分支靠「是不是 null」决定要不要再要一次
+  // —— 一个刚刚 404 的端点于是又被请求一遍，第二次还是 404。超时才值得重发：
+  // 那次请求可能还在飞，marketGet 会让两者共用同一个 in-flight promise。
+  const api = codeOf(await source('components/detail/api.ts'));
+  assert.match(api, /kind: 'ok'/);
+  assert.match(api, /kind: 'timeout'/);
+  assert.match(api, /kind: 'failed'/);
+  assert.match(
+    api,
+    /supplement\.kind === 'timeout'\s*\?\s*await marketGet\(supplementUrl/,
+    '回退分支没有把重发限制在超时这一种情况上',
+  );
+  // 失败也被折成 null 的旧写法不能再出现。
+  assert.doesNotMatch(api, /\)\.catch\(\(\) => null\),?\s*\n\s*new Promise<null>/);
 });

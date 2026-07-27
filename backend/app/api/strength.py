@@ -531,6 +531,12 @@ async def stock(ticker: str, profile: str = Query("balanced", pattern="^(conserv
                     "ticker": symbol,
                     "row": row,
                     "market_regime": payload.get("market_regime"),
+                    # Which macro snapshot this row's shadow fields were scored
+                    # against. The drawer pairs the row's technical-minus-macro
+                    # gap with a *live* macro fit, and a scan can be hours older
+                    # than the latest publication; without this the interface
+                    # cannot tell whether the two numbers describe one moment.
+                    "macro_linkage": payload.get("macro_linkage"),
                     "_cached": True,
                     "snapshot_source": "worker",
                 })

@@ -138,6 +138,7 @@ function mapStockDetail(body: unknown): StockDetail {
     macroSupporting: mapMacroFitDrivers(r.macro_supporting_factors),
     macroOpposing: mapMacroFitDrivers(r.macro_opposing_factors),
     macroShadowStatus: pickS(r, 'macro_shadow_status'),
+    macroSnapshotDate: pickS(r, 'macro_snapshot_date'),
   };
 }
 

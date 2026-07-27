@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react';
 import { accessApi } from '@/api/modules/access';
 import { PRINCIPAL_INVALID_EVENT } from '@/api/client';
+import { dropSharedReads } from '@/api/sharedRead';
 import type { AccessRole, AccessStatus } from '@/api/types';
 import { t } from '../i18n/core.ts';
 
@@ -65,10 +66,27 @@ export function AccessProvider({ children }: { children: ReactNode }) {
    */
   const generationRef = useRef(0);
 
+  /**
+   * 上一次确认到的身份，用来判断它是不是**真的**变了。
+   *
+   * 身份不只在登录/登出时变：会话过期是由 60 秒定时或重新聚焦那次核验发现的，
+   * 没有任何本地写操作。那条路径也必须作废共享读，否则刚被降级成访客的页面还能
+   * 在 2 秒内复用 owner 那份 /strength/market。
+   *
+   * 但只在**变了**的时候作废。每次探测都清一遍会把 2 秒共享窗口废掉：一个轮询
+   * 周期里三个组件同时要 /market/status，那正是这个窗口要压掉的重复。
+   */
+  const identityRef = useRef<string | null>(null);
+
   const readInto = useCallback(async (generation: number) => {
     try {
       const next = await accessApi.status();
       if (generation !== generationRef.current) return;
+      const identity = `${next.role}\u0000${next.accountUsername ?? ''}`;
+      if (identityRef.current !== null && identityRef.current !== identity) {
+        dropSharedReads();
+      }
+      identityRef.current = identity;
       setStatus(next);
       setIdentityUnavailable(false);
     } catch (error) {
@@ -88,6 +106,10 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   /** 作废所有在途探测并开始新一轮读取。写操作之后必须走这条路径。 */
   const invalidateAndRead = useCallback(() => {
     generationRef.current += 1;
+    // 共享读缓存也一起作废：/strength/market 对访客和 owner 返回的不是同一份
+    // 数据（访客读公开快照，owner 实时算），2 秒的共享窗口足以让登录成功后的
+    // 第一次读取复用上一个身份那份。
+    dropSharedReads();
     return readInto(generationRef.current);
   }, [readInto]);
 

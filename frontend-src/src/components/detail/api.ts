@@ -6,6 +6,12 @@
  * - POST /api/signals/stock/{t}/ai-analysis（signal_analysis 任务，202）
  * - GET /api/strength/stocks/{t}（概览 503 时的基础行情回退：扫描行快照，匿名可用）
  * mock 模式下代码不存在抛 404（整页形态 404 空态）。
+ *
+ * 大写后的代码在本文件里一律叫 `symbol`，**不要改回 `t`**。翻译函数按惯例叫 `t`，
+ * 从前这里每个函数都以 `const t = ticker.toUpperCase()` 开头，两者一撞，函数体内的
+ * `t('…')` 就是 “t is not a function” —— 而且是运行时才炸，类型检查看不出来
+ * （`t` 确实存在，只是变成了 string）。双保险：局部改名 `symbol`，翻译函数按
+ * codemod 惯例以 `__t` 别名引入（见 i18n-coverage 的 classify）。
  */
 import { ApiError, mockOr } from '@/api/client';
 import { marketGet } from '@/api/marketRead';
@@ -101,18 +107,88 @@ function strengthRowToDetail(env: Rec): StockDetail | null {
     macroSupporting: mapMacroFitDrivers(row.macro_supporting_factors),
     macroOpposing: mapMacroFitDrivers(row.macro_opposing_factors),
     macroTechnicalGap: pickN(row, 'macro_technical_gap'),
+    // 这一行的影子字段是对着哪一期宏观快照算的（信封顶层 macro_linkage）。
+    macroSnapshotDate: pickS(asRec(env.macro_linkage), 'macro_snapshot_date'),
   };
 }
 
 /** 强度补充的独立截止时间；超过就先给核心行情，评分随下一次读取补齐。 */
 const STRENGTH_SUPPLEMENT_DEADLINE_MS = 4_000;
 
+/**
+ * 强度补充这一路的结果，**带上它为什么是这个结果**。
+ *
+ * 原来失败和超时都被折成 `null`，于是 503 回退分支只能重发一次请求来区分两者 ——
+ * 而明确 404 的端点重发一次还是 404，纯属白跑。超时才值得再要一次：那次请求可能
+ * 还在飞，marketGet 会让它们共用同一个 in-flight promise。
+ */
+type StrengthSupplement =
+  | { kind: 'ok'; body: unknown }
+  | { kind: 'failed' }
+  | { kind: 'timeout' };
+
+/** 抽屉里那组宏观影子字段。 */
+type MacroFields = Pick<
+  StockDetail,
+  | 'macroFit'
+  | 'macroTailwind'
+  | 'macroFitConfidence'
+  | 'macroSupporting'
+  | 'macroOpposing'
+  | 'macroTechnicalGap'
+  | 'macroShadowStatus'
+  | 'macroSnapshotDate'
+>;
+
+/**
+ * 合并概览与扫描行的宏观影子字段。
+ *
+ * 两条规则，都是「不要把两份读数拼成一份」：
+ *
+ * 1. **概览一旦回答了，它就是权威**，不再逐字段回填扫描行。逐字段 `??` 会犯两个
+ *    方向相反的错：概览说「本次没有读数」（macro_snapshot_unavailable /
+ *    exposure_coverage_low）时，上一次扫描的旧分被复活；概览说「本期没有负面
+ *    因子」时，空数组长度为 0，旧的负面因子被补回来。两者都是拿一份已经不成立的
+ *    解释冒充当前读数 —— 后端专门为此返回 null 而不是 50，前端不能在这里抵消掉。
+ *    概览必然带 macro_shadow_status（四种取值都写），所以它非空就等于「答过了」；
+ *    只有对接不带这个字段的旧后端时才整组回退扫描行。
+ *
+ * 2. **差值只在同期时才显示。** macroFit 来自实时概览，macroTechnicalGap 只有落库的
+ *    扫描行算得出（它要该股的 market_fit_score）。扫描可能比最新一期宏观旧几个
+ *    小时；两个数字各自都对，凑在一起却不是同一个测量时点。
+ *
+ * 导出是为了能真的跑它 —— 这条规则值得用行为断言钉住，而不是用正则看一眼源码。
+ */
+export function mergeMacroFields(
+  detail: Partial<MacroFields>,
+  strength: Partial<MacroFields> | null,
+): MacroFields {
+  const overviewAnswered =
+    detail.macroShadowStatus !== null && detail.macroShadowStatus !== undefined;
+  const source = overviewAnswered ? detail : strength;
+  const gapIsSameSnapshot =
+    // 概览没答 → 分数和差值都出自同一行，同期是构造保证的。
+    !overviewAnswered
+    || (strength?.macroSnapshotDate != null
+      && detail.macroSnapshotDate === strength.macroSnapshotDate);
+  return {
+    macroFit: source?.macroFit ?? null,
+    macroTailwind: source?.macroTailwind ?? null,
+    macroFitConfidence: source?.macroFitConfidence ?? null,
+    macroSupporting: source?.macroSupporting ?? [],
+    macroOpposing: source?.macroOpposing ?? [],
+    macroSnapshotDate: source?.macroSnapshotDate ?? null,
+    macroTechnicalGap: gapIsSameSnapshot ? strength?.macroTechnicalGap ?? null : null,
+    macroShadowStatus: detail.macroShadowStatus ?? strength?.macroShadowStatus ?? null,
+  };
+}
+
 export function getDetail(ticker: string, force = false): Promise<StockDetail> {
-  const t = ticker.toUpperCase();
+  const symbol = ticker.toUpperCase();
   return mockOr(
     () => {
-      if (!fx.hasTicker(t)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: t }));
-      return fx.getStockDetail(t);
+      if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
+      return fx.getStockDetail(symbol);
     },
     async () => {
       // 两个请求互不依赖，同时发出。
@@ -124,22 +200,23 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
       // 可选补充不得拖住核心详情（审计 P2-32）：失败已经被捕获，但请求缓慢或
       // 悬挂时整个详情对象仍会一直等它。截止时间从**发起时刻**起算，
       // 这也是并行之后才成立的口径。
-      const detailPromise = stocksApi.detail(t, force);
-      const strengthPromise = Promise.race([
-        marketGet(
-          `/strength/stocks/${encodeURIComponent(t)}`,
-          { ttlMs: 60_000, staleMs: 30 * 60_000, force },
-        ).catch(() => null),
-        new Promise<null>((resolve) => {
-          setTimeout(() => resolve(null), STRENGTH_SUPPLEMENT_DEADLINE_MS);
+      const detailPromise = stocksApi.detail(symbol, force);
+      const supplementUrl = `/strength/stocks/${encodeURIComponent(symbol)}`;
+      const supplementPromise: Promise<StrengthSupplement> = Promise.race([
+        marketGet(supplementUrl, { ttlMs: 60_000, staleMs: 30 * 60_000, force })
+          .then((body): StrengthSupplement => ({ kind: 'ok', body }))
+          .catch((): StrengthSupplement => ({ kind: 'failed' })),
+        new Promise<StrengthSupplement>((resolve) => {
+          setTimeout(() => resolve({ kind: 'timeout' }), STRENGTH_SUPPLEMENT_DEADLINE_MS);
         }),
       ]);
 
       try {
         // 行情价格仍以 stocks 概览（Massive 主源）为准；强度快照只补其真实评分与缺失基本面。
         const detail = await detailPromise;
-        const strengthBody = await strengthPromise;
-        const strength = strengthBody !== null ? strengthRowToDetail(asRec(strengthBody)) : null;
+        const supplement = await supplementPromise;
+        const strength =
+          supplement.kind === 'ok' ? strengthRowToDetail(asRec(supplement.body)) : null;
         const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
         return {
           ...detail,
@@ -152,32 +229,23 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
           // 宏观适配以**概览**为主源：概览对每只在主题表里的票都算得出，而
           // /strength/stocks/{t} 只回答公开快照 top 切片里的代码，其余 404 ——
           // 之前拿它当主源，AMD、SLB 等约 190 只票就都显示「暂无宏观读数」。
-          //
-          // 扫描行只补概览没有的那一个字段（技术 − 结构性宏观的差值，它需要该股的
-          // 市场适配分，概览里没有）。两边都没有就保持 null，不兜中性。
-          macroFit: detail.macroFit ?? strength?.macroFit ?? null,
-          macroTailwind: detail.macroTailwind ?? strength?.macroTailwind ?? null,
-          macroFitConfidence:
-            detail.macroFitConfidence ?? strength?.macroFitConfidence ?? null,
-          macroSupporting:
-            (detail.macroSupporting?.length ? detail.macroSupporting : strength?.macroSupporting) ?? [],
-          macroOpposing:
-            (detail.macroOpposing?.length ? detail.macroOpposing : strength?.macroOpposing) ?? [],
-          macroTechnicalGap: strength?.macroTechnicalGap ?? null,
-          macroShadowStatus: detail.macroShadowStatus ?? strength?.macroShadowStatus ?? null,
+          // 整组字段同源同期，规则见 mergeMacroFields。
+          ...mergeMacroFields(detail, strength),
         };
       } catch (e) {
         // 只有明确的公开快照边界才允许回退扫描行；供应方错误不能被伪装成基础行情成功。
         if (!(e instanceof ApiError) || e.code !== 503 || e.bizCode !== 'public_snapshot_unavailable') throw e;
         // 上面已经发出去的那次强度请求可以直接复用，不必再发一次。
-        // 它超时会解析成 null，此时才真的重新要一次。
-        const body =
-          (await strengthPromise) ??
-          (await marketGet(
-            `/strength/stocks/${encodeURIComponent(t)}`,
-            { ttlMs: 60_000, staleMs: 30 * 60_000, force },
-          ).catch(() => null));
-        const fallback = body !== null ? strengthRowToDetail(asRec(body)) : null;
+        // **只有超时**才值得重发：那次请求可能还在飞，marketGet 会让两者共用同一个
+        // in-flight promise。明确失败（404 / 503）重发一次结果一样，纯属白跑。
+        const supplement = await supplementPromise;
+        const retried =
+          supplement.kind === 'timeout'
+            ? await marketGet(supplementUrl, { ttlMs: 60_000, staleMs: 30 * 60_000, force })
+                .then((body): StrengthSupplement => ({ kind: 'ok', body }))
+                .catch((): StrengthSupplement => ({ kind: 'failed' }))
+            : supplement;
+        const fallback = retried.kind === 'ok' ? strengthRowToDetail(asRec(retried.body)) : null;
         if (fallback === null) throw e;
         return fallback;
       }
@@ -186,19 +254,19 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
 }
 
 export function getDetailChart(ticker: string, range: ChartRange, force = false): Promise<StockChartEx> {
-  const t = ticker.toUpperCase();
+  const symbol = ticker.toUpperCase();
   return mockOr(
     () => {
-      if (!fx.hasTicker(t)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: t }));
-      return fx.getStockChartEx(t, range);
+      if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
+      return fx.getStockChartEx(symbol, range);
     },
     // 契约 range ∈ 5m|15m|1h|1d|1w：界面与后端周期一一对应。
     () =>
       marketGet(
-        `/stocks/${encodeURIComponent(t)}/chart?range=${range}&adjustment=raw`,
+        `/stocks/${encodeURIComponent(symbol)}/chart?range=${range}&adjustment=raw`,
         { ttlMs: 60_000, staleMs: 60 * 60_000, force },
       ).then((d) =>
-        mapChartEx(d, t, range),
+        mapChartEx(d, symbol, range),
       ),
   );
 }
@@ -434,33 +502,33 @@ export function mapTrendBiasResponse(body: unknown, ticker: string): StockTrendB
 }
 
 export function getTrendBias(ticker: string, force = false): Promise<StockTrendBiasView> {
-  const t = ticker.toUpperCase();
+  const symbol = ticker.toUpperCase();
   return mockOr<StockTrendBiasView>(
     () => {
-      if (!fx.hasTicker(t)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: t }));
-      return mapTrendBiasResponse(fx.getStockTrendBias(t), t);
+      if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
+      return mapTrendBiasResponse(fx.getStockTrendBias(symbol), symbol);
     },
     () =>
-      marketGet(`/signals/stock/${encodeURIComponent(t)}`, {
+      marketGet(`/signals/stock/${encodeURIComponent(symbol)}`, {
         ttlMs: 60_000,
         staleMs: 30 * 60_000,
         force,
-      }).then((body) => mapTrendBiasResponse(body, t)),
+      }).then((body) => mapTrendBiasResponse(body, symbol)),
   );
 }
 
 /** signal_analysis 任务（owner）；轮询/取消复用 aiJobsApi.get / cancel */
 export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
-  const t = ticker.toUpperCase();
+  const symbol = ticker.toUpperCase();
   return mockOr(
     () => {
-      if (!fx.hasTicker(t)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: t }));
-      const d = fx.getStockDetail(t);
-      const b = fx.getStockTrendBias(t);
+      if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
+      const d = fx.getStockDetail(symbol);
+      const b = fx.getStockTrendBias(symbol);
       // mock 模式下模拟「模型写的分析正文」，与真实 AI 输出同样不做界面翻译（如实保留原文）。
       const ivTone = d.ivPercentile >= 60 ? '偏贵' : d.ivPercentile <= 40 ? '相对便宜' : '中性';
       const text =
-        `${t} 模型分析完成：趋势偏向分 ${b.trend_bias_score}（${b.trend_bias_label}），` +
+        `${symbol} 模型分析完成：趋势偏向分 ${b.trend_bias_score}（${b.trend_bias_label}），` +
         `分项读数 趋势 ${b.scores.trend} / 动量 ${b.scores.momentum} / 量能 ${b.scores.volume} / 波动 ${b.scores.volatility}。` +
         `现价 ${d.price.toFixed(2)} 美元，IV 百分位 ${d.ivPercentile}%，期权定价${ivTone}。` +
         `近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。` +
@@ -468,7 +536,7 @@ export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
       return fx2.createAiJob('signal-analysis' as AiJob['kind'], text);
     },
     // 契约：owner+SO → 202 + Location（job_id 可能仅在 Location 头）
-    () => postAiJob(`/signals/stock/${encodeURIComponent(t)}/ai-analysis`, { force: false }),
+    () => postAiJob(`/signals/stock/${encodeURIComponent(symbol)}/ai-analysis`, { force: false }),
   );
 }
 
@@ -489,7 +557,7 @@ export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
  * 该失败照样失败，错误态仍由面板自己呈现。
  */
 export function prefetchStockDetailPanels(ticker: string): void {
-  const t = ticker.toUpperCase();
-  void getDetailChart(t, DEFAULT_CHART_RANGE).catch(() => {});
-  void getTrendBias(t).catch(() => {});
+  const symbol = ticker.toUpperCase();
+  void getDetailChart(symbol, DEFAULT_CHART_RANGE).catch(() => {});
+  void getTrendBias(symbol).catch(() => {});
 }

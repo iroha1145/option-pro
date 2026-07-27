@@ -322,12 +322,147 @@ test('个股宏观适配读的是概览端点，不是只覆盖前 20 名的强�
     'utf8',
   );
   const code = detail.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-  // 概览优先、扫描行兜底。这一条正好表达了意图：概览必须排在前面。
+  // 概览优先。合并规则本身由下面那组行为测试钉住，这里只确认它接的是概览。
   assert.match(
     code,
-    /macroFit: detail\.macroFit \?\? strength\?\.macroFit \?\? null/,
+    /\.\.\.mergeMacroFields\(detail, strength\)/,
     '抽屉的宏观适配不是以概览为主源',
   );
+});
+
+/* ---------------- 抽屉合并：不把两期快照拼成一份 ---------------- */
+
+/**
+ * 取出真实的 mergeMacroFields 跑一遍。
+ *
+ * 它刻意不依赖任何导入（纯规则），所以能整段抽出来编译。一旦有人给它加了外部
+ * 依赖，这里会以 require is not defined 失败 —— 那是提醒，不是障碍。
+ */
+function loadMergeMacroFields() {
+  const source = readFileSync(
+    resolve(repoRoot, 'frontend-src/src/components/detail/api.ts'),
+    'utf8',
+  );
+  const start = source.indexOf('export function mergeMacroFields');
+  assert.ok(start > 0, 'detail/api.ts 里找不到 mergeMacroFields');
+  const end = source.indexOf('\n}', start) + 2;
+  const compiled = ts.transpileModule(
+    source.slice(start, end).replace('export function', 'function'),
+    { compilerOptions: { target: ts.ScriptTarget.ES2022 } },
+  ).outputText;
+  const sandbox = { result: null };
+  vm.runInNewContext(`${compiled}\nresult = mergeMacroFields;`, sandbox);
+  return sandbox.result;
+}
+
+const mergeMacroFields = loadMergeMacroFields();
+
+/**
+ * 跨 realm 归一。
+ *
+ * mergeMacroFields 在 vm 沙箱里跑，它自己造的 `[]` 用的是沙箱那份 Array 原型，
+ * deepStrictEqual 会以「结构相同但引用不等」失败 —— 那不是被测行为出了问题。
+ */
+const plain = (value) => JSON.parse(JSON.stringify(value ?? null));
+
+/** 一份「概览算得出分」的读数。 */
+const overviewScored = {
+  macroFit: 60.9,
+  macroTailwind: 'neutral',
+  macroFitConfidence: 0.87,
+  macroSupporting: [{ id: 'wti', label: 'WTI 原油价格' }],
+  macroOpposing: [],
+  macroShadowStatus: 'ok',
+  macroSnapshotDate: '2026-07-25',
+};
+
+/** 一份**较旧**的扫描行读数：分数、负面因子、差值都有。 */
+const staleScanRow = {
+  macroFit: 68,
+  macroTailwind: 'tailwind',
+  macroFitConfidence: 0.91,
+  macroSupporting: [{ id: 'ism', label: 'ISM 制造业' }],
+  macroOpposing: [{ id: 'real_rate', label: '实际利率' }],
+  macroTechnicalGap: -12.4,
+  macroSnapshotDate: '2026-07-24',
+};
+
+test('概览说「覆盖不足」时保持 null，不复活扫描行的旧分', () => {
+  // 后端专门为此返回 null 而不是 50。前端逐字段 ?? 会把它抵消掉：界面显示 68，
+  // 而当前这一期宏观其实明确算不出分。
+  const merged = mergeMacroFields(
+    {
+      macroFit: null,
+      macroTailwind: null,
+      macroFitConfidence: 0.31,
+      macroSupporting: [],
+      macroOpposing: [],
+      macroShadowStatus: 'exposure_coverage_low',
+      macroSnapshotDate: '2026-07-25',
+    },
+    staleScanRow,
+  );
+  assert.equal(merged.macroFit, null, '旧扫描行的分数被复活了');
+  assert.equal(merged.macroTailwind, null);
+  assert.equal(merged.macroShadowStatus, 'exposure_coverage_low');
+});
+
+test('宏观快照暂时读不到时同样保持 null', () => {
+  // 这一条最容易发生：一次瞬时读失败（发布中、磁盘抖动）就会让界面把上一次扫描
+  // 的分数当成当前读数。
+  const merged = mergeMacroFields(
+    {
+      macroFit: null,
+      macroTailwind: null,
+      macroSupporting: [],
+      macroOpposing: [],
+      macroShadowStatus: 'macro_snapshot_unavailable',
+    },
+    staleScanRow,
+  );
+  assert.equal(merged.macroFit, null);
+  assert.deepEqual(plain(merged.macroOpposing), []);
+});
+
+test('概览本期没有负面因子时，不把旧的负面因子补回来', () => {
+  // 空数组长度为 0，于是 `a?.length ? a : b` 会取 b —— 用户读到的是一条已经不属于
+  // 当前宏观快照的解释。
+  const merged = mergeMacroFields(overviewScored, staleScanRow);
+  assert.deepEqual(plain(merged.macroOpposing), [], '旧的负面因子被补回来了');
+  assert.deepEqual(plain(merged.macroSupporting), overviewScored.macroSupporting);
+  assert.equal(merged.macroFit, 60.9);
+});
+
+test('两边快照不同期时不显示技术 − 宏观差值', () => {
+  // 差值只有扫描行算得出（要该股的 market_fit_score），而分数来自实时概览。
+  // 各自都对，凑在一起却不是同一个测量时点。
+  const merged = mergeMacroFields(overviewScored, staleScanRow);
+  assert.equal(merged.macroTechnicalGap, null, '差值和分数来自两期快照却照样显示了');
+});
+
+test('两边同期时差值照常显示', () => {
+  const merged = mergeMacroFields(overviewScored, {
+    ...staleScanRow,
+    macroSnapshotDate: overviewScored.macroSnapshotDate,
+  });
+  assert.equal(merged.macroTechnicalGap, -12.4);
+});
+
+test('概览没有 macro_shadow_status 时整组回退扫描行', () => {
+  // 对接不带这个字段的旧后端：此时分数和差值都出自同一行，同期是构造保证的，
+  // 差值可以显示。
+  const merged = mergeMacroFields({}, staleScanRow);
+  assert.equal(merged.macroFit, 68);
+  assert.deepEqual(plain(merged.macroOpposing), staleScanRow.macroOpposing);
+  assert.equal(merged.macroTechnicalGap, -12.4);
+});
+
+test('两边都没有宏观读数时保持 null，不兜中性 50', () => {
+  const merged = mergeMacroFields({}, null);
+  assert.equal(merged.macroFit, null);
+  assert.equal(merged.macroTechnicalGap, null);
+  assert.equal(merged.macroShadowStatus, null);
+  assert.deepEqual(plain(merged.macroSupporting), []);
 });
 
 test('mock 映射表不住在 lib/macroFit 之外的第二处', () => {

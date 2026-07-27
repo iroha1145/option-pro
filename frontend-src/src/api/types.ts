@@ -220,6 +220,14 @@ export interface StockDetail extends WatchlistItem {
   macroTechnicalGap?: number | null;
   /** 后端 macro_shadow_status：区分「没快照」「未归板块」「暴露观测不足」。 */
   macroShadowStatus?: string | null;
+  /**
+   * 这份宏观读数出自哪一期快照（后端 macro_snapshot_date）。
+   *
+   * 抽屉里 macroFit 取自实时概览，而 macroTechnicalGap 只能取自落库的扫描行 ——
+   * 两者可能横跨一次宏观发布。有了它才能判断这两个数字说的是不是同一时刻，
+   * 而不是把两期快照拼成一个看起来很精确的组合。
+   */
+  macroSnapshotDate?: string | null;
 }
 
 export interface StockPullResource {

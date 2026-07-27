@@ -51,9 +51,9 @@ test('预取取的正是 K 线和信号那两个端点', () => {
   const code = codeOf(detailApi);
   const fn = code.slice(code.indexOf('export function prefetchStockDetailPanels'));
   assert.ok(fn.length > 0, '找不到 prefetchStockDetailPanels');
-  assert.match(fn, /getDetailChart\(t, DEFAULT_CHART_RANGE\)/);
+  assert.match(fn, /getDetailChart\(symbol, DEFAULT_CHART_RANGE\)/);
   // TrendBiasPanel 与 SignalList 读的是同一个 /signals/stock/{t}，一次预取覆盖两者。
-  assert.match(fn, /getTrendBias\(t\)/);
+  assert.match(fn, /getTrendBias\(symbol\)/);
 });
 
 test('预取不 force：强制读会消耗 owner 手动拉取后那一次性的退避豁免', () => {
@@ -115,12 +115,16 @@ test('详情合并以概览为宏观主源，缺失时保持 null 而不是中�
   // 这一条原先钉的是「只从扫描行取」。那是错的：/strength/stocks/{t} 只回答公开
   // 快照 top 切片里的代码，其余 404 —— AMD、SLB 等约 190 只票于是显示「暂无宏观
   // 读数」，而分数明明算得出来。概览是抽屉必然会调的那次请求，所以它才是主源。
+  //
+  // 第二版又钉过逐字段 `??`。那也是错的，方向相反：概览说「本次没有读数」时，
+  // 上一次扫描的旧分会被复活。规则现在收在 mergeMacroFields 里，行为断言见
+  // macro-fit-presentation.test.mjs；这里只钉「合并走的是那个函数」。
   const code = codeOf(detailApi);
-  assert.match(code, /macroFit: detail\.macroFit \?\? strength\?\.macroFit \?\? null/);
-  assert.match(
-    code,
-    /macroTailwind: detail\.macroTailwind \?\? strength\?\.macroTailwind \?\? null/,
-  );
+  assert.match(code, /\.\.\.mergeMacroFields\(detail, strength\)/);
+  assert.match(code, /export function mergeMacroFields/);
+  // 逐字段 ?? 回填不能再出现。
+  assert.doesNotMatch(code, /macroFit: detail\.macroFit \?\? strength\?\.macroFit/);
+  assert.doesNotMatch(code, /detail\.macroOpposing\?\.length \? detail\.macroOpposing/);
   // 两边都没有时保持 null。补充这一路超时会让 strength 为 null，此时不能凭空出 50。
   assert.doesNotMatch(code, /macroFit:[^\n]*\?\?\s*50/);
 });

@@ -576,4 +576,15 @@ export const HINTS: Dict = {
     'The Henry Hub natural gas spot price (US dollars per million BTU). This score measures energy-cost pressure — it is not a health rating for the natural-gas industry.',
     'ヘンリーハブ天然ガス現物価格（米ドル/百万 BTU）です。このスコアはエネルギーコストの圧力を測るものであり、天然ガス産業の景況感を評価するものではありません。',
   ],
+
+  /* ── 焦点周期逐股评估（偏向 + 置信合并说明，main #84 引入） ── */
+  '偏向与置信（AI 判断）': ['Bias & confidence (AI judgment)', 'バイアスと信頼度（AI 判断）'],
+  '偏向是模型对这只股票的方向 × 强度估计，界面按 ±5 显示：正=利多、负=利空，绝对值代表预期影响幅度。置信是模型对自己这次判断的把握程度（0–100），置信低通常意味着新闻信息量不足或含糊，应降低参考权重。': [
+    "Bias is the model's direction × strength estimate for this stock, shown on a ±5 scale: positive = bullish, negative = bearish, and the magnitude reflects the expected impact. Confidence is how sure the model is about this particular judgment (0–100); low confidence usually means the news was thin or ambiguous, so give it less weight.",
+    'バイアスはこの銘柄に対するモデルの方向×強度の推定で、±5 スケールで表示します：プラス=強気、マイナス=弱気、絶対値は想定インパクトの大きさです。信頼度はモデルが今回の判断にどれだけ確信を持っているか（0–100）で、低い場合はニュースの情報量が乏しい・曖昧であることが多く、参考度を下げるべきです。',
+  ],
+  '两者都是模型判断，不是量价计算：偏向不是收益预测，置信不是胜率。': [
+    'Both are model judgments, not price/volume computations: the bias is not a return forecast, and the confidence is not a win rate.',
+    'どちらもモデルの判断であり、価格・出来高からの計算値ではありません：バイアスはリターン予測ではなく、信頼度は勝率ではありません。',
+  ],
 };

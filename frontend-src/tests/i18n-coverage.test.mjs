@@ -101,10 +101,10 @@ function inThrow(node) {
  * TYPE_DISCRIMINANTS 第 2 类）。行号来自这些 mock 拼接语句。
  */
 const KNOWN_TEMPLATE_EXEMPT_LINES = new Set([
-  'components/detail/api.ts:324',
-  'components/detail/api.ts:463',
-  'components/detail/api.ts:464',
-  'components/detail/api.ts:465',
+  'components/detail/api.ts:392',
+  'components/detail/api.ts:531',
+  'components/detail/api.ts:532',
+  'components/detail/api.ts:533',
 ]);
 
 // ── 收集 dict/*.ts 里的全部词条（跳过 types.ts / index.ts 本身） ────────────
@@ -164,18 +164,18 @@ const KNOWN_TYPE_DISCRIMINANTS = new Set([
   'components/CommandPalette.tsx:171 功能',
   'components/CommandPalette.tsx:182 功能',
   'components/CommandPalette.tsx:194 功能',
-  'components/detail/api.ts:386 数据不足',
-  'components/detail/api.ts:388 偏多',
-  'components/detail/api.ts:390 偏空',
-  'components/detail/api.ts:391 中性',
+  'components/detail/api.ts:454 数据不足',
+  'components/detail/api.ts:456 偏多',
+  'components/detail/api.ts:458 偏空',
+  'components/detail/api.ts:459 中性',
   'pages/Market.tsx:67 偏多',
   'pages/Market.tsx:67 偏空',
   'pages/Market.tsx:67 中性',
-  'components/detail/api.ts:461 偏贵',
-  'components/detail/api.ts:461 相对便宜',
-  'components/detail/api.ts:461 中性',
-  'components/detail/api.ts:466 近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。',
-  'components/detail/api.ts:467 以上为方向性研究结论，非收益预测。',
+  'components/detail/api.ts:529 偏贵',
+  'components/detail/api.ts:529 相对便宜',
+  'components/detail/api.ts:529 中性',
+  'components/detail/api.ts:534 近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。',
+  'components/detail/api.ts:535 以上为方向性研究结论，非收益预测。',
   // `t(macroMissingReason(status) ?? '暂无宏观读数')` — the literal is the right
   // operand of `??`, not itself t()'s direct argument, so the classifier can't see
   // that the whole expression is covered by the outer call. It is (verified by hand).

@@ -10,6 +10,7 @@
  * 渐进挂载不会。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 
 export interface ProgressiveList<T> {
   /** 当前允许渲染的条目。 */
@@ -26,8 +27,25 @@ export interface ProgressiveList<T> {
    * 打印用：只挂了 24 张卡时，打印出来的也只有 24 张 —— 数据在内存里，
    * 但纸上没有。浏览器原生查找（⌘F）同样只能找到已挂载的部分，那个限制
    * 无法在页面里可靠拦截，因此不在这里假装解决。
+   *
+   * 打印请走 prepareForPrint / restoreAfterPrint，别直接用它：
+   * 直接用会把上限永久留在「全部」上。
    */
   loadAll: () => void;
+  /**
+   * beforeprint 用：**同步**挂载全部，并记下当前上限。
+   *
+   * 必须同步。浏览器派发 beforeprint 之后可能立刻截取打印文档，而普通 setState
+   * 在 React 里是异步提交的 —— 纸上仍然只有那 24 张。所以这里用 flushSync。
+   */
+  prepareForPrint: () => void;
+  /**
+   * afterprint 用：把上限还回去。
+   *
+   * 不还的话，关掉打印窗口后两百多张卡会一直挂在 DOM 里，这一轮渐进挂载的收益
+   * 到下次整页刷新之前都作废了。
+   */
+  restoreAfterPrint: () => void;
   /**
    * 挂在列表末尾的哨兵元素上；进入视口即自动加载下一批。
    * 不支持 IntersectionObserver 时不会自动加载，此时「加载更多」按钮仍然可用。
@@ -57,6 +75,27 @@ export function useProgressiveList<T>(
   }, [total, initial]);
 
   const loadAll = useCallback(() => setLimit(Number.MAX_SAFE_INTEGER), []);
+
+  /** 打印前的上限；null = 当前不在打印中。 */
+  const limitBeforePrintRef = useRef<number | null>(null);
+  /** 当前上限的镜像：beforeprint 在提交之后触发，读它是安全的。 */
+  const limitRef = useRef(limit);
+  useEffect(() => {
+    limitRef.current = limit;
+  }, [limit]);
+
+  const prepareForPrint = useCallback(() => {
+    // 连点两次打印不要把「全部」记成打印前的状态。
+    if (limitBeforePrintRef.current === null) limitBeforePrintRef.current = limitRef.current;
+    // 同步提交：beforeprint 返回后浏览器可能立刻截取打印文档。
+    flushSync(() => setLimit(Number.MAX_SAFE_INTEGER));
+  }, []);
+
+  const restoreAfterPrint = useCallback(() => {
+    const previous = limitBeforePrintRef.current;
+    limitBeforePrintRef.current = null;
+    if (previous !== null) setLimit(previous);
+  }, []);
 
   const loadMore = useCallback(() => {
     setLimit((current) => (current >= total ? current : current + step));
@@ -92,6 +131,8 @@ export function useProgressiveList<T>(
     remaining: Math.max(0, total - limit),
     loadMore,
     loadAll,
+    prepareForPrint,
+    restoreAfterPrint,
     sentinelRef,
   };
 }

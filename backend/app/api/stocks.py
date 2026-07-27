@@ -2491,6 +2491,14 @@ def _attach_macro_fit(symbol: str, payload: Any) -> Any:
     Shadow only, and per *sector*: the exposure profile belongs to the sector,
     not the stock. Failure degrades to "no read" -- never to a neutral 50, and
     never to an error, because a quote must not fail over an annotation.
+
+    Provenance travels with the reading whenever there is a snapshot to name.
+    The drawer shows this fit next to a technical-minus-macro gap that comes from
+    the persisted strength scan, and those two can straddle a publication; the
+    interface needs to be able to tell that they did.
+
+    Synchronous on purpose -- see ``_attach_macro_fit_async`` for the endpoint
+    path, which is where the thread hop belongs.
     """
 
     if not isinstance(payload, dict):
@@ -2516,16 +2524,19 @@ def _attach_macro_fit(symbol: str, payload: Any) -> Any:
         reader = load_macro_fit_reader()
         if not reader.available:
             return {**payload, **blank, "macro_shadow_status": str(reader.reason or "unavailable")}
+        provenance = reader.provenance()
         fit = reader.fit_for(sector_id)
         if fit.score is None:
             return {
                 **payload,
                 **blank,
+                **provenance,
                 "macro_fit_confidence": round(fit.confidence, 4),
                 "macro_shadow_status": "exposure_coverage_low",
             }
         return {
             **payload,
+            **provenance,
             "macro_fit_shadow": fit.score,
             "macro_fit_confidence": round(fit.confidence, 4),
             "macro_fit_version": fit.version,
@@ -2536,6 +2547,18 @@ def _attach_macro_fit(symbol: str, payload: Any) -> Any:
         }
     except Exception:
         return {**payload, **blank, "macro_shadow_status": "unavailable"}
+
+
+async def _attach_macro_fit_async(symbol: str, payload: Any) -> Any:
+    """``_attach_macro_fit`` off the event loop.
+
+    The macro read opens SQLite and runs three queries. Cheap when the disk is
+    idle, but this is an ``async def`` endpoint: run it inline and a busy disk,
+    WAL contention or a stalled volume blocks every unrelated request on the
+    loop, not just this one.
+    """
+
+    return await asyncio.to_thread(_attach_macro_fit, symbol, payload)
 
 
 @router.get("/{ticker}")
@@ -2554,9 +2577,9 @@ async def stock_overview(ticker: str):
             ),
         )
         if disk_result is not None:
-            return _attach_macro_fit(symbol, _sanitize(disk_result))
+            return await _attach_macro_fit_async(symbol, _sanitize(disk_result))
     try:
-        return _attach_macro_fit(
+        return await _attach_macro_fit_async(
             symbol,
             await _stale_while_revalidate_endpoint(
                 key,
@@ -2577,7 +2600,7 @@ async def stock_overview(ticker: str):
         )
         if result is None:
             raise exc
-        return _attach_macro_fit(symbol, _sanitize(result))
+        return await _attach_macro_fit_async(symbol, _sanitize(result))
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Stock data is currently unavailable") from exc
 
