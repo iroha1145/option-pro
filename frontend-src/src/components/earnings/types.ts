@@ -268,11 +268,22 @@ export function etToday(): string {
   return value;
 }
 
-/** date('YYYY-MM-DD') → 距 ET 今日的天数（0=今天） */
+/** date('YYYY-MM-DD') → 距 ET 今日的天数（0=今天）。
+ * 按 (今日, 日期串) 记忆化：排序比较器会按比较次数调用（4000 行 ≈ 9 万次），
+ * 而窗口里的唯一日期只有几十个；ET 换日时整表失效。 */
+let daysUntilCache: { today: string; byDate: Map<string, number> } | null = null;
 export function daysUntil(date: string): number {
+  const today = etToday();
+  if (!daysUntilCache || daysUntilCache.today !== today) {
+    daysUntilCache = { today, byDate: new Map() };
+  }
+  const cached = daysUntilCache.byDate.get(date);
+  if (cached !== undefined) return cached;
   const a = Date.parse(`${date}T00:00:00Z`);
-  const b = Date.parse(`${etToday()}T00:00:00Z`);
-  return Math.round((a - b) / 86_400_000);
+  const b = Date.parse(`${today}T00:00:00Z`);
+  const value = Math.round((a - b) / 86_400_000);
+  daysUntilCache.byDate.set(date, value);
+  return value;
 }
 
 /** 在 YYYY-MM-DD 上加减天数（UTC 正午锚定，规避 DST） */
