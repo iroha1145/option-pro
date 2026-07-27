@@ -649,8 +649,10 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                     </span>
                   )}
                 </div>
-                <p className="mt-1 font-mono text-micro text-ink-400">
-                  {impact.outputLanguage}
+                <p className="mt-1 text-micro text-ink-400">
+                  {/* zh-CN 是给机器看的语言代码；同一含义在个股新闻页是中文
+                      chip「简体中文」（审计 2.3.5） */}
+                  {impact.outputLanguage === 'zh-CN' ? __t('简体中文') : impact.outputLanguage}
                   {impact.reportDate ? __t(' · 财报日 {date}', { date: impact.reportDate }) : ''}
                 </p>
                 {isImpactFinalizing(impact) && !isFinalImpact(impact) && (

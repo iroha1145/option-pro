@@ -13,7 +13,6 @@ export const DETAIL: Dict = {
   '· 市值': ['· Market cap', '· 時価総額'],
   '报价更新于': ['Quote updated at', '相場更新'],
   ' · 延迟行情': [' · Delayed quotes', ' · 遅延データ'],
-  '近 72 小时无事件 · 雷达仍在盯': ['No events in the past 72 hours · Radar is still watching', '過去72時間はイベントなし · レーダーは監視中'],
   '代码不存在': ['Ticker not found', '銘柄が見つかりません'],
   '请求较频繁': ['Too many requests', 'リクエストが多すぎます'],
   '该标的暂无完整数据': ['No complete data for this ticker', 'この銘柄の完全なデータはありません'],

@@ -927,5 +927,12 @@ export const catalystsContract = {
       () => fx2.cancelNewsAnalysisJob(jobId),
       () => post(`/catalysts/analysis-jobs/${encodeURIComponent(jobId)}/cancel`, { confirm: true }).then((d) => { clearCatalystReadCache(); return nAnalysisJob(d, jobId); }),
     ),
-  themeName: (themeId: string): string => fx2.getHotspotThemeName(themeId),
+  /* live 构建里 stripMocks 会把 fx2 的值导出替换成 undefined——这是整个
+     contract 里唯一不在 mockOr 里的 fx2 调用，直接调用会在带 ?theme= 的
+     URL 上抛 TypeError 白屏（审计 2.6.13）。live 契约没有主题名来源，
+     如实回退展示原始 themeId。 */
+  themeName: (themeId: string): string =>
+    typeof fx2.getHotspotThemeName === 'function'
+      ? fx2.getHotspotThemeName(themeId)
+      : themeId,
 };

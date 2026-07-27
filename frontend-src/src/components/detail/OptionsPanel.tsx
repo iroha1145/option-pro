@@ -362,9 +362,19 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
   }, [chain]);
 
   useEffect(() => {
-    if (atmRef.current) {
-      atmRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }
+    /* 只滚动链表自己的 max-h 容器（审计 2.2.18）：scrollIntoView 会连带滚动
+       所有可滚动祖先——抽屉的 overflow-y-auto 和整页文档都会被拽去把平值行
+       居中，用户正在看的价格头部/K 线被顶出视野。 */
+    const row = atmRef.current;
+    if (!row) return;
+    const scroller = row.closest<HTMLElement>('[data-options-scroll]');
+    if (!scroller) return;
+    const target =
+      row.offsetTop - scroller.clientHeight / 2 + row.offsetHeight / 2;
+    scroller.scrollTo({
+      top: Math.max(0, target),
+      behavior: 'smooth',
+    });
   }, [atmStrike, exp]);
 
   if (!supported) {
@@ -490,7 +500,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
       )}
 
       {/* 三带表 */}
-      <div className="relative mt-3 max-h-[420px] overflow-auto rounded-lg border border-line">
+      <div data-options-scroll className="relative mt-3 max-h-[420px] overflow-auto rounded-lg border border-line">
         {chainLoading || !chain ? (
           <SkeletonRows rows={8} />
         ) : (

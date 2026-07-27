@@ -99,7 +99,6 @@ export const SCREENER: Dict = {
   '活跃信号': ['Active signals', 'アクティブなシグナル'],
   '信号读取失败 · 收起后重新展开可重试': ['Failed to load signals · collapse and re-expand to retry', 'シグナルの取得に失敗 · 折りたたんで再度開くと再試行します'],
   '— 暂无信号': ['— No signals', '— シグナルなし'],
-  '美元成交额（推导）': ['Dollar volume (derived)', '売買代金（算出）'],
 
   /* ---------------- ScanHistoryPopover.tsx ---------------- */
   '扫描历史': ['Scan history', 'スキャン履歴'],
@@ -207,4 +206,6 @@ export const SCREENER: Dict = {
   '读取中': ['Loading', '読み込み中'],
   '档位未知': ['Profile unknown', 'プロファイル不明'],
   '评分档位读取失败，无法显示当前权重。': ['Failed to load scoring profiles; current weights cannot be shown.', 'スコアリングプロファイルの読み込みに失敗したため、現在のウェイトを表示できません。'],
+  '20日均额': ['20D avg $ vol', '20日平均代金'],
+  '20 日均美元成交额': ['20-day average dollar volume', '20日平均売買代金（ドル）'],
 };

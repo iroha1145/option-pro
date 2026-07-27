@@ -35,23 +35,46 @@ const TONE_TEXT: Record<LifecycleTone, string> = {
   ink: 'text-ink-500',
 };
 
+/* 历史回溯按「美股交易日」阅读（审计 2.6.6）：分组键与行内时间一律按
+   America/New_York 计，UTC+8 用户不再看到 14:00 ET 的事件被归到「次日 03:00」，
+   与同页 SessionChip / Navbar 的 ET 口径一致。 */
+const NY_DAY_KEY = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/New_York',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+const NY_HHMM = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'America/New_York',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+function nyDayKey(iso: string): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return NY_DAY_KEY.format(d);
+}
+
 function hhmm(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return NY_HHMM.format(d);
 }
 
 function dayLabel(key: string): string {
-  const d = new Date(`${key}T12:00:00`);
-  const weekZh = [t('周日'), t('周一'), t('周二'), t('周三'), t('周四'), t('周五'), t('周六')][d.getDay()];
+  // key 是纽约日历日；用 UTC 正午解析取星期，避免本地时区把日期挪一天
+  const d = new Date(`${key}T12:00:00Z`);
+  const weekZh = [t('周日'), t('周一'), t('周二'), t('周三'), t('周四'), t('周五'), t('周六')][d.getUTCDay()];
   const week = t(weekZh);
   const locale = getLocale();
   // en：紧凑数字日期 + 缩写星期（"7/26 Sun"）；ja：原生日期写法（"7月26日（日）"）；
   // zh：保留原版空格分词，三种语言各自的自然写法互不通用，不能共享一个模板。
-  if (locale === 'en') return `${d.getMonth() + 1}/${d.getDate()} ${week}`;
-  if (locale === 'ja') return `${d.getMonth() + 1}月${d.getDate()}日（${week}）`;
-  return `${d.getMonth() + 1} 月 ${d.getDate()} 日 ${week}`;
+  if (locale === 'en') return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${week} · ET`;
+  if (locale === 'ja') return `${d.getUTCMonth() + 1}月${d.getUTCDate()}日（${week}）· ET`;
+  return `${d.getUTCMonth() + 1} 月 ${d.getUTCDate()} 日 ${week} · ET`;
 }
 
 interface HistoryRailProps {
@@ -105,7 +128,8 @@ export default function HistoryRail({
   const groups = useMemo(() => {
     const map = new Map<string, BreakoutEventFull[]>();
     shown.forEach((e) => {
-      const key = new Date(e.event_at).toLocaleDateString('en-CA');
+      const key = nyDayKey(e.event_at);
+      if (!key) return;
       const arr = map.get(key) ?? [];
       arr.push(e);
       map.set(key, arr);

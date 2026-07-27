@@ -96,7 +96,14 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
 
   /* 拉取详情 */
   useEffect(() => {
-    if (!newsId) return;
+    if (!newsId) {
+      /* 抽屉关闭（newsId=null）时必须停掉分析任务轮询（审计 2.2.17）：
+         组件常驻不卸载，不清理的话 setTimeout 会继续以 2s→10s 打后端，
+         直到任务终态再弹一条与当前语境无关的 toast。 */
+      setJob(null);
+      stopPoll();
+      return;
+    }
     setItem(null);
     setLoadError(null);
     setJob(null);

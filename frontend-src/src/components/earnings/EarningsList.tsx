@@ -144,8 +144,10 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
       <section className="card-surface" aria-label={t("即将公布")}>
         <EmptyState
           image="/empty-chart.svg"
-          title={filteredByDay ? t('当日无财报') : t('本周清淡')}
-          description={filteredByDay ? t('选中的日期没有财报安排，切换日格或查看下周。') : t('本周期没有财报安排，跳到下周看看。')}
+          /* 默认列表覆盖的是「近 3 天到未来 30 天」滚动窗口（审计 2.3.4）：
+             写「本周清淡 · 跳到下周看看」会让用户以为还有下周数据没查。 */
+          title={filteredByDay ? t('当日无财报') : t('近一个月暂无财报')}
+          description={filteredByDay ? t('选中的日期没有财报安排，切换日格或查看下周。') : t('未来 30 天没有已安排的财报，稍后再来看看。')}
           action={
             onNextWeek ? (
               <button

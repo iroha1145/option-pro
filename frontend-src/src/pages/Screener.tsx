@@ -772,6 +772,23 @@ export default function Screener() {
                         stale
                       />
                     </div>
+                    {/* 移动端同样保留旧结果（审计 2.4.3）：只给桌面表格时，
+                        <768px 的失败态会剩一行「已过期」标签指着一片空白。 */}
+                    <div className="opacity-60 md:hidden">
+                      <ResultCards
+                        rows={pageRows}
+                        expanded={expanded}
+                        onToggle={onToggle}
+                        catalysts={catalysts}
+                        details={details}
+                        weights={activeProfile?.weights ?? null}
+                        signals={signalsMap}
+                        onOpenDetail={openTicker}
+                        animKey={animKey}
+                        page={safePage}
+                        showMacro={showMacro}
+                      />
+                    </div>
                   </div>
                 )}
               </>
@@ -852,9 +869,11 @@ export default function Screener() {
           </div>
         </section>
 
-        {/* B3 右侧栏（4 列吸顶；768–1023 双列落入 B2 下） */}
+        {/* B3 右侧栏（4 列吸顶；768–1023 双列落入 B2 下）。
+            吸顶偏移 = Navbar 64px + 16px：IndexTape 不吸顶，按它计会恒留
+            52px 空隙；与 Breakouts 侧栏的 top-20 同口径（审计 2.4.10）。 */}
         <aside
-          className="grid grid-cols-1 gap-4 self-start md:grid-cols-2 lg:sticky lg:top-[116px] lg:col-span-4 lg:grid-cols-1"
+          className="grid grid-cols-1 gap-4 self-start md:grid-cols-2 lg:sticky lg:top-20 lg:col-span-4 lg:grid-cols-1"
           aria-label={__t("侧栏")}
         >
           {marketQ.data ? (

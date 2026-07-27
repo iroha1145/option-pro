@@ -10,7 +10,6 @@ export const BREAKOUTS: Dict = {
   '现价': ['Current price', '現在値'],
   '暂无轨迹数据': ['No trajectory data yet', '推移データなし'],
   '生命周期轨迹': ['Lifecycle trajectory', 'ライフサイクル推移'],
-  '该股近 24h 暂无相关催化剂': ['No catalysts for this stock in the past 24h', '直近24時間、この銘柄に関連するカタリストなし'],
   '补充详情未能加载，以下为列表已有字段。': [
     "Couldn't load additional detail — showing fields already available from the list.",
     '追加の詳細情報を読み込めませんでした。以下は一覧に既にあるフィールドです。',
@@ -226,4 +225,5 @@ export const BREAKOUTS: Dict = {
   ],
   '突破扫描结果 · 行情为延迟数据': ['Breakout scan results · quotes are delayed', 'ブレイクアウトスキャン結果 · 相場は遅延データです'],
   '告警优先级数据不足': ['Alert priority: insufficient data', 'アラート優先度：データ不足'],
+  '该股近 72 小时暂无相关催化剂': ['No catalysts for this stock in the past 72 hours', '直近72時間、この銘柄に関連するカタリストなし'],
 };
