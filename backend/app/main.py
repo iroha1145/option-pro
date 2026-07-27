@@ -46,6 +46,7 @@ from app.api import (
     ai,
     breakouts,
     catalysts,
+    diagnostics,
     earnings,
     macro_conditions,
     market,
@@ -537,7 +538,11 @@ class _GatewayMiddleware:
                             "public, max-age=300, stale-while-revalidate=60"
                         )
                 elif path.startswith("/api/") or path in {"/health", "/ready"}:
-                    headers["Cache-Control"] = "private, no-store"
+                    # Default-deny caching, but let snapshot endpoints opt into
+                    # conditional caching (ETag + private max-age) explicitly.
+                    # Anything that never sets its own header stays no-store.
+                    if "cache-control" not in headers:
+                        headers["Cache-Control"] = "private, no-store"
             await send(message)
 
         publicly_available = bool(
@@ -641,6 +646,7 @@ app.include_router(catalysts.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(strength.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(breakouts.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(worker_actions.router, dependencies=_OWNER_DEPENDENCIES)
+app.include_router(diagnostics.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(runtime_settings.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(access.router)
 # No owner dependency: every account route authenticates the caller from its

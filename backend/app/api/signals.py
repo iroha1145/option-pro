@@ -9,7 +9,7 @@ import re
 import time
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import StrictBool
 
@@ -26,6 +26,7 @@ from app.access import (
     require_same_origin_action,
 )
 from app.personal_config import get_personal_config
+from app.services.http_read_cache import respond_with_snapshot, snapshot_version_key
 from app.public_home_snapshot import (
     public_home_resource_parameters,
     read_owner_public_home_entry_async,
@@ -184,13 +185,14 @@ async def _owner_stock_signal_evidence(
 
 
 @router.get("/market")
-async def market_signals():
+async def market_signals(request: Request):
     """Read the worker-published market-signal snapshot without blocking GETs."""
     try:
         owner = current_request_is_owner()
         config = get_personal_config()
         now = time.time()
         parameters = public_home_resource_parameters("market_signals", now=now)
+        cache_control = "private, max-age=30, stale-while-revalidate=120"
         if owner:
             disk_entry = await read_owner_public_home_entry_async(
                 "market_signals",
@@ -202,7 +204,17 @@ async def market_signals():
                 payload = dict(disk_entry["payload"])
                 payload["_cached"] = True
                 payload["snapshot_source"] = "worker"
-                return _sanitize(payload)
+                return respond_with_snapshot(
+                    request,
+                    _sanitize(payload),
+                    version_key=snapshot_version_key(
+                        "market_signals",
+                        "owner",
+                        disk_entry["saved_at"],
+                        bool(disk_entry["fresh"]),
+                    ),
+                    cache_control=cache_control,
+                )
             # Private-network installations do not run PublicHomeTask. Keep
             # their owner-only live path, while password-mode production is
             # normally served from the restart-safe worker snapshot.
@@ -217,7 +229,16 @@ async def market_signals():
             if payload is not None:
                 payload["_cached"] = True
                 payload["snapshot_source"] = "worker"
-                return _sanitize(payload)
+                return respond_with_snapshot(
+                    request,
+                    _sanitize(payload),
+                    version_key=snapshot_version_key(
+                        "market_signals",
+                        "public",
+                        payload.get("snapshot_saved_at"),
+                    ),
+                    cache_control=cache_control,
+                )
         raise public_snapshot_unavailable("signals:market")
     except HTTPException:
         raise

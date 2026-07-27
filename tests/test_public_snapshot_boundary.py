@@ -160,10 +160,10 @@ def test_public_cold_cache_never_calls_market_data_providers(
             await _expect_unavailable(stocks.stock_logo("AAPL"))
             await _expect_unavailable(stocks.stock_overview("AAPL"))
             await _expect_unavailable(stocks.stock_chart("AAPL", "1d", "raw"))
-            await _expect_unavailable(options.unusual_activity(type="all", min_vol_oi=1.0))
-            await _expect_unavailable(earnings.upcoming_earnings())
-            await _expect_unavailable(market.market_indices())
-            await _expect_unavailable(signals.market_signals())
+            await _expect_unavailable(options.unusual_activity(_request(), type="all", min_vol_oi=1.0))
+            await _expect_unavailable(earnings.upcoming_earnings(_request()))
+            await _expect_unavailable(market.market_indices(_request()))
+            await _expect_unavailable(signals.market_signals(_request()))
             await _expect_unavailable(signals.stock_signals("AAPL"))
             await _expect_unavailable(strength.market())
             await _expect_unavailable(strength.stock("AAPL", "balanced"))
@@ -246,9 +246,14 @@ def test_public_expired_watchlist_never_refreshes_or_rewrites(
     assert stocks._endpoint_refresh_tasks == {}
 
 
-def test_public_endpoints_serve_existing_cache_entries_without_loaders(
+def test_public_endpoints_never_read_the_owner_process_cache(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
 ) -> None:
+    """Identity is part of the cache scope: a visitor must not observe the
+    owner's live-rebuild cache entries, and (with no published snapshot) the
+    endpoints stay unavailable without ever calling a loader."""
+
     now = time.time()
     today = earnings._market_today()
     cache.set(f"earnings:upcoming:{today.isoformat()}", {"items": ["saved"]}, 60)
@@ -265,14 +270,34 @@ def test_public_endpoints_serve_existing_cache_entries_without_loaders(
     monkeypatch.setattr(market, "_build_indices", lambda: pytest.fail("loader called"))
     monkeypatch.setattr(options, "_unusual_activity_impl", lambda *_args: pytest.fail("loader called"))
     monkeypatch.setattr(sectors, "_iv_ranking_payload", lambda *_args: pytest.fail("loader called"))
+    # No published public-home snapshot on disk.
+    from app import public_home_snapshot as phs
+    from app.data_paths import get_data_paths
+
+    missing = tmp_path / "missing-public-home.json"
+    original_get = get_data_paths
+
+    class _Paths:
+        def __getattr__(self, name):
+            if name == "public_home_snapshot":
+                return missing
+            return getattr(original_get(), name)
+
+    monkeypatch.setattr(phs, "get_data_paths", lambda: _Paths())
 
     async def scenario() -> None:
         with request_owner_access_context(False):
-            assert (await earnings.upcoming_earnings())["items"] == ["saved"]
-            assert (await market.market_indices())["indices"] == ["saved"]
-            assert (
-                await options.unusual_activity(type="all", min_vol_oi=1.0)
-            )["items"] == ["saved"]
+            with pytest.raises(HTTPException) as earn_exc:
+                await earnings.upcoming_earnings(_request())
+            assert earn_exc.value.status_code == 503
+            with pytest.raises(HTTPException) as idx_exc:
+                await market.market_indices(_request())
+            assert idx_exc.value.status_code == 503
+            with pytest.raises(HTTPException) as unusual_exc:
+                await options.unusual_activity(_request(), type="all", min_vol_oi=1.0)
+            assert unusual_exc.value.status_code == 503
+            # The sector IV process cache is deliberately shared: it only ever
+            # holds data that is simultaneously published to disk.
             assert (
                 await sectors.iv_ranking(sector_id, _request())
             )["sector_id"] == sector_id

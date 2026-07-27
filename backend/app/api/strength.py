@@ -11,11 +11,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.access import current_request_is_owner, public_snapshot_unavailable
 from app.data_paths import get_data_paths
+from app.services.http_read_cache import respond_with_snapshot, snapshot_version_key
 from app.services.sectors import SECTORS
+from app.services.snapshot_read_cache import FingerprintedFileCache
 from app.services.strength.scanner import (
     PROFILES,
     TIMEFRAMES,
@@ -108,7 +110,7 @@ async def _public_strength_snapshot() -> dict[str, Any]:
     """Read the worker-produced default snapshot without running a scan."""
 
     parameters = DEFAULT_STRENGTH_SCAN_PARAMETERS
-    return await scan(
+    payload, _, _ = await _scan_snapshot_payload(
         universe=str(parameters["universe"]),
         timeframe=str(parameters["timeframe"]),
         profile=str(parameters["profile"]),
@@ -118,6 +120,7 @@ async def _public_strength_snapshot() -> dict[str, Any]:
         min_avg_dollar_volume=float(parameters["min_avg_dollar_volume"]),
         include_options=bool(parameters["include_options"]),
     )
+    return payload
 
 
 def strength_scan_parameters_hash(parameters: dict[str, Any]) -> str:
@@ -318,6 +321,65 @@ def _clean_strength_snapshot_payload(
     return dict(value)
 
 
+# Parsed strength snapshots keyed by file identity: the worker publishes with
+# os.replace, so a fingerprint hit is exactly the document we already ran the
+# full-tree finite check and row validation on. One entry per variant file.
+_strength_documents = FingerprintedFileCache(
+    "strength",
+    max_paths=_STRENGTH_SNAPSHOT_VARIANT_LIMIT + 8,
+    max_bytes=8 * _STRENGTH_SNAPSHOT_MAX_BYTES,
+)
+
+
+def _parse_strength_snapshot_document(
+    raw: bytes,
+    *,
+    parameters: dict[str, Any],
+    now: float,
+) -> dict[str, Any] | None:
+    """Parse+validate the snapshot bytes; the stale flag stays time-dependent
+    and is computed by the caller on every read."""
+
+    if not raw:
+        return None
+    document = json.loads(
+        raw.decode("utf-8"),
+        object_pairs_hook=_reject_duplicate_json_keys,
+        parse_constant=_reject_non_finite_json,
+    )
+    if not isinstance(document, dict):
+        return None
+    version = document.get("version")
+    if (
+        isinstance(version, bool)
+        or not isinstance(version, int)
+        or version != _STRENGTH_SNAPSHOT_VERSION
+        or not _parameters_match(
+            document.get("parameters"),
+            parameters,
+            exact=True,
+        )
+    ):
+        return None
+    saved_at = document.get("saved_at")
+    if (
+        isinstance(saved_at, bool)
+        or not isinstance(saved_at, (int, float))
+        or not math.isfinite(float(saved_at))
+    ):
+        return None
+    saved_at = float(saved_at)
+    if saved_at <= 0 or saved_at > now:
+        return None
+    payload = _clean_strength_snapshot_payload(
+        document.get("payload"),
+        parameters,
+    )
+    if payload is None:
+        return None
+    return {"saved_at": saved_at, "payload": payload}
+
+
 def _read_strength_snapshot(
     path: Path,
     *,
@@ -325,52 +387,16 @@ def _read_strength_snapshot(
     now: float,
 ) -> dict[str, Any] | None:
     try:
-        if path.is_symlink() or not path.is_file():
+        if path.is_symlink():
             return None
-        with path.open("rb") as handle:
-            raw = handle.read(_STRENGTH_SNAPSHOT_MAX_BYTES + 1)
-        if not raw or len(raw) > _STRENGTH_SNAPSHOT_MAX_BYTES:
-            return None
-        document = json.loads(
-            raw.decode("utf-8"),
-            object_pairs_hook=_reject_duplicate_json_keys,
-            parse_constant=_reject_non_finite_json,
+        document = _strength_documents.read(
+            path,
+            lambda raw: _parse_strength_snapshot_document(
+                raw, parameters=parameters, now=now
+            ),
+            now=now,
+            max_bytes=_STRENGTH_SNAPSHOT_MAX_BYTES,
         )
-        if not isinstance(document, dict):
-            return None
-        version = document.get("version")
-        if (
-            isinstance(version, bool)
-            or not isinstance(version, int)
-            or version != _STRENGTH_SNAPSHOT_VERSION
-            or not _parameters_match(
-                document.get("parameters"),
-                parameters,
-                exact=True,
-            )
-        ):
-            return None
-        saved_at = document.get("saved_at")
-        if (
-            isinstance(saved_at, bool)
-            or not isinstance(saved_at, (int, float))
-            or not math.isfinite(float(saved_at))
-        ):
-            return None
-        saved_at = float(saved_at)
-        if saved_at <= 0 or saved_at > now:
-            return None
-        payload = _clean_strength_snapshot_payload(
-            document.get("payload"),
-            parameters,
-        )
-        if payload is None:
-            return None
-        return {
-            "saved_at": saved_at,
-            "stale": saved_at + _STRENGTH_SNAPSHOT_TTL_SECONDS <= now,
-            "payload": payload,
-        }
     except (
         OSError,
         RecursionError,
@@ -380,6 +406,14 @@ def _read_strength_snapshot(
         json.JSONDecodeError,
     ):
         return None
+    if document is None:
+        return None
+    saved_at = float(document["saved_at"])
+    return {
+        "saved_at": saved_at,
+        "stale": saved_at + _STRENGTH_SNAPSHOT_TTL_SECONDS <= now,
+        "payload": document["payload"],
+    }
 
 
 def _write_strength_snapshot(
@@ -442,18 +476,19 @@ def _write_strength_snapshot(
         raise
 
 
-@router.get("/scan")
-async def scan(
-    universe: str = Query("themes", pattern="^(themes)$"),
-    timeframe: str = Query("all", pattern="^(short|mid|long|all)$"),
-    profile: str = Query("balanced", pattern="^(conservative|balanced|aggressive)$"),
-    top: int = Query(20, ge=5, le=120),
-    sector_id: Optional[str] = Query(None),
-    min_price: float = Query(5.0, ge=0),
-    min_avg_dollar_volume: float = Query(10_000_000, ge=0),
+async def _scan_snapshot_payload(
+    *,
+    universe: str = "themes",
+    timeframe: str = "all",
+    profile: str = "balanced",
+    top: int = 20,
+    sector_id: Optional[str] = None,
+    min_price: float = 5.0,
+    min_avg_dollar_volume: float = 10_000_000,
     include_options: bool = True,
-) -> dict[str, Any]:
-    """Read a matching Strength Radar snapshot produced by the worker."""
+) -> tuple[dict[str, Any], float, bool]:
+    """Return (payload, saved_at, stale) for a matching worker snapshot."""
+
     if universe not in UNIVERSES or timeframe not in TIMEFRAMES or profile not in PROFILES:
         raise HTTPException(status_code=400, detail="Invalid screener parameters")
     try:
@@ -508,13 +543,53 @@ async def scan(
         }
     )
     if stale:
-        payload.update(
-            {
-                "stale_reason": "worker_snapshot_expired",
-                "stale_age_seconds": round(max(now - saved_at, 0.0), 1),
-            }
-        )
-    return sanitize(payload)
+        # Keep stale bodies byte-stable for ETag/304: expose the reason and
+        # the fixed snapshot_saved_at; clients derive the age themselves.
+        payload["stale_reason"] = "worker_snapshot_expired"
+    return sanitize(payload), saved_at, stale
+
+
+@router.get("/scan")
+async def scan(
+    request: Request,
+    universe: str = Query("themes", pattern="^(themes)$"),
+    timeframe: str = Query("all", pattern="^(short|mid|long|all)$"),
+    profile: str = Query("balanced", pattern="^(conservative|balanced|aggressive)$"),
+    top: int = Query(20, ge=5, le=120),
+    sector_id: Optional[str] = Query(None),
+    min_price: float = Query(5.0, ge=0),
+    min_avg_dollar_volume: float = Query(10_000_000, ge=0),
+    include_options: bool = True,
+):
+    """Read a matching Strength Radar snapshot produced by the worker."""
+    payload, saved_at, stale = await _scan_snapshot_payload(
+        universe=universe,
+        timeframe=timeframe,
+        profile=profile,
+        top=top,
+        sector_id=sector_id,
+        min_price=min_price,
+        min_avg_dollar_volume=min_avg_dollar_volume,
+        include_options=include_options,
+    )
+    return respond_with_snapshot(
+        request,
+        payload,
+        version_key=snapshot_version_key(
+            "strength_scan",
+            saved_at,
+            stale,
+            universe,
+            timeframe,
+            profile,
+            top,
+            sector_id,
+            min_price,
+            min_avg_dollar_volume,
+            include_options,
+        ),
+        cache_control="private, max-age=60, stale-while-revalidate=300",
+    )
 
 
 @router.get("/stocks/{ticker}")

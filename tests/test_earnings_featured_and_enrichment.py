@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 
 from app.api import earnings
+from tests.http_response_support import anonymous_get_request as _areq
 from app.services import earnings_enrichment as enrich
 from app.public_home_snapshot import validate_public_home_payload
 
@@ -501,7 +502,7 @@ def test_visitor_read_never_starts_a_provider_build(
 
     async def scenario():
         with request_owner_access_context(False):
-            return await earnings.upcoming_earnings()
+            return await earnings.upcoming_earnings(_areq())
 
     with pytest.raises(Exception) as excinfo:
         asyncio.run(scenario())

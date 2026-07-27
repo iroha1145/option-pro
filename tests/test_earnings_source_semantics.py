@@ -9,6 +9,7 @@ import pytest
 
 from app.api import earnings
 from app.public_home_snapshot import validate_public_home_payload
+from tests.http_response_support import anonymous_get_request as _areq, response_payload as _rp
 
 
 _REAL_EXPECTED_MOVE_FOR_REPORT = earnings._expected_move_for_report
@@ -1078,7 +1079,7 @@ def test_explicit_refresh_is_bounded_and_replaces_the_cached_snapshot(
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", build)
     monkeypatch.setattr(earnings.time, "monotonic", lambda: clock[0])
 
-    initial = asyncio.run(earnings.upcoming_earnings())
+    initial = _rp(asyncio.run(earnings.upcoming_earnings(_areq())))
     refreshed = asyncio.run(earnings.refresh_upcoming_earnings())
     cooled = asyncio.run(earnings.refresh_upcoming_earnings())
 
@@ -1111,7 +1112,7 @@ def test_failed_explicit_refresh_preserves_cached_data(
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", build)
     monkeypatch.setattr(earnings.time, "monotonic", lambda: 200.0)
 
-    initial = asyncio.run(earnings.upcoming_earnings())
+    initial = _rp(asyncio.run(earnings.upcoming_earnings(_areq())))
     stale = asyncio.run(earnings.refresh_upcoming_earnings())
 
     assert initial["earnings"] == [{"ticker": "SAFE"}]
@@ -1151,7 +1152,7 @@ def test_degraded_explicit_refresh_cannot_replace_complete_same_day_cache(
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", build)
     monkeypatch.setattr(earnings.time, "monotonic", lambda: 300.0)
 
-    initial = asyncio.run(earnings.upcoming_earnings())
+    initial = _rp(asyncio.run(earnings.upcoming_earnings(_areq())))
     stale = asyncio.run(earnings.refresh_upcoming_earnings())
     persisted = earnings.cache.get(key)
 

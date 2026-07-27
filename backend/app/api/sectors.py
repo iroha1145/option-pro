@@ -22,6 +22,7 @@ from app.data_paths import get_data_paths
 from app.services import massive, yahoo
 from app.services.request_security import request_client_ip
 from app.services.sectors import SECTORS
+from app.services.snapshot_read_cache import FingerprintedFileCache
 from app.services.zh_names import get_zh_name
 
 router = APIRouter(prefix="/api/sectors", tags=["sectors"])
@@ -514,6 +515,59 @@ def _write_sector_iv_snapshot(
         raise
 
 
+# Validated per-sector IV snapshots keyed by file identity (atomic publish
+# swaps the inode). The sector catalog is bounded, so one entry per sector.
+_sector_iv_documents = FingerprintedFileCache(
+    "sector_iv",
+    max_paths=32,
+    max_bytes=32 * _SECTOR_IV_SNAPSHOT_MAX_BYTES,
+)
+
+
+def _parse_sector_iv_document(
+    raw: bytes,
+    *,
+    sector_id: str,
+    observed: float,
+) -> dict[str, Any] | None:
+    if not raw:
+        return None
+    document = json.loads(
+        raw.decode("utf-8"),
+        object_pairs_hook=_reject_duplicate_json_keys,
+        parse_constant=_reject_non_finite_json,
+    )
+    if (
+        not isinstance(document, dict)
+        or document.get("version") != _SECTOR_IV_SNAPSHOT_VERSION
+        or document.get("sector_id") != sector_id
+    ):
+        return None
+    saved_at = document.get("saved_at")
+    if (
+        isinstance(saved_at, bool)
+        or not isinstance(saved_at, (int, float))
+        or not math.isfinite(float(saved_at))
+        or float(saved_at) <= 0
+        or float(saved_at) > observed
+    ):
+        return None
+    payload = _clean_sector_iv_snapshot_payload(
+        sector_id,
+        document.get("payload"),
+    )
+    if payload is None:
+        return None
+    snapshot_origin = document.get("snapshot_origin", "legacy")
+    if snapshot_origin not in {"owner_live", "public_live", "legacy"}:
+        return None
+    return {
+        "saved_at": float(saved_at),
+        "payload": payload,
+        "snapshot_origin": snapshot_origin,
+    }
+
+
 def _read_sector_iv_snapshot(
     sector_id: str,
     *,
@@ -522,41 +576,16 @@ def _read_sector_iv_snapshot(
     target = _sector_iv_snapshot_path(sector_id)
     observed = time.time() if now is None else float(now)
     try:
-        if target.is_symlink() or not target.is_file():
+        if target.is_symlink():
             return None
-        with target.open("rb") as handle:
-            raw = handle.read(_SECTOR_IV_SNAPSHOT_MAX_BYTES + 1)
-        if not raw or len(raw) > _SECTOR_IV_SNAPSHOT_MAX_BYTES:
-            return None
-        document = json.loads(
-            raw.decode("utf-8"),
-            object_pairs_hook=_reject_duplicate_json_keys,
-            parse_constant=_reject_non_finite_json,
+        document = _sector_iv_documents.read(
+            target,
+            lambda raw: _parse_sector_iv_document(
+                raw, sector_id=sector_id, observed=observed
+            ),
+            now=observed,
+            max_bytes=_SECTOR_IV_SNAPSHOT_MAX_BYTES,
         )
-        if (
-            not isinstance(document, dict)
-            or document.get("version") != _SECTOR_IV_SNAPSHOT_VERSION
-            or document.get("sector_id") != sector_id
-        ):
-            return None
-        saved_at = document.get("saved_at")
-        if (
-            isinstance(saved_at, bool)
-            or not isinstance(saved_at, (int, float))
-            or not math.isfinite(float(saved_at))
-            or float(saved_at) <= 0
-            or float(saved_at) > observed
-        ):
-            return None
-        payload = _clean_sector_iv_snapshot_payload(
-            sector_id,
-            document.get("payload"),
-        )
-        if payload is None:
-            return None
-        snapshot_origin = document.get("snapshot_origin", "legacy")
-        if snapshot_origin not in {"owner_live", "public_live", "legacy"}:
-            return None
     except (
         OSError,
         RecursionError,
@@ -566,8 +595,12 @@ def _read_sector_iv_snapshot(
         json.JSONDecodeError,
     ):
         return None
+    if document is None:
+        return None
 
-    saved_at = float(saved_at)
+    saved_at = float(document["saved_at"])
+    # Copy before decorating: the parsed document is shared by the cache.
+    payload = dict(document["payload"])
     stale = (
         saved_at + _SECTOR_IV_SNAPSHOT_TTL_SECONDS <= observed
         or bool(payload.get("_stale"))
@@ -577,7 +610,7 @@ def _read_sector_iv_snapshot(
             "_cached": True,
             "_stale": stale,
             "snapshot_source": "sector_snapshot",
-            "snapshot_origin": snapshot_origin,
+            "snapshot_origin": document["snapshot_origin"],
             "snapshot_saved_at": datetime.fromtimestamp(
                 saved_at,
                 timezone.utc,

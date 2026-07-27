@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from app.access import request_owner_access_context
 from app.api import options
 from app.services import yahoo
+from tests.http_response_support import anonymous_get_request as _areq
 
 
 @pytest.fixture(autouse=True)
@@ -122,20 +123,20 @@ def test_unusual_total_failure_uses_short_negative_cache(
     monkeypatch.setattr(options.time, "monotonic", lambda: now[0])
 
     with pytest.raises(HTTPException) as first:
-        asyncio.run(options.unusual_activity("all", 1.0))
+        asyncio.run(options.unusual_activity(_areq(), "all", 1.0))
     assert first.value.status_code == 503
     assert first.value.headers == {"Retry-After": "30"}
     assert calls == 2
 
     with pytest.raises(HTTPException) as cooled:
-        asyncio.run(options.unusual_activity("all", 1.0))
+        asyncio.run(options.unusual_activity(_areq(), "all", 1.0))
     assert cooled.value.status_code == 503
     assert cooled.value.headers == {"Retry-After": "30"}
     assert calls == 2
 
     now[0] += 31
     with pytest.raises(HTTPException):
-        asyncio.run(options.unusual_activity("all", 1.0))
+        asyncio.run(options.unusual_activity(_areq(), "all", 1.0))
     assert calls == 4
 
 
@@ -154,7 +155,7 @@ def test_concurrent_total_failures_share_one_negative_result(
 
     async def scenario():
         return await asyncio.gather(
-            *[options.unusual_activity("all", 1.0) for _ in range(5)],
+            *[options.unusual_activity(_areq(), "all", 1.0) for _ in range(5)],
             return_exceptions=True,
         )
 

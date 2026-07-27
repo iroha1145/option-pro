@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timezone
 
 import yfinance as yf
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.access import current_request_is_owner, public_snapshot_unavailable
 from app.public_home_snapshot import (
@@ -17,6 +17,7 @@ from app.public_home_snapshot import (
 )
 from app.personal_config import get_personal_config
 from app.services.cache import cache as _shared_cache
+from app.services.http_read_cache import respond_with_snapshot, snapshot_version_key
 from app.services.market_calendar import (
     ET,
     early_close_minutes as _early_close_minutes,
@@ -33,7 +34,7 @@ INDEX_SYMBOLS = list(PUBLIC_HOME_INDEX_SYMBOLS)
 
 
 @router.get("/indices")
-async def market_indices():
+async def market_indices(request: Request):
     """Batch quote endpoint for the frontend index ticker bar.
 
     One request returns all index quotes via fast_info — the old path made the
@@ -42,23 +43,34 @@ async def market_indices():
     """
     key = "market:indices"
     owner = current_request_is_owner()
+    cache_control = "private, max-age=30, stale-while-revalidate=120"
     if not owner:
-        cached = _shared_cache.get(key)
-        if cached is None:
-            now = time.time()
-            cached = await read_public_home_resource_async(
-                "indices",
-                parameters=public_home_resource_parameters("indices", now=now),
-                now=now,
-            )
-        if cached is None:
+        # Anonymous readers get the published snapshot only. The fingerprint
+        # cache makes this a stat-level read, and keeping the path off the
+        # owner's process-cache key means a visitor can never observe the
+        # owner's live rebuild before the worker publishes it.
+        now = time.time()
+        payload = await read_public_home_resource_async(
+            "indices",
+            parameters=public_home_resource_parameters("indices", now=now),
+            now=now,
+        )
+        if payload is None:
             raise public_snapshot_unavailable(key)
-        return cached
-    cached = _shared_cache.get(key)
-    if cached is not None:
-        return cached
+        return respond_with_snapshot(
+            request,
+            payload,
+            version_key=snapshot_version_key(
+                "indices", "public", payload.get("snapshot_saved_at")
+            ),
+            cache_control=cache_control,
+        )
     config = get_personal_config()
     if config.access.mode == "password":
+        # Owner ordinary reads follow the worker snapshot too (fresh or
+        # stale-labelled); a cold API process must not fall into a provider
+        # rebuild just because the owner opened the page. The live rebuild
+        # stays available below only when no snapshot exists at all.
         now = time.time()
         interval = float(config.public_home.indices_seconds)
         disk_entry = await read_owner_public_home_entry_async(
@@ -68,12 +80,19 @@ async def market_indices():
             now=now,
         )
         if disk_entry is not None:
-            remaining = max(
-                1,
-                int(float(disk_entry["saved_at"]) + interval - now),
+            return respond_with_snapshot(
+                request,
+                disk_entry["payload"],
+                version_key=snapshot_version_key(
+                    "indices",
+                    "owner",
+                    disk_entry["saved_at"],
+                    bool(disk_entry["fresh"]),
+                ),
+                cache_control=cache_control,
             )
-            return _shared_cache.set(key, disk_entry["payload"], remaining)
-    return await _shared_cache.get_or_set(key, 60, _build_indices)
+    owner_key = f"{key}:owner-live"
+    return await _shared_cache.get_or_set(owner_key, 60, _build_indices)
 
 
 async def _build_indices():

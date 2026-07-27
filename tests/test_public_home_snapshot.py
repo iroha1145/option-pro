@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from tests.http_response_support import anonymous_get_request as _areq, response_payload as _rp
 
 from app.access import (
     OwnerAccessRuntime,
@@ -1481,13 +1482,13 @@ def test_public_cold_process_reads_file_without_provider_or_write(
 
     async def scenario() -> None:
         with request_owner_access_context(False):
-            assert (await market.market_indices())["_stale"] is True
+            assert _rp(await market.market_indices(_areq()))["_stale"] is True
             assert (await stocks.stock_overview("NVDA"))["price"] == 100.0
             assert (await stocks.stock_chart("NVDA", "1d", "raw"))["_stale"] is True
             assert (await stocks.stock_signals("NVDA"))["_stale"] is True
-            assert (await earnings.upcoming_earnings())["_stale"] is True
-            assert (
-                await options.unusual_activity(type="all", min_vol_oi=1.0)
+            assert _rp(await earnings.upcoming_earnings(_areq()))["_stale"] is True
+            assert _rp(
+                await options.unusual_activity(_areq(), type="all", min_vol_oi=1.0)
             )["_stale"] is True
 
     asyncio.run(scenario())
@@ -1520,8 +1521,8 @@ def test_public_snapshot_parameter_scope_never_leaks_default_data(
             await unavailable(stocks.stock_signals("AAPL"))
             await unavailable(stocks.stock_chart("NVDA", "15m", "raw"))
             await unavailable(stocks.stock_chart("NVDA", "1d", "adjusted"))
-            await unavailable(options.unusual_activity(type="call", min_vol_oi=1.0))
-            await unavailable(options.unusual_activity(type="all", min_vol_oi=2.0))
+            await unavailable(options.unusual_activity(_areq(), type="call", min_vol_oi=1.0))
+            await unavailable(options.unusual_activity(_areq(), type="all", min_vol_oi=2.0))
 
     asyncio.run(scenario())
 
@@ -1654,13 +1655,13 @@ def test_owner_closed_cold_process_reuses_two_hour_disk_generation(
     async def scenario() -> list[dict]:
         with request_owner_access_context(True):
             return [
-                await market.market_indices(),
+                _rp(await market.market_indices(_areq())),
                 await stocks.watchlist(),
                 await stocks.stock_overview("NVDA"),
                 await stocks.stock_chart("NVDA", "1d", "raw"),
                 await stocks.stock_signals("NVDA"),
-                await earnings.upcoming_earnings(),
-                await options.unusual_activity(type="all", min_vol_oi=1.0),
+                _rp(await earnings.upcoming_earnings(_areq())),
+                _rp(await options.unusual_activity(_areq(), type="all", min_vol_oi=1.0)),
             ]
 
     payloads = asyncio.run(scenario())
@@ -1797,7 +1798,7 @@ def test_password_owner_market_signals_reads_worker_snapshot_without_provider(
 
     async def scenario() -> dict:
         with request_owner_access_context(True):
-            return await signals.market_signals()
+            return _rp(await signals.market_signals(_areq()))
 
     payload = asyncio.run(scenario())
 

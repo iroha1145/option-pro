@@ -16,6 +16,7 @@ import httpx
 from fastapi import HTTPException
 
 from app.api import market, signals as signals_api, strength as strength_api
+from tests.http_response_support import anonymous_get_request as _areq
 from app.public_home_snapshot import validate_public_home_payload
 from app.services import scoring, signals, yahoo
 from app.services.cache import TTLCache
@@ -977,6 +978,7 @@ def test_strength_api_returns_typed_unavailable_without_running_provider_scan(
     with pytest.raises(HTTPException) as captured:
         asyncio.run(
             strength_api.scan(
+                _areq(),
                 universe="themes",
                 timeframe="all",
                 profile="balanced",

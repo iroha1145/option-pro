@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 import yfinance as yf
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.access import (
     current_request_is_owner,
@@ -51,6 +51,7 @@ EARNINGS_TICKERS = [
 
 
 from app.services import earnings_enrichment
+from app.services.http_read_cache import respond_with_snapshot, snapshot_version_key
 from app.services.utils import sanitize as _sanitize
 
 MARKET_TZ = ZoneInfo("America/New_York")
@@ -768,31 +769,48 @@ def _expected_move_for_report(
 
 
 @router.get("/upcoming")
-async def upcoming_earnings():
-    """Fetch real upcoming earnings dates from Yahoo Finance.
+async def upcoming_earnings(request: Request):
+    """Serve the published earnings snapshot with conditional-GET support.
 
-    Uses the locked cache helper so concurrent cold-cache requests share ONE
-    fetch instead of each firing ~67 tickers worth of yfinance calls
-    (thundering herd).
+    The worker owns publication; ordinary GETs (owner included) never start a
+    provider scan in password mode — POST /upcoming/refresh is the explicit
+    rebuild. The 4MB body is served from the serialized-bytes cache with a
+    strong ETag, so a repeat visit costs a 304 instead of a re-encode.
     """
     today = _market_today()
     key = f"earnings:upcoming:{today.isoformat()}"
     owner = current_request_is_owner()
+    cache_control = "private, max-age=60, stale-while-revalidate=600"
     if not owner:
-        cached = cache.get(key)
-        if cached is None:
-            now = time.time()
-            cached = await read_public_home_resource_async(
-                "earnings",
-                parameters=public_home_resource_parameters("earnings", now=now),
-                now=now,
-            )
-        if cached is None:
+        # Snapshot-only, and deliberately off the owner's process-cache key:
+        # a visitor must never observe the owner's live rebuild before the
+        # worker publishes it (identity is part of every cache scope).
+        now = time.time()
+        payload = await read_public_home_resource_async(
+            "earnings",
+            parameters=public_home_resource_parameters("earnings", now=now),
+            now=now,
+        )
+        if payload is None:
             raise public_snapshot_unavailable(key)
-        return cached
+        return respond_with_snapshot(
+            request,
+            payload,
+            version_key=snapshot_version_key(
+                "earnings", "public", payload.get("snapshot_saved_at")
+            ),
+            cache_control=cache_control,
+        )
     cached = cache.get(key)
     if cached is not None:
-        return cached
+        # Manual-refresh results carry request-scoped fields; keep the ETag
+        # but skip the bytes cache (no stable version for mutated copies).
+        return respond_with_snapshot(
+            request,
+            cached,
+            version_key=None,
+            cache_control=cache_control,
+        )
     config = get_personal_config()
     if config.access.mode == "password":
         now = time.time()
@@ -804,11 +822,27 @@ async def upcoming_earnings():
             now=now,
         )
         if disk_entry is not None:
-            remaining = max(
-                1,
-                int(float(disk_entry["saved_at"]) + interval - now),
+            payload = disk_entry["payload"]
+            if disk_entry["fresh"]:
+                remaining = max(
+                    1,
+                    int(float(disk_entry["saved_at"]) + interval - now),
+                )
+                cache.set(key, payload, remaining)
+            return respond_with_snapshot(
+                request,
+                payload,
+                version_key=snapshot_version_key(
+                    "earnings",
+                    "owner",
+                    disk_entry["saved_at"],
+                    bool(disk_entry["fresh"]),
+                ),
+                cache_control=cache_control,
             )
-            return cache.set(key, disk_entry["payload"], remaining)
+        # No published snapshot at all: stay honest and unavailable instead
+        # of letting an ordinary page read trigger a ~67-ticker provider scan.
+        raise public_snapshot_unavailable(key)
     return await cache.get_or_set(
         key,
         3600,

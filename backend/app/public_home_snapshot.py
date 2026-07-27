@@ -16,6 +16,7 @@ from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
 from app.data_paths import get_data_paths
+from app.services.snapshot_read_cache import FingerprintedFileCache
 
 
 PUBLIC_HOME_SNAPSHOT_VERSION = 1
@@ -1212,6 +1213,44 @@ def _validate_entry(resource: str, value: Any, *, now: float) -> dict[str, Any] 
     }
 
 
+# Parsed-and-validated documents keyed by file identity. Publishing swaps the
+# inode (mkstemp + os.replace), so a hit is exactly "the same bytes we already
+# validated" and a fresh publish invalidates on the next stat. Entries are
+# shared read-only structures: every consumer below copies before decorating.
+_parsed_documents = FingerprintedFileCache(
+    "public_home",
+    max_paths=4,
+    max_bytes=3 * PUBLIC_HOME_SNAPSHOT_MAX_BYTES,
+)
+
+
+def _parse_public_home_document(
+    raw: bytes, *, now: float
+) -> dict[str, dict[str, Any]] | None:
+    if not raw:
+        return None
+    document = json.loads(
+        raw.decode("utf-8"),
+        object_pairs_hook=_reject_duplicate_json_keys,
+        parse_constant=_reject_non_finite_json,
+    )
+    if (
+        not isinstance(document, dict)
+        or set(document) != {"version", "resources"}
+        or document.get("version") != PUBLIC_HOME_SNAPSHOT_VERSION
+        or isinstance(document.get("version"), bool)
+        or not isinstance(document.get("resources"), dict)
+        or any(name not in PUBLIC_HOME_RESOURCE_SPECS for name in document["resources"])
+    ):
+        return None
+    result: dict[str, dict[str, Any]] = {}
+    for resource, value in document["resources"].items():
+        entry = _validate_entry(resource, value, now=now)
+        if entry is not None:
+            result[resource] = entry
+    return result
+
+
 def read_public_home_entries(
     path: Path | None = None,
     *,
@@ -1220,36 +1259,14 @@ def read_public_home_entries(
     target = path or get_data_paths().public_home_snapshot
     current = time.time() if now is None else float(now)
     try:
-        if (
-            not target.is_absolute()
-            or _path_has_symlink_boundary(target)
-            or not target.is_file()
-        ):
+        if not target.is_absolute() or _path_has_symlink_boundary(target):
             return {}
-        with target.open("rb") as handle:
-            raw = handle.read(PUBLIC_HOME_SNAPSHOT_MAX_BYTES + 1)
-        if not raw or len(raw) > PUBLIC_HOME_SNAPSHOT_MAX_BYTES:
-            return {}
-        document = json.loads(
-            raw.decode("utf-8"),
-            object_pairs_hook=_reject_duplicate_json_keys,
-            parse_constant=_reject_non_finite_json,
+        entries = _parsed_documents.read(
+            target,
+            lambda raw: _parse_public_home_document(raw, now=current),
+            now=current,
+            max_bytes=PUBLIC_HOME_SNAPSHOT_MAX_BYTES,
         )
-        if (
-            not isinstance(document, dict)
-            or set(document) != {"version", "resources"}
-            or document.get("version") != PUBLIC_HOME_SNAPSHOT_VERSION
-            or isinstance(document.get("version"), bool)
-            or not isinstance(document.get("resources"), dict)
-            or any(name not in PUBLIC_HOME_RESOURCE_SPECS for name in document["resources"])
-        ):
-            return {}
-        result: dict[str, dict[str, Any]] = {}
-        for resource, value in document["resources"].items():
-            entry = _validate_entry(resource, value, now=current)
-            if entry is not None:
-                result[resource] = entry
-        return result
     except (
         OSError,
         RecursionError,
@@ -1259,6 +1276,17 @@ def read_public_home_entries(
         json.JSONDecodeError,
     ):
         return {}
+    if not entries:
+        return {}
+    # Top-level copy so callers replacing entries (the worker's publish path)
+    # never mutate the shared cached document.
+    return dict(entries)
+
+
+def reset_public_home_read_cache() -> None:
+    """Test hook: drop the fingerprint cache (frozen-clock tests rely on it)."""
+
+    _parsed_documents.invalidate()
 
 
 def public_home_entry_is_servable(
@@ -1299,11 +1327,12 @@ def read_public_home_resource(
     ):
         return None
     payload = dict(entry["payload"])
-    age = max(0.0, current - float(entry["saved_at"]))
     payload["_stale"] = True
     payload["source_status"] = "degraded"
     payload["stale_reason"] = "public_snapshot_only"
-    payload["stale_age_seconds"] = round(age, 1)
+    # The body must stay byte-stable for a given snapshot so ETag/304 works:
+    # expose the fixed saved_at and let clients derive "how old" themselves
+    # instead of stamping a request-time stale_age_seconds into every reply.
     payload["snapshot_saved_at"] = datetime.fromtimestamp(
         float(entry["saved_at"]), timezone.utc
     ).isoformat()
@@ -1360,7 +1389,8 @@ def read_owner_public_home_entry(
         payload["_stale"] = True
         payload["source_status"] = "degraded"
         payload["stale_reason"] = "worker_snapshot_awaiting_refresh"
-        payload["stale_age_seconds"] = round(age, 1)
+        # Byte-stable stale marker (see read_public_home_resource): clients
+        # compute the age from the fixed snapshot_saved_at.
         payload["snapshot_saved_at"] = datetime.fromtimestamp(
             saved_at,
             timezone.utc,

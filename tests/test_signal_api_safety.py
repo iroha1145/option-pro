@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from app.access import request_owner_access_context
 from app.api import signals
+from tests.http_response_support import anonymous_get_request as _areq
 
 
 def test_signal_api_rejects_invalid_ticker_before_provider_call(monkeypatch):
@@ -51,7 +52,7 @@ def test_signal_api_does_not_expose_or_log_internal_provider_errors(monkeypatch,
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(signals.market_signals())
+        asyncio.run(signals.market_signals(_areq()))
     assert exc_info.value.status_code == 503
     assert exc_info.value.detail == "Market signals are currently unavailable"
     assert "secret" not in exc_info.value.detail

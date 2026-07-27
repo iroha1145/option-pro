@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.api import strength
+from tests.http_response_support import anonymous_get_request as _areq, response_payload as _rp
 
 
 NOW = 1_789_000_000.0
@@ -36,8 +37,9 @@ def _payload(
 
 
 def _run_scan(*, top: int = 20) -> dict:
-    return asyncio.run(
+    return _rp(asyncio.run(
         strength.scan(
+            _areq(),
             universe="themes",
             timeframe="all",
             profile="balanced",
@@ -46,7 +48,7 @@ def _run_scan(*, top: int = 20) -> dict:
             min_price=5.0,
             min_avg_dollar_volume=10_000_000.0,
         )
-    )
+    ))
 
 
 def test_default_scan_reads_fresh_worker_snapshot_without_network(
@@ -139,7 +141,8 @@ def test_expired_cache_is_returned_as_stale_worker_snapshot(
     assert result["_stale"] is True
     assert result["source_status"] == "stale"
     assert result["stale_reason"] == "worker_snapshot_expired"
-    assert result["stale_age_seconds"] == pytest.approx(NOW - saved_at)
+    assert "stale_age_seconds" not in result
+    assert result["snapshot_saved_at"].startswith("20")
 
 
 def test_old_snapshot_remains_visible_after_refresh_failures(
@@ -162,7 +165,8 @@ def test_old_snapshot_remains_visible_after_refresh_failures(
     assert result["rows"][0]["ticker"] == "MSFT"
     assert result["_stale"] is True
     assert result["source_status"] == "stale"
-    assert result["stale_age_seconds"] == pytest.approx(NOW - saved_at)
+    assert "stale_age_seconds" not in result
+    assert result["snapshot_saved_at"].startswith("20")
 
 
 def test_nondefault_parameters_do_not_reuse_default_worker_snapshot(
@@ -244,7 +248,7 @@ def test_nondefault_worker_snapshot_is_path_isolated_and_read_by_exact_query(
     monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", base)
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
 
-    result = asyncio.run(strength.scan(**parameters))
+    result = _rp(asyncio.run(strength.scan(_areq(), **parameters)))
 
     assert result["rows"][0]["ticker"] == "NVDA"
     assert result["snapshot_source"] == "worker"

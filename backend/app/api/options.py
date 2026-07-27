@@ -8,7 +8,7 @@ import time
 from typing import Literal
 
 import yfinance as yf
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.access import current_request_is_owner, public_snapshot_unavailable
 from app.services import yahoo
@@ -19,6 +19,7 @@ from app.public_home_snapshot import (
     read_public_home_resource_async,
 )
 from app.personal_config import get_personal_config
+from app.services.http_read_cache import respond_with_snapshot, snapshot_version_key
 
 router = APIRouter(prefix="/api/options", tags=["options"])
 POPULAR_TICKERS = ["NVDA", "TSLA", "AAPL", "AMD", "AMZN", "META", "MSFT", "SPY", "QQQ", "GOOGL"]
@@ -250,6 +251,7 @@ def _load_expirations_snapshot(symbol: str) -> dict:
 
 @router.get("/unusual")
 async def unusual_activity(
+    request: Request,
     type: Literal["all", "call", "put"] = "all",
     min_vol_oi: float = Query(1.0, ge=0),
 ):
@@ -260,21 +262,38 @@ async def unusual_activity(
     """
     key = _unusual_key(type, min_vol_oi)
     owner = current_request_is_owner()
+    cache_control = "private, max-age=60, stale-while-revalidate=300"
     if not owner:
-        cached = cache.get(key)
-        if cached is None:
-            now = time.time()
-            cached = await read_public_home_resource_async(
-                "unusual",
-                parameters={"type": type, "min_vol_oi": float(min_vol_oi)},
-                now=now,
-            )
-        if cached is None:
+        # Snapshot-only for visitors; never share the owner's live-rebuild
+        # cache key across principals.
+        now = time.time()
+        payload = await read_public_home_resource_async(
+            "unusual",
+            parameters={"type": type, "min_vol_oi": float(min_vol_oi)},
+            now=now,
+        )
+        if payload is None:
             raise public_snapshot_unavailable(key)
-        return cached
+        return respond_with_snapshot(
+            request,
+            payload,
+            version_key=snapshot_version_key(
+                "unusual",
+                "public",
+                type,
+                float(min_vol_oi),
+                payload.get("snapshot_saved_at"),
+            ),
+            cache_control=cache_control,
+        )
     cached = cache.get(key)
     if cached is not None:
-        return cached
+        return respond_with_snapshot(
+            request,
+            cached,
+            version_key=None,
+            cache_control=cache_control,
+        )
     config = get_personal_config()
     if (
         config.access.mode == "password"
@@ -290,11 +309,24 @@ async def unusual_activity(
             now=now,
         )
         if disk_entry is not None:
-            remaining = max(
-                1,
-                int(float(disk_entry["saved_at"]) + interval - now),
+            payload = disk_entry["payload"]
+            if disk_entry["fresh"]:
+                remaining = max(
+                    1,
+                    int(float(disk_entry["saved_at"]) + interval - now),
+                )
+                cache.set(key, payload, remaining)
+            return respond_with_snapshot(
+                request,
+                payload,
+                version_key=snapshot_version_key(
+                    "unusual",
+                    "owner",
+                    disk_entry["saved_at"],
+                    bool(disk_entry["fresh"]),
+                ),
+                cache_control=cache_control,
             )
-            return cache.set(key, disk_entry["payload"], remaining)
     retry_after = _failure_cooldown(key)
     if retry_after > 0:
         raise _cooldown_error(retry_after)

@@ -1169,6 +1169,8 @@ _WATCHLIST_SNAPSHOT_TRANSPORT_FIELDS = frozenset(
 )
 _watchlist_snapshot_load_attempted = False
 _watchlist_snapshot_observed: tuple[str, tuple[int, int, int]] | None = None
+# Owner-path identity gate: (path, file identity, snapshot fetched_at).
+_watchlist_owner_snapshot_observed: tuple[str, tuple[int, int, int], float] | None = None
 _WATCHLIST_TICKER_PATTERN = re.compile(
     r"^(?:\^[A-Z0-9][A-Z0-9.^_=-]{0,30}|[A-Z0-9][A-Z0-9.^_=-]{0,31})$"
 )
@@ -1601,14 +1603,30 @@ def _load_watchlist_snapshot_once(now: float) -> None:
 def _load_watchlist_snapshot_for_owner(now: float) -> _EndpointCacheEntry | None:
     """Reuse a worker generation without launching the same Yahoo batch."""
 
+    global _watchlist_owner_snapshot_observed
     config = get_personal_config()
     if config.access.mode != "password":
         return None
     interval = float(config.public_home.watchlist_seconds)
     current = _usable_hit("watchlist", now)
+    # Identity gate (same as the visitor path): while the snapshot file is
+    # unchanged and the memory entry already reflects that generation or a
+    # newer live refresh, skip the full read+validate.
+    path_key = str(_WATCHLIST_SNAPSHOT_PATH)
+    identity = _watchlist_snapshot_identity(_WATCHLIST_SNAPSHOT_PATH)
+    observed = _watchlist_owner_snapshot_observed
+    if (
+        observed is not None
+        and observed[0] == path_key
+        and observed[1] == identity
+        and current is not None
+        and current.fetched_at >= observed[2]
+    ):
+        return current
     entry = _read_watchlist_snapshot(_WATCHLIST_SNAPSHOT_PATH, now=now)
     if entry is None:
         return None
+    _watchlist_owner_snapshot_observed = (path_key, identity, entry.fetched_at)
     entry.expires_at = entry.fetched_at + interval
     if current is None or entry.fetched_at > current.fetched_at or (
         entry.fetched_at == current.fetched_at and current.expires_at <= now
