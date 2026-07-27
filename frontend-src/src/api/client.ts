@@ -133,13 +133,15 @@ export function toQuery(params: Record<string, unknown>): string {
 export interface RequestOptions extends RequestInit {
   /** 覆盖默认超时；长任务轮询可单独放宽。传 0 表示不超时。 */
   timeoutMs?: number;
+  /** 条件请求:304 Not Modified 不作为错误抛出,原样返回 Response。 */
+  acceptNotModified?: boolean;
 }
 
 /** live 模式请求（返回原始 Response 供需要读头的场景，如 202 Location） */
 export async function requestRaw(path: string, init?: RequestOptions): Promise<Response> {
   const method = (init?.method ?? 'GET').toUpperCase();
   const isWrite = method !== 'GET' && method !== 'HEAD';
-  const { timeoutMs, signal: callerSignal, ...rest } = init ?? {};
+  const { timeoutMs, acceptNotModified, signal: callerSignal, ...rest } = init ?? {};
   const budget = timeoutMs ?? REQUEST_TIMEOUT_MS;
   const timeout = budget > 0 ? withTimeout(callerSignal, budget) : null;
   let res: Response;
@@ -166,6 +168,9 @@ export async function requestRaw(path: string, init?: RequestOptions): Promise<R
     throw error;
   } finally {
     timeout?.dispose();
+  }
+  if (res.status === 304 && acceptNotModified) {
+    return res;
   }
   if (!res.ok) {
     let message = res.statusText || t('请求失败');

@@ -89,6 +89,17 @@ function loadSectorsModule(responses = {}) {
   const calls = [];
   const module = { exports: {} };
   const require = (id) => {
+    if (id === '../queryRegistry') {
+      return {
+        registryGet: async (url) => {
+          calls.push(url);
+          return responses[url] ?? {};
+        },
+        restorePersistedQuery: async () => null,
+        invalidateQueryPaths: () => {},
+        queryConfigFor: () => null,
+      };
+    }
     if (id === '../client') {
       return {
         get: async (url) => {

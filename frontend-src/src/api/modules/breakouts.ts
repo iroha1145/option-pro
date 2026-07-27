@@ -1,5 +1,6 @@
 /** 突破雷达域 */
 import { get, mockOr, toQuery } from '../client';
+import { registryGet } from '../queryRegistry';
 import { marketGet } from '../marketRead';
 import { asRec, num, pickN, pickS, pickLabel, str, unwrap, type Rec } from '../live';
 import { mapMacroFitDrivers } from '../macroFields';
@@ -279,13 +280,13 @@ export const breakoutsApi = {
     mockOr(
       async () => ({ events: await fx2.getBreakoutsCurrent(), asOf: null }),
       () =>
-        get('/breakouts/current').then((d) => ({
+        registryGet('/breakouts/current').then((d) => ({
           events: unwrap(d, 'events').map(normalizeBreakoutEvent) as unknown as BreakoutSignal[],
           asOf: pickS(asRec(d), 'as_of', 'asOf'),
         })),
     ),
   status: (): Promise<BreakoutStatus> =>
-    mockOr(() => fx2.getBreakoutsStatus(), () => get('/breakouts/status').then(normalizeBreakoutStatus)),
+    mockOr(() => fx2.getBreakoutsStatus(), () => registryGet('/breakouts/status').then(normalizeBreakoutStatus)),
   /**
    * 历史事件分页。
    *

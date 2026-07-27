@@ -14,6 +14,7 @@
  * 分数含义：过去 5 年滚动历史分位，不是预测概率。
  */
 import { get, mockOr, post, toQuery } from '../client';
+import { registryGet } from '../queryRegistry';
 import { asRec, pickB, pickN, pickS, unwrap } from '../live';
 import { MACRO_MODULE_ORDER, type MacroModuleId } from '@/lib/macroModules';
 import * as macroMock from '@/mocks/macro';
@@ -409,7 +410,7 @@ export const macroApi = {
   conditions: (): Promise<MacroConditionsResponse> =>
     mockOr(
       () => macroMock.getMacroConditions(),
-      () => get('/macro/conditions').then(mapConditions),
+      () => registryGet('/macro/conditions').then(mapConditions),
     ),
   history: (days = 365): Promise<MacroHistoryResponse> =>
     mockOr(

@@ -100,6 +100,17 @@ const MOCKS = macroMockModule();
 const { MOCK_REASON, getMacroConditions, getMacroHistory, getMacroModuleDetail } = MOCKS;
 
 const MACRO_API = loadModule('api/modules/macro.ts', (id) => {
+  if (id === '../queryRegistry') {
+    return {
+      registryGet: async (url) => {
+        calls.push(url);
+        return responses[url] ?? {};
+      },
+      restorePersistedQuery: async () => null,
+      invalidateQueryPaths: () => {},
+      queryConfigFor: () => null,
+    };
+  }
   if (id === '../client') {
     return {
       get: async () => ({}),

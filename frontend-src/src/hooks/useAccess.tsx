@@ -3,6 +3,9 @@ import type { ReactNode } from 'react';
 import { accessApi } from '@/api/modules/access';
 import { PRINCIPAL_INVALID_EVENT } from '@/api/client';
 import { dropSharedReads } from '@/api/sharedRead';
+import { setQueryPrincipal } from '@/api/queryRegistry';
+import { resetMarketReadState } from '@/api/marketRead';
+import { clearCatalystReadCache } from '@/components/catalysts/api';
 import type { AccessRole, AccessStatus } from '@/api/types';
 import { t } from '../i18n/core.ts';
 
@@ -84,9 +87,14 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       if (generation !== generationRef.current) return;
       const identity = `${next.role}\u0000${next.accountUsername ?? ''}`;
       if (identityRef.current !== null && identityRef.current !== identity) {
+        // 主体变了:注册表(含持久层)、marketRead、catalysts 读缓存一起作废,
+        // 上一个主体的响应不得复用给下一个。
         dropSharedReads();
+        resetMarketReadState();
+        clearCatalystReadCache();
       }
       identityRef.current = identity;
+      setQueryPrincipal(identity);
       setStatus(next);
       setIdentityUnavailable(false);
     } catch (error) {
@@ -107,9 +115,11 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   const invalidateAndRead = useCallback(() => {
     generationRef.current += 1;
     // 共享读缓存也一起作废：/strength/market 对访客和 owner 返回的不是同一份
-    // 数据（访客读公开快照，owner 实时算），2 秒的共享窗口足以让登录成功后的
-    // 第一次读取复用上一个身份那份。
+    // 数据（访客读公开快照，owner 实时算），登录成功后的第一次读取不得复用
+    // 上一个身份那份。三层读缓存一起清。
     dropSharedReads();
+    resetMarketReadState();
+    clearCatalystReadCache();
     return readInto(generationRef.current);
   }, [readInto]);
 

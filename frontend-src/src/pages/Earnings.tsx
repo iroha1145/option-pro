@@ -7,7 +7,8 @@
  */
 import { useCallback, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { earningsApi } from '@/api/modules/earnings';
+import { invalidateQueryPaths } from '@/api/queryRegistry';
+import { earningsApi, restoreUpcomingFromCache } from '@/api/modules/earnings';
 import type { EarningsReportAnalysis } from '@/api/modules/earnings';
 import { accountApi } from '@/api/modules/account';
 import { ApiError } from '@/api/client';
@@ -57,7 +58,11 @@ export default function Earnings() {
   const now = useNow(1000);
 
   /* 数据（契约 TTL：earnings 1800s） */
-  const q = usePolling(() => earningsApi.upcoming(), 1_800_000);
+  const q = usePolling(() => earningsApi.upcoming(), 1_800_000, [], {
+    // 冷启动先恢复上一份真实快照(界面按 asOf 显示数据截至时间),
+    // 后台条件请求确认;304 时不重复下载 4MB 正文。
+    restore: restoreUpcomingFromCache,
+  });
   /* 账号自选进入重点公司（账号上下文，只在本端合并，不进公共快照）。
      访客/未登录 resolve(null)：不发任何请求。 */
   const watchlistQ = usePolling(
@@ -165,6 +170,7 @@ export default function Earnings() {
     setRefreshing(true);
     try {
       const fresh = await earningsApi.refresh();
+      invalidateQueryPaths(['/earnings/upcoming']);
       q.refresh();
       const retrySeconds = fresh.refreshRetryAfterSeconds ?? REFRESH_COOLDOWN_S;
       setCooldownUntil(Date.now() + retrySeconds * 1000);
@@ -287,7 +293,9 @@ export default function Earnings() {
     [items, selectedTicker],
   );
 
-  const loading = q.loading;
+  // 恢复的上一份真实快照要立即可见:骨架只在"什么都没有"时出现。
+  // loading && data = 恢复值显示中、后台确认中(页头有明示)。
+  const loading = q.loading && !q.data;
   const error503 = q.error && !q.data;
 
   /* 页头右侧：AI 状态点 + owner 刷新 */
@@ -329,6 +337,12 @@ export default function Earnings() {
           </>
         )}
       </span>
+      {q.loading && q.data && (
+        <span className="font-mono text-micro text-ink-400">{t('正在确认最新数据…')}</span>
+      )}
+      {!q.loading && q.error && q.data && (
+        <span className="font-mono text-micro text-warn-600">{t('刷新失败 · 显示已有数据')}</span>
+      )}
       {isOwner && (
         <span className="flex items-center gap-2.5">
           {refreshStatus === 'failed_stale' && (

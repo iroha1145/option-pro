@@ -1,5 +1,6 @@
 /** 财报域：upcoming / refresh / AI 影响分析 */
 import { get, post, mockOr, toQuery } from '../client';
+import { registryGet, restorePersistedQuery } from '../queryRegistry';
 import { asRec, pickN, pickS, pickLabel, unwrap } from '../live';
 import * as fx2 from '@/mocks/fixtures2';
 import type { EarningsItem } from '../types';
@@ -279,6 +280,15 @@ function normalizeMockEarningsImpact(body: unknown): EarningsImpactResult {
   }
 }
 
+/**
+ * 冷启动恢复:上一份持久化的财报快照(不发网络)。
+ * 返回值与 upcoming() 同形状;数据截至时间以 payload 里的 asOf 为准。
+ */
+export async function restoreUpcomingFromCache(): Promise<EarningsCalendarResult | null> {
+  const raw = await restorePersistedQuery('/earnings/upcoming');
+  return raw === null ? null : mapUpcomingPayload(raw);
+}
+
 export const earningsApi = {
   upcoming: (): Promise<EarningsCalendarResult> =>
     mockOr(
@@ -291,7 +301,7 @@ export const earningsApi = {
         refreshStatus: null,
         refreshRetryAfterSeconds: null,
       }),
-      () => get('/earnings/upcoming').then(mapUpcomingPayload),
+      () => registryGet('/earnings/upcoming').then(mapUpcomingPayload),
     ),
   refresh: (): Promise<EarningsCalendarResult> =>
     // 契约：owner+SO → {earnings:[...], refresh_status∈refreshed|cooldown|failed_stale}

@@ -36,6 +36,17 @@ function loadNormalizer() {
   }).outputText;
   const module = { exports: {} };
   const require = (id) => {
+    if (id === '../queryRegistry') {
+      return {
+        registryGet: async (url) => {
+          calls.push(url);
+          return responses[url] ?? {};
+        },
+        restorePersistedQuery: async () => null,
+        invalidateQueryPaths: () => {},
+        queryConfigFor: () => null,
+      };
+    }
     if (id === '../client') {
       return {
         get: () => Promise.resolve({}),
@@ -95,6 +106,17 @@ function loadUpcomingMapper() {
   }).outputText;
   const module = { exports: {} };
   const require = (id) => {
+    if (id === '../queryRegistry') {
+      return {
+        registryGet: async (url) => {
+          calls.push(url);
+          return responses[url] ?? {};
+        },
+        restorePersistedQuery: async () => null,
+        invalidateQueryPaths: () => {},
+        queryConfigFor: () => null,
+      };
+    }
     if (id === '../client') {
       return {
         get: () => Promise.resolve({}),
@@ -237,6 +259,17 @@ test('财报日程不把缺失或未知时间伪装成盘前', () => {
   }).outputText;
   const module = { exports: {} };
   const require = (id) => {
+    if (id === '../queryRegistry') {
+      return {
+        registryGet: async (url) => {
+          calls.push(url);
+          return responses[url] ?? {};
+        },
+        restorePersistedQuery: async () => null,
+        invalidateQueryPaths: () => {},
+        queryConfigFor: () => null,
+      };
+    }
     if (id === '../client') {
       return {
         get: () => Promise.resolve({}),

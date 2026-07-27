@@ -1,5 +1,6 @@
 /** 板块域：真实目录、强度聚合与板块内 IV 横截面。 */
 import { get, mockOr, toQuery } from '../client';
+import { registryGet } from '../queryRegistry';
 import { asRec, pickB, pickN, pickS, pickLabel, unwrap, type Rec } from '../live';
 import { mapMacroFitDrivers } from '../macroFields';
 import type { MacroFitDriver } from '@/lib/macroFit';
@@ -226,7 +227,7 @@ export const sectorsApi = {
   list: (): Promise<SectorCatalogItem[]> =>
     mockOr(
       () => mapSectorCatalog({ sectors: fx2.getSectors() }),
-      () => get('/sectors').then(mapSectorCatalog),
+      () => registryGet('/sectors').then(mapSectorCatalog),
     ),
   strength: (period: SectorPeriod = '3mo'): Promise<SectorStrengthEnvelope> =>
     mockOr(

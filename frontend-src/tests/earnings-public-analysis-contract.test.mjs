@@ -41,6 +41,17 @@ function loadEarningsModule(
     module,
     exports: module.exports,
     require: (id) => {
+      if (id === '../queryRegistry') {
+        return {
+          registryGet: async (url) => {
+            calls.push(url);
+            return responses[url] ?? {};
+          },
+          restorePersistedQuery: async () => null,
+          invalidateQueryPaths: () => {},
+          queryConfigFor: () => null,
+        };
+      }
       if (id === '../client') {
         return {
           get: onGet,

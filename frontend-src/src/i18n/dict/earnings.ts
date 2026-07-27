@@ -173,6 +173,7 @@ export const EARNINGS: Dict = {
 
   // ---------------- pages/Earnings.tsx ----------------
   '已更新': ["Updated", "更新済み"],
+  '正在确认最新数据…': ["Confirming latest data…", "最新データを確認中…"],
   '上游刷新失败，继续使用上一次完整日历': ["Upstream refresh failed; continuing to use the last complete calendar.", "データ元の更新に失敗したため、前回の完全なカレンダーを引き続き使用します。"],
   'AI 分析可用': ["AI analysis available", "AI 分析が利用可能です"],
   'AI 分析未开启': ["AI analysis is off", "AI 分析はオフです"],

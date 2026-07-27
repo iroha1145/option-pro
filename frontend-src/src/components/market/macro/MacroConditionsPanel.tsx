@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiError } from '@/api/client';
+import { invalidateQueryPaths } from '@/api/queryRegistry';
 import { macroApi, type MacroConditionsResponse } from '@/api/modules/macro';
 import { usePolling } from '@/hooks/usePolling';
 import { useAccess } from '@/hooks/useAccess';
@@ -113,6 +114,7 @@ export default function MacroConditionsPanel({
         setRefreshNote(t('刷新仍未在预期时间内完成，面板会在下一次轮询更新。'));
         return;
       }
+      invalidateQueryPaths(['/macro/conditions']);
       conditionsQ.refresh();
     }, REFRESH_FOLLOW_INTERVAL_MS);
     return () => window.clearInterval(timer);

@@ -117,12 +117,18 @@ test('共享落在原始响应层，覆盖所有拉同一端点的模块', async
   assert.match(pulse, /sharedGlobalGet<RawMarketStatus>\('\/market\/status'\)/);
   assert.match(pulse, /sharedGlobalGet<\{ market_regime[^}]*\}>\('\/strength\/market'\)/);
 
-  // 白名单：不在名单里的路径直接放行，避免有人把按用户变化的接口塞进来
-  assert.match(shared, /const SHAREABLE = new Set/);
-  assert.match(shared, /if \(!SHAREABLE\.has\(path\)\) \{/);
-  // 窗口必须短：替代不了轮询，只压掉同一时刻的重复
-  const window = Number(/SHARE_WINDOW_MS = ([\d_]+)/.exec(shared)[1].replace(/_/g, ''));
-  assert.ok(window > 0 && window <= 5000, `共享窗口 ${window}ms 过长`);
+  // 共享层现在由 queryRegistry 统一承载:sharedRead 只是薄壳,白名单外直接放行。
+  assert.match(shared, /if \(!queryConfigFor\(path\)\) \{/);
+  assert.match(shared, /return registryGet<T>\(path\);/);
+
+  // 白名单与 fresh 窗口在注册表里;窗口封顶 5 分钟 —— 缓存不允许为了命中率
+  // 无限延长金融数据的有效期(条件请求 + 世代失效让分钟级窗口安全)。
+  const registry = codeOf(await source('api/queryRegistry.ts'));
+  assert.match(registry, /const QUERY_CONFIG: Record<string, QueryConfig>/);
+  for (const match of registry.matchAll(/ttlMs: ([\d_]+)/g)) {
+    const ttl = Number(match[1].replace(/_/g, ''));
+    assert.ok(ttl > 0 && ttl <= 300_000, `fresh 窗口 ${ttl}ms 超出 5 分钟上限`);
+  }
 });
 
 test('共享的市场时段请求在并发调用下只发一次', async () => {
@@ -152,7 +158,35 @@ test('共享的市场时段请求在并发调用下只发一次', async () => {
     isMock: false,
   };
 
-  // 加载**真实**的 sharedRead：去重逻辑就在它里面，桩掉它这条测试就没有意义了。
+  // 加载**真实**的 queryRegistry + sharedRead：去重逻辑在注册表里,桩掉它
+  // 这条测试就没有意义了。requestRaw 桩返回 Response 形状(status/headers/json)。
+  const rawStub = {
+    requestRaw: async () => {
+      calls += 1;
+      await new Promise((r) => setTimeout(r, 5));
+      return {
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({ market: 'open', session: 'regular', label: '盘中' }),
+      };
+    },
+  };
+  const persistStub = {
+    readPersisted: async () => null,
+    writePersisted: async () => {},
+    clearPersisted: async () => {},
+  };
+  const registrySrc = ts.transpileModule(
+    fs.readFileSync(path.join(src, 'api', 'queryRegistry.ts'), 'utf8'),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+  ).outputText;
+  const registryModule = { exports: {} };
+  vm.runInNewContext(registrySrc, {
+    module: registryModule,
+    exports: registryModule.exports,
+    require: (rid) => (rid.includes('persistedCache') ? persistStub : rawStub),
+    Date, Promise, Map, Set, Object, Number, String, Boolean, Headers,
+  });
   const sharedSrc = ts.transpileModule(
     fs.readFileSync(path.join(src, 'api', 'sharedRead.ts'), 'utf8'),
     { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
@@ -161,7 +195,7 @@ test('共享的市场时段请求在并发调用下只发一次', async () => {
   vm.runInNewContext(sharedSrc, {
     module: sharedModule,
     exports: sharedModule.exports,
-    require: () => clientStub,
+    require: (rid) => (rid.includes('queryRegistry') ? registryModule.exports : clientStub),
     Date, Promise, Map, Set, Object, Number, String, Boolean,
   });
 
