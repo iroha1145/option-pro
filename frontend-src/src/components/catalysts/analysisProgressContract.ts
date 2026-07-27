@@ -1,3 +1,4 @@
+import { t } from '../../i18n/core.ts';
 export interface NewsAnalysisProgress {
   status: 'idle' | 'active' | 'completed';
   scope: 'latest_submission_batch';
@@ -63,14 +64,14 @@ export function normalizeNewsAnalysisProgress(raw: unknown): NewsAnalysisProgres
   const record = asRecord(raw);
   const status = record.status;
   if (status !== 'idle' && status !== 'active' && status !== 'completed') {
-    throw new Error('新闻分析进度状态无效');
+    throw new Error(t('新闻分析进度状态无效'));
   }
   if (record.scope !== 'latest_submission_batch') {
-    throw new Error('新闻分析进度统计范围无效');
+    throw new Error(t('新闻分析进度统计范围无效'));
   }
   const batchSource = record.batch_source;
   if (batchSource !== null && batchSource !== 'manual' && batchSource !== 'scheduled') {
-    throw new Error('新闻分析进度任务来源无效');
+    throw new Error(t('新闻分析进度任务来源无效'));
   }
 
   const total = requiredCount(record, 'total');
@@ -96,11 +97,11 @@ export function normalizeNewsAnalysisProgress(raw: unknown): NewsAnalysisProgres
     currentPhase !== 'provider_queued' &&
     currentPhase !== 'provider_processing'
   ) {
-    throw new Error('新闻分析当前阶段无效');
+    throw new Error(t('新闻分析当前阶段无效'));
   }
 
   if (finished + waiting + inProgress !== total) {
-    throw new Error('新闻分析进度总数不一致');
+    throw new Error(t('新闻分析进度总数不一致'));
   }
   if (
     succeeded +
@@ -112,14 +113,14 @@ export function normalizeNewsAnalysisProgress(raw: unknown): NewsAnalysisProgres
       budgetBlocked !==
     finished
   ) {
-    throw new Error('新闻分析结束数不一致');
+    throw new Error(t('新闻分析结束数不一致'));
   }
   if (queueWaiting + queueInProgress !== queueTotal) {
-    throw new Error('新闻分析队列数不一致');
+    throw new Error(t('新闻分析队列数不一致'));
   }
   const expectedPercent = total > 0 ? Math.round((finished * 100) / total) : 0;
   if (progressPercent !== expectedPercent || progressPercent > 100) {
-    throw new Error('新闻分析百分比不一致');
+    throw new Error(t('新闻分析百分比不一致'));
   }
   if (
     (currentIndex !== null ||
@@ -127,21 +128,21 @@ export function normalizeNewsAnalysisProgress(raw: unknown): NewsAnalysisProgres
       currentPhase !== null) &&
     inProgress !== 1
   ) {
-    throw new Error('新闻分析当前条目无法唯一确定');
+    throw new Error(t('新闻分析当前条目无法唯一确定'));
   }
   if (
     inProgress === 1 &&
     (currentIndex === null || currentPhase === null)
   ) {
-    throw new Error('新闻分析当前条目字段缺失');
+    throw new Error(t('新闻分析当前条目字段缺失'));
   }
   if (currentIndex !== null && currentIndex > total) {
-    throw new Error('新闻分析当前序号超出范围');
+    throw new Error(t('新闻分析当前序号超出范围'));
   }
 
   const asOf = record.as_of;
   if (typeof asOf !== 'string' || !asOf) {
-    throw new Error('新闻分析进度更新时间无效');
+    throw new Error(t('新闻分析进度更新时间无效'));
   }
   return {
     status,

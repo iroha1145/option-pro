@@ -21,19 +21,20 @@ import {
   macroGap,
   macroQuadrant,
 } from '@/lib/macroFit';
+import { t } from '../../i18n/core.ts';
 
 /**
  * 为什么排除信用与风险，写在界面上而不是只写在代码注释里：一个「结构性宏观」的
  * 数字如果不说清它少了哪两块，读者会以为它是宏观的全部。
  */
 const MATRIX_HINT = {
-  title: '技术 × 结构性宏观',
+  title: t('技术 × 结构性宏观'),
   body:
-    '技术侧为市场形态六维均值；宏观侧为结构性宏观（流动性、融资、国债、利率）的加权均值。',
+    t('技术侧为市场形态六维均值；宏观侧为结构性宏观（流动性、融资、国债、利率）的加权均值。'),
+  // 整句作单一 msgid：英/日与中文语序不同，分段 t() 拼接必然错乱，只能整句翻译。
   note:
-    '信用与风险不计入结构性宏观：它们与技术形态读的是同一批工具（HYG/LQD/KRE/VIX/'
-    + 'SPY-TLT/IWM-SPY），再算一次等于同一个信号计两次权。此卡仅展示，不改变任何评分，'
-    + `也不参与突破的六状态分类。${MACRO_QUADRANT_NOTE}`,
+    t('信用与风险不计入结构性宏观：它们与技术形态读的是同一批工具（HYG/LQD/KRE/VIX/SPY-TLT/IWM-SPY），再算一次等于同一个信号计两次权。此卡仅展示，不改变任何评分，也不参与突破的六状态分类。')
+    + t(MACRO_QUADRANT_NOTE),
 };
 
 interface Props {
@@ -46,10 +47,10 @@ interface Props {
 }
 
 const MODULE_LABEL: Record<string, string> = {
-  liquidity: '流动性',
-  funding: '融资',
-  treasury: '国债',
-  rates: '利率',
+  liquidity: t('流动性'),
+  funding: t('融资'),
+  treasury: t('国债'),
+  rates: t('利率'),
 };
 
 export default function MacroTechnicalMatrix({
@@ -67,24 +68,24 @@ export default function MacroTechnicalMatrix({
   return (
     <div className={cn('card-surface p-5', className)}>
       <p className="eyebrow">
-        技术 × 结构性宏观 · TECHNICAL × MACRO
+        {t('技术 × 结构性宏观 · TECHNICAL × MACRO')}
         <InfoHint hint={MATRIX_HINT} side="bottom" size={11} className="ml-1" />
       </p>
       <h3 className="mt-1.5 text-h3 text-ink-900">
-        {quadrant ? MACRO_QUADRANT_LABEL[quadrant] : '暂无二维读数'}
+        {quadrant ? t(MACRO_QUADRANT_LABEL[quadrant]) : t('暂无二维读数')}
       </h3>
       {quadrant ? (
         <>
-          <p className="mt-1 text-body-s text-ink-500">{MACRO_QUADRANT_HINT[quadrant]}</p>
+          <p className="mt-1 text-body-s text-ink-500">{t(MACRO_QUADRANT_HINT[quadrant])}</p>
           <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2">
             <div>
-              <dt className="text-micro text-ink-400">技术形态</dt>
+              <dt className="text-micro text-ink-400">{t('技术形态')}</dt>
               <dd className="font-mono text-data-l text-ink-900 tnum">
                 {technical?.toFixed(1)}
               </dd>
             </div>
             <div>
-              <dt className="text-micro text-ink-400">结构性宏观</dt>
+              <dt className="text-micro text-ink-400">{t('结构性宏观')}</dt>
               <dd className="font-mono text-data-l text-ink-900 tnum">
                 {structural?.toFixed(1)}
               </dd>
@@ -92,7 +93,7 @@ export default function MacroTechnicalMatrix({
           </dl>
           {gap !== null && (
             <p className="mt-3 border-t border-line pt-3 text-caption text-ink-500">
-              差值{' '}
+              {t('差值')}{' '}
               <span
                 className={cn(
                   'font-mono tnum',
@@ -102,10 +103,10 @@ export default function MacroTechnicalMatrix({
                 {gap > 0 ? '+' : ''}{gap.toFixed(1)}
               </span>
               {gap > 20
-                ? ' · 价格明显跑在环境前面'
+                ? t(' · 价格明显跑在环境前面')
                 : gap < -20
-                  ? ' · 宏观环境领先价格改善'
-                  : ' · 两者大致同步'}
+                  ? t(' · 宏观环境领先价格改善')
+                  : t(' · 两者大致同步')}
             </p>
           )}
         </>
@@ -113,18 +114,18 @@ export default function MacroTechnicalMatrix({
         /* 任一侧缺失就不给状态。凑一个出来会把「没数据」说成一个判断。 */
         <p className="mt-1 text-body-s text-ink-400">
           {technical === null && structural === null
-            ? '市场形态与宏观快照都暂不可用'
+            ? t('市场形态与宏观快照都暂不可用')
             : technical === null
-              ? '市场形态六维暂不可用'
-              : '宏观快照暂不可用'}
-          {' · 不按中性计'}
+              ? t('市场形态六维暂不可用')
+              : t('宏观快照暂不可用')}
+          {t(' · 不按中性计')}
         </p>
       )}
       {moduleText && (
-        <p className="mt-2 text-micro text-ink-300">结构性宏观 = {moduleText}</p>
+        <p className="mt-2 text-micro text-ink-300">{t('结构性宏观 =')} {moduleText}</p>
       )}
       {/* 两套分界线不一样，说出来，免得读者拿象限和顺风/逆风对不上。 */}
-      <p className="mt-1 text-micro text-ink-300">{MACRO_QUADRANT_NOTE}</p>
+      <p className="mt-1 text-micro text-ink-300">{t(MACRO_QUADRANT_NOTE)}</p>
     </div>
   );
 }

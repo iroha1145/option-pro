@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
+import { t as __t } from '../i18n/core.ts';
 
 type ToastKind = 'success' | 'error' | 'info';
 
@@ -83,7 +84,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 <button
                   onClick={() => dismiss(t.id)}
                   className="rounded-sm p-1 text-ink-400 transition-colors hover:bg-paper-2 hover:text-ink-600"
-                  aria-label="关闭通知"
+                  aria-label={__t("关闭通知")}
                 >
                   <Icon name="x" size={13} />
                 </button>
@@ -98,6 +99,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
-  if (!ctx) throw new Error('useToast 必须在 <ToastProvider> 内使用');
+  if (!ctx) throw new Error(__t('useToast 必须在 <ToastProvider> 内使用'));
   return ctx;
 }

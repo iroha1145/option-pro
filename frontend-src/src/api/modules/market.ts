@@ -4,21 +4,22 @@ import { resetSharedReads, sharedGlobalGet } from '../sharedRead';
 import { asRec, pickN, pickS, unwrap } from '../live';
 import * as fx from '@/mocks/fixtures';
 import type { IndexQuote, MarketSession, MarketStatus } from '../types';
+import { t } from '../../i18n/core.ts';
 
 /**
  * Yahoo 风格指数符号 → UI 短代码 + 中文名（纸带与 /market 指数卡共用此映射）。
  * 未知符号原样透传（code=name=symbol），不编造。
  */
 const INDEX_SYMBOL_MAP: Record<string, { code: string; name: string }> = {
-  '^GSPC': { code: 'SPX', name: '标普500' },
-  '^IXIC': { code: 'IXIC', name: '纳指综合' },
-  '^NDX': { code: 'NDX', name: '纳指100' },
-  '^DJI': { code: 'DJI', name: '道琼斯' },
-  '^RUT': { code: 'RUT', name: '罗素2000' },
-  '^N225': { code: 'N225', name: '日经225' },
-  '000001.SS': { code: 'SSE', name: '上证综指' },
-  '^VIX': { code: 'VIX', name: '恐慌指数' },
-  '^SOX': { code: 'SOX', name: '费城半导体' },
+  '^GSPC': { code: 'SPX', name: t('标普500') },
+  '^IXIC': { code: 'IXIC', name: t('纳指综合') },
+  '^NDX': { code: 'NDX', name: t('纳指100') },
+  '^DJI': { code: 'DJI', name: t('道琼斯') },
+  '^RUT': { code: 'RUT', name: t('罗素2000') },
+  '^N225': { code: 'N225', name: t('日经225') },
+  '000001.SS': { code: 'SSE', name: t('上证综指') },
+  '^VIX': { code: 'VIX', name: t('恐慌指数') },
+  '^SOX': { code: 'SOX', name: t('费城半导体') },
 };
 
 /** 契约 {indices:[{symbol, price, change_percent}], ...} → UI IndexQuote[] */
@@ -44,12 +45,12 @@ function mapIndices(body: unknown): IndexQuote[] {
 
 /** 契约 market ∈ open|pre-market|after-hours|closed；兼容旧别名。 */
 const SESSION_MAP: Record<string, { session: MarketSession; label: string }> = {
-  open: { session: 'regular', label: '盘中' },
-  'pre-market': { session: 'premarket', label: '盘前' },
-  premarket: { session: 'premarket', label: '盘前' },
-  'after-hours': { session: 'afterhours', label: '盘后' },
-  postmarket: { session: 'afterhours', label: '盘后' },
-  closed: { session: 'closed', label: '休市' },
+  open: { session: 'regular', label: t('盘中') },
+  'pre-market': { session: 'premarket', label: t('盘前') },
+  premarket: { session: 'premarket', label: t('盘前') },
+  'after-hours': { session: 'afterhours', label: t('盘后') },
+  postmarket: { session: 'afterhours', label: t('盘后') },
+  closed: { session: 'closed', label: t('休市') },
 };
 
 /** 契约 {market, phase, next_open, next_close, server_time(ET iso), ...} → UI MarketStatus */

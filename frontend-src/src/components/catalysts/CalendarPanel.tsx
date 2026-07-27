@@ -6,6 +6,7 @@ import type { EconomicEvent } from './api';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import { cn } from '@/lib/utils';
+import { t as __t } from '../../i18n/core.ts';
 
 const IMPACT_STYLE: Record<EconomicEvent['impact'], { bar: string; chip: string; dots: number }> = {
   high: { bar: 'bg-down-600', chip: 'bg-down-50 text-down-700', dots: 3 },
@@ -75,14 +76,14 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title={q.error.code === 503 ? '日历数据暂不可用' : '加载失败'}
-          description="稍后刷新再试"
+          title={q.error.code === 503 ? __t('日历数据暂不可用') : __t('加载失败')}
+          description={__t("稍后刷新再试")}
           action={
             <button
               onClick={q.refresh}
               className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
             >
-              重试
+              {__t('重试')}
             </button>
           }
         />
@@ -101,9 +102,9 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
             <div className={cn('flex items-center justify-between px-5 py-2.5', isToday ? 'bg-brand-50' : 'bg-card-warm')}>
               <p className={cn('font-mono text-caption font-semibold tnum', isToday ? 'text-brand-700' : 'text-ink-600')}>
                 {d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit', weekday: 'short' })}
-                {isToday && <span className="ml-2 rounded-xs bg-brand-600 px-1.5 py-0.5 text-[10px] font-medium text-white">今日</span>}
+                {isToday && <span className="ml-2 rounded-xs bg-brand-600 px-1.5 py-0.5 text-[10px] font-medium text-white">{__t('今日')}</span>}
               </p>
-              <span className="font-mono text-micro text-ink-400 tnum">{events.length} 项</span>
+              <span className="font-mono text-micro text-ink-400 tnum">{events.length} {__t('项')}</span>
             </div>
             <div className="divide-y divide-line">
               {/* 后续区块 rise-in 减量：直接呈现 */}
@@ -120,7 +121,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                     <span className={cn('w-[3px] shrink-0 rounded-full', s.bar)} aria-hidden="true" />
                     <div className="flex w-12 shrink-0 flex-col justify-center">
                       <span className="font-mono text-[11px] leading-[14px] text-ink-500 tnum">
-                        {allDay ? '全天' : t.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })}
+                        {allDay ? __t('全天') : t.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })}
                       </span>
                       <span className="text-[10px] leading-[14px] text-ink-300">{ev.country}</span>
                     </div>
@@ -130,16 +131,16 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                         <ImpactChip ev={ev} />
                       </div>
                       <p className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 font-mono text-micro text-ink-400 tnum">
-                        <span>预期 <span className="text-ink-600">{ev.forecast}</span></span>
-                        <span>前值 <span className="text-ink-600">{ev.previous}</span></span>
+                        <span>{__t('预期')} <span className="text-ink-600">{ev.forecast}</span></span>
+                        <span>{__t('前值')} <span className="text-ink-600">{ev.previous}</span></span>
                         <span>
-                          实际{' '}
+                          {__t('实际')}{' '}
                           {ev.actual !== null ? (
                             <span className="font-medium text-brand-600">{ev.actual}</span>
                           ) : ev.releaseStatus === 'awaiting_source' ? (
-                            <span className="text-warn-600">数据源未回填</span>
+                            <span className="text-warn-600">{__t('数据源未回填')}</span>
                           ) : (
-                            <span className="text-ink-300">待公布</span>
+                            <span className="text-ink-300">{__t('待公布')}</span>
                           )}
                         </span>
                       </p>

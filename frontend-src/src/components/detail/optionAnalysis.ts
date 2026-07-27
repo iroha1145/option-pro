@@ -1,5 +1,6 @@
 import type { OptionAlertInput } from '../../api/modules/ai-jobs.ts';
 import type { OptionChain, OptionChainRow } from '../../api/types.ts';
+import { t } from '../../i18n/core.ts';
 
 export interface OptionAlertResult {
   output_language: 'zh-CN';
@@ -111,32 +112,32 @@ function buildLeg(
 
   if (ratio !== null && ratio >= 3) {
     severity += 4;
-    reasons.push(`成交量/持仓量 ${ratio.toFixed(1)} 倍`);
+    reasons.push(t('成交量/持仓量 {ratio} 倍', { ratio: ratio.toFixed(1) }));
   }
   // 持仓量为 0 而当日有成交：全部是新开仓，量持比无穷大而不是 0。
   if (state.kind === 'new_opening') {
     severity += 4;
-    reasons.push(`持仓量为 0 且成交 ${volume} 张，全部为新开仓（量持比不适用）`);
+    reasons.push(t('持仓量为 0 且成交 {volume} 张，全部为新开仓（量持比不适用）', { volume }));
   }
   if (volume >= 5_000) {
     severity += 3;
-    reasons.push(`成交量 ${volume} 张`);
+    reasons.push(t('成交量 {volume} 张', { volume }));
   }
   if (premium >= 500_000) {
     severity += 2;
-    reasons.push(`按买卖中价估算权利金 ${Math.round(premium)} 美元`);
+    reasons.push(t('按买卖中价估算权利金 {premium} 美元', { premium: Math.round(premium) }));
   }
   if (volume >= 1_000 && openInterest !== null && openInterest > 0 && openInterest < 500) {
     severity += 2;
-    reasons.push('成交量较高且持仓量较低，待后续持仓量确认');
+    reasons.push(t('成交量较高且持仓量较低，待后续持仓量确认'));
   }
   if (volume >= 1_000 && openInterest === null) {
     severity += 1;
-    reasons.push('持仓量不可用，无法计算量持比');
+    reasons.push(t('持仓量不可用，无法计算量持比'));
   }
   if (legMoneyness === 'otm' && distance > 0.1 && volume >= 2_000) {
     severity += 1;
-    reasons.push(`深度虚值约 ${(distance * 100).toFixed(0)}%`);
+    reasons.push(t('深度虚值约 {pct}%', { pct: (distance * 100).toFixed(0) }));
   }
   if (reasons.length === 0) return null;
 
@@ -163,7 +164,7 @@ function buildLeg(
     direction_confidence: 0,
     direction_status: 'unavailable_without_trade_side',
     direction_deprecated: true,
-    direction_note: '缺少成交主动方，无法判断真实交易方向',
+    direction_note: t('缺少成交主动方，无法判断真实交易方向'),
   };
   return { alert, severity, premium, ratio };
 }

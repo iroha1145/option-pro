@@ -1,7 +1,7 @@
 /** 股票域：watchlist / detail / signals / chart / search */
 import { mockOr, post } from '../client';
 import { marketGet, resetMarketReadPaths } from '../marketRead';
-import { asRec, pickN, pickS, unwrap, type Rec } from '../live';
+import { asRec, pickN, pickS, pickLabel, unwrap, type Rec } from '../live';
 import { mapMacroFitDrivers } from '../macroFields';
 import * as fx from '@/mocks/fixtures';
 import type {
@@ -63,7 +63,7 @@ function mapWatchlist(body: unknown): WatchlistItem[] {
      保留首次出现的行情行，分组名合并进 sector（UI 仅作展示文案，无按组过滤） */
   const byTicker = new Map<string, { item: WatchlistItem; groups: string[] }>();
   for (const g of unwrap(body, 'groups')) {
-    const groupName = pickS(g, 'name') ?? '';
+    const groupName = pickLabel(g, 'name') ?? '';
     for (const s of unwrap(g, 'stocks')) {
       const ticker = pickS(s, 'ticker') ?? '';
       if (!ticker) continue;
@@ -77,8 +77,8 @@ function mapWatchlist(body: unknown): WatchlistItem[] {
       }
       const item: WatchlistItem = {
         ticker,
-        name: pickS(s, 'name') ?? '',
-        sector: pickS(s, 'sector') ?? groupName, // 契约无板块字段，回退分组名
+        name: pickLabel(s, 'name') ?? '',
+        sector: pickLabel(s, 'sector') ?? groupName, // 契约无板块字段，回退分组名
         price: pickN(s, 'price') ?? 0,
         change: pickN(s, 'change') ?? 0,
         changePct: pickN(s, 'change_percent', 'changePct') ?? 0,
@@ -107,8 +107,8 @@ function mapStockDetail(body: unknown): StockDetail {
   const yearHigh = pickN(r, 'year_high');
   return {
     ticker: pickS(r, 'ticker') ?? '',
-    name: pickS(r, 'name') ?? '',
-    sector: pickS(r, 'sector', 'sic_description') ?? '',
+    name: pickLabel(r, 'name') ?? '',
+    sector: pickLabel(r, 'sector', 'sic_description') ?? '',
     price: pickN(r, 'price') ?? 0,
     change: pickN(r, 'change') ?? (null as unknown as number),
     changePct: pickN(r, 'changePct', 'change_percent') ?? (null as unknown as number),
@@ -146,8 +146,8 @@ function mapStockDetail(body: unknown): StockDetail {
 function mapSearch(body: unknown): StockSearchResult[] {
   return unwrap(body, 'results', 'items').map((r) => ({
     ticker: pickS(r, 'ticker', 'symbol') ?? '',
-    name: pickS(r, 'name') ?? '',
-    sector: pickS(r, 'sector') ?? '',
+    name: pickLabel(r, 'name') ?? '',
+    sector: pickLabel(r, 'sector') ?? '',
   }));
 }
 

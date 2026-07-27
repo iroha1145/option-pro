@@ -7,6 +7,7 @@ import {
 } from '../aiJobNormalize';
 import * as fx2 from '@/mocks/fixtures2';
 import type { AiJob } from '../types';
+import { t } from '../../i18n/core.ts';
 
 export { aiJobResultSummary, normalizeAiJob, normalizeJobStatus };
 
@@ -56,7 +57,7 @@ export async function postAiJob(path: string, body?: unknown): Promise<AiJob> {
   const locId = idFromLocation(location);
   const job = normalizeAiJob(data, locId);
   if (!job.id) {
-    throw new ApiError(502, '任务创建响应缺少 job_id（body 与 Location 头均未提供）', { payload: data });
+    throw new ApiError(502, t('任务创建响应缺少 job_id（body 与 Location 头均未提供）'), { payload: data });
   }
   return job;
 }

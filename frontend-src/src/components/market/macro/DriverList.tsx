@@ -6,6 +6,7 @@ import ChangeBadge from '@/components/shared/ChangeBadge';
 import InfoHint from '@/components/shared/InfoHint';
 import { MACRO_FACTOR_HINTS } from '@/lib/scoreHints';
 import type { MacroDriver } from '@/api/modules/macro';
+import { t } from '../../../i18n/core.ts';
 
 export default function DriverList({
   title,
@@ -31,7 +32,7 @@ export default function DriverList({
             return (
               <li key={driver.factorId} className="flex items-start justify-between gap-3">
                 <span className="flex min-w-0 items-center gap-1 text-body-s text-ink-700">
-                  <span className="truncate">{driver.nameZh}</span>
+                  <span className="truncate">{t(driver.nameZh)}</span>
                   {hint && <InfoHint hint={hint} side="bottom" align="start" size={11} />}
                 </span>
                 <span className="flex shrink-0 items-center gap-2">

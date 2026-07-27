@@ -7,6 +7,10 @@
  * 顺风/中性/逆风的分界线来自后端 linkage.py 的 TAILWIND_STRONG / TAILWIND_WEAK。
  * 后端已经把标签算好随字段一起下发，所以正常路径直接用它的；本地分档只在
  * 后端没给标签、但给了分数时用来兜底，且分界线和它一致（有测试盯着）。
+ *
+ * 本文件刻意保持零依赖（tests/macro-fit-presentation.test.mjs 断言这一点：沙箱
+ * 不给 require，加了导入会立刻报错）。这里的字符串因此保持原文中文，翻译发生在
+ * 各消费处渲染时（如 MacroFitBadge.tsx / MacroFitPanel.tsx 对这些导出值调用 t()）。
  */
 
 /** 一个宏观驱动因素：后端连同因子 id 一起下发中文名，前端不再自己映射一份。 */
@@ -125,10 +129,17 @@ export function macroGap(
   return Math.round((technical - macro) * 10) / 10;
 }
 
-/** 驱动因素列表 → 「流动性、实际利率」；空列表返回 null，让调用方决定不渲染。 */
-export function driverText(drivers: MacroFitDriver[] | null | undefined): string | null {
+/**
+ * 驱动因素列表 → 「流动性、实际利率」；空列表返回 null，让调用方决定不渲染。
+ * `translate` 可选：逐个因子名过一遍（比如界面语言翻译），不传就原样透传——
+ * 保持这个函数本身零依赖，翻译函数由调用方传入而不是在这里 import。
+ */
+export function driverText(
+  drivers: MacroFitDriver[] | null | undefined,
+  translate: (label: string) => string = (label) => label,
+): string | null {
   if (!drivers || drivers.length === 0) return null;
-  const names = drivers.map((d) => d.label || d.factor_id).filter(Boolean);
+  const names = drivers.map((d) => translate(d.label || d.factor_id)).filter(Boolean);
   return names.length > 0 ? names.join('、') : null;
 }
 

@@ -7,14 +7,15 @@
  * mock 数据。
  */
 import type { SignalType } from '@/api/types';
+import { t } from '../i18n/core.ts';
 
 export const SIGNAL_LABELS: Record<SignalType, string> = {
-  breakout: '突破',
-  volume: '放量',
-  pullback: '回踩',
-  'ma-touch': '触均线',
-  gap: '跳空',
-  'iv-spike': 'IV 异动',
+  breakout: t('突破'),
+  volume: t('放量'),
+  pullback: t('回踩'),
+  'ma-touch': t('触均线'),
+  gap: t('跳空'),
+  'iv-spike': t('IV 异动'),
 };
 
 export const SIGNAL_TYPES = Object.keys(SIGNAL_LABELS) as SignalType[];

@@ -4,6 +4,8 @@
  * 映射层返回 null / 空数组，由 UI 渲染「—」；仅做字段名对齐与信封解包。
  */
 
+import { t } from '../i18n/core.ts';
+
 export type Rec = Record<string, unknown>;
 
 export const asRec = (v: unknown): Rec =>
@@ -42,6 +44,22 @@ export function pickS(r: Rec, ...keys: string[]): string | null {
     if (s) return s;
   }
   return null;
+}
+
+/**
+ * 后端下发的中文展示标签（公司名、板块名、公司简介）在归一层就地本地化：
+ * 这些是 backend/app/services/zh_names.py 与 sectors.py 里的静态中文表（见
+ * i18n/dict/companies.ts），不是模型当次生成的正文，所以过 t() 是正确的。
+ * 集中在此一处而非几十个渲染点，避免逐个遗漏。表里没有的（后端本就回退成裸
+ * 代码的情形）t() 缺译回退原值，原样透传，不会显示空白或裸中文。
+ * AI 正文（titleZh / summaryZh / analysis 等）不经过这里，仍裸透传。
+ */
+export const localizeLabel = (v: string | null): string | null =>
+  v === null ? null : t(v);
+
+/** 取候选键并本地化（公司名 / 板块名 / 简介专用）。 */
+export function pickLabel(r: Rec, ...keys: string[]): string | null {
+  return localizeLabel(pickS(r, ...keys));
 }
 
 /** 按候选键取 boolean */

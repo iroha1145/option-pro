@@ -9,11 +9,12 @@ import SignalChip from '@/components/shared/SignalChip';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { fmtPrice, fmtRelative } from '@/lib/format';
+import { t } from '../../i18n/core.ts';
 
 const RESULT_META = {
-  hit: { text: '已达成', cls: 'bg-up-50 text-up-700' },
-  failed: { text: '已失效', cls: 'bg-down-50 text-down-700' },
-  pending: { text: '进行中', cls: 'bg-brand-50 text-brand-700' },
+  hit: { text: t('已达成'), cls: 'bg-up-50 text-up-700' },
+  failed: { text: t('已失效'), cls: 'bg-down-50 text-down-700' },
+  pending: { text: t('进行中'), cls: 'bg-brand-50 text-brand-700' },
 } as const;
 
 export default function SignalList({
@@ -37,8 +38,8 @@ export default function SignalList({
     return (
       <div className="flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-8 text-center">
         <Icon name="radar" size={28} className="text-ink-300" />
-        <p className="mt-3 text-body-s font-medium text-ink-600">近期无信号 · 雷达仍在盯</p>
-        <p className="mt-1 text-caption text-ink-400">突破 / 放量 / 回踩等触发后将在此出现</p>
+        <p className="mt-3 text-body-s font-medium text-ink-600">{t('近期无信号 · 雷达仍在盯')}</p>
+        <p className="mt-1 text-caption text-ink-400">{t('突破 / 放量 / 回踩等触发后将在此出现')}</p>
       </div>
     );
   }
@@ -64,7 +65,7 @@ export default function SignalList({
           >
             <SignalChip type={e.type} label={e.label} />
             <div className="min-w-0 flex-1">
-              <p className="font-mono text-body-s text-ink-800 tnum">触发 {fmtPrice(e.price)}</p>
+              <p className="font-mono text-body-s text-ink-800 tnum">{t('触发')} {fmtPrice(e.price)}</p>
               <p className="text-micro text-ink-400">{fmtRelative(e.at)}</p>
             </div>
             <span className={cn('rounded-xs px-1.5 py-0.5 text-micro font-medium', meta.cls)}>{meta.text}</span>

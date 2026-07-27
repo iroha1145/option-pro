@@ -5,6 +5,7 @@
  * - getIndexIntraday：确定性盘中序列生成器（仅 mock；live 无指数K线端点，UI 如实留空）
  */
 import { Rng, round2 } from './rng';
+import { t as __t } from '../i18n/core.ts';
 
 /* ---------------- 市场形态六维（contract market_regime 同名） ---------------- */
 export interface MarketRegime {
@@ -99,7 +100,7 @@ export function getMarketStatusDetail(nowMs = Date.now()): MarketStatusDetail {
     market = 'postmarket';
     phase = '盘后交易 · 留意财报与公告驱动';
   } else {
-    phase = isWeekday ? '常规时段已收盘 · 等待下一交易时段' : '周末休市 · 下一个交易日 9:30 ET 开盘';
+    phase = isWeekday ? __t('常规时段已收盘 · 等待下一交易时段') : __t('周末休市 · 下一个交易日 9:30 ET 开盘');
   }
   return {
     market,

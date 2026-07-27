@@ -17,6 +17,7 @@ import {
   type MacroModule,
   type MacroModuleId,
 } from '@/api/modules/macro';
+import { t } from '../../../i18n/core.ts';
 
 export const HISTORY_RANGES = [
   { key: '30D', days: 30 },
@@ -28,9 +29,9 @@ export const HISTORY_RANGES = [
 export type HistoryRangeKey = (typeof HISTORY_RANGES)[number]['key'];
 
 const BASIS_LABEL: Record<string, string> = {
-  latest_revised_backfill: '按当前修订值回算',
-  local_point_in_time: '本地点时快照',
-  mixed: '混合基础',
+  latest_revised_backfill: t('按当前修订值回算'),
+  local_point_in_time: t('本地点时快照'),
+  mixed: t('混合基础'),
 };
 
 /** 模块线共用全站图表调色，不给模块分配固定鲜艳色。 */
@@ -83,7 +84,7 @@ export default function MacroHistoryChart({
 
     const series: Record<string, unknown>[] = [
       {
-        name: '综合分（回算）',
+        name: t('综合分（回算）'),
         type: 'line',
         data: revised,
         showSymbol: false,
@@ -95,7 +96,7 @@ export default function MacroHistoryChart({
           silent: true,
           symbol: 'none',
           label: {
-            formatter: '中性 50',
+            formatter: t('中性 50'),
             color: CH.ink400,
             fontSize: 10,
             position: 'insideEndTop',
@@ -105,7 +106,7 @@ export default function MacroHistoryChart({
         },
       },
       {
-        name: '综合分（本地点时）',
+        name: t('综合分（本地点时）'),
         type: 'line',
         data: local,
         showSymbol: false,
@@ -119,7 +120,7 @@ export default function MacroHistoryChart({
     shownModules.forEach((moduleId) => {
       const colorIndex = MACRO_MODULE_ORDER.indexOf(moduleId);
       series.push({
-        name: modules.find((item) => item.moduleId === moduleId)?.nameZh ?? moduleId,
+        name: t(modules.find((item) => item.moduleId === moduleId)?.nameZh ?? moduleId),
         type: 'line',
         data: points.map((point) => point.moduleScores[moduleId] ?? null),
         showSymbol: false,
@@ -155,8 +156,8 @@ export default function MacroHistoryChart({
           return [
             date,
             ...lines,
-            regime ? `环境：${regime}` : '',
-            basis ? `历史基础：${BASIS_LABEL[basis] ?? basis}` : '',
+            regime ? t('环境：{regime}', { regime }) : '',
+            basis ? t('历史基础：{basis}', { basis: BASIS_LABEL[basis] ?? basis }) : '',
           ]
             .filter(Boolean)
             .join('<br/>');
@@ -180,10 +181,10 @@ export default function MacroHistoryChart({
   }, [points, modules, shownModules]);
 
   return (
-    <section className="card-surface p-5" aria-label="宏观环境历史">
+    <section className="card-surface p-5" aria-label={t("宏观环境历史")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="eyebrow">
-          综合分历史 · COMPOSITE HISTORY
+          {t('综合分历史 · COMPOSITE HISTORY')}
           <InfoHint
             hint={SCORE_HINTS_MACRO.macroHistoryBasis}
             side="bottom"
@@ -192,7 +193,7 @@ export default function MacroHistoryChart({
             className="ml-1"
           />
         </p>
-        <div className="flex flex-wrap gap-1" role="group" aria-label="历史区间">
+        <div className="flex flex-wrap gap-1" role="group" aria-label={t("历史区间")}>
           {HISTORY_RANGES.map((item) => (
             <button
               key={item.key}
@@ -217,28 +218,28 @@ export default function MacroHistoryChart({
           <SkeletonBlock className="h-full w-full" />
         ) : error && points.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
-            <p className="text-body-s text-warn-600">历史数据读取失败：{error.message}</p>
+            <p className="text-body-s text-warn-600">{t('历史数据读取失败：')}{error.message}</p>
             {onRetry && (
               <button
                 type="button"
                 onClick={onRetry}
                 className="rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
               >
-                重试
+                {t('重试')}
               </button>
             )}
           </div>
         ) : points.length === 0 ? (
           <div className="flex h-full items-center justify-center px-4 text-center text-body-s text-ink-400">
-            历史正在积累：本地快照攒够之后这里会显示综合分曲线。
+            {t('历史正在积累：本地快照攒够之后这里会显示综合分曲线。')}
           </div>
         ) : (
-          <ReactECharts option={option} ariaLabel="宏观环境综合分历史曲线" />
+          <ReactECharts option={option} ariaLabel={t("宏观环境综合分历史曲线")} />
         )}
       </div>
 
       {modules.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="叠加模块线">
+        <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label={t("叠加模块线")}>
           {modules.map((module) => {
             const active = shownModules.includes(module.moduleId);
             return (
@@ -260,7 +261,7 @@ export default function MacroHistoryChart({
                     : 'border-line text-ink-400 hover:text-ink-600 focus-visible:text-ink-600',
                 )}
               >
-                {module.nameZh}
+                {t(module.nameZh)}
               </button>
             );
           })}
@@ -268,7 +269,7 @@ export default function MacroHistoryChart({
       )}
 
       <p className="mt-3 border-t border-line pt-3 text-micro leading-relaxed text-ink-400">
-        虚线段表示该区间按当前修订值回算，不是当时市场已知的分数；实线段来自本地点时快照。
+        {t('虚线段表示该区间按当前修订值回算，不是当时市场已知的分数；实线段来自本地点时快照。')}
       </p>
     </section>
   );

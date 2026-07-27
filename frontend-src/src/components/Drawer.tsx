@@ -10,6 +10,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
+import { t } from '../i18n/core.ts';
 
 /** iOS 感抽屉缓动（--ease-drawer） */
 const EASE_DRAWER = [0.32, 0.72, 0, 1] as [number, number, number, number];
@@ -75,7 +76,7 @@ export default function Drawer({ open, onClose, title, children, width = 560 }: 
               <button
                 onClick={onClose}
                 className="rounded-sm p-1.5 text-ink-400 transition-colors hover:bg-paper-2 hover:text-ink-600"
-                aria-label="关闭抽屉"
+                aria-label={t("关闭抽屉")}
               >
                 <Icon name="x" size={16} />
               </button>
@@ -101,7 +102,7 @@ export default function Drawer({ open, onClose, title, children, width = 560 }: 
               <button
                 onClick={onClose}
                 className="rounded-sm p-1.5 text-ink-400 transition-colors hover:bg-paper-2 hover:text-ink-600"
-                aria-label="关闭抽屉"
+                aria-label={t("关闭抽屉")}
               >
                 <Icon name="x" size={16} />
               </button>

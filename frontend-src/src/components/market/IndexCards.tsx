@@ -15,6 +15,7 @@ import ChangeBadge from '@/components/shared/ChangeBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
+import { t } from '../../i18n/core.ts';
 
 const IndexCard = memo(function IndexCard({
   quote,
@@ -62,7 +63,7 @@ const IndexCard = memo(function IndexCard({
         'focus-visible:outline-none focus-visible:shadow-focus-ring',
         focused && 'shadow-[inset_2px_0_0_0_var(--brand-600),0_1px_2px_rgba(13,22,38,.05),inset_0_1px_0_rgba(255,255,255,.9)] ring-1 ring-brand-100',
       )}
-      aria-label={`${quote.name} ${quote.code} 详情`}
+      aria-label={t('{name} {code} 详情', { name: quote.name, code: quote.code })}
     >
       <div className="flex items-baseline justify-between gap-2">
         <p className="min-w-0">
@@ -153,8 +154,8 @@ export default function IndexCards({
         <EmptyState
           variant="error"
           image="/empty-chart.svg"
-          title={error.code === 503 ? '数据暂不可用' : '加载失败'}
-          description={error.code === 503 ? '暂无指数数据' : error.message}
+          title={error.code === 503 ? t('数据暂不可用') : t('加载失败')}
+          description={error.code === 503 ? t('暂无指数数据') : error.message}
           action={
             <button
               onClick={onRetry}
@@ -162,7 +163,7 @@ export default function IndexCards({
               className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
             >
               {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
-              重试
+              {t('重试')}
             </button>
           }
         />

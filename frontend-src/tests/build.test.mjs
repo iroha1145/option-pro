@@ -260,11 +260,11 @@ test('chart controls map one-to-one to the backend candle intervals', async () =
     readFile(chartApiSource, 'utf8'),
   ]);
   assert.doesNotMatch(stocks, /CHART_RANGE_MAP/);
-  assert.match(detail, /value: '5m', label: '5分'/);
-  assert.match(detail, /value: '15m', label: '15分'/);
-  assert.match(detail, /value: '1h', label: '1小时'/);
-  assert.match(detail, /value: '1d', label: '日线'/);
-  assert.match(detail, /value: '1w', label: '周线'/);
+  assert.match(detail, /value: '5m', label: __t\('5分'\)/);
+  assert.match(detail, /value: '15m', label: __t\('15分'\)/);
+  assert.match(detail, /value: '1h', label: __t\('1小时'\)/);
+  assert.match(detail, /value: '1d', label: __t\('日线'\)/);
+  assert.match(detail, /value: '1w', label: __t\('周线'\)/);
 });
 
 test('missing worker health fields fail closed', async () => {

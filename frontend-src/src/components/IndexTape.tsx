@@ -10,6 +10,7 @@ import { useTickFlash } from '@/hooks/useTickFlash';
 import { fmtPct, fmtPrice } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { IndexQuote } from '@/api/types';
+import { t } from '../i18n/core.ts';
 
 function TapeItem({ q, flash, onOpen }: { q: IndexQuote; flash: 'up' | 'down' | null; onOpen: (code: string) => void }) {
   /* 平盘用中性色，不画成上涨（审计 P2-8 同一口径）。 */
@@ -18,10 +19,12 @@ function TapeItem({ q, flash, onOpen }: { q: IndexQuote; flash: 'up' | 'down' | 
     <button
       type="button"
       onClick={() => onOpen(q.code)}
-      title={`查看大盘强弱 · ${q.code}`}
-      aria-label={`查看大盘强弱，${q.code} 最新价 ${fmtPrice(q.price)}，${
-        tone === 'flat' ? '持平' : `涨跌 ${fmtPct(q.changePct)}`
-      }`}
+      title={t('查看大盘强弱 · {code}', { code: q.code })}
+      aria-label={
+        tone === 'flat'
+          ? t('查看大盘强弱，{code} 最新价 {price}，{flat}', { code: q.code, price: fmtPrice(q.price), flat: t('持平') })
+          : t('查看大盘强弱，{code} 最新价 {price}，涨跌 {pct}', { code: q.code, price: fmtPrice(q.price), pct: fmtPct(q.changePct) })
+      }
       className={cn(
         'inline-flex cursor-pointer items-baseline gap-2 rounded-xs px-1 transition-colors duration-150 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
         flash === 'up' && 'animate-tick-flash-up',
@@ -77,7 +80,7 @@ export default function IndexTape() {
         </div>
       </div>
       <span className="glass absolute right-0 top-0 z-10 flex h-full items-center border-l border-line px-3 text-micro font-medium text-ink-400">
-        延迟行情
+        {t('延迟行情')}
       </span>
     </div>
   );

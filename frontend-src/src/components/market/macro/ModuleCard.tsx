@@ -8,6 +8,7 @@ import ChangeBadge from '@/components/shared/ChangeBadge';
 import InfoHint from '@/components/shared/InfoHint';
 import { MACRO_MODULE_HINTS } from '@/lib/scoreHints';
 import type { MacroModule } from '@/api/modules/macro';
+import { t } from '../../../i18n/core.ts';
 
 export default function ModuleCard({
   module,
@@ -23,12 +24,12 @@ export default function ModuleCard({
     /* 后续区块 rise-in 减量：直接呈现 */
     <article
       className="card-surface flex min-w-0 flex-col p-4"
-      aria-label={`${module.nameZh} 模块`}
+      aria-label={t('{name} 模块', { name: t(module.nameZh) })}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="flex items-center gap-1 truncate text-h3 text-ink-800">
-            {module.nameZh}
+            {t(module.nameZh)}
             {hint && <InfoHint hint={hint} side="bottom" align="start" size={12} />}
           </p>
           <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-ink-400">
@@ -56,16 +57,16 @@ export default function ModuleCard({
         <ChangeBadge value={module.scoreChange7d} size="sm" format="points" />
         <span className="font-mono text-micro text-ink-400 tnum">
           {module.validFactorCount === null
-            ? '有效因子 —'
-            : `有效因子 ${module.validFactorCount}/${module.totalFactorCount ?? '—'}`}
+            ? t('有效因子 —')
+            : t('有效因子 {valid}/{total}', { valid: module.validFactorCount, total: module.totalFactorCount ?? '—' })}
         </span>
       </div>
       <p className="mt-2 font-mono text-micro text-ink-400 tnum">
-        截止 {module.dataThrough ?? '—'}
+        {t('截止')} {module.dataThrough ?? '—'}
       </p>
       {!hasScore && (
         <p className="mt-2 text-micro leading-relaxed text-ink-400">
-          有效因子不足 {module.minimumValidFactors ?? ''} 个门槛，本模块不出分（不按 50 补齐）。
+          {t('有效因子不足')} {module.minimumValidFactors ?? ''} {t('个门槛，本模块不出分（不按 50 补齐）。')}
         </p>
       )}
     </article>

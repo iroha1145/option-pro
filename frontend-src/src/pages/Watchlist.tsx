@@ -40,6 +40,7 @@ import SessionLED, { SessionDot } from '@/components/shared/SessionLED';
 import { SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
 import Icon from '@/components/icons';
+import { t } from '../i18n/core.ts';
 
 /* ---------------- B1 小件：涨跌宽度比条 ---------------- */
 function AdvanceDeclineBar({
@@ -60,7 +61,7 @@ function AdvanceDeclineBar({
         <span className="text-down-700">{decliners}</span>
         {unchanged > 0 && (
           <span className="ml-1.5 align-middle text-caption text-ink-400">
-            · {unchanged} 平
+            · {unchanged} {t('平')}
           </span>
         )}
       </p>
@@ -84,7 +85,7 @@ function ScoreDonut({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-4">
       <p className="font-mono text-data-xl text-ink-900 tnum">{score.toFixed(1)}</p>
-      <svg width="72" height="72" viewBox="0 0 72 72" aria-label={`平均强度分 ${score.toFixed(1)}`}>
+      <svg width="72" height="72" viewBox="0 0 72 72" aria-label={t('平均强度分 {score}', { score: score.toFixed(1) })}>
         <circle cx="36" cy="36" r={R} fill="none" stroke="var(--line)" strokeWidth="6" />
         <motion.circle
           cx="36"
@@ -101,7 +102,7 @@ function ScoreDonut({ score }: { score: number }) {
           transform="rotate(-90 36 36)"
         />
         <text x="36" y="40" textAnchor="middle" className="fill-ink-500 font-mono" fontSize="12">
-          均值
+          {t('均值')}
         </text>
       </svg>
     </div>
@@ -115,7 +116,7 @@ function ForceRefreshButton({ onRefresh, spinning }: { onRefresh: () => void; sp
     <button
       onClick={isOwner ? onRefresh : undefined}
       disabled={!isOwner || spinning}
-      title={isOwner ? '重新计算完整自选数据' : '登录 Owner 后可强制刷新'}
+      title={isOwner ? t('重新计算完整自选数据') : t('登录 Owner 后可强制刷新')}
       className={cn(
         'flex h-9 items-center gap-2 rounded-md border px-3 text-caption transition-colors duration-fast',
         isOwner
@@ -124,7 +125,7 @@ function ForceRefreshButton({ onRefresh, spinning }: { onRefresh: () => void; sp
       )}
     >
       <Icon name="refresh" size={15} className={spinning ? 'animate-spin-once' : ''} />
-      强制刷新
+      {t('强制刷新')}
     </button>
   );
 }
@@ -133,7 +134,7 @@ function ForceRefreshButton({ onRefresh, spinning }: { onRefresh: () => void; sp
 function SignalDistribution({ data }: { data: MarketSignalsSnapshot }) {
   return (
     <div className="card-surface p-5">
-      <p className="eyebrow">市场信号 · 实时指标</p>
+      <p className="eyebrow">{t('市场信号 · 实时指标')}</p>
       <div className="mt-4 space-y-3">
         {data.metrics.slice(0, 8).map((metric) => (
           <div key={metric.key} className="grid grid-cols-[minmax(0,1fr)_56px] items-center gap-2">
@@ -143,11 +144,11 @@ function SignalDistribution({ data }: { data: MarketSignalsSnapshot }) {
         ))}
       </div>
       <p className="mt-4 text-micro text-ink-400">
-        顶部风险
+        {t('顶部风险')}
         <InfoHint hint={SCORE_HINTS.readingTop} align="start" size={11} className="mx-0.5" />
-        {` ${data.topScore ?? '—'} · 底部修复`}
+        {` ${data.topScore ?? '—'} · ${t('底部修复')}`}
         <InfoHint hint={SCORE_HINTS.readingBottom} size={11} className="mx-0.5" />
-        {` ${data.bottomScore ?? '—'} · 数据质量`}
+        {` ${data.bottomScore ?? '—'} · ${t('数据质量')}`}
         <InfoHint hint={SCORE_HINTS.readingDataQuality} align="end" size={11} className="mx-0.5" />
         {` ${data.dataQuality ?? '—'}`}
       </p>
@@ -160,7 +161,7 @@ function StrengthHistogram({ histogram }: { histogram: number[] }) {
   const max = Math.max(...histogram, 1);
   return (
     <div className="card-surface p-5">
-      <p className="eyebrow">强度分布 · 全市场</p>
+      <p className="eyebrow">{t('强度分布 · 全市场')}</p>
       <div className="mt-4 flex h-24 items-end gap-1.5">
         {histogram.map((n, i) => {
           const score = i * 10 + 5;
@@ -196,18 +197,18 @@ function MarketClockCard() {
   const session = status?.session ?? 'closed';
   return (
     <div className="card-surface p-5">
-      <p className="eyebrow">市场时钟 · 纽约</p>
+      <p className="eyebrow">{t('市场时钟 · 纽约')}</p>
       <div className="mt-3 flex items-center gap-2.5">
         <SessionDot session={session} />
-        <span className="font-display text-[20px] leading-[26px] text-ink-900">{status?.label ?? '休市'}</span>
+        <span className="font-display text-[20px] leading-[26px] text-ink-900">{status?.label ?? t('休市')}</span>
       </div>
       <p className="mt-2 font-mono text-data-l text-ink-800 tnum" suppressHydrationWarning>
         {fmtNyTime(new Date(now))}
       </p>
-      <p className="mt-1 text-micro text-ink-400">美东时间 ET</p>
+      <p className="mt-1 text-micro text-ink-400">{t('美东时间 ET')}</p>
       {status?.nextEvent && (
         <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
-          <span className="text-caption text-ink-500">距{status.nextEvent.kind === 'open' ? '开盘' : '收盘'}</span>
+          <span className="text-caption text-ink-500">{t('距')}{status.nextEvent.kind === 'open' ? t('开盘') : t('收盘')}</span>
           <span className="font-mono text-data-m text-brand-600 tnum">{fmtCountdown(status.nextEvent.at, now)}</span>
         </div>
       )}
@@ -218,11 +219,11 @@ function MarketClockCard() {
 
 /* ---------------- 排序下拉 ---------------- */
 const SORT_OPTIONS: { id: string; label: string; sort: SortState | null }[] = [
-  { id: 'default', label: '默认排序', sort: null },
-  { id: 'gain', label: '涨幅优先', sort: { key: 'changePct', desc: true } },
-  { id: 'loss', label: '跌幅优先', sort: { key: 'changePct', desc: false } },
-  { id: 'strength', label: '强度优先', sort: { key: 'strength', desc: true } },
-  { id: 'ticker', label: '按代码 A–Z', sort: { key: 'ticker', desc: false } },
+  { id: 'default', label: t('默认排序'), sort: null },
+  { id: 'gain', label: t('涨幅优先'), sort: { key: 'changePct', desc: true } },
+  { id: 'loss', label: t('跌幅优先'), sort: { key: 'changePct', desc: false } },
+  { id: 'strength', label: t('强度优先'), sort: { key: 'strength', desc: true } },
+  { id: 'ticker', label: t('按代码 A–Z'), sort: { key: 'ticker', desc: false } },
 ];
 
 function SortDropdown({ sort, onChange }: { sort: SortState | null; onChange: (s: SortState | null) => void }) {
@@ -320,8 +321,8 @@ function WatchCard({
         <span
           role="button"
           tabIndex={0}
-          aria-label={`将 ${item.ticker} 移出自选`}
-          title="移出自选"
+          aria-label={t('将 {ticker} 移出自选', { ticker: item.ticker })}
+          title={t("移出自选")}
           onClick={(event) => {
             event.stopPropagation();
             event.preventDefault();
@@ -441,9 +442,9 @@ export default function Watchlist() {
       setMyTickers(next.tickers);
       setMaxTickers(next.maxTickers);
       setAddInput('');
-      toast.success('已加入自选', symbol);
+      toast.success(t('已加入自选'), symbol);
     } catch (error) {
-      toast.error('加入失败', error instanceof ApiError ? error.message : '请稍后再试');
+      toast.error(t('加入失败'), error instanceof ApiError ? error.message : t('请稍后再试'));
     } finally {
       setSavingTicker(false);
     }
@@ -454,9 +455,9 @@ export default function Watchlist() {
       try {
         const next = await accountApi.remove(symbol);
         setMyTickers(next.tickers);
-        toast.info('已移出自选', symbol);
+        toast.info(t('已移出自选'), symbol);
       } catch (error) {
-        toast.error('移除失败', error instanceof ApiError ? error.message : '请稍后再试');
+        toast.error(t('移除失败'), error instanceof ApiError ? error.message : t('请稍后再试'));
       }
     },
     [toast],
@@ -468,26 +469,26 @@ export default function Watchlist() {
 
   const onForceRefresh = useCallback(async () => {
     if (!isOwner || forceRefreshing) {
-      if (!isOwner) toast.info('登录 Owner 后可强制刷新');
+      if (!isOwner) toast.info(t('登录 Owner 后可强制刷新'));
       return;
     }
     setForceRefreshing(true);
-    toast.info('正在刷新', '正在重新计算完整自选数据');
+    toast.info(t('正在刷新'), t('正在重新计算完整自选数据'));
     try {
       const action = await runtimeApi.workerAction('focus_refresh');
       if (action.status !== 'completed') {
-        if (!action.requestId) throw new ApiError(502, '刷新任务未能启动');
+        if (!action.requestId) throw new ApiError(502, t('刷新任务未能启动'));
         await runtimeApi.waitForWorkerAction(action.requestId);
       }
       // worker 原子写入后绕过浏览器短缓存读取一次同一路径；不再发送
       // 后端从未支持的 ?force=1 占位参数。
       await stocksApi.watchlist(true);
       refreshWatchlist();
-      toast.success('自选已更新', '已读取最新行情数据');
+      toast.success(t('自选已更新'), t('已读取最新行情数据'));
     } catch (error) {
       toast.error(
-        '自选刷新失败',
-        error instanceof ApiError ? error.message : '刷新暂时不可用',
+        t('自选刷新失败'),
+        error instanceof ApiError ? error.message : t('刷新暂时不可用'),
       );
     } finally {
       setForceRefreshing(false);
@@ -537,7 +538,7 @@ export default function Watchlist() {
     () => [
       {
         key: 'ticker',
-        title: '代码',
+        title: t('代码'),
         sortable: true,
         sortValue: (r) => r.ticker,
         render: (r) => (
@@ -552,7 +553,7 @@ export default function Watchlist() {
       },
       {
         key: 'price',
-        title: '最新价',
+        title: t('最新价'),
         align: 'right',
         sortable: true,
         sortValue: (r) => r.price,
@@ -571,7 +572,7 @@ export default function Watchlist() {
       },
       {
         key: 'changePct',
-        title: '涨跌幅',
+        title: t('涨跌幅'),
         align: 'right',
         sortable: true,
         sortValue: (r) => r.changePct,
@@ -579,7 +580,7 @@ export default function Watchlist() {
       },
       {
         key: 'spark',
-        title: '今日分时',
+        title: t('今日分时'),
         render: (r) => <Sparkline data={r.sparkline} change={r.changePct} />,
       },
       ...(rowStrengthAvailable
@@ -587,7 +588,7 @@ export default function Watchlist() {
             key: 'strength',
             title: (
               <>
-                强度
+                {t('强度')}
                 <InfoHint hint={SCORE_HINTS.strengthComposite} side="bottom" size={11} />
               </>
             ),
@@ -599,7 +600,7 @@ export default function Watchlist() {
       ...(rowSignalsAvailable
         ? [{
             key: 'signals',
-            title: '信号',
+            title: t('信号'),
             render: (r: WatchlistItem) => (
               <span className="flex items-center gap-1">
                 {r.signals.slice(0, 2).map((s, i) => (
@@ -626,8 +627,8 @@ export default function Watchlist() {
             {canManageWatchlist && (
               <button
                 type="button"
-                title={`从自选移除 ${r.ticker}`}
-                aria-label={`从自选移除 ${r.ticker}`}
+                title={t('从自选移除 {ticker}', { ticker: r.ticker })}
+                aria-label={t('从自选移除 {ticker}', { ticker: r.ticker })}
                 onClick={(event) => {
                   // 行本身是「打开详情」的点击目标，删除必须先拦住冒泡。
                   event.stopPropagation();
@@ -723,8 +724,8 @@ export default function Watchlist() {
       <PageHeader
         section="01"
         eyebrow="WATCHLIST · DELAYED 15MIN"
-        title="自选观察"
-        description="你盯住的票，今天谁在动。"
+        title={t("自选观察")}
+        description={t("你盯住的票，今天谁在动。")}
         meta={
           <>
             {username && (
@@ -746,7 +747,7 @@ export default function Watchlist() {
       />
 
       {/* B1 概览统计条 */}
-      <section className="mt-6" aria-label="市场概览">
+      <section className="mt-6" aria-label={t("市场概览")}>
         {statsLoading ? (
           /* 占位必须和真实内容占同样的空间。
              旧写法在移动端是 grid-cols-1 —— 四张卡竖着堆起来，而真实内容是一行
@@ -766,14 +767,14 @@ export default function Watchlist() {
           >
             {[
               ...(signalsQ.data?.topScore !== null && signalsQ.data?.topScore !== undefined
-                ? [<StatCard key="top-risk" label="顶部风险分" icon="flag" value={signalsQ.data.topScore} sub={signalsQ.data.topLabel ?? '市场信号模型'} className="card-lift" />]
+                ? [<StatCard key="top-risk" label={t("顶部风险分")} icon="flag" value={signalsQ.data.topScore} sub={signalsQ.data.topLabel ?? t('市场信号模型')} className="card-lift" />]
                 : []),
               ...(signalsQ.data?.bottomScore !== null && signalsQ.data?.bottomScore !== undefined
-                ? [<StatCard key="bottom-repair" label="底部修复分" icon="target" value={signalsQ.data.bottomScore} sub={signalsQ.data.bottomLabel ?? '市场信号模型'} className="card-lift" />]
+                ? [<StatCard key="bottom-repair" label={t("底部修复分")} icon="target" value={signalsQ.data.bottomScore} sub={signalsQ.data.bottomLabel ?? t('市场信号模型')} className="card-lift" />]
                 : []),
               <div key="ad" className="card-surface min-w-[220px] snap-start p-5 sm:min-w-0">
                 <div className="flex items-start justify-between">
-                  <p className="eyebrow">上涨 / 下跌</p>
+                  <p className="eyebrow">{t('上涨 / 下跌')}</p>
                   <Icon name="candle" size={18} className="text-ink-400" />
                 </div>
                 <AdvanceDeclineBar
@@ -787,7 +788,7 @@ export default function Watchlist() {
                     <div key="avg" className="card-surface min-w-[220px] snap-start p-5 sm:min-w-0">
                       <div className="flex items-start justify-between">
                         <p className="eyebrow">
-                          全市场平均强度
+                          {t('全市场平均强度')}
                           <InfoHint hint={SCORE_HINTS.avgStrength} side="bottom" size={12} className="ml-1" />
                         </p>
                         <Icon name="wallet-gauge" size={18} className="text-ink-400" />
@@ -811,14 +812,14 @@ export default function Watchlist() {
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* B2 自选主区（8 列） */}
-        <section className="lg:col-span-8" aria-label="自选列表">
+        <section className="lg:col-span-8" aria-label={t("自选列表")}>
           {/* 工具行 */}
           <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-line py-1.5">
             <div className="flex min-w-0 flex-wrap items-center gap-2.5">
               <Segmented
                 options={[
-                  { value: 'table', label: '表格' },
-                  { value: 'cards', label: '卡片' },
+                  { value: 'table', label: t('表格') },
+                  { value: 'cards', label: t('卡片') },
                 ]}
                 value={view}
                 onChange={setView}
@@ -835,9 +836,9 @@ export default function Watchlist() {
                   <input
                     value={addInput}
                     onChange={(event) => setAddInput(event.target.value)}
-                    placeholder="加自选"
+                    placeholder={t("加自选")}
                     maxLength={12}
-                    aria-label="添加自选股票代码"
+                    aria-label={t("添加自选股票代码")}
                     className="h-8 w-[92px] rounded-sm border border-line-strong bg-card px-2 font-mono text-caption uppercase text-ink-800 outline-none transition-[border-color,box-shadow] duration-fast placeholder:font-sans placeholder:normal-case placeholder:text-ink-300 focus:border-brand-600 focus:shadow-focus-ring"
                   />
                   <button
@@ -846,16 +847,16 @@ export default function Watchlist() {
                     className="flex h-8 items-center gap-1 rounded-sm border border-line-strong bg-card px-2.5 text-caption text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Icon name="plus" size={13} />
-                    添加
+                    {t('添加')}
                   </button>
                 </form>
               )}
             </div>
             <p className="w-full text-right text-caption text-ink-400 sm:w-auto">
-              <span className="font-mono tnum">{items.length}</span> 只标的
-              {canManageWatchlist && <span className="ml-1 text-ink-300">/ 上限 {maxTickers}</span>}
+              <span className="font-mono tnum">{items.length}</span> {t('只标的')}
+              {canManageWatchlist && <span className="ml-1 text-ink-300">{t('/ 上限')} {maxTickers}</span>}
               {wl.lastUpdatedAt && (
-                <span className="ml-2 hidden font-mono text-micro tnum sm:inline">更新 {fmtTimeHHMMSS(wl.lastUpdatedAt)}</span>
+                <span className="ml-2 hidden font-mono text-micro tnum sm:inline">{t('更新')} {fmtTimeHHMMSS(wl.lastUpdatedAt)}</span>
               )}
             </p>
           </div>
@@ -865,8 +866,8 @@ export default function Watchlist() {
               className="mt-3 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-600"
               role="status"
             >
-              暂无行情：{uncoveredTickers.join('、')}
-              <span className="ml-1 text-ink-500">（不在当前覆盖范围内，可在个股页手动获取）</span>
+              {t('暂无行情：')}{uncoveredTickers.join('、')}
+              <span className="ml-1 text-ink-500">{t('（不在当前覆盖范围内，可在个股页手动获取）')}</span>
             </p>
           )}
 
@@ -875,13 +876,13 @@ export default function Watchlist() {
               className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-600"
               role="status"
             >
-              读不到你的自选列表，下面显示的是系统默认关注池。
+              {t('读不到你的自选列表，下面显示的是系统默认关注池。')}
               <button
                 type="button"
                 onClick={() => setPersonalReloadToken((n) => n + 1)}
                 className="rounded-xs border border-warn-600/30 px-2 py-0.5 font-medium text-warn-600 transition-colors hover:bg-warn-600/10"
               >
-                重试
+                {t('重试')}
               </button>
             </p>
           )}
@@ -891,8 +892,8 @@ export default function Watchlist() {
               className="mt-3 rounded-md border border-line bg-paper-2 px-3 py-2 text-caption text-ink-500"
               role="status"
             >
-              你还没有自己的自选，下面是系统默认关注池。
-              <span className="ml-1 text-ink-400">上方输入代码即可开始建立自己的列表。</span>
+              {t('你还没有自己的自选，下面是系统默认关注池。')}
+              <span className="ml-1 text-ink-400">{t('上方输入代码即可开始建立自己的列表。')}</span>
             </p>
           )}
 
@@ -911,8 +912,8 @@ export default function Watchlist() {
                 <EmptyState
                   variant="error"
                   image="/empty-chart.svg"
-                  title={err.code === 503 ? '数据暂不可用' : '加载失败'}
-                  description={err.code === 503 ? '稍后刷新再试' : err.message}
+                  title={err.code === 503 ? t('数据暂不可用') : t('加载失败')}
+                  description={err.code === 503 ? t('稍后刷新再试') : err.message}
                   action={
                     <button
                       onClick={wl.refresh}
@@ -920,7 +921,7 @@ export default function Watchlist() {
                       className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
                     >
                       {wl.refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
-                      重试
+                      {t('重试')}
                     </button>
                   }
                 />
@@ -929,17 +930,17 @@ export default function Watchlist() {
               <div className="card-surface">
                 <EmptyState
                   image="/empty-watchlist.svg"
-                  title="清单还是空的"
+                  title={t("清单还是空的")}
                   description={
                     canManageWatchlist
-                      ? '在上方输入股票代码，加入你的第一只自选'
-                      : '登录后可以把自选股保存在账号里，换设备也还在'
+                      ? t('在上方输入股票代码，加入你的第一只自选')
+                      : t('登录后可以把自选股保存在账号里，换设备也还在')
                   }
                   footnote={
                     canManageWatchlist
-                      ? `自选保存在账号 ${username} 下`
+                      ? t('自选保存在账号 {username} 下', { username })
                       : isVisitor
-                        ? '当前为访客只读模式'
+                        ? t('当前为访客只读模式')
                         : undefined
                   }
                   action={
@@ -948,7 +949,7 @@ export default function Watchlist() {
                       className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
                     >
                       <Icon name="search" size={14} />
-                      搜索代码
+                      {t('搜索代码')}
                     </button>
                   }
                 />
@@ -1005,9 +1006,9 @@ export default function Watchlist() {
                   onClick={progressive.loadMore}
                   className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line-strong bg-card px-4 py-2 text-caption text-ink-600 transition-colors hover:bg-paper-2"
                 >
-                  加载更多
+                  {t('加载更多')}
                   <span className="font-mono text-micro text-ink-400 tnum">
-                    还有 {progressive.remaining} 只
+                    {t('还有')} {progressive.remaining} {t('只')}
                   </span>
                 </button>
               </div>
@@ -1016,7 +1017,7 @@ export default function Watchlist() {
         </section>
 
         {/* B3 右侧栏（4 列，吸顶 116px） */}
-        <aside className="grid grid-cols-1 gap-4 self-start md:grid-cols-2 lg:sticky lg:top-[116px] lg:col-span-4 lg:grid-cols-1" aria-label="侧栏">
+        <aside className="grid grid-cols-1 gap-4 self-start md:grid-cols-2 lg:sticky lg:top-[116px] lg:col-span-4 lg:grid-cols-1" aria-label={t("侧栏")}>
           {signalsQ.data ? (
             <SignalDistribution data={signalsQ.data} />
           ) : (

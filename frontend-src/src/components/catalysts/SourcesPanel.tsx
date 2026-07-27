@@ -7,14 +7,15 @@ import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
 import SourceNote from '@/components/shared/SourceNote';
 import { cn } from '@/lib/utils';
-import { fmtRelative } from '@/lib/format';
+import { fmtRelativeShort } from '@/lib/format';
+import { t } from '../../i18n/core.ts';
 
 function formatDataLag(milliseconds: number | null): string {
   if (milliseconds === null) return '—';
-  if (milliseconds < 1_000) return '<1 秒';
-  if (milliseconds < 60_000) return `${Math.round(milliseconds / 1_000)} 秒`;
-  if (milliseconds < 3_600_000) return `${Math.round(milliseconds / 60_000)} 分`;
-  return `${(milliseconds / 3_600_000).toFixed(milliseconds < 36_000_000 ? 1 : 0)} 小时`;
+  if (milliseconds < 1_000) return t('<1 秒');
+  if (milliseconds < 60_000) return t('{n} 秒', { n: Math.round(milliseconds / 1_000) });
+  if (milliseconds < 3_600_000) return t('{n} 分', { n: Math.round(milliseconds / 60_000) });
+  return t('{n} 小时', { n: (milliseconds / 3_600_000).toFixed(milliseconds < 36_000_000 ? 1 : 0) });
 }
 
 export default function SourcesPanel({ refreshToken }: { refreshToken: number }) {
@@ -35,14 +36,14 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title="数据源状态暂不可用"
-          description="稍后刷新再试"
+          title={t("数据源状态暂不可用")}
+          description={t("稍后刷新再试")}
           action={
             <button
               onClick={q.refresh}
               className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
             >
-              重试
+              {t('重试')}
             </button>
           }
         />
@@ -77,23 +78,23 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
               >
                 {/* 源正常/异常是静态健康状态，不脉冲 */}
                 <Led tone={s.status === 'active' ? 'up' : 'warn'} className="size-1.5" />
-                {s.status === 'active' ? '正常' : '异常'}
+                {s.status === 'active' ? t('正常') : t('异常')}
               </span>
             </div>
             <div className="mt-4 grid grid-cols-3 gap-2 text-center">
               <div>
                 <p className="font-mono text-data-l text-ink-900 tnum">{formatDataLag(s.latencyMs)}</p>
-                <p className="mt-0.5 text-micro text-ink-400">数据滞后</p>
+                <p className="mt-0.5 text-micro text-ink-400">{t('数据滞后')}</p>
               </div>
               <div>
                 <p className="font-mono text-data-l text-ink-900 tnum">{s.itemsToday ?? '—'}</p>
-                <p className="mt-0.5 text-micro text-ink-400">近 24h 条数</p>
+                <p className="mt-0.5 text-micro text-ink-400">{t('近 24h 条数')}</p>
               </div>
               <div>
                 <p className="font-mono text-data-l text-ink-900 tnum" suppressHydrationWarning>
-                  {fmtRelative(s.lastFetchedAt).replace(' 分钟前', 'm').replace(' 小时前', 'h').replace(' 天前', 'd')}
+                  {fmtRelativeShort(s.lastFetchedAt)}
                 </p>
-                <p className="mt-0.5 text-micro text-ink-400">最近抓取</p>
+                <p className="mt-0.5 text-micro text-ink-400">{t('最近抓取')}</p>
               </div>
             </div>
             <p className="mt-3 border-t border-line pt-2.5 text-micro text-ink-400">{s.note}</p>
@@ -102,7 +103,7 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
       </motion.div>
       <SourceNote
         className="mt-4"
-        text="滞后表示数据更新到了什么时候，不是页面加载速度；条数按最近 24 小时收录的新闻与经济事件统计"
+        text={t("滞后表示数据更新到了什么时候，不是页面加载速度；条数按最近 24 小时收录的新闻与经济事件统计")}
       />
     </div>
   );

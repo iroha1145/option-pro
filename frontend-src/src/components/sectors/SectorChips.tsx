@@ -5,6 +5,7 @@
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import HorizontalScroller from '@/components/shared/HorizontalScroller';
+import { t } from '../../i18n/core.ts';
 
 interface SectorChipsProps {
   sectors: { id: string; name: string }[];
@@ -19,7 +20,7 @@ export default function SectorChips({ sectors, value, onChange, className }: Sec
      还有。滚动交给 HorizontalScroller，role="tablist" 留在真正装 tab 的元素上。 */
   return (
     <HorizontalScroller className={className} scrollerClassName="py-0.5">
-      <div role="tablist" aria-label="板块切换" className="flex gap-1.5">
+      <div role="tablist" aria-label={t("板块切换")} className="flex gap-1.5">
       {sectors.map((s) => {
         const active = s.id === value;
         return (

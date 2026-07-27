@@ -30,7 +30,7 @@ test('stock pull UI reports truthful three-resource progress and persistence', a
   assert.match(control, /基础行情/);
   assert.match(control, /日线/);
   assert.match(control, /技术信号/);
-  assert.ok(control.includes('已完成 {availableCount}/3'));
+  assert.ok(control.includes("{t('已完成')} {availableCount}/3"));
   assert.match(control, /服务器保存失败，重启后可能失效/);
   assert.match(control, /正在更新基础行情、日线与技术信号 · 共 3 项/);
   assert.match(control, /state\.ticker === ticker/);

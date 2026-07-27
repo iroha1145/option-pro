@@ -7,10 +7,11 @@
  * - GET /api/strength/stocks/{t}（概览 503 时的基础行情回退：扫描行快照，匿名可用）
  * mock 模式下代码不存在抛 404（整页形态 404 空态）。
  *
- * 大写后的代码在本文件里一律叫 `symbol`，**不要改回 `t`**。翻译函数按惯例也叫 `t`，
- * 这里每个函数都以 `const t = ticker.toUpperCase()` 开头，两者一撞，函数体内的
+ * 大写后的代码在本文件里一律叫 `symbol`，**不要改回 `t`**。翻译函数按惯例叫 `t`，
+ * 从前这里每个函数都以 `const t = ticker.toUpperCase()` 开头，两者一撞，函数体内的
  * `t('…')` 就是 “t is not a function” —— 而且是运行时才炸，类型检查看不出来
- * （`t` 确实存在，只是变成了 string）。名字长两个字母换掉这个雷。
+ * （`t` 确实存在，只是变成了 string）。双保险：局部改名 `symbol`，翻译函数按
+ * codemod 惯例以 `__t` 别名引入（见 i18n-coverage 的 classify）。
  */
 import { ApiError, mockOr } from '@/api/client';
 import { marketGet } from '@/api/marketRead';
@@ -28,6 +29,7 @@ import type {
   StockTrendBias,
   TrendBiasFactor,
 } from '@/mocks/fixtures';
+import { t as __t } from '../../i18n/core.ts';
 
 export type ChartRange = StockChart['range'];
 /**
@@ -38,11 +40,11 @@ export type ChartRange = StockChart['range'];
  */
 export const DEFAULT_CHART_RANGE: ChartRange = '1d';
 export const CHART_RANGES: { value: ChartRange; label: string }[] = [
-  { value: '5m', label: '5分' },
-  { value: '15m', label: '15分' },
-  { value: '1h', label: '1小时' },
-  { value: '1d', label: '日线' },
-  { value: '1w', label: '周线' },
+  { value: '5m', label: __t('5分') },
+  { value: '15m', label: __t('15分') },
+  { value: '1h', label: __t('1小时') },
+  { value: '1d', label: __t('日线') },
+  { value: '1w', label: __t('周线') },
 ];
 
 /** 契约 {bars:[{t,o,h,l,c,v,quote_only}], as_of, _stale?} → StockChartEx（字段名 1:1） */
@@ -185,7 +187,7 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
   const symbol = ticker.toUpperCase();
   return mockOr(
     () => {
-      if (!fx.hasTicker(symbol)) throw new ApiError(404, `代码 ${symbol} 不存在`);
+      if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
       return fx.getStockDetail(symbol);
     },
     async () => {
@@ -255,7 +257,7 @@ export function getDetailChart(ticker: string, range: ChartRange, force = false)
   const symbol = ticker.toUpperCase();
   return mockOr(
     () => {
-      if (!fx.hasTicker(symbol)) throw new ApiError(404, `代码 ${symbol} 不存在`);
+      if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
       return fx.getStockChartEx(symbol, range);
     },
     // 契约 range ∈ 5m|15m|1h|1d|1w：界面与后端周期一一对应。
@@ -293,22 +295,22 @@ const FACTOR_SIGNALS: {
 }[] = [
   {
     key: 'trend',
-    label: '趋势',
+    label: __t('趋势'),
     candidates: ['relative_strength_spy', 'sma50_dist', 'sma20_dist'],
   },
   {
     key: 'momentum',
-    label: '动量',
+    label: __t('动量'),
     candidates: ['rsi14', 'macd_hist', 'return_20d'],
   },
   {
     key: 'volume',
-    label: '量能',
+    label: __t('量能'),
     candidates: ['obv_divergence', 'volume_zscore', '_volume_ratio'],
   },
   {
     key: 'volatility',
-    label: '波动',
+    label: __t('波动'),
     candidates: ['atr_percentile', 'atm_iv_percent'],
   },
 ];
@@ -503,7 +505,7 @@ export function getTrendBias(ticker: string, force = false): Promise<StockTrendB
   const symbol = ticker.toUpperCase();
   return mockOr<StockTrendBiasView>(
     () => {
-      if (!fx.hasTicker(symbol)) throw new ApiError(404, `代码 ${symbol} 不存在`);
+      if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
       return mapTrendBiasResponse(fx.getStockTrendBias(symbol), symbol);
     },
     () =>
@@ -520,9 +522,10 @@ export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
   const symbol = ticker.toUpperCase();
   return mockOr(
     () => {
-      if (!fx.hasTicker(symbol)) throw new ApiError(404, `代码 ${symbol} 不存在`);
+      if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
       const d = fx.getStockDetail(symbol);
       const b = fx.getStockTrendBias(symbol);
+      // mock 模式下模拟「模型写的分析正文」，与真实 AI 输出同样不做界面翻译（如实保留原文）。
       const ivTone = d.ivPercentile >= 60 ? '偏贵' : d.ivPercentile <= 40 ? '相对便宜' : '中性';
       const text =
         `${symbol} 模型分析完成：趋势偏向分 ${b.trend_bias_score}（${b.trend_bias_label}），` +

@@ -100,7 +100,7 @@ test('已评分候选多于返回行时，界面标明只在前 N 名内筛选',
   const page = codeOf(await source('pages/Screener.tsx'));
   assert.match(page, /truncatedScope = useMemo/);
   assert.match(page, /if \(scanMeta\.screenedCount <= returned\) return null;/);
-  assert.match(page, /仅在强度前 \{truncatedScope\.returned\} 名内筛选/);
+  assert.match(page, /\{__t\('仅在强度前'\)\} \{truncatedScope\.returned\} \{__t\('名内筛选'\)\}/);
 });
 
 /* ---------------- P2-10：分档计数描述候选池 ---------------- */
@@ -111,7 +111,7 @@ test('分档计数取后端整池分布，缺失时如实标注范围', async ()
 
   assert.match(page, /universeQ\.data\?\.tierDistribution \?\? null/);
   assert.match(page, /tierCountsCoverPool: distribution !== null/);
-  assert.match(workbench, /coversPool \? '已评分候选池' : '当前快照返回的行'/);
+  assert.match(workbench, /coversPool \? __t\('已评分候选池'\) : __t\('当前快照返回的行'\)/);
 });
 
 test('分档分布任一档缺失即整体判为不可用', async () => {

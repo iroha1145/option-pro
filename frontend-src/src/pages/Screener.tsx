@@ -22,7 +22,7 @@ import { useShell } from '@/components/Layout';
 import { cn } from '@/lib/utils';
 import { fmtCompact, fmtTimeHHMMSS } from '@/lib/format';
 import {
-  MACRO_SHADOW_TITLE_ATTR,
+  MACRO_SHADOW_HINT,
   MACRO_TONE_LABEL,
   macroToneOf,
   type MacroTone,
@@ -58,6 +58,7 @@ import {
   type Tier,
   type TierFilter,
 } from '@/components/screener/types';
+import { t as __t } from '../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const PAGE_SIZE = 20;
@@ -186,12 +187,12 @@ export default function Screener() {
       const refreshSnapshot = async () => {
         const action = await runtimeApi.workerAction('strength_refresh', requested);
         if (!strengthParametersMatch(action.details.parameters, requested)) {
-          throw new ApiError(409, '另一组筛选条件正在扫描或冷却，请稍后重试', {
+          throw new ApiError(409, __t('另一组筛选条件正在扫描或冷却，请稍后重试'), {
             bizCode: 'strength_parameters_busy',
             payload: action,
           });
         }
-        if (!action.requestId) throw new ApiError(502, '扫描任务未能启动');
+        if (!action.requestId) throw new ApiError(502, __t('扫描任务未能启动'));
         if (action.status !== 'completed') await runtimeApi.waitForWorkerAction(action.requestId);
       };
 
@@ -248,7 +249,7 @@ export default function Screener() {
       return true;
     } catch (e) {
       if (scanSeq.current !== seq) return;
-      setScanError(e instanceof ApiError ? e : new ApiError(500, e instanceof Error ? e.message : '扫描失败'));
+      setScanError(e instanceof ApiError ? e : new ApiError(500, e instanceof Error ? e.message : __t('扫描失败')));
       setScanState('error');
       return false;
     }
@@ -440,14 +441,14 @@ export default function Screener() {
     try {
       const ok = await runScan(applied, { forceRefresh: true });
       if (!ok) {
-        toast.error('刷新失败', '扫描未完成，请查看结果区的错误提示');
+        toast.error(__t('刷新失败'), __t('扫描未完成，请查看结果区的错误提示'));
         return;
       }
-      toast.success('强度扫描完成', '已读取最新扫描结果');
+      toast.success(__t('强度扫描完成'), __t('已读取最新扫描结果'));
       universeQ.refresh();
       marketQ.refresh();
     } catch (e) {
-      toast.error('触发失败', e instanceof ApiError ? e.message : '扫描服务暂不可用');
+      toast.error(__t('触发失败'), e instanceof ApiError ? e.message : __t('扫描服务暂不可用'));
     } finally {
       setRefreshingStrength(false);
     }
@@ -535,12 +536,12 @@ export default function Screener() {
       <PageHeader
         section="02"
         eyebrow="SCREENER · STRENGTH SCAN"
-        title="选股扫描"
-        description="按真实行情扫描主题股票池，可查看扫描时间与股票池规模。"
+        title={__t("选股扫描")}
+        description={__t("按真实行情扫描主题股票池，可查看扫描时间与股票池规模。")}
         meta={
           <>
             <span className="hidden text-right sm:block">
-              <span className="block text-micro text-ink-400">上次扫描</span>
+              <span className="block text-micro text-ink-400">{__t('上次扫描')}</span>
               <span className="font-mono text-caption text-ink-600 tnum" suppressHydrationWarning>
                 {lastScanAt ? fmtTimeHHMMSS(lastScanAt) : '—'}
               </span>
@@ -550,11 +551,11 @@ export default function Screener() {
               <button
                 onClick={() => void onStrengthRefresh()}
                 disabled={refreshingStrength || scanState === 'scanning'}
-                title="手动触发一次强度扫描（需 Owner）"
+                title={__t("手动触发一次强度扫描（需 Owner）")}
                 className="flex h-9 items-center gap-2 rounded-md border border-line bg-card px-3 text-caption text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Icon name="refresh" size={15} className={refreshingStrength ? 'animate-spin-once' : ''} />
-                刷新强度分
+                {__t('刷新强度分')}
               </button>
             )}
           </>
@@ -578,23 +579,23 @@ export default function Screener() {
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* B2 结果区（8 列） */}
-        <section className="lg:col-span-8" aria-label="扫描结果">
+        <section className="lg:col-span-8" aria-label={__t("扫描结果")}>
           {/* 结果统计行 */}
           <div className="flex min-h-10 flex-wrap items-center gap-x-3 gap-y-2">
             {scanState === 'scanning' ? (
               <span className="flex items-center gap-2 text-body-s text-ink-500">
                 <span className="size-3.5 animate-spin rounded-full border-2 border-brand-600/25 border-t-brand-600" aria-hidden="true" />
-                正在扫描…
+                {__t('正在扫描…')}
               </span>
             ) : scanState === 'done' || (scanState === 'error' && rows) ? (
               <>
                 <h2 className="font-display text-[18px] leading-[24px] text-ink-900">
-                  命中 <span className="font-mono tnum">{hitCount}</span> 只
+                  {__t('命中')} <span className="font-mono tnum">{hitCount}</span> {__t('只')}
                 </h2>
-                <span className="font-mono text-caption text-ink-400 tnum">耗时 {(scanDurationMs / 1000).toFixed(1)}s</span>
+                <span className="font-mono text-caption text-ink-400 tnum">{__t('耗时')} {(scanDurationMs / 1000).toFixed(1)}s</span>
                 {scanMeta && (
                   <span className="font-mono text-micro text-ink-400 tnum">
-                    股票池 {scanMeta.universeCount} / 已评分 {scanMeta.screenedCount}
+                    {__t('股票池')} {scanMeta.universeCount} {__t('/ 已评分')} {scanMeta.screenedCount}
                   </span>
                 )}
                 {/* 客户端条件只作用在后端返回的强度前 N 名上（审计 P1-05）：
@@ -602,20 +603,20 @@ export default function Screener() {
                 {truncatedScope && (
                   <span
                     className="rounded-xs bg-warn-50 px-1.5 py-px text-micro text-warn-600"
-                    title={`价格上限、多板块、分档与最低分是客户端条件，只能作用在后端返回的这 ${truncatedScope.returned} 行上；已评分候选共 ${truncatedScope.screened} 只。`}
+                    title={__t('价格上限、多板块、分档与最低分是客户端条件，只能作用在后端返回的这 {returned} 行上；已评分候选共 {screened} 只。', { returned: truncatedScope.returned, screened: truncatedScope.screened })}
                   >
-                    仅在强度前 {truncatedScope.returned} 名内筛选
+                    {__t('仅在强度前')} {truncatedScope.returned} {__t('名内筛选')}
                   </span>
                 )}
                 {preparingCatalystSort && (
                   <span className="inline-flex items-center gap-1.5 rounded-xs bg-paper-2 px-1.5 py-px text-micro text-ink-500">
                     <span className="size-2.5 animate-spin rounded-full border-[1.5px] border-brand-600/25 border-t-brand-600" aria-hidden="true" />
-                    正在准备排序数据 · 剩余 {missingCatalystTickers.length}
+                    {__t('正在准备排序数据 · 剩余')} {missingCatalystTickers.length}
                   </span>
                 )}
                 {scanMeta?.stale && (
                   <span className="rounded-xs bg-warn-50 px-1.5 py-px text-micro text-warn-600">
-                    数据未刷新{scanMeta.snapshotSavedAt ? ` · ${new Date(scanMeta.snapshotSavedAt).toLocaleString('zh-CN')}` : ''}
+                    {__t('数据未刷新')}{scanMeta.snapshotSavedAt ? ` · ${new Date(scanMeta.snapshotSavedAt).toLocaleString('zh-CN')}` : ''}
                   </span>
                 )}
                 {chips.map((c) => (
@@ -624,14 +625,14 @@ export default function Screener() {
                     className="inline-flex items-center gap-1 rounded-xs border border-line bg-card-warm px-1.5 py-0.5 text-micro text-ink-500"
                   >
                     {c.label}
-                    <button onClick={c.onRemove} aria-label={`移除条件 ${c.label}`} className="text-ink-300 transition-colors hover:text-down-600">
+                    <button onClick={c.onRemove} aria-label={__t('移除条件 {label}', { label: c.label })} className="text-ink-300 transition-colors hover:text-down-600">
                       <Icon name="x" size={10} />
                     </button>
                   </span>
                 ))}
               </>
             ) : (
-              <h2 className="font-display text-[18px] leading-[24px] text-ink-900">扫描结果</h2>
+              <h2 className="font-display text-[18px] leading-[24px] text-ink-900">{__t('扫描结果')}</h2>
             )}
             <div className="ml-auto flex flex-wrap items-center gap-2">
               {/* 可选列开关。关掉时同时清掉宏观筛选：否则行会按一个看不见的条件被筛掉。 */}
@@ -645,7 +646,7 @@ export default function Screener() {
                   });
                   setPage(1);
                 }}
-                title={MACRO_SHADOW_TITLE_ATTR}
+                title={__t('{title}：{body}{note}', { title: __t(MACRO_SHADOW_HINT.title), body: __t(MACRO_SHADOW_HINT.body), note: __t(MACRO_SHADOW_HINT.note) })}
                 className={cn(
                   'flex h-8 items-center gap-1.5 rounded-pill border px-3 text-caption transition-colors duration-fast',
                   showMacro
@@ -654,12 +655,12 @@ export default function Screener() {
                 )}
               >
                 <Icon name="layers" size={13} />
-                宏观适配
+                {__t('宏观适配')}
               </button>
               {showMacro && (
                 <Segmented<MacroTone | 'all'>
                   options={[
-                    { value: 'all' as const, label: '全部' },
+                    { value: 'all' as const, label: __t('全部') },
                     { value: 'tailwind' as const, label: MACRO_TONE_LABEL.tailwind },
                     { value: 'neutral' as const, label: MACRO_TONE_LABEL.neutral },
                     { value: 'headwind' as const, label: MACRO_TONE_LABEL.headwind },
@@ -681,7 +682,7 @@ export default function Screener() {
           {/* 宏观筛选会排除没有读数的行；数量说清楚，别让人以为那些股票不存在。 */}
           {showMacro && macroToneFilter !== 'all' && macroUnreadCount > 0 && (
             <p className="mt-2 text-micro text-ink-400">
-              {macroUnreadCount} 只无宏观读数，已排除（不按中性计）
+              {macroUnreadCount} {__t('只无宏观读数，已排除（不按中性计）')}
             </p>
           )}
 
@@ -692,8 +693,8 @@ export default function Screener() {
               <div className="card-surface">
                 <EmptyState
                   image="/empty-scan.svg"
-                  title="设定条件，开始一次扫描"
-                  description="或从预设策略一键开始"
+                  title={__t("设定条件，开始一次扫描")}
+                  description={__t("或从预设策略一键开始")}
                   action={
                     <div className="flex flex-col items-center gap-3">
                       <button
@@ -701,7 +702,7 @@ export default function Screener() {
                         className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
                       >
                         <Icon name="crosshair" size={14} />
-                        开始扫描
+                        {__t('开始扫描')}
                       </button>
                       {profiles && (
                         <div className="flex flex-wrap justify-center gap-2">
@@ -733,14 +734,14 @@ export default function Screener() {
                   <EmptyState
                     variant="error"
                     image="/empty-chart.svg"
-                    title={scanError?.code === 503 ? '扫描数据不可用' : '扫描失败'}
-                    description={scanError?.code === 503 ? '稍后刷新再试' : scanError?.message}
+                    title={scanError?.code === 503 ? __t('扫描数据不可用') : __t('扫描失败')}
+                    description={scanError?.code === 503 ? __t('稍后刷新再试') : scanError?.message}
                     action={
                       <button
                         onClick={() => void runScan(applied)}
                         className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
                       >
-                        重试
+                        {__t('重试')}
                       </button>
                     }
                   />
@@ -748,8 +749,8 @@ export default function Screener() {
                 {rows && (
                   <div className="mt-4">
                     <p className="mb-2 flex items-center gap-2 text-caption text-ink-400">
-                      <span className="rounded-xs bg-warn-50 px-1.5 py-px font-mono text-micro text-warn-600">已过期</span>
-                      上次成功扫描于 <span className="font-mono tnum">{lastScanAt ? fmtTimeHHMMSS(lastScanAt) : '—'}</span>
+                      <span className="rounded-xs bg-warn-50 px-1.5 py-px font-mono text-micro text-warn-600">{__t('已过期')}</span>
+                      {__t('上次成功扫描于')} <span className="font-mono tnum">{lastScanAt ? fmtTimeHHMMSS(lastScanAt) : '—'}</span>
                     </p>
                     <div className="hidden md:block">
                       <ResultTable
@@ -779,19 +780,19 @@ export default function Screener() {
               <div className="card-surface">
                 <EmptyState
                   icon="search"
-                  title="当前条件无命中"
-                  description="尝试放宽条件，或移除部分过滤器"
+                  title={__t("当前条件无命中")}
+                  description={__t("尝试放宽条件，或移除部分过滤器")}
                   action={
                     <div className="flex flex-wrap justify-center gap-2">
                       {(applied.tier !== 'all' || applied.minScore != null) && (
-                        <SuggestButton label="放宽一档" onClick={() => patchApplied({ tier: 'all', minScore: null, presetId: null })} />
+                        <SuggestButton label={__t("放宽一档")} onClick={() => patchApplied({ tier: 'all', minScore: null, presetId: null })} />
                       )}
-                      {applied.sectors.length > 0 && <SuggestButton label="清除板块" onClick={() => patchApplied({ sectors: [] })} />}
+                      {applied.sectors.length > 0 && <SuggestButton label={__t("清除板块")} onClick={() => patchApplied({ sectors: [] })} />}
                       {(applied.priceMin != null || applied.priceMax != null) && (
-                        <SuggestButton label="清除价格区间" onClick={() => patchApplied({ priceMin: null, priceMax: null })} />
+                        <SuggestButton label={__t("清除价格区间")} onClick={() => patchApplied({ priceMin: null, priceMax: null })} />
                       )}
-                      {applied.minDollarVol > 0 && <SuggestButton label="清除成交额下限" onClick={() => patchApplied({ minDollarVol: 0 })} />}
-                      <SuggestButton label="重置全部条件" onClick={() => patchApplied({ ...DEFAULT_FILTERS })} />
+                      {applied.minDollarVol > 0 && <SuggestButton label={__t("清除成交额下限")} onClick={() => patchApplied({ minDollarVol: 0 })} />}
+                      <SuggestButton label={__t("重置全部条件")} onClick={() => patchApplied({ ...DEFAULT_FILTERS })} />
                     </div>
                   }
                 />
@@ -838,11 +839,11 @@ export default function Screener() {
                   {/* 移动端分页 */}
                   {totalPages > 1 && (
                     <div className="mt-4 flex items-center justify-center gap-2">
-                      <PagerButton disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} label="上一页" />
+                      <PagerButton disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} label={__t("上一页")} />
                       <span className="font-mono text-caption text-ink-500 tnum">
                         {safePage} / {totalPages}
                       </span>
-                      <PagerButton disabled={safePage >= totalPages} onClick={() => setPage(safePage + 1)} label="下一页" />
+                      <PagerButton disabled={safePage >= totalPages} onClick={() => setPage(safePage + 1)} label={__t("下一页")} />
                     </div>
                   )}
                 </div>
@@ -854,20 +855,20 @@ export default function Screener() {
         {/* B3 右侧栏（4 列吸顶；768–1023 双列落入 B2 下） */}
         <aside
           className="grid grid-cols-1 gap-4 self-start md:grid-cols-2 lg:sticky lg:top-[116px] lg:col-span-4 lg:grid-cols-1"
-          aria-label="侧栏"
+          aria-label={__t("侧栏")}
         >
           {marketQ.data ? (
             <MarketRegimeCard market={marketQ.data} />
           ) : marketQ.error ? (
             <div className="card-surface p-5">
-              <p className="eyebrow">市场形态 · MARKET REGIME</p>
-              <p className="mt-3 text-body-s text-ink-500">{marketQ.error.code === 503 ? '数据暂不可用 · 稍后刷新再试' : marketQ.error.message}</p>
+              <p className="eyebrow">{__t('市场形态 · MARKET REGIME')}</p>
+              <p className="mt-3 text-body-s text-ink-500">{marketQ.error.code === 503 ? __t('数据暂不可用 · 稍后刷新再试') : marketQ.error.message}</p>
               <button
                 onClick={marketQ.refresh}
                 className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
               >
                 <Icon name="refresh" size={13} />
-                重试
+                {__t('重试')}
               </button>
             </div>
           ) : (
@@ -885,14 +886,14 @@ export default function Screener() {
                 transition={{ duration: 0.48, ease: EASE_PAPER }}
                 className="card-surface p-5"
               >
-                <p className="eyebrow">无命中引导</p>
-                <p className="mt-2.5 text-body-s text-ink-500">当前条件过严，没有标的进入结果集。</p>
+                <p className="eyebrow">{__t('无命中引导')}</p>
+                <p className="mt-2.5 text-body-s text-ink-500">{__t('当前条件过严，没有标的进入结果集。')}</p>
                 <button
                   onClick={() => patchApplied({ tier: 'all', minScore: null, presetId: null })}
                   className="mt-3 flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-caption font-medium text-white transition-[filter] hover:brightness-105"
                 >
                   <Icon name="filter-funnel" size={13} />
-                  放宽一档试试
+                  {__t('放宽一档试试')}
                 </button>
               </motion.div>
             )}
@@ -917,9 +918,9 @@ function buildChips(
   patch: (p: Partial<ScanFilters>) => void,
 ): EchoChip[] {
   const chips: EchoChip[] = [];
-  if (f.tier !== 'all') chips.push({ key: 'tier', label: `${f.tier} 档`, onRemove: () => patch({ tier: 'all' }) });
-  if (f.timeframe !== 'all') chips.push({ key: 'tf', label: `周期 ${TIMEFRAME_CN[f.timeframe]}`, onRemove: () => patch({ timeframe: 'all' }) });
-  if (f.profile !== 'balanced') chips.push({ key: 'pf', label: `偏好 ${PROFILE_CN[f.profile]}`, onRemove: () => patch({ profile: 'balanced' }) });
+  if (f.tier !== 'all') chips.push({ key: 'tier', label: __t('{tier} 档', { tier: f.tier }), onRemove: () => patch({ tier: 'all' }) });
+  if (f.timeframe !== 'all') chips.push({ key: 'tf', label: __t('周期 {tf}', { tf: TIMEFRAME_CN[f.timeframe] }), onRemove: () => patch({ timeframe: 'all' }) });
+  if (f.profile !== 'balanced') chips.push({ key: 'pf', label: __t('偏好 {profile}', { profile: PROFILE_CN[f.profile] }), onRemove: () => patch({ profile: 'balanced' }) });
   if (f.topN > 0) chips.push({ key: 'top', label: `Top ${f.topN}`, onRemove: () => patch({ topN: 0 }) });
   f.sectors.forEach((s) =>
     chips.push({
@@ -932,31 +933,31 @@ function buildChips(
   if (f.priceMin != null || f.priceMax != null) {
     const lo = f.priceMin != null ? `$${f.priceMin}` : '—';
     const hi = f.priceMax != null ? `$${f.priceMax}` : '—';
-    chips.push({ key: 'price', label: `价格 ${lo}–${hi}`, onRemove: () => patch({ priceMin: null, priceMax: null }) });
+    chips.push({ key: 'price', label: __t('价格 {lo}–{hi}', { lo, hi }), onRemove: () => patch({ priceMin: null, priceMax: null }) });
   }
   if (f.minDollarVol > 0) {
     const opt = DOLLAR_VOL_OPTIONS.find((o) => o.value === f.minDollarVol);
-    chips.push({ key: 'dv', label: `成交额 ${opt?.label ?? `≥${fmtCompact(f.minDollarVol)}`}`, onRemove: () => patch({ minDollarVol: 0 }) });
+    chips.push({ key: 'dv', label: __t('成交额 {v}', { v: opt?.label ?? `≥${fmtCompact(f.minDollarVol)}` }), onRemove: () => patch({ minDollarVol: 0 }) });
   }
-  if (f.minScore != null) chips.push({ key: 'ms', label: `强度 ≥${f.minScore}`, onRemove: () => patch({ minScore: null }) });
+  if (f.minScore != null) chips.push({ key: 'ms', label: __t('强度 ≥{n}', { n: f.minScore }), onRemove: () => patch({ minScore: null }) });
   if (f.presetId) {
     const name = profiles?.find((p) => p.id === f.presetId)?.name ?? f.presetId;
-    chips.push({ key: 'preset', label: `预设 ${name}`, onRemove: () => patch({ presetId: null }) });
+    chips.push({ key: 'preset', label: __t('预设 {name}', { name }), onRemove: () => patch({ presetId: null }) });
   }
   return chips;
 }
 
 function summarizeFilters(f: ScanFilters): string {
   const parts: string[] = [];
-  if (f.tier !== 'all') parts.push(`${f.tier} 档`);
+  if (f.tier !== 'all') parts.push(__t('{tier} 档', { tier: f.tier }));
   if (f.timeframe !== 'all') parts.push(TIMEFRAME_CN[f.timeframe]);
   parts.push(PROFILE_CN[f.profile]);
   if (f.topN > 0) parts.push(`Top ${f.topN}`);
-  if (f.sectors.length > 0) parts.push(`板块 ${f.sectors.length} 项`);
-  if (f.priceMin != null || f.priceMax != null) parts.push('价格区间');
-  if (f.minDollarVol > 0) parts.push(`成交额≥${fmtCompact(f.minDollarVol)}`);
-  if (f.minScore != null) parts.push(`强度≥${f.minScore}`);
-  return parts.join(' · ') || '默认条件';
+  if (f.sectors.length > 0) parts.push(__t('板块 {n} 项', { n: f.sectors.length }));
+  if (f.priceMin != null || f.priceMax != null) parts.push(__t('价格区间'));
+  if (f.minDollarVol > 0) parts.push(__t('成交额≥{v}', { v: fmtCompact(f.minDollarVol) }));
+  if (f.minScore != null) parts.push(__t('强度≥{n}', { n: f.minScore }));
+  return parts.join(' · ') || __t('默认条件');
 }
 
 function SuggestButton({ label, onClick }: { label: string; onClick: () => void }) {

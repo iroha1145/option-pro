@@ -16,6 +16,7 @@ import MobileDock from '@/components/MobileDock';
 import CommandPalette from '@/components/CommandPalette';
 import { pushRecent } from '@/lib/recentTickers';
 import Drawer from '@/components/Drawer';
+import { t as __t } from '../i18n/core.ts';
 
 /* 抽屉体只在用户点开个股时才需要，独立分包 */
 const StockDrawerBody = lazy(() => import('@/components/StockDrawerBody'));
@@ -29,7 +30,7 @@ const ShellContext = createContext<ShellContextValue | null>(null);
 
 export function useShell(): ShellContextValue {
   const ctx = useContext(ShellContext);
-  if (!ctx) throw new Error('useShell 必须在 <Layout> 内使用');
+  if (!ctx) throw new Error(__t('useShell 必须在 <Layout> 内使用'));
   return ctx;
 }
 

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { aiJobsApi } from '@/api/modules/ai-jobs';
 import type { AiJob } from '@/api/types';
+import { t } from '../../i18n/core.ts';
 
 export function useAiJob() {
   const [job, setJob] = useState<AiJob | null>(null);
@@ -35,7 +36,7 @@ export function useAiJob() {
           if (j.status === 'succeeded' || j.status === 'failed' || j.status === 'cancelled') stop();
         } catch (e) {
           if (!aliveRef.current) return;
-          setError(e instanceof Error ? e.message : '任务查询失败');
+          setError(e instanceof Error ? e.message : t('任务查询失败'));
           stop();
         }
       }, 2500);
@@ -54,7 +55,7 @@ export function useAiJob() {
         poll(j.id);
       } catch (e) {
         if (!aliveRef.current) return;
-        setError(e instanceof Error ? e.message : '任务创建失败');
+        setError(e instanceof Error ? e.message : t('任务创建失败'));
       }
     },
     [poll],
@@ -86,4 +87,4 @@ export function useAiJob() {
 }
 
 /** AI 输出纪律脚注：影响分非收益 · 置信度非胜率 */
-export const AI_DISCLAIMER = 'AI 输出仅供研究 · 影响分为方向性估计 · 非收益预测 · 置信度非胜率';
+export const AI_DISCLAIMER = t('AI 输出仅供研究 · 影响分为方向性估计 · 非收益预测 · 置信度非胜率');

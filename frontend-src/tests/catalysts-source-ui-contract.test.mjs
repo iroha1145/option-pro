@@ -50,8 +50,21 @@ function liveHelpers() {
         if (typeof row[key] === 'string' && row[key]) return row[key];
       }
       return null;
+    }, pickLabel: (row, ...keys) => {
+      for (const key of keys) {
+        if (typeof row[key] === 'string' && row[key]) return row[key];
+      }
+      return null;
     },
   };
+}
+
+/**
+ * i18n/core 的最小桩：这些测试断言的是数据映射/契约逻辑，不是翻译本身，回退原文
+ * 即可（与真实 t() 在 zh 语言下的行为一致），{n} 占位符按真实 core.ts 同款规则替换。
+ */
+function stubT(msgid, vars) {
+  return vars ? msgid.replace(/\{(\w+)\}/g, (whole, key) => (vars[key] === undefined || vars[key] === null ? whole : String(vars[key]))) : msgid;
 }
 
 function loadCatalystsModule(responses = {}) {
@@ -106,6 +119,7 @@ function loadCatalystsModule(responses = {}) {
           `/catalysts/market-focus-cycles/${idValue}`,
       };
     }
+    if (id === '../../i18n/core.ts') return { t: stubT };
     throw new Error(`unexpected import: ${id}`);
   };
   vm.runInNewContext(compiled, {

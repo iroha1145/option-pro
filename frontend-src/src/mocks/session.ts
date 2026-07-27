@@ -1,5 +1,6 @@
 /** Mock 会话 / 运行时状态（写操作在此落盘于内存） */
 import type { AccessStatus, RuntimeSettings } from '@/api/types';
+import { t } from '../i18n/core.ts';
 
 const session = {
   role: 'visitor' as AccessStatus['role'],
@@ -40,8 +41,8 @@ const settings: RuntimeSettings = {
 };
 
 const history: { id: string; at: string; actor: string; change: string }[] = [
-  { id: 'h1', at: new Date(Date.now() - 3 * 86_400_000).toISOString(), actor: 'owner', change: '开启 AI 分析开关' },
-  { id: 'h2', at: new Date(Date.now() - 6 * 86_400_000).toISOString(), actor: 'owner', change: '扫描间隔 10 → 15 分钟' },
+  { id: 'h1', at: new Date(Date.now() - 3 * 86_400_000).toISOString(), actor: 'owner', change: t('开启 AI 分析开关') },
+  { id: 'h2', at: new Date(Date.now() - 6 * 86_400_000).toISOString(), actor: 'owner', change: t('扫描间隔 10 → 15 分钟') },
 ];
 
 export function getSettings(): RuntimeSettings {

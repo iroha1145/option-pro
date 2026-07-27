@@ -23,12 +23,16 @@ from app.services.macro_conditions.registry import (
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 HINTS_PATH = REPOSITORY_ROOT / "frontend-src" / "src" / "lib" / "scoreHints.ts"
 
+# i18n 之后条目形如 `title: t('…')`：t() 的实参就是简体中文 msgid（gettext 风格，
+# 见 src/i18n/core.ts），所以「前端文案 == registry.description_zh 逐字一致」这条
+# 契约照旧成立——这里提取的是 msgid，译文层由前端的 i18n-coverage 测试另行把守。
+# title/body 捕获括号内文本（下面有精确相等断言）；note 保留整段（断言只用 in）。
 _ENTRY = re.compile(
     r"^  (?P<key>[A-Za-z0-9_]+): \{\n"
-    r"    title: '(?P<title>(?:[^'\\]|\\.)*)',\n"
+    r"    title: t\('(?P<title>(?:[^'\\]|\\.)*)'\),\n"
     r"    body:\n"
-    r"      '(?P<body>(?:[^'\\]|\\.)*)',\n"
-    r"    note: (?P<note>MACRO_MISSING_AWARE|'(?:[^'\\]|\\.)*'),\n"
+    r"      t\('(?P<body>(?:[^'\\]|\\.)*)'\),\n"
+    r"    note: (?P<note>MACRO_MISSING_AWARE|t\('(?:[^'\\]|\\.)*'\)),\n"
     r"  \},$",
     re.MULTILINE,
 )

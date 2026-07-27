@@ -12,6 +12,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
 import { SkeletonCard } from '@/components/shared/Skeleton';
+import { t } from '../../i18n/core.ts';
 
 /*
  * tip 是悬停时的一句话摘要，必须与 SCORE_HINTS 里的算法说明同源——三条原先与代码
@@ -23,17 +24,17 @@ import { SkeletonCard } from '@/components/shared/Skeleton';
  *     它自己看的是 VIX、信用价差、久期与回撤。
  */
 const DIMS: { key: keyof MarketRegime; label: string; tip: string; hint: ScoreHint }[] = [
-  { key: 'index_trend_score', label: '指数趋势', tip: 'SPY / QQQ / IWM / RSP 相对 50 与 200 日均线的位置，加 SPY 200 日线斜率。', hint: SCORE_HINTS.regimeTrend },
-  { key: 'market_momentum_score', label: '市场动量', tip: 'SPY / QQQ / IWM 的 20 日涨跌，加 QQQ−SPY、RSP−SPY 的 20 日相对差。', hint: SCORE_HINTS.regimeMomentum },
-  { key: 'market_breadth_score', label: '市场广度', tip: '11 个行业 ETF 中站上 50 / 200 日均线的比例，加等权对市值加权（RSP÷SPY）与小盘对大盘（IWM÷SPY）的 20 日相对强弱。', hint: SCORE_HINTS.regimeBreadth },
-  { key: 'market_volume_score', label: '量能配合', tip: 'SPY / QQQ 近 5 日方向与相对量能是否同向：放量上行加分，放量下行扣分。', hint: SCORE_HINTS.regimeVolume },
-  { key: 'risk_appetite_score', label: '风险偏好', tip: 'VIX 水平与一年分位、HYG−TLT 与 HYG−IEF 信用价差、10 年期利率变化、久期、SPY / QQQ 回撤。', hint: SCORE_HINTS.regimeRiskAppetite },
-  { key: 'risk_on_spread_score', label: '风险利差', tip: '十组进攻／防守资产对的 20 日相对价差（QQQ/SPY、SOXX/XLK、HYG/IEF、XLY/XLP 等）。', hint: SCORE_HINTS.regimeRiskOn },
+  { key: 'index_trend_score', label: t('指数趋势'), tip: t('SPY / QQQ / IWM / RSP 相对 50 与 200 日均线的位置，加 SPY 200 日线斜率。'), hint: SCORE_HINTS.regimeTrend },
+  { key: 'market_momentum_score', label: t('市场动量'), tip: t('SPY / QQQ / IWM 的 20 日涨跌，加 QQQ−SPY、RSP−SPY 的 20 日相对差。'), hint: SCORE_HINTS.regimeMomentum },
+  { key: 'market_breadth_score', label: t('市场广度'), tip: t('11 个行业 ETF 中站上 50 / 200 日均线的比例，加等权对市值加权（RSP÷SPY）与小盘对大盘（IWM÷SPY）的 20 日相对强弱。'), hint: SCORE_HINTS.regimeBreadth },
+  { key: 'market_volume_score', label: t('量能配合'), tip: t('SPY / QQQ 近 5 日方向与相对量能是否同向：放量上行加分，放量下行扣分。'), hint: SCORE_HINTS.regimeVolume },
+  { key: 'risk_appetite_score', label: t('风险偏好'), tip: t('VIX 水平与一年分位、HYG−TLT 与 HYG−IEF 信用价差、10 年期利率变化、久期、SPY / QQQ 回撤。'), hint: SCORE_HINTS.regimeRiskAppetite },
+  { key: 'risk_on_spread_score', label: t('风险利差'), tip: t('十组进攻／防守资产对的 20 日相对价差（QQQ/SPY、SOXX/XLK、HYG/IEF、XLY/XLP 等）。'), hint: SCORE_HINTS.regimeRiskOn },
 ];
 
 /** 面板级口径：说清这六个数算自什么、以及为什么它不随选中的指数变。 */
 const DIMS_SOURCE_NOTE =
-  '六维算自同一篮固定基准：SPY / QQQ / IWM / RSP、11 个行业 ETF、VIX、HYG / IEF / TLT / 10 年期、GLD、SOXX / SMH —— 是全市场读数，不区分指数。';
+  t('六维算自同一篮固定基准：SPY / QQQ / IWM / RSP、11 个行业 ETF、VIX、HYG / IEF / TLT / 10 年期、GLD、SOXX / SMH —— 是全市场读数，不区分指数。');
 
 function regimeMean(r: MarketRegime): number {
   return DIMS.reduce((s, d) => s + r[d.key], 0) / DIMS.length;
@@ -61,8 +62,8 @@ export default function RegimePanel({
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title="数据暂不可用"
-          description={error ? error.message : '暂无市场环境六维数据'}
+          title={t("数据暂不可用")}
+          description={error ? error.message : t('暂无市场环境六维数据')}
           action={
             <button
               onClick={onRetry}
@@ -70,7 +71,7 @@ export default function RegimePanel({
               className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
             >
               {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
-              重试
+              {t('重试')}
             </button>
           }
         />
@@ -84,14 +85,14 @@ export default function RegimePanel({
     /* 后续区块 rise-in 减量：直接呈现 */
     <section
       className="card-surface flex h-full flex-col p-5"
-      aria-label="市场形态六维"
+      aria-label={t("市场形态六维")}
     >
       <div className="flex items-start justify-between">
-        <p className="eyebrow">市场形态六维 · MARKET REGIME</p>
+        <p className="eyebrow">{t('市场形态六维 · MARKET REGIME')}</p>
         <p className="text-right">
           <span className="font-mono text-data-l text-ink-900 tnum">{mean.toFixed(1)}</span>
           <span className="block text-micro text-ink-400">
-            综合均值
+            {t('综合均值')}
             <InfoHint hint={SCORE_HINTS.marketRegime} side="bottom" align="end" size={11} className="ml-1" />
           </span>
         </p>
@@ -128,7 +129,7 @@ export default function RegimePanel({
         })}
       </div>
       <p className="mt-4 border-t border-line pt-3 text-micro leading-relaxed text-ink-400">
-        色阶：&lt;50 弱 · 50–69 中性 · 70–84 强 · ≥85 极强
+        {t('色阶：&lt;50 弱 · 50–69 中性 · 70–84 强 · ≥85 极强')}
         <span className="mt-1 block">{DIMS_SOURCE_NOTE}</span>
       </p>
     </section>

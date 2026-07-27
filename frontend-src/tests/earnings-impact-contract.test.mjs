@@ -17,6 +17,14 @@ const earningsComponentsPath = path.resolve(here, '..', 'src', 'components', 'ea
 const commandPaletteSourcePath = path.resolve(here, '..', 'src', 'components', 'CommandPalette.tsx');
 const earningsTypesSourcePath = path.resolve(here, '..', 'src', 'components', 'earnings', 'types.ts');
 
+/**
+ * i18n/core 的最小桩：这些测试断言的是数据归一/校验逻辑，不是翻译本身，回退原文
+ * 即可（与真实 t() 在 zh 语言下的行为一致），{n} 占位符按真实 core.ts 同款规则替换。
+ */
+function stubT(msgid, vars) {
+  return vars ? msgid.replace(/\{(\w+)\}/g, (whole, key) => (vars[key] === undefined || vars[key] === null ? whole : String(vars[key]))) : msgid;
+}
+
 function loadNormalizer() {
   const source = fs.readFileSync(moduleSourcePath, 'utf8');
   const compiled = ts.transpileModule(source, {
@@ -53,6 +61,11 @@ function loadNormalizer() {
             if (typeof row[key] === 'string' && row[key]) return row[key];
           }
           return null;
+        }, pickLabel: (row, ...keys) => {
+          for (const key of keys) {
+            if (typeof row[key] === 'string' && row[key]) return row[key];
+          }
+          return null;
         },
         unwrap: (body, ...keys) => {
           if (Array.isArray(body)) return body;
@@ -64,6 +77,7 @@ function loadNormalizer() {
       };
     }
     if (id === '@/mocks/fixtures2') return {};
+    if (id === '../../i18n/core.ts') return { t: stubT };
     throw new Error(`unexpected import: ${id}`);
   };
   vm.runInNewContext(compiled, { module, exports: module.exports, require });
@@ -106,6 +120,11 @@ function loadUpcomingMapper() {
             if (typeof row[key] === 'string' && row[key]) return row[key];
           }
           return null;
+        }, pickLabel: (row, ...keys) => {
+          for (const key of keys) {
+            if (typeof row[key] === 'string' && row[key]) return row[key];
+          }
+          return null;
         },
         unwrap: (body, ...keys) => {
           if (Array.isArray(body)) return body;
@@ -117,6 +136,7 @@ function loadUpcomingMapper() {
       };
     }
     if (id === '@/mocks/fixtures2') return {};
+    if (id === '../../i18n/core.ts') return { t: stubT };
     throw new Error(`unexpected import: ${id}`);
   };
   vm.runInNewContext(compiled, { module, exports: module.exports, require });
@@ -137,6 +157,7 @@ function loadEarningsDateTools() {
     module,
     exports: module.exports,
     require: (id) => {
+      if (id === '../../i18n/core.ts') return { t: stubT };
       throw new Error(`unexpected runtime import: ${id}`);
     },
   });
@@ -235,6 +256,11 @@ test('财报日程不把缺失或未知时间伪装成盘前', () => {
             if (typeof row[key] === 'string' && row[key]) return row[key];
           }
           return null;
+        }, pickLabel: (row, ...keys) => {
+          for (const key of keys) {
+            if (typeof row[key] === 'string' && row[key]) return row[key];
+          }
+          return null;
         },
         unwrap: (body, ...keys) => {
           for (const key of keys) {
@@ -245,6 +271,7 @@ test('财报日程不把缺失或未知时间伪装成盘前', () => {
       };
     }
     if (id === '@/mocks/fixtures2') return {};
+    if (id === '../../i18n/core.ts') return { t: stubT };
     throw new Error(`unexpected import: ${id}`);
   };
   vm.runInNewContext(compiled, { module, exports: module.exports, require });
@@ -349,8 +376,8 @@ test('财报页面保留近期已公布结果并默认收纳长列表', () => {
   assert.equal(page.includes('const LIST_PAGE_SIZE = 24'), true);
   assert.equal(page.includes('prioritizeEarningsRows(filteredItems, visibleLimit)'), true);
   assert.equal(page.includes('visibleItems.length < filteredItems.length'), true);
-  assert.equal(page.includes('显示更多 · {Math.min(LIST_PAGE_SIZE'), true);
-  assert.equal(page.includes('收起至前 {LIST_PAGE_SIZE} 条'), true);
+  assert.equal(page.includes("{t('显示更多 ·')} {Math.min(LIST_PAGE_SIZE"), true);
+  assert.equal(page.includes("{t('收起至前')} {LIST_PAGE_SIZE} {t('条')}"), true);
   assert.equal(page.includes('row={selectedRow}'), true);
   assert.equal(page.includes('xl:col-span-8'), true);
   assert.equal(page.includes('xl:col-span-4'), true);
@@ -376,7 +403,7 @@ test('预期波动仅在存在真实数值时显示', () => {
   );
 
   assert.equal(list.includes("items.some((row) => exNum(row, 'expectedMovePct') != null)"), true);
-  assert.equal(list.includes('hasExpectedMove && <span className="eyebrow">预期波动</span>'), true);
+  assert.equal(list.includes("hasExpectedMove && <span className=\"eyebrow\">{t('预期波动')}</span>"), true);
   assert.equal(list.includes('hasExpectedMove && <ExpectedMoveCell'), true);
   assert.equal(cell.includes('if (pct == null) return <span aria-hidden="true" />'), true);
   assert.equal(cell.includes('—'), false);
@@ -465,8 +492,8 @@ test('访客能看到单股分析入口和终版状态', () => {
   assert.equal(page.includes('单股分析可用'), true);
   assert.equal(list.includes('ready === false && !isOwner'), false);
   /* 终版与重分析仍要各有可辨的状态，但标签必须短到能塞进 96px 的列里 */
-  assert.equal(list.includes("['最终', '查看最终分析']"), true);
-  assert.equal(list.includes("['分析中', '最终分析生成中']"), true);
+  assert.equal(list.includes("[t('最终'), t('查看最终分析')]"), true);
+  assert.equal(list.includes("[t('分析中'), t('最终分析生成中')]"), true);
   assert.match(list, /whitespace-nowrap/);
 });
 

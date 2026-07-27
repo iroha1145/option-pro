@@ -3,21 +3,22 @@
  */
 import { Link } from 'react-router';
 import Icon, { type IconName } from '@/components/icons';
+import { t } from '../../i18n/core.ts';
 
 const CARDS: { to: string; icon: IconName; title: string; en: string; desc: string }[] = [
   {
     to: '/sectors',
     icon: 'layers',
-    title: '板块透视',
+    title: t('板块透视'),
     en: 'SECTORS',
-    desc: '十一大板块热力矩阵与 IV 排名，看资金在哪个赛道抱团。',
+    desc: t('十一大板块热力矩阵与 IV 排名，看资金在哪个赛道抱团。'),
   },
   {
     to: '/breakouts',
     icon: 'radar',
-    title: '突破雷达',
+    title: t('突破雷达'),
     en: 'BREAKOUT RADAR',
-    desc: '当日突破信号与事件时间线，追踪生命周期状态迁移。',
+    desc: t('当日突破信号与事件时间线，追踪生命周期状态迁移。'),
   },
 ];
 

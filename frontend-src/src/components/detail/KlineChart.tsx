@@ -26,6 +26,7 @@ import {
 } from '@/lib/drawdown';
 import { fmtCompact, fmtPct, fmtPrice, fmtSigned } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { t } from '../../i18n/core.ts';
 import { CHART_RANGES, DEFAULT_CHART_RANGE, getDetailChart, type ChartRange } from './api';
 import type { ChartBarEx } from '@/mocks/fixtures';
 
@@ -67,7 +68,7 @@ function measureMarks(overlay: MeasureOverlay | null | undefined) {
         {
           xAxis: overlay.aIdx,
           lineStyle: { color: CH.brand500, width: 1, type: [4, 4] as number[] },
-          label: { ...MEASURE_LABEL_FONT, formatter: '起点', color: CH.brand600, position: 'insideEndTop' as const },
+          label: { ...MEASURE_LABEL_FONT, formatter: t('起点'), color: CH.brand600, position: 'insideEndTop' as const },
         },
       ],
     };
@@ -82,7 +83,7 @@ function measureMarks(overlay: MeasureOverlay | null | undefined) {
         lineStyle: { color: CH.ink400, width: 1, type: [6, 4] as number[] },
         label: {
           ...MEASURE_LABEL_FONT,
-          formatter: `${m.isDrawdown ? '高' : '低'} ${fmtPrice(m.startPrice)}`,
+          formatter: `${m.isDrawdown ? t('高') : t('低')} ${fmtPrice(m.startPrice)}`,
           color: CH.ink400,
           position: 'insideStartTop' as const,
         },
@@ -92,7 +93,7 @@ function measureMarks(overlay: MeasureOverlay | null | undefined) {
         lineStyle: { color: dir, width: 1, type: [6, 4] as number[] },
         label: {
           ...MEASURE_LABEL_FONT,
-          formatter: `${m.isDrawdown ? '低' : '高'} ${fmtPrice(m.endPrice)} · ${fmtPct(m.changePct)}`,
+          formatter: `${m.isDrawdown ? t('低') : t('高')} ${fmtPrice(m.endPrice)} · ${fmtPct(m.changePct)}`,
           color: dir,
           position: m.isDrawdown ? ('insideStartBottom' as const) : ('insideStartTop' as const),
         },
@@ -151,7 +152,7 @@ function buildOption(
         yAxis: prevClose,
         lineStyle: { color: CH.ink400, width: 1, type: [6, 4] as number[] },
         label: {
-          formatter: `昨收 ${fmtPrice(prevClose)}`,
+          formatter: t('昨收 {p}', { p: fmtPrice(prevClose) }),
           color: CH.ink400,
           fontSize: 10,
           fontFamily: '"IBM Plex Mono", monospace',
@@ -189,9 +190,9 @@ function buildOption(
           const color = chg >= 0 ? CH.up600 : CH.down600;
           return (
             `<div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:19px">` +
-            `<div style="color:#8A94B0">${barTooltipTitle(b.t, range)}${b.quote_only ? ' · 仅报价' : ''}</div>` +
-            `<div>收 <b style="color:${color}">${fmtPrice(b.c)}</b></div>` +
-            `<div>量 ${fmtCompact(b.v)}</div></div>`
+            `<div style="color:#8A94B0">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
+            `<div>${t('收 {c}', { c: `<b style="color:${color}">${fmtPrice(b.c)}</b>` })}</div>` +
+            `<div>${t('量 {v}', { v: fmtCompact(b.v) })}</div></div>`
           );
         },
       }),
@@ -315,13 +316,13 @@ function buildOption(
           `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#8A94B0">${k}</span><span>${v}</span></div>`;
         return (
           `<div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:19px;min-width:150px">` +
-          `<div style="color:#8A94B0;margin-bottom:2px">${barTooltipTitle(b.t, range)}${b.quote_only ? ' · <span style="color:#E8930C">仅报价</span>' : ''}</div>` +
-          row('开', fmtPrice(b.o)) +
-          row('高', fmtPrice(b.h)) +
-          row('低', fmtPrice(b.l)) +
-          row('收', `<b style="color:${color}">${fmtPrice(b.c)}</b>`) +
-          row('涨跌', `<span style="color:${color}">${sign}${Math.abs(chg).toFixed(2)} (${sign}${Math.abs(pct).toFixed(2)}%)</span>`) +
-          row('量', fmtCompact(b.v)) +
+          `<div style="color:#8A94B0;margin-bottom:2px">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · <span style="color:#E8930C">仅报价</span>') : ''}</div>` +
+          row(t('开'), fmtPrice(b.o)) +
+          row(t('高'), fmtPrice(b.h)) +
+          row(t('低'), fmtPrice(b.l)) +
+          row(t('收'), `<b style="color:${color}">${fmtPrice(b.c)}</b>`) +
+          row(t('涨跌'), `<span style="color:${color}">${sign}${Math.abs(chg).toFixed(2)} (${sign}${Math.abs(pct).toFixed(2)}%)</span>`) +
+          row(t('量'), fmtCompact(b.v)) +
           `</div>`
         );
       },
@@ -384,9 +385,9 @@ type MeasureState =
   | { phase: 'done'; aMs: number; bMs: number };
 
 function measureDurationText(range: ChartRange, m: RangeMeasure): string {
-  if (range === '1w') return `${m.barCount} 周`;
-  if (range === '1d') return `${m.barCount} 个交易日`;
-  return `${m.barCount} 根 · 跨 ${m.sessionDays} 个交易日`;
+  if (range === '1w') return t('{n} 周', { n: m.barCount });
+  if (range === '1d') return t('{n} 个交易日', { n: m.barCount });
+  return t('{n} 根 · 跨 {d} 个交易日', { n: m.barCount, d: m.sessionDays });
 }
 
 /** 与 MacroHistoryChart 叠加线按钮一致的开关样式 */
@@ -500,7 +501,7 @@ export default function KlineChart({
   );
 
   return (
-    <section className={className} aria-label={`${ticker} K 线图`}>
+    <section className={className} aria-label={t('{ticker} K 线图', { ticker })}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Segmented
           options={CHART_RANGES}
@@ -511,8 +512,8 @@ export default function KlineChart({
         <div className="flex flex-wrap items-center gap-2">
           <Segmented
             options={[
-              { value: 'candle' as ChartMode, label: 'K 线' },
-              { value: 'area' as ChartMode, label: '面积' },
+              { value: 'candle' as ChartMode, label: t('K 线') },
+              { value: 'area' as ChartMode, label: t('面积') },
             ]}
             value={mode}
             onChange={setMode}
@@ -521,23 +522,23 @@ export default function KlineChart({
             <button
               type="button"
               aria-pressed={basis === 'close'}
-              aria-label="按收盘价口径测量"
+              aria-label={t('按收盘价口径测量')}
               onClick={() => setBasis((prev) => (prev === 'close' ? 'wick' : 'close'))}
               className={toggleButtonCls(basis === 'close')}
             >
-              收盘口径
+              {t('收盘口径')}
             </button>
           )}
           <button
             type="button"
             aria-pressed={measureActive}
-            aria-label="回撤测量尺"
+            aria-label={t('回撤测量尺')}
             onClick={() =>
               setMeasure((prev) => (prev.phase === 'idle' ? { phase: 'selectStart' } : { phase: 'idle' }))
             }
             className={toggleButtonCls(measureActive)}
           >
-            回撤
+            {t('回撤')}
           </button>
         </div>
       </div>
@@ -545,7 +546,7 @@ export default function KlineChart({
       {data?._stale && (
         <p className="mt-3 flex items-center gap-1.5 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">
           <Icon name="bell" size={13} />
-          数据暂未刷新 · 显示最近一次结果（延迟行情）
+          {t('数据暂未刷新 · 显示最近一次结果（延迟行情）')}
         </p>
       )}
 
@@ -568,14 +569,14 @@ export default function KlineChart({
               <EmptyState
                 variant="empty"
                 image="/empty-chart.svg"
-                title="K 线暂不可用"
-                description={`${ticker} · ${CHART_RANGES.find((item) => item.value === range)?.label ?? range}数据暂不可用，其他周期仍可切换`}
+                title={t("K 线暂不可用")}
+                description={t('{ticker} · {range}数据暂不可用，其他周期仍可切换', { ticker, range: CHART_RANGES.find((item) => item.value === range)?.label ?? range })}
                 action={
                   <button
                     onClick={refresh}
                     className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] duration-fast hover:brightness-105"
                   >
-                    重试
+                    {t('重试')}
                   </button>
                 }
                 className="py-6"
@@ -593,7 +594,7 @@ export default function KlineChart({
                 option={option}
                 onInit={setChartInst}
                 className={measureActive ? 'cursor-crosshair' : undefined}
-                ariaLabel={`${ticker} ${range} ${mode === 'candle' ? 'K 线' : '面积'}图`}
+                ariaLabel={t('{ticker} {range} {mode}图', { ticker, range, mode: mode === 'candle' ? t('K 线') : t('面积') })}
               />
             </motion.div>
           )}
@@ -603,16 +604,16 @@ export default function KlineChart({
       {measureActive && (
         <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro">
           {measure.phase === 'selectStart' && (
-            <span className="text-ink-400">回撤尺：点击图表选择起点（Esc 退出）</span>
+            <span className="text-ink-400">{t('回撤尺：点击图表选择起点（Esc 退出）')}</span>
           )}
           {measure.phase === 'selectEnd' && (
-            <span className="text-ink-400">回撤尺：再次点击选择终点（Esc 退出）</span>
+            <span className="text-ink-400">{t('回撤尺：再次点击选择终点（Esc 退出）')}</span>
           )}
           {measure.phase === 'done' && measurement && (
             <>
               <span className="text-ink-400">
-                {effectiveBasis === 'wick' ? '高—低' : '收盘—收盘'}
-                {measurement.isDrawdown ? '回撤' : '涨幅'}
+                {effectiveBasis === 'wick' ? t('高—低') : t('收盘—收盘')}
+                {measurement.isDrawdown ? t('回撤') : t('涨幅')}
               </span>
               <span
                 className={cn(
@@ -620,7 +621,7 @@ export default function KlineChart({
                   measurement.isDrawdown ? 'text-down-600' : 'text-up-600',
                 )}
               >
-                {fmtPct(measurement.changePct)}（{fmtSigned(measurement.changeAbs)}）
+                {t('{pct}（{abs}）', { pct: fmtPct(measurement.changePct), abs: fmtSigned(measurement.changeAbs) })}
               </span>
               <span className="font-mono tnum text-ink-400">
                 {fmtPrice(measurement.startPrice)} → {fmtPrice(measurement.endPrice)}
@@ -628,7 +629,7 @@ export default function KlineChart({
               <span className="text-ink-400">{measureDurationText(range, measurement)}</span>
               {measurement.recoveryPct !== null && (
                 <span className="text-ink-400">
-                  修复需 <span className="font-mono tnum">{fmtPct(measurement.recoveryPct)}</span>
+                  {t('修复需')} <span className="font-mono tnum">{fmtPct(measurement.recoveryPct)}</span>
                 </span>
               )}
               <button
@@ -636,19 +637,19 @@ export default function KlineChart({
                 onClick={() => setMeasure({ phase: 'selectStart' })}
                 className="text-brand-600 underline-offset-2 hover:underline"
               >
-                重测
+                {t('重测')}
               </button>
             </>
           )}
           {measureInvalid && (
             <>
-              <span className="text-warn-600">测量已失效（数据已更新）</span>
+              <span className="text-warn-600">{t('测量已失效（数据已更新）')}</span>
               <button
                 type="button"
                 onClick={() => setMeasure({ phase: 'selectStart' })}
                 className="text-brand-600 underline-offset-2 hover:underline"
               >
-                重新测量
+                {t('重新测量')}
               </button>
             </>
           )}
@@ -657,7 +658,12 @@ export default function KlineChart({
 
       <p className={cn('mt-2 flex items-center justify-between text-micro text-ink-400')}>
         <span className="font-mono tnum">
-          {data ? `共 ${data.bars.length} 根 · 末根${data.bars[data.bars.length - 1]?.quote_only ? '为仅报价 bar' : '已收齐'}` : ' '}
+          {data
+            ? t('共 {n} 根 · 末根{status}', {
+                n: data.bars.length,
+                status: data.bars[data.bars.length - 1]?.quote_only ? t('为仅报价 bar') : t('已收齐'),
+              })
+            : ' '}
         </span>
         <span className="font-mono tnum">{data ? `as of ${new Date(data.as_of).toLocaleString('zh-CN', { hour12: false })}` : ''}</span>
       </p>

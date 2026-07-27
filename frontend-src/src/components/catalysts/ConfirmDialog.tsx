@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
+import { t } from '../../i18n/core.ts';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -19,8 +20,8 @@ export default function ConfirmDialog({
   open,
   title,
   description,
-  confirmLabel = '确认',
-  cancelLabel = '取消',
+  confirmLabel = t('确认'),
+  cancelLabel = t('取消'),
   danger = false,
   onConfirm,
   onCancel,

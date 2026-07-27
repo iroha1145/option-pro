@@ -11,7 +11,7 @@ export type IconName =
   | 'arrow-up-right' | 'arrow-down-right' | 'external' | 'chevron-down' | 'chevron-right'
   | 'dots-grid' | 'flame-line' | 'spark-ai' | 'shield' | 'target' | 'flag' | 'x' | 'plus'
   | 'refresh' | 'wallet-gauge' | 'doc-quote' | 'logout' | 'arrow-up' | 'arrow-down' | 'minus'
-  | 'check' | 'menu' | 'list' | 'cards';
+  | 'check' | 'menu' | 'list' | 'cards' | 'languages';
 
 interface IconProps extends SVGProps<SVGSVGElement> {
   name: IconName;
@@ -192,6 +192,14 @@ const PATHS: Record<IconName, ReactElement> = {
       <rect x="12.4" y="3.6" width="8.2" height="8.2" rx="1.6" />
       <rect x="3.4" y="12.6" width="8.2" height="8.2" rx="1.6" />
       <rect x="12.4" y="12.6" width="8.2" height="8.2" rx="1.6" />
+    </>
+  ),
+  /* 地球经纬线：外圈 + 中央经线「透镜」+ 赤道横线，语言切换用 */
+  languages: (
+    <>
+      <circle cx="12" cy="12" r="8.3" />
+      <path d="M12 3.75c2.5 2.3 3.9 5.15 3.9 8.25s-1.4 5.95-3.9 8.25c-2.5-2.3-3.9-5.15-3.9-8.25s1.4-5.95 3.9-8.25Z" />
+      <path d="M3.9 12h16.2" />
     </>
   ),
 };

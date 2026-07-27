@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
+import { t } from '../../i18n/core.ts';
 
 export default function BreadthHistogram({
   data,
@@ -30,8 +31,8 @@ export default function BreadthHistogram({
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title={error?.code === 503 ? '数据暂不可用' : '加载失败'}
-          description={error ? error.message : '暂无强度分布数据'}
+          title={error?.code === 503 ? t('数据暂不可用') : t('加载失败')}
+          description={error ? error.message : t('暂无强度分布数据')}
           action={
             <button
               onClick={onRetry}
@@ -39,7 +40,7 @@ export default function BreadthHistogram({
               className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
             >
               {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
-              重试
+              {t('重试')}
             </button>
           }
         />
@@ -52,13 +53,13 @@ export default function BreadthHistogram({
     /* 后续区块 rise-in 减量：直接呈现 */
     <section
       className="card-surface flex h-full flex-col p-5"
-      aria-label="强度分布"
+      aria-label={t("强度分布")}
     >
       <div className="flex items-start justify-between">
-        <p className="eyebrow">强度分布 · 全市场</p>
+        <p className="eyebrow">{t('强度分布 · 全市场')}</p>
         <span className="inline-flex items-center gap-1 rounded-xs bg-up-50 px-1.5 py-0.5 font-mono text-micro text-up-700 tnum">
           <Icon name="target" size={12} strokeWidth={1.45} />
-          ≥85 · {data.ge85Count} 只
+          ≥85 · {data.ge85Count} {t('只')}
         </span>
       </div>
 
@@ -70,7 +71,7 @@ export default function BreadthHistogram({
           aria-hidden="true"
         >
           <span className="absolute -left-8 -top-0.5 whitespace-nowrap font-mono text-[9px] text-ink-400 tnum">
-            均值 {data.avgScore.toFixed(1)}
+            {t('均值')} {data.avgScore.toFixed(1)}
           </span>
         </div>
         <div className="flex h-28 items-end gap-1.5 pt-4">
@@ -90,7 +91,7 @@ export default function BreadthHistogram({
                   viewport={{ once: true, amount: 0.4 }}
                   transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: i * 0.04 }}
                   style={{ height: `${Math.max(4, (n / max) * 96)}px` }}
-                  aria-label={`强度 ${i * 10}–${i === 9 ? 100 : i * 10 + 9}：${n} 只`}
+                  aria-label={t('强度 {lo}–{hi}：{n} 只', { lo: i * 10, hi: i === 9 ? 100 : i * 10 + 9, n })}
                 />
               </div>
             );
@@ -104,9 +105,9 @@ export default function BreadthHistogram({
       </div>
 
       <p className="mt-auto pt-4 text-micro leading-relaxed text-ink-400">
-        桶宽 10 分 · 色阶 &lt;50 弱 / 50–69 / 70–84 / ≥85 强
+        {t('桶宽 10 分 · 色阶 &lt;50 弱 / 50–69 / 70–84 / ≥85 强')}
         {/* 「全市场」指扫描股票池整体，与上方选中的指数无关——不标出来读者会以为它跟着指数变。 */}
-        <span className="mt-1 block">统计范围为扫描股票池全体，不区分指数。</span>
+        <span className="mt-1 block">{t('统计范围为扫描股票池全体，不区分指数。')}</span>
       </p>
     </section>
   );

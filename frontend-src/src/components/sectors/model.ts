@@ -11,6 +11,7 @@ import type {
 } from '@/api/modules/sectors';
 import { heatColor } from '@/lib/chart';
 import type { MacroFitDriver } from '@/lib/macroFit';
+import { t } from '../../i18n/core.ts';
 
 export interface SectorVm {
   id: string;
@@ -62,9 +63,9 @@ export interface IvMetaVm {
 }
 
 const PERIOD_LABELS: Record<SectorPeriod, string> = {
-  '1mo': '1 个月',
-  '3mo': '3 个月',
-  '6mo': '6 个月',
+  '1mo': t('1 个月'),
+  '3mo': t('3 个月'),
+  '6mo': t('6 个月'),
 };
 
 export function periodLabel(period: SectorPeriod): string {
@@ -207,7 +208,7 @@ export function toneOnColor(bg: string): 'light' | 'dark' {
 }
 
 export const SOURCE_STATUS_CN: Record<Exclude<SectorSourceStatus, 'active'>, string> = {
-  degraded: '数据不完整',
-  stale: '数据过期',
-  insufficient_data: '数据不足',
+  degraded: t('数据不完整'),
+  stale: t('数据过期'),
+  insufficient_data: t('数据不足'),
 };

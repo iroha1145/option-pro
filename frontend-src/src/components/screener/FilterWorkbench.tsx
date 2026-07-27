@@ -21,13 +21,14 @@ import {
   type TierFilter,
   type Timeframe,
 } from './types';
+import { t as __t } from '../../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const SPRING_POP = { type: 'spring', stiffness: 520, damping: 32 } as const;
 
 /* ---------------- 分档 Segmented（自定义：带 Mono 11 数量徽标） ---------------- */
 const TIER_OPTIONS: { value: TierFilter; label: string }[] = [
-  { value: 'all', label: '全部' },
+  { value: 'all', label: __t('全部') },
   { value: 'S', label: 'S' },
   { value: 'A', label: 'A' },
   { value: 'B', label: 'B' },
@@ -46,12 +47,12 @@ function TierSegmented({
   coversPool: boolean;
   onChange: (v: TierFilter) => void;
 }) {
-  const scopeNote = coversPool ? '已评分候选池' : '当前快照返回的行';
+  const scopeNote = coversPool ? __t('已评分候选池') : __t('当前快照返回的行');
   return (
     <div
       role="tablist"
-      aria-label={`强度分档 · 计数基于${scopeNote}`}
-      title={`分档计数基于${scopeNote}`}
+      aria-label={__t('强度分档 · 计数基于{scope}', { scope: scopeNote })}
+      title={__t('分档计数基于{scope}', { scope: scopeNote })}
       className="no-scrollbar inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-md border border-line bg-card-warm p-0.5"
     >
       {TIER_OPTIONS.map((o) => {
@@ -208,13 +209,13 @@ export function ScanButton({
         {scanning ? (
           <>
             <span className="size-[18px] animate-spin rounded-full border-2 border-white/35 border-t-white" aria-hidden="true" />
-            <span className="text-body-s font-medium">扫描中 · 等待后台结果</span>
+            <span className="text-body-s font-medium">{__t('扫描中 · 等待后台结果')}</span>
           </>
         ) : (
           <>
             <Icon name="crosshair" size={16} />
-            <span className="text-body-s font-medium">开始扫描</span>
-            <span className="font-mono text-micro text-white/70 tnum">≈{universeCount} 只</span>
+            <span className="text-body-s font-medium">{__t('开始扫描')}</span>
+            <span className="font-mono text-micro text-white/70 tnum">≈{universeCount} {__t('只')}</span>
           </>
         )}
       </span>
@@ -293,12 +294,12 @@ export default function FilterWorkbench({
       animate="show"
       variants={{ show: { transition: { staggerChildren: 0.06 } } }}
       className="card-surface p-4 sm:p-5"
-      aria-label="筛选工作台"
+      aria-label={__t("筛选工作台")}
     >
       {/* 行 1 · 分档与预设 */}
       <motion.div variants={row} className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3">
         <div className="w-full min-w-0 sm:w-auto">
-          <FieldLabel>强度分档</FieldLabel>
+          <FieldLabel>{__t('强度分档')}</FieldLabel>
           <TierSegmented
             value={draft.tier}
             counts={universe.tierCounts}
@@ -308,9 +309,9 @@ export default function FilterWorkbench({
         </div>
         <div className="hidden h-9 w-px bg-line sm:block" aria-hidden="true" />
         <div className="w-full min-w-0 sm:w-auto sm:flex-1">
-          <FieldLabel>预设策略</FieldLabel>
+          <FieldLabel>{__t('预设策略')}</FieldLabel>
           {presetsFailed ? (
-            <p className="flex h-8 items-center text-caption text-ink-400">预设暂不可用 · 使用默认分档</p>
+            <p className="flex h-8 items-center text-caption text-ink-400">{__t('预设暂不可用 · 使用默认分档')}</p>
           ) : presets === null ? (
             <div className="flex gap-2" aria-hidden="true">
               {Array.from({ length: 3 }, (_, i) => (
@@ -351,7 +352,7 @@ export default function FilterWorkbench({
       {/* 行 2 · 周期 / 偏好 / Top N */}
       <motion.div variants={row} className="flex flex-wrap items-end gap-x-6 gap-y-3">
         <div>
-          <FieldLabel>周期</FieldLabel>
+          <FieldLabel>{__t('周期')}</FieldLabel>
           <Segmented<Timeframe>
             options={(['short', 'mid', 'long', 'all'] as const).map((v) => ({ value: v, label: TIMEFRAME_CN[v] }))}
             value={draft.timeframe}
@@ -359,7 +360,7 @@ export default function FilterWorkbench({
           />
         </div>
         <div>
-          <FieldLabel>偏好</FieldLabel>
+          <FieldLabel>{__t('偏好')}</FieldLabel>
           <Segmented<ProfilePref>
             options={(['conservative', 'balanced', 'aggressive'] as const).map((v) => ({ value: v, label: PROFILE_CN[v] }))}
             value={draft.profile}
@@ -367,8 +368,8 @@ export default function FilterWorkbench({
           />
         </div>
         <div>
-          <FieldLabel>返回数量</FieldLabel>
-          <SelectField ariaLabel="返回数量 Top N" value={draft.topN} onChange={(topN) => patch({ topN })} options={TOPN_OPTIONS} />
+          <FieldLabel>{__t('返回数量')}</FieldLabel>
+          <SelectField ariaLabel={__t("返回数量 Top N")} value={draft.topN} onChange={(topN) => patch({ topN })} options={TOPN_OPTIONS} />
         </div>
       </motion.div>
 
@@ -380,7 +381,7 @@ export default function FilterWorkbench({
           data-screener-field="sectors"
           className="w-full min-w-0 flex-none sm:w-auto sm:flex-1"
         >
-          <FieldLabel>板块（多选）</FieldLabel>
+          <FieldLabel>{__t('板块（多选）')}</FieldLabel>
           {sectorOptions.length === 0 ? (
             <div className="flex flex-wrap gap-2" aria-hidden="true">
               {Array.from({ length: 5 }, (_, i) => (
@@ -422,24 +423,24 @@ export default function FilterWorkbench({
                   onClick={() => setShowAllSectors(false)}
                   className="flex h-7 shrink-0 items-center whitespace-nowrap rounded-xs px-1.5 text-caption text-ink-400 transition-colors hover:text-ink-600"
                 >
-                  收起
+                  {__t('收起')}
                 </button>
               )}
             </div>
           )}
         </div>
         <div data-screener-field="price">
-          <FieldLabel>价格区间</FieldLabel>
+          <FieldLabel>{__t('价格区间')}</FieldLabel>
           <div className="flex items-center gap-1.5">
-            <PriceInput value={draft.priceMin} placeholder="最低" ariaLabel="最低价格" onCommit={(priceMin) => patch({ priceMin })} />
+            <PriceInput value={draft.priceMin} placeholder={__t("最低")} ariaLabel={__t("最低价格")} onCommit={(priceMin) => patch({ priceMin })} />
             <span className="text-ink-300" aria-hidden="true">–</span>
-            <PriceInput value={draft.priceMax} placeholder="最高" ariaLabel="最高价格" onCommit={(priceMax) => patch({ priceMax })} />
+            <PriceInput value={draft.priceMax} placeholder={__t("最高")} ariaLabel={__t("最高价格")} onCommit={(priceMax) => patch({ priceMax })} />
           </div>
         </div>
         <div data-screener-field="dollar-volume">
-          <FieldLabel>成交额下限</FieldLabel>
+          <FieldLabel>{__t('成交额下限')}</FieldLabel>
           <SelectField
-            ariaLabel="成交额下限"
+            ariaLabel={__t("成交额下限")}
             value={draft.minDollarVol}
             onChange={(minDollarVol) => patch({ minDollarVol })}
             options={DOLLAR_VOL_OPTIONS}

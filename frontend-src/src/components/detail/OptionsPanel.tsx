@@ -29,6 +29,7 @@ import {
   type VolOiState,
 } from './optionAnalysis';
 import type { OptionChain, OptionChainRow } from '@/api/types';
+import { t } from '../../i18n/core.ts';
 
 const NEW_YORK_DATE = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/New_York',
@@ -103,16 +104,16 @@ const DIRECTION_META: Record<
   OptionAlertResult['direction'],
   { label: string; className: string }
 > = {
-  bullish: { label: '偏多', className: 'bg-up-50 text-up-700' },
-  bearish: { label: '偏空', className: 'bg-down-50 text-down-700' },
-  mixed: { label: '多空混合', className: 'bg-warn-50 text-warn-600' },
-  unknown: { label: '方向未知', className: 'bg-paper-2 text-ink-500' },
+  bullish: { label: t('偏多'), className: 'bg-up-50 text-up-700' },
+  bearish: { label: t('偏空'), className: 'bg-down-50 text-down-700' },
+  mixed: { label: t('多空混合'), className: 'bg-warn-50 text-warn-600' },
+  unknown: { label: t('方向未知'), className: 'bg-paper-2 text-ink-500' },
 };
 
 const CONFIDENCE_LABEL: Record<OptionAlertResult['confidence'], string> = {
-  high: '证据一致性高',
-  medium: '证据一致性中等',
-  low: '证据一致性低',
+  high: t('证据一致性高'),
+  medium: t('证据一致性中等'),
+  low: t('证据一致性低'),
 };
 
 /* ---------------- AI 期权解读（owner） ---------------- */
@@ -151,7 +152,7 @@ function AiOptionInsight({
       <div className="flex items-center justify-between gap-3">
         <p className="flex items-center gap-1.5 text-body-s font-medium text-ink-800">
           <Icon name="spark-ai" size={15} className="text-ai-600" />
-          AI 期权解读
+          {t('AI 期权解读')}
         </p>
         {!job && !confirming && (
           <button
@@ -159,27 +160,27 @@ function AiOptionInsight({
             disabled={!hasEvidence}
             title={
               hasEvidence
-                ? `使用当前期权链的 ${evidence.length} 条异动证据`
-                : '当前期权链没有达到异动阈值的合约'
+                ? t('使用当前期权链的 {n} 条异动证据', { n: evidence.length })
+                : t('当前期权链没有达到异动阈值的合约')
             }
             className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white transition-[filter] duration-fast hover:brightness-105 disabled:cursor-not-allowed disabled:bg-ink-300"
           >
-            {hasEvidence ? '生成解读' : '暂无异动'}
+            {hasEvidence ? t('生成解读') : t('暂无异动')}
           </button>
         )}
       </div>
 
       {!job && !confirming && chain && evidence.length === 0 && (
         <p className="mt-2.5 text-caption text-ink-500">
-          当前到期日没有达到成交量、成交量/持仓量或估算权利金阈值的合约，未创建付费任务。
+          {t('当前到期日没有达到成交量、成交量/持仓量或估算权利金阈值的合约，未创建付费任务。')}
         </p>
       )}
 
       {!job && confirming && (
         <div className="mt-2.5">
           <p className="text-caption text-ink-600">
-            将提交 {ticker} 当前到期日的 {evidence.length}{' '}
-            条真实异动证据、标的价和到期日，消耗 1 次模型额度，是否继续？
+            {t('将提交')} {ticker} {t('当前到期日的')} {evidence.length}{' '}
+            {t('条真实异动证据、标的价和到期日，消耗 1 次模型额度，是否继续？')}
           </p>
           <div className="mt-2 flex gap-2">
             <button
@@ -198,13 +199,13 @@ function AiOptionInsight({
               }}
               className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white hover:brightness-105"
             >
-              生成解读
+              {t('生成解读')}
             </button>
             <button
               onClick={() => setConfirming(false)}
               className="rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 hover:bg-paper-2"
             >
-              取消
+              {t('取消')}
             </button>
           </div>
         </div>
@@ -216,12 +217,12 @@ function AiOptionInsight({
             <span className="flex items-center gap-1.5">
               <span className="size-1.5 animate-led-pulse rounded-full bg-ai-600" />
               {job.status === 'queued'
-                ? '排队中…'
+                ? t('排队中…')
                 : job.progress === null
-                  ? '模型正在处理 · 暂无进度百分比'
-                  : `解读中 ${Math.round(job.progress)}%`}
+                  ? t('模型正在处理 · 暂无进度百分比')
+                  : t('解读中 {pct}%', { pct: Math.round(job.progress) })}
             </span>
-            <button onClick={() => void cancel()} className="text-ink-400 hover:text-ink-600">取消任务</button>
+            <button onClick={() => void cancel()} className="text-ink-400 hover:text-ink-600">{t('取消任务')}</button>
           </div>
           {job.progress !== null && (
             <div className="mt-1.5 h-1 overflow-hidden rounded-pill bg-line">
@@ -234,7 +235,7 @@ function AiOptionInsight({
         </div>
       )}
 
-      {error && <p className="mt-2.5 text-caption text-down-700">任务失败：{error}</p>}
+      {error && <p className="mt-2.5 text-caption text-down-700">{t('任务失败：')}{error}</p>}
 
       {job?.status === 'succeeded' && result && (
         <div className="mt-3 border-t border-ai-600/20 pt-3">
@@ -248,11 +249,11 @@ function AiOptionInsight({
               {DIRECTION_META[result.direction].label}
             </span>
             <span className="rounded-xs bg-card px-1.5 py-0.5 text-micro text-ink-500">
-              {CONFIDENCE_LABEL[result.confidence]} · 非胜率
+              {CONFIDENCE_LABEL[result.confidence]} {t('· 非胜率')}
             </span>
             {result.direction_status === 'unavailable_without_trade_side' && (
               <span className="text-micro text-ink-400">
-                缺少成交主动方，方向不可判定
+                {t('缺少成交主动方，方向不可判定')}
               </span>
             )}
           </div>
@@ -264,7 +265,7 @@ function AiOptionInsight({
           </p>
           {result.key_strikes.length > 0 && (
             <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-              <span className="text-micro text-ink-400">关键行权价</span>
+              <span className="text-micro text-ink-400">{t('关键行权价')}</span>
               {result.key_strikes.map((strike) => (
                 <span
                   key={strike}
@@ -276,13 +277,13 @@ function AiOptionInsight({
             </div>
           )}
           <p className="mt-2.5 border-t border-ai-600/15 pt-2 text-caption text-warn-600">
-            风险说明：{result.risk_note}
+            {t('风险说明：')}{result.risk_note}
           </p>
           <p className="mt-2 text-micro text-ink-400">
-            {AI_DISCLAIMER} · 到期 {expiration ?? '—'} · 输入证据 {evidence.length} 条
+            {AI_DISCLAIMER} {t('· 到期')} {expiration ?? '—'} {t('· 输入证据')} {evidence.length} {t('条')}
           </p>
           <button onClick={reset} className="mt-2 text-caption font-medium text-ai-600 hover:text-ai-600/80">
-            重新生成
+            {t('重新生成')}
           </button>
         </div>
       )}
@@ -290,17 +291,17 @@ function AiOptionInsight({
       {job?.status === 'succeeded' && !result && (
         <div className="mt-3 border-t border-ai-600/20 pt-3">
           <p className="text-caption text-down-700">
-            分析已完成，但没有返回可展示的结果。
+            {t('分析已完成，但没有返回可展示的结果。')}
           </p>
           <button onClick={reset} className="mt-2 text-caption font-medium text-ai-600">
-            重新生成
+            {t('重新生成')}
           </button>
         </div>
       )}
       {(job?.status === 'failed' || job?.status === 'cancelled') && (
         <p className="mt-2.5 text-caption text-ink-500">
-          任务{job.status === 'failed' ? '失败' : '已取消'} ·{' '}
-          <button onClick={reset} className="font-medium text-ai-600">重试</button>
+          {t('任务')}{job.status === 'failed' ? t('失败') : t('已取消')} ·{' '}
+          <button onClick={reset} className="font-medium text-ai-600">{t('重试')}</button>
         </p>
       )}
     </div>
@@ -370,8 +371,8 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
     return (
       <EmptyState
         icon="doc-quote"
-        title="该标的暂无期权数据"
-        description={`支持标的：${OPTION_SUPPORTED_LIST}`}
+        title={t("该标的暂无期权数据")}
+        description={t('支持标的：{list}', { list: OPTION_SUPPORTED_LIST })}
         className="py-8"
       />
     );
@@ -387,16 +388,16 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
         icon="doc-quote"
         title={
           loginExpired
-            ? '登录状态已失效'
+            ? t('登录状态已失效')
             : rateLimited
-              ? '期权链请求较频繁'
-              : '期权数据暂不可用'
+              ? t('期权链请求较频繁')
+              : t('期权数据暂不可用')
         }
         description={
           loginExpired
-            ? '请重新登录后查看期权数据'
-            : `期权数据暂时获取不到${
-                retrySeconds > 0 ? ` · ${retrySeconds} 秒后可重试` : ''
+            ? t('请重新登录后查看期权数据')
+            : `${t('期权数据暂时获取不到')}${
+                retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''
               }`
         }
         action={
@@ -417,7 +418,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
             >
               <Icon name="refresh" size={14} />
-              {retrying ? '正在重试' : retrySeconds > 0 ? `${retrySeconds} 秒后重试` : '重试'}
+              {retrying ? t('正在重试') : retrySeconds > 0 ? t('{n} 秒后重试', { n: retrySeconds }) : t('重试')}
             </button>
           )
         }
@@ -431,8 +432,8 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
     return (
       <EmptyState
         icon="doc-quote"
-        title="暂无到期日数据"
-        description="暂未获取到该标的的期权到期日"
+        title={t("暂无到期日数据")}
+        description={t("暂未获取到该标的的期权到期日")}
         action={
           <button
             type="button"
@@ -440,7 +441,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105"
           >
             <Icon name="refresh" size={14} />
-            重新拉取
+            {t('重新拉取')}
           </button>
         }
         className="py-8"
@@ -457,7 +458,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
             value={exp ?? ''}
             onChange={(e) => setExpiration(e.target.value)}
             className="h-9 appearance-none rounded-md border border-line-strong bg-card pl-3 pr-8 font-mono text-caption text-ink-800 tnum transition-shadow focus:shadow-focus-ring focus:outline-none"
-            aria-label="选择到期日"
+            aria-label={t("选择到期日")}
           >
             {expList.map((x) => (
               <option key={x} value={x}>
@@ -469,12 +470,12 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
         </label>
         {chain && (
           <p className="text-micro text-ink-400">
-            标的价{' '}
+            {t('标的价')}{' '}
             <span className="font-mono text-ink-600 tnum">
               {dash(chain.spot, (n) => fmtPrice(n))}
             </span>
             {chain.spot === null && (
-              <span className="ml-1.5 text-ink-400">· 标的现价不可用，价内侧与平值行未标注</span>
+              <span className="ml-1.5 text-ink-400">{t('· 标的现价不可用，价内侧与平值行未标注')}</span>
             )}
           </p>
         )}
@@ -482,9 +483,9 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
       {chain && (
         <SourceNote
           className="mt-2"
-          text={`期权数据为延迟数据${
-            chain.asOf ? ` · 更新于 ${fmtRelative(chain.asOf)}` : ''
-          }${chain.stale ? ' · 暂未刷新，显示最近一次结果' : ''}`}
+          text={`${t('期权数据为延迟数据')}${
+            chain.asOf ? t(' · 更新于 {time}', { time: fmtRelative(chain.asOf) }) : ''
+          }${chain.stale ? t(' · 暂未刷新，显示最近一次结果') : ''}`}
         />
       )}
 
@@ -496,9 +497,9 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
           <table className="min-w-[520px] w-full whitespace-nowrap border-collapse font-mono text-micro tnum">
             <thead className="sticky top-0 z-10">
               <tr className="bg-card-warm text-left font-sans text-micro text-ink-400">
-                <th className="px-2 py-2 font-medium" colSpan={2}>CALLS · 量/持 · 权利金</th>
-                <th className="px-2 py-2 text-center font-medium">行权价</th>
-                <th className="px-2 py-2 text-right font-medium" colSpan={2}>权利金 · 量/持 · PUTS</th>
+                <th className="px-2 py-2 font-medium" colSpan={2}>{t('CALLS · 量/持 · 权利金')}</th>
+                <th className="px-2 py-2 text-center font-medium">{t('行权价')}</th>
+                <th className="px-2 py-2 text-right font-medium" colSpan={2}>{t('权利金 · 量/持 · PUTS')}</th>
               </tr>
             </thead>
             <tbody>
@@ -526,10 +527,10 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
                       )}
                       title={
                         alert
-                          ? `成交异动 ${callBadge ?? putBadge ?? ''}${
+                          ? `${t('成交异动 {badge}', { badge: callBadge ?? putBadge ?? '' })}${
                               premiums.length > 0
-                                ? ` · 权利金流约 $${fmtCompact(Math.max(...premiums))}（估算）`
-                                : ' · 权利金不可估算（缺买卖价）'
+                                ? t(' · 权利金流约 ${amount}（估算）', { amount: fmtCompact(Math.max(...premiums)) })
+                                : t(' · 权利金不可估算（缺买卖价）')
                             }`
                           : undefined
                       }
@@ -575,7 +576,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
                         <span className="text-ink-800">{dash(r.putVol, fmtCompact)}</span>
                         <span className="text-ink-300"> / </span>
                         <span className="text-ink-500">{dash(r.putOi, fmtCompact)}</span>
-                        {alert && <Icon name="bolt" size={12} className="ml-1 inline text-warn-600" aria-label="成交异动" />}
+                        {alert && <Icon name="bolt" size={12} className="ml-1 inline text-warn-600" aria-label={t("成交异动")} />}
                       </td>
                     </motion.tr>
                   );
@@ -587,8 +588,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
       </div>
 
       <p className="mt-2 text-micro text-ink-400">
-        浅底为价内（ITM）侧 · 异动标注 vol/oi &gt; 3（倍数为该侧比值）；持仓量为 0 而当日有成交标 ∞（全部新开仓）·
-        「—」表示上游未提供该字段，不代表 0 · 权利金按买卖中价估算 · 非收益承诺
+        {t('浅底为价内（ITM）侧 · 异动标注 vol/oi &gt; 3（倍数为该侧比值）；持仓量为 0 而当日有成交标 ∞（全部新开仓）· 「—」表示上游未提供该字段，不代表 0 · 权利金按买卖中价估算 · 非收益承诺')}
       </p>
 
       <AiOptionInsight ticker={ticker} expiration={exp} chain={chain} />

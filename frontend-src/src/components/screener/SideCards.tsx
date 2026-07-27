@@ -11,6 +11,7 @@ import Icon from '@/components/icons';
 import HatchLegend from '@/components/shared/HatchLegend';
 import SourceNote from '@/components/shared/SourceNote';
 import { SUBSCORE_META, type Tier, type TierFilter } from './types';
+import { t as __t } from '../../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const SPRING_POP = { type: 'spring', stiffness: 520, damping: 32 } as const;
@@ -47,7 +48,7 @@ export function TierHistogram({
 
   return (
     <div className="card-surface p-5">
-      <p className="eyebrow">强度剖面 · 分档命中</p>
+      <p className="eyebrow">{__t('强度剖面 · 分档命中')}</p>
       <div className="mt-4 flex h-28 items-end gap-2.5">
         {TIERS.map((t, i) => {
           const hit = hits?.[t] ?? 0;
@@ -62,7 +63,7 @@ export function TierHistogram({
               animate={{ scale: active ? 1.04 : 1 }}
               transition={SPRING_POP}
               aria-pressed={active}
-              title={selectable ? `只看 ${t} 档` : 'D 档（<60）计入「全部」'}
+              title={selectable ? __t('只看 {tier} 档', { tier: t }) : __t('D 档（<60）计入「全部」')}
               className={cn(
                 'group relative flex h-full flex-1 flex-col items-center justify-end gap-1 rounded-t-[4px] border-b-2 pb-0.5 transition-colors duration-fast',
                 active ? 'border-brand-600 bg-brand-50' : 'border-transparent hover:bg-paper-2',
@@ -108,10 +109,10 @@ export function TierHistogram({
         ))}
       </div>
       {ref !== null ? (
-        <HatchLegend className="mt-3.5" actual="本次命中" estimate="全市场参照" />
+        <HatchLegend className="mt-3.5" actual={__t("本次命中")} estimate={__t("全市场参照")} />
       ) : (
         /* 契约无全市场直方图：只标注命中分布，参照留空优于编造 */
-        <p className="mt-3.5 text-micro text-ink-400">仅统计本次筛选命中的标的</p>
+        <p className="mt-3.5 text-micro text-ink-400">{__t('仅统计本次筛选命中的标的')}</p>
       )}
     </div>
   );
@@ -127,7 +128,7 @@ export function MethodCard({ profile }: { profile: StrengthProfile | null }) {
         aria-expanded={open}
         className="flex w-full items-center justify-between"
       >
-        <span className="eyebrow">评分方法 · {profile ? profile.name : '默认权重'}</span>
+        <span className="eyebrow">{__t('评分方法 ·')} {profile ? profile.name : __t('默认权重')}</span>
         <Icon name="chevron-down" size={14} className={cn('text-ink-400 transition-transform duration-200', open && 'rotate-180')} />
       </button>
       <AnimatePresence initial={false}>
@@ -142,7 +143,7 @@ export function MethodCard({ profile }: { profile: StrengthProfile | null }) {
           >
             {profile && !profile.weights ? (
               /* live 契约 /strength/profiles 仅返回枚举，无权重明细：隐藏权重条，不编造默认 25% */
-              <p className="mt-4 text-caption leading-[18px] text-ink-400">该档位暂无权重明细</p>
+              <p className="mt-4 text-caption leading-[18px] text-ink-400">{__t('该档位暂无权重明细')}</p>
             ) : (
               <div className="mt-4 space-y-2.5">
                 {SUBSCORE_META.map(({ key, label }, i) => {
@@ -169,10 +170,10 @@ export function MethodCard({ profile }: { profile: StrengthProfile | null }) {
             <p className="mt-3 text-caption leading-[18px] text-ink-500">
               {profile?.description ||
                 (profile && !profile.weights
-                  ? '偏好档位决定评分时侧重哪些因子，最终强度分 0–100，≥85 为高强度区。'
-                  : '最终强度分为四因子加权合成（0–100），≥85 为高强度区。')}
+                  ? __t('偏好档位决定评分时侧重哪些因子，最终强度分 0–100，≥85 为高强度区。')
+                  : __t('最终强度分为四因子加权合成（0–100），≥85 为高强度区。'))}
             </p>
-            <SourceNote className="mt-3" text="权重取自当前选用的评分档位" />
+            <SourceNote className="mt-3" text={__t("权重取自当前选用的评分档位")} />
           </motion.div>
         )}
       </AnimatePresence>

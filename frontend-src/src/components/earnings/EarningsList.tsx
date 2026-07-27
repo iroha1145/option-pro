@@ -13,6 +13,7 @@ import TickerLogo from '@/components/shared/TickerLogo';
 import EmptyState from '@/components/shared/EmptyState';
 import type { EarningsRow } from './types';
 import { daysUntil, exBool, exNum, exStr, fmtMDCN, relativeDayCN, weekdayCN } from './types';
+import { t } from '../../i18n/core.ts';
 
 /* ---------------- 迷你斜纹柱对（48px，预估 45° 斜纹 / 实际实心） ---------------- */
 function EpsPairBars({ est, act, index }: { est: number | null; act: number | null; index: number }) {
@@ -49,9 +50,9 @@ function EpsPairBars({ est, act, index }: { est: number | null; act: number | nu
 export function TimingBadge({ timing, className }: { timing: EarningsRow['timing']; className?: string }) {
   if (timing == null) {
     return (
-      <span className={cn('inline-flex items-center gap-1.5 text-ink-400', className)} aria-label="公布时间待定">
+      <span className={cn('inline-flex items-center gap-1.5 text-ink-400', className)} aria-label={t("公布时间待定")}>
         <Icon name="clock-ny" size={14} />
-        <span className="text-caption">时间待定</span>
+        <span className="text-caption">{t('时间待定')}</span>
       </span>
     );
   }
@@ -59,10 +60,10 @@ export function TimingBadge({ timing, className }: { timing: EarningsRow['timing
   return (
     <span
       className={cn('inline-flex items-center gap-1.5', bmo ? 'text-warn-600' : 'text-ai-600', className)}
-      aria-label={bmo ? '盘前公布' : '盘后公布'}
+      aria-label={bmo ? t('盘前公布') : t('盘后公布')}
     >
       <Icon name={bmo ? 'sun-bmo' : 'moon-amc'} size={14} />
-      <span className="text-caption">{bmo ? '盘前' : '盘后'}</span>
+      <span className="text-caption">{bmo ? t('盘前') : t('盘后')}</span>
     </span>
   );
 }
@@ -97,14 +98,14 @@ function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => voi
   /* 这一列只有 96px：标签必须短且单行，四个汉字会折行把 h-7 撑破。
      列头已经写着「AI 影响」，按钮不必再重复一遍，状态交给配色区分。 */
   const [label, title] = locked
-    ? ['最终', '查看最终分析']
+    ? [t('最终'), t('查看最终分析')]
     : finalizing
-      ? ['分析中', '最终分析生成中']
+      ? [t('分析中'), t('最终分析生成中')]
       : ready === true
-        ? ['查看', '查看 AI 影响分析']
+        ? [t('查看'), t('查看 AI 影响分析')]
         : ready === false
-          ? ['分析', '生成 AI 影响分析']
-          : ['AI 影响', 'AI 影响分析'];
+          ? [t('分析'), t('生成 AI 影响分析')]
+          : [t('AI 影响'), t('AI 影响分析')];
   return (
     <button
       onClick={(e) => {
@@ -140,18 +141,18 @@ interface EarningsListProps {
 export default function EarningsList({ items, selectedTicker, onSelectTicker, onNextWeek, filteredByDay }: EarningsListProps) {
   if (items.length === 0) {
     return (
-      <section className="card-surface" aria-label="即将公布">
+      <section className="card-surface" aria-label={t("即将公布")}>
         <EmptyState
           image="/empty-chart.svg"
-          title={filteredByDay ? '当日无财报' : '本周清淡'}
-          description={filteredByDay ? '选中的日期没有财报安排，切换日格或查看下周。' : '本周期没有财报安排，跳到下周看看。'}
+          title={filteredByDay ? t('当日无财报') : t('本周清淡')}
+          description={filteredByDay ? t('选中的日期没有财报安排，切换日格或查看下周。') : t('本周期没有财报安排，跳到下周看看。')}
           action={
             onNextWeek ? (
               <button
                 onClick={onNextWeek}
                 className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
               >
-                查看下周
+                {t('查看下周')}
                 <Icon name="chevron-right" size={13} />
               </button>
             ) : undefined
@@ -180,7 +181,7 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
   return (
     <section
       className="card-surface overflow-hidden md:max-h-[min(72vh,880px)] md:overflow-y-auto md:overscroll-contain [scrollbar-gutter:stable]"
-      aria-label="即将公布"
+      aria-label={t("即将公布")}
     >
       {/* 桌面列头（≥md） */}
       <div
@@ -189,13 +190,13 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
           gridColumns,
         )}
       >
-        <span className="eyebrow">代码</span>
-        <span className="eyebrow">时间</span>
-        <span className="eyebrow">EPS 预期 vs 实际</span>
-        <span className="eyebrow hidden 2xl:block">营收预期</span>
-        <span className="eyebrow hidden 2xl:block">市值</span>
-        {hasExpectedMove && <span className="eyebrow">预期波动</span>}
-        <span className="eyebrow text-right">AI 影响</span>
+        <span className="eyebrow">{t('代码')}</span>
+        <span className="eyebrow">{t('时间')}</span>
+        <span className="eyebrow">{t('EPS 预期 vs 实际')}</span>
+        <span className="eyebrow hidden 2xl:block">{t('营收预期')}</span>
+        <span className="eyebrow hidden 2xl:block">{t('市值')}</span>
+        {hasExpectedMove && <span className="eyebrow">{t('预期波动')}</span>}
+        <span className="eyebrow text-right">{t('AI 影响')}</span>
       </div>
 
       {groups.map((g) => {
@@ -215,11 +216,11 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
                   {fmtMDCN(g.date)} · {weekdayCN(g.date)}
                 </span>
                 {isToday && (
-                  <span className="rounded-xs bg-brand-600 px-1.5 py-px text-[10px] font-semibold leading-4 text-white">今天</span>
+                  <span className="rounded-xs bg-brand-600 px-1.5 py-px text-[10px] font-semibold leading-4 text-white">{t('今天')}</span>
                 )}
               </p>
               <p className="font-mono text-micro text-ink-400 tnum">
-                {relativeDayCN(g.date)} · {g.rows.length} 条
+                {relativeDayCN(g.date)} · {g.rows.length} {t('条')}
               </p>
             </div>
 
@@ -277,7 +278,7 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
                         <span className="text-ink-500">{est != null ? est.toFixed(2) : '—'}</span>
                         <span className="mx-1 text-ink-300">/</span>
                         <span className={act != null ? 'font-semibold text-ink-900' : 'text-ink-300'}>
-                          {act != null ? act.toFixed(2) : '未公布'}
+                          {act != null ? act.toFixed(2) : t('未公布')}
                         </span>
                       </span>
                     </span>
@@ -326,7 +327,7 @@ export default function EarningsList({ items, selectedTicker, onSelectTicker, on
                           <span className="text-ink-500">{est != null ? est.toFixed(2) : '—'}</span>
                           <span className="mx-1 text-ink-300">/</span>
                           <span className={act != null ? 'text-ink-900' : 'text-ink-300'}>
-                            {act != null ? act.toFixed(2) : '未公布'}
+                            {act != null ? act.toFixed(2) : t('未公布')}
                           </span>
                         </span>
                       </span>

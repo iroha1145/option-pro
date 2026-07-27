@@ -4,6 +4,7 @@ import { marketGet } from '../marketRead';
 import { asRec, pickN, pickS } from '../live';
 import * as fx from '@/mocks/fixtures';
 import type { MarketSignalsSnapshot, Signal, SignalType } from '../types';
+import { t } from '../../i18n/core.ts';
 
 /** 契约 signals 为指标对象；只把有明确高分方向的指标投影成“活跃信号”。 */
 function mapStockSignals(d: unknown): Signal[] {
@@ -29,7 +30,7 @@ function mapStockSignals(d: unknown): Signal[] {
     }
     return {
       type,
-      label: `${label} ${value} · ${topScore !== null && topScore >= (bottomScore ?? -1) ? '顶部风险' : '底部修复'} ${activeScore}`,
+      label: `${label} ${value} · ${topScore !== null && topScore >= (bottomScore ?? -1) ? t('顶部风险') : t('底部修复')} ${activeScore}`,
       at,
     };
   });

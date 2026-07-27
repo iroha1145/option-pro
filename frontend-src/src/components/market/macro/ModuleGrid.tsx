@@ -4,12 +4,13 @@
  */
 import ModuleCard from './ModuleCard';
 import type { MacroModule } from '@/api/modules/macro';
+import { t } from '../../../i18n/core.ts';
 
 export default function ModuleGrid({ modules }: { modules: MacroModule[] }) {
   if (!modules.length) {
     return (
       <p className="card-surface p-5 text-body-s text-ink-500">
-        暂无模块分数。数据接入后这里会显示七个模块。
+        {t('暂无模块分数。数据接入后这里会显示七个模块。')}
       </p>
     );
   }

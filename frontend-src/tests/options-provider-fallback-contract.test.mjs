@@ -52,6 +52,11 @@ function loadOptionsModule(marketGet) {
             if (typeof row[key] === 'string' && row[key]) return row[key];
           }
           return null;
+        }, pickLabel: (row, ...keys) => {
+          for (const key of keys) {
+            if (typeof row[key] === 'string' && row[key]) return row[key];
+          }
+          return null;
         },
         unwrap: (body, ...keys) => {
           if (Array.isArray(body)) return body;
@@ -86,7 +91,7 @@ test('期权链保留真实来源并按 Retry-After 冷却重试', async () => {
 
   assert.match(api, /provider:\s*pickS\(r,\s*'provider'\)/);
   assert.match(api, /asOf:\s*pickS\(r,\s*'as_of',\s*'asOf'\)/);
-  assert.match(panel, /chain\.asOf \? ` · 更新于 \$\{fmtRelative\(chain\.asOf\)\}`/);
+  assert.match(panel, /chain\.asOf \? t\(' · 更新于 \{time\}', \{ time: fmtRelative\(chain\.asOf\) \}\)/);
   assert.match(panel, /providerError\?\.retryAfter/);
   assert.match(panel, /disabled=\{retrySeconds > 0 \|\| retrying\}/);
   assert.match(panel, /期权数据暂时获取不到/);

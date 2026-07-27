@@ -12,6 +12,7 @@ import SessionLED from '@/components/shared/SessionLED';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
+import { t } from '../../i18n/core.ts';
 
 const MARKET_TO_SESSION: Record<MarketStatusDetail['market'], MarketSession> = {
   open: 'regular',
@@ -21,21 +22,21 @@ const MARKET_TO_SESSION: Record<MarketStatusDetail['market'], MarketSession> = {
 };
 
 const MARKET_LABEL: Record<MarketStatusDetail['market'], string> = {
-  open: '盘中',
-  premarket: '盘前',
-  postmarket: '盘后',
-  closed: '休市',
+  open: t('盘中'),
+  premarket: t('盘前'),
+  postmarket: t('盘后'),
+  closed: t('休市'),
 };
 
 const PHASE_LABEL: Record<string, string> = {
-  regular: '常规交易时段 · 9:30–16:00 ET',
-  'pre-market': '盘前交易 · 流动性较薄，报价点差偏大',
-  premarket: '盘前交易 · 流动性较薄，报价点差偏大',
-  'after-hours': '盘后交易 · 留意财报与公告驱动',
-  postmarket: '盘后交易 · 留意财报与公告驱动',
-  overnight: '隔夜休市 · 等待下一交易时段',
-  weekend: '周末休市 · 等待下一个交易日',
-  holiday: '节假日休市',
+  regular: t('常规交易时段 · 9:30–16:00 ET'),
+  'pre-market': t('盘前交易 · 流动性较薄，报价点差偏大'),
+  premarket: t('盘前交易 · 流动性较薄，报价点差偏大'),
+  'after-hours': t('盘后交易 · 留意财报与公告驱动'),
+  postmarket: t('盘后交易 · 留意财报与公告驱动'),
+  overnight: t('隔夜休市 · 等待下一交易时段'),
+  weekend: t('周末休市 · 等待下一个交易日'),
+  holiday: t('节假日休市'),
 };
 
 function CountdownRow({ label, at, now }: { label: string; at: string | null; now: number }) {
@@ -71,8 +72,8 @@ export default function StatusCard({
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title={error.code === 503 ? '数据暂不可用' : '加载失败'}
-          description={error.code === 503 ? '暂无市场状态数据' : error.message}
+          title={error.code === 503 ? t('数据暂不可用') : t('加载失败')}
+          description={error.code === 503 ? t('暂无市场状态数据') : error.message}
           action={
             <button
               onClick={onRetry}
@@ -80,7 +81,7 @@ export default function StatusCard({
               className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
             >
               {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
-              重试
+              {t('重试')}
             </button>
           }
         />
@@ -94,10 +95,10 @@ export default function StatusCard({
     /* 后续区块 rise-in 减量：直接呈现 */
     <section
       className="card-surface flex h-full flex-col p-5"
-      aria-label="市场状态"
+      aria-label={t("市场状态")}
     >
       <div className="flex items-start justify-between">
-        <p className="eyebrow">市场状态 · MARKET STATUS</p>
+        <p className="eyebrow">{t('市场状态 · MARKET STATUS')}</p>
         <Icon name="clock-ny" size={18} className="text-ink-400" />
       </div>
       <div className="mt-4 flex items-center gap-2.5">
@@ -108,13 +109,13 @@ export default function StatusCard({
         <p className="font-mono text-data-xl text-ink-900 tnum" suppressHydrationWarning>
           {fmtNyTime(new Date(now))}
         </p>
-        <p className="mt-1 text-micro text-ink-400">纽约时间（ET）· 每秒更新</p>
+        <p className="mt-1 text-micro text-ink-400">{t('纽约时间（ET）· 每秒更新')}</p>
       </div>
       <div className="mt-4">
-        <CountdownRow label="距下一开盘" at={data.next_open} now={now} />
-        <CountdownRow label="距下一收盘" at={data.next_close} now={now} />
+        <CountdownRow label={t("距下一开盘")} at={data.next_open} now={now} />
+        <CountdownRow label={t("距下一收盘")} at={data.next_close} now={now} />
         <div className="flex items-center justify-between border-y border-line py-2.5">
-          <span className="text-caption text-ink-500">节假日</span>
+          <span className="text-caption text-ink-500">{t('节假日')}</span>
           <span className="font-mono text-data-m text-ink-600 tnum">{data.holiday ?? '—'}</span>
         </div>
       </div>

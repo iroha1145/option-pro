@@ -3,6 +3,7 @@
  * 轨道 line 色 3px 圆角，填充 grow-bar；色阶 <50 ink-300 / 50–69 brand-400 / 70–84 brand-600 / ≥85 up-600
  */
 import { cn } from '@/lib/utils';
+import { t } from '../../i18n/core.ts';
 
 export function strengthBarClass(score: number): string {
   if (score >= 85) return 'bg-up-600';
@@ -25,7 +26,7 @@ export default function StrengthBar({
   /* live 无强度分（契约未覆盖）：空轨道 + 「—」，不编造 0 分 */
   const valid = typeof score === 'number' && Number.isFinite(score);
   return (
-    <span className={cn('inline-flex items-center gap-2', className)} aria-label={valid ? `强度分 ${score}` : '强度分缺失'}>
+    <span className={cn('inline-flex items-center gap-2', className)} aria-label={valid ? t('强度分 {score}', { score }) : t('强度分缺失')}>
       <span className="h-[3px] overflow-hidden rounded-pill bg-line" style={{ width }} role="presentation">
         {valid && (
           <span

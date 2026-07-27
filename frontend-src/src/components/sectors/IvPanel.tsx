@@ -11,6 +11,7 @@ import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { useRetryCountdown } from '@/hooks/useRetryCountdown';
+import { t } from '../../i18n/core.ts';
 import SectorChips from './SectorChips';
 import type { IvMetaVm, IvRowVm } from './model';
 import { SOURCE_STATUS_CN, ivRankColor } from './model';
@@ -84,26 +85,26 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
       {/* 头：标题 + 徽标 + 排序 */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex items-center gap-2.5">
-          <h2 className="text-h3 text-ink-800">板块 IV 横截面排名</h2>
+          <h2 className="text-h3 text-ink-800">{t('板块 IV 横截面排名')}</h2>
           {meta.status !== 'active' && <SourceStatusBadge status={meta.status} />}
         </div>
         <div className="flex items-center gap-3">
           {meta.asOf && (
-            <span className="hidden font-mono text-micro text-ink-400 tnum sm:inline">更新于 {fmtRelative(meta.asOf)}</span>
+            <span className="hidden font-mono text-micro text-ink-400 tnum sm:inline">{t('更新于')} {fmtRelative(meta.asOf)}</span>
           )}
           <button
             type="button"
             onClick={() => setDesc((v) => !v)}
             className="flex h-7 items-center gap-1 rounded-md border border-line bg-card px-2 text-caption text-ink-500 transition-colors duration-fast hover:border-line-strong hover:text-ink-800"
-            aria-label={`切换排序，当前板块排位${desc ? '降序' : '升序'}`}
+            aria-label={t('切换排序，当前板块排位{order}', { order: desc ? t('降序') : t('升序') })}
           >
             <Icon name={desc ? 'arrow-down' : 'arrow-up'} size={12} />
-            排位{desc ? '降序' : '升序'}
+            {t('排位')}{desc ? t('降序') : t('升序')}
           </button>
         </div>
       </div>
       <p className="mt-1 text-caption text-ink-400">
-        {desc ? '当前 ATM IV 较高的成分在前' : '当前 ATM IV 较低的成分在前'}
+        {desc ? t('当前 ATM IV 较高的成分在前') : t('当前 ATM IV 较低的成分在前')}
       </p>
 
       {/* 板块 pills（随 B1 联动，可手动改） */}
@@ -113,7 +114,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
       {meta.stale && !loading && !error && (
         <div className="mt-3 flex items-center gap-2 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-600" role="status">
           <Icon name="clock-ny" size={14} />
-          数据暂未刷新，以下为最近一次结果
+          {t('数据暂未刷新，以下为最近一次结果')}
         </div>
       )}
 
@@ -124,10 +125,10 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
         ) : error ? (
           <EmptyState
             image="/empty-chart.svg"
-            title={error.code === 503 ? 'IV 排名暂不可用' : 'IV 排名加载失败'}
+            title={error.code === 503 ? t('IV 排名暂不可用') : t('IV 排名加载失败')}
             description={
               error.code === 503
-                ? `期权数据暂时获取不到${retrySeconds > 0 ? ` · ${retrySeconds} 秒后可重试` : ''}`
+                ? `${t('期权数据暂时获取不到')}${retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''}`
                 : error.message
             }
             action={
@@ -138,15 +139,15 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
                 className="flex min-h-11 items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
               >
                 <Icon name="refresh" size={14} />
-                {retrySeconds > 0 ? `${retrySeconds} 秒后重试` : '重试'}
+                {retrySeconds > 0 ? t('{n} 秒后重试', { n: retrySeconds }) : t('重试')}
               </button>
             }
           />
         ) : rows.length === 0 ? (
           <EmptyState
             image="/empty-chart.svg"
-            title="该板块暂无 IV 排名数据"
-            description="该板块成分暂无可用的期权样本，可切换板块或重新加载"
+            title={t("该板块暂无 IV 排名数据")}
+            description={t("该板块成分暂无可用的期权样本，可切换板块或重新加载")}
             action={
               <button
                 type="button"
@@ -154,25 +155,25 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
                 className="flex min-h-11 items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105"
               >
                 <Icon name="refresh" size={14} />
-                重新加载
+                {t('重新加载')}
               </button>
             }
           />
         ) : (
-          <table className="min-w-[420px] w-full border-collapse" aria-label="板块 IV 横截面排名表">
+          <table className="min-w-[420px] w-full border-collapse" aria-label={t("板块 IV 横截面排名表")}>
             <thead>
               <tr className="border-b border-line text-left text-eyebrow font-sans uppercase tracking-[0.14em] text-ink-400">
-                <th className="py-2.5 pr-2 font-sans">代码</th>
-                <th className="px-2 py-2.5 text-right font-sans">价</th>
+                <th className="py-2.5 pr-2 font-sans">{t('代码')}</th>
+                <th className="px-2 py-2.5 text-right font-sans">{t('价')}</th>
                 <th className="px-2 py-2.5 font-sans">
-                  板块排位
+                  {t('板块排位')}
                   <InfoHint hint={SCORE_HINTS.sectorIvRank} side="bottom" size={11} className="ml-1" />
                 </th>
                 <th className="px-2 py-2.5 text-right font-sans">
                   IV%
                   <InfoHint hint={SCORE_HINTS.sectorAtmIv} side="bottom" align="end" size={11} className="ml-1" />
                 </th>
-                <th className="w-10" aria-label="操作" />
+                <th className="w-10" aria-label={t("操作")} />
               </tr>
             </thead>
             <tbody>
@@ -220,7 +221,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
 
       <SourceNote
         className="mt-4"
-        text="板块排位是同板块成分之间的横向比较，不是该股自己的历史高低位；期权与价格均为延迟数据"
+        text={t("板块排位是同板块成分之间的横向比较，不是该股自己的历史高低位；期权与价格均为延迟数据")}
       />
     </div>
   );

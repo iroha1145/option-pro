@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { fmtPrice } from '@/lib/format';
 import Icon from '@/components/icons';
 import type { IconName } from '@/components/icons';
+import { t } from '../../i18n/core.ts';
 
 interface PriceScaleProps {
   /** live 契约可空（如无目标价 target_price）：缺失的标记不画、不编造 */
@@ -46,9 +47,9 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
   /* 已知价位不足两个：画不出标尺，诚实空态 */
   if (known.length < 2 || !fin(current)) {
     return (
-      <div className={cn('w-full', className)} aria-label="价格标尺数据不足">
+      <div className={cn('w-full', className)} aria-label={t("价格标尺数据不足")}>
         <div className="flex h-9 items-center justify-center rounded-md border border-line bg-card-warm font-mono text-micro text-ink-300">
-          — 价位数据不足
+          {t('— 价位数据不足')}
         </div>
       </div>
     );
@@ -63,9 +64,9 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
   const cursorFrom = fin(trigger) ? trigger : current;
 
   const markers: MarkerDef[] = [
-    { key: 'invalid', label: '失效', icon: 'shield' as const, value: invalidation as number, iconCls: 'text-down-600' },
-    { key: 'trigger', label: '触发', icon: 'flag' as const, value: trigger as number, iconCls: 'text-brand-600' },
-    { key: 'target', label: '目标', icon: 'target' as const, value: target as number, iconCls: 'text-up-600' },
+    { key: 'invalid', label: t('失效'), icon: 'shield' as const, value: invalidation as number, iconCls: 'text-down-600' },
+    { key: 'trigger', label: t('触发'), icon: 'flag' as const, value: trigger as number, iconCls: 'text-brand-600' },
+    { key: 'target', label: t('目标'), icon: 'target' as const, value: target as number, iconCls: 'text-up-600' },
   ].filter((m) => fin(m.value));
   const currentPct = x(current);
   const nearbyMarker = [...markers]
@@ -78,7 +79,7 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
   return (
     <div
       className={cn('w-full', className)}
-      aria-label={`价格标尺：失效 ${fin(invalidation) ? fmtPrice(invalidation) : '—'}，触发 ${fin(trigger) ? fmtPrice(trigger) : '—'}，目标 ${fin(target) ? fmtPrice(target) : '—'}，现价 ${fmtPrice(current)}`}
+      aria-label={t('价格标尺：失效 {invalid}，触发 {trigger}，目标 {target}，现价 {current}', { invalid: fin(invalidation) ? fmtPrice(invalidation) : '—', trigger: fin(trigger) ? fmtPrice(trigger) : '—', target: fin(target) ? fmtPrice(target) : '—', current: fmtPrice(current) })}
     >
       {/* marker 图标行 */}
       <div className="relative h-4">
@@ -123,7 +124,7 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
             className={cn('absolute', edgeAnchor(x(current)))}
           >
             <span className="block text-[10px] leading-[14px] text-brand-600">
-              {nearbyMarker ? `${nearbyMarker.label} / 现价` : '现价'}
+              {nearbyMarker ? t('{marker} / 现价', { marker: nearbyMarker.label }) : t('现价')}
             </span>
             <span
               className={cn(

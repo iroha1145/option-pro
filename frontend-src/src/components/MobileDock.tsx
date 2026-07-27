@@ -8,17 +8,20 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAccess } from '@/hooks/useAccess';
 import Icon, { type IconName } from '@/components/icons';
+import Segmented from '@/components/shared/Segmented';
+import { LOCALES, getLocale, setLocale, t } from '../i18n/core.ts';
 
+/* setLocale() 整页重载才会切语言，模块级常量在加载期求值一次即可，不需要每次渲染重算 */
 const DOCK_ITEMS: { label: string; path: string; icon: IconName }[] = [
-  { label: '自选', path: '/watchlist', icon: 'star-line' },
-  { label: '选股', path: '/screener', icon: 'filter-funnel' },
-  { label: '雷达', path: '/breakouts', icon: 'radar' },
-  { label: '板块', path: '/sectors', icon: 'layers' },
+  { label: t('自选'), path: '/watchlist', icon: 'star-line' },
+  { label: t('选股'), path: '/screener', icon: 'filter-funnel' },
+  { label: t('雷达'), path: '/breakouts', icon: 'radar' },
+  { label: t('板块'), path: '/sectors', icon: 'layers' },
 ];
 
 const MORE_ITEMS: { label: string; path: string; icon: IconName; desc: string }[] = [
-  { label: '财报日历', path: '/earnings', icon: 'calendar-spark', desc: '即将公布 × AI 影响' },
-  { label: '新闻催化', path: '/catalysts', icon: 'bolt', desc: '热点 · 情绪新闻流' },
+  { label: t('财报日历'), path: '/earnings', icon: 'calendar-spark', desc: t('即将公布 × AI 影响') },
+  { label: t('新闻催化'), path: '/catalysts', icon: 'bolt', desc: t('热点 · 情绪新闻流') },
 ];
 
 export default function MobileDock() {
@@ -74,7 +77,7 @@ export default function MobileDock() {
     <>
       <nav
         className="glass fixed inset-x-0 bottom-0 z-[60] flex h-[calc(4rem+env(safe-area-inset-bottom))] items-stretch border-t border-line px-2 pb-[env(safe-area-inset-bottom)] xl:hidden"
-        aria-label="移动端导航"
+        aria-label={t('移动端导航')}
       >
         {DOCK_ITEMS.slice(0, 2).map(renderItem)}
         {renderItem(DOCK_ITEMS[2])}
@@ -82,10 +85,10 @@ export default function MobileDock() {
         <button
           onClick={() => setMoreOpen(true)}
           className="flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5"
-          aria-label="更多"
+          aria-label={t('更多')}
         >
           <Icon name="menu" size={19} className="text-ink-400" />
-          <span className="text-[10px] leading-none text-ink-400">更多</span>
+          <span className="text-[10px] leading-none text-ink-400">{t('更多')}</span>
         </button>
       </nav>
 
@@ -109,13 +112,27 @@ export default function MobileDock() {
               className="fixed inset-x-0 bottom-0 z-[65] rounded-t-xl border-t border-line bg-card pb-[calc(env(safe-area-inset-bottom)+16px)] shadow-sh-3 xl:hidden"
               role="dialog"
               aria-modal="true"
-              aria-label="更多功能"
+              aria-label={t('更多功能')}
             >
               <div className="flex justify-center pb-1 pt-2 text-ink-300">
                 <Icon name="dots-grid" size={18} />
               </div>
-              <p className="eyebrow px-5 pb-2 pt-1">更多功能</p>
+              <p className="eyebrow px-5 pb-2 pt-1">{t('更多功能')}</p>
               <div className="px-3">
+                <div className="flex items-center justify-between gap-3 rounded-md px-3 py-3">
+                  <span className="flex items-center gap-3">
+                    <span className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-brand-600">
+                      <Icon name="languages" size={17} />
+                    </span>
+                    <span className="text-body-s font-medium text-ink-800">{t('界面语言')}</span>
+                  </span>
+                  <Segmented
+                    options={LOCALES.map((l) => ({ value: l.code, label: l.short }))}
+                    value={getLocale()}
+                    onChange={(code) => setLocale(code)}
+                  />
+                </div>
+                <div className="mx-3 my-2 border-t border-line" />
                 {MORE_ITEMS.map((m) => (
                   <button
                     key={m.path}
@@ -147,8 +164,8 @@ export default function MobileDock() {
                     <Icon name="shield" size={17} />
                   </span>
                   <span className="flex-1">
-                    <span className="block text-body-s font-medium text-ink-800">{isOwner ? 'Owner 已登录' : '访客只读模式'}</span>
-                    <span className="block text-micro text-ink-400">{isOwner ? '可执行写操作' : '登录后可强制刷新与 AI 分析'}</span>
+                    <span className="block text-body-s font-medium text-ink-800">{isOwner ? t('Owner 已登录') : t('访客只读模式')}</span>
+                    <span className="block text-micro text-ink-400">{isOwner ? t('可执行写操作') : t('登录后可强制刷新与 AI 分析')}</span>
                   </span>
                 </button>
               </div>

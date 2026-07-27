@@ -12,6 +12,7 @@ import {
   macroMissingReason,
   macroToneOf,
 } from '@/lib/macroFit';
+import { t } from '../../i18n/core.ts';
 
 interface Props {
   score: number | null | undefined;
@@ -33,7 +34,7 @@ export default function MacroFitBadge({
 }: Props) {
   const tone = macroToneOf(score, tailwind);
   if (tone === null || typeof score !== 'number') {
-    const reason = macroMissingReason(status) ?? '暂无宏观读数';
+    const reason = t(macroMissingReason(status) ?? '暂无宏观读数');
     return (
       <span
         className={cn(
@@ -42,7 +43,7 @@ export default function MacroFitBadge({
         )}
         title={reason}
       >
-        {compact ? '无读数' : reason}
+        {compact ? t('无读数') : reason}
       </span>
     );
   }
@@ -55,7 +56,7 @@ export default function MacroFitBadge({
       )}
     >
       <span className="font-mono tnum">{score.toFixed(1)}</span>
-      <span>{MACRO_TONE_LABEL[tone]}</span>
+      <span>{t(MACRO_TONE_LABEL[tone])}</span>
     </span>
   );
 }

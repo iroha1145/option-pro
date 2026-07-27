@@ -12,12 +12,13 @@ import { catalystsContract } from './api';
 import type { CatalystNewsItem, NewsAnalysisJob, NewsClassification, TrustedStockImpact } from './api';
 import { AnalysisStatusChip, ClassificationChip, ConfidenceLabel, ImpactValue, Led, StaleChip, TickerChip } from './bits';
 import ConfirmDialog from './ConfirmDialog';
+import { t as __t } from '../../i18n/core.ts';
 
 const TERMINAL: NewsAnalysisJob['status'][] = ['completed', 'failed', 'cancelled', 'insufficient_context'];
 const DIR_STYLE: Record<NewsClassification, { label: string; cls: string }> = {
-  bullish: { label: '利多', cls: 'bg-up-50 text-up-700' },
-  bearish: { label: '利空', cls: 'bg-down-50 text-down-700' },
-  neutral: { label: '中性', cls: 'bg-paper-2 text-ink-500 border border-line' },
+  bullish: { label: __t('利多'), cls: 'bg-up-50 text-up-700' },
+  bearish: { label: __t('利空'), cls: 'bg-down-50 text-down-700' },
+  neutral: { label: __t('中性'), cls: 'bg-paper-2 text-ink-500 border border-line' },
 };
 
 /* ---------------- 逐股影响卡 ---------------- */
@@ -38,7 +39,7 @@ function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: numbe
         <span className="ml-auto font-mono text-micro text-ink-400">{imp.horizon}</span>
       </div>
       <p className="mt-2 text-micro text-ink-500">
-        <span className="font-medium text-ink-600">机制 · {imp.mechanism}</span>
+        <span className="font-medium text-ink-600">{__t('机制 ·')} {imp.mechanism}</span>
       </p>
       <p className="mt-1 text-body-s leading-relaxed text-ink-600">{imp.reason}</p>
     </motion.div>
@@ -47,14 +48,14 @@ function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: numbe
 
 /* ---------------- 服务端任务进度 ---------------- */
 function JobStepper({ job }: { job: NewsAnalysisJob }) {
-  const label = job.status === 'queued' ? '任务排队中' : '模型分析中';
+  const label = job.status === 'queued' ? __t('任务排队中') : __t('模型分析中');
   return (
     <div className="rounded-sm border border-line bg-card px-3 py-2.5">
       <div className="flex min-w-0 items-center gap-2">
         <Led tone="brand" pulse={job.status === 'in_progress'} />
         <p className="truncate text-body-s font-medium text-ink-700">{label}</p>
         <span className="ml-auto shrink-0 font-mono text-micro text-ink-400 tnum">
-          {job.progress === null ? '等待服务端状态' : `${Math.round(job.progress)}%`}
+          {job.progress === null ? __t('等待服务端状态') : `${Math.round(job.progress)}%`}
         </span>
       </div>
       {job.progress !== null && (
@@ -109,7 +110,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
         onUpdate(n);
       })
       .catch(() => {
-        if (!dead) setLoadError('暂时打不开这条新闻的详情');
+        if (!dead) setLoadError(__t('暂时打不开这条新闻的详情'));
       });
     return () => {
       dead = true;
@@ -141,7 +142,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
         if (TERMINAL.includes(next.status)) {
           stopPoll();
           if (next.status === 'completed') {
-            toast.success('AI 分析已完成');
+            toast.success(__t('AI 分析已完成'));
             const fresh = await catalystsContract.news(job.newsId);
             setItem(fresh);
             onUpdate(fresh);
@@ -149,14 +150,14 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
             const fresh = await catalystsContract.news(job.newsId);
             setItem(fresh);
             onUpdate(fresh);
-            toast.info('规则判定信息不足', '未调用模型');
+            toast.info(__t('规则判定信息不足'), __t('未调用模型'));
           } else if (next.status === 'failed') {
-            toast.error('分析失败', next.error ?? '可重试');
+            toast.error(__t('分析失败'), next.error ?? __t('可重试'));
             const fresh = await catalystsContract.news(job.newsId);
             setItem(fresh);
             onUpdate(fresh);
           } else {
-            toast.info('任务已取消');
+            toast.info(__t('任务已取消'));
             const fresh = await catalystsContract.news(job.newsId);
             setItem(fresh);
             onUpdate(fresh);
@@ -187,9 +188,9 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
         const nextItem = { ...item, analysisStatus: (j.status === 'queued' ? 'queued' : 'in_progress') as CatalystNewsItem['analysisStatus'], analysisJobId: j.jobId };
         setItem(nextItem);
         onUpdate(nextItem);
-        toast.info('分析任务已提交', force ? '强制重新分析' : '可在本页查看真实状态');
+        toast.info(__t('分析任务已提交'), force ? __t('强制重新分析') : __t('可在本页查看真实状态'));
       } catch (e) {
-        toast.error('提交失败', e instanceof Error ? e.message : undefined);
+        toast.error(__t('提交失败'), e instanceof Error ? e.message : undefined);
       }
     },
     [item, onUpdate, toast],
@@ -202,7 +203,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
       const next = await catalystsContract.cancelAnalysisJob(job.jobId);
       setJob({ ...next });
     } catch (e) {
-      toast.error('取消失败', e instanceof Error ? e.message : undefined);
+      toast.error(__t('取消失败'), e instanceof Error ? e.message : undefined);
     }
   }, [job, toast]);
 
@@ -223,7 +224,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
       title={
         <span className="flex items-center gap-2">
           <Icon name="bolt" size={16} className="text-brand-600" />
-          <span className="eyebrow">NEWS DETAIL · 新闻详情</span>
+          <span className="eyebrow">{__t('NEWS DETAIL · 新闻详情')}</span>
         </span>
       }
     >
@@ -240,8 +241,8 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
           <span className="flex size-14 items-center justify-center rounded-lg border border-line bg-card-warm text-ink-400">
             <Icon name="doc-quote" size={26} />
           </span>
-          <h3 className="mt-4 text-h3 text-ink-800">详情不可用</h3>
-          <p className="mt-1.5 text-body-s text-ink-500">{loadError} · 列表摘要仍然有效</p>
+          <h3 className="mt-4 text-h3 text-ink-800">{__t('详情不可用')}</h3>
+          <p className="mt-1.5 text-body-s text-ink-500">{loadError} {__t('· 列表摘要仍然有效')}</p>
         </div>
       )}
       {item && (
@@ -253,7 +254,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
             <span className="font-mono tnum">
               {new Date(item.publishedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
             </span>
-            {item.sourceCount > 1 && <span className="rounded-xs bg-paper-2 px-1 py-px font-mono text-[10px]">{item.sourceCount} 源确认</span>}
+            {item.sourceCount > 1 && <span className="rounded-xs bg-paper-2 px-1 py-px font-mono text-[10px]">{item.sourceCount} {__t('源确认')}</span>}
             {item.isStale && <StaleChip />}
             <a
               href={item.url}
@@ -261,7 +262,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
               rel="noopener noreferrer"
               className="ml-auto inline-flex items-center gap-1 text-micro text-brand-600 transition-colors hover:text-brand-500"
             >
-              原文
+              {__t('原文')}
               <Icon name="external" size={12} />
             </a>
           </div>
@@ -276,18 +277,18 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
 
           {/* 关联代码 */}
           <div className="mt-4 flex flex-wrap items-center gap-1.5">
-            <span className="shrink-0 text-micro text-ink-400">关联代码</span>
+            <span className="shrink-0 text-micro text-ink-400">{__t('关联代码')}</span>
             {item.sourceTickers.map((t) => (
               <TickerChip key={t} ticker={t} />
             ))}
           </div>
 
           {/* ============ 模型分析区 ============ */}
-          <section className="mt-6 rounded-lg border border-line bg-card-warm/50 p-4" aria-label="模型分析区">
+          <section className="mt-6 rounded-lg border border-line bg-card-warm/50 p-4" aria-label={__t("模型分析区")}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="flex items-center gap-1.5 text-h3 text-ink-800">
                 <Icon name="spark-ai" size={15} className="text-ai-600" />
-                模型分析
+                {__t('模型分析')}
               </p>
               <AnalysisStatusChip status={running ? (job.status === 'queued' ? 'queued' : 'in_progress') : item.analysisStatus} />
             </div>
@@ -309,7 +310,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
                         onClick={() => setConfirm('cancel')}
                         className="mt-3 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-500 transition-colors hover:border-down-600/40 hover:text-down-700"
                       >
-                        取消任务
+                        {__t('取消任务')}
                       </button>
                     )}
                   </div>
@@ -340,7 +341,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
                   ))}
                 </div>
                 <p className="mt-3 border-t border-line pt-2.5 font-mono text-micro text-ink-400 tnum">
-                  AI 生成于{' '}
+                  {__t('AI 生成于')}{' '}
                   {new Date(analysis.generatedAt).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })}
                 </p>
               </motion.div>
@@ -350,22 +351,22 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
             {showInsufficient && (
               <div className="mt-4 rounded-md border border-line bg-paper-2 p-4 text-center">
                 <Icon name="doc-quote" size={22} className="mx-auto text-ink-300" />
-                <p className="mt-2 text-body-s font-medium text-ink-800">信息不足 · 未调用模型</p>
-                <p className="mt-1 text-micro text-ink-400">这条新闻信息量不足，未做 AI 分析</p>
+                <p className="mt-2 text-body-s font-medium text-ink-800">{__t('信息不足 · 未调用模型')}</p>
+                <p className="mt-1 text-micro text-ink-400">{__t('这条新闻信息量不足，未做 AI 分析')}</p>
               </div>
             )}
 
             {/* 失败 */}
             {showFailed && (
               <div className="mt-4 rounded-md border border-down-600/20 bg-down-50 p-3.5">
-                <p className="text-body-s font-medium text-down-700">分析失败</p>
-                <p className="mt-1 text-micro text-ink-500">{job?.error ?? '模型输出校验失败，可重试'}</p>
+                <p className="text-body-s font-medium text-down-700">{__t('分析失败')}</p>
+                <p className="mt-1 text-micro text-ink-500">{job?.error ?? __t('模型输出校验失败，可重试')}</p>
               </div>
             )}
 
             {/* 已取消 */}
             {showCancelled && !showFailed && (
-              <div className="mt-4 rounded-md border border-line bg-paper-2 p-3.5 text-center text-body-s text-ink-500">任务已取消</div>
+              <div className="mt-4 rounded-md border border-line bg-paper-2 p-3.5 text-center text-body-s text-ink-500">{__t('任务已取消')}</div>
             )}
 
             {/* 操作区 */}
@@ -379,7 +380,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
                         className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
                       >
                         <Icon name="spark-ai" size={13} />
-                        生成 AI 分析
+                        {__t('生成 AI 分析')}
                       </button>
                     )}
                     {(showCompleted || showFailed || showInsufficient) && (
@@ -388,12 +389,12 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
                         className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
                       >
                         <Icon name="refresh" size={13} />
-                        {showFailed || showInsufficient ? '重试分析（强制）' : '重新分析（强制）'}
+                        {showFailed || showInsufficient ? __t('重试分析（强制）') : __t('重新分析（强制）')}
                       </button>
                     )}
                   </>
                 ) : (
-                  <p className="text-micro text-ink-400">登录后可用模型分析</p>
+                  <p className="text-micro text-ink-400">{__t('登录后可用模型分析')}</p>
                 )}
               </div>
             )}
@@ -404,25 +405,25 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
       {/* 费用确认弹窗 */}
       <ConfirmDialog
         open={confirm === 'create'}
-        title="生成 AI 分析？"
-        description="将调用模型对该新闻进行情绪与影响分析，消耗模型预算并计入每日额度与任务上限。"
-        confirmLabel="生成分析"
+        title={__t("生成 AI 分析？")}
+        description={__t("将调用模型对该新闻进行情绪与影响分析，消耗模型预算并计入每日额度与任务上限。")}
+        confirmLabel={__t("生成分析")}
         onConfirm={() => void startAnalysis(false)}
         onCancel={() => setConfirm(null)}
       />
       <ConfirmDialog
         open={confirm === 'force'}
-        title="强制重新分析？"
-        description="将忽略既有结果重新调用模型，消耗模型预算并计入每日额度；后台可能因冷却或开关限制而拒绝。"
-        confirmLabel="重新分析"
+        title={__t("强制重新分析？")}
+        description={__t("将忽略既有结果重新调用模型，消耗模型预算并计入每日额度；后台可能因冷却或开关限制而拒绝。")}
+        confirmLabel={__t("重新分析")}
         onConfirm={() => void startAnalysis(true)}
         onCancel={() => setConfirm(null)}
       />
       <ConfirmDialog
         open={confirm === 'cancel'}
-        title="取消分析任务？"
-        description="任务取消后可重新发起；已产生的排队资源将释放。"
-        confirmLabel="取消任务"
+        title={__t("取消分析任务？")}
+        description={__t("任务取消后可重新发起；已产生的排队资源将释放。")}
+        confirmLabel={__t("取消任务")}
         danger
         onConfirm={() => void cancelJob()}
         onCancel={() => setConfirm(null)}

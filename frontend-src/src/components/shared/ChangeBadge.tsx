@@ -7,13 +7,14 @@
 import { cn } from '@/lib/utils';
 import { fmtPct, fmtSigned } from '@/lib/format';
 import Icon from '@/components/icons';
+import { t } from '../../i18n/core.ts';
 
 export default function ChangeBadge({
   value,
   className,
   size = 'md',
   format = 'percent',
-  pointsSuffix = '分',
+  pointsSuffix = t('分'),
 }: {
   value: number | null | undefined;
   className?: string;
@@ -30,7 +31,7 @@ export default function ChangeBadge({
           size === 'md' ? 'px-1.5 py-0.5 text-[13px] leading-[18px]' : 'px-1 py-px text-micro',
           className,
         )}
-        aria-label="涨跌数据缺失"
+        aria-label={t("涨跌数据缺失")}
       >
         —
       </span>
@@ -46,11 +47,11 @@ export default function ChangeBadge({
   const label =
     direction === 'flat'
       ? points
-        ? `持平 0 ${pointsSuffix}`
-        : '持平 0.00%'
+        ? t('持平 0 {suffix}', { suffix: pointsSuffix })
+        : t('持平 0.00%')
       : points
-        ? `${direction === 'up' ? '上升' : '下降'} ${magnitude}`
-        : `${direction === 'up' ? '涨' : '跌'} ${magnitude}`;
+        ? `${direction === 'up' ? t('上升') : t('下降')} ${magnitude}`
+        : `${direction === 'up' ? t('涨') : t('跌')} ${magnitude}`;
   const text = points
     ? direction === 'flat'
       ? `0.0 ${pointsSuffix}`

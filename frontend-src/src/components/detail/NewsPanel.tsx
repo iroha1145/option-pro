@@ -14,11 +14,12 @@ import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { fmtRelative } from '@/lib/format';
 import type { NewsItem, NewsSentiment } from '@/api/types';
+import { t } from '../../i18n/core.ts';
 
 const SENTIMENT_META: Record<NewsSentiment, { text: string; cls: string }> = {
-  positive: { text: '利多', cls: 'bg-up-50 text-up-700' },
-  neutral: { text: '中性', cls: 'bg-card-warm text-ink-500 border border-line-strong' },
-  negative: { text: '利空', cls: 'bg-down-50 text-down-700' },
+  positive: { text: t('利多'), cls: 'bg-up-50 text-up-700' },
+  neutral: { text: t('中性'), cls: 'bg-card-warm text-ink-500 border border-line-strong' },
+  negative: { text: t('利空'), cls: 'bg-down-50 text-down-700' },
 };
 
 const WINDOW_MS = 72 * 3600_000;
@@ -47,30 +48,30 @@ export default function NewsPanel({ ticker }: { ticker: string }) {
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <span className="flex items-center gap-1.5 text-body-s font-medium text-ink-800">
               <Icon name="spark-ai" size={15} className="text-ai-600" />
-              AI 财报影响
+              {t('AI 财报影响')}
             </span>
-            <span className="rounded-xs border border-ai-600/20 bg-card px-1.5 py-px text-micro font-medium text-ai-600">简体中文</span>
+            <span className="rounded-xs border border-ai-600/20 bg-card px-1.5 py-px text-micro font-medium text-ai-600">{t('简体中文')}</span>
             <Link to="/earnings" className="ml-auto flex items-center gap-1 text-caption font-medium text-ai-600 hover:text-ai-600/80">
-              查看财报页
+              {t('查看财报页')}
               <Icon name="chevron-right" size={13} />
             </Link>
           </div>
           <p className="mt-2 text-caption leading-5 text-ink-700">{impact.summary}</p>
-          <p className="mt-1.5 text-micro leading-4 text-ink-500">预期：{impact.expectation}</p>
+          <p className="mt-1.5 text-micro leading-4 text-ink-500">{t('预期：')}{impact.expectation}</p>
         </div>
       )}
 
       {items.length === 0 ? (
         <EmptyState
           image="/empty-news.svg"
-          title="72 小时内无相关新闻"
-          description="新的催化剂出现后将在电报纸上呈现"
+          title={t("72 小时内无相关新闻")}
+          description={t("新的催化剂出现后将在电报纸上呈现")}
           action={
             <Link
               to={`/catalysts?ticker=${encodeURIComponent(ticker)}`}
               className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
             >
-              去催化剂页浏览新闻流
+              {t('去催化剂页浏览新闻流')}
             </Link>
           }
           className="py-8"
@@ -103,7 +104,7 @@ export default function NewsPanel({ ticker }: { ticker: string }) {
           to={`/catalysts?ticker=${encodeURIComponent(ticker)}`}
           className="inline-flex items-center gap-1.5 text-caption font-medium text-brand-600 transition-colors hover:text-brand-700"
         >
-          更多相关新闻
+          {t('更多相关新闻')}
           <Icon name="arrow-up-right" size={13} />
         </Link>
       </div>

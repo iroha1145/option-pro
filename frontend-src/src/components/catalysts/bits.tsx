@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import type { NewsAnalysisStatus, NewsClassification } from './api';
+import { t } from '../../i18n/core.ts';
 
 /* ---------------- 状态 LED ---------------- */
 type LedTone = 'up' | 'down' | 'warn' | 'brand' | 'ai' | 'muted';
@@ -28,9 +29,9 @@ export function Led({ tone, pulse = false, className }: { tone: LedTone; pulse?:
 
 /* ---------------- 分类 chip（bullish 绿 / bearish 红 / neutral 灰） ---------------- */
 const CLS_STYLE: Record<NewsClassification, { label: string; cls: string }> = {
-  bullish: { label: '利多', cls: 'bg-up-50 text-up-700' },
-  bearish: { label: '利空', cls: 'bg-down-50 text-down-700' },
-  neutral: { label: '中性', cls: 'bg-paper-2 text-ink-500 border border-line' },
+  bullish: { label: t('利多'), cls: 'bg-up-50 text-up-700' },
+  bearish: { label: t('利空'), cls: 'bg-down-50 text-down-700' },
+  neutral: { label: t('中性'), cls: 'bg-paper-2 text-ink-500 border border-line' },
 };
 
 export function ClassificationChip({ classification, className }: { classification: NewsClassification; className?: string }) {
@@ -49,12 +50,12 @@ export function ClassificationChip({ classification, className }: { classificati
 
 /* ---------------- 分析状态 chip ---------------- */
 const ANALYSIS_STYLE: Record<NewsAnalysisStatus, { label: string; cls: string; led?: LedTone; pulse?: boolean }> = {
-  pending: { label: '未分析', cls: 'border border-line text-ink-400' },
-  queued: { label: '排队中', cls: 'bg-warn-50 text-warn-600', led: 'warn', pulse: true },
-  in_progress: { label: '分析中', cls: 'bg-brand-50 text-brand-600', led: 'brand', pulse: true },
-  completed: { label: '已分析', cls: 'bg-ai-50 text-ai-600' },
-  insufficient_context: { label: '信息不足', cls: 'bg-paper-2 text-ink-500 border border-line' },
-  failed: { label: '分析失败', cls: 'bg-down-50 text-down-700' },
+  pending: { label: t('未分析'), cls: 'border border-line text-ink-400' },
+  queued: { label: t('排队中'), cls: 'bg-warn-50 text-warn-600', led: 'warn', pulse: true },
+  in_progress: { label: t('分析中'), cls: 'bg-brand-50 text-brand-600', led: 'brand', pulse: true },
+  completed: { label: t('已分析'), cls: 'bg-ai-50 text-ai-600' },
+  insufficient_context: { label: t('信息不足'), cls: 'bg-paper-2 text-ink-500 border border-line' },
+  failed: { label: t('分析失败'), cls: 'bg-down-50 text-down-700' },
 };
 
 export function AnalysisStatusChip({ status, className }: { status: NewsAnalysisStatus; className?: string }) {
@@ -71,7 +72,7 @@ export function AnalysisStatusChip({ status, className }: { status: NewsAnalysis
 export function ConfidenceLabel({ value, className }: { value: number; className?: string }) {
   return (
     <span className={cn('font-mono text-micro text-ink-500 tnum', className)}>
-      {(value * 100).toFixed(0)}% <span className="text-ink-400">· 非胜率</span>
+      {(value * 100).toFixed(0)}% <span className="text-ink-400">{t('· 非胜率')}</span>
       <InfoHint hint={SCORE_HINTS.newsConfidence} size={11} className="ml-1" />
     </span>
   );
@@ -111,7 +112,7 @@ export function ImpactValue({
       {!bare && (
         <>
           {' '}
-          <span className="text-ink-400">· 非收益</span>
+          <span className="text-ink-400">{t('· 非收益')}</span>
           <InfoHint hint={SCORE_HINTS.newsImpact} size={11} className="ml-1" />
         </>
       )}
@@ -137,7 +138,7 @@ export function TickerChip({ ticker, onClick, className }: { ticker: string; onC
 /* ---------------- 热度计（5 段弧条，grow-bar  stagger） ---------------- */
 export function HeatMeter({ level, heat, className }: { level: number; heat: number; className?: string }) {
   return (
-    <span className={cn('inline-flex items-end gap-[3px]', className)} role="img" aria-label={`热度 ${heat}，${level} / 5 段`}>
+    <span className={cn('inline-flex items-end gap-[3px]', className)} role="img" aria-label={t('热度 {heat}，{level} / 5 段', { heat, level })}>
       {Array.from({ length: 5 }, (_, i) => (
         <motion.span
           key={i}
@@ -157,7 +158,7 @@ export function HeatMeter({ level, heat, className }: { level: number; heat: num
 export function StaleChip() {
   return (
     <span className="inline-flex items-center rounded-xs border border-line bg-card-warm px-1.5 py-0.5 text-micro font-medium text-ink-400">
-      过期
+      {t('过期')}
     </span>
   );
 }

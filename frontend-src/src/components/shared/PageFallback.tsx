@@ -13,18 +13,19 @@
  * **只用于路由级 Suspense。** 抽屉、面板等局部占位用 InlineFallback：那里没有页脚、
  * 也没有要压的位移，整屏高度只会白撑出一大片空白。
  */
+import { t } from '../../i18n/core.ts';
 export default function PageFallback() {
   return (
     <div
       className="flex min-h-screen items-start justify-center pt-[20vh]"
       role="status"
-      aria-label="页面加载中"
+      aria-label={t("页面加载中")}
     >
       <span
         className="size-5 animate-spin rounded-full border-2 border-line border-t-brand-600"
         aria-hidden="true"
       />
-      <span className="ml-2.5 text-caption text-ink-400">加载中…</span>
+      <span className="ml-2.5 text-caption text-ink-400">{t('加载中…')}</span>
     </div>
   );
 }

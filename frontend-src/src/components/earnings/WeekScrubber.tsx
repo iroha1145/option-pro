@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import type { EarningsRow } from './types';
 import { etToday, fmtMDCN, fmtMMDD, weekDays, weekdayCN } from './types';
+import { t as __t } from '../../i18n/core.ts';
 
 interface WeekScrubberProps {
   items: EarningsRow[];
@@ -26,7 +27,7 @@ interface WeekScrubberProps {
 const MAX_CHIPS = 3;
 
 const timingLabel = (timing: EarningsRow['timing']) => (
-  timing === 'bmo' ? '盘前' : timing === 'amc' ? '盘后' : '时间待定'
+  timing === 'bmo' ? __t('盘前') : timing === 'amc' ? __t('盘后') : __t('时间待定')
 );
 
 export default function WeekScrubber({
@@ -67,24 +68,24 @@ export default function WeekScrubber({
   }, [flashing]);
 
   return (
-    <section className="card-surface overflow-hidden" aria-label="周历">
+    <section className="card-surface overflow-hidden" aria-label={__t("周历")}>
       {/* 周切换条 */}
       <div className="flex h-11 items-center justify-between border-b border-line px-4">
         <button
           onClick={() => onWeekChange(-1)}
           className="flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-500 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
-          aria-label="上一周"
+          aria-label={__t("上一周")}
         >
           <Icon name="chevron-right" size={14} className="rotate-180" />
         </button>
         <p className="font-mono text-caption text-ink-600 tnum" aria-live="polite">
           {fmtMDCN(days[0])} – {fmtMDCN(days[6])}
-          <span className="ml-2 font-sans text-micro text-ink-400">美东 ET</span>
+          <span className="ml-2 font-sans text-micro text-ink-400">{__t('美东 ET')}</span>
         </p>
         <button
           onClick={() => onWeekChange(1)}
           className="flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-500 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
-          aria-label="下一周"
+          aria-label={__t("下一周")}
         >
           <Icon name="chevron-right" size={14} />
         </button>
@@ -121,7 +122,7 @@ export default function WeekScrubber({
                   role="button"
                   tabIndex={0}
                   aria-pressed={isSelected}
-                  aria-label={`${weekdayCN(date)} ${fmtMMDD(date)}，${dayItems.length} 条财报`}
+                  aria-label={__t('{weekday} {md}，{n} 条财报', { weekday: weekdayCN(date), md: fmtMMDD(date), n: dayItems.length })}
                   onClick={() => onSelectDay(isSelected ? null : date)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -143,7 +144,7 @@ export default function WeekScrubber({
                     <span className={cn('text-caption', isToday ? 'font-semibold text-brand-600' : 'text-ink-500')}>
                       {weekdayCN(date)}
                     </span>
-                    {isToday && <span className="size-1.5 rounded-full bg-brand-600" aria-label="今天" />}
+                    {isToday && <span className="size-1.5 rounded-full bg-brand-600" aria-label={__t("今天")} />}
                   </div>
                   <span className={cn('font-mono text-micro tnum', isToday ? 'text-brand-600' : 'text-ink-400')}>
                     {fmtMMDD(date)}
@@ -169,7 +170,7 @@ export default function WeekScrubber({
                                 e.stopPropagation();
                                 onSelectTicker(it.ticker, date);
                               }}
-                              aria-label={`${it.ticker} ${timingLabel(it.timing)}财报，查看 AI 影响`}
+                              aria-label={__t('{ticker} {timing}财报，查看 AI 影响', { ticker: it.ticker, timing: timingLabel(it.timing) })}
                               className={cn(
                                 'flex h-6 items-center gap-1 rounded-xs border-l-2 px-1 transition-[transform,background-color] duration-fast hover:-translate-y-px',
                                 active
@@ -195,7 +196,7 @@ export default function WeekScrubber({
 
                   {/* 每日数量 */}
                   <span className="mt-1 font-mono text-[10px] leading-4 text-ink-300 tnum">
-                    {dayItems.length > 0 ? `${dayItems.length} 条` : ''}
+                    {dayItems.length > 0 ? __t('{n} 条', { n: dayItems.length }) : ''}
                   </span>
                 </motion.div>
               );

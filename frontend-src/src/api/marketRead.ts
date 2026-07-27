@@ -1,4 +1,5 @@
 import { ApiError, get } from './client.ts';
+import { t } from '../i18n/core.ts';
 
 interface MarketReadOptions {
   /** Successful response freshness window. */
@@ -73,7 +74,7 @@ export function marketGet<T>(
       return Promise.resolve(hit.value as T);
     }
     return Promise.reject(
-      new ApiError(429, '市场数据请求过于频繁，请稍后重试', {
+      new ApiError(429, t('市场数据请求过于频繁，请稍后重试'), {
         bizCode: 'rate_limited',
         retryable: true,
         retryAfter: Math.ceil((marketBackoffUntil - now) / 1000),

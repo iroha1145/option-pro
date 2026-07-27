@@ -16,6 +16,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import { LIFECYCLE_CN, LIFECYCLE_TONE, SETUP_CN } from './types';
 import type { BreakoutEventFull, LifecycleTone } from './types';
+import { getLocale, t } from '../../i18n/core.ts';
 
 const PAGE = 12;
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -43,7 +44,13 @@ function hhmm(iso: string | null | undefined): string {
 
 function dayLabel(key: string): string {
   const d = new Date(`${key}T12:00:00`);
-  const week = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()];
+  const weekZh = [t('周日'), t('周一'), t('周二'), t('周三'), t('周四'), t('周五'), t('周六')][d.getDay()];
+  const week = t(weekZh);
+  const locale = getLocale();
+  // en：紧凑数字日期 + 缩写星期（"7/26 Sun"）；ja：原生日期写法（"7月26日（日）"）；
+  // zh：保留原版空格分词，三种语言各自的自然写法互不通用，不能共享一个模板。
+  if (locale === 'en') return `${d.getMonth() + 1}/${d.getDate()} ${week}`;
+  if (locale === 'ja') return `${d.getMonth() + 1}月${d.getDate()}日（${week}）`;
   return `${d.getMonth() + 1} 月 ${d.getDate()} 日 ${week}`;
 }
 
@@ -118,27 +125,27 @@ export default function HistoryRail({
   let rowIndex = 0;
 
   return (
-    <section aria-label="历史事件回溯" className="card-surface flex max-h-[560px] flex-col overflow-hidden">
+    <section aria-label={t("历史事件回溯")} className="card-surface flex max-h-[560px] flex-col overflow-hidden">
       {/* 标题行 + 副标 */}
       <div className="shrink-0 border-b border-line px-4 pb-2.5 pt-3.5">
         <p className="flex items-baseline justify-between gap-2">
           <span className="text-body-s font-semibold text-ink-900">
-            历史事件回溯 ·{' '}
+            {t('历史事件回溯 ·')}{' '}
             <span className="font-mono tnum">
-              {total !== null ? `共 ${total} 条` : `已加载 ${loadedCount} 条${serverHasMore ? '+' : ''}`}
+              {total !== null ? t('共 {n} 条', { n: total }) : t('已加载 {n} 条{suffix}', { n: loadedCount, suffix: serverHasMore ? '+' : '' })}
             </span>
           </span>
           {stale && (
-            <span className="rounded-xs border border-warn-600/40 bg-warn-50 px-1.5 py-px text-micro text-warn-600">已过期</span>
+            <span className="rounded-xs border border-warn-600/40 bg-warn-50 px-1.5 py-px text-micro text-warn-600">{t('已过期')}</span>
           )}
         </p>
         <p className="mt-1 text-micro text-ink-400">
-          按时间倒序
+          {t('按时间倒序')}
           {events.length !== loadedCount && (
-            <span className="font-mono tnum"> · 筛选出 {events.length} 条</span>
+            <span className="font-mono tnum"> {t('· 筛选出')} {events.length} {t('条')}</span>
           )}
           <span className="mx-1 text-ink-300" aria-hidden="true">·</span>
-          点击行打开事件详情
+          {t('点击行打开事件详情')}
         </p>
       </div>
 
@@ -150,28 +157,28 @@ export default function HistoryRail({
           <EmptyState
             variant="error"
             icon="doc-quote"
-            title={error.code === 503 ? '事件数据暂不可用' : '事件加载失败'}
-            description={error.code === 503 ? '稍后刷新再试' : error.message}
+            title={error.code === 503 ? t('事件数据暂不可用') : t('事件加载失败')}
+            description={error.code === 503 ? t('稍后刷新再试') : error.message}
             action={
               <button
                 onClick={onRetry}
                 className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
               >
-                重试
+                {t('重试')}
               </button>
             }
           />
         ) : events.length === 0 ? (
           <EmptyState
             image="/empty-radar.svg"
-            title="暂无匹配的历史事件"
-            description="放宽页头筛选条件，或等雷达下一轮扫描把事件沉淀到这里"
+            title={t("暂无匹配的历史事件")}
+            description={t("放宽页头筛选条件，或等雷达下一轮扫描把事件沉淀到这里")}
             action={
               <button
                 onClick={onRetry}
                 className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
               >
-                重新加载
+                {t('重新加载')}
               </button>
             }
           />
@@ -182,7 +189,7 @@ export default function HistoryRail({
                 {/* 日期分组小头（Serif 13px + 计数） */}
                 <div className="flex items-baseline justify-between border-b border-line bg-card-warm px-3 py-1.5">
                   <p className="font-display text-[13px] leading-[18px] text-ink-800">{dayLabel(day)}</p>
-                  <span className="font-mono text-micro text-ink-400 tnum">{items.length} 条</span>
+                  <span className="font-mono text-micro text-ink-400 tnum">{items.length} {t('条')}</span>
                 </div>
                 <ul className="divide-y divide-line">
                   {items.map((e) => {
@@ -206,7 +213,11 @@ export default function HistoryRail({
                               onOpenDetail(e);
                             }
                           }}
-                          aria-label={`${e.ticker} ${SETUP_CN[e.setup_type] ?? e.setup_type ?? ''}，${LIFECYCLE_CN[e.lifecycle_state] ?? e.lifecycle_state ?? ''}，打开事件详情`}
+                          aria-label={t('{ticker} {setup}，{state}，打开事件详情', {
+                            ticker: e.ticker,
+                            setup: SETUP_CN[e.setup_type] ?? e.setup_type ?? '',
+                            state: LIFECYCLE_CN[e.lifecycle_state] ?? e.lifecycle_state ?? '',
+                          })}
                           className="flex min-h-[52px] cursor-pointer items-center gap-2.5 px-3 py-1.5 transition-colors duration-fast hover:bg-paper-2"
                         >
                           {/* 时间 */}
@@ -250,8 +261,8 @@ export default function HistoryRail({
                   className="flex items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
                 >
                   {loadingMore && <span className="size-3.5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" />}
-                  加载更多
-                  <span className="font-mono text-micro text-ink-400 tnum">剩 {events.length - visible} 条</span>
+                  {t('加载更多')}
+                  <span className="font-mono text-micro text-ink-400 tnum">{t('剩')} {events.length - visible} {t('条')}</span>
                 </button>
               ) : serverHasMore ? (
                 <button
@@ -260,14 +271,14 @@ export default function HistoryRail({
                   className="flex items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
                 >
                   {loadingServerMore && <span className="size-3.5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" />}
-                  继续读取更早事件
+                  {t('继续读取更早事件')}
                 </button>
               ) : (
-                <p className="font-mono text-micro text-ink-300 tnum">已加载全部 {events.length} 条</p>
+                <p className="font-mono text-micro text-ink-300 tnum">{t('已加载全部')} {events.length} {t('条')}</p>
               )}
               {serverMoreError && (
                 <p className="text-micro text-down-700">
-                  加载更多失败：{serverMoreError.message}
+                  {t('加载更多失败：')}{serverMoreError.message}
                 </p>
               )}
             </div>

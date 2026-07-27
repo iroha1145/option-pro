@@ -15,6 +15,7 @@ import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { fmtRelative } from '@/lib/format';
+import { t } from '../../i18n/core.ts';
 
 const RANGE = 5; // 净影响映射区间 ±5
 
@@ -38,7 +39,7 @@ function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) 
         className="relative h-1.5 w-28 rounded-pill"
         style={{ background: 'linear-gradient(90deg, rgba(229,72,77,.35), rgba(233,231,224,.6) 50%, rgba(14,159,110,.35))' }}
         role="img"
-        aria-label={`净影响 ${sign}${Math.abs(value).toFixed(2)}（非收益）`}
+        aria-label={t('净影响 {sign}{value}（非收益）', { sign, value: Math.abs(value).toFixed(2) })}
       >
         <span className="absolute left-1/2 top-1/2 h-2.5 w-px -translate-x-1/2 -translate-y-1/2 bg-ink-300" aria-hidden="true" />
         <span
@@ -57,10 +58,10 @@ function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) 
           />
         </span>
       </div>
-      <span className={cn('font-mono text-data-m tnum', tone)} title="净影响分 · 非收益">
+      <span className={cn('font-mono text-data-m tnum', tone)} title={t("净影响分 · 非收益")}>
         {sign}
         {Math.abs(value).toFixed(2)}
-        <span className="ml-1 text-micro font-normal text-ink-400">· 非收益</span>
+        <span className="ml-1 text-micro font-normal text-ink-400">{t('· 非收益')}</span>
       </span>
     </div>
   );
@@ -87,7 +88,7 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
       })
       .catch((e) => {
         if (dead) return;
-        setError(e instanceof ApiError ? e : new ApiError(500, '加载失败'));
+        setError(e instanceof ApiError ? e : new ApiError(500, t('加载失败')));
         setLoading(false);
       });
     return () => {
@@ -112,8 +113,8 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title={error.code === 503 ? '影响汇总暂不可用' : '加载失败'}
-          description={error.code === 503 ? '稍后刷新再试' : error.message}
+          title={error.code === 503 ? t('影响汇总暂不可用') : t('加载失败')}
+          description={error.code === 503 ? t('稍后刷新再试') : error.message}
         />
       );
     }
@@ -121,11 +122,11 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
       return (
         <EmptyState
           image="/empty-news.svg"
-          title="当前窗口暂无已分析出方向性影响的股票"
+          title={t("当前窗口暂无已分析出方向性影响的股票")}
           description={
             rows && rows.length > 0
-              ? `${rows.length} 只候选股票的新闻尚未分析或影响为中性，暂不上榜`
-              : '放宽时间窗或清除过滤后重试'
+              ? t('{n} 只候选股票的新闻尚未分析或影响为中性，暂不上榜', { n: rows.length })
+              : t('放宽时间窗或清除过滤后重试')
           }
         />
       );
@@ -140,7 +141,7 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
             transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(i * 0.035, 0.42) }}
             onClick={() => navigate(`/stock/${r.ticker}`)}
             className="group flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 text-left transition-colors duration-fast hover:bg-paper-2/70 sm:px-5"
-            aria-label={`查看 ${r.ticker} 股票详情`}
+            aria-label={t('查看 {ticker} 股票详情', { ticker: r.ticker })}
           >
             <span className="flex min-w-0 flex-1 items-center gap-2.5 sm:w-40 sm:flex-none">
               <TickerLogo ticker={r.ticker} size={28} />
@@ -158,22 +159,22 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
             <span className="order-last w-full min-w-0 sm:order-none sm:min-w-[180px] sm:flex-1">
               <NetImpactBar value={r.netImpact} analyzed={r.analyzed} />
             </span>
-            <span className="hidden items-center gap-1 font-mono text-micro tnum md:flex" title="利多 / 利空 / 中性">
+            <span className="hidden items-center gap-1 font-mono text-micro tnum md:flex" title={t("利多 / 利空 / 中性")}>
               <span className="text-up-700">{r.bullish}</span>
               <span className="text-ink-300">/</span>
               <span className="text-down-700">{r.bearish}</span>
               <span className="text-ink-300">/</span>
               <span className="text-ink-500">{r.neutral}</span>
             </span>
-            <span className="hidden w-14 text-right font-mono text-micro text-ink-500 tnum sm:block" title="来源数">
-              {r.sourceDiversity} 源
+            <span className="hidden w-14 text-right font-mono text-micro text-ink-500 tnum sm:block" title={t("来源数")}>
+              {r.sourceDiversity} {t('源')}
             </span>
-            <span className="hidden w-16 text-right font-mono text-micro text-ink-400 tnum lg:block" title="最新新闻">
+            <span className="hidden w-16 text-right font-mono text-micro text-ink-400 tnum lg:block" title={t("最新新闻")}>
               {fmtRelative(r.latestAt)}
             </span>
-            <span className="w-12 shrink-0 text-right font-mono text-data-m text-ink-800 tnum" title="相关新闻数">
+            <span className="w-12 shrink-0 text-right font-mono text-data-m text-ink-800 tnum" title={t("相关新闻数")}>
               {r.count}
-              <span className="ml-0.5 text-micro font-normal text-ink-400">条</span>
+              <span className="ml-0.5 text-micro font-normal text-ink-400">{t('条')}</span>
             </span>
             <Icon name="chevron-right" size={14} className="shrink-0 text-ink-300 transition-colors group-hover:text-brand-600" />
           </motion.button>
@@ -185,15 +186,15 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
   return (
     <div className="card-surface overflow-hidden">
       <div className="hidden grid-cols-none items-center border-b border-line px-5 py-2.5 sm:flex">
-        <p className="w-40 eyebrow">代码</p>
+        <p className="w-40 eyebrow">{t('代码')}</p>
         <p className="min-w-[180px] flex-1 eyebrow">
-          净影响 · 非收益
+          {t('净影响 · 非收益')}
           <InfoHint hint={SCORE_HINTS.netImpact} side="bottom" size={11} className="ml-1" />
         </p>
-        <p className="hidden eyebrow md:block">多/空/中</p>
-        <p className="hidden w-14 text-right eyebrow sm:block">来源</p>
-        <p className="hidden w-16 text-right eyebrow lg:block">最新</p>
-        <p className="w-12 text-right eyebrow">新闻</p>
+        <p className="hidden eyebrow md:block">{t('多/空/中')}</p>
+        <p className="hidden w-14 text-right eyebrow sm:block">{t('来源')}</p>
+        <p className="hidden w-16 text-right eyebrow lg:block">{t('最新')}</p>
+        <p className="w-12 text-right eyebrow">{t('新闻')}</p>
         <span className="w-3.5" />
       </div>
       {content}

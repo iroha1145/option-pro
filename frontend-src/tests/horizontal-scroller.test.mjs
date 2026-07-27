@@ -53,7 +53,7 @@ test('热点带的真实尺寸：8 张 260px 卡一定溢出桌面视口', () =>
 
 test('溢出时提供可点、可聚焦的入口，而不是只靠隐藏的滚动条', async () => {
   const code = await source('components/shared/HorizontalScroller.tsx');
-  assert.match(code, /aria-label=\{side === 'left' \? '向左滚动' : '向右滚动'\}/);
+  assert.match(code, /aria-label=\{side === 'left' \? t\('向左滚动'\) : t\('向右滚动'\)\}/);
   // 箭头只在该方向真的还能滚时渲染
   assert.match(code, /if \(!active\) return null;/);
   // 滚动容器要能获得焦点，键盘才能用方向键
@@ -74,7 +74,7 @@ test('不会因为 children 引用变化陷入无限重渲染', async () => {
 test('热点带用上了这个组件', async () => {
   const strip = await source('components/catalysts/HotspotsStrip.tsx');
   assert.match(strip, /<HorizontalScroller/);
-  assert.match(strip, /label="热点主题带，可横向滚动"/);
+  assert.match(strip, /label=\{__t\("热点主题带，可横向滚动"\)\}/);
   // 原来那层裸的 overflow-x-auto 不该再留着
   assert.doesNotMatch(strip, /className="-mx-4 mt-4 overflow-x-auto/);
 });
@@ -84,7 +84,7 @@ test('板块 chip 条也用上了这个组件，且 tablist 语义留在原处',
   // 实测 /sectors 上这条 chip 带藏掉 1474px（2117 轨道 / 643 视口）且没有任何控件
   assert.match(chips, /<HorizontalScroller/);
   // role="tablist" 必须留在真正装 tab 的元素上，不能挪到滚动容器
-  assert.match(chips, /<div role="tablist" aria-label="板块切换" className="flex gap-1\.5">/);
+  assert.match(chips, /<div role="tablist" aria-label=\{t\("板块切换"\)\} className="flex gap-1\.5">/);
   // 原来那层裸的 overflow-x-auto 不该再留着
   assert.doesNotMatch(chips, /overflow-x-auto py-0\.5 no-scrollbar/);
 });

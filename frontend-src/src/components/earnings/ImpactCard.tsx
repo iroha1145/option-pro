@@ -31,6 +31,7 @@ import { SkeletonText } from '@/components/shared/Skeleton';
 import PulseDot from './PulseDot';
 import type { EarningsRow } from './types';
 import { exNum } from './types';
+import { t as __t } from '../../i18n/core.ts';
 
 /* ---------------- 报告级公开分析状态机 ---------------- */
 const ACTIVE_STATUSES = new Set(['preparing', 'pending', 'queued', 'in_progress', 'processing', 'running', 'cancel_requested']);
@@ -46,26 +47,26 @@ const BACKOFF_MS = [2000, 3000, 5000, 8000, 10000];
  * 一句通用说明，绝不把原始码打到页面上。
  */
 const ANALYSIS_ERROR_TEXT: Record<string, string> = {
-  scheduled_analysis_disabled: '自动分析当时处于关闭状态，这次没有执行',
-  manual_analysis_disabled: 'AI 分析已关闭',
-  daily_token_limit_reached: '今天的 AI 用量已用完，明天会自动重试',
-  daily_budget_reached: '今天的 AI 预算已用完，明天会自动重试',
-  daily_job_limit_reached: '今天的 AI 分析次数已用完，明天会自动重试',
-  global_concurrency_limit: '同时进行的分析过多，稍后会自动重试',
-  ai_job_queue_full: '排队的分析过多，稍后会自动重试',
-  runtime_configuration_changed: '分析配置已更新，需要重新生成',
-  runtime_settings_unavailable: '服务配置暂时读不到，稍后重试',
-  scheduled_window_changed_to_5_days: '财报关注范围已调整，这次分析不再需要',
-  provider_incomplete_max_output_tokens: '模型输出被截断，重新生成即可',
-  submission_outcome_unknown: '上一次提交结果不明，重新生成即可',
-  ai_job_payload_too_large: '这份财报数据过大，无法分析',
-  ai_job_result_too_large: '分析结果过大，无法保存',
+  scheduled_analysis_disabled: __t('自动分析当时处于关闭状态，这次没有执行'),
+  manual_analysis_disabled: __t('AI 分析已关闭'),
+  daily_token_limit_reached: __t('今天的 AI 用量已用完，明天会自动重试'),
+  daily_budget_reached: __t('今天的 AI 预算已用完，明天会自动重试'),
+  daily_job_limit_reached: __t('今天的 AI 分析次数已用完，明天会自动重试'),
+  global_concurrency_limit: __t('同时进行的分析过多，稍后会自动重试'),
+  ai_job_queue_full: __t('排队的分析过多，稍后会自动重试'),
+  runtime_configuration_changed: __t('分析配置已更新，需要重新生成'),
+  runtime_settings_unavailable: __t('服务配置暂时读不到，稍后重试'),
+  scheduled_window_changed_to_5_days: __t('财报关注范围已调整，这次分析不再需要'),
+  provider_incomplete_max_output_tokens: __t('模型输出被截断，重新生成即可'),
+  submission_outcome_unknown: __t('上一次提交结果不明，重新生成即可'),
+  ai_job_payload_too_large: __t('这份财报数据过大，无法分析'),
+  ai_job_result_too_large: __t('分析结果过大，无法保存'),
 };
 
 function analysisErrorText(code: string | undefined | null): string {
   const key = String(code ?? '').trim();
   if (!key) return '';
-  return ANALYSIS_ERROR_TEXT[key] ?? '这次分析没有完成';
+  return ANALYSIS_ERROR_TEXT[key] ?? __t('这次分析没有完成');
 }
 const FINAL_STAGES = new Set([
   'final',
@@ -101,9 +102,9 @@ function isImpactFinalizing(value: EarningsImpactResult | null): boolean {
 
 function completedStageLabel(value: EarningsImpactResult): string {
   const stage = normalizedStage(value.analysisStage);
-  if (stage === 'pre_release') return '发布前分析';
-  if (stage === 'post_release_manual') return '发布后分析';
-  return '简体中文';
+  if (stage === 'pre_release') return __t('发布前分析');
+  if (stage === 'post_release_manual') return __t('发布后分析');
+  return __t('简体中文');
 }
 
 /* ---------------- 报告级服务端状态：不展示任务编号、费用或取消能力 ---------------- */
@@ -113,12 +114,12 @@ function JobSteps({ analysis }: { analysis: EarningsReportAnalysis }) {
     <div role="status">
       <p className="flex items-center gap-2 text-caption text-ink-500">
         <PulseDot className="bg-ai-600" size={8} />
-        {queued ? '第 1 / 1 条正在排队' : '正在分析第 1 / 1 条'}
+        {queued ? __t('第 1 / 1 条正在排队') : __t('正在分析第 1 / 1 条')}
         <span className="ml-auto font-mono text-micro text-ai-600 tnum">
-          {queued ? '等待开始' : '模型处理中'}
+          {queued ? __t('等待开始') : __t('模型处理中')}
         </span>
       </p>
-      <div className="mt-2 h-1 overflow-hidden rounded-pill bg-line" role="progressbar" aria-label="财报分析处理中">
+      <div className="mt-2 h-1 overflow-hidden rounded-pill bg-line" role="progressbar" aria-label={__t("财报分析处理中")}>
         <motion.div
           className="h-full w-1/3 rounded-pill bg-ai-600"
           animate={{ x: ['-100%', '300%'] }}
@@ -130,17 +131,17 @@ function JobSteps({ analysis }: { analysis: EarningsReportAnalysis }) {
 }
 
 const DIRECTION_META: Record<EarningsImpactDirection, { label: string; className: string }> = {
-  bullish: { label: '利多', className: 'border-up-600/25 bg-up-50 text-up-700' },
-  bearish: { label: '利空', className: 'border-down-600/25 bg-down-50 text-down-700' },
-  mixed: { label: '多空交织', className: 'border-warn-600/25 bg-warn-50 text-warn-600' },
+  bullish: { label: __t('利多'), className: 'border-up-600/25 bg-up-50 text-up-700' },
+  bearish: { label: __t('利空'), className: 'border-down-600/25 bg-down-50 text-down-700' },
+  mixed: { label: __t('多空交织'), className: 'border-warn-600/25 bg-warn-50 text-warn-600' },
 };
 
 const RELATION_LABELS: Record<EarningsImpactRelation, string> = {
-  competitor: '竞争对手',
-  supplier: '供应链',
-  customer: '客户',
-  etf: '交易所交易基金',
-  opposing: '反向关联',
+  competitor: __t('竞争对手'),
+  supplier: __t('供应链'),
+  customer: __t('客户'),
+  etf: __t('交易所交易基金'),
+  opposing: __t('反向关联'),
 };
 
 /* ---------------- Serif 引文：$CODE 高亮可点击 ---------------- */
@@ -156,7 +157,7 @@ function QuotedSummary({ text, onOpenTicker }: { text: string; onOpenTicker: (t:
               key={i}
               onClick={() => onOpenTicker(p.slice(1))}
               className="font-semibold text-brand-600 underline decoration-brand-400/50 decoration-dotted underline-offset-4 transition-colors hover:text-brand-700"
-              aria-label={`查看 ${p.slice(1)} 详情`}
+              aria-label={__t('查看 {name} 详情', { name: p.slice(1) })}
             >
               {p}
             </button>
@@ -274,7 +275,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
   const loadImpact = useCallback(
     async (t: string): Promise<EarningsReportAnalysis | null> => {
       if (!reportDate) {
-        setErrorMsg('当前日历行缺少财报日期，无法绑定精确报告');
+        setErrorMsg(__t('当前日历行缺少财报日期，无法绑定精确报告'));
         setPhase('unavailable');
         return null;
       }
@@ -294,13 +295,13 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
         } else if (err && (err.code === 409 || err.bizCode === 'analysis_required')) {
           setPhase(isOwner && !aiAvailable ? 'locked-ai' : 'needs-analysis');
         } else if (err && err.code === 401) {
-          setErrorMsg(err.message || '公开分析入口暂不可用');
+          setErrorMsg(err.message || __t('公开分析入口暂不可用'));
           setPhase('public-unavailable');
         } else if (err && err.code === 503) {
-          setErrorMsg(err.message || '数据暂不可用');
+          setErrorMsg(err.message || __t('数据暂不可用'));
           setPhase('unavailable');
         } else {
-          setErrorMsg(err?.message ?? '加载失败');
+          setErrorMsg(err?.message ?? __t('加载失败'));
           setPhase('unavailable');
         }
         return null;
@@ -357,7 +358,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
       const next = await loadImpact(ticker);
       setPollAttempt((value) => value + 1);
       if (next?.result && !reportAnalysisNeedsPolling(next)) {
-        toast.success(`${ticker} AI 影响分析已生成`);
+        toast.success(__t('{ticker} AI 影响分析已生成', { ticker }));
       }
     }, delay);
     return () => window.clearTimeout(timer);
@@ -388,20 +389,20 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
       } else if (err?.bizCode === 'earnings_finalization_in_progress') {
         setPhase('finalizing');
       } else if (err?.code === 429) {
-        toast.error('AI 任务队列已满', `约 ${err.retryAfter ?? 60}s 后重试`);
+        toast.error(__t('AI 任务队列已满'), __t('约 {n}s 后重试', { n: err.retryAfter ?? 60 }));
       } else if (err?.code === 401) {
-        setErrorMsg(err.message || '公开分析入口暂不可用');
+        setErrorMsg(err.message || __t('公开分析入口暂不可用'));
         setPhase('public-unavailable');
       } else if (err?.bizCode === 'manual_analysis_disabled') {
         setPhase('locked-ai');
       } else {
-        toast.error('任务创建失败', err?.message);
+        toast.error(__t('任务创建失败'), err?.message);
       }
     }
   };
 
   return (
-    <aside className={cn('card-surface self-start overflow-hidden', className)} aria-label="AI 影响分析">
+    <aside className={cn('card-surface self-start overflow-hidden', className)} aria-label={__t("AI 影响分析")}>
       {/* 顶边 2px ai-600 标识条 */}
       <div className="h-0.5 bg-ai-600" aria-hidden="true" />
       <AnimatePresence mode="wait">
@@ -419,17 +420,17 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
               <span className="flex size-12 items-center justify-center rounded-lg border border-line bg-card-warm text-ink-400">
                 <Icon name="calendar-spark" size={22} />
               </span>
-              <h3 className="mt-3 text-h3 text-ink-800">选择一只标的</h3>
-              <p className="mt-1 max-w-[260px] text-caption text-ink-500">点击周历 chip 或列表行，查看该财报的 AI 连锁影响分析。</p>
+              <h3 className="mt-3 text-h3 text-ink-800">{__t('选择一只标的')}</h3>
+              <p className="mt-1 max-w-[260px] text-caption text-ink-500">{__t('点击周历 chip 或列表行，查看该财报的 AI 连锁影响分析。')}</p>
             </div>
           )}
 
           {/* ---------- 加载骨架 ---------- */}
           {phase === 'loading' && (
-            <div aria-label="AI 影响分析加载中">
+            <div aria-label={__t("AI 影响分析加载中")}>
               <div className="flex items-center gap-2">
                 <Icon name="spark-ai" size={16} className="text-ai-600" />
-                <span className="font-display text-[18px] leading-6 text-ink-900">AI 影响 · {ticker}</span>
+                <span className="font-display text-[18px] leading-6 text-ink-900">{__t('AI 影响 ·')} {ticker}</span>
               </div>
               <div className="mt-4 space-y-4">
                 <div className="skeleton-shimmer h-9 w-28 rounded-sm" />
@@ -444,11 +445,11 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
           {phase === 'locked-ai' && (
             <LockedPanel
               iconClass="text-ink-300"
-              title={aiEnabled ? 'AI 分析暂不可用' : 'AI 分析未启用'}
+              title={aiEnabled ? __t('AI 分析暂不可用') : __t('AI 分析未启用')}
               description={
                 aiEnabled
-                  ? '模型服务当前不可用，已有分析仍会照常显示。'
-                  : '模型生成开关已关闭，已有分析仍会照常显示。'
+                  ? __t('模型服务当前不可用，已有分析仍会照常显示。')
+                  : __t('模型生成开关已关闭，已有分析仍会照常显示。')
               }
             />
           )}
@@ -457,8 +458,8 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
           {phase === 'public-unavailable' && (
             <LockedPanel
               iconClass="text-ink-300"
-              title="公开分析入口暂不可用"
-              description={errorMsg || `${ticker ?? '该标的'} 的模型任务暂时无法提交，请稍后重试。`}
+              title={__t("公开分析入口暂不可用")}
+              description={errorMsg || __t('{name} 的模型任务暂时无法提交，请稍后重试。', { name: ticker ?? __t('该标的') })}
             />
           )}
 
@@ -467,10 +468,10 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
             <div className="py-8" role="status" aria-live="polite">
               <div className="flex items-center gap-2">
                 <PulseDot className="bg-ai-600" size={8} />
-                <h3 className="text-h3 text-ink-800">正在生成最终分析 · {ticker}</h3>
+                <h3 className="text-h3 text-ink-800">{__t('正在生成最终分析 ·')} {ticker}</h3>
               </div>
               <p className="mt-2 text-caption leading-5 text-ink-500">
-                财报已发布，正在把实际每股收益和营收纳入分析，完成后会自动更新为最终版本。
+                {__t('财报已发布，正在把实际每股收益和营收纳入分析，完成后会自动更新为最终版本。')}
               </p>
               <div className="mt-4 h-1 overflow-hidden rounded-pill bg-line">
                 <motion.div
@@ -484,7 +485,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                 disabled
                 className="mt-4 h-8 cursor-not-allowed rounded-md border border-line bg-card-warm px-3 text-caption text-ink-300"
               >
-                自动重分析中
+                {__t('自动重分析中')}
               </button>
             </div>
           )}
@@ -496,18 +497,18 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                 <Icon name="spark-ai" size={22} />
               </span>
               <span className="mt-3 rounded-pill border border-up-600/25 bg-up-50 px-2.5 py-1 text-micro font-semibold text-up-700">
-                已锁定 · 最终分析
+                {__t('已锁定 · 最终分析')}
               </span>
-              <h3 className="mt-3 text-h3 text-ink-800">该财报不再重复分析</h3>
+              <h3 className="mt-3 text-h3 text-ink-800">{__t('该财报不再重复分析')}</h3>
               <p className="mt-1 max-w-[280px] text-caption text-ink-500">
-                财报发布后的自动重分析已经完成，后台已禁止再次创建同一财报的任务。
+                {__t('财报发布后的自动重分析已经完成，后台已禁止再次创建同一财报的任务。')}
               </p>
               <button
                 type="button"
                 disabled
                 className="mt-4 h-8 cursor-not-allowed rounded-md border border-line bg-card-warm px-3 text-caption text-ink-300"
               >
-                最终分析已锁定
+                {__t('最终分析已锁定')}
               </button>
             </div>
           )}
@@ -518,14 +519,14 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
               <span className="flex size-12 items-center justify-center rounded-lg border border-ai-600/30 bg-ai-50 text-ai-600">
                 <Icon name="spark-ai" size={22} />
               </span>
-              <h3 className="mt-3 text-h3 text-ink-800">尚未生成 AI 影响</h3>
+              <h3 className="mt-3 text-h3 text-ink-800">{__t('尚未生成 AI 影响')}</h3>
               <p className="mt-1 max-w-[280px] text-caption text-ink-500">
-                分析 {ticker} 财报对关联标的的连锁影响。
+                {__t('分析')} {ticker} {__t('财报对关联标的的连锁影响。')}
               </p>
               {confirming ? (
                 <div className="mt-4 w-full rounded-md border border-ai-600/30 bg-ai-50 p-3 text-left">
                   <p className="text-caption text-ink-600">
-                    将按本次财报日期生成 {ticker} 的分析；结果生成后不会重复计算。
+                    {__t('将按本次财报日期生成')} {ticker} {__t('的分析；结果生成后不会重复计算。')}
                   </p>
                   <div className="mt-2.5 flex gap-2">
                     <button
@@ -533,13 +534,13 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                       className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-ai-600 text-caption font-medium text-white transition-[filter] hover:brightness-105"
                     >
                       <Icon name="spark-ai" size={13} />
-                      生成分析
+                      {__t('生成分析')}
                     </button>
                     <button
                       onClick={() => setConfirming(false)}
                       className="h-8 rounded-md border border-line bg-card px-3 text-caption text-ink-500 transition-colors hover:text-ink-800"
                     >
-                      取消
+                      {__t('取消')}
                     </button>
                   </div>
                 </div>
@@ -549,7 +550,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                   className="mt-4 flex h-9 items-center gap-2 rounded-md bg-ai-600 px-4 text-caption font-medium text-white transition-[filter] hover:brightness-105"
                 >
                   <Icon name="spark-ai" size={14} />
-                  生成分析
+                  {__t('生成分析')}
                 </button>
               )}
             </div>
@@ -560,18 +561,18 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
             <div>
               <div className="flex items-center gap-2">
                 <PulseDot className="bg-ai-600" size={8} />
-                <h3 className="text-h3 text-ink-800">正在分析 · {ticker}</h3>
+                <h3 className="text-h3 text-ink-800">{__t('正在分析 ·')} {ticker}</h3>
                 <span className="ml-auto font-mono text-micro text-ai-600 tnum">
                   {['queued', 'pending', 'preparing'].includes(normalizedStage(analysis.status))
-                    ? '排队中'
-                    : '模型处理中'}
+                    ? __t('排队中')
+                    : __t('模型处理中')}
                 </span>
               </div>
               <div className="mt-5">
                 <JobSteps analysis={analysis} />
               </div>
               <p className="mt-5 border-t border-line pt-3 text-micro leading-5 text-ink-400">
-                分析完成后会自动显示，不用刷新页面。
+                {__t('分析完成后会自动显示，不用刷新页面。')}
               </p>
             </div>
           )}
@@ -580,15 +581,15 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
           {phase === 'job-failed' && (
             <div>
               <div className="rounded-md border border-down-600/30 bg-down-50 p-3">
-                <p className="text-caption font-medium text-down-700">分析任务失败</p>
-                <p className="mt-0.5 text-micro text-ink-500">{errorMsg || '未知原因'}</p>
+                <p className="text-caption font-medium text-down-700">{__t('分析任务失败')}</p>
+                <p className="mt-0.5 text-micro text-ink-500">{errorMsg || __t('未知原因')}</p>
               </div>
               <button
                 onClick={() => setPhase('needs-analysis')}
                 className="mt-3 flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-3 text-caption text-ink-600 transition-colors hover:border-ai-600/50 hover:text-ai-600"
               >
                 <Icon name="refresh" size={13} />
-                重试
+                {__t('重试')}
               </button>
             </div>
           )}
@@ -599,8 +600,8 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
               <span className="flex size-12 items-center justify-center rounded-lg border border-line bg-card-warm text-ink-400">
                 <Icon name="doc-quote" size={22} />
               </span>
-              <h3 className="mt-3 text-h3 text-ink-800">数据暂不可用</h3>
-              <p className="mt-1 max-w-[260px] text-caption text-ink-500">{errorMsg || '稍后刷新再试。'}</p>
+              <h3 className="mt-3 text-h3 text-ink-800">{__t('数据暂不可用')}</h3>
+              <p className="mt-1 max-w-[260px] text-caption text-ink-500">{errorMsg || __t('稍后刷新再试。')}</p>
               <button
                 onClick={() => {
                   if (!ticker) return;
@@ -610,7 +611,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                 className="mt-4 flex h-8 items-center gap-1.5 rounded-md bg-brand-600 px-3.5 text-caption font-medium text-white transition-[filter] hover:brightness-105"
               >
                 <Icon name="refresh" size={13} />
-                重试
+                {__t('重试')}
               </button>
             </div>
           )}
@@ -626,15 +627,15 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
               <Section>
                 <div className="flex items-center gap-2">
                   <Icon name="spark-ai" size={16} className="text-ai-600" />
-                  <h3 className="font-display text-[18px] leading-6 text-ink-900">AI 影响 · {impact.ticker}</h3>
+                  <h3 className="font-display text-[18px] leading-6 text-ink-900">{__t('AI 影响 ·')} {impact.ticker}</h3>
                   {isFinalImpact(impact) ? (
                     <span className="ml-auto rounded-pill border border-up-600/25 bg-up-50 px-2 py-0.5 text-micro font-semibold text-up-700">
-                      已锁定 · 最终分析
+                      {__t('已锁定 · 最终分析')}
                     </span>
                   ) : isImpactFinalizing(impact) ? (
                     <span className="ml-auto inline-flex items-center gap-1.5 rounded-pill border border-ai-600/25 bg-ai-50 px-2 py-0.5 text-micro font-medium text-ai-600">
                       <PulseDot className="bg-ai-600" size={6} />
-                      自动重分析中
+                      {__t('自动重分析中')}
                     </span>
                   ) : (
                     <span className="ml-auto rounded-pill border border-ai-600/20 bg-ai-50 px-2 py-0.5 text-micro font-medium text-ai-600">
@@ -644,29 +645,29 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                 </div>
                 <p className="mt-1 font-mono text-micro text-ink-400">
                   {impact.outputLanguage}
-                  {impact.reportDate ? ` · 财报日 ${impact.reportDate}` : ''}
+                  {impact.reportDate ? __t(' · 财报日 {date}', { date: impact.reportDate }) : ''}
                 </p>
                 {isImpactFinalizing(impact) && !isFinalImpact(impact) && (
                   <div className="mt-3 rounded-md border border-ai-600/25 bg-ai-50 px-3 py-2.5" role="status" aria-live="polite">
                     <p className="flex items-center gap-2 text-caption font-medium text-ai-600">
                       <PulseDot className="bg-ai-600" size={7} />
-                      财报已发布，正在自动重分析
+                      {__t('财报已发布，正在自动重分析')}
                     </p>
                     <p className="mt-1 text-micro text-ink-500">
-                      当前先保留发布前结果；实际每股收益和营收写入完成后，将自动替换并锁定。
+                      {__t('当前先保留发布前结果；实际每股收益和营收写入完成后，将自动替换并锁定。')}
                     </p>
                   </div>
                 )}
                 {isFinalImpact(impact) && (
                   <p className="mt-3 rounded-md border border-up-600/20 bg-up-50 px-3 py-2 text-micro leading-5 text-up-700">
-                    已纳入发布后的实际财报数据，并锁定为最终版本；不会再次发起模型请求。
+                    {__t('已纳入发布后的实际财报数据，并锁定为最终版本；不会再次发起模型请求。')}
                   </p>
                 )}
               </Section>
 
               {/* 2 摘要 */}
               <Section>
-                <p className="eyebrow">分析摘要</p>
+                <p className="eyebrow">{__t('分析摘要')}</p>
                 <div className="mt-2.5">
                   <QuotedSummary text={impact.summary} onOpenTicker={openTicker} />
                 </div>
@@ -674,15 +675,15 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
 
               {/* 3 财报预期 */}
               <Section>
-                <p className="eyebrow">财报预期</p>
+                <p className="eyebrow">{__t('财报预期')}</p>
                 <p className="mt-2 text-body-s leading-6 text-ink-700">{impact.expectation}</p>
               </Section>
 
               {/* 4 关联标的 */}
               <Section>
                 <div className="flex items-baseline justify-between">
-                  <p className="eyebrow">关联标的</p>
-                  <span className="text-micro text-ink-300">{impact.impacted.length} 项</span>
+                  <p className="eyebrow">{__t('关联标的')}</p>
+                  <span className="text-micro text-ink-300">{impact.impacted.length} {__t('项')}</span>
                 </div>
                 <div className="mt-2.5 space-y-2">
                   {impact.impacted.map((item) => {
@@ -691,7 +692,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                       <button
                         key={`${item.ticker}-${item.relation}`}
                         onClick={() => openTicker(item.ticker)}
-                        aria-label={`查看 ${item.ticker}：${meta.label}`}
+                        aria-label={__t('查看 {ticker}：{label}', { ticker: item.ticker, label: meta.label })}
                         className="w-full rounded-md border border-line bg-card-warm p-3 text-left transition-colors hover:border-brand-400/50 hover:bg-card"
                       >
                         <span className="flex min-w-0 items-center gap-2">
@@ -707,7 +708,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                     );
                   })}
                 </div>
-                <SourceNote className="mt-3" text="AI 依据本次财报日程生成 · 仅供研究参考" />
+                <SourceNote className="mt-3" text={__t("AI 依据本次财报日程生成 · 仅供研究参考")} />
               </Section>
             </motion.div>
           )}

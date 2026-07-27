@@ -19,6 +19,7 @@ import PriceScale from './PriceScale';
 import { ScoreBarsMini } from './ScoreBars';
 import { LIFECYCLE_CHIP_CLASS, LIFECYCLE_CN, LIFECYCLE_TONE, SETUP_CN } from './types';
 import type { BreakoutCurrentEvent } from './types';
+import { t } from '../../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -39,7 +40,7 @@ function ChipRow({ ev }: { ev: BreakoutCurrentEvent }) {
         {LIFECYCLE_CN[ev.lifecycle_state] ?? ev.lifecycle_state ?? '—'}
       </span>
       <span className="ml-auto inline-flex items-center gap-1 rounded-xs border border-warn-600/40 bg-warn-50 px-1.5 py-px font-mono text-micro leading-[16px] text-warn-600 tnum">
-        量能 {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}
+        {t('量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}
       </span>
     </div>
   );
@@ -76,7 +77,7 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
       }}
       role="button"
       tabIndex={0}
-      aria-label={`${ev.ticker} ${SETUP_CN[ev.setup_type] ?? ev.setup_type ?? ''} 信号卡，打开事件详情`}
+      aria-label={t('{ticker} {setup} 信号卡，打开事件详情', { ticker: ev.ticker, setup: SETUP_CN[ev.setup_type] ?? ev.setup_type ?? '' })}
       /* hover 上浮走 whileHover（framer 入场后内联 transform:none 会压掉 CSS hover 位移），阴影用 CSS */
       whileHover={{ y: -3, transition: { duration: 0.24, ease: 'easeOut' } }}
       className={cn(
@@ -94,7 +95,7 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
               e.stopPropagation();
               openTicker(ev.ticker);
             }}
-            aria-label={`打开 ${ev.ticker} 个股详情抽屉`}
+            aria-label={t('打开 {ticker} 个股详情抽屉', { ticker: ev.ticker })}
             className="font-mono text-body-s font-semibold text-ink-800 underline-offset-2 transition-colors hover:text-brand-600 hover:underline"
           >
             {ev.ticker}
@@ -144,7 +145,7 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
         {(ev.evidence ?? []).length > 0 && (
           <span className="inline-flex items-center gap-1 text-micro text-ink-400">
             <Icon name="doc-quote" size={12} />
-            证据 {(ev.evidence ?? []).length} 条
+            {t('证据')} {(ev.evidence ?? []).length} {t('条')}
           </span>
         )}
       </div>

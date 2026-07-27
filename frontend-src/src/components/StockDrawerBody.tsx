@@ -37,13 +37,14 @@ import AiAnalysisCard from '@/components/detail/AiAnalysisCard';
 import ManualStockPull from '@/components/detail/ManualStockPull';
 import KeyStats from '@/components/detail/KeyStats';
 import type { StockDetail } from '@/api/types';
+import { t, t as __t } from '../i18n/core.ts';
 
 type TabKey = 'signals' | 'options' | 'news';
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: 'signals', label: '信号' },
-  { key: 'options', label: '期权链' },
-  { key: 'news', label: '新闻' },
+  { key: 'signals', label: __t('信号') },
+  { key: 'options', label: __t('期权链') },
+  { key: 'news', label: __t('新闻') },
 ];
 
 /** live 缺失数值字段（类型为 number 但运行时可为 null）如实显「—」 */
@@ -87,12 +88,12 @@ function PriceHeader({ detail }: { detail: StockDetail }) {
             <span className="rounded-xs border border-line-strong bg-card-warm px-1.5 py-px text-micro text-ink-500">
               {detail.sector}
             </span>
-            {market && <SessionLED session={market.session} label={`${market.label} · 延迟 15 分钟`} />}
+            {market && <SessionLED session={market.session} label={t('{label} · 延迟 15 分钟', { label: market.label })} />}
           </div>
         </div>
         <div className="ml-auto text-right">
           <p className="eyebrow">
-            强度分
+            {__t('强度分')}
             <InfoHint hint={SCORE_HINTS.strengthComposite} side="bottom" align="end" size={12} className="ml-1" />
           </p>
           <StrengthBar score={detail.strengthScore} width={72} className="mt-1.5" />
@@ -120,13 +121,13 @@ function PriceHeader({ detail }: { detail: StockDetail }) {
           </div>
         </div>
         <p className="pb-1.5 text-right font-mono text-micro text-ink-500 tnum">
-          成交量 {compactOr(detail.volume)} · 市值 {isNum(detail.marketCap) ? `$${fmtCompact(detail.marketCap)}` : '—'}
+          {__t('成交量')} {compactOr(detail.volume)} {__t('· 市值')} {isNum(detail.marketCap) ? `$${fmtCompact(detail.marketCap)}` : '—'}
         </p>
       </div>
 
       <p className="mt-2 text-micro text-ink-400">
-        报价更新于 <span className="font-mono tnum">{fmtTimeHHMMSS(new Date(detail.updatedAt))}</span>
-        {' · 延迟行情'}
+        {__t('报价更新于')} <span className="font-mono tnum">{fmtTimeHHMMSS(new Date(detail.updatedAt))}</span>
+        {__t(' · 延迟行情')}
       </p>
     </motion.header>
   );
@@ -168,11 +169,11 @@ function SidebarEvents({ ticker }: { ticker: string }) {
   return (
     <div className="card-surface p-5">
       <p className="eyebrow">BREAKOUT EVENTS</p>
-      <h3 className="mt-1.5 text-h3 text-ink-900">相关突破事件</h3>
+      <h3 className="mt-1.5 text-h3 text-ink-900">{__t('相关突破事件')}</h3>
       {items.length === 0 ? (
         <p className="mt-3 flex items-center gap-2 text-body-s text-ink-400">
           <Icon name="radar" size={16} className="text-ink-300" />
-          近 72 小时无事件 · 雷达仍在盯
+          {__t('近 72 小时无事件 · 雷达仍在盯')}
         </p>
       ) : (
         <ul className="mt-3 space-y-2.5">
@@ -262,24 +263,24 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
         image="/empty-chart.svg"
         title={
           is404
-            ? '代码不存在'
+            ? __t('代码不存在')
             : loginExpired
-              ? '登录状态已失效'
+              ? __t('登录状态已失效')
               : rateLimited
-                ? '请求较频繁'
+                ? __t('请求较频繁')
                 : manualRecovery
-                  ? '该标的暂无完整数据'
-                  : '行情服务暂不可用'
+                  ? __t('该标的暂无完整数据')
+                  : __t('行情服务暂不可用')
         }
         description={
           is404
-            ? `${ticker} 不在当前股票目录中`
+            ? t('{ticker} 不在当前股票目录中', { ticker })
             : loginExpired
-              ? '请重新登录后读取个股详情'
+              ? __t('请重新登录后读取个股详情')
             : publicSnapshotMissing
-              ? '该股票暂无数据，可手动获取最新行情、日线与技术指标'
-              : `${error?.message || '暂时取不到该股票的行情数据'}${
-                  error?.retryAfter ? ` · ${Math.ceil(error.retryAfter)} 秒后可重试` : ''
+              ? __t('该股票暂无数据，可手动获取最新行情、日线与技术指标')
+              : `${error?.message || __t('暂时取不到该股票的行情数据')}${
+                  error?.retryAfter ? t(' · {n} 秒后可重试', { n: Math.ceil(error.retryAfter) }) : ''
                 }`
         }
         action={
@@ -288,14 +289,14 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
               to="/watchlist"
               className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white hover:brightness-105"
             >
-              返回自选
+              {__t('返回自选')}
             </Link>
           ) : loginExpired ? (
             <Link
               to="/login"
               className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white hover:brightness-105"
             >
-              重新登录
+              {__t('重新登录')}
             </Link>
           ) : manualRecovery ? (
             <ManualStockPull ticker={ticker} onPulled={handlePulled} />
@@ -307,7 +308,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
             >
               <Icon name="refresh" size={14} />
-              {refreshing ? '正在重试' : '重试'}
+              {refreshing ? __t('正在重试') : __t('重试')}
             </button>
           )
         }
@@ -321,7 +322,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
     <div className="mt-3 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2" role="status">
       <p className="flex items-start gap-2 text-caption leading-[18px] text-warn-600">
         <Icon name="flag" size={13} className="mt-px shrink-0" />
-        当前只有筛选结果里的基础行情，日线与技术指标按实际情况显示
+        {__t('当前只有筛选结果里的基础行情，日线与技术指标按实际情况显示')}
       </p>
       <ManualStockPull ticker={detail.ticker} onPulled={handlePulled} compact className="mt-2" />
     </div>
@@ -368,9 +369,9 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
     </div>
   );
   const providerNote = [
-    '行情为延迟数据',
-    '影响分表示新闻方向，不是收益预测',
-    '置信度是模型的把握程度，不是胜率',
+    __t('行情为延迟数据'),
+    __t('影响分表示新闻方向，不是收益预测'),
+    __t('置信度是模型的把握程度，不是胜率'),
   ].join(' · ');
 
   if (layout === 'page') {
