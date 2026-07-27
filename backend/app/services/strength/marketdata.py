@@ -11,6 +11,9 @@ from app.config import Settings, get_settings
 PROVIDER = "MarketData.app"
 _CACHE: dict[str, tuple[float, dict[str, Any] | None]] = {}
 _TTL_SECONDS = 60 * 30
+# 期权热度至少要有量或持仓其中一个真实分量（0.30）才成立；只剩
+# IV/失衡这类间接分量时按 insufficient_data 处理而不是硬凑一个分数。
+_MIN_HEAT_ACTIVE_WEIGHT = 0.30
 
 
 def marketdata_is_enabled(settings: Settings | None = None) -> bool:
@@ -150,36 +153,47 @@ def _score_option_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
     put_oi = _sum(_partition_by_side(payload, "put", "openInterest"))
     avg_iv = _weighted_average(iv_values, weights)
 
-    volume_score = _clamp(math.log10(total_volume + 1) * 20 if total_volume else 30)
-    oi_score = _clamp(math.log10(total_oi + 1) * 13 if total_oi else 35)
+    # 无成交/无持仓不是「中等热度」，是该分量缺失。以前的 30/35 中性
+    # 占位会让一只完全没有期权活动的股票拿到中等 option_heat 并标 active。
+    volume_score = _clamp(math.log10(total_volume + 1) * 20) if total_volume > 0 else None
+    oi_score = _clamp(math.log10(total_oi + 1) * 13) if total_oi > 0 else None
     iv_score = (
         _clamp(avg_iv * 100 * 1.15, 20, 95)
         if avg_iv is not None
         else None
     )
-    imbalance = abs(math.log((call_volume + 1) / (put_volume + 1)))
-    imbalance_score = _clamp(50 + imbalance * 12, 50, 85)
-    option_components = [
-        (volume_score, .34),
-        (oi_score, .30),
-        (imbalance_score, .12),
+    imbalance_score = (
+        _clamp(50 + abs(math.log((call_volume + 1) / (put_volume + 1))) * 12, 50, 85)
+        if (call_volume + put_volume) > 0
+        else None
+    )
+    weighted_candidates = [
+        ("volume", volume_score, .34),
+        ("open_interest", oi_score, .30),
+        ("iv_average", iv_score, .24),
+        ("flow_imbalance", imbalance_score, .12),
     ]
-    missing_components: list[str] = []
-    if iv_score is None:
-        missing_components.append("iv_average")
-    else:
-        option_components.append((iv_score, .24))
+    missing_components = [name for name, value, _w in weighted_candidates if value is None]
+    option_components = [
+        (value, weight) for _name, value, weight in weighted_candidates if value is not None
+    ]
     active_weight = sum(weight for _value, weight in option_components)
-    option_heat_score = round(
-        _clamp(
-            sum(value * weight for value, weight in option_components)
-            / active_weight
-        ),
-        1,
+    option_heat_score = (
+        round(
+            _clamp(
+                sum(value * weight for value, weight in option_components)
+                / active_weight
+            ),
+            1,
+        )
+        if active_weight >= _MIN_HEAT_ACTIVE_WEIGHT
+        else None
     )
 
-    put_call_volume = round(put_volume / call_volume, 2) if call_volume > 0 else (None if put_volume == 0 else 99.0)
-    put_call_oi = round(put_oi / call_oi, 2) if call_oi > 0 else (None if put_oi == 0 else 99.0)
+    # call 侧为 0 时比率不可计算——None 配合原始 call/put 数量已完整表达
+    # 「极端偏 put」，99.0 哨兵会被下游当成真实的 99 倍看跌情绪。
+    put_call_volume = round(put_volume / call_volume, 2) if call_volume > 0 else None
+    put_call_oi = round(put_oi / call_oi, 2) if call_oi > 0 else None
     iv_label = (
         "隐波缺失"
         if avg_iv is None
@@ -200,7 +214,7 @@ def _score_option_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
         "active_weight": round(active_weight, 2),
         "coverage": round(active_weight, 2),
         "missing_components": missing_components,
-        "source_status": "active",
+        "source_status": "active" if option_heat_score is not None else "insufficient_data",
         "provider": "MarketData.app",
         "contracts": len(symbols),
         "total_volume": int(total_volume),
@@ -249,6 +263,7 @@ def enrich_rows_with_marketdata_options(rows: list[dict[str, Any]], settings: Se
     timeout = min(float(cfg.request_timeout or 20.0), 8.0)
     enriched = 0
     failed = 0
+    insufficient = 0
     last_error = ""
 
     try:
@@ -266,7 +281,9 @@ def enrich_rows_with_marketdata_options(rows: list[dict[str, Any]], settings: Se
 
                     new_score = _safe_float(metrics.get("option_heat_score"), 1)
                     if new_score is None:
-                        failed += 1
+                        # 链取到了但活动分量不足（无量无仓）——这是数据的
+                        # 真实形态，不是 provider 故障，不计入 failed。
+                        insufficient += 1
                         continue
                     row["option_heat_score"] = new_score
                     row["option_activity"] = {
@@ -318,6 +335,7 @@ def enrich_rows_with_marketdata_options(rows: list[dict[str, Any]], settings: Se
         "configured": True,
         "enriched": enriched,
         "failed": failed,
+        "insufficient": insufficient,
         "mode": (cfg.marketdata_option_mode or "delayed").strip() or "default",
         "dte": int(cfg.marketdata_option_dte or 30),
         "strike_limit": int(cfg.marketdata_option_strike_limit or 8),

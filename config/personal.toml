@@ -1,6 +1,12 @@
 [access]
 mode = "private_network"
 allowed_private_cidrs = ["127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10"]
+# 密码模式下非 Owner（匿名访客与朋友账号）默认只读已保存的快照。
+# 按需打开下面的开关可恢复两个有限的「访客可发起」面（仍有每 IP 限流与冷却）：
+# visitor_live_pulls = true   # 个股手动拉取 / 板块 IV 冷启动实扫 / 日历 actual 外部补全
+# visitor_ai_actions = true   # 财报影响 AI 分析提交（消耗模型预算）
+visitor_live_pulls = false
+visitor_ai_actions = false
 
 [features]
 breakout_enabled = true

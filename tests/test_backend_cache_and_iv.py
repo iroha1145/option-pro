@@ -295,12 +295,15 @@ def test_sector_iv_total_failure_is_cooled_and_concurrent_calls_coalesce(
     monkeypatch.setattr(sector_api, "_iv_ranking_payload", unavailable)
 
     async def scenario() -> list[object]:
+        # 冷却与合流是 visitor_live_pulls 开启后的保护；默认关闭时访客
+        # 直接得到 public_snapshot_unavailable（见 test_visitor_action_boundaries）。
         with request_owner_access_context(False):
             return await asyncio.gather(
                 *[
                     sector_api._request_iv_payload(
                         sector_id,
                         public_client_id="203.0.113.20",
+                        visitor_live_allowed=True,
                     )
                     for _ in range(5)
                 ],
@@ -370,11 +373,13 @@ def test_public_sector_iv_provider_work_has_a_per_client_budget(
                 await sector_api._request_iv_payload(
                     sector_id,
                     public_client_id="203.0.113.21",
+                    visitor_live_allowed=True,
                 )
             with pytest.raises(HTTPException) as captured:
                 await sector_api._request_iv_payload(
                     sector_ids[2],
                     public_client_id="203.0.113.21",
+                    visitor_live_allowed=True,
                 )
             assert captured.value.status_code == 429
             assert captured.value.detail["code"] == "sector_iv_rate_limited"

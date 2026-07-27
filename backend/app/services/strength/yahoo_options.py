@@ -12,6 +12,9 @@ from app.services import yahoo
 PROVIDER = "Yahoo/yfinance"
 _OPTION_POOL_CAP = 20
 _OPTION_MAX_WORKERS = 4
+# 期权热度至少要有量/持仓/权利金其中一个横截面分位（0.18+）才成立；
+# 只剩失衡与绝对 IV（合计 0.16）时按 insufficient_data 处理。
+_MIN_HEAT_ACTIVE_WEIGHT = 0.18
 
 
 def yahoo_options_is_enabled(settings: Settings | None = None) -> bool:
@@ -230,7 +233,9 @@ def _pct_rank(metrics: list[dict[str, Any]], key: str) -> dict[str, float]:
     if not values:
         return {}
     if len(values) == 1:
-        return {item["ticker"]: 50.0 for item in metrics if _safe_float(item.get(key), 6) is not None}
+        # A single observation has no defensible cross-sectional percentile
+        # (mirrors scanner._pct_rank). Returning 50 would fabricate a median.
+        return {}
     denom = max(len(values) - 1, 1)
     ranks: dict[str, float] = {}
     for item in metrics:
@@ -260,35 +265,50 @@ def _score_metrics(raw_metrics: list[dict[str, Any]]) -> dict[str, dict[str, Any
         put_volume = _safe_float(metrics.get("put_volume"), 4) or 0.0
         total_volume = _safe_float(metrics.get("total_volume"), 4) or 0.0
         total_oi = _safe_float(metrics.get("total_open_interest"), 4) or 0.0
-        volume_rank = ranks["total_volume"].get(ticker, 35.0 if total_volume else 25.0)
-        oi_rank = ranks["total_open_interest"].get(ticker, 35.0 if total_oi else 25.0)
-        premium_rank = ranks["premium_flow"].get(ticker, 35.0)
+        # 横截面分位算不出来（样本池只剩 1 只）时不用 35/25/50 顶替——
+        # 缺失分量直接从加权里剔除；剩余权重不足则整个热度分记不可用。
+        volume_rank = ranks["total_volume"].get(ticker)
+        oi_rank = ranks["total_open_interest"].get(ticker)
+        premium_rank = ranks["premium_flow"].get(ticker)
         option_pool_iv_rank = ranks["iv_average"].get(ticker)
-        unusual_rank = ranks["unusual_count"].get(ticker, 50.0)
+        unusual_rank = ranks["unusual_count"].get(ticker)
         iv_abs_score = (
             _clamp(avg_iv * 100 * 1.2, 20, 95)
             if avg_iv is not None
             else None
         )
-        imbalance = abs(math.log((call_volume + 1) / (put_volume + 1)))
-        imbalance_score = _clamp(50 + imbalance * 12, 50, 90)
-        option_components = [
-            (volume_rank, .32),
-            (oi_rank, .22),
-            (premium_rank, .18),
-            (unusual_rank, .12),
-            (imbalance_score, .06),
+        imbalance_score = (
+            _clamp(50 + abs(math.log((call_volume + 1) / (put_volume + 1))) * 12, 50, 90)
+            if (call_volume + put_volume) > 0
+            else None
+        )
+        weighted_candidates = [
+            ("volume_rank", volume_rank, .32),
+            ("open_interest_rank", oi_rank, .22),
+            ("premium_rank", premium_rank, .18),
+            ("unusual_rank", unusual_rank, .12),
+            ("flow_imbalance", imbalance_score, .06),
+            ("iv_absolute", iv_abs_score, .10),
         ]
-        if iv_abs_score is not None:
-            option_components.append((iv_abs_score, .10))
+        missing_components = [
+            name for name, value, _w in weighted_candidates if value is None
+        ]
+        option_components = [
+            (value, weight)
+            for _name, value, weight in weighted_candidates
+            if value is not None
+        ]
         active_weight = sum(weight for _value, weight in option_components)
-        option_heat = sum(
-            value * weight for value, weight in option_components
-        ) / active_weight
-        if total_volume <= 0 and total_oi <= 0:
+        option_heat = (
+            sum(value * weight for value, weight in option_components) / active_weight
+            if active_weight >= _MIN_HEAT_ACTIVE_WEIGHT
+            else None
+        )
+        if option_heat is not None and total_volume <= 0 and total_oi <= 0:
             option_heat = min(option_heat, 42.0)
 
-        put_call_volume = round(put_volume / call_volume, 2) if call_volume > 0 else (None if put_volume == 0 else 99.0)
+        # call 侧为 0 时比率不可计算；99.0 哨兵会被当成真实的 99 倍看跌。
+        put_call_volume = round(put_volume / call_volume, 2) if call_volume > 0 else None
         put_call_oi = (
             round((_safe_float(metrics.get("put_open_interest"), 4) or 0.0) / (_safe_float(metrics.get("call_open_interest"), 4) or 1.0), 2)
             if (_safe_float(metrics.get("call_open_interest"), 4) or 0.0) > 0
@@ -305,7 +325,9 @@ def _score_metrics(raw_metrics: list[dict[str, Any]]) -> dict[str, dict[str, Any
         )
         scored[ticker] = {
             **metrics,
-            "option_heat_score": round(_clamp(option_heat), 1),
+            "option_heat_score": round(_clamp(option_heat), 1) if option_heat is not None else None,
+            "heat_missing_components": missing_components,
+            "heat_active_weight": round(active_weight, 2),
             "atm_iv_percent": round(avg_iv * 100, 1) if avg_iv is not None else None,
             "option_pool_iv_rank": option_pool_iv_rank,
             # Historical IV rank/percentile is unavailable from a single chain snapshot.
@@ -314,7 +336,11 @@ def _score_metrics(raw_metrics: list[dict[str, Any]]) -> dict[str, dict[str, Any
             "iv_label": iv_label,
             "put_call_volume": put_call_volume,
             "put_call_open_interest": put_call_oi,
-            "source_status": metrics.get("source_status") or "active",
+            "source_status": (
+                (metrics.get("source_status") or "active")
+                if option_heat is not None
+                else "insufficient_data"
+            ),
             "provider": PROVIDER,
             "confidence": "broad_screen",
             "provider_note": "Yahoo/yfinance 只提供期权链快照，无法判断真实买卖方向",

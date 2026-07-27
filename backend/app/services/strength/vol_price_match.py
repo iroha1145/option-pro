@@ -74,15 +74,22 @@ def compute_vol_price_match(
     required = {"Open", "High", "Low", "Close", "Volume"}
     if hist.empty or not required.issubset(hist.columns):
         return _empty("missing_data", "量价数据不足")
-    if len(hist) < baseline_window + 2:
-        return _empty("not_enough_data", "量价样本不足")
 
     data = hist.copy()
+    # 缺失的成交量是「没观测到」，不是「当天零成交」。fillna(0) 会把
+    # recent/baseline 美元额中位数压低，伪造 vacuum/假突破判定；与
+    # scanner._feature_row 的 valid_volume 口径一致：整行剔除后再算。
+    observed_volume = data["Volume"].notna() & (data["Volume"].astype(float) >= 0)
+    if not observed_volume.all():
+        data = data.loc[observed_volume]
+    if len(data) < baseline_window + 2:
+        return _empty("not_enough_data", "量价样本不足")
+
     open_ = data["Open"].astype(float)
     high = data["High"].astype(float)
     low = data["Low"].astype(float)
     close = data["Close"].astype(float)
-    volume = data["Volume"].astype(float).fillna(0)
+    volume = data["Volume"].astype(float)
     prev_close = close.shift(1)
 
     true_range = pd.concat(

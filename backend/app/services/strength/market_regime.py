@@ -20,6 +20,9 @@ MARKET_BENCHMARKS = (
 )
 
 SECTOR_ETFS = ("XLK", "XLF", "XLV", "XLE", "XLI", "XLC", "XLY", "XLP", "XLU", "XLRE", "XLB")
+# 板块广度读数的最低覆盖数：与 signals.py 的 0.60 覆盖率门槛同口径
+# （ceil(11 × 0.60) = 7）。低于门槛时读数置 None 并记入 optional_missing。
+MIN_BREADTH_COVERAGE = math.ceil(len(SECTOR_ETFS) * 0.6)
 
 # Core requirements are expressed by evidence, not by requiring every proxy.
 # In particular, either RSP or IWM can satisfy the breadth proxy requirement.
@@ -274,8 +277,19 @@ def _compute_breadth_score(closes: dict[str, pd.Series]) -> tuple[float | None, 
     above_200 = [close for close in sector_closes if _above_sma(close, 200)]
     valid_count = sum(1 for close in sector_closes if len(close) >= 50)
     valid_200_count = sum(1 for close in sector_closes if len(close) >= 200)
-    above_50_pct = len(above_50) / valid_count * 100 if valid_count else None
-    above_200_pct = len(above_200) / valid_200_count * 100 if valid_200_count else None
+    # 覆盖率门槛与 signals.py 的 _MIN_SECTOR_BREADTH_COVERAGE=0.60 同口径：
+    # 11 只行业 ETF 只下载到两三只时，「板块在均线上方 %」会给出 0%/100%
+    # 这类极端读数并推动市场总分。宁可缺失（按缺失重新配权），不出极端假读数。
+    above_50_pct = (
+        len(above_50) / valid_count * 100
+        if valid_count >= MIN_BREADTH_COVERAGE
+        else None
+    )
+    above_200_pct = (
+        len(above_200) / valid_200_count * 100
+        if valid_200_count >= MIN_BREADTH_COVERAGE
+        else None
+    )
 
     spy = closes.get("SPY", pd.Series(dtype=float))
     rsp = closes.get("RSP", pd.Series(dtype=float))
@@ -583,9 +597,9 @@ def _compute_market_regime_snapshot(
             optional_missing.append(group)
     if spread_matrix.get("status") != "active" or risk_on_spread_score is None:
         optional_missing.append("risk_on_spreads")
-    if int(breadth.get("sector_50dma_coverage") or 0) < 6:
+    if int(breadth.get("sector_50dma_coverage") or 0) < MIN_BREADTH_COVERAGE:
         optional_missing.append("sector_breadth_50dma")
-    if int(breadth.get("sector_200dma_coverage") or 0) < 6:
+    if int(breadth.get("sector_200dma_coverage") or 0) < MIN_BREADTH_COVERAGE:
         optional_missing.append("sector_breadth_200dma")
     optional_missing = list(dict.fromkeys(optional_missing))
 

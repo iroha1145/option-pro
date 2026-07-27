@@ -204,7 +204,17 @@ def test_stock_data_quality_is_derived_from_model_signal_schema() -> None:
     payload["atm_iv_percent"] = _scored_signal(35.0)
 
     complete = scoring.compute_stock_scores(payload)
-    assert complete["data_quality"] == 100
+    # 与市场分数同口径（审计 2.6.10）：data_quality = 信号可得率 × 模型
+    # 覆盖率。11 个价格类信号齐全时信号可得率是 100，但 top/bottom 各有
+    # 4/7 个分类恒缺（期权拥挤、财报反应、估值预期、事件风险），覆盖率
+    # 只有 0.5——不允许再报出「数据质量 100」。
+    assert complete["signal_data_quality"] == 100
+    assert complete["coverage"]["top_ratio"] == pytest.approx(0.5, abs=0.06)
+    expected_coverage = (
+        complete["coverage"]["top_ratio"] + complete["coverage"]["bottom_ratio"]
+    ) / 2
+    assert complete["data_quality"] == round(100 * expected_coverage)
+    assert complete["data_quality"] < 100
     assert complete["data_quality_available"] == 11
     assert complete["data_quality_expected"] == 11
 
@@ -217,7 +227,12 @@ def test_stock_data_quality_is_derived_from_model_signal_schema() -> None:
     partial = scoring.compute_stock_scores(payload)
     assert partial["data_quality_available"] == 10
     assert partial["data_quality_expected"] == 11
-    assert partial["data_quality"] == 91
+    assert partial["signal_data_quality"] == 91
+    partial_coverage = (
+        partial["coverage"]["top_ratio"] + partial["coverage"]["bottom_ratio"]
+    ) / 2
+    assert partial["data_quality"] == round(91 * partial_coverage)
+    assert partial["data_quality"] < partial["signal_data_quality"]
 
 
 def test_atr_does_not_masquerade_as_an_iv_rank_component() -> None:

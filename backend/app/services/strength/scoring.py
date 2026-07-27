@@ -26,7 +26,11 @@ from app.services.technical.range_persistence import (
 
 
 SCORE_VERSION = "strength-v2"
-FEATURE_VERSION = "strength-features-v2"
+# v3（2026-07-27 审计批）：52 周高位要求 ≥240 根真实样本（不足时
+# ath_proximity 缺失并按缺失重新配权）；量价匹配剔除缺失成交量日；
+# 期权热度不再用 30/35/50 中性占位；板块聚合改按完整 theme_ids 归组。
+# 评分公式本身未变，特征提取口径变了，旧快照的行值不可与 v3 混排对比。
+FEATURE_VERSION = "strength-features-v3"
 NORMALIZATION_VERSION = "strength-normalization-v1"
 
 

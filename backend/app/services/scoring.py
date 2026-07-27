@@ -403,10 +403,16 @@ def compute_stock_scores(signals: dict) -> dict:
     dip = _compute_dip_buy_quality(signals)
     top_reasons = _reasons(signals, "top")
     bottom_reasons = _reasons(signals, "bottom")
-    data_quality, quality_available, quality_expected = _quality_for_keys(
+    signal_quality, quality_available, quality_expected = _quality_for_keys(
         signals,
         STOCK_SCORE_SIGNAL_KEYS,
     )
+    # 与市场分数同口径：数据质量 = 信号可得率 × 模型覆盖率。个股侧
+    # top/bottom 各有约一半分类恒缺（期权拥挤、财报反应、估值预期、事件
+    # 风险），只看 11 个价格类信号会在覆盖率仅 0.5 时报出 100 的满分。
+    model_coverage = (
+        top_aggregate["coverage"] + bottom_aggregate["coverage"]
+    ) / 2.0
     return {
         "top_score": top_score,
         "bottom_score": bottom_score,
@@ -418,7 +424,8 @@ def compute_stock_scores(signals: dict) -> dict:
         "dip_buy_active_weight": dip["active_weight"],
         "dip_buy_coverage": dip["coverage"],
         "dip_buy_missing_components": dip["missing_components"],
-        "data_quality": data_quality,
+        "data_quality": round(signal_quality * model_coverage),
+        "signal_data_quality": signal_quality,
         "data_quality_available": quality_available,
         "data_quality_expected": quality_expected,
         "top_status": top_aggregate["status"],

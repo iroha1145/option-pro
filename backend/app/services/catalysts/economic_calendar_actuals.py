@@ -276,14 +276,33 @@ async def _fetch_source_rows(date_from: date, date_to: date) -> list[dict[str, A
         return deepcopy(rows)
 
 
+def _peek_cached_source_rows(
+    date_from: date,
+    date_to: date,
+) -> list[dict[str, Any]] | None:
+    """Return fresh cached provider rows without any network work."""
+
+    cached = _cache.get((date_from.isoformat(), date_to.isoformat()))
+    if cached is not None and cached[0] > monotonic_time.monotonic():
+        return deepcopy(cached[1])
+    return None
+
+
 async def enrich_recent_actuals(
     payload: Mapping[str, Any],
     *,
     date_from: date,
     date_to: date,
     as_of: datetime,
+    allow_fetch: bool = True,
 ) -> dict[str, Any]:
-    """Fill recent missing actuals without making the calendar route fragile."""
+    """Fill recent missing actuals without making the calendar route fragile.
+
+    ``allow_fetch=False`` keeps the call strictly local: a fresh in-process
+    cache is still merged, but no external provider request is made. Visitors
+    run in this mode unless the owner opted in via
+    ``access.visitor_live_pulls``.
+    """
 
     observed = as_of.astimezone(timezone.utc)
     recent_start = observed.date() - timedelta(days=_MAX_ENRICH_DAYS - 1)
@@ -312,6 +331,29 @@ async def enrich_recent_actuals(
             "status": "not_needed",
             "attempted": 0,
             "filled": 0,
+        }
+        return output
+    if not allow_fetch:
+        cached_rows = _peek_cached_source_rows(start_date, end_date)
+        if cached_rows is None:
+            output["actual_fallback"] = {
+                "provider": _PROVIDER,
+                "status": "skipped",
+                "reason": "visitor_read_only",
+                "attempted": len(missing_past),
+                "filled": 0,
+            }
+            return output
+        output, filled, attempted = merge_recent_actuals(
+            output,
+            cached_rows,
+            as_of=observed,
+        )
+        output["actual_fallback"] = {
+            "provider": _PROVIDER,
+            "status": "active" if filled else "no_match",
+            "attempted": attempted,
+            "filled": filled,
         }
         return output
     try:

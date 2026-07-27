@@ -391,7 +391,13 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
       } else if (err?.code === 429) {
         toast.error(__t('AI 任务队列已满'), __t('约 {n}s 后重试', { n: err.retryAfter ?? 60 }));
       } else if (err?.code === 401) {
-        setErrorMsg(err.message || __t('公开分析入口暂不可用'));
+        // 访客提交默认关闭（access.visitor_ai_actions）：如实说明需要
+        // Owner 登录，而不是显示一句泛化的英文错误。
+        setErrorMsg(
+          err.bizCode === 'owner_login_required'
+            ? __t('生成分析需要 Owner 登录；已有分析仍可浏览')
+            : (err.message || __t('公开分析入口暂不可用')),
+        );
         setPhase('public-unavailable');
       } else if (err?.bizCode === 'manual_analysis_disabled') {
         setPhase('locked-ai');

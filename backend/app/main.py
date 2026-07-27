@@ -325,8 +325,19 @@ def _is_public_read_api_path(path: str) -> bool:
     )
 
 
-def _is_public_read_request(path: str, method: str) -> bool:
-    """Return whether password-mode visitors may use this bounded surface."""
+def _is_public_read_request(
+    path: str,
+    method: str,
+    *,
+    visitor_ai_actions: bool = False,
+    visitor_live_pulls: bool = False,
+) -> bool:
+    """Return whether password-mode visitors may use this bounded surface.
+
+    The two keyword flags mirror ``AccessConfig``: the earnings-impact
+    submission and the manual stock pull are visitor-reachable only when the
+    owner opted in via config; by default visitors stay read-only.
+    """
 
     normalized_method = method.upper()
     if _is_account_api_request(path, normalized_method):
@@ -342,8 +353,8 @@ def _is_public_read_request(path: str, method: str) -> bool:
         )
     return normalized_method == "POST" and (
         path in _PUBLIC_READ_POST_PATHS
-        or is_public_earnings_impact_action_path(path)
-        or is_public_stock_pull_path(path)
+        or (visitor_ai_actions and is_public_earnings_impact_action_path(path))
+        or (visitor_live_pulls and is_public_stock_pull_path(path))
     )
 
 
@@ -536,7 +547,12 @@ class _GatewayMiddleware:
                 and (
                     path in _PASSWORD_ENTRY_PATHS
                     or path.startswith(_PASSWORD_ENTRY_PREFIXES)
-                    or _is_public_read_request(path, method)
+                    or _is_public_read_request(
+                        path,
+                        method,
+                        visitor_ai_actions=self.access_runtime.visitor_ai_actions,
+                        visitor_live_pulls=self.access_runtime.visitor_live_pulls,
+                    )
                 )
             )
         )

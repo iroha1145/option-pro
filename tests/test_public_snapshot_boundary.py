@@ -375,7 +375,9 @@ def test_sector_iv_reads_persisted_strength_worker_options_without_provider_call
     assert heatmap_payload["data"] == heatmap_payload["rankings"]
     assert heatmap_payload["data"][0]["ticker"] == "NVDA"
     assert owner_payload["rankings"][0]["ticker"] == "MSFT"
-    assert owner_payload["rankings"][0]["sector_iv_rank"] == 50.0
+    # 单个样本没有可辩护的板块内分位——绝对 IV 照常给出，分位留空。
+    assert owner_payload["rankings"][0]["sector_iv_rank"] is None
+    assert owner_payload["rankings"][0]["atm_iv_percent"] == 25.0
     assert path.read_bytes() == original
 
 
@@ -462,6 +464,8 @@ def test_sector_iv_rejects_non_provider_option_placeholders(
         }
 
     monkeypatch.setattr(sectors, "_iv_ranking_payload", unavailable_scan)
+    # 占位数据被拒后访客要能走到实扫，需要 owner 打开 visitor_live_pulls。
+    monkeypatch.setattr(sectors, "request_allows_visitor_live_pulls", lambda _r: True)
 
     async def scenario() -> list[HTTPException]:
         with request_owner_access_context(False):
@@ -592,6 +596,9 @@ def test_public_cold_sector_iv_uses_yahoo_and_persists_restart_snapshot(
         sector_id,
         {"name": "Public Cold Sector", "tickers": ["AAA", "BBB"]},
     )
+    # 冷启动实扫是 visitor_live_pulls 开启后的行为；默认关闭时访客得到
+    # public_snapshot_unavailable（见 test_visitor_action_boundaries）。
+    monkeypatch.setattr(sectors, "request_allows_visitor_live_pulls", lambda _r: True)
     snapshot_dir = tmp_path / "sector-iv-snapshots-v1"
     monkeypatch.setattr(sectors, "_SECTOR_IV_SNAPSHOT_DIR", snapshot_dir)
     monkeypatch.setattr(
