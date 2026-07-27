@@ -338,6 +338,58 @@ test.describe("macro conditions desktop", () => {
     await hint.press("Escape");
     await expectNoHorizontalOverflow(page);
   });
+
+  test("an info hint escapes clipping ancestors and stays inside the viewport", async ({ page }) => {
+    // 评分读数几乎都住在 `card-surface overflow-hidden` 里。浮层若与触发点同层，
+    // 会被祖先的 overflow 直接切掉——z-index 对 overflow 裁剪无效（新闻流首行
+    // 的说明曾被削去半截）。这里钉住两件事：浮层挂到 body，且完整落在视口内。
+    await stubApi(page, { conditions: conditions(), history: history() });
+    await openMarket(page);
+    const hint = page
+      .getByRole("button", { name: /宏观环境综合分（0–100 分）：查看评分说明/ })
+      .first();
+
+    // 收起时不该有常驻节点（读屏会把几十字算法说明当正文连读）
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+
+    await hint.focus();
+    const tooltip = page.getByRole("tooltip").first();
+    await expect(tooltip).toBeVisible();
+
+    const geometry = await tooltip.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      let clipper = null;
+      for (let el = node.parentElement; el && el !== document.documentElement; el = el.parentElement) {
+        const style = getComputedStyle(el);
+        if (style.overflowX !== "visible" || style.overflowY !== "visible") {
+          clipper = `${el.tagName}.${el.className}`;
+          break;
+        }
+      }
+      return {
+        parentIsBody: node.parentElement === document.body,
+        position: getComputedStyle(node).position,
+        clipper,
+        rect: { top: rect.top, left: rect.left, bottom: rect.bottom, right: rect.right },
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+      };
+    });
+
+    expect(geometry.parentIsBody).toBe(true);
+    expect(geometry.position).toBe("fixed");
+    expect(geometry.clipper).toBe(null);
+    expect(geometry.rect.top).toBeGreaterThanOrEqual(0);
+    expect(geometry.rect.left).toBeGreaterThanOrEqual(0);
+    expect(geometry.rect.bottom).toBeLessThanOrEqual(geometry.viewport.height);
+    expect(geometry.rect.right).toBeLessThanOrEqual(geometry.viewport.width);
+
+    // 移开指针并失焦后节点整体移除（Escape 只关点按态，仍聚焦时浮层照旧可见，
+    // 与改造前 focus-within 的行为一致）
+    await hint.press("Escape");
+    await page.locator("h1").first().hover();
+    await hint.blur();
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+  });
 });
 
 /* -------------------------------- 降级取证 -------------------------------- */
