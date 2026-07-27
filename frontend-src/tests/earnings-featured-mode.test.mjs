@@ -22,7 +22,7 @@ import vm from 'node:vm';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = path.resolve(here, '..', 'src');
 
-function loadTypesModule() {
+function loadTypesModule(globalOverrides = {}) {
   const modulePath = path.join(src, 'components/earnings/types.ts');
   const compiled = ts.transpileModule(fs.readFileSync(modulePath, 'utf8'), {
     compilerOptions: {
@@ -53,6 +53,7 @@ function loadTypesModule() {
     Set,
     String,
     Boolean,
+    ...globalOverrides,
   });
   return module.exports;
 }
@@ -301,6 +302,34 @@ test('选中日切换后孤儿解析在该日范围内取默认候选', () => {
 /* ---------------- #16：大规模列表性能 ---------------- */
 
 test('4000 行下派生状态与渐进挂载保持在预算内', () => {
+  // 挂钟断言在 CI 上量的是核争抢不是算法（node --test 多文件并行，双核 runner
+  // 会把 <20ms 的任务拖到数百 ms），所以这里改成两层：
+  //  1) 确定性计数：在 sandbox 里注入计数版 Date/Intl，直接数派生过程做了多少次
+  //     日期解析/格式化——逐行 Intl.format（≥4000）、逐比较 Date.parse（≈19 万）
+  //     这类数量级回归会被数出来，与机器快慢无关；
+  //  2) 宽松挂钟护栏：只拦灾难性回归，阈值高于任何调度噪声。
+  const counters = { dateParses: 0, dateConstructions: 0, intlFormatters: 0 };
+  class CountingDate extends Date {
+    constructor(...args) {
+      super(...args);
+      counters.dateConstructions += 1;
+    }
+    static parse(text) {
+      counters.dateParses += 1;
+      return Date.parse(text);
+    }
+    static now() {
+      return Date.now();
+    }
+  }
+  const CountingIntl = {
+    DateTimeFormat: function DateTimeFormat(...args) {
+      counters.intlFormatters += 1;
+      return new Intl.DateTimeFormat(...args);
+    },
+  };
+  const counted = loadTypesModule({ Date: CountingDate, Intl: CountingIntl });
+
   const items = Array.from({ length: 4000 }, (_, i) =>
     row(`T${String(i).padStart(4, '0')}`, {
       public_featured: i % 7 === 0,
@@ -309,8 +338,14 @@ test('4000 行下派生状态与渐进挂载保持在预算内', () => {
       epsActual: i % 5 === 0 ? 1.2 : null,
     }),
   );
+
+  // 模块加载本身允许构造一个 etFmt 单例；派生过程从零开始计数。
+  counters.dateParses = 0;
+  counters.dateConstructions = 0;
+  counters.intlFormatters = 0;
+
   const started = process.hrtime.bigint();
-  const state = computeEarningsListState({
+  const state = counted.computeEarningsListState({
     items,
     selectedDay: null,
     mode: 'all',
@@ -318,24 +353,33 @@ test('4000 行下派生状态与渐进挂载保持在预算内', () => {
     visibleLimit: 24,
     selectedTicker: 'T3999',
   });
+  counted.prioritizeEarningsRows(items, 24);
   const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
-  // 预算给到 300ms：全套测试并行时 CI 核会被分走；etToday 已按秒记忆化，
-  // 单跑实测 <20ms，这里防的是数量级回归（O(n²)/逐行 Intl.format）。
+
+  // 28 个唯一日期 × 2 次 parse × 若干派生趟 ≈ 60；600 留 10 倍余量，
+  // 仍比逐行（8000+）低一个数量级、比逐比较（≈19 万）低两个数量级。
   assert.ok(
-    elapsedMs < 300,
-    `4000 行派生状态耗时 ${elapsedMs.toFixed(1)}ms，超出 300ms 预算`,
+    counters.dateParses <= 600,
+    `4000 行派生做了 ${counters.dateParses} 次 Date.parse——日期解析没有按唯一日期记忆化`,
   );
+  assert.ok(
+    counters.intlFormatters === 0,
+    `派生过程构造了 ${counters.intlFormatters} 个 Intl.DateTimeFormat——应复用模块级 etFmt 单例`,
+  );
+  assert.ok(
+    counters.dateConstructions <= 200,
+    `派生过程构造了 ${counters.dateConstructions} 个 Date 实例——存在逐行/逐比较的日期对象分配`,
+  );
+
+  // 灾难护栏：远高于调度噪声，只拦数量级崩坏。
+  assert.ok(
+    elapsedMs < 1500,
+    `4000 行派生 + prioritize 耗时 ${elapsedMs.toFixed(1)}ms，超出 1500ms 灾难护栏`,
+  );
+
   // 渐进挂载额度仍然生效：24 条 + 强制可见的选中行
   assert.ok(state.visibleItems.length <= 25);
   assert.ok(state.visibleItems.some((r) => r.ticker === 'T3999'));
-  // prioritize 本身也要在预算内（同一数据第二次裁切）
-  const startedPrioritize = process.hrtime.bigint();
-  prioritizeEarningsRows(items, 24);
-  const prioritizeMs = Number(process.hrtime.bigint() - startedPrioritize) / 1e6;
-  assert.ok(
-    prioritizeMs < 300,
-    `4000 行 prioritize 耗时 ${prioritizeMs.toFixed(1)}ms，超出预算`,
-  );
 });
 
 /* ---------------- 页面结构互证：日历组件只接 allItems ---------------- */
