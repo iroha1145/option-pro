@@ -37,3 +37,7 @@ migration-report.json
 .secrets.env.lock
 .personal-operation.lock/
 config/unmapped-env.json
+
+# worktree 里手工 symlink 过一次 node_modules,结果被 git add -A 收进了提交(#84);
+# 路径级忽略让这类链接从一开始就进不了暂存区。
+frontend-src/node_modules

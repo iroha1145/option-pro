@@ -4,8 +4,10 @@
  * 成交量副图（18% 高，随阴阳 40% 透明）· 十字光标 dash 3/3
  * 面积模式：brand-500 主线 + 点阵填充 + 虚线趋势线；5 分钟图叠昨收基准虚线 + 末端价格旗标
  * quote_only bar 半透明标注 · _stale 横幅 · 503 → empty-chart.svg「快照不可用」
+ * 回撤尺：手动两点区间测量（K线默认高—低口径可切收盘，面积固定收盘口径），
+ * 锚点按 bar 时间戳存储、静默刷新后重新解析，解析不到判失效
  */
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import ReactECharts from '@/components/charts/ReactECharts';
 import Segmented from '@/components/shared/Segmented';
@@ -13,12 +15,20 @@ import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { usePolling } from '@/hooks/usePolling';
-import { baseAnimation, CH, glassTooltip, stippleAreaStyle, type ChartOption } from '@/lib/chart';
-import { fmtCompact, fmtPrice } from '@/lib/format';
+import { baseAnimation, CH, glassTooltip, stippleAreaStyle, type ChartOption, type EChartsInstance } from '@/lib/chart';
+import {
+  barTimeMs,
+  measureRange,
+  resolveAnchor,
+  snapToMeasurableBar,
+  type MeasureBasis,
+  type RangeMeasure,
+} from '@/lib/drawdown';
+import { fmtCompact, fmtPct, fmtPrice, fmtSigned } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { t } from '../../i18n/core.ts';
 import { CHART_RANGES, DEFAULT_CHART_RANGE, getDetailChart, type ChartRange } from './api';
 import type { ChartBarEx } from '@/mocks/fixtures';
-import { t } from '../../i18n/core.ts';
 
 type ChartMode = 'candle' | 'area';
 
@@ -40,16 +50,80 @@ function barTooltipTitle(iso: string, range: ChartRange): string {
     : ymd;
 }
 
+/** 回撤尺覆盖层：pending = 已选起点待终点；done = 测量完成 */
+type MeasureOverlay =
+  | { kind: 'pending'; aIdx: number }
+  | { kind: 'done'; m: RangeMeasure };
+
+const MEASURE_LABEL_FONT = { fontSize: 10, fontFamily: '"IBM Plex Mono", monospace' };
+
+/** 覆盖层 → markLine / markPoint / markArea 数据（K线与面积模式共用） */
+function measureMarks(overlay: MeasureOverlay | null | undefined) {
+  const empty = { lines: [] as object[], points: [] as object[], areas: [] as object[] };
+  if (!overlay) return empty;
+  if (overlay.kind === 'pending') {
+    return {
+      ...empty,
+      lines: [
+        {
+          xAxis: overlay.aIdx,
+          lineStyle: { color: CH.brand500, width: 1, type: [4, 4] as number[] },
+          label: { ...MEASURE_LABEL_FONT, formatter: t('起点'), color: CH.brand600, position: 'insideEndTop' as const },
+        },
+      ],
+    };
+  }
+  const { m } = overlay;
+  const dir = m.isDrawdown ? CH.down600 : CH.up600;
+  const dirFill = m.isDrawdown ? 'rgba(229,72,77,.07)' : 'rgba(14,159,110,.07)';
+  return {
+    lines: [
+      {
+        yAxis: m.startPrice,
+        lineStyle: { color: CH.ink400, width: 1, type: [6, 4] as number[] },
+        label: {
+          ...MEASURE_LABEL_FONT,
+          formatter: `${m.isDrawdown ? t('高') : t('低')} ${fmtPrice(m.startPrice)}`,
+          color: CH.ink400,
+          position: 'insideStartTop' as const,
+        },
+      },
+      {
+        yAxis: m.endPrice,
+        lineStyle: { color: dir, width: 1, type: [6, 4] as number[] },
+        label: {
+          ...MEASURE_LABEL_FONT,
+          formatter: `${m.isDrawdown ? t('低') : t('高')} ${fmtPrice(m.endPrice)} · ${fmtPct(m.changePct)}`,
+          color: dir,
+          position: m.isDrawdown ? ('insideStartBottom' as const) : ('insideStartTop' as const),
+        },
+      },
+    ],
+    points: [
+      { coord: [m.startIdx, m.startPrice], itemStyle: { color: CH.ink400 } },
+      { coord: [m.endIdx, m.endPrice], itemStyle: { color: dir } },
+    ],
+    areas: [
+      [
+        { xAxis: m.startIdx, yAxis: Math.min(m.startPrice, m.endPrice), itemStyle: { color: dirFill } },
+        { xAxis: m.endIdx, yAxis: Math.max(m.startPrice, m.endPrice) },
+      ],
+    ],
+  };
+}
+
 function buildOption(
   bars: ChartBarEx[],
   ma20: (number | null)[],
   range: ChartRange,
   mode: ChartMode,
   prevClose?: number,
+  overlay?: MeasureOverlay | null,
 ): ChartOption {
   const labels = bars.map((b) => fmtAxisLabel(b.t, range));
   const upFill = CH.up600;
   const downFill = CH.down600;
+  const marks = measureMarks(overlay);
 
   const common = {
     ...baseAnimation,
@@ -71,6 +145,22 @@ function buildOption(
       intercept = (sy - slope * sx) / n;
     }
     const last = closes[n - 1];
+    // 昨收基准线与回撤尺测量线共用一个 markLine（样式随 data 项各自指定）
+    const areaMarkLines: object[] = [];
+    if (range === '5m' && prevClose) {
+      areaMarkLines.push({
+        yAxis: prevClose,
+        lineStyle: { color: CH.ink400, width: 1, type: [6, 4] as number[] },
+        label: {
+          formatter: t('昨收 {p}', { p: fmtPrice(prevClose) }),
+          color: CH.ink400,
+          fontSize: 10,
+          fontFamily: '"IBM Plex Mono", monospace',
+          position: 'insideStartTop' as const,
+        },
+      });
+    }
+    areaMarkLines.push(...marks.lines);
     return {
       ...common,
       grid: baseGridArea(),
@@ -121,22 +211,13 @@ function buildOption(
             fontFamily: '"IBM Plex Mono", monospace',
             distance: 6,
           },
-          markLine:
-            range === '5m' && prevClose
-              ? {
-                  symbol: 'none',
-                  silent: true,
-                  data: [{ yAxis: prevClose }],
-                  lineStyle: { color: CH.ink400, width: 1, type: [6, 4] as number[] },
-                  label: {
-                    formatter: t('昨收 {p}', { p: fmtPrice(prevClose) }),
-                    color: CH.ink400,
-                    fontSize: 10,
-                    fontFamily: '"IBM Plex Mono", monospace',
-                    position: 'insideStartTop' as const,
-                  },
-                }
-              : undefined,
+          markLine: areaMarkLines.length
+            ? { symbol: 'none', silent: true, data: areaMarkLines }
+            : undefined,
+          markPoint: marks.points.length
+            ? { symbol: 'circle', symbolSize: 7, silent: true, data: marks.points }
+            : undefined,
+          markArea: marks.areas.length ? { silent: true, data: marks.areas } : undefined,
           z: 3,
         },
         {
@@ -260,6 +341,11 @@ function buildOption(
           borderWidth: 1,
         },
         barMaxWidth: 14,
+        markLine: marks.lines.length ? { symbol: 'none', silent: true, data: marks.lines } : undefined,
+        markPoint: marks.points.length
+          ? { symbol: 'circle', symbolSize: 7, silent: true, data: marks.points }
+          : undefined,
+        markArea: marks.areas.length ? { silent: true, data: marks.areas } : undefined,
         z: 3,
       },
       {
@@ -291,6 +377,29 @@ function baseGridArea() {
   return { left: 8, right: 56, top: 16, bottom: 8, containLabel: true };
 }
 
+/** 回撤尺状态机：idle → 选起点 → 选终点 → 完成（Esc / 再点按钮回 idle） */
+type MeasureState =
+  | { phase: 'idle' }
+  | { phase: 'selectStart' }
+  | { phase: 'selectEnd'; aMs: number }
+  | { phase: 'done'; aMs: number; bMs: number };
+
+function measureDurationText(range: ChartRange, m: RangeMeasure): string {
+  if (range === '1w') return t('{n} 周', { n: m.barCount });
+  if (range === '1d') return t('{n} 个交易日', { n: m.barCount });
+  return t('{n} 根 · 跨 {d} 个交易日', { n: m.barCount, d: m.sessionDays });
+}
+
+/** 与 MacroHistoryChart 叠加线按钮一致的开关样式 */
+function toggleButtonCls(active: boolean): string {
+  return cn(
+    'rounded-xs border px-2 py-0.5 text-micro outline-none transition-colors duration-fast',
+    active
+      ? 'border-brand-400 bg-brand-50 text-brand-700'
+      : 'border-line text-ink-400 hover:text-ink-600 focus-visible:text-ink-600',
+  );
+}
+
 export default function KlineChart({
   ticker,
   prevClose,
@@ -320,9 +429,75 @@ export default function KlineChart({
     [ticker, range, refreshVersion],
   );
 
+  const [measure, setMeasure] = useState<MeasureState>({ phase: 'idle' });
+  const [basis, setBasis] = useState<MeasureBasis>('wick');
+  const [chartInst, setChartInst] = useState<EChartsInstance | null>(null);
+  const measureActive = measure.phase !== 'idle';
+  // 面积图没有影线可吸附，强制收盘口径；K线默认高—低，可切收盘
+  const effectiveBasis: MeasureBasis = mode === 'area' ? 'close' : basis;
+  const bars = data?.bars;
+
+  // 锚点属于旧价格序列：切标的 / 周期 / 显示模式一律清除，不跨序列迁移
+  useEffect(() => {
+    setMeasure({ phase: 'idle' });
+  }, [ticker, range, mode]);
+
+  useEffect(() => {
+    if (!measureActive) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMeasure({ phase: 'idle' });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [measureActive]);
+
+  // 选点走 zrender 全域点击：点击任意位置吸附最近可测 bar（series 命中区太窄，移动端点不中）
+  useEffect(() => {
+    const chart = chartInst;
+    const phase = measure.phase;
+    if (!chart || chart.isDisposed() || !bars?.length) return;
+    if (phase !== 'selectStart' && phase !== 'selectEnd') return;
+    const zr = chart.getZr();
+    const handler = (event: { offsetX: number; offsetY: number }) => {
+      const converted = chart.convertFromPixel({ gridIndex: 0 }, [event.offsetX, event.offsetY]) as
+        | number[]
+        | null;
+      if (!converted || !Number.isFinite(converted[0])) return;
+      const idx = snapToMeasurableBar(bars, converted[0]);
+      if (idx < 0) return;
+      const clickedMs = barTimeMs(bars[idx]);
+      setMeasure((prev) => {
+        if (prev.phase === 'selectStart') return { phase: 'selectEnd', aMs: clickedMs };
+        if (prev.phase === 'selectEnd') return { phase: 'done', aMs: prev.aMs, bMs: clickedMs };
+        return prev;
+      });
+    };
+    zr.on('click', handler);
+    return () => {
+      if (!chart.isDisposed()) zr.off('click', handler);
+    };
+  }, [chartInst, measure.phase, bars]);
+
+  const measurement = useMemo(() => {
+    if (measure.phase !== 'done' || !bars) return null;
+    return measureRange(bars, measure.aMs, measure.bMs, effectiveBasis);
+  }, [measure, bars, effectiveBasis]);
+
+  // 数据静默刷新后锚点时间戳解析不到 → 失效态，如实提示而不是挪到别的 bar
+  const measureInvalid = measure.phase === 'done' && !!bars && !measurement;
+
+  const overlay = useMemo<MeasureOverlay | null>(() => {
+    if (measure.phase === 'selectEnd' && bars) {
+      const aIdx = resolveAnchor(bars, measure.aMs);
+      return aIdx >= 0 ? { kind: 'pending', aIdx } : null;
+    }
+    if (measure.phase === 'done' && measurement) return { kind: 'done', m: measurement };
+    return null;
+  }, [measure, bars, measurement]);
+
   const option = useMemo(
-    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose) : null),
-    [data, range, mode, prevClose],
+    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay) : null),
+    [data, range, mode, prevClose, overlay],
   );
 
   return (
@@ -334,14 +509,38 @@ export default function KlineChart({
           onChange={setRange}
           className="[&_button]:font-mono [&_button]:text-micro"
         />
-        <Segmented
-          options={[
-            { value: 'candle' as ChartMode, label: t('K 线') },
-            { value: 'area' as ChartMode, label: t('面积') },
-          ]}
-          value={mode}
-          onChange={setMode}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented
+            options={[
+              { value: 'candle' as ChartMode, label: t('K 线') },
+              { value: 'area' as ChartMode, label: t('面积') },
+            ]}
+            value={mode}
+            onChange={setMode}
+          />
+          {measureActive && mode === 'candle' && (
+            <button
+              type="button"
+              aria-pressed={basis === 'close'}
+              aria-label={t('按收盘价口径测量')}
+              onClick={() => setBasis((prev) => (prev === 'close' ? 'wick' : 'close'))}
+              className={toggleButtonCls(basis === 'close')}
+            >
+              {t('收盘口径')}
+            </button>
+          )}
+          <button
+            type="button"
+            aria-pressed={measureActive}
+            aria-label={t('回撤测量尺')}
+            onClick={() =>
+              setMeasure((prev) => (prev.phase === 'idle' ? { phase: 'selectStart' } : { phase: 'idle' }))
+            }
+            className={toggleButtonCls(measureActive)}
+          >
+            {t('回撤')}
+          </button>
+        </div>
       </div>
 
       {data?._stale && (
@@ -391,11 +590,71 @@ export default function KlineChart({
               exit={{ opacity: 0, transition: { duration: 0.16 } }}
               className="absolute inset-0"
             >
-              <ReactECharts option={option} ariaLabel={t('{ticker} {range} {mode}图', { ticker, range, mode: mode === 'candle' ? t('K 线') : t('面积') })} />
+              <ReactECharts
+                option={option}
+                onInit={setChartInst}
+                className={measureActive ? 'cursor-crosshair' : undefined}
+                ariaLabel={t('{ticker} {range} {mode}图', { ticker, range, mode: mode === 'candle' ? t('K 线') : t('面积') })}
+              />
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {measureActive && (
+        <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro">
+          {measure.phase === 'selectStart' && (
+            <span className="text-ink-400">{t('回撤尺：点击图表选择起点（Esc 退出）')}</span>
+          )}
+          {measure.phase === 'selectEnd' && (
+            <span className="text-ink-400">{t('回撤尺：再次点击选择终点（Esc 退出）')}</span>
+          )}
+          {measure.phase === 'done' && measurement && (
+            <>
+              <span className="text-ink-400">
+                {effectiveBasis === 'wick' ? t('高—低') : t('收盘—收盘')}
+                {measurement.isDrawdown ? t('回撤') : t('涨幅')}
+              </span>
+              <span
+                className={cn(
+                  'font-mono tnum font-medium',
+                  measurement.isDrawdown ? 'text-down-600' : 'text-up-600',
+                )}
+              >
+                {fmtPct(measurement.changePct)}（{fmtSigned(measurement.changeAbs)}）
+              </span>
+              <span className="font-mono tnum text-ink-400">
+                {fmtPrice(measurement.startPrice)} → {fmtPrice(measurement.endPrice)}
+              </span>
+              <span className="text-ink-400">{measureDurationText(range, measurement)}</span>
+              {measurement.recoveryPct !== null && (
+                <span className="text-ink-400">
+                  {t('修复需')} <span className="font-mono tnum">{fmtPct(measurement.recoveryPct)}</span>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setMeasure({ phase: 'selectStart' })}
+                className="text-brand-600 underline-offset-2 hover:underline"
+              >
+                {t('重测')}
+              </button>
+            </>
+          )}
+          {measureInvalid && (
+            <>
+              <span className="text-warn-600">{t('测量已失效（数据已更新）')}</span>
+              <button
+                type="button"
+                onClick={() => setMeasure({ phase: 'selectStart' })}
+                className="text-brand-600 underline-offset-2 hover:underline"
+              >
+                {t('重新测量')}
+              </button>
+            </>
+          )}
+        </p>
+      )}
 
       <p className={cn('mt-2 flex items-center justify-between text-micro text-ink-400')}>
         <span className="font-mono tnum">

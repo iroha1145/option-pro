@@ -159,4 +159,29 @@ export const DETAIL: Dict = {
   /* src/pages/StockDetail.tsx */
   '行情、技术信号、期权链与相关新闻的全上下文视图 · 数据延迟 15 分钟': ['Full context view of quotes, technical signals, options chain, and related news · Data delayed 15 minutes', '相場・テクニカルシグナル・オプションチェーン・関連ニュースを網羅したビュー · データは15分遅延'],
   '返回': ['Back', '戻る'],
+
+  /* K 线回撤尺（feat/drawdown-measure-tool，合并时补齐） */
+  '回撤': ['Drawdown', 'ドローダウン'],
+  '涨幅': ['Gain', '上昇率'],
+  '回撤测量尺': ['Drawdown measure tool', 'ドローダウン計測ツール'],
+  '收盘口径': ['Close basis', '終値ベース'],
+  '按收盘价口径测量': ['Measure on closing prices', '終値ベースで計測'],
+  '回撤尺：点击图表选择起点（Esc 退出）': [
+    'Drawdown ruler: click the chart to pick a start point (Esc to exit)',
+    'ドローダウン計測：チャートをクリックして始点を選択（Esc で終了）',
+  ],
+  '回撤尺：再次点击选择终点（Esc 退出）': [
+    'Drawdown ruler: click again to pick the end point (Esc to exit)',
+    'ドローダウン計測：もう一度クリックして終点を選択（Esc で終了）',
+  ],
+  '起点': ['Start', '始点'],
+  '高—低': ['High–Low', '高値–安値'],
+  '收盘—收盘': ['Close–Close', '終値–終値'],
+  '修复需': ['Recovery needs', '回復に必要'],
+  '重测': ['Re-measure', '再計測'],
+  '重新测量': ['Measure again', 'もう一度計測'],
+  '测量已失效（数据已更新）': ['Measurement invalidated (data refreshed)', '計測は無効になりました（データ更新）'],
+  '{n} 周': ['{n} wk||{n} wks', '{n} 週'],
+  '{n} 个交易日': ['{n} trading day||{n} trading days', '{n} 営業日'],
+  '{n} 根 · 跨 {d} 个交易日': ['{n} bar across {d} trading days||{n} bars across {d} trading days', '{n} 本 · {d} 営業日にわたる'],
 };

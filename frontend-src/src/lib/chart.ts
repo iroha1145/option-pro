@@ -7,7 +7,9 @@ import { BarChart, CandlestickChart, LineChart, PieChart } from 'echarts/charts'
 import {
   DataZoomComponent,
   GridComponent,
+  MarkAreaComponent,
   MarkLineComponent,
+  MarkPointComponent,
   TooltipComponent,
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
@@ -16,13 +18,16 @@ import type { BarSeriesOption, CandlestickSeriesOption, LineSeriesOption, PieSer
 import type {
   DataZoomComponentOption,
   GridComponentOption,
+  MarkAreaComponentOption,
   MarkLineComponentOption,
+  MarkPointComponentOption,
   TooltipComponentOption,
 } from 'echarts/components';
 
 echarts.use([
   LineChart, BarChart, CandlestickChart, PieChart,
   GridComponent, TooltipComponent, DataZoomComponent, MarkLineComponent,
+  MarkPointComponent, MarkAreaComponent,
   CanvasRenderer,
 ]);
 
@@ -37,7 +42,12 @@ export type ChartOption = ComposeOption<
   | TooltipComponentOption
   | DataZoomComponentOption
   | MarkLineComponentOption
+  | MarkPointComponentOption
+  | MarkAreaComponentOption
 >;
+
+/** echarts.init 返回的实例类型（供交互层 convertFromPixel/zr 事件使用） */
+export type EChartsInstance = ReturnType<typeof echarts.init>;
 
 /* ---------- 调色（与 CSS 变量一致） ---------- */
 export const CH = {
