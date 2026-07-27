@@ -112,6 +112,8 @@ module.exports = {
         'card-hover': '0 1px 2px rgba(16,24,40,.03), 0 12px 32px -14px rgba(16,24,40,.10), inset 0 1px 0 rgba(255,255,255,.7)',
         'inset-hi': 'inset 0 1px 0 rgba(255,255,255,.7)',
         'focus-ring': '0 0 0 3px rgba(46,70,224,.18)',
+        /* 开关旋钮：小件白色控件在彩色轨道上需要比 sh-1 更实的两层墨影才有层次 */
+        knob: '0 1px 3px rgba(16,24,40,.18), 0 1px 1px rgba(16,24,40,.10)',
         xs: '0 1px 2px 0 rgba(16,24,40,.05)', // v8.1 纯黑→墨色，与三层制同源
       },
       fontFamily: {
