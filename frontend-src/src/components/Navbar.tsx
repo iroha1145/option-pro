@@ -107,7 +107,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             aria-label={t("打开命令面板")}
           >
             <Icon name="search" size={14} />
-            <span className="flex-1 text-left">{t('搜索代码或功能…')}</span>
+            <span className="flex-1 truncate text-left">{t('搜索代码或功能…')}</span>
             <kbd className="flex items-center gap-0.5 font-mono text-[10px] text-ink-400">
               <Icon name="command" size={11} />K
             </kbd>
@@ -158,7 +158,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           {isOwner ? (
             <button
               onClick={handleLogout}
-              className="flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-3 text-caption text-ink-500 transition-colors hover:text-ink-800"
+              className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-3 text-caption text-ink-500 transition-colors hover:text-ink-800"
             >
               <Icon name="logout" size={14} />
               {t('退出')}
@@ -166,7 +166,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           ) : (
             <Link
               to="/login"
-              className="flex h-8 items-center rounded-md bg-brand-600 px-3.5 text-caption font-medium text-white shadow-sh-1 transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
+              className="flex h-8 shrink-0 items-center whitespace-nowrap rounded-md bg-brand-600 px-3.5 text-caption font-medium text-white shadow-sh-1 transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
             >
               {t('登录')}
             </Link>
