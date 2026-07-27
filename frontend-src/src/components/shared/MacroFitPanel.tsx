@@ -7,9 +7,9 @@
  * 没读到就说没读到：不显示 50，不显示「中性」，也不显示空白。
  */
 import InfoHint from '@/components/shared/InfoHint';
+import { macroShadowHint } from '@/lib/scoreHints';
 import MacroFitBadge from '@/components/shared/MacroFitBadge';
 import {
-  MACRO_SHADOW_HINT,
   driverText,
   macroMissingReason,
   type MacroFitDriver,
@@ -47,7 +47,7 @@ export default function MacroFitPanel({
       {!bare && (
         <p className="eyebrow">
           {t('宏观适配 · MACRO FIT')}
-          <InfoHint hint={MACRO_SHADOW_HINT} side="bottom" size={11} className="ml-1" />
+          <InfoHint hint={macroShadowHint()} side="bottom" size={11} className="ml-1" />
         </p>
       )}
       <div className="mt-3 space-y-2">

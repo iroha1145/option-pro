@@ -5,10 +5,9 @@ import DataTable, { type Column } from '@/components/shared/DataTable';
 import StrengthBar from '@/components/shared/StrengthBar';
 import InfoHint from '@/components/shared/InfoHint';
 import MacroFitBadge from '@/components/shared/MacroFitBadge';
-import { SCORE_HINTS } from '@/lib/scoreHints';
+import { SCORE_HINTS, macroShadowHint } from '@/lib/scoreHints';
 import {
   MACRO_QUADRANT_LABEL,
-  MACRO_SHADOW_HINT,
   macroQuadrant,
 } from '@/lib/macroFit';
 import Icon from '@/components/icons';
@@ -92,7 +91,7 @@ export default function SectorList({
         title: (
           <>
             {t('宏观适配')}
-            <InfoHint hint={MACRO_SHADOW_HINT} side="bottom" size={11} />
+            <InfoHint hint={macroShadowHint()} side="bottom" size={11} />
           </>
         ),
         sortable: true,

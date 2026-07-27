@@ -145,11 +145,11 @@ export function MethodCard({ profile }: { profile: StrengthProfile | null }) {
               /* live 契约 /strength/profiles 仅返回枚举，无权重明细：隐藏权重条，不编造默认 25% */
               <p className="mt-4 text-caption leading-[18px] text-ink-400">{__t('该档位暂无权重明细')}</p>
             ) : (
-              <div className="mt-4 space-y-2.5">
+              <div className="mt-4 grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2.5">
                 {SUBSCORE_META.map(({ key, label }, i) => {
                   const w = profile?.weights?.[key] ?? 25;
                   return (
-                    <div key={key} className="grid grid-cols-[40px_1fr_40px] items-center gap-2.5">
+                    <div key={key} className="col-span-3 grid grid-cols-subgrid items-center gap-x-2.5">
                       <span className="text-caption text-ink-500">{label}</span>
                       <span className="h-1.5 overflow-hidden rounded-pill bg-line" role="presentation">
                         <motion.span

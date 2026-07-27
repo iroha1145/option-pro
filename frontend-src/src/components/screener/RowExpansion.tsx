@@ -41,6 +41,21 @@ const DIM_HINTS: Record<string, ScoreHint> = {
 const DOT_DAYS = 6;
 const closesCache = new Map<string, Promise<number[] | null>>();
 
+/**
+ * 日线取不到时的人话。公开快照边界（public_snapshot_unavailable）的 detail 是
+ * 后端英文句子（"Saved public snapshot is unavailable for …"），在中/日界面上
+ * 原样透出就是夹生文案——按 bizCode 给本地化说法，其余错误保留后端 message。
+ */
+function dailyChartError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.bizCode === 'public_snapshot_unavailable') {
+      return t('公开快照暂无该股票的日线图 · 可手动拉取');
+    }
+    return error.message;
+  }
+  return t('暂时取不到日线数据');
+}
+
 function fetchDailyCloses(ticker: string, force = false): Promise<number[] | null> {
   if (force) closesCache.delete(ticker);
   let p = closesCache.get(ticker);
@@ -92,7 +107,7 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
       .catch((error: unknown) => {
         if (!alive) return;
         setCloses(null);
-        setLoadError(error instanceof ApiError ? error.message : t('暂时取不到日线数据'));
+        setLoadError(dailyChartError(error));
       });
     return () => {
       alive = false;
@@ -113,7 +128,7 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
       .then(setCloses)
       .catch((error: unknown) => {
         setCloses(null);
-        setLoadError(error instanceof ApiError ? error.message : t('暂时取不到日线数据'));
+        setLoadError(dailyChartError(error));
       });
   };
 
@@ -169,11 +184,11 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
       {/* ① 分项强度 breakdown（与行内微条同源） */}
       <div>
         <p className="eyebrow">{t('分项强度 · BREAKDOWN')}</p>
-        <div className="mt-3 space-y-2.5">
+        <div className="mt-3 grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2.5">
           {dims.map(({ key, label, value }, i) => {
             const w = weightOf(key);
             return (
-              <div key={key} className="grid grid-cols-[56px_1fr_64px] items-center gap-2.5">
+              <div key={key} className="col-span-3 grid grid-cols-subgrid items-center gap-x-2.5">
                 <span className="whitespace-nowrap text-caption text-ink-500">
                   {label}
                   {DIM_HINTS[key] && <InfoHint hint={DIM_HINTS[key]} side="bottom" size={11} className="ml-0.5" />}
