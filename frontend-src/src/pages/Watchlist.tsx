@@ -246,8 +246,16 @@ function SortDropdown({ sort, onChange }: { sort: SortState | null; onChange: (s
     const onDoc = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
+    /* Escape 也能关（审计 2.5.8） */
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
     document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [open]);
   return (
     <div ref={ref} className="relative">
@@ -311,7 +319,11 @@ function WatchCard({
   animateIn: boolean;
 }) {
   return (
-    <motion.button
+    /* 移除键是卡片按钮的「兄弟」而不是后代（审计 2.5.12）：button 里嵌
+       role=button 违反规范，读屏普遍把后代扁平化成卡片可访问名的一部分，
+       「将 X 移出自选」被并进卡片名、删除动作对读屏几乎不存在。
+       动画与 hover 上浮留在外层包装上，观感不变。 */
+    <motion.div
       /* layout="position" 曾挂在每张卡上。它会为每个元素建一个 framer 投影节点并在
          每次布局变化时重新测量 —— 214 张卡时 Style & Layout 达 1,285ms，且把
          ~103K 的投影/拖拽代码拉进首屏包。入场淡入不需要它，hover 位移也不需要。 */
@@ -322,35 +334,15 @@ function WatchCard({
           ? { duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.045, 0.5) }
           : undefined
       }
-      onClick={onClick}
       /* hover 上浮 -3px/240ms 走 whileHover（framer 入场后内联 transform:none 会压掉 CSS hover 位移），阴影用 CSS */
       whileHover={{ y: -3, transition: { duration: 0.24, ease: 'easeOut' } }}
-      className="group/card card-surface relative flex flex-col p-4 text-left transition-shadow duration-[240ms] ease-out hover:shadow-sh-2"
+      className="group/card relative"
     >
-      {onRemove && (
-        /* 卡片本身是 button，移除键用 span[role=button] 以免非法嵌套 */
-        <span
-          role="button"
-          tabIndex={0}
-          aria-label={t('将 {ticker} 移出自选', { ticker: item.ticker })}
-          title={t("移出自选")}
-          onClick={(event) => {
-            event.stopPropagation();
-            event.preventDefault();
-            onRemove();
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.stopPropagation();
-              event.preventDefault();
-              onRemove();
-            }
-          }}
-          className="absolute right-2 top-2 z-10 inline-flex size-6 cursor-pointer items-center justify-center rounded-xs text-ink-300 opacity-0 outline-none transition-[opacity,color] duration-fast hover:bg-paper-2 hover:text-down-700 focus-visible:opacity-100 group-hover/card:opacity-100"
-        >
-          <Icon name="x" size={13} />
-        </span>
-      )}
+      <button
+        type="button"
+        onClick={onClick}
+        className="card-surface flex w-full flex-col p-4 text-left transition-shadow duration-[240ms] ease-out hover:shadow-sh-2"
+      >
       <div className="flex items-center gap-2.5">
         <TickerLogo ticker={item.ticker} />
         <div className="min-w-0 flex-1">
@@ -376,7 +368,22 @@ function WatchCard({
           )}
         </div>
       )}
-    </motion.button>
+      </button>
+      {onRemove && (
+        <button
+          type="button"
+          aria-label={t('将 {ticker} 移出自选', { ticker: item.ticker })}
+          title={t("移出自选")}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove();
+          }}
+          className="absolute right-2 top-2 z-10 inline-flex size-6 cursor-pointer items-center justify-center rounded-xs text-ink-300 opacity-0 outline-none transition-[opacity,color] duration-fast hover:bg-paper-2 hover:text-down-700 focus-visible:opacity-100 group-hover/card:opacity-100"
+        >
+          <Icon name="x" size={13} />
+        </button>
+      )}
+    </motion.div>
   );
 }
 
@@ -771,8 +778,10 @@ export default function Watchlist() {
              横向滚动条（130px）。两者高度差直接产生 CLS 0.200，是这个页面最差的
              一项指标。这里用与下方 motion.div 完全相同的布局类。 */
           <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-1 no-scrollbar sm:grid sm:grid-cols-2 sm:overflow-visible xl:grid-cols-4">
+            {/* 与真实卡片同宽（240px）——220 会让骨架→真实切换时 snap 落点
+                左右错位（审计 2.4.9） */}
             {Array.from({ length: 4 }, (_, i) => (
-              <SkeletonCard key={i} className="min-w-[220px] shrink-0 snap-start sm:min-w-0" />
+              <SkeletonCard key={i} className="min-w-[240px] shrink-0 snap-start sm:min-w-0" />
             ))}
           </div>
         ) : (

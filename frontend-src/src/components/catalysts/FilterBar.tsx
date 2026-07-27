@@ -27,8 +27,16 @@ function StatusDropdown({ value, onChange }: { value: '' | NewsAnalysisStatus; o
     const onDoc = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
+    /* Escape 也能关（审计 2.5.8）：与 ScanHistoryPopover 同口径 */
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
     document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [open]);
   const current = STATUS_OPTIONS.find((o) => o.value === value) ?? STATUS_OPTIONS[0];
   return (
@@ -269,7 +277,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
           <span className="inline-flex items-center gap-1.5 rounded-pill bg-brand-100 px-2.5 py-1 text-caption font-medium text-brand-700">
             <Icon name="flame-line" size={12} />
             {t('主题：')}{catalystsContract.themeName(filters.themeId)}
-            <button onClick={() => set({ themeId: null })} aria-label={t("清除主题过滤")} className="rounded-full p-0.5 hover:bg-brand-200/60">
+            <button onClick={() => set({ themeId: null })} aria-label={t("清除主题过滤")} className="rounded-full p-0.5 hover:bg-brand-100">
               <Icon name="x" size={11} />
             </button>
           </span>

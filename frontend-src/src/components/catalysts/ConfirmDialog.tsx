@@ -1,6 +1,7 @@
 /** 确认弹窗（design.md §4.3 模态：scale(.96)→1 + fade，spring-pop；ESC/背板关闭） */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import { t } from '../../i18n/core.ts';
@@ -26,6 +27,13 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  /* 焦点圈定（审计 2.5.7）：打开时把焦点移到「取消」（默认不选中消耗预算的
+     动作），Tab 只在对话框内循环，关闭后归还给触发按钮——否则焦点还停在
+     抽屉正文里，读屏用户根本不知道弹了确认框。 */
+  const panelRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  useFocusTrap(panelRef, open, { initialFocusRef: cancelRef });
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -49,6 +57,7 @@ export default function ConfirmDialog({
             aria-hidden="true"
           />
           <motion.div
+            ref={panelRef}
             role="alertdialog"
             aria-modal="true"
             aria-label={title}
@@ -77,6 +86,7 @@ export default function ConfirmDialog({
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
+                ref={cancelRef}
                 onClick={onCancel}
                 className="rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 transition-colors duration-fast hover:bg-paper-2"
               >

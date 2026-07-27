@@ -292,7 +292,7 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
             className={cn(
               'flex items-center gap-2 rounded-md border px-3 py-1.5 text-caption font-medium transition-colors duration-fast',
               running
-                ? 'cursor-wait border-brand-200 bg-brand-100/60 text-brand-600'
+                ? 'cursor-wait border-brand-400 bg-brand-100/60 text-brand-600'
                 : 'border-line bg-card text-ink-600 hover:border-brand-400 hover:text-brand-600',
             )}
           >

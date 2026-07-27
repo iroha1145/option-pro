@@ -8,7 +8,7 @@
  * - 悬停/focus-within 用 CSS 显示；触屏无 hover，用受控 open 点按切换
  * - 文案来自 lib/scoreHints（源自后端真实算法），本组件不编内容
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { ScoreHint } from '@/lib/scoreHints';
 import { t } from '../../i18n/core.ts';
@@ -53,6 +53,7 @@ export default function InfoHint({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLSpanElement | null>(null);
   const triggerRef = useRef<HTMLSpanElement | null>(null);
+  const tooltipId = useId();
   const [offsetLeft, setOffsetLeft] = useState<number | null>(null);
 
   /**
@@ -126,6 +127,8 @@ export default function InfoHint({
         role="button"
         tabIndex={0}
         aria-label={t('{title}：查看评分说明', { title: t(hint.title) })}
+        aria-expanded={open}
+        aria-describedby={open ? tooltipId : undefined}
         className={cn(
           'inline-flex cursor-help items-center rounded-full text-ink-300 outline-none transition-colors duration-fast',
           'hover:text-brand-600 focus-visible:text-brand-600',
@@ -150,7 +153,11 @@ export default function InfoHint({
       </span>
 
       <span
+        id={tooltipId}
         role="tooltip"
+        /* 收起时移出可访问性树（审计 2.5.10）：opacity-0 的常驻节点会被读屏
+           当正文连读，每个 InfoHint 的几十字算法说明全部混进页面内容。 */
+        aria-hidden={!open}
         className={cn(
           'pointer-events-none absolute z-50 w-max rounded-md border border-line bg-card px-3 py-2.5 text-left shadow-sh-3',
           'opacity-0 transition-opacity duration-fast',

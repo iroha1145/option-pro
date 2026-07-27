@@ -55,16 +55,41 @@ function TierSegmented({
       title={__t('分档计数基于{scope}', { scope: scopeNote })}
       className="no-scrollbar inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-md border border-line bg-card-warm p-0.5"
     >
-      {TIER_OPTIONS.map((o) => {
+      {TIER_OPTIONS.map((o, index) => {
         const active = value === o.value;
         return (
           <button
             key={o.value}
             role="tab"
             aria-selected={active}
+            /* tablist 标准键盘行为，与 shared/Segmented 的 P3-5 口径一致
+               （审计 2.5.9）：roving tabindex + 方向键 + Home/End。 */
+            tabIndex={active ? 0 : -1}
             onClick={() => onChange(o.value)}
+            onKeyDown={(event) => {
+              const step =
+                event.key === 'ArrowRight' || event.key === 'ArrowDown'
+                  ? 1
+                  : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+                    ? -1
+                    : 0;
+              let target = -1;
+              if (step !== 0) {
+                target = (index + step + TIER_OPTIONS.length) % TIER_OPTIONS.length;
+              } else if (event.key === 'Home') {
+                target = 0;
+              } else if (event.key === 'End') {
+                target = TIER_OPTIONS.length - 1;
+              }
+              if (target < 0) return;
+              event.preventDefault();
+              onChange(TIER_OPTIONS[target].value);
+              const list = event.currentTarget.parentElement;
+              const next = list?.children[target];
+              if (next instanceof HTMLElement) next.focus();
+            }}
             className={cn(
-              'relative shrink-0 whitespace-nowrap rounded-[6px] px-2.5 py-1 text-caption font-medium transition-colors duration-fast',
+              'relative shrink-0 whitespace-nowrap rounded-[6px] px-2.5 py-1 text-caption font-medium transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
               active ? 'text-ink-800' : 'text-ink-400 hover:text-ink-600',
             )}
           >

@@ -45,7 +45,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (kind: ToastKind, title: string, description?: string) => {
       const id = ++idRef.current;
       setItems((prev) => [...prev.slice(-3), { id, kind, title, description }]);
-      window.setTimeout(() => dismiss(id), 4000);
+      /* 错误停留更久（审计 2.5.6）：失败原因 4 秒就消失，读屏 polite 队列
+         常常还没轮到它，节点已经被移除。 */
+      window.setTimeout(() => dismiss(id), kind === 'error' ? 8000 : 4000);
     },
     [dismiss],
   );
@@ -63,7 +65,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed right-4 top-4 z-[90] flex w-[320px] max-w-[calc(100vw-32px)] flex-col gap-2" role="status" aria-live="polite">
+      {/* live 语义放在每条 toast 上（审计 2.5.6）：插入 role=alert 的节点会被
+          立即播报，错误不再排在 polite 队列里等到超时被删。 */}
+      <div className="pointer-events-none fixed right-4 top-4 z-[90] flex w-[320px] max-w-[calc(100vw-32px)] flex-col gap-2">
         <AnimatePresence>
           {items.map((t) => (
             <motion.div
@@ -73,6 +77,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8, transition: { duration: 0.13 } }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              role={t.kind === 'error' ? 'alert' : 'status'}
               className="pointer-events-auto relative overflow-hidden rounded-md border border-line bg-card shadow-sh-2"
             >
               <span className={cn('absolute inset-y-0 left-0 w-[3px]', BAR[t.kind])} aria-hidden="true" />

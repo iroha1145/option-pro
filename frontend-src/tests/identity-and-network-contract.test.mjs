@@ -299,9 +299,18 @@ test('命令面板不再内联本地存储解析', async () => {
 
 test('顶级错误边界包住身份 Provider、命令面板与抽屉', async () => {
   const app = codeOf(await source('App.tsx'));
-  // AppErrorBoundary 必须在 AccessProvider 之外
-  assert.match(app, /<AppErrorBoundary>\s*\n\s*<AccessProvider>/);
-  assert.match(app, /<\/AccessProvider>\s*\n\s*<\/AppErrorBoundary>/);
+  // AppErrorBoundary 必须在 AccessProvider 之外。中间允许出现 MotionConfig
+  // 这类无渲染语义的全局配置层（审计 2.5.2 引入），但不允许反过来。
+  const boundaryOpen = app.indexOf('<AppErrorBoundary>');
+  const accessOpen = app.indexOf('<AccessProvider>');
+  const accessClose = app.indexOf('</AccessProvider>');
+  const boundaryClose = app.indexOf('</AppErrorBoundary>');
+  assert.ok(boundaryOpen !== -1 && accessOpen !== -1 && accessClose !== -1 && boundaryClose !== -1);
+  assert.ok(boundaryOpen < accessOpen, 'AppErrorBoundary 必须先于 AccessProvider 打开');
+  assert.ok(accessClose < boundaryClose, 'AccessProvider 必须先于 AppErrorBoundary 关闭');
+  // 两者之间只允许配置性包装（当前是 MotionConfig），不允许再塞会渲染 UI 的层
+  const between = app.slice(boundaryOpen, accessOpen);
+  assert.doesNotMatch(between, /<(?!\/?(AppErrorBoundary|MotionConfig)\b)[A-Z]/);
 });
 
 /* ---------------- P3-6：未知路由显示 404 ---------------- */

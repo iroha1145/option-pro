@@ -467,28 +467,39 @@ function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
 }
 
 /* ---------------- 贡献分段条（5 段一整条 + 图例；无 contribution_breakdown 时按权重×评分推导） ---------------- */
+/* 分段只信后端 contribution_breakdown（含 event_freshness）；没有它就不画。
+   旧实现用一套与后端不一致的前端权重（0.30/0.25/0.15/0.15/0.15，缺
+   event_freshness，板块契合/数据置信高估、突破质量低估）把缺失推导成
+   五段 0.0（审计 2.1.14）——那不是「推导」，是错误口径的编造。 */
 const CONTRIB_DEFS = [
-  { key: 'breakout_quality', label: t('突破质量'), cls: 'bg-brand-600', scoreKey: 'base_quality_score', weight: 0.3 },
-  { key: 'intrinsic_strength', label: t('内在强度'), cls: 'bg-brand-400', scoreKey: 'intrinsic_strength_score', weight: 0.25 },
-  { key: 'sector_fit', label: t('板块契合'), cls: 'bg-up-600', scoreKey: 'sector_fit_score', weight: 0.15 },
-  { key: 'market_fit', label: t('市场契合'), cls: 'bg-ai-600', scoreKey: 'market_fit_score', weight: 0.15 },
-  { key: 'data_confidence', label: t('数据置信'), cls: 'bg-ink-300', scoreKey: 'data_confidence_score', weight: 0.15 },
+  { key: 'breakout_quality', label: t('突破质量'), cls: 'bg-brand-600' },
+  { key: 'intrinsic_strength', label: t('内在强度'), cls: 'bg-brand-400' },
+  { key: 'market_fit', label: t('市场契合'), cls: 'bg-ai-600' },
+  { key: 'sector_fit', label: t('板块契合'), cls: 'bg-up-600' },
+  { key: 'data_confidence', label: t('数据置信'), cls: 'bg-ink-300' },
+  { key: 'event_freshness', label: t('事件新鲜度'), cls: 'bg-warn-600' },
 ] as const;
 
 function ContributionBar({ ev }: { ev: BreakoutEventFull }) {
-  const { parts, derived } = useMemo(() => {
+  const parts = useMemo(() => {
     const loose = (ev as unknown as { contribution_breakdown?: Record<string, unknown> }).contribution_breakdown;
-    const fromApi = loose && typeof loose === 'object';
-    const raws = CONTRIB_DEFS.map((d) => {
-      if (fromApi) {
-        const v = num(loose[d.key]);
-        if (v !== null) return { d, v, pct: 0 };
-      }
-      return { d, v: Math.round(d.weight * (num(ev[d.scoreKey]) ?? 0) * 10) / 10, pct: 0 };
+    if (!loose || typeof loose !== 'object') return null;
+    const raws = CONTRIB_DEFS.flatMap((d) => {
+      const v = num(loose[d.key]);
+      return v !== null ? [{ d, v, pct: 0 }] : [];
     });
+    if (raws.length === 0) return null;
     const total = raws.reduce((s, p) => s + p.v, 0) || 1;
-    return { parts: raws.map((p) => ({ ...p, pct: (p.v / total) * 100 })), derived: !fromApi };
+    return raws.map((p) => ({ ...p, pct: (p.v / total) * 100 }));
   }, [ev]);
+
+  if (parts === null) {
+    return (
+      <p className="text-[11px] leading-[14px] text-ink-400">
+        {t('评分构成不可用（数据不足）')}
+      </p>
+    );
+  }
 
   return (
     <div aria-label={t("评分贡献分解")}>
@@ -513,11 +524,6 @@ function ContributionBar({ ev }: { ev: BreakoutEventFull }) {
             <span className="font-mono text-[11px] leading-[14px] text-ink-600 tnum">{p.v.toFixed(1)}</span>
           </li>
         ))}
-        {derived && (
-          <li className="rounded-xs border border-line-strong bg-card-warm px-1.5 py-px text-[10px] leading-[14px] text-ink-400">
-            {t('推导')}
-          </li>
-        )}
       </ul>
     </div>
   );
