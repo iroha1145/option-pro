@@ -103,6 +103,7 @@ export default function Layout() {
       <Drawer
         open={drawerTicker !== null}
         onClose={() => setDrawerTicker(null)}
+        label={drawerTicker ? __t('{ticker} 详情', { ticker: drawerTicker }) : undefined}
         title={
           drawerTicker && (
             <span className="flex items-baseline gap-2">
