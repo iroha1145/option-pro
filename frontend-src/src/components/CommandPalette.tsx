@@ -272,7 +272,6 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
             className="fixed left-1/2 top-[18vh] z-[81] w-[640px] max-w-[calc(100vw-24px)] -translate-x-1/2 overflow-hidden rounded-lg border border-line-strong bg-card/[0.88] backdrop-blur-xl backdrop-saturate-150 shadow-[0_24px_64px_-16px_rgba(16,24,40,0.35),0_6px_20px_-8px_rgba(16,24,40,0.16)]"
           >
             {/* 顶边 brand 发丝线（纸面卡片签名） */}
-            <span aria-hidden="true" className="absolute inset-x-0 top-0 h-[2px] bg-brand-600/80" />
             <div className="flex h-12 items-center gap-2.5 border-b border-line px-4">
               <Icon name="search" size={16} className="shrink-0 text-ink-400" />
               <input
