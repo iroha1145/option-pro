@@ -2853,3 +2853,42 @@ def test_transient_link_failure_retries_and_stays_recoverable(
     assert attempts["count"] == 3
     assert stored["openai_response_id"] == "resp_transient_link"
     assert stored["error_code"] != "submission_outcome_unknown"
+
+
+def test_focus_cycle_creation_survives_a_full_bulk_queue(tmp_path):
+    """market_focus is an explicit, self-rate-limited owner action; a bulk
+    earnings/news backlog riding the max_queued ceiling must not reject it."""
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    repository.initialize()
+    for index in range(3):
+        _create_budget_job(repository, "earnings_impact", f"T{index:07d}")
+
+    # The bulk path stays bounded…
+    with pytest.raises(RuntimeError, match="ai_job_queue_full"):
+        repository.create_job(
+            job_type="earnings_impact",
+            payload={"ticker": "FULLQ", "name": "Full queue"},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="background",
+            prompt_version="earnings-impact-v2",
+            schema_version=runtime.schema_identity("earnings_impact")[0],
+            schema_sha256=runtime.schema_identity("earnings_impact")[1],
+            max_queued=3,
+        )
+
+    # …while the focus cycle is admitted at the same depth.
+    focus, created = repository.create_job(
+        job_type="market_focus",
+        payload={"as_of": "2026-07-28T00:00:00Z", "prepared_revision": 42},
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="market-focus-v1",
+        schema_version=runtime.schema_identity("market_focus")[0],
+        schema_sha256=runtime.schema_identity("market_focus")[1],
+        max_queued=3,
+    )
+    assert created is True
+    assert focus["status"] == "pending"

@@ -224,6 +224,15 @@ def _settled_budget_charge_microusd(
     )
 
 
+# Owner-facing focus cycles are explicit, rate-limited actions (30s trigger
+# cooldown, prepared-revision optimistic locking, and the single paid slot).
+# They must not be starved by the bulk analysis backlog: in earnings season
+# the scheduled earnings/news queue legitimately rides the max_queued ceiling
+# for hours, and a depth-based rejection would make the focus trigger answer
+# "queue full" exactly when the owner most wants a market read.
+_QUEUE_LIMIT_EXEMPT_JOB_TYPES = frozenset({"market_focus"})
+
+
 class AIJobRepository:
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -1126,7 +1135,10 @@ class AIJobRepository:
                                WHERE status IN ('pending','queued','in_progress')"""
                         ).fetchone()[0]
                     )
-                    if active >= max_queued:
+                    if (
+                        active >= max_queued
+                        and job_type not in _QUEUE_LIMIT_EXEMPT_JOB_TYPES
+                    ):
                         connection.rollback()
                         raise RuntimeError("ai_job_queue_full")
                     retry_parent = self._select_identity_row(
@@ -1162,7 +1174,7 @@ class AIJobRepository:
                 WHERE status IN ('pending','queued','in_progress')
                 """
             ).fetchone()["count"]
-            if active >= max_queued:
+            if active >= max_queued and job_type not in _QUEUE_LIMIT_EXEMPT_JOB_TYPES:
                 connection.rollback()
                 raise RuntimeError("ai_job_queue_full")
             row = self._insert_job(
