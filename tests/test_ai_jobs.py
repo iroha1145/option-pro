@@ -2694,3 +2694,162 @@ def test_background_cancel_transport_error_is_deferred(
     assert deferred["status"] == "in_progress"
     assert deferred["error_code"] == "provider_cancel_deferred"
     assert deferred["openai_response_id"] == "resp_cancel_error"
+
+
+def test_unlinked_unknown_submission_frees_the_paid_slot_after_short_hold(
+    tmp_path,
+):
+    """An unknown submission with no recorded response id can never be
+    reconciled; it must hold the single paid slot only for the short
+    no-response window instead of the full day-long quarantine."""
+
+    import sqlite3 as _sqlite3
+
+    database = tmp_path / "ai-jobs.db"
+    repository = AIJobRepository(database)
+    repository.initialize()
+    stuck, _ = _create_earnings_job(repository)
+    owner = "short-hold-owner"
+    assert repository.claim_due(owner, 60) is not None
+    assert (
+        repository.mark_submission_started(stuck["job_id"], owner, daily_limit=4)
+        == "started"
+    )
+    repository.fail(stuck["job_id"], owner, "submission_outcome_unknown")
+    assert repository.get_job(stuck["job_id"])["openai_response_id"] is None
+
+    version, digest = runtime.schema_identity("earnings_impact")
+    follower, created = repository.create_job(
+        job_type="earnings_impact",
+        payload={"ticker": "MSFT", "name": "Microsoft"},
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="earnings-impact-v2",
+        schema_version=version,
+        schema_sha256=digest,
+        max_queued=200,
+    )
+    assert created is True
+    assert repository.claim_due(owner, 60) is not None
+
+    # Inside the short window the un-linked submission still occupies the slot.
+    assert (
+        repository.mark_submission_started(
+            follower["job_id"], owner, daily_limit=4
+        )
+        == "concurrency_limit"
+    )
+
+    # Age the stuck submission past the short window but well inside the
+    # 24h quarantine: the slot must open up.
+    aged = (datetime.now(timezone.utc) - timedelta(seconds=1800)).strftime(
+        "%Y-%m-%dT%H:%M:%S.%f"
+    ) + "Z"
+    with _sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET submission_started_at=? WHERE job_id=?",
+            (aged, stuck["job_id"]),
+        )
+        # The first concurrency_limit verdict deferred the follower by two
+        # seconds; drop that so the re-claim below does not have to sleep.
+        connection.execute(
+            "UPDATE ai_jobs SET next_attempt_at=NULL WHERE job_id=?",
+            (follower["job_id"],),
+        )
+    assert repository.claim_due(owner, 60) is not None
+    assert (
+        repository.mark_submission_started(
+            follower["job_id"], owner, daily_limit=4
+        )
+        == "started"
+    )
+
+
+def test_linked_unknown_submission_keeps_the_full_quarantine(tmp_path):
+    """With a recorded response id the submission is reconcilable, so the
+    conservative day-long hold keeps protecting against double spending."""
+
+    import sqlite3 as _sqlite3
+
+    database = tmp_path / "ai-jobs.db"
+    repository = AIJobRepository(database)
+    repository.initialize()
+    stuck, _ = _create_earnings_job(repository)
+    owner = "full-hold-owner"
+    assert repository.claim_due(owner, 60) is not None
+    assert (
+        repository.mark_submission_started(stuck["job_id"], owner, daily_limit=4)
+        == "started"
+    )
+    repository.link_background_response(
+        stuck["job_id"], owner, "resp_linked_quarantine"
+    )
+    repository.fail(stuck["job_id"], owner, "submission_outcome_unknown")
+
+    aged = (datetime.now(timezone.utc) - timedelta(seconds=1800)).strftime(
+        "%Y-%m-%dT%H:%M:%S.%f"
+    ) + "Z"
+    with _sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET submission_started_at=? WHERE job_id=?",
+            (aged, stuck["job_id"]),
+        )
+
+    version, digest = runtime.schema_identity("earnings_impact")
+    follower, created = repository.create_job(
+        job_type="earnings_impact",
+        payload={"ticker": "MSFT", "name": "Microsoft"},
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="earnings-impact-v2",
+        schema_version=version,
+        schema_sha256=digest,
+        max_queued=200,
+    )
+    assert created is True
+    assert repository.claim_due(owner, 60) is not None
+    assert (
+        repository.mark_submission_started(
+            follower["job_id"], owner, daily_limit=4
+        )
+        == "concurrency_limit"
+    )
+
+
+def test_transient_link_failure_retries_and_stays_recoverable(
+    monkeypatch,
+    tmp_path,
+):
+    """A brief SQLite busy error while persisting the response id must not
+    turn a successful paid submission into an unreconcilable unknown."""
+
+    import sqlite3 as _sqlite3
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    settings = _settings(tmp_path / "ai-jobs.db")
+    owner = "transient-link-owner"
+
+    async def fake_submit(*_args, **_kwargs):
+        return SimpleNamespace(status="queued", id="resp_transient_link")
+
+    original_link = repository.link_background_response
+    attempts = {"count": 0}
+
+    def flaky_link(job_id, link_owner, response_id):
+        attempts["count"] += 1
+        if attempts["count"] <= 2:
+            raise _sqlite3.OperationalError("database is locked")
+        return original_link(job_id, link_owner, response_id)
+
+    monkeypatch.setattr(runtime, "submit_background", fake_submit)
+    monkeypatch.setattr(repository, "link_background_response", flaky_link)
+    claimed = repository.claim_due(owner, 60)
+    asyncio.run(process_job(repository, settings, claimed, owner))
+
+    stored = repository.get_job(row["job_id"])
+    assert attempts["count"] == 3
+    assert stored["openai_response_id"] == "resp_transient_link"
+    assert stored["error_code"] != "submission_outcome_unknown"

@@ -1613,6 +1613,7 @@ class AIJobRepository:
         daily_token_limit: int = 10_000_000,
         cooldown_seconds: int = 0,
         unknown_submission_hold_seconds: int = 86400,
+        unknown_submission_no_response_hold_seconds: int = 900,
     ) -> str:
         """Atomically enforce concurrency, cooldown, and daily Token usage.
 
@@ -1631,6 +1632,18 @@ class AIJobRepository:
             now_dt
             - timedelta(
                 seconds=max(1, int(unknown_submission_hold_seconds))
+            )
+        )
+        # A submission with no recorded response id can never be reconciled,
+        # so a day-long quarantine buys nothing after the provider run has
+        # certainly finished; hold the paid slot only for the short window in
+        # which the un-linked response could still be executing upstream.
+        unknown_no_response_cutoff = _iso(
+            now_dt
+            - timedelta(
+                seconds=max(
+                    1, int(unknown_submission_no_response_hold_seconds)
+                )
             )
         )
         day_start = _iso(now_dt.replace(hour=0, minute=0, second=0, microsecond=0))
@@ -1665,11 +1678,15 @@ class AIJobRepository:
                         status IN ('queued','in_progress')
                         OR (
                           error_code='submission_outcome_unknown'
-                          AND submission_started_at>=?
+                          AND (
+                            (openai_response_id IS NOT NULL
+                             AND submission_started_at>=?)
+                            OR submission_started_at>=?
+                          )
                         )
                       )
                     """,
-                    (job_id, unknown_submission_cutoff),
+                    (job_id, unknown_submission_cutoff, unknown_no_response_cutoff),
                 ).fetchone()[0]
             )
             if in_flight:
@@ -2395,6 +2412,7 @@ class AIJobRepository:
         daily_token_limit: int = 10_000_000,
         cooldown_seconds: int = 0,
         unknown_submission_hold_seconds: int = 86400,
+        unknown_submission_no_response_hold_seconds: int = 900,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         """Return a secret-free, point-in-time view of paid task capacity.
@@ -2409,6 +2427,14 @@ class AIJobRepository:
             observed
             - timedelta(
                 seconds=max(1, int(unknown_submission_hold_seconds))
+            )
+        )
+        unknown_no_response_cutoff = _iso(
+            observed
+            - timedelta(
+                seconds=max(
+                    1, int(unknown_submission_no_response_hold_seconds)
+                )
             )
         )
         day_start_dt = observed.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -2438,12 +2464,16 @@ class AIJobRepository:
                     j.status IN ('queued','in_progress')
                     OR (
                       j.error_code='submission_outcome_unknown'
-                      AND j.submission_started_at>=?
+                      AND (
+                        (j.openai_response_id IS NOT NULL
+                         AND j.submission_started_at>=?)
+                        OR j.submission_started_at>=?
+                      )
                     )
                   )
                 ORDER BY j.created_at LIMIT 1
                 """,
-                (unknown_submission_cutoff,),
+                (unknown_submission_cutoff, unknown_no_response_cutoff),
             ).fetchone()
             latest_paid = connection.execute(
                 """

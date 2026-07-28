@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import os
+import sqlite3
 import threading
 import time
 import uuid
@@ -23,6 +24,32 @@ logger = logging.getLogger(__name__)
 
 _NEW_SUBMISSION_RETRY_SECONDS = 30.0
 _MIN_LEASE_HEARTBEAT_INTERVAL_SECONDS = 5.0
+# Persisting the provider response id is the step that turns a paid
+# submission from "outcome unknown" into "recoverable". A transient SQLite
+# busy error here used to cost the whole day's paid slot, so it is worth a
+# few short retries before conceding.
+_LINK_RESPONSE_RETRIES = 3
+_LINK_RESPONSE_RETRY_DELAY_SECONDS = 0.25
+
+
+async def _link_response_with_retry(
+    repository: AIJobRepository,
+    job_id: str,
+    owner: str,
+    response_id: str,
+) -> None:
+    for attempt in range(_LINK_RESPONSE_RETRIES + 1):
+        try:
+            repository.link_background_response(job_id, owner, response_id)
+            return
+        except sqlite3.OperationalError:
+            # Transient lock/busy contention only; anything else (a rejected
+            # link, a lost lease) keeps its original meaning and propagates.
+            if attempt >= _LINK_RESPONSE_RETRIES:
+                raise
+            await asyncio.sleep(
+                _LINK_RESPONSE_RETRY_DELAY_SECONDS * (attempt + 1)
+            )
 
 
 def _personal_analysis_permissions(config: Any) -> tuple[bool, bool]:
@@ -578,7 +605,8 @@ async def process_job(
                 "submission_outcome_unknown",
             )
             return
-        repository.link_background_response(
+        await _link_response_with_retry(
+            repository,
             job["job_id"],
             owner,
             submitted_response_id,
