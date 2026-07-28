@@ -269,7 +269,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
             /* 键盘逻辑挂在面板上（审计 2.2.13）：焦点 Tab 进结果按钮后，
                ↑↓/Enter/Esc 依然生效（事件冒泡到这里统一处理）。 */
             onKeyDown={onKeyDown}
-            className="fixed left-1/2 top-[18vh] z-[81] w-[640px] max-w-[calc(100vw-24px)] -translate-x-1/2 overflow-hidden rounded-lg border border-line-strong bg-card shadow-sh-3"
+            className="fixed left-1/2 top-[18vh] z-[81] w-[640px] max-w-[calc(100vw-24px)] -translate-x-1/2 overflow-hidden rounded-lg border border-line-strong bg-card/[0.88] backdrop-blur-xl backdrop-saturate-150 shadow-[0_24px_64px_-16px_rgba(16,24,40,0.35),0_6px_20px_-8px_rgba(16,24,40,0.16)]"
           >
             {/* 顶边 brand 发丝线（纸面卡片签名） */}
             <span aria-hidden="true" className="absolute inset-x-0 top-0 h-[2px] bg-brand-600/80" />

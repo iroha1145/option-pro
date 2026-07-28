@@ -1,6 +1,7 @@
 /**
  * 移动端底部 Dock（design.md §7.4）
- * 64px + safe-area 毛玻璃；中央雷达凸起 44px 圆钮；「更多」上弹 sheet（spring-gentle）。
+ * 悬浮胶囊：离屏 12px + safe-area、圆角毛玻璃、墨色浮起阴影；
+ * 五个入口同级单色（雷达不再是中央凸起圆钮）；「更多」上弹 sheet（spring-gentle）。
  */
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
@@ -47,41 +48,22 @@ export default function MobileDock() {
 
   const renderItem = (item: (typeof DOCK_ITEMS)[number]) => {
     const active = location.pathname.startsWith(item.path);
-    if (item.path === '/breakouts') {
-      // 中央凸起圆钮
-      return (
-        <Link
-          key={item.path}
-          to={item.path}
-          className="relative flex flex-1 flex-col items-center justify-end pb-1.5"
-          aria-label={item.label}
-        >
-          <span
-            className={cn(
-              'absolute -top-5 flex size-11 items-center justify-center overflow-hidden rounded-full text-white shadow-sh-2 transition-colors duration-fast',
-              active ? 'bg-brand-700' : 'bg-brand-600',
-            )}
-          >
-            {/* radar-sweep 微动画 */}
-            <span
-              aria-hidden="true"
-              className="absolute inset-0 animate-radar-sweep"
-              style={{ background: 'conic-gradient(from 0deg, rgba(255,255,255,.35), transparent 90deg)' }}
-            />
-            <Icon name="radar" size={20} className="relative" />
-          </span>
-          <span className={cn('mt-6 text-[10px] leading-none', active ? 'font-medium text-brand-600' : 'text-ink-400')}>{item.label}</span>
-        </Link>
-      );
-    }
     return (
       <Link
         key={item.path}
         to={item.path}
-        className="flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5"
+        className="relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1"
         aria-label={item.label}
         aria-current={active ? 'page' : undefined}
       >
+        {/* 当前页的小标记：图标上方一枚 4px 圆点，比整块高亮安静 */}
+        <span
+          aria-hidden="true"
+          className={cn(
+            'absolute top-1.5 size-1 rounded-full bg-brand-600 transition-opacity duration-fast',
+            active ? 'opacity-100' : 'opacity-0',
+          )}
+        />
         <Icon name={item.icon} size={19} className={active ? 'text-brand-600' : 'text-ink-400'} />
         <span className={cn('text-[10px] leading-none', active ? 'font-medium text-brand-600' : 'text-ink-400')}>{item.label}</span>
       </Link>
@@ -90,16 +72,16 @@ export default function MobileDock() {
 
   return (
     <>
+      {/* 悬浮胶囊 Dock：离屏 12px、全圆角、毛玻璃 + 墨色浮起阴影；
+          雷达与其余入口同级同色，不再做中央凸起圆钮。 */}
       <nav
-        className="glass fixed inset-x-0 bottom-0 z-[60] flex h-[calc(4rem+env(safe-area-inset-bottom))] items-stretch border-t border-line px-2 pb-[env(safe-area-inset-bottom)] xl:hidden"
+        className="glass fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[60] mx-auto flex h-16 max-w-md items-stretch rounded-2xl border border-line px-1.5 shadow-[0_18px_40px_-14px_rgba(16,24,40,0.30),0_4px_14px_-6px_rgba(16,24,40,0.14)] xl:hidden"
         aria-label={t('移动端导航')}
       >
-        {DOCK_ITEMS.slice(0, 2).map(renderItem)}
-        {renderItem(DOCK_ITEMS[2])}
-        {renderItem(DOCK_ITEMS[3])}
+        {DOCK_ITEMS.map(renderItem)}
         <button
           onClick={() => setMoreOpen(true)}
-          className="flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5"
+          className="flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1"
           aria-label={t('更多')}
         >
           <Icon name="menu" size={19} className="text-ink-400" />

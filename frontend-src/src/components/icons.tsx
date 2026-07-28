@@ -19,16 +19,13 @@ interface IconProps extends SVGProps<SVGSVGElement> {
 }
 
 const PATHS: Record<IconName, ReactElement> = {
-  /* 雷达：同心弧 + 扫描针 + 两个信号点（弧带轻微抖动） */
+  /* 雷达：碟形天线 —— 斜切碟面朝右上 + 馈源杆与信号球 + 左下三角支架 */
   radar: (
     <>
-      <path d="M12 12 L19.2 5.1" />
-      <path d="M12 3.2c4.8-.3 8.7 3.5 8.8 8.3" />
-      <path d="M12 7.1c2.6-.1 4.7 1.9 4.8 4.4" />
-      <circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none" />
-      <circle cx="15.9" cy="9.2" r="0.9" fill="currentColor" stroke="none" />
-      <circle cx="9.4" cy="14.8" r="0.9" fill="currentColor" stroke="none" />
-      <path d="M12 20.8c-4.9.2-8.7-3.7-8.7-8.6" />
+      <path d="M7.1 5.5 A7.2 7.2 0 0 0 17.3 15.7 Z" />
+      <path d="M12.2 10.6 L16.3 6.5" />
+      <circle cx="17.5" cy="5.3" r="1.7" fill="currentColor" stroke="none" />
+      <path d="M6.6 17.4 L9.8 20.8 H3.4 Z" />
     </>
   ),
   crosshair: (
