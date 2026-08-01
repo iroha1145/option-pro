@@ -412,7 +412,9 @@ test('财报页面保留近期已公布结果并默认收纳长列表', () => {
     'utf8',
   );
   assert.equal(typesSource.includes('distance >= -3 && distance <= 30'), true);
-  assert.equal(typesSource.includes('prioritizeEarningsRows(listItems, visibleLimit)'), true);
+  // 选中某天 = 目录视图（展示顺序前缀截断，无空洞）；未选天 = 优先级采样摘要。
+  assert.equal(typesSource.includes('? listItems.slice(0, Math.max(0, Math.floor(visibleLimit)))'), true);
+  assert.equal(typesSource.includes(': prioritizeEarningsRows(listItems, visibleLimit)'), true);
   assert.equal(page.includes('const LIST_PAGE_SIZE = 24'), true);
   assert.equal(page.includes('computeEarningsListState({'), true);
   assert.equal(page.includes('visibleItems.length < filteredItems.length'), true);
