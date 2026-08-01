@@ -33,7 +33,10 @@ from app.worker.tasks import MacroConditionsTask
 
 
 FAKE_KEY = "0123456789abcdef0123456789abcdef"
-END = dt.date(2026, 7, 23)
+# 观测终点必须跟着真实时钟走：任务在生产镜像里用真实「今天」判定陈旧闸，
+# 固定日期的合成数据会在数天后过期（2026-08-01 实爆：7/23 终点 → 9 天旧 →
+# 有效模块 <5/7 → composite 原子放弃发布 → 冒烟在 None 上崩）。
+END = dt.date.today() - dt.timedelta(days=1)
 START = END - dt.timedelta(days=366 * 8)
 
 _UNITS = {
@@ -183,6 +186,11 @@ async def _run() -> dict:
 
     reader = MacroRepository(database, read_only=True)
     composite = reader.latest_composite()
+    # None = 有效模块不足、原子发布整体放弃。给出可读原因而不是 TypeError。
+    assert composite is not None, (
+        "no composite published — likely the synthetic observations are stale "
+        f"relative to the container clock (fixture END={END.isoformat()})"
+    )
     snapshot_date = dt.date.fromisoformat(str(composite["snapshot_date"]))
     modules = reader.modules_at(snapshot_date)
     factors = reader.factors_at(snapshot_date)
