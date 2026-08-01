@@ -36,6 +36,13 @@ export default function MobileDock() {
      CommandPalette 都调了 useFocusTrap，这里补齐。 */
   const sheetRef = useRef<HTMLDivElement | null>(null);
   useFocusTrap(sheetRef, moreOpen);
+  /* 导航离开时同步强制关闭：sheet 的卸载依赖 AnimatePresence 退场动画完成，
+     而催化这类重页面挂载会持续榨干低端手机的主线程，退场被饿死时白色 sheet
+     会一直盖在新页面上（手机「进催化白屏、刷新才好」的根因）。路由一变就
+     立刻置 false，退场动画能跑就跑、跑不动也不影响下一帧强制清理。 */
+  useEffect(() => {
+    setMoreOpen(false);
+  }, [location.pathname]);
 
   /* 「更多」sheet 声明了 aria-modal，就要有配套行为（审计 2.5.5）：
      Escape 可关 + 打开期间锁背景滚动。 */
@@ -103,15 +110,20 @@ export default function MobileDock() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-[64] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px] xl:hidden"
+              transition={{ duration: 0.15 }}
+              /* 不用 backdrop-blur：全屏背板的实时模糊在移动 GPU 上是弹出/收起
+                 掉帧的最大单项，纯色遮罩视觉上足够。 */
+              className="fixed inset-0 z-[64] bg-[rgba(13,22,38,.32)] xl:hidden"
               onClick={() => setMoreOpen(false)}
             />
             <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              /* 短 tween 取代 spring：物理弹簧需要连续多帧收敛，主线程被重页面
+                 挂载抢走时会长时间停在半途；定长 tween 即使被饿死，恢复的第一帧
+                 也已到终点。 */
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               ref={sheetRef}
               className="fixed inset-x-0 bottom-0 z-[65] rounded-t-xl border-t border-line bg-card pb-[calc(env(safe-area-inset-bottom)+16px)] shadow-sh-3 xl:hidden"
               role="dialog"

@@ -197,6 +197,24 @@
 }
 
 /* sparkline 首绘 draw-line 700ms（§6-4） */
+/* 路由进场：只动 transform，不碰 opacity（Layout 的说明）。
+   动画运行期间 from 帧就是当前值：任何形式的 from{opacity:0}（JS 或 CSS）
+   在动画时钟被饿死/冻结时都表现为「内容已挂载的全白页」；transform 的
+   from 帧最坏也只是停在 6px 偏移，内容始终可读。 */
+.page-enter {
+  animation: page-enter 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-enter {
+    animation: none;
+  }
+}
+@keyframes page-enter {
+  from {
+    transform: translateY(6px);
+  }
+}
+
 @keyframes spark-draw {
   to { stroke-dashoffset: 0; }
 }

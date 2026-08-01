@@ -5,7 +5,6 @@
  */
 import { Suspense, createContext, lazy, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { AnimatePresence, motion } from 'framer-motion';
 import Navbar from '@/components/Navbar';
 import IndexTape from '@/components/IndexTape';
 import Footer from '@/components/Footer';
@@ -70,23 +69,21 @@ export default function Layout() {
         <Navbar onOpenPalette={openPalette} />
         <IndexTape />
         <main className="mx-auto w-full max-w-shell flex-1 px-4 pt-8 md:px-8">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={location.pathname}
-              /* page-fade 转场：enter 240ms opacity + translateY(6px)，exit 120ms */
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, transition: { duration: 0.12 } }}
-              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-            >
-              {/* 按路由重建的错误边界:页面崩溃显示错误卡而非白屏,切页自动复位 */}
-              <RouteErrorBoundary>
-                <Suspense fallback={<PageFallback />}>
-                  <Outlet />
-                </Suspense>
-              </RouteErrorBoundary>
-            </motion.div>
-          </AnimatePresence>
+          {/* page-fade 转场改纯 CSS（enter 240ms opacity + translateY(6px)）。
+              原先 AnimatePresence mode="wait" + initial opacity:0 意味着新页面
+              「默认不可见、靠一帧 JS 动画亮起来」——催化这类重页面在低端手机上
+              挂载时主线程被塞死，动画迟迟不跑，用户看到的就是内容已挂载的全白
+              页（手机菜单进催化白屏的根因之二）。CSS 动画基态即可见：动画只
+              描述过渡，被饿死时最坏也只是直接出现。代价是去掉了 120ms 的退场
+              淡出。 */}
+          <div key={location.pathname} className="page-enter">
+            {/* 按路由重建的错误边界:页面崩溃显示错误卡而非白屏,切页自动复位 */}
+            <RouteErrorBoundary>
+              <Suspense fallback={<PageFallback />}>
+                <Outlet />
+              </Suspense>
+            </RouteErrorBoundary>
+          </div>
         </main>
         <Footer />
         <MobileDock />
