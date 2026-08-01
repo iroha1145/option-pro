@@ -138,6 +138,9 @@ ANALYSIS_LINK_BUSY_TIMEOUT_MS = 250
 # _PUBLIC_MAX_WINDOW_HOURS）——保留期内条目整体保留，窗口读语义不受影响。
 JOURNAL_RETENTION_MIN_DAYS = 8
 _JOURNAL_PRUNE_BATCH_ITEMS = 500
+# 可见性修剪的静默护栏：上游仍在重推的条目（48h 内有新变更）先不删，
+# 避免「删了又被同步灌回来」的抖动循环。
+_JOURNAL_PRUNE_QUIET_HOURS = 48
 
 
 _SCHEMA = """
@@ -1188,9 +1191,14 @@ class LocalCatalystIntelligence:
         """整条目修剪：删除保留期外再无任何变更的新闻及其派生行。
 
         规则与边界：
-        - 以条目（news_id）为单位：仅当该条目**最新**一次变更的 available_at
-          早于 cutoff 才整条删除；存活条目的旧变更原样保留，窗口读与 cursor
-          分页的点时语义不受影响（保留期下限 8 天 > 公共窗口上限 7 天）。
+        - 以条目（news_id）为单位整条删除，两条谓词满足其一（都要求 48h 静默
+          护栏——上游仍在重推的条目不删，防「删了又灌回」抖动）：
+          (a) 最新变更的 available_at 早于 cutoff（本地日志意义上的老条目）；
+          (b) 全部修订的发布/抓取时间都早于 cutoff（可见性意义上的死重：feed
+              窗口按 COALESCE(published,fetched) 过滤，这类条目对任何 ≤7 天
+              窗口永不可见——生产初始回填里 83% 的条目属于此类）。
+          存活条目的旧变更原样保留，窗口读与 cursor 分页的点时语义不受影响
+          （保留期下限 8 天 > 公共窗口上限 7 天）。
         - result_audit 与 tombstones 有意保留：前者是付费结果的不可变审计
           副本（result_json 全文在审计行里另存一份），后者承担防复活语义。
         - 同步游标在 macrolens_etl_state，不读表内容；修订缓存指纹里
@@ -1206,7 +1214,9 @@ class LocalCatalystIntelligence:
             raise ValueError(
                 "journal retention must not undercut the public feed window"
             )
-        cutoff = _iso((now or _utc_now()) - timedelta(days=days))
+        anchor = now or _utc_now()
+        cutoff = _iso(anchor - timedelta(days=days))
+        quiet = _iso(anchor - timedelta(hours=_JOURNAL_PRUNE_QUIET_HOURS))
         totals = {
             "pruned_items": 0,
             "pruned_changes": 0,
@@ -1219,10 +1229,21 @@ class LocalCatalystIntelligence:
                 ids = [
                     row["news_id"]
                     for row in connection.execute(
-                        """SELECT news_id FROM macrolens_etl_news_changes
-                           GROUP BY news_id HAVING MAX(available_at)<?
+                        """SELECT ch.news_id FROM macrolens_etl_news_changes ch
+                           GROUP BY ch.news_id
+                           HAVING MAX(ch.available_at)<?
+                              AND (
+                                  MAX(ch.available_at)<?
+                                  OR COALESCE(
+                                         (SELECT MAX(COALESCE(
+                                              r.published_at,r.fetched_at))
+                                          FROM catalyst_local_news_revisions r
+                                          WHERE r.news_id=ch.news_id),
+                                         MAX(ch.available_at)
+                                     )<?
+                              )
                            LIMIT ?""",
-                        (cutoff, _JOURNAL_PRUNE_BATCH_ITEMS),
+                        (quiet, cutoff, cutoff, _JOURNAL_PRUNE_BATCH_ITEMS),
                     )
                 ]
                 if not ids:
