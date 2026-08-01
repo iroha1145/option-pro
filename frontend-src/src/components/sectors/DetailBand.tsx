@@ -152,6 +152,7 @@ export default function DetailBand({
               </p>
             ) : (
               <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {/* 只展示前 12 个：截断要标出来（下方注脚），旁边的总数才不骗人 */}
                 {sector.tickers.slice(0, 12).map((ticker) => (
                   <button
                     key={ticker}
@@ -163,6 +164,11 @@ export default function DetailBand({
                   </button>
                 ))}
               </div>
+              {sector.tickers.length > 12 && (
+                <p className="mt-2 text-micro text-ink-400">
+                  {t('仅展示前 12 个 · 共 {n} 只成分', { n: sector.tickers.length })}
+                </p>
+              )}
             )}
           </div>
         </div>

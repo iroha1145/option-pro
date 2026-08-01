@@ -67,7 +67,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       {/* live 语义放在每条 toast 上（审计 2.5.6）：插入 role=alert 的节点会被
           立即播报，错误不再排在 polite 队列里等到超时被删。 */}
-      <div className="pointer-events-none fixed right-4 top-4 z-[90] flex w-[320px] max-w-[calc(100vw-32px)] flex-col gap-2">
+      {/* 顶部偏移让开 sticky Navbar（h-12 / md:h-16）：z-[90] 的 toast 落在
+          右上角会压住「退出/登录」按钮并吃掉点击 4–8 秒——典型链是「点退出 →
+          弹 toast → 同位置变出的登录入口被自己压住」（审计 #63）。 */}
+      <div className="pointer-events-none fixed right-4 top-[calc(3rem+8px)] z-[90] flex w-[320px] max-w-[calc(100vw-32px)] flex-col gap-2 md:top-[calc(4rem+8px)]">
         <AnimatePresence>
           {items.map((t) => (
             <motion.div

@@ -9,7 +9,7 @@ export const MARKET: Dict = {
   '强度分布 · 全市场': ['Strength distribution · market-wide', '強度分布 · 全市場'],
   '只': ['stock||stocks', '銘柄'],
   '均值': ['Average', '平均'],
-  '桶宽 10 分 · 色阶 &lt;50 弱 / 50–69 / 70–84 / ≥85 强': ['Bucket width 10 points · color scale &lt;50 weak / 50–69 / 70–84 / ≥85 strong', 'バケット幅10点 · 色分け &lt;50 弱 / 50–69 / 70–84 / ≥85 強'],
+  '桶宽 10 分 · 色阶 <50 弱 / 50–69 / 70–84 / ≥85 强': ['Bucket width 10 points · color scale <50 weak / 50–69 / 70–84 / ≥85 strong', 'バケット幅10点 · 色分け <50 弱 / 50–69 / 70–84 / ≥85 強'],
   '统计范围为扫描股票池全体，不区分指数。': ['Covers the full scanned stock universe, not broken down by index.', '集計範囲はスキャン対象銘柄プール全体で、指数区分はありません。'],
 
   /* src/components/market/IndexCards.tsx */
@@ -38,7 +38,7 @@ export const MARKET: Dict = {
   '市场形态六维': ['Six-factor market regime', '市場環境六軸'],
   '市场形态六维 · MARKET REGIME': ['Market regime', '市場環境六軸 · MARKET REGIME'],
   '综合均值': ['Composite average', '総合平均'],
-  '色阶：&lt;50 弱 · 50–69 中性 · 70–84 强 · ≥85 极强': ['Color scale: &lt;50 weak · 50–69 neutral · 70–84 strong · ≥85 very strong', '色分け：&lt;50 弱 · 50–69 中立 · 70–84 強 · ≥85 極強'],
+  '色阶：<50 弱 · 50–69 中性 · 70–84 强 · ≥85 极强': ['Color scale: <50 weak · 50–69 neutral · 70–84 strong · ≥85 very strong', '色分け：<50 弱 · 50–69 中立 · 70–84 強 · ≥85 極強'],
 
   /* src/components/market/SignalsReading.tsx */
   '，': [', ', '、'],
@@ -87,6 +87,7 @@ export const MARKET: Dict = {
   '偏多': ['Bullish', '強気'],
   '偏空': ['Bearish', '弱気'],
   '大盘强弱': ['Market strength', '地合いの強弱'],
+  '该区间读取失败，仍显示上一区间的曲线': ['This range failed to load — still showing the previous range', 'この期間の読み込みに失敗したため、前の期間の曲線を表示しています'],
   '指数、形态与广度的全景。': ['A full picture of indices, regime, and breadth.', '指数・市場環境・広がりを一望できます。'],
   '时段读取中…': ['Loading session…', 'セッション取得中…'],
   '时段未知': ['Session unknown', 'セッション不明'],

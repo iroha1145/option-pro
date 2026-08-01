@@ -48,8 +48,10 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
   const statusState = remoteState(statusQ);
   const hotState = remoteState(hotStatusQ);
   const loading = statusState === 'loading';
-  const statusUnread = statusState === 'error';
-  const hotUnread = hotState === 'error';
+  /* stale（读取失败但有旧数据）与 error 同待遇：状态灯是「现在能不能采集」，
+     拿 15 分钟前的旧快照亮绿灯说「采集中」，是把读不到伪装成健康。 */
+  const statusUnread = statusState === 'error' || statusState === 'stale';
+  const hotUnread = hotState === 'error' || hotState === 'stale';
 
   const reason = s?.analysisReason ? ANALYSIS_REASON_CN[s.analysisReason] ?? { label: t('模型分析不可用'), tone: 'down' as const } : null;
   const unreadCell = (

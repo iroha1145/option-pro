@@ -24,6 +24,9 @@ export const NAV_ITEMS = [
   { no: '04', label: t('板块'), path: '/sectors' },
   { no: '05', label: t('财报'), path: '/earnings' },
   { no: '06', label: t('催化'), path: '/catalysts' },
+  /* 大盘强弱页此前没有任何常规入口（不在导航、不在 Dock、⌘K 也搜不到，
+     唯一通路是点指数跑马灯）——一个完整页面不该只有彩蛋入口。 */
+  { no: '07', label: t('大盘'), path: '/market' },
 ] as const;
 
 function NyClock({ className }: { className?: string }) {
@@ -53,6 +56,9 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
     const active = nav.querySelector<HTMLElement>('[data-active="true"]');
     if (active) {
       setIndicator({ left: active.offsetLeft + active.offsetWidth / 2 - 12 });
+    } else {
+      // 非导航路由（/stock/:t、404）下划线必须复位，否则停在上一个导航项下
+      setIndicator(null);
     }
   }, [location.pathname]);
 

@@ -104,6 +104,11 @@ export default function MacroConditionsPanel({
    * 这里在动作未完成期间每 5 秒读一次快照版本，版本一变即认定完成并停表。
    */
   const [refreshBaseline, setRefreshBaseline] = useState<string | null>(null);
+  /* refresh 经 ref 取用：conditionsQ 是每次渲染的新对象，直接进 deps 会让
+     effect 每渲染重建——started 不停归零，3 分钟放弃逻辑成死代码，且 5 秒
+     强拉回源直到离开页面。 */
+  const refreshConditionsRef = useRef(conditionsQ.refresh);
+  refreshConditionsRef.current = conditionsQ.refresh;
   useEffect(() => {
     if (refreshPhase !== 'queued' && refreshPhase !== 'in_progress') return;
     const started = Date.now();
@@ -115,10 +120,10 @@ export default function MacroConditionsPanel({
         return;
       }
       invalidateQueryPaths(['/macro/conditions']);
-      conditionsQ.refresh();
+      refreshConditionsRef.current();
     }, REFRESH_FOLLOW_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [refreshPhase, conditionsQ]);
+  }, [refreshPhase]);
 
   /* 快照版本变化即表示刷新已落地，明确复位而不是让状态一直挂着。 */
   const snapshotStamp = conditionsQ.data?.dataThrough ?? conditionsQ.data?.asOf ?? null;

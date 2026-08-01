@@ -156,7 +156,8 @@ export default function MacroHistoryChart({
           return [
             date,
             ...lines,
-            regime ? t('环境：{regime}', { regime }) : '',
+            // regime 是中文分档名（同卡片处已译）：tooltip 里同样要过词典
+            regime ? t('环境：{regime}', { regime: t(regime) }) : '',
             basis ? t('历史基础：{basis}', { basis: BASIS_LABEL[basis] ?? basis }) : '',
           ]
             .filter(Boolean)
@@ -213,6 +214,18 @@ export default function MacroHistoryChart({
         </div>
       </div>
 
+      {error && points.length > 0 && (
+        /* 新区间读取失败、图上还是上一区间的曲线：按钮已高亮新区间，不标注
+           就是同屏说谎（审计 #54）。 */
+        <p className="mt-3 flex items-center justify-between gap-2 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">
+          {t('该区间读取失败，仍显示上一区间的曲线')}
+          {onRetry && (
+            <button type="button" onClick={onRetry} className="shrink-0 font-medium underline underline-offset-2">
+              {t('重试')}
+            </button>
+          )}
+        </p>
+      )}
       <div className="mt-4 h-[240px] w-full">
         {loading && points.length === 0 ? (
           <SkeletonBlock className="h-full w-full" />

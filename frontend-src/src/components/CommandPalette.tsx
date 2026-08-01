@@ -233,6 +233,10 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
       e.preventDefault();
       flat[clampedActive]?.action();
     } else if (e.key === 'Escape') {
+      /* 只关命令面板：不拦截的话原生 keydown 继续冒到 document，命中下层
+         Drawer 的 Escape 监听，把已打开的股票抽屉一起关掉（审计 #61）。 */
+      e.preventDefault();
+      e.stopPropagation();
       onClose();
     }
   };

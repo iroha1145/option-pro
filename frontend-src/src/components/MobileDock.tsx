@@ -3,11 +3,12 @@
  * 悬浮胶囊：离屏 12px + safe-area、圆角毛玻璃、墨色浮起阴影；
  * 五个入口同级单色（雷达不再是中央凸起圆钮）；「更多」上弹 sheet（spring-gentle）。
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAccess } from '@/hooks/useAccess';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import Icon, { type IconName } from '@/components/icons';
 import Segmented from '@/components/shared/Segmented';
 import { LOCALES, getLocale, setLocale, t } from '../i18n/core.ts';
@@ -22,6 +23,7 @@ const DOCK_ITEMS: { label: string; path: string; icon: IconName }[] = [
 
 const MORE_ITEMS: { label: string; path: string; icon: IconName; desc: string }[] = [
   { label: t('财报日历'), path: '/earnings', icon: 'calendar-spark', desc: t('即将公布 × AI 影响') },
+  { label: t('大盘强弱'), path: '/market', icon: 'radar', desc: t('指数 · 宽度 · 宏观环境') },
   { label: t('新闻催化'), path: '/catalysts', icon: 'bolt', desc: t('热点 · 情绪新闻流') },
 ];
 
@@ -30,6 +32,10 @@ export default function MobileDock() {
   const navigate = useNavigate();
   const { isOwner, isSignedIn, username } = useAccess();
   const [moreOpen, setMoreOpen] = useState(false);
+  /* aria-modal 配套（审计 #60）：声明了模态就要真的困住焦点，Drawer 与
+     CommandPalette 都调了 useFocusTrap，这里补齐。 */
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(sheetRef, moreOpen);
 
   /* 「更多」sheet 声明了 aria-modal，就要有配套行为（审计 2.5.5）：
      Escape 可关 + 打开期间锁背景滚动。 */
@@ -106,6 +112,7 @@ export default function MobileDock() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              ref={sheetRef}
               className="fixed inset-x-0 bottom-0 z-[65] rounded-t-xl border-t border-line bg-card pb-[calc(env(safe-area-inset-bottom)+16px)] shadow-sh-3 xl:hidden"
               role="dialog"
               aria-modal="true"

@@ -2,6 +2,7 @@
 import type { Dict } from './types';
 
 export const SECTORS: Dict = {
+  '仅展示前 12 个 · 共 {n} 只成分': ['Showing the first 12 of {n} constituents', '先頭12件のみ表示 · 全{n}銘柄'],
   /* DetailBand.tsx —— 板块详情展开带 */
   '板块详情 · 成分股汇总': ['Sector detail · Constituent summary', 'セクター詳細 · 構成銘柄サマリー'],
   '查看该板块扫描结果': ["View this sector's scan results", 'このセクターのスキャン結果を見る'],

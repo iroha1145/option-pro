@@ -21,7 +21,8 @@ function mapStockSignals(d: unknown): Signal[] {
     const bottomScore = pickN(metric, 'bottom_score', 'bottomScore');
     const activeScore = Math.max(topScore ?? -1, bottomScore ?? -1);
     if (activeScore < 40) return [];
-    const label = pickS(metric, 'label') ?? key;
+    // 与同文件大盘信号（pickLabel）同口径：个股信号名也过词典本地化
+    const label = pickLabel(metric, 'label') ?? key;
     let type: SignalType = 'pullback';
     if (key.includes('volume')) type = 'volume';
     else if (key.includes('iv')) type = 'iv-spike';

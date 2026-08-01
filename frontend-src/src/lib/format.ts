@@ -25,7 +25,16 @@ export function fmtCompact(n: number): string {
 export function fmtTimeHHMMSS(ts: number | Date): string {
   const d = typeof ts === 'number' ? new Date(ts) : ts;
   if (Number.isNaN(d.getTime())) return '—'; // 无效时间（live 缺失字段）如实显「—」
-  return d.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  /* 统一 ET：12 处「更新 / 最近扫描 / 报价更新于」用它，而同屏页面时钟走
+     fmtNyTime（ET）。原实现走浏览器本地时区且无任何时区标注——UTC+8 用户
+     同屏看到「01:12:04 ET」和「更新 14:10:42」两套数字。 */
+  return d.toLocaleTimeString('en-GB', {
+    timeZone: 'America/New_York',
+    hourCycle: 'h23',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 }
 
 /** 纽约时间 HH:MM:SS（秒级走字） */

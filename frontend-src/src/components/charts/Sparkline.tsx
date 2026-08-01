@@ -31,7 +31,8 @@ const Sparkline = memo(function Sparkline({ data, width = 48, height = 20, chang
     () => (data.length >= 2 ? buildPath(data, width, height, variant === 'area' ? 3 : 2) : { line: '', area: '' }),
     [data, width, height, variant],
   );
-  const color = change >= 0 ? 'var(--up-600)' : 'var(--down-600)';
+  // 三态与同屏 ChangeBadge 一致：持平不是上涨
+  const color = change > 0 ? 'var(--up-600)' : change < 0 ? 'var(--down-600)' : 'var(--ink-400)';
   const lineColor = variant === 'area' ? 'var(--brand-500)' : color;
 
   return (

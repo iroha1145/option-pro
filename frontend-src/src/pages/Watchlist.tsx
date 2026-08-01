@@ -887,8 +887,12 @@ export default function Watchlist() {
               )}
             </div>
             <p className="w-full text-right text-caption text-ink-400 sm:w-auto">
-              <span className="font-mono tnum">{items.length}</span> {t('只标的')}
-              {canManageWatchlist && <span className="ml-1 text-ink-300">{t('/ 上限')} {maxTickers}</span>}
+              <span className="font-mono tnum">{items.length}</span>{' '}
+              {showingDefaultPool ? t('只（默认关注池）') : t('只标的')}
+              {/* 默认池是站点的池子：拿它的规模对照「上限 50」等于把它冒充成用户自选 */}
+              {canManageWatchlist && !showingDefaultPool && (
+                <span className="ml-1 text-ink-300">{t('/ 上限')} {maxTickers}</span>
+              )}
               {wl.lastUpdatedAt && (
                 <span className="ml-2 hidden font-mono text-micro tnum sm:inline">{t('更新')} {fmtTimeHHMMSS(wl.lastUpdatedAt)}</span>
               )}
@@ -960,6 +964,16 @@ export default function Watchlist() {
                       {t('重试')}
                     </button>
                   }
+                />
+              </div>
+            ) : items.length === 0 && myTickers && myTickers.length > 0 ? (
+              /* 有自选、但全部在行情覆盖范围外：上方黄条已列出代码，这里不能再说
+                 「清单还是空的」——同屏自相矛盾。 */
+              <div className="card-surface">
+                <EmptyState
+                  image="/empty-chart.svg"
+                  title={t('自选暂时都不在行情覆盖范围内')}
+                  description={t('上方列出的代码已保存在账号里，行情覆盖后会自动出现')}
                 />
               </div>
             ) : items.length === 0 ? (

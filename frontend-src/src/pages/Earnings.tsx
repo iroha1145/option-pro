@@ -111,6 +111,23 @@ export default function Earnings() {
 
   /* owner 刷新：60s 冷却 + refreshed/cooldown/failed_stale 三态 */
   const [refreshStatus, setRefreshStatus] = useState<RefreshStatus>(null);
+  /* failed_stale 说的是「当前显示的数据已过时」：下一轮自动轮询成功、数据
+     翻新之后，这句话就不再成立，必须自动撤下（原先只有再点一次手动刷新才清）。 */
+  const lastGoodAsOf = q.data?.asOf ?? null;
+  const [staleBannerAsOf, setStaleBannerAsOf] = useState<string | null>(null);
+  useEffect(() => {
+    if (refreshStatus === 'failed_stale') {
+      setStaleBannerAsOf((current) => current ?? lastGoodAsOf);
+      return;
+    }
+    setStaleBannerAsOf(null);
+  }, [refreshStatus, lastGoodAsOf]);
+  useEffect(() => {
+    if (refreshStatus !== 'failed_stale') return;
+    if (staleBannerAsOf !== null && lastGoodAsOf !== null && lastGoodAsOf !== staleBannerAsOf) {
+      setRefreshStatus(null);
+    }
+  }, [refreshStatus, staleBannerAsOf, lastGoodAsOf]);
   const [cooldownUntil, setCooldownUntil] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
   const cooldownRemain = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
@@ -202,7 +219,18 @@ export default function Earnings() {
   /* 联动选择。从月历/周历/任意入口点到非重点公司时：自动切「全部公司」、
      保留并选中日期与代码、重置渐进额度（listScope 变化自动归位），选中行
      由 computeEarningsListState 强制挂载可见。 */
-  const onSelectDay = useCallback((date: string | null) => setSelectedDay(date), []);
+  const onSelectDay = useCallback(
+    (date: string | null) => {
+      setSelectedDay(date);
+      /* 月历点选的日期要带动周历（#42）：否则切回周视图后选中日不在可视周，
+         列表在筛选、周历却看不出选了哪天。 */
+      if (date) {
+        setWeekDir(date >= monday ? 1 : -1);
+        setMonday(weekStartMonday(date));
+      }
+    },
+    [monday],
+  );
   const selectTicker = useCallback(
     (ticker: string) => {
       const plan = planTickerSelection({
