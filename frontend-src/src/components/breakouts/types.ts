@@ -24,7 +24,7 @@ export const LIFECYCLE_CN: Record<LifecycleState, string> = {
   WATCHING: t('观察中'),
   TRIGGERED: t('已触发'),
   CONFIRMED: t('已确认'),
-  HOLDING: t('持有中'),
+  HOLDING: t('保持中'), // 与筛选胶囊/步进条同名：同一状态不该有两套中文
   RETESTING: t('回踩中'),
   RETEST_HELD: t('回踩企稳'),
   REACCELERATING: t('再加速'),

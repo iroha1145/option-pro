@@ -165,7 +165,7 @@ export default function InfoHint({
         ref={triggerRef}
         role="button"
         tabIndex={0}
-        aria-label={t('{title}：查看评分说明', { title: t(hint.title) })}
+        aria-label={t('{title}：查看评分说明', { title: hint.title })}
         aria-expanded={open}
         aria-describedby={exposed ? tooltipId : undefined}
         onFocus={() => setFocused(true)}
@@ -218,13 +218,15 @@ export default function InfoHint({
               }px))`,
             }}
           >
-            <span className="block text-caption font-semibold text-ink-800">{t(hint.title)}</span>
+            {/* scoreHints 的 title/body/note 在定义处已经 t() 过：再包一层会在
+                EN/JA 下拿译文回查词典，DEV 的缺译告警被几十条假警报淹没。 */}
+            <span className="block text-caption font-semibold text-ink-800">{hint.title}</span>
             <span className="mt-1 block whitespace-normal text-micro leading-relaxed text-ink-600">
-              {t(hint.body)}
+              {hint.body}
             </span>
             {hint.note && (
               <span className="mt-1 block whitespace-normal text-micro leading-relaxed text-ink-400">
-                {t(hint.note)}
+                {hint.note}
               </span>
             )}
           </span>,

@@ -191,7 +191,9 @@ export function getMarketStrength(): MarketStrength {
   const total = histogram.reduce((s, n) => s + n, 0);
   const ge85Count = histogram[8] + histogram[9];
   const avgScore = round2(histogram.reduce((s, n, b) => s + n * (b * 10 + 5), 0) / total);
-  return { avgScore, ge85Count, histogram };
+  // aggregateAvailable：Market.tsx B6 用严格 === true 判定；mock 不产出该字段
+  // 会让强度分布整块在演示模式永不渲染（真数据反而有）。
+  return { avgScore, ge85Count, histogram, aggregateAvailable: true };
 }
 
 export function getStrengthProfiles(): StrengthProfile[] {

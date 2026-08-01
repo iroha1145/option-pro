@@ -84,7 +84,7 @@ test('板块 chip 条也用上了这个组件，且 tablist 语义留在原处',
   // 实测 /sectors 上这条 chip 带藏掉 1474px（2117 轨道 / 643 视口）且没有任何控件
   assert.match(chips, /<HorizontalScroller/);
   // role="tablist" 必须留在真正装 tab 的元素上，不能挪到滚动容器
-  assert.match(chips, /<div role="tablist" aria-label=\{t\("板块切换"\)\} className="flex gap-1\.5">/);
+  assert.match(chips, /<div ref=\{listRef\} role="tablist" aria-label=\{t\("板块切换"\)\} className="flex gap-1\.5">/);
   // 原来那层裸的 overflow-x-auto 不该再留着
   assert.doesNotMatch(chips, /overflow-x-auto py-0\.5 no-scrollbar/);
 });

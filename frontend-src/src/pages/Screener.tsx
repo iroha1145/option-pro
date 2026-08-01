@@ -414,7 +414,9 @@ export default function Screener() {
       const next = prev === ticker ? null : ticker;
       // 失败不再写入空数组（审计 P2-13）：那与「真实没有信号」无法区分，而且会
       // 永久占住该键，以后展开同一股票也不会重试。
-      if (next && signalsRef.current[next] === undefined) {
+      const currentSignals = next ? signalsRef.current[next] : undefined;
+      // error 不占键：收起再展开就该重试（与注释语义一致）
+      if (next && (currentSignals === undefined || currentSignals.state === 'error')) {
         signalsRef.current = { ...signalsRef.current, [next]: { state: 'loading' } };
         setSignalsMap(signalsRef.current);
         signalsApi
@@ -665,9 +667,9 @@ export default function Screener() {
                 <Segmented<MacroTone | 'all'>
                   options={[
                     { value: 'all' as const, label: __t('全部') },
-                    { value: 'tailwind' as const, label: MACRO_TONE_LABEL.tailwind },
-                    { value: 'neutral' as const, label: MACRO_TONE_LABEL.neutral },
-                    { value: 'headwind' as const, label: MACRO_TONE_LABEL.headwind },
+                    { value: 'tailwind' as const, label: __t(MACRO_TONE_LABEL.tailwind) },
+                    { value: 'neutral' as const, label: __t(MACRO_TONE_LABEL.neutral) },
+                    { value: 'headwind' as const, label: __t(MACRO_TONE_LABEL.headwind) },
                   ]}
                   value={macroToneFilter}
                   onChange={(value) => {
@@ -679,7 +681,10 @@ export default function Screener() {
               <Segmented<SortMode>
                 options={(['deterministic', 'latest', 'impact'] as const).map((v) => ({ value: v, label: SORT_CN[v] }))}
                 value={sortMode}
-                onChange={setSortMode}
+                onChange={(v) => {
+                  setSortMode(v);
+                  setPage(1); // 同组其它控件都重置分页，排序不该独漏
+                }}
               />
             </div>
           </div>
@@ -897,7 +902,8 @@ export default function Screener() {
           ) : (
             <SkeletonCard />
           )}
-          <TierHistogram hits={hitsByTier} market={marketQ.data} activeTier={draft.tier} onSelect={onTierFromHistogram} />
+          {/* 选中判定与柱高同源（applied）：用 draft 判定时，工作台改过分档后点柱子会被读成「取消」，要点两次 */}
+          <TierHistogram hits={hitsByTier} market={marketQ.data} activeTier={applied.tier} onSelect={onTierFromHistogram} />
           <MethodCard
             profile={activeProfile}
             loading={profilesQ.loading}

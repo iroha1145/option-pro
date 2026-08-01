@@ -127,7 +127,9 @@ function nAnalysisStatus(v: unknown): CatalystNewsItem['analysisStatus'] {
   return 'pending';
 }
 
-const WAITING_ZH = new Set([__t('中文标题等待生成'), __t('中文摘要等待生成'), __t('热点标题等待中文分析')]);
+/* 哨兵对照的是后端落库的中文字面量：绝不能过 __t——EN/JA 下集合里装的是译文，
+   永远匹配不上，防御整个失效。 */
+const WAITING_ZH = new Set(['中文标题等待生成', '中文摘要等待生成', '热点标题等待中文分析']);
 const usefulZh = (value: string | null): string | null => (value && !WAITING_ZH.has(value) ? value : null);
 
 function nNewsItem(r: Rec): CatalystNewsItem {

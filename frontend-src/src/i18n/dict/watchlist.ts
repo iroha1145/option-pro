@@ -5,6 +5,9 @@
 import type { Dict } from './types';
 
 export const WATCHLIST: Dict = {
+  '只（默认关注池）': ['tickers (default pool)', '銘柄（デフォルト注目プール）'],
+  '自选暂时都不在行情覆盖范围内': ['None of your watchlist is covered by quotes yet', 'ウォッチリストの銘柄はまだ相場データの対象外です'],
+  '上方列出的代码已保存在账号里，行情覆盖后会自动出现': ['The tickers listed above are saved to your account and will appear once covered', '上に列挙したティッカーはアカウントに保存済みで、対象になり次第表示されます'],
   /* ---------------- B0 页头带 ---------------- */
   '自选观察': ['Your watchlist', 'マイウォッチリスト'],
   '你盯住的票，今天谁在动。': [

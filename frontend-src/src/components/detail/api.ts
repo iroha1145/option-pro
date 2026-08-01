@@ -15,7 +15,7 @@
  */
 import { ApiError, mockOr } from '@/api/client';
 import { marketGet } from '@/api/marketRead';
-import { asRec, pickN, pickS, unwrap, type Rec } from '@/api/live';
+import { asRec, pickLabel, pickN, pickS, unwrap, type Rec } from '@/api/live';
 import { ma20Of, mapBar } from '@/api/modules/stocks';
 import { stocksApi } from '@/api/modules/stocks';
 import { mapMacroFitDrivers } from '@/api/macroFields';
@@ -78,8 +78,10 @@ function strengthRowToDetail(env: Rec): StockDetail | null {
   const nullNum = null as unknown as number;
   return {
     ticker,
-    name: pickS(row, 'name') ?? ticker,
-    sector: pickS(row, 'sector_name', 'primary_sector_name') ?? '',
+    // 与 strength.ts 同源行保持一致：公司名/板块名过 pickLabel，EN/JA 下不再
+    // 出现「列表页 Semiconductors、详情抽屉 半导体」的分裂
+    name: pickLabel(row, 'name') ?? ticker,
+    sector: pickLabel(row, 'sector_name', 'primary_sector_name') ?? '',
     price,
     change: prevClose !== null ? price - prevClose : nullNum,
     changePct: changePct ?? nullNum,
@@ -398,8 +400,8 @@ function mapProvidedFactors(body: Rec): TrendBiasFactor[] {
   return unwrap(body, 'factors').flatMap((item) => {
     const key = pickS(item, 'key') as TrendBiasScoreKey | null;
     const tone = pickS(item, 'tone') as TrendBiasFactor['tone'] | null;
-    const label = pickS(item, 'label');
-    const reading = pickS(item, 'reading');
+    const label = pickLabel(item, 'label');
+    const reading = pickLabel(item, 'reading');
     if (
       key === null
       || !allowedKeys.has(key)
@@ -421,7 +423,7 @@ function factorsFromSignals(body: Rec): TrendBiasFactor[] {
       const signal = asRec(signals[signalKey]);
       const value = pickN(signal, 'value');
       if (value === null) continue;
-      const sourceLabel = pickS(signal, 'label') ?? signalKey;
+      const sourceLabel = pickLabel(signal, 'label') ?? signalKey;
       return [{
         key: spec.key,
         label: spec.label,

@@ -101,18 +101,31 @@ export default function TrendBiasPanel({
   ticker: string;
   refreshVersion?: number;
 }) {
-  const { data, loading, error } = usePolling(
+  const { data, loading, error, refresh, refreshing } = usePolling(
     () => getTrendBias(ticker),
     null,
     [ticker, refreshVersion],
   );
 
   if (loading) return <SkeletonText lines={5} className="py-4" />;
-  if (error || !data) {
+  if (!data) {
+    /* 读取失败 ≠ 暂无数据：失败要说失败并给重试；只有成功拿到空才是「暂无」。 */
     return (
-      <p className="rounded-md border border-line bg-card-warm px-4 py-6 text-center text-body-s text-ink-400">
-        {t('暂无技术信号数据')}
-      </p>
+      <div className="rounded-md border border-line bg-card-warm px-4 py-6 text-center">
+        <p className="text-body-s text-ink-400">
+          {error ? t('趋势偏向读取失败') : t('暂无技术信号数据')}
+        </p>
+        {error != null && (
+          <button
+            type="button"
+            onClick={() => refresh()}
+            disabled={refreshing}
+            className="mt-2.5 inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
+          >
+            {refreshing ? t('正在重试') : t('重试')}
+          </button>
+        )}
+      </div>
     );
   }
 

@@ -59,11 +59,18 @@ export default function DataTable<T>({
     const col = columns.find((c) => c.key === sort.key);
     if (!col?.sortValue) return rows;
     const dir = sort.desc ? -1 : 1;
+    /* 缺失值（null/NaN）恒沉底、与方向无关（watchlistSort 同语义）：把「无数据」
+       当 0 分会让它随排序方向在头尾跳动，被读成极值。 */
+    const missing = (v: unknown) =>
+      v === null || v === undefined || (typeof v === 'number' && !Number.isFinite(v));
     return [...rows].sort((a, b) => {
       const va = col.sortValue!(a);
       const vb = col.sortValue!(b);
+      const ma = missing(va);
+      const mb = missing(vb);
+      if (ma || mb) return ma && mb ? 0 : ma ? 1 : -1;
       if (typeof va === 'string' || typeof vb === 'string') return String(va).localeCompare(String(vb)) * dir;
-      return (va - vb) * dir;
+      return ((va as number) - (vb as number)) * dir;
     });
   }, [rows, sort, columns]);
 

@@ -216,7 +216,14 @@ function LifecycleStepper({ state }: { state: LifecycleState }) {
   );
 
   const items: { el: ReturnType<typeof node>; passed: boolean }[] = STEPS.map((s, i) => ({
-    el: node(s.label, i === idx ? 'current' : i <= pastTo ? 'past' : 'future', s.key, i),
+    /* 第 5 节点聚合了 RETESTING/RETEST_HELD/REACCELERATING/EXTENDED 四个状态：
+       当前节点直接显示真实状态名（LIFECYCLE_CN），不再一律标成「回踩中」。 */
+    el: node(
+      i === idx ? (LIFECYCLE_CN[state] ?? s.label) : s.label,
+      i === idx ? 'current' : i <= pastTo ? 'past' : 'future',
+      s.key,
+      i,
+    ),
     passed: terminal ? i < STEPS.length - 1 : i < idx,
   }));
   if (terminal) {

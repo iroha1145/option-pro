@@ -147,7 +147,14 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
 
   const runRefresh = useCallback(
     async (op: RefreshOperation, label: string) => {
-      setBusyOp(`r-${op}`);
+      // 单槽忙碌态：并发触发会互相清掉对方的 busy。全面板互斥（一次一件事）
+      let claimed = false;
+      setBusyOp((current) => {
+        if (current !== null) return current;
+        claimed = true;
+        return `r-${op}`;
+      });
+      if (!claimed) return;
       try {
         const t = await adminApi.catalystRefresh(op);
         toast.info(__t('{label}刷新已入队', { label }), t.reason ?? undefined);
@@ -174,7 +181,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       } catch (e) {
         toast.error(__t('{label}刷新未受理', { label }), errText(e));
       } finally {
-        setBusyOp(null);
+        setBusyOp((current) => (current === `r-${op}` ? null : current));
       }
     },
     [onDataRefreshed, toast],
@@ -182,7 +189,13 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
 
   const runWorkerAction = useCallback(
     async (action: WorkerActionType, label: string) => {
-      setBusyOp(`w-${action}`);
+      let claimed = false;
+      setBusyOp((current) => {
+        if (current !== null) return current;
+        claimed = true;
+        return `w-${action}`;
+      });
+      if (!claimed) return;
       try {
         const t = await adminApi.workerAction(action);
         if (t.reason === 'cooldown') toast.info(__t('{label}仍在冷却', { label }), __t('稍后自动执行或重试'));
@@ -192,7 +205,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       } catch (e) {
         toast.error(__t('{label}未受理', { label }), errText(e));
       } finally {
-        setBusyOp(null);
+        setBusyOp((current) => (current === `w-${action}` ? null : current));
       }
     },
     [toast],

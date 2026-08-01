@@ -129,7 +129,7 @@ export default function RegimePanel({
         })}
       </div>
       <p className="mt-4 border-t border-line pt-3 text-micro leading-relaxed text-ink-400">
-        {t('色阶：&lt;50 弱 · 50–69 中性 · 70–84 强 · ≥85 极强')}
+        {t('色阶：<50 弱 · 50–69 中性 · 70–84 强 · ≥85 极强')}
         <span className="mt-1 block">{DIMS_SOURCE_NOTE}</span>
       </p>
     </section>
