@@ -165,6 +165,9 @@ module.exports = {
       transitionDuration: {
         instant: '90ms',
         fast: '160ms',
+        /* 卡片 hover 抬升的统一时长。之前 5 处写 duration-[240ms] 任意值，
+           构建报「匹配多个 utility」二义警告——收进 token 一并消除。 */
+        240: '240ms',
         ui: '260ms',
         section: '560ms',
       },

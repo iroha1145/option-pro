@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.access import current_request_is_owner, public_snapshot_unavailable
 from app.data_paths import get_data_paths
+from app.personal_config import get_personal_config
 from app.services.http_read_cache import respond_with_snapshot, snapshot_version_key
 from app.services.sectors import SECTORS
 from app.services.snapshot_read_cache import FingerprintedFileCache
@@ -592,9 +593,22 @@ async def scan(
     )
 
 
+def _serve_public_snapshot() -> bool:
+    """password 公网模式下，普通 GET 对所有主体读同一份 Worker 快照。
+
+    Owner 现算曾是有意保留的产品特性（900s TTLCache 兜底），但冷启动或
+    缓存失效时 stock_strength 内部是整池扫描（top=250），Owner 打开抽屉
+    反而比访客更慢（审计 P1-02）。现算保留在 private_network 本地模式；
+    Owner 的重算入口是 /scan 的显式刷新链路（刷新强度分按钮）。
+    """
+    if not current_request_is_owner():
+        return True
+    return get_personal_config().access.mode == "password"
+
+
 @router.get("/stocks/{ticker}")
 async def stock(ticker: str, profile: str = Query("balanced", pattern="^(conservative|balanced|aggressive)$")) -> dict[str, Any]:
-    if not current_request_is_owner():
+    if _serve_public_snapshot():
         if profile != DEFAULT_STRENGTH_SCAN_PARAMETERS["profile"]:
             raise public_snapshot_unavailable(f"strength:stock:{ticker}:{profile}")
         payload = await _public_strength_snapshot()
@@ -629,7 +643,7 @@ async def stock(ticker: str, profile: str = Query("balanced", pattern="^(conserv
 
 @router.get("/sectors")
 async def sectors(period: str = Query("3mo", pattern="^(1mo|3mo|6mo)$")) -> dict[str, Any]:
-    if not current_request_is_owner():
+    if _serve_public_snapshot():
         payload = await _public_strength_snapshot()
         selected_key = f"avg_return_{period}"
         rows = []
@@ -671,7 +685,7 @@ async def sectors(period: str = Query("3mo", pattern="^(1mo|3mo|6mo)$")) -> dict
 
 @router.get("/market")
 async def market() -> dict[str, Any]:
-    if not current_request_is_owner():
+    if _serve_public_snapshot():
         payload = await _public_strength_snapshot()
         regime = payload.get("market_regime")
         if not isinstance(regime, dict):

@@ -186,7 +186,7 @@ export default function Sectors() {
           </span>
           <button
             type="button"
-            onClick={strengthQ.refresh}
+            onClick={() => strengthQ.refresh()}
             className="ml-auto shrink-0 font-medium text-warn-600 underline decoration-warn-600/40 underline-offset-2"
           >
             {t('重试')}

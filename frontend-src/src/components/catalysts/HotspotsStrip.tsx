@@ -23,7 +23,7 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
       whileHover={openable ? { y: -3, transition: { duration: 0.24, ease: 'easeOut' } } : undefined}
       onClick={onOpen}
       disabled={!openable}
-      className={`group relative flex w-[260px] shrink-0 snap-start flex-col rounded-lg border border-line bg-card p-4 pt-3 text-left shadow-sh-1 transition-shadow duration-[240ms] ease-out sm:w-[300px] ${
+      className={`group relative flex w-[260px] shrink-0 snap-start flex-col rounded-lg border border-line bg-card p-4 pt-3 text-left shadow-sh-1 transition-shadow duration-240 ease-out sm:w-[300px] ${
         openable ? 'hover:shadow-sh-2' : 'cursor-default'
       }`}
     >
@@ -155,7 +155,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
               <p className="text-body-s text-ink-500">{__t('热点数据读取失败')}</p>
               <p className="mt-1 text-micro text-ink-400">{__t('是读取失败，不代表市场没有热点')}</p>
               <button
-                onClick={listQ.refresh}
+                onClick={() => listQ.refresh()}
                 className="mt-3 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
               >
                 {__t('重试')}

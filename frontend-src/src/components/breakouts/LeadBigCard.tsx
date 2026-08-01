@@ -412,7 +412,7 @@ function MiniKline({ ticker }: { ticker: string }) {
               </button>
             )}
             <button
-              onClick={refresh}
+              onClick={() => refresh()}
               className="rounded-md border border-line bg-card px-2.5 py-1 text-micro font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
             >
               {t('重试')}

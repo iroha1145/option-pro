@@ -68,7 +68,7 @@ export default function ResultCards({
             transition={{ duration: 0.4, ease: EASE_PAPER, delay: page === 1 ? Math.min(i * 0.03, 0.3) : 0, layout: { duration: 0.32, ease: EASE_PAPER } }}
             /* 可展开结果卡：hover 上浮 -3px/240ms（whileHover 避免入场后内联 transform 压掉 CSS 位移），阴影用 CSS */
             whileHover={{ y: -3, transition: { duration: 0.24, ease: 'easeOut' } }}
-            className="card-surface overflow-hidden transition-shadow duration-[240ms] ease-out hover:shadow-sh-2"
+            className="card-surface overflow-hidden transition-shadow duration-240 ease-out hover:shadow-sh-2"
           >
             <button
               onClick={() => onToggle(r.ticker)}

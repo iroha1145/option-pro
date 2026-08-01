@@ -198,7 +198,7 @@ function SidebarEvents({ ticker }: { ticker: string }) {
           <Icon name="doc-quote" size={16} className="text-ink-300" />
           {__t('突破事件读取失败')}
           <button
-            onClick={refresh}
+            onClick={() => refresh()}
             className="ml-auto rounded-md border border-line px-2 py-0.5 text-micro text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
           >
             {__t('重试')}
@@ -341,7 +341,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
           ) : (
             <button
               type="button"
-              onClick={refresh}
+              onClick={() => refresh()}
               disabled={refreshing}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
             >

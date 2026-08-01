@@ -573,7 +573,7 @@ export default function KlineChart({
                 description={t('{ticker} · {range}数据暂不可用，其他周期仍可切换', { ticker, range: CHART_RANGES.find((item) => item.value === range)?.label ?? range })}
                 action={
                   <button
-                    onClick={refresh}
+                    onClick={() => refresh()}
                     className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast hover:brightness-105"
                   >
                     {t('重试')}

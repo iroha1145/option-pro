@@ -40,7 +40,7 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
           description={t("稍后刷新再试")}
           action={
             <button
-              onClick={q.refresh}
+              onClick={() => q.refresh()}
               className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
             >
               {t('重试')}

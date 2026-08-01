@@ -479,7 +479,7 @@ export default function Breakouts() {
                 description={currentError.code === 503 ? __t('稍后刷新再试') : currentError.message}
                 action={
                   <button
-                    onClick={currentQ.refresh}
+                    onClick={() => currentQ.refresh()}
                     className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
                   >
                     {__t('重试')}

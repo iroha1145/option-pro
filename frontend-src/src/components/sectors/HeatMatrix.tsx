@@ -54,7 +54,7 @@ function HeatTile({
           : t('{name}暂无强度聚合', { name: sector.name })
       }
       className={cn(
-        'group relative h-[92px] overflow-visible rounded-md text-left shadow-sh-1 transition-shadow duration-[240ms] ease-out hover:shadow-sh-2 md:h-[108px]',
+        'group relative h-[92px] overflow-visible rounded-md text-left shadow-sh-1 transition-shadow duration-240 ease-out hover:shadow-sh-2 md:h-[108px]',
         !hasReturn && 'border border-dashed border-line-strong',
         selected && 'shadow-sh-2',
       )}
