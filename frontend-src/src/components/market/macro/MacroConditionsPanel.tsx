@@ -6,7 +6,7 @@
  * insufficient_history —— 刷新失败保留旧面板、显示 Warning，不清空图表、不把旧值改成 0。
  * 手动刷新只对 Owner 显示；访客可读全部数据，但看不到也触发不了 Worker 动作。
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { invalidateQueryPaths } from '@/api/queryRegistry';
 import { macroApi, type MacroConditionsResponse } from '@/api/modules/macro';

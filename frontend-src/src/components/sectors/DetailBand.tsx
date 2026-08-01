@@ -151,6 +151,7 @@ export default function DetailBand({
                 {t('板块目录尚未返回成分代码。')}
               </p>
             ) : (
+              <>
               <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {/* 只展示前 12 个：截断要标出来（下方注脚），旁边的总数才不骗人 */}
                 {sector.tickers.slice(0, 12).map((ticker) => (
@@ -169,6 +170,7 @@ export default function DetailBand({
                   {t('仅展示前 12 个 · 共 {n} 只成分', { n: sector.tickers.length })}
                 </p>
               )}
+              </>
             )}
           </div>
         </div>

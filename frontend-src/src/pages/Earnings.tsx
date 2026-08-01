@@ -5,7 +5,7 @@
  * B3 AI 影响分析卡（缓存结果 / 409 生成 / 任务轮询 / 锁定态）· B5 本月密度条
  * 轮询 1800s（契约 TTL）· 空态 / 骨架 / 503 · 响应式（<md 卡片流 + 横滑 snap）
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { invalidateQueryPaths } from '@/api/queryRegistry';
 import { earningsApi, restoreUpcomingFromCache } from '@/api/modules/earnings';
