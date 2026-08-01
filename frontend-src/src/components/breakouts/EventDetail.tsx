@@ -11,7 +11,7 @@ import type { NewsItem } from '@/api/types';
 import { usePolling } from '@/hooks/usePolling';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { cn } from '@/lib/utils';
-import { fmtPrice, fmtRelative } from '@/lib/format';
+import { fmtNyHHmm, fmtPrice, fmtRelative } from '@/lib/format';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
 import InfoHint from '@/components/shared/InfoHint';
@@ -29,12 +29,8 @@ import {
 import type { BreakoutEventFull } from './types';
 import { t as __t } from '../../i18n/core.ts';
 
-function hhmm(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
+/* 统一 ET（见 LeadBigCard.fmtEventTime 的说明）：原实现走浏览器本地时区 */
+const hhmm = fmtNyHHmm;
 
 const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 

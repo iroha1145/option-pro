@@ -164,6 +164,9 @@ const KNOWN_TYPE_DISCRIMINANTS = new Set([
   'components/CommandPalette.tsx:171 功能',
   'components/CommandPalette.tsx:182 功能',
   'components/CommandPalette.tsx:194 功能',
+  // 客户账号退出/登录条目（#18）：group 判别字段，同上由渲染处 __t 包裹
+  'components/CommandPalette.tsx:196 功能',
+  'components/CommandPalette.tsx:208 功能',
   'components/detail/api.ts:454 数据不足',
   'components/detail/api.ts:456 偏多',
   'components/detail/api.ts:458 偏空',

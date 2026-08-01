@@ -163,9 +163,11 @@ function PriceInput({
   onCommit: (v: number | null) => void;
 }) {
   const [text, setText] = useState(value === null ? '' : String(value));
-  // 外部值变化（如 chip 移除）时在渲染期同步本地输入（React 推荐模式）
+  // 外部值变化（如 chip 移除）时在渲染期同步本地输入（React 推荐模式）。
+  // Object.is：NaN !== NaN 恒真，一旦上游漏进 NaN，普通比较会让渲染期
+  // setState 永不收敛，直接撞 React 重渲染上限把整页打崩。
   const [prevValue, setPrevValue] = useState(value);
-  if (prevValue !== value) {
+  if (!Object.is(prevValue, value)) {
     setPrevValue(value);
     setText(value === null ? '' : String(value));
   }
@@ -181,7 +183,10 @@ function PriceInput({
           const t = e.target.value;
           if (!/^\d*\.?\d*$/.test(t)) return;
           setText(t);
-          onCommit(t === '' ? null : Number(t));
+          // 裸 `.`（想输 .5 的中间态）Number() 得 NaN：输入框保留文本，
+          // 但绝不把非有限值交给上游筛选状态。
+          const n = Number(t);
+          onCommit(t === '' || !Number.isFinite(n) ? null : n);
         }}
         className="h-8 w-[88px] rounded-md border border-line bg-card pl-6 pr-2 font-mono text-caption text-ink-800 tnum placeholder:text-ink-300 hover:border-line-strong focus-visible:border-brand-400"
       />

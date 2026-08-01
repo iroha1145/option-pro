@@ -126,12 +126,19 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
   }, [newsId]);
 
   /* 详情含在途任务 → 恢复轮询 */
+  const activeNewsRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeNewsRef.current = item?.newsId ?? null;
+  }, [item?.newsId]);
   useEffect(() => {
     if (!item?.analysisJobId || job) return;
     if (item.analysisStatus !== 'queued' && item.analysisStatus !== 'in_progress') return;
+    const forNews = item.newsId;
     catalystsContract
       .analysisJob(item.analysisJobId)
       .then((j) => {
+        // 响应落地时可能已经换了新闻（甚至关了抽屉再开新条）：旧 job 不得污染新条
+        if (activeNewsRef.current !== forNews) return;
         if (!TERMINAL.includes(j.status)) setJob(j);
       })
       .catch(() => undefined);
@@ -185,9 +192,12 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job?.jobId, job?.status]);
 
+  const submittingRef = useRef(false);
   const startAnalysis = useCallback(
     async (force: boolean) => {
       if (!item) return;
+      if (submittingRef.current) return; // 提交在途，吞掉重复点击
+      submittingRef.current = true;
       setConfirm(null);
       try {
         const j = await catalystsContract.createAnalysisJob(item.newsId, force);
@@ -198,6 +208,8 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
         toast.info(__t('分析任务已提交'), force ? __t('强制重新分析') : __t('可在本页查看真实状态'));
       } catch (e) {
         toast.error(__t('提交失败'), e instanceof Error ? e.message : undefined);
+      } finally {
+        submittingRef.current = false;
       }
     },
     [item, onUpdate, toast],

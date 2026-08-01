@@ -65,7 +65,7 @@ function Kbd({ children }: { children: React.ReactNode }) {
 
 export default function CommandPalette({ open, onClose, onOpenTicker, onForceRefresh }: PaletteProps) {
   const navigate = useNavigate();
-  const { isOwner, logout } = useAccess();
+  const { isOwner, isSignedIn, username, logout } = useAccess();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{ ticker: string; name: string; sector: string }[]>([]);
   const [searching, setSearching] = useState(false);
@@ -188,12 +188,26 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
             void logout();
           },
         });
+      } else if (isSignedIn) {
+        // 客户账号：给出结束会话的入口（原先这里只有「登录 Owner」，
+        // 客户会话在整个 UI 里无处退出）
+        list.push({
+          id: 'f-logout',
+          group: '功能',
+          title: username ? __t('退出 {name}', { name: username }) : __t('退出登录'),
+          hint: __t('结束本机会话'),
+          icon: 'shield',
+          action: () => {
+            onClose();
+            void logout();
+          },
+        });
       } else {
         list.push({
           id: 'f-login',
           group: '功能',
-          title: __t('登录 Owner'),
-          hint: __t('解锁写操作与 AI 分析'),
+          title: __t('登录'),
+          hint: __t('Owner 或客户账号'),
           icon: 'shield',
           action: () => {
             onClose();
@@ -203,7 +217,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
       }
     }
     return list;
-  }, [query, results, navigate, onClose, onForceRefresh, pickTicker, isOwner, logout]);
+  }, [query, results, navigate, onClose, onForceRefresh, pickTicker, isOwner, isSignedIn, username, logout]);
 
   const flat = entries;
   const clampedActive = Math.min(active, Math.max(0, flat.length - 1));

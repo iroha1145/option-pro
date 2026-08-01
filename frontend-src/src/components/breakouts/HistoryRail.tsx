@@ -78,6 +78,9 @@ function dayLabel(key: string): string {
 }
 
 interface HistoryRailProps {
+  /** 筛选条件指纹：变化时分页收回首页。不能用 events 数组引用当判据——
+      「继续读取更早事件」追加数据必然产出新引用，会把展开的上百行塌回 12 行。 */
+  filterKey: string;
   events: BreakoutEventFull[];
   /** 已加载条数（筛选前）。 */
   loadedCount: number;
@@ -112,15 +115,16 @@ export default function HistoryRail({
   error,
   onRetry,
   onOpenDetail,
+  filterKey,
 }: HistoryRailProps) {
   const [visible, setVisible] = useState(PAGE);
   const moreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  /* 上游过滤结果变化时重置分页（渲染期派生，避免 effect 级联） */
-  const [prevEvents, setPrevEvents] = useState(events);
-  if (prevEvents !== events) {
-    setPrevEvents(events);
+  /* 筛选条件变化时重置分页（渲染期派生，避免 effect 级联） */
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey);
     setVisible(PAGE);
   }
 

@@ -101,7 +101,7 @@ test('没有在 loading 分支里另挂一个 KlineChart', () => {
   // 比原来的串行更糟。
   const code = codeOf(drawerBody);
   const loadingAt = code.indexOf('if (loading)');
-  const errorAt = code.indexOf('if (error || !detail)');
+  const errorAt = code.indexOf('if (!detail)');
   assert.ok(loadingAt > 0 && errorAt > loadingAt);
   const loadingBranch = code.slice(loadingAt, errorAt);
   assert.doesNotMatch(

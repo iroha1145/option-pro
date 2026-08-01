@@ -15,7 +15,7 @@ import { t } from '../../i18n/core.ts';
 
 export default function AiAnalysisCard({ ticker }: { ticker: string }) {
   const { isOwner, loading } = useAccess();
-  const { job, error, start, cancel, reset } = useAiJob();
+  const { job, error, starting, start, cancel, reset } = useAiJob();
   const [confirming, setConfirming] = useState(false);
 
   const running =
@@ -33,7 +33,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
           <Icon name="spark-ai" size={16} className="text-ai-600" />
           {t('AI 股票分析')}
         </p>
-        {isOwner && !job && !confirming && (
+        {isOwner && !job && !starting && !confirming && (
           <button
             onClick={() => setConfirming(true)}
             className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white transition-[filter] duration-fast hover:brightness-105 active:brightness-95"
@@ -46,13 +46,20 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
       {!isOwner && !loading && (
         <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-dashed border-line-strong bg-card-warm px-3 py-2.5">
           <p className="text-caption text-ink-500">{t('登录后可用模型分析')}</p>
-          <Link to="/login" className="shrink-0 text-caption font-medium text-brand-600 hover:text-brand-700">
+          <Link
+            to="/login"
+            state={{ from: `${window.location.pathname}${window.location.search}` }}
+            className="shrink-0 text-caption font-medium text-brand-600 hover:text-brand-700"
+          >
             {t('去登录')}
           </Link>
         </div>
       )}
 
       <AnimatePresence initial={false}>
+        {isOwner && starting && !job && (
+          <p className="mt-3 text-caption text-ink-500">{t('正在创建分析任务…')}</p>
+        )}
         {isOwner && confirming && !job && (
           <motion.div
             key="confirm"
@@ -72,7 +79,8 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
                     setConfirming(false);
                     void start(() => createSignalAnalysisJob(ticker));
                   }}
-                  className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white hover:brightness-105"
+                  disabled={starting}
+                  className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
                 >
                   {t('开始分析')}
                 </button>

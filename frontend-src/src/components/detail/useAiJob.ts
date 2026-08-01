@@ -7,6 +7,10 @@ import { t } from '../../i18n/core.ts';
 export function useAiJob() {
   const [job, setJob] = useState<AiJob | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* 提交在途门闩：POST 发出到 job 回来的窗口里 job 仍是 null，没有它
+     「生成分析」按钮立刻恢复可点，双击会创建两个付费任务（个股路径的
+     evidence_as_of 微秒时间戳让服务端 request_hash 必然不同、去重失效）。 */
+  const [starting, setStarting] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const aliveRef = useRef(true);
 
@@ -44,8 +48,12 @@ export function useAiJob() {
     [stop],
   );
 
+  const startingRef = useRef(false);
   const start = useCallback(
     async (create: () => Promise<AiJob>) => {
+      if (startingRef.current) return; // 双击/竞态下第二次提交直接吞掉
+      startingRef.current = true;
+      setStarting(true);
       setError(null);
       setJob(null);
       try {
@@ -56,6 +64,9 @@ export function useAiJob() {
       } catch (e) {
         if (!aliveRef.current) return;
         setError(e instanceof Error ? e.message : t('任务创建失败'));
+      } finally {
+        startingRef.current = false;
+        if (aliveRef.current) setStarting(false);
       }
     },
     [poll],
@@ -83,7 +94,7 @@ export function useAiJob() {
     setError(null);
   }, [stop]);
 
-  return { job, error, start, cancel, reset };
+  return { job, error, starting, start, cancel, reset };
 }
 
 /** AI 输出纪律脚注：影响分非收益 · 置信度非胜率 */

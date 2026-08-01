@@ -123,11 +123,15 @@ function CoverageCard({
   sector,
   rows,
   meta,
+  loading = false,
   error = false,
 }: {
   sector: SectorVm | null;
   rows: IvRowVm[];
   meta: IvMetaVm;
+  /** 请求在飞：出骨架。原实现无 loading 通道，切板块的数秒内显示
+   *  黄色「数据不足 · 成功样本 0」，随后跳成真值。 */
+  loading?: boolean;
   /** 请求失败且无数据：覆盖数显示「—」而不是伪造的「0 / —」（审计 2.2.8） */
   error?: boolean;
 }) {
@@ -141,6 +145,20 @@ function CoverageCard({
     : meta.status === 'active'
       ? t('数据正常')
       : SOURCE_STATUS_CN[meta.status];
+
+  if (loading && !error) {
+    return (
+      <div className="card-surface p-5">
+        <p className="eyebrow">{t('IV 数据覆盖')}</p>
+        <h3 className="mt-1 text-h3 text-ink-800">{sector?.name ?? t('所选板块')}</h3>
+        <div className="mt-4 space-y-2.5" aria-hidden="true">
+          <SkeletonBlock className="h-4 w-full" />
+          <SkeletonBlock className="h-4 w-3/4" />
+          <SkeletonBlock className="h-4 w-5/6" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="card-surface p-5">
@@ -237,7 +255,7 @@ export default function SideRail({
         onOpenTicker={onOpenTicker}
         onOpenPalette={onOpenPalette}
       />
-      <CoverageCard sector={sector} rows={rows} meta={meta} error={ivError} />
+      <CoverageCard sector={sector} rows={rows} meta={meta} loading={ivLoading} error={ivError} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { accountApi } from '@/api/modules/account';
 import { accessApi } from '@/api/modules/access';
 import { PRINCIPAL_INVALID_EVENT } from '@/api/client';
 import { dropSharedReads } from '@/api/sharedRead';
@@ -20,6 +21,9 @@ interface AccessContextValue {
   username: string | null;
   /** 是否为已登录的普通客户（与 isOwner 互不蕴含）。 */
   isCustomer: boolean;
+  /** 任一主体已登录（Owner 或客户）。导航区「退出/登录」按它判定：
+   *  只看 isOwner 会让客户账号右上角恒显「登录」、会话无处结束。 */
+  isSignedIn: boolean;
   /**
    * 能否读写「我的自选」。
    *
@@ -188,8 +192,16 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(
-    () => applyWrite(() => accessApi.logout()),
-    [applyWrite],
+    () => applyWrite(async () => {
+      /* 客户会话走账号登出，Owner 会话走访问层登出。此前只接了 accessApi.logout，
+         注册的客户账号在 UI 里无处结束会话（accountApi.logout 全站零调用点）。 */
+      if (status.role !== 'owner' && status.accountUsername !== null) {
+        await accountApi.logout();
+        return;
+      }
+      await accessApi.logout();
+    }),
+    [applyWrite, status.role, status.accountUsername],
   );
 
   const value = useMemo<AccessContextValue>(
@@ -202,6 +214,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       isVisitor: status.role !== 'owner',
       username: status.accountUsername,
       isCustomer: status.accountUsername !== null,
+      isSignedIn: status.role === 'owner' || status.accountUsername !== null,
       canManageWatchlist: status.accountUsername !== null || status.role === 'owner',
       loading,
       identityUnavailable,

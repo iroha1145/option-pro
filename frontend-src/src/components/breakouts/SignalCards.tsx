@@ -70,6 +70,7 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
       transition={{ duration: 0.48, ease: EASE_PAPER, delay: Math.min(index * 0.045, 0.5) }}
       onClick={() => onOpen(ev)}
       onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return; // 卡内真按钮的键盘激活不拦截
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onOpen(ev);

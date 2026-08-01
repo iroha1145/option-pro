@@ -24,7 +24,7 @@ import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
-import { fmtPrice, fmtRelative } from '@/lib/format';
+import { fmtNyEventTime, fmtNyHHmm, fmtPrice, fmtRelative } from '@/lib/format';
 import { MACRO_TONE_LABEL, macroToneOf } from '@/lib/macroFit';
 import { baseAnimation, CH, glassTooltip, type ChartOption } from '@/lib/chart';
 import {
@@ -44,14 +44,11 @@ const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const MONO = '"IBM Plex Mono", monospace';
 
 /* ---------------- 工具 ---------------- */
-const pad2 = (n: number) => String(n).padStart(2, '0');
 
-/** 事件时间 M/DD HH:mm（美东快照时间，与全站本地时区口径一致） */
-function fmtEventTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return `${d.getMonth() + 1}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-}
+/** 事件时间 M/DD HH:mm：统一 ET（lib/format 的 fmtNyEventTime）。原实现用
+ *  getHours() 走浏览器本地时区、旁边却标着「美东」——UTC+8 用户看到的时刻
+ *  与右侧历史轨道（HistoryRail，正确的 ET）差一整个时区。 */
+const fmtEventTime = fmtNyEventTime;
 
 /** 观测 x 小时前（不足 1 小时显分钟） */
 function observedAgo(iso: string): string {
@@ -258,15 +255,10 @@ function LifecycleStepper({ state }: { state: LifecycleState }) {
 type MiniBar = Candle & { quote_only?: boolean };
 
 function buildMiniOption(bars: MiniBar[]): ChartOption {
-  const labels = bars.map((b) => {
-    const d = new Date(b.t);
-    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-  });
+  /* K 线 bar 的语义时区是美东交易时段，轴标/tooltip 与卡头事件时间同口径 */
+  const labels = bars.map((b) => fmtNyHHmm(b.t));
   /** tooltip 时间：15m 跨日数据需 M/DD 日期前缀，末根 quote_only 如实标注 */
-  const fmtBarTime = (iso: string) => {
-    const d = new Date(iso);
-    return `${d.getMonth() + 1}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-  };
+  const fmtBarTime = (iso: string) => fmtNyEventTime(iso);
   return {
     ...baseAnimation,
     grid: { left: 6, right: 6, top: 10, bottom: 4, containLabel: true },

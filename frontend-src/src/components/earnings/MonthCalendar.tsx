@@ -189,6 +189,7 @@ export default function MonthCalendar({
                 aria-label={t('{md}，{n} 条财报', { md: fmtMDCN(date), n: dayItems.length })}
                 onClick={() => onSelectDay(isSelected ? null : date)}
                 onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return; // 格内代码 chip 的键盘激活不拦截
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
                     onSelectDay(isSelected ? null : date);

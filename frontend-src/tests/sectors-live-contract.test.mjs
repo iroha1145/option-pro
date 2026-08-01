@@ -300,6 +300,11 @@ test('IV 排名等待真实板块目录，首屏不再请求旧占位编号', ()
   assert.equal(page.includes('Promise.resolve(null)'), true);
   assert.match(
     page,
-    /ivSectorIdValid\s*\?\s*sectorsApi\.ivRanking\(ivSectorIdValid\)\s*:\s*Promise\.resolve\(null\)/,
+    /ivSectorIdValid\s*\?\s*sectorsApi\s*\.ivRanking\(ivSectorIdValid\)/,
+  );
+  // 降级分支仍在（目录未到达前不发请求）
+  assert.match(
+    page,
+    /:\s*Promise\.resolve\(null\)/,
   );
 });

@@ -10,7 +10,7 @@
  *  - 无论生成开关是否开启都先读取缓存；owner 的运行开关不限制 visitor 读取公开入口
  * 纪律：不展示后端契约没有的推导指标
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
@@ -214,6 +214,10 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [confirming, setConfirming] = useState(false);
   const [pollAttempt, setPollAttempt] = useState(0);
+  /* stale-response 守卫（同 ManualStockPull.requestSequenceRef）：快速连点
+     AAPL→MSFT 时若 AAPL 响应后到，没有序号校验它会把整卡写回 AAPL 的内容，
+     而左侧高亮已是 MSFT，且不会自行纠正。 */
+  const requestSequenceRef = useRef(0);
 
   const applyReportAnalysis = useCallback((next: EarningsReportAnalysis) => {
     const resolvedReportDate = next.reportDate ?? reportDate ?? undefined;
@@ -279,14 +283,17 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
         setPhase('unavailable');
         return null;
       }
+      const seq = ++requestSequenceRef.current;
       try {
         const next = await earningsApi.reportAnalysis(t, reportDate, {
           year: reportYear,
           quarter: reportQuarter,
         });
+        if (seq !== requestSequenceRef.current) return null; // 已被更新请求取代
         applyReportAnalysis(next);
         return next;
       } catch (e) {
+        if (seq !== requestSequenceRef.current) return null;
         const err = e instanceof ApiError ? e : null;
         if (err?.bizCode === 'earnings_analysis_locked') {
           setPhase('final-locked');
@@ -330,6 +337,9 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
   const [prevContextKey, setPrevContextKey] = useState(contextKey);
   if (contextKey !== prevContextKey) {
     setPrevContextKey(contextKey);
+    // 立刻作废所有在途响应：新上下文的首个请求要到 effect 才会发出，
+    // 这个空窗期内旧响应若落地，没有这次递增就会通过序号校验。
+    requestSequenceRef.current += 1;
     setAnalysis(null);
     setConfirming(false);
     setPollAttempt(0);
@@ -365,6 +375,8 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
   }, [analysis?.retryAfterSeconds, loadImpact, pollAttempt, shouldPoll, ticker, toast]);
 
   /* 报告级 POST 的正文固定为 {confirm:true}，全部财务事实由服务端当前快照绑定。 */
+  const submittingRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
   const startJob = async () => {
     if (
       !ticker
@@ -373,15 +385,21 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
       || phase === 'final-locked'
       || isFinalImpact(impact)
     ) return;
+    if (submittingRef.current) return; // 提交在途，job 尚未占位，吞掉重复点击
+    submittingRef.current = true;
+    setSubmitting(true);
     setConfirming(false);
+    const seq = ++requestSequenceRef.current;
     try {
       const next = await earningsApi.requestReportAnalysis(ticker, reportDate, {
         year: reportYear,
         quarter: reportQuarter,
       });
+      if (seq !== requestSequenceRef.current) return;
       applyReportAnalysis(next);
       setPollAttempt(0);
     } catch (e) {
+      if (seq !== requestSequenceRef.current) return;
       const err = e instanceof ApiError ? e : null;
       if (err?.bizCode === 'earnings_analysis_locked') {
         const finalState = await loadImpact(ticker);
@@ -404,6 +422,9 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
       } else {
         toast.error(__t('任务创建失败'), err?.message);
       }
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -537,10 +558,11 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                   <div className="mt-2.5 flex gap-2">
                     <button
                       onClick={() => void startJob()}
-                      className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-ai-600 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+                      disabled={submitting}
+                      className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-ai-600 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
                     >
                       <Icon name="spark-ai" size={13} />
-                      {__t('生成分析')}
+                      {submitting ? __t('正在提交…') : __t('生成分析')}
                     </button>
                     <button
                       onClick={() => setConfirming(false)}
