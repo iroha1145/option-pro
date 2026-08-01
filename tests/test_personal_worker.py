@@ -2237,6 +2237,76 @@ def test_personal_catalyst_task_reconciles_with_real_local_store(
         assert connection.execute("SELECT count(*) FROM ai_jobs").fetchone()[0] == 0
 
 
+def test_personal_catalyst_task_prunes_journal_when_due(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_empty_etl_page(request.url.path))
+
+    cache_path = tmp_path / "catalyst-cache.db"
+    ai_path = tmp_path / "ai-jobs.db"
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "owner-token")
+    monkeypatch.setenv("MACROLENS_URL", "https://macrolens.example")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    prune_calls: list[int] = []
+
+    class PruningIntelligence:
+        def __init__(self, *args: object, **options: object) -> None:
+            del args, options
+
+        def initialize(self) -> None:
+            return None
+
+        def consume_refresh_requested(self) -> bool:
+            return False
+
+        def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict:
+            assert allow_scheduled_jobs is False
+            return {"news": 0, "queued": 0}
+
+        def prune_journal(self, *, retention_days: int) -> dict[str, int]:
+            prune_calls.append(retention_days)
+            return {"pruned_items": 0, "pruned_changes": 0}
+
+    config = SimpleNamespace(
+        catalyst=SimpleNamespace(sync_seconds=53, journal_retention_days=9),
+        features=SimpleNamespace(catalyst_mode="read"),
+        ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),
+    )
+    task = CatalystSyncTask(
+        "prune-worker",
+        settings=_worker_config(
+            tmp_path,
+            token="owner-token",
+            url="https://macrolens.example",
+            cache_path=cache_path,
+            ai_path=ai_path,
+        ),
+        personal_config=config,
+        etl_transport=httpx.MockTransport(handler),
+        intelligence_factory=PruningIntelligence,
+    )
+
+    async def run() -> tuple[TaskResult, TaskResult]:
+        first = await task()
+        # 强制第二轮到达同步窗口；修剪节流间隔未到，不得重复修剪。
+        task._last_personal_sync_monotonic = None
+        second = await task()
+        await task.aclose()
+        return first, second
+
+    first, second = asyncio.run(run())
+
+    assert "journal_prune" in first.details["processed"]
+    assert first.details["journal_prune"] == {
+        "pruned_items": 0,
+        "pruned_changes": 0,
+    }
+    assert prune_calls == [9]
+    assert "journal_prune" not in second.details["processed"]
+
+
 def test_personal_catalyst_task_isolates_stream_failure(tmp_path: Path) -> None:
     class SyncError(RuntimeError):
         code = "upstream_unavailable"

@@ -134,6 +134,10 @@ SCHEDULED_FOCUS_RETRYABLE_ERRORS = SCHEDULED_TRANSIENT_AI_ERRORS
 MANUAL_REFRESH_CLAIM_TTL_SECONDS = 10 * 60
 MANUAL_REFRESH_TYPES = ("news", "calendar", "source_health")
 ANALYSIS_LINK_BUSY_TIMEOUT_MS = 250
+# 变更日志修剪：下限必须大于公共 feed 窗口上限（7 天，api/catalysts.py 的
+# _PUBLIC_MAX_WINDOW_HOURS）——保留期内条目整体保留，窗口读语义不受影响。
+JOURNAL_RETENTION_MIN_DAYS = 8
+_JOURNAL_PRUNE_BATCH_ITEMS = 500
 
 
 _SCHEMA = """
@@ -1174,6 +1178,90 @@ class LocalCatalystIntelligence:
                     ),
                 )
             connection.commit()
+
+    def prune_journal(
+        self,
+        *,
+        retention_days: int,
+        now: datetime | None = None,
+    ) -> dict[str, int]:
+        """整条目修剪：删除保留期外再无任何变更的新闻及其派生行。
+
+        规则与边界：
+        - 以条目（news_id）为单位：仅当该条目**最新**一次变更的 available_at
+          早于 cutoff 才整条删除；存活条目的旧变更原样保留，窗口读与 cursor
+          分页的点时语义不受影响（保留期下限 8 天 > 公共窗口上限 7 天）。
+        - result_audit 与 tombstones 有意保留：前者是付费结果的不可变审计
+          副本（result_json 全文在审计行里另存一份），后者承担防复活语义。
+        - 同步游标在 macrolens_etl_state，不读表内容；修订缓存指纹里
+          changes/revisions 走 MAX(rowid)（修剪老行不改变），links 走计数——
+          有删除的那次运行会使缓存失效一次（v5 后重建 <1s），此后不再扰动。
+        - 上游换代（generation reset）全量重放会重新灌入历史，由后续修剪
+          再次收敛，属预期行为。
+        - event_groups 对代表修订无外键；旧版本组的代表被剪后按 LEFT JOIN
+          缺省处理，热点只读最新 prepared_revision，不受影响。
+        """
+        days = int(retention_days)
+        if days < JOURNAL_RETENTION_MIN_DAYS:
+            raise ValueError(
+                "journal retention must not undercut the public feed window"
+            )
+        cutoff = _iso((now or _utc_now()) - timedelta(days=days))
+        totals = {
+            "pruned_items": 0,
+            "pruned_changes": 0,
+            "pruned_revisions": 0,
+            "pruned_links": 0,
+            "pruned_current": 0,
+        }
+        with self._connect() as connection:
+            while True:
+                ids = [
+                    row["news_id"]
+                    for row in connection.execute(
+                        """SELECT news_id FROM macrolens_etl_news_changes
+                           GROUP BY news_id HAVING MAX(available_at)<?
+                           LIMIT ?""",
+                        (cutoff, _JOURNAL_PRUNE_BATCH_ITEMS),
+                    )
+                ]
+                if not ids:
+                    break
+                marks = ",".join("?" for _ in ids)
+                # 外键顺序：links 是 revisions 的子表，必须先删。
+                totals["pruned_links"] += connection.execute(
+                    "DELETE FROM catalyst_local_analysis_links"
+                    f" WHERE news_id IN ({marks})",
+                    ids,
+                ).rowcount
+                totals["pruned_revisions"] += connection.execute(
+                    "DELETE FROM catalyst_local_news_revisions"
+                    f" WHERE news_id IN ({marks})",
+                    ids,
+                ).rowcount
+                totals["pruned_changes"] += connection.execute(
+                    "DELETE FROM macrolens_etl_news_changes"
+                    f" WHERE news_id IN ({marks})",
+                    ids,
+                ).rowcount
+                totals["pruned_current"] += connection.execute(
+                    "DELETE FROM macrolens_etl_news"
+                    f" WHERE news_id IN ({marks})",
+                    ids,
+                ).rowcount
+                totals["pruned_items"] += len(ids)
+                # 分批各自成交：WAL 不膨胀，读端始终只看到完整批次。
+                connection.commit()
+            # 现状镜像里没有对应变更行的孤儿（历史形态遗留）同刻度清理。
+            totals["pruned_current"] += connection.execute(
+                """DELETE FROM macrolens_etl_news
+                   WHERE available_at<? AND news_id NOT IN (
+                       SELECT news_id FROM macrolens_etl_news_changes
+                   )""",
+                (cutoff,),
+            ).rowcount
+            connection.commit()
+        return totals
 
     @staticmethod
     def _normalize_local_news_timestamps(

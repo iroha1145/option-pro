@@ -110,6 +110,9 @@ class AIConfig(StrictConfigModel):
 class CatalystConfig(StrictConfigModel):
     sync_seconds: int = Field(default=120, ge=30, le=86_400)
     focus_seconds: int = Field(default=1800, ge=300, le=86_400)
+    # 变更日志整条目保留期。下限 8 天必须大于公共 feed 窗口上限 7 天：
+    # 保留期内的条目全量保留（含旧变更），窗口读与 cursor 分页语义不受修剪影响。
+    journal_retention_days: int = Field(default=30, ge=8, le=3650)
     manual_force_reanalysis: Literal[True] = True
     manual_refresh_cooldown_seconds: int = Field(default=30, ge=0, le=3600)
     scheduled_times_et: list[str] = Field(
