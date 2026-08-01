@@ -36,7 +36,7 @@ function NyClock({ className }: { className?: string }) {
 }
 
 export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void }) {
-  const { isOwner, aiEnabled, aiAvailable, aiReason, logout } = useAccess();
+  const { isOwner, isSignedIn, username, aiEnabled, aiAvailable, aiReason, logout } = useAccess();
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -56,10 +56,23 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
     }
   }, [location.pathname]);
 
+  const [loggingOut, setLoggingOut] = useState(false);
   const handleLogout = async () => {
-    await logout();
-    toast.info(t('已退出 Owner 模式'), t('当前为访客只读模式'));
-    navigate('/watchlist');
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await logout();
+      toast.info(
+        isOwner ? t('已退出 Owner 模式') : t('已退出登录'),
+        t('当前为访客只读模式'),
+      );
+      navigate('/watchlist');
+    } catch (error) {
+      // 登出失败以前完全静默：按钮按了没反应，会话还挂着
+      toast.error(t('退出失败'), error instanceof Error ? error.message : t('请稍后再试'));
+    } finally {
+      setLoggingOut(false);
+    }
   };
 
   return (
@@ -156,13 +169,14 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
 
           <LanguageSwitcher className="hidden md:block" />
 
-          {isOwner ? (
+          {isSignedIn ? (
             <button
               onClick={handleLogout}
-              className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-3 text-caption text-ink-500 transition-colors hover:text-ink-800"
+              disabled={loggingOut}
+              className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-3 text-caption text-ink-500 transition-colors hover:text-ink-800 disabled:cursor-wait disabled:opacity-60"
             >
               <Icon name="logout" size={14} />
-              {t('退出')}
+              {username ? t('退出 {name}', { name: username }) : t('退出')}
             </button>
           ) : (
             <Link

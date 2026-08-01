@@ -181,7 +181,15 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
                 <tr
                   key={`${sectorId}:${r.ticker}`}
                   onClick={() => onOpenTicker(r.ticker)}
-                  className="group h-11 cursor-pointer border-b border-line transition-colors duration-fast last:border-0 hover:bg-paper-2"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget) return;
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onOpenTicker(r.ticker);
+                    }
+                  }}
+                  className="group h-11 cursor-pointer border-b border-line transition-colors duration-fast last:border-0 hover:bg-paper-2 focus-visible:bg-paper-2 focus-visible:outline-none"
                 >
                   <td className="py-2 pr-2">
                     <span className="flex items-center gap-2.5">

@@ -28,7 +28,7 @@ const MORE_ITEMS: { label: string; path: string; icon: IconName; desc: string }[
 export default function MobileDock() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isOwner } = useAccess();
+  const { isOwner, isSignedIn, username } = useAccess();
   const [moreOpen, setMoreOpen] = useState(false);
 
   /* 「更多」sheet 声明了 aria-modal，就要有配套行为（审计 2.5.5）：
@@ -161,8 +161,12 @@ export default function MobileDock() {
                     <Icon name="shield" size={17} />
                   </span>
                   <span className="flex-1">
-                    <span className="block text-body-s font-medium text-ink-800">{isOwner ? t('Owner 已登录') : t('访客只读模式')}</span>
-                    <span className="block text-micro text-ink-400">{isOwner ? t('可执行写操作') : t('登录后可强制刷新与 AI 分析')}</span>
+                    <span className="block text-body-s font-medium text-ink-800">
+                      {isOwner ? t('Owner 已登录') : isSignedIn ? t('已登录 {name}', { name: username ?? '' }) : t('访客只读模式')}
+                    </span>
+                    <span className="block text-micro text-ink-400">
+                      {isOwner ? t('可执行写操作') : isSignedIn ? t('自选保存在账号里') : t('登录后可强制刷新与 AI 分析')}
+                    </span>
                   </span>
                 </button>
               </div>

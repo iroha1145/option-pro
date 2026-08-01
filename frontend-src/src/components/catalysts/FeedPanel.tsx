@@ -59,8 +59,19 @@ export function NewsRow({
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: animate ? Math.min(index * 0.03, 0.3) : 0 }}
       /* v8.1：行级去位移。上浮属于「卡片脱离纸面」的 elevation 隐喻——列表行无阴影无边界，
          浮起没有语义；60 行高频扫视区满屏跳也违反动效克制。背景色 + 标题下划线两重反馈已够。 */
-      className="group relative flex cursor-pointer gap-3 px-4 py-[18px] transition-colors duration-fast hover:bg-paper-2/70 sm:px-5"
+      className="group relative flex cursor-pointer gap-3 px-4 py-[18px] transition-colors duration-fast hover:bg-paper-2/70 focus-visible:bg-paper-2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400/60 sm:px-5"
       onClick={() => onOpen(item.newsId)}
+      /* 键盘可达：article + onClick 对 Tab 键用户完全不存在，右侧那颗
+         「AI 分析」按钮又是 aria-hidden 的 span——整条新闻打不开。 */
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen(item.newsId);
+        }
+      }}
       aria-label={item.titleZh}
     >
       <TimeCol iso={item.publishedAt} />
@@ -270,7 +281,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
             </button>
           }
         />
-      ) : items.length === 0 ? (
+      ) : items.length === 0 && !nextCursor ? (
         <EmptyState
           image="/empty-news.svg"
           title={hasFilters ? __t('这个角度暂时没有新闻') : __t('暂时没有新闻')}
@@ -288,6 +299,9 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
           }
         />
       ) : (
+        /* items 为空但 nextCursor 还在：首页可能整页被中文校验过滤（译文未跟上），
+           后面几页已翻译好的新闻必须还点得出来——空态若吞掉「加载更多」，那些
+           新闻就永远不可达。 */
         <>
           <div
             className={cn('divide-y divide-line transition-opacity duration-200', fading && 'opacity-0')}

@@ -91,12 +91,12 @@ test('期权链保留真实来源并按 Retry-After 冷却重试', async () => {
 
   assert.match(api, /provider:\s*pickS\(r,\s*'provider'\)/);
   assert.match(api, /asOf:\s*pickS\(r,\s*'as_of',\s*'asOf'\)/);
-  assert.match(panel, /chain\.asOf \? t\(' · 更新于 \{time\}', \{ time: fmtRelative\(chain\.asOf\) \}\)/);
+  assert.match(panel, /shownChain\.asOf \? t\(' · 更新于 \{time\}', \{ time: fmtRelative\(shownChain\.asOf\) \}\)/);
   assert.match(panel, /providerError\?\.retryAfter/);
   assert.match(panel, /disabled=\{retrySeconds > 0 \|\| retrying\}/);
   assert.match(panel, /期权数据暂时获取不到/);
   assert.doesNotMatch(panel, /yfinance|Massive Stocks Starter/);
-  assert.match(panel, /providerError\.code === 400[\s\S]*forceExpirationsRef\.current = true;[\s\S]*refreshExpirations\(\);[\s\S]*return;/);
+  assert.match(panel, /expError\.code === 400[\s\S]*forceExpirationsRef\.current = true;[\s\S]*refreshExpirations\(\);[\s\S]*return;/);
   assert.match(api, /force:\s*readOptions\.force/);
 });
 

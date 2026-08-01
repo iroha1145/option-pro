@@ -71,16 +71,33 @@ export default function Sectors() {
   const ivQ = usePolling(
     () =>
       ivSectorIdValid
-        ? sectorsApi.ivRanking(ivSectorIdValid)
+        ? sectorsApi
+            .ivRanking(ivSectorIdValid)
+            // 信封若未带 sectorId，盖上本次请求的板块章：切板块时旧信封
+            // 仍留在 usePolling.data 里，没有归属就无法识别「这是谁的数字」
+            .then((envelope) =>
+              envelope
+                ? { ...envelope, sectorId: envelope.sectorId ?? ivSectorIdValid }
+                : envelope,
+            )
         : Promise.resolve(null),
     600_000,
     [ivSectorIdValid],
   );
-  const ivRows = useMemo(
-    () => (ivQ.data?.rows ?? []).map(normalizeIvRow),
-    [ivQ.data],
+  /* 只认属于当前板块的信封：切板块后新请求在飞的数秒内，旧板块的行与统计
+     不得顶着新板块的标题上屏（标题换了、数字没换=同屏自相矛盾）。 */
+  const ivData = useMemo(
+    () =>
+      ivQ.data && (!ivQ.data.sectorId || ivQ.data.sectorId === ivSectorIdValid)
+        ? ivQ.data
+        : null,
+    [ivQ.data, ivSectorIdValid],
   );
-  const ivMeta = useMemo(() => normalizeIvMeta(ivQ.data), [ivQ.data]);
+  const ivRows = useMemo(
+    () => (ivData?.rows ?? []).map(normalizeIvRow),
+    [ivData],
+  );
+  const ivMeta = useMemo(() => normalizeIvMeta(ivData), [ivData]);
 
   const selected = useMemo(
     () => sectors.find((sector) => sector.id === selectedId) ?? null,
@@ -365,8 +382,8 @@ export default function Sectors() {
               rows={ivRows}
               meta={ivMeta}
               loading={catalogQ.loading}
-              ivLoading={ivQ.loading}
-              ivError={!!ivQ.error && !ivQ.data}
+              ivLoading={ivQ.loading || (!ivData && !ivQ.error)}
+              ivError={!!ivQ.error && !ivData}
               onIvRetry={ivQ.refresh}
               onOpenTicker={openTicker}
               onOpenPalette={openPalette}

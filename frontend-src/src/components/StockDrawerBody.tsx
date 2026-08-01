@@ -285,7 +285,10 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
     );
   }
 
-  if (error || !detail) {
+  /* 失败但仍有上一轮 detail 时继续展示（同文件下方信号区的 error && !data
+     正是这个语义）：一次 408/断网就把价格头、K 线和 Tab 连内部状态一起卸载，
+     对 60s 轮询来说代价完全不对称。 */
+  if (!detail) {
     const is404 = error?.code === 404;
     const loginExpired = error?.code === 401;
     const rateLimited = error?.code === 429;
@@ -328,6 +331,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
           ) : loginExpired ? (
             <Link
               to="/login"
+              state={{ from: `${window.location.pathname}${window.location.search}` }}
               className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white hover:brightness-105"
             >
               {__t('重新登录')}
@@ -393,13 +397,20 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
                 <p className="eyebrow mb-3">RECENT SIGNALS</p>
                 <SignalList ticker={detail.ticker} refreshVersion={dataRevision} />
               </div>
-              <AiAnalysisCard ticker={detail.ticker} />
             </div>
           )}
           {tab === 'options' && <OptionsPanel ticker={detail.ticker} />}
           {tab === 'news' && <NewsPanel ticker={detail.ticker} />}
         </motion.div>
       </AnimatePresence>
+      {/* AI 分析卡挂载与页签解耦：它持有付费任务的轮询与结果，若放在按 tab
+          键控的 AnimatePresence 里，切到「期权链」就整卡卸载——任务与结果随
+          组件销毁，切回只剩「开始分析」，全站又没有任务列表可找回，重点会再
+          扣一次额度。非 signals 页签只隐藏不卸载；按 ticker 键控在换标的时
+          正常重置。 */}
+      <div className={tab === 'signals' ? 'mt-6' : 'hidden'}>
+        <AiAnalysisCard key={detail.ticker} ticker={detail.ticker} />
+      </div>
     </div>
   );
   const providerNote = [

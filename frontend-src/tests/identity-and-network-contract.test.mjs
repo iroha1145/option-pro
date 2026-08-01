@@ -171,7 +171,10 @@ test('身份读取带世代号，旧响应不能覆盖新结果', async () => {
   // 登录 / 注册 / 登出必须先递增世代，作废在途探测
   assert.match(hook, /generationRef\.current \+= 1;/);
   assert.match(hook, /applyWrite\(\(\) => accessApi\.login\(username, password\)\)/);
-  assert.match(hook, /applyWrite\(\(\) => accessApi\.logout\(\)\)/);
+  // 登出走 applyWrite 双路：客户会话 accountApi.logout、Owner 会话 accessApi.logout（#18）
+  assert.match(hook, /const logout = useCallback\(\s*\(\) => applyWrite\(async \(\) => \{/);
+  assert.match(hook, /await accountApi\.logout\(\);/);
+  assert.match(hook, /await accessApi\.logout\(\);/);
 });
 
 /* ---------------- P2-1 / P2-2：错误不再由 visitor 兼任 ---------------- */

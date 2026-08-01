@@ -378,7 +378,10 @@ function WatchCard({
             event.stopPropagation();
             onRemove();
           }}
-          className="absolute right-2 top-2 z-10 inline-flex size-6 cursor-pointer items-center justify-center rounded-xs text-ink-300 opacity-0 outline-none transition-[opacity,color] duration-fast hover:bg-paper-2 hover:text-down-700 focus-visible:opacity-100 group-hover/card:opacity-100"
+          /* opacity-0 不影响命中测试：必须同步 pointer-events-none，否则这颗
+             压在整卡按钮之上的隐形 × 会把「点卡片开详情」变成静默删除。
+             触屏没有 hover，永远进不了 group-hover —— 无 hover 环境改为常驻可见。 */
+          className="pointer-events-none absolute right-2 top-2 z-10 inline-flex size-6 cursor-pointer items-center justify-center rounded-xs text-ink-300 opacity-0 outline-none transition-[opacity,color] duration-fast hover:bg-paper-2 hover:text-down-700 focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:text-ink-400"
         >
           <Icon name="x" size={13} />
         </button>
@@ -938,7 +941,9 @@ export default function Watchlist() {
               <div className="card-surface">
                 <SkeletonRows rows={10} />
               </div>
-            ) : err ? (
+            ) : err && !wl.data ? (
+              /* 失败但还有上一轮数据时不整块换错误页：一次 408/断网就把
+                 「214 只标的」的统计和涨跌家数换成加载失败，同屏自相矛盾 */
               <div className="card-surface">
                 <EmptyState
                   variant="error"

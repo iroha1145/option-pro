@@ -113,6 +113,6 @@ test('production option panel contains no hard-coded completion conclusion', asy
   );
   assert.doesNotMatch(source, /期权链解读完成/);
   assert.match(source, /alerts: evidence/);
-  assert.match(source, /underlyingPrice: chain\.spot/);
+  assert.match(source, /underlyingPrice: activeChain\.spot/);
   assert.match(source, /expiration,/);
 });

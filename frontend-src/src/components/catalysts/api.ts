@@ -700,7 +700,15 @@ export const catalystsContract = {
     mockOr(() => fx2.getNewsDetailV2(id), () =>
       get(`/catalysts/news/${encodeURIComponent(id)}`).then((d) => {
         const env = asRec(d);
-        return nNewsItem(asRec(env.item ?? env));
+        const record = asRec(env.item ?? env);
+        /* 在途任务挂在信封层（analysis_job 与 item 平级）：只解析 item 会让
+           analysisJobId 恒为 null——排队中的新闻在抽屉里既没有任何按钮、也不
+           恢复轮询（四个渲染分支全不命中，渲染出空节点）。 */
+        return nNewsItem(
+          record.analysis_job === undefined && env.analysis_job !== undefined
+            ? { ...record, analysis_job: env.analysis_job }
+            : record,
+        );
       }),
     ),
   hotspots: (): Promise<HotspotGroup[]> =>

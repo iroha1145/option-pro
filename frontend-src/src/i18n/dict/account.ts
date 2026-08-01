@@ -98,6 +98,11 @@ export const ACCOUNT: Dict = {
   /* ---------------- 提交成功 toast ---------------- */
   '账号已创建': ['Account created', 'アカウントを作成しました'],
   '欢迎回来': ['Welcome back', 'おかえりなさい'],
+  '网络连接超时，请检查网络后重试': ['The connection timed out — check your network and retry', '接続がタイムアウトしました。ネットワークを確認して再試行してください'],
+  '网络连接失败，请检查网络后重试': ['The connection failed — check your network and retry', '接続に失敗しました。ネットワークを確認して再試行してください'],
+  '当前会话': ['Current session', '現在のセッション'],
+  '继续浏览': ['Keep browsing', 'このまま閲覧を続ける'],
+  '退出并换账号': ['Sign out & switch account', 'サインアウトしてアカウントを切り替え'],
   /* 「管理员已登录」只在用户名字面等于 admin 时出现，属于该演示账号的彩蛋文案；
      产品里对应的角色概念就是 Owner，按术语表不译成 Administrator / 管理者。 */
   '管理员已登录': ['Owner signed in', 'オーナーとしてサインインしました'],

@@ -522,9 +522,13 @@ export default function Screener() {
     );
   }, [profiles, applied.profile, applied.presetId]);
 
+  /* 服务端参数 chip 的移除只写 draft：分数是哪套参数算的必须与右侧说明同源 */
+  const patchDraftOnly = useCallback((p: Partial<ScanFilters>) => {
+    setDraft((d) => ({ ...d, ...p }));
+  }, []);
   const chips = useMemo(
-    () => buildChips(applied, profiles, sectorOptions, patchApplied),
-    [applied, profiles, sectorOptions, patchApplied],
+    () => buildChips(applied, profiles, sectorOptions, patchApplied, patchDraftOnly),
+    [applied, profiles, sectorOptions, patchApplied, patchDraftOnly],
   );
 
   const animKey = `${scanSeq.current}:${safePage}`;
@@ -940,30 +944,39 @@ function buildChips(
   profiles: StrengthProfile[] | null,
   sectorOptions: SectorOption[],
   patch: (p: Partial<ScanFilters>) => void,
+  patchServer: (p: Partial<ScanFilters>) => void,
 ): EchoChip[] {
+  /* 两类移除语义（评分方法卡与表格分数必须同源）：
+     - 客户端条件（tier/priceMax 等本地过滤）→ patch：applied+draft 同步，立即生效；
+     - 服务端参数（timeframe/profile/topN/sectors/priceMin/minDollarVol/minScore，
+       见 scanRequest.apiParams）→ patchServer：只写 draft，让扫描按钮进入 dirty
+       脉冲提示重扫。原实现把服务端参数也走 patch：右侧立刻显示「评分方法·均衡」，
+       表格里的分数却仍是进取档算出来的，且 dirty=false 没有任何重扫提示。 */
   const chips: EchoChip[] = [];
   if (f.tier !== 'all') chips.push({ key: 'tier', label: __t('{tier} 档', { tier: f.tier }), onRemove: () => patch({ tier: 'all' }) });
-  if (f.timeframe !== 'all') chips.push({ key: 'tf', label: __t('周期 {tf}', { tf: TIMEFRAME_CN[f.timeframe] }), onRemove: () => patch({ timeframe: 'all' }) });
-  if (f.profile !== 'balanced') chips.push({ key: 'pf', label: __t('偏好 {profile}', { profile: PROFILE_CN[f.profile] }), onRemove: () => patch({ profile: 'balanced' }) });
-  if (f.topN > 0) chips.push({ key: 'top', label: `Top ${f.topN}`, onRemove: () => patch({ topN: 0 }) });
+  if (f.timeframe !== 'all') chips.push({ key: 'tf', label: __t('周期 {tf}', { tf: TIMEFRAME_CN[f.timeframe] }), onRemove: () => patchServer({ timeframe: 'all' }) });
+  if (f.profile !== 'balanced') chips.push({ key: 'pf', label: __t('偏好 {profile}', { profile: PROFILE_CN[f.profile] }), onRemove: () => patchServer({ profile: 'balanced' }) });
+  if (f.topN > 0) chips.push({ key: 'top', label: `Top ${f.topN}`, onRemove: () => patchServer({ topN: 0 }) });
   f.sectors.forEach((s) =>
     chips.push({
       key: `sec-${s}`,
       // sectors 存 id：回显中文名（mock id=name 等价）
       label: sectorOptions.find((o) => o.id === s)?.name ?? s,
-      onRemove: () => patch({ sectors: f.sectors.filter((x) => x !== s) }),
+      onRemove: () => patchServer({ sectors: f.sectors.filter((x) => x !== s) }),
     }),
   );
   if (f.priceMin != null || f.priceMax != null) {
     const lo = f.priceMin != null ? `$${f.priceMin}` : '—';
     const hi = f.priceMax != null ? `$${f.priceMax}` : '—';
-    chips.push({ key: 'price', label: __t('价格 {lo}–{hi}', { lo, hi }), onRemove: () => patch({ priceMin: null, priceMax: null }) });
+    // priceMin 进 apiParams（min_price）、priceMax 是客户端过滤：并存时按更严的服务端语义走
+    const remove = f.priceMin != null ? patchServer : patch;
+    chips.push({ key: 'price', label: __t('价格 {lo}–{hi}', { lo, hi }), onRemove: () => remove({ priceMin: null, priceMax: null }) });
   }
   if (f.minDollarVol > 0) {
     const opt = DOLLAR_VOL_OPTIONS.find((o) => o.value === f.minDollarVol);
-    chips.push({ key: 'dv', label: __t('成交额 {v}', { v: opt?.label ?? `≥${fmtCompact(f.minDollarVol)}` }), onRemove: () => patch({ minDollarVol: 0 }) });
+    chips.push({ key: 'dv', label: __t('成交额 {v}', { v: opt?.label ?? `≥${fmtCompact(f.minDollarVol)}` }), onRemove: () => patchServer({ minDollarVol: 0 }) });
   }
-  if (f.minScore != null) chips.push({ key: 'ms', label: __t('强度 ≥{n}', { n: f.minScore }), onRemove: () => patch({ minScore: null }) });
+  if (f.minScore != null) chips.push({ key: 'ms', label: __t('强度 ≥{n}', { n: f.minScore }), onRemove: () => patchServer({ minScore: null }) });
   if (f.presetId) {
     const name = profiles?.find((p) => p.id === f.presetId)?.name ?? f.presetId;
     chips.push({ key: 'preset', label: __t('预设 {name}', { name }), onRemove: () => patch({ presetId: null }) });

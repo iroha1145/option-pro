@@ -122,6 +122,10 @@ export default function DataTable<T>({
                       tabIndex: 0,
                       role: 'button' as const,
                       onKeyDown: (event: ReactKeyboardEvent<HTMLTableRowElement>) => {
+                        /* 只处理落在行本体上的按键：行内真按钮（如「从自选移除」）
+                           的 Enter 激活是 keydown 的默认动作，容器 preventDefault
+                           会吃掉它，让键盘用户执行到相反的动作（打开详情）。 */
+                        if (event.target !== event.currentTarget) return;
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault();
                           onRowClick(row);

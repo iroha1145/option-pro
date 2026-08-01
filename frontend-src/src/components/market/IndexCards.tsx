@@ -133,10 +133,18 @@ export default function IndexCards({
   const registerRef = (code: string, el: HTMLDivElement | null) => {
     cardRefs.current[code] = el;
   };
+  /* 每个 focus 值只滚动一次：deps 里的 data 每 60s 轮询都换新引用，
+     不加一次性守卫会周期性把页面强行拽回这张卡。 */
+  const scrolledForRef = useRef<string | null>(null);
   useEffect(() => {
     if (!focus || !data) return;
-    const el = cardRefs.current[focus.toUpperCase()];
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    const code = focus.toUpperCase();
+    if (scrolledForRef.current === code) return;
+    const el = cardRefs.current[code];
+    if (el) {
+      scrolledForRef.current = code;
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
   }, [focus, data]);
 
   if (loading) {

@@ -218,7 +218,10 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
 
   useEffect(() => stopPoll, [stopPoll]);
 
+  const submittingRef = useRef(false);
   const startJob = useCallback(async () => {
+    if (submittingRef.current) return; // POST 在途时 running 仍为 false，会重复提交
+    submittingRef.current = true;
     setConfirmOpen(false);
     try {
       const failedCycleId =
@@ -272,6 +275,8 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
       }, 2000);
     } catch (e) {
       toast.error(t('提交失败'), e instanceof Error ? e.message : undefined);
+    } finally {
+      submittingRef.current = false;
     }
   }, [latestQ, stopPoll, toast]);
 

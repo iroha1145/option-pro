@@ -39,6 +39,43 @@ export function fmtNyTime(d: Date): string {
   });
 }
 
+/* 事件时刻的全站统一 ET 口径。行情事件（突破触发、K 线 bar、快照观测）的
+   语义时区是美东：用浏览器本地 getHours() 渲染再标「美东」，UTC+8 用户会看到
+   差一整个时区的数字。hourCycle h23：en-US 在 hour12:false 下会把午夜渲染成
+   24:00。 */
+const NY_EVENT_FMT = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  month: 'numeric',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+const NY_HHMM_FMT = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'America/New_York',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/** ISO → 美东 `M/DD HH:mm`；无效输入显「—」 */
+export function fmtNyEventTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const parts = Object.fromEntries(
+    NY_EVENT_FMT.formatToParts(d).map((part) => [part.type, part.value]),
+  );
+  return `${parts.month}/${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
+/** ISO → 美东 `HH:mm`；空值/无效输入显「—」 */
+export function fmtNyHHmm(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return NY_HHMM_FMT.format(d);
+}
+
 export function fmtRelative(iso: string | null | undefined): string {
   if (!iso) return '—'; // live 可空时间字段（如未触发事件的 triggered_at）显「—」
   const diff = Date.now() - new Date(iso).getTime();

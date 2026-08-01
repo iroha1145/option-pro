@@ -7,8 +7,8 @@
  *   错误映射：login_cooldown→连续登录失败，请稍后再试 / https_required→密码模式需 HTTPS / 其他→密码不正确
  * L3 移动单栏；「返回公开研究页面」链接；reduced-motion 降级；页面不可见暂停 K 线循环
  */
-import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useAccess } from '@/hooks/useAccess';
 import { accessApi } from '@/api/modules/access';
@@ -170,7 +170,10 @@ type SubmitState = 'idle' | 'verifying' | 'success' | 'error';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, register, isOwner, isCustomer, loading } = useAccess();
+  const { login, register, isOwner, isCustomer, username: signedInName, logout, loading } = useAccess();
+  const location = useLocation();
+  /* 从别处「去登录」带来的来源页（#21）：登录成功回到出发点而不是固定 /watchlist */
+  const fromPath = (location.state as { from?: string } | null)?.from ?? null;
   const toast = useToast();
   const reduced = useReducedMotion();
 
@@ -185,12 +188,15 @@ export default function Login() {
   const [pwError, setPwError] = useState(false);
   const [serviceDown, setServiceDown] = useState(false);
 
-  /* 已登录（管理员或客户）→ 直接进工作台（无闪烁） */
-  useEffect(() => {
-    if (!loading && (isOwner || isCustomer)) navigate('/watchlist', { replace: true });
-  }, [loading, isOwner, isCustomer, navigate]);
 
-  /* access/status 失败 → 顶部警告条 + 禁用 */
+  /* access/status 失败 → 顶部警告条 + 禁用；探测可重试（原实现置位后永不恢复，
+     一次瞬时失败就把登录表单永久禁用）。 */
+  const probeService = useCallback(() => {
+    accessApi
+      .status()
+      .then(() => setServiceDown(false))
+      .catch(() => setServiceDown(true));
+  }, []);
   useEffect(() => {
     let alive = true;
     accessApi.status().catch(() => {
@@ -240,6 +246,11 @@ export default function Login() {
         return { text: e.message || t('用户名或密码不正确'), tone: 'error' };
       }
       if (e.code === 429 || e.code >= 500) return { text: t('服务暂时不可用，稍后重试'), tone: 'warn' };
+      if (e.code === 408 || e.code === 0) return { text: t('网络连接超时，请检查网络后重试'), tone: 'warn' };
+    }
+    if (e instanceof TypeError) {
+      // fetch 网络层失败（断网/DNS）不是凭据错误，谎报会引导用户改密码
+      return { text: t('网络连接失败，请检查网络后重试'), tone: 'warn' };
     }
     return { text: mode === 'register' ? t('注册失败，请重试') : t('用户名或密码不正确'), tone: 'error' };
   };
@@ -271,7 +282,7 @@ export default function Login() {
         mode === 'register' ? t('账号已创建') : t('欢迎回来'),
         isAdmin ? t('管理员已登录') : t('已登录 {name}', { name }),
       );
-      navigate('/watchlist', { replace: true });
+      navigate(fromPath ?? '/watchlist', { replace: true });
     } catch (err) {
       setState('error');
       setStatusMsg(mapError(err));
@@ -281,10 +292,39 @@ export default function Login() {
     }
   };
 
-  if (loading || isOwner || isCustomer) {
+  if (loading) {
     return (
       <div className="dot-grid-dense flex min-h-[100dvh] items-center justify-center bg-paper">
         <div className="size-8 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-label={t("加载中")} />
+      </div>
+    );
+  }
+
+  if (isOwner || isCustomer) {
+    /* 已登录不再无条件弹走：客户账号此前被这里立刻 replace 回 /watchlist，
+       整个 UI 没有任何地方能结束会话或换账号。 */
+    return (
+      <div className="dot-grid-dense flex min-h-[100dvh] items-center justify-center bg-paper px-4">
+        <div className="card-surface w-full max-w-[360px] p-6 text-center">
+          <p className="eyebrow">{t('当前会话')}</p>
+          <p className="mt-2 text-h3 text-ink-800">
+            {isOwner ? t('Owner 已登录') : t('已登录 {name}', { name: signedInName ?? '' })}
+          </p>
+          <div className="mt-5 flex flex-col gap-2.5">
+            <button
+              onClick={() => navigate(fromPath ?? '/watchlist', { replace: true })}
+              className="h-10 rounded-md bg-brand-600 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+            >
+              {t('继续浏览')}
+            </button>
+            <button
+              onClick={() => void logout()}
+              className="h-10 rounded-md border border-line bg-card text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+            >
+              {t('退出并换账号')}
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -418,8 +458,11 @@ export default function Login() {
             </div>
 
             {serviceDown && (
-              <p role="status" className="mt-4 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">
+              <p role="status" className="mt-4 flex items-center justify-between gap-2 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">
                 {t('无法连接服务，登录暂不可用')}
+                <button type="button" onClick={probeService} className="shrink-0 font-medium underline underline-offset-2">
+                  {t('重试')}
+                </button>
               </p>
             )}
 

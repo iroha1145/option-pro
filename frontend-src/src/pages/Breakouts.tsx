@@ -239,17 +239,23 @@ export default function Breakouts() {
     locateTimer.current = setTimeout(() => setLocateTicker(null), 2000);
   };
   const [detailError, setDetailError] = useState<ApiError | null>(null);
+  /* 当前打开的事件 id：成功路径本有 prev.event_id 守卫，失败路径没有——
+     快速连开 A、B 两个事件时，A 的失败会把错误横幅打在 B 的模态上。 */
+  const detailForRef = useRef<string | null>(null);
   const openFromArchive = (ev: BreakoutEventFull) => {
     setSelected(ev);
     setDetailError(null);
+    detailForRef.current = ev.event_id;
     /* 契约 GET /breakouts/events/{id}：详情到位后替换（mock 同形） */
     breakoutsApi
       .eventDetail(ev.event_id)
       .then((d) => {
+        if (detailForRef.current !== ev.event_id) return;
         setSelected((prev) => (prev && prev.event_id === ev.event_id ? asFullDetail(d) : prev));
         setDetailError(null);
       })
       .catch((error: unknown) => {
+        if (detailForRef.current !== ev.event_id) return;
         // 详情失败此前被完全吞掉：界面既不报错也不给重试（审计 P2-20）。
         setDetailError(error instanceof ApiError ? error : new ApiError(500, __t('详情加载失败')));
       });
@@ -304,6 +310,7 @@ export default function Breakouts() {
   /* 历史事件回溯压缩面板（右栏吸顶 / 空态·错误态下整宽兜底，保持历史可访问） */
   const historyRailEl = (
     <HistoryRail
+      filterKey={`${statusFilter}|${minScore}|${tickerFilter}|${onlyWatch}`}
       events={filteredEvents}
       loadedCount={events.length}
       total={eventsQ.data?.total ?? null}

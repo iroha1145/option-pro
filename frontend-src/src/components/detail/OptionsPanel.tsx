@@ -127,14 +127,28 @@ function AiOptionInsight({
   chain: OptionChain | null;
 }) {
   const { isOwner } = useAccess();
-  const { job, error, start, cancel, reset } = useAiJob();
+  const { job, error, starting, start, cancel, reset } = useAiJob();
   const [confirming, setConfirming] = useState(false);
+  /* 提交那一刻的到期日与证据数快照：结果脚注只认它。轮询会刷新 chain、
+     父层切换会换 expiration——用渲染期的值标注既成结果，会把已付费的
+     解读错误归属到另一个到期周。 */
+  const [submitted, setSubmitted] = useState<{
+    expiration: string;
+    evidenceCount: number;
+  } | null>(null);
+  /* 链必须与当前 (ticker, expiration) 匹配才可用：切到期日后新链在途时，
+     usePolling 仍保留上一条链的数据，直接用它建证据会把旧到期日的合约
+     提交成新到期日的任务。 */
+  const activeChain =
+    chain && chain.ticker === ticker && chain.expiration === expiration
+      ? chain
+      : null;
   const evidence = useMemo(
     () =>
-      chain && expiration
-        ? buildOptionAlertEvidence(chain, expiration, dte(expiration))
+      activeChain && expiration
+        ? buildOptionAlertEvidence(activeChain, expiration, dte(expiration))
         : [],
-    [chain, expiration],
+    [activeChain, expiration],
   );
   const result =
     job?.status === 'succeeded' ? parseOptionAlertResult(job.result) : null;
@@ -154,7 +168,7 @@ function AiOptionInsight({
           <Icon name="spark-ai" size={15} className="text-ai-600" />
           {t('AI 期权解读')}
         </p>
-        {!job && !confirming && (
+        {!job && !starting && !confirming && (
           <button
             onClick={() => setConfirming(true)}
             disabled={!hasEvidence}
@@ -176,6 +190,9 @@ function AiOptionInsight({
         </p>
       )}
 
+      {!job && starting && (
+        <p className="mt-2.5 text-caption text-ink-500">{t('正在创建解读任务…')}</p>
+      )}
       {!job && confirming && (
         <div className="mt-2.5">
           <p className="text-caption text-ink-600">
@@ -186,13 +203,16 @@ function AiOptionInsight({
             <button
               onClick={() => {
                 setConfirming(false);
-                if (!chain || !expiration || evidence.length === 0) return;
+                if (!activeChain || !expiration || evidence.length === 0) return;
+                setSubmitted({ expiration, evidenceCount: evidence.length });
                 void start(() =>
                   aiJobsApi.createOptionAlerts({
                     tickers: [ticker],
                     alerts: evidence,
                     // 标的现价缺失时不发 0：契约里它是可选字段。
-                    ...(chain.spot !== null ? { underlyingPrice: chain.spot } : {}),
+                    ...(activeChain.spot !== null
+                      ? { underlyingPrice: activeChain.spot }
+                      : {}),
                     expiration,
                   }),
                 );
@@ -280,9 +300,17 @@ function AiOptionInsight({
             {t('风险说明：')}{result.risk_note}
           </p>
           <p className="mt-2 text-micro text-ink-400">
-            {AI_DISCLAIMER} {t('· 到期')} {expiration ?? '—'} {t('· 输入证据')} {evidence.length} {t('条')}
+            {/* 只认提交快照：渲染期的 expiration/evidence 会随切换与轮询漂移 */}
+            {AI_DISCLAIMER} {t('· 到期')} {submitted?.expiration ?? expiration ?? '—'} {t('· 输入证据')}{' '}
+            {submitted?.evidenceCount ?? evidence.length} {t('条')}
           </p>
-          <button onClick={reset} className="mt-2 text-caption font-medium text-ai-600 hover:text-ai-600/80">
+          <button
+            onClick={() => {
+              setSubmitted(null);
+              reset();
+            }}
+            className="mt-2 text-caption font-medium text-ai-600 hover:text-ai-600/80"
+          >
             {t('重新生成')}
           </button>
         </div>
@@ -344,22 +372,28 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
     null,
     [ticker, exp],
   );
+  /* 到期日列表失败才整块空态；单个到期周的链失败只替换表格区域——
+     否则一个坏到期日会连带换掉 <select>，用户失去唯一的逃生控件，
+     若坏的恰是 expirations[0]，整个期权页持续不可用。 */
   const providerError = expError ?? chainError;
   const retrySeconds = useRetryCountdown(
     providerError,
     providerError?.retryAfter,
   );
+  /* 链必须匹配当前 (ticker, exp) 才能上屏：轮询在切换后仍保留上一条链 */
+  const shownChain =
+    chain && chain.ticker === ticker && chain.expiration === exp ? chain : null;
 
   const atmRef = useRef<HTMLTableRowElement>(null);
   // 标的现价缺失时不猜平值行：旧实现把 spot 当 0，平值高亮会落在最低行权价上。
   const atmStrike = useMemo(() => {
-    if (!chain || chain.rows.length === 0) return null;
-    const spot = chain.spot;
+    if (!shownChain || shownChain.rows.length === 0) return null;
+    const spot = shownChain.spot;
     if (spot === null) return null;
-    return chain.rows.reduce((best, r) =>
+    return shownChain.rows.reduce((best, r) =>
       Math.abs(r.strike - spot) < Math.abs(best - spot) ? r.strike : best,
-    chain.rows[0].strike);
-  }, [chain]);
+    shownChain.rows[0].strike);
+  }, [shownChain]);
 
   useEffect(() => {
     /* 只滚动链表自己的 max-h 容器（审计 2.2.18）：scrollIntoView 会连带滚动
@@ -389,9 +423,9 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
   }
 
   if (expLoading) return <SkeletonRows rows={6} />;
-  if (providerError) {
-    const loginExpired = providerError.code === 401;
-    const rateLimited = providerError.code === 429;
+  if (expError) {
+    const loginExpired = expError.code === 401;
+    const rateLimited = expError.code === 429;
     const retrying = expRefreshing || chainRefreshing;
     return (
       <EmptyState
@@ -415,7 +449,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
             <button
               type="button"
               onClick={() => {
-                if (providerError.code === 400) {
+                if (expError.code === 400) {
                   setExpiration(null);
                   forceExpirationsRef.current = true;
                   refreshExpirations();
@@ -478,30 +512,47 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
           </select>
           <Icon name="chevron-down" size={14} className="pointer-events-none absolute right-2.5 text-ink-400" />
         </label>
-        {chain && (
+        {shownChain && (
           <p className="text-micro text-ink-400">
             {t('标的价')}{' '}
             <span className="font-mono text-ink-600 tnum">
-              {dash(chain.spot, (n) => fmtPrice(n))}
+              {dash(shownChain.spot, (n) => fmtPrice(n))}
             </span>
-            {chain.spot === null && (
+            {shownChain.spot === null && (
               <span className="ml-1.5 text-ink-400">{t('· 标的现价不可用，价内侧与平值行未标注')}</span>
             )}
           </p>
         )}
       </div>
-      {chain && (
+      {shownChain && (
         <SourceNote
           className="mt-2"
           text={`${t('期权数据为延迟数据')}${
-            chain.asOf ? t(' · 更新于 {time}', { time: fmtRelative(chain.asOf) }) : ''
-          }${chain.stale ? t(' · 暂未刷新，显示最近一次结果') : ''}`}
+            shownChain.asOf ? t(' · 更新于 {time}', { time: fmtRelative(shownChain.asOf) }) : ''
+          }${shownChain.stale ? t(' · 暂未刷新，显示最近一次结果') : ''}`}
         />
       )}
 
       {/* 三带表 */}
       <div data-options-scroll className="relative mt-3 max-h-[420px] overflow-auto rounded-lg border border-line">
-        {chainLoading || !chain ? (
+        {chainError && !shownChain ? (
+          <div className="flex flex-col items-center gap-2.5 px-4 py-10 text-center">
+            <p className="text-body-s font-medium text-ink-700">{t('该到期日的期权链暂不可用')}</p>
+            <p className="text-caption text-ink-400">
+              {t('其它到期日不受影响，可直接切换')}
+              {retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''}
+            </p>
+            <button
+              type="button"
+              onClick={() => refreshChain()}
+              disabled={retrySeconds > 0 || chainRefreshing}
+              className="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
+            >
+              <Icon name="refresh" size={13} />
+              {chainRefreshing ? t('正在重试') : t('重试该到期日')}
+            </button>
+          </div>
+        ) : chainLoading || !shownChain ? (
           <SkeletonRows rows={8} />
         ) : (
           <table className="min-w-[520px] w-full whitespace-nowrap border-collapse font-mono text-micro tnum">
@@ -514,11 +565,11 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
             </thead>
             <tbody>
               <AnimatePresence initial={false}>
-                {chain.rows.map((r) => {
+                {shownChain.rows.map((r) => {
                   const m = rowMeta(r);
                   const isAtm = r.strike === atmStrike;
-                  const callItm = chain.spot !== null && r.strike < chain.spot;
-                  const putItm = chain.spot !== null && r.strike > chain.spot;
+                  const callItm = shownChain.spot !== null && r.strike < shownChain.spot;
+                  const putItm = shownChain.spot !== null && r.strike > shownChain.spot;
                   const alert = m.callAlert || m.putAlert;
                   const callBadge = volOiBadge(m.callVolOi);
                   const putBadge = volOiBadge(m.putVolOi);
@@ -601,7 +652,10 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
         {t('浅底为价内（ITM）侧 · 异动标注 vol/oi &gt; 3（倍数为该侧比值）；持仓量为 0 而当日有成交标 ∞（全部新开仓）· 「—」表示上游未提供该字段，不代表 0 · 权利金按买卖中价估算 · 非收益承诺')}
       </p>
 
-      <AiOptionInsight ticker={ticker} expiration={exp} chain={chain} />
+      {/* key 强制重挂：切标的/到期日后旧 job（含已生成的付费解读）不得残留，
+          否则正文是 8/21 的解读、脚注却标着 9/18，且「生成解读」入口被 job
+          占位不再渲染。 */}
+      <AiOptionInsight key={`${ticker}-${exp ?? 'none'}`} ticker={ticker} expiration={exp} chain={shownChain} />
     </div>
   );
 }
