@@ -409,6 +409,125 @@ def test_v4_local_database_gains_audit_job_index_without_checksum_conflict(
     assert payload["items"] == []
 
 
+def test_prune_journal_removes_stale_items_and_keeps_live_history(tmp_path):
+    etl, _, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    old = now - timedelta(days=40)
+    recent = now - timedelta(days=2)
+    _apply_news(
+        etl,
+        [
+            _news_change(1, 101, available_at=old),
+            _news_change(2, 102, available_at=old - timedelta(hours=1)),
+            _news_change(3, 103, available_at=recent),
+            _news_change(4, 102, available_at=recent, title="Item 102 updated"),
+        ],
+        as_of=now,
+    )
+    intelligence.reconcile()
+
+    cache_path = tmp_path / "catalyst-cache.db"
+    with sqlite3.connect(cache_path) as connection:
+        connection.row_factory = sqlite3.Row
+        hash_101 = connection.execute(
+            "SELECT content_hash FROM catalyst_local_news_revisions"
+            " WHERE news_id=101"
+        ).fetchone()["content_hash"]
+        connection.execute(
+            """INSERT INTO catalyst_local_analysis_links(
+                   news_id,change_sequence,content_hash,job_id,result_json,
+                   result_available_at,verified_at,created_at
+               ) VALUES(101,1,?,?,?,?,?,?)""",
+            (
+                hash_101,
+                "job-101",
+                '{"ok":true}',
+                _iso(old),
+                _iso(old),
+                _iso(old),
+            ),
+        )
+        connection.execute(
+            """INSERT INTO catalyst_local_analysis_result_audit(
+                   job_id,contract_id,result_sha256,outcome,reason,
+                   result_json,result_available_at,verified_at,observed_at
+               ) VALUES('job-101','contract-x',?,'accepted',NULL,
+                        '{"ok":true}',?,?,?)""",
+            ("a" * 64, _iso(old), _iso(old), _iso(old)),
+        )
+        connection.execute(
+            """INSERT INTO macrolens_etl_news_tombstones(
+                   news_id,change_sequence,deleted_at,source_updated_at,
+                   raw_json,applied_at
+               ) VALUES(999,1,?,?,'{}',?)""",
+            (_iso(old), _iso(old), _iso(old)),
+        )
+        connection.commit()
+        assert (
+            connection.execute(
+                "SELECT COUNT(*) FROM macrolens_etl_news WHERE news_id=101"
+            ).fetchone()[0]
+            == 1
+        )
+
+    totals = intelligence.prune_journal(retention_days=30, now=now)
+
+    assert totals["pruned_items"] == 1
+    assert totals["pruned_changes"] == 1
+    assert totals["pruned_revisions"] == 1
+    assert totals["pruned_links"] == 1
+    with sqlite3.connect(cache_path) as connection:
+        def count(sql: str) -> int:
+            return connection.execute(sql).fetchone()[0]
+
+        assert count(
+            "SELECT COUNT(*) FROM macrolens_etl_news_changes WHERE news_id=101"
+        ) == 0
+        assert count(
+            "SELECT COUNT(*) FROM catalyst_local_news_revisions"
+            " WHERE news_id=101"
+        ) == 0
+        assert count(
+            "SELECT COUNT(*) FROM catalyst_local_analysis_links"
+            " WHERE news_id=101"
+        ) == 0
+        assert count(
+            "SELECT COUNT(*) FROM macrolens_etl_news WHERE news_id=101"
+        ) == 0
+        # 付费结果的不可变审计副本保留；tombstone 防复活行保留。
+        assert count(
+            "SELECT COUNT(*) FROM catalyst_local_analysis_result_audit"
+            " WHERE job_id='job-101'"
+        ) == 1
+        assert count(
+            "SELECT COUNT(*) FROM macrolens_etl_news_tombstones"
+            " WHERE news_id=999"
+        ) == 1
+        # 存活条目 102 的旧变更与旧修订原样保留（整条目保留语义）。
+        assert count(
+            "SELECT COUNT(*) FROM macrolens_etl_news_changes WHERE news_id=102"
+        ) == 2
+        assert count(
+            "SELECT COUNT(*) FROM catalyst_local_news_revisions"
+            " WHERE news_id=102"
+        ) == 2
+        assert count("SELECT COUNT(*) FROM macrolens_etl_state") >= 1
+
+    feed = intelligence.feed(window_hours=72, limit=12)
+    ids = {item["news_id"] for item in feed["items"]}
+    assert 102 in ids
+    assert 103 in ids
+    assert 101 not in ids
+    again = intelligence.prune_journal(retention_days=30, now=now)
+    assert again["pruned_items"] == 0
+
+
+def test_prune_journal_rejects_retention_below_public_window(tmp_path):
+    _, _, intelligence = _stack(tmp_path)
+    with pytest.raises(ValueError):
+        intelligence.prune_journal(retention_days=7)
+
+
 def test_reconcile_archives_invalid_published_news_and_makes_it_due_again(
     tmp_path,
     monkeypatch,

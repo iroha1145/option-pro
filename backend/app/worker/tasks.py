@@ -608,6 +608,11 @@ class EarningsAnalysisTask:
         return await self._run(manual=False)
 
 
+# 变更日志修剪的节流间隔：修剪是 cutoff 幂等操作，6 小时一次足以压住增长；
+# 稳态一轮只有一个索引探测查询，代价可忽略。
+_JOURNAL_PRUNE_INTERVAL_SECONDS = 6 * 3600.0
+
+
 class CatalystSyncTask:
     def __init__(
         self,
@@ -635,6 +640,7 @@ class CatalystSyncTask:
         self._service: Any = None
         self._intelligence: Any = None
         self._last_personal_sync_monotonic: float | None = None
+        self._last_journal_prune_monotonic: float | None = None
 
     async def _prepare_personal(self) -> str:
         from app.services.catalysts.etl_client import EtlClientConfig, MacroLensEtlClient
@@ -798,6 +804,44 @@ class CatalystSyncTask:
         if scheduled_due:
             self._last_personal_sync_monotonic = clock
 
+        # 变更日志保留：同步成功的整点周期里按节流间隔修剪。hasattr 守卫让
+        # 不带该能力的测试替身自然跳过（与 manual_refresh_cooldown 同范式）。
+        journal_prune_metrics: dict[str, int] | None = None
+        if (
+            scheduled_due
+            and "news" not in errors
+            and hasattr(self._intelligence, "prune_journal")
+            and (
+                self._last_journal_prune_monotonic is None
+                or clock - self._last_journal_prune_monotonic
+                >= _JOURNAL_PRUNE_INTERVAL_SECONDS
+            )
+        ):
+            retention_days = int(
+                getattr(
+                    getattr(self._personal_config, "catalyst", None),
+                    "journal_retention_days",
+                    30,
+                )
+                or 30
+            )
+            try:
+                pruned = await _call_local(
+                    self._intelligence.prune_journal,
+                    retention_days=retention_days,
+                )
+            except Exception as exc:
+                errors["journal_prune"] = self._error_code(exc)
+            else:
+                self._last_journal_prune_monotonic = clock
+                processed.append("journal_prune")
+                if isinstance(pruned, dict):
+                    journal_prune_metrics = {
+                        str(key)[:64]: int(value)
+                        for index, (key, value) in enumerate(pruned.items())
+                        if index < 8 and isinstance(value, int)
+                    }
+
         if manual_request is not None and hasattr(
             self._intelligence,
             "complete_refresh_request",
@@ -826,6 +870,8 @@ class CatalystSyncTask:
                 else None
             ),
         }
+        if journal_prune_metrics is not None:
+            details["journal_prune"] = journal_prune_metrics
         if isinstance(projection, dict):
             projection_metrics: dict[str, bool | int | float | None] = {}
             for index, (key, value) in enumerate(projection.items()):
