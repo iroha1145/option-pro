@@ -472,6 +472,52 @@ def test_prune_journal_removes_stale_items_and_keeps_live_history(tmp_path):
                ) VALUES(999,1,?,?,'{}',?)""",
             (_iso(old), _iso(old), _iso(old)),
         )
+        # 热点世系三版：11 旧且无引用（删）；12 旧但被 focus 周期引用（留）；
+        # 13 一小时前准备且为最新（留）。事件组 grp-a 只被 11 引用（随删），
+        # grp-b 被存留版本引用（留）。
+        for gid, seed in (("grp-a", "a"), ("grp-b", "b")):
+            connection.execute(
+                """INSERT INTO catalyst_local_event_groups(
+                       event_group_id,event_group_version,input_hash,
+                       event_type,representative_news_id,
+                       representative_change_sequence,
+                       representative_content_hash,representative_title_zh,
+                       representative_summary_zh,first_published_at,
+                       last_published_at,available_at,source_count,
+                       source_names_json,validated_tickers_json,
+                       news_identities_json,hot_score,component_scores_json,
+                       reasons_json,created_at
+                   ) VALUES(?,1,?,'earnings',1,1,'h','标题','摘要',?,?,?,1,
+                            '[]','[]','[]',50,'{}','[]',?)""",
+                (gid, seed * 64, _iso(old), _iso(old), _iso(old), _iso(old)),
+            )
+        lineage = (
+            (11, old, "grp-a"),
+            (12, old, "grp-b"),
+            (13, now - timedelta(hours=1), "grp-b"),
+        )
+        for rev, prepared, gid in lineage:
+            connection.execute(
+                """INSERT INTO catalyst_local_hotspot_revisions(
+                       prepared_revision,input_hash,prepared_at,
+                       data_through,item_count
+                   ) VALUES(?,?,?,?,1)""",
+                (rev, ("%064x" % rev), _iso(prepared), _iso(prepared)),
+            )
+            connection.execute(
+                """INSERT INTO catalyst_local_hotspot_items(
+                       prepared_revision,ordinal,event_group_id,
+                       event_group_version
+                   ) VALUES(?,1,?,1)""",
+                (rev, gid),
+            )
+        connection.execute(
+            """INSERT INTO catalyst_local_focus_cycles(
+                   cycle_id,status,prepared_revision,snapshot_as_of,
+                   input_hash,job_id,payload_json,created_at,updated_at
+               ) VALUES('cyc-1','completed',12,?,?,'job-focus-1','{}',?,?)""",
+            (_iso(old), "c" * 64, _iso(old), _iso(old)),
+        )
         connection.commit()
         assert (
             connection.execute(
@@ -487,6 +533,10 @@ def test_prune_journal_removes_stale_items_and_keeps_live_history(tmp_path):
     assert totals["pruned_changes"] == 2
     assert totals["pruned_revisions"] == 2
     assert totals["pruned_links"] == 1
+    # 世系：只有旧且无引用的 11 整版删除；grp-a 失去全部引用后随扫清理。
+    assert totals["pruned_hotspot_revisions"] == 1
+    assert totals["pruned_hotspot_items"] == 1
+    assert totals["pruned_event_groups"] == 1
     with sqlite3.connect(cache_path) as connection:
         def count(sql: str) -> int:
             return connection.execute(sql).fetchone()[0]
@@ -534,6 +584,23 @@ def test_prune_journal_removes_stale_items_and_keeps_live_history(tmp_path):
             " WHERE news_id=105"
         ) == 1
         assert count("SELECT COUNT(*) FROM macrolens_etl_state") >= 1
+        remaining_revisions = {
+            row[0]
+            for row in connection.execute(
+                "SELECT prepared_revision FROM catalyst_local_hotspot_revisions"
+            )
+        }
+        # reconcile 自身会准备一版新鲜热点（48h 内，保留），用包含式断言。
+        assert 11 not in remaining_revisions
+        assert {12, 13} <= remaining_revisions
+        remaining_groups = {
+            row[0]
+            for row in connection.execute(
+                "SELECT event_group_id FROM catalyst_local_event_groups"
+            )
+        }
+        assert "grp-a" not in remaining_groups
+        assert "grp-b" in remaining_groups
 
     feed = intelligence.feed(window_hours=72, limit=12)
     ids = {item["news_id"] for item in feed["items"]}
