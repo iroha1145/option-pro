@@ -96,7 +96,7 @@ _FOCUS_WAITING_PLACEHOLDERS = frozenset(
 _LEGACY_PLACEHOLDER_INPUT_ERROR = "legacy_placeholder_input_hidden"
 AMBIGUOUS_TICKERS = frozenset({"AI", "ON", "CAT"})
 TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-^]{0,11}$")
-SCHEMA_VERSION = "optix-local-catalyst-v4"
+SCHEMA_VERSION = "optix-local-catalyst-v5"
 NEWS_RESULT_CONTRACT_ID = (
     "news-impact-result:"
     f"{ai_runtime.RESULT_VALIDATION_CONTRACT_VERSION}:"
@@ -197,6 +197,13 @@ CREATE TABLE IF NOT EXISTS catalyst_local_analysis_result_audit (
 );
 CREATE INDEX IF NOT EXISTS idx_local_analysis_result_audit_outcome
     ON catalyst_local_analysis_result_audit(contract_id,outcome,observed_at);
+-- 读路径按 job_id 连 audit 必须走这条（查询端 INDEXED BY 强制）。库里没有
+-- ANALYZE 统计时规划器会挑上面的 (contract_id,outcome) 前缀：对结果集每一行
+-- 全扫已接受 audit 行并逐行比对完整 result_json —— 生产 2026-08-01 实测把
+-- O(窗口) 的修订视图拖成 33s（3001 行 × 8449 audit）。job 前缀 3 等值项在
+-- 无统计下也稳赢，命中后每行只剩个位数字符串比对。
+CREATE INDEX IF NOT EXISTS idx_local_analysis_result_audit_job
+    ON catalyst_local_analysis_result_audit(job_id,contract_id,outcome);
 
 CREATE TABLE IF NOT EXISTS catalyst_local_event_groups (
     event_group_id TEXT NOT NULL,
@@ -3146,6 +3153,7 @@ class LocalCatalystIntelligence:
                       AND job_link.content_hash=r.content_hash
                       AND job_link.rank=1
                      LEFT JOIN catalyst_local_analysis_result_audit audit
+                       INDEXED BY idx_local_analysis_result_audit_job
                        ON audit.job_id=analysis.job_id
                       AND audit.contract_id=?
                       AND audit.outcome='accepted'
@@ -3254,6 +3262,7 @@ class LocalCatalystIntelligence:
                           EXISTS(
                               SELECT 1
                               FROM catalyst_local_analysis_result_audit audit
+                              INDEXED BY idx_local_analysis_result_audit_job
                               WHERE audit.job_id=link.job_id
                                 AND audit.contract_id=?
                                 AND audit.outcome='accepted'
@@ -4369,6 +4378,7 @@ class LocalCatalystIntelligence:
                                   SELECT 1
                                   FROM catalyst_local_analysis_links link
                                   JOIN catalyst_local_analysis_result_audit audit
+                                    INDEXED BY idx_local_analysis_result_audit_job
                                     ON audit.job_id=link.job_id
                                    AND audit.contract_id=?
                                    AND audit.outcome='accepted'
@@ -4491,6 +4501,7 @@ class LocalCatalystIntelligence:
                               SELECT 1
                               FROM catalyst_local_analysis_links link
                               JOIN catalyst_local_analysis_result_audit audit
+                                INDEXED BY idx_local_analysis_result_audit_job
                                 ON audit.job_id=link.job_id
                                AND audit.contract_id=?
                                AND audit.outcome='accepted'

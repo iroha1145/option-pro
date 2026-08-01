@@ -348,13 +348,65 @@ def test_v2_local_database_adds_v3_result_audit_tables_without_rewriting_history
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()
         }
+        indexes = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='index'"
+            ).fetchall()
+        }
     assert versions == [
         ("optix-local-catalyst-timestamps-v1",),
         ("optix-local-catalyst-v2",),
-        ("optix-local-catalyst-v4",),
+        ("optix-local-catalyst-v5",),
     ]
     assert "catalyst_local_analysis_result_audit" in tables
     assert "catalyst_local_focus_result_audit" in tables
+    assert "idx_local_analysis_result_audit_job" in indexes
+
+
+def test_v4_local_database_gains_audit_job_index_without_checksum_conflict(
+    tmp_path,
+):
+    """v4 库（旧 checksum 行、无 job 索引）升级到 v5 不得触发校验闸门。
+
+    读路径的 audit 引用带 INDEXED BY：索引缺失时查询会响亮失败，所以
+    initialize 必须在旧库上先把索引补出来，且旧版本行原样保留不改写。
+    """
+    etl, ai, intelligence = _stack(tmp_path)
+    cache_path = tmp_path / "catalyst-cache.db"
+    with sqlite3.connect(cache_path) as connection:
+        connection.execute("DROP INDEX idx_local_analysis_result_audit_job")
+        connection.execute(
+            "DELETE FROM catalyst_local_schema WHERE version=?",
+            ("optix-local-catalyst-v5",),
+        )
+        connection.execute(
+            """INSERT INTO catalyst_local_schema(version,checksum,applied_at)
+               VALUES('optix-local-catalyst-v4','legacy-checksum',?)""",
+            (_iso(datetime.now(timezone.utc)),),
+        )
+        connection.commit()
+
+    intelligence.initialize()
+
+    with sqlite3.connect(cache_path) as connection:
+        rows = dict(
+            connection.execute(
+                "SELECT version,checksum FROM catalyst_local_schema"
+            ).fetchall()
+        )
+        indexes = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='index'"
+            ).fetchall()
+        }
+    assert rows["optix-local-catalyst-v4"] == "legacy-checksum"
+    assert "optix-local-catalyst-v5" in rows
+    assert "idx_local_analysis_result_audit_job" in indexes
+    # INDEXED BY 的查询在升级后的库上必须可编译可执行（空结果合法）。
+    payload = intelligence.feed(window_hours=72, limit=12)
+    assert payload["items"] == []
 
 
 def test_reconcile_archives_invalid_published_news_and_makes_it_due_again(
