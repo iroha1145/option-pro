@@ -81,7 +81,16 @@ export function computeEarningsListState(input: {
       });
   const featuredItems = baseItems.filter((it) => isFeaturedRow(it, personalTickers));
   const listItems = mode === 'featured' ? featuredItems : baseItems;
-  let visibleItems = prioritizeEarningsRows(listItems, visibleLimit);
+  /* 选中某天 = 目录视图：可见窗口必须是展示顺序的前缀，「显示更多」按同一顺序
+     续页。此前对当日列表也按优先级挑行、再按代码序展示，字母序中间会出现空洞
+     （…AGM 下一条直接是 AMZN，夹在中间的 AXTI 被跳过），读起来像数据缺失而
+     不是列表截断。
+     未选天的滚动窗口保持优先级采样：首屏要同时露出刚公布的大市值结果和近期
+     待公布项目（见 impact-contract「首屏同时保留」测试），跨日期本就不连续，
+     不存在前缀预期。 */
+  let visibleItems = selectedDay
+    ? listItems.slice(0, Math.max(0, Math.floor(visibleLimit)))
+    : prioritizeEarningsRows(listItems, visibleLimit);
   if (
     selectedTicker
     && listItems.some((it) => it.ticker === selectedTicker)

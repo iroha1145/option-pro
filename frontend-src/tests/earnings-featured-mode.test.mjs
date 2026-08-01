@@ -138,6 +138,56 @@ test('预期波动缺失不影响重点资格', () => {
   assert.equal(isFeaturedRow(featured, NONE), true);
 });
 
+/* ---------------- 选中日 = 目录视图：可见窗口是展示顺序的前缀 ---------------- */
+
+test('选中某天时可见行是当日列表的连续前缀，截断不产生字母序空洞', () => {
+  // 线上实况（7/30，296 行）：优先级挑行 + 按代码序展示，首屏出现
+  // …AGM → AMZN 的跳跃，夹在中间的 AXTI 读起来像数据缺失。
+  const day = addDays(TODAY, 4);
+  const items = [];
+  for (let i = 0; i < 40; i += 1) {
+    items.push(row(`A${String(i).padStart(2, '0')}`, { date: day, epsActual: 1 + i }));
+  }
+  // 大市值行（代码序靠后）：旧逻辑会把它优先挑进首屏，制造空洞
+  items.push(row('ZBIG', { date: day, epsActual: 9, marketCap: 1_000_000_000_000, public_featured: true }));
+
+  const state = computeEarningsListState({
+    items,
+    selectedDay: day,
+    mode: 'all',
+    personalTickers: NONE,
+    visibleLimit: 24,
+    selectedTicker: null,
+  });
+  // 恰为前 24 条（顺序与引用都一致），ZBIG 在「显示更多」之后而不是插队
+  assert.deepEqual(state.visibleItems, state.listItems.slice(0, 24));
+  assert.equal(state.visibleItems.some((it) => it.ticker === 'ZBIG'), false);
+
+  // 展开到全量后 ZBIG 在自己的位置上
+  const expanded = computeEarningsListState({
+    items,
+    selectedDay: day,
+    mode: 'all',
+    personalTickers: NONE,
+    visibleLimit: 48,
+    selectedTicker: null,
+  });
+  assert.equal(expanded.visibleItems.length, 41);
+  assert.equal(expanded.visibleItems.at(-1).ticker, 'ZBIG');
+
+  // 选中行强制可见仍然成立：前缀之外的选中行被并入且保持原顺序
+  const withSelected = computeEarningsListState({
+    items,
+    selectedDay: day,
+    mode: 'all',
+    personalTickers: NONE,
+    visibleLimit: 24,
+    selectedTicker: 'ZBIG',
+  });
+  assert.equal(withSelected.visibleItems.some((it) => it.ticker === 'ZBIG'), true);
+  assert.equal(withSelected.visibleItems.length, 25);
+});
+
 /* ---------------- #9 / #10：日历恒全量 · 计数随范围 ---------------- */
 
 test('周历/月历/密度条数据在两个模式下完全一致，恒为 allItems', () => {
