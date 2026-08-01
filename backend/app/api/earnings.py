@@ -803,12 +803,19 @@ async def upcoming_earnings(request: Request):
         )
     cached = cache.get(key)
     if cached is not None:
-        # Manual-refresh results carry request-scoped fields; keep the ETag
-        # but skip the bytes cache (no stable version for mutated copies).
+        # 进程缓存里存的是基础 payload——refresh_status 等请求域字段只加在
+        # POST 返回的副本上，从不落进 cache.set。as_of 每次构建唯一，
+        # (key, as_of) 即可稳定决定字节；此前 version_key=None 让 Owner 的
+        # 每次命中都重付 json.dumps+sha256+gzip（审计 P2-01）。
+        stamp = cached.get("as_of") if isinstance(cached, dict) else None
         return respond_with_snapshot(
             request,
             cached,
-            version_key=None,
+            version_key=(
+                snapshot_version_key("earnings", "owner-live", key, stamp)
+                if stamp
+                else None
+            ),
             cache_control=cache_control,
         )
     config = get_personal_config()

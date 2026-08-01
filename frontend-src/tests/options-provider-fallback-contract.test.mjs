@@ -163,7 +163,9 @@ test('详情错误只在明确缺失快照时显示手动拉取', async () => {
   assert.match(drawer, /loginExpired[\s\S]*重新登录/);
   assert.match(drawer, /rateLimited[\s\S]*请求较频繁/);
   assert.match(drawer, /manualRecovery \? \([\s\S]*<ManualStockPull/);
-  assert.match(drawer, /onClick=\{refresh\}/);
+  // refresh 的签名带可选 options（force 世代），事件处理器一律箭头包装，
+  // 防止 MouseEvent 流进 options 位。
+  assert.match(drawer, /onClick=\{\(\) => refresh\(\)\}/);
 });
 
 test('手动拉取与手机工具栏保持可点击且不溢出', async () => {

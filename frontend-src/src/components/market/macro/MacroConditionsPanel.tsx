@@ -119,8 +119,11 @@ export default function MacroConditionsPanel({
         setRefreshNote(t('刷新仍未在预期时间内完成，面板会在下一次轮询更新。'));
         return;
       }
-      invalidateQueryPaths(['/macro/conditions']);
-      refreshConditionsRef.current();
+      /* 硬失效 + 强制世代：跟进轮询必须真的打到后端。普通失效下，
+         浏览器 HTTP 缓存（max-age 窗口内）或在途旧请求都可能让这一拍
+         白转，直到整个跟进窗口烧完（审计 P1-01 同族）。 */
+      invalidateQueryPaths(['/macro/conditions'], { reload: true });
+      refreshConditionsRef.current({ force: true });
     }, REFRESH_FOLLOW_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [refreshPhase]);
@@ -203,7 +206,7 @@ export default function MacroConditionsPanel({
             action={
               <button
                 type="button"
-                onClick={conditionsQ.refresh}
+                onClick={() => conditionsQ.refresh()}
                 disabled={conditionsQ.refreshing}
                 className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
               >

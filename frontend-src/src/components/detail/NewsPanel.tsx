@@ -49,7 +49,7 @@ export default function NewsPanel({ ticker }: { ticker: string }) {
         description={t('是读取失败，不代表该股近期没有新闻')}
         action={
           <button
-            onClick={newsQ.refresh}
+            onClick={() => newsQ.refresh()}
             className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
           >
             {t('重试')}

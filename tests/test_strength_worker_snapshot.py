@@ -308,3 +308,73 @@ def test_parameter_normalization_rejects_unsafe_boundaries(updates: dict) -> Non
         strength.normalize_strength_scan_parameters(
             {**strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, **updates}
         )
+
+
+def _owner_mode(monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(strength, "current_request_is_owner", lambda: True)
+    monkeypatch.setattr(
+        strength,
+        "get_personal_config",
+        lambda: SimpleNamespace(access=SimpleNamespace(mode=mode)),
+    )
+
+
+def test_password_mode_owner_reads_worker_snapshot_not_live_scan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """审计 P1-02：password 公网模式下 Owner 普通 GET 一律读 Worker 快照。
+
+    现算路径（stock_strength 内部是整池扫描）必须完全不被触碰——
+    monkeypatch 成必炸函数来证明。
+    """
+    path = tmp_path / "strength-snapshot-v1.json"
+    payload = _payload()
+    payload["market_regime"] = {"score": 55, "label": "均衡"}
+    payload["sectors"] = [
+        {"id": "tech", "name": "科技", "avg_return_3mo": 1.2, "avg_strength": 60},
+    ]
+    strength._write_strength_snapshot(
+        path,
+        parameters=dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS),
+        payload=payload,
+        saved_at=NOW - 10,
+    )
+    monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", path)
+    monkeypatch.setattr(strength.time, "time", lambda: NOW)
+    _owner_mode(monkeypatch, "password")
+
+    async def _must_not_run(*_args, **_kwargs):
+        raise AssertionError("live compute must not run in password mode")
+
+    monkeypatch.setattr(strength, "stock_strength", _must_not_run)
+    monkeypatch.setattr(strength, "market_strength", _must_not_run)
+    monkeypatch.setattr(strength, "sector_strength", _must_not_run)
+
+    stock = asyncio.run(strength.stock("AAPL", profile="balanced"))
+    assert stock["snapshot_source"] == "worker"
+    assert stock["_cached"] is True
+    assert stock["row"]["ticker"] == "AAPL"
+
+    market = asyncio.run(strength.market())
+    assert market["snapshot_source"] == "worker"
+
+    sectors = asyncio.run(strength.sectors(period="3mo"))
+    assert sectors["snapshot_source"] == "worker"
+
+
+def test_private_network_owner_keeps_live_compute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """本地 private_network 模式保留 Owner 现算（开发场景，无 Worker 快照）。"""
+    _owner_mode(monkeypatch, "private_network")
+    sentinel = {"market_regime": {"score": 42}, "live": True}
+
+    async def _live():
+        return sentinel
+
+    monkeypatch.setattr(strength, "market_strength", _live)
+    result = asyncio.run(strength.market())
+    assert result["live"] is True

@@ -19,6 +19,7 @@
 import { requestRaw } from './client.ts';
 import {
   clearPersisted,
+  deletePersisted,
   readPersisted,
   writePersisted,
 } from './persistedCache.ts';
@@ -54,6 +55,8 @@ interface Entry {
   fetchedAt: number;
   generation: number;
   restored: boolean;
+  /** 硬失效后下一次请求绕过浏览器 HTTP 缓存（cache:'reload'），用后即清。 */
+  forceReload: boolean;
 }
 
 const entries = new Map<string, Entry>();
@@ -70,6 +73,7 @@ function entryFor(path: string): Entry {
       fetchedAt: 0,
       generation: 0,
       restored: false,
+      forceReload: false,
     };
     entries.set(path, entry);
   }
@@ -87,9 +91,15 @@ export function setQueryPrincipal(key: string): void {
 
 async function fetchInto(path: string, entry: Entry, config: QueryConfig): Promise<unknown> {
   const generation = entry.generation;
-  const conditional = entry.etag;
+  /* 硬失效后的第一发必须打穿浏览器 HTTP 缓存：后端给 max-age=60，普通
+     GET 在窗口内可能整个不出浏览器就拿回刷新前的旧正文（审计 P1-01
+     场景二）。标记一次性使用；即便这发失败，重试退回条件请求也可接受。 */
+  const reload = entry.forceReload;
+  if (reload) entry.forceReload = false;
+  const conditional = reload ? null : entry.etag;
   const res = await requestRaw(path, {
     method: 'GET',
+    ...(reload ? { cache: 'reload' as RequestCache } : {}),
     acceptNotModified: Boolean(conditional),
     headers: conditional ? { 'If-None-Match': conditional } : {},
   });
@@ -174,8 +184,16 @@ export async function restorePersistedQuery<T>(path: string): Promise<T | null> 
   return record.raw as T;
 }
 
-/** 手动刷新:按路径前缀精确失效;失效瞬间旧在途响应全部作废。 */
-export function invalidateQueryPaths(prefixes: string[]): void {
+/**
+ * 手动刷新:按路径前缀精确失效;失效瞬间旧在途响应全部作废。
+ * reload:硬失效——同时删掉 IndexedDB 里的旧记录,并让下一次请求带
+ * cache:'reload' 打穿浏览器 HTTP 缓存。写路径(POST 成功后)应当用它,
+ * 配合 usePolling 的 refresh({force:true}) 保证页面拿到的是刷新后的版本。
+ */
+export function invalidateQueryPaths(
+  prefixes: string[],
+  options?: { reload?: boolean },
+): void {
   for (const [path, entry] of entries) {
     if (prefixes.some((prefix) => path === prefix || path.startsWith(prefix))) {
       entry.generation += 1;
@@ -183,6 +201,10 @@ export function invalidateQueryPaths(prefixes: string[]): void {
       entry.etag = null;
       entry.fetchedAt = 0;
       entry.inFlight = null;
+      if (options?.reload) {
+        entry.forceReload = true;
+        void deletePersisted(path);
+      }
     }
   }
 }

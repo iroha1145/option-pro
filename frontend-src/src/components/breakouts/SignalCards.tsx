@@ -83,7 +83,7 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
       whileHover={{ y: -3, transition: { duration: 0.24, ease: 'easeOut' } }}
       className={cn(
         'card-surface cursor-pointer p-4',
-        'transition-shadow duration-[240ms] ease-out hover:shadow-sh-2',
+        'transition-shadow duration-240 ease-out hover:shadow-sh-2',
         locate && 'bk-locate',
       )}
     >

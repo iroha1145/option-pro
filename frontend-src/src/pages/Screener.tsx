@@ -892,7 +892,7 @@ export default function Screener() {
               <p className="eyebrow">{__t('市场形态 · MARKET REGIME')}</p>
               <p className="mt-3 text-body-s text-ink-500">{marketQ.error.code === 503 ? __t('数据暂不可用 · 稍后刷新再试') : marketQ.error.message}</p>
               <button
-                onClick={marketQ.refresh}
+                onClick={() => marketQ.refresh()}
                 className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
               >
                 <Icon name="refresh" size={13} />

@@ -59,7 +59,7 @@ const IndexCard = memo(function IndexCard({
       whileHover={{ y: -3, transition: { duration: 0.24, ease: 'easeOut' } }}
       className={cn(
         'card-surface relative block w-full overflow-hidden p-4 text-left',
-        'transition-shadow duration-[240ms] ease-out hover:shadow-sh-2',
+        'transition-shadow duration-240 ease-out hover:shadow-sh-2',
         'focus-visible:outline-none focus-visible:shadow-focus-ring',
         focused && 'shadow-[inset_2px_0_0_0_var(--brand-600),0_1px_2px_rgba(13,22,38,.05),inset_0_1px_0_rgba(255,255,255,.9)] ring-1 ring-brand-100',
       )}

@@ -187,8 +187,10 @@ export default function Earnings() {
     setRefreshing(true);
     try {
       const fresh = await earningsApi.refresh();
-      invalidateQueryPaths(['/earnings/upcoming']);
-      q.refresh();
+      /* 硬失效（删 IndexedDB 旧记录 + 下一发打穿浏览器缓存）+ 强制世代
+         （旧在途 GET 从此写不进页面，且合流闸不再吞掉这次刷新）。 */
+      invalidateQueryPaths(['/earnings/upcoming'], { reload: true });
+      q.refresh({ force: true });
       const retrySeconds = fresh.refreshRetryAfterSeconds ?? REFRESH_COOLDOWN_S;
       setCooldownUntil(Date.now() + retrySeconds * 1000);
       if (fresh.refreshStatus === 'failed_stale') {
@@ -418,7 +420,7 @@ export default function Earnings() {
             {t('自动刷新失败，当前显示的是上一次的数据，可能已经过时。')}
           </p>
           <button
-            onClick={q.refresh}
+            onClick={() => q.refresh()}
             className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-600 transition-colors hover:bg-warn-600 hover:text-white"
           >
             {t('重试')}
@@ -480,7 +482,7 @@ export default function Earnings() {
               description={q.error?.message || t('稍后刷新再试')}
               action={
                 <button
-                  onClick={q.refresh}
+                  onClick={() => q.refresh()}
                   disabled={q.refreshing}
                   className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
                 >
@@ -569,7 +571,7 @@ export default function Earnings() {
                 description={t("稍后刷新再试")}
                 action={
                   <button
-                    onClick={q.refresh}
+                    onClick={() => q.refresh()}
                     disabled={q.refreshing}
                     className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
                   >

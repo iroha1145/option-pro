@@ -89,6 +89,7 @@ class FingerprintedFileCache:
         ):
             self._entries.popitem(last=False)
             self._metric("evicted")
+        self._prune_path_locks_locked()
         cache_metrics.set_gauge(
             f"snapshot_cache.{self._name}.bytes", float(self._total_bytes_locked())
         )
@@ -207,15 +208,33 @@ class FingerprintedFileCache:
                     self._store_locked(key, opened, current, len(raw), value)
             return value
 
+    def _prune_path_locks_locked(self) -> None:
+        """回收不再对应任何缓存态且未被持有的路径锁。
+
+        参数变体（strength 快照最多 24 个路径）长期运行会让锁表只增不减
+        （审计缓存卫生项）。持有中的锁跳过：极端竞态下同路径可能短暂出现
+        两把锁 → 两个线程各解析一次——loader 是纯函数，重复解析良性。
+        """
+        for key in [
+            k
+            for k, lock in self._path_locks.items()
+            if k not in self._entries
+            and k not in self._failures
+            and not lock.locked()
+        ]:
+            self._path_locks.pop(key, None)
+
     def invalidate(self, path: Path | None = None) -> None:
         with self._lock:
             if path is None:
                 self._entries.clear()
                 self._failures.clear()
+                self._prune_path_locks_locked()
                 return
             key = os.path.abspath(os.fspath(path))
             self._entries.pop(key, None)
             self._failures.pop(key, None)
+            self._prune_path_locks_locked()
 
     def stats(self) -> dict[str, Any]:
         with self._lock:

@@ -132,7 +132,20 @@ def _if_none_match_hits(header_value: str | None, etag: str) -> bool:
 
 
 def _accepts_gzip(request: Request) -> bool:
-    return "gzip" in request.headers.get("accept-encoding", "")
+    """gzip;q=0 是显式拒绝，不是接受——裸子串判断会把它当成同意（审计卫生项）。"""
+    header = request.headers.get("accept-encoding", "")
+    for part in header.split(","):
+        token, _, params = part.partition(";")
+        if token.strip().lower() != "gzip":
+            continue
+        q = params.strip().lower()
+        if q.startswith("q="):
+            try:
+                return float(q[2:]) > 0
+            except ValueError:
+                return True
+        return True
+    return False
 
 
 def snapshot_version_key(*parts: Any) -> str:

@@ -170,3 +170,35 @@ test('non-whitelisted paths pass through without sharing', async () => {
     resetQueryRegistry();
   }
 });
+
+test('hard invalidation bypasses the browser HTTP cache exactly once', async () => {
+  resetQueryRegistry();
+  const originalFetch = globalThis.fetch;
+  const inits = [];
+  let version = 'old';
+  globalThis.fetch = async (_url, init) => {
+    inits.push(init ?? {});
+    return jsonResponse({ version }, { ETag: `"${version}"` });
+  };
+  try {
+    const first = await registryGet('/earnings/upcoming');
+    assert.equal(first.version, 'old');
+    version = 'new';
+    // 硬失效：POST 成功后的写路径语义——下一发必须打穿浏览器缓存，
+    // 且不得带旧 ETag 的条件头（否则 60s max-age 窗口内可能整个
+    // 不出浏览器就拿回刷新前的旧正文）。
+    invalidateQueryPaths(['/earnings/upcoming'], { reload: true });
+    const second = await registryGet('/earnings/upcoming');
+    assert.equal(second.version, 'new');
+    assert.equal(inits[1].cache, 'reload');
+    assert.equal('If-None-Match' in (inits[1].headers ?? {}), false);
+    // 一次性：硬失效只作用于紧随其后的一发，之后恢复条件请求语义。
+    invalidateQueryPaths(['/earnings/upcoming']);
+    const third = await registryGet('/earnings/upcoming');
+    assert.equal(third.version, 'new');
+    assert.equal(inits[2].cache, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+    resetQueryRegistry();
+  }
+});

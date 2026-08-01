@@ -165,7 +165,10 @@ class TTLCache:
             cache_metrics.incr("ttl_cache.rejected_oversize")
             self._drop(key)
             return value
-        self._maybe_purge(size)
+        # 同键替换按增量占预算：旧值马上被覆盖，按全量算会在真实内存并未超限时
+        # 先把别的有效条目挤出去（审计缓存卫生项）。
+        incoming_delta = max(0, size - self._sizes.get(key, 0))
+        self._maybe_purge(incoming_delta)
         self._store[key] = (time.time() + ttl, value)
         self._sizes[key] = size
         self._publish_gauges()

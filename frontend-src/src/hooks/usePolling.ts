@@ -8,7 +8,12 @@ export interface PollingState<T> {
   loading: boolean;      // 首次加载中
   refreshing: boolean;   // 后续轮询中
   lastUpdatedAt: number | null;
-  refresh: () => void;
+  /**
+   * force：手动刷新的强制语义。普通 refresh 在同世代已有在途请求时是
+   * 合流 no-op——写路径（POST 成功后）必须用 force 开新世代，否则旧在途
+   * 响应最后返回时会把刷新前的数据写回页面（审计 P1-01）。
+   */
+  refresh: (options?: { force?: boolean }) => void;
 }
 
 export interface PollingOptions<T> {
@@ -71,7 +76,16 @@ export function usePolling<T>(
     }
   }, []);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((options?: { force?: boolean }) => {
+    if (options?.force) {
+      // 开新世代：旧在途响应从此过不了世代守卫（写不进 data/error），
+      // 新世代不受「同世代在途即跳过」的合流闸限制，立即真正发起请求。
+      const next = generationRef.current + 1;
+      generationRef.current = next;
+      activeGenerationsRef.current.add(next);
+      void tick(false, next);
+      return;
+    }
     void tick(false);
   }, [tick]);
 
@@ -103,7 +117,13 @@ export function usePolling<T>(
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
-      activeGenerations.delete(generation);
+      // 本效果任期内 force 派生的世代一并回收（范围 [本世代, 当前世代]：
+      // React 先跑旧效果清理再跑新效果，此刻 generationRef 尚未进入下一任期）。
+      for (const spawned of Array.from(activeGenerations)) {
+        if (spawned >= generation && spawned <= generationRef.current) {
+          activeGenerations.delete(spawned);
+        }
+      }
       if (timer) clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };

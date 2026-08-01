@@ -341,7 +341,7 @@ function WatchCard({
       <button
         type="button"
         onClick={onClick}
-        className="card-surface flex w-full flex-col p-4 text-left transition-shadow duration-[240ms] ease-out hover:shadow-sh-2"
+        className="card-surface flex w-full flex-col p-4 text-left transition-shadow duration-240 ease-out hover:shadow-sh-2"
       >
       <div className="flex items-center gap-2.5">
         <TickerLogo ticker={item.ticker} />
@@ -956,7 +956,7 @@ export default function Watchlist() {
                   description={err.code === 503 ? t('稍后刷新再试') : err.message}
                   action={
                     <button
-                      onClick={wl.refresh}
+                      onClick={() => wl.refresh()}
                       disabled={wl.refreshing}
                       className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
                     >
@@ -1080,7 +1080,7 @@ export default function Watchlist() {
               <p className="eyebrow">{t('市场信号 · 模型指标')}</p>
               <p className="mt-3 text-caption text-ink-400">{t('市场信号读取失败')}</p>
               <button
-                onClick={signalsQ.refresh}
+                onClick={() => signalsQ.refresh()}
                 className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
               >
                 <Icon name="refresh" size={13} />
