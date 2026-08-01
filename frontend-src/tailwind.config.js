@@ -120,9 +120,11 @@ module.exports = {
         /* 按钮立体三档（与 sh-* 同族墨影）：btn-hi 实心主按钮 > btn 描边次按钮 >
            幽灵/文字按钮平面。chip 给选中态胶囊/页码/分段滑块（介于两者之间）；
            track 是开关轨道的内凹井。按下收拢/禁用摊平的全局规则在 index.css。 */
-        btn: '0 1px 2px rgba(16,24,40,.08), 0 2px 6px -2px rgba(16,24,40,.06), inset 0 1px 0 rgba(255,255,255,.75)',
+        /* v8.2 收小：次按钮/选中胶囊多为 26–36px 小件，2px/6px 晕染层在这个
+           尺度上发飘（用户实测反馈）——btn 只留 1px 贴身影，chip 收到 1px/3px。 */
+        btn: '0 1px 2px rgba(16,24,40,.07), inset 0 1px 0 rgba(255,255,255,.75)',
         'btn-hi': 'inset 0 1px 0 rgba(255,255,255,.16), 0 1px 2px rgba(16,24,40,.18), 0 4px 12px -4px rgba(16,24,40,.34)',
-        chip: 'inset 0 1px 0 rgba(255,255,255,.14), 0 2px 6px -2px rgba(16,24,40,.30)',
+        chip: 'inset 0 1px 0 rgba(255,255,255,.14), 0 1px 3px -1px rgba(16,24,40,.25)',
         track: 'inset 0 1px 2px rgba(16,24,40,.16)',
       },
       fontFamily: {
