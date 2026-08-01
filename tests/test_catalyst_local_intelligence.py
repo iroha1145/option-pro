@@ -421,6 +421,10 @@ def test_prune_journal_removes_stale_items_and_keeps_live_history(tmp_path):
             _news_change(2, 102, available_at=old - timedelta(hours=1)),
             _news_change(3, 103, available_at=recent),
             _news_change(4, 102, available_at=recent, title="Item 102 updated"),
+            # 104：初始回填形态——本地日志很新（3 天前），发布日期很老。
+            _news_change(5, 104, available_at=now - timedelta(days=3)),
+            # 105：发布日期同样老，但 1 小时前仍有新变更（上游重推中）。
+            _news_change(6, 105, available_at=now - timedelta(hours=1)),
         ],
         as_of=now,
     )
@@ -429,6 +433,12 @@ def test_prune_journal_removes_stale_items_and_keeps_live_history(tmp_path):
     cache_path = tmp_path / "catalyst-cache.db"
     with sqlite3.connect(cache_path) as connection:
         connection.row_factory = sqlite3.Row
+        # 把 104/105 的修订改成 60 天前发布——对任何 ≤7 天窗口永不可见。
+        connection.execute(
+            "UPDATE catalyst_local_news_revisions"
+            " SET published_at=?,fetched_at=? WHERE news_id IN (104,105)",
+            (_iso(now - timedelta(days=60)), _iso(now - timedelta(days=60))),
+        )
         hash_101 = connection.execute(
             "SELECT content_hash FROM catalyst_local_news_revisions"
             " WHERE news_id=101"
@@ -472,9 +482,10 @@ def test_prune_journal_removes_stale_items_and_keeps_live_history(tmp_path):
 
     totals = intelligence.prune_journal(retention_days=30, now=now)
 
-    assert totals["pruned_items"] == 1
-    assert totals["pruned_changes"] == 1
-    assert totals["pruned_revisions"] == 1
+    # 101 按变更龄删除；104 按可见性删除（回填死重）；105 被 48h 静默护栏保住。
+    assert totals["pruned_items"] == 2
+    assert totals["pruned_changes"] == 2
+    assert totals["pruned_revisions"] == 2
     assert totals["pruned_links"] == 1
     with sqlite3.connect(cache_path) as connection:
         def count(sql: str) -> int:
@@ -511,6 +522,17 @@ def test_prune_journal_removes_stale_items_and_keeps_live_history(tmp_path):
             "SELECT COUNT(*) FROM catalyst_local_news_revisions"
             " WHERE news_id=102"
         ) == 2
+        # 104 整条消失；105（护栏内）完整保留。
+        assert count(
+            "SELECT COUNT(*) FROM macrolens_etl_news_changes WHERE news_id=104"
+        ) == 0
+        assert count(
+            "SELECT COUNT(*) FROM macrolens_etl_news_changes WHERE news_id=105"
+        ) == 1
+        assert count(
+            "SELECT COUNT(*) FROM catalyst_local_news_revisions"
+            " WHERE news_id=105"
+        ) == 1
         assert count("SELECT COUNT(*) FROM macrolens_etl_state") >= 1
 
     feed = intelligence.feed(window_hours=72, limit=12)
