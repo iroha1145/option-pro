@@ -196,6 +196,20 @@
   }
 }
 
+/* §3.6 按钮立体层级的全局状态物理（token 见 tailwind.config boxShadow.btn/btn-hi/
+   chip/track）：按下阴影收拢成内凹、禁用摊平，调用点只写一个 shadow-* 类即可，
+   不必逐个补 active:/disabled: 变体。选择器特异度 (0,3,0) 稳压工具类。 */
+.shadow-btn:not(:disabled):active {
+  box-shadow: inset 0 1px 2px rgba(16, 24, 40, .08);
+}
+.shadow-btn-hi:not(:disabled):active {
+  box-shadow: inset 0 1.5px 3px rgba(13, 22, 38, .28), 0 1px 2px rgba(16, 24, 40, .10);
+}
+.shadow-btn:disabled,
+.shadow-btn-hi:disabled {
+  box-shadow: none;
+}
+
 /* sparkline 首绘 draw-line 700ms（§6-4） */
 /* 路由进场：只动 transform，不碰 opacity（Layout 的说明）。
    动画运行期间 from 帧就是当前值：任何形式的 from{opacity:0}（JS 或 CSS）

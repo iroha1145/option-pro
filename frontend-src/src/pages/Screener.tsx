@@ -558,7 +558,7 @@ export default function Screener() {
                 onClick={() => void onStrengthRefresh()}
                 disabled={refreshingStrength || scanState === 'scanning'}
                 title={__t("手动触发一次强度扫描（需 Owner）")}
-                className="flex h-9 items-center gap-2 rounded-md border border-line bg-card px-3 text-caption text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-9 items-center gap-2 rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Icon name="refresh" size={15} className={refreshingStrength ? 'animate-spin-once' : ''} />
                 {__t('刷新强度分')}
@@ -654,7 +654,7 @@ export default function Screener() {
                 }}
                 title={__t('{title}：{body}{note}', { title: __t(MACRO_SHADOW_HINT.title), body: __t(MACRO_SHADOW_HINT.body), note: __t(MACRO_SHADOW_HINT.note) })}
                 className={cn(
-                  'flex h-8 items-center gap-1.5 rounded-pill border px-3 text-caption transition-colors duration-fast',
+                  'flex h-8 items-center gap-1.5 rounded-pill border px-3 text-caption shadow-btn transition-colors duration-fast',
                   showMacro
                     ? 'border-brand-600 bg-brand-100 font-medium text-brand-700'
                     : 'border-line bg-card text-ink-500 hover:border-line-strong hover:text-ink-800',
@@ -708,7 +708,7 @@ export default function Screener() {
                     <div className="flex flex-col items-center gap-3">
                       <button
                         onClick={onScanClick}
-                        className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+                        className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
                       >
                         <Icon name="crosshair" size={14} />
                         {__t('开始扫描')}
@@ -719,7 +719,7 @@ export default function Screener() {
                             <button
                               key={p.id}
                               onClick={() => onPresetQuick(p.id)}
-                              className="flex h-8 items-center gap-1.5 rounded-pill border border-line bg-card px-3 text-caption text-ink-500 transition-colors duration-fast hover:border-brand-400/60 hover:text-brand-600"
+                              className="flex h-8 items-center gap-1.5 rounded-pill border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400/60 hover:text-brand-600"
                             >
                               <Icon name="spark-ai" size={13} className="text-ink-300" />
                               {p.name}
@@ -748,7 +748,7 @@ export default function Screener() {
                     action={
                       <button
                         onClick={() => void runScan(applied)}
-                        className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+                        className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
                       >
                         {__t('重试')}
                       </button>
@@ -893,7 +893,7 @@ export default function Screener() {
               <p className="mt-3 text-body-s text-ink-500">{marketQ.error.code === 503 ? __t('数据暂不可用 · 稍后刷新再试') : marketQ.error.message}</p>
               <button
                 onClick={marketQ.refresh}
-                className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+                className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
               >
                 <Icon name="refresh" size={13} />
                 {__t('重试')}
@@ -924,7 +924,7 @@ export default function Screener() {
                 <p className="mt-2.5 text-body-s text-ink-500">{__t('当前条件过严，没有标的进入结果集。')}</p>
                 <button
                   onClick={() => patchApplied({ tier: 'all', minScore: null, presetId: null })}
-                  className="mt-3 flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+                  className="mt-3 flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
                 >
                   <Icon name="filter-funnel" size={13} />
                   {__t('放宽一档试试')}
@@ -1007,7 +1007,7 @@ function SuggestButton({ label, onClick }: { label: string; onClick: () => void 
   return (
     <button
       onClick={onClick}
-      className="flex h-8 items-center rounded-pill border border-line bg-card px-3 text-caption text-ink-500 transition-colors duration-fast hover:border-brand-400/60 hover:text-brand-600"
+      className="flex h-8 items-center rounded-pill border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400/60 hover:text-brand-600"
     >
       {label}
     </button>
@@ -1019,7 +1019,7 @@ function PagerButton({ label, disabled, onClick }: { label: string; disabled: bo
     <button
       onClick={onClick}
       disabled={disabled}
-      className="flex h-8 items-center rounded-md border border-line bg-card px-3 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+      className="flex h-8 items-center rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
     >
       {label}
     </button>

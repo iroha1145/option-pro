@@ -39,7 +39,7 @@ export default function ScanHistoryPopover({ history }: { history: ScanHistoryEn
         aria-haspopup="dialog"
         aria-expanded={open}
         className={cn(
-          'flex h-9 items-center gap-1.5 rounded-md border px-3 text-caption transition-colors duration-fast',
+          'flex h-9 items-center gap-1.5 rounded-md border px-3 text-caption shadow-btn transition-colors duration-fast',
           open ? 'border-brand-400 text-brand-600' : 'border-line bg-card text-ink-500 hover:text-ink-800',
         )}
       >

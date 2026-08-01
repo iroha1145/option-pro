@@ -313,13 +313,13 @@ export default function Login() {
           <div className="mt-5 flex flex-col gap-2.5">
             <button
               onClick={() => navigate(fromPath ?? '/watchlist', { replace: true })}
-              className="h-10 rounded-md bg-brand-600 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+              className="h-10 rounded-md bg-brand-600 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
             >
               {t('继续浏览')}
             </button>
             <button
               onClick={() => void logout()}
-              className="h-10 rounded-md border border-line bg-card text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+              className="h-10 rounded-md border border-line bg-card text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
             >
               {t('退出并换账号')}
             </button>
@@ -448,7 +448,7 @@ export default function Login() {
                   {mode === value && (
                     <motion.span
                       layoutId="login-mode-pill"
-                      className="absolute inset-0 rounded-xs bg-brand-600"
+                      className="absolute inset-0 rounded-xs bg-brand-600 shadow-chip"
                       transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
                     />
                   )}
@@ -533,7 +533,7 @@ export default function Login() {
                 type="submit"
                 disabled={serviceDown || state === 'verifying' || state === 'success'}
                 className={cn(
-                  'flex h-12 w-full items-center justify-center gap-2 rounded-md font-mono text-[14px] tracking-[0.02em] text-white shadow-sh-1',
+                  'flex h-12 w-full items-center justify-center gap-2 rounded-md font-mono text-[14px] tracking-[0.02em] text-white shadow-btn-hi',
                   'transition-[transform,filter,background-color] duration-fast',
                   state === 'success'
                     ? 'bg-up-600'
@@ -584,7 +584,7 @@ export default function Login() {
             </div>
             <button
               onClick={() => navigate('/watchlist')}
-              className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-md border border-line-strong bg-transparent text-body-s font-medium text-ink-600 transition-colors duration-fast hover:bg-paper-2 hover:text-ink-800"
+              className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-md border border-line-strong bg-transparent text-body-s font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:bg-paper-2 hover:text-ink-800"
             >
               {t('以访客身份浏览（只读）')}
             </button>

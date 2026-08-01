@@ -134,7 +134,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           </button>
           <button
             onClick={onOpenPalette}
-            className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-ink-500 md:hidden"
+            className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-ink-500 shadow-btn md:hidden"
             aria-label={t("搜索")}
           >
             <Icon name="search" size={16} />
@@ -179,7 +179,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             <button
               onClick={handleLogout}
               disabled={loggingOut}
-              className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-3 text-caption text-ink-500 transition-colors hover:text-ink-800 disabled:cursor-wait disabled:opacity-60"
+              className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors hover:text-ink-800 disabled:cursor-wait disabled:opacity-60"
             >
               <Icon name="logout" size={14} />
               {username ? t('退出 {name}', { name: username }) : t('退出')}
@@ -187,7 +187,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           ) : (
             <Link
               to="/login"
-              className="flex h-8 shrink-0 items-center whitespace-nowrap rounded-md bg-brand-600 px-3.5 text-caption font-medium text-white shadow-sh-1 transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
+              className="flex h-8 shrink-0 items-center whitespace-nowrap rounded-md bg-brand-600 px-3.5 text-caption font-medium text-white shadow-btn-hi transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
             >
               {t('登录')}
             </Link>

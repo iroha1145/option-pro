@@ -19,7 +19,7 @@ export default function NotFound() {
       action={
         <Link
           to="/watchlist"
-          className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+          className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
         >
           {t('返回自选')}
         </Link>

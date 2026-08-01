@@ -400,7 +400,7 @@ function MiniKline({ ticker }: { ticker: string }) {
               <button
                 onClick={() => void pullAndReload()}
                 disabled={pulling}
-                className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-2.5 py-1 text-micro font-medium text-white transition-[background-color,opacity] duration-fast hover:bg-brand-700 disabled:cursor-wait disabled:opacity-70"
+                className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-2.5 py-1 text-micro font-medium text-white shadow-btn-hi transition-[background-color,opacity] duration-fast hover:bg-brand-700 disabled:cursor-wait disabled:opacity-70"
               >
                 {pulling && (
                   <span
@@ -413,7 +413,7 @@ function MiniKline({ ticker }: { ticker: string }) {
             )}
             <button
               onClick={refresh}
-              className="rounded-md border border-line bg-card px-2.5 py-1 text-micro font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+              className="rounded-md border border-line bg-card px-2.5 py-1 text-micro font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
             >
               {t('重试')}
             </button>
@@ -745,14 +745,14 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
         <div className="flex items-center gap-2">
           <button
             onClick={() => onOpen(e)}
-            className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+            className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
           >
             <Icon name="doc-quote" size={13} />
             {t('查看完整证据')}
           </button>
           <Link
             to={`/stock/${encodeURIComponent(e.ticker)}`}
-            className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-caption font-medium text-white transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
+            className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-caption font-medium text-white shadow-btn-hi transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
           >
             {t('打开研究页')}
             <Icon name="arrow-up-right" size={13} />

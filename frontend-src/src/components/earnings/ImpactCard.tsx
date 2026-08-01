@@ -559,14 +559,14 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                     <button
                       onClick={() => void startJob()}
                       disabled={submitting}
-                      className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-ai-600 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+                      className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-ai-600 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
                     >
                       <Icon name="spark-ai" size={13} />
                       {submitting ? __t('正在提交…') : __t('生成分析')}
                     </button>
                     <button
                       onClick={() => setConfirming(false)}
-                      className="h-8 rounded-md border border-line bg-card px-3 text-caption text-ink-500 transition-colors hover:text-ink-800"
+                      className="h-8 rounded-md border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors hover:text-ink-800"
                     >
                       {__t('取消')}
                     </button>
@@ -575,7 +575,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
               ) : (
                 <button
                   onClick={() => setConfirming(true)}
-                  className="mt-4 flex h-9 items-center gap-2 rounded-md bg-ai-600 px-4 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+                  className="mt-4 flex h-9 items-center gap-2 rounded-md bg-ai-600 px-4 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
                 >
                   <Icon name="spark-ai" size={14} />
                   {__t('生成分析')}
@@ -614,7 +614,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
               </div>
               <button
                 onClick={() => setPhase('needs-analysis')}
-                className="mt-3 flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-3 text-caption text-ink-600 transition-colors hover:border-ai-600/50 hover:text-ai-600"
+                className="mt-3 flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors hover:border-ai-600/50 hover:text-ai-600"
               >
                 <Icon name="refresh" size={13} />
                 {__t('重试')}
@@ -636,7 +636,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
                   setPhase('loading');
                   void loadImpact(ticker);
                 }}
-                className="mt-4 flex h-8 items-center gap-1.5 rounded-md bg-brand-600 px-3.5 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+                className="mt-4 flex h-8 items-center gap-1.5 rounded-md bg-brand-600 px-3.5 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
               >
                 <Icon name="refresh" size={13} />
                 {__t('重试')}

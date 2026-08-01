@@ -149,7 +149,7 @@ export default function Catalysts() {
             )}
             <button
               onClick={onRefresh}
-              className="flex h-9 items-center gap-2 rounded-md border border-line bg-card px-3 text-caption text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+              className="flex h-9 items-center gap-2 rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
               title={__t("刷新本页数据")}
             >
               <Icon name="refresh" size={15} className={spinning ? 'animate-spin-once' : ''} />

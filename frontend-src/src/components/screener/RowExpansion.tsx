@@ -235,14 +235,14 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
         <div className="mt-3 flex flex-col items-start gap-2">
           <button
             onClick={() => onOpenDetail(row.ticker)}
-            className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+            className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
           >
             <Icon name="arrow-up-right" size={13} />
             {t('打开详情')}
           </button>
           <Link
             to="/breakouts"
-            className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+            className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
           >
             <Icon name="radar" size={13} />
             {t('相关突破事件')}

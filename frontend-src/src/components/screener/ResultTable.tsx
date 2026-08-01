@@ -242,7 +242,7 @@ export default function ResultTable({
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
             aria-label={t("上一页")}
-            className="flex size-7 items-center justify-center rounded-sm border border-line text-ink-500 transition-colors hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex size-7 items-center justify-center rounded-sm border border-line text-ink-500 shadow-btn transition-colors hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Icon name="chevron-right" size={13} className="rotate-180" />
           </button>
@@ -253,7 +253,7 @@ export default function ResultTable({
               aria-current={p === page ? 'page' : undefined}
               className={cn(
                 'flex size-7 items-center justify-center rounded-sm border font-mono text-caption tnum transition-colors duration-fast',
-                p === page ? 'border-brand-600 bg-brand-600 text-white' : 'border-line text-ink-500 hover:border-brand-400 hover:text-brand-600',
+                p === page ? 'border-brand-600 bg-brand-600 text-white shadow-chip' : 'border-line text-ink-500 hover:border-brand-400 hover:text-brand-600',
               )}
             >
               {p}
@@ -263,7 +263,7 @@ export default function ResultTable({
             onClick={() => onPageChange(page + 1)}
             disabled={page >= totalPages}
             aria-label={t("下一页")}
-            className="flex size-7 items-center justify-center rounded-sm border border-line text-ink-500 transition-colors hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex size-7 items-center justify-center rounded-sm border border-line text-ink-500 shadow-btn transition-colors hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Icon name="chevron-right" size={13} />
           </button>

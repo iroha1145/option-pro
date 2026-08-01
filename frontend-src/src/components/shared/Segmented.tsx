@@ -29,7 +29,7 @@ export default function Segmented<T extends string>({ options, value, onChange, 
     >
       <span
         aria-hidden="true"
-        className="absolute top-0.5 bottom-0.5 rounded-[4px] bg-card shadow-sh-1 transition-[left,width,opacity] duration-ui ease-paper"
+        className="absolute top-0.5 bottom-0.5 rounded-[4px] bg-card shadow-btn transition-[left,width,opacity] duration-ui ease-paper"
         style={thumb ? { left: thumb.left, width: thumb.width } : { opacity: 0 }}
       />
       {options.map((o, index) => (

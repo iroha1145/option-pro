@@ -33,7 +33,7 @@ export default function StockDetail() {
           <button
             type="button"
             onClick={goBack}
-            className="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-card px-3 py-1.5 text-caption font-medium text-ink-600 transition-colors duration-fast hover:bg-paper-2 hover:text-ink-800"
+            className="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-card px-3 py-1.5 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:bg-paper-2 hover:text-ink-800"
           >
             <Icon name="chevron-right" size={14} className="rotate-180" />
             {__t('返回')}

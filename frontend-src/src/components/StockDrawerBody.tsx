@@ -199,7 +199,7 @@ function SidebarEvents({ ticker }: { ticker: string }) {
           {__t('突破事件读取失败')}
           <button
             onClick={refresh}
-            className="ml-auto rounded-md border border-line px-2 py-0.5 text-micro text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+            className="ml-auto rounded-md border border-line px-2 py-0.5 text-micro text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
           >
             {__t('重试')}
           </button>
@@ -324,7 +324,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
           is404 ? (
             <Link
               to="/watchlist"
-              className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white hover:brightness-105"
+              className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi hover:brightness-105"
             >
               {__t('返回自选')}
             </Link>
@@ -332,7 +332,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
             <Link
               to="/login"
               state={{ from: `${window.location.pathname}${window.location.search}` }}
-              className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white hover:brightness-105"
+              className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi hover:brightness-105"
             >
               {__t('重新登录')}
             </Link>
@@ -343,7 +343,7 @@ export default function StockDrawerBody({ ticker, layout = 'drawer' }: { ticker:
               type="button"
               onClick={refresh}
               disabled={refreshing}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
             >
               <Icon name="refresh" size={14} />
               {refreshing ? __t('正在重试') : __t('重试')}

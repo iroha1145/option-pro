@@ -105,7 +105,7 @@ function IvHeatCard({
             {onRetry && (
               <button
                 onClick={onRetry}
-                className="rounded-md border border-line px-2 py-0.5 text-micro text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+                className="rounded-md border border-line px-2 py-0.5 text-micro text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
               >
                 {t('重试')}
               </button>

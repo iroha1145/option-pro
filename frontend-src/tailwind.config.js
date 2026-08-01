@@ -117,6 +117,13 @@ module.exports = {
         /* 区带/轨道色块：内高光 + 一层薄墨影，翻出层次但不打破扁平轨道语言 */
         zone: 'inset 0 1px 0 rgba(255,255,255,.45), 0 1px 2px rgba(16,24,40,.10)',
         xs: '0 1px 2px 0 rgba(16,24,40,.05)', // v8.1 纯黑→墨色，与三层制同源
+        /* 按钮立体三档（与 sh-* 同族墨影）：btn-hi 实心主按钮 > btn 描边次按钮 >
+           幽灵/文字按钮平面。chip 给选中态胶囊/页码/分段滑块（介于两者之间）；
+           track 是开关轨道的内凹井。按下收拢/禁用摊平的全局规则在 index.css。 */
+        btn: '0 1px 2px rgba(16,24,40,.08), 0 2px 6px -2px rgba(16,24,40,.06), inset 0 1px 0 rgba(255,255,255,.75)',
+        'btn-hi': 'inset 0 1px 0 rgba(255,255,255,.16), 0 1px 2px rgba(16,24,40,.18), 0 4px 12px -4px rgba(16,24,40,.34)',
+        chip: 'inset 0 1px 0 rgba(255,255,255,.14), 0 2px 6px -2px rgba(16,24,40,.30)',
+        track: 'inset 0 1px 2px rgba(16,24,40,.16)',
       },
       fontFamily: {
         /* v8：display 换系统 sans 栈（与 sans 相同但独立变量保留，大标不再用衬线） */
