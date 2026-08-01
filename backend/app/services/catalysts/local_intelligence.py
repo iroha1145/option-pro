@@ -141,6 +141,11 @@ _JOURNAL_PRUNE_BATCH_ITEMS = 500
 # 可见性修剪的静默护栏：上游仍在重推的条目（48h 内有新变更）先不删，
 # 避免「删了又被同步灌回来」的抖动循环。
 _JOURNAL_PRUNE_QUIET_HOURS = 48
+# 热点世系是可再生的派生缓存，读取方只用最新版和 focus 周期引用的版本；
+# 其余按短缓冲即弃（每版本存整张 ~1900 条候选榜，生产一天新增 ~340 版，
+# 曾累积到 866 万行/1GB）。缓冲不与新闻的 retention_days 挂钩。
+_HOTSPOT_LINEAGE_KEEP_HOURS = 48
+_HOTSPOT_PRUNE_BATCH_REVISIONS = 50
 
 
 _SCHEMA = """
@@ -1208,6 +1213,10 @@ class LocalCatalystIntelligence:
           再次收敛，属预期行为。
         - event_groups 对代表修订无外键；旧版本组的代表被剪后按 LEFT JOIN
           缺省处理，热点只读最新 prepared_revision，不受影响。
+        - 热点世系（hotspot_revisions/items）按引用保留而非按龄：留 48h 缓冲
+          + focus_cycles 引用的版本 + 最新一版，其余整版本删除；随后清掉
+          不再被任何存留条目引用且超出保留期的事件组（items→groups 有外键，
+          显式过滤而非依赖外键报错）。
         """
         days = int(retention_days)
         if days < JOURNAL_RETENTION_MIN_DAYS:
@@ -1223,6 +1232,9 @@ class LocalCatalystIntelligence:
             "pruned_revisions": 0,
             "pruned_links": 0,
             "pruned_current": 0,
+            "pruned_hotspot_revisions": 0,
+            "pruned_hotspot_items": 0,
+            "pruned_event_groups": 0,
         }
         with self._connect() as connection:
             while True:
@@ -1279,6 +1291,53 @@ class LocalCatalystIntelligence:
                    WHERE available_at<? AND news_id NOT IN (
                        SELECT news_id FROM macrolens_etl_news_changes
                    )""",
+                (cutoff,),
+            ).rowcount
+            connection.commit()
+            # ---- 热点世系：引用保留（focus/最新）+ 48h 缓冲，其余整版删。 ----
+            lineage_cutoff = _iso(
+                anchor - timedelta(hours=_HOTSPOT_LINEAGE_KEEP_HOURS)
+            )
+            while True:
+                revisions = [
+                    row["prepared_revision"]
+                    for row in connection.execute(
+                        """SELECT r.prepared_revision
+                           FROM catalyst_local_hotspot_revisions r
+                           WHERE r.prepared_at<?
+                             AND r.prepared_revision NOT IN (
+                                 SELECT prepared_revision
+                                 FROM catalyst_local_focus_cycles
+                             )
+                             AND r.prepared_revision<>(
+                                 SELECT MAX(prepared_revision)
+                                 FROM catalyst_local_hotspot_revisions
+                             )
+                           LIMIT ?""",
+                        (lineage_cutoff, _HOTSPOT_PRUNE_BATCH_REVISIONS),
+                    )
+                ]
+                if not revisions:
+                    break
+                marks = ",".join("?" for _ in revisions)
+                totals["pruned_hotspot_items"] += connection.execute(
+                    "DELETE FROM catalyst_local_hotspot_items"
+                    f" WHERE prepared_revision IN ({marks})",
+                    revisions,
+                ).rowcount
+                totals["pruned_hotspot_revisions"] += connection.execute(
+                    "DELETE FROM catalyst_local_hotspot_revisions"
+                    f" WHERE prepared_revision IN ({marks})",
+                    revisions,
+                ).rowcount
+                connection.commit()
+            totals["pruned_event_groups"] += connection.execute(
+                """DELETE FROM catalyst_local_event_groups
+                   WHERE available_at<?
+                     AND (event_group_id||':'||event_group_version) NOT IN (
+                         SELECT event_group_id||':'||event_group_version
+                         FROM catalyst_local_hotspot_items
+                     )""",
                 (cutoff,),
             ).rowcount
             connection.commit()
