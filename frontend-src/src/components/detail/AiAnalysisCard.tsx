@@ -36,7 +36,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
         {isOwner && !job && !starting && !confirming && (
           <button
             onClick={() => setConfirming(true)}
-            className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white transition-[filter] duration-fast hover:brightness-105 active:brightness-95"
+            className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast hover:brightness-105 active:brightness-95"
           >
             {t('开始分析')}
           </button>
@@ -80,13 +80,13 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
                     void start(() => createSignalAnalysisJob(ticker));
                   }}
                   disabled={starting}
-                  className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+                  className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white shadow-btn-hi hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
                 >
                   {t('开始分析')}
                 </button>
                 <button
                   onClick={() => setConfirming(false)}
-                  className="rounded-md border border-line-strong bg-card px-3 py-1.5 text-caption text-ink-600 hover:bg-paper-2"
+                  className="rounded-md border border-line-strong bg-card px-3 py-1.5 text-caption text-ink-600 shadow-btn hover:bg-paper-2"
                 >
                   {t('取消')}
                 </button>

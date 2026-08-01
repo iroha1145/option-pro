@@ -118,7 +118,7 @@ function ForceRefreshButton({ onRefresh, spinning }: { onRefresh: () => void; sp
       disabled={!isOwner || spinning}
       title={isOwner ? t('重新计算完整自选数据') : t('登录 Owner 后可强制刷新')}
       className={cn(
-        'flex h-9 items-center gap-2 rounded-md border px-3 text-caption transition-colors duration-fast',
+        'flex h-9 items-center gap-2 rounded-md border px-3 text-caption shadow-btn transition-colors duration-fast',
         isOwner
           ? 'border-line bg-card text-ink-600 hover:border-brand-400 hover:text-brand-600'
           : 'cursor-not-allowed border-line bg-card-warm text-ink-300',
@@ -261,7 +261,7 @@ function SortDropdown({ sort, onChange }: { sort: SortState | null; onChange: (s
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-2.5 text-caption text-ink-500 transition-colors hover:text-ink-800"
+        className="flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-2.5 text-caption text-ink-500 shadow-btn transition-colors hover:text-ink-800"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
@@ -878,7 +878,7 @@ export default function Watchlist() {
                   <button
                     type="submit"
                     disabled={savingTicker || !addInput.trim()}
-                    className="flex h-8 items-center gap-1 rounded-sm border border-line-strong bg-card px-2.5 text-caption text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex h-8 items-center gap-1 rounded-sm border border-line-strong bg-card px-2.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Icon name="plus" size={13} />
                     {t('添加')}
@@ -958,7 +958,7 @@ export default function Watchlist() {
                     <button
                       onClick={wl.refresh}
                       disabled={wl.refreshing}
-                      className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
+                      className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
                     >
                       {wl.refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
                       {t('重试')}
@@ -996,7 +996,7 @@ export default function Watchlist() {
                   action={
                     <button
                       onClick={openPalette}
-                      className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+                      className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
                     >
                       <Icon name="search" size={14} />
                       {t('搜索代码')}
@@ -1054,7 +1054,7 @@ export default function Watchlist() {
                 <button
                   type="button"
                   onClick={progressive.loadMore}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line-strong bg-card px-4 py-2 text-caption text-ink-600 transition-colors hover:bg-paper-2"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line-strong bg-card px-4 py-2 text-caption text-ink-600 shadow-btn transition-colors hover:bg-paper-2"
                 >
                   {t('加载更多')}
                   <span className="font-mono text-micro text-ink-400 tnum">
@@ -1081,7 +1081,7 @@ export default function Watchlist() {
               <p className="mt-3 text-caption text-ink-400">{t('市场信号读取失败')}</p>
               <button
                 onClick={signalsQ.refresh}
-                className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+                className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
               >
                 <Icon name="refresh" size={13} />
                 {t('重试')}

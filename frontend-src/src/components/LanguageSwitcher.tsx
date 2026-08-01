@@ -43,7 +43,7 @@ export default function LanguageSwitcher({ className }: { className?: string }) 
         aria-expanded={open}
         aria-label={t('切换界面语言')}
         className={cn(
-          'flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-caption transition-colors duration-fast',
+          'flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-caption shadow-btn transition-colors duration-fast',
           open ? 'border-brand-400 text-brand-600' : 'border-line bg-card-warm text-ink-500 hover:text-ink-800',
         )}
       >

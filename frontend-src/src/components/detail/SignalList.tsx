@@ -55,7 +55,7 @@ export default function SignalList({
               signalsQ.refresh();
               eventsQ.refresh();
             }}
-            className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+            className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
           >
             <Icon name="refresh" size={13} />
             {t('重试')}

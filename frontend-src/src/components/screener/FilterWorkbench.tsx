@@ -208,18 +208,21 @@ export function ScanButton({
   onScan: () => void;
   className?: string;
 }) {
+  /* 基础立体影 = tailwind shadow-btn-hi。framer 的 dirty 脉冲环走内联 boxShadow，
+     会压掉 class 阴影，只能把基础影并进每一帧动画值（各帧层数一致才可补间）。 */
+  const base = 'inset 0 1px 0 rgba(255,255,255,.16), 0 1px 2px rgba(16,24,40,.18), 0 4px 12px -4px rgba(16,24,40,.34)';
   return (
     <motion.button
       onClick={onScan}
       disabled={scanning}
       animate={
         dirty && !scanning
-          ? { boxShadow: ['0 0 0 0 rgba(46,70,224,.38)', '0 0 0 9px rgba(46,70,224,0)', '0 0 0 0 rgba(46,70,224,0)'] }
-          : { boxShadow: '0 0 0 0 rgba(46,70,224,0)' }
+          ? { boxShadow: [`${base}, 0 0 0 0 rgba(46,70,224,.38)`, `${base}, 0 0 0 9px rgba(46,70,224,0)`, `${base}, 0 0 0 0 rgba(46,70,224,0)`] }
+          : { boxShadow: `${base}, 0 0 0 0 rgba(46,70,224,0)` }
       }
       transition={dirty && !scanning ? { duration: 1.2, repeat: 2 } : { duration: 0.16 }}
       className={cn(
-        'relative h-10 min-w-[168px] overflow-hidden rounded-md bg-brand-600 px-4 text-white transition-[filter] duration-fast',
+        'relative h-10 min-w-[168px] overflow-hidden rounded-md bg-brand-600 px-4 text-white shadow-btn-hi transition-[filter] duration-fast',
         scanning ? 'cursor-wait' : 'hover:brightness-105',
         className,
       )}
@@ -363,7 +366,7 @@ export default function FilterWorkbench({
                     className={cn(
                       'flex h-8 items-center gap-1.5 rounded-pill border px-3 text-caption transition-colors duration-fast',
                       active
-                        ? 'border-brand-400 bg-brand-100 text-brand-700'
+                        ? 'border-brand-400 bg-brand-100 text-brand-700 shadow-chip'
                         : 'border-line bg-card text-ink-500 hover:border-brand-400/60 hover:text-brand-600',
                     )}
                   >
@@ -432,7 +435,7 @@ export default function FilterWorkbench({
                     className={cn(
                       'flex h-7 shrink-0 items-center whitespace-nowrap rounded-xs border px-2 text-caption transition-colors duration-fast',
                       active
-                        ? 'border-brand-400 bg-brand-100 text-brand-700'
+                        ? 'border-brand-400 bg-brand-100 text-brand-700 shadow-chip'
                         : 'border-line bg-card text-ink-500 hover:border-brand-400/60 hover:text-brand-600',
                     )}
                   >

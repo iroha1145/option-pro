@@ -120,7 +120,7 @@ export default function TrendBiasPanel({
             type="button"
             onClick={() => refresh()}
             disabled={refreshing}
-            className="mt-2.5 inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
+            className="mt-2.5 inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
           >
             {refreshing ? t('正在重试') : t('重试')}
           </button>

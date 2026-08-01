@@ -196,7 +196,7 @@ export default function EarningsAnalysisControls() {
             onClick={() => void updateSchedule()}
             disabled={!doc || loading || running}
             className={cn(
-              'inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-caption transition-colors',
+              'inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-caption shadow-btn transition-colors',
               enabled
                 ? 'border-ai-600/30 bg-ai-50 text-ai-600'
                 : 'border-line bg-card text-ink-500',
@@ -215,7 +215,7 @@ export default function EarningsAnalysisControls() {
             disabled={!taskReady || running}
             title={!taskReady ? t('财报分析后台任务当前不可用') : t('立即分析未来 5 天内尚未建立任务的财报')}
             className={cn(
-              'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-caption font-medium transition-colors',
+              'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-caption font-medium shadow-btn transition-colors',
               taskReady && !running
                 ? 'border-line bg-card text-ink-600 hover:border-ai-600/40 hover:text-ai-600'
                 : 'cursor-not-allowed border-line bg-card-warm text-ink-300',

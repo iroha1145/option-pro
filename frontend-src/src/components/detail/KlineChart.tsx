@@ -395,7 +395,7 @@ function toggleButtonCls(active: boolean): string {
   return cn(
     'rounded-xs border px-2 py-0.5 text-micro outline-none transition-colors duration-fast',
     active
-      ? 'border-brand-400 bg-brand-50 text-brand-700'
+      ? 'border-brand-400 bg-brand-50 text-brand-700 shadow-chip'
       : 'border-line text-ink-400 hover:text-ink-600 focus-visible:text-ink-600',
   );
 }
@@ -574,7 +574,7 @@ export default function KlineChart({
                 action={
                   <button
                     onClick={refresh}
-                    className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] duration-fast hover:brightness-105"
+                    className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast hover:brightness-105"
                   >
                     {t('重试')}
                   </button>

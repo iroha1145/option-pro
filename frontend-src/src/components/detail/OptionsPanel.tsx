@@ -177,7 +177,7 @@ function AiOptionInsight({
                 ? t('使用当前期权链的 {n} 条异动证据', { n: evidence.length })
                 : t('当前期权链没有达到异动阈值的合约')
             }
-            className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white transition-[filter] duration-fast hover:brightness-105 disabled:cursor-not-allowed disabled:bg-ink-300"
+            className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast hover:brightness-105 disabled:cursor-not-allowed disabled:bg-ink-300"
           >
             {hasEvidence ? t('生成解读') : t('暂无异动')}
           </button>
@@ -217,13 +217,13 @@ function AiOptionInsight({
                   }),
                 );
               }}
-              className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white hover:brightness-105"
+              className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white shadow-btn-hi hover:brightness-105"
             >
               {t('生成解读')}
             </button>
             <button
               onClick={() => setConfirming(false)}
-              className="rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 hover:bg-paper-2"
+              className="rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 shadow-btn hover:bg-paper-2"
             >
               {t('取消')}
             </button>
@@ -482,7 +482,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
           <button
             type="button"
             onClick={() => refreshExpirations()}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] hover:brightness-105"
           >
             <Icon name="refresh" size={14} />
             {t('重新拉取')}
@@ -546,7 +546,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
               type="button"
               onClick={() => refreshChain()}
               disabled={retrySeconds > 0 || chainRefreshing}
-              className="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
             >
               <Icon name="refresh" size={13} />
               {chainRefreshing ? t('正在重试') : t('重试该到期日')}

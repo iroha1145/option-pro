@@ -46,7 +46,7 @@ function StatusDropdown({ value, onChange }: { value: '' | NewsAnalysisStatus; o
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(
-          'flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-caption transition-colors duration-fast',
+          'flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-caption shadow-btn transition-colors duration-fast',
           value ? 'border-brand-400 bg-brand-50 text-brand-700' : 'border-line bg-card text-ink-500 hover:text-ink-800',
         )}
       >
@@ -211,7 +211,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
       >
         <span
           className={cn(
-            'relative h-[18px] w-8 shrink-0 rounded-pill transition-colors duration-ui',
+            'relative h-[18px] w-8 shrink-0 rounded-pill shadow-track transition-colors duration-ui',
             filters.multiSourceOnly ? 'bg-brand-600' : 'bg-ink-300',
           )}
         >
@@ -228,7 +228,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
       {activeCount > 0 && (
         <button
           onClick={() => onChange({ ...DEFAULT_FILTERS })}
-          className="flex items-center gap-1 rounded-md border border-line bg-card px-2 py-1.5 text-micro text-ink-500 transition-colors duration-fast hover:border-down-600/40 hover:text-down-700"
+          className="flex items-center gap-1 rounded-md border border-line bg-card px-2 py-1.5 text-micro text-ink-500 shadow-btn transition-colors duration-fast hover:border-down-600/40 hover:text-down-700"
         >
           <Icon name="x" size={11} />
           {t('清除过滤')}
@@ -245,7 +245,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
           onClick={() => setMobileOpen((v) => !v)}
           aria-expanded={mobileOpen}
           className={cn(
-            'flex items-center gap-2 rounded-md border px-3 py-2 text-caption font-medium transition-colors',
+            'flex items-center gap-2 rounded-md border px-3 py-2 text-caption font-medium shadow-btn transition-colors',
             activeCount > 0 ? 'border-brand-400 bg-brand-50 text-brand-700' : 'border-line bg-card text-ink-600',
           )}
         >

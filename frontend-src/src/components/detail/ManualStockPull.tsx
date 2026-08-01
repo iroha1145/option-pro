@@ -118,7 +118,7 @@ export default function ManualStockPull({
         onClick={() => void pull()}
         disabled={running}
         className={cn(
-          'inline-flex min-h-11 w-full items-center justify-center gap-2 whitespace-normal rounded-md bg-brand-600 px-3 py-2 text-caption font-medium text-white transition-[filter,opacity] duration-fast hover:brightness-105 disabled:cursor-wait disabled:opacity-70 sm:w-auto',
+          'inline-flex min-h-11 w-full items-center justify-center gap-2 whitespace-normal rounded-md bg-brand-600 px-3 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] duration-fast hover:brightness-105 disabled:cursor-wait disabled:opacity-70 sm:w-auto',
         )}
       >
         {running ? (

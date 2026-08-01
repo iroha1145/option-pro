@@ -65,7 +65,7 @@ function FChip({ active, onClick, children, ariaLabel }: { active: boolean; onCl
       className={cn(
         'rounded-pill border px-2.5 py-1 text-micro font-medium transition-[transform,color,background-color,border-color] duration-fast',
         active
-          ? 'scale-[1.04] border-brand-600 bg-brand-600 text-white'
+          ? 'scale-[1.04] border-brand-600 bg-brand-600 text-white shadow-chip'
           : 'border-line bg-card text-ink-500 hover:border-brand-400 hover:text-brand-600',
       )}
     >
@@ -87,7 +87,7 @@ function WatchOnlyToggle({ value, onChange }: { value: boolean; onChange: (v: bo
         whileTap={{ scale: 1.06 }}
         transition={{ type: 'spring', stiffness: 520, damping: 32 }}
         /* shrink-0：flex 行挤压下轨道不得缩窄（缩到 21px 时 knob 直接飞出压住标签） */
-        className={cn('relative h-5 w-9 shrink-0 rounded-pill transition-colors duration-ui', value ? 'bg-brand-600' : 'bg-line-strong')}
+        className={cn('relative h-5 w-9 shrink-0 rounded-pill shadow-track transition-colors duration-ui', value ? 'bg-brand-600' : 'bg-line-strong')}
       >
         {/* left 显式锚定（与 ManagePanel/FilterBar 同范式）：绝对定位不写 left 时
             静态位置生效，而 button 的 UA text-align:center 会把基准推到轨道正中，
@@ -437,7 +437,7 @@ export default function Breakouts() {
               onClick={onRefreshSnapshot}
               disabled={scanning}
               title={__t("立即触发一次突破扫描")}
-              className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
+              className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
             >
               <Icon name="refresh" size={14} className={scanning ? 'animate-spin-once' : ''} />
               {__t('立即扫描')}
@@ -480,7 +480,7 @@ export default function Breakouts() {
                 action={
                   <button
                     onClick={currentQ.refresh}
-                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
                   >
                     {__t('重试')}
                   </button>
@@ -507,7 +507,7 @@ export default function Breakouts() {
                 action={
                   <button
                     onClick={() => railRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
                   >
                     <Icon name="clock-ny" size={14} />
                     {__t('看看历史事件')}

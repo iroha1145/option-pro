@@ -95,7 +95,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
           <button
             type="button"
             onClick={() => setDesc((v) => !v)}
-            className="flex h-7 items-center gap-1 rounded-md border border-line bg-card px-2 text-caption text-ink-500 transition-colors duration-fast hover:border-line-strong hover:text-ink-800"
+            className="flex h-7 items-center gap-1 rounded-md border border-line bg-card px-2 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-line-strong hover:text-ink-800"
             aria-label={t('切换排序，当前板块排位{order}', { order: desc ? t('降序') : t('升序') })}
           >
             <Icon name={desc ? 'arrow-down' : 'arrow-up'} size={12} />
@@ -136,7 +136,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
                 type="button"
                 onClick={onRetry}
                 disabled={retrySeconds > 0}
-                className="flex min-h-11 items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+                className="flex min-h-11 items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
               >
                 <Icon name="refresh" size={14} />
                 {retrySeconds > 0 ? t('{n} 秒后重试', { n: retrySeconds }) : t('重试')}
@@ -152,7 +152,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
               <button
                 type="button"
                 onClick={onRetry}
-                className="flex min-h-11 items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105"
+                className="flex min-h-11 items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] hover:brightness-105"
               >
                 <Icon name="refresh" size={14} />
                 {t('重新加载')}

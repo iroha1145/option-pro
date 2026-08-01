@@ -384,7 +384,7 @@ export default function Earnings() {
             disabled={refreshing || cooldownRemain > 0}
             title={cooldownRemain > 0 ? t('冷却中，{n}s 后可刷新', { n: cooldownRemain }) : t('手动刷新财报日历')}
             className={cn(
-              'flex h-9 items-center gap-2 rounded-md border px-3 text-caption transition-colors duration-fast',
+              'flex h-9 items-center gap-2 rounded-md border px-3 text-caption shadow-btn transition-colors duration-fast',
               refreshing || cooldownRemain > 0
                 ? 'cursor-not-allowed border-line bg-card-warm text-ink-300'
                 : 'border-line bg-card text-ink-600 hover:border-brand-400 hover:text-brand-600',
@@ -482,7 +482,7 @@ export default function Earnings() {
                 <button
                   onClick={q.refresh}
                   disabled={q.refreshing}
-                  className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
+                  className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
                 >
                   {q.refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
                   {t('重试')}
@@ -571,7 +571,7 @@ export default function Earnings() {
                   <button
                     onClick={q.refresh}
                     disabled={q.refreshing}
-                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105 disabled:opacity-60"
+                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
                   >
                     {t('重试')}
                   </button>
@@ -604,7 +604,7 @@ export default function Earnings() {
                     </p>
                     <button
                       onClick={() => setSelectedDay(null)}
-                      className="flex items-center gap-1 rounded-sm border border-line bg-card px-2 py-1 text-caption text-ink-500 transition-colors hover:text-ink-800"
+                      className="flex items-center gap-1 rounded-sm border border-line bg-card px-2 py-1 text-caption text-ink-500 shadow-btn transition-colors hover:text-ink-800"
                     >
                       <Icon name="x" size={12} />
                       {t('清除筛选')}
@@ -630,7 +630,7 @@ export default function Earnings() {
                   </p>
                   <button
                     onClick={() => setVisibleLimit((limit) => limit + LIST_PAGE_SIZE)}
-                    className="h-8 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+                    className="h-8 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
                   >
                     {t('显示更多 ·')} {Math.min(LIST_PAGE_SIZE, filteredItems.length - visibleItems.length)} {t('条')}
                   </button>

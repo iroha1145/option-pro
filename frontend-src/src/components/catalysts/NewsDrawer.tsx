@@ -328,7 +328,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
                     {isOwner && job.cancellable && (
                       <button
                         onClick={() => setConfirm('cancel')}
-                        className="mt-3 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-500 transition-colors hover:border-down-600/40 hover:text-down-700"
+                        className="mt-3 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-500 shadow-btn transition-colors hover:border-down-600/40 hover:text-down-700"
                       >
                         {__t('取消任务')}
                       </button>
@@ -397,7 +397,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
                     {(item.analysisStatus === 'pending' || showCancelled) && (
                       <button
                         onClick={() => setConfirm('create')}
-                        className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+                        className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
                       >
                         <Icon name="spark-ai" size={13} />
                         {__t('生成 AI 分析')}
@@ -406,7 +406,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
                     {(showCompleted || showFailed || showInsufficient) && (
                       <button
                         onClick={() => setConfirm('force')}
-                        className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 transition-colors hover:border-brand-400 hover:text-brand-600"
+                        className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
                       >
                         <Icon name="refresh" size={13} />
                         {showFailed || showInsufficient ? __t('重试分析（强制）') : __t('重新分析（强制）')}

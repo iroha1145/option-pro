@@ -190,7 +190,7 @@ export default function HistoryRail({
             action={
               <button
                 onClick={onRetry}
-                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
               >
                 {t('重试')}
               </button>
@@ -204,7 +204,7 @@ export default function HistoryRail({
             action={
               <button
                 onClick={onRetry}
-                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
               >
                 {t('重新加载')}
               </button>
@@ -286,7 +286,7 @@ export default function HistoryRail({
                 <button
                   onClick={onLoadMore}
                   disabled={loadingMore}
-                  className="flex items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
+                  className="flex items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
                 >
                   {loadingMore && <span className="size-3.5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" />}
                   {t('加载更多')}
@@ -296,7 +296,7 @@ export default function HistoryRail({
                 <button
                   onClick={onFetchMore}
                   disabled={loadingServerMore}
-                  className="flex items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
+                  className="flex items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
                 >
                   {loadingServerMore && <span className="size-3.5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" />}
                   {t('继续读取更早事件')}

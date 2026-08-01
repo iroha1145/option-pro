@@ -72,7 +72,7 @@ function ActionButton({ label, busy, onClick }: { label: string; busy: boolean; 
       onClick={onClick}
       disabled={busy}
       className={cn(
-        'flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-caption font-medium transition-colors duration-fast',
+        'flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-caption font-medium shadow-btn transition-colors duration-fast',
         busy
           ? 'cursor-wait border-brand-400 bg-brand-50 text-brand-600'
           : 'border-line bg-card text-ink-600 hover:border-brand-400 hover:text-brand-600',
@@ -95,7 +95,7 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
       <span className="text-caption text-ink-700">{label}</span>
       <span
         className={cn(
-          'relative h-4 w-7 shrink-0 rounded-pill transition-colors duration-fast',
+          'relative h-4 w-7 shrink-0 rounded-pill shadow-track transition-colors duration-fast',
           value ? 'bg-brand-600' : 'bg-ink-300',
         )}
         aria-hidden="true"
@@ -339,7 +339,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                       <button
                         onClick={() => void rollback()}
                         disabled={saving}
-                        className="rounded-md border border-line bg-card px-2.5 py-1.5 text-caption text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-50"
+                        className="rounded-md border border-line bg-card px-2.5 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-50"
                       >
                         {__t('回滚上一版')}
                       </button>
@@ -347,7 +347,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                         onClick={() => void saveSettings()}
                         disabled={saving || !dirty}
                         className={cn(
-                          'rounded-md px-3 py-1.5 text-caption font-medium text-white transition-[filter] duration-fast',
+                          'rounded-md px-3 py-1.5 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast',
                           dirty ? 'bg-brand-600 hover:brightness-105' : 'bg-ink-300',
                         )}
                       >

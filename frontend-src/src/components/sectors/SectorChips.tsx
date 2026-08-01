@@ -44,7 +44,7 @@ export default function SectorChips({ sectors, value, onChange, className }: Sec
             className={cn(
               'shrink-0 rounded-pill border px-3 py-1.5 text-caption transition-colors duration-fast',
               active
-                ? 'border-brand-600 bg-brand-100 font-semibold text-brand-700'
+                ? 'border-brand-600 bg-brand-100 font-semibold text-brand-700 shadow-chip'
                 : 'border-line bg-card text-ink-500 hover:border-line-strong hover:text-ink-800',
             )}
           >

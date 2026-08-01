@@ -274,7 +274,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
           action={
             <button
               onClick={() => void fetchFirst()}
-              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
             >
               <Icon name="refresh" size={14} />
               {__t('重试')}
@@ -290,7 +290,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
             hasFilters ? (
               <button
                 onClick={onClearFilters}
-                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter] hover:brightness-105"
+                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
               >
                 <Icon name="x" size={13} />
                 {__t('清除过滤')}
@@ -318,7 +318,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
               <button
                 onClick={() => void loadMore()}
                 disabled={loadingMore}
-                className="inline-flex items-center gap-2 rounded-md border border-line bg-card px-4 py-2 text-caption font-medium text-ink-600 transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-md border border-line bg-card px-4 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
               >
                 {loadingMore && <span className="size-3.5 animate-spin rounded-full border-2 border-line-strong border-t-brand-600" aria-hidden="true" />}
                 {__t('加载更多')}
