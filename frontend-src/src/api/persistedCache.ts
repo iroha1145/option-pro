@@ -20,6 +20,8 @@ export interface PersistedResponse {
   /** 原始响应 JSON(mapper 之前的形状,与 locale 无关)。 */
   raw: unknown;
   storedAt: number;
+  /** 最后一次被服务器确认(200/304)的时刻;恢复年龄按它计,缺省回退 storedAt。 */
+  validatedAt?: number | null;
 }
 
 function openDb(): Promise<IDBDatabase | null> {

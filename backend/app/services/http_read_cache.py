@@ -25,6 +25,7 @@ one principal's body to another after login/logout.
 
 from __future__ import annotations
 
+import asyncio
 import gzip
 import hashlib
 import json
@@ -154,7 +155,19 @@ def snapshot_version_key(*parts: Any) -> str:
     return "|".join(repr(part) for part in parts)
 
 
-def respond_with_snapshot(
+def _encode_snapshot_bytes(payload: Any) -> tuple[bytes, str, bytes | None]:
+    """json.dumps + SHA-256 + gzip——冷编码的全部同步 CPU 都在这里。"""
+    body = _encode_payload(payload)
+    etag = _etag_for(body)
+    packed = None
+    if len(body) >= _GZIP_MIN_BYTES:
+        packed = gzip.compress(body, compresslevel=_GZIP_LEVEL)
+        if len(packed) >= len(body):
+            packed = None
+    return body, etag, packed
+
+
+async def respond_with_snapshot(
     request: Request,
     payload: Any,
     *,
@@ -175,13 +188,12 @@ def respond_with_snapshot(
         cache_state = "bytes-hit"
         cache_metrics.incr("response_bytes.hit")
     else:
-        body = _encode_payload(payload)
-        etag = _etag_for(body)
-        packed = None
-        if len(body) >= _GZIP_MIN_BYTES:
-            packed = gzip.compress(body, compresslevel=_GZIP_LEVEL)
-            if len(packed) >= len(body):
-                packed = None
+        # 每个新快照版本的首次编码是数百毫秒级同步 CPU（4MB 财报正文），
+        # 留在事件循环里会饿死并发请求（审计 P2-03）——挪线程池。字节缓存
+        # 命中路径保持零切换开销。
+        body, etag, packed = await asyncio.to_thread(
+            _encode_snapshot_bytes, payload
+        )
         cache_state = "bytes-miss"
         cache_metrics.incr("response_bytes.miss")
         if version_key is not None and len(body) >= _STORE_MIN_BYTES:

@@ -793,7 +793,7 @@ async def upcoming_earnings(request: Request):
         )
         if payload is None:
             raise public_snapshot_unavailable(key)
-        return respond_with_snapshot(
+        return await respond_with_snapshot(
             request,
             payload,
             version_key=snapshot_version_key(
@@ -808,7 +808,7 @@ async def upcoming_earnings(request: Request):
         # (key, as_of) 即可稳定决定字节；此前 version_key=None 让 Owner 的
         # 每次命中都重付 json.dumps+sha256+gzip（审计 P2-01）。
         stamp = cached.get("as_of") if isinstance(cached, dict) else None
-        return respond_with_snapshot(
+        return await respond_with_snapshot(
             request,
             cached,
             version_key=(
@@ -836,7 +836,7 @@ async def upcoming_earnings(request: Request):
                     int(float(disk_entry["saved_at"]) + interval - now),
                 )
                 cache.set(key, payload, remaining)
-            return respond_with_snapshot(
+            return await respond_with_snapshot(
                 request,
                 payload,
                 version_key=snapshot_version_key(

@@ -1408,3 +1408,30 @@ def test_health_probe_does_not_rehash_the_frontend_per_request(
     assert second["sha256"] != first["sha256"]
 
     main.reset_frontend_integrity_cache()
+
+
+def test_index_html_carries_runtime_app_commit_meta(tmp_path, monkeypatch) -> None:
+    """部署版本以 <meta> 在发出 index.html 时注入（审计 P2-02）。
+
+    注入必须发生在响应期：构建先于提交，把 git sha 编进产物会打破提交
+    产物的 CI 字节闸门。commit 未知（本地 dev）时不注入，前端按无信息
+    处理。文件替换或 commit 变化都必须使注入缓存失效。
+    """
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    (frontend / "index.html").write_text(
+        "<html><head><title>optix</title></head><body></body></html>",
+        encoding="utf-8",
+    )
+    static = main._SPAStaticFiles(directory=str(frontend), html=True)
+
+    monkeypatch.setattr(main, "_APP_COMMIT", "abc123def456")
+    body = bytes(static._index_response().body)
+    assert b'<meta name="x-app-commit" content="abc123def456">' in body
+    assert body.count(b"<head>") == 1
+
+    monkeypatch.setattr(main, "_APP_COMMIT", "fedcba987654")
+    assert b'content="fedcba987654"' in bytes(static._index_response().body)
+
+    monkeypatch.setattr(main, "_APP_COMMIT", "unknown")
+    assert b"x-app-commit" not in bytes(static._index_response().body)

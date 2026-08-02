@@ -202,3 +202,35 @@ test('hard invalidation bypasses the browser HTTP cache exactly once', async () 
     resetQueryRegistry();
   }
 });
+
+test('restore age gate anchors on the last validation and deletes over-age records', async () => {
+  const { persistedRecordWithinAge } = await import('../src/api/queryRegistry.ts');
+  const DAY = 24 * 60 * 60 * 1000;
+  const now = 1_800_000_000_000;
+  // 无上限路径不设闸
+  assert.equal(persistedRecordWithinAge({}, { storedAt: now - 400 * DAY }, now), true);
+  // 上限内可恢复
+  assert.equal(
+    persistedRecordWithinAge({ maxRestoreAgeMs: 3 * DAY }, { storedAt: now - 2 * DAY }, now),
+    true,
+  );
+  // 超龄拒绝
+  assert.equal(
+    persistedRecordWithinAge({ maxRestoreAgeMs: 3 * DAY }, { storedAt: now - 4 * DAY }, now),
+    false,
+  );
+  // validatedAt 优先：老 storedAt + 新近 304 确认 = 仍可恢复
+  assert.equal(
+    persistedRecordWithinAge(
+      { maxRestoreAgeMs: 3 * DAY },
+      { storedAt: now - 40 * DAY, validatedAt: now - DAY },
+      now,
+    ),
+    true,
+  );
+  // 损坏时间戳按不可恢复处理
+  assert.equal(
+    persistedRecordWithinAge({ maxRestoreAgeMs: 3 * DAY }, { storedAt: Number.NaN }, now),
+    false,
+  );
+});
