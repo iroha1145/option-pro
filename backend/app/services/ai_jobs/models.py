@@ -480,6 +480,11 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         "TikTok",
         "Varonis",
         "VIX",
+        # signal_analysis 契约的 key_levels.vwap_levels 字段就要求模型讨论
+        # VWAP——不进白名单会自相矛盾：输入没有 VWAP 数据时，模型如实写
+        # 「未提供VWAP数据」反而被拒（2026-08-02 生产 schema_validation_failed
+        # 根因之一）。
+        "VWAP",
         "Visa",
         "WTI",
         "WhatsApp",
@@ -2567,10 +2572,20 @@ def _validation_source_texts(job_type: str, payload: dict) -> tuple[str, ...]:
     return tuple(values)
 
 
+# 信号引擎的相对基准池（services/signals.py 的 benchmarks，去掉 ^ 前缀的
+# 指数代码）。每个 signal_analysis 输入都自带 vs 基准的对比读数，结果里
+# 谈及基准（如「相对SPY走弱」）不是幻觉实体——不加进 allowed_codes 时，
+# 基准代码后随中文谓语会被 ticker 绑定规则拒掉（2026-08-02 生产三连
+# schema_validation_failed 根因之一）。
+_SIGNAL_BENCHMARK_CODES = ("SPY", "QQQ", "IWM", "RSP", "HYG", "TLT")
+
+
 def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
     model = result_model_for(job_type)
     if job_type in {"news_impact", "market_focus"}:
         raw_allowed_codes = list(payload.get("allowed_tickers") or [])
+    elif job_type == "signal_analysis":
+        raw_allowed_codes = [payload.get("ticker"), *_SIGNAL_BENCHMARK_CODES]
     else:
         raw_allowed_codes = [payload.get("ticker")]
     allowed_codes = [
