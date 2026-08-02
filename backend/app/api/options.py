@@ -274,7 +274,7 @@ async def unusual_activity(
         )
         if payload is None:
             raise public_snapshot_unavailable(key)
-        return respond_with_snapshot(
+        return await respond_with_snapshot(
             request,
             payload,
             version_key=snapshot_version_key(
@@ -288,7 +288,7 @@ async def unusual_activity(
         )
     cached = cache.get(key)
     if cached is not None:
-        return respond_with_snapshot(
+        return await respond_with_snapshot(
             request,
             cached,
             version_key=None,
@@ -316,7 +316,7 @@ async def unusual_activity(
                     int(float(disk_entry["saved_at"]) + interval - now),
                 )
                 cache.set(key, payload, remaining)
-            return respond_with_snapshot(
+            return await respond_with_snapshot(
                 request,
                 payload,
                 version_key=snapshot_version_key(

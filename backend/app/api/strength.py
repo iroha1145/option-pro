@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import math
@@ -509,7 +510,11 @@ async def _scan_snapshot_payload(
             detail={"code": "strength_parameters_invalid"},
         ) from exc
     now = time.time()
-    snapshot = _read_strength_snapshot(
+    # 新快照版本的首次读取要同步读盘 + 解码 + 递归校验最高 4MB JSON——
+    # 挪线程池，别让单事件循环为冷缓存停摆（审计 P2-03）。指纹缓存命中时
+    # to_thread 只多一次线程切换，微秒级。
+    snapshot = await asyncio.to_thread(
+        _read_strength_snapshot,
         _strength_snapshot_path(parameters),
         parameters=parameters,
         now=now,
@@ -573,7 +578,7 @@ async def scan(
         min_avg_dollar_volume=min_avg_dollar_volume,
         include_options=include_options,
     )
-    return respond_with_snapshot(
+    return await respond_with_snapshot(
         request,
         payload,
         version_key=snapshot_version_key(

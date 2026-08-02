@@ -57,7 +57,7 @@ async def market_indices(request: Request):
         )
         if payload is None:
             raise public_snapshot_unavailable(key)
-        return respond_with_snapshot(
+        return await respond_with_snapshot(
             request,
             payload,
             version_key=snapshot_version_key(
@@ -80,7 +80,7 @@ async def market_indices(request: Request):
             now=now,
         )
         if disk_entry is not None:
-            return respond_with_snapshot(
+            return await respond_with_snapshot(
                 request,
                 disk_entry["payload"],
                 version_key=snapshot_version_key(

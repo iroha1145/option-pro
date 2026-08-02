@@ -29,7 +29,14 @@ interface QueryConfig {
   ttlMs: number;
   /** 是否把原始响应持久化到 IndexedDB(仅公开研究快照)。 */
   persist?: boolean;
+  /**
+   * 冷启动恢复的最大年龄(按最后确认时间计)。超龄记录直接删除不恢复——
+   * 一个月前的行情标着「正在确认」也不该出现在首屏(审计 P2-02)。
+   */
+  maxRestoreAgeMs?: number;
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * 注册表白名单:全局、只读、同一身份下返回同一份数据的端点。
@@ -38,12 +45,12 @@ interface QueryConfig {
  */
 const QUERY_CONFIG: Record<string, QueryConfig> = {
   '/market/status': { ttlMs: 15_000 },
-  '/market/indices': { ttlMs: 30_000, persist: true },
-  '/strength/market': { ttlMs: 30_000, persist: true },
-  '/signals/market': { ttlMs: 30_000, persist: true },
-  '/earnings/upcoming': { ttlMs: 60_000, persist: true },
-  '/sectors': { ttlMs: 120_000, persist: true },
-  '/macro/conditions': { ttlMs: 60_000, persist: true },
+  '/market/indices': { ttlMs: 30_000, persist: true, maxRestoreAgeMs: 3 * DAY_MS },
+  '/strength/market': { ttlMs: 30_000, persist: true, maxRestoreAgeMs: 3 * DAY_MS },
+  '/signals/market': { ttlMs: 30_000, persist: true, maxRestoreAgeMs: 3 * DAY_MS },
+  '/earnings/upcoming': { ttlMs: 60_000, persist: true, maxRestoreAgeMs: 7 * DAY_MS },
+  '/sectors': { ttlMs: 120_000, persist: true, maxRestoreAgeMs: 7 * DAY_MS },
+  '/macro/conditions': { ttlMs: 60_000, persist: true, maxRestoreAgeMs: 30 * DAY_MS },
   '/breakouts/status': { ttlMs: 10_000 },
   '/breakouts/current': { ttlMs: 10_000 },
 };
@@ -57,11 +64,28 @@ interface Entry {
   restored: boolean;
   /** 硬失效后下一次请求绕过浏览器 HTTP 缓存（cache:'reload'），用后即清。 */
   forceReload: boolean;
+  /** 持久记录的原始 storedAt（304 重写时保留首存时间）。 */
+  persistedStoredAt: number;
 }
 
 const entries = new Map<string, Entry>();
 let principalKey = 'anonymous';
-let knownAppCommit: string | null = null;
+
+/**
+ * 部署版本在网关发 index.html 时以 <meta name="x-app-commit"> 注入——
+ * 模块初始化即读取,恢复持久缓存前就知道自己属于哪个部署;此前只有首个
+ * 网络响应返回后才知道,冷启动版本检查形同虚设(审计 P2-02)。
+ */
+function bootAppCommit(): string | null {
+  if (typeof document === 'undefined') return null;
+  const content = document
+    .querySelector('meta[name="x-app-commit"]')
+    ?.getAttribute('content')
+    ?.trim();
+  return content || null;
+}
+
+let knownAppCommit: string | null = bootAppCommit();
 
 function entryFor(path: string): Entry {
   let entry = entries.get(path);
@@ -74,6 +98,7 @@ function entryFor(path: string): Entry {
       generation: 0,
       restored: false,
       forceReload: false,
+      persistedStoredAt: 0,
     };
     entries.set(path, entry);
   }
@@ -109,6 +134,19 @@ async function fetchInto(path: string, entry: Entry, config: QueryConfig): Promi
     // 数据没变:正文零下载,只把这份值确认成"刚验证过"。
     if (entry.generation === generation) {
       entry.fetchedAt = Date.now();
+      if (config.persist && entry.value !== undefined) {
+        // 304 = 服务器刚确认这份数据仍有效:validatedAt 前移,让恢复
+        // 年龄按最后确认时间计——一直有效的数据不该越放越"老"。
+        void writePersisted({
+          path,
+          principal: principalKey,
+          appCommit: knownAppCommit,
+          etag: entry.etag,
+          raw: entry.value,
+          storedAt: entry.persistedStoredAt || Date.now(),
+          validatedAt: Date.now(),
+        });
+      }
     }
     return entry.value;
   }
@@ -120,6 +158,7 @@ async function fetchInto(path: string, entry: Entry, config: QueryConfig): Promi
   entry.value = data;
   entry.etag = res.headers.get('ETag');
   entry.fetchedAt = Date.now();
+  entry.persistedStoredAt = Date.now();
   if (config.persist) {
     void writePersisted({
       path,
@@ -127,7 +166,8 @@ async function fetchInto(path: string, entry: Entry, config: QueryConfig): Promi
       appCommit: knownAppCommit,
       etag: entry.etag,
       raw: data,
-      storedAt: Date.now(),
+      storedAt: entry.persistedStoredAt,
+      validatedAt: entry.persistedStoredAt,
     });
   }
   return data;
@@ -177,9 +217,15 @@ export async function restorePersistedQuery<T>(path: string): Promise<T | null> 
   ) {
     return null;
   }
+  if (!persistedRecordWithinAge(config, record, Date.now())) {
+    // 超龄记录直接删掉:下次冷启动不再反复读到注定不可用的数据。
+    void deletePersisted(path);
+    return null;
+  }
   if (entry.value !== undefined) return entry.value as T;
   entry.value = record.raw;
   entry.etag = record.etag;
+  entry.persistedStoredAt = record.storedAt;
   // fetchedAt 故意保持 0:恢复值可显示,但绝不算 fresh。
   return record.raw as T;
 }
@@ -216,6 +262,21 @@ export function dropQueryRegistry(): void {
   }
   entries.clear();
   void clearPersisted();
+}
+
+/**
+ * 恢复年龄闸(纯函数,导出供测试):以最后确认时间计龄,缺省回退 storedAt;
+ * 未配置上限的路径不设闸。
+ */
+export function persistedRecordWithinAge(
+  config: { maxRestoreAgeMs?: number },
+  record: { storedAt: number; validatedAt?: number | null },
+  now: number,
+): boolean {
+  const cap = config.maxRestoreAgeMs;
+  if (!cap) return true;
+  const anchor = record.validatedAt ?? record.storedAt;
+  return Number.isFinite(anchor) && now - anchor <= cap;
 }
 
 /** 测试用复位。 */

@@ -358,12 +358,12 @@ def test_serialized_response_store_respects_budget(monkeypatch: pytest.MonkeyPat
     http_read_cache.reset_serialized_response_cache()
     request = anonymous_get_request()
     for index in range(24):
-        http_read_cache.respond_with_snapshot(
+        asyncio.run(http_read_cache.respond_with_snapshot(
             request,
             {"filler": "y" * 8_000, "index": index},
             version_key=f"budget-test-{index}",
             cache_control="private, max-age=30",
-        )
+        ))
     store = http_read_cache._store
     with store._lock:
         total = store._total_bytes_locked()

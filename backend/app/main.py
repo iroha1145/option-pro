@@ -26,7 +26,7 @@ from starlette.datastructures import Headers, MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.requests import Request as StarletteRequest
-from starlette.responses import PlainTextResponse
+from starlette.responses import PlainTextResponse, Response
 
 from app.access import (
     OwnerAccessRuntime,
@@ -833,17 +833,49 @@ class _SPAStaticFiles(StaticFiles):
 
     BrowserRouter 路由(/watchlist、/market、/stock/NVDA…)在磁盘上没有对应
     文件;带扩展名的缺失路径(资产)仍如实返回 404。
+
+    index.html 在发出时注入 <meta name="x-app-commit">:前端注册表在
+    发出任何网络请求之前就知道自己属于哪个部署,冷启动恢复 IndexedDB
+    记录时的版本检查才真正生效(审计 P2-02)。注入发生在响应期而不是
+    构建期——构建先于提交,把 git sha 编进产物会打破提交产物的 CI
+    字节闸门。文档路径本就 no-store,不需要文件级校验器。
     """
 
+    _index_cache: tuple[tuple[int, int, str], bytes] | None = None
+
+    def _index_response(self) -> Response:
+        index_path = Path(self.directory) / "index.html"
+        try:
+            stat = index_path.stat()
+        except OSError:
+            raise StarletteHTTPException(status_code=404)
+        identity = (stat.st_mtime_ns, stat.st_size, _APP_COMMIT)
+        cached = self._index_cache
+        if cached is None or cached[0] != identity:
+            raw = index_path.read_bytes()
+            if _APP_COMMIT != "unknown":
+                raw = raw.replace(
+                    b"<head>",
+                    b'<head><meta name="x-app-commit" content="'
+                    + _APP_COMMIT.encode("ascii", "ignore")
+                    + b'">',
+                    1,
+                )
+            cached = (identity, raw)
+            self._index_cache = cached
+        return Response(content=cached[1], media_type="text/html")
+
     async def get_response(self, path: str, scope):
+        if path in ("", ".", "index.html"):
+            return self._index_response()
         try:
             response = await super().get_response(path, scope)
         except StarletteHTTPException as exc:
             if exc.status_code == 404 and _is_spa_document_path("/" + path):
-                return await super().get_response("index.html", scope)
+                return self._index_response()
             raise
         if response.status_code == 404 and _is_spa_document_path("/" + path):
-            return await super().get_response("index.html", scope)
+            return self._index_response()
         return response
 
 

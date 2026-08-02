@@ -204,7 +204,7 @@ async def market_signals(request: Request):
                 payload = dict(disk_entry["payload"])
                 payload["_cached"] = True
                 payload["snapshot_source"] = "worker"
-                return respond_with_snapshot(
+                return await respond_with_snapshot(
                     request,
                     _sanitize(payload),
                     version_key=snapshot_version_key(
@@ -229,7 +229,7 @@ async def market_signals(request: Request):
             if payload is not None:
                 payload["_cached"] = True
                 payload["snapshot_source"] = "worker"
-                return respond_with_snapshot(
+                return await respond_with_snapshot(
                     request,
                     _sanitize(payload),
                     version_key=snapshot_version_key(
