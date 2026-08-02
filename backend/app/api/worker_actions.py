@@ -26,6 +26,7 @@ ActionType = Literal[
     "strength_refresh",
     "breakout_refresh",
     "earnings_analysis",
+    "earnings_calendar",
     "macro_conditions",
     "retention",
 ]
@@ -35,6 +36,8 @@ _ACTION_TASKS: dict[str, str] = {
     "strength_refresh": "strength_refresh",
     "breakout_refresh": "breakout_refresh",
     "earnings_analysis": "earnings_analysis",
+    # 财报日历重建由 public_home 任务承担（它本就拥有该资源的定时发布）。
+    "earnings_calendar": "public_home",
     # Scheduled and manual macro refreshes deliberately share one task name.
     "macro_conditions": "macro_conditions",
     "retention": "retention",
@@ -44,6 +47,7 @@ _ACTION_COOLDOWNS: dict[str, float] = {
     "strength_refresh": 30.0,
     "breakout_refresh": 30.0,
     "earnings_analysis": 60.0,
+    "earnings_calendar": 60.0,
     "macro_conditions": 300.0,
     "retention": 300.0,
 }

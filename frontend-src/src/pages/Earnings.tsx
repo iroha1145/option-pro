@@ -5,7 +5,7 @@
  * B3 AI 影响分析卡（缓存结果 / 409 生成 / 任务轮询 / 锁定态）· B5 本月密度条
  * 轮询 1800s（契约 TTL）· 空态 / 骨架 / 503 · 响应式（<md 卡片流 + 横滑 snap）
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { invalidateQueryPaths } from '@/api/queryRegistry';
 import { earningsApi, restoreUpcomingFromCache } from '@/api/modules/earnings';
@@ -46,7 +46,7 @@ import { t } from '../i18n/core.ts';
 
 const REFRESH_COOLDOWN_S = 60;
 const LIST_PAGE_SIZE = 24;
-type RefreshStatus = 'refreshed' | 'cooldown' | 'failed_stale' | null;
+type RefreshStatus = 'refreshed' | 'cooldown' | 'failed_stale' | 'queued' | null;
 
 function reportAnalysisKey(ticker: string, reportDate: string): string {
   return `${ticker.trim().toUpperCase()}|${reportDate}`;
@@ -132,6 +132,45 @@ export default function Earnings() {
   const [refreshing, setRefreshing] = useState(false);
   const cooldownRemain = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
 
+  /**
+   * Worker 化手动刷新的跟进（审计 P2-04，与宏观刷新同一套节奏）。
+   * POST 只入队；这里每 5s 硬失效 + 强制拉一次，快照 asOf 翻新即完成；
+   * 3 分钟未完成则提示后台继续并解除按钮占用。toast/refresh 走 ref，
+   * 避免把每渲染的新对象放进 effect deps。
+   */
+  const [refreshBaselineAsOf, setRefreshBaselineAsOf] = useState<string | null>(null);
+  const followRefreshRef = useRef(q.refresh);
+  followRefreshRef.current = q.refresh;
+  const followToastRef = useRef(toast);
+  followToastRef.current = toast;
+  const currentAsOf = q.data?.asOf ?? null;
+  useEffect(() => {
+    if (refreshStatus !== 'queued') return;
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      if (Date.now() - started > 180_000) {
+        window.clearInterval(timer);
+        setRefreshStatus(null);
+        setRefreshing(false);
+        followToastRef.current.info(t('刷新仍在后台进行，完成后日历会自动更新'));
+        return;
+      }
+      invalidateQueryPaths(['/earnings/upcoming'], { reload: true });
+      followRefreshRef.current({ force: true });
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [refreshStatus]);
+  useEffect(() => {
+    if (refreshStatus !== 'queued') return;
+    if (refreshBaselineAsOf === null || currentAsOf === null) return;
+    if (currentAsOf !== refreshBaselineAsOf) {
+      setRefreshStatus('refreshed');
+      setRefreshing(false);
+      setFlashSignal((s) => s + 1);
+      followToastRef.current.success(t('财报日历已在后台完成刷新'));
+    }
+  }, [refreshStatus, refreshBaselineAsOf, currentAsOf]);
+
   /* 默认选中第一条「即将公布」（渲染期 adjust-state，避免 effect 级联；fixture 现含上月历史，跳过过去日期）。
      重点模式下默认候选来自重点列表——刚打开页面不该选中一只看不见的票。 */
   const [autoPicked, setAutoPicked] = useState(false);
@@ -185,14 +224,24 @@ export default function Earnings() {
       return;
     }
     setRefreshing(true);
+    let following = false;
     try {
       const fresh = await earningsApi.refresh();
+      const retrySeconds = fresh.refreshRetryAfterSeconds ?? REFRESH_COOLDOWN_S;
+      setCooldownUntil(Date.now() + retrySeconds * 1000);
+      if (fresh.refreshStatus === 'queued') {
+        /* password 模式：POST 已入队 Worker，请求内零上游工作。跟进 effect
+           负责硬失效+强制拉与停表；按钮在跟进窗口内保持「刷新中」。 */
+        following = true;
+        setRefreshBaselineAsOf(q.data?.asOf ?? null);
+        setRefreshStatus('queued');
+        toast.info(t('已排入后台刷新，完成后自动更新'));
+        return;
+      }
       /* 硬失效（删 IndexedDB 旧记录 + 下一发打穿浏览器缓存）+ 强制世代
          （旧在途 GET 从此写不进页面，且合流闸不再吞掉这次刷新）。 */
       invalidateQueryPaths(['/earnings/upcoming'], { reload: true });
       q.refresh({ force: true });
-      const retrySeconds = fresh.refreshRetryAfterSeconds ?? REFRESH_COOLDOWN_S;
-      setCooldownUntil(Date.now() + retrySeconds * 1000);
       if (fresh.refreshStatus === 'failed_stale') {
         setRefreshStatus('failed_stale');
         toast.info(t('上游刷新失败，继续使用上一次完整日历'));
@@ -214,7 +263,7 @@ export default function Earnings() {
         toast.error(t('刷新失败'), e instanceof ApiError ? e.message : undefined);
       }
     } finally {
-      setRefreshing(false);
+      if (!following) setRefreshing(false);
     }
   }, [refreshing, cooldownRemain, q, toast]);
 

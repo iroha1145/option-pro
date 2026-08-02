@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import date, datetime, timedelta
 import math
+import sqlite3
 import re
 import time
 from typing import Any, Mapping
@@ -801,25 +802,12 @@ async def upcoming_earnings(request: Request):
             ),
             cache_control=cache_control,
         )
-    cached = cache.get(key)
-    if cached is not None:
-        # 进程缓存里存的是基础 payload——refresh_status 等请求域字段只加在
-        # POST 返回的副本上，从不落进 cache.set。as_of 每次构建唯一，
-        # (key, as_of) 即可稳定决定字节；此前 version_key=None 让 Owner 的
-        # 每次命中都重付 json.dumps+sha256+gzip（审计 P2-01）。
-        stamp = cached.get("as_of") if isinstance(cached, dict) else None
-        return await respond_with_snapshot(
-            request,
-            cached,
-            version_key=(
-                snapshot_version_key("earnings", "owner-live", key, stamp)
-                if stamp
-                else None
-            ),
-            cache_control=cache_control,
-        )
     config = get_personal_config()
     if config.access.mode == "password":
+        # Worker 拥有发布权：password 模式 owner 每次直读磁盘快照（指纹缓存
+        # 微秒级命中），不再经过进程 TTLCache——手动刷新已 Worker 化，进程
+        # 缓存无法跨进程失效，会让刷新后的跟进轮询一直读到旧载荷
+        # （审计 P2-04）。序列化成本由字节缓存按 saved_at 版本键承担。
         now = time.time()
         interval = float(config.public_home.earnings_seconds)
         disk_entry = await read_owner_public_home_entry_async(
@@ -829,16 +817,9 @@ async def upcoming_earnings(request: Request):
             now=now,
         )
         if disk_entry is not None:
-            payload = disk_entry["payload"]
-            if disk_entry["fresh"]:
-                remaining = max(
-                    1,
-                    int(float(disk_entry["saved_at"]) + interval - now),
-                )
-                cache.set(key, payload, remaining)
             return await respond_with_snapshot(
                 request,
-                payload,
+                disk_entry["payload"],
                 version_key=snapshot_version_key(
                     "earnings",
                     "owner",
@@ -850,11 +831,76 @@ async def upcoming_earnings(request: Request):
         # No published snapshot at all: stay honest and unavailable instead
         # of letting an ordinary page read trigger a ~67-ticker provider scan.
         raise public_snapshot_unavailable(key)
+    cached = cache.get(key)
+    if cached is not None:
+        # private_network 现算路径的进程缓存命中。基础 payload 不含请求域
+        # 字段，as_of 每次构建唯一，(key, as_of) 稳定决定字节（审计 P2-01）。
+        stamp = cached.get("as_of") if isinstance(cached, dict) else None
+        return await respond_with_snapshot(
+            request,
+            cached,
+            version_key=(
+                snapshot_version_key("earnings", "owner-live", key, stamp)
+                if stamp
+                else None
+            ),
+            cache_control=cache_control,
+        )
     return await cache.get_or_set(
         key,
         3600,
         lambda: _build_upcoming_earnings(today),
     )
+
+
+def _queue_earnings_calendar_refresh() -> dict[str, Any]:
+    """password 模式手动刷新：入队 Worker 动作，HTTP 请求内零上游工作。
+
+    审计 P2-04：按钮时长曾完全由上游决定（Finnhub/FMP/Yahoo/市值/期权增强
+    全在请求内跑）。入队后由 public_home 任务重建并发布快照；同分钟重复
+    点击/动作已在跑一律按 queued 返回，前端以快照 as_of 是否翻新收尾——
+    上游失败时 worker 侧完整性闸保留上一份完整日历，跟进窗口超时提示。
+    """
+    from app.api.worker_actions import (
+        _ACTION_COOLDOWNS,
+        _minute_key,
+        _read_health,
+        _repository,
+        _task_state,
+    )
+
+    repository = _repository()
+    worker = _read_health(repository)
+    if not worker.get("healthy"):
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "worker_unavailable"},
+        )
+    task = _task_state(worker, "public_home")
+    if task is None or not bool(task.get("enabled")):
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "worker_task_unavailable", "task": "public_home"},
+        )
+    try:
+        item = repository.request_action(
+            "earnings_calendar",
+            "public_home",
+            _minute_key("earnings_calendar"),
+            cooldown_seconds=_ACTION_COOLDOWNS["earnings_calendar"],
+            details={},
+        )
+    except (OSError, sqlite3.Error, ValueError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "worker_state_unavailable"},
+        ) from exc
+    reason = str(item.get("reason") or "")
+    return _sanitize({
+        "refresh_status": "cooldown" if reason == "cooldown" else "queued",
+        "refresh_action_id": item.get("request_id"),
+        "refresh_retry_after_seconds": EARNINGS_REFRESH_COOLDOWN_SECONDS,
+    })
 
 
 @router.post(
@@ -867,6 +913,8 @@ async def refresh_upcoming_earnings():
     State-changing provider work uses POST; ordinary GET requests remain
     cache-only and never start a refresh.
     """
+    if get_personal_config().access.mode == "password":
+        return _queue_earnings_calendar_refresh()
     today = _market_today()
     key = f"earnings:upcoming:{today.isoformat()}"
 
