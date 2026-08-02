@@ -19,6 +19,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
+from app.access import request_owner_access_context
 from app.personal_config import get_personal_config
 from app.public_home_snapshot import (
     public_home_resource_parameters,
@@ -44,7 +45,9 @@ CONTEXT_BLOCK_KEYS = (
     "upcoming_earnings",
 )
 
-_NEWS_WINDOW_HOURS = 168
+#: 与公共 feed 的默认窗口一致：匿名条目缓存按 (db_path, window_hours) 键
+#: 共享，错开窗口会放弃全天被访客流量焐热的缓存条目。
+_NEWS_WINDOW_HOURS = 72
 _NEWS_FETCH_LIMIT = 12
 _NEWS_MAX_ITEMS = 10
 _NEWS_TITLE_MAX_CHARS = 160
@@ -285,15 +288,20 @@ def _news_block(symbol: str) -> tuple[dict[str, Any], list[str]] | None:
     from app.services.catalysts.personal_service import PersonalCatalystService
 
     service = PersonalCatalystService(get_catalyst_settings())
-    payload = service.ticker(
-        symbol,
-        as_of=datetime.now(timezone.utc),
-        window_hours=_NEWS_WINDOW_HOURS,
-        limit=_NEWS_FETCH_LIMIT,
-        min_confidence=0,
-        include_unanalyzed=True,
-        include_neutral=True,
-    )
+    # 匿名读，有意为之：证据只要已发布的中文分析（fail-closed 边界之内，
+    # 队列态无用），而 _active_revision_bundle 的匿名条目缓存只对非 owner
+    # 读生效——owner 上下文每次全窗重建 _item()，生产实测 72h 6s+/168h
+    # 15s+，会吃光甚至击穿整个上下文组装预算。
+    with request_owner_access_context(False):
+        payload = service.ticker(
+            symbol,
+            as_of=datetime.now(timezone.utc),
+            window_hours=_NEWS_WINDOW_HOURS,
+            limit=_NEWS_FETCH_LIMIT,
+            min_confidence=0,
+            include_unanalyzed=True,
+            include_neutral=True,
+        )
     status = str(payload.get("status") or "")
     if status in {"disabled", "unavailable"}:
         return None
