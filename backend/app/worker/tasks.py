@@ -1615,6 +1615,56 @@ class PublicHomeTask:
             next_delay_seconds=float(self._config.poll_seconds),
         )
 
+    async def run_for_actions(self, actions: list[dict[str, Any]]) -> TaskResult:
+        """Owner 手动财报刷新（审计 P2-04）：动作路径立即重建并发布 earnings。
+
+        此前 POST /earnings/upcoming/refresh 在 HTTP 请求内同步跑完全部上游
+        （Finnhub/可选 FMP/Yahoo/市值补全/期权预期波动），按钮时长完全由
+        上游决定。现在 POST 只入队（earnings_calendar → 本任务名），这里
+        承担全部 provider 工作，并复用与定时发布完全相同的完整性闸——
+        上游断供时 _produce_entry 抛 earnings_snapshot_incomplete，上一份
+        完整日历原样保留，动作由 runner 统一记失败；前端跟进窗口按快照
+        as_of 是否翻新判定，超时提示后台仍在进行。
+        """
+        from app.public_home_snapshot import public_home_resource_parameters
+
+        for action in actions:
+            action_type = (
+                action.get("action_type") if isinstance(action, dict) else None
+            )
+            if action_type != "earnings_calendar":
+                raise ValueError(
+                    "public_home only serves earnings_calendar actions"
+                )
+        path = self._snapshot_path or get_data_paths().public_home_snapshot
+        watchlist_path = self._watchlist_path or (
+            path.parent / "watchlist-snapshot-v1.json"
+            if self._snapshot_path is not None
+            else get_data_paths().watchlist_snapshot
+        )
+        observed = float(self._clock())
+        parameters = public_home_resource_parameters("earnings", now=observed)
+        entry = await self._produce_entry("earnings", parameters)
+        await self._publish_entry(
+            "earnings",
+            entry,
+            path=path,
+            watchlist_path=watchlist_path,
+        )
+        # 手动重建同时压掉同资源的在途定时构建：旧结果晚到不得覆盖新发布。
+        inflight = self._inflight.get("earnings")
+        if inflight is not None:
+            inflight.superseded = True
+        self._failures.pop("earnings", None)
+        return TaskResult(
+            status="idle",
+            details={
+                "result": "earnings_refreshed",
+                "saved_at": _timestamp_text(float(entry["saved_at"])),
+            },
+            next_delay_seconds=2.0,
+        )
+
     async def __call__(self) -> TaskResult:
         from app.public_home_snapshot import (
             PUBLIC_HOME_OPTIONAL_RESOURCE_ORDER,
