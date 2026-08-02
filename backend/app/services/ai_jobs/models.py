@@ -2539,7 +2539,22 @@ def validate_job_payload(job_type: str, payload: dict) -> None:
         if any(_TICKER_PATTERN.fullmatch(ticker) is None for ticker in tickers):
             raise ValueError("allowed_tickers_invalid")
         return
-    if job_type not in {"earnings_impact", "option_alerts", "signal_analysis"}:
+    if job_type == "signal_analysis":
+        # 证据包 v2 的上下文代码表（并入 allowed_codes）。自建载荷始终合规，
+        # 这里的检查保护未来的其他调用方不把无界列表带进付费边界。
+        if payload.get("context_tickers") is not None:
+            tickers = _require_unique_string_list(
+                payload,
+                "context_tickers",
+                max_items=24,
+                max_length=12,
+            )
+            if any(
+                _TICKER_PATTERN.fullmatch(ticker) is None for ticker in tickers
+            ):
+                raise ValueError("context_tickers_invalid")
+        return
+    if job_type not in {"earnings_impact", "option_alerts"}:
         raise ValueError("unsupported_job_type")
 
 
@@ -2569,6 +2584,14 @@ def _validation_source_texts(job_type: str, payload: dict) -> tuple[str, ...]:
     elif job_type == "signal_analysis":
         collect(payload.get("signals"))
         collect(payload.get("scores"))
+        # 证据包 v2 的上下文块。新闻标题/摘要先收集：模型引用其中的外文
+        # 实体（公司、产品名）依赖 source-binding 豁免，截断顺序上它们
+        # 最不能被 200 条上限挤掉。
+        collect(payload.get("recent_news"))
+        collect(payload.get("options_chain"))
+        collect(payload.get("market_context"))
+        collect(payload.get("macro_conditions"))
+        collect(payload.get("upcoming_earnings"))
     return tuple(values)
 
 
@@ -2585,7 +2608,14 @@ def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
     if job_type in {"news_impact", "market_focus"}:
         raw_allowed_codes = list(payload.get("allowed_tickers") or [])
     elif job_type == "signal_analysis":
-        raw_allowed_codes = [payload.get("ticker"), *_SIGNAL_BENCHMARK_CODES]
+        # context_tickers 是证据包新闻块里实际出现过的代码（入队时经
+        # validate_job_payload 校验有界）。分析引用新闻里的同行/对手代码
+        # 不是幻觉实体，不并入会重演 2026-08-02 的 SPY 误杀。
+        raw_allowed_codes = [
+            payload.get("ticker"),
+            *_SIGNAL_BENCHMARK_CODES,
+            *(payload.get("context_tickers") or []),
+        ]
     else:
         raw_allowed_codes = [payload.get("ticker")]
     allowed_codes = [

@@ -1354,7 +1354,7 @@ def test_all_paid_job_prompt_versions_invalidate_legacy_english_cache():
     assert ai._PROMPT_VERSIONS == {
         "earnings_impact": "earnings-impact-zh-cn-v5",
         "option_alerts": "option-alerts-zh-cn-v4",
-        "signal_analysis": "signal-analysis-zh-cn-v5",
+        "signal_analysis": "signal-analysis-zh-cn-v6",
         "news_impact": "news-impact-zh-cn-v6",
         "market_focus": "market-focus-zh-cn-v5",
     }
@@ -2987,3 +2987,42 @@ def test_manual_fast_lane_is_not_blocked_by_scheduled_in_flight(tmp_path):
         )
         == "concurrency_limit"
     )
+
+
+def test_active_for_ticker_sees_only_running_jobs_of_the_same_type(tmp_path):
+    path = tmp_path / "ai-jobs.db"
+    repository = AIJobRepository(path)
+    version, digest = runtime.schema_identity("signal_analysis")
+    row, _created = repository.create_job(
+        job_type="signal_analysis",
+        payload={
+            "ticker": "AMD",
+            "signals": {},
+            "scores": {},
+            "as_of": "2026-08-02T00:00:00Z",
+        },
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="signal-analysis-zh-cn-v6",
+        schema_version=version,
+        schema_sha256=digest,
+        max_queued=200,
+        submission_source="manual",
+        priority=80,
+    )
+
+    found = repository.active_for_ticker("signal_analysis", "amd")
+    assert found is not None
+    assert found["job_id"] == row["job_id"]
+    assert repository.active_for_ticker("signal_analysis", "NVDA") is None
+    assert repository.active_for_ticker("earnings_impact", "AMD") is None
+
+    connection = sqlite3.connect(path)
+    connection.execute(
+        "UPDATE ai_jobs SET status='completed' WHERE job_id=?",
+        (row["job_id"],),
+    )
+    connection.commit()
+    connection.close()
+    assert repository.active_for_ticker("signal_analysis", "AMD") is None
