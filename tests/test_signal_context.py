@@ -121,8 +121,10 @@ def test_news_block_projects_compact_items_and_collects_tickers(monkeypatch):
     ]
 
     class FakeService:
-        def __init__(self, _settings):
-            pass
+        def __init__(self, settings):
+            # 真实构造契约：CatalystSettings（含 cache_db_path），不是应用
+            # Settings——首版就是在这里被宽松 mock 掩盖的。
+            assert hasattr(settings, "cache_db_path")
 
         def ticker(self, symbol, **kwargs):
             assert symbol == "AMD"
@@ -156,8 +158,8 @@ def test_news_block_projects_compact_items_and_collects_tickers(monkeypatch):
 
 def test_news_block_returns_none_when_catalysts_are_disabled(monkeypatch):
     class FakeService:
-        def __init__(self, _settings):
-            pass
+        def __init__(self, settings):
+            assert hasattr(settings, "cache_db_path")
 
         def ticker(self, _symbol, **_kwargs):
             return {"status": "disabled", "items": []}
