@@ -1629,10 +1629,18 @@ class AIJobRepository:
     ) -> str:
         """Atomically enforce concurrency, cooldown, and daily Token usage.
 
+        并发是**双车道**（用户实测反馈：后台批任务一跑几十分钟，手动个股
+        分析哪怕按 priority 排在队首也要干等）：manual 与 scheduled 各占
+        一个提交槽，互不阻塞——用户点击时最多出现 1 后台 + 1 交互两个并发
+        付费任务；同道内仍严格单飞。车道以 ai_job_sources.submission_source
+        判定（缺失按 scheduled 保守归类）。unknown 提交的占槽隔离也随道：
+        后台的 submission_outcome_unknown 不再锁住用户的手动提交
+        （2026-07 那次 unknown 锁死全队列 24h 的事故从机制上只剩半径）。
+
         An unknown submission remains terminal and is never retried. It reserves
-        the single paid slot only for the configured response recovery window.
-        The former count and dollar arguments remain API-compatible but no
-        longer block work; zero represents their disabled state.
+        its own lane's paid slot only for the configured response recovery
+        window. The former count and dollar arguments remain API-compatible but
+        no longer block work; zero represents their disabled state.
         """
 
         del daily_limit, daily_budget_usd
@@ -1667,7 +1675,11 @@ class AIJobRepository:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
-                "SELECT job_type,status,lease_owner FROM ai_jobs WHERE job_id=?",
+                """SELECT j.job_type,j.status,j.lease_owner,
+                          COALESCE(s.submission_source,'scheduled') AS lane
+                   FROM ai_jobs AS j
+                   LEFT JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                   WHERE j.job_id=?""",
                 (job_id,),
             ).fetchone()
             if (
@@ -1677,6 +1689,7 @@ class AIJobRepository:
             ):
                 connection.rollback()
                 raise RuntimeError("ai_job_not_submittable")
+            lane = str(row["lane"])
             reservation_microusd = _task_budget_reservation_microusd(
                 str(row["job_type"])
             )
@@ -1684,21 +1697,28 @@ class AIJobRepository:
             in_flight = int(
                 connection.execute(
                     """
-                    SELECT COUNT(*) FROM ai_jobs
-                    WHERE job_id<>? AND submission_started_at IS NOT NULL
+                    SELECT COUNT(*) FROM ai_jobs AS j
+                    LEFT JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                    WHERE j.job_id<>? AND j.submission_started_at IS NOT NULL
+                      AND COALESCE(s.submission_source,'scheduled')=?
                       AND (
-                        status IN ('queued','in_progress')
+                        j.status IN ('queued','in_progress')
                         OR (
-                          error_code='submission_outcome_unknown'
+                          j.error_code='submission_outcome_unknown'
                           AND (
-                            (openai_response_id IS NOT NULL
-                             AND submission_started_at>=?)
-                            OR submission_started_at>=?
+                            (j.openai_response_id IS NOT NULL
+                             AND j.submission_started_at>=?)
+                            OR j.submission_started_at>=?
                           )
                         )
                       )
                     """,
-                    (job_id, unknown_submission_cutoff, unknown_no_response_cutoff),
+                    (
+                        job_id,
+                        lane,
+                        unknown_submission_cutoff,
+                        unknown_no_response_cutoff,
+                    ),
                 ).fetchone()[0]
             )
             if in_flight:

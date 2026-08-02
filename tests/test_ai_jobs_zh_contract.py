@@ -2398,3 +2398,37 @@ def test_v1_database_migration_preserves_and_disables_sync_history(tmp_path):
 )
 def test_terminal_provider_states_have_explicit_bounded_errors(response, expected):
     assert runtime.response_terminal_error(response) == expected
+
+
+def test_signal_evidence_may_reference_engine_benchmarks_and_vwap():
+    """2026-08-02 生产三连 schema_validation_failed 的镜子（原句逐字）。
+
+    信号引擎输入自带 vs SPY 对比（services/signals.py 基准池），契约又要求
+    key_levels.vwap_levels——模型谈及 SPY/VWAP 不是幻觉实体，中文校验不得
+    误伤：SPY 后随中文谓语（非「表现」类技术后缀）曾被 ticker 绑定规则拒，
+    VWAP 既不在白名单、输入又恰好没有 VWAP 数据可绑。
+    """
+    spy_text = (
+        "价格低于20日、50日均线约7%，以及相对SPY走弱，"
+        "构成输入模型识别回撤过度的候选条件。"
+    )
+    assert (
+        validate_simplified_chinese_text(
+            spy_text,
+            None,
+            allowed_codes=("AMD", "SPY"),
+        )
+        == spy_text
+    )
+    vwap_text = "未提供VWAP数据，无法评估价格相对VWAP支撑或阻力。"
+    assert validate_simplified_chinese_text(vwap_text, None) == vwap_text
+
+
+def test_signal_evidence_still_rejects_unbound_tickers():
+    """基准豁免不放松幻觉实体闸：不在 allowed_codes 的代码照旧拒。"""
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        validate_simplified_chinese_text(
+            "以及相对TSLA走弱，构成候选条件。",
+            None,
+            allowed_codes=("AMD",),
+        )

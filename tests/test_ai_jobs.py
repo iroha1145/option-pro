@@ -2892,3 +2892,98 @@ def test_focus_cycle_creation_survives_a_full_bulk_queue(tmp_path):
     )
     assert created is True
     assert focus["status"] == "pending"
+
+
+def test_manual_fast_lane_is_not_blocked_by_scheduled_in_flight(tmp_path):
+    """手动任务插队（用户实测反馈）：后台批任务在飞时，用户点的个股分析
+    不再等它跑完——manual/scheduled 双车道各占一个提交槽，同道内仍单飞。"""
+
+    database = tmp_path / "ai-jobs.db"
+    repository = AIJobRepository(database)
+    repository.initialize()
+    version, digest = runtime.schema_identity("news_impact")
+    scheduled, _ = repository.create_job(
+        job_type="news_impact",
+        payload={"ticker": "NVDA", "title": "背景批任务", "allowed_tickers": ["NVDA"]},
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="news-impact-v1",
+        schema_version=version,
+        schema_sha256=digest,
+        max_queued=200,
+        submission_source="scheduled",
+        priority=70,
+    )
+    owner = "lane-owner"
+    assert repository.claim_due(owner, 60) is not None
+    assert (
+        repository.mark_submission_started(
+            scheduled["job_id"], owner, daily_limit=4
+        )
+        == "started"
+    )
+
+    sig_version, sig_digest = runtime.schema_identity("signal_analysis")
+    manual, _ = repository.create_job(
+        job_type="signal_analysis",
+        payload={"ticker": "AMD"},
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="signal-analysis-zh-cn-v5",
+        schema_version=sig_version,
+        schema_sha256=sig_digest,
+        max_queued=200,
+        submission_source="manual",
+        priority=80,
+    )
+    assert repository.claim_due(owner, 60) is not None
+    # 后台道被占，交互道畅通。
+    assert (
+        repository.mark_submission_started(manual["job_id"], owner, daily_limit=4)
+        == "started"
+    )
+
+    # 同道第二单照旧被并发闸挡下：交互道也严格单飞。
+    manual_second, _ = repository.create_job(
+        job_type="signal_analysis",
+        payload={"ticker": "NVDA"},
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="signal-analysis-zh-cn-v5",
+        schema_version=sig_version,
+        schema_sha256=sig_digest,
+        max_queued=200,
+        submission_source="manual",
+        priority=80,
+    )
+    assert repository.claim_due(owner, 60) is not None
+    assert (
+        repository.mark_submission_started(
+            manual_second["job_id"], owner, daily_limit=4
+        )
+        == "concurrency_limit"
+    )
+
+    scheduled_second, _ = repository.create_job(
+        job_type="news_impact",
+        payload={"ticker": "AMD", "title": "第二个背景批任务", "allowed_tickers": ["AMD"]},
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="news-impact-v1",
+        schema_version=version,
+        schema_sha256=digest,
+        max_queued=200,
+        submission_source="scheduled",
+        priority=70,
+    )
+    assert repository.claim_due(owner, 60) is not None
+    assert (
+        repository.mark_submission_started(
+            scheduled_second["job_id"], owner, daily_limit=4
+        )
+        == "concurrency_limit"
+    )
