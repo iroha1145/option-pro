@@ -95,30 +95,45 @@ def test_chain_summary_returns_none_for_an_empty_chain():
 
 
 def test_news_block_projects_compact_items_and_collects_tickers(monkeypatch):
+    """条目形状对齐匿名公共投影：title_zh/headline_summary/trusted_stock_impacts。"""
+
     long_title = "标题" * 200
     items = [
         {
             "published_at": f"2026-08-01T0{i}:00:00Z",
             "source": "reuters",
-            "title": long_title if i == 0 else f"新闻标题{i}",
-            "summary": "摘要" * 300,
+            # 匿名投影下 title/summary 为 None，文本在 *_zh 字段里。
+            "title": None,
+            "summary": None,
+            "title_zh": long_title if i == 0 else f"新闻标题{i}",
+            "summary_zh": "泛化摘要" * 100,
+            "headline_summary": "一句话结论" * 60,
             "classification": "bullish",
             "confidence": 70,
             "source_tickers": ["AMD", "NVDA", "TSM", "AVGO", "MU", "INTC", "QCOM"],
-            "analysis": {
-                "affected_stocks": [
-                    {
-                        "ticker": "AMD",
-                        "impact_score": 25,
-                        "horizon": "weeks",
-                        "reason": "理由" * 200,
-                    },
-                    {"ticker": "NVDA", "impact_score": 10, "reason": "别家的理由"},
-                ]
-            },
+            "trusted_stock_impacts": [
+                {
+                    "ticker": "AMD",
+                    "impact_score": 25,
+                    "horizon": "weeks",
+                    "reason": "理由" * 200,
+                },
+                {"ticker": "NVDA", "impact_score": 10, "reason": "别家的理由"},
+            ],
         }
         for i in range(12)
     ]
+    # fail-closed 压掉全部文本的条目必须被跳过，不能以空标题进证据。
+    items.insert(
+        0,
+        {
+            "published_at": "2026-08-01T09:00:00Z",
+            "source": "reuters",
+            "title_zh": "",
+            "headline_summary": "",
+            "source_tickers": ["XXXX"],
+        },
+    )
 
     class FakeService:
         def __init__(self, settings):
@@ -128,7 +143,8 @@ def test_news_block_projects_compact_items_and_collects_tickers(monkeypatch):
 
         def ticker(self, symbol, **kwargs):
             assert symbol == "AMD"
-            assert kwargs["include_unanalyzed"] is True
+            # 匿名投影会压掉未分析条目的原文标题，取了也没有文本可用。
+            assert kwargs["include_unanalyzed"] is False
             assert kwargs["include_neutral"] is True
             return {
                 "status": "ok",
@@ -149,11 +165,13 @@ def test_news_block_projects_compact_items_and_collects_tickers(monkeypatch):
     assert len(first["title"]) == signal_context._NEWS_TITLE_MAX_CHARS
     assert first["title"].endswith("…")
     assert len(first["summary"]) == signal_context._NEWS_SUMMARY_MAX_CHARS
+    assert first["summary"].startswith("一句话结论")
     assert first["ticker_impact_score"] == 25
     assert first["ticker_impact_horizon"] == "weeks"
     assert len(first["ticker_impact_reason"]) == signal_context._NEWS_REASON_MAX_CHARS
     assert first["tickers"] == ["AMD", "NVDA", "TSM", "AVGO", "MU", "INTC"]
     assert "AMD" in tickers and "NVDA" in tickers
+    assert "XXXX" not in tickers
 
 
 def test_news_block_returns_none_when_catalysts_are_disabled(monkeypatch):

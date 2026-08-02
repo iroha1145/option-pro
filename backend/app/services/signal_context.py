@@ -291,7 +291,8 @@ def _news_block(symbol: str) -> tuple[dict[str, Any], list[str]] | None:
     # 匿名读，有意为之：证据只要已发布的中文分析（fail-closed 边界之内，
     # 队列态无用），而 _active_revision_bundle 的匿名条目缓存只对非 owner
     # 读生效——owner 上下文每次全窗重建 _item()，生产实测 72h 6s+/168h
-    # 15s+，会吃光甚至击穿整个上下文组装预算。
+    # 15s+，会吃光甚至击穿整个上下文组装预算。匿名投影同时会压掉未分析
+    # 条目的原文标题（无文本可用），所以干脆不取未分析条目。
     with request_owner_access_context(False):
         payload = service.ticker(
             symbol,
@@ -299,7 +300,7 @@ def _news_block(symbol: str) -> tuple[dict[str, Any], list[str]] | None:
             window_hours=_NEWS_WINDOW_HOURS,
             limit=_NEWS_FETCH_LIMIT,
             min_confidence=0,
-            include_unanalyzed=True,
+            include_unanalyzed=False,
             include_neutral=True,
         )
     status = str(payload.get("status") or "")
@@ -310,19 +311,33 @@ def _news_block(symbol: str) -> tuple[dict[str, Any], list[str]] | None:
     for item in payload.get("items") or []:
         if not isinstance(item, dict):
             continue
-        analysis = item.get("analysis")
+        # 匿名投影的字段名是 title_zh/summary_zh；headline_summary 是分析的
+        # 一句话结论，信息密度高于泛化摘要，优先。没有任何文本的条目
+        # （fail-closed 压掉的）对模型没有价值，直接跳过。
+        title = _clip(
+            item.get("title_zh") or item.get("title"), _NEWS_TITLE_MAX_CHARS
+        )
+        if title is None:
+            continue
+        summary = _clip(
+            item.get("headline_summary")
+            or item.get("summary_zh")
+            or item.get("summary"),
+            _NEWS_SUMMARY_MAX_CHARS,
+        )
         impact_score = None
         impact_reason = None
         impact_horizon = None
-        if isinstance(analysis, dict):
-            for stock in analysis.get("affected_stocks") or []:
-                if isinstance(stock, dict) and stock.get("ticker") == symbol:
-                    impact_score = _finite_number(stock.get("impact_score"))
-                    impact_reason = _clip(
-                        stock.get("reason"), _NEWS_REASON_MAX_CHARS
-                    )
-                    impact_horizon = stock.get("horizon")
-                    break
+        analysis = item.get("analysis")
+        impact_rows = item.get("trusted_stock_impacts")
+        if not isinstance(impact_rows, list) and isinstance(analysis, dict):
+            impact_rows = analysis.get("affected_stocks")
+        for stock in impact_rows or []:
+            if isinstance(stock, dict) and stock.get("ticker") == symbol:
+                impact_score = _finite_number(stock.get("impact_score"))
+                impact_reason = _clip(stock.get("reason"), _NEWS_REASON_MAX_CHARS)
+                impact_horizon = stock.get("horizon")
+                break
         source_tickers = [
             ticker
             for ticker in (item.get("source_tickers") or [])
@@ -335,8 +350,8 @@ def _news_block(symbol: str) -> tuple[dict[str, Any], list[str]] | None:
             {
                 "published_at": item.get("published_at"),
                 "source": item.get("source"),
-                "title": _clip(item.get("title"), _NEWS_TITLE_MAX_CHARS),
-                "summary": _clip(item.get("summary"), _NEWS_SUMMARY_MAX_CHARS),
+                "title": title,
+                "summary": summary,
                 "classification": item.get("classification"),
                 "confidence": _finite_number(item.get("confidence")),
                 "ticker_impact_score": impact_score,
