@@ -19,7 +19,6 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from app.config import get_settings
 from app.personal_config import get_personal_config
 from app.public_home_snapshot import (
     public_home_resource_parameters,
@@ -282,9 +281,10 @@ def _options_block(symbol: str) -> dict[str, Any] | None:
 def _news_block(symbol: str) -> tuple[dict[str, Any], list[str]] | None:
     """本地催化流按票摘要（中文标题/结论优先，未分析条目保留原文标题）。"""
 
+    from app.services.catalysts.config import get_catalyst_settings
     from app.services.catalysts.personal_service import PersonalCatalystService
 
-    service = PersonalCatalystService(get_settings())
+    service = PersonalCatalystService(get_catalyst_settings())
     payload = service.ticker(
         symbol,
         as_of=datetime.now(timezone.utc),
