@@ -34,6 +34,7 @@ from app.public_home_snapshot import (
 )
 from app.services.ai_jobs.models import StrictModel
 from app.services.scoring import compute_market_scores, compute_stock_scores
+from app.services.signal_context import CONTEXT_BLOCK_KEYS, build_signal_context
 from app.services.signals import (
     cached_stock_signals,
     compute_market_signals,
@@ -56,11 +57,28 @@ def today_str() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+#: 证据包（不含哈希字段）允许的最大规范化字节数。低于 runtime 的
+#: 60KB(_MAX_UNTRUSTED_JSON_BYTES) 与仓库的 64KB 上限，留出封装余量；
+#: 超限时按 CONTEXT_BLOCK_KEYS 顺序整块丢弃并在 context_status 里标注。
+_EVIDENCE_MAX_BYTES = 52_000
+
+
+def _canonical_evidence_bytes(evidence: dict) -> bytes:
+    return json.dumps(
+        evidence,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+
+
 def _signal_analysis_payload(
     symbol: str,
     signals: dict,
     scores: dict,
     *,
+    context: dict | None = None,
     evidence_as_of: str | None = None,
     evidence_source: str = "live",
     evidence_stale: bool = False,
@@ -78,13 +96,28 @@ def _signal_analysis_payload(
         "evidence_source": evidence_source,
         "evidence_stale": evidence_stale,
     }
-    canonical = json.dumps(
-        evidence,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    ).encode("utf-8")
+    if context is not None:
+        blocks = context.get("blocks") or {}
+        context_status = dict(context.get("status") or {})
+        for key in CONTEXT_BLOCK_KEYS:
+            block = blocks.get(key)
+            if block is not None:
+                evidence[key] = _sanitize(block)
+        context_tickers = [
+            str(ticker)
+            for ticker in context.get("context_tickers") or []
+            if isinstance(ticker, str) and ticker
+        ]
+        if context_tickers:
+            evidence["context_tickers"] = context_tickers
+        evidence["context_status"] = context_status
+        for key in CONTEXT_BLOCK_KEYS:
+            if len(_canonical_evidence_bytes(evidence)) <= _EVIDENCE_MAX_BYTES:
+                break
+            if key in evidence:
+                del evidence[key]
+                context_status[key] = "omitted_size"
+    canonical = _canonical_evidence_bytes(evidence)
     return {
         **evidence,
         "evidence_hash": hashlib.sha256(canonical).hexdigest(),
@@ -326,6 +359,19 @@ async def stock_ai_analysis(
     _require_manual_analysis_enabled()
     _require_runtime_capability()
     symbol = _normalize_ticker(ticker)
+    # 证据包含动态上下文块后，同票重复提交的 request_hash 几乎必然不同，
+    # 仓库级哈希去重挡不住重复付费。非 force 提交先复用在跑任务。
+    active = _job_repository().active_for_ticker("signal_analysis", symbol)
+    if active is not None and not request.force:
+        public = _job_repository().public(active, cached=False)
+        return JSONResponse(
+            public,
+            status_code=202,
+            headers={
+                "Location": f"/api/ai/jobs/{active['job_id']}",
+                "Retry-After": "2",
+            },
+        )
     try:
         signals, saved, snapshot_source = (
             await _owner_stock_signal_evidence(symbol)
@@ -354,18 +400,34 @@ async def stock_ai_analysis(
             if snapshot_source == "manual_pull" and saved is not None
             else datetime.now(timezone.utc).isoformat()
         )
-        row, created = _create_job(
-            "signal_analysis",
-            _signal_analysis_payload(
-                symbol,
-                signals,
-                scores,
-                evidence_as_of=evidence_as_of,
-                evidence_source=snapshot_source or "live",
-                evidence_stale=False,
-            ),
-            force_retry=request.force,
-        )
+        context = await build_signal_context(symbol)
+        evidence_kwargs = {
+            "evidence_as_of": evidence_as_of,
+            "evidence_source": snapshot_source or "live",
+            "evidence_stale": False,
+        }
+        try:
+            row, created = _create_job(
+                "signal_analysis",
+                _signal_analysis_payload(
+                    symbol,
+                    signals,
+                    scores,
+                    context=context,
+                    **evidence_kwargs,
+                ),
+                force_retry=request.force,
+            )
+        except ValueError as exc:
+            if str(exc) != "ai_job_payload_too_large":
+                raise
+            # 上下文块的兜底裁剪之后核心信号仍超限才会走到这里；退回
+            # 无上下文证据，保住手动分析本身可用。
+            row, created = _create_job(
+                "signal_analysis",
+                _signal_analysis_payload(symbol, signals, scores, **evidence_kwargs),
+                force_retry=request.force,
+            )
     except ValueError as exc:
         if str(exc) == "ai_job_payload_too_large":
             raise HTTPException(

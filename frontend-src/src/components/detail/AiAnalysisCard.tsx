@@ -71,7 +71,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
           >
             <div className="mt-3 rounded-md bg-ai-50 px-3 py-2.5">
               <p className="text-caption text-ink-600">
-                {t('将综合')} {ticker} {t('的量价、趋势偏向与期权定价生成分析报告，消耗 1 次 AI 额度，是否继续？')}
+                {t('将综合')} {ticker} {t('的技术信号、大盘与宏观环境、期权链和相关新闻生成分析报告，消耗 1 次 AI 额度，是否继续？')}
               </p>
               <div className="mt-2 flex gap-2">
                 <button
