@@ -886,3 +886,83 @@ def test_option_enrichment_failure_does_not_erase_price_derived_signals(
     assert payload["macd_hist"]["value"] is not None
     assert payload["atm_iv_percent"]["value"] is None
     assert payload["_price_provider"]["value"] == "Massive"
+
+
+def _pulled_daily_chart_payload(n: int = 160) -> dict:
+    """Chart-contract daily bars long enough for structure analysis (>=30)."""
+
+    start = int(datetime(2026, 1, 5, 21, 0, tzinfo=timezone.utc).timestamp())
+    bars = []
+    price = 60.0
+    for i in range(n):
+        # 6 上 6 下的长波：产生 span=3 可确认的分形摆动点
+        price += 0.5 if (i // 6) % 2 == 0 else -0.45
+        close = round(price, 2)
+        bars.append(
+            {
+                "t": start + i * 86_400,
+                "o": round(close - 0.3, 2),
+                "h": round(close + 0.6, 2),
+                "l": round(close - 0.8, 2),
+                "c": close,
+                "v": 900_000 + (i % 7) * 40_000,
+            }
+        )
+    return {
+        "ticker": "AAOI",
+        "range": "1d",
+        "price_adjustment": "raw",
+        "price_provider": "Massive",
+        "as_of": "2026-07-24T01:00:01+00:00",
+        "last_bar_at": "2026-07-23T20:00:00+00:00",
+        "bars": bars,
+    }
+
+
+def test_guest_technical_reads_manual_pull_snapshot_after_restart(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """拉取过的股票重启后，访客的结构分析必须与 K 线同源可读。
+
+    chart 路由会 hydrate 手动拉取的日线快照给访客画蜡烛；technical 的访客
+    回退若只读 public_home，就会出现「K 线画得出来、结构卡 503」的割裂。
+    """
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    chart_payload = _pulled_daily_chart_payload()
+    write_stock_pull_resources(
+        "AAOI",
+        {"daily_chart": (chart_payload, time.time())},
+    )
+    stocks._endpoint_cache.clear()  # simulate a backend restart
+
+    async def scenario() -> dict:
+        with request_owner_access_context(False):
+            return await stocks.stock_technical("aaoi")
+
+    payload = asyncio.run(scenario())
+
+    assert payload["ticker"] == "AAOI"
+    assert payload["basis"] == "raw_daily"
+    assert payload["bar_count"] == len(chart_payload["bars"])
+    assert payload["as_of"] == chart_payload["as_of"]
+    assert payload["price_action"]["swing_highs"]
+    assert payload["technicals"]["rsi14"] is not None
+
+
+def test_guest_technical_still_requires_some_snapshot(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """没拉取过也没有公开快照的股票，访客不得触发任何回源计算。"""
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+
+    async def scenario() -> dict:
+        with request_owner_access_context(False):
+            return await stocks.stock_technical("aaoi")
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(scenario())
+    assert exc_info.value.status_code == 503

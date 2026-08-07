@@ -3086,10 +3086,16 @@ async def stock_technical(ticker: str):
     except HTTPException as exc:
         if owner or not _is_public_snapshot_unavailable(exc):
             raise
-        # 访客冷缓存：直接从公开快照的日线现算（不回源、不写缓存）
+        # 访客冷缓存：先吃手动拉取的日线快照（与 chart 路由同一 hydrate 通路——
+        # 访客拉取完，K 线和结构必须同源同现），再退公开快照；现算不回源、不写缓存。
         from app.services.technical.structure import compute_technical_structure
 
-        chart = await _guest_daily_chart_snapshot(symbol)
+        chart_key = f"chart:{symbol}:1d:raw"
+        await _hydrate_stock_pull_resource(symbol, "daily_chart", chart_key)
+        pulled = _usable_hit(chart_key, time.time())
+        chart = pulled.value if pulled is not None and isinstance(pulled.value, dict) else None
+        if chart is None:
+            chart = await _guest_daily_chart_snapshot(symbol)
         bars = chart.get("bars") if isinstance(chart, dict) else None
         if not bars:
             raise exc

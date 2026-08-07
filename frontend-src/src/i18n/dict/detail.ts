@@ -79,6 +79,9 @@ export const DETAIL: Dict = {
   '正在更新基础行情、日线与技术信号 · 共 3 项': ['Updating basic quote, daily bars, and technical signals · 3 items total', '基本株価データ・日足・テクニカルシグナルを更新中 · 全3項目'],
   '已完成': ['Done', '完了'],
   ' · 服务器保存失败，重启后可能失效': [' · Server-side save failed — may not survive a restart', ' · サーバー側保存に失敗、再起動後に失われる可能性があります'],
+  '拉取并分析': ['Pull & analyze', '取得して分析'],
+  '该股尚未拉取数据，拉取后自动分析': ['No data pulled for this stock yet — pull once and the analysis runs automatically', 'この銘柄のデータは未取得です。取得すると自動で分析されます'],
+  '拉取数据后显示': ['Shown after data is pulled', 'データ取得後に表示'],
 
   /* src/components/detail/NewsPanel.tsx */
   'AI 财报影响': ['AI earnings impact', 'AI 決算インパクト'],

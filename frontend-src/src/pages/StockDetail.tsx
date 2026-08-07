@@ -211,12 +211,18 @@ export default function StockDetail() {
     </div>
   );
 
-  const techFallback = techQ.loading && !technical ? (
+  /* 技术结构三态回退：加载骨架 / 未拉取（拉取 CTA）/ 瞬时失败（重试）。
+     快照缺失 ≠ 读取失败——没拉过数据的股票给「拉取并分析」，不误导重试；
+     侧栏技术指标卡只放占位与短注，整页的卡内拉取入口集中在结构卡。 */
+  const techSkeleton = (
     <div className="mt-3 space-y-2" aria-hidden="true">
       <span className="skeleton-shimmer block h-4 w-full rounded-xs" />
       <span className="skeleton-shimmer block h-4 w-3/4 rounded-xs" />
     </div>
-  ) : techQ.error && !technical ? (
+  );
+  const techError = technical ? null : techQ.error;
+  const techSnapshotMissing = techError?.bizCode === 'public_snapshot_unavailable';
+  const techRetryRow = (
     <p className="mt-3 flex items-center gap-2 text-body-s text-ink-400">
       <Icon name="doc-quote" size={16} className="text-ink-300" />
       {__t('技术结构读取失败 · 不代表该股没有结构')}
@@ -227,7 +233,7 @@ export default function StockDetail() {
         {__t('重试')}
       </button>
     </p>
-  ) : null;
+  );
 
   const providerNote = [
     __t('行情为延迟数据'),
@@ -271,7 +277,20 @@ export default function StockDetail() {
           <div className="card-surface p-5">
             <p className="eyebrow">TECHNICALS</p>
             <h3 className="mt-1.5 text-h3 text-ink-900">{__t('技术指标')}</h3>
-            {technical ? <TechnicalPanel technical={technical} /> : techFallback ?? <TechnicalPanel technical={null} />}
+            {technical ? (
+              <TechnicalPanel technical={technical} />
+            ) : techQ.loading ? (
+              techSkeleton
+            ) : techSnapshotMissing ? (
+              <>
+                <TechnicalPanel technical={null} />
+                <p className="mt-2 text-micro text-ink-400">{__t('拉取数据后显示')}</p>
+              </>
+            ) : techError ? (
+              techRetryRow
+            ) : (
+              <TechnicalPanel technical={null} />
+            )}
           </div>
           <SidebarEvents ticker={detail.ticker} />
         </aside>
@@ -282,16 +301,30 @@ export default function StockDetail() {
         <div className="card-surface p-5 xl:col-span-7">
           <p className="eyebrow">TREND BIAS · SIGNALS</p>
           <h3 className="mb-4 mt-1.5 text-h3 text-ink-900">{__t('趋势偏向与近期信号')}</h3>
-          <TrendBiasPanel ticker={detail.ticker} refreshVersion={dataRevision} />
+          <TrendBiasPanel ticker={detail.ticker} refreshVersion={dataRevision} onPulled={handlePulled} />
           <div className="mt-6">
             <p className="eyebrow mb-3">RECENT SIGNALS</p>
-            <SignalList ticker={detail.ticker} refreshVersion={dataRevision} />
+            <SignalList ticker={detail.ticker} refreshVersion={dataRevision} onPulled={handlePulled} />
           </div>
         </div>
         <div className="card-surface p-5 xl:col-span-5">
           <p className="eyebrow">CHART STRUCTURE</p>
           <h3 className="mt-1.5 text-h3 text-ink-900">{__t('K线结构分析')}</h3>
-          {technical ? <StructurePanel technical={technical} /> : techFallback ?? <StructurePanel technical={null} />}
+          {technical ? (
+            <StructurePanel technical={technical} />
+          ) : techQ.loading ? (
+            techSkeleton
+          ) : techSnapshotMissing ? (
+            <div className="mt-3 flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-8 text-center">
+              <Icon name="doc-quote" size={26} className="text-ink-300" />
+              <p className="mt-3 text-body-s font-medium text-ink-600">{__t('该股尚未拉取数据，拉取后自动分析')}</p>
+              <ManualStockPull ticker={detail.ticker} minimal className="mt-3" onPulled={handlePulled} />
+            </div>
+          ) : techError ? (
+            techRetryRow
+          ) : (
+            <StructurePanel technical={null} />
+          )}
         </div>
       </div>
 

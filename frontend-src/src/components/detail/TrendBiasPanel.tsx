@@ -12,6 +12,7 @@ import { SCORE_HINTS } from '@/lib/scoreHints';
 import { cn } from '@/lib/utils';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import { getTrendBias, type StockTrendBiasView } from './api';
+import ManualStockPull from './ManualStockPull';
 import type { TrendBiasFactor } from '@/mocks/fixtures';
 import { t } from '../../i18n/core.ts';
 
@@ -97,9 +98,12 @@ const SUBSCORES: { key: keyof StockTrendBiasView['scores']; label: string }[] = 
 export default function TrendBiasPanel({
   ticker,
   refreshVersion = 0,
+  onPulled,
 }: {
   ticker: string;
   refreshVersion?: number;
+  /** 快照缺失 CTA 拉取成功后的整页刷新回调（StockDetail.handlePulled） */
+  onPulled?: () => void;
 }) {
   const { data, loading, error, refresh, refreshing } = usePolling(
     () => getTrendBias(ticker),
@@ -109,7 +113,16 @@ export default function TrendBiasPanel({
 
   if (loading) return <SkeletonText lines={5} className="py-4" />;
   if (!data) {
-    /* 读取失败 ≠ 暂无数据：失败要说失败并给重试；只有成功拿到空才是「暂无」。 */
+    /* 快照缺失 ≠ 读取失败 ≠ 暂无数据：没拉过数据要给「拉取并分析」而不是
+       误导性的重试；瞬时失败才给重试；只有成功拿到空才是「暂无」。 */
+    if (error?.bizCode === 'public_snapshot_unavailable') {
+      return (
+        <div className="flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-6 text-center">
+          <p className="text-body-s text-ink-500">{t('该股尚未拉取数据，拉取后自动分析')}</p>
+          <ManualStockPull ticker={ticker} minimal className="mt-2.5" onPulled={() => onPulled?.()} />
+        </div>
+      );
+    }
     return (
       <div className="rounded-md border border-line bg-card-warm px-4 py-6 text-center">
         <p className="text-body-s text-ink-400">

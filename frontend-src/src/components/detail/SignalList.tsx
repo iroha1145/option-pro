@@ -12,6 +12,7 @@ import { SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { fmtPrice, fmtRelative } from '@/lib/format';
+import ManualStockPull from './ManualStockPull';
 import { t } from '../../i18n/core.ts';
 
 const RESULT_META = {
@@ -23,9 +24,12 @@ const RESULT_META = {
 export default function SignalList({
   ticker,
   refreshVersion = 0,
+  onPulled,
 }: {
   ticker: string;
   refreshVersion?: number;
+  /** 快照缺失 CTA 拉取成功后的整页刷新回调（StockDetail.handlePulled） */
+  onPulled?: () => void;
 }) {
   const signalsQ = usePolling(
     () => signalsApi.stock(ticker),
@@ -42,6 +46,16 @@ export default function SignalList({
   if (!hasSignals && !hasEvents) {
     if (signalsQ.loading || eventsQ.loading) {
       return <SkeletonText lines={4} className="py-2" />;
+    }
+    /* 快照缺失 ≠ 读取失败：没拉过数据的股票给「拉取并分析」，不误导重试 */
+    if (signalsQ.error?.bizCode === 'public_snapshot_unavailable' && !signals) {
+      return (
+        <div className="flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-8 text-center">
+          <Icon name="radar" size={26} className="text-ink-300" />
+          <p className="mt-3 text-body-s font-medium text-ink-600">{t('该股尚未拉取数据，拉取后自动分析')}</p>
+          <ManualStockPull ticker={ticker} minimal className="mt-3" onPulled={() => onPulled?.()} />
+        </div>
+      );
     }
     const failed = (signalsQ.error && !signals) || (eventsQ.error && !events);
     if (failed) {

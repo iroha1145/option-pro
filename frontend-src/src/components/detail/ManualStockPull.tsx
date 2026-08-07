@@ -28,11 +28,14 @@ export default function ManualStockPull({
   ticker,
   onPulled,
   compact = false,
+  minimal = false,
   className,
 }: {
   ticker: string;
   onPulled?: (result: StockPullResult) => void;
   compact?: boolean;
+  /** 卡片内嵌 CTA：只渲染按钮与错误行（成功后由 onPulled 整页刷新，无需进度明细） */
+  minimal?: boolean;
   className?: string;
 }) {
   const latestTickerRef = useRef(ticker);
@@ -110,6 +113,31 @@ export default function ManualStockPull({
   const availableCount = result
     ? RESOURCE_LABELS.filter(({ key }) => result.resources[key].status === 'available').length
     : 0;
+
+  if (minimal) {
+    return (
+      <div className={cn('space-y-1.5', className)}>
+        <button
+          type="button"
+          onClick={() => void pull()}
+          disabled={running}
+          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] duration-fast hover:brightness-105 disabled:cursor-wait disabled:opacity-70"
+        >
+          {running ? (
+            <span className="size-3 animate-spin rounded-full border-2 border-white/35 border-t-white" aria-hidden="true" />
+          ) : (
+            <Icon name="refresh" size={12} />
+          )}
+          {running ? t('正在拉取真实数据') : t('拉取并分析')}
+        </button>
+        {error && (
+          <p role="alert" className="text-caption text-down-700">
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={cn(compact ? 'space-y-2' : 'rounded-md border border-brand-100 bg-brand-50/45 p-3', className)}>

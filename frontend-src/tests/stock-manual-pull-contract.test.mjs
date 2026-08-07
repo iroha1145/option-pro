@@ -18,11 +18,39 @@ test('stock pull refreshes detail, daily chart, and signals cache paths', async 
     '`/stocks/${encoded}`',
     '`/stocks/${encoded}/chart?range=1d&adjustment=raw`',
     '`/signals/stock/${encoded}`',
+    '`/stocks/${encoded}/technical`',
   ]) {
     assert.ok(stocks.includes(pathSource), `missing invalidation path ${pathSource}`);
   }
   assert.match(stocks, /resetMarketReadPaths\(\[/);
   assert.ok(stocks.includes('{ ttlMs: 60_000, staleMs: 60 * 60_000, force }'));
+});
+
+test('snapshot-missing panels offer pull-and-analyze instead of a dead-end retry', async () => {
+  // 快照缺失 ≠ 读取失败：三块分析卡都必须区分 public_snapshot_unavailable
+  // 并给出「拉取并分析」入口；真正的瞬时失败仍保留重试按钮。
+  const trend = await source('components/detail/TrendBiasPanel.tsx');
+  const list = await source('components/detail/SignalList.tsx');
+  const page = await source('pages/StockDetail.tsx');
+  const control = await source('components/detail/ManualStockPull.tsx');
+  for (const [name, body] of [['TrendBiasPanel', trend], ['SignalList', list], ['StockDetail', page]]) {
+    assert.match(
+      body,
+      /bizCode === 'public_snapshot_unavailable'/,
+      `${name} must branch on the snapshot-missing biz code`,
+    );
+    assert.match(
+      body,
+      /该股尚未拉取数据，拉取后自动分析/,
+      `${name} must explain the pull-then-analyze recovery`,
+    );
+    assert.match(body, /<ManualStockPull[^>]*minimal/, `${name} must embed the minimal pull CTA`);
+  }
+  assert.match(trend, /趋势偏向读取失败/);
+  assert.match(list, /信号数据读取失败/);
+  assert.match(page, /技术结构读取失败 · 不代表该股没有结构/);
+  assert.match(control, /minimal/);
+  assert.match(control, /拉取并分析/);
 });
 
 test('stock pull UI reports truthful three-resource progress and persistence', async () => {
