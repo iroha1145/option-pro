@@ -94,7 +94,8 @@ export default function SignalList({
         <SignalLines signals={signals!} />
       )}
       {events?.slice(0, 4).map((e) => {
-        const meta = RESULT_META[e.result];
+        /* 契约 result 若透传了三态之外的值，不渲染状态章（不猜语义、不崩页） */
+        const meta = RESULT_META[e.result] as (typeof RESULT_META)[keyof typeof RESULT_META] | undefined;
         return (
           <div
             key={e.id}
@@ -102,10 +103,15 @@ export default function SignalList({
           >
             <SignalChip type={e.type} label={e.label} />
             <div className="min-w-0 flex-1">
-              <p className="font-mono text-body-s text-ink-800 tnum">{t('触发')} {fmtPrice(e.price)}</p>
+              {/* 盘前跳空等事件可无成交价（event_price=null）——显「—」，不崩页 */}
+              <p className="font-mono text-body-s text-ink-800 tnum">
+                {t('触发')} {typeof e.price === 'number' && Number.isFinite(e.price) ? fmtPrice(e.price) : '—'}
+              </p>
               <p className="text-micro text-ink-400">{fmtRelative(e.at)}</p>
             </div>
-            <span className={cn('rounded-xs px-1.5 py-0.5 text-micro font-medium', meta.cls)}>{meta.text}</span>
+            {meta && (
+              <span className={cn('rounded-xs px-1.5 py-0.5 text-micro font-medium', meta.cls)}>{meta.text}</span>
+            )}
           </div>
         );
       })}

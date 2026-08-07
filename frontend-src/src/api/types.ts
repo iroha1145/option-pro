@@ -385,7 +385,8 @@ export interface BreakoutEvent {
   type: SignalType;
   label: string;
   at: string;
-  price: number;
+  /** 事件价：盘前跳空等 setup 的契约 event_price 可为 null（无成交锚点） */
+  price: number | null;
   result: 'hit' | 'failed' | 'pending';
 }
 export interface BreakoutEventDetail extends BreakoutEvent {

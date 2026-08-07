@@ -43,7 +43,10 @@ export default function SidebarEvents({ ticker }: { ticker: string }) {
           {items.map((e) => (
             <li key={e.id} className="flex items-center gap-2.5">
               <SignalChip type={e.type} label={e.label} />
-              <span className="font-mono text-caption text-ink-800 tnum">{fmtPrice(e.price)}</span>
+              {/* 盘前跳空等事件可无成交价（event_price=null）——显「—」，不崩页 */}
+              <span className="font-mono text-caption text-ink-800 tnum">
+                {typeof e.price === 'number' && Number.isFinite(e.price) ? fmtPrice(e.price) : '—'}
+              </span>
               <span className="ml-auto text-micro text-ink-400">{fmtRelative(e.at)}</span>
             </li>
           ))}

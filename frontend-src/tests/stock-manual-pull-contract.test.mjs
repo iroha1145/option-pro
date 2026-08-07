@@ -91,6 +91,20 @@ test('public breakout research pages and drawers expose the same manual recovery
   assert.match(lead, /打开研究页/);
 });
 
+test('breakout event rows survive a null event price without inventing one', async () => {
+  // 盘前跳空（PREMARKET_GAP）过期事件的 event_price 为 null：AXTI 曾整页崩在
+  // fmtPrice(null).toLocaleString。事件价显「—」，未知 result 不渲染状态章。
+  const sidebar = await source('components/detail/SidebarEvents.tsx');
+  const list = await source('components/detail/SignalList.tsx');
+  const types = await source('api/types.ts');
+  for (const body of [sidebar, list]) {
+    assert.match(body, /typeof e\.price === 'number' && Number\.isFinite\(e\.price\) \? fmtPrice\(e\.price\) : '—'/);
+  }
+  assert.doesNotMatch(sidebar, /\{fmtPrice\(e\.price\)\}/);
+  assert.match(list, /meta && \(/);
+  assert.match(types, /price: number \| null;/);
+});
+
 test('index cards open the detail page with the real symbol, never the display code', async () => {
   // /stock/SPX 会整页「行情服务暂不可用」：详情页与 /stocks 端点只认 ^GSPC。
   const cards = await source('components/market/IndexCards.tsx');
