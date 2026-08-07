@@ -39,8 +39,13 @@ export interface AccessStatus {
 export type SignalType = 'breakout' | 'volume' | 'pullback' | 'ma-touch' | 'gap' | 'iv-spike';
 export interface Signal {
   type: SignalType;
-  label: string;          // 突破 / 放量 / 回踩 …
+  label: string;          // 突破 / 放量 / 回踩 …（完整句，兼容旧 chip 用法）
   at: string;             // ISO
+  /** live 契约的结构化投影（文字行排版用；mock 简签无这些字段） */
+  name?: string;          // 指标名（已本地化）
+  value?: number;         // 指标读数
+  reading?: string;       // 顶部风险 / 底部修复（已本地化）
+  score?: number;         // 方向分 0-100
 }
 
 export interface WatchlistItem {

@@ -30,10 +30,15 @@ function mapStockSignals(d: unknown): Signal[] {
     else if (key.includes('return') || key.includes('relative_strength') || key.includes('macd')) {
       type = value >= 0 ? 'breakout' : 'pullback';
     }
+    const reading = topScore !== null && topScore >= (bottomScore ?? -1) ? t('顶部风险') : t('底部修复');
     return {
       type,
-      label: `${label} ${value} · ${topScore !== null && topScore >= (bottomScore ?? -1) ? t('顶部风险') : t('底部修复')} ${activeScore}`,
+      label: `${label} ${value} · ${reading} ${activeScore}`,
       at,
+      name: label,
+      value,
+      reading,
+      score: activeScore,
     };
   });
 }

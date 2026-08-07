@@ -14,7 +14,7 @@ import type { ScreenerRow } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { fmtCompact } from '@/lib/format';
 import Icon from '@/components/icons';
-import SignalChip from '@/components/shared/SignalChip';
+import SignalLines from '@/components/shared/SignalLines';
 import Sparkline from '@/components/charts/Sparkline';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import { strengthBarClass } from '@/components/shared/StrengthBar';
@@ -260,11 +260,8 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
           ) : signals.signals.length === 0 ? (
             <p className="text-caption text-ink-400">{t('— 暂无信号')}</p>
           ) : (
-            <span className="flex flex-wrap gap-1.5">
-              {signals.signals.map((s, i) => (
-                <SignalChip key={i} type={s.type} label={s.label} />
-              ))}
-            </span>
+            /* 文字行排版（对齐日股展开区）：卡片 chip 一屏十来个太闹 */
+            <SignalLines signals={signals.signals} />
           )}
         </div>
         <div className="mt-3 flex items-center justify-between border-t border-line pt-3">

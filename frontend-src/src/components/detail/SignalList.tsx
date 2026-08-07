@@ -8,6 +8,7 @@ import { usePolling } from '@/hooks/usePolling';
 import { signalsApi } from '@/api/modules/signals';
 import { breakoutsApi } from '@/api/modules/breakouts';
 import SignalChip from '@/components/shared/SignalChip';
+import SignalLines from '@/components/shared/SignalLines';
 import { SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
@@ -89,14 +90,8 @@ export default function SignalList({
   return (
     <div className="space-y-2">
       {hasSignals && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {signals!.map((s, i) => (
-            <span key={`${s.type}-${i}`} className="inline-flex items-center gap-1.5">
-              <SignalChip type={s.type} label={s.label} />
-              <span className="text-micro text-ink-400">{fmtRelative(s.at)}</span>
-            </span>
-          ))}
-        </div>
+        /* 文字行排版（对齐日股展开区）：原卡片 chip 一行一句读起来太密 */
+        <SignalLines signals={signals!} />
       )}
       {events?.slice(0, 4).map((e) => {
         const meta = RESULT_META[e.result];

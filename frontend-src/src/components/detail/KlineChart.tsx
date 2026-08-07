@@ -126,6 +126,26 @@ function barTooltipTitle(iso: string, range: ChartRange): string {
     : ymd;
 }
 
+/**
+ * 日/周 K 默认视窗（参考日股工作台：日 K 默认约 6 个月，不把全史挤进一屏）。
+ * inside 缩放：滚轮/双指可回看全部历史；数据仍全量在图，叠加点位索引不受影响。
+ */
+const DEFAULT_ZOOM_BARS: Partial<Record<ChartRange, number>> = { '1d': 126, '1w': 104 };
+
+function insideZoom(range: ChartRange, barCount: number, axes: number[]) {
+  const window = DEFAULT_ZOOM_BARS[range];
+  if (!window || barCount <= window) return undefined;
+  return [
+    {
+      type: 'inside' as const,
+      xAxisIndex: axes,
+      startValue: barCount - window,
+      endValue: barCount - 1,
+      minValueSpan: 15,
+    },
+  ];
+}
+
 /** 回撤尺覆盖层：pending = 已选起点待终点；done = 测量完成 */
 type MeasureOverlay =
   | { kind: 'pending'; aIdx: number }
@@ -247,6 +267,7 @@ function buildOption(
     return {
       ...common,
       grid: baseGridArea(),
+      dataZoom: insideZoom(range, bars.length, [0]),
       xAxis: {
         type: 'category' as const,
         data: labels,
@@ -332,6 +353,7 @@ function buildOption(
       { left: 8, right: 8, top: 12, height: '60%', containLabel: true },
       { left: 8, right: 8, top: '76%', height: '17%', containLabel: true },
     ],
+    dataZoom: insideZoom(range, bars.length, [0, 1]),
     xAxis: [
       {
         type: 'category' as const,

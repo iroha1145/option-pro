@@ -296,8 +296,9 @@ export default function StockDetail() {
         </aside>
       </div>
 
-      {/* 行2: 趋势偏向 + 信号(7) · K线结构(5) */}
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
+      {/* 行2: 趋势偏向 + 信号(7) · K线结构(5)。items-start：卡片贴内容收高，
+          结构卡在 base=null 时很短，不跟着左列拉出一大块空白（对齐日股观感）。 */}
+      <div className="mt-6 grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
         <div className="card-surface p-5 xl:col-span-7">
           <p className="eyebrow">TREND BIAS · SIGNALS</p>
           <h3 className="mb-4 mt-1.5 text-h3 text-ink-900">{__t('趋势偏向与近期信号')}</h3>
@@ -328,8 +329,8 @@ export default function StockDetail() {
         </div>
       </div>
 
-      {/* 行3: 宏观适配 + AI 分析 */}
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
+      {/* 行3: 宏观适配 + AI 分析（items-start 同行2） */}
+      <div className="mt-6 grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
         <div className="card-surface p-5 xl:col-span-5">
           <MacroFitPanel
             score={detail.macroFit}
