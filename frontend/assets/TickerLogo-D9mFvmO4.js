@@ -1,0 +1,1 @@
+import{j as i,c as r}from"./index-z5qNUhh_.js";function o({ticker:n,size:e=32,className:t}){return i.jsx("span",{className:r("inline-flex shrink-0 select-none items-center justify-center rounded-sm bg-brand-50 font-display font-bold text-brand-700",t),style:{width:e,height:e,fontSize:e*.5,lineHeight:1},"aria-hidden":"true",children:n.slice(0,1)})}export{o as T};

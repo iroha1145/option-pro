@@ -30,13 +30,13 @@ import { SIGNAL_LABELS, SIGNAL_TYPES } from '@/lib/signalLabels';
 const infoOf = (t: string): TickerInfo => TICKER_POOL.find((x) => x.ticker === t) ?? TICKER_POOL[0];
 
 /* ---------------- 指数 tape ---------------- */
-const INDEX_BASE: { code: string; name: string; base: number }[] = [
-  { code: 'SPX', name: __t('标普 500'), base: 5972.4 },
-  { code: 'NDX', name: __t('纳指 100'), base: 21468.2 },
-  { code: 'DJI', name: '道琼斯', base: 43828.1 },
-  { code: 'RUT', name: __t('罗素 2000'), base: 2382.6 },
-  { code: 'SOX', name: '费城半导体', base: 5124.7 },
-  { code: 'VIX', name: __t('波动率指数'), base: 14.86 },
+const INDEX_BASE: { code: string; symbol: string; name: string; base: number }[] = [
+  { code: 'SPX', symbol: '^GSPC', name: __t('标普 500'), base: 5972.4 },
+  { code: 'NDX', symbol: '^NDX', name: __t('纳指 100'), base: 21468.2 },
+  { code: 'DJI', symbol: '^DJI', name: '道琼斯', base: 43828.1 },
+  { code: 'RUT', symbol: '^RUT', name: __t('罗素 2000'), base: 2382.6 },
+  { code: 'SOX', symbol: '^SOX', name: '费城半导体', base: 5124.7 },
+  { code: 'VIX', symbol: '^VIX', name: __t('波动率指数'), base: 14.86 },
 ];
 
 interface QuoteState { price: number; prevClose: number }
@@ -54,11 +54,11 @@ function jitter(state: QuoteState, vol = 0.0011): void {
 }
 
 export function getIndices(): IndexQuote[] {
-  return INDEX_BASE.map(({ code, name }) => {
+  return INDEX_BASE.map(({ code, symbol, name }) => {
     const s = indexState.get(code)!;
     jitter(s, code === 'VIX' ? 0.004 : 0.0009);
     const change = round2(s.price - s.prevClose);
-    return { code, name, price: s.price, change, changePct: round4(change / s.prevClose) * 100 };
+    return { code, symbol, name, price: s.price, change, changePct: round4(change / s.prevClose) * 100 };
   });
 }
 

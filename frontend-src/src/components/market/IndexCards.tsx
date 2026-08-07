@@ -48,11 +48,12 @@ const IndexCard = memo(function IndexCard({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.045, 0.4) }}
-      /* 点卡片开该指数的详情抽屉——与全站「点代码开抽屉、保留上下文」一致。
+      /* 点卡片开该指数的详情页——与全站「点代码开详情」一致。
          这里不做「选中」：本页四个面板都是全市场读数，没有按指数的版本可切换，
          留一个改不动数据的选中态等于承诺一个兑现不了的交互。?index= 仍然保留，
-         但只用于从顶部 tape 跳进来时高亮定位。 */
-      onClick={() => onOpen(quote.code)}
+         但只用于从顶部 tape 跳进来时高亮定位。
+         必须传真实符号 ^GSPC：详情页与 /stocks 端点不认显示短码 SPX。 */
+      onClick={() => onOpen(quote.symbol || quote.code)}
       /* 上浮 -3px/240ms 与自选卡、热点卡同一套手感；走 whileHover 而不是 CSS
          hover:-translate-y，因为入场动画结束后 framer 会留下内联 transform，
          把 CSS 位移压掉。 */

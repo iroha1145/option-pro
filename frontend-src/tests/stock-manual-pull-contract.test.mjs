@@ -91,6 +91,17 @@ test('public breakout research pages and drawers expose the same manual recovery
   assert.match(lead, /打开研究页/);
 });
 
+test('index cards open the detail page with the real symbol, never the display code', async () => {
+  // /stock/SPX 会整页「行情服务暂不可用」：详情页与 /stocks 端点只认 ^GSPC。
+  const cards = await source('components/market/IndexCards.tsx');
+  const market = await source('api/modules/market.ts');
+  const mocks = await source('mocks/fixtures.ts');
+  assert.match(cards, /onOpen\(quote\.symbol \|\| quote\.code\)/);
+  assert.doesNotMatch(cards, /onOpen\(quote\.code\)(?!\s*\|\|)/);
+  assert.match(market, /symbol,\n/);
+  assert.match(mocks, /symbol: '\^GSPC'/);
+});
+
 test('live trend bias maps optional signal fields and renders missing data without inventing values', async () => {
   const detailApi = await source('components/detail/api.ts');
   const trend = await source('components/detail/TrendBiasPanel.tsx');

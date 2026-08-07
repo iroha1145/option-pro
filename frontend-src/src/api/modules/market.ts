@@ -35,6 +35,9 @@ function mapIndices(body: unknown): IndexQuote[] {
     const mapped = INDEX_SYMBOL_MAP[symbol];
     return [{
       code: mapped?.code ?? symbol,
+      // 真实符号必须随行保留：详情页与全部 /stocks 端点只认 ^GSPC，
+      // 拿显示短码 SPX 去开详情会整页报「行情服务暂不可用」。
+      symbol,
       name: mapped?.name ?? pickS(r, 'name') ?? symbol,
       price,
       change,

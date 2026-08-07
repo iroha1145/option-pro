@@ -3,7 +3,8 @@ import type { MacroFitDriver } from '@/lib/macroFit';
 
 /* ---------- 市场 ---------- */
 export interface IndexQuote {
-  code: string;        // SPX / NDX / DJI / RUT / VIX
+  code: string;        // SPX / NDX / DJI / RUT / VIX（显示用短码）
+  symbol: string;      // ^GSPC / ^IXIC …（真实行情符号——详情页/接口只认这个）
   name: string;
   price: number;
   change: number;
