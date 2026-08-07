@@ -12,8 +12,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 import ReactECharts from '@/components/charts/ReactECharts';
 import Segmented from '@/components/shared/Segmented';
 import EmptyState from '@/components/shared/EmptyState';
+import InfoHint from '@/components/shared/InfoHint';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
+import { STRUCTURE_HINTS } from '@/lib/structureHints';
 import { usePolling } from '@/hooks/usePolling';
 import { baseAnimation, CH, glassTooltip, stippleAreaStyle, type ChartOption, type EChartsInstance } from '@/lib/chart';
 import {
@@ -634,17 +636,20 @@ export default function KlineChart({
             onChange={setMode}
           />
           {overlays !== null && (
-            <button
-              type="button"
-              aria-pressed={levelsAvailable && showLevels}
-              aria-label={t('在图上叠加技术点位（阻力带/失效位/摆动点）')}
-              disabled={!levelsAvailable}
-              title={levelsAvailable ? undefined : t('技术点位按日线结构计算，仅日 K 线模式绘制')}
-              onClick={() => setShowLevels((prev) => !prev)}
-              className={cn(toggleButtonCls(levelsAvailable && showLevels), !levelsAvailable && 'cursor-not-allowed opacity-50')}
-            >
-              {t('技术点位')}
-            </button>
+            <span className="inline-flex items-center gap-1">
+              <button
+                type="button"
+                aria-pressed={levelsAvailable && showLevels}
+                aria-label={t('在图上叠加技术点位（阻力带/失效位/摆动点）')}
+                disabled={!levelsAvailable}
+                title={levelsAvailable ? undefined : t('技术点位按日线结构计算，仅日 K 线模式绘制')}
+                onClick={() => setShowLevels((prev) => !prev)}
+                className={cn(toggleButtonCls(levelsAvailable && showLevels), !levelsAvailable && 'cursor-not-allowed opacity-50')}
+              >
+                {t('技术点位')}
+              </button>
+              <InfoHint hint={STRUCTURE_HINTS.chart_overlays} side="bottom" align="end" size={12} />
+            </span>
           )}
           {measureActive && mode === 'candle' && (
             <button
