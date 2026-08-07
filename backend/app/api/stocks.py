@@ -32,8 +32,10 @@ from app.access import (
 from app.data_paths import get_data_paths
 from app.personal_config import get_personal_config
 from app.public_home_snapshot import (
+    PUBLIC_HOME_INDEX_SYMBOLS,
     PUBLIC_HOME_RESOURCE_SPECS,
     breakout_lead_chart_parameters,
+    public_home_resource_parameters,
     read_owner_public_home_entry_async,
     read_public_home_resource_async,
 )
@@ -2590,6 +2592,67 @@ async def _attach_macro_fit_async(symbol: str, payload: Any) -> Any:
     return await asyncio.to_thread(_attach_macro_fit, symbol, payload)
 
 
+async def _index_overview_from_public_snapshot(
+    symbol: str,
+    *,
+    now: float,
+) -> dict[str, Any] | None:
+    """访客回退：指数代码从 public_home 的 indices 快照拼最小行情头。
+
+    /market 纸带对访客永远可读，同一份快照顺带满足 /stock/^GSPC 的页面准入——
+    手动拉取的 overview 快照只有 24h，过期后指数页不该退回整页空态。
+    只填快照真实有的字段（价/涨跌幅/由涨跌幅反推的昨收），其余留空显「—」。
+    """
+
+    if symbol not in PUBLIC_HOME_INDEX_SYMBOLS:
+        return None
+    payload = await read_public_home_resource_async(
+        "indices",
+        parameters=public_home_resource_parameters("indices", now=now),
+        now=now,
+    )
+    if not isinstance(payload, dict):
+        return None
+    row = next(
+        (
+            item
+            for item in (payload.get("indices") or [])
+            if isinstance(item, dict) and item.get("symbol") == symbol
+        ),
+        None,
+    )
+    if row is None:
+        return None
+    try:
+        price = float(row.get("price"))
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(price) or price <= 0:
+        return None
+    change_pct_raw = row.get("change_percent")
+    change_pct: float | None
+    try:
+        change_pct = float(change_pct_raw)
+        if not math.isfinite(change_pct) or change_pct <= -100:
+            change_pct = None
+    except (TypeError, ValueError):
+        change_pct = None
+    prev_close = (
+        round(price / (1 + change_pct / 100), 4) if change_pct is not None else None
+    )
+    return {
+        "ticker": symbol,
+        "price": price,
+        "change_percent": change_pct,
+        "prev_close": prev_close,
+        "change": round(price - prev_close, 4) if prev_close is not None else None,
+        "as_of": payload.get("as_of"),
+        "price_provider": "public_home:indices",
+        "snapshot_source": "indices",
+        "_cached": True,
+    }
+
+
 @router.get("/{ticker}")
 async def stock_overview(ticker: str):
     owner = current_request_is_owner()
@@ -2627,6 +2690,10 @@ async def stock_overview(ticker: str):
             parameters={"ticker": symbol},
             now=now,
         )
+        if result is None:
+            # 指数码（/market 指数卡点开）没有 focus 快照；纸带那份 indices
+            # 快照对访客常绿，用它保住页面准入，K线/结构仍由拉取快照供给。
+            result = await _index_overview_from_public_snapshot(symbol, now=now)
         if result is None:
             raise exc
         return await _attach_macro_fit_async(symbol, _sanitize(result))

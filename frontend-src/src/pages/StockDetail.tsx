@@ -254,8 +254,9 @@ export default function StockDetail() {
         <ManualStockPull ticker={detail.ticker} onPulled={handlePulled} compact className="mt-3" />
       )}
 
-      {/* 行1: K线 + 右栏 */}
-      <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-12">
+      {/* 行1: K线(8) + 关键数据(4)。右栏只留关键数据：技术指标与突破事件
+          下沉到行2/行3 与对面高卡配对，消掉图下方那块大留白（对齐日股观感）。 */}
+      <div className="mt-8 grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
         <div className="xl:col-span-8">
           <div className="card-surface p-5">
             <KlineChart
@@ -272,8 +273,24 @@ export default function StockDetail() {
             </p>
           </div>
         </div>
-        <aside className="grid content-start gap-6 xl:col-span-4">
+        <aside className="xl:col-span-4">
           <KeyStats detail={detail} />
+        </aside>
+      </div>
+
+      {/* 行2: 趋势偏向 + 信号(7) · 技术指标 + K线结构(5 竖排)。
+          右列两卡叠放后与左列高卡大致等高；items-start 让残差只是背景。 */}
+      <div className="mt-6 grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
+        <div className="card-surface p-5 xl:col-span-7">
+          <p className="eyebrow">TREND BIAS · SIGNALS</p>
+          <h3 className="mb-4 mt-1.5 text-h3 text-ink-900">{__t('趋势偏向与近期信号')}</h3>
+          <TrendBiasPanel ticker={detail.ticker} refreshVersion={dataRevision} onPulled={handlePulled} />
+          <div className="mt-6">
+            <p className="eyebrow mb-3">RECENT SIGNALS</p>
+            <SignalList ticker={detail.ticker} refreshVersion={dataRevision} onPulled={handlePulled} />
+          </div>
+        </div>
+        <div className="grid content-start gap-6 xl:col-span-5">
           <div className="card-surface p-5">
             <p className="eyebrow">TECHNICALS</p>
             <h3 className="mt-1.5 text-h3 text-ink-900">{__t('技术指标')}</h3>
@@ -292,55 +309,43 @@ export default function StockDetail() {
               <TechnicalPanel technical={null} />
             )}
           </div>
-          <SidebarEvents ticker={detail.ticker} />
-        </aside>
-      </div>
-
-      {/* 行2: 趋势偏向 + 信号(7) · K线结构(5)。items-start：卡片贴内容收高，
-          结构卡在 base=null 时很短，不跟着左列拉出一大块空白（对齐日股观感）。 */}
-      <div className="mt-6 grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
-        <div className="card-surface p-5 xl:col-span-7">
-          <p className="eyebrow">TREND BIAS · SIGNALS</p>
-          <h3 className="mb-4 mt-1.5 text-h3 text-ink-900">{__t('趋势偏向与近期信号')}</h3>
-          <TrendBiasPanel ticker={detail.ticker} refreshVersion={dataRevision} onPulled={handlePulled} />
-          <div className="mt-6">
-            <p className="eyebrow mb-3">RECENT SIGNALS</p>
-            <SignalList ticker={detail.ticker} refreshVersion={dataRevision} onPulled={handlePulled} />
+          <div className="card-surface p-5">
+            <p className="eyebrow">CHART STRUCTURE</p>
+            <h3 className="mt-1.5 text-h3 text-ink-900">{__t('K线结构分析')}</h3>
+            {technical ? (
+              <StructurePanel technical={technical} />
+            ) : techQ.loading ? (
+              techSkeleton
+            ) : techSnapshotMissing ? (
+              <div className="mt-3 flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-8 text-center">
+                <Icon name="doc-quote" size={26} className="text-ink-300" />
+                <p className="mt-3 text-body-s font-medium text-ink-600">{__t('该股尚未拉取数据，拉取后自动分析')}</p>
+                <ManualStockPull ticker={detail.ticker} minimal className="mt-3" onPulled={handlePulled} />
+              </div>
+            ) : techError ? (
+              techRetryRow
+            ) : (
+              <StructurePanel technical={null} />
+            )}
           </div>
         </div>
-        <div className="card-surface p-5 xl:col-span-5">
-          <p className="eyebrow">CHART STRUCTURE</p>
-          <h3 className="mt-1.5 text-h3 text-ink-900">{__t('K线结构分析')}</h3>
-          {technical ? (
-            <StructurePanel technical={technical} />
-          ) : techQ.loading ? (
-            techSkeleton
-          ) : techSnapshotMissing ? (
-            <div className="mt-3 flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-8 text-center">
-              <Icon name="doc-quote" size={26} className="text-ink-300" />
-              <p className="mt-3 text-body-s font-medium text-ink-600">{__t('该股尚未拉取数据，拉取后自动分析')}</p>
-              <ManualStockPull ticker={detail.ticker} minimal className="mt-3" onPulled={handlePulled} />
-            </div>
-          ) : techError ? (
-            techRetryRow
-          ) : (
-            <StructurePanel technical={null} />
-          )}
-        </div>
       </div>
 
-      {/* 行3: 宏观适配 + AI 分析（items-start 同行2） */}
+      {/* 行3: 宏观适配 + 突破事件(5 竖排) · AI 分析(7)（items-start 同行2） */}
       <div className="mt-6 grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
-        <div className="card-surface p-5 xl:col-span-5">
-          <MacroFitPanel
-            score={detail.macroFit}
-            tailwind={detail.macroTailwind}
-            confidence={detail.macroFitConfidence}
-            supporting={detail.macroSupporting}
-            opposing={detail.macroOpposing}
-            technicalGap={detail.macroTechnicalGap}
-            status={detail.macroShadowStatus}
-          />
+        <div className="grid content-start gap-6 xl:col-span-5">
+          <div className="card-surface p-5">
+            <MacroFitPanel
+              score={detail.macroFit}
+              tailwind={detail.macroTailwind}
+              confidence={detail.macroFitConfidence}
+              supporting={detail.macroSupporting}
+              opposing={detail.macroOpposing}
+              technicalGap={detail.macroTechnicalGap}
+              status={detail.macroShadowStatus}
+            />
+          </div>
+          <SidebarEvents ticker={detail.ticker} />
         </div>
         <div className="xl:col-span-7">
           <AiAnalysisCard key={detail.ticker} ticker={detail.ticker} />

@@ -742,3 +742,68 @@ def test_directly_mounted_public_router_keeps_cold_cache_snapshot_only(
     assert head.status_code in {405, 503}
     assert calls == []
     assert list(tmp_path.iterdir()) == []
+
+
+def test_guest_index_overview_falls_back_to_indices_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """指数码（/market 指数卡点开）的访客行情头吃纸带 indices 快照。
+
+    手动拉取的 overview 快照只有 24h；过期后指数页不该退回整页空态，
+    纸带那份对访客常绿的快照足以保住页面准入。
+    """
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+
+    async def fake_read(resource, *, parameters=None, now=None):
+        if resource == "indices":
+            return {
+                "indices": [
+                    {"symbol": "^GSPC", "price": 7709.96, "change_percent": -0.18},
+                    {"symbol": "^N225", "price": None, "change_percent": None},
+                ],
+                "as_of": "2026-08-07T07:00:00+00:00",
+            }
+        return None
+
+    monkeypatch.setattr(stocks, "read_public_home_resource_async", fake_read)
+
+    async def scenario() -> dict:
+        with request_owner_access_context(False):
+            return await stocks.stock_overview("^gspc")
+
+    payload = asyncio.run(scenario())
+    assert payload["ticker"] == "^GSPC"
+    assert payload["price"] == 7709.96
+    assert payload["snapshot_source"] == "indices"
+    assert payload["prev_close"] == pytest.approx(7709.96 / (1 - 0.0018), abs=0.01)
+    assert payload["as_of"] == "2026-08-07T07:00:00+00:00"
+
+
+def test_guest_index_overview_rejects_unusable_snapshot_rows(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """快照里价格为 None 的指数、以及非指数码，仍保持 503 边界。"""
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+
+    async def fake_read(resource, *, parameters=None, now=None):
+        if resource == "indices":
+            return {
+                "indices": [{"symbol": "^N225", "price": None, "change_percent": None}],
+                "as_of": "2026-08-07T07:00:00+00:00",
+            }
+        return None
+
+    monkeypatch.setattr(stocks, "read_public_home_resource_async", fake_read)
+
+    async def scenario() -> None:
+        with request_owner_access_context(False):
+            # 快照行存在但无可用价格 → 拒绝拼头，维持诚实 503
+            await _expect_unavailable(stocks.stock_overview("^N225"))
+            # 普通股票代码不走指数回退
+            await _expect_unavailable(stocks.stock_overview("AAPL"))
+
+    asyncio.run(scenario())
