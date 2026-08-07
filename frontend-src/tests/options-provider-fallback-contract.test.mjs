@@ -157,7 +157,7 @@ test('旧到期日返回 400 后强制刷新新列表并恢复期权链', async 
 });
 
 test('详情错误只在明确缺失快照时显示手动拉取', async () => {
-  const drawer = await source('components/StockDrawerBody.tsx');
+  const drawer = await source('pages/StockDetail.tsx');
 
   assert.match(drawer, /manualRecovery = publicSnapshotMissing \|\| \(!error && !detail\)/);
   assert.match(drawer, /loginExpired[\s\S]*重新登录/);

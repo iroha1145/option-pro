@@ -22,7 +22,7 @@ import { mapMacroFitDrivers } from '@/api/macroFields';
 import { postAiJob } from '@/api/modules/ai-jobs';
 import * as fx from '@/mocks/fixtures';
 import * as fx2 from '@/mocks/fixtures2';
-import type { AiJob, StockChart, StockDetail } from '@/api/types';
+import type { AiJob, StockChart, StockDetail, TechnicalStructure, TechSwingPoint } from '@/api/types';
 import type {
   ChartBarEx,
   StockChartEx,
@@ -558,8 +558,137 @@ export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
  * 失败在这里吞掉。预取不是数据来源 —— 各面板自己那次调用共享的是同一个 promise，
  * 该失败照样失败，错误态仍由面板自己呈现。
  */
+/* ---------------- 技术结构（/stocks/{t}/technical） ---------------- */
+
+/** 摆动点 t（epoch 秒/毫秒）→ 与 mapBar 同一 ISO 口径，图表按同源字符串对齐 */
+function mapSwingPoint(raw: Rec): TechSwingPoint | null {
+  const price = pickN(raw, 'price');
+  const tradeDate = pickS(raw, 'trade_date') ?? '';
+  const rawTime = raw.t;
+  let iso = pickS(raw, 't');
+  if (iso === null && typeof rawTime === 'number' && Number.isFinite(rawTime)) {
+    const epoch = rawTime >= 100_000_000_000 ? rawTime : rawTime * 1_000;
+    const parsed = new Date(epoch);
+    iso = Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+  }
+  if (iso === null && tradeDate === '') return null;
+  return { t: iso ?? tradeDate, trade_date: tradeDate || (iso ?? '').slice(0, 10), price };
+}
+
+function mapSwingList(body: Rec, key: string): TechSwingPoint[] {
+  return unwrap(body, key).flatMap((item) => {
+    const point = mapSwingPoint(item);
+    return point ? [point] : [];
+  });
+}
+
+/**
+ * live 归一：数值原样、结构/形态/量价的中文标签**保持原文透传**——渲染处统一
+ * 过 t()（与雷达 structure_label 同纪律，勿在此 pickLabel，双侧翻译会让
+ * ja 落空）。
+ */
+function mapTechnicalStructure(body: unknown): TechnicalStructure {
+  const r = asRec(body);
+  const pa = asRec(r.price_action);
+  const vp = asRec(r.vol_price);
+  const tech = asRec(r.technicals);
+  const macd = asRec(tech.macd);
+  const overlays = asRec(r.chart_overlays);
+  const baseRaw = r.base === null || r.base === undefined ? null : asRec(r.base);
+  const strList = (rec: Rec, key: string): string[] =>
+    unwrap(rec, key).flatMap((item) => (typeof item === 'string' ? [item] : []));
+  const base = baseRaw === null
+    ? null
+    : {
+        pivot_id: pickS(baseRaw, 'pivot_id'),
+        pivot_price: pickN(baseRaw, 'pivot_price'),
+        resistance_low: pickN(baseRaw, 'resistance_low'),
+        resistance_high: pickN(baseRaw, 'resistance_high'),
+        support_low: pickN(baseRaw, 'support_low'),
+        support_high: pickN(baseRaw, 'support_high'),
+        invalidation_price: pickN(baseRaw, 'invalidation_price'),
+        base_start: pickS(baseRaw, 'base_start'),
+        base_end: pickS(baseRaw, 'base_end'),
+        resistance_touches: pickN(baseRaw, 'resistance_touches'),
+        quality: pickN(baseRaw, 'quality'),
+        base_duration_days: pickN(baseRaw, 'base_duration_days'),
+      };
+  return {
+    base,
+    price_action: {
+      status: pickS(pa, 'status') ?? 'missing_data',
+      score: pickN(pa, 'score'),
+      structure: pickS(pa, 'structure') ?? 'range',
+      structure_label: pickS(pa, 'structure_label') ?? '',
+      swing_highs: mapSwingList(pa, 'swing_highs'),
+      swing_lows: mapSwingList(pa, 'swing_lows'),
+      resistance: pickN(pa, 'resistance'),
+      support: pickN(pa, 'support'),
+      resistance_dist_pct: pickN(pa, 'resistance_dist_pct'),
+      support_dist_pct: pickN(pa, 'support_dist_pct'),
+      patterns: strList(pa, 'patterns'),
+      pattern_labels: strList(pa, 'pattern_labels'),
+      spring: pa.spring === true,
+      upthrust: pa.upthrust === true,
+      tags: strList(pa, 'tags'),
+    },
+    vol_price: {
+      status: pickS(vp, 'status') ?? 'missing_data',
+      setup_type: pickS(vp, 'setup_type') ?? '',
+      setup_label: pickS(vp, 'setup_label') ?? '',
+      effort: pickN(vp, 'effort'),
+      result: pickN(vp, 'result'),
+      breakout_quality_adjustment: pickN(vp, 'breakout_quality_adjustment') ?? 0,
+      false_breakout_risk: pickN(vp, 'false_breakout_risk') ?? 0,
+      tags: strList(vp, 'tags'),
+    },
+    technicals: {
+      rsi14: pickN(tech, 'rsi14'),
+      rsi_score: pickN(tech, 'rsi_score'),
+      macd: { histogram: pickN(macd, 'histogram'), direction_pct: pickN(macd, 'direction_pct') },
+      trend_efficiency_63d: pickN(tech, 'trend_efficiency_63d'),
+      ma50_slope_pct_21d: pickN(tech, 'ma50_slope_pct_21d'),
+      return_stability_20d: pickN(tech, 'return_stability_20d'),
+      range_position_60d: pickN(tech, 'range_position_60d'),
+      range_persistence_fast: pickN(tech, 'range_persistence_fast'),
+      range_persistence_slow: pickN(tech, 'range_persistence_slow'),
+    },
+    chart_overlays: {
+      swing_highs: mapSwingList(overlays, 'swing_highs'),
+      swing_lows: mapSwingList(overlays, 'swing_lows'),
+      resistance_high: pickN(overlays, 'resistance_high'),
+      resistance_low: pickN(overlays, 'resistance_low'),
+      support_low: pickN(overlays, 'support_low'),
+      invalidation_price: pickN(overlays, 'invalidation_price'),
+      pivot_price: pickN(overlays, 'pivot_price'),
+      base_start: pickS(overlays, 'base_start'),
+      base_end: pickS(overlays, 'base_end'),
+    },
+    basis: pickS(r, 'basis') ?? 'raw_daily',
+    data_through: pickS(r, 'data_through'),
+    as_of: pickS(r, 'as_of', 'asOf'),
+  };
+}
+
+export function getTechnicalStructure(ticker: string, force = false): Promise<TechnicalStructure> {
+  const symbol = ticker.toUpperCase();
+  return mockOr(
+    () => {
+      if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
+      return fx2.getTechnicalStructure(symbol);
+    },
+    () =>
+      marketGet(`/stocks/${encodeURIComponent(symbol)}/technical`, {
+        ttlMs: 5 * 60_000,
+        staleMs: 60 * 60_000,
+        force,
+      }).then((d) => mapTechnicalStructure(d)),
+  );
+}
+
 export function prefetchStockDetailPanels(ticker: string): void {
   const symbol = ticker.toUpperCase();
   void getDetailChart(symbol, DEFAULT_CHART_RANGE).catch(() => {});
   void getTrendBias(symbol).catch(() => {});
+  void getTechnicalStructure(symbol).catch(() => {});
 }

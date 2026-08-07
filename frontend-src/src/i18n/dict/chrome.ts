@@ -223,5 +223,4 @@ export const CHROME: Dict = {
     'The page reloads after switching so every label matches the chosen language.',
     '全体の表記をそろえるため、切り替え後にページを再読み込みします。',
   ],
-  '{ticker} 详情': ['{ticker} detail', '{ticker} 詳細'],
 };

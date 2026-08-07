@@ -25,13 +25,15 @@ for (const tag of scriptTags) {
   assert.match(tag, /type="module"/, `构建脚本必须是 module script：${tag}`);
 }
 
-// ── 资源引用：全部 ./assets/ 相对路径，且对应文件真实存在 ────────────────────
+// ── 资源引用：全部 /assets/ 绝对根路径，且对应文件真实存在 ──────────────────
+// （原为 ./assets/ 相对路径；/stock/NVDA 这类二级深链硬刷新时相对路径会解析成
+//  /stock/assets/* 直接 404 白屏，详情页改全屏整页后 base 已切绝对根。）
 const scriptRefs = [...index.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/g)].map(match => match[1]);
 const styleRefs = [...index.matchAll(/<link\s+rel="stylesheet"[^>]*\bhref="([^"]+)"/g)].map(match => match[1]);
 for (const ref of [...scriptRefs, ...styleRefs]) {
-  assert.match(ref, /^\.\/assets\//, `脚本/样式引用必须是 ./assets/ 相对路径：${ref}`);
+  assert.match(ref, /^\/assets\//, `脚本/样式引用必须是 /assets/ 绝对根路径：${ref}`);
   await assert.doesNotReject(
-    access(path.join(artifactDir, ref.replace(/^\.\//, ''))),
+    access(path.join(artifactDir, ref.replace(/^\//, ''))),
     `index.html 引用的文件必须存在：${ref}`,
   );
 }
@@ -57,7 +59,7 @@ for (const svg of [
 ]) {
   await assert.doesNotReject(access(path.join(artifactDir, svg)), `根部公共资产缺失：${svg}`);
 }
-assert.match(index, /rel="icon"[^>]*href="\.\/logo\.svg"/, '本地 favicon（logo.svg）必须被链接');
+assert.match(index, /rel="icon"[^>]*href="\/logo\.svg"/, '本地 favicon（logo.svg）必须被链接');
 
 // ── assets 目录（路由级分包时代）────────────────────────────────────────────
 // HTML 只引用唯一的 index 入口 js + 唯一 css；其余为懒加载 chunk。
@@ -75,14 +77,14 @@ for (const name of [...jsAssets, ...cssAssets]) {
     `assets 文件必须带内容哈希（immutable 缓存契约）：${name}`,
   );
 }
-const entryJsRefs = scriptRefs.filter(ref => /^\.\/assets\/index-[^/]+\.js$/.test(ref));
+const entryJsRefs = scriptRefs.filter(ref => /^\/assets\/index-[^/]+\.js$/.test(ref));
 assert.equal(entryJsRefs.length, 1, `index.html 应恰好引用 1 个 index-*.js 入口，实际：${scriptRefs.join(', ') || '无'}`);
 assert.equal(scriptRefs.length, 1, 'index.html 除入口外不得直接引用其他 js（chunk 走动态 import）');
 assert.equal(styleRefs.length, 1, 'index.html 应恰好引用 1 个样式表');
-assert.match(styleRefs[0], /^\.\/assets\/index-[^/]+\.css$/, 'CI 就绪探针依赖 index-*.css 命名');
+assert.match(styleRefs[0], /^\/assets\/index-[^/]+\.css$/, 'CI 就绪探针依赖 index-*.css 命名');
 for (const ref of [...scriptRefs, ...styleRefs]) {
   assert.ok(
-    assetEntries.includes(ref.replace(/^\.\/assets\//, '')),
+    assetEntries.includes(ref.replace(/^\/assets\//, '')),
     `index.html 引用必须落在 assets 目录内：${ref}`,
   );
 }

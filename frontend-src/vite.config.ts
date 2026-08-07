@@ -102,7 +102,10 @@ function stripMocksFromLiveBuild(live: boolean): Plugin {
 export default defineConfig(() => {
   const live = process.env.VITE_API_MODE === "live"
   return {
-    base: './',
+    // 根路径配信专用。相对 base 在 /stock/NVDA 这类二级深链上会把资产解析成
+    // /stock/assets/*（网关对带扩展名路径如实 404）——硬刷新详情页直接白屏。
+    // 详情页改为全屏整页后深链/刷新是常规路径，与 JP 站同口径改为绝对根。
+    base: '/',
     plugins: [react(), stripMocksFromLiveBuild(live)],
     server: {
       port: 3000,

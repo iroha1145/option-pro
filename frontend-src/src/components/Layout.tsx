@@ -1,24 +1,22 @@
 /**
  * Layout（design.md §7）
  * sticky Header + IndexTape + 内容槽（<Outlet/>，page-fade 转场）+ Footer
- * 全局：命令面板（⌘K）、股票详情抽屉、移动 Dock、Toast。
+ * 全局：命令面板（⌘K）、移动 Dock、Toast。
+ *
+ * v2：个股详情从右侧抽屉改为 /stock/:ticker 全屏整页（参考日股工作台），
+ * openTicker 一律导航——抽屉基座与 StockDrawerBody 已随之撤除。
  */
-import { Suspense, createContext, lazy, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Suspense, createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import Navbar from '@/components/Navbar';
 import IndexTape from '@/components/IndexTape';
 import Footer from '@/components/Footer';
 import RouteErrorBoundary from '@/components/shared/RouteErrorBoundary';
-import InlineFallback from '@/components/shared/InlineFallback';
 import PageFallback from '@/components/shared/PageFallback';
 import MobileDock from '@/components/MobileDock';
 import CommandPalette from '@/components/CommandPalette';
 import { pushRecent } from '@/lib/recentTickers';
-import Drawer from '@/components/Drawer';
 import { t as __t } from '../i18n/core.ts';
-
-/* 抽屉体只在用户点开个股时才需要，独立分包 */
-const StockDrawerBody = lazy(() => import('@/components/StockDrawerBody'));
 
 interface ShellContextValue {
   openPalette: () => void;
@@ -37,13 +35,13 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [drawerTicker, setDrawerTicker] = useState<string | null>(null);
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);
-  const openTicker = useCallback((t: string) => {
-    pushRecent(t);
-    setDrawerTicker(t);
-  }, []);
+  const openTicker = useCallback((ticker: string) => {
+    const symbol = ticker.toUpperCase();
+    pushRecent(symbol);
+    navigate(`/stock/${encodeURIComponent(symbol)}`);
+  }, [navigate]);
 
   /* ⌘K / Ctrl+K 全局绑定 */
   useEffect(() => {
@@ -63,7 +61,7 @@ export default function Layout() {
     <ShellContext.Provider value={value}>
       {/* overflow-x-clip：绝对定位的解释浮层即使处于 opacity-0 也占布局盒，
           窄屏时会把文档撑出横向滚动条。clip 只裁剪绘制，不建立滚动容器、
-          不影响 sticky，也不裁剪 position:fixed 的 Dock 与抽屉；
+          不影响 sticky，也不裁剪 position:fixed 的 Dock；
           InfoHint 自身已把可见浮层收敛在视口内，因此这里裁不到真实内容。 */}
       <div className="flex min-h-[100dvh] flex-col overflow-x-clip">
         <Navbar onOpenPalette={openPalette} />
@@ -92,32 +90,9 @@ export default function Layout() {
       <CommandPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
-        onOpenTicker={(t) => setDrawerTicker(t)}
+        onOpenTicker={openTicker}
         onForceRefresh={() => navigate('/watchlist?force=1')}
       />
-
-      {/* 全局股票详情抽屉（基座；内容由 stock-detail 代理完善） */}
-      <Drawer
-        open={drawerTicker !== null}
-        onClose={() => setDrawerTicker(null)}
-        label={drawerTicker ? __t('{ticker} 详情', { ticker: drawerTicker }) : undefined}
-        title={
-          drawerTicker && (
-            <span className="flex items-baseline gap-2">
-              <span className="font-display text-display-m text-ink-900">{drawerTicker}</span>
-              <span className="eyebrow">STOCK DETAIL</span>
-            </span>
-          )
-        }
-      >
-        {drawerTicker && (
-          /* 抽屉内部用 InlineFallback：PageFallback 是整屏高的（为了压路由级 CLS），
-             搬进抽屉只会先撑出一大片空白。 */
-          <Suspense fallback={<InlineFallback />}>
-            <StockDrawerBody ticker={drawerTicker} />
-          </Suspense>
-        )}
-      </Drawer>
     </ShellContext.Provider>
   );
 }

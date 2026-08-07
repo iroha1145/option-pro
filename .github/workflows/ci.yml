@@ -181,9 +181,9 @@ jobs:
           grep -qi '^content-security-policy:' /tmp/optix-root.headers
           grep -qi '^cache-control:.*no-store' /tmp/optix-root.headers
           grep -q '<title>Optix Pro' /tmp/optix-root.html
-          css_ref=$(grep -o '\./assets/index-[^"]*\.css' /tmp/optix-root.html | head -n 1)
+          css_ref=$(grep -o '/assets/index-[^"]*\.css' /tmp/optix-root.html | head -n 1)
           test -n "$css_ref"
-          curl --fail --silent --show-error -H 'Accept-Encoding: gzip' -D /tmp/optix-static.headers -o /tmp/optix-styles.gz "http://127.0.0.1:2000${css_ref#.}"
+          curl --fail --silent --show-error -H 'Accept-Encoding: gzip' -D /tmp/optix-static.headers -o /tmp/optix-styles.gz "http://127.0.0.1:2000${css_ref}"
           grep -qi '^content-encoding: gzip' /tmp/optix-static.headers
           # 带内容哈希的 /assets/ 产物走一年 immutable 缓存（app/main.py 静态头策略）
           grep -qi '^cache-control:.*max-age=31536000.*immutable' /tmp/optix-static.headers

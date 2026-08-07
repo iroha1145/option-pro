@@ -29,8 +29,84 @@ import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
 import { CHART_RANGES, DEFAULT_CHART_RANGE, getDetailChart, type ChartRange } from './api';
 import type { ChartBarEx } from '@/mocks/fixtures';
+import type { TechnicalStructure, TechSwingPoint } from '@/api/types';
 
 type ChartMode = 'candle' | 'area';
+export type TechOverlays = TechnicalStructure['chart_overlays'];
+
+/**
+ * 技术点位 → markLine / markArea / markPoint。
+ * 只在日 K 上绘制：结构由 raw 日线算出，摆动点按「精确 t → 交易日」两级
+ * 寻址到当前序列的具体一根（mock 两次生成的 t 差几毫秒，退到日历日仍准）。
+ */
+function technicalMarks(overlays: TechOverlays | null | undefined, bars: ChartBarEx[]) {
+  const empty = { lines: [] as object[], points: [] as object[], areas: [] as object[] };
+  if (!overlays || bars.length === 0) return empty;
+  const idxByT = new Map<string, number>();
+  const idxByDay = new Map<string, number>();
+  bars.forEach((b, i) => {
+    idxByT.set(b.t, i);
+    const day = b.t.slice(0, 10);
+    if (!idxByDay.has(day)) idxByDay.set(day, i);
+  });
+  const locate = (p: TechSwingPoint): number =>
+    idxByT.get(p.t) ?? idxByDay.get(p.trade_date || p.t.slice(0, 10)) ?? -1;
+
+  const lines: object[] = [];
+  const points: object[] = [];
+  const areas: object[] = [];
+
+  if (overlays.invalidation_price != null && Number.isFinite(overlays.invalidation_price)) {
+    lines.push({
+      yAxis: overlays.invalidation_price,
+      lineStyle: { color: CH.down600, width: 1, type: 'dotted' as const },
+      label: {
+        ...MEASURE_LABEL_FONT,
+        formatter: t('失效位 {p}', { p: fmtPrice(overlays.invalidation_price) }),
+        color: CH.down600,
+        position: 'insideEndBottom' as const,
+      },
+    });
+  }
+  if (
+    overlays.resistance_low != null
+    && overlays.resistance_high != null
+    && Number.isFinite(overlays.resistance_low)
+    && Number.isFinite(overlays.resistance_high)
+  ) {
+    areas.push([
+      {
+        yAxis: overlays.resistance_low,
+        itemStyle: { color: CH.brand400, opacity: 0.08 },
+        label: {
+          ...MEASURE_LABEL_FONT,
+          show: true,
+          formatter: t('阻力带'),
+          color: CH.brand600,
+          position: 'insideTopRight' as const,
+        },
+      },
+      { yAxis: overlays.resistance_high },
+    ]);
+  }
+  const markSwings = (list: TechSwingPoint[], isHigh: boolean) => {
+    for (const point of list.slice(-3)) {
+      const index = locate(point);
+      if (index < 0 || point.price == null) continue;
+      points.push({
+        coord: [index, point.price],
+        symbol: 'triangle',
+        symbolRotate: isHigh ? 180 : 0,
+        symbolSize: 8,
+        itemStyle: { color: isHigh ? CH.warn600 : CH.ai600 },
+        label: { show: false },
+      });
+    }
+  };
+  markSwings(overlays.swing_highs ?? [], true);
+  markSwings(overlays.swing_lows ?? [], false);
+  return { lines, points, areas };
+}
 
 function fmtAxisLabel(iso: string, range: ChartRange): string {
   const d = new Date(iso);
@@ -119,11 +195,18 @@ function buildOption(
   mode: ChartMode,
   prevClose?: number,
   overlay?: MeasureOverlay | null,
+  tech?: ReturnType<typeof technicalMarks> | null,
 ): ChartOption {
   const labels = bars.map((b) => fmtAxisLabel(b.t, range));
   const upFill = CH.up600;
   const downFill = CH.down600;
-  const marks = measureMarks(overlay);
+  const measure = measureMarks(overlay);
+  // 技术点位与回撤尺共用蜡烛系列的 mark 通道，两组数据直接并列
+  const marks = {
+    lines: [...(tech?.lines ?? []), ...measure.lines],
+    points: [...(tech?.points ?? []), ...measure.points],
+    areas: [...(tech?.areas ?? []), ...measure.areas],
+  };
 
   const common = {
     ...baseAnimation,
@@ -406,12 +489,15 @@ export default function KlineChart({
   height = 320,
   className,
   refreshVersion = 0,
+  overlays = null,
 }: {
   ticker: string;
   prevClose?: number;
   height?: number;
   className?: string;
   refreshVersion?: number;
+  /** 技术点位（/stocks/{t}/technical 的 chart_overlays）；只在日 K 绘制 */
+  overlays?: TechOverlays | null;
 }) {
   // Daily bars are the reliable default covered by Massive Stocks Starter;
   // intraday intervals remain available on demand. The default lives in ./api so
@@ -432,7 +518,9 @@ export default function KlineChart({
   const [measure, setMeasure] = useState<MeasureState>({ phase: 'idle' });
   const [basis, setBasis] = useState<MeasureBasis>('wick');
   const [chartInst, setChartInst] = useState<EChartsInstance | null>(null);
+  const [showLevels, setShowLevels] = useState(true);
   const measureActive = measure.phase !== 'idle';
+  const levelsAvailable = overlays !== null && range === '1d' && mode === 'candle';
   // 面积图没有影线可吸附，强制收盘口径；K线默认高—低，可切收盘
   const effectiveBasis: MeasureBasis = mode === 'area' ? 'close' : basis;
   const bars = data?.bars;
@@ -495,9 +583,14 @@ export default function KlineChart({
     return null;
   }, [measure, bars, measurement]);
 
+  const techMarks = useMemo(
+    () => (levelsAvailable && showLevels && data ? technicalMarks(overlays, data.bars) : null),
+    [levelsAvailable, showLevels, overlays, data],
+  );
+
   const option = useMemo(
-    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay) : null),
-    [data, range, mode, prevClose, overlay],
+    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, techMarks) : null),
+    [data, range, mode, prevClose, overlay, techMarks],
   );
 
   return (
@@ -518,6 +611,19 @@ export default function KlineChart({
             value={mode}
             onChange={setMode}
           />
+          {overlays !== null && (
+            <button
+              type="button"
+              aria-pressed={levelsAvailable && showLevels}
+              aria-label={t('在图上叠加技术点位（阻力带/失效位/摆动点）')}
+              disabled={!levelsAvailable}
+              title={levelsAvailable ? undefined : t('技术点位按日线结构计算，仅日 K 线模式绘制')}
+              onClick={() => setShowLevels((prev) => !prev)}
+              className={cn(toggleButtonCls(levelsAvailable && showLevels), !levelsAvailable && 'cursor-not-allowed opacity-50')}
+            >
+              {t('技术点位')}
+            </button>
+          )}
           {measureActive && mode === 'candle' && (
             <button
               type="button"

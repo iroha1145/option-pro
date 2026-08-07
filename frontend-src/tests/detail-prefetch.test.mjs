@@ -31,7 +31,7 @@ function codeOf(source) {
 
 const detailApi = read('frontend-src/src/components/detail/api.ts');
 const klineChart = read('frontend-src/src/components/detail/KlineChart.tsx');
-const drawerBody = read('frontend-src/src/components/StockDrawerBody.tsx');
+const drawerBody = read('frontend-src/src/pages/StockDetail.tsx');
 
 test('默认周期只有一份定义，预取和图表因此请求同一个 URL', () => {
   assert.match(detailApi, /export const DEFAULT_CHART_RANGE: ChartRange = '1d'/);
@@ -76,9 +76,9 @@ test('预取失败被吞掉，但错误态仍由各面板自己那次调用呈�
 
 test('抽屉在 loading 分支之前就发起预取', () => {
   const code = codeOf(drawerBody);
-  const prefetchAt = code.indexOf('prefetchStockDetailPanels(ticker)');
+  const prefetchAt = code.indexOf('prefetchStockDetailPanels(symbol)');
   const loadingReturnAt = code.indexOf('if (loading)');
-  assert.ok(prefetchAt > 0, '抽屉没有调用预取');
+  assert.ok(prefetchAt > 0, '详情页没有调用预取');
   assert.ok(loadingReturnAt > 0);
   assert.ok(
     prefetchAt < loadingReturnAt,
@@ -88,11 +88,11 @@ test('抽屉在 loading 分支之前就发起预取', () => {
 
 test('预取只随 ticker 变化重跑，不跟着轮询每分钟重发', () => {
   const code = codeOf(drawerBody);
-  const effect = code.slice(code.indexOf('prefetchStockDetailPanels(ticker)'));
+  const effect = code.slice(code.indexOf('prefetchStockDetailPanels(symbol)'));
   assert.match(
     effect.slice(0, 120),
-    /\}, \[ticker\]\);/,
-    '预取 effect 的依赖不是只有 ticker：会随其它 state 变化反复发请求',
+    /\}, \[symbol\]\);/,
+    '预取 effect 的依赖不是只有 symbol：会随其它 state 变化反复发请求',
   );
 });
 

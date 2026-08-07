@@ -266,6 +266,91 @@ export interface StockChart {
   ma20: (number | null)[];
 }
 
+/* ---------- 个股技术结构（/stocks/{t}/technical） ---------- */
+
+/** 已确认分形摆动点；t 与日线 bar 的 t 逐根同源，前端按同一转换对齐。 */
+export interface TechSwingPoint {
+  /** 归一后与 Candle.t 同格式（ISO）；用于在图上按根寻址 */
+  t: string;
+  /** 纽约时区的交易日 YYYY-MM-DD（展示用） */
+  trade_date: string;
+  price: number | null;
+}
+
+/** 枢轴聚类检出的完成基底（服务端 technical/base_structure）。 */
+export interface TechBaseStructure {
+  pivot_id?: string | null;
+  pivot_price: number | null;
+  resistance_low: number | null;
+  resistance_high: number | null;
+  support_low: number | null;
+  support_high?: number | null;
+  invalidation_price: number | null;
+  base_start: string | null;
+  base_end: string | null;
+  resistance_touches: number | null;
+  quality: number | null;
+  base_duration_days?: number | null;
+}
+
+export interface TechnicalStructure {
+  base: TechBaseStructure | null;
+  price_action: {
+    status: string;
+    score: number | null;
+    structure: string;
+    /** 后端下发中文标签，渲染处过 t()（与雷达 structure_label 同纪律） */
+    structure_label: string;
+    swing_highs: TechSwingPoint[];
+    swing_lows: TechSwingPoint[];
+    resistance: number | null;
+    support: number | null;
+    resistance_dist_pct: number | null;
+    support_dist_pct: number | null;
+    patterns: string[];
+    pattern_labels: string[];
+    spring: boolean;
+    upthrust: boolean;
+    tags: string[];
+  };
+  vol_price: {
+    status: string;
+    setup_type: string;
+    setup_label: string;
+    effort: number | null;
+    result: number | null;
+    breakout_quality_adjustment: number;
+    false_breakout_risk: number;
+    tags: string[];
+  };
+  technicals: {
+    rsi14: number | null;
+    rsi_score: number | null;
+    macd: { histogram: number | null; direction_pct: number | null };
+    trend_efficiency_63d: number | null;
+    ma50_slope_pct_21d: number | null;
+    return_stability_20d: number | null;
+    range_position_60d: number | null;
+    range_persistence_fast: number | null;
+    range_persistence_slow: number | null;
+  };
+  chart_overlays: {
+    swing_highs: TechSwingPoint[];
+    swing_lows: TechSwingPoint[];
+    resistance_high?: number | null;
+    resistance_low?: number | null;
+    support_low?: number | null;
+    invalidation_price?: number | null;
+    pivot_price?: number | null;
+    base_start?: string | null;
+    base_end?: string | null;
+  };
+  /** raw_daily：与日 K 线同一 raw 序列（除权日附近以图上所见为准） */
+  basis?: string;
+  data_through?: string | null;
+  as_of?: string | null;
+}
+
 /* ---------- 突破雷达 ---------- */
 export interface BreakoutSignal {
   id: string;

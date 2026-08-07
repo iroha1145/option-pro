@@ -10,7 +10,7 @@ const stocksSource = fs.readFileSync(
   'utf8',
 );
 const drawerSource = fs.readFileSync(
-  path.resolve(here, '..', 'src', 'components', 'StockDrawerBody.tsx'),
+  path.resolve(here, '..', 'src', 'pages', 'StockDetail.tsx'),
   'utf8',
 );
 const frontendRoot = path.resolve(here, '..', 'src');

@@ -3009,6 +3009,101 @@ async def _load_stock_chart(
     return payload
 
 
+# 结构分析与图表共享同一份 raw 日线（同一 chart:{T}:1d:raw 缓存键）：
+# 叠加线必须落在用户正看着的那套蜡烛上，换一份数据源就会画错位。
+_TECHNICAL_TTL = 600
+_TECHNICAL_MAX_AGE = 24 * 60 * 60
+
+
+async def _guest_daily_chart_snapshot(symbol: str) -> dict[str, Any] | None:
+    """Guest fallback: same public-home resources the chart route serves."""
+
+    now = time.time()
+    result = await read_public_home_resource_async(
+        "focus_chart",
+        parameters={"ticker": symbol, "range": "1d", "adjustment": "raw"},
+        now=now,
+    )
+    if result is None:
+        try:
+            breakout_parameters = breakout_lead_chart_parameters(symbol)
+        except ValueError:
+            breakout_parameters = None
+        if breakout_parameters is not None:
+            result = await read_public_home_resource_async(
+                "breakout_lead_chart",
+                parameters=breakout_parameters,
+                now=now,
+            )
+    return result if isinstance(result, dict) else None
+
+
+async def _load_stock_technical(symbol: str, owner: bool) -> dict[str, Any]:
+    from app.services.technical.structure import compute_technical_structure
+
+    await _hydrate_stock_pull_resource(symbol, "daily_chart", f"chart:{symbol}:1d:raw")
+    chart = await _stale_while_revalidate_endpoint(
+        f"chart:{symbol}:1d:raw",
+        _CHART_TTL.get("1d", 600),
+        _CHART_MAX_AGE.get("1d", 24 * 60 * 60),
+        lambda: _load_stock_chart(symbol, "1d", "raw"),
+        allow_refresh=owner,
+    )
+    bars = chart.get("bars") if isinstance(chart, dict) else None
+    # 结构计算是纯 CPU（≈500 根日线几毫秒），但仍不占事件循环。
+    result = await asyncio.to_thread(compute_technical_structure, bars or [])
+    if result is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Not enough daily bars for technical structure",
+        )
+    payload: dict[str, Any] = {
+        "ticker": symbol,
+        "as_of": chart.get("as_of") if isinstance(chart, dict) else None,
+        # raw 日线口径：与 K 线图完全同源；指标在除权日附近以图上所见为准
+        "basis": "raw_daily",
+        **result,
+    }
+    return payload
+
+
+@router.get("/{ticker}/technical")
+async def stock_technical(ticker: str):
+    """K-line structure + indicators computed from the same daily bars the
+    chart endpoint serves (base band, invalidation, swings, RSI/MACD family)."""
+
+    owner = current_request_is_owner()
+    symbol = ticker.upper().strip()
+    key = f"technical:{symbol}"
+    try:
+        return await _stale_while_revalidate_endpoint(
+            key,
+            _TECHNICAL_TTL,
+            _TECHNICAL_MAX_AGE,
+            lambda: _load_stock_technical(symbol, owner),
+            allow_refresh=owner,
+        )
+    except HTTPException as exc:
+        if owner or not _is_public_snapshot_unavailable(exc):
+            raise
+        # 访客冷缓存：直接从公开快照的日线现算（不回源、不写缓存）
+        from app.services.technical.structure import compute_technical_structure
+
+        chart = await _guest_daily_chart_snapshot(symbol)
+        bars = chart.get("bars") if isinstance(chart, dict) else None
+        if not bars:
+            raise exc
+        result = await asyncio.to_thread(compute_technical_structure, bars)
+        if result is None:
+            raise exc
+        return _sanitize({
+            "ticker": symbol,
+            "as_of": chart.get("as_of") if isinstance(chart, dict) else None,
+            "basis": "raw_daily",
+            **result,
+        })
+
+
 _MASSIVE_CHART_WINDOWS = {
     # range → (multiplier, timespan, 回看天数);窗口略宽于 Yahoo period,余量无害
     "5m": (5, "minute", 10),

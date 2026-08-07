@@ -42,7 +42,7 @@ test('stock pull UI reports truthful three-resource progress and persistence', a
 });
 
 test('manual pull refreshes the open detail, chart, and signal panels immediately', async () => {
-  const drawer = await source('components/StockDrawerBody.tsx');
+  const drawer = await source('pages/StockDetail.tsx');
   const chart = await source('components/detail/KlineChart.tsx');
   const trend = await source('components/detail/TrendBiasPanel.tsx');
   const list = await source('components/detail/SignalList.tsx');
@@ -54,10 +54,10 @@ test('manual pull refreshes the open detail, chart, and signal panels immediatel
 });
 
 test('public breakout research pages and drawers expose the same manual recovery path', async () => {
-  const drawer = await source('components/StockDrawerBody.tsx');
+  const drawer = await source('pages/StockDetail.tsx');
   const lead = await source('components/breakouts/LeadBigCard.tsx');
   assert.match(drawer, /publicSnapshotMissing[\s\S]*可手动获取最新行情、日线与技术指标/);
-  assert.match(drawer, /<ManualStockPull ticker=\{ticker\} onPulled=\{handlePulled\} \/>/);
+  assert.match(drawer, /<ManualStockPull ticker=\{symbol\} onPulled=\{handlePulled\} \/>/);
   assert.equal(drawer.includes('isOwner'), false);
   assert.match(lead, /to=\{`\/stock\/\$\{encodeURIComponent\(e\.ticker\)\}`\}/);
   assert.match(lead, /打开研究页/);

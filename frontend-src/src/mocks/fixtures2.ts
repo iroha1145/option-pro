@@ -2,7 +2,7 @@
 import { ApiError } from '@/api/client';
 import { Rng, round2, round4 } from './rng';
 import { HOTSPOTS, NEWS_SOURCES, NEWS_TEMPLATES, SECTORS, TICKER_POOL } from './data';
-import { SIGNAL_LABELS, WATCHLIST_TICKERS, getMarketStatus, getStockDetail } from './fixtures';
+import { SIGNAL_LABELS, WATCHLIST_TICKERS, getMarketStatus, getStockChartEx, getStockDetail } from './fixtures';
 import type {
   AiJob,
   BreakoutEvent,
@@ -19,6 +19,8 @@ import type {
   OptionChain,
   Sector,
   SignalType,
+  TechSwingPoint,
+  TechnicalStructure,
   UnusualOption,
   WorkerTask,
 } from '@/api/types';
@@ -1832,4 +1834,204 @@ export function getTickerImpactSummaries(q: CatalystFeedQuery = {}): TickerImpac
 /** 热点主题列表（供筛选 chip 反显主题名） */
 export function getHotspotThemeName(themeId: string): string {
   return THEME_DEFS.find((t) => t.id === themeId)?.theme ?? themeId;
+}
+
+/* ---------------- 个股技术结构（/stocks/{t}/technical） ---------------- */
+/*
+ * 结构与摆动点从 mock 日线**真实推导**（同款分形规则：左严格右容平、span 3），
+ * 保证叠加线落在图上正确的位置；量价/形态等无法从合成K线可信推导的字段按
+ * 代码种子生成。两次调用的 bar 时间戳可能相差几毫秒（buildCandles 以调用时
+ * 刻为锚），图表侧按「精确 t → 日历日」两级匹配。
+ */
+
+const PA_STRUCTURE_META: Record<string, { label: string; score: number }> = {
+  uptrend: { label: 'HH+HL 上升结构', score: 82 },
+  uptrend_weak: { label: '高点抬升待确认', score: 66 },
+  hl_base: { label: '低点抬升筑底', score: 62 },
+  range: { label: '区间震荡', score: 50 },
+  lh_pressure: { label: '高点压低', score: 38 },
+  downtrend: { label: 'LH+LL 下降结构', score: 24 },
+};
+
+const VP_SETUPS: { type: string; label: string; risk: number; adj: number; tags: string[] }[] = [
+  { type: 'absorption_bullish', label: '多头吸收', risk: 4, adj: 12, tags: ['吸收型收缩', '多头吸收'] },
+  { type: 'vacuum', label: '真空型收缩', risk: 16, adj: -10, tags: ['真空型收缩', '假突破风险高'] },
+  { type: 'no_compression', label: '未收缩', risk: 8, adj: 0, tags: ['未明显收缩'] },
+  { type: 'absorption_unconfirmed', label: '吸收未确认', risk: 10, adj: 4, tags: ['吸收型收缩'] },
+];
+
+export function getTechnicalStructure(ticker: string): TechnicalStructure {
+  const symbol = ticker.toUpperCase();
+  const i = Math.max(0, TICKER_POOL.findIndex((x) => x.ticker === symbol));
+  const r = new Rng(77000 + i * 419);
+  const bars = getStockChartEx(symbol, '1d').bars;
+  const look = bars.slice(-120);
+  const highs = look.map((b) => b.h);
+  const lows = look.map((b) => b.l);
+  const closes = look.map((b) => b.c);
+  const lastClose = closes[closes.length - 1] ?? 0;
+
+  // 分形摆动点（与后端同规则：左严格、右容平，末尾 3 根不确认）
+  const span = 3;
+  const swingHighs: TechSwingPoint[] = [];
+  const swingLows: TechSwingPoint[] = [];
+  for (let k = span; k < look.length - span; k++) {
+    const leftH = Math.max(...highs.slice(k - span, k));
+    const rightH = Math.max(...highs.slice(k + 1, k + span + 1));
+    if (highs[k] > leftH && highs[k] >= rightH) {
+      swingHighs.push({ t: look[k].t, trade_date: look[k].t.slice(0, 10), price: highs[k] });
+    }
+    const leftL = Math.min(...lows.slice(k - span, k));
+    const rightL = Math.min(...lows.slice(k + 1, k + span + 1));
+    if (lows[k] < leftL && lows[k] <= rightL) {
+      swingLows.push({ t: look[k].t, trade_date: look[k].t.slice(0, 10), price: lows[k] });
+    }
+  }
+  const sh = swingHighs.slice(-4);
+  const sl = swingLows.slice(-4);
+
+  // 市场结构：与后端同判定
+  let structure = 'range';
+  if (swingHighs.length >= 2 && swingLows.length >= 2) {
+    const hh = swingHighs[swingHighs.length - 1].price! > swingHighs[swingHighs.length - 2].price!;
+    const hl = swingLows[swingLows.length - 1].price! > swingLows[swingLows.length - 2].price!;
+    const lh = swingHighs[swingHighs.length - 1].price! < swingHighs[swingHighs.length - 2].price!;
+    const ll = swingLows[swingLows.length - 1].price! < swingLows[swingLows.length - 2].price!;
+    structure = hh && hl ? 'uptrend' : lh && ll ? 'downtrend' : hh ? 'uptrend_weak' : hl ? 'hl_base' : lh ? 'lh_pressure' : 'range';
+  }
+  const meta = PA_STRUCTURE_META[structure];
+  const resistance = sh.length ? sh[sh.length - 1].price : null;
+  const support = sl.length ? sl[sl.length - 1].price : null;
+
+  // 基底：近 60 根（剔除末 5 根）的高点带；已明显突破则视为无完成基底
+  const baseWin = look.slice(-65, -5);
+  let base: TechnicalStructure['base'] = null;
+  if (baseWin.length >= 30) {
+    const resHigh = Math.max(...baseWin.map((b) => b.h));
+    const resLow = resHigh * (1 - r.float(0.008, 0.02));
+    const supLow = Math.min(...baseWin.map((b) => b.l));
+    const touches = baseWin.filter((b) => b.h >= resLow).length;
+    if (lastClose <= resHigh * 1.005 && touches >= 2) {
+      base = {
+        pivot_price: round2((resHigh + resLow) / 2),
+        resistance_low: round2(resLow),
+        resistance_high: round2(resHigh),
+        support_low: round2(supLow),
+        support_high: round2(supLow * 1.015),
+        invalidation_price: round2(supLow * 0.988),
+        base_start: baseWin[0].t.slice(0, 10),
+        base_end: baseWin[baseWin.length - 1].t.slice(0, 10),
+        resistance_touches: Math.min(touches, 6),
+        quality: round4(r.float(0.42, 0.86)),
+        base_duration_days: baseWin.length,
+      };
+    }
+  }
+
+  // 形态/陷阱：种子化（合成K线不适合逐形态断言）
+  const patternPool = ['看涨吞没', '锤子线', '内包线', '射击之星', '看跌吞没'];
+  const patternLabels = r.float(0, 1) < 0.55 ? [patternPool[r.int(0, patternPool.length - 1)]] : [];
+  const spring = r.float(0, 1) < 0.18;
+  const upthrust = !spring && r.float(0, 1) < 0.14;
+  const score = Math.max(0, Math.min(100, meta.score + (spring ? 8 : 0) - (upthrust ? 8 : 0) + r.float(-4, 4)));
+
+  const vp = VP_SETUPS[r.int(0, VP_SETUPS.length - 1)];
+
+  // 指标：从收盘序列真实推导（RSI/MA50 斜率/区间位置/效率/稳定度）
+  const rsiPeriod = 14;
+  let rsi: number | null = null;
+  if (closes.length > rsiPeriod) {
+    let gain = 0;
+    let loss = 0;
+    for (let k = 1; k <= rsiPeriod; k++) {
+      const d = closes[k] - closes[k - 1];
+      if (d > 0) gain += d; else loss -= d;
+    }
+    let avgG = gain / rsiPeriod;
+    let avgL = loss / rsiPeriod;
+    for (let k = rsiPeriod + 1; k < closes.length; k++) {
+      const d = closes[k] - closes[k - 1];
+      avgG = (avgG * (rsiPeriod - 1) + Math.max(d, 0)) / rsiPeriod;
+      avgL = (avgL * (rsiPeriod - 1) + Math.max(-d, 0)) / rsiPeriod;
+    }
+    rsi = avgL <= 0 ? (avgG > 0 ? 100 : 50) : 100 - 100 / (1 + avgG / avgL);
+  }
+  const sma = (end: number, win: number) => {
+    const seg = closes.slice(Math.max(0, end - win), end);
+    return seg.length ? seg.reduce((a, b) => a + b, 0) / seg.length : null;
+  };
+  const maNow = sma(closes.length, 50);
+  const maPrev = sma(closes.length - 21, 50);
+  const maSlope = maNow !== null && maPrev !== null && maPrev > 0 ? ((maNow / maPrev) - 1) * 100 : null;
+  const win60 = look.slice(-60);
+  const hi60 = Math.max(...win60.map((b) => b.h));
+  const lo60 = Math.min(...win60.map((b) => b.l));
+  const rangePos = hi60 > lo60 ? (lastClose - lo60) / (hi60 - lo60) : 0.5;
+  const tail63 = closes.slice(-64);
+  let path = 0;
+  for (let k = 1; k < tail63.length; k++) path += Math.abs(tail63[k] - tail63[k - 1]);
+  const efficiency = path > 0 ? Math.abs(tail63[tail63.length - 1] - tail63[0]) / path : null;
+  const rets = closes.slice(-21).map((c, k, arr) => (k > 0 && arr[k - 1] > 0 ? c / arr[k - 1] - 1 : 0)).slice(1);
+  const mean = rets.reduce((a, b) => a + b, 0) / Math.max(1, rets.length);
+  const stability = Math.sqrt(rets.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, rets.length));
+
+  return {
+    base,
+    price_action: {
+      status: 'active',
+      score: round2(score),
+      structure,
+      structure_label: meta.label,
+      swing_highs: sh,
+      swing_lows: sl,
+      resistance: resistance ?? null,
+      support: support ?? null,
+      resistance_dist_pct: resistance != null && lastClose > 0 ? round2((resistance / lastClose - 1) * 100) : null,
+      support_dist_pct: support != null && lastClose > 0 ? round2((support / lastClose - 1) * 100) : null,
+      patterns: [],
+      pattern_labels: patternLabels,
+      spring,
+      upthrust,
+      tags: [meta.label, ...patternLabels].slice(0, 4),
+    },
+    vol_price: {
+      status: 'active',
+      setup_type: vp.type,
+      setup_label: vp.label,
+      effort: round2(r.float(0.5, 1.6)),
+      result: round2(r.float(0.4, 1.8)),
+      breakout_quality_adjustment: vp.adj,
+      false_breakout_risk: vp.risk + (upthrust ? 8 : 0),
+      tags: vp.tags,
+    },
+    technicals: {
+      rsi14: rsi !== null ? round2(rsi) : null,
+      rsi_score: rsi !== null ? round2(Math.max(0, 88 - Math.abs(rsi - 68) * 1.6)) : null,
+      macd: { histogram: round4(r.float(-1.2, 1.6)), direction_pct: round4(r.float(-0.6, 0.8)) },
+      trend_efficiency_63d: efficiency !== null ? round4(efficiency) : null,
+      ma50_slope_pct_21d: maSlope !== null ? round2(maSlope) : null,
+      return_stability_20d: round4(stability),
+      range_position_60d: round4(rangePos),
+      range_persistence_fast: round4(Math.min(1, Math.max(0, rangePos + r.float(-0.08, 0.08)))),
+      range_persistence_slow: round4(Math.min(1, Math.max(0, rangePos + r.float(-0.15, 0.1)))),
+    },
+    chart_overlays: {
+      swing_highs: sh,
+      swing_lows: sl,
+      ...(base
+        ? {
+            resistance_high: base.resistance_high,
+            resistance_low: base.resistance_low,
+            support_low: base.support_low,
+            invalidation_price: base.invalidation_price,
+            pivot_price: base.pivot_price,
+            base_start: base.base_start,
+            base_end: base.base_end,
+          }
+        : {}),
+    },
+    basis: 'raw_daily',
+    data_through: look.length ? look[look.length - 1].t.slice(0, 10) : null,
+    as_of: new Date(Date.now() - 15 * 60_000).toISOString(),
+  };
 }
