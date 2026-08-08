@@ -598,7 +598,7 @@ export default function Login() {
 
             <div className="mt-4 border-t border-line pt-3 text-center">
               <Link
-                to="/watchlist"
+                to="/"
                 className="inline-flex items-center gap-1 text-caption font-medium text-brand-600 transition-colors hover:text-brand-700"
               >
                 <Icon name="chevron-right" size={13} className="rotate-180" />
