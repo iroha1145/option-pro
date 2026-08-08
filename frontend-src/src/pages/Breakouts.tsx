@@ -84,7 +84,7 @@ function WatchOnlyToggle({ value, onChange }: { value: boolean; onChange: (v: bo
       className="flex items-center gap-2 text-caption text-ink-500 transition-colors hover:text-ink-800"
     >
       <motion.span
-        whileTap={{ scale: 1.06 }}
+        whileTap={{ scale: 0.96 }}
         transition={{ type: 'spring', stiffness: 520, damping: 32 }}
         /* shrink-0：flex 行挤压下轨道不得缩窄（缩到 21px 时 knob 直接飞出压住标签） */
         className={cn('relative h-5 w-9 shrink-0 rounded-pill shadow-track transition-colors duration-ui', value ? 'bg-brand-600' : 'bg-line-strong')}
