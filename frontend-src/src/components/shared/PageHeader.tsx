@@ -6,6 +6,7 @@
 import type { ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { DUR_SECTION } from '@/lib/motion';
 
 interface PageHeaderProps {
   section: string;      // 01
@@ -21,7 +22,7 @@ export default function PageHeader({ section, eyebrow, title, description, meta,
     <motion.header
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: DUR_SECTION, ease: [0.16, 1, 0.3, 1] }}
       className={cn('flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-5', className)}
     >
       <div className="min-w-0">

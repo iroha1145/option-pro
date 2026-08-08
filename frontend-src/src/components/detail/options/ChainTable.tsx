@@ -7,6 +7,7 @@
  */
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { DUR_SECTION } from '@/lib/motion';
 import { fmtCompact, fmtPrice } from '@/lib/format';
 import { t } from '../../../i18n/core.ts';
 import type { OptionChain, OptionChainRow } from '@/api/types';
@@ -63,7 +64,7 @@ function WaterCell({
           }}
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}
-          transition={{ duration: 0.5, delay: delay + 0.06, ease: EASE }}
+          transition={{ duration: DUR_SECTION, delay: delay + 0.06, ease: EASE }}
         />
       )}
       <span className="relative text-ink-700">{dash(value, fmtCompact)}</span>
