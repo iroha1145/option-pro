@@ -327,7 +327,7 @@ test.describe("macro conditions desktop", () => {
     await stubApi(page, { conditions: conditions(), history: history() });
     await openMarket(page);
     const hint = page
-      .getByRole("button", { name: /宏观环境综合分（0–100 分）：查看评分说明/ })
+      .getByRole("button", { name: /宏观环境综合分（0–100 分）：查看说明/ })
       .first();
     await hint.focus();
     await expect(hint).toBeFocused();
@@ -346,7 +346,7 @@ test.describe("macro conditions desktop", () => {
     await stubApi(page, { conditions: conditions(), history: history() });
     await openMarket(page);
     const hint = page
-      .getByRole("button", { name: /宏观环境综合分（0–100 分）：查看评分说明/ })
+      .getByRole("button", { name: /宏观环境综合分（0–100 分）：查看说明/ })
       .first();
 
     // 收起时不该有常驻节点（读屏会把几十字算法说明当正文连读）
