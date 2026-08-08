@@ -202,9 +202,25 @@ export function ivRankColor(rank: number): string {
   return 'rgb(228,233,255)';
 }
 
-export function toneOnColor(bg: string): 'light' | 'dark' {
-  const rgb = parseRgb(bg);
-  return rgb && luminance(rgb) < 0.55 ? 'light' : 'dark';
+/* v8.3 IV 高位砖去糖果色：满底热色是「AI 生成热力图」签名。砖改为白底 card +
+   左缘 3px 热色竖条 + 极淡 tint 底，热色只出现在「数据墨水」上（竖条/数字）。
+   toneOnColor/light 分支随满底背景一并退役（luminance 仍服务 heatTone）。 */
+
+/** 砖底极淡 tint：ivRankColor 的 rgb 加 0.12 alpha（几乎不可见，近看有温度）。 */
+export function ivRankTint(rank: number): string {
+  const rgb = parseRgb(ivRankColor(rank));
+  return rgb ? `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.12)` : 'rgba(228,233,255,0.12)';
+}
+
+/** rank 数字墨色：热色与 ink-800(#182338) 按 55% 混色，保证数字在 tint 底上可读。 */
+export function ivRankInk(rank: number): string {
+  const rgb = parseRgb(ivRankColor(rank));
+  if (!rgb) return 'rgb(24,35,56)';
+  const ink: Rgb = [24, 35, 56];
+  const mixed = rgb.map((value, channel) =>
+    Math.round(value * 0.55 + ink[channel] * 0.45),
+  ) as Rgb;
+  return `rgb(${mixed[0]},${mixed[1]},${mixed[2]})`;
 }
 
 export const SOURCE_STATUS_CN: Record<Exclude<SectorSourceStatus, 'active'>, string> = {

@@ -8,7 +8,8 @@ import type { IvMetaVm, IvRowVm, SectorVm } from './model';
 import {
   SOURCE_STATUS_CN,
   ivRankColor,
-  toneOnColor,
+  ivRankInk,
+  ivRankTint,
 } from './model';
 import { t } from '../../i18n/core.ts';
 
@@ -48,8 +49,9 @@ function IvHeatCard({
               <SkeletonBlock key={index} className="h-14 rounded-md" />
             ))
           : top.map((row, index) => {
-              const background = ivRankColor(row.rank ?? 0);
-              const light = toneOnColor(background) === 'light';
+              const rank = row.rank ?? 0;
+              /* v8.3 去糖果色：白底 card + 左缘 3px 热色竖条 + 极淡 tint 底，
+                 不再满底热色 + toneOnColor 反白（「AI 生成热力图」签名）。 */
               return (
                 <motion.button
                   key={row.ticker}
@@ -67,22 +69,20 @@ function IvHeatCard({
                   }}
                   onClick={() => onOpenTicker(row.ticker)}
                   aria-label={t('{ticker} 板块 IV 排位 {rank}，打开详情', { ticker: row.ticker, rank: row.rank })}
-                  className="flex h-14 flex-col items-center justify-center gap-0.5 rounded-md shadow-sh-1 transition-shadow duration-fast hover:shadow-sh-2"
-                  style={{ backgroundColor: background }}
+                  className="relative flex h-14 flex-col items-center justify-center gap-0.5 rounded-md border border-line bg-card shadow-sh-1 transition-shadow duration-fast hover:shadow-sh-2"
+                  style={{ backgroundColor: ivRankTint(rank) }}
                 >
                   <span
-                    className={cn(
-                      'font-mono text-caption font-semibold leading-none',
-                      light ? 'text-white' : 'text-ink-800',
-                    )}
-                  >
+                    aria-hidden="true"
+                    className="absolute inset-y-0 left-0 w-[3px] rounded-l-md"
+                    style={{ backgroundColor: ivRankColor(rank) }}
+                  />
+                  <span className="font-mono text-caption font-semibold leading-none text-ink-800">
                     {row.ticker}
                   </span>
                   <span
-                    className={cn(
-                      'font-mono text-micro leading-none tnum',
-                      light ? 'text-white/75' : 'text-ink-500',
-                    )}
+                    className="font-mono text-micro leading-none tnum"
+                    style={{ color: ivRankInk(rank) }}
                   >
                     {row.rank}
                   </span>
