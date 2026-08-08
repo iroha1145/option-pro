@@ -400,6 +400,82 @@ export interface TechnicalStructure {
   as_of?: string | null;
 }
 
+/* ---------- CTA 趋势资金代理估算（大盘分析页） ---------- */
+
+export type CtaTriggerKind = 'trend_flip' | 'vol_delever' | 'mixed';
+
+export interface CtaTriggerZone {
+  id: string;
+  rank: number;
+  /** 语义标签键（按当前仓位动态：空头回补/恢复加仓/买盘加速…），渲染处翻译 */
+  label_key: string;
+  kind: CtaTriggerKind;
+  price: number;
+  price_low: number;
+  price_high: number;
+  distance_pct: number;
+  models: string[];
+  components: string[];
+  weight_share: number;
+  est_position_change: number;
+  trend_change: number;
+  vol_change: number;
+  needs_close_confirm: boolean;
+}
+
+export interface CtaSubmodel {
+  label: string;
+  weight: number;
+  signal: number;
+}
+
+export interface CtaInstrumentEstimate {
+  instrument: string;
+  label: string;
+  proxy_symbol: string;
+  proxy_type: string;
+  index_symbol: string;
+  source_status: string;
+  settlement_confirmed: boolean | null;
+  position_score: number | null;
+  previous_position_score: number | null;
+  flow_score: number | null;
+  trend_flow: number | null;
+  volatility_flow: number | null;
+  state: string | null;
+  position_label: string | null;
+  model_agreement: number | null;
+  submodels: Record<string, CtaSubmodel> | null;
+  volatility: {
+    realized_annual: number | null;
+    target_annual: number;
+    scalar: number;
+    previous_scalar: number;
+  } | null;
+  trigger_levels: { above: CtaTriggerZone[]; below: CtaTriggerZone[] } | null;
+  scenario_curve: { prices: number[]; full: number[]; trend_only: number[] } | null;
+  history: { date: string; position: number }[];
+  reference_price: number | null;
+  data_through: string | null;
+  coverage: { bars: number; required: number } | null;
+  warnings: string[];
+  intraday: {
+    price: number;
+    date: string | null;
+    provisional: boolean;
+    crossed_zone_ids: string[];
+  } | null;
+}
+
+export interface CtaTrendPayload {
+  method_version: string;
+  generated_at: string | null;
+  proxy_note: string;
+  source_status: string;
+  instruments: CtaInstrumentEstimate[];
+  _stale?: boolean;
+}
+
 /* ---------- 突破雷达 ---------- */
 export interface BreakoutSignal {
   id: string;

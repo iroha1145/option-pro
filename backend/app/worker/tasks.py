@@ -1140,6 +1140,7 @@ class PublicHomeTask:
         "breakout_lead_chart": "chart_seconds",
         "earnings": "earnings_seconds",
         "unusual": "unusual_seconds",
+        "cta_trend": "cta_seconds",
     }
     _HEAVY_RESOURCES = ("earnings", "unusual")
 
@@ -1194,6 +1195,8 @@ class PublicHomeTask:
             return await stocks._build_stock_signals(str(parameters["ticker"]))
         if resource == "market_signals":
             return await signals._build_market_signals_payload()
+        if resource == "cta_trend":
+            return await market._build_cta_trend()
         if resource == "breakout_lead_chart":
             return await stocks._stock_chart_impl(
                 str(parameters["ticker"]),
@@ -1698,6 +1701,8 @@ class PublicHomeTask:
         resource_order = (
             "watchlist",
             *tuple(PUBLIC_HOME_RESOURCE_ORDER),
+            # CTA 趋势资金：无条件刷新的可选资源（不依赖雷达领跑票）。
+            "cta_trend",
             *optional_resources,
         )
         market_phases = {

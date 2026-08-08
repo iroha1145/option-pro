@@ -154,6 +154,9 @@ class PublicHomeConfig(StrictConfigModel):
     signals_seconds: int = Field(default=900, ge=900, le=86_400)
     earnings_seconds: int = Field(default=21_600, ge=21_600, le=172_800)
     unusual_seconds: int = Field(default=1800, ge=1800, le=86_400)
+    # CTA 趋势资金估算：日频模型，盘中 30 分钟一算足够（末根未收盘只做
+    # 暂定标记，正式仓位要等收盘后的下一轮刷新）。
+    cta_seconds: int = Field(default=1800, ge=900, le=86_400)
     failure_retry_seconds: int = Field(default=300, ge=60, le=3600)
 
 

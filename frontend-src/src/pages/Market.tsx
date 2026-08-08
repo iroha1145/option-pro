@@ -21,6 +21,7 @@ import StatusCard from '@/components/market/StatusCard';
 import RegimePanel, { regimeMean } from '@/components/market/RegimePanel';
 import SignalsReading, { type TrendBias } from '@/components/market/SignalsReading';
 import BreadthHistogram from '@/components/market/BreadthHistogram';
+import CtaTrendPanel from '@/components/market/CtaTrendPanel';
 import LinkCards from '@/components/market/LinkCards';
 import MacroConditionsPanel from '@/components/market/macro/MacroConditionsPanel';
 import SourceNote from '@/components/shared/SourceNote';
@@ -50,10 +51,11 @@ export default function Market() {
   /* 60s：指数 + 市场状态 */
   const indicesQ = usePolling(() => marketApi.indices(), 60_000);
   const statusQ = usePolling(() => marketPulseApi.statusDetail(), 60_000);
-  /* 300s：形态六维 + 信号 + 强度 */
+  /* 300s：形态六维 + 信号 + 强度 + CTA 趋势资金（worker 快照只读） */
   const regimeQ = usePolling(() => marketPulseApi.regime(), 300_000);
   const signalsQ = usePolling(() => signalsApi.market(), 300_000);
   const strengthQ = usePolling(() => strengthApi.market(), 300_000);
+  const ctaQ = usePolling(() => marketApi.ctaTrend(), 300_000);
 
   const status = statusQ.data;
   /* 时段读不到时显示「时段未知」，不落回「休市」（审计 P2-9）：加载中或状态接口
@@ -144,6 +146,18 @@ export default function Market() {
         {/* 技术侧分数由这里传下去：本页已经有形态六维均值，面板不必为一张展示卡
             再拉一次 /strength/market。 */}
         <MacroConditionsPanel technicalScore={mean} />
+      </section>
+
+      {/* B4.5 CTA 趋势资金估算：与市场环境并排解释、绝不混入 regime/Strength 评分 */}
+      <section className="mt-8" aria-label={t("CTA 趋势资金估算")}>
+        <CtaTrendPanel
+          data={ctaQ.data}
+          loading={ctaQ.loading}
+          error={ctaQ.error}
+          onRetry={ctaQ.refresh}
+          refreshing={ctaQ.refreshing}
+          regimeMean={mean}
+        />
       </section>
 
       {/* B5 信号解读 + B6 强度分布 */}

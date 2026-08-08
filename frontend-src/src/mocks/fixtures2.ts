@@ -10,6 +10,9 @@ import type {
   BreakoutSignal,
   BreakoutStatus,
   CatalystsStatus,
+  CtaInstrumentEstimate,
+  CtaTrendPayload,
+  CtaTriggerZone,
   EarningsImpact,
   EarningsItem,
   FocusCycle,
@@ -2090,5 +2093,133 @@ export function getTechnicalStructure(ticker: string): TechnicalStructure {
       : null,
     series_break_at: null,
     as_of: new Date(Date.now() - 15 * 60_000).toISOString(),
+  };
+}
+
+/* ---------------- CTA 趋势资金代理估算（大盘页 mock） ---------------- */
+
+const CTA_SPECS = [
+  { instrument: 'sp500', label: '标普 500', proxy: 'SPY', index: '^GSPC', px: 642 },
+  { instrument: 'nasdaq100', label: '纳斯达克 100', proxy: 'QQQ', index: '^NDX', px: 575 },
+  { instrument: 'russell2000', label: '罗素 2000', proxy: 'IWM', index: '^RUT', px: 231 },
+  { instrument: 'dow', label: '道琼斯', proxy: 'DIA', index: '^DJI', px: 541 },
+];
+
+export function getCtaTrend(): CtaTrendPayload {
+  const instruments: CtaInstrumentEstimate[] = CTA_SPECS.map((spec, idx) => {
+    const r = new Rng(91_000 + idx * 733);
+    const position = round2(r.float(-70, 85));
+    const trendFlow = round2(r.float(-8, 8));
+    const volFlow = round2(r.float(-5, 2));
+    const flow = round2(trendFlow + volFlow);
+    const prev = round2(position - flow);
+    const scalar = round4(r.float(0.45, 1));
+    const fast = round4(Math.max(-1, Math.min(1, position / 100 + r.float(-0.5, 0.5))));
+    const medium = round4(Math.max(-1, Math.min(1, position / 100 + r.float(-0.25, 0.25))));
+    const slow = round4(Math.max(-1, Math.min(1, position / 100 + r.float(-0.15, 0.15))));
+    const agreementPool = [fast, medium, slow].filter((v) => Math.abs(v) > 0.1);
+    const dir = position >= 0 ? 1 : -1;
+    const agreement = agreementPool.length
+      ? round4(agreementPool.filter((v) => v * dir > 0).length / agreementPool.length)
+      : 0;
+    const prices: number[] = [];
+    const full: number[] = [];
+    const trendOnly: number[] = [];
+    for (let i = 0; i < 97; i++) {
+      const p = round2(spec.px * (0.88 + 0.24 * (i / 96)));
+      prices.push(p);
+      const drift = ((p / spec.px - 1) * 100) * 6;
+      const trendVal = Math.max(-100, Math.min(100, position + drift));
+      trendOnly.push(round2(trendVal));
+      const shrink = 1 - Math.min(0.35, Math.abs(p / spec.px - 1) * 2.2);
+      full.push(round2(trendVal * shrink));
+    }
+    const zone = (side: 'above' | 'below', rank: number, distPct: number, labelKey: string): CtaTriggerZone => {
+      const price = round2(spec.px * (1 + distPct / 100));
+      const width = round2(spec.px * 0.004);
+      const change = round2((side === 'above' ? 1 : -1) * r.float(6, 22));
+      return {
+        id: `${side}-${rank}`,
+        rank,
+        label_key: labelKey,
+        kind: rank === 2 ? 'mixed' : 'trend_flip',
+        price,
+        price_low: round2(price - width),
+        price_high: round2(price + width),
+        distance_pct: distPct,
+        models: rank === 1 ? ['fast'] : ['fast', 'medium'],
+        components: rank === 1 ? ['ewma_8/24'] : ['tsmom_63d', 'donchian_55d'],
+        weight_share: rank === 1 ? 0.12 : 0.28,
+        est_position_change: change,
+        trend_change: round2(change * 0.8),
+        vol_change: round2(change * 0.2),
+        needs_close_confirm: true,
+      };
+    };
+    const aboveFirst = position <= -15 ? 'short_cover' : position < 15 ? 'reopen_long' : 'add_long';
+    const belowFirst = position >= 15 ? 'trim_long' : position > -15 ? 'reopen_short' : 'add_short';
+    const history = Array.from({ length: 120 }, (_, i) => {
+      const date = new Date(Date.now() - (120 - i) * 86_400_000).toISOString().slice(0, 10);
+      const wobble = Math.sin(i / 11) * 18 + r.float(-4, 4);
+      return { date, position: round2(Math.max(-100, Math.min(100, position - flow * ((120 - i) / 24) + wobble))) };
+    });
+    return {
+      instrument: spec.instrument,
+      label: spec.label,
+      proxy_symbol: spec.proxy,
+      proxy_type: 'etf',
+      index_symbol: spec.index,
+      source_status: 'active',
+      settlement_confirmed: true,
+      position_score: position,
+      previous_position_score: prev,
+      flow_score: flow,
+      trend_flow: trendFlow,
+      volatility_flow: volFlow,
+      state:
+        Math.abs(flow) < 3
+          ? 'steady'
+          : position >= 15
+            ? (flow > 0 ? 'long_add' : 'long_trim')
+            : position <= -15
+              ? (flow < 0 ? 'short_add' : 'short_cover')
+              : (flow > 0 ? 'rebuilding' : 'reducing'),
+      position_label:
+        position >= 60 ? 'strong_long'
+        : position >= 15 ? 'net_long'
+        : position <= -60 ? 'strong_short'
+        : position <= -15 ? 'net_short'
+        : agreement < 0.55 ? 'divergent' : 'neutral',
+      model_agreement: agreement,
+      submodels: {
+        fast: { label: '快速（≈1 个月）', weight: 0.3, signal: fast },
+        medium: { label: '中速（≈3 个月）', weight: 0.4, signal: medium },
+        slow: { label: '慢速（≈12 个月）', weight: 0.3, signal: slow },
+      },
+      volatility: {
+        realized_annual: round4(0.15 / scalar),
+        target_annual: 0.15,
+        scalar,
+        previous_scalar: round4(Math.min(1, scalar + r.float(-0.03, 0.03))),
+      },
+      trigger_levels: {
+        above: [zone('above', 1, round2(r.float(0.8, 2)), aboveFirst), zone('above', 2, round2(r.float(3, 5)), 'buy_accelerate')],
+        below: [zone('below', 1, round2(-r.float(0.8, 2)), belowFirst), zone('below', 2, round2(-r.float(3, 5)), 'sell_accelerate')],
+      },
+      scenario_curve: { prices, full, trend_only: trendOnly },
+      history,
+      reference_price: spec.px,
+      data_through: new Date(Date.now() - 86_400_000).toISOString().slice(0, 10),
+      coverage: { bars: 500, required: 380 },
+      warnings: [],
+      intraday: null,
+    };
+  });
+  return {
+    method_version: 'cta-proxy-v1',
+    generated_at: new Date(Date.now() - 20 * 60_000).toISOString(),
+    proxy_note: 'etf_trend_proxy',
+    source_status: 'active',
+    instruments,
   };
 }

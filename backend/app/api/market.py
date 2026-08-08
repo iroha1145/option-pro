@@ -133,6 +133,151 @@ async def _build_indices():
     }
 
 
+@router.get("/cta")
+async def market_cta(request: Request):
+    """CTA 趋势资金代理估算（大盘分析页）。
+
+    读取语义与 /market/indices 完全同款：匿名与普通账号只读 worker 发布的
+    公开快照（指纹 ETag、绝不触发供应商请求）；password 模式下 owner 普通
+    读也走磁盘快照，只有快照完全缺失时才现算兜底。
+    """
+
+    key = "market:cta"
+    owner = current_request_is_owner()
+    cache_control = "private, max-age=60, stale-while-revalidate=300"
+    now = time.time()
+    parameters = public_home_resource_parameters("cta_trend", now=now)
+    if not owner:
+        payload = await read_public_home_resource_async(
+            "cta_trend", parameters=parameters, now=now,
+        )
+        if payload is None:
+            raise public_snapshot_unavailable(key)
+        return await respond_with_snapshot(
+            request,
+            payload,
+            version_key=snapshot_version_key(
+                "cta_trend", "public", payload.get("snapshot_saved_at")
+            ),
+            cache_control=cache_control,
+        )
+    config = get_personal_config()
+    if config.access.mode == "password":
+        disk_entry = await read_owner_public_home_entry_async(
+            "cta_trend",
+            parameters=parameters,
+            fresh_for_seconds=float(config.public_home.cta_seconds),
+            now=now,
+        )
+        if disk_entry is not None:
+            return await respond_with_snapshot(
+                request,
+                disk_entry["payload"],
+                version_key=snapshot_version_key(
+                    "cta_trend",
+                    "owner",
+                    disk_entry["saved_at"],
+                    bool(disk_entry["fresh"]),
+                ),
+                cache_control=cache_control,
+            )
+    return await _shared_cache.get_or_set("market:cta:owner-live", 300, _build_cta_trend)
+
+
+async def _build_cta_trend():
+    """构建 CTA 趋势资金快照（worker 定时调用；owner 无快照时兜底）。
+
+    收盘语义：正式估算只吃已收盘日线；末根未收盘时另做「盘中暂定」标记，
+    不进入正式仓位与历史。
+    """
+
+    from app.api import stocks
+    from app.services.cta.config import INSTRUMENTS, METHOD_VERSION
+    from app.services.cta.model import compute_cta_estimate, mark_intraday_crossings
+    from app.services.technical.structure import _last_bar_closed
+
+    now_dt = datetime.now(timezone.utc)
+
+    async def _one(inst) -> dict:
+        base = {
+            "instrument": inst.key,
+            "label": inst.label,
+            "proxy_symbol": inst.proxy_symbol,
+            "proxy_type": inst.proxy_type,
+            "index_symbol": inst.index_symbol,
+            "calculation_at": now_dt.isoformat(),
+        }
+        try:
+            chart = await stocks._stock_chart_impl(inst.proxy_symbol, "1d", "raw")
+        except Exception:
+            chart = None
+        bars = chart.get("bars") if isinstance(chart, dict) else None
+        if not isinstance(bars, list) or not bars:
+            return {
+                **base,
+                "source_status": "unavailable",
+                "settlement_confirmed": None,
+                "intraday": None,
+                "coverage": {"bars": 0, "required": 0},
+                "warnings": ["代理标的日线不可用"],
+                "position_score": None,
+                "previous_position_score": None,
+                "flow_score": None,
+                "trend_flow": None,
+                "volatility_flow": None,
+                "state": None,
+                "position_label": None,
+                "model_agreement": None,
+                "submodels": None,
+                "volatility": None,
+                "trigger_levels": None,
+                "scenario_curve": None,
+                "history": [],
+                "reference_price": None,
+                "data_through": None,
+            }
+        settled = list(bars)
+        intraday_bar = None
+        try:
+            last_epoch = int(settled[-1]["t"])
+        except (KeyError, TypeError, ValueError):
+            last_epoch = None
+        if last_epoch is not None and not _last_bar_closed(last_epoch, now_dt):
+            intraday_bar = settled.pop()
+        estimate = await asyncio.to_thread(compute_cta_estimate, settled)
+        intraday = None
+        if intraday_bar is not None:
+            try:
+                intraday_price = float(intraday_bar["c"])
+            except (KeyError, TypeError, ValueError):
+                intraday_price = None
+            intraday_day = (
+                datetime.fromtimestamp(int(intraday_bar["t"]), tz=timezone.utc)
+                .astimezone(ET)
+                .date()
+                .isoformat()
+            )
+            intraday = mark_intraday_crossings(estimate, intraday_price, intraday_day)
+        return {
+            **base,
+            **estimate,
+            "settlement_confirmed": estimate["source_status"] == "active",
+            "intraday": intraday,
+        }
+
+    rows = list(await asyncio.gather(*[_one(inst) for inst in INSTRUMENTS]))
+    active = sum(1 for row in rows if row.get("source_status") == "active")
+    return {
+        "method_version": METHOD_VERSION,
+        "generated_at": now_dt.isoformat(),
+        "proxy_note": "etf_trend_proxy",
+        "source_status": (
+            "active" if active == len(rows) else ("degraded" if active else "unavailable")
+        ),
+        "instruments": rows,
+    }
+
+
 @router.get("/status")
 async def market_status():
     """Determine US market status from current time (no external API needed)."""

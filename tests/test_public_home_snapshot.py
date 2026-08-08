@@ -95,9 +95,53 @@ def _seed_watchlist(
     return path
 
 
+def _cta_trend_payload(now: float) -> dict:
+    from app.services.cta.config import INSTRUMENTS, METHOD_VERSION
+
+    def row(item):
+        return {
+            "instrument": item.key,
+            "label": item.label,
+            "proxy_symbol": item.proxy_symbol,
+            "proxy_type": item.proxy_type,
+            "index_symbol": item.index_symbol,
+            "calculation_at": _iso(now),
+            "source_status": "active",
+            "settlement_confirmed": True,
+            "intraday": None,
+            "coverage": {"bars": 500, "required": 380},
+            "warnings": [],
+            "position_score": 42.0,
+            "previous_position_score": 40.0,
+            "flow_score": 2.0,
+            "trend_flow": 1.5,
+            "volatility_flow": 0.5,
+            "state": "long_add",
+            "position_label": "net_long",
+            "model_agreement": 1.0,
+            "submodels": {},
+            "volatility": {"realized_annual": 0.18, "target_annual": 0.15, "scalar": 0.83, "previous_scalar": 0.84},
+            "trigger_levels": {"above": [], "below": []},
+            "scenario_curve": {"prices": [], "full": [], "trend_only": []},
+            "history": [],
+            "reference_price": 100.0,
+            "data_through": "2026-08-05",
+        }
+
+    return {
+        "method_version": METHOD_VERSION,
+        "generated_at": _iso(now),
+        "proxy_note": "etf_trend_proxy",
+        "source_status": "active",
+        "instruments": [row(item) for item in INSTRUMENTS],
+    }
+
+
 def _payload(resource: str, now: float, *, price: float = 100.0) -> dict:
     if resource == "watchlist":
         return _watchlist_payload(price=price)
+    if resource == "cta_trend":
+        return _cta_trend_payload(now)
     if resource == "indices":
         return {
             "indices": [
@@ -351,6 +395,8 @@ def _payload(resource: str, now: float, *, price: float = 100.0) -> dict:
 
 
 def _entries(now: float, *, price: float = 100.0) -> dict[str, dict]:
+    # cta_trend 一并预置：它是无条件刷新的可选资源，不预置的话在只考察
+    # 单一资源到期的用例里会「永远到期」，把无关轮次都拖成 degraded。
     return {
         resource: create_public_home_entry(
             resource,
@@ -358,7 +404,7 @@ def _entries(now: float, *, price: float = 100.0) -> dict[str, dict]:
             saved_at=now,
             parameters=public_home_resource_parameters(resource, now=now),
         )
-        for resource in PUBLIC_HOME_RESOURCE_ORDER
+        for resource in (*PUBLIC_HOME_RESOURCE_ORDER, "cta_trend")
     }
 
 
@@ -372,6 +418,7 @@ def _task_config() -> SimpleNamespace:
         signals_seconds=900,
         earnings_seconds=21_600,
         unusual_seconds=1800,
+        cta_seconds=1800,
         failure_retry_seconds=300,
     )
 
@@ -688,7 +735,7 @@ def test_worker_publishes_quick_resources_before_heavy_failure(tmp_path: Path) -
         _task_config(),
         builders={
             resource: builder(resource)
-            for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER)
+            for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER, "cta_trend")
         },
         snapshot_path=path,
         clock=lambda: now,
@@ -706,6 +753,7 @@ def test_worker_publishes_quick_resources_before_heavy_failure(tmp_path: Path) -
             "focus_signals",
             "market_signals",
             "earnings",
+            "cta_trend",
         ]
     assert set(read_public_home_entries(path, now=now)) == {
         "indices",
@@ -713,6 +761,7 @@ def test_worker_publishes_quick_resources_before_heavy_failure(tmp_path: Path) -
         "focus_chart",
         "focus_signals",
         "market_signals",
+        "cta_trend",
     }
 
 
@@ -777,14 +826,14 @@ def test_worker_staggers_heavy_resources_and_skips_not_due_providers(
         _task_config(),
         builders={
             resource: builder(resource)
-            for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER)
+            for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER, "cta_trend")
         },
         snapshot_path=path,
         clock=lambda: current[0],
     )
     first = asyncio.run(task())
     assert first.details["deferred"] == ["unusual"]
-    assert calls[-1] == "earnings"
+    assert "earnings" in calls  # cta_trend 在重资源之后构建，占据末位
 
     current[0] += 30
     calls.clear()
@@ -797,9 +846,10 @@ def test_worker_staggers_heavy_resources_and_skips_not_due_providers(
     third = asyncio.run(task())
     assert third.status == "idle"
     assert calls == []
-    assert set(read_public_home_entries(path, now=current[0])) == set(
-        PUBLIC_HOME_RESOURCE_ORDER
-    )
+    assert set(read_public_home_entries(path, now=current[0])) == {
+        *PUBLIC_HOME_RESOURCE_ORDER,
+        "cta_trend",
+    }
 
 
 def test_worker_retries_failed_heavy_resource_after_cooldown_only(
@@ -828,7 +878,7 @@ def test_worker_retries_failed_heavy_resource_after_cooldown_only(
         _task_config(),
         builders={
             resource: fail if resource == "unusual" else refresh(resource)
-            for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER)
+            for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER, "cta_trend")
         },
         snapshot_path=path,
         clock=lambda: current[0],
@@ -997,7 +1047,7 @@ def test_weekend_uses_closed_windows_and_keeps_unusual_servable(
             saved_at=saved_at,
             parameters=public_home_resource_parameters(resource, now=now),
         )
-        for resource in PUBLIC_HOME_RESOURCE_ORDER
+        for resource in (*PUBLIC_HOME_RESOURCE_ORDER, "cta_trend")
     }
     write_public_home_snapshot(path, entries, now=now)
     _seed_watchlist(path, saved_at)
@@ -1014,7 +1064,7 @@ def test_weekend_uses_closed_windows_and_keeps_unusual_servable(
         _task_config(),
         builders={
             resource: builder(resource)
-            for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER)
+            for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER, "cta_trend")
         },
         snapshot_path=path,
         clock=lambda: now,
@@ -1025,6 +1075,7 @@ def test_weekend_uses_closed_windows_and_keeps_unusual_servable(
     assert result.details["available"] == [
         "watchlist",
         *PUBLIC_HOME_RESOURCE_ORDER,
+        "cta_trend",
     ]
     assert result.details["unavailable"] == []
     assert result.details["deferred"] == ["unusual"]
@@ -1108,6 +1159,7 @@ def test_weekend_retries_only_unusual_persistence_after_write_failure(
         "earnings_seconds",
     ):
         setattr(config, field, 7 * 24 * 60 * 60)
+    config.cta_seconds = 86_400  # 本用例只考察 unusual：6 小时跳变不得把 cta 拖入轮次
     task = PublicHomeTask(
         config,
         builders={"unusual": build},
@@ -1194,7 +1246,7 @@ def test_hanging_heavy_refresh_does_not_block_quick_or_duplicate_heavy(
             _task_config(),
             builders={
                 resource: builder(resource)
-                for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER)
+                for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER, "cta_trend")
             },
             snapshot_path=path,
             clock=lambda: current[0],
@@ -1398,7 +1450,7 @@ def test_public_home_worker_does_not_block_on_massive_symbol_directory(
         _task_config(),
         builders={
             resource: builder(resource)
-            for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER)
+            for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER, "cta_trend")
         },
         snapshot_path=tmp_path / "public-home-snapshot-v1.json",
         clock=lambda: now,

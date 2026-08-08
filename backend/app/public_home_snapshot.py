@@ -33,7 +33,9 @@ PUBLIC_HOME_RESOURCE_ORDER = (
     "earnings",
     "unusual",
 )
-PUBLIC_HOME_OPTIONAL_RESOURCE_ORDER = ("breakout_lead_chart",)
+# cta_trend 是可选资源：不进 release 闸门（首次部署时 worker 尚未发布过
+# 它的快照，设为必需会让部署在第一次发布前永远过不了验证）。
+PUBLIC_HOME_OPTIONAL_RESOURCE_ORDER = ("breakout_lead_chart", "cta_trend")
 _MARKET_TZ = ZoneInfo("America/New_York")
 _BREAKOUT_TICKER_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,19}$")
 _EARNINGS_TICKER_PATTERN = re.compile(r"^[A-Z][A-Z0-9.-]{0,11}$")
@@ -261,6 +263,9 @@ PUBLIC_HOME_RESOURCE_SPECS: dict[str, PublicHomeResourceSpec] = {
     # 在 worker 下一次成功刷新前按不可用处理。
     "earnings": PublicHomeResourceSpec("earnings-upcoming-v3", 30 * 60 * 60),
     "unusual": PublicHomeResourceSpec("options-unusual-v1", 4 * 24 * 60 * 60),
+    # CTA 趋势资金代理估算：日频模型，7 天上限撑过长周末；参数里带
+    # method_version——模型参数换代时旧快照按参数不匹配自动失效。
+    "cta_trend": PublicHomeResourceSpec("cta-trend-v1", 7 * 24 * 60 * 60),
 }
 
 
@@ -285,6 +290,13 @@ def public_home_resource_parameters(resource: str, *, now: float) -> dict[str, A
         }
     if resource == "unusual":
         return {"type": "all", "min_vol_oi": 1.0}
+    if resource == "cta_trend":
+        from app.services.cta.config import INSTRUMENTS, METHOD_VERSION
+
+        return {
+            "instruments": [item.key for item in INSTRUMENTS],
+            "method_version": METHOD_VERSION,
+        }
     raise KeyError(resource)
 
 
@@ -398,6 +410,8 @@ def _payload_timestamps_fit_entry(
         "unusual",
     }:
         iso_values.append(payload.get("as_of"))
+    if resource == "cta_trend":
+        iso_values.append(payload.get("generated_at"))
     if resource in {"focus_chart", "breakout_lead_chart"}:
         if payload.get("last_bar_at") is not None:
             iso_values.append(payload.get("last_bar_at"))
@@ -1095,6 +1109,49 @@ def _validate_unusual(payload: Mapping[str, Any]) -> bool:
     return True
 
 
+def _validate_cta_trend(payload: Mapping[str, Any]) -> bool:
+    from app.services.cta.config import INSTRUMENTS, METHOD_VERSION
+
+    if set(payload) != {
+        "method_version",
+        "generated_at",
+        "source_status",
+        "proxy_note",
+        "instruments",
+    }:
+        return False
+    if payload.get("method_version") != METHOD_VERSION:
+        return False
+    if not _valid_iso_timestamp(payload.get("generated_at")):
+        return False
+    if payload.get("source_status") not in {"active", "degraded", "unavailable"}:
+        return False
+    rows = payload.get("instruments")
+    if not isinstance(rows, list) or len(rows) != len(INSTRUMENTS):
+        return False
+    expected_keys = [item.key for item in INSTRUMENTS]
+    for row, expected in zip(rows, expected_keys):
+        if not isinstance(row, dict) or row.get("instrument") != expected:
+            return False
+        # 结构性检查：估算字段必须在场（值可以是 null——缺数据的诚实形态），
+        # 细粒度数值语义由模型层测试钉住，不在快照层复刻一遍。
+        for field in (
+            "proxy_symbol",
+            "proxy_type",
+            "source_status",
+            "position_score",
+            "flow_score",
+            "trend_flow",
+            "volatility_flow",
+            "trigger_levels",
+            "scenario_curve",
+            "data_through",
+        ):
+            if field not in row:
+                return False
+    return True
+
+
 _PAYLOAD_VALIDATORS = {
     "indices": _validate_indices,
     "focus_overview": _validate_overview,
@@ -1104,6 +1161,7 @@ _PAYLOAD_VALIDATORS = {
     "breakout_lead_chart": _validate_breakout_lead_chart,
     "earnings": _validate_earnings,
     "unusual": _validate_unusual,
+    "cta_trend": _validate_cta_trend,
 }
 
 

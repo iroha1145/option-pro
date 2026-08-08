@@ -1,9 +1,19 @@
-/** 市场域：GET /api/market/indices · GET /api/market/status */
+/** 市场域：GET /api/market/indices · GET /api/market/status · GET /api/market/cta */
 import {mockOr} from '../client';
+import { marketGet } from '../marketRead';
 import { resetSharedReads, sharedGlobalGet } from '../sharedRead';
-import { asRec, pickN, pickS, unwrap } from '../live';
+import { asRec, pickN, pickS, unwrap, type Rec } from '../live';
 import * as fx from '@/mocks/fixtures';
-import type { IndexQuote, MarketSession, MarketStatus } from '../types';
+import * as fx2 from '@/mocks/fixtures2';
+import type {
+  CtaInstrumentEstimate,
+  CtaTrendPayload,
+  CtaTriggerKind,
+  CtaTriggerZone,
+  IndexQuote,
+  MarketSession,
+  MarketStatus,
+} from '../types';
 import { t } from '../../i18n/core.ts';
 
 /**
@@ -90,9 +100,144 @@ export function resetMarketStatusShare(): void {
   resetSharedReads();
 }
 
+/** 契约 /market/cta → CtaTrendPayload（null 保真：缺数据不折 0/中性） */
+export function mapCtaTrend(body: unknown): CtaTrendPayload {
+  const r = asRec(body);
+  const zone = (item: Rec): CtaTriggerZone | null => {
+    const id = pickS(item, 'id');
+    const labelKey = pickS(item, 'label_key');
+    const kindRaw = pickS(item, 'kind');
+    const price = pickN(item, 'price');
+    if (id === null || labelKey === null || price === null) return null;
+    const kind: CtaTriggerKind =
+      kindRaw === 'vol_delever' || kindRaw === 'mixed' ? kindRaw : 'trend_flip';
+    return {
+      id,
+      rank: pickN(item, 'rank') ?? 0,
+      label_key: labelKey,
+      kind,
+      price,
+      price_low: pickN(item, 'price_low') ?? price,
+      price_high: pickN(item, 'price_high') ?? price,
+      distance_pct: pickN(item, 'distance_pct') ?? 0,
+      models: unwrap(item, 'models').flatMap((v) => (typeof v === 'string' ? [v] : [])),
+      components: unwrap(item, 'components').flatMap((v) => (typeof v === 'string' ? [v] : [])),
+      weight_share: pickN(item, 'weight_share') ?? 0,
+      est_position_change: pickN(item, 'est_position_change') ?? 0,
+      trend_change: pickN(item, 'trend_change') ?? 0,
+      vol_change: pickN(item, 'vol_change') ?? 0,
+      needs_close_confirm: item.needs_close_confirm !== false,
+    };
+  };
+  const instruments = unwrap(r, 'instruments').map((item): CtaInstrumentEstimate => {
+    const rec = asRec(item);
+    const submodelsRaw = rec.submodels === null || rec.submodels === undefined ? null : asRec(rec.submodels);
+    const submodels = submodelsRaw === null
+      ? null
+      : Object.fromEntries(
+          Object.entries(submodelsRaw).flatMap(([key, value]) => {
+            const sub = asRec(value);
+            const label = pickS(sub, 'label');
+            const weight = pickN(sub, 'weight');
+            const signal = pickN(sub, 'signal');
+            if (label === null || weight === null || signal === null) return [];
+            return [[key, { label, weight, signal }]];
+          }),
+        );
+    const volRaw = rec.volatility === null || rec.volatility === undefined ? null : asRec(rec.volatility);
+    const triggersRaw = rec.trigger_levels === null || rec.trigger_levels === undefined ? null : asRec(rec.trigger_levels);
+    const curveRaw = rec.scenario_curve === null || rec.scenario_curve === undefined ? null : asRec(rec.scenario_curve);
+    const intradayRaw = rec.intraday === null || rec.intraday === undefined ? null : asRec(rec.intraday);
+    const coverageRaw = rec.coverage === null || rec.coverage === undefined ? null : asRec(rec.coverage);
+    const numbers = (raw: Rec, key: string): number[] =>
+      unwrap(raw, key).flatMap((v) => (typeof v === 'number' && Number.isFinite(v) ? [v] : []));
+    return {
+      instrument: pickS(rec, 'instrument') ?? '',
+      label: pickS(rec, 'label') ?? '',
+      proxy_symbol: pickS(rec, 'proxy_symbol') ?? '',
+      proxy_type: pickS(rec, 'proxy_type') ?? 'etf',
+      index_symbol: pickS(rec, 'index_symbol') ?? '',
+      source_status: pickS(rec, 'source_status') ?? 'unavailable',
+      settlement_confirmed: typeof rec.settlement_confirmed === 'boolean' ? rec.settlement_confirmed : null,
+      position_score: pickN(rec, 'position_score'),
+      previous_position_score: pickN(rec, 'previous_position_score'),
+      flow_score: pickN(rec, 'flow_score'),
+      trend_flow: pickN(rec, 'trend_flow'),
+      volatility_flow: pickN(rec, 'volatility_flow'),
+      state: pickS(rec, 'state'),
+      position_label: pickS(rec, 'position_label'),
+      model_agreement: pickN(rec, 'model_agreement'),
+      submodels,
+      volatility: volRaw === null
+        ? null
+        : {
+            realized_annual: pickN(volRaw, 'realized_annual'),
+            target_annual: pickN(volRaw, 'target_annual') ?? 0.15,
+            scalar: pickN(volRaw, 'scalar') ?? 1,
+            previous_scalar: pickN(volRaw, 'previous_scalar') ?? 1,
+          },
+      trigger_levels: triggersRaw === null
+        ? null
+        : {
+            above: unwrap(triggersRaw, 'above').flatMap((z) => {
+              const mapped = zone(asRec(z));
+              return mapped ? [mapped] : [];
+            }),
+            below: unwrap(triggersRaw, 'below').flatMap((z) => {
+              const mapped = zone(asRec(z));
+              return mapped ? [mapped] : [];
+            }),
+          },
+      scenario_curve: curveRaw === null
+        ? null
+        : {
+            prices: numbers(curveRaw, 'prices'),
+            full: numbers(curveRaw, 'full'),
+            trend_only: numbers(curveRaw, 'trend_only'),
+          },
+      history: unwrap(rec, 'history').flatMap((row) => {
+        const item2 = asRec(row);
+        const date = pickS(item2, 'date');
+        const position = pickN(item2, 'position');
+        return date !== null && position !== null ? [{ date, position }] : [];
+      }),
+      reference_price: pickN(rec, 'reference_price'),
+      data_through: pickS(rec, 'data_through'),
+      coverage: coverageRaw === null
+        ? null
+        : { bars: pickN(coverageRaw, 'bars') ?? 0, required: pickN(coverageRaw, 'required') ?? 0 },
+      warnings: unwrap(rec, 'warnings').flatMap((v) => (typeof v === 'string' ? [v] : [])),
+      intraday: intradayRaw === null
+        ? null
+        : {
+            price: pickN(intradayRaw, 'price') ?? 0,
+            date: pickS(intradayRaw, 'date'),
+            provisional: intradayRaw.provisional === true,
+            crossed_zone_ids: unwrap(intradayRaw, 'crossed_zone_ids').flatMap((v) =>
+              typeof v === 'string' ? [v] : [],
+            ),
+          },
+    };
+  });
+  return {
+    method_version: pickS(r, 'method_version') ?? '',
+    generated_at: pickS(r, 'generated_at'),
+    proxy_note: pickS(r, 'proxy_note') ?? 'etf_trend_proxy',
+    source_status: pickS(r, 'source_status') ?? 'unavailable',
+    instruments,
+    ...(r._stale === true ? { _stale: true } : {}),
+  };
+}
+
 export const marketApi = {
   /* 常驻的 IndexTape 与大盘页会同时要这份数据；共享同一次请求。 */
   indices: (): Promise<IndexQuote[]> => mockOr(() => fx.getIndices(), sharedIndices),
+  /** CTA 趋势资金代理估算：worker 快照只读（5 分钟轮询足够，日频模型）。 */
+  ctaTrend: (): Promise<CtaTrendPayload> =>
+    mockOr(
+      () => fx2.getCtaTrend(),
+      () => marketGet('/market/cta', { ttlMs: 5 * 60_000, staleMs: 60 * 60_000 }).then(mapCtaTrend),
+    ),
   /**
    * 市场时段。
    *

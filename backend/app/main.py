@@ -244,6 +244,8 @@ _PUBLIC_READ_API_PATHS = {
     "/api/sectors",
     "/api/market/indices",
     "/api/market/status",
+    # CTA 趋势资金代理估算：只读 worker 快照（指纹 ETag），无供应商工作。
+    "/api/market/cta",
     # Optix 宏观环境 reads are bounded SQLite snapshot reads: no provider work,
     # no worker action, no model spend. The refresh POST is deliberately absent.
     "/api/macro/conditions",
