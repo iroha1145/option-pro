@@ -10,10 +10,13 @@ import { cn } from '@/lib/utils';
 import type { TechnicalStructure } from '@/api/types';
 import { t } from '../../i18n/core.ts';
 
-function StructFact({ label, value }: { label: string; value: string }) {
+function StructFact({ label, value, hint }: { label: string; value: string; hint?: typeof STRUCTURE_HINTS[string] }) {
   return (
     <div className="rounded-md bg-paper-2 px-2 py-1">
-      <dt className="text-micro text-ink-400">{label}</dt>
+      <dt className="flex flex-wrap items-center gap-x-1 text-micro text-ink-400">
+        {label}
+        {hint && <InfoHint hint={hint} size={10} />}
+      </dt>
       <dd className="font-mono text-caption text-ink-800 tnum">{value}</dd>
     </div>
   );
@@ -100,13 +103,14 @@ export default function StructurePanel({ technical }: { technical: TechnicalStru
             {t('基底检测（枢轴聚类）')}
             <InfoHint hint={STRUCTURE_HINTS.base_detection} />
           </span>
-          <span className="text-caption font-medium text-ink-800">
+          <span className="flex items-center gap-1 text-caption font-medium text-ink-800">
             {base
               ? t('{n} 次触碰 · 质量 {q}', {
                   n: base.resistance_touches ?? '—',
                   q: base.quality !== null ? Math.round((base.quality ?? 0) * 100) : '—',
                 })
               : t('未检测到完成基底')}
+            {base && <InfoHint hint={STRUCTURE_HINTS.base_quality} size={11} align="end" />}
           </span>
         </div>
         {base && (
@@ -131,11 +135,20 @@ export default function StructurePanel({ technical }: { technical: TechnicalStru
           </span>
         </div>
         <dl className="grid grid-cols-3 gap-1.5 text-caption">
-          <StructFact label={t('努力')} value={vpm.effort !== null ? `${vpm.effort.toFixed(2)}x` : '—'} />
-          <StructFact label={t('结果')} value={vpm.result !== null ? `${vpm.result.toFixed(2)}x` : '—'} />
+          <StructFact
+            label={t('努力')}
+            value={vpm.effort !== null ? `${vpm.effort.toFixed(2)}x` : '—'}
+            hint={STRUCTURE_HINTS.effort}
+          />
+          <StructFact
+            label={t('结果')}
+            value={vpm.result !== null ? `${vpm.result.toFixed(2)}x` : '—'}
+            hint={STRUCTURE_HINTS.result}
+          />
           <StructFact
             label={t('假突破风险')}
             value={`${vpm.false_breakout_risk > 0 ? '+' : ''}${vpm.false_breakout_risk}`}
+            hint={STRUCTURE_HINTS.false_breakout_risk}
           />
         </dl>
         {vpm.tags.length > 0 && (
