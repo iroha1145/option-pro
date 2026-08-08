@@ -15,6 +15,24 @@ export const MARKET: Dict = {
   /* src/components/market/IndexCards.tsx */
   '暂无指数数据': ['No index data available', '指数データがありません'],
 
+  /* src/pages/Home.tsx（首页：指数带 / 市场状态 / 雷达信号 / 财报临近 / 自选异动 / CTA 联动带） */
+  '指数、信号与自选的全景。': ['Indices, signals, and your watchlist at a glance.', '指数・シグナル・ウォッチリストの全景。'],
+  '雷达信号': ['Radar signals', 'レーダーシグナル'],
+  '雷达仍在盯': ['Radar is still watching', 'レーダーは監視中'],
+  '财报临近': ['Earnings approaching', 'まもなく決算'],
+  '自选异动': ['Watchlist movers', 'ウォッチリストの異動'],
+  '暂无自选': ['No watchlist items yet', 'ウォッチリストはまだありません'],
+  '查看全部': ['View all', 'すべて見る'],
+  '纽约时间': ['New York time', 'ニューヨーク時間'],
+  '六维形态均值': ['Six-dimension regime mean', '六軸レジーム平均'],
+  '扫描池': ['Scan pool', 'スキャンプール'],
+  '上涨': ['Advancers', '値上がり'],
+  '下跌': ['Decliners', '値下がり'],
+  '平盘': ['Unchanged', '変わらず'],
+  '平均强度 {avg} · ≥85 {n} 只': ['Avg strength {avg} · {n} names ≥85', '平均強度 {avg} · ≥85 は {n} 銘柄'],
+  'EPS 预期 {v}': ['EPS est. {v}', 'EPS予想 {v}'],
+  '主题板块热力与 IV 排名': ['Theme-sector heat & IV rankings', 'テーマ別セクターのヒートとIVランキング'],
+
   /* src/components/market/LinkCards.tsx */
   '突破雷达': ['Breakout radar', 'ブレイクアウト・レーダー'],
   '板块透视': ['Sector X-ray', 'セクター透視'],

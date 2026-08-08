@@ -15,13 +15,15 @@ import { LOCALES, getLocale, setLocale, t } from '../i18n/core.ts';
 
 /* setLocale() 整页重载才会切语言，模块级常量在加载期求值一次即可，不需要每次渲染重算 */
 const DOCK_ITEMS: { label: string; path: string; icon: IconName }[] = [
+  { label: t('首页'), path: '/', icon: 'candle' },
   { label: t('自选'), path: '/watchlist', icon: 'star-line' },
   { label: t('选股'), path: '/screener', icon: 'filter-funnel' },
   { label: t('雷达'), path: '/breakouts', icon: 'radar' },
-  { label: t('板块'), path: '/sectors', icon: 'layers' },
 ];
 
 const MORE_ITEMS: { label: string; path: string; icon: IconName; desc: string }[] = [
+  /* 板块从 Dock 移入「更多」（首页/自选/选股/雷达占满四个一级入口） */
+  { label: t('板块透视'), path: '/sectors', icon: 'layers', desc: t('主题板块热力与 IV 排名') },
   { label: t('财报日历'), path: '/earnings', icon: 'calendar-spark', desc: t('即将公布 × AI 影响') },
   { label: t('大盘强弱'), path: '/market', icon: 'radar', desc: t('指数 · 宽度 · 宏观环境') },
   { label: t('CTA 趋势资金'), path: '/cta', icon: 'candle', desc: t('趋势资金 · 触发位') },
@@ -61,7 +63,8 @@ export default function MobileDock() {
   }, [moreOpen]);
 
   const renderItem = (item: (typeof DOCK_ITEMS)[number]) => {
-    const active = location.pathname.startsWith(item.path);
+    /* '/' 必须精确匹配：startsWith('/') 对任何路径都为真，首页会永远亮着 */
+    const active = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path);
     return (
       <Link
         key={item.path}
