@@ -18,17 +18,18 @@ import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { t } from '../i18n/core.ts';
 
 export const NAV_ITEMS = [
-  { no: '01', label: t('自选'), path: '/watchlist' },
-  { no: '02', label: t('选股'), path: '/screener' },
-  { no: '03', label: t('雷达'), path: '/breakouts' },
-  { no: '04', label: t('板块'), path: '/sectors' },
-  { no: '05', label: t('财报'), path: '/earnings' },
-  { no: '06', label: t('催化'), path: '/catalysts' },
+  { no: '01', label: t('首页'), path: '/' },
+  { no: '02', label: t('自选'), path: '/watchlist' },
+  { no: '03', label: t('选股'), path: '/screener' },
+  { no: '04', label: t('雷达'), path: '/breakouts' },
+  { no: '05', label: t('板块'), path: '/sectors' },
+  { no: '06', label: t('财报'), path: '/earnings' },
+  { no: '07', label: t('催化'), path: '/catalysts' },
   /* 大盘强弱页此前没有任何常规入口（不在导航、不在 Dock、⌘K 也搜不到，
      唯一通路是点指数跑马灯）——一个完整页面不该只有彩蛋入口。 */
-  { no: '07', label: t('大盘'), path: '/market' },
+  { no: '08', label: t('大盘'), path: '/market' },
   /* CTA 趋势资金：原大盘页 B4.5 卡剥离成的独立页面 */
-  { no: '08', label: t('CTA'), path: '/cta' },
+  { no: '09', label: t('CTA'), path: '/cta' },
 ] as const;
 
 function NyClock({ className }: { className?: string }) {
@@ -87,7 +88,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
     <header className="glass sticky top-0 z-50 border-b border-line">
       <div className="mx-auto flex h-12 max-w-shell items-center gap-3 px-4 md:h-16 md:gap-5 md:px-8">
         {/* Logo */}
-        <Link to="/watchlist" className="flex shrink-0 items-center gap-2.5" aria-label={t("Optix Pro 首页")}>
+        <Link to="/" className="flex shrink-0 items-center gap-2.5" aria-label={t("Optix Pro 首页")}>
           <img src="/logo.svg" alt="" className="size-7 md:size-8" />
           <span className="hidden flex-col leading-none sm:flex">
             <span className="font-display text-[17px] font-bold text-ink-900">Optix Pro</span>
@@ -101,7 +102,8 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             <NavLink
               key={item.path}
               to={item.path}
-              data-active={location.pathname.startsWith(item.path)}
+              /* '/' 必须精确匹配：startsWith('/') 对任何路径都为真，首页会永远亮着 */
+              data-active={item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)}
               className={({ isActive }) =>
                 cn(
                   'flex h-full items-center gap-1.5 whitespace-nowrap px-2.5 text-body-s transition-colors duration-fast 2xl:px-3.5',
