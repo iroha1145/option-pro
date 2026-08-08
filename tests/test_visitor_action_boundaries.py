@@ -1,8 +1,11 @@
 """密码模式下非 Owner 的动作边界（2026-07-27 审计批）。
 
 目标口径：
-- 匿名访客与朋友账号默认只读已保存的快照，不触发模型任务、实时行情
-  拉取、期权冷启动扫描或外部数据补全；
+- 匿名访客默认只读已保存的快照，不触发模型任务、实时行情拉取、
+  期权冷启动扫描或外部数据补全；
+- 个股手动拉取（2026-08-08 起）对登录客户开放并按账号限额——正向
+  路径钉在 tests/test_stock_pull_access.py，本文件守匿名/伪造 cookie
+  仍被拒的一半；其余动作面朋友账号与匿名同样只读；
 - `[access] visitor_live_pulls` / `visitor_ai_actions` 是仅有的两个例外
   开关，默认关闭，打开后原有限流、冷却与同源校验仍然生效。
 """
@@ -25,7 +28,10 @@ from app.access import (
     require_public_read_or_owner_access,
     require_same_origin_action,
 )
+from app.api import accounts as accounts_api
 from app.api import sectors, stocks
+from app.api.accounts import ACCOUNT_COOKIE_NAME
+from app.services.accounts import AccountStore, set_account_store
 from app.main import _GatewayMiddleware
 from app.personal_config import AccessConfig
 from app.services.catalysts import economic_calendar_actuals as actuals
@@ -98,29 +104,84 @@ def test_anonymous_stock_pull_is_rejected_by_default(
             headers=_action_headers(),
         )
     assert response.status_code == 401
-    assert response.json()["error"] == "owner_login_required"
+    # 2026-08-08 起拉取对登录客户开放：匿名的拒绝语义从 owner_login_required
+    # 改为「请先登录」，引导注册/登录而不是索要 Owner 口令。
+    assert response.json()["error"] == "account_login_required"
     assert calls == 0
 
 
-def test_customer_session_is_still_not_owner_for_stock_pull(
+def test_forged_account_cookie_is_still_anonymous_for_stock_pull(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """朋友账号的 Cookie 不是 Owner 会话——写面对它保持同样的 401。"""
+    """伪造的账号 Cookie 不构成登录会话——拉取面保持匿名 401。
+
+    登录客户可拉取的正向路径（含 acct:{uid} 限额）钉在
+    tests/test_stock_pull_access.py；这里守边界的另一半：随手捏一个
+    cookie 值不能把写面打开，也不能把请求抬成 Owner。
+    """
 
     async def unexpected_pull(symbol: str) -> dict:
-        raise AssertionError("customer pull must not reach providers by default")
+        raise AssertionError("forged account cookie must not reach providers")
 
     monkeypatch.setattr(stocks, "_pull_stock_data_once", unexpected_pull)
     app = _gateway_app(_runtime())
     with TestClient(app, base_url="https://testserver") as client:
-        client.cookies.set("optix_account", "usr_customer_cookie")
+        client.cookies.set(ACCOUNT_COOKIE_NAME, "usr_forged_cookie_value")
         response = client.post(
             "/api/stocks/AAOI/pull",
             json={},
             headers=_action_headers(),
         )
     assert response.status_code == 401
-    assert response.json()["error"] == "owner_login_required"
+    assert response.json()["error"] == "account_login_required"
+
+
+def test_signed_in_customer_pull_passes_both_gateway_layers(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """真实账号会话要同时过 ASGI 中间件与路由依赖两层。
+
+    test_stock_pull_access.py 的迷你 app 没挂 _GatewayMiddleware，只测了
+    依赖层；这里把两层叠起来测，防止两层口径漂移（历史上两层各自为政
+    出过分叉）。"""
+
+    calls = 0
+
+    async def pull(symbol: str) -> dict:
+        nonlocal calls
+        calls += 1
+        return {"ticker": symbol, "status": "completed"}
+
+    monkeypatch.setattr(stocks, "_pull_stock_data_once", pull)
+    stocks._stock_pull_tasks.clear()
+    stocks._public_stock_pull_ticker_deadlines.clear()
+    stocks._public_stock_pull_recent.clear()
+    set_account_store(AccountStore(tmp_path / "accounts.db"))
+    accounts_api.reset_rate_limits()
+    app = _gateway_app(_runtime())
+    app.include_router(accounts_api.router)
+    try:
+        with TestClient(app, base_url="https://testserver") as client:
+            registered = client.post(
+                "/api/account/register",
+                json={"username": "boundary_carol", "password": "pw"},
+                headers=_action_headers(),
+            )
+            assert registered.status_code == 201
+            response = client.post(
+                "/api/stocks/AAOI/pull",
+                json={},
+                headers=_action_headers(),
+            )
+        assert response.status_code == 200
+        assert calls == 1
+    finally:
+        set_account_store(None)
+        accounts_api.reset_rate_limits()
+        stocks._stock_pull_tasks.clear()
+        stocks._public_stock_pull_ticker_deadlines.clear()
+        stocks._public_stock_pull_recent.clear()
 
 
 def test_visitor_stock_pull_flag_reopens_the_bounded_surface(

@@ -27,6 +27,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from app.access import (
     current_request_is_owner,
     public_snapshot_unavailable,
+    request_account_session,
     require_same_origin_json,
 )
 from app.data_paths import get_data_paths
@@ -3501,7 +3502,14 @@ async def pull_stock_data(
 
     public_client_id: str | None = None
     if not current_request_is_owner():
-        public_client_id = request_client_ip(request)
+        # 登录客户按账号限额（换 IP 不重置）；匿名（visitor_live_pulls 开启时
+        # 才会到这里）沿用 IP 限额。owner 不限。
+        account = request_account_session(request)
+        public_client_id = (
+            f"acct:{account.user_id}"
+            if account is not None
+            else request_client_ip(request)
+        )
 
     return await _coalesced_stock_pull(
         symbol,

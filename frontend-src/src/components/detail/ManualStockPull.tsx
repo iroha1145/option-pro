@@ -91,8 +91,8 @@ export default function ManualStockPull({
         running: false,
         result: null,
         error: cause instanceof ApiError
-          ? cause.bizCode === 'owner_login_required'
-            ? t('拉取需要 Owner 登录；访客只读已保存的快照')
+          ? cause.bizCode === 'account_login_required' || cause.bizCode === 'owner_login_required'
+            ? t('拉取需要登录；未登录只读已保存的快照')
             : `${cause.message}${cause.retryAfter ? t(' · {n} 秒后可重试', { n: cause.retryAfter }) : ''}`
           : t('拉取失败，请稍后重试'),
       });

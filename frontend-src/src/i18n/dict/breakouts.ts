@@ -63,7 +63,7 @@ export const BREAKOUTS: Dict = {
   '回踩中': ['Pulling back', 'リテスト中'],
   ' · 仅报价': [' · Quote only', ' · 現在値のみ'],
   '拉取失败，请稍后重试': ['Failed to pull data — try again shortly', '取得に失敗しました。しばらくしてから再度お試しください。'],
-  '拉取需要 Owner 登录；访客只读已保存的快照': ['Pulling live data requires the owner to sign in; visitors read saved snapshots only', 'ライブデータの取得にはオーナーのサインインが必要です。ビジターは保存済みスナップショットのみ閲覧できます'],
+  '拉取需要登录；未登录只读已保存的快照': ['Pulling live data requires signing in; anonymous visitors read saved snapshots only', 'ライブデータの取得にはサインインが必要です。未ログインでは保存済みスナップショットのみ閲覧できます'],
   '暂无当日 K 线': ['No candles for today yet', '本日のローソク足はまだありません'],
   'K 线读取失败': ['Failed to load candles', 'ローソク足の読み込みに失敗しました'],
   '可点击下方按钮获取最新行情': ['Click the button below to pull the latest quote', '下のボタンをクリックして最新の株価を取得できます'],

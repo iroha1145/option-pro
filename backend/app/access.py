@@ -543,6 +543,30 @@ def require_owner_access(request: Request) -> None:
     )
 
 
+def request_account_session(request: Request):
+    """登录客户（账号 cookie）的会话账号，解析失败一律按未登录（None）。
+
+    手动拉取的准入与预算键控都从这里取账号：注册账号可拉、按 acct:{uid}
+    限额；匿名只读快照。宽容 except 不只是防御——旧测试用 SimpleNamespace
+    冒充 Request 直调路由函数（没有 .cookies），必须把它们保持在「匿名」
+    语义而不是炸 AttributeError。
+    账号面在 app.api.accounts（它反向依赖本模块），这里延迟导入避免环。
+    """
+
+    try:
+        from app.api.accounts import current_account
+
+        return current_account(request)
+    except Exception:
+        return None
+
+
+def request_has_account_session(request: Request) -> bool:
+    """登录客户会话是否有效（request_account_session 的布尔视图）。"""
+
+    return request_account_session(request) is not None
+
+
 async def require_public_read_or_owner_access(
     request: Request,
 ) -> AsyncIterator[None]:
@@ -554,10 +578,12 @@ async def require_public_read_or_owner_access(
         method == "POST"
         and request.url.path == "/api/catalysts/tickers/batch"
     )
-    public_stock_pull = (
-        method == "POST"
-        and runtime.visitor_live_pulls
-        and is_public_stock_pull_path(request.url.path)
+    is_stock_pull = (
+        method == "POST" and is_public_stock_pull_path(request.url.path)
+    )
+    # 手动拉取：owner 与登录客户都可发起；visitor_live_pulls 开关额外放开匿名。
+    public_stock_pull = is_stock_pull and (
+        runtime.visitor_live_pulls or request_has_account_session(request)
     )
     if runtime.mode == "password" and (
         method in {"GET", "HEAD"} or public_batch_query or public_stock_pull
@@ -567,6 +593,17 @@ async def require_public_read_or_owner_access(
         with request_owner_access_context(owner_access):
             yield
         return
+    if (
+        runtime.mode == "password"
+        and is_stock_pull
+        and not runtime.request_is_owner(request)
+    ):
+        # 到这里必是匿名（owner 与账号会话已在上面放行）：如实要求登录，
+        # 不再抛统一的 owner 门——拉取本来就不是 owner 专属动作。
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "account_login_required", "message": "请先登录"},
+        )
     require_owner_access(request)
     with request_owner_access_context(True):
         yield

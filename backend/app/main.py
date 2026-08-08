@@ -35,6 +35,7 @@ from app.access import (
     is_public_earnings_ai_read_path,
     is_public_earnings_impact_action_path,
     is_public_stock_pull_path,
+    request_has_account_session,
     request_owner_access_context,
     require_public_read_or_owner_access,
     require_same_origin_action,
@@ -565,6 +566,21 @@ class _GatewayMiddleware:
         owner_access = self.access_runtime.request_is_owner(owner_request)
         scope.setdefault("state", {})["owner_access"] = owner_access
 
+        is_stock_pull_post = (
+            self.access_runtime.mode == "password"
+            and method == "POST"
+            and is_public_stock_pull_path(path)
+        )
+        if (
+            not publicly_available
+            and not owner_access
+            and is_stock_pull_post
+            and request_has_account_session(owner_request)
+        ):
+            # 手动拉取对登录客户开放（仅匿名保持只读）。账号 cookie 只在
+            # 「即将被拒的拉取 POST」上才解析，不给全站请求加数据库查找。
+            publicly_available = True
+
         if (
             method != "OPTIONS"
             and not publicly_available
@@ -573,6 +589,13 @@ class _GatewayMiddleware:
             if self.access_runtime.mode == "password" and is_html:
                 response = RedirectResponse("/login", status_code=303)
                 return await response(scope, receive, send_with_response_headers)
+            if is_stock_pull_post:
+                # 匿名点拉取：如实要求登录，而不是抛 owner 门。
+                return await _send_json(
+                    send_with_response_headers,
+                    401,
+                    {"error": "account_login_required", "message": "请先登录"},
+                )
             code = (
                 "owner_login_required"
                 if self.access_runtime.mode == "password"
