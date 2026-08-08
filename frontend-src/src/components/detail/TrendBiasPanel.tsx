@@ -60,7 +60,7 @@ function Gauge({ score, label }: { score: number; label: StockTrendBiasView['tre
           strokeDasharray={C}
           initial={{ strokeDashoffset: C }}
           animate={{ strokeDashoffset: C * (1 - score / 100) }}
-          transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
         />
       </svg>
       <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
