@@ -1894,6 +1894,53 @@ def test_worker_publishes_exact_breakout_lead_chart_as_optional_resource(
     assert stored["breakout_lead_chart"]["payload"]["ticker"] == "NVEC"
 
 
+def test_worker_builds_cta_trend_once_despite_duplicate_order_slots(
+    tmp_path: Path,
+) -> None:
+    """cta_trend 挂在硬编码位 + OPTIONAL 列表两处；领跑票在场时资源序列必须
+    按首次出现去重，否则同一轮对它双构建双落盘（生产 status 曾双列
+    available）。领跑票缺席的用例走不到重复分支，这里显式带票复现。"""
+    now = _regular_time()
+    path = tmp_path / "public-home-snapshot-v1.json"
+    entries = _entries(now)
+    # 其余资源全部新鲜；只有 cta_trend 超过 cta_seconds（1800s）到期。
+    stale_at = now - 1801
+    entries["cta_trend"] = create_public_home_entry(
+        "cta_trend",
+        _cta_trend_payload(stale_at),
+        saved_at=stale_at,
+        parameters=public_home_resource_parameters("cta_trend", now=now),
+    )
+    entries["breakout_lead_chart"] = create_public_home_entry(
+        "breakout_lead_chart",
+        {**_payload("focus_chart", now), "ticker": "NVEC"},
+        saved_at=now,
+        parameters=breakout_lead_chart_parameters("NVEC"),
+    )
+    write_public_home_snapshot(path, entries, now=now)
+    _seed_watchlist(path, now)
+    calls: list[dict] = []
+
+    async def build(parameters: dict) -> dict:
+        calls.append(dict(parameters))
+        return _cta_trend_payload(now)
+
+    task = PublicHomeTask(
+        _task_config(),
+        builders={"cta_trend": build},
+        snapshot_path=path,
+        breakout_lead_ticker_reader=lambda: "NVEC",
+        clock=lambda: now,
+    )
+    result = asyncio.run(task())
+
+    assert calls == [dict(public_home_resource_parameters("cta_trend", now=now))]
+    assert result.details["refreshed"] == ["cta_trend"]
+    available = result.details["available"]
+    assert available.count("cta_trend") == 1
+    assert len(available) == len(set(available))
+
+
 def test_anonymous_breakout_lead_chart_reads_disk_without_provider(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
