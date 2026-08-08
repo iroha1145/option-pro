@@ -11,7 +11,7 @@ import { baseAnimation, CH, glassTooltip, stippleAreaStyle, type ChartOption } f
 import { t } from '../../i18n/core.ts';
 import { signed } from './ctaMeta';
 
-export function historyOption(history: { date: string; position: number }[]): ChartOption | null {
+function historyOption(history: { date: string; position: number }[]): ChartOption | null {
   if (!history.length) return null;
   return {
     ...baseAnimation,

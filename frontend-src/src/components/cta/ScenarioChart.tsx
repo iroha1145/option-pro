@@ -10,7 +10,7 @@ import { fmtPrice } from '@/lib/format';
 import type { CtaInstrumentEstimate } from '@/api/types';
 import { t } from '../../i18n/core.ts';
 
-export function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
+function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
   const curve = row.scenario_curve;
   if (!curve || curve.prices.length === 0 || row.reference_price === null) return null;
   const refIndex = curve.prices.reduce(
