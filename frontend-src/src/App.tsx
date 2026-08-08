@@ -1,6 +1,6 @@
 import { Suspense, lazy } from 'react';
 import { MotionConfig } from 'framer-motion';
-import { Navigate, Route, Routes } from 'react-router';
+import { Route, Routes } from 'react-router';
 import Layout from '@/components/Layout';
 import { AccessProvider } from '@/hooks/useAccess';
 import { ToastProvider } from '@/components/Toast';
@@ -9,6 +9,7 @@ import PageFallback from '@/components/shared/PageFallback';
 import NotFound from '@/pages/NotFound';
 
 /* 路由级代码分割：页面按需加载，echarts 等重依赖不进首屏包 */
+const Home = lazy(() => import('@/pages/Home'));
 const Watchlist = lazy(() => import('@/pages/Watchlist'));
 const Login = lazy(() => import('@/pages/Login'));
 const Screener = lazy(() => import('@/pages/Screener'));
@@ -35,7 +36,7 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route element={<Layout />}>
-                <Route index element={<Navigate to="/watchlist" replace />} />
+                <Route index element={<Home />} />
                 <Route path="/watchlist" element={<Watchlist />} />
                 <Route path="/screener" element={<Screener />} />
                 <Route path="/breakouts" element={<Breakouts />} />
