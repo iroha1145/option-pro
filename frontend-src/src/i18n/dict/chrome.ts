@@ -25,6 +25,8 @@ export const CHROME: Dict = {
   '登录': ['Sign in', 'サインイン'],
   '大盘': ['Market', '地合い'],
   '指数 · 宽度 · 宏观环境': ['Indices · breadth · macro conditions', '指数 · 幅 · マクロ環境'],
+  'CTA': ['CTA', 'CTA'],
+  '趋势资金 · 触发位': ['Trend money · trigger levels', 'トレンド資金 · トリガー水準'],
   '退出': ['Sign out', 'サインアウト'],
   'Owner 已登录': ['Signed in as Owner', 'オーナーとしてサインイン中'],
   '访客只读模式': ['Guest · read-only', 'ゲスト · 閲覧のみ'],
