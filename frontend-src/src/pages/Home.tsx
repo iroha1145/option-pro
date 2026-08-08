@@ -356,7 +356,12 @@ export default function Home() {
           >
             <div className="divide-y divide-line">
               {breakouts.map((s) => (
-                <div key={s.id} className="flex items-center gap-3 px-4 py-2.5 md:px-5">
+                <Link
+                  key={s.id}
+                  to={`/stock/${encodeURIComponent(s.ticker)}`}
+                  aria-label={t('查看 {ticker} 股票详情', { ticker: s.ticker })}
+                  className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast hover:bg-paper-2/70 md:px-5"
+                >
                   <TickerLogo ticker={s.ticker} size={28} />
                   <p className="min-w-0 flex-1 truncate">
                     <span className="font-mono text-caption font-semibold text-ink-800">{s.ticker}</span>
@@ -367,7 +372,7 @@ export default function Home() {
                   <span className="w-10 shrink-0 text-right font-mono text-caption text-ink-800 tnum">
                     {s.strengthScore}
                   </span>
-                </div>
+                </Link>
               ))}
             </div>
           </ListBody>
@@ -387,7 +392,12 @@ export default function Home() {
           >
             <div className="divide-y divide-line">
               {earnings.map((it) => (
-                <div key={`${it.ticker}-${it.date}`} className="flex items-center gap-3 px-4 py-2.5 md:px-5">
+                <Link
+                  key={`${it.ticker}-${it.date}`}
+                  to={`/stock/${encodeURIComponent(it.ticker)}`}
+                  aria-label={t('查看 {ticker} 股票详情', { ticker: it.ticker })}
+                  className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast hover:bg-paper-2/70 md:px-5"
+                >
                   <TickerLogo ticker={it.ticker} size={28} />
                   <p className="min-w-0 flex-1 truncate">
                     <span className="font-mono text-caption font-semibold text-ink-800">{it.ticker}</span>
@@ -406,7 +416,7 @@ export default function Home() {
                       </span>
                     )}
                   </span>
-                </div>
+                </Link>
               ))}
             </div>
           </ListBody>
@@ -423,7 +433,12 @@ export default function Home() {
           >
             <div className="divide-y divide-line">
               {movers.map((item) => (
-                <div key={item.ticker} className="flex items-center gap-3 px-4 py-2.5 md:px-5">
+                <Link
+                  key={item.ticker}
+                  to={`/stock/${encodeURIComponent(item.ticker)}`}
+                  aria-label={t('查看 {ticker} 股票详情', { ticker: item.ticker })}
+                  className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast hover:bg-paper-2/70 md:px-5"
+                >
                   <TickerLogo ticker={item.ticker} size={28} />
                   <p className="min-w-0 flex-1 truncate">
                     <span className="font-mono text-caption font-semibold text-ink-800">{item.ticker}</span>
@@ -433,7 +448,7 @@ export default function Home() {
                     {Number.isFinite(item.price) && item.price > 0 ? fmtPrice(item.price) : '—'}
                   </span>
                   <ChangeBadge value={item.changePct} size="sm" />
-                </div>
+                </Link>
               ))}
             </div>
           </ListBody>
