@@ -137,7 +137,8 @@ export default function WeekScrubber({
                   className={cn(
                     'flex min-h-[148px] w-[86px] shrink-0 cursor-pointer snap-start flex-col border-r border-line px-2 py-2.5 text-left transition-colors duration-fast last:border-r-0 sm:w-auto sm:min-w-0',
                     isSelected ? 'bg-brand-50' : 'hover:bg-paper-2',
-                    flashing && dayItems.length > 0 && 'animate-tick-flash-up',
+                    'tick-flash',
+                    flashing && dayItems.length > 0 && 'tick-flash-up',
                   )}
                 >
                   {/* 日期头 */}

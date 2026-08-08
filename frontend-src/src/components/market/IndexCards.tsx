@@ -75,9 +75,9 @@ const IndexCard = memo(function IndexCard({
       </div>
       <p
         className={cn(
-          'mt-2 inline-block rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
-          flash === 'up' && 'animate-tick-flash-up',
-          flash === 'down' && 'animate-tick-flash-down',
+          'tick-flash mt-2 inline-block rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
+          flash === 'up' && 'tick-flash-up',
+          flash === 'down' && 'tick-flash-down',
         )}
       >
         {hasPrice ? fmtPrice(price) : '—'}

@@ -24,6 +24,7 @@ import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtNyEventTime, fmtNyHHmm, fmtPrice, fmtRelative } from '@/lib/format';
 import { MACRO_TONE_LABEL, macroToneOf } from '@/lib/macroFit';
 import { baseAnimation, CH, glassTooltip, type ChartOption } from '@/lib/chart';
@@ -40,7 +41,6 @@ import {
 import type { BreakoutCurrentEvent, BreakoutEventFull, BreakoutSession, LifecycleState } from './types';
 import { t } from '../../i18n/core.ts';
 
-const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const MONO = '"IBM Plex Mono", monospace';
 
 /* ---------------- 工具 ---------------- */
@@ -134,7 +134,7 @@ function PriorityRing({ score }: { score: number | null }) {
               strokeDasharray={c}
               initial={{ strokeDashoffset: c }}
               animate={{ strokeDashoffset: c * (1 - frac) }}
-              transition={{ duration: 1.1, ease: EASE_PAPER }}
+              transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
             />
           )}
         </svg>
@@ -247,7 +247,7 @@ function LifecycleStepper({ state }: { state: LifecycleState }) {
                 className="absolute inset-y-0 left-0 bg-brand-600"
                 initial={{ width: '0%' }}
                 animate={{ width: it.passed ? '100%' : '0%' }}
-                transition={{ duration: 0.4, ease: 'easeOut', delay: 0.24 + i * 0.06 }}
+                transition={{ duration: 0.4, ease: EASE_PAPER, delay: 0.24 + i * 0.06 }}
               />
             </span>
           )}
@@ -669,9 +669,9 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
             <p className="mt-0.5 flex items-center gap-2">
               <span
                 className={cn(
-                  'rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
-                  flash === 'up' && 'animate-tick-flash-up',
-                  flash === 'down' && 'animate-tick-flash-down',
+                  'tick-flash rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
+                  flash === 'up' && 'tick-flash-up',
+                  flash === 'down' && 'tick-flash-down',
                 )}
               >
                 {num(e.current_price) !== null ? fmtPrice(e.current_price) : '—'}

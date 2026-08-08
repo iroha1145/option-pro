@@ -91,7 +91,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 </div>
                 <button
                   onClick={() => dismiss(t.id)}
-                  className="rounded-sm p-1 text-ink-400 transition-colors hover:bg-paper-2 hover:text-ink-600"
+                  className="rounded-sm p-1 text-ink-400 transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-600 active:scale-95"
                   aria-label={__t("关闭通知")}
                 >
                   <Icon name="x" size={13} />

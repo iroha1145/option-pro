@@ -66,7 +66,7 @@ export default function MobileDock() {
       <Link
         key={item.path}
         to={item.path}
-        className="relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1"
+        className="relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 transition-transform duration-fast active:scale-[0.96]"
         aria-label={item.label}
         aria-current={active ? 'page' : undefined}
       >
@@ -89,13 +89,13 @@ export default function MobileDock() {
       {/* 悬浮胶囊 Dock：离屏 12px、全圆角、毛玻璃 + 墨色浮起阴影；
           雷达与其余入口同级同色，不再做中央凸起圆钮。 */}
       <nav
-        className="glass fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[60] mx-auto flex h-16 max-w-md items-stretch rounded-2xl border border-line px-1.5 shadow-[0_18px_40px_-14px_rgba(16,24,40,0.30),0_4px_14px_-6px_rgba(16,24,40,0.14)] xl:hidden"
+        className="glass fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[60] mx-auto flex h-16 max-w-md items-stretch rounded-2xl border border-line px-1.5 shadow-dock xl:hidden"
         aria-label={t('移动端导航')}
       >
         {DOCK_ITEMS.map(renderItem)}
         <button
           onClick={() => setMoreOpen(true)}
-          className="flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1"
+          className="flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 transition-transform duration-fast active:scale-[0.96]"
           aria-label={t('更多')}
         >
           <Icon name="menu" size={19} className="text-ink-400" />
@@ -120,7 +120,9 @@ export default function MobileDock() {
             <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
-              exit={{ y: '100%' }}
+              /* 退场独立给 150ms（规则：退场 < 进场 220ms）：定长 tween 即使被饿死，
+                 恢复的第一帧也已到终点；收起时拖沓的 sheet 会盖住新页面。 */
+              exit={{ y: '100%', transition: { duration: 0.15, ease: [0.16, 1, 0.3, 1] } }}
               /* 短 tween 取代 spring：物理弹簧需要连续多帧收敛，主线程被重页面
                  挂载抢走时会长时间停在半途；定长 tween 即使被饿死，恢复的第一帧
                  也已到终点。 */
@@ -157,7 +159,7 @@ export default function MobileDock() {
                       setMoreOpen(false);
                       navigate(m.path);
                     }}
-                    className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-colors hover:bg-paper-2"
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-[transform,background-color] hover:bg-paper-2 active:bg-line/60"
                   >
                     <span className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-brand-600">
                       <Icon name={m.icon} size={17} />
@@ -175,7 +177,7 @@ export default function MobileDock() {
                     setMoreOpen(false);
                     navigate('/login');
                   }}
-                  className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-colors hover:bg-paper-2"
+                  className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-[transform,background-color] hover:bg-paper-2 active:bg-line/60"
                 >
                   <span className={cn('flex size-9 items-center justify-center rounded-md border border-line', isOwner ? 'bg-up-50 text-up-700' : 'bg-card-warm text-ink-400')}>
                     <Icon name="shield" size={17} />

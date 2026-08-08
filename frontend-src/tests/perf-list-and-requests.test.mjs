@@ -78,8 +78,12 @@ test('自选卡片不再使用 layout 投影，首屏之外不做入场动画', 
   assert.doesNotMatch(page, /layout="position"/, 'layout 投影会为每张卡建节点并反复测量');
   assert.match(page, /initial=\{animateIn \? \{ opacity: 0, y: 14 \} : false\}/);
   assert.match(page, /animateIn=\{i < FIRST_BATCH\}/);
-  // hover 位移必须保留
-  assert.match(page, /whileHover=\{\{ y: -3/);
+  // hover 位移必须保留：由 framer whileHover 收敛为 gated CSS card-lift
+  //（触屏不粘滞，hover 上浮 -3px + sh-2 行为保留）
+  assert.match(page, /card-lift/);
+  // card-lift 的 hover 规则必须用 hover/pointer 门控，否则触屏 tap 后 hover 粘滞
+  const css = await source('index.css');
+  assert.match(css, /@media \(hover: hover\) and \(pointer: fine\)/);
 });
 
 /* ---------- 占位与真实内容占同样的空间 ---------- */

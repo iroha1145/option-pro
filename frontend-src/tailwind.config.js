@@ -126,6 +126,9 @@ module.exports = {
         'btn-hi': 'inset 0 1px 0 rgba(255,255,255,.16), 0 1px 2px rgba(16,24,40,.18), 0 4px 12px -4px rgba(16,24,40,.34)',
         chip: 'inset 0 1px 0 rgba(255,255,255,.14), 0 1px 3px -1px rgba(16,24,40,.25)',
         track: 'inset 0 1px 2px rgba(16,24,40,.16)',
+        /* v8.3 悬浮层两档登记（原 CommandPalette/MobileDock 的任意值 shadow，同族墨影） */
+        overlay: '0 24px 64px -16px rgba(16,24,40,0.35), 0 6px 20px -8px rgba(16,24,40,0.16)',
+        dock: '0 18px 40px -14px rgba(16,24,40,0.30), 0 4px 14px -6px rgba(16,24,40,0.14)',
       },
       fontFamily: {
         /* v8：display 换系统 sans 栈（与 sans 相同但独立变量保留，大标不再用衬线） */
@@ -197,14 +200,8 @@ module.exports = {
           from: { opacity: '1' },
           to: { opacity: '0' },
         },
-        'tick-flash-up': {
-          '0%': { backgroundColor: '#E5F6EF' },
-          '100%': { backgroundColor: 'transparent' },
-        },
-        'tick-flash-down': {
-          '0%': { backgroundColor: '#FCECEC' },
-          '100%': { backgroundColor: 'transparent' },
-        },
+        /* v8.3 tick-flash keyframes 退役：keyframes 一旦触发必须跑完、无法中断，
+           改为 index.css 的 .tick-flash*（常驻 600ms 回落 transition + 瞬时上色态）。 */
         'led-pulse': {
           '0%': { boxShadow: '0 0 0 0 rgba(14,159,110,.55)' },
           '70%': { boxShadow: '0 0 0 6px rgba(14,159,110,0)' },
@@ -247,8 +244,6 @@ module.exports = {
         'rise-in': 'rise-in 560ms cubic-bezier(.16,1,.3,1) both',
         'page-fade-in': 'page-fade-in 280ms cubic-bezier(.16,1,.3,1) both',
         'page-fade-out': 'page-fade-out 160ms cubic-bezier(.16,1,.3,1) both',
-        'tick-flash-up': 'tick-flash-up 600ms cubic-bezier(.22,1,.36,1)',
-        'tick-flash-down': 'tick-flash-down 600ms cubic-bezier(.22,1,.36,1)',
         'led-pulse': 'led-pulse 1.5s cubic-bezier(.45,0,.15,1) infinite',
         'radar-sweep': 'radar-sweep 3.2s linear infinite',
         'blip-ripple': 'blip-ripple 2s cubic-bezier(.45,0,.15,1) infinite',

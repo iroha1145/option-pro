@@ -230,7 +230,9 @@ test('股票影响圆点由外层定位，缩放动画不会覆盖居中位移',
   assert.equal(source.includes('style={{ left: `${pct}%` }}'), true);
   assert.match(
     source,
-    /className="absolute top-1\/2 -translate-x-1\/2 -translate-y-1\/2"[\s\S]*?<motion\.span[\s\S]*?initial=\{\{ scale: 0 \}\}/,
+    // R3：入场由 scale(0) 收敛为 0.9+opacity（去 AI 味），语义不变——
+    // 缩放动画仍在内层 motion.span 上，居中位移仍由外层绝对定位 span 承担。
+    /className="absolute top-1\/2 -translate-x-1\/2 -translate-y-1\/2"[\s\S]*?<motion\.span[\s\S]*?initial=\{\{ scale: 0\.9, opacity: 0 \}\}/,
   );
 });
 

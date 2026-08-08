@@ -146,17 +146,21 @@
   .card-hover {
     transition: transform 260ms var(--ease-paper), box-shadow 260ms var(--ease-paper);
   }
-  .card-hover:hover {
-    transform: translateY(-3px);
-    box-shadow: var(--shadow-sh-2), inset 0 1px 0 rgba(255, 255, 255, .7);
-  }
   /* v8 清新上浮卡：hover 抬升 3px + sh-2 */
   .card-lift {
     transition: transform .24s cubic-bezier(.23, 1, .32, 1), box-shadow .24s cubic-bezier(.23, 1, .32, 1);
   }
-  .card-lift:hover {
-    transform: translateY(-3px);
-    box-shadow: var(--shadow-sh-2);
+  /* v8.3 触屏 hover 粘滞全局修：:hover 上浮/阴影只在「可悬停的精确指针」
+     （鼠标/触控板）下生效；触屏 tap 后 :hover 会粘住不解除，卡片一直浮着。 */
+  @media (hover: hover) and (pointer: fine) {
+    .card-hover:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-sh-2), inset 0 1px 0 rgba(255, 255, 255, .7);
+    }
+    .card-lift:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-sh-2);
+    }
   }
 
   /* 表格数字 */
@@ -194,6 +198,14 @@
   .marquee-track:hover .marquee-inner {
     animation-play-state: paused;
   }
+
+  /* v8.3 tick-flash 可中断化：原 keyframes 闪烁（tailwind config 已删）→
+     常驻 base 类做 600ms 回落 transition；闪烁态 transition:none 瞬时上色，
+     再次闪烁可从任意中间色瞬时重上色——天然可中断。
+     reduced-motion 由全局 transition-duration:160ms 覆盖，无需额外处理。 */
+  .tick-flash { transition: background-color 600ms cubic-bezier(.22,1,.36,1); }
+  .tick-flash-up { background-color: var(--up-50); transition: none; }
+  .tick-flash-down { background-color: var(--down-50); transition: none; }
 }
 
 /* §3.6 按钮立体层级的全局状态物理（token 见 tailwind.config boxShadow.btn/btn-hi/

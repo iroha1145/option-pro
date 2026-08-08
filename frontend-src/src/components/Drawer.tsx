@@ -99,7 +99,7 @@ export default function Drawer({ open, onClose, title, label, children, width = 
                 <div className="min-w-0 flex-1">{title}</div>
                 <button
                   onClick={onClose}
-                  className="rounded-sm p-1.5 text-ink-400 transition-colors hover:bg-paper-2 hover:text-ink-600"
+                  className="rounded-sm p-1.5 text-ink-400 transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-600 active:scale-95"
                   aria-label={t("关闭抽屉")}
                 >
                   <Icon name="x" size={16} />

@@ -98,7 +98,7 @@ function ScoreDonut({ score }: { score: number }) {
           strokeDasharray={C}
           initial={{ strokeDashoffset: C }}
           animate={{ strokeDashoffset: target }}
-          transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
           transform="rotate(-90 36 36)"
         />
         <text x="36" y="40" textAnchor="middle" className="fill-ink-500 font-mono" fontSize="12">
@@ -322,7 +322,7 @@ function WatchCard({
     /* 移除键是卡片按钮的「兄弟」而不是后代（审计 2.5.12）：button 里嵌
        role=button 违反规范，读屏普遍把后代扁平化成卡片可访问名的一部分，
        「将 X 移出自选」被并进卡片名、删除动作对读屏几乎不存在。
-       动画与 hover 上浮留在外层包装上，观感不变。 */
+       入场动画留在外层包装上，hover 上浮/阴影走 button 的 card-lift（gated CSS），观感不变。 */
     <motion.div
       /* layout="position" 曾挂在每张卡上。它会为每个元素建一个 framer 投影节点并在
          每次布局变化时重新测量 —— 214 张卡时 Style & Layout 达 1,285ms，且把
@@ -334,14 +334,15 @@ function WatchCard({
           ? { duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.045, 0.5) }
           : undefined
       }
-      /* hover 上浮 -3px/240ms 走 whileHover（framer 入场后内联 transform:none 会压掉 CSS hover 位移），阴影用 CSS */
-      whileHover={{ y: -3, transition: { duration: 0.24, ease: 'easeOut' } }}
       className="group/card relative"
     >
       <button
         type="button"
         onClick={onClick}
-        className="card-surface flex w-full flex-col p-4 text-left transition-shadow duration-240 ease-out hover:shadow-sh-2"
+        /* hover 上浮 -3px + sh-2 走 card-lift（hover/pointer 门控 CSS，触屏不粘滞；
+           原 framer whileHover 已收敛）。不能挂在外层 motion.div：framer 入场后
+           内联 transform:none 会压掉同元素上的 CSS hover 位移。 */
+        className="card-surface card-lift flex w-full flex-col p-4 text-left"
       >
       <div className="flex items-center gap-2.5">
         <TickerLogo ticker={item.ticker} />
@@ -582,9 +583,9 @@ export default function Watchlist() {
           <span
             key={`${r.ticker}-${r.price}`}
             className={cn(
-              'inline-block rounded-xs px-1 font-mono text-[15px] leading-6 text-ink-900 tnum',
-              flashes[r.ticker] === 'up' && 'animate-tick-flash-up',
-              flashes[r.ticker] === 'down' && 'animate-tick-flash-down',
+              'tick-flash inline-block rounded-xs px-1 font-mono text-[15px] leading-6 text-ink-900 tnum',
+              flashes[r.ticker] === 'up' && 'tick-flash-up',
+              flashes[r.ticker] === 'down' && 'tick-flash-down',
             )}
           >
             {fmtPrice(r.price)}

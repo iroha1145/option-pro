@@ -9,6 +9,7 @@
 import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { DUR_SECTION } from '@/lib/motion';
 import { fmtPrice, fmtRelative } from '@/lib/format';
 import { useShell } from '@/components/Layout';
 import TickerLogo from '@/components/shared/TickerLogo';
@@ -67,7 +68,7 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
       ref={ref}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.48, ease: EASE_PAPER, delay: Math.min(index * 0.045, 0.5) }}
+      transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(index * 0.045, 0.5) }}
       onClick={() => onOpen(ev)}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return; // 卡内真按钮的键盘激活不拦截
@@ -79,14 +80,16 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
       role="button"
       tabIndex={0}
       aria-label={t('{ticker} {setup} 信号卡，打开事件详情', { ticker: ev.ticker, setup: SETUP_CN[ev.setup_type] ?? ev.setup_type ?? '' })}
-      /* hover 上浮走 whileHover（framer 入场后内联 transform:none 会压掉 CSS hover 位移），阴影用 CSS */
-      whileHover={{ y: -3, transition: { duration: 0.24, ease: 'easeOut' } }}
-      className={cn(
-        'card-surface cursor-pointer p-4',
-        'transition-shadow duration-240 ease-out hover:shadow-sh-2',
-        locate && 'bk-locate',
-      )}
     >
+      {/* hover 上浮 -3px + sh-2 走 card-lift（hover/pointer 门控 CSS，触屏不粘滞）。
+          必须挂内层 div：framer 入场后在本元素留下内联 transform:none，
+          会压掉同元素上的 CSS hover 位移（原 whileHover 方案因此存在）。 */}
+      <div
+        className={cn(
+          'card-surface card-lift h-full cursor-pointer p-4',
+          locate && 'bk-locate',
+        )}
+      >
       {/* 顶行：Logo + 代码/名称 + 相对时间（ticker 点击开个股抽屉） */}
       <div className="flex items-center gap-2.5">
         <TickerLogo ticker={ev.ticker} />
@@ -117,9 +120,9 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
       <div className="mt-3 flex items-end justify-between gap-2">
         <span
           className={cn(
-            'rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
-            flash === 'up' && 'animate-tick-flash-up',
-            flash === 'down' && 'animate-tick-flash-down',
+            'tick-flash rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
+            flash === 'up' && 'tick-flash-up',
+            flash === 'down' && 'tick-flash-down',
           )}
         >
           {typeof ev.current_price === 'number' && Number.isFinite(ev.current_price) ? fmtPrice(ev.current_price) : '—'}
@@ -149,6 +152,7 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
             {t('证据')} {(ev.evidence ?? []).length} {t('条')}
           </span>
         )}
+      </div>
       </div>
     </motion.article>
   );

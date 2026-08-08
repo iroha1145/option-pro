@@ -8,6 +8,7 @@ import SourceNote from '@/components/shared/SourceNote';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { fmtRelative } from '@/lib/format';
+import { DUR_SECTION } from '@/lib/motion';
 import { t } from '../../i18n/core.ts';
 
 function HeroCell({ label, children }: { label: string; children: React.ReactNode }) {
@@ -65,7 +66,7 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
     <motion.section
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: DUR_SECTION, ease: [0.16, 1, 0.3, 1] }}
       aria-label={t("数据源状态")}
       className="card-surface mt-6"
     >
