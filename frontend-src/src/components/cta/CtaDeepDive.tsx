@@ -40,6 +40,16 @@ function PositionBar({ value }: { value: number }) {
   );
 }
 
+/** 「x/y 同向」：表态（|signal|>0.1）子模型里与总趋势同号的个数。 */
+function directionCount(row: CtaInstrumentEstimate): string {
+  const subs = row.submodels ? Object.values(row.submodels) : [];
+  const active = subs.filter((s) => Math.abs(s.signal) > 0.1);
+  if (!active.length) return '0/0';
+  const dir = (row.trend_strength ?? row.position_score ?? 0) >= 0 ? 1 : -1;
+  const agree = active.filter((s) => s.signal * dir > 0).length;
+  return `${agree}/${active.length}`;
+}
+
 function SignalRow({ label, signal }: { label: string; signal: number }) {
   const half = Math.min(1, Math.abs(signal)) * 50;
   return (
@@ -178,14 +188,20 @@ export default function CtaDeepDive({
                 </div>
                 <div className="rounded-md bg-paper-2 px-3 py-2">
                   <p className="flex items-center gap-1 text-micro text-ink-400">
-                    {t('模型一致度')}
+                    {t('趋势读数')}
                     <InfoHint hint={CTA_HINTS.agreement} size={10} />
                   </p>
+                  {/* 审计口径：大号 100% 视觉像「高置信度」，实际只表方向同向。
+                      主读数改趋势强度（波动率缩放前，±100），方向/覆盖/缩放小字并列。 */}
                   <p className="mt-0.5 font-mono text-body font-semibold text-ink-900 tnum">
-                    {row.model_agreement !== null ? `${Math.round(row.model_agreement * 100)}%` : '—'}
+                    {t('强度 {v}', { v: signed(row.trend_strength) })}
                   </p>
                   <p className="font-mono text-micro text-ink-400 tnum">
-                    {t('波动缩放 ×{s}', { s: row.volatility ? row.volatility.scalar.toFixed(2) : '—' })}
+                    {t('{d} 同向 · 覆盖 {c} · 缩放 ×{s}', {
+                      d: directionCount(row),
+                      c: row.active_model_weight !== null ? `${Math.round(row.active_model_weight * 100)}%` : '—',
+                      s: row.volatility ? row.volatility.scalar.toFixed(2) : '—',
+                    })}
                   </p>
                 </div>
               </div>
@@ -231,7 +247,8 @@ export default function CtaDeepDive({
           {/* 触发阶梯 ｜ 情景曲线 */}
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
             <div className="lg:col-span-6">
-              <TriggerLadder row={row} />
+              {/* 切标的重挂：触发区 id（above-1…）每只都复用，展开态不得跨标的迁移 */}
+              <TriggerLadder key={row.instrument} row={row} />
             </div>
             <div className="lg:col-span-6">
               <p className="flex items-center gap-1 text-micro text-ink-400">
@@ -257,6 +274,12 @@ export default function CtaDeepDive({
 
           <p className="mt-4 text-micro text-ink-400">
             {t('数据截至 {d} 收盘', { d: row.data_through ?? '—' })}
+            {/* 快照按墙钟变旧 ≠ 数据过期：休市期间只要覆盖最近已收盘交易日
+                就是最新（GPT-5.6-Pro 审计问题 3 的双状态拆分）。 */}
+            {row.market_data_current === true && <span> · {t('已是最新交易日')}</span>}
+            {row.market_data_current === false && (
+              <span className="text-warn-600"> · {t('晚于最近交易日，等待快照更新')}</span>
+            )}
             {row.intraday?.provisional && <span> · {t('盘中读数为暂定，不入正式历史')}</span>}
             {' · '}{t('方法 {v} · 代理={p}', { v: data.method_version ?? '—', p: row.proxy_symbol })}
             {' · '}{t('代理模型估算，非任何机构真实仓位披露')}

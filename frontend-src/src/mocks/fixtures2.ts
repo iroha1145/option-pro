@@ -2191,6 +2191,11 @@ export function getCtaTrend(): CtaTrendPayload {
         : position <= -15 ? 'net_short'
         : agreement < 0.55 ? 'divergent' : 'neutral',
       model_agreement: agreement,
+      trend_strength: round2(scalar > 0 ? position / scalar : position),
+      active_model_weight: round4(
+        (Math.abs(fast) > 0.1 ? 0.3 : 0) + (Math.abs(medium) > 0.1 ? 0.4 : 0) + (Math.abs(slow) > 0.1 ? 0.3 : 0),
+      ),
+      market_data_current: true,
       submodels: {
         fast: { label: '快速（≈1 个月）', weight: 0.3, signal: fast },
         medium: { label: '中速（≈3 个月）', weight: 0.4, signal: medium },
@@ -2203,7 +2208,20 @@ export function getCtaTrend(): CtaTrendPayload {
         previous_scalar: round4(Math.min(1, scalar + r.float(-0.03, 0.03))),
       },
       trigger_levels: {
-        above: [zone('above', 1, round2(r.float(0.8, 2)), aboveFirst), zone('above', 2, round2(r.float(3, 5)), 'buy_accelerate')],
+        above: [
+          zone('above', 1, round2(r.float(0.8, 2)), aboveFirst),
+          /* v2 冲突样例（第二个标的）：趋势加多但波动率去杠杆占优 → 净减仓。
+             钉住前端不得把净负值区间渲染成买盘措辞。 */
+          idx === 1
+            ? {
+                ...zone('above', 2, round2(r.float(3, 5)), 'trend_up_vol_dominates'),
+                kind: 'vol_delever' as const,
+                est_position_change: -3.3,
+                trend_change: 1.1,
+                vol_change: -4.4,
+              }
+            : zone('above', 2, round2(r.float(3, 5)), 'buy_accelerate'),
+        ],
         below: [zone('below', 1, round2(-r.float(0.8, 2)), belowFirst), zone('below', 2, round2(-r.float(3, 5)), 'sell_accelerate')],
       },
       scenario_curve: { prices, full, trend_only: trendOnly },
@@ -2216,10 +2234,12 @@ export function getCtaTrend(): CtaTrendPayload {
     };
   });
   return {
-    method_version: 'cta-proxy-v1',
+    method_version: 'cta-proxy-v2',
     generated_at: new Date(Date.now() - 20 * 60_000).toISOString(),
     proxy_note: 'etf_trend_proxy',
     source_status: 'active',
     instruments,
+    snapshot_saved_at: new Date(Date.now() - 18 * 60_000).toISOString(),
+    stale_reason: null,
   };
 }

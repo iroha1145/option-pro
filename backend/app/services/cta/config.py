@@ -21,7 +21,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-METHOD_VERSION = "cta-proxy-v1"
+# v2（2026-08-09，GPT-5.6-Pro 审计）：下方触发区 Δ 改按下行穿越方向计算、
+# 区间垫衬钳位在现价一侧、距离按最近边界、权重按 (model,component) 去重、
+# 标签跟随净变化方向（新增趋势-波动率冲突键）、新增 trend_strength /
+# active_model_weight。版本写入快照 parameters，旧快照按参数不匹配自动失效。
+METHOD_VERSION = "cta-proxy-v2"
 
 # ── 标的：首版 ETF 代理（供应商无期货连续合约能力，见模块 docstring） ──
 

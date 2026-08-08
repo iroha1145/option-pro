@@ -68,9 +68,26 @@ test('触发位需收盘确认，盘中穿越只挂暂定章', () => {
 });
 
 test('触发标签按当前仓位动态（回补/重新加多/恢复加仓齐备）', () => {
-  for (const key of ['short_cover', 'reopen_long', 'add_long', 'buy_accelerate', 'trim_long', 'sell_accelerate']) {
+  for (const key of [
+    'short_cover', 'reopen_long', 'add_long', 'buy_accelerate', 'trim_long', 'sell_accelerate',
+    /* v2：趋势与净变化冲突时的显式标签（P1-02——净减仓不得叫买盘） */
+    'trend_up_vol_dominates', 'trend_down_vol_dominates',
+  ]) {
     assert.ok(panel.includes(`${key}:`) || panel.includes(`'${key}'`), `缺少触发标签 ${key}`);
   }
+});
+
+test('v2 读数拆解与新鲜度：强度/覆盖/最新交易日/快照时刻/换标的重挂', () => {
+  assert.match(panel, /trend_strength/);
+  assert.match(panel, /active_model_weight/);
+  assert.match(panel, /market_data_current/);
+  assert.match(panel, /已是最新交易日/);
+  /* 触发阶梯换标的必须重挂：区间 id（above-1…）每只都复用 */
+  assert.match(panel, /<TriggerLadder key=\{row\.instrument\}/);
+  /* 页头时间 = 快照落盘时刻，不是浏览器请求时刻 */
+  assert.match(ctaPage, /snapshot_saved_at/);
+  assert.match(ctaPage, /快照 \{time\}/);
+  assert.doesNotMatch(ctaPage, /\{t\('更新'\)\} \{fmtTimeHHMMSS\(ctaQ\.lastUpdatedAt\)\}/);
 });
 
 test('CTA 只做并排联动，不混入 regime 或 Strength', () => {

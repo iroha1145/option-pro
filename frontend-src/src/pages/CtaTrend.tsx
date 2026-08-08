@@ -56,9 +56,16 @@ export default function CtaTrend() {
                 {ctaQ.data.method_version}
               </span>
             )}
-            {ctaQ.lastUpdatedAt && (
+            {/* 页头时间 = worker 快照落盘时刻（缺失时退 generated_at）。
+                此前显示的是浏览器请求完成时刻，会把旧快照误标成「刚更新」
+                （GPT-5.6-Pro 审计问题 3）。 */}
+            {(ctaQ.data?.snapshot_saved_at ?? ctaQ.data?.generated_at) && (
               <span className="font-mono text-caption text-ink-400 tnum">
-                {t('更新')} {fmtTimeHHMMSS(ctaQ.lastUpdatedAt)}
+                {t('快照 {time}', {
+                  time: fmtTimeHHMMSS(
+                    new Date((ctaQ.data.snapshot_saved_at ?? ctaQ.data.generated_at)!).getTime(),
+                  ),
+                })}
               </span>
             )}
           </>

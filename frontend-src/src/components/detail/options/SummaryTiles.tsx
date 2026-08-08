@@ -22,7 +22,9 @@ function fmtRatio(value: number | null): string {
   return value.toFixed(2);
 }
 
-/** Call/Put 双色占比条（up-600 系 vs down-600 系）；两侧皆无数据时只画空轨道。 */
+/** Call/Put 双色占比条（up-600 系 vs down-600 系）。
+ *  任一侧缺失就只画空轨道：把缺失当 0 会捏造出「全是另一侧」的占比
+ *  （GPT-5.6-Pro 审计：摘要条不得破坏逐行「缺失显 —」的纪律）。 */
 function SplitBar({
   call,
   put,
@@ -32,10 +34,10 @@ function SplitBar({
   put: number | null;
   delay: number;
 }) {
-  const total = (call ?? 0) + (put ?? 0);
-  if (total <= 0) {
+  if (call === null || put === null || call + put <= 0) {
     return <div className="mt-2 h-1 rounded-pill bg-line" aria-hidden="true" />;
   }
+  const total = call + put;
   return (
     <div
       className="mt-2 flex h-1 overflow-hidden rounded-pill bg-line"
@@ -43,14 +45,14 @@ function SplitBar({
     >
       <motion.div
         className="h-full bg-up-600/70"
-        style={{ width: `${((call ?? 0) / total) * 100}%`, transformOrigin: 'left' }}
+        style={{ width: `${(call / total) * 100}%`, transformOrigin: 'left' }}
         initial={{ scaleX: 0 }}
         animate={{ scaleX: 1 }}
         transition={{ duration: 0.5, delay, ease: EASE }}
       />
       <motion.div
         className="h-full bg-down-600/70"
-        style={{ width: `${((put ?? 0) / total) * 100}%`, transformOrigin: 'right' }}
+        style={{ width: `${(put / total) * 100}%`, transformOrigin: 'right' }}
         initial={{ scaleX: 0 }}
         animate={{ scaleX: 1 }}
         transition={{ duration: 0.5, delay, ease: EASE }}
@@ -93,6 +95,24 @@ function Tile({
   );
 }
 
+/** 单侧值文案：缺失显「—」，绝不折 0（与逐行同一纪律）。 */
+const sideText = (value: number | null, prefix = ''): string =>
+  value === null ? '—' : `${prefix}${fmtCompact(value)}`;
+
+/** 两侧齐全才叫「总计」；单侧缺失时数字仍给已知侧合计，但 caption 用
+ *  「C — · P …」明示缺口（GPT-5.6-Pro 审计：sumSides 把缺失当 0 的问题）。 */
+function tileParts(
+  call: number | null,
+  put: number | null,
+  prefix = '',
+): { value: string; partial: boolean } {
+  const total = sumSides(call, put);
+  return {
+    value: total === null ? '—' : `${prefix}${fmtCompact(total)}`,
+    partial: total !== null && (call === null || put === null),
+  };
+}
+
 export default function SummaryTiles({
   totals,
   alertCount,
@@ -100,9 +120,11 @@ export default function SummaryTiles({
   totals: ChainTotals;
   alertCount: number;
 }) {
-  const totalVol = sumSides(totals.callVol, totals.putVol);
-  const totalOi = sumSides(totals.callOi, totals.putOi);
-  const totalPremium = sumSides(totals.callPremium, totals.putPremium);
+  const vol = tileParts(totals.callVol, totals.putVol);
+  const oi = tileParts(totals.callOi, totals.putOi);
+  const premium = tileParts(totals.callPremium, totals.putPremium, '$');
+  const sidesCaption = (call: number | null, put: number | null, prefix = '') =>
+    `C ${sideText(call, prefix)} · P ${sideText(put, prefix)}`;
   return (
     <motion.div
       className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4"
@@ -111,24 +133,32 @@ export default function SummaryTiles({
       variants={{ show: { transition: { staggerChildren: 0.05 } } }}
     >
       <Tile
-        label={t('总成交量')}
-        value={totalVol === null ? '—' : fmtCompact(totalVol)}
-        caption={t('C/P 比 {ratio}', { ratio: fmtRatio(cpRatio(totals.callVol, totals.putVol)) })}
+        label={vol.partial ? t('已知成交量（数据不完整）') : t('总成交量')}
+        value={vol.value}
+        caption={
+          vol.partial
+            ? sidesCaption(totals.callVol, totals.putVol)
+            : t('C/P 比 {ratio}', { ratio: fmtRatio(cpRatio(totals.callVol, totals.putVol)) })
+        }
         bar={<SplitBar call={totals.callVol} put={totals.putVol} delay={0.15} />}
       />
       <Tile
-        label={t('总持仓量')}
-        value={totalOi === null ? '—' : fmtCompact(totalOi)}
-        caption={t('C/P 比 {ratio}', { ratio: fmtRatio(cpRatio(totals.callOi, totals.putOi)) })}
+        label={oi.partial ? t('已知持仓量（数据不完整）') : t('总持仓量')}
+        value={oi.value}
+        caption={
+          oi.partial
+            ? sidesCaption(totals.callOi, totals.putOi)
+            : t('C/P 比 {ratio}', { ratio: fmtRatio(cpRatio(totals.callOi, totals.putOi)) })
+        }
         bar={<SplitBar call={totals.callOi} put={totals.putOi} delay={0.2} />}
       />
       <Tile
-        label={t('估算权利金流')}
-        value={totalPremium === null ? '—' : `$${fmtCompact(totalPremium)}`}
+        label={premium.partial ? t('已知权利金流（数据不完整）') : t('估算权利金流')}
+        value={premium.value}
         caption={
-          totalPremium === null
+          premium.value === '—'
             ? t('缺买卖价，不可估算')
-            : `C $${fmtCompact(totals.callPremium ?? 0)} · P $${fmtCompact(totals.putPremium ?? 0)}`
+            : sidesCaption(totals.callPremium, totals.putPremium, '$')
         }
         bar={<SplitBar call={totals.callPremium} put={totals.putPremium} delay={0.25} />}
       />

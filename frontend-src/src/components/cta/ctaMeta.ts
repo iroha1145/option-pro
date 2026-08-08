@@ -43,6 +43,10 @@ export const ZONE_LABELS: Record<string, string> = {
   add_short: t('继续加空'),
   sell_accelerate: t('卖盘加速'),
   flip_further: t('进一步翻空'),
+  /* v2 冲突标签：趋势方向与净变化相反（波动率去/回杠杆占优）时后端显式
+     下发，不再把净减仓的区间叫「买盘」（GPT-5.6-Pro 审计 P1-02）。 */
+  trend_up_vol_dominates: t('趋势转多·波动率去杠杆占优'),
+  trend_down_vol_dominates: t('趋势转空·波动率回杠杆占优'),
 };
 
 export const ZONE_KIND: Record<string, string> = {

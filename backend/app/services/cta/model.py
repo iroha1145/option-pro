@@ -318,22 +318,39 @@ def _collect_events(
     return events
 
 
-_ABOVE_LABELS = ("short_cover", "buy_accelerate", "add_further")
-_BELOW_LABELS = ("trim_long", "sell_accelerate", "flip_further")
+_BUY_DEPTH_LABELS = ("buy_accelerate", "add_further")
+_SELL_DEPTH_LABELS = ("sell_accelerate", "flip_further")
 
 
-def _first_zone_label(side: str, position: float) -> str:
-    if side == "above":
-        if position <= -POSITION_NEUTRAL_BAND:
-            return "short_cover"       # 净空时上方第一层 = 空头回补
-        if position < POSITION_NEUTRAL_BAND:
-            return "reopen_long"       # 分歧/中性时 = 重新加多
-        return "add_long"              # 已净多 = 恢复/继续加仓
-    if position >= POSITION_NEUTRAL_BAND:
-        return "trim_long"             # 净多时下方第一层 = 多头减仓
-    if position > -POSITION_NEUTRAL_BAND:
-        return "reopen_short"          # 分歧/中性时 = 重新加空
-    return "add_short"                 # 已净空 = 继续加空
+def _zone_label(rank: int, position: float, net: float, trend: float) -> str:
+    """标签跟随**净仓位变化方向**，不再按「上方=买/下方=卖」硬编码。
+
+    GPT-5.6-Pro 审计 P1-02：价格上冲若触发波动率去杠杆，净变化可以为负——
+    把它叫「买盘加速」是错误语义。趋势方向与净方向相反时给显式冲突标签，
+    由前端译成「趋势转多，但波动率去杠杆占优」。净变化近零（|net|<1）时按
+    趋势方向选族——该区间的意义是趋势触发本身。
+    """
+
+    if net <= -1.0 and trend >= 1.0:
+        return "trend_up_vol_dominates"
+    if net >= 1.0 and trend <= -1.0:
+        return "trend_down_vol_dominates"
+    direction = net if abs(net) >= 1.0 else trend
+    if direction >= 0:
+        if rank == 0:
+            if position <= -POSITION_NEUTRAL_BAND:
+                return "short_cover"   # 净空时的首个买向区 = 空头回补
+            if position < POSITION_NEUTRAL_BAND:
+                return "reopen_long"   # 分歧/中性 = 重新加多
+            return "add_long"          # 已净多 = 恢复/继续加仓
+        return _BUY_DEPTH_LABELS[min(rank - 1, 1)]
+    if rank == 0:
+        if position >= POSITION_NEUTRAL_BAND:
+            return "trim_long"         # 净多时的首个卖向区 = 多头减仓
+        if position > -POSITION_NEUTRAL_BAND:
+            return "reopen_short"      # 分歧/中性 = 重新加空
+        return "add_short"             # 已净空 = 继续加空
+    return _SELL_DEPTH_LABELS[min(rank - 1, 1)]
 
 
 def _cluster_triggers(
@@ -371,12 +388,23 @@ def _cluster_triggers(
     pad = 0.5 * gap
     zones: list[dict[str, Any]] = []
     for cluster in clusters:
+        # 垫衬不得越过现价（GPT-5.6-Pro 审计：QQQ 的「上方」区间下沿被垫到
+        # 现价之下，总览却仍显示 +0.23% 距离）。钳位后区间恒在对应一侧，
+        # 盘中穿越判断也不会因垫衬提前挂章。
         lo = min(e["price"] for e in cluster) - pad
         hi = max(e["price"] for e in cluster) + pad
-        # 净效果 = 完整敞口曲线跨过该区间的仓位变化；趋势口径单独评估，
-        # 用于归因（趋势翻转 vs 波动率去杠杆 vs 两者兼有）。
-        full_delta = curve_eval(hi) - curve_eval(lo)
-        trend_delta = trend_eval(hi) - trend_eval(lo)
+        if side == "above":
+            lo = max(lo, ref_price)
+        else:
+            hi = min(hi, ref_price)
+        # 穿越方向随侧别（审计 P1-01）：上方区间自下而上到达，下方区间自上
+        # 而下到达——Δ 一律按「实际到达方向」评估，下方不再复用上行差值。
+        if side == "above":
+            full_delta = curve_eval(hi) - curve_eval(lo)
+            trend_delta = trend_eval(hi) - trend_eval(lo)
+        else:
+            full_delta = curve_eval(lo) - curve_eval(hi)
+            trend_delta = trend_eval(lo) - trend_eval(hi)
         vol_delta = full_delta - trend_delta
         if abs(full_delta) < TRIGGER_MIN_DELTA and abs(trend_delta) < TRIGGER_MIN_DELTA:
             continue
@@ -387,14 +415,19 @@ def _cluster_triggers(
         else:
             kind = "vol_delever"
         models = sorted({e["model"] for e in cluster}, key=lambda k: ["fast", "medium", "slow"].index(k))
+        # 权重按 (model, component) 去重（审计：同一分量的翻转价+两个饱和价
+        # 落进一簇会把同一份权重加三次，理论上能超 100%）。
+        unique_weights = {(e["model"], e["component"]): e["weight"] for e in cluster}
+        # 「最近距离」按靠近现价的边界计（不再用区间中点）：上方=下沿，下方=上沿。
+        near_edge = lo if side == "above" else hi
         zones.append({
             "price_low": round(lo, 2),
             "price_high": round(hi, 2),
             "price": round((lo + hi) / 2, 2),
-            "distance_pct": round(((lo + hi) / 2 / ref_price - 1) * 100, 2),
+            "distance_pct": round((near_edge / ref_price - 1) * 100, 2),
             "models": models,
             "components": sorted({e["component"] for e in cluster}),
-            "weight_share": round(sum(e["weight"] for e in cluster), 4),
+            "weight_share": round(min(1.0, sum(unique_weights.values())), 4),
             "est_position_change": round(full_delta, 1),
             "trend_change": round(trend_delta, 1),
             "vol_change": round(vol_delta, 1),
@@ -404,10 +437,11 @@ def _cluster_triggers(
     zones.sort(key=lambda z: abs(z["est_position_change"]), reverse=True)
     zones = zones[:TRIGGER_MAX_ZONES_PER_SIDE]
     zones.sort(key=lambda z: z["price"], reverse=(side == "below"))
-    labels = _ABOVE_LABELS if side == "above" else _BELOW_LABELS
     for rank, zone in enumerate(zones):
         zone["rank"] = rank + 1
-        zone["label_key"] = _first_zone_label(side, position) if rank == 0 else labels[min(rank, 2)]
+        zone["label_key"] = _zone_label(
+            rank, position, zone["est_position_change"], zone["trend_change"]
+        )
         zone["id"] = f"{side}-{rank + 1}"
     return zones
 
@@ -437,15 +471,22 @@ def _flow_state(position: float, flow: float) -> str:
     return "rebuilding" if flow > 0 else "reducing"
 
 
-def _agreement(detail: Mapping[str, Mapping[str, Any]], total_trend: float) -> float:
-    """加权同向占比：不表态（|signal|≤ε）的子模型不进分母。"""
+def _agreement_stats(
+    detail: Mapping[str, Mapping[str, Any]], total_trend: float
+) -> tuple[float, float]:
+    """(加权同向占比, 表态权重覆盖)。不表态（|signal|≤ε）的子模型不进分母。
+
+    审计口径澄清：同向占比只回答「表态的模型是否指向同一方向」，不反映趋势
+    强弱；覆盖单独返回，UI 得以呈现「3/3 同向但趋势只有 +35」这类完整读数。
+    """
 
     direction = 1.0 if total_trend >= 0 else -1.0
     active = [(m["weight"], m["signal"]) for m in detail.values() if abs(m["signal"]) > SUBMODEL_ACTIVE_EPS]
     if not active:
-        return 0.0
+        return 0.0, 0.0
+    active_weight = sum(w for w, _ in active)
     agree = sum(w for w, s in active if s * direction > 0)
-    return round(agree / sum(w for w, _ in active), 4)
+    return round(agree / active_weight, 4), round(active_weight, 4)
 
 
 # ── 单标的完整估算 ───────────────────────────────────────────
@@ -506,6 +547,8 @@ def compute_cta_estimate(bars: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             "state": None,
             "position_label": None,
             "model_agreement": None,
+            "trend_strength": None,
+            "active_model_weight": None,
             "submodels": None,
             "volatility": None,
             "trigger_levels": None,
@@ -551,6 +594,8 @@ def compute_cta_estimate(bars: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             "state": None,
             "position_label": None,
             "model_agreement": None,
+            "trend_strength": None,
+            "active_model_weight": None,
             "submodels": None,
             "volatility": None,
             "trigger_levels": None,
@@ -573,7 +618,7 @@ def compute_cta_estimate(bars: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     ref_price = closes[-1]
     sigma = _sigma_daily(state.var) or 0.0
     atr = _atr_through(highs, lows, closes)
-    agreement = _agreement(last_detail, trend)
+    agreement, active_model_weight = _agreement_stats(last_detail, trend)
 
     def full_curve(price: float) -> float:
         value, _, _, _ = _positions_at(closes, state, price, atr)
@@ -619,6 +664,11 @@ def compute_cta_estimate(bars: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "state": _flow_state(position, flow),
         "position_label": _position_label(position, agreement),
         "model_agreement": agreement,
+        # 一致度只表方向同向；强弱与覆盖单列（GPT-5.6-Pro 审计：QQQ 三模型
+        # 微幅为正也显 100%，视觉像高置信度）。趋势强度 = 波动率缩放前的
+        # 加权趋势 ×100，与 position = 强度 × scalar 恒等。
+        "trend_strength": round(100.0 * trend, 1),
+        "active_model_weight": active_model_weight,
         "submodels": last_detail,
         "volatility": {
             "realized_annual": round(annual_vol, 4) if annual_vol else None,

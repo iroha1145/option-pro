@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import math
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import yfinance as yf
 from fastapi import APIRouter, HTTPException, Request
@@ -184,6 +184,27 @@ async def market_cta(request: Request):
     return await _shared_cache.get_or_set("market:cta:owner-live", 300, _build_cta_trend)
 
 
+def _last_settled_trading_date(now_dt: datetime) -> str | None:
+    """最近一个「已收盘」交易日（NY 日历）：判断模型数据是否已是最新。
+
+    当天为交易日且已过收盘（+30 分钟数据缓冲）算当天，否则回退到上一交易日。
+    """
+
+    from app.services.market_calendar import ET, early_close_minutes, is_trading_day
+
+    local = now_dt.astimezone(ET)
+    for offset in range(10):
+        day = (local - timedelta(days=offset)).date()
+        if not is_trading_day(day):
+            continue
+        if offset > 0:
+            return day.isoformat()
+        close_minutes = early_close_minutes(day) or 16 * 60
+        if local.hour * 60 + local.minute >= close_minutes + 30:
+            return day.isoformat()
+    return None
+
+
 async def _build_cta_trend():
     """构建 CTA 趋势资金快照（worker 定时调用；owner 无快照时兜底）。
 
@@ -220,6 +241,7 @@ async def _build_cta_trend():
                 "intraday": None,
                 "coverage": {"bars": 0, "required": 0},
                 "warnings": ["代理标的日线不可用"],
+                "market_data_current": None,
                 "position_score": None,
                 "previous_position_score": None,
                 "flow_score": None,
@@ -262,9 +284,18 @@ async def _build_cta_trend():
             **base,
             **estimate,
             "settlement_confirmed": estimate["source_status"] == "active",
+            # 周末/收盘后快照按墙钟变旧属正常，市场数据本身可能已是最新完成
+            # 交易日——单独给出该判定，前端据此把「快照延迟」与「数据过期」
+            # 分开表述（GPT-5.6-Pro 审计问题 3）。
+            "market_data_current": (
+                estimate.get("data_through") == expected_settled_date
+                if estimate.get("data_through") and expected_settled_date
+                else None
+            ),
             "intraday": intraday,
         }
 
+    expected_settled_date = _last_settled_trading_date(now_dt)
     rows = list(await asyncio.gather(*[_one(inst) for inst in INSTRUMENTS]))
     active = sum(1 for row in rows if row.get("source_status") == "active")
     return {

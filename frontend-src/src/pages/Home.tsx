@@ -1,6 +1,7 @@
 /**
  * §01 首页（/）
- * 指数带 · 市场状态 · 雷达信号 · 财报临近 · 自选异动 · CTA 联动带
+ * 指数带（列表由后端决定：live 为美股三指+日经+上证共 5 个，mock 6 个——
+ * 列数 auto-fit 不写死） · 市场状态 · 雷达信号 · 财报临近 · 关注池异动 · CTA 联动带
  * 轮询：指数/状态 60s，其余 300s（visibility 暂停由 usePolling 负责）
  *
  * 数据纪律（与 components/market/IndexCards.tsx 同款）：
@@ -119,7 +120,10 @@ function ListBody({
       </div>
     );
   }
-  if (error) {
+  /* 陈旧数据纪律：后续轮询失败时 usePolling 保留上一份成功数据——只有
+     「确实没有旧数据」才整块换错误卡；有旧数据就继续显示 + 陈旧条
+     （GPT-5.6-Pro 审计首页问题 4）。 */
+  if (error && isEmpty) {
     return (
       <EmptyState
         variant="error"
@@ -130,7 +134,28 @@ function ListBody({
     );
   }
   if (isEmpty) return <EmptyState title={emptyTitle} />;
-  return <>{children}</>;
+  return (
+    <>
+      {error && <StaleStrip onRetry={onRetry} refreshing={refreshing} />}
+      {children}
+    </>
+  );
+}
+
+/** 刷新失败但仍有旧数据：小黄条明示陈旧 + 重试，不清空内容。 */
+function StaleStrip({ onRetry, refreshing }: { onRetry: () => void; refreshing: boolean }) {
+  return (
+    <p className="mx-4 mb-1 mt-2 flex items-center justify-between gap-2 rounded-sm bg-warn-50 px-2.5 py-1.5 text-micro text-warn-700 md:mx-5">
+      {t('刷新失败，显示上次成功的结果')}
+      <button
+        onClick={onRetry}
+        disabled={refreshing}
+        className="shrink-0 font-medium underline-offset-2 hover:underline disabled:opacity-60"
+      >
+        {t('重试')}
+      </button>
+    </p>
+  );
 }
 
 /** 统计小砖：居中大数字 + micro 标签（涨绿/跌红/平灰；无数据显 —） */
@@ -181,13 +206,28 @@ export default function Home() {
   /* 雷达信号：最新 8 条 */
   const breakouts = useMemo(() => (breakoutsQ.data ?? []).slice(0, 8), [breakoutsQ.data]);
 
-  /* 财报临近：按日期升序前 6 条 */
+  /* 财报临近：只取今天（纽约日历）及以后，按日期升序前 6 条。接口从
+     days_until=-3 起步，不过滤会让三天前已公布的小公司霸占「临近」榜
+     （GPT-5.6-Pro 审计首页问题 2）。 */
+  const nyToday = useMemo(
+    () =>
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date()),
+    [],
+  );
   const earnings = useMemo(
-    () => (earningsQ.data?.items ?? []).slice().sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6),
-    [earningsQ.data],
+    () =>
+      (earningsQ.data?.items ?? [])
+        .filter((it) => it.date >= nyToday)
+        .slice()
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(0, 6),
+    [earningsQ.data, nyToday],
   );
 
-  /* 自选异动：|changePct| 降序前 6；changePct 缺失的行排最后 */
+  /* 关注池异动：stocksApi.watchlist() 返回站点公共关注池（非登录账号的个
+     人自选——个人过滤在自选页做），按 |changePct| 降序前 6；缺失的行排最后 */
   const movers = useMemo(() => {
     const mag = (v: number | null | undefined) =>
       typeof v === 'number' && Number.isFinite(v) ? Math.abs(v) : -1;
@@ -239,12 +279,12 @@ export default function Home() {
       {/* 指数带（SPX/NDX/DJI/RUT/SOX/VIX，点击进 /market?index= 高亮定位） */}
       <section className="mt-8" aria-label={t('指数概览')}>
         {indicesQ.loading ? (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            {Array.from({ length: 6 }, (_, i) => (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
+            {Array.from({ length: 5 }, (_, i) => (
               <SkeletonCard key={i} className="h-24" />
             ))}
           </div>
-        ) : indicesQ.error ? (
+        ) : indicesQ.error && !indicesQ.data?.length ? (
           <div className="card-surface">
             <EmptyState
               variant="error"
@@ -254,7 +294,7 @@ export default function Home() {
             />
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
             {(indicesQ.data ?? []).map((q, i) => {
               /* 数据纪律：无有效价（live 快照缺失）显「—」，不显 0.00 */
               const hasPrice = Number.isFinite(q.price) && q.price > 0;
@@ -372,7 +412,7 @@ export default function Home() {
           </ListBody>
         </SectionCard>
 
-        <SectionCard title={t('自选异动')} to="/watchlist">
+        <SectionCard title={t('关注池异动')} to="/watchlist">
           <ListBody
             loading={watchlistQ.loading}
             error={watchlistQ.error}
@@ -400,19 +440,42 @@ export default function Home() {
         </SectionCard>
       </div>
 
-      {/* 行4：CTA 趋势资金联动带——data 为 null 或 instruments 空则不渲染（不要空壳） */}
-      {ctaInstruments.length > 0 && (
-        <section className="mt-8" aria-label={t('CTA 趋势资金')}>
-          <div className="card-surface p-4 md:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-h3 text-ink-900">{t('CTA 趋势资金')}</h3>
-              <Link
-                to="/cta"
-                className="shrink-0 text-caption font-medium text-brand-700 transition-colors duration-fast hover:text-brand-600"
-              >
-                {t('查看全部')}
-              </Link>
+      {/* 行4：CTA 趋势资金联动带。区块常驻：加载给骨架、失败给错误行、
+          快照未发布给说明——整块消失会让「本来没有」与「没读到」不可分辨，
+          还引发布局跳动（GPT-5.6-Pro 审计首页问题 5）。 */}
+      <section className="mt-8" aria-label={t('CTA 趋势资金')}>
+        <div className="card-surface p-4 md:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-h3 text-ink-900">{t('CTA 趋势资金')}</h3>
+            <Link
+              to="/cta"
+              className="shrink-0 text-caption font-medium text-brand-700 transition-colors duration-fast hover:text-brand-600"
+            >
+              {t('查看全部')}
+            </Link>
+          </div>
+          {ctaQ.loading && !ctaQ.data ? (
+            <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+              {Array.from({ length: 4 }, (_, i) => (
+                <SkeletonCard key={i} className="h-20" />
+              ))}
             </div>
+          ) : ctaQ.error && !ctaQ.data ? (
+            <p className="mt-3 flex items-center justify-between gap-2 rounded-md bg-paper-2 px-3 py-2.5 text-caption text-ink-500">
+              {ctaQ.error.bizCode === 'public_snapshot_unavailable'
+                ? t('CTA 估算快照尚未发布：Worker 完成首次计算后自动出现，无需手动操作')
+                : t('CTA 估算读取失败')}
+              <button
+                onClick={() => ctaQ.refresh()}
+                disabled={ctaQ.refreshing}
+                className="shrink-0 font-medium text-brand-700 hover:text-brand-600 disabled:opacity-60"
+              >
+                {t('重试')}
+              </button>
+            </p>
+          ) : ctaInstruments.length === 0 ? (
+            <p className="mt-3 rounded-md bg-paper-2 px-3 py-2.5 text-caption text-ink-500">{t('暂无数据')}</p>
+          ) : (
             <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
               {ctaInstruments.slice(0, 4).map((ins) => (
                 <div key={ins.instrument} className="rounded-md bg-paper-2 px-3 py-2">
@@ -435,9 +498,9 @@ export default function Home() {
                 </div>
               ))}
             </div>
-          </div>
-        </section>
-      )}
+          )}
+        </div>
+      </section>
     </div>
   );
 }

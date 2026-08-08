@@ -231,10 +231,89 @@ def test_trigger_zone_deltas_match_curve() -> None:
 
     for side in ("above", "below"):
         for zone in result["trigger_levels"][side]:
-            approx = curve_at(zone["price_high"]) - curve_at(zone["price_low"])
+            # Δ 按「实际到达方向」评估（P1-01）：上方=自下而上，下方=自上而下。
+            if side == "above":
+                approx = curve_at(zone["price_high"]) - curve_at(zone["price_low"])
+            else:
+                approx = curve_at(zone["price_low"]) - curve_at(zone["price_high"])
             assert abs(approx - zone["est_position_change"]) <= 6.0, \
                 f"{zone['id']} 声称 Δ{zone['est_position_change']} 但曲线为 Δ{approx:.1f}"
             assert zone["needs_close_confirm"] is True
+
+
+# ── 不变量（审计 P1-01/02 + 区间钳位 + 权重上限） ─────────────
+
+
+_BUY_KEYS = {"short_cover", "reopen_long", "add_long", "buy_accelerate", "add_further"}
+_SELL_KEYS = {"trim_long", "reopen_short", "add_short", "sell_accelerate", "flip_further"}
+_CONFLICT_KEYS = {"trend_up_vol_dominates", "trend_down_vol_dominates"}
+
+
+def _all_zone_results() -> list[dict]:
+    results = []
+    for drift, seed, noise in ((0.003, 31, 0.006), (-0.002, 17, 0.008), (0.001, 5, 0.012)):
+        results.append(compute_cta_estimate(_bars_from_closes(_drift_series(N, drift, seed, noise))))
+    return results
+
+
+def test_zone_labels_never_contradict_net_change() -> None:
+    """标签与净仓位变化同向：买族净 Δ 不得为显著负值，卖族反之（P1-02）。
+
+    趋势与净方向冲突时必须使用显式冲突键，不得沿用买/卖措辞。
+    """
+
+    for result in _all_zone_results():
+        triggers = result["trigger_levels"] or {"above": [], "below": []}
+        for side in ("above", "below"):
+            for zone in triggers[side]:
+                net, trend = zone["est_position_change"], zone["trend_change"]
+                key = zone["label_key"]
+                if key in _BUY_KEYS:
+                    assert net >= -1.0, f"{zone['id']} 买族标签却净减仓 {net}"
+                elif key in _SELL_KEYS:
+                    assert net <= 1.0, f"{zone['id']} 卖族标签却净加仓 {net}"
+                else:
+                    assert key in _CONFLICT_KEYS, f"未知标签 {key}"
+                    assert net * trend < 0, f"{zone['id']} 冲突标签但趋势与净同向"
+
+
+def test_below_zones_report_downward_crossing_sign() -> None:
+    """顺涨趋势下方区间 = 跌破趋势阈值 → 净仓位必须下降（P1-01 回归）。"""
+
+    result = compute_cta_estimate(_bars_from_closes(_drift_series(N, 0.003, 7, 0.004)))
+    zones = result["trigger_levels"]["below"]
+    assert zones, "顺趋势序列下方应有触发区"
+    assert all(z["est_position_change"] < 0 or z["trend_change"] < 0 for z in zones), \
+        f"下方区间应报下行穿越的负向变化：{[(z['id'], z['est_position_change']) for z in zones]}"
+
+
+def test_zone_bounds_clamped_to_reference_side() -> None:
+    """垫衬不得越过现价；最近距离按靠近现价的边界计（审计 QQQ inside-zone）。"""
+
+    for result in _all_zone_results():
+        ref = result["reference_price"]
+        if ref is None:
+            continue
+        triggers = result["trigger_levels"] or {"above": [], "below": []}
+        for zone in triggers["above"]:
+            assert zone["price_low"] >= round(ref, 2) - 0.01, \
+                f"{zone['id']} 上方区间下沿 {zone['price_low']} 低于现价 {ref}"
+            assert zone["distance_pct"] >= -0.01
+        for zone in triggers["below"]:
+            assert zone["price_high"] <= round(ref, 2) + 0.01, \
+                f"{zone['id']} 下方区间上沿 {zone['price_high']} 高于现价 {ref}"
+            assert zone["distance_pct"] <= 0.01
+
+
+def test_zone_weight_share_deduped_and_bounded() -> None:
+    """weight_share 按 (model, component) 去重后 ∈ (0, 1]（审计问题 4）。"""
+
+    for result in _all_zone_results():
+        triggers = result["trigger_levels"] or {"above": [], "below": []}
+        for side in ("above", "below"):
+            for zone in triggers[side]:
+                assert 0 < zone["weight_share"] <= 1.0, \
+                    f"{zone['id']} weight_share={zone['weight_share']} 越界"
 
 
 # ── 不变量：完整曲线的极端端点不超过冻结波动的趋势曲线 ────────

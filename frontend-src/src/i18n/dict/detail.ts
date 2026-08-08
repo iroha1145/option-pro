@@ -146,6 +146,9 @@ export const DETAIL: Dict = {
   '占比条按全链最大量归一': ['Bars normalized to the chain-wide max', 'バーはチェーン全体の最大値で正規化'],
   '浅底为价内侧': ['Shaded background = the ITM side', '薄い背景はITM側'],
   '全部新开仓': ['Entirely new positions', '全て新規建玉'],
+  '已知成交量（数据不完整）': ['Known volume (incomplete data)', '既知の出来高（データ不完全）'],
+  '已知持仓量（数据不完整）': ['Known open interest (incomplete data)', '既知の建玉（データ不完全）'],
+  '已知权利金流（数据不完整）': ['Known premium flow (incomplete data)', '既知のプレミアムフロー（データ不完全）'],
   '「—」表示数据缺失': ['"—" means data unavailable', '「—」はデータなしを示す'],
   '「—」表示上游未提供该字段，不代表 0 · 权利金按买卖中价估算 · 非收益承诺': ['"—" means the upstream feed didn\'t provide this field — it isn\'t 0 · premium is estimated from the bid/ask midpoint · not a promise of returns', '「—」は上流フィードがこの項目を提供しなかったことを示し、0を意味しません · プレミアムは買値・売値の中値で推定 · リターンを約束するものではありません'],
   '浅底为价内（ITM）侧 · 异动标注 vol/oi > 3（倍数为该侧比值）；持仓量为 0 而当日有成交标 ∞（全部新开仓）· 「—」表示上游未提供该字段，不代表 0 · 权利金按买卖中价估算 · 非收益承诺': [

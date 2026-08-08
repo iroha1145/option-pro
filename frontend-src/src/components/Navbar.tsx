@@ -131,7 +131,9 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
         <div className="ml-auto flex items-center gap-2.5 md:gap-3.5 xl:ml-0">
           <button
             onClick={onOpenPalette}
-            className="hidden h-8 w-44 items-center gap-2 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-400 transition-colors duration-fast hover:border-line-strong hover:text-ink-500 md:flex 2xl:w-[220px]"
+            /* xl–2xl 是 9 项导航的拥挤带（审计：1280 + 长用户名/英日文风险）：
+               该档只留搜索图标（下方按钮），文字框在 md–xl 与 ≥2xl 显示。 */
+            className="hidden h-8 w-44 items-center gap-2 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-400 transition-colors duration-fast hover:border-line-strong hover:text-ink-500 md:flex xl:hidden 2xl:flex 2xl:w-[220px]"
             aria-label={t("打开命令面板")}
           >
             <Icon name="search" size={14} />
@@ -142,7 +144,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           </button>
           <button
             onClick={onOpenPalette}
-            className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-ink-500 shadow-btn md:hidden"
+            className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-ink-500 shadow-btn md:hidden xl:flex 2xl:hidden"
             aria-label={t("搜索")}
           >
             <Icon name="search" size={16} />

@@ -32,7 +32,7 @@ export const CHROME: Dict = {
   'Owner 已登录': ['Signed in as Owner', 'オーナーとしてサインイン中'],
   '访客只读模式': ['Guest · read-only', 'ゲスト · 閲覧のみ'],
   '可执行写操作': ['Write actions enabled', '書き込み操作が可能'],
-  '登录后可强制刷新与 AI 分析': ['Sign in to force-refresh and run AI analysis', 'サインインすると強制更新と AI 分析が使えます'],
+  '登录后可用个人自选与手动拉取': ['Sign in for a personal watchlist and on-demand pulls', 'サインインで個人ウォッチリストと手動取得が利用可能'],
   '已退出 Owner 模式': ['Signed out of Owner mode', 'オーナーモードからサインアウトしました'],
   '当前为访客只读模式': ['Now browsing as a read-only guest', '現在はゲストの閲覧のみモードです'],
 

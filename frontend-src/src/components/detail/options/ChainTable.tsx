@@ -26,7 +26,9 @@ const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 const dash = (value: number | null, render: (n: number) => string): string =>
   value === null ? '—' : render(value);
 
-/** 量/持单元格：低透明度水位条 + 叠加数字。 */
+/** 量/持单元格：低透明度水位条 + 叠加数字。
+ *  animated=false 走静态条：每行 4 条水位 + 1 个 motion.tr，100 个行权价
+ *  就是四五百个 Framer 节点——入场动画只给首屏附近的行（审计动画限流）。 */
 function WaterCell({
   value,
   max,
@@ -34,6 +36,7 @@ function WaterCell({
   align,
   shaded,
   delay,
+  animated,
 }: {
   value: number | null;
   max: number | null;
@@ -41,8 +44,13 @@ function WaterCell({
   align: 'right' | 'left';
   shaded: boolean;
   delay: number;
+  animated: boolean;
 }) {
   const share = barShare(value, max);
+  const barClass = cn(
+    'absolute inset-y-0',
+    side === 'call' ? 'right-0 bg-up-600/10' : 'left-0 bg-down-600/10',
+  );
   return (
     <td
       className={cn(
@@ -51,26 +59,30 @@ function WaterCell({
         shaded && 'bg-paper-2',
       )}
     >
-      {share > 0 && (
-        <motion.span
-          aria-hidden="true"
-          className={cn(
-            'absolute inset-y-0',
-            side === 'call' ? 'right-0 bg-up-600/10' : 'left-0 bg-down-600/10',
-          )}
-          style={{
-            width: `${share * 100}%`,
-            transformOrigin: side === 'call' ? 'right' : 'left',
-          }}
-          initial={{ scaleX: 0 }}
-          animate={{ scaleX: 1 }}
-          transition={{ duration: DUR_SECTION, delay: delay + 0.06, ease: EASE }}
-        />
-      )}
+      {share > 0 &&
+        (animated ? (
+          <motion.span
+            aria-hidden="true"
+            className={barClass}
+            style={{
+              width: `${share * 100}%`,
+              transformOrigin: side === 'call' ? 'right' : 'left',
+            }}
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: 1 }}
+            transition={{ duration: DUR_SECTION, delay: delay + 0.06, ease: EASE }}
+          />
+        ) : (
+          <span aria-hidden="true" className={barClass} style={{ width: `${share * 100}%` }} />
+        ))}
       <span className="relative text-ink-700">{dash(value, fmtCompact)}</span>
     </td>
   );
 }
+
+
+/** 入场动画只给前 24 行；深处行静态挂载，避免长链堆出数百个动画节点。 */
+const ANIMATED_ROWS = 24;
 
 export default function ChainTable({
   chain,
@@ -118,16 +130,20 @@ export default function ChainTable({
           const callItm = chain.spot !== null && r.strike < chain.spot;
           const putItm = chain.spot !== null && r.strike > chain.spot;
           const alert = m.callAlert || m.putAlert;
+          const animated = i < ANIMATED_ROWS;
           const delay = Math.min(i * 0.012, 0.18);
           const callBadge = volOiBadge(m.callVolOi);
           const putBadge = volOiBadge(m.putVolOi);
-          const premiums = [m.callPremium, m.putPremium].filter(
-            (value): value is number => value !== null,
-          );
+          /* 悬停文案只统计真正触发异动的腿：另一侧普通成交的权利金更大时，
+             取整行最大值会把异动归到没报警的那一侧（GPT-5.6-Pro 审计）。 */
+          const premiums = [
+            m.callAlert ? m.callPremium : null,
+            m.putAlert ? m.putPremium : null,
+          ].filter((value): value is number => value !== null);
           return (
             <motion.tr
               key={`${exp}-${r.strike}`}
-              initial={{ opacity: 0, y: 4 }}
+              initial={animated ? { opacity: 0, y: 4 } : false}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.24, delay, ease: EASE }}
               ref={isAtm ? setAtmRef : undefined}
@@ -163,6 +179,7 @@ export default function ChainTable({
                 align="right"
                 shaded={callItm && !alert}
                 delay={delay}
+                animated={animated}
               />
               <WaterCell
                 value={r.callOi}
@@ -171,6 +188,7 @@ export default function ChainTable({
                 align="right"
                 shaded={callItm && !alert}
                 delay={delay}
+                animated={animated}
               />
               {/* 行权价 */}
               <td
@@ -202,6 +220,7 @@ export default function ChainTable({
                 align="left"
                 shaded={putItm && !alert}
                 delay={delay}
+                animated={animated}
               />
               <WaterCell
                 value={r.putVol}
@@ -210,6 +229,7 @@ export default function ChainTable({
                 align="left"
                 shaded={putItm && !alert}
                 delay={delay}
+                animated={animated}
               />
               <td className={cn('px-2 py-1.5 text-left', putItm && !alert && 'bg-paper-2')}>
                 <div className="flex flex-col items-start gap-0.5">

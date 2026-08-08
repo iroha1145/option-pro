@@ -31,12 +31,15 @@ function MiniBar({
   max,
   side,
   delay,
+  animated,
 }: {
   label: string;
   value: number | null;
   max: number | null;
   side: 'call' | 'put';
   delay: number;
+  /** 入场动画只给首屏附近的卡（审计动画限流），其余画静态条 */
+  animated: boolean;
 }) {
   const share = barShare(value, max);
   return (
@@ -46,18 +49,27 @@ function MiniBar({
         <span className="font-mono text-ink-700 tnum">{dash(value, fmtCompact)}</span>
       </div>
       <div className="mt-0.5 h-1 overflow-hidden rounded-pill bg-line" aria-hidden="true">
-        {share > 0 && (
-          <motion.div
-            className={cn(
-              'h-full rounded-pill',
-              side === 'call' ? 'bg-up-600/60' : 'bg-down-600/60',
-            )}
-            style={{ transformOrigin: side === 'call' ? 'left' : 'right' }}
-            initial={{ scaleX: 0 }}
-            animate={{ scaleX: share }}
-            transition={{ duration: 0.5, delay: delay + 0.06, ease: EASE }}
-          />
-        )}
+        {share > 0 &&
+          (animated ? (
+            <motion.div
+              className={cn(
+                'h-full rounded-pill',
+                side === 'call' ? 'bg-up-600/60' : 'bg-down-600/60',
+              )}
+              style={{ transformOrigin: side === 'call' ? 'left' : 'right' }}
+              initial={{ scaleX: 0 }}
+              animate={{ scaleX: share }}
+              transition={{ duration: 0.5, delay: delay + 0.06, ease: EASE }}
+            />
+          ) : (
+            <div
+              className={cn(
+                'h-full rounded-pill',
+                side === 'call' ? 'bg-up-600/60' : 'bg-down-600/60',
+              )}
+              style={{ width: `${share * 100}%` }}
+            />
+          ))}
       </div>
     </div>
   );
@@ -70,6 +82,7 @@ function SideBlock({
   totals,
   shaded,
   delay,
+  animated,
 }: {
   side: 'call' | 'put';
   row: OptionChainRow;
@@ -77,6 +90,7 @@ function SideBlock({
   totals: ChainTotals;
   shaded: boolean;
   delay: number;
+  animated: boolean;
 }) {
   const isCall = side === 'call';
   const vol = isCall ? row.callVol : row.putVol;
@@ -102,8 +116,8 @@ function SideBlock({
         {dash(mid, (n) => fmtPrice(n))}
       </p>
       <div className="mt-1.5 space-y-1.5">
-        <MiniBar label={t('量')} value={vol} max={totals.maxVol} side={side} delay={delay} />
-        <MiniBar label={t('持')} value={oi} max={totals.maxOi} side={side} delay={delay} />
+        <MiniBar label={t('量')} value={vol} max={totals.maxVol} side={side} delay={delay} animated={animated} />
+        <MiniBar label={t('持')} value={oi} max={totals.maxOi} side={side} delay={delay} animated={animated} />
       </div>
       {alerting && (
         <div className="mt-1.5">
@@ -136,12 +150,13 @@ export default function ChainCards({
         const m = rowMeta(r);
         const isAtm = r.strike === atmStrike;
         const alert = m.callAlert || m.putAlert;
+        const animated = i < 24; // 入场动画只给首屏附近的卡（审计动画限流）
         const delay = Math.min(i * 0.012, 0.18);
         return (
           <motion.li
             key={`${exp}-${r.strike}`}
             ref={isAtm ? setAtmRef : undefined}
-            initial={{ opacity: 0, y: 4 }}
+            initial={animated ? { opacity: 0, y: 4 } : false}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.24, delay, ease: EASE }}
             className={cn(
@@ -176,6 +191,7 @@ export default function ChainCards({
                 totals={totals}
                 shaded={chain.spot !== null && r.strike < chain.spot && !alert}
                 delay={delay}
+                animated={animated}
               />
               <SideBlock
                 side="put"
@@ -184,6 +200,7 @@ export default function ChainCards({
                 totals={totals}
                 shaded={chain.spot !== null && r.strike > chain.spot && !alert}
                 delay={delay}
+                animated={animated}
               />
             </div>
           </motion.li>

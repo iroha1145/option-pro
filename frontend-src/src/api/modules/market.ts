@@ -167,6 +167,11 @@ export function mapCtaTrend(body: unknown): CtaTrendPayload {
       state: pickS(rec, 'state'),
       position_label: pickS(rec, 'position_label'),
       model_agreement: pickN(rec, 'model_agreement'),
+      /* v2 拆解读数：一致度只表方向，强弱与表态覆盖单独下发 */
+      trend_strength: pickN(rec, 'trend_strength'),
+      active_model_weight: pickN(rec, 'active_model_weight'),
+      market_data_current:
+        typeof rec.market_data_current === 'boolean' ? rec.market_data_current : null,
       submodels,
       volatility: volRaw === null
         ? null
@@ -225,6 +230,11 @@ export function mapCtaTrend(body: unknown): CtaTrendPayload {
     proxy_note: pickS(r, 'proxy_note') ?? 'etf_trend_proxy',
     source_status: pickS(r, 'source_status') ?? 'unavailable',
     instruments,
+    /* 快照新鲜度原样透传：访客通道的 _stale/degraded 是常驻标记
+       （public_snapshot_only），页面据 stale_reason 与 market_data_current
+       分辨「数据过期」与「快照按墙钟变旧」，不再一律吓人。 */
+    snapshot_saved_at: pickS(r, 'snapshot_saved_at'),
+    stale_reason: pickS(r, 'stale_reason'),
     ...(r._stale === true ? { _stale: true } : {}),
   };
 }

@@ -62,6 +62,8 @@ export default function MobileDock() {
     };
   }, [moreOpen]);
 
+  const moreActive = MORE_ITEMS.some((m) => location.pathname.startsWith(m.path));
+
   const renderItem = (item: (typeof DOCK_ITEMS)[number]) => {
     /* '/' 必须精确匹配：startsWith('/') 对任何路径都为真，首页会永远亮着 */
     const active = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path);
@@ -98,11 +100,21 @@ export default function MobileDock() {
         {DOCK_ITEMS.map(renderItem)}
         <button
           onClick={() => setMoreOpen(true)}
-          className="flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 transition-transform duration-fast active:scale-[0.96]"
+          className="relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 transition-transform duration-fast active:scale-[0.96]"
           aria-label={t('更多')}
+          aria-current={moreActive ? 'page' : undefined}
         >
-          <Icon name="menu" size={19} className="text-ink-400" />
-          <span className="text-[10px] leading-none text-ink-400">{t('更多')}</span>
+          {/* 处在板块/财报/大盘/CTA/催化时，「更多」承担当前页标记——否则
+              Dock 看起来像没有任何当前页面（GPT-5.6-Pro 审计）。 */}
+          <span
+            aria-hidden="true"
+            className={cn(
+              'absolute top-1.5 size-1 rounded-full bg-brand-600 transition-opacity duration-fast',
+              moreActive ? 'opacity-100' : 'opacity-0',
+            )}
+          />
+          <Icon name="menu" size={19} className={moreActive ? 'text-brand-600' : 'text-ink-400'} />
+          <span className={cn('text-[10px] leading-none', moreActive ? 'font-medium text-brand-600' : 'text-ink-400')}>{t('更多')}</span>
         </button>
       </nav>
 
@@ -131,7 +143,7 @@ export default function MobileDock() {
                  也已到终点。 */
               transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               ref={sheetRef}
-              className="fixed inset-x-0 bottom-0 z-[65] rounded-t-xl border-t border-line bg-card pb-[calc(env(safe-area-inset-bottom)+16px)] shadow-sh-3 xl:hidden"
+              className="fixed inset-x-0 bottom-0 z-[65] max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-t-xl border-t border-line bg-card pb-[calc(env(safe-area-inset-bottom)+16px)] shadow-sh-3 xl:hidden"
               role="dialog"
               aria-modal="true"
               aria-label={t('更多功能')}
@@ -162,7 +174,11 @@ export default function MobileDock() {
                       setMoreOpen(false);
                       navigate(m.path);
                     }}
-                    className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-[transform,background-color] hover:bg-paper-2 active:bg-line/60"
+                    aria-current={location.pathname.startsWith(m.path) ? 'page' : undefined}
+                    className={cn(
+                      'flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-[transform,background-color] hover:bg-paper-2 active:bg-line/60',
+                      location.pathname.startsWith(m.path) && 'bg-brand-50',
+                    )}
                   >
                     <span className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-brand-600">
                       <Icon name={m.icon} size={17} />
@@ -171,7 +187,11 @@ export default function MobileDock() {
                       <span className="block text-body-s font-medium text-ink-800">{m.label}</span>
                       <span className="block text-micro text-ink-400">{m.desc}</span>
                     </span>
-                    <Icon name="chevron-right" size={14} className="text-ink-300" />
+                    {location.pathname.startsWith(m.path) ? (
+                      <span className="size-1.5 shrink-0 rounded-full bg-brand-600" aria-hidden="true" />
+                    ) : (
+                      <Icon name="chevron-right" size={14} className="text-ink-300" />
+                    )}
                   </button>
                 ))}
                 <div className="mx-3 my-2 border-t border-line" />
@@ -190,7 +210,7 @@ export default function MobileDock() {
                       {isOwner ? t('Owner 已登录') : isSignedIn ? t('已登录 {name}', { name: username ?? '' }) : t('访客只读模式')}
                     </span>
                     <span className="block text-micro text-ink-400">
-                      {isOwner ? t('可执行写操作') : isSignedIn ? t('自选保存在账号里') : t('登录后可强制刷新与 AI 分析')}
+                      {isOwner ? t('可执行写操作') : isSignedIn ? t('自选保存在账号里') : t('登录后可用个人自选与手动拉取')}
                     </span>
                   </span>
                 </button>

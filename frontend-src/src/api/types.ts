@@ -444,7 +444,14 @@ export interface CtaInstrumentEstimate {
   volatility_flow: number | null;
   state: string | null;
   position_label: string | null;
+  /** 加权同向占比（只表方向，不表强弱；v2 起配合下面两项完整解读） */
   model_agreement: number | null;
+  /** 波动率缩放前的加权趋势 ×100（position = trend_strength × scalar） */
+  trend_strength: number | null;
+  /** 表态（|signal|>ε）子模型的权重覆盖 0..1 */
+  active_model_weight: number | null;
+  /** 模型数据是否已覆盖最近一个已收盘交易日（周末快照变旧≠数据过期） */
+  market_data_current: boolean | null;
   submodels: Record<string, CtaSubmodel> | null;
   volatility: {
     realized_annual: number | null;
@@ -473,6 +480,10 @@ export interface CtaTrendPayload {
   proxy_note: string;
   source_status: string;
   instruments: CtaInstrumentEstimate[];
+  /** worker 落盘时刻（访客读取层附带）；页头新鲜度以此为准，不用请求时刻 */
+  snapshot_saved_at: string | null;
+  /** 访客通道常驻 public_snapshot_only；只有别的原因才当异常展示 */
+  stale_reason: string | null;
   _stale?: boolean;
 }
 
