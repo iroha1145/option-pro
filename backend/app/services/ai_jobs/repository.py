@@ -18,7 +18,11 @@ from app.services.ai_jobs.models import (
 )
 
 
-_SCHEMA_VERSION = "ai-jobs-v3"
+# 版本号必须随 schema 形状（建表文本）一起升级：registry 按版本存建表文本的
+# 校验和，形状变了版本不变会在老库上撞出 ai_job_schema_checksum_mismatch，
+# ai_jobs/catalyst/focus 三个任务整体停摆（2026-08-08 生产事故：加 error_detail
+# 列没升版本）。老版本行保留作历史；回滚安全——旧代码只查自己版本的行。
+_SCHEMA_VERSION = "ai-jobs-v4"
 _SOURCE_SCHEMA_VERSION = "ai-job-sources-v1"
 _BATCH_SCHEMA_VERSION = "ai-job-batch-members-v1"
 _EARNINGS_LOCK_SCHEMA_VERSION = "ai-earnings-final-locks-v1"

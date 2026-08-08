@@ -1683,6 +1683,66 @@ def test_failure_detail_is_persisted_exposed_and_cleared_by_recovery(tmp_path):
     assert recovered["error_code"] is None
 
 
+def test_error_detail_migration_survives_v3_checksum_registry(tmp_path):
+    """精确复刻 2026-08-08 生产事故：老库带 v3 校验和 + 无 error_detail 列。
+
+    加列改变建表文本 → 校验和改变；版本号没升时，老库 registry 里的 v3 行
+    与新代码计算值不匹配，ensure_initialized 每次 RuntimeError，ai_jobs/
+    catalyst/focus 任务全停。修复=版本升到 v4：老行保留、新行独立成键。
+    """
+    import hashlib as _hashlib
+
+    from app.services.ai_jobs import repository as repo_module
+
+    database = tmp_path / "ai-jobs.db"
+    repository = AIJobRepository(database)
+    row, _ = _create_earnings_job(repository)
+    old_table_sql = repo_module._AI_JOBS_TABLE_SQL.replace(
+        "    error_detail TEXT,\n", ""
+    )
+    assert old_table_sql != repo_module._AI_JOBS_TABLE_SQL
+    old_checksum = _hashlib.sha256(
+        (
+            repo_module._SCHEMA_REGISTRY_SQL
+            + old_table_sql
+            + repo_module._AI_JOBS_INDEX_SQL
+        ).encode("utf-8")
+    ).hexdigest()
+    with repository._connect() as connection:
+        connection.execute("ALTER TABLE ai_jobs DROP COLUMN error_detail")
+        connection.execute(
+            "DELETE FROM ai_job_schema WHERE version IN ('ai-jobs-v3','ai-jobs-v4')"
+        )
+        connection.execute(
+            """INSERT INTO ai_job_schema(version,checksum,applied_at)
+               VALUES('ai-jobs-v3',?,?)""",
+            (old_checksum, "2026-08-01T00:00:00Z"),
+        )
+        connection.commit()
+
+    reopened = AIJobRepository(database)
+    reopened.ensure_initialized()
+
+    with reopened._connect() as connection:
+        columns = {
+            str(item["name"])
+            for item in connection.execute(
+                "PRAGMA table_info(ai_jobs)"
+            ).fetchall()
+        }
+        registry = {
+            str(item["version"]): str(item["checksum"])
+            for item in connection.execute(
+                "SELECT version,checksum FROM ai_job_schema"
+            ).fetchall()
+        }
+    assert "error_detail" in columns
+    # 老 v3 行原样保留（回滚安全），v4 行写入当前校验和。
+    assert registry["ai-jobs-v3"] == old_checksum
+    assert registry["ai-jobs-v4"] == repo_module._SCHEMA_CHECKSUM
+    assert reopened.get_job(row["job_id"]) is not None
+
+
 def test_error_detail_column_backfills_on_existing_database(tmp_path):
     database = tmp_path / "ai-jobs.db"
     repository = AIJobRepository(database)
