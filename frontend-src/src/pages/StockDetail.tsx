@@ -17,7 +17,6 @@ import { usePolling } from '@/hooks/usePolling';
 import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
 import MacroFitPanel from '@/components/shared/MacroFitPanel';
-import InfoHint from '@/components/shared/InfoHint';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { getDetail, getTechnicalStructure, prefetchStockDetailPanels } from '@/components/detail/api';
@@ -33,7 +32,6 @@ import NewsPanel from '@/components/detail/NewsPanel';
 import AiAnalysisCard from '@/components/detail/AiAnalysisCard';
 import ManualStockPull from '@/components/detail/ManualStockPull';
 import KeyStats from '@/components/detail/KeyStats';
-import { STRUCTURE_HINTS } from '@/lib/structureHints';
 import { t, t as __t } from '../i18n/core.ts';
 
 export default function StockDetail() {
@@ -259,18 +257,14 @@ export default function StockDetail() {
       <div className="mt-8 grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
         <div className="xl:col-span-8">
           <div className="card-surface p-5">
+            {/* 图例改由 KlineChart 内部按模式/状态渲染（真图例：色块/符号 + 状态语义） */}
             <KlineChart
               ticker={detail.ticker}
               prevClose={detail.prevClose}
               height={420}
               refreshVersion={dataRevision}
-              overlays={technical?.chart_overlays ?? null}
+              technical={technical}
             />
-            <p className="mt-2 flex items-center gap-1 text-micro text-ink-400">
-              {__t('图例')}
-              <InfoHint hint={STRUCTURE_HINTS.chart_overlays} align="start" size={12} />
-              <span className="ml-1">{__t('阻力带 / 失效位 / 摆动点按日线结构自动标注')}</span>
-            </p>
           </div>
         </div>
         <aside className="xl:col-span-4">

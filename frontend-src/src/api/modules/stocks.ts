@@ -32,16 +32,24 @@ export function mapBar<T extends Candle = Candle>(b: Rec): T {
     l: pickN(b, 'l') ?? 0,
     c: pickN(b, 'c') ?? 0,
     v: pickN(b, 'v') ?? 0,
+    // 盘前盘后与仅报价 bar 要一路带到图表层：均线等常规时段指标按它剔除
+    ...(b.ext === true ? { ext: true } : {}),
     ...(b.quote_only === true ? { quote_only: true } : {}),
   } as T;
 }
 
 /** 由收盘价计算 MA20（真实推导，非编造；不足 20 根处为 null） */
 export function ma20Of(candles: Candle[]): (number | null)[] {
-  return candles.map((_, i) => {
-    if (i < 19) return null;
+  // 与后端契约 moving_average_scope=regular_session_only 同口径：盘前盘后
+  // （ext）与零成交的仅报价 bar 不进窗口也不画点——报价路径混进均线，
+  // 会把 MA20 朝着盘后噪声拽弯。窗口是「最近 20 根合格收盘」。
+  const eligible: number[] = [];
+  return candles.map((bar) => {
+    if (bar.ext === true || bar.quote_only === true) return null;
+    eligible.push(bar.c);
+    if (eligible.length < 20) return null;
     let sum = 0;
-    for (let j = i - 19; j <= i; j++) sum += candles[j].c;
+    for (let j = eligible.length - 20; j < eligible.length; j++) sum += eligible[j];
     return Math.round((sum / 20) * 100) / 100;
   });
 }

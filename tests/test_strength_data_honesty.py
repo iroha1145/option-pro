@@ -286,7 +286,11 @@ def test_vol_price_match_short_after_filter_reports_not_enough_data() -> None:
     result = vpm.compute_vol_price_match(tampered)
     assert result["status"] == "not_enough_data"
     assert result["volume_range_ratio"] is None
-    assert result["breakout_quality_adjustment"] == 0.0
+    # 没测过 ≠ 测出来是零：三个调整量在数据不足时都必须是 None，
+    # 否则 UI 与快照会把「无数据」显示成「假突破风险 0」。
+    assert result["breakout_quality_adjustment"] is None
+    assert result["false_breakout_risk"] is None
+    assert result["risk_penalty_adjustment"] is None
 
 
 # ── price_action 空态分数（2.1.10） ──────────────────────────

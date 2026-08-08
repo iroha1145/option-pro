@@ -357,6 +357,8 @@ export interface StockChartEx {
   bars: ChartBarEx[];
   ma20: (number | null)[];
   as_of: string;
+  /** 契约 last_bar_at：末根 K 线自身的时间（as_of 只是接口读取时刻） */
+  last_bar_at?: string | null;
   _stale?: boolean;
 }
 

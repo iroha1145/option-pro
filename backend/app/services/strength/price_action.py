@@ -35,6 +35,9 @@ _STRUCTURE_LABELS = {
     "range": "区间震荡",
     "lh_pressure": "高点压低",
     "downtrend": "LH+LL 下降结构",
+    # 摆动点不足以构成完整序列时不打分：中性 50 是「观察到的均衡」，
+    # 不能拿来掩盖「没有足够证据」。score=None → 评分侧该维度自动脱落。
+    "unconfirmed": "结构未确认",
 }
 
 _PATTERN_LABELS = {
@@ -85,8 +88,13 @@ def _empty(status: str, label: str) -> dict[str, Any]:
         "support_dist_pct": None,
         "patterns": [],
         "pattern_labels": [],
+        "pattern_events": [],
         "spring": False,
         "upthrust": False,
+        "spring_bars_ago": None,
+        "spring_level": None,
+        "upthrust_bars_ago": None,
+        "upthrust_level": None,
         "tags": [label],
     }
 
@@ -114,7 +122,9 @@ def _find_swings(high: list[float], low: list[float], span: int) -> tuple[list[t
 
 def _structure_state(swing_highs: list[tuple[int, float]], swing_lows: list[tuple[int, float]]) -> str:
     if len(swing_highs) < 2 or len(swing_lows) < 2:
-        return "range"
+        # 单边平滑行情、平台或样本太短都会走到这里：连两个已确认高点/低点
+        # 都凑不齐，HH/HL 比较无从谈起——如实报未确认，而不是判成区间震荡。
+        return "unconfirmed"
     hh = swing_highs[-1][1] > swing_highs[-2][1]
     hl = swing_lows[-1][1] > swing_lows[-2][1]
     lh = swing_highs[-1][1] < swing_highs[-2][1]
@@ -135,14 +145,15 @@ def _structure_state(swing_highs: list[tuple[int, float]], swing_lows: list[tupl
 def _detect_patterns(
     open_: list[float], high: list[float], low: list[float], close: list[float],
     check_last: int = 3, extreme_window: int = 10,
-) -> list[str]:
-    """Candlestick patterns on the most recent `check_last` bars.
+) -> list[tuple[str, int]]:
+    """Candlestick patterns on the most recent `check_last` bars, with the bar
+    index each fired on (so callers can report the date / bars-ago).
 
     Pin bars only count at price extremes (hammer near a local low, shooting
     star near a local high) — a hammer mid-range is noise, not signal.
     """
     n = len(close)
-    found: list[str] = []
+    found: list[tuple[str, int]] = []
     for i in range(max(1, n - check_last), n):
         o, h, l, c = open_[i], high[i], low[i], close[i]
         po, pc = open_[i - 1], close[i - 1]
@@ -156,29 +167,49 @@ def _detect_patterns(
 
         # Engulfing: current real body wraps the previous real body, opposite colors.
         if pc < po and c > o and c >= po and o <= pc and body > prev_body * 1.05:
-            found.append("bullish_engulfing")
+            found.append(("bullish_engulfing", i))
         elif pc > po and c < o and c <= po and o >= pc and body > prev_body * 1.05:
-            found.append("bearish_engulfing")
+            found.append(("bearish_engulfing", i))
 
         # Pin bars (require a meaningful body so dojis don't trigger).
         window_lo = min(low[max(0, i - extreme_window):i + 1])
         window_hi = max(high[max(0, i - extreme_window):i + 1])
         if body > 0 and lower_wick >= body * 2 and upper_wick <= body * 0.6 and l <= window_lo * 1.01:
-            found.append("hammer")
+            found.append(("hammer", i))
         elif body > 0 and upper_wick >= body * 2 and lower_wick <= body * 0.6 and h >= window_hi * 0.99:
-            found.append("shooting_star")
+            found.append(("shooting_star", i))
 
         # Inside bar: contraction, direction-neutral.
         if h < high[i - 1] and l > low[i - 1]:
-            found.append("inside_bar")
-    return list(dict.fromkeys(found))
+            found.append(("inside_bar", i))
+    # 每种形态只留最近一次出现（bars_ago 才是最新发生位置）；顺序按首次出现。
+    latest: dict[str, int] = {}
+    order: list[str] = []
+    for name, index in found:
+        if name not in latest:
+            order.append(name)
+        latest[name] = max(latest.get(name, index), index)
+    return [(name, latest[name]) for name in order]
+
+
+def _atr(high: list[float], low: list[float], close: list[float], window: int = 14) -> float | None:
+    n = len(close)
+    if n < 2:
+        return None
+    window = min(window, n - 1)
+    trs = [
+        max(high[i] - low[i], abs(high[i] - close[i - 1]), abs(low[i] - close[i - 1]))
+        for i in range(n - window, n)
+    ]
+    return sum(trs) / len(trs) if trs else None
 
 
 def _detect_traps(
     high: list[float], low: list[float], close: list[float],
     swing_highs: list[tuple[int, float]], swing_lows: list[tuple[int, float]],
+    atr: float | None,
     recent: int = 8,
-) -> tuple[bool, bool]:
+) -> dict[str, Any]:
     """Spring / upthrust against the latest CONFIRMED swing levels.
 
     spring   = a recent bar pierced the prior swing low intraday but closed
@@ -186,23 +217,36 @@ def _detect_traps(
     upthrust = pierced the prior swing high but closed back below (failed
                breakout → bearish).
     Only swings confirmed BEFORE the probed bar are used — no lookahead.
+    穿越幅度阈值按 max(0.2%×位, 0.1×ATR)：高价股 0.2% 是天量、低波动股
+    0.2% 又太宽，纯百分比在两端都失真。
+    Returns the latest occurrence's bar index and reference level, so callers
+    can report when it happened instead of a bare boolean.
     """
     n = len(close)
     start = max(0, n - recent)
-    spring = False
-    upthrust = False
+    result: dict[str, Any] = {
+        "spring": False, "upthrust": False,
+        "spring_index": None, "spring_level": None,
+        "upthrust_index": None, "upthrust_level": None,
+    }
     for i in range(start, n):
         prior_lows = [price for idx, price in swing_lows if idx < i - 1]
-        if prior_lows and not spring:
+        if prior_lows:
             level = prior_lows[-1]
-            if low[i] < level * 0.998 and close[i] > level:
-                spring = True
+            pierce = max(level * 0.002, (atr or 0.0) * 0.1)
+            if low[i] < level - pierce and close[i] > level:
+                result["spring"] = True
+                result["spring_index"] = i
+                result["spring_level"] = level
         prior_highs = [price for idx, price in swing_highs if idx < i - 1]
-        if prior_highs and not upthrust:
+        if prior_highs:
             level = prior_highs[-1]
-            if high[i] > level * 1.002 and close[i] < level:
-                upthrust = True
-    return spring, upthrust
+            pierce = max(level * 0.002, (atr or 0.0) * 0.1)
+            if high[i] > level + pierce and close[i] < level:
+                result["upthrust"] = True
+                result["upthrust_index"] = i
+                result["upthrust_level"] = level
+    return result
 
 
 def compute_price_action(
@@ -231,10 +275,10 @@ def compute_price_action(
     swing_highs, swing_lows = _find_swings(high, low, swing_span)
     structure = _structure_state(swing_highs, swing_lows)
     structure_label = _STRUCTURE_LABELS[structure]
-    score = _STRUCTURE_SCORES[structure]
     tags: list[str] = [structure_label] if structure != "range" else []
 
-    patterns = _detect_patterns(open_, high, low, close)
+    pattern_hits = _detect_patterns(open_, high, low, close)
+    patterns = [name for name, _ in pattern_hits]
     pattern_adjust = 0.0
     for pattern in patterns:
         pattern_adjust += _PATTERN_ADJUST.get(pattern, 0.0)
@@ -246,7 +290,11 @@ def compute_price_action(
     # Cap combined candle influence — patterns refine structure, never dominate it.
     pattern_adjust = max(-10.0, min(10.0, pattern_adjust))
 
-    spring, upthrust = _detect_traps(high, low, close, swing_highs, swing_lows)
+    n = len(close)
+    atr = _atr(high, low, close)
+    traps = _detect_traps(high, low, close, swing_highs, swing_lows, atr)
+    spring = bool(traps["spring"])
+    upthrust = bool(traps["upthrust"])
     trap_adjust = 0.0
     if spring:
         trap_adjust += 8.0
@@ -255,14 +303,21 @@ def compute_price_action(
         trap_adjust -= 8.0
         tags.append("Upthrust 假突破")
 
-    score = _clamp(score + pattern_adjust + trap_adjust)
+    # 结构未确认 → 不打分。形态/陷阱仍如实报告（它们不依赖摆动序列完整），
+    # 但没有基准分就没有可修正的对象；评分侧按 None 让该维度权重重分。
+    if structure == "unconfirmed":
+        score: float | None = None
+    else:
+        score = round(_clamp(_STRUCTURE_SCORES[structure] + pattern_adjust + trap_adjust), 1)
 
     resistance = swing_highs[-1][1] if swing_highs else None
     support = swing_lows[-1][1] if swing_lows else None
 
+    bars_ago = (lambda index: None if index is None else n - 1 - int(index))
+
     return {
         "status": "active",
-        "score": round(score, 1),
+        "score": score,
         "structure": structure,
         "structure_label": structure_label,
         "swing_high": _safe_float(resistance, 4),
@@ -273,7 +328,21 @@ def compute_price_action(
         "support_dist_pct": _safe_float((support / last_close - 1) * 100, 2) if support else None,
         "patterns": patterns,
         "pattern_labels": [_PATTERN_LABELS[p] for p in patterns if p in _PATTERN_LABELS],
+        # 形态是「最近 3 根里的历史事件」，不是当前状态——带上距今根数让
+        # 前端能写明发生时点，而不是永远像刚刚出现。
+        "pattern_events": [
+            {
+                "pattern": name,
+                "label": _PATTERN_LABELS.get(name, name),
+                "bars_ago": bars_ago(index),
+            }
+            for name, index in pattern_hits
+        ],
         "spring": spring,
         "upthrust": upthrust,
+        "spring_bars_ago": bars_ago(traps["spring_index"]),
+        "spring_level": _safe_float(traps["spring_level"], 4),
+        "upthrust_bars_ago": bars_ago(traps["upthrust_index"]),
+        "upthrust_level": _safe_float(traps["upthrust_level"], 4),
         "tags": list(dict.fromkeys(tags))[:4],
     }

@@ -263,6 +263,10 @@ export interface StockPullResult {
 export interface Candle {
   t: string; // ISO
   o: number; h: number; l: number; c: number; v: number;
+  /** 盘前/盘后 bar（分钟周期 prepost）；均线等常规时段指标不吃它 */
+  ext?: boolean;
+  /** 零成交的报价路径 bar：只有报价包络，不是真实成交 OHLC */
+  quote_only?: boolean;
 }
 export interface StockChart {
   ticker: string;
@@ -297,6 +301,30 @@ export interface TechBaseStructure {
   resistance_touches: number | null;
   quality: number | null;
   base_duration_days?: number | null;
+  /** 七维质量分里有几维是实测（其余走保守默认值） */
+  quality_coverage?: { observed: number; total: number; missing: string[] } | null;
+  /** 七档窗口里有几档独立检出基底（1/7 孤检 vs 5/7 共识） */
+  window_agreement?: number | null;
+  windows_scanned?: number | null;
+}
+
+/** 最新价相对已检出基底的位置（基底本身永远是「截至前一收盘」的历史检测） */
+export type TechBaseStatus = 'in_base' | 'at_resistance' | 'breakout' | 'below_support' | 'failed';
+
+export interface TechBaseState {
+  status: TechBaseStatus;
+  reference_close: number | null;
+  reference_date: string | null;
+  /** 参考收盘来自未收盘 bar：状态是暂定的 */
+  provisional: boolean;
+}
+
+export interface TechPatternEvent {
+  pattern: string;
+  /** 后端下发中文标签，渲染处过 t() */
+  label: string;
+  bars_ago: number | null;
+  trade_date: string | null;
 }
 
 export interface TechnicalStructure {
@@ -315,24 +343,32 @@ export interface TechnicalStructure {
     support_dist_pct: number | null;
     patterns: string[];
     pattern_labels: string[];
+    /** 形态是「最近 3 根里的历史事件」——带发生时点，不冒充当前状态 */
+    pattern_events: TechPatternEvent[];
     spring: boolean;
     upthrust: boolean;
+    spring_bars_ago: number | null;
+    spring_trade_date: string | null;
+    upthrust_bars_ago: number | null;
+    upthrust_trade_date: string | null;
     tags: string[];
   };
+  base_state: TechBaseState | null;
   vol_price: {
     status: string;
     setup_type: string;
     setup_label: string;
     effort: number | null;
     result: number | null;
-    breakout_quality_adjustment: number;
-    false_breakout_risk: number;
+    /** null = 量价数据不足未测——不是 0 */
+    breakout_quality_adjustment: number | null;
+    false_breakout_risk: number | null;
     tags: string[];
   };
   technicals: {
     rsi14: number | null;
     rsi_score: number | null;
-    macd: { histogram: number | null; direction_pct: number | null };
+    macd: { histogram: number | null; histogram_pct: number | null; direction_pct: number | null };
     trend_efficiency_63d: number | null;
     ma50_slope_pct_21d: number | null;
     return_stability_20d: number | null;
@@ -350,10 +386,17 @@ export interface TechnicalStructure {
     pivot_price?: number | null;
     base_start?: string | null;
     base_end?: string | null;
+    /** 最新价相对基底的状态（叠加层按它改变视觉语义） */
+    base_status?: TechBaseStatus | null;
   };
-  /** raw_daily：与日 K 线同一 raw 序列（除权日附近以图上所见为准） */
+  /** raw_daily：与日 K 线同一序列（拆股已复权、分红不复权） */
   basis?: string;
+  /** 指标/结构实际吃到的最后一根收盘 K 的日期 */
   data_through?: string | null;
+  /** 图上可见的最后一根（可能未收盘）；closed=false 时状态判定为暂定 */
+  last_bar?: { t: string; trade_date: string; closed: boolean } | null;
+  /** 序列断裂点（坏拼接/异常断崖）；分析只用断裂之后的一致段 */
+  series_break_at?: string | null;
   as_of?: string | null;
 }
 

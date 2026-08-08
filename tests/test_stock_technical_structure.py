@@ -92,10 +92,16 @@ def test_detect_base_structure_finds_the_shelf() -> None:
     assert base["base_end"] <= prior["dates"][-1]
 
 
+# 合成序列的日期可能越过真实「今天」；固定时钟让所有 bar 都是已收盘的过去。
+_AFTER_ALL_BARS = datetime(2027, 1, 4, 12, 0, tzinfo=timezone.utc)
+
+
 def test_compute_technical_structure_full_payload() -> None:
     bars = _synthetic_bars()
-    result = compute_technical_structure(bars)
+    result = compute_technical_structure(bars, now=_AFTER_ALL_BARS)
     assert result is not None
+    assert result["last_bar"]["closed"] is True
+    assert result["series_break_at"] is None
 
     pa = result["price_action"]
     assert pa["status"] == "active"
@@ -138,7 +144,7 @@ def test_swing_values_match_price_action_module() -> None:
     canonical price-action analysis; the last swing must equal its
     resistance/support values."""
 
-    result = compute_technical_structure(_synthetic_bars())
+    result = compute_technical_structure(_synthetic_bars(), now=_AFTER_ALL_BARS)
     assert result is not None
     pa = result["price_action"]
     if pa["swing_highs"] and pa["resistance"] is not None:

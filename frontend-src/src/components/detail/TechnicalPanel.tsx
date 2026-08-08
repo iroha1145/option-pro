@@ -33,8 +33,14 @@ export default function TechnicalPanel({ technical }: { technical: TechnicalStru
         value={tech.rsi14 !== null ? tech.rsi14.toFixed(1) : '—'}
         hint={TECHNICAL_HINTS.rsi14}
       />
+      {/* 柱体位置（零轴上/下）与柱体变化是两回事：柱体在零轴下时「变化为正」
+          只是空头动能衰减。主数显示柱体变化，标签行标注柱体当前正负。 */}
       <MiniStat
-        label={t('MACD 动向')}
+        label={
+          tech.macd.histogram_pct !== null
+            ? t('MACD 柱变化（柱{sign}）', { sign: tech.macd.histogram_pct >= 0 ? '+' : '−' })
+            : t('MACD 柱变化')
+        }
         value={signedPct(tech.macd.direction_pct, 2)}
         hint={TECHNICAL_HINTS.macd}
       />
@@ -53,8 +59,9 @@ export default function TechnicalPanel({ technical }: { technical: TechnicalStru
         value={tech.range_position_60d !== null ? `${Math.round(tech.range_position_60d * 100)}%` : '—'}
         hint={TECHNICAL_HINTS.range_position}
       />
+      {/* 原名「波动稳定」易被读成 0-100 的稳定度评分；它其实是日收益标准差。 */}
       <MiniStat
-        label={t('波动稳定')}
+        label={t('20 日波动率')}
         value={tech.return_stability_20d !== null ? `${(tech.return_stability_20d * 100).toFixed(1)}%` : '—'}
         hint={TECHNICAL_HINTS.return_stability}
       />

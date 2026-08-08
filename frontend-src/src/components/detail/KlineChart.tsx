@@ -7,7 +7,7 @@
  * 回撤尺：手动两点区间测量（K线默认高—低口径可切收盘，面积固定收盘口径），
  * 锚点按 bar 时间戳存储、静默刷新后重新解析，解析不到判失效
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import ReactECharts from '@/components/charts/ReactECharts';
 import Segmented from '@/components/shared/Segmented';
@@ -38,8 +38,13 @@ export type TechOverlays = TechnicalStructure['chart_overlays'];
 
 /**
  * 技术点位 → markLine / markArea / markPoint。
- * 只在日 K 上绘制：结构由 raw 日线算出，摆动点按「精确 t → 交易日」两级
+ * 只在日 K 上绘制：结构与图表同源同序列，摆动点按「精确 t → 交易日」两级
  * 寻址到当前序列的具体一根（mock 两次生成的 t 差几毫秒，退到日历日仍准）。
+ *
+ * 阻力带/失效位是「从基底起点起」的水平参考，不是全史事实：
+ * - 实心段 = 基底形成区间 [base_start, base_end]
+ * - 淡化段 = base_end 之后的延伸观察区（价位仍被盯着，但基底已是历史检测）
+ * - 已跌破失效位（failed）→ 整带转灰，只保留失效位红线警示语义
  */
 function technicalMarks(overlays: TechOverlays | null | undefined, bars: ChartBarEx[]) {
   const empty = { lines: [] as object[], points: [] as object[], areas: [] as object[] };
@@ -53,43 +58,72 @@ function technicalMarks(overlays: TechOverlays | null | undefined, bars: ChartBa
   });
   const locate = (p: TechSwingPoint): number =>
     idxByT.get(p.t) ?? idxByDay.get(p.trade_date || p.t.slice(0, 10)) ?? -1;
+  const locateDay = (day: string | null | undefined): number =>
+    day ? idxByDay.get(day) ?? -1 : -1;
 
   const lines: object[] = [];
   const points: object[] = [];
   const areas: object[] = [];
+  const failed = overlays.base_status === 'failed';
+  const lastIndex = bars.length - 1;
+  const startIndex = locateDay(overlays.base_start);
+  const endIndex = locateDay(overlays.base_end);
 
-  if (overlays.invalidation_price != null && Number.isFinite(overlays.invalidation_price)) {
-    lines.push({
-      yAxis: overlays.invalidation_price,
-      lineStyle: { color: CH.down600, width: 1, type: 'dotted' as const },
-      label: {
-        ...MEASURE_LABEL_FONT,
-        formatter: t('失效位 {p}', { p: fmtPrice(overlays.invalidation_price) }),
-        color: CH.down600,
-        position: 'insideEndBottom' as const,
+  if (
+    overlays.invalidation_price != null
+    && Number.isFinite(overlays.invalidation_price)
+    && startIndex >= 0
+  ) {
+    lines.push([
+      {
+        coord: [startIndex, overlays.invalidation_price],
+        lineStyle: { color: CH.down600, width: 1, type: 'dotted' as const },
+        label: {
+          ...MEASURE_LABEL_FONT,
+          formatter: t('失效位 {p}', { p: fmtPrice(overlays.invalidation_price) }),
+          color: CH.down600,
+          position: 'insideEndBottom' as const,
+        },
       },
-    });
+      { coord: [lastIndex, overlays.invalidation_price] },
+    ]);
   }
   if (
     overlays.resistance_low != null
     && overlays.resistance_high != null
     && Number.isFinite(overlays.resistance_low)
     && Number.isFinite(overlays.resistance_high)
+    && startIndex >= 0
+    && endIndex >= startIndex
   ) {
+    const bandColor = failed ? CH.ink400 : CH.brand400;
+    const labelColor = failed ? CH.ink400 : CH.brand600;
     areas.push([
       {
+        xAxis: startIndex,
         yAxis: overlays.resistance_low,
-        itemStyle: { color: CH.brand400, opacity: 0.08 },
+        itemStyle: { color: bandColor, opacity: 0.1 },
         label: {
           ...MEASURE_LABEL_FONT,
           show: true,
-          formatter: t('阻力带'),
-          color: CH.brand600,
+          formatter: failed ? t('阻力带（基底已失效）') : t('阻力带'),
+          color: labelColor,
           position: 'insideTopRight' as const,
         },
       },
-      { yAxis: overlays.resistance_high },
+      { xAxis: endIndex, yAxis: overlays.resistance_high },
     ]);
+    if (endIndex < lastIndex) {
+      areas.push([
+        {
+          xAxis: endIndex,
+          yAxis: overlays.resistance_low,
+          itemStyle: { color: bandColor, opacity: 0.04 },
+          label: { show: false },
+        },
+        { xAxis: lastIndex, yAxis: overlays.resistance_high },
+      ]);
+    }
   }
   const markSwings = (list: TechSwingPoint[], isHigh: boolean) => {
     for (const point of list.slice(-3)) {
@@ -108,6 +142,26 @@ function technicalMarks(overlays: TechOverlays | null | undefined, bars: ChartBa
   markSwings(overlays.swing_highs ?? [], true);
   markSwings(overlays.swing_lows ?? [], false);
   return { lines, points, areas };
+}
+
+/**
+ * 结构负载与当前图表 bars 是否同一份数据。
+ *
+ * 两者各有缓存（chart 10 分钟 / technical 10 分钟 + 各自的拉取快照通路），
+ * 拉取或静默刷新后可能短暂错版本——把旧序列的阻力带画到新 K 线上，比暂时
+ * 不画危险得多。锚点：结构声明的末根（last_bar，旧负载退 data_through）
+ * 必须能在当前日线序列里找到，且落后不超过 2 根（未收盘末根 + 一个刷新周期）。
+ */
+function overlaysConsistentWithBars(
+  technical: Pick<TechnicalStructure, 'last_bar' | 'data_through'> | null | undefined,
+  bars: { t: string; ext?: boolean }[],
+): boolean {
+  if (!technical) return false;
+  const anchor = technical.last_bar?.trade_date ?? technical.data_through;
+  if (!anchor) return true; // 更旧的负载没有锚点可校验，维持原行为
+  const days = bars.filter((b) => b.ext !== true).map((b) => b.t.slice(0, 10));
+  const position = days.lastIndexOf(anchor);
+  return position >= 0 && days.length - 1 - position <= 2;
 }
 
 function fmtAxisLabel(iso: string, range: ChartRange): string {
@@ -237,18 +291,9 @@ function buildOption(
 
   if (mode === 'area') {
     const closes = bars.map((b) => b.c);
-    // 虚线趋势线（最小二乘）
+    // （原全史最小二乘趋势线已删：拟合域是全部历史、显示域是默认视窗，
+    //  两者不一致时那条线只会误导；且对研究没有独立价值。）
     const n = closes.length;
-    let slope = 0;
-    let intercept = closes[0] ?? 0;
-    if (n > 1) {
-      let sx = 0, sy = 0, sxy = 0, sxx = 0;
-      closes.forEach((c, i) => {
-        sx += i; sy += c; sxy += i * c; sxx += i * i;
-      });
-      slope = (n * sxy - sx * sy) / Math.max(1e-9, n * sxx - sx * sx);
-      intercept = (sy - slope * sx) / n;
-    }
     const last = closes[n - 1];
     // 昨收基准线与回撤尺测量线共用一个 markLine（样式随 data 项各自指定）
     const areaMarkLines: object[] = [];
@@ -325,15 +370,6 @@ function buildOption(
             : undefined,
           markArea: marks.areas.length ? { silent: true, data: marks.areas } : undefined,
           z: 3,
-        },
-        {
-          type: 'line' as const,
-          data: closes.map((_, i) => Number((intercept + slope * i).toFixed(2))),
-          showSymbol: false,
-          silent: true,
-          lineStyle: { color: CH.ink400, width: 1, type: [6, 4] as number[] },
-          tooltip: { show: false },
-          z: 2,
         },
       ],
     } as ChartOption;
@@ -415,10 +451,18 @@ function buildOption(
         const idx = arr[0]?.dataIndex ?? 0;
         const b = bars[idx];
         if (!b) return '';
+        const signedCell = (chg: number, pct: number | null) => {
+          const color = chg >= 0 ? CH.up600 : CH.down600;
+          const sign = chg >= 0 ? '+' : '−';
+          const pctText = pct === null ? '' : ` (${sign}${Math.abs(pct).toFixed(2)}%)`;
+          return `<span style="color:${color}">${sign}${Math.abs(chg).toFixed(2)}${pctText}</span>`;
+        };
         const chg = b.c - b.o;
-        const pct = b.o ? (chg / b.o) * 100 : 0;
         const color = chg >= 0 ? CH.up600 : CH.down600;
-        const sign = chg >= 0 ? '+' : '−';
+        // 「开→收」量的是 bar 实体；跳空行情里它看不见隔夜缺口，所以再给
+        // 「较前收」一行（上一根收盘为基准）。首根没有前收，只显示开→收。
+        const prev = idx > 0 ? bars[idx - 1] : null;
+        const gapChg = prev && prev.c > 0 ? b.c - prev.c : null;
         const row = (k: string, v: string) =>
           `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#8A94B0">${k}</span><span>${v}</span></div>`;
         return (
@@ -428,7 +472,8 @@ function buildOption(
           row(t('高'), fmtPrice(b.h)) +
           row(t('低'), fmtPrice(b.l)) +
           row(t('收'), `<b style="color:${color}">${fmtPrice(b.c)}</b>`) +
-          row(t('涨跌'), `<span style="color:${color}">${sign}${Math.abs(chg).toFixed(2)} (${sign}${Math.abs(pct).toFixed(2)}%)</span>`) +
+          row(t('开→收'), signedCell(chg, b.o ? (chg / b.o) * 100 : null)) +
+          (gapChg !== null ? row(t('较前收'), signedCell(gapChg, (gapChg / prev!.c) * 100)) : '') +
           row(t('量'), fmtCompact(b.v)) +
           `</div>`
         );
@@ -513,16 +558,18 @@ export default function KlineChart({
   height = 320,
   className,
   refreshVersion = 0,
-  overlays = null,
+  technical = null,
 }: {
   ticker: string;
   prevClose?: number;
   height?: number;
   className?: string;
   refreshVersion?: number;
-  /** 技术点位（/stocks/{t}/technical 的 chart_overlays）；只在日 K 绘制 */
-  overlays?: TechOverlays | null;
+  /** 技术结构负载（/stocks/{t}/technical）；叠加只在日 K 绘制，且要过与
+      当前 bars 的同源校验——不一致宁可暂隐，也不把旧带画到新 K 线上 */
+  technical?: TechnicalStructure | null;
 }) {
+  const overlays = technical?.chart_overlays ?? null;
   // Daily bars are the reliable default covered by Massive Stocks Starter;
   // intraday intervals remain available on demand. The default lives in ./api so
   // the prefetch and this component request the same URL.
@@ -544,10 +591,16 @@ export default function KlineChart({
   const [chartInst, setChartInst] = useState<EChartsInstance | null>(null);
   const [showLevels, setShowLevels] = useState(true);
   const measureActive = measure.phase !== 'idle';
-  const levelsAvailable = overlays !== null && range === '1d' && mode === 'candle';
+  const bars = data?.bars;
+  // 结构负载与图表 bars 各有缓存，可能短暂错版本；不同源就暂隐叠加。
+  const overlaysConsistent = useMemo(
+    () => (range === '1d' && bars ? overlaysConsistentWithBars(technical, bars) : false),
+    [range, bars, technical],
+  );
+  const levelsAvailable = overlays !== null && range === '1d' && mode === 'candle' && overlaysConsistent;
+  const levelsInconsistent = overlays !== null && range === '1d' && mode === 'candle' && !overlaysConsistent;
   // 面积图没有影线可吸附，强制收盘口径；K线默认高—低，可切收盘
   const effectiveBasis: MeasureBasis = mode === 'area' ? 'close' : basis;
-  const bars = data?.bars;
 
   // 锚点属于旧价格序列：切标的 / 周期 / 显示模式一律清除，不跨序列迁移
   useEffect(() => {
@@ -789,17 +842,102 @@ export default function KlineChart({
         </p>
       )}
 
-      <p className={cn('mt-2 flex items-center justify-between text-micro text-ink-400')}>
+      {data && (
+        <OverlayLegend
+          mode={mode}
+          shown={levelsAvailable && showLevels}
+          inconsistent={levelsInconsistent}
+          hasBase={overlays?.resistance_high != null}
+          baseStatus={overlays?.base_status ?? null}
+        />
+      )}
+
+      <p className={cn('mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-micro text-ink-400')}>
         <span className="font-mono tnum">
           {data
-            ? t('共 {n} 根 · 末根{status}', {
+            ? t('共 {n} 根 · 末根 {at}{status}', {
                 n: data.bars.length,
-                status: data.bars[data.bars.length - 1]?.quote_only ? t('为仅报价 bar') : t('已收齐'),
+                at: lastBarText(data, range),
+                status: data.bars[data.bars.length - 1]?.quote_only ? t('（仅报价）') : '',
               })
             : ' '}
         </span>
-        <span className="font-mono tnum">{data ? `as of ${new Date(data.as_of).toLocaleString('zh-CN', { hour12: false })}` : ''}</span>
+        <span className="font-mono tnum">
+          {data ? t('读取于 {at}', { at: new Date(data.as_of).toLocaleString('zh-CN', { hour12: false }) }) : ''}
+        </span>
       </p>
     </section>
+  );
+}
+
+/** 末根 K 线自身的时间：日/周只到日期，分钟带时刻（as_of 只是读取时刻，两回事） */
+function lastBarText(data: { bars: ChartBarEx[]; last_bar_at?: string | null }, range: ChartRange): string {
+  const iso = data.bars[data.bars.length - 1]?.t ?? data.last_bar_at;
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const ymd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return range === '5m' || range === '15m' || range === '1h'
+    ? `${ymd} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    : ymd;
+}
+
+/**
+ * 可扫读的图上标记图例：色块/符号 + 名称，按当前模式与数据状态变化——
+ * 检出失效基底时点明状态、结构与图表错版本时说明为何暂隐，
+ * 而不是永远同一句「按日线结构自动标注」。
+ */
+function OverlayLegend({
+  mode,
+  shown,
+  inconsistent,
+  hasBase,
+  baseStatus,
+}: {
+  mode: ChartMode;
+  shown: boolean;
+  inconsistent: boolean;
+  hasBase: boolean;
+  baseStatus: TechnicalStructure['chart_overlays']['base_status'] | null;
+}) {
+  if (inconsistent) {
+    return (
+      <p className="mt-2 text-micro text-warn-600">
+        {t('结构分析与当前 K 线数据版本不一致，技术点位已暂隐，刷新后恢复')}
+      </p>
+    );
+  }
+  if (!shown) return null;
+  const chip = (symbol: ReactNode, label: string) => (
+    <span className="inline-flex items-center gap-1">
+      {symbol}
+      <span>{label}</span>
+    </span>
+  );
+  return (
+    <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-ink-400">
+      <span className="inline-flex items-center gap-1 text-ink-500">
+        {t('图例')}
+        <InfoHint hint={STRUCTURE_HINTS.chart_overlays} align="start" size={12} />
+      </span>
+      {hasBase
+        && chip(
+          <span className="inline-block h-2 w-4 rounded-xs bg-brand-400/30" aria-hidden />,
+          baseStatus === 'failed' ? t('阻力带（基底已失效）') : t('阻力带（整理区上沿）'),
+        )}
+      {hasBase
+        && chip(
+          <span className="inline-block h-0 w-4 border-t border-dotted border-down-600" aria-hidden />,
+          t('失效位'),
+        )}
+      {chip(<span aria-hidden className="text-warn-600" style={{ fontSize: 8 }}>▼</span>, t('确认摆动高点'))}
+      {chip(<span aria-hidden className="text-ai-600" style={{ fontSize: 8 }}>▲</span>, t('确认摆动低点'))}
+      {mode === 'candle'
+        && chip(
+          <span className="inline-block h-0 w-4 border-t border-dashed border-brand-500" aria-hidden />,
+          t('MA20 · 最近 20 根常规时段收盘的均线'),
+        )}
+    </p>
   );
 }

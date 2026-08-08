@@ -22,7 +22,7 @@ import { mapMacroFitDrivers } from '@/api/macroFields';
 import { postAiJob } from '@/api/modules/ai-jobs';
 import * as fx from '@/mocks/fixtures';
 import * as fx2 from '@/mocks/fixtures2';
-import type { AiJob, StockChart, StockDetail, TechnicalStructure, TechSwingPoint } from '@/api/types';
+import type { AiJob, StockChart, StockDetail, TechBaseStatus, TechnicalStructure, TechSwingPoint } from '@/api/types';
 import type {
   ChartBarEx,
   StockChartEx,
@@ -57,6 +57,7 @@ function mapChartEx(body: unknown, ticker: string, range: ChartRange): StockChar
     bars,
     ma20: ma20Of(bars),
     as_of: pickS(r, 'as_of', 'asOf') ?? '',
+    last_bar_at: pickS(r, 'last_bar_at'),
     ...(r._stale === true ? { _stale: true } : {}),
   };
 }
@@ -612,9 +613,48 @@ function mapTechnicalStructure(body: unknown): TechnicalStructure {
         resistance_touches: pickN(baseRaw, 'resistance_touches'),
         quality: pickN(baseRaw, 'quality'),
         base_duration_days: pickN(baseRaw, 'base_duration_days'),
+        quality_coverage: (() => {
+          const cov = asRec(baseRaw.quality_coverage);
+          const observed = pickN(cov, 'observed');
+          const total = pickN(cov, 'total');
+          if (observed === null || total === null) return null;
+          return {
+            observed,
+            total,
+            missing: unwrap(cov, 'missing').flatMap((v) => (typeof v === 'string' ? [v] : [])),
+          };
+        })(),
+        window_agreement: pickN(baseRaw, 'window_agreement'),
+        windows_scanned: pickN(baseRaw, 'windows_scanned'),
       };
+  const stateRaw = r.base_state === null || r.base_state === undefined ? null : asRec(r.base_state);
+  const BASE_STATUSES = new Set(['in_base', 'at_resistance', 'breakout', 'below_support', 'failed']);
+  const stateStatus = stateRaw === null ? null : pickS(stateRaw, 'status');
+  const base_state = stateRaw !== null && stateStatus !== null && BASE_STATUSES.has(stateStatus)
+    ? {
+        status: stateStatus as TechBaseStatus,
+        reference_close: pickN(stateRaw, 'reference_close'),
+        reference_date: pickS(stateRaw, 'reference_date'),
+        provisional: stateRaw.provisional === true,
+      }
+    : null;
+  const mapPatternEvents = (rec: Rec): TechnicalStructure['price_action']['pattern_events'] =>
+    unwrap(rec, 'pattern_events').flatMap((item) => {
+      const pattern = pickS(item, 'pattern');
+      const label = pickS(item, 'label');
+      if (pattern === null || label === null) return [];
+      return [{
+        pattern,
+        label,
+        bars_ago: pickN(item, 'bars_ago'),
+        trade_date: pickS(item, 'trade_date'),
+      }];
+    });
+  const lastBarRaw = asRec(r.last_bar);
+  const lastBarPoint = mapSwingPoint(lastBarRaw);
   return {
     base,
+    base_state,
     price_action: {
       status: pickS(pa, 'status') ?? 'missing_data',
       score: pickN(pa, 'score'),
@@ -628,8 +668,13 @@ function mapTechnicalStructure(body: unknown): TechnicalStructure {
       support_dist_pct: pickN(pa, 'support_dist_pct'),
       patterns: strList(pa, 'patterns'),
       pattern_labels: strList(pa, 'pattern_labels'),
+      pattern_events: mapPatternEvents(pa),
       spring: pa.spring === true,
       upthrust: pa.upthrust === true,
+      spring_bars_ago: pickN(pa, 'spring_bars_ago'),
+      spring_trade_date: pickS(pa, 'spring_trade_date'),
+      upthrust_bars_ago: pickN(pa, 'upthrust_bars_ago'),
+      upthrust_trade_date: pickS(pa, 'upthrust_trade_date'),
       tags: strList(pa, 'tags'),
     },
     vol_price: {
@@ -638,14 +683,19 @@ function mapTechnicalStructure(body: unknown): TechnicalStructure {
       setup_label: pickS(vp, 'setup_label') ?? '',
       effort: pickN(vp, 'effort'),
       result: pickN(vp, 'result'),
-      breakout_quality_adjustment: pickN(vp, 'breakout_quality_adjustment') ?? 0,
-      false_breakout_risk: pickN(vp, 'false_breakout_risk') ?? 0,
+      // null = 数据不足未测：不许折成 0 冒充「风险为零」
+      breakout_quality_adjustment: pickN(vp, 'breakout_quality_adjustment'),
+      false_breakout_risk: pickN(vp, 'false_breakout_risk'),
       tags: strList(vp, 'tags'),
     },
     technicals: {
       rsi14: pickN(tech, 'rsi14'),
       rsi_score: pickN(tech, 'rsi_score'),
-      macd: { histogram: pickN(macd, 'histogram'), direction_pct: pickN(macd, 'direction_pct') },
+      macd: {
+        histogram: pickN(macd, 'histogram'),
+        histogram_pct: pickN(macd, 'histogram_pct'),
+        direction_pct: pickN(macd, 'direction_pct'),
+      },
       trend_efficiency_63d: pickN(tech, 'trend_efficiency_63d'),
       ma50_slope_pct_21d: pickN(tech, 'ma50_slope_pct_21d'),
       return_stability_20d: pickN(tech, 'return_stability_20d'),
@@ -663,9 +713,21 @@ function mapTechnicalStructure(body: unknown): TechnicalStructure {
       pivot_price: pickN(overlays, 'pivot_price'),
       base_start: pickS(overlays, 'base_start'),
       base_end: pickS(overlays, 'base_end'),
+      base_status: (() => {
+        const status = pickS(overlays, 'base_status');
+        return status !== null && BASE_STATUSES.has(status) ? (status as TechBaseStatus) : null;
+      })(),
     },
     basis: pickS(r, 'basis') ?? 'raw_daily',
     data_through: pickS(r, 'data_through'),
+    last_bar: lastBarPoint === null
+      ? null
+      : {
+          t: lastBarPoint.t,
+          trade_date: lastBarPoint.trade_date,
+          closed: lastBarRaw.closed === true,
+        },
+    series_break_at: pickS(r, 'series_break_at'),
     as_of: pickS(r, 'as_of', 'asOf'),
   };
 }

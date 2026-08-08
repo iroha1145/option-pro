@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from typing import Any, Sequence
 
-TECHNICALS_VERSION = "us-technicals-v1"
+TECHNICALS_VERSION = "us-technicals-v2"
 
 
 def _safe(value: Any, ndigits: int = 4) -> float | None:
@@ -52,13 +52,26 @@ def rsi14(closes: Sequence[float], period: int = 14) -> float | None:
 
 
 def rsi_score(value: float | None) -> float | None:
-    """Piecewise knot map from strength scoring: RSI≈68 scores best."""
+    """RSI → 0-100 的评分映射。
+
+    节点必须与 strength/scoring.rsi_score **完全一致**（那是正式评分用的
+    唯一口径）：本文件为 JP 姊妹仓可携带而保持零依赖，所以是复制而不是
+    import——一致性由 tests 里的等价测试钉死，改任何一边都会被测试打回。
+    """
 
     if value is None:
         return None
-    knots = ((0.0, 15.0), (30.0, 35.0), (45.0, 60.0), (55.0, 75.0), (68.0, 88.0), (80.0, 70.0), (100.0, 33.0))
+    value = max(0.0, min(100.0, value))
+    knots = (
+        (0.0, 0.0),
+        (35.0, 42.0),
+        (50.0, 58.0),
+        (68.0, 88.0),
+        (78.0, 66.0),
+        (100.0, 33.0),
+    )
     for (x0, y0), (x1, y1) in zip(knots, knots[1:]):
-        if x0 <= value <= x1:
+        if value <= x1:
             if x1 == x0:
                 return y0
             ratio = (value - x0) / (x1 - x0)
@@ -88,10 +101,14 @@ def macd_direction(closes: Sequence[float]) -> dict[str, float | None]:
     histogram = [m - s for m, s in zip(macd_line, signal)]
     last_close = closes[-1]
     if last_close <= 0 or len(histogram) < 4:
-        return {"histogram": _safe(histogram[-1]), "direction_pct": None}
+        return {"histogram": _safe(histogram[-1]), "histogram_pct": None, "direction_pct": None}
     delta = histogram[-1] - histogram[-4]
     return {
         "histogram": _safe(histogram[-1]),
+        # 柱体自身位置（零轴上/下）与柱体变化是两回事：柱体在零轴下方时
+        # 「变化为正」只是空头动能衰减，不是多头增强——两个读数都下发，
+        # 前端才能把话说对。都按收盘价折算成 %，跨价位可比。
+        "histogram_pct": _safe(histogram[-1] / last_close * 100.0),
         "direction_pct": _safe(delta / last_close * 100.0),
     }
 
@@ -157,8 +174,10 @@ def range_position(
         window_low = min(lows[i - window + 1:i + 1])
         span = window_high - window_low
         positions.append((closes[i] - window_low) / span if span > 0 else 0.5)
-    fast = _ema_series(positions, 5)[-1] if positions else None
-    slow = _ema_series(positions, 20)[-1] if len(positions) >= 5 else None
+    # EMA 平滑线要有不少于自身周期的观测才有意义：5 期线至少 5 个点、
+    # 20 期线至少 20 个点，否则「慢线」只是首值的影子，如实返回 None。
+    fast = _ema_series(positions, 5)[-1] if len(positions) >= 5 else None
+    slow = _ema_series(positions, 20)[-1] if len(positions) >= 20 else None
     return {
         "position": _safe(positions[-1]) if positions else None,
         "persistence_fast": _safe(fast),

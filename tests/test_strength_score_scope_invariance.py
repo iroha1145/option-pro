@@ -166,7 +166,7 @@ def test_market_and_profile_layers_are_separate_from_intrinsic(monkeypatch) -> N
     for row in balanced["rows"]:
         other = next(item for item in aggressive["rows"] if item["ticker"] == row["ticker"])
         assert other["intrinsic_score"] == row["intrinsic_score"]
-        assert other["score_version"] == row["score_version"] == "strength-v2"
+        assert other["score_version"] == row["score_version"] == "strength-v3"
         assert row["final_score"] == row["ranking_score"]
         assert row["strength_score"] == row["ranking_score"]
 

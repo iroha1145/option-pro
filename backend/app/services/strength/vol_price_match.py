@@ -42,6 +42,8 @@ def _slope(values: list[float]) -> float | None:
 
 
 def _empty(status: str, tag: str) -> dict[str, Any]:
+    # 量价数据不足时三个调整量必须是 None：0.0 会被 UI 与快照读成
+    # 「实测过、风险为零」。评分侧 finite_number(None)/or 0.0 本就兼容缺失。
     return {
         "status": status,
         "setup_type": status,
@@ -55,9 +57,9 @@ def _empty(status: str, tag: str) -> dict[str, Any]:
         "effort": None,
         "result": None,
         "effort_result_ratio": None,
-        "breakout_quality_adjustment": 0.0,
-        "false_breakout_risk": 0.0,
-        "risk_penalty_adjustment": 0.0,
+        "breakout_quality_adjustment": None,
+        "false_breakout_risk": None,
+        "risk_penalty_adjustment": None,
         "tags": [tag],
     }
 
@@ -82,7 +84,9 @@ def compute_vol_price_match(
     observed_volume = data["Volume"].notna() & (data["Volume"].astype(float) >= 0)
     if not observed_volume.all():
         data = data.loc[observed_volume]
-    if len(data) < baseline_window + 2:
+    # 基准窗口剔除近期窗口（否则「近期 vs 基准」的对比被近期自身稀释），
+    # 所以需要 recent+baseline 两段都齐；上市不足约 70 个交易日如实报样本不足。
+    if len(data) < baseline_window + recent_window + 2:
         return _empty("not_enough_data", "量价样本不足")
 
     open_ = data["Open"].astype(float)
@@ -103,10 +107,12 @@ def compute_vol_price_match(
     tr_pct = (true_range / close.where(close > 0)).replace([math.inf, -math.inf], pd.NA).dropna()
     dollar_volume = close * volume
 
+    # 近期 = 最后 10 个交易日；基准 = 再往前的 60 个交易日（不含近期）。
+    # tail(60) 会把近期 10 日也算进基准，收缩信号被自身平均掉约 1/6。
     recent_tr = tr_pct.tail(recent_window).median()
-    baseline_tr = tr_pct.tail(baseline_window).median()
+    baseline_tr = tr_pct.iloc[-(baseline_window + recent_window):-recent_window].median()
     recent_dv = dollar_volume.tail(recent_window).median()
-    baseline_dv = dollar_volume.tail(baseline_window).median()
+    baseline_dv = dollar_volume.iloc[-(baseline_window + recent_window):-recent_window].median()
     if not baseline_tr or not baseline_dv or baseline_tr <= 0 or baseline_dv <= 0:
         return _empty("invalid_baseline", "量价基准异常")
 
@@ -118,10 +124,13 @@ def compute_vol_price_match(
     clv = ((2 * close - high - low) / daily_range).replace([math.inf, -math.inf], pd.NA).dropna()
     clv_mean = float(clv.tail(recent_window).mean()) if not clv.tail(recent_window).empty else 0.0
 
-    recent = data.tail(recent_window).copy()
-    recent["dollar_volume"] = dollar_volume.tail(recent_window)
-    up_dv = recent.loc[recent["Close"] > recent["Open"], "dollar_volume"].sum()
-    down_dv = recent.loc[recent["Close"] < recent["Open"], "dollar_volume"].sum()
+    # 涨跌日按「较前收」划分（跳空日的方向在开收口径下会被吞掉），
+    # 与下方 OBV 的 close.diff 方向口径一致——同一个模块不该有两套涨跌定义。
+    close_change = close.diff()
+    recent_dv_series = dollar_volume.tail(recent_window)
+    recent_change = close_change.tail(recent_window)
+    up_dv = float(recent_dv_series[recent_change > 0].sum())
+    down_dv = float(recent_dv_series[recent_change < 0].sum())
     up_down_volume_ratio = float(up_dv / max(down_dv, 1e-9))
 
     direction = close.diff().fillna(0)
@@ -132,8 +141,11 @@ def compute_vol_price_match(
     obv_scale = max(float(volume.tail(recent_window).median() or 1.0), 1.0)
     normalized_obv_slope = (obv_slope / obv_scale) if obv_slope is not None else 0.0
 
-    recent_abs_return = abs(close.iloc[-1] / close.iloc[-recent_window] - 1) if close.iloc[-recent_window] else 0.0
-    baseline_range = float(tr_pct.tail(baseline_window).median() or 1e-9)
+    # iloc[-recent_window] 只覆盖 9 个收益间隔；真正的「近 10 日位移」要从
+    # 第 11 根收盘起算。分母沿用剔除近期后的基准波幅（同一把尺）。
+    anchor_close = close.iloc[-(recent_window + 1)]
+    recent_abs_return = abs(close.iloc[-1] / anchor_close - 1) if anchor_close else 0.0
+    baseline_range = float(baseline_tr or 1e-9)
     effort = float(recent_dv / max(baseline_dv, 1e-9))
     result = float(recent_abs_return / max(baseline_range, 1e-9))
     effort_result_ratio = float(effort / max(result, 1e-9))
@@ -179,10 +191,19 @@ def compute_vol_price_match(
     elif volume_range_ratio <= vacuum_ratio_threshold:
         setup_type = "vacuum"
         setup_label = "真空型收缩"
-        tags.extend(["真空型收缩", "假突破风险高"])
-        breakout_adjustment = -10.0
-        false_breakout_risk = 12.0
-        risk_penalty_adjustment = 8.0
+        # 量价同枯不天然等于高危：收盘位置与 OBV 都偏多的「安静回踩」
+        # 历史上更接近建设性洗盘，风险降一档；内部同样疲弱才给满额加点。
+        constructive = clv_mean > 0.15 and normalized_obv_slope > 0
+        if constructive:
+            tags.extend(["真空型收缩", "收缩内部偏多"])
+            breakout_adjustment = -6.0
+            false_breakout_risk = 8.0
+            risk_penalty_adjustment = 5.0
+        else:
+            tags.extend(["真空型收缩", "假突破风险高"])
+            breakout_adjustment = -10.0
+            false_breakout_risk = 12.0
+            risk_penalty_adjustment = 8.0
     else:
         setup_type = "balanced_compression"
         setup_label = "平衡收缩"

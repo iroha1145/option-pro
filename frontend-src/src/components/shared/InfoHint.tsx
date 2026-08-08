@@ -165,7 +165,7 @@ export default function InfoHint({
         ref={triggerRef}
         role="button"
         tabIndex={0}
-        aria-label={t('{title}：查看评分说明', { title: hint.title })}
+        aria-label={t('{title}：查看说明', { title: hint.title })}
         aria-expanded={open}
         aria-describedby={exposed ? tooltipId : undefined}
         onFocus={() => setFocused(true)}

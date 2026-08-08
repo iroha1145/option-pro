@@ -18,7 +18,7 @@ import json
 from statistics import mean, median, pstdev
 from typing import Any, Sequence
 
-DETECTOR_VERSION = "us-base-structure-v1"
+DETECTOR_VERSION = "us-base-structure-v2"
 
 WINDOW_GRID = (10, 15, 20, 30, 40, 60, 80)
 BASE_MIN_DAYS = 10
@@ -179,6 +179,27 @@ def _candidate(window: dict[str, list], dates: Sequence[str]) -> dict[str, Any] 
             "support_integrity": round(support_quality * 100, 2),
             "higher_low_quality": round(higher_low * 100, 2),
         },
+        # 七维里有几维是实测（其余走保守默认值顶位）：紧致/持续/触碰必有，
+        # 量能收缩、ATR 收缩、支撑聚类、低点抬升可能缺数据。默认值刻意压在
+        # 中位以下不抬分，但读者需要知道这个分是几维数据撑起来的。
+        "quality_coverage": {
+            "observed": 3
+            + int(turnover_contraction is not None)
+            + int(atr_contraction is not None)
+            + int(bool(support_cluster))
+            + int(len(low_pivots) >= 2),
+            "total": 7,
+            "missing": [
+                name
+                for name, present in (
+                    ("turnover_contraction", turnover_contraction is not None),
+                    ("atr_contraction", atr_contraction is not None),
+                    ("support_cluster", bool(support_cluster)),
+                    ("higher_low", len(low_pivots) >= 2),
+                )
+                if not present
+            ],
+        },
         "break_buffer": round(break_buffer, 4),
     }
 
@@ -194,9 +215,11 @@ def detect_base_structure(series: dict[str, list]) -> dict[str, Any] | None:
     if len(closes) < BASE_MIN_DAYS:
         return None
     candidates: list[dict[str, Any]] = []
+    windows_scanned = 0
     for size in WINDOW_GRID:
         if size < BASE_MIN_DAYS or size > BASE_MAX_DAYS or len(closes) < size:
             continue
+        windows_scanned += 1
         window = {key: list(series[key][-size:]) for key in ("closes", "highs", "lows", "turnover")}
         dates = list(series["dates"][-size:])
         candidate = _candidate(window, dates)
@@ -204,7 +227,7 @@ def detect_base_structure(series: dict[str, list]) -> dict[str, Any] | None:
             candidates.append(candidate)
     if not candidates:
         return None
-    return max(
+    best = max(
         candidates,
         key=lambda item: (
             item["quality"],
@@ -212,6 +235,13 @@ def detect_base_structure(series: dict[str, list]) -> dict[str, Any] | None:
             item["base_duration_days"],
         ),
     )
+    # 多窗口择优拿最高分有「选择偏乐观」倾向：报出有几档窗口独立检出了
+    # 基底（1/7 的孤检 vs 5/7 的共识可信度完全不同），把选择效应摊在明面。
+    return {
+        **best,
+        "window_agreement": len(candidates),
+        "windows_scanned": windows_scanned,
+    }
 
 
 __all__ = [
