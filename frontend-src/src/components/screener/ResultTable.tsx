@@ -172,9 +172,9 @@ export default function ResultTable({
                     <span
                       key={`${r.ticker}-${r.price}`}
                       className={cn(
-                        'inline-block rounded-xs px-1 font-mono text-body-s text-ink-900 tnum',
-                        flashes[r.ticker] === 'up' && 'animate-tick-flash-up',
-                        flashes[r.ticker] === 'down' && 'animate-tick-flash-down',
+                        'tick-flash inline-block rounded-xs px-1 font-mono text-body-s text-ink-900 tnum',
+                        flashes[r.ticker] === 'up' && 'tick-flash-up',
+                        flashes[r.ticker] === 'down' && 'tick-flash-down',
                       )}
                     >
                       {fmtPrice(r.price)}

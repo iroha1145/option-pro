@@ -21,9 +21,9 @@ export default function StatCard({ label, value, digits = 0, suffix, icon, sub, 
   return (
     <div
       className={cn(
-        'card-surface p-5',
-        flash === 'up' && 'animate-tick-flash-up',
-        flash === 'down' && 'animate-tick-flash-down',
+        'card-surface tick-flash p-5',
+        flash === 'up' && 'tick-flash-up',
+        flash === 'down' && 'tick-flash-down',
         className,
       )}
     >
