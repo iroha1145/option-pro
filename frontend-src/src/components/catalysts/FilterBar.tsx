@@ -277,7 +277,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
           <span className="inline-flex items-center gap-1.5 rounded-pill bg-brand-100 px-2.5 py-1 text-caption font-medium text-brand-700">
             <Icon name="flame-line" size={12} />
             {t('主题：')}{catalystsContract.themeName(filters.themeId)}
-            <button onClick={() => set({ themeId: null })} aria-label={t("清除主题过滤")} className="rounded-full p-0.5 hover:bg-brand-100">
+            <button onClick={() => set({ themeId: null })} aria-label={t("清除主题过滤")} className="rounded-full p-0.5 transition-transform duration-fast hover:bg-brand-100 active:scale-95">
               <Icon name="x" size={11} />
             </button>
           </span>

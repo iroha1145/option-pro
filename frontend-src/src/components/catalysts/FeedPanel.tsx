@@ -123,7 +123,7 @@ export function NewsRow({
       {/* 右侧：AI 分析幽灵钮（hover 显现） */}
       <div className="flex w-8 shrink-0 items-start justify-end">
         <span
-          className="flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ai-600 opacity-0 shadow-sh-1 transition-opacity duration-fast group-hover:opacity-100"
+          className="flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ai-600 opacity-0 shadow-sh-1 transition-[opacity,transform] duration-fast group-hover:opacity-100 group-active:scale-95"
           title={__t("查看 / 生成 AI 分析")}
           aria-hidden="true"
         >

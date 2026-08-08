@@ -15,6 +15,7 @@ import { accessApi } from '@/api/modules/access';
 import { ApiError } from '@/api/client';
 import { useToast } from '@/components/Toast';
 import { cn } from '@/lib/utils';
+import { DUR_SECTION } from '@/lib/motion';
 import Icon from '@/components/icons';
 import type { IconName } from '@/components/icons';
 import { t } from '../i18n/core.ts';
@@ -356,12 +357,12 @@ export default function Login() {
           >
             <img src="/logo.svg" alt="" className="size-10" />
             <div>
-              <p className="font-display text-[20px] font-bold leading-[24px] text-ink-900">Optix Pro</p>
+              <p className="font-display text-h2 font-bold text-ink-900">Optix Pro</p>
               <p className="eyebrow mt-0.5">US EQUITY RESEARCH DESK</p>
             </div>
           </motion.div>
 
-          <h1 className="mt-10 font-display text-[40px] leading-[46px] font-bold text-ink-900 lg:text-display-xl">
+          <h1 className="mt-10 font-display text-display-l text-ink-900 lg:text-display-xl">
             <CharStagger text={t("把")} delayBase={0.1} />
             <span className="marker"><CharStagger text={t("市场")} delayBase={0.13} /></span>
             <br />
@@ -413,7 +414,7 @@ export default function Login() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: reduced ? 0 : 0.2 }}
+            transition={{ duration: DUR_SECTION, ease: [0.16, 1, 0.3, 1], delay: reduced ? 0 : 0.2 }}
             className={cn(
               'glass w-full max-w-[400px] rounded-xl border border-line p-9 shadow-sh-3 max-lg:p-6',
               shake && 'animate-nudge-shake',
@@ -424,7 +425,7 @@ export default function Login() {
                 <Icon name="command" size={20} />
               </span>
               <div>
-                <h2 className="font-display text-[22px] font-semibold leading-[28px] text-ink-900">{t('进入终端')}</h2>
+                <h2 className="font-display text-h2 text-ink-900">{t('进入终端')}</h2>
                 <p className="mt-0.5 text-caption text-ink-400">{t('登录后自选股保存在账号里 · 访客可只读浏览')}</p>
               </div>
             </div>
