@@ -24,6 +24,7 @@ const DOCK_ITEMS: { label: string; path: string; icon: IconName }[] = [
 const MORE_ITEMS: { label: string; path: string; icon: IconName; desc: string }[] = [
   { label: t('财报日历'), path: '/earnings', icon: 'calendar-spark', desc: t('即将公布 × AI 影响') },
   { label: t('大盘强弱'), path: '/market', icon: 'radar', desc: t('指数 · 宽度 · 宏观环境') },
+  { label: t('CTA 趋势资金'), path: '/cta', icon: 'candle', desc: t('趋势资金 · 触发位') },
   { label: t('新闻催化'), path: '/catalysts', icon: 'bolt', desc: t('热点 · 情绪新闻流') },
 ];
 

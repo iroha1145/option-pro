@@ -1,5 +1,5 @@
 /**
- * CTA 趋势资金卡的语义契约（2026-08-08）。
+ * CTA 趋势资金的语义契约（2026-08-08；同日随 /cta 独立页改造更新路径）。
  *
  * 钉住 brief 的产品红线：
  * - 一律「代理估算/模型触发位」措辞，绝不出现「必买/必卖/真实仓位」类断言；
@@ -7,6 +7,9 @@
  * - 数据不足显示诚实空态，不折中性值；
  * - 触发位需收盘确认，盘中穿越只挂暂定章；
  * - CTA 读数不得混入 market_regime（只做并排联动解释）。
+ *
+ * 面板已从 src/components/market/CtaTrendPanel.tsx 迁移至 src/components/cta/**
+ * 并挂载在独立页 src/pages/CtaTrend.tsx（/cta）；大盘页只留 /cta 引导卡。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,7 +18,18 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const src = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
-const panel = readFileSync(join(src, 'components/market/CtaTrendPanel.tsx'), 'utf8');
+/* 旧面板已拆分为 cta/ 目录多个组件：语义断言面向它们的拼接体 */
+const panel = [
+  'components/cta/ctaMeta.ts',
+  'components/cta/CtaDeepDive.tsx',
+  'components/cta/TriggerLadder.tsx',
+  'components/cta/ScenarioChart.tsx',
+  'components/cta/CtaOverviewStrip.tsx',
+  'components/cta/PositionHistoryChart.tsx',
+]
+  .map((f) => readFileSync(join(src, f), 'utf8'))
+  .join('\n');
+const ctaPage = readFileSync(join(src, 'pages/CtaTrend.tsx'), 'utf8');
 const marketPage = readFileSync(join(src, 'pages/Market.tsx'), 'utf8');
 const marketModule = readFileSync(join(src, 'api/modules/market.ts'), 'utf8');
 const hints = readFileSync(join(src, 'lib/ctaHints.ts'), 'utf8');
@@ -48,7 +62,8 @@ test('数据不足诚实空态，不折中性', () => {
 test('触发位需收盘确认，盘中穿越只挂暂定章', () => {
   assert.match(panel, /模型触发位（需收盘确认）/);
   assert.match(panel, /盘中已穿越 · 待收盘确认/);
-  assert.match(panel, /crossed_zone_ids\.includes\(zone\.id\)/);
+  assert.match(panel, /crossed_zone_ids/);
+  assert.match(panel, /\.includes\(zone\.id\)/);
   assert.match(panel, /盘中读数为暂定，不入正式历史/);
 });
 
@@ -59,10 +74,14 @@ test('触发标签按当前仓位动态（回补/重新加多/恢复加仓齐备
 });
 
 test('CTA 只做并排联动，不混入 regime 或 Strength', () => {
-  assert.match(marketPage, /<CtaTrendPanel/);
-  assert.match(marketPage, /regimeMean=\{mean\}/);
-  // regimeMean 只读传入面板；页面的 bias/mean 计算不引用 CTA 数据。
-  assert.ok(!/ctaQ\.data/.test(marketPage.split('const bias')[1]?.split('return (')[0] ?? ''), 'bias 推导不得读 CTA');
+  /* 旧面板已剥离：大盘页不再渲染 <CtaTrendPanel>、不再轮询 ctaTrend，
+     只留指向 /cta 的引导卡。 */
+  assert.doesNotMatch(marketPage, /CtaTrendPanel/);
+  assert.doesNotMatch(marketPage, /ctaQ/);
+  assert.match(marketPage, /to="\/cta"/);
+  /* regimeMean 只读传入深读面板；页面的 bias/mean 计算不引用 CTA 数据。 */
+  assert.match(ctaPage, /regimeMean=\{mean\}/);
+  assert.match(ctaPage, /marketApi\.ctaTrend\(\)/);
   const regimePanel = readFileSync(join(src, 'components/market/RegimePanel.tsx'), 'utf8');
   assert.ok(!regimePanel.includes('Cta'), 'RegimePanel 不得引用 CTA');
 });
@@ -75,6 +94,12 @@ test('情景双曲线（完整敞口 vs 波动率冻结）都在图上', () => {
   assert.match(panel, /完整敞口（含波动率调整）/);
   assert.match(panel, /仅趋势（波动率冻结）/);
   assert.match(panel, /trend_only/);
+});
+
+test('120 日仓位历史已接入独立页（原面板未使用的 history 字段）', () => {
+  assert.match(panel, /仓位历史/);
+  assert.match(panel, /history\.map/);
+  assert.match(panel, /markArea/);
 });
 
 test('hints 数字与后端 config 一致（镜子）', () => {

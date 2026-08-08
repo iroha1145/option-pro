@@ -1525,11 +1525,17 @@ def test_worker_heartbeat_survives_a_saturated_default_executor(
             return TaskResult(status="idle")
 
         repository = WorkerStateRepository(tmp_path / "heartbeat-executor.db")
+        # Timing contract: sleep (1.3s) > stale threshold (1.1s) > renewal
+        # interval (lease/3 = 0.5s) + CI scheduling jitter. A heartbeat that
+        # rode the saturated default executor would stop renewing entirely and
+        # look stale at the check; a healthy dedicated thread tolerates ~0.6s
+        # of runner contention. The previous 0.3/0.65/0.25 margins left only
+        # 0.15s of jitter budget and lost the SQLite lease on busy CI runners.
         supervisor = WorkerSupervisor(
             repository,
             (TaskSpec("catalyst_sync", long_task, 3600),),
             owner_id="heartbeat-executor-worker",
-            lease_seconds=0.3,
+            lease_seconds=1.5,
             process_lock=ProcessFileLock(tmp_path / "heartbeat-executor.lock"),
         )
         running = asyncio.create_task(supervisor.run_forever())
@@ -1547,9 +1553,9 @@ def test_worker_heartbeat_survives_a_saturated_default_executor(
         assert blocker_started.is_set()
 
         try:
-            await asyncio.sleep(0.65)
+            await asyncio.sleep(1.3)
             health = repository.health(
-                heartbeat_stale_seconds=0.25,
+                heartbeat_stale_seconds=1.1,
                 expected_tasks=("catalyst_sync",),
             )
             assert health["healthy"] is True

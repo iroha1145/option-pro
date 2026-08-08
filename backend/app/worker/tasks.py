@@ -1698,12 +1698,19 @@ class PublicHomeTask:
             if breakout_lead_ticker is not None
             else ()
         )
-        resource_order = (
-            "watchlist",
-            *tuple(PUBLIC_HOME_RESOURCE_ORDER),
-            # CTA 趋势资金：无条件刷新的可选资源（不依赖雷达领跑票）。
-            "cta_trend",
-            *optional_resources,
+        # cta_trend 既有硬编码位（领跑票缺席时也要刷新）又在 OPTIONAL 列表里；
+        # 领跑票在场时会叠出重复项——due 清单收录两次 → 同一轮双构建双落盘，
+        # 生产 status 的 available 也双列。按首次出现去重。
+        resource_order = tuple(
+            dict.fromkeys(
+                (
+                    "watchlist",
+                    *tuple(PUBLIC_HOME_RESOURCE_ORDER),
+                    # CTA 趋势资金：无条件刷新的可选资源（不依赖雷达领跑票）。
+                    "cta_trend",
+                    *optional_resources,
+                )
+            )
         )
         market_phases = {
             resource: self._market_phase(observed, resource=resource)

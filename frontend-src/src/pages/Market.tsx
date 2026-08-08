@@ -5,9 +5,10 @@
  * 轮询：indices+status 60s / 形态+信号+强度 300s / 宏观 15min（visibility 暂停，usePolling）
  */
 import { useMemo } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useShell } from '@/components/Layout';
 import { marketApi } from '@/api/modules/market';
+import Icon from '@/components/icons';
 import { signalsApi } from '@/api/modules/signals';
 import { strengthApi } from '@/api/modules/strength';
 import { marketPulseApi } from '@/components/market/api';
@@ -21,7 +22,6 @@ import StatusCard from '@/components/market/StatusCard';
 import RegimePanel, { regimeMean } from '@/components/market/RegimePanel';
 import SignalsReading, { type TrendBias } from '@/components/market/SignalsReading';
 import BreadthHistogram from '@/components/market/BreadthHistogram';
-import CtaTrendPanel from '@/components/market/CtaTrendPanel';
 import LinkCards from '@/components/market/LinkCards';
 import MacroConditionsPanel from '@/components/market/macro/MacroConditionsPanel';
 import SourceNote from '@/components/shared/SourceNote';
@@ -51,11 +51,10 @@ export default function Market() {
   /* 60s：指数 + 市场状态 */
   const indicesQ = usePolling(() => marketApi.indices(), 60_000);
   const statusQ = usePolling(() => marketPulseApi.statusDetail(), 60_000);
-  /* 300s：形态六维 + 信号 + 强度 + CTA 趋势资金（worker 快照只读） */
+  /* 300s：形态六维 + 信号 + 强度（CTA 趋势资金已剥离为独立页 /cta） */
   const regimeQ = usePolling(() => marketPulseApi.regime(), 300_000);
   const signalsQ = usePolling(() => signalsApi.market(), 300_000);
   const strengthQ = usePolling(() => strengthApi.market(), 300_000);
-  const ctaQ = usePolling(() => marketApi.ctaTrend(), 300_000);
 
   const status = statusQ.data;
   /* 时段读不到时显示「时段未知」，不落回「休市」（审计 P2-9）：加载中或状态接口
@@ -148,16 +147,32 @@ export default function Market() {
         <MacroConditionsPanel technicalScore={mean} />
       </section>
 
-      {/* B4.5 CTA 趋势资金估算：与市场环境并排解释、绝不混入 regime/Strength 评分 */}
-      <section className="mt-8" aria-label={t("CTA 趋势资金估算")}>
-        <CtaTrendPanel
-          data={ctaQ.data}
-          loading={ctaQ.loading}
-          error={ctaQ.error}
-          onRetry={ctaQ.refresh}
-          refreshing={ctaQ.refreshing}
-          regimeMean={mean}
-        />
+      {/* B4.5 CTA 趋势资金：已剥离为独立页 /cta，这里只留紧凑引导卡 */}
+      <section className="mt-8" aria-label={t("CTA 趋势资金")}>
+        {/* 窄屏错位修复：三列 flex 在手机上把标题/眉题挤成竖排。改为可换行，
+            链接在窄屏整行右对齐落到第二行（审计：390px 竖屏标题竖排） */}
+        <Link to="/cta" className="card-surface card-lift group flex flex-wrap items-center gap-x-4 gap-y-2.5 p-5">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-line bg-brand-50 text-brand-600">
+            <Icon name="wallet-gauge" size={20} />
+          </span>
+          <span className="min-w-0 flex-1 basis-40">
+            <span className="flex flex-wrap items-baseline gap-x-2">
+              <span className="text-h3 text-ink-900">{t('CTA 趋势资金')}</span>
+              <span className="eyebrow">CTA TREND FLOW</span>
+            </span>
+            <span className="mt-1 block text-caption text-ink-500">
+              {t('系统性趋势资金的代理仓位估算与模型触发位，已拆分为独立页面。')}
+            </span>
+          </span>
+          <span className="ml-auto flex shrink-0 items-center gap-1 text-caption font-medium text-brand-600">
+            {t('查看 CTA 趋势详情')}
+            <Icon
+              name="arrow-up-right"
+              size={16}
+              className="transition-[transform] duration-fast group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+            />
+          </span>
+        </Link>
       </section>
 
       {/* B5 信号解读 + B6 强度分布 */}
