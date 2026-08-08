@@ -66,8 +66,8 @@ function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) 
           aria-hidden="true"
         >
           <motion.span
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
             transition={{ type: 'spring', stiffness: 520, damping: 32, delay: 0.15 }}
             className={cn(
               'block size-2.5 rounded-full border-2 border-card',

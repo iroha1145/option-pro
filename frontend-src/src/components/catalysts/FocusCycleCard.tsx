@@ -44,7 +44,7 @@ function StageStepper({ stage }: { stage: number }) {
               <span className={cn('mx-1 h-[2px] min-w-3 flex-1 rounded-full sm:mx-2', past || current ? 'bg-ink-300' : 'bg-line')} aria-hidden="true" />
             )}
             <motion.span
-              initial={{ scale: 0, opacity: 0 }}
+              initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: 'spring', stiffness: 520, damping: 32, delay: 0.15 + i * 0.1 }}
               className="flex flex-col items-center gap-1"
