@@ -17,9 +17,16 @@ export function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
     (best, p, i) => (Math.abs(p - row.reference_price!) < Math.abs(curve.prices[best] - row.reference_price!) ? i : best),
     0,
   );
+  const ref = row.reference_price;
   const zones = [...(row.trigger_levels?.above ?? []), ...(row.trigger_levels?.below ?? [])];
   const idxOf = (price: number) =>
     curve.prices.reduce((best, p, i) => (Math.abs(p - price) < Math.abs(curve.prices[best] - price) ? i : best), 0);
+  /* 横轴=距现价百分比（基准 reference_price）：-12% … 0 … +12%，避免长价格标签被裁 */
+  const pctOf = (i: number) => ((curve.prices[i] - ref) / ref) * 100;
+  const pctLabel = (i: number) => {
+    const p = Math.round(pctOf(i));
+    return p === 0 ? '0' : `${p > 0 ? '+' : ''}${p}%`;
+  };
   return {
     ...baseAnimation,
     grid: { left: 8, right: 14, top: 12, bottom: 4, containLabel: true },
@@ -28,7 +35,16 @@ export function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
       data: curve.prices.map((p) => fmtPrice(p)),
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: '"IBM Plex Mono", monospace', interval: 23 },
+      axisLabel: {
+        color: CH.ink400,
+        fontSize: 10,
+        fontFamily: '"IBM Plex Mono", monospace',
+        /* interval 传数值时 ECharts 按「每 N+1 个取一」采样，中心标签会偏离
+           0 基准（实测落在 +1%）。改函数式：固定取 0/24/48/72/96 五点，
+           refIndex=48 正好落在 0 标签上。 */
+        interval: (index: number) => index % 24 === 0,
+        formatter: (_value: string, index: number) => pctLabel(index),
+      },
     },
     yAxis: {
       type: 'value' as const,
@@ -49,9 +65,10 @@ export function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
         const rows = arr
           .map((s) => `<div>${s.seriesName}: <b>${s.data > 0 ? '+' : ''}${s.data}</b></div>`)
           .join('');
+        const pct = `${pctOf(idx) > 0 ? '+' : ''}${pctOf(idx).toFixed(1)}%`;
         return (
           `<div style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:17px">` +
-          `<div style="color:#8A94B0">${t('若收于 {p}', { p: fmtPrice(curve.prices[idx]) })}</div>${rows}</div>`
+          `<div style="color:#8A94B0">${t('收于 {p}（{pct}）', { p: fmtPrice(curve.prices[idx]), pct })}</div>${rows}</div>`
         );
       },
     }),
@@ -79,6 +96,28 @@ export function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
             },
           ],
         },
+        /* 当前仓位 markPoint：brand-600 实心小点钉在 (现价, position_score) */
+        markPoint: {
+          symbol: 'circle',
+          symbolSize: 7,
+          silent: true,
+          itemStyle: { color: CH.brand600 },
+          label: {
+            show: true,
+            /* top 会与现价 markLine 的竖排标签撞在同一 x 上，改放右侧 */
+            position: 'right' as const,
+            distance: 6,
+            fontSize: 10,
+            fontFamily: '"IBM Plex Mono", monospace',
+            color: CH.brand600,
+            formatter: t('现值 {v}', {
+              v: row.position_score === null
+                ? '—'
+                : `${row.position_score > 0 ? '+' : ''}${row.position_score.toFixed(1)}`,
+            }),
+          },
+          data: row.position_score === null ? [] : [{ coord: [refIndex, row.position_score] }],
+        },
         markArea: zones.length
           ? {
               silent: true,
@@ -87,7 +126,7 @@ export function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
                   xAxis: idxOf(zone.price_low),
                   itemStyle: {
                     color: zone.est_position_change >= 0 ? CH.up600 : CH.down600,
-                    opacity: 0.08,
+                    opacity: 0.1,
                   },
                 },
                 { xAxis: idxOf(zone.price_high) },

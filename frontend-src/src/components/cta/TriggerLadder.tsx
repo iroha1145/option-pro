@@ -1,14 +1,18 @@
 /**
- * 触发阶梯（/cta 主区）：纵向价格轴上的模型触发位可视化。
+ * 触发阶梯（/cta 主区）：交易终端式「价格梯」——发丝线分隔的等距表列行。
  *
- * - 上=上方触发区、中=现价标记、下=下方触发区；每个区间一块：预计仓位变化
- *   为正用 up 系、为负用 down 系，块宽≈该触发位权重占比（weight_share 归一）。
- * - 触发位全部「需收盘确认」：盘中穿越的区间挂脉动圆点，详情里再给
- *   「盘中已穿越 · 待收盘确认」暂定章，不构成正式触发。
- * - 点击区间块展开详情（标签/类型/模型/权重/估算 Δ 与趋势/波动率拆分）。
+ * - 行序=价格降序：上方触发区（高→低）→ 现价虚线行 → 下方触发区（高→低，
+ *   离现价最近的紧贴现价行）；方向符 ▲/▼ 表示触发区在现价上方/下方。
+ * - 数字一律 font-mono tnum 右对齐表列：价格区间 / 距离 / 估算 Δ / 权重计量条
+ *   （bg-line 轨道 + ink-500 填充，宽=weight_share/maxWeight）。
+ * - 触发位全部「需收盘确认」：盘中穿越的区间在标签后挂脉动圆点，展开详情里
+ *   再给「盘中已穿越 · 待收盘确认」暂定章，不构成正式触发。
+ * - 点击行在手风琴内展开详情（类型/确认章/估算 Δ 与趋势/波动率拆分/模型权重），
+ *   默认展开距现价最近的一行；选中行 = 左侧 2px brand 竖条 + bg-paper-2（不用 ring）。
+ * - 语义纪律：这是多周期趋势模型群的**代理估算**，不是任何机构的真实仓位披露。
  */
 import { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import InfoHint from '@/components/shared/InfoHint';
 import { CTA_HINTS } from '@/lib/ctaHints';
 import { fmtPrice } from '@/lib/format';
@@ -29,32 +33,50 @@ function PulseDot({ className }: { className?: string }) {
   );
 }
 
+/** 方向小三角（CSS border 三角，▲=现价上方触发区 / ▼=下方） */
+function DirTick({ up }: { up: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'inline-block size-0 shrink-0 border-x-[3.5px] border-x-transparent',
+        up ? 'border-b-[5px] border-b-up-600' : 'border-t-[5px] border-t-down-600',
+      )}
+    />
+  );
+}
+
+/** 权重计量条：24px 宽 3px 高，bg-line 轨道 + ink-500 填充 */
+function WeightMeter({ share, maxWeight }: { share: number; maxWeight: number }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1">
+      <span className="inline-block h-[3px] w-6 overflow-hidden rounded-pill bg-line" role="presentation">
+        <span
+          className="block h-full bg-ink-500"
+          style={{ width: `${Math.max(4, (share / maxWeight) * 100)}%` }}
+        />
+      </span>
+      <span className="font-mono text-micro text-ink-500 tnum">{Math.round(share * 100)}%</span>
+    </span>
+  );
+}
+
 export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
-  const above = useMemo(() => [...(row.trigger_levels?.above ?? [])].sort((a, b) => a.price - b.price), [row]);
+  /* 显示序=价格降序：上方组高压顶、下方组高压上（离现价最近者贴住现价行） */
+  const above = useMemo(() => [...(row.trigger_levels?.above ?? [])].sort((a, b) => b.price - a.price), [row]);
   const below = useMemo(() => [...(row.trigger_levels?.below ?? [])].sort((a, b) => b.price - a.price), [row]);
   const zones = useMemo(() => [...above, ...below], [above, below]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const crossedIds = row.intraday?.crossed_zone_ids ?? [];
 
-  const axis = useMemo(() => {
-    if (!zones.length || row.reference_price === null) return null;
-    const ref = row.reference_price;
-    let min = ref;
-    let max = ref;
-    for (const z of zones) {
-      min = Math.min(min, z.price_low);
-      max = Math.max(max, z.price_high);
-    }
-    const pad = Math.max((max - min) * 0.1, ref * 0.004);
-    return { min: min - pad, max: max + pad, ref };
-  }, [zones, row.reference_price]);
+  const nearest: CtaTriggerZone | null = zones.reduce<CtaTriggerZone | null>(
+    (best, z) => (best === null || Math.abs(z.distance_pct) < Math.abs(best.distance_pct) ? z : best),
+    null,
+  );
+  /* 手风琴：默认展开距现价最近的一行 */
+  const expandedId = selectedId ?? nearest?.id ?? null;
 
-  const selected: CtaTriggerZone | null =
-    zones.find((z) => z.id === selectedId) ?? zones.reduce<CtaTriggerZone | null>(
-      (best, z) => (best === null || Math.abs(z.distance_pct) < Math.abs(best.distance_pct) ? z : best),
-      null,
-    );
-
-  if (!axis || !selected) {
+  if (!zones.length || row.reference_price === null || !nearest) {
     return (
       <div>
         <p className="flex items-center gap-1 text-micro text-ink-400">
@@ -67,8 +89,96 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
   }
 
   const maxWeight = Math.max(...zones.map((z) => z.weight_share), 0.01);
-  const topPct = (price: number) => ((axis.max - price) / (axis.max - axis.min)) * 100;
-  const crossedIds = row.intraday?.crossed_zone_ids ?? [];
+
+  const renderZone = (zone: CtaTriggerZone, up: boolean) => {
+    const crossed = crossedIds.includes(zone.id);
+    const isUp = zone.est_position_change >= 0;
+    const expanded = expandedId === zone.id;
+    const tone = isUp ? 'text-up-700' : 'text-down-700';
+    return (
+      <div key={zone.id} className="border-t border-line">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-label={`${ZONE_LABELS[zone.label_key] ?? zone.label_key} ${fmtPrice(zone.price_low)} – ${fmtPrice(zone.price_high)}`}
+          onClick={() => setSelectedId(expanded ? (nearest.id === zone.id ? null : nearest.id) : zone.id)}
+          className={cn(
+            'relative flex w-full flex-wrap items-center gap-x-2 py-2 pl-3 pr-1 text-left transition-colors duration-fast',
+            expanded ? 'bg-paper-2' : 'hover:bg-paper-2',
+          )}
+        >
+          {expanded && <span className="absolute inset-y-0 left-0 w-0.5 bg-brand-600" aria-hidden />}
+          {/* 1 方向符 ▲/▼ */}
+          <DirTick up={up} />
+          {/* 2 标签（可缩） */}
+          <span className="inline-flex min-w-0 flex-1 items-center gap-1.5">
+            <span className="truncate text-caption font-medium text-ink-800">
+              {ZONE_LABELS[zone.label_key] ?? zone.label_key}
+            </span>
+            {crossed && <PulseDot className="shrink-0" />}
+          </span>
+          {/* 3 距离（右对齐定宽）——手机竖屏留在第一行 */}
+          <span className={cn('order-3 w-12 shrink-0 text-right font-mono text-caption tnum sm:order-4', tone)}>
+            {zone.distance_pct > 0 ? '+' : ''}{zone.distance_pct.toFixed(1)}%
+          </span>
+          {/* 4 估算 Δ（右对齐定宽）——手机竖屏留在第一行 */}
+          <span className={cn('order-4 w-12 shrink-0 text-right font-mono text-caption font-semibold tnum sm:order-5', tone)}>
+            {signed(zone.est_position_change)}
+          </span>
+          {/* 5+6 价格区间 & 权重计量条：手机竖屏 basis-full 强制折到第二行；
+              桌面 sm:contents 拆平包装器，子列恢复 价格区间→…→权重 的列序 */}
+          <span className="order-5 flex basis-full items-center gap-2 pl-[18px] sm:contents">
+            <span className="shrink-0 font-mono text-micro text-ink-500 tnum sm:order-3 sm:text-caption sm:text-ink-800">
+              {fmtPrice(zone.price_low)} – {fmtPrice(zone.price_high)}
+            </span>
+            <span className="shrink-0 sm:order-6">
+              <WeightMeter share={zone.weight_share} maxWeight={maxWeight} />
+            </span>
+          </span>
+        </button>
+
+        <AnimatePresence initial={false}>
+          {expanded && (
+            <motion.div
+              key="detail"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+              className="overflow-hidden"
+            >
+              <div className="border-t border-line/60 bg-paper-2 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                  <span className="rounded-pill border border-line px-1.5 py-0.5 text-micro text-ink-500">
+                    {ZONE_KIND[zone.kind]}
+                  </span>
+                  <span className="rounded-pill border border-line px-1.5 py-0.5 text-micro text-ink-500">
+                    {t('需收盘确认')}
+                  </span>
+                  {crossed && (
+                    <span className="inline-flex items-center gap-1 rounded-pill border border-warn-600/40 px-1.5 py-0.5 text-micro text-warn-600">
+                      <PulseDot />
+                      {t('盘中已穿越 · 待收盘确认')}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1.5 font-mono text-micro text-ink-500 tnum">
+                  {t('估算 Δ{v}', { v: signed(zone.est_position_change) })}
+                  {' · '}
+                  {t('趋势 {a} · 波动率 {b}', { a: signed(zone.trend_change), b: signed(zone.vol_change) })}
+                </p>
+                <p className="mt-0.5 font-mono text-micro text-ink-400 tnum">
+                  {zone.models.map((m) => MODEL_SHORT[m] ?? m).join('/')}
+                  {' · '}
+                  {t('权重 {w}%', { w: Math.round(zone.weight_share * 100) })}
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -77,94 +187,17 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
         <InfoHint hint={CTA_HINTS.triggers} size={10} />
       </p>
 
-      <div className="mt-2 flex gap-2">
-        {/* 价格轴（顶=最高触发价 · 底=最低触发价） */}
-        <div className="relative h-72 w-10 shrink-0" aria-hidden="true">
-          <span className="absolute right-0 top-0 font-mono text-micro text-ink-400 tnum">{fmtPrice(axis.max)}</span>
-          <span className="absolute bottom-0 right-0 font-mono text-micro text-ink-400 tnum">{fmtPrice(axis.min)}</span>
+      <div className="mt-2 border-b border-line" role="group" aria-label={t('触发阶梯')}>
+        {above.map((zone) => renderZone(zone, true))}
+
+        {/* 现价行：虚线发丝分隔，mono 品牌色读数 */}
+        <div className="flex items-center justify-center border-t border-dashed border-ink-400 bg-paper-2 py-2">
+          <span className="font-mono text-caption text-brand-700 tnum">
+            {t('现价 {p}', { p: fmtPrice(row.reference_price) })}
+          </span>
         </div>
 
-        {/* 阶梯轨道 */}
-        <div className="relative h-72 flex-1" role="group" aria-label={t('触发阶梯')}>
-          <span className="absolute inset-y-0 left-0 w-px bg-line-strong" aria-hidden />
-          {zones.map((zone) => {
-            const crossed = crossedIds.includes(zone.id);
-            const mid = (zone.price_low + zone.price_high) / 2;
-            const isUp = zone.est_position_change >= 0;
-            const isSelected = selected.id === zone.id;
-            return (
-              <button
-                key={zone.id}
-                type="button"
-                aria-pressed={isSelected}
-                aria-label={`${ZONE_LABELS[zone.label_key] ?? zone.label_key} ${fmtPrice(zone.price_low)} – ${fmtPrice(zone.price_high)}`}
-                onClick={() => setSelectedId(zone.id)}
-                className={cn(
-                  'absolute left-2 flex min-h-[30px] -translate-y-1/2 items-center gap-1.5 overflow-hidden rounded-md border px-2 py-1 text-left transition-[box-shadow,border-color] duration-fast',
-                  isUp ? 'border-up-600/25 bg-up-50' : 'border-down-600/25 bg-down-50',
-                  isSelected && 'ring-2 ring-brand-500/40',
-                )}
-                style={{
-                  top: `${topPct(mid)}%`,
-                  /* 块宽≈权重占比：权重越大的触发位在阶梯上越宽 */
-                  width: `${34 + (zone.weight_share / maxWeight) * 54}%`,
-                }}
-              >
-                <span className={cn('absolute inset-y-0 left-0 w-0.5', isUp ? 'bg-up-600' : 'bg-down-600')} aria-hidden />
-                <span className={cn('truncate text-micro font-medium', isUp ? 'text-up-700' : 'text-down-700')}>
-                  {ZONE_LABELS[zone.label_key] ?? zone.label_key}
-                </span>
-                <span className="shrink-0 font-mono text-micro text-ink-500 tnum">
-                  {zone.distance_pct > 0 ? '+' : ''}{zone.distance_pct.toFixed(1)}%
-                </span>
-                {crossed && <PulseDot className="shrink-0" />}
-              </button>
-            );
-          })}
-          {/* 现价标记 */}
-          <div className="absolute inset-x-0" style={{ top: `${topPct(axis.ref)}%` }}>
-            <span className="absolute inset-x-0 top-0 border-t border-dashed border-ink-400" aria-hidden />
-            <span className="absolute right-0 top-0 -translate-y-1/2 rounded-pill border border-line bg-card px-1.5 py-0.5 font-mono text-micro text-ink-600 tnum">
-              {t('现价 {p}', { p: fmtPrice(axis.ref) })}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 选中区间详情 */}
-      <div className="mt-3 rounded-md bg-paper-2 px-3 py-2.5">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className={cn('text-caption font-medium', selected.est_position_change >= 0 ? 'text-up-700' : 'text-down-700')}>
-            {ZONE_LABELS[selected.label_key] ?? selected.label_key}
-          </span>
-          <span className="font-mono text-caption text-ink-800 tnum">
-            {fmtPrice(selected.price_low)} – {fmtPrice(selected.price_high)}
-          </span>
-          <span className="rounded-pill border border-line bg-card px-1.5 py-0.5 text-micro text-ink-500">
-            {ZONE_KIND[selected.kind]}
-          </span>
-          <span className="rounded-pill border border-line bg-card px-1.5 py-0.5 text-micro text-ink-500">
-            {t('需收盘确认')}
-          </span>
-          {crossedIds.includes(selected.id) && (
-            <span className="inline-flex items-center gap-1 rounded-pill bg-warn-50 px-1.5 py-0.5 text-micro text-warn-600">
-              <PulseDot />
-              {t('盘中已穿越 · 待收盘确认')}
-            </span>
-          )}
-        </div>
-        <p className="mt-1.5 font-mono text-micro text-ink-500 tnum">
-          {t('估算 Δ{v}', { v: signed(selected.est_position_change) })}
-          {' · '}
-          {t('趋势 {a} · 波动率 {b}', { a: signed(selected.trend_change), b: signed(selected.vol_change) })}
-        </p>
-        <p className="mt-0.5 font-mono text-micro text-ink-400 tnum">
-          {selected.models.map((m) => MODEL_SHORT[m] ?? m).join('/')}
-          {' · '}
-          {t('权重 {w}%', { w: Math.round(selected.weight_share * 100) })}
-          {' · '}
-          {selected.distance_pct > 0 ? '+' : ''}{selected.distance_pct.toFixed(1)}%
-        </p>
+        {below.map((zone) => renderZone(zone, false))}
       </div>
     </div>
   );

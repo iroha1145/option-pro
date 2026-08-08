@@ -230,10 +230,10 @@ export default function CtaDeepDive({
 
           {/* 触发阶梯 ｜ 情景曲线 */}
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
-            <div className="lg:col-span-5">
+            <div className="lg:col-span-6">
               <TriggerLadder row={row} />
             </div>
-            <div className="lg:col-span-7">
+            <div className="lg:col-span-6">
               <p className="flex items-center gap-1 text-micro text-ink-400">
                 {t('情景曲线：若明日收于横轴价格，估算目标仓位为纵轴值')}
                 <InfoHint hint={CTA_HINTS.scenario} size={10} />
