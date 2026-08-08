@@ -45,8 +45,14 @@ _LONG_OUTPUT_MICROUSD_PER_MILLION = 22_500_000
 _WEB_SEARCH_CALL_MICROUSD = 10_000
 AI_TASK_MAX_OUTPUT_TOKENS: dict[str, int] = {
     "earnings_impact": 32_768,
-    "option_alerts": 32_768,
-    "signal_analysis": 32_768,
+    # 思考 tokens 计入输出上限。signal_analysis 在 reasoning=max + v5 全证据
+    # 包后思考量到了 27-30k（2026-08-08 生产 32,768 顶格截断，
+    # provider_incomplete_max_output_tokens），答案预算只剩 ~2.5k——上限翻倍
+    # 留足余量。option_alerts 同为 owner 手动型，抬到 market_focus 档做保险。
+    # 两类任务低频（14 天合计 9 次），预算预留抬高可承受；批量型
+    # earnings/news 保持不变以免压缩队列并发容量。
+    "option_alerts": 49_152,
+    "signal_analysis": 65_536,
     "news_impact": 32_768,
     "market_focus": 49_152,
 }

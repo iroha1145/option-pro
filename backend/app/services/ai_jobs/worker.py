@@ -394,7 +394,7 @@ async def process_job(
         if lease_lost.is_set():
             raise RuntimeError("ai_job_lease_lost")
 
-    def persist_failure(code: str) -> None:
+    def persist_failure(code: str, detail: str | None = None) -> None:
         if response_id and code in {
             "ai_job_heartbeat_unavailable",
             "ai_job_lease_lost",
@@ -409,7 +409,7 @@ async def process_job(
                 error_code=code,
             )
             return
-        repository.fail(job["job_id"], owner, code)
+        repository.fail(job["job_id"], owner, code, detail=detail)
 
     heartbeat.add_done_callback(stop_on_heartbeat_failure)
     try:
@@ -628,7 +628,7 @@ async def process_job(
         )
         logger.warning("AI job stopped after heartbeat failure (%s)", code)
         with suppress(Exception):
-            persist_failure(code)
+            persist_failure(code, detail=str(exc))
     except Exception as exc:
         code = _public_error(
             exc,
@@ -637,7 +637,9 @@ async def process_job(
         )
         logger.warning("AI job failed (%s, %s)", code, type(exc).__name__)
         with suppress(Exception):
-            persist_failure(code)
+            # str(exc) 对校验失败是 pydantic 的字段路径+规则消息——这正是
+            # 「schema_validation_failed 到底挂在哪条规则」的现场证据。
+            persist_failure(code, detail=str(exc))
     finally:
         heartbeat.remove_done_callback(stop_on_heartbeat_failure)
         stop.set()
@@ -653,7 +655,7 @@ async def process_job(
             )
             logger.warning("AI job heartbeat failed (%s)", code)
             with suppress(Exception):
-                persist_failure(code)
+                persist_failure(code, detail=str(exc))
 
 
 async def run_once(

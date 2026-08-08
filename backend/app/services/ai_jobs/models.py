@@ -2427,6 +2427,11 @@ class AIJobPublic(StrictModel):
     error_code: Optional[
         Annotated[str, StringConstraints(max_length=120)]
     ] = None
+    # 失败诊断细节（如 pydantic 校验的字段路径与规则消息）。仅 owner 可见：
+    # API 层对非 owner 置空。
+    error_detail: Optional[
+        Annotated[str, StringConstraints(max_length=2000)]
+    ] = None
     retry_after: Optional[StrictInt] = Field(default=None, ge=0)
     result: Optional[dict] = None
     cached: StrictBool = False

@@ -654,6 +654,8 @@ export interface AiJob {
   /** 按任务类型保留后端结构化结果；消费组件负责校验所属契约。 */
   result?: string | Record<string, unknown>;
   error?: string;
+  /** 失败诊断细节（owner 排障用；后端对非 owner 置空） */
+  errorDetail?: string;
 }
 
 /* ---------- 运行时 ---------- */

@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS ai_jobs (
     poll_count INTEGER NOT NULL DEFAULT 0,
     next_attempt_at TEXT,
     error_code TEXT,
+    error_detail TEXT,
     result_json TEXT CHECK(result_json IS NULL OR json_valid(result_json)),
     usage_input_tokens INTEGER,
     usage_cached_input_tokens INTEGER,
@@ -304,6 +305,13 @@ class AIJobRepository:
                                ADD COLUMN budget_charge_microusd INTEGER
                                NOT NULL DEFAULT 0
                                CHECK(budget_charge_microusd >= 0)"""
+                        )
+                    if "error_detail" not in columns:
+                        # 2026-08-08：schema_validation_failed 只留裸错误码，
+                        # 具体命中哪条内容规则随容器日志销毁无从追查。失败
+                        # 诊断细节（pydantic 校验消息等）落库随任务保存。
+                        connection.execute(
+                            "ALTER TABLE ai_jobs ADD COLUMN error_detail TEXT"
                         )
                     self._ensure_indexes(connection)
             connection.execute(_AI_JOB_SOURCES_TABLE_SQL)
@@ -2062,6 +2070,7 @@ class AIJobRepository:
                 """
                 UPDATE ai_jobs
                 SET status='completed',result_json=?,error_code=NULL,
+                    error_detail=NULL,
                     completed_at=COALESCE(completed_at,?),next_attempt_at=NULL,
                     lease_owner=NULL,lease_expires_at=NULL,updated_at=?
                 WHERE job_id=? AND status='failed'
@@ -2155,10 +2164,16 @@ class AIJobRepository:
         owner: str,
         error_code: str,
         *,
+        detail: str | None = None,
         usage: dict[str, int | None] | None = None,
     ) -> None:
         now = _iso()
         safe_code = error_code[:120]
+        safe_detail = (
+            str(detail).strip()[:2000]
+            if detail is not None and str(detail).strip()
+            else None
+        )
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             current = connection.execute(
@@ -2214,7 +2229,7 @@ class AIJobRepository:
             updated = connection.execute(
                 """
                 UPDATE ai_jobs
-                SET status='failed', error_code=?, completed_at=?,
+                SET status='failed', error_code=?, error_detail=?, completed_at=?,
                     usage_input_tokens=COALESCE(?,usage_input_tokens),
                     usage_cached_input_tokens=COALESCE(?,usage_cached_input_tokens),
                     usage_output_tokens=COALESCE(?,usage_output_tokens),
@@ -2227,6 +2242,7 @@ class AIJobRepository:
                 """,
                 (
                     safe_code,
+                    safe_detail,
                     now,
                     usage_values.get("input_tokens"),
                     usage_values.get("cached_input_tokens"),
@@ -2390,6 +2406,7 @@ class AIJobRepository:
                 row.get("error_code")
                 or ("legacy_output_hidden" if legacy_output_hidden else None)
             ),
+            error_detail=row.get("error_detail"),
             retry_after=None,
             result=result,
             cached=cached,

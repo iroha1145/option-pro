@@ -1637,6 +1637,74 @@ def test_paid_schema_failure_can_be_recovered_without_changing_usage(tmp_path):
     assert repository.public(recovered)["result"]["ticker"] == "AAPL"
 
 
+def test_owner_manual_output_caps_leave_reasoning_headroom():
+    # 2026-08-08 生产：signal_analysis reasoning=max 思考 27-30k，32,768 顶格
+    # 截断（provider_incomplete_max_output_tokens）。思考 tokens 计入输出上
+    # 限，owner 手动型任务必须给 max 档留成倍余量；批量型保持原值，避免抬高
+    # 预算预留压缩队列并发。
+    assert runtime.max_output_tokens_for("signal_analysis") == 65_536
+    assert runtime.max_output_tokens_for("option_alerts") == 49_152
+    assert runtime.max_output_tokens_for("earnings_impact") == 32_768
+    assert runtime.max_output_tokens_for("news_impact") == 32_768
+
+
+def test_failure_detail_is_persisted_exposed_and_cleared_by_recovery(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    owner = "detail-owner"
+    claimed = repository.claim_due(owner, 60)
+    assert claimed is not None
+    detail = (
+        "1 validation error for EarningsImpactResult\nsummary\n  "
+        "Value error, 中文纯度：不允许的外文片段 [type=value_error]" + "x" * 3000
+    )
+    repository.fail(
+        row["job_id"], owner, "schema_validation_failed", detail=detail
+    )
+    stored = repository.get_job(row["job_id"])
+    assert stored["error_code"] == "schema_validation_failed"
+    # 细节截断到 2000 字符落库，并通过 public() 透传（API 层对非 owner 置空）。
+    assert stored["error_detail"] == detail.strip()[:2000]
+    assert repository.public(stored)["error_detail"] == detail.strip()[:2000]
+    with repository._connect() as connection:
+        connection.execute(
+            """UPDATE ai_jobs SET openai_response_id='resp_detail_recover'
+               WHERE job_id=?""",
+            (row["job_id"],),
+        )
+        connection.commit()
+    recovered = repository.recover_schema_validation_failure(
+        row["job_id"],
+        "resp_detail_recover",
+        _earnings_result(),
+    )
+    # 误伤恢复发布后，诊断细节随错误码一并清空。
+    assert recovered["error_detail"] is None
+    assert recovered["error_code"] is None
+
+
+def test_error_detail_column_backfills_on_existing_database(tmp_path):
+    database = tmp_path / "ai-jobs.db"
+    repository = AIJobRepository(database)
+    row, _ = _create_earnings_job(repository)
+    # 老库形态：没有 error_detail 列（与 budget_charge_microusd 同款的
+    # 列探测式 ALTER 迁移路径）。
+    with repository._connect() as connection:
+        connection.execute("ALTER TABLE ai_jobs DROP COLUMN error_detail")
+        connection.commit()
+    reopened = AIJobRepository(database)
+    reopened.ensure_initialized()
+    with reopened._connect() as connection:
+        columns = {
+            str(item["name"])
+            for item in connection.execute(
+                "PRAGMA table_info(ai_jobs)"
+            ).fetchall()
+        }
+    assert "error_detail" in columns
+    assert reopened.get_job(row["job_id"]) is not None
+
+
 def test_paid_schema_failure_recovery_rejects_wrong_response_or_invalid_result(
     tmp_path,
 ):

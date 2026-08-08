@@ -286,6 +286,12 @@ function AiOptionInsight({
         <p className="mt-2.5 text-caption text-ink-500">
           {t('任务')}{job.status === 'failed' ? t('失败') : t('已取消')} ·{' '}
           <button onClick={reset} className="font-medium text-ai-600">{t('重试')}</button>
+          {job.status === 'failed' && job.errorDetail && (
+            /* owner 排障线索（非 owner 后端置空不渲染）：命中的校验规则/字段 */
+            <span className="mt-1 block break-all font-mono text-micro text-ink-400">
+              {job.errorDetail}
+            </span>
+          )}
         </p>
       )}
     </div>

@@ -87,6 +87,7 @@ export function normalizeAiJob(raw: unknown, fallbackId?: string | null): AiJob 
     result,
     error:
       firstString(record, 'error', 'error_code', 'message') ?? undefined,
+    errorDetail: firstString(record, 'error_detail') ?? undefined,
   };
 }
 

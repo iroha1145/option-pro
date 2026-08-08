@@ -897,7 +897,11 @@ async def get_ai_job(job_id: Annotated[str, Path(min_length=10, max_length=80)])
             observed = datetime.min.replace(tzinfo=timezone.utc)
         if observed < datetime.now(timezone.utc) - timedelta(days=30):
             raise HTTPException(status_code=404, detail="AI job not found")
-    return _job_repository().public(row)
+    public = _job_repository().public(row)
+    if not current_request_is_owner():
+        # 失败诊断细节含模型输出片段，只给 owner 排障用。
+        public["error_detail"] = None
+    return public
 
 
 @router.post("/jobs/{job_id}/cancel")

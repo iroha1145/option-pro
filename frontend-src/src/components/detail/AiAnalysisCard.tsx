@@ -170,6 +170,12 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
             <button onClick={reset} className="font-medium text-ai-600">
               {t('重试')}
             </button>
+            {job?.status === 'failed' && job.errorDetail && (
+              /* owner 排障线索（非 owner 后端置空不渲染）：命中的校验规则/字段 */
+              <span className="mt-1 block break-all font-mono text-micro text-ink-400">
+                {job.errorDetail}
+              </span>
+            )}
           </motion.p>
         )}
       </AnimatePresence>
