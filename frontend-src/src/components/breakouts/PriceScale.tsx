@@ -148,9 +148,9 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
             </span>
             <span
               className={cn(
-                'block rounded-xs px-0.5 font-mono text-micro font-semibold leading-[14px] text-brand-700 tnum',
-                flash === 'up' && 'animate-tick-flash-up',
-                flash === 'down' && 'animate-tick-flash-down',
+                'tick-flash block rounded-xs px-0.5 font-mono text-micro font-semibold leading-[14px] text-brand-700 tnum',
+                flash === 'up' && 'tick-flash-up',
+                flash === 'down' && 'tick-flash-down',
               )}
             >
               {fmtPrice(current)}
@@ -167,9 +167,9 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
           >
             <span
               className={cn(
-                'rounded-xs px-0.5 font-mono text-micro font-semibold leading-[16px] text-ink-800 tnum',
-                flash === 'up' && 'animate-tick-flash-up',
-                flash === 'down' && 'animate-tick-flash-down',
+                'tick-flash rounded-xs px-0.5 font-mono text-micro font-semibold leading-[16px] text-ink-800 tnum',
+                flash === 'up' && 'tick-flash-up',
+                flash === 'down' && 'tick-flash-down',
               )}
             >
               {fmtPrice(current)}
