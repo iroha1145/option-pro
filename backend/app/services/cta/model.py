@@ -20,7 +20,9 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
+from zoneinfo import ZoneInfo
 
 from app.services.cta.config import (
     AGREEMENT_DIVERGENT,
@@ -49,6 +51,9 @@ from app.services.cta.config import (
     VOL_SCALAR_FLOOR,
     VOL_WARMUP_DAYS,
 )
+
+
+_NEW_YORK_TZ = ZoneInfo("America/New_York")
 
 
 def _clip(value: float, lo: float = -1.0, hi: float = 1.0) -> float:
@@ -470,8 +475,22 @@ def compute_cta_estimate(bars: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         closes.append(c)
         highs.append(h)
         lows.append(low)
-        raw_t = bar.get("t")
-        dates.append(str(bar.get("trade_date") or raw_t))
+        # 真实图表 bars 只有 epoch t（无 trade_date）：按纽约时区折成交易日，
+        # 否则 data_through/history 会把裸时间戳当日期下发（生产实测踩过）。
+        trade_date = bar.get("trade_date")
+        if isinstance(trade_date, str) and trade_date:
+            dates.append(trade_date)
+        else:
+            raw_t = bar.get("t")
+            if isinstance(raw_t, (int, float)) and math.isfinite(raw_t) and raw_t > 0:
+                dates.append(
+                    datetime.fromtimestamp(int(raw_t), tz=timezone.utc)
+                    .astimezone(_NEW_YORK_TZ)
+                    .date()
+                    .isoformat()
+                )
+            else:
+                dates.append(str(raw_t))
 
     coverage = {"bars": len(closes), "required": MIN_BARS_REQUIRED}
     if len(closes) < MIN_BARS_REQUIRED:

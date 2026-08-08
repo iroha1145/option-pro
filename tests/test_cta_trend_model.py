@@ -276,3 +276,16 @@ def test_trend_history_is_stable() -> None:
     result = compute_cta_estimate(_bars_from_closes(_drift_series(N, 0.004, 71, 0.003)))
     tail = result["history"][-60:]
     assert all(row["position"] > 0 for row in tail)
+
+
+# ── 真实图表 bars 只有 epoch t：日期必须折成纽约交易日（生产实测回归） ──
+
+
+def test_epoch_only_bars_produce_iso_dates() -> None:
+    bars = [{**bar, "trade_date": None} for bar in _bars_from_closes(_drift_series(N, 0.002, 81, 0.005))]
+    for bar in bars:
+        bar.pop("trade_date")
+    result = compute_cta_estimate(bars)
+    assert result["source_status"] == "active"
+    assert len(result["data_through"]) == 10 and result["data_through"].count("-") == 2
+    assert all(row["date"].count("-") == 2 for row in result["history"])
