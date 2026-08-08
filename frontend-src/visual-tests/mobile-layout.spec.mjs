@@ -32,7 +32,7 @@ async function openEarnings(page, width) {
     await page.getByRole("button", { name: "更多" }).click();
     await page.getByRole("dialog", { name: "更多功能" }).getByRole("button", { name: /财报日历/ }).click();
   } else {
-    await page.getByRole("link", { name: "05 财报" }).click();
+    await page.getByRole("link", { name: /财报/ }).click();
   }
   await expect(page).toHaveURL(/\/earnings$/);
 }

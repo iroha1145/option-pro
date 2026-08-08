@@ -106,12 +106,16 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
               data-active={item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)}
               className={({ isActive }) =>
                 cn(
-                  'flex h-full items-center gap-1.5 whitespace-nowrap px-2.5 text-body-s transition-colors duration-fast 2xl:px-3.5',
+                  /* R4 加到 9 项后 1440(xl) 逼近满宽：sub-2xl 收 px-2，登录态
+                     右侧簇（AI 胶囊+退出）才不会被挤出视口；≥2xl 恢复 3.5。 */
+                  'flex h-full items-center gap-1.5 whitespace-nowrap px-2 text-body-s transition-colors duration-fast 2xl:px-3.5',
                   isActive ? 'font-medium text-brand-600' : 'text-ink-500 hover:text-ink-800',
                 )
               }
             >
-              <span className="font-mono text-[11px] text-ink-400">{item.no}</span>
+              {/* 9 项编号在 xl–2xl 之间是压垮布局的最后一根稻草（1440 登录态
+                  「退出」被挤出视口）：sub-2xl 只留文字标签，≥2xl 恢复编号。 */}
+              <span className="hidden font-mono text-[11px] text-ink-400 2xl:inline">{item.no}</span>
               {item.label}
             </NavLink>
           ))}
@@ -127,7 +131,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
         <div className="ml-auto flex items-center gap-2.5 md:gap-3.5 xl:ml-0">
           <button
             onClick={onOpenPalette}
-            className="hidden h-8 w-[220px] items-center gap-2 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-400 transition-colors duration-fast hover:border-line-strong hover:text-ink-500 md:flex"
+            className="hidden h-8 w-44 items-center gap-2 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-400 transition-colors duration-fast hover:border-line-strong hover:text-ink-500 md:flex 2xl:w-[220px]"
             aria-label={t("打开命令面板")}
           >
             <Icon name="search" size={14} />

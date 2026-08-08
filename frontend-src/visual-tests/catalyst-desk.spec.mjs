@@ -10,7 +10,7 @@
 //   深层路由直接 page.goto；
 // - 未设（本地默认 python http.server 服务 ../frontend）→ 无 SPA 回退，只 goto /，
 //   /catalysts 与 /breakouts 走 Navbar 应用内导航（BrowserRouter 客户端路由），
-//   /market 无导航入口（Navbar.tsx NAV_ITEMS 仅 01–06），该用例跳过并注明原因。
+//   /market 在静态模式下依赖真实行情入口，该用例跳过并注明原因。
 import { expect, test } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -37,8 +37,10 @@ async function expectShell(page) {
 
 test("Catalyst Desk visual evidence: home /", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  // SPA 首页 index 路由重定向 /watchlist（App.tsx <Navigate to="/watchlist">）
-  await expect(page).toHaveURL(/\/watchlist$/);
+  // R4 起 / 是真实首页仪表盘（App.tsx <Route index element={<Home />}>），
+  // 不再重定向 /watchlist。
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("region", { name: "指数概览" })).toBeVisible();
   await expectShell(page);
   await screenshot(page, "1440x900-home");
 });
@@ -48,13 +50,13 @@ test("Catalyst Desk visual evidence: /catalysts", async ({ page }) => {
     await page.goto("/catalysts", { waitUntil: "domcontentloaded" });
   } else {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await page.getByRole("link", { name: "06 催化" }).click();
+    await page.getByRole("link", { name: /催化/ }).click();
     await page.waitForLoadState("domcontentloaded");
   }
   await expect(page).toHaveURL(/\/catalysts$/);
   await expectShell(page);
   // NavLink 激活态（react-router 自动设置 aria-current="page"）
-  await expect(page.getByRole("link", { name: "06 催化" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("link", { name: /催化/ })).toHaveAttribute("aria-current", "page");
   await screenshot(page, "1440x900-catalysts");
 });
 
@@ -63,12 +65,12 @@ test("Catalyst Desk visual evidence: /breakouts", async ({ page }) => {
     await page.goto("/breakouts", { waitUntil: "domcontentloaded" });
   } else {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await page.getByRole("link", { name: "03 雷达" }).click();
+    await page.getByRole("link", { name: /雷达/ }).click();
     await page.waitForLoadState("domcontentloaded");
   }
   await expect(page).toHaveURL(/\/breakouts$/);
   await expectShell(page);
-  await expect(page.getByRole("link", { name: "03 雷达" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("link", { name: /雷达/ })).toHaveAttribute("aria-current", "page");
   await screenshot(page, "1440x900-breakouts");
 });
 

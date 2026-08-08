@@ -268,15 +268,19 @@ test("password mode keeps public research readable and reserves owner controls f
   expect(await deepDocument.text()).toContain('<div id="root">');
 
   // ── 匿名访问 / ────────────────────────────────────────────────────────────
-  // 当前网关对口令模式匿名 HTML 采用「公共只读」策略：200 返回壳，SPA 首页重定向
-  // /watchlist；若网关收紧为 303 → /login，本断言同样放行（两种到达态都接受）。
+  // 当前网关对口令模式匿名 HTML 采用「公共只读」策略：200 返回壳。R4 起 / 是
+  // 真实首页仪表盘（不再重定向 /watchlist）；若网关收紧为 303 → /login，本断言
+  // 同样放行（两种到达态都接受）。
   await page.goto(`${PASSWORD_BASE_URL}/`, { waitUntil: "domcontentloaded" });
-  await expect(page).toHaveURL(/\/(watchlist|login)$/);
+  await expect(page).toHaveURL(/(\/|\/login)$/);
   if (new URL(page.url()).pathname === "/login") {
-    // 303 分支：从登录页走「以访客身份浏览（只读）」回到公开研究面（Login.tsx L442-447）
+    // 303 分支：从登录页走「以访客身份浏览（只读）」回公开面（落点 / 或 /watchlist 均可）
     await page.getByRole("button", { name: "以访客身份浏览（只读）" }).click();
-    await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/watchlist`);
+    await expect(page).toHaveURL(/(\/|\/watchlist)$/);
   }
+  // 自选研究断言固定在 /watchlist 上做：走应用内导航（BrowserRouter 客户端路由）
+  await page.getByRole("link", { name: /自选/ }).click();
+  await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/watchlist`);
 
   // 访客可读研究数据（默认卡片视图显示代码与公司名）
   await expect(page.getByText("NVDA", { exact: true }).first()).toBeVisible();
@@ -287,7 +291,7 @@ test("password mode keeps public research readable and reserves owner controls f
   await screenshot(page, "password-visitor-watchlist");
 
   // 应用内导航到催化页（http 文档不再变化，走 BrowserRouter 客户端路由）
-  await page.getByRole("link", { name: "06 催化" }).click();
+  await page.getByRole("link", { name: /催化/ }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
   await page.waitForLoadState("networkidle");
   await expect(page.getByText("公开浏览可见的中文新闻标题").first()).toBeVisible();
@@ -340,11 +344,11 @@ test("password mode keeps public research readable and reserves owner controls f
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/watchlist`);
 
   // 登录成功后不得残留延迟跳转：过去的 400ms 定时器会把随后打开的页面拉回 /watchlist。
-  await page.getByRole("link", { name: "06 催化" }).click();
+  await page.getByRole("link", { name: /催化/ }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
   await page.waitForTimeout(500);
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
-  await page.getByRole("link", { name: "01 自选" }).click();
+  await page.getByRole("link", { name: /自选/ }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/watchlist`);
 
   // 会话仅存于 HttpOnly Cookie：脚本不可见、口令不落任何浏览器存储
@@ -376,7 +380,7 @@ test("password mode keeps public research readable and reserves owner controls f
   await expect(forceRefresh).toHaveAttribute("title", "重新计算完整自选数据");
   await screenshot(page, "password-owner-watchlist");
 
-  await page.getByRole("link", { name: "06 催化" }).click();
+  await page.getByRole("link", { name: /催化/ }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
   await page.waitForLoadState("networkidle");
   await expect(page.getByText("公开浏览可见的中文新闻标题").first()).toBeVisible();
@@ -413,7 +417,7 @@ test("password mode keeps public research readable and reserves owner controls f
   await expect(page.getByText("英伟达", { exact: true }).first()).toBeVisible();
 
   // 登出后公共研究面仍可读
-  await page.getByRole("link", { name: "06 催化" }).click();
+  await page.getByRole("link", { name: /催化/ }).click();
   await page.waitForLoadState("networkidle");
   await expect(page.getByText("公开浏览可见的中文新闻标题").first()).toBeVisible();
   await expectVisitorShell(page);
