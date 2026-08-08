@@ -18,6 +18,7 @@ const Earnings = lazy(() => import('@/pages/Earnings'));
 const Catalysts = lazy(() => import('@/pages/Catalysts'));
 const StockDetail = lazy(() => import('@/pages/StockDetail'));
 const Market = lazy(() => import('@/pages/Market'));
+const CtaTrend = lazy(() => import('@/pages/CtaTrend'));
 
 export default function App() {
   return (
@@ -42,6 +43,7 @@ export default function App() {
                 <Route path="/earnings" element={<Earnings />} />
                 <Route path="/catalysts" element={<Catalysts />} />
                 <Route path="/market" element={<Market />} />
+                <Route path="/cta" element={<CtaTrend />} />
                 <Route path="/stock/:ticker" element={<StockDetail />} />
                 {/* 未知路由显示 404，不再静默重定向到自选（审计 P3-6）：
                     重定向会掩盖失效链接与部署缺页，也会让自动化测试看不出路由问题。 */}

@@ -27,6 +27,8 @@ export const NAV_ITEMS = [
   /* 大盘强弱页此前没有任何常规入口（不在导航、不在 Dock、⌘K 也搜不到，
      唯一通路是点指数跑马灯）——一个完整页面不该只有彩蛋入口。 */
   { no: '07', label: t('大盘'), path: '/market' },
+  /* CTA 趋势资金：原大盘页 B4.5 卡剥离成的独立页面 */
+  { no: '08', label: t('CTA'), path: '/cta' },
 ] as const;
 
 function NyClock({ className }: { className?: string }) {
