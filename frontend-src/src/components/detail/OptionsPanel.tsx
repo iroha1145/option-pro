@@ -1,11 +1,11 @@
 /**
- * 期权链（stock-detail.md T3）
- * 到期日下拉 → Calls ｜ 行权价 ｜ Puts 三带表（行权价列高亮，ITM 侧浅底区分）
- * 异动行（vol/oi > 3）bolt 角标 + 倍数 chip + 权利金流（估算）
+ * 期权链（stock-detail.md T3 · UI 重构版）
+ * 顶部摘要条（总量/总比/权利金流/异动数）→ Calls ｜ 行权价 ｜ Puts 三带数据条表
+ * （量/持水位条全链归一、ATM 居中高亮、异动行 warn 底 + 倍数/∞ 胶囊）；md 以下
+ * 切紧凑卡片流（同一份归一基准）。判定语义与数据契约不变，展示子组件见 options/。
  * owner：「AI 期权解读」（option_alerts 任务 + 轮询 + 确认费用）；visitor 隐藏
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isMock } from '@/api/client';
 import { optionsApi } from '@/api/modules/options';
 import { aiJobsApi } from '@/api/modules/ai-jobs';
@@ -17,18 +17,19 @@ import SourceNote from '@/components/shared/SourceNote';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
-import { fmtCompact, fmtPrice, fmtRelative } from '@/lib/format';
+import { fmtPrice, fmtRelative } from '@/lib/format';
 import { OPTION_SUPPORTED_LIST, optionsSupported } from '@/mocks/fixtures2';
 import { AI_DISCLAIMER, useAiJob } from './useAiJob';
 import {
   buildOptionAlertEvidence,
-  midpoint,
   parseOptionAlertResult,
-  volOiState,
   type OptionAlertResult,
-  type VolOiState,
 } from './optionAnalysis';
-import type { OptionChain, OptionChainRow } from '@/api/types';
+import ChainTable from './options/ChainTable.tsx';
+import ChainCards from './options/ChainCards.tsx';
+import SummaryTiles from './options/SummaryTiles.tsx';
+import { rowMeta, summarizeChain } from './options/chainMetrics.ts';
+import type { OptionChain } from '@/api/types';
 import { t } from '../../i18n/core.ts';
 
 const NEW_YORK_DATE = new Intl.DateTimeFormat('en-CA', {
@@ -54,51 +55,6 @@ function dte(expiration: string): number {
 /** 缺失数值显「—」，不落回 0。 */
 const dash = (value: number | null, render: (n: number) => string): string =>
   value === null ? '—' : render(value);
-
-interface RowMeta {
-  callVolOi: VolOiState;
-  putVolOi: VolOiState;
-  callAlert: boolean;
-  putAlert: boolean;
-  callPremium: number | null; // 美元，估算
-  putPremium: number | null;
-}
-
-/** 量持比 > 3 或持仓量为 0 而有成交（全部新开仓）都算异动。 */
-function isAlerting(state: VolOiState): boolean {
-  return (
-    (state.kind === 'ratio' && state.ratio > 3) || state.kind === 'new_opening'
-  );
-}
-
-function premiumOf(
-  volume: number | null,
-  bid: number | null,
-  ask: number | null,
-): number | null {
-  const m = midpoint(bid, ask);
-  if (volume === null || m === null) return null;
-  return volume * m * 100;
-}
-
-function rowMeta(r: OptionChainRow): RowMeta {
-  const callVolOi = volOiState(r.callVol, r.callOi);
-  const putVolOi = volOiState(r.putVol, r.putOi);
-  return {
-    callVolOi,
-    putVolOi,
-    callAlert: isAlerting(callVolOi),
-    putAlert: isAlerting(putVolOi),
-    callPremium: premiumOf(r.callVol, r.callBid, r.callAsk),
-    putPremium: premiumOf(r.putVol, r.putBid, r.putAsk),
-  };
-}
-
-/** 异动角标文案：有比值显倍数，新开仓显 ∞（量持比不适用）。 */
-function volOiBadge(state: VolOiState): string | null {
-  if (state.kind === 'ratio') return state.ratio > 3 ? `${state.ratio.toFixed(1)}×` : null;
-  return state.kind === 'new_opening' ? '∞' : null;
-}
 
 const DIRECTION_META: Record<
   OptionAlertResult['direction'],
@@ -336,6 +292,38 @@ function AiOptionInsight({
   );
 }
 
+/* ---------------- 图例 ---------------- */
+function ChainLegend() {
+  return (
+    <div className="mt-2.5 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-micro text-ink-400">
+      <span className="inline-flex items-center gap-1.5">
+        <span className="flex h-2 w-6 overflow-hidden rounded-xs" aria-hidden="true">
+          <span className="h-full w-1/2 bg-up-600/20" />
+          <span className="h-full w-1/2 bg-down-600/20" />
+        </span>
+        {t('占比条按全链最大量归一')}
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="size-2.5 rounded-xs border border-line bg-paper-2" aria-hidden="true" />
+        {t('浅底为价内侧')}
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="rounded-pill bg-warn-600 px-1.5 text-[10px] font-semibold leading-4 text-white" aria-hidden="true">
+          3.2×
+        </span>
+        {t('成交异动')}
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="rounded-pill border border-warn-600 px-1.5 text-[10px] font-semibold leading-4 text-warn-700" aria-hidden="true">
+          ∞
+        </span>
+        {t('全部新开仓')}
+      </span>
+      <span>{t('「—」表示数据缺失')}</span>
+    </div>
+  );
+}
+
 /* ---------------- 链主体 ---------------- */
 export default function OptionsPanel({ ticker }: { ticker: string }) {
   // 支持名单只属于 mock 数据集;live 由真实接口自证(到期日为空 → 诚实空态)
@@ -384,7 +372,26 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
   const shownChain =
     chain && chain.ticker === ticker && chain.expiration === exp ? chain : null;
 
-  const atmRef = useRef<HTMLTableRowElement>(null);
+  /* 派生指标（纯展示层）：摘要条合计 + 水位条归一基准 + 异动腿数 */
+  const totals = useMemo(
+    () => (shownChain ? summarizeChain(shownChain) : null),
+    [shownChain],
+  );
+  const alertCount = useMemo(() => {
+    if (!shownChain) return 0;
+    return shownChain.rows.reduce((n, r) => {
+      const m = rowMeta(r);
+      return n + (m.callAlert ? 1 : 0) + (m.putAlert ? 1 : 0);
+    }, 0);
+  }, [shownChain]);
+
+  const atmRef = useRef<HTMLElement | null>(null);
+  /* 桌面表与移动卡片同时挂载（另一套被断点 hidden）：display:none 的元素
+     offsetParent 为 null，不允许它抢走 ATM 居中锚点。 */
+  const setAtmRef = useCallback((el: HTMLElement | null) => {
+    if (el === null || el.offsetParent === null) return;
+    atmRef.current = el;
+  }, []);
   // 标的现价缺失时不猜平值行：旧实现把 spot 当 0，平值高亮会落在最低行权价上。
   const atmStrike = useMemo(() => {
     if (!shownChain || shownChain.rows.length === 0) return null;
@@ -533,7 +540,16 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
         />
       )}
 
-      {/* 三带表 */}
+      {/* 顶部摘要条：总量 / C/P 比 / 估算权利金流 / 异动数（当前链派生） */}
+      {shownChain && totals && (
+        <SummaryTiles
+          key={`${shownChain.ticker}-${shownChain.expiration}`}
+          totals={totals}
+          alertCount={alertCount}
+        />
+      )}
+
+      {/* 三带数据条表（md+）/ 紧凑卡片流（<md），共用滚动容器与 ATM 居中 */}
       <div data-options-scroll className="relative mt-3 max-h-[420px] overflow-auto rounded-lg border border-line">
         {chainError && !shownChain ? (
           <div className="flex flex-col items-center gap-2.5 px-4 py-10 text-center">
@@ -552,101 +568,33 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
               {chainRefreshing ? t('正在重试') : t('重试该到期日')}
             </button>
           </div>
-        ) : chainLoading || !shownChain ? (
+        ) : chainLoading || !shownChain || !totals || !exp ? (
           <SkeletonRows rows={8} />
         ) : (
-          <table className="min-w-[520px] w-full whitespace-nowrap border-collapse font-mono text-micro tnum">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-card-warm text-left font-sans text-micro text-ink-400">
-                <th className="px-2 py-2 font-medium" colSpan={2}>{t('CALLS · 量/持 · 权利金')}</th>
-                <th className="px-2 py-2 text-center font-medium">{t('行权价')}</th>
-                <th className="px-2 py-2 text-right font-medium" colSpan={2}>{t('权利金 · 量/持 · PUTS')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <AnimatePresence initial={false}>
-                {shownChain.rows.map((r) => {
-                  const m = rowMeta(r);
-                  const isAtm = r.strike === atmStrike;
-                  const callItm = shownChain.spot !== null && r.strike < shownChain.spot;
-                  const putItm = shownChain.spot !== null && r.strike > shownChain.spot;
-                  const alert = m.callAlert || m.putAlert;
-                  const callBadge = volOiBadge(m.callVolOi);
-                  const putBadge = volOiBadge(m.putVolOi);
-                  const premiums = [m.callPremium, m.putPremium].filter(
-                    (value): value is number => value !== null,
-                  );
-                  return (
-                    <motion.tr
-                      key={`${exp}-${r.strike}`}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1, transition: { duration: 0.2 } }}
-                      ref={isAtm ? atmRef : undefined}
-                      className={cn(
-                        'h-9 border-t border-line align-middle',
-                        isAtm ? 'bg-brand-50' : alert ? 'bg-warn-50/50' : undefined,
-                      )}
-                      title={
-                        alert
-                          ? `${t('成交异动 {badge}', { badge: callBadge ?? putBadge ?? '' })}${
-                              premiums.length > 0
-                                ? t(' · 权利金流约 ${amount}（估算）', { amount: fmtCompact(Math.max(...premiums)) })
-                                : t(' · 权利金不可估算（缺买卖价）')
-                            }`
-                          : undefined
-                      }
-                    >
-                      {/* CALLS 侧 */}
-                      <td className={cn('px-2 py-1.5', callItm && 'bg-paper-2')}>
-                        <span className="text-ink-800">{dash(r.callVol, fmtCompact)}</span>
-                        <span className="text-ink-300"> / </span>
-                        <span className="text-ink-500">{dash(r.callOi, fmtCompact)}</span>
-                      </td>
-                      <td className={cn('px-2 py-1.5', callItm && 'bg-paper-2')}>
-                        <span className="text-ink-800">
-                          {dash(midpoint(r.callBid, r.callAsk), (n) => fmtPrice(n))}
-                        </span>
-                        {callBadge && (
-                          <span className="ml-1.5 rounded-xs bg-warn-50 px-1 py-px text-[10px] font-medium text-warn-600">
-                            {callBadge}
-                          </span>
-                        )}
-                      </td>
-                      {/* 行权价 */}
-                      <td
-                        className={cn(
-                          'relative px-2 py-1.5 text-center',
-                          isAtm ? 'font-semibold text-brand-700' : 'text-ink-600',
-                        )}
-                      >
-                        {isAtm && <span className="absolute inset-y-0 left-0 w-0.5 bg-brand-600" aria-hidden="true" />}
-                        {fmtPrice(r.strike, r.strike >= 100 ? 0 : 2)}
-                      </td>
-                      {/* PUTS 侧 */}
-                      <td className={cn('px-2 py-1.5 text-right', putItm && 'bg-paper-2')}>
-                        {putBadge && (
-                          <span className="mr-1.5 rounded-xs bg-warn-50 px-1 py-px text-[10px] font-medium text-warn-600">
-                            {putBadge}
-                          </span>
-                        )}
-                        <span className="text-ink-800">
-                          {dash(midpoint(r.putBid, r.putAsk), (n) => fmtPrice(n))}
-                        </span>
-                      </td>
-                      <td className={cn('px-2 py-1.5 text-right', putItm && 'bg-paper-2')}>
-                        <span className="text-ink-800">{dash(r.putVol, fmtCompact)}</span>
-                        <span className="text-ink-300"> / </span>
-                        <span className="text-ink-500">{dash(r.putOi, fmtCompact)}</span>
-                        {alert && <Icon name="bolt" size={12} className="ml-1 inline text-warn-600" aria-label={t("成交异动")} />}
-                      </td>
-                    </motion.tr>
-                  );
-                })}
-              </AnimatePresence>
-            </tbody>
-          </table>
+          <>
+            <div className="hidden md:block">
+              <ChainTable
+                chain={shownChain}
+                totals={totals}
+                atmStrike={atmStrike}
+                exp={exp}
+                setAtmRef={setAtmRef}
+              />
+            </div>
+            <div className="md:hidden">
+              <ChainCards
+                chain={shownChain}
+                totals={totals}
+                atmStrike={atmStrike}
+                exp={exp}
+                setAtmRef={setAtmRef}
+              />
+            </div>
+          </>
         )}
       </div>
+
+      <ChainLegend />
 
       <p className="mt-2 text-micro text-ink-400">
         {t('浅底为价内（ITM）侧 · 异动标注 vol/oi > 3（倍数为该侧比值）；持仓量为 0 而当日有成交标 ∞（全部新开仓）· 「—」表示上游未提供该字段，不代表 0 · 权利金按买卖中价估算 · 非收益承诺')}
