@@ -382,6 +382,14 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         "CPU",
         "CRM",
         "CUDA",
+        # 2026-08-09 生产误伤修正：期权/时间通用缩写。security 语境仍走
+        # _approved_span_requires_ticker_binding 后检（「ET股价」照样要绑定）。
+        "DTE",
+        "EDT",
+        "EST",
+        "ET",
+        "GMT",
+        "UTC",
         "Claude",
         "Cloudflare",
         "Copilot",
@@ -1318,6 +1326,11 @@ def _is_source_bound_foreign_entity(
             return False
         if len(words) == 1 and any(char in word for char in "-./"):
             return True
+        # 单词条的全小写长实体也可源绑定：药名/代号惯例全小写（生产实测
+        # berobenatide 在付费源里出现 2 次仍被形状检查拒掉，market_focus
+        # 因此连挂）。prose word 已在上方拦截，≥6 字母排除短介词残留。
+        if len(words) == 1 and letters.islower() and len(letters) >= 6:
+            return True
         return (
             any(char.isdigit() for char in word)
             or letters.isupper()
@@ -1372,6 +1385,53 @@ def _source_uses_initialism_as_technical_modifier(
         re.IGNORECASE,
     )
     return any(pattern.search(source) is not None for source in source_texts)
+
+
+def _is_cjk_gloss_annotation(
+    span: str,
+    *,
+    sentence: str,
+    start: int,
+    end: int,
+) -> bool:
+    """「中文术语（Foreign）」注释位：紧跟中文、独占括号的紧凑外文标注。
+
+    行业缩写常由模型自行补注（生产实测「电动垂直起降飞行器（eVTOL）」——
+    eVTOL 不在付费源文本里，任何白名单都追不上这类构词）。约束：
+    - 括号内只有该片段本身（左括号紧贴、右括号紧随），括号前一字符是中文；
+    - 片段紧凑（≤24、无空白）且含小写字母或数字，或长度 ≥6；
+    - 1–5 位全大写的代码形状**不进此通道**——未绑定证券代码不得借括号
+      漂白，仍走代码绑定规则；prose word 同样拒绝。
+    """
+
+    if not 1 < len(span) <= 24 or any(char.isspace() for char in span):
+        return False
+    if not any(char.isalpha() for char in span):
+        return False
+    if span.isupper() and len(span) <= 5:
+        return False
+    if not (any(char.islower() for char in span) or any(char.isdigit() for char in span) or len(span) >= 6):
+        return False
+    if span.casefold().rstrip(".") in _ENGLISH_PROSE_WORDS:
+        return False
+    before = sentence[:start]
+    if not before or before[-1] not in "（(":
+        return False
+    closer = "）" if before[-1] == "（" else ")"
+    after = sentence[end:]
+    if not after or after[0] != closer:
+        return False
+    # 证券语境不进注释通道：「公司（Tesla）股价」仍要求代码绑定，括号
+    # 不是绑定规则的免检口（对应既有 unbound_approved_brand 反例）。
+    if _approved_span_requires_ticker_binding(
+        span,
+        sentence=sentence,
+        start=start,
+        end=end,
+    ):
+        return False
+    head = before[:-1].rstrip()
+    return bool(head) and _is_cjk(head[-1])
 
 
 def _foreign_span_context(
@@ -1472,6 +1532,8 @@ def _foreign_span_context(
         end=end,
         allowed_codes=allowed_codes,
     ):
+        return True
+    if _is_cjk_gloss_annotation(span, sentence=sentence, start=start, end=end):
         return True
     folded = span.casefold().rstrip(".")
     prose_form = folded[:-2] if folded.endswith("'s") else folded

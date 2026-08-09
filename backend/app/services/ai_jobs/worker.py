@@ -306,6 +306,9 @@ async def _finish_response(
         try:
             result = runtime.response_result(response, job["job_type"], payload)
         except Exception as exc:
+            # 后台任务的校验失败绝大多数从这里落库（轮询完成路径）——此前
+            # 只有提交路径带 detail，生产 schema_validation_failed 全是 NULL，
+            # 排障只能重取响应现场复现（2026-08-09 中文校验误伤即如此）。
             repository.fail(
                 job["job_id"],
                 owner,
@@ -315,6 +318,7 @@ async def _finish_response(
                     response_id=response_id or None,
                 ),
                 usage=usage,
+                detail=str(exc),
             )
             return
         repository.complete(

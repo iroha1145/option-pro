@@ -2432,3 +2432,72 @@ def test_signal_evidence_still_rejects_unbound_tickers():
             None,
             allowed_codes=("AMD",),
         )
+
+
+# ── 2026-08-09 生产误伤回归：整段中文因单个技术片段连挂 ─────────────
+# 复盘：市场焦点/期权/个股/新闻四类任务当日全部 schema_validation_failed，
+# 拒绝片段分别是 berobenatide（付费源里出现 2 次的药名，全小写被形状检查
+# 拒）、DTE/UTC（白名单缺通用缩写）、eVTOL（模型自注的行业缩写，任何白
+# 名单都追不上）。修复三通道各配正负样本，红线（未绑定代码/英文从句）不放松。
+
+
+def test_zh_prose_allows_bare_time_and_option_initialisms():
+    text = "10笔记录均为到期日2026-08-10、DTE为2天的认购期权，成交主要集中在397—400区间。"
+    assert validate_simplified_chinese_text(text, None, allowed_codes=("GLD",)) == text
+    utc_text = "本结论以2026年8月7日08:17:55 UTC为证据时点，不代表实时状态。"
+    assert validate_simplified_chinese_text(utc_text, None) == utc_text
+    et_text = "常规交易时段为9:30-16:00 ET，数据截至收盘。"
+    assert validate_simplified_chinese_text(et_text, None) == et_text
+
+
+def test_zh_prose_allows_source_bound_lowercase_entity():
+    """药名/代号惯例全小写：出现在付费源文本里就不是幻觉实体。"""
+    source = (
+        "Pfizer said its obesity candidate berobenatide showed monthly "
+        "dosing potential in a phase 2b study."
+    )
+    text = "据报道，PFE的berobenatide在2b期研究中显示月度给药的减重潜力。"
+    assert (
+        validate_simplified_chinese_text(
+            text,
+            None,
+            allowed_codes=("PFE",),
+            source_texts=(source,),
+        )
+        == text
+    )
+
+
+def test_zh_prose_still_rejects_unbound_lowercase_entity_without_source():
+    """源绑定是放行前提：没有源文本佐证的小写实体照旧拒。"""
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        validate_simplified_chinese_text(
+            "据报道，PFE的berobenatide在2b期研究中显示潜力。",
+            None,
+            allowed_codes=("PFE",),
+        )
+
+
+def test_zh_prose_allows_cjk_gloss_annotation():
+    """「中文术语（Foreign）」注释位：紧凑外文标注不算英文散文。"""
+    text = "电动垂直起降飞行器（eVTOL）板块受政策催化，商业化仍处早期。"
+    assert validate_simplified_chinese_text(text, None) == text
+    biosim = "生物类似药（biosimilar）竞争加剧，定价压力上升。"
+    assert validate_simplified_chinese_text(biosim, None) == biosim
+
+
+def test_zh_prose_gloss_does_not_launder_ticker_shaped_codes():
+    """1–5 位全大写代码形状不得借括号漂白：仍走代码绑定规则。"""
+    text = "市场关注英伟达（NVDA）财报表现。"
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        validate_simplified_chinese_text(text, None)
+    assert validate_simplified_chinese_text(text, None, allowed_codes=("NVDA",)) == text
+
+
+def test_zh_prose_still_rejects_english_clause_in_parentheses():
+    """括号不是英文从句的免检通道：多词散文照旧拒。"""
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        validate_simplified_chinese_text(
+            "公司发布新品（the new flagship product）以提振销量。",
+            None,
+        )
