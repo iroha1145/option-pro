@@ -7,7 +7,6 @@ import { SkeletonBlock, SkeletonCard } from '@/components/shared/Skeleton';
 import type { IvMetaVm, IvRowVm, SectorVm } from './model';
 import {
   SOURCE_STATUS_CN,
-  ivRankColor,
   ivRankInk,
   ivRankTint,
 } from './model';
@@ -50,8 +49,8 @@ function IvHeatCard({
             ))
           : top.map((row, index) => {
               const rank = row.rank ?? 0;
-              /* v8.3 去糖果色：白底 card + 左缘 3px 热色竖条 + 极淡 tint 底，
-                 不再满底热色 + toneOnColor 反白（「AI 生成热力图」签名）。 */
+              /* v8.3 去糖果色：白底 card + 极淡 tint 底（边缘热色竖条按用户
+                 要求移除，热度只靠 tint 底 + 排位数字的 ink 色阶表达）。 */
               return (
                 <motion.button
                   key={row.ticker}
@@ -72,11 +71,6 @@ function IvHeatCard({
                   className="relative flex h-14 flex-col items-center justify-center gap-0.5 rounded-md border border-line bg-card shadow-sh-1 transition-shadow duration-fast hover:shadow-sh-2"
                   style={{ backgroundColor: ivRankTint(rank) }}
                 >
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-y-0 left-0 w-[3px] rounded-l-md"
-                    style={{ backgroundColor: ivRankColor(rank) }}
-                  />
                   <span className="font-mono text-caption font-semibold leading-none text-ink-800">
                     {row.ticker}
                   </span>

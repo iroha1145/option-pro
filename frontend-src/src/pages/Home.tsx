@@ -1,7 +1,8 @@
 /**
  * §01 首页（/）
  * 指数带（列表由后端决定：live 为美股三指+日经+上证共 5 个，mock 6 个——
- * 列数 auto-fit 不写死） · 市场状态 · 雷达信号 · 财报临近 · 关注池异动 · CTA 联动带
+ * 列数 auto-fit 不写死） · 市场状态 · 雷达信号（双列卡片格） · 财报临近
+ * （日期锚块行） · 关注池异动（迷你卡格） · CTA 联动带
  * 轮询：指数/状态 60s，其余 300s（visibility 暂停由 usePolling 负责）
  *
  * 数据纪律（与 components/market/IndexCards.tsx 同款）：
@@ -12,7 +13,7 @@ import { useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { motion } from 'framer-motion';
 import { isMock, type ApiError } from '@/api/client';
-import type { BreakoutSignal, MarketSession } from '@/api/types';
+import type { BreakoutSignal, EarningsItem, MarketSession, WatchlistItem } from '@/api/types';
 import { marketApi } from '@/api/modules/market';
 import { signalsApi } from '@/api/modules/signals';
 import { strengthApi } from '@/api/modules/strength';
@@ -27,18 +28,18 @@ import { useNow } from '@/hooks/useNow';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtCountdown, fmtNyTime, fmtPrice, fmtRelative, fmtTimeHHMMSS } from '@/lib/format';
-import { fmtMDCN } from '@/components/earnings/types';
 import { instrumentName, signed } from '@/components/cta/ctaMeta';
 import PageHeader from '@/components/shared/PageHeader';
 import StaleStrip from '@/components/shared/StaleStrip';
 import SessionLED from '@/components/shared/SessionLED';
+import StrengthBar from '@/components/shared/StrengthBar';
 import { exNum, isFeaturedRow, type EarningsRow } from '@/components/earnings/types';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import TickerLogo from '@/components/shared/TickerLogo';
 import EmptyState from '@/components/shared/EmptyState';
-import { SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
+import { SkeletonBlock, SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
-import { t } from '../i18n/core.ts';
+import { localeTag, t } from '../i18n/core.ts';
 
 const MARKET_TO_SESSION: Record<string, MarketSession> = {
   open: 'regular',
@@ -53,6 +54,25 @@ const SESSION_LABEL: Record<string, string> = {
   postmarket: t('盘后'),
   closed: t('休市'),
 };
+
+/* 财报日期块的月份缩写随界面语言走（en Aug / zh 8月 / ja 8月）；
+   语言在页面加载期定型，模块级 formatter 与 t() 同口径 */
+const MONTH_SHORT_FMT = new Intl.DateTimeFormat(localeTag(), { month: 'short' });
+
+/** 'YYYY-MM-DD' → { 日号, 月份缩写 }；字符串解析避免 UTC 午夜跨时区串日 */
+function dateAnchorParts(iso: string): { day: number; monthShort: string } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return null;
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (!month || !day) return null;
+  return { day, monthShort: MONTH_SHORT_FMT.format(new Date(Number(m[1]), month - 1, 1)) };
+}
+
+/** 卡片格入场 stagger 档位：i*0.04 封顶 0.3（雷达/自选两区同一节奏） */
+function staggerDelay(i: number): number {
+  return Math.min(i * 0.04, 0.3);
+}
 
 function RetryButton({ onClick, refreshing }: { onClick: () => void; refreshing: boolean }) {
   return (
@@ -95,7 +115,8 @@ function SectionCard({
   );
 }
 
-/** 列表卡三态统一：加载 SkeletonRows / 错误 EmptyState+重试 / 空态简洁文案 */
+/** 列表卡三态统一：加载骨架（默认 SkeletonRows，可传 skeleton 换卡片格）/
+ *  错误 EmptyState+重试 / 空态简洁文案 */
 function ListBody({
   loading,
   error,
@@ -104,6 +125,7 @@ function ListBody({
   isEmpty,
   emptyTitle,
   rows = 6,
+  skeleton,
   children,
 }: {
   loading: boolean;
@@ -113,9 +135,11 @@ function ListBody({
   isEmpty: boolean;
   emptyTitle: string;
   rows?: number;
+  skeleton?: ReactNode;
   children: ReactNode;
 }) {
   if (loading) {
+    if (skeleton) return <>{skeleton}</>;
     return (
       <div className="pb-2">
         <SkeletonRows rows={rows} />
@@ -380,28 +404,11 @@ export default function Home() {
             onRetry={breakoutsQ.refresh}
             isEmpty={breakouts.length === 0}
             emptyTitle={t('雷达仍在盯')}
-            rows={8}
+            skeleton={<SignalGridSkeleton cards={8} />}
           >
-            {/* 行链接不加 aria-label：整行可见内容（代码/名称/形态/时间/分数）
-                自然组成可访问名——覆盖式标签会让读屏只听到代码（审计） */}
-            <div className="divide-y divide-line">
-              {breakouts.map((s) => (
-                <Link
-                  key={s.id}
-                  to={`/stock/${encodeURIComponent(s.ticker)}`}
-                  className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast hover:bg-paper-2/70 md:px-5"
-                >
-                  <TickerLogo ticker={s.ticker} size={28} />
-                  <p className="min-w-0 flex-1 truncate">
-                    <span className="font-mono text-caption font-semibold text-ink-800">{s.ticker}</span>
-                    <span className="ml-2 text-caption text-ink-500">{s.name}</span>
-                  </p>
-                  <span className="hidden shrink-0 text-caption text-ink-600 sm:block">{s.label}</span>
-                  <span className="shrink-0 text-micro text-ink-400">{fmtRelative(s.at)}</span>
-                  <span className="w-10 shrink-0 text-right font-mono text-caption text-ink-800 tnum">
-                    {s.strengthScore}
-                  </span>
-                </Link>
+            <div className="grid grid-cols-1 gap-2.5 px-4 pb-4 pt-3 sm:grid-cols-2 md:px-5 md:pb-5 xl:grid-cols-2">
+              {breakouts.map((s, i) => (
+                <RadarSignalCard key={s.id} signal={s} index={i} />
               ))}
             </div>
           </ListBody>
@@ -421,30 +428,9 @@ export default function Home() {
           >
             <div className="divide-y divide-line">
               {earnings.map((it) => (
-                <Link
-                  key={`${it.ticker}-${it.date}`}
-                  to={`/stock/${encodeURIComponent(it.ticker)}`}
-                  className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast hover:bg-paper-2/70 md:px-5"
-                >
-                  <TickerLogo ticker={it.ticker} size={28} />
-                  <p className="min-w-0 flex-1 truncate">
-                    <span className="font-mono text-caption font-semibold text-ink-800">{it.ticker}</span>
-                    <span className="ml-2 text-caption text-ink-500">{it.name}</span>
-                  </p>
-                  <span className="flex shrink-0 flex-col items-end gap-1">
-                    <span className="flex items-center gap-1.5">
-                      <span className="text-caption text-ink-500">{fmtMDCN(it.date)}</span>
-                      <span className="rounded-xs bg-paper-2 px-1.5 py-0.5 text-micro text-ink-600">
-                        {it.timing === 'bmo' ? t('盘前') : it.timing === 'amc' ? t('盘后') : t('时间待定')}
-                      </span>
-                    </span>
-                    {it.epsEstimate !== null && (
-                      <span className="font-mono text-micro text-ink-400 tnum">
-                        {t('EPS 预期 {v}', { v: it.epsEstimate.toFixed(2) })}
-                      </span>
-                    )}
-                  </span>
-                </Link>
+                /* todayKey 用 nyToday：财报日历一律按纽约日，与上面的过滤同口径
+                   （用户版取浏览器本地日，跨时区会提前/滞后一天高亮） */
+                <EarningsAnchorRow key={`${it.ticker}-${it.date}`} item={it} todayKey={nyToday} />
               ))}
             </div>
           </ListBody>
@@ -458,24 +444,11 @@ export default function Home() {
             onRetry={watchlistQ.refresh}
             isEmpty={movers.length === 0}
             emptyTitle={t('暂无关注标的')}
+            skeleton={<MoverGridSkeleton cards={6} />}
           >
-            <div className="divide-y divide-line">
-              {movers.map((item) => (
-                <Link
-                  key={item.ticker}
-                  to={`/stock/${encodeURIComponent(item.ticker)}`}
-                  className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast hover:bg-paper-2/70 md:px-5"
-                >
-                  <TickerLogo ticker={item.ticker} size={28} />
-                  <p className="min-w-0 flex-1 truncate">
-                    <span className="font-mono text-caption font-semibold text-ink-800">{item.ticker}</span>
-                    <span className="ml-2 text-caption text-ink-500">{item.name}</span>
-                  </p>
-                  <span className="shrink-0 font-mono text-caption text-ink-800 tnum">
-                    {Number.isFinite(item.price) && item.price > 0 ? fmtPrice(item.price) : '—'}
-                  </span>
-                  <ChangeBadge value={item.changePct} size="sm" />
-                </Link>
+            <div className="grid grid-cols-1 gap-2.5 px-4 pb-4 pt-3 sm:grid-cols-2 md:px-5 md:pb-5">
+              {movers.map((item, i) => (
+                <WatchlistMoverCard key={item.ticker} item={item} index={i} />
               ))}
             </div>
           </ListBody>
@@ -684,5 +657,170 @@ function MarketStatusPanel({
         />
       )}
     </section>
+  );
+}
+
+/** 雷达信号卡：TickerLogo+类型胶囊+相对时间 / 名称+价+涨跌 / 强度条。
+ *  不加 aria-label：整行可见内容自然组成可访问名（审计）。 */
+function RadarSignalCard({ signal: s, index: i }: { signal: BreakoutSignal; index: number }) {
+  const hasPrice = Number.isFinite(s.price) && s.price > 0;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: staggerDelay(i) }}
+    >
+      <Link to={`/stock/${encodeURIComponent(s.ticker)}`} className="card-surface card-hover block rounded-lg p-3">
+        <div className="flex items-center gap-2">
+          <TickerLogo ticker={s.ticker} size={24} />
+          <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{s.ticker}</span>
+          <span className="min-w-0 truncate rounded-xs border border-line px-1.5 py-0.5 text-micro text-ink-600">
+            {s.label}
+          </span>
+          <span className="ml-auto shrink-0 text-micro text-ink-400">{fmtRelative(s.at)}</span>
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-caption text-ink-500">{s.name}</span>
+          <span className="shrink-0 font-mono text-caption text-ink-800 tnum">
+            {hasPrice ? fmtPrice(s.price) : '—'}
+          </span>
+          <ChangeBadge value={s.changePct} size="sm" className="shrink-0" />
+        </div>
+        <div className="mt-2">
+          <StrengthBar score={s.strengthScore} width={56} showScore />
+        </div>
+      </Link>
+    </motion.div>
+  );
+}
+
+/** 财报日期锚定行：w-11 日期块（纽约日=今天时高亮）+ 代码/名称 + timing chip + EPS 预期 */
+function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKey: string }) {
+  const anchor = dateAnchorParts(it.date);
+  const isToday = it.date.slice(0, 10) === todayKey;
+  const eps = typeof it.epsEstimate === 'number' && Number.isFinite(it.epsEstimate) ? it.epsEstimate : null;
+  return (
+    <Link
+      to={`/stock/${encodeURIComponent(it.ticker)}`}
+      className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast hover:bg-paper-2/70 focus-visible:bg-paper-2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400/60 md:px-5"
+    >
+      <span
+        className={cn(
+          'w-11 shrink-0 rounded-md border py-1 text-center',
+          isToday ? 'border-brand-600/20 bg-brand-50' : 'border-line bg-paper-2',
+        )}
+      >
+        <span
+          className={cn(
+            'block font-mono text-body-s font-semibold tnum',
+            isToday ? 'text-brand-700' : 'text-ink-900',
+          )}
+        >
+          {anchor ? anchor.day : '—'}
+        </span>
+        <span className="block text-micro text-ink-400">{anchor?.monthShort ?? ''}</span>
+      </span>
+      <TickerLogo ticker={it.ticker} size={28} />
+      <p className="min-w-0 flex-1 truncate">
+        <span className="font-mono text-caption font-semibold text-ink-800">{it.ticker}</span>
+        <span className="ml-2 text-caption text-ink-500">{it.name}</span>
+      </p>
+      <span className="flex shrink-0 items-center gap-1.5">
+        {eps !== null && (
+          <span className="hidden font-mono text-micro text-ink-500 tnum sm:block">
+            {t('EPS 预期 {v}', { v: eps.toFixed(2) })}
+          </span>
+        )}
+        <span className="rounded-xs bg-paper-2 px-1.5 py-0.5 text-micro text-ink-600">
+          {it.timing === 'bmo' ? t('盘前') : it.timing === 'amc' ? t('盘后') : t('时间待定')}
+        </span>
+      </span>
+    </Link>
+  );
+}
+
+/** 自选异动迷你卡：Ticker+名称+涨跌 / 大价+sparkline（缺失不渲染）/ 强度条+首条信号 */
+function WatchlistMoverCard({ item, index: i }: { item: WatchlistItem; index: number }) {
+  const hasChange = Number.isFinite(item.changePct);
+  const hasPrice = Number.isFinite(item.price) && item.price > 0;
+  const spark = Array.isArray(item.sparkline) && item.sparkline.length > 1 ? item.sparkline : null;
+  const signalLabel = item.signals?.[0]?.label ?? null;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: staggerDelay(i) }}
+    >
+      <Link to={`/stock/${encodeURIComponent(item.ticker)}`} className="card-surface card-hover block rounded-lg p-3">
+        <div className="flex items-center gap-2">
+          <TickerLogo ticker={item.ticker} size={24} />
+          <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{item.ticker}</span>
+          <span className="min-w-0 flex-1 truncate text-caption text-ink-500">{item.name}</span>
+          <ChangeBadge value={item.changePct} size="sm" className="shrink-0" />
+        </div>
+        <div className="mt-2 flex items-end justify-between gap-2">
+          <span className="font-mono text-data-l text-ink-900 tnum">
+            {hasPrice ? fmtPrice(item.price) : '—'}
+          </span>
+          {spark && (
+            <Sparkline data={spark} width={96} height={24} change={hasChange ? item.changePct : 0} />
+          )}
+        </div>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <StrengthBar score={item.strengthScore} width={56} />
+          {signalLabel && <span className="truncate text-micro text-ink-400">{signalLabel}</span>}
+        </div>
+      </Link>
+    </motion.div>
+  );
+}
+
+/** 雷达卡片格骨架：2 列镜像真实卡（logo+胶囊 / 名称+徽标 / 强度条） */
+function SignalGridSkeleton({ cards }: { cards: number }) {
+  return (
+    <div
+      className="grid grid-cols-1 gap-2.5 px-4 pb-4 pt-3 sm:grid-cols-2 md:px-5 md:pb-5 xl:grid-cols-2"
+      aria-hidden="true"
+    >
+      {Array.from({ length: cards }, (_, i) => (
+        <div key={i} className="card-surface rounded-lg p-3">
+          <div className="flex items-center gap-2">
+            <SkeletonBlock className="size-6 rounded-sm" />
+            <SkeletonBlock className="h-3 w-12" />
+            <SkeletonBlock className="h-4 w-14 rounded-xs" />
+            <SkeletonBlock className="ml-auto h-3 w-10" />
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <SkeletonBlock className="h-3 flex-1" />
+            <SkeletonBlock className="h-3 w-14" />
+            <SkeletonBlock className="h-4 w-12 rounded-xs" />
+          </div>
+          <SkeletonBlock className="mt-2.5 h-[3px] w-14 rounded-pill" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 自选迷你卡骨架：2 列镜像真实卡（logo+徽标 / 大价+sparkline / 强度条） */
+function MoverGridSkeleton({ cards }: { cards: number }) {
+  return (
+    <div className="grid grid-cols-1 gap-2.5 px-4 pb-4 pt-3 sm:grid-cols-2 md:px-5 md:pb-5" aria-hidden="true">
+      {Array.from({ length: cards }, (_, i) => (
+        <div key={i} className="card-surface rounded-lg p-3">
+          <div className="flex items-center gap-2">
+            <SkeletonBlock className="size-6 rounded-sm" />
+            <SkeletonBlock className="h-3 w-12" />
+            <SkeletonBlock className="h-3 flex-1" />
+            <SkeletonBlock className="h-4 w-12 rounded-xs" />
+          </div>
+          <div className="mt-2 flex items-end justify-between gap-2">
+            <SkeletonBlock className="h-6 w-24" />
+            <SkeletonBlock className="h-6 w-24" />
+          </div>
+          <SkeletonBlock className="mt-2.5 h-[3px] w-14 rounded-pill" />
+        </div>
+      ))}
+    </div>
   );
 }
