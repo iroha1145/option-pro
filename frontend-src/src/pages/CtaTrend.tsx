@@ -13,6 +13,7 @@ import { regimeMean } from '@/components/market/RegimePanel';
 import { usePolling } from '@/hooks/usePolling';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import PageHeader from '@/components/shared/PageHeader';
+import StaleStrip from '@/components/shared/StaleStrip';
 import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
 import Icon from '@/components/icons';
@@ -107,6 +108,10 @@ export default function CtaTrend() {
         </div>
       ) : (
         <>
+          {/* 有旧快照时刷新失败 → 明示陈旧，不清空页面（与首页同一纪律） */}
+          {ctaQ.error && (
+            <StaleStrip onRetry={() => ctaQ.refresh()} refreshing={ctaQ.refreshing} className="mt-6" />
+          )}
           {/* B1 跨标的总览 */}
           <section className="mt-6" aria-label={t('跨标的总览')}>
             <CtaOverviewStrip

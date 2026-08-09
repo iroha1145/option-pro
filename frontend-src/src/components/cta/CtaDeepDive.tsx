@@ -18,7 +18,7 @@ import { CTA_HINTS } from '@/lib/ctaHints';
 import { cn } from '@/lib/utils';
 import type { CtaInstrumentEstimate, CtaTrendPayload } from '@/api/types';
 import { t } from '../../i18n/core.ts';
-import { FLOW_META, POSITION_META, signed } from './ctaMeta';
+import { FLOW_META, POSITION_META, instrumentName, signed } from './ctaMeta';
 import PositionHistoryChart from './PositionHistoryChart';
 import ScenarioChart from './ScenarioChart';
 import TriggerLadder from './TriggerLadder';
@@ -40,14 +40,28 @@ function PositionBar({ value }: { value: number }) {
   );
 }
 
-/** 「x/y 同向」：表态（|signal|>0.1）子模型里与总趋势同号的个数。 */
+/** 「x/y 同向」：v3 起由后端下发计数（前端硬编码阈值会随 config 调整漂移，
+ *  审计 v3）；旧快照缺字段时回退本地重算。部分同向时补充加权占比，
+ *  「2/3 模型、60% 权重同向」比裸计数完整。 */
 function directionCount(row: CtaInstrumentEstimate): string {
-  const subs = row.submodels ? Object.values(row.submodels) : [];
-  const active = subs.filter((s) => Math.abs(s.signal) > 0.1);
-  if (!active.length) return '0/0';
-  const dir = (row.trend_strength ?? row.position_score ?? 0) >= 0 ? 1 : -1;
-  const agree = active.filter((s) => s.signal * dir > 0).length;
-  return `${agree}/${active.length}`;
+  let agree: number;
+  let active: number;
+  if (row.aligned_models !== null && row.active_models !== null) {
+    agree = row.aligned_models;
+    active = row.active_models;
+  } else {
+    const subs = row.submodels ? Object.values(row.submodels) : [];
+    const activeSubs = subs.filter((s) => Math.abs(s.signal) > 0.1);
+    const dir = (row.trend_strength ?? row.position_score ?? 0) >= 0 ? 1 : -1;
+    agree = activeSubs.filter((s) => s.signal * dir > 0).length;
+    active = activeSubs.length;
+  }
+  if (!active) return '0/0';
+  const base = `${agree}/${active}`;
+  if (agree < active && row.model_agreement !== null) {
+    return t('{base}（权重 {p}%）', { base, p: Math.round(row.model_agreement * 100) });
+  }
+  return base;
 }
 
 function SignalRow({ label, signal }: { label: string; signal: number }) {
@@ -105,7 +119,7 @@ export default function CtaDeepDive({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="flex items-center gap-1.5 text-h3 text-ink-900">
-            {t(row.label)}
+            {instrumentName(row.instrument, row.label)}
             <span className="font-mono text-caption font-normal text-ink-400 tnum">{row.proxy_symbol}</span>
             <InfoHint hint={CTA_HINTS.overview} />
           </h2>
@@ -116,7 +130,7 @@ export default function CtaDeepDive({
           </span>
           {rows.length > 1 && (
             <Segmented
-              options={rows.map((item) => ({ value: item.instrument, label: t(item.label) }))}
+              options={rows.map((item) => ({ value: item.instrument, label: instrumentName(item.instrument, item.label) }))}
               value={row.instrument}
               onChange={onInstrumentChange}
               className="[&_button]:text-micro"
@@ -278,7 +292,7 @@ export default function CtaDeepDive({
                 就是最新（GPT-5.6-Pro 审计问题 3 的双状态拆分）。 */}
             {row.market_data_current === true && <span> · {t('已是最新交易日')}</span>}
             {row.market_data_current === false && (
-              <span className="text-warn-600"> · {t('晚于最近交易日，等待快照更新')}</span>
+              <span className="text-warn-600"> · {t('落后于最近交易日，等待快照更新')}</span>
             )}
             {row.intraday?.provisional && <span> · {t('盘中读数为暂定，不入正式历史')}</span>}
             {' · '}{t('方法 {v} · 代理={p}', { v: data.method_version ?? '—', p: row.proxy_symbol })}

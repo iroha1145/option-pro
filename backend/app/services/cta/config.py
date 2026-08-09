@@ -25,7 +25,13 @@ from dataclasses import dataclass, field
 # 区间垫衬钳位在现价一侧、距离按最近边界、权重按 (model,component) 去重、
 # 标签跟随净变化方向（新增趋势-波动率冲突键）、新增 trend_strength /
 # active_model_weight。版本写入快照 parameters，旧快照按参数不匹配自动失效。
-METHOD_VERSION = "cta-proxy-v2"
+# v3（2026-08-09，GPT-5.6-Pro 审计二轮）：触发区标签改按区间前后真实状态
+# 迁移生成（下发 position/trend_before/after；「翻空/翻多」必须真穿越中性带，
+# 撤销 rank 深度标签「加速/进一步翻空」）；聚簇保留底层事件类型，kind 细分
+# trend_cross / trend_saturation / trend_cross_and_saturation（饱和上沿不再
+# 冒充「翻转」）；冲突键按趋势是否过零拆 firming/fading 变体；新增最近原始
+# 断点距离 nearest_event_distance_pct 与 aligned/active_models 同向计数。
+METHOD_VERSION = "cta-proxy-v3"
 
 # ── 标的：首版 ETF 代理（供应商无期货连续合约能力，见模块 docstring） ──
 

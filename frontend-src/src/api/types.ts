@@ -402,24 +402,41 @@ export interface TechnicalStructure {
 
 /* ---------- CTA 趋势资金代理估算（大盘分析页） ---------- */
 
-export type CtaTriggerKind = 'trend_flip' | 'vol_delever' | 'mixed';
+/** v3：趋势区按底层事件细分——过零（cross）与饱和（saturation）不再统称
+ *  「翻转」；trend_flip 仅作旧快照过渡兜底。 */
+export type CtaTriggerKind =
+  | 'trend_cross'
+  | 'trend_saturation'
+  | 'trend_cross_and_saturation'
+  | 'vol_delever'
+  | 'mixed'
+  | 'trend_flip';
 
 export interface CtaTriggerZone {
   id: string;
   rank: number;
-  /** 语义标签键（按当前仓位动态：空头回补/恢复加仓/买盘加速…），渲染处翻译 */
+  /** 语义标签键（v3 起由区间前后真实状态迁移生成），渲染处翻译 */
   label_key: string;
   kind: CtaTriggerKind;
   price: number;
   price_low: number;
   price_high: number;
   distance_pct: number;
+  /** 距最近**原始模型断点**的距离；聚簇垫衬贴到现价时区分「缓冲边界 0.0%」与真实阈值 */
+  nearest_event_distance_pct: number | null;
   models: string[];
   components: string[];
+  /** 底层事件类型：flip（信号过零）/ saturate_up / saturate_down */
+  event_types: string[];
   weight_share: number;
   est_position_change: number;
   trend_change: number;
   vol_change: number;
+  /** 状态迁移四元组：标签的生成依据，UI 用于「仓位 a → b」可核验展示 */
+  position_before: number | null;
+  position_after: number | null;
+  trend_before: number | null;
+  trend_after: number | null;
   needs_close_confirm: boolean;
 }
 
@@ -450,6 +467,9 @@ export interface CtaInstrumentEstimate {
   trend_strength: number | null;
   /** 表态（|signal|>ε）子模型的权重覆盖 0..1 */
   active_model_weight: number | null;
+  /** 同向/表态子模型个数（v3 起后端下发，前端不再用硬编码阈值重算） */
+  aligned_models: number | null;
+  active_models: number | null;
   /** 模型数据是否已覆盖最近一个已收盘交易日（周末快照变旧≠数据过期） */
   market_data_current: boolean | null;
   submodels: Record<string, CtaSubmodel> | null;

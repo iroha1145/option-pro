@@ -2134,30 +2134,46 @@ export function getCtaTrend(): CtaTrendPayload {
       const shrink = 1 - Math.min(0.35, Math.abs(p / spec.px - 1) * 2.2);
       full.push(round2(trendVal * shrink));
     }
-    const zone = (side: 'above' | 'below', rank: number, distPct: number, labelKey: string): CtaTriggerZone => {
+    /* v3：标签镜像后端状态迁移规则（中性带 ±15；「翻」必须真穿越），
+       kind 按事件类型细分（饱和沿不再冒充「翻转」），四元组自洽：
+       position_after − position_before ≡ est Δ，trend 同理。 */
+    const zone = (side: 'above' | 'below', rank: number, distPct: number, opts?: Partial<CtaTriggerZone>): CtaTriggerZone => {
       const price = round2(spec.px * (1 + distPct / 100));
       const width = round2(spec.px * 0.004);
       const change = round2((side === 'above' ? 1 : -1) * r.float(6, 22));
+      const pb = round2(position + (side === 'above' ? 0.4 : -0.4) * Math.abs(distPct));
+      const pa = round2(pb + change);
+      const trendChange = round2(change * 0.8);
+      const label =
+        change >= 0
+          ? pb <= -15 ? (pa >= 15 ? 'flip_to_long' : 'short_cover') : pb < 15 ? 'reopen_long' : 'add_long'
+          : pb >= 15 ? (pa <= -15 ? 'flip_to_short' : 'trim_long') : pb > -15 ? 'reopen_short' : 'add_short';
+      const satEvent = side === 'above' ? 'saturate_up' : 'saturate_down';
       return {
         id: `${side}-${rank}`,
         rank,
-        label_key: labelKey,
-        kind: rank === 2 ? 'mixed' : 'trend_flip',
+        label_key: label,
+        kind: rank === 2 ? 'mixed' : 'trend_saturation',
         price,
         price_low: round2(price - width),
         price_high: round2(price + width),
         distance_pct: distPct,
+        nearest_event_distance_pct: round2(distPct + (side === 'above' ? 0.2 : -0.2)),
         models: rank === 1 ? ['fast'] : ['fast', 'medium'],
         components: rank === 1 ? ['ewma_8/24'] : ['tsmom_63d', 'donchian_55d'],
+        event_types: rank === 2 ? ['flip', satEvent] : [satEvent],
         weight_share: rank === 1 ? 0.12 : 0.28,
         est_position_change: change,
-        trend_change: round2(change * 0.8),
-        vol_change: round2(change * 0.2),
+        trend_change: trendChange,
+        vol_change: round2(change - trendChange),
+        position_before: pb,
+        position_after: pa,
+        trend_before: round2(pb + 4),
+        trend_after: round2(pb + 4 + trendChange),
         needs_close_confirm: true,
+        ...opts,
       };
     };
-    const aboveFirst = position <= -15 ? 'short_cover' : position < 15 ? 'reopen_long' : 'add_long';
-    const belowFirst = position >= 15 ? 'trim_long' : position > -15 ? 'reopen_short' : 'add_short';
     const history = Array.from({ length: 120 }, (_, i) => {
       const date = new Date(Date.now() - (120 - i) * 86_400_000).toISOString().slice(0, 10);
       const wobble = Math.sin(i / 11) * 18 + r.float(-4, 4);
@@ -2195,6 +2211,9 @@ export function getCtaTrend(): CtaTrendPayload {
       active_model_weight: round4(
         (Math.abs(fast) > 0.1 ? 0.3 : 0) + (Math.abs(medium) > 0.1 ? 0.4 : 0) + (Math.abs(slow) > 0.1 ? 0.3 : 0),
       ),
+      /* v3：同向/表态计数由后端下发（与上面 agreementPool 同口径） */
+      aligned_models: agreementPool.filter((v) => v * dir > 0).length,
+      active_models: agreementPool.length,
       market_data_current: true,
       submodels: {
         fast: { label: '快速（≈1 个月）', weight: 0.3, signal: fast },
@@ -2209,20 +2228,51 @@ export function getCtaTrend(): CtaTrendPayload {
       },
       trigger_levels: {
         above: [
-          zone('above', 1, round2(r.float(0.8, 2)), aboveFirst),
-          /* v2 冲突样例（第二个标的）：趋势加多但波动率去杠杆占优 → 净减仓。
-             钉住前端不得把净负值区间渲染成买盘措辞。 */
+          /* 第二个标的（QQQ）钉「垫衬贴现价」样例：边界距离 0.0% 但最近
+             原始断点 +0.2%——前端必须能区分缓冲边界与真实阈值（审计 v3）。 */
           idx === 1
-            ? {
-                ...zone('above', 2, round2(r.float(3, 5)), 'trend_up_vol_dominates'),
-                kind: 'vol_delever' as const,
+            ? zone('above', 1, 0, {
+                price_low: spec.px,
+                price_high: round2(spec.px * 1.006),
+                nearest_event_distance_pct: 0.2,
+              })
+            : zone('above', 1, round2(r.float(0.8, 2))),
+          /* v3 冲突样例（QQQ）：趋势沿饱和方向继续增强（未过零）但波动率
+             去杠杆占优 → 净减仓。钉住 firming 措辞——不得写成「转多」。 */
+          idx === 1
+            ? zone('above', 2, round2(r.float(3, 5)), {
+                label_key: 'trend_firming_vol_dominates',
+                kind: 'vol_delever',
+                event_types: ['saturate_up'],
                 est_position_change: -3.3,
                 trend_change: 1.1,
                 vol_change: -4.4,
-              }
-            : zone('above', 2, round2(r.float(3, 5)), 'buy_accelerate'),
+                position_before: 58,
+                position_after: 54.7,
+                trend_before: 62,
+                trend_after: 63.1,
+              })
+            : zone('above', 2, round2(r.float(3, 5))),
         ],
-        below: [zone('below', 1, round2(-r.float(0.8, 2)), belowFirst), zone('below', 2, round2(-r.float(3, 5)), 'sell_accelerate')],
+        below: [
+          zone('below', 1, round2(-r.float(0.8, 2))),
+          /* v3 真穿越样例（IWM）：区间前后仓位跨越中性带 → 才允许「翻为空头」，
+             kind=过零（事件含 flip）。 */
+          idx === 2
+            ? zone('below', 2, round2(-r.float(3, 5)), {
+                label_key: 'flip_to_short',
+                kind: 'trend_cross',
+                event_types: ['flip'],
+                est_position_change: -38.0,
+                trend_change: -30.4,
+                vol_change: -7.6,
+                position_before: 20,
+                position_after: -18,
+                trend_before: 22,
+                trend_after: -8.4,
+              })
+            : zone('below', 2, round2(-r.float(3, 5))),
+        ],
       },
       scenario_curve: { prices, full, trend_only: trendOnly },
       history,
@@ -2234,7 +2284,7 @@ export function getCtaTrend(): CtaTrendPayload {
     };
   });
   return {
-    method_version: 'cta-proxy-v2',
+    method_version: 'cta-proxy-v3',
     generated_at: new Date(Date.now() - 20 * 60_000).toISOString(),
     proxy_note: 'etf_trend_proxy',
     source_status: 'active',

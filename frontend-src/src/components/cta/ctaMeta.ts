@@ -32,28 +32,49 @@ export const FLOW_META: Record<string, string> = {
   steady: t('边际持稳'),
 };
 
+/* v3：标签由区间前后**真实状态迁移**生成（后端下发 position_before/after）——
+   「翻空/翻多」必须真穿越中性带；rank 深度标签「加速/进一步翻空」已撤销
+   （GPT-5.6-Pro 审计：SPY 下方第二层 Δ 比第一层还小却叫「卖盘加速」）。 */
 export const ZONE_LABELS: Record<string, string> = {
   short_cover: t('空头回补'),
+  flip_to_long: t('翻为多头'),
   reopen_long: t('重新加多'),
-  add_long: t('恢复加仓'),
-  buy_accelerate: t('买盘加速'),
-  add_further: t('进一步加仓'),
+  add_long: t('多头加仓'),
   trim_long: t('多头减仓'),
+  flip_to_short: t('翻为空头'),
   reopen_short: t('重新加空'),
-  add_short: t('继续加空'),
-  sell_accelerate: t('卖盘加速'),
-  flip_further: t('进一步翻空'),
-  /* v2 冲突标签：趋势方向与净变化相反（波动率去/回杠杆占优）时后端显式
-     下发，不再把净减仓的区间叫「买盘」（GPT-5.6-Pro 审计 P1-02）。 */
+  add_short: t('空头加仓'),
+  /* 冲突标签：趋势变化与净变化相反或被波动率项吃平。「转多/转空」只在趋势
+     读数真正过零时使用；已在同向途中继续增强/走弱用 firming/fading 变体，
+     饱和途中的信号不再冒充「转向」（审计 v3）。 */
   trend_up_vol_dominates: t('趋势转多·波动率去杠杆占优'),
+  trend_firming_vol_dominates: t('趋势增强·波动率去杠杆占优'),
   trend_down_vol_dominates: t('趋势转空·波动率回杠杆占优'),
+  trend_fading_vol_dominates: t('趋势走弱·波动率回杠杆占优'),
 };
 
+/* v3：底层事件本就分过零与饱和——饱和沿是「分量停止继续变化」的价格，
+   不是新一轮买卖被触发；统称「翻转」已撤销（trend_flip 仅旧快照兜底）。 */
 export const ZONE_KIND: Record<string, string> = {
-  trend_flip: t('趋势模型翻转'),
+  trend_cross: t('趋势信号过零'),
+  trend_saturation: t('趋势信号饱和'),
+  trend_cross_and_saturation: t('趋势过零+饱和'),
   vol_delever: t('波动率去杠杆'),
   mixed: t('趋势+波动率'),
+  trend_flip: t('趋势信号变化'),
 };
+
+/* 标的显示名按 instrument 键映射（audit：后端中文 label 直渲染会漏翻——
+   英文界面出现「纳斯达克 100」残留；不再依赖后端显示名当 i18n 键）。 */
+export const INSTRUMENT_NAMES: Record<string, string> = {
+  sp500: t('标普 500'),
+  nasdaq100: t('纳斯达克 100'),
+  russell2000: t('罗素 2000'),
+  dow: t('道琼斯'),
+};
+
+export const instrumentName = (instrument: string, fallback: string): string =>
+  INSTRUMENT_NAMES[instrument] ?? t(fallback);
 
 export const MODEL_SHORT: Record<string, string> = {
   fast: t('快'),

@@ -244,9 +244,17 @@ def test_trigger_zone_deltas_match_curve() -> None:
 # ── 不变量（审计 P1-01/02 + 区间钳位 + 权重上限） ─────────────
 
 
-_BUY_KEYS = {"short_cover", "reopen_long", "add_long", "buy_accelerate", "add_further"}
-_SELL_KEYS = {"trim_long", "reopen_short", "add_short", "sell_accelerate", "flip_further"}
-_CONFLICT_KEYS = {"trend_up_vol_dominates", "trend_down_vol_dominates"}
+_BUY_KEYS = {"short_cover", "flip_to_long", "reopen_long", "add_long"}
+_SELL_KEYS = {"trim_long", "flip_to_short", "reopen_short", "add_short"}
+_CONFLICT_KEYS = {
+    "trend_up_vol_dominates",
+    "trend_firming_vol_dominates",
+    "trend_down_vol_dominates",
+    "trend_fading_vol_dominates",
+}
+# v3 撤销的 rank 深度标签：任何区间都不得再出现（审计：Δ 变小仍叫「加速」、
+# 两端仓位同号仍叫「翻空」）。
+_RETIRED_KEYS = {"buy_accelerate", "add_further", "sell_accelerate", "flip_further"}
 
 
 def _all_zone_results() -> list[dict]:
@@ -256,25 +264,31 @@ def _all_zone_results() -> list[dict]:
     return results
 
 
+def _all_zones(result: dict) -> list[tuple[str, dict]]:
+    triggers = result["trigger_levels"] or {"above": [], "below": []}
+    return [(side, zone) for side in ("above", "below") for zone in triggers[side]]
+
+
 def test_zone_labels_never_contradict_net_change() -> None:
     """标签与净仓位变化同向：买族净 Δ 不得为显著负值，卖族反之（P1-02）。
 
-    趋势与净方向冲突时必须使用显式冲突键，不得沿用买/卖措辞。
+    趋势与净方向冲突（或净变化被波动率项吃平）时必须使用显式冲突键；
+    rank 深度标签已撤销，任何情况下不得出现。
     """
 
     for result in _all_zone_results():
-        triggers = result["trigger_levels"] or {"above": [], "below": []}
-        for side in ("above", "below"):
-            for zone in triggers[side]:
-                net, trend = zone["est_position_change"], zone["trend_change"]
-                key = zone["label_key"]
-                if key in _BUY_KEYS:
-                    assert net >= -1.0, f"{zone['id']} 买族标签却净减仓 {net}"
-                elif key in _SELL_KEYS:
-                    assert net <= 1.0, f"{zone['id']} 卖族标签却净加仓 {net}"
-                else:
-                    assert key in _CONFLICT_KEYS, f"未知标签 {key}"
-                    assert net * trend < 0, f"{zone['id']} 冲突标签但趋势与净同向"
+        for _, zone in _all_zones(result):
+            net, trend = zone["est_position_change"], zone["trend_change"]
+            key = zone["label_key"]
+            assert key not in _RETIRED_KEYS, f"{zone['id']} 出现已撤销的深度标签 {key}"
+            if key in _BUY_KEYS:
+                assert net >= -1.0, f"{zone['id']} 买族标签却净减仓 {net}"
+            elif key in _SELL_KEYS:
+                assert net <= 1.0, f"{zone['id']} 卖族标签却净加仓 {net}"
+            else:
+                assert key in _CONFLICT_KEYS, f"未知标签 {key}"
+                assert (trend >= 1.0 and net < 1.0) or (trend <= -1.0 and net > -1.0), \
+                    f"{zone['id']} 冲突标签但净/趋势不构成冲突（net={net}, trend={trend}）"
 
 
 def test_below_zones_report_downward_crossing_sign() -> None:
@@ -314,6 +328,104 @@ def test_zone_weight_share_deduped_and_bounded() -> None:
             for zone in triggers[side]:
                 assert 0 < zone["weight_share"] <= 1.0, \
                     f"{zone['id']} weight_share={zone['weight_share']} 越界"
+
+
+# ── 不变量（审计 v3）：状态迁移四元组与标签互证 ────────────────
+
+
+def test_zone_state_fields_are_self_consistent() -> None:
+    """position/trend_before/after 与 est/trend Δ 恒等；断点距离不小于边界距离。"""
+
+    for result in _all_zone_results():
+        for side, zone in _all_zones(result):
+            net = zone["position_after"] - zone["position_before"]
+            assert abs(net - zone["est_position_change"]) <= 0.15, \
+                f"{zone['id']} after−before={net:.1f} ≠ est {zone['est_position_change']}"
+            trend_net = zone["trend_after"] - zone["trend_before"]
+            assert abs(trend_net - zone["trend_change"]) <= 0.15
+            assert zone["event_types"], f"{zone['id']} 缺事件类型"
+            assert set(zone["event_types"]) <= {"flip", "saturate_up", "saturate_down"}
+            # 聚簇垫衬只会让边界比原始断点更靠近现价，不会更远。
+            assert abs(zone["distance_pct"]) <= abs(zone["nearest_event_distance_pct"]) + 0.01, \
+                f"{zone['id']} 边界距离 {zone['distance_pct']} 远于断点 {zone['nearest_event_distance_pct']}"
+            if side == "above":
+                assert zone["nearest_event_distance_pct"] > 0
+            else:
+                assert zone["nearest_event_distance_pct"] < 0
+
+
+def test_flip_labels_require_actual_band_crossing() -> None:
+    """「翻空/翻多」必须真穿越中性带；减仓/回补不得越带（审计 v3 P1）。
+
+    SPY 生产反例：下方第三层区间两端情景仓位均为正，却标「进一步翻空」。
+    """
+
+    band = POSITION_NEUTRAL_BAND
+    for result in _all_zone_results():
+        for _, zone in _all_zones(result):
+            pb, pa = zone["position_before"], zone["position_after"]
+            key = zone["label_key"]
+            if key == "flip_to_short":
+                assert pb >= band and pa <= -band, f"{zone['id']} 翻空但 {pb}→{pa} 未穿越中性带"
+            elif key == "flip_to_long":
+                assert pb <= -band and pa >= band, f"{zone['id']} 翻多但 {pb}→{pa} 未穿越中性带"
+            elif key == "trim_long":
+                assert pb >= band and pa > -band, f"{zone['id']} 减仓标签但 {pb}→{pa}"
+            elif key == "short_cover":
+                assert pb <= -band and pa < band, f"{zone['id']} 回补标签但 {pb}→{pa}"
+            elif key == "add_long":
+                assert pb >= band, f"{zone['id']} 多头加仓但起点 {pb} 非净多"
+            elif key == "add_short":
+                assert pb <= -band, f"{zone['id']} 空头加仓但起点 {pb} 非净空"
+
+
+def test_zone_kind_matches_underlying_event_types() -> None:
+    """kind 与事件类型互证：饱和上沿不得冒充「过零/翻转」（审计 v3 P1/P2）。"""
+
+    for result in _all_zone_results():
+        for _, zone in _all_zones(result):
+            kinds = set(zone["event_types"])
+            if zone["kind"] == "trend_cross":
+                assert "flip" in kinds and kinds == {"flip"}
+            elif zone["kind"] == "trend_saturation":
+                assert "flip" not in kinds
+            elif zone["kind"] == "trend_cross_and_saturation":
+                assert "flip" in kinds and kinds != {"flip"}
+            else:
+                assert zone["kind"] in {"vol_delever", "mixed"}, f"未知 kind {zone['kind']}"
+            assert zone["kind"] != "trend_flip", "v2 的统称 kind 不得再出现"
+
+
+def test_uptrend_above_zones_are_saturation_not_cross() -> None:
+    """单调上升趋势：所有分量零点都在现价下方——上方区间只能由饱和沿构成，
+    不得出现 flip 事件、trend_cross kind 或「翻多」标签（审计 SPY/DIA 反例）。
+    """
+
+    result = compute_cta_estimate(_bars_from_closes(_drift_series(N, 0.004, 1, 0.004)))
+    zones = (result["trigger_levels"] or {}).get("above") or []
+    for zone in zones:
+        assert "flip" not in zone["event_types"], \
+            f"{zone['id']} 单调上升趋势的上方区间不应含过零事件"
+        assert zone["kind"] not in {"trend_cross", "trend_cross_and_saturation"}
+        assert zone["label_key"] not in {"flip_to_long", "trend_up_vol_dominates"}, \
+            f"{zone['id']} 已在多头的饱和区不得称「转多」：{zone['label_key']}"
+
+
+def test_aligned_model_counts_are_consistent() -> None:
+    """同向/表态计数由后端下发：强趋势 = 全同向；快慢分化 = 严格少于表态数。"""
+
+    strong = compute_cta_estimate(_bars_from_closes(_drift_series(N, 0.004, 1, 0.004)))
+    assert strong["active_models"] == 3
+    assert strong["aligned_models"] == 3
+    assert strong["model_agreement"] == 1.0
+
+    closes = _drift_series(N - 12, 0.004, 3, 0.003)
+    for _ in range(12):
+        closes.append(closes[-1] * 0.988)
+    split = compute_cta_estimate(_bars_from_closes(closes))
+    assert 1 <= split["aligned_models"] < split["active_models"], \
+        f"快慢分化应表现为部分同向：{split['aligned_models']}/{split['active_models']}"
+    assert split["model_agreement"] < 1.0
 
 
 # ── 不变量：完整曲线的极端端点不超过冻结波动的趋势曲线 ────────

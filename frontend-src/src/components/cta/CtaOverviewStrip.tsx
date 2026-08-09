@@ -10,7 +10,7 @@ import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import type { CtaInstrumentEstimate } from '@/api/types';
 import { t } from '../../i18n/core.ts';
-import { POSITION_META, ZONE_LABELS, signed } from './ctaMeta';
+import { POSITION_META, ZONE_LABELS, instrumentName, signed } from './ctaMeta';
 
 function nearestZone(row: CtaInstrumentEstimate) {
   const zones = [...(row.trigger_levels?.above ?? []), ...(row.trigger_levels?.below ?? [])];
@@ -46,7 +46,7 @@ function OverviewCard({
     >
       <span className="flex items-start justify-between gap-2">
         <span className="min-w-0">
-          <span className="block truncate text-body-s font-medium text-ink-900">{t(row.label)}</span>
+          <span className="block truncate text-body-s font-medium text-ink-900">{instrumentName(row.instrument, row.label)}</span>
           <span className="font-mono text-micro text-ink-400 tnum">{row.proxy_symbol} · ETF</span>
         </span>
         {active && meta ? (
@@ -92,7 +92,7 @@ function OverviewCard({
           )}
           {zone && (
             <span className="mt-2 block truncate text-micro text-ink-400">
-              {t('最近触发位')}{' '}
+              {t('最近断点区')}{' '}
               <span className={zone.est_position_change >= 0 ? 'text-up-700' : 'text-down-700'}>
                 {ZONE_LABELS[zone.label_key] ?? zone.label_key}
               </span>{' '}

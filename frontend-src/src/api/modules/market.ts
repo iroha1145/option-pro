@@ -110,7 +110,13 @@ export function mapCtaTrend(body: unknown): CtaTrendPayload {
     const price = pickN(item, 'price');
     if (id === null || labelKey === null || price === null) return null;
     const kind: CtaTriggerKind =
-      kindRaw === 'vol_delever' || kindRaw === 'mixed' ? kindRaw : 'trend_flip';
+      kindRaw === 'trend_cross' ||
+      kindRaw === 'trend_saturation' ||
+      kindRaw === 'trend_cross_and_saturation' ||
+      kindRaw === 'vol_delever' ||
+      kindRaw === 'mixed'
+        ? kindRaw
+        : 'trend_flip';
     return {
       id,
       rank: pickN(item, 'rank') ?? 0,
@@ -120,12 +126,18 @@ export function mapCtaTrend(body: unknown): CtaTrendPayload {
       price_low: pickN(item, 'price_low') ?? price,
       price_high: pickN(item, 'price_high') ?? price,
       distance_pct: pickN(item, 'distance_pct') ?? 0,
+      nearest_event_distance_pct: pickN(item, 'nearest_event_distance_pct'),
       models: unwrap(item, 'models').flatMap((v) => (typeof v === 'string' ? [v] : [])),
       components: unwrap(item, 'components').flatMap((v) => (typeof v === 'string' ? [v] : [])),
+      event_types: unwrap(item, 'event_types').flatMap((v) => (typeof v === 'string' ? [v] : [])),
       weight_share: pickN(item, 'weight_share') ?? 0,
       est_position_change: pickN(item, 'est_position_change') ?? 0,
       trend_change: pickN(item, 'trend_change') ?? 0,
       vol_change: pickN(item, 'vol_change') ?? 0,
+      position_before: pickN(item, 'position_before'),
+      position_after: pickN(item, 'position_after'),
+      trend_before: pickN(item, 'trend_before'),
+      trend_after: pickN(item, 'trend_after'),
       needs_close_confirm: item.needs_close_confirm !== false,
     };
   };
@@ -170,6 +182,9 @@ export function mapCtaTrend(body: unknown): CtaTrendPayload {
       /* v2 拆解读数：一致度只表方向，强弱与表态覆盖单独下发 */
       trend_strength: pickN(rec, 'trend_strength'),
       active_model_weight: pickN(rec, 'active_model_weight'),
+      /* v3：同向/表态计数由后端下发（前端不再用硬编码 0.1 阈值重算） */
+      aligned_models: pickN(rec, 'aligned_models'),
+      active_models: pickN(rec, 'active_models'),
       market_data_current:
         typeof rec.market_data_current === 'boolean' ? rec.market_data_current : null,
       submodels,

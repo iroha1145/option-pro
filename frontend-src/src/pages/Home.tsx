@@ -12,7 +12,7 @@ import { useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { motion } from 'framer-motion';
 import { isMock, type ApiError } from '@/api/client';
-import type { MarketSession } from '@/api/types';
+import type { BreakoutSignal, MarketSession } from '@/api/types';
 import { marketApi } from '@/api/modules/market';
 import { signalsApi } from '@/api/modules/signals';
 import { strengthApi } from '@/api/modules/strength';
@@ -28,9 +28,11 @@ import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtCountdown, fmtNyTime, fmtPrice, fmtRelative, fmtTimeHHMMSS } from '@/lib/format';
 import { fmtMDCN } from '@/components/earnings/types';
-import { signed } from '@/components/cta/ctaMeta';
+import { instrumentName, signed } from '@/components/cta/ctaMeta';
 import PageHeader from '@/components/shared/PageHeader';
+import StaleStrip from '@/components/shared/StaleStrip';
 import SessionLED from '@/components/shared/SessionLED';
+import { exNum, isFeaturedRow, type EarningsRow } from '@/components/earnings/types';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import TickerLogo from '@/components/shared/TickerLogo';
 import EmptyState from '@/components/shared/EmptyState';
@@ -136,25 +138,9 @@ function ListBody({
   if (isEmpty) return <EmptyState title={emptyTitle} />;
   return (
     <>
-      {error && <StaleStrip onRetry={onRetry} refreshing={refreshing} />}
+      {error && <StaleStrip onRetry={onRetry} refreshing={refreshing} className="mx-4 mb-1 mt-2 md:mx-5" />}
       {children}
     </>
-  );
-}
-
-/** 刷新失败但仍有旧数据：小黄条明示陈旧 + 重试，不清空内容。 */
-function StaleStrip({ onRetry, refreshing }: { onRetry: () => void; refreshing: boolean }) {
-  return (
-    <p className="mx-4 mb-1 mt-2 flex items-center justify-between gap-2 rounded-sm bg-warn-50 px-2.5 py-1.5 text-micro text-warn-700 md:mx-5">
-      {t('刷新失败，显示上次成功的结果')}
-      <button
-        onClick={onRetry}
-        disabled={refreshing}
-        className="shrink-0 font-medium underline-offset-2 hover:underline disabled:opacity-60"
-      >
-        {t('重试')}
-      </button>
-    </p>
   );
 }
 
@@ -203,27 +189,54 @@ export default function Home() {
   const mean = useMemo(() => (regimeQ.data ? regimeMean(regimeQ.data) : null), [regimeQ.data]);
   const bias = mean === null ? null : mean >= 60 ? t('偏多') : mean <= 40 ? t('偏空') : t('中性');
 
-  /* 雷达信号：最新 8 条 */
-  const breakouts = useMemo(() => (breakoutsQ.data ?? []).slice(0, 8), [breakoutsQ.data]);
+  /* 雷达信号：按 ticker 去重后取前 8（接口按时间倒序，保留每只最新一条）。
+     同一只股票的多次形态事件全上首页会把摘要榜刷满重复代码（审计：ROAD ×3、
+     TNDM/TEAM ×2）；完整事件流留在雷达页。 */
+  const breakouts = useMemo(() => {
+    const seen = new Set<string>();
+    const rows: BreakoutSignal[] = [];
+    for (const s of breakoutsQ.data ?? []) {
+      if (seen.has(s.ticker)) continue;
+      seen.add(s.ticker);
+      rows.push(s);
+      if (rows.length === 8) break;
+    }
+    return rows;
+  }, [breakoutsQ.data]);
 
-  /* 财报临近：只取今天（纽约日历）及以后，按日期升序前 6 条。接口从
-     days_until=-3 起步，不过滤会让三天前已公布的小公司霸占「临近」榜
-     （GPT-5.6-Pro 审计首页问题 2）。 */
+  /* 财报临近：只取今天（纽约日历）及以后。纽约日随分钟时钟重算——页面跨越
+     纽约午夜保持打开时过滤不得停在昨天（审计低优先级项）。 */
+  const nowMinute = useNow(60_000);
   const nyToday = useMemo(
     () =>
       new Intl.DateTimeFormat('en-CA', {
         timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
-      }).format(new Date()),
-    [],
+      }).format(new Date(nowMinute)),
+    [nowMinute],
+  );
+  /* 排序复用财报页的重点口径（publicFeatured ∪ 公共关注池）：重点公司优先 →
+     日期升序 → 市值降序 → 普通公司补足。此前同日内部沿用上游顺序，数千家
+     覆盖里的小公司会排在大型公司前面（审计首页问题 4）。 */
+  const poolTickers = useMemo(
+    () => new Set((watchlistQ.data ?? []).map((item) => item.ticker.toUpperCase())),
+    [watchlistQ.data],
   );
   const earnings = useMemo(
     () =>
       (earningsQ.data?.items ?? [])
         .filter((it) => it.date >= nyToday)
         .slice()
-        .sort((a, b) => a.date.localeCompare(b.date))
+        .sort((a, b) => {
+          const ra = a as EarningsRow;
+          const rb = b as EarningsRow;
+          const fa = isFeaturedRow(ra, poolTickers) ? 0 : 1;
+          const fb = isFeaturedRow(rb, poolTickers) ? 0 : 1;
+          if (fa !== fb) return fa - fb;
+          if (a.date !== b.date) return a.date.localeCompare(b.date);
+          return (exNum(rb, 'marketCap') ?? -1) - (exNum(ra, 'marketCap') ?? -1);
+        })
         .slice(0, 6),
-    [earningsQ.data, nyToday],
+    [earningsQ.data, nyToday, poolTickers],
   );
 
   /* 关注池异动：stocksApi.watchlist() 返回站点公共关注池（非登录账号的个
@@ -294,6 +307,11 @@ export default function Home() {
             />
           </div>
         ) : (
+          <>
+            {/* 有旧数据时刷新失败 → 明示陈旧，不清空指数卡（审计首页问题 5 补全） */}
+            {indicesQ.error && (
+              <StaleStrip onRetry={indicesQ.refresh} refreshing={indicesQ.refreshing} className="mb-3" />
+            )}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
             {(indicesQ.data ?? []).map((q, i) => {
               /* 数据纪律：无有效价（live 快照缺失）显「—」，不显 0.00 */
@@ -325,6 +343,7 @@ export default function Home() {
               );
             })}
           </div>
+          </>
         )}
       </section>
 
@@ -342,6 +361,15 @@ export default function Home() {
           breadth={breadth}
           strength={strengthQ.data}
           signalMetrics={signalsQ.data?.metrics ?? null}
+          /* 该卡实际拼了四个辅助接口（六维/信号/强度/关注池宽度）：任一失败
+             此前只会悄悄显示「—」或保留旧值——补统一陈旧提示（审计问题 5） */
+          auxError={Boolean(regimeQ.error || signalsQ.error || strengthQ.error || watchlistQ.error)}
+          auxRefreshing={regimeQ.refreshing || signalsQ.refreshing || strengthQ.refreshing || watchlistQ.refreshing}
+          onRetryAux={() => {
+            for (const q of [regimeQ, signalsQ, strengthQ, watchlistQ]) {
+              if (q.error) q.refresh();
+            }
+          }}
         />
 
         <SectionCard title={t('雷达信号')} to="/breakouts" className="lg:col-span-2">
@@ -354,12 +382,13 @@ export default function Home() {
             emptyTitle={t('雷达仍在盯')}
             rows={8}
           >
+            {/* 行链接不加 aria-label：整行可见内容（代码/名称/形态/时间/分数）
+                自然组成可访问名——覆盖式标签会让读屏只听到代码（审计） */}
             <div className="divide-y divide-line">
               {breakouts.map((s) => (
                 <Link
                   key={s.id}
                   to={`/stock/${encodeURIComponent(s.ticker)}`}
-                  aria-label={t('查看 {ticker} 股票详情', { ticker: s.ticker })}
                   className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast hover:bg-paper-2/70 md:px-5"
                 >
                   <TickerLogo ticker={s.ticker} size={28} />
@@ -395,7 +424,6 @@ export default function Home() {
                 <Link
                   key={`${it.ticker}-${it.date}`}
                   to={`/stock/${encodeURIComponent(it.ticker)}`}
-                  aria-label={t('查看 {ticker} 股票详情', { ticker: it.ticker })}
                   className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast hover:bg-paper-2/70 md:px-5"
                 >
                   <TickerLogo ticker={it.ticker} size={28} />
@@ -429,14 +457,13 @@ export default function Home() {
             refreshing={watchlistQ.refreshing}
             onRetry={watchlistQ.refresh}
             isEmpty={movers.length === 0}
-            emptyTitle={t('暂无自选')}
+            emptyTitle={t('暂无关注标的')}
           >
             <div className="divide-y divide-line">
               {movers.map((item) => (
                 <Link
                   key={item.ticker}
                   to={`/stock/${encodeURIComponent(item.ticker)}`}
-                  aria-label={t('查看 {ticker} 股票详情', { ticker: item.ticker })}
                   className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast hover:bg-paper-2/70 md:px-5"
                 >
                   <TickerLogo ticker={item.ticker} size={28} />
@@ -491,10 +518,17 @@ export default function Home() {
           ) : ctaInstruments.length === 0 ? (
             <p className="mt-3 rounded-md bg-paper-2 px-3 py-2.5 text-caption text-ink-500">{t('暂无数据')}</p>
           ) : (
+            <>
+            {/* 有旧数据时刷新失败 → 明示陈旧（与列表卡同一纪律） */}
+            {ctaQ.error && (
+              <StaleStrip onRetry={() => ctaQ.refresh()} refreshing={ctaQ.refreshing} className="mt-3" />
+            )}
             <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
               {ctaInstruments.slice(0, 4).map((ins) => (
                 <div key={ins.instrument} className="rounded-md bg-paper-2 px-3 py-2">
-                  <p className="truncate text-caption text-ink-500">{ins.label}</p>
+                  {/* 标的名按 instrument 键走本地词典：直渲染后端中文 label
+                      在英文界面会漏翻（审计 i18n 漏点 1） */}
+                  <p className="truncate text-caption text-ink-500">{instrumentName(ins.instrument, ins.label)}</p>
                   <p
                     className={cn(
                       'mt-0.5 font-mono text-data-m tnum',
@@ -513,6 +547,7 @@ export default function Home() {
                 </div>
               ))}
             </div>
+            </>
           )}
         </div>
       </section>
@@ -533,6 +568,9 @@ function MarketStatusPanel({
   breadth,
   strength,
   signalMetrics,
+  auxError,
+  auxRefreshing,
+  onRetryAux,
 }: {
   status: import('@/components/market/api').MarketStatusDetail | null;
   session: MarketSession | null;
@@ -545,6 +583,9 @@ function MarketStatusPanel({
   breadth: { adv: number | null; dec: number | null; flat: number | null; total: number | null };
   strength: { aggregateAvailable?: boolean; avgScore: number; ge85Count: number } | null;
   signalMetrics: { label: string; value: number }[] | null;
+  auxError: boolean;
+  auxRefreshing: boolean;
+  onRetryAux: () => void;
 }) {
   const now = useNow(1000);
 
@@ -620,10 +661,27 @@ function MarketStatusPanel({
           {t('平均强度 {avg} · ≥85 {n} 只', { avg: strength.avgScore.toFixed(1), n: strength.ge85Count })}
         </p>
       )}
+      {/* 两列短行 + 两位小数：此前直拼 `${label} ${value}` 会把后端原始小数
+          （1.9381）挤成一整段（审计首页问题 6） */}
       {signalMetrics && signalMetrics.length > 0 && (
-        <p className="mt-1.5 text-micro text-ink-400">
-          {signalMetrics.slice(0, 4).map((m) => `${m.label} ${m.value}`).join(' · ')}
-        </p>
+        <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
+          {signalMetrics.slice(0, 4).map((m) => (
+            <p key={m.label} className="flex items-baseline justify-between gap-2 text-micro text-ink-400">
+              <span className="min-w-0 truncate">{m.label}</span>
+              <span className="shrink-0 font-mono text-ink-600 tnum">
+                {Number.isInteger(m.value) ? m.value : m.value.toFixed(2)}
+              </span>
+            </p>
+          ))}
+        </div>
+      )}
+      {auxError && (
+        <StaleStrip
+          onRetry={onRetryAux}
+          refreshing={auxRefreshing}
+          label={t('部分读数刷新失败，显示上次成功的结果')}
+          className="mt-3"
+        />
       )}
     </section>
   );

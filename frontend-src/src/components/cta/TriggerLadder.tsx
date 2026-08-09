@@ -33,14 +33,16 @@ function PulseDot({ className }: { className?: string }) {
   );
 }
 
-/** 方向小三角（CSS border 三角，▲=现价上方触发区 / ▼=下方） */
+/** 方向小三角（CSS border 三角，▲=现价上方触发区 / ▼=下方）。
+ *  中性墨色：三角只表示价格位置，不表示交易动作——「涨上去反而净减仓」
+ *  的区间里绿三角+红Δ会构成混合语义（审计 v3），红绿只留给净仓位变化。 */
 function DirTick({ up }: { up: boolean }) {
   return (
     <span
       aria-hidden="true"
       className={cn(
         'inline-block size-0 shrink-0 border-x-[3.5px] border-x-transparent',
-        up ? 'border-b-[5px] border-b-up-600' : 'border-t-[5px] border-t-down-600',
+        up ? 'border-b-[5px] border-b-ink-400' : 'border-t-[5px] border-t-ink-400',
       )}
     />
   );
@@ -80,7 +82,7 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
     return (
       <div>
         <p className="flex items-center gap-1 text-micro text-ink-400">
-          {t('模型触发位（需收盘确认）')}
+          {t('模型断点区（需收盘确认）')}
           <InfoHint hint={CTA_HINTS.triggers} size={10} />
         </p>
         <p className="mt-2 text-micro text-ink-400">{t('±12% 情景范围内没有会显著改变目标仓位的价格')}</p>
@@ -117,8 +119,8 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
             </span>
             {crossed && <PulseDot className="shrink-0" />}
           </span>
-          {/* 3 距离（右对齐定宽）——手机竖屏留在第一行 */}
-          <span className={cn('order-3 w-12 shrink-0 text-right font-mono text-caption tnum sm:order-4', tone)}>
+          {/* 3 距离（右对齐定宽）——价格位置读数用中性色，红绿只留给净 Δ */}
+          <span className="order-3 w-12 shrink-0 text-right font-mono text-caption text-ink-600 tnum sm:order-4">
             {zone.distance_pct > 0 ? '+' : ''}{zone.distance_pct.toFixed(1)}%
           </span>
           {/* 4 估算 Δ（右对齐定宽）——手机竖屏留在第一行 */}
@@ -162,7 +164,13 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
                     </span>
                   )}
                 </div>
-                <p className="mt-1.5 font-mono text-micro text-ink-500 tnum">
+                {/* 状态迁移读数：标签的生成依据，让「翻空/减仓」可当场核验 */}
+                {zone.position_before !== null && zone.position_after !== null && (
+                  <p className="mt-1.5 font-mono text-micro text-ink-600 tnum">
+                    {t('仓位 {a} → {b}', { a: signed(zone.position_before), b: signed(zone.position_after) })}
+                  </p>
+                )}
+                <p className="mt-0.5 font-mono text-micro text-ink-500 tnum">
                   {t('估算 Δ{v}', { v: signed(zone.est_position_change) })}
                   {' · '}
                   {t('趋势 {a} · 波动率 {b}', { a: signed(zone.trend_change), b: signed(zone.vol_change) })}
@@ -171,6 +179,16 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
                   {zone.models.map((m) => MODEL_SHORT[m] ?? m).join('/')}
                   {' · '}
                   {t('权重 {w}%', { w: Math.round(zone.weight_share * 100) })}
+                  {/* 垫衬/钳位可让区间边界贴到现价（0.0%）：单列最近原始断点，
+                      避免把聚簇缓冲边界读成精确阈值（审计 QQQ 0.0% 案例） */}
+                  {zone.nearest_event_distance_pct !== null && (
+                    <>
+                      {' · '}
+                      {t('最近断点 {v}%', {
+                        v: `${zone.nearest_event_distance_pct > 0 ? '+' : ''}${zone.nearest_event_distance_pct.toFixed(1)}`,
+                      })}
+                    </>
+                  )}
                 </p>
               </div>
             </motion.div>
@@ -183,7 +201,7 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
   return (
     <div>
       <p className="flex items-center gap-1 text-micro text-ink-400">
-        {t('模型触发位（需收盘确认）')}
+        {t('模型断点区（需收盘确认）')}
         <InfoHint hint={CTA_HINTS.triggers} size={10} />
       </p>
 
