@@ -927,8 +927,7 @@ class PersonalCatalystService:
             projected["status"] = "active" if items else "empty"
         return projected
 
-    @staticmethod
-    def _project_focus_cycle(cycle: Any) -> dict[str, Any] | None:
+    def _project_focus_cycle(self, cycle: Any) -> dict[str, Any] | None:
         if not isinstance(cycle, Mapping):
             return None
         projected = dict(cycle)
@@ -944,6 +943,37 @@ class PersonalCatalystService:
         result = projected.get("result")
         if result is None:
             return projected
+        # 读取时重校验必须复原写入时的完整上下文：周期行的瘦 payload 没有
+        # 新闻源文本（events），写入时靠源绑定放行的实体（生产实测 PPI、
+        # 药名）会被误判成英文散文、把已完成周期整体隐藏（2026-08-13
+        # 「焦点周期没东西」事故）。从关联任务取回原始 payload 作为校验
+        # 上下文；身份与绑定字段一律以周期行为准覆盖，红线不因此放松。
+        validation_payload: dict[str, Any] = {}
+        job_id = str(projected.get("job_id") or "")
+        if job_id:
+            try:
+                job_row = self.ai_repository.get_job(job_id)
+            except Exception:  # noqa: BLE001 - 任务库暂不可用时退回瘦上下文
+                job_row = None
+            raw_payload = (
+                job_row.get("payload_json") if isinstance(job_row, Mapping) else None
+            )
+            if isinstance(raw_payload, str) and raw_payload:
+                try:
+                    parsed = json.loads(raw_payload)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, dict):
+                    validation_payload = parsed
+        validation_payload.update(
+            {
+                "cycle_id": projected.get("cycle_id"),
+                "as_of": projected.get("snapshot_as_of"),
+                "input_hash": projected.get("input_hash"),
+                "allowed_event_group_ids": allowed_event_group_ids,
+                "allowed_tickers": allowed_tickers,
+            }
+        )
         try:
             result_data = validate_result(
                 "market_focus",
@@ -953,13 +983,7 @@ class PersonalCatalystService:
                     separators=(",", ":"),
                     allow_nan=False,
                 ),
-                {
-                    "cycle_id": projected.get("cycle_id"),
-                    "as_of": projected.get("snapshot_as_of"),
-                    "input_hash": projected.get("input_hash"),
-                    "allowed_event_group_ids": allowed_event_group_ids,
-                    "allowed_tickers": allowed_tickers,
-                },
+                validation_payload,
             )
         except (TypeError, ValueError):
             projected["result"] = None

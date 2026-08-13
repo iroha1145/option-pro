@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -1091,14 +1092,70 @@ def test_focus_result_must_match_cycle_time_and_input_hash() -> None:
         "result": _focus_result(input_hash=expected_hash),
     }
 
-    projected = PersonalCatalystService._project_focus_cycle(cycle)
+    projected = _service("manual")._project_focus_cycle(cycle)
     assert projected["result"]["input_hash"] == expected_hash
 
     mismatched = {
         **cycle,
         "result": _focus_result(input_hash="b" * 64),
     }
-    hidden = PersonalCatalystService._project_focus_cycle(mismatched)
+    hidden = _service("manual")._project_focus_cycle(mismatched)
+    assert hidden["result"] is None
+    assert hidden["error_code"] == "legacy_output_hidden"
+
+
+def test_focus_projection_recovers_write_time_sources_from_linked_job() -> None:
+    """读取投影必须复原写入时上下文（2026-08-13「焦点周期没东西」事故）。
+
+    写入时靠新闻源文本绑定放行的实体（PPI、药名），周期行瘦 payload 里
+    没有源文本——投影若用瘦上下文重校验，会把已完成周期整体误藏。
+    """
+
+    expected_hash = "a" * 64
+    job_id = "aij_" + "f" * 32
+    result = _focus_result(input_hash=expected_hash)
+    result["summary_zh"] = "据报道，berobenatide的月度给药数据带来减重管线关注。"
+    cycle = {
+        "cycle_id": "mfc_" + "a" * 32,
+        "snapshot_as_of": "2026-07-15T04:00:00Z",
+        "input_hash": expected_hash,
+        "status": "completed",
+        "job_id": job_id,
+        "result": result,
+    }
+    repository = FakeAIRepository(
+        {
+            job_id: {
+                "job_id": job_id,
+                "job_type": "market_focus",
+                "status": "completed",
+                "payload_json": json.dumps(
+                    {
+                        "cycle_id": cycle["cycle_id"],
+                        "as_of": cycle["snapshot_as_of"],
+                        "input_hash": expected_hash,
+                        "allowed_event_group_ids": [],
+                        "allowed_tickers": [],
+                        "events": [
+                            {
+                                "summary": (
+                                    "Pfizer's obesity candidate berobenatide showed "
+                                    "monthly dosing potential in a phase 2b study."
+                                )
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+            }
+        }
+    )
+    projected = _service("manual", repository=repository)._project_focus_cycle(cycle)
+    assert projected["result"] is not None, "源绑定实体不得在读取投影时被误藏"
+
+    # 任务行缺失（无链接）时退回瘦上下文：源绑定实体无从佐证 → 仍隐藏。
+    unlinked = {key: value for key, value in cycle.items() if key != "job_id"}
+    hidden = _service("manual")._project_focus_cycle(unlinked)
     assert hidden["result"] is None
     assert hidden["error_code"] == "legacy_output_hidden"
 
@@ -1152,7 +1209,7 @@ def test_projection_preserves_results_with_their_task_ticker_context() -> None:
         "validation_allowed_event_group_ids": ["event-01"],
         "result": focus,
     }
-    projected_focus = PersonalCatalystService._project_focus_cycle(cycle)
+    projected_focus = _service("manual")._project_focus_cycle(cycle)
     assert projected_focus is not None
     assert projected_focus["result"]["title_zh"].startswith("NVDA")
     assert "validation_allowed_tickers" not in projected_focus
@@ -1236,7 +1293,7 @@ def test_focus_projection_hides_structured_identity_outside_cycle_context(
         "result": focus,
     }
 
-    projected = PersonalCatalystService._project_focus_cycle(cycle)
+    projected = _service("manual")._project_focus_cycle(cycle)
 
     assert projected is not None
     assert projected["result"] is None

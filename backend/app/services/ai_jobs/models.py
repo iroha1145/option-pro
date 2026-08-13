@@ -454,10 +454,14 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         "OpenAI",
         "Ozempic/Wegovy",
         "P/E",
+        "NFP",
         "PBOC",
         "PCE",
         "PEG",
         "PMI",
+        # 2026-08-13 生产事故：CPI/PCE/PMI 在列偏偏漏了 PPI——写入时靠新闻
+        # 源文本绑定放行，读取投影无源文本即被拒，完整焦点周期被整体隐藏。
+        "PPI",
         "Palantir",
         "PayPal",
         "Pharming",
