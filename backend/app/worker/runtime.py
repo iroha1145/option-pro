@@ -552,12 +552,22 @@ class WorkerSupervisor:
 
             self.stop.set()
             failed = next(loop for loop in loops.values() if loop in done)
+            # 带上任务名：崩溃循环时（生产实测一夜 85 次重启）日志必须能一眼
+            # 看出死的是哪个循环，而不是匿名的「task loop failed」。
+            failed_name = next(
+                (spec.name for spec, loop in loops.items() if loop is failed),
+                failed.get_name(),
+            )
             if failed.cancelled():
-                raise RuntimeError("worker task loop was cancelled unexpectedly")
+                raise RuntimeError(
+                    f"worker task loop was cancelled unexpectedly: {failed_name}"
+                )
             error = failed.exception()
             if error is None:
-                raise RuntimeError("worker task loop exited unexpectedly")
-            raise RuntimeError("worker task loop failed") from error
+                raise RuntimeError(
+                    f"worker task loop exited unexpectedly: {failed_name}"
+                )
+            raise RuntimeError(f"worker task loop failed: {failed_name}") from error
         finally:
             if not stop_waiter.done():
                 stop_waiter.cancel()

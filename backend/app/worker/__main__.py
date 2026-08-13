@@ -100,8 +100,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print({"healthy": False, "status": "lease_lost", "error_code": "worker_lease_lost"})
         return 1
     except (OSError, ValueError, RuntimeError) as error:
-        logging.getLogger("optix.worker").error(
-            "worker startup failed error_type=%s", type(error).__name__
+        # .exception() 连 __cause__ 链一起打全栈：此前只打类型名，任务循环
+        # 运行期死亡也被贴「startup failed」标签，生产崩溃循环一夜 85 次
+        # 重启却看不到死因（2026-08-13 突破雷达停摆事故）。
+        logging.getLogger("optix.worker").exception(
+            "worker exited abnormally error_type=%s error=%s cause=%s",
+            type(error).__name__,
+            error,
+            error.__cause__,
         )
         _print(
             {
