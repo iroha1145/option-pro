@@ -281,6 +281,7 @@ export const CATALYSTS: Dict = {
   '后台 worker 不可用': ['Background worker unavailable', 'バックグラウンドワーカーを利用できません'],
   '今日 Token 预算已用完': ["Today's token budget is used up", '本日のトークン予算を使い切りました'],
   '今日预算已用完': ["Today's budget is used up", '本日の予算を使い切りました'],
+  'AI 供应商余额耗尽，需充值': ['AI provider credits exhausted — top up required', 'AIプロバイダーの残高が枯渇——チャージが必要です'],
   '分析任务进行中': ['Analysis job in progress', '分析ジョブを実行中'],
   '催化剂模块未启用': ['Catalysts module disabled', 'カタリストモジュールが無効です'],
   '模型分析不可用': ['Model analysis unavailable', 'モデル分析を利用できません'],

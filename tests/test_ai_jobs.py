@@ -1204,10 +1204,16 @@ def test_provider_terminal_non_success_persists_usage(
     assert stored["budget_charge_microusd"] == 1_005
 
 
-def test_terminal_response_without_usage_keeps_full_reservation(
+def test_terminal_failure_without_usage_releases_token_reservation(
     tmp_path,
     monkeypatch,
 ):
+    """供应商明确失败且零计费上报 → token 账释放预留（2026-08-14 预算误锁）。
+
+    美元侧的保守预留（budget_charge_microusd）语义不变；completed 无 usage
+    （计费了、数额未知）仍按满额预留，见 direct_background_completion 测试。
+    """
+
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     job, _ = _create_earnings_job(repository)
     settings = _settings(repository.path)
@@ -1233,9 +1239,7 @@ def test_terminal_response_without_usage_keeps_full_reservation(
         daily_limit=0,
         daily_budget_usd=0,
     )
-    assert snapshot["token_budget_used_tokens"] == runtime.token_reservation(
-        "earnings_impact"
-    )
+    assert snapshot["token_budget_used_tokens"] == 0
 
 
 def test_used_tokens_plus_every_task_reservation_never_exceeds_cap(tmp_path):
@@ -2461,7 +2465,14 @@ def test_daily_token_limit_is_reserved_before_provider_submission(
         seed_owner,
         "resp_token_seed",
     )
-    repository.fail(row["job_id"], seed_owner, "fixture_terminal")
+    # 终态失败若零计费不再占预算（2026-08-14 预算误锁修正）：种子改带
+    # 真实结算用量，令「已用+下一预留 > 上限」的场景保持成立。
+    repository.fail(
+        row["job_id"],
+        seed_owner,
+        "fixture_terminal",
+        usage={"input_tokens": 100_000, "output_tokens": 60_000, "total_tokens": 160_000},
+    )
 
     blocked = create("LIMIT")
     owner = "worker-limit"
@@ -2532,6 +2543,7 @@ def test_concurrent_token_reservations_cannot_cross_the_limit(tmp_path) -> None:
         rows[started_index]["job_id"],
         owners[started_index],
         "fixture_terminal",
+        usage={"input_tokens": 100_000, "output_tokens": 50_000, "total_tokens": 150_000},
     )
     with repository._connect() as connection:
         connection.execute(

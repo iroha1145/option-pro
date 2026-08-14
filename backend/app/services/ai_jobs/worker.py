@@ -293,6 +293,9 @@ async def _finish_response(
         return
     usage = runtime.response_usage(response)
     terminal_error = runtime.response_terminal_error(response)
+    # 供应商侧错误信息落盘（第三个缺口）：余额耗尽等终态失败的 message
+    # 此前不可见，只能重取响应现场复现（2026-08-14 预算误锁事故）。
+    provider_detail = runtime.response_error_detail(response)
     if status == "completed":
         if terminal_error:
             repository.fail(
@@ -300,6 +303,7 @@ async def _finish_response(
                 owner,
                 terminal_error,
                 usage=usage,
+                detail=provider_detail,
             )
             return
         payload = json.loads(job["payload_json"])
@@ -337,6 +341,7 @@ async def _finish_response(
             owner,
             terminal_error or f"provider_{status}",
             usage=usage,
+            detail=provider_detail,
         )
         return
     repository.fail(
@@ -344,6 +349,7 @@ async def _finish_response(
         owner,
         "provider_status_unsupported",
         usage=usage,
+        detail=provider_detail,
     )
 
 

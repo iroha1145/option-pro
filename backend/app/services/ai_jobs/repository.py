@@ -8,7 +8,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterable, Iterator, Mapping
 from urllib.parse import quote
 
 from app.services.ai_jobs.models import (
@@ -212,6 +212,37 @@ def _minimum_task_token_reservation() -> int:
     from app.services.ai_jobs.runtime import minimum_token_reservation
 
     return minimum_token_reservation()
+
+
+def _daily_tokens_used(token_rows: Iterable[Mapping[str, Any]]) -> int:
+    """当日 token 账：已结算按实际用量，预留只留给仍可能计费的行。
+
+    终态（failed/cancelled/completed/budget_blocked）且无 usage 的行计 0——
+    供应商余额耗尽的瞬时失败零计费，若按满额预留计入，失败风暴会吃光
+    全天预算（2026-08-14 生产：94 个 provider_failed 把 10M 账本记到
+    9.97M，实际结算 0，全线误报「今日 Token 预算已用完」）。结果未知
+    （submission_outcome_unknown，可能已计费未对账）与在途/待重试行
+    保留满额预留，防超支方向不放松。
+    """
+
+    total = 0
+    for item in token_rows:
+        usage = item["usage_total_tokens"]
+        if usage is not None:
+            total += int(usage)
+            continue
+        status = str(item["status"] or "")
+        error_code = str(item["error_code"] or "")
+        # 只对「供应商明确终结且无计费上报」的行释放：failed/cancelled 且
+        # 非结果未知。completed 无 usage（计费了、数额未知）、在途、待重试
+        # 与 submission_outcome_unknown 一律保留满额预留——防超支不放松。
+        released = (
+            status in {"failed", "cancelled"}
+            and error_code != "submission_outcome_unknown"
+        )
+        if not released:
+            total += _task_token_reservation(str(item["job_type"]))
+    return total
 
 
 def _settled_budget_charge_microusd(
@@ -1801,16 +1832,11 @@ class AIJobRepository:
                     connection.commit()
                     return "cooldown"
             token_rows = connection.execute(
-                """SELECT job_type,usage_total_tokens FROM ai_jobs
+                """SELECT job_type,status,error_code,usage_total_tokens FROM ai_jobs
                    WHERE submission_started_at>=? AND submission_started_at<?""",
                 (day_start, day_end),
             ).fetchall()
-            tokens_used = sum(
-                int(item["usage_total_tokens"])
-                if item["usage_total_tokens"] is not None
-                else _task_token_reservation(str(item["job_type"]))
-                for item in token_rows
-            )
+            tokens_used = _daily_tokens_used(token_rows)
             if tokens_used + token_reservation > token_limit:
                 connection.execute(
                     """
@@ -2528,10 +2554,19 @@ class AIJobRepository:
                 (_iso(day_start_dt), _iso(day_end_dt)),
             ).fetchone()
             token_rows = connection.execute(
-                """SELECT job_type,usage_total_tokens FROM ai_jobs
+                """SELECT job_type,status,error_code,usage_total_tokens FROM ai_jobs
                    WHERE submission_started_at>=? AND submission_started_at<?""",
                 (_iso(day_start_dt), _iso(day_end_dt)),
             ).fetchall()
+            # 供应商余额耗尽的滑动窗口信号：2h 内出现过即置位。充值后重试
+            # 成功、窗口滑走即自愈；据此给前端专属状态而不是误导性的
+            # 「今日预算已用完」（2026-08-14 生产事故）。
+            credit_exhausted_recent = connection.execute(
+                """SELECT 1 FROM ai_jobs
+                   WHERE error_code='provider_credit_exhausted'
+                     AND updated_at>=? LIMIT 1""",
+                (_iso(observed - timedelta(hours=2)),),
+            ).fetchone() is not None
             active = connection.execute(
                 """
                 SELECT j.*,s.submission_source FROM ai_jobs AS j
@@ -2569,12 +2604,7 @@ class AIJobRepository:
         token_limit = int(daily_token_limit)
         if not 102_400 <= token_limit <= 100_000_000:
             raise ValueError("daily_token_limit is invalid")
-        token_budget_used = sum(
-            int(item["usage_total_tokens"])
-            if item["usage_total_tokens"] is not None
-            else _task_token_reservation(str(item["job_type"]))
-            for item in token_rows
-        )
+        token_budget_used = _daily_tokens_used(token_rows)
         cooldown_until: datetime | None = None
         if latest_paid is not None and int(cooldown_seconds) > 0:
             activity_at = _parse_time(latest_paid["activity_at"])
@@ -2602,6 +2632,7 @@ class AIJobRepository:
             ),
             "token_budget_available": token_budget_available,
             "budget_available": token_budget_available,
+            "provider_credit_exhausted": credit_exhausted_recent,
             "job_limit_available": True,
             "dollar_budget_available": True,
             "concurrency_available": active is None,

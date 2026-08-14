@@ -275,6 +275,7 @@ class PersonalCatalystService:
             "token_budget_remaining_tokens": daily_token_limit,
             "token_budget_available": True,
             "budget_available": True,
+            "provider_credit_exhausted": False,
             "job_limit_available": True,
             "dollar_budget_available": True,
             "concurrency_available": True,
@@ -324,6 +325,9 @@ class PersonalCatalystService:
             reason = "not_configured"
         elif not worker_healthy:
             reason = "worker_unavailable"
+        elif capacity.get("provider_credit_exhausted"):
+            # 余额耗尽优先于本地预算文案：它不会随日期翻转自愈，需要充值
+            reason = "provider_credit_exhausted"
         elif not capacity["token_budget_available"]:
             reason = "daily_token_limit"
         elif not capacity["concurrency_available"]:

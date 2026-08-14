@@ -31,6 +31,9 @@ const ANALYSIS_REASON_CN: Record<string, { label: string; tone: 'muted' | 'down'
   worker_unavailable: { label: t('后台 worker 不可用'), tone: 'down' },
   daily_token_limit: { label: t('今日 Token 预算已用完'), tone: 'warn' },
   daily_budget_usd_reached: { label: t('今日预算已用完'), tone: 'warn' },
+  /* 供应商余额耗尽 ≠ 本站预算用完：需要去 OpenAI 充值，等到明天也不会自愈
+     （2026-08-14 生产 155 连败曾被误报成「今日 Token 预算已用完」）。 */
+  provider_credit_exhausted: { label: t('AI 供应商余额耗尽，需充值'), tone: 'down' },
   analysis_in_progress: { label: t('分析任务进行中'), tone: 'warn' },
   cooldown_active: { label: t('冷却中'), tone: 'warn' },
   catalyst_disabled: { label: t('催化剂模块未启用'), tone: 'down' },

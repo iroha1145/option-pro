@@ -1968,6 +1968,8 @@ def test_daily_submission_count_is_not_capped_at_four(tmp_path):
 
 
 def test_daily_token_limit_is_atomic(tmp_path):
+    """已结算用量 + 下一笔预留 > 上限时，提交被原子拦截为 budget_blocked。"""
+
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     first = _create_job(repository, "AAA")
     second = _create_job(repository, "BBB")
@@ -1984,7 +1986,12 @@ def test_daily_token_limit_is_atomic(tmp_path):
         first_owner,
         "resp_atomic_token_limit",
     )
-    repository.fail(first["job_id"], first_owner, "provider_failed")
+    repository.fail(
+        first["job_id"],
+        first_owner,
+        "provider_failed",
+        usage={"input_tokens": 100_000, "output_tokens": 50_000, "total_tokens": 150_000},
+    )
 
     second_owner = "token-owner-two"
     assert repository.claim_due(second_owner, 60)["job_id"] == second["job_id"]
@@ -1997,6 +2004,54 @@ def test_daily_token_limit_is_atomic(tmp_path):
     assert blocked["status"] == "budget_blocked"
     assert blocked["error_code"] == "daily_token_limit_reached"
     assert blocked["submission_started_at"] is None
+
+
+def test_failed_jobs_without_usage_release_daily_token_budget(tmp_path):
+    """终态失败且无 usage 的行不吃当日预算（2026-08-14 预算误锁事故镜像）。
+
+    供应商余额耗尽的瞬时失败零计费；旧账法按满额预留计入，94 个失败把
+    10M 账本记到 9.97M、实际结算 0，全线误报「今日 Token 预算已用完」。
+    """
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    first = _create_job(repository, "AAA")
+    second = _create_job(repository, "BBB")
+
+    first_owner = "credit-owner-one"
+    assert repository.claim_due(first_owner, 60)["job_id"] == first["job_id"]
+    assert repository.mark_submission_started(
+        first["job_id"],
+        first_owner,
+        daily_token_limit=200_000,
+    ) == "started"
+    repository.link_background_response(
+        first["job_id"],
+        first_owner,
+        "resp_credit_exhausted",
+    )
+    repository.fail(
+        first["job_id"],
+        first_owner,
+        "provider_credit_exhausted",
+        detail="credit_balance_exhausted: You have no credits remaining.",
+    )
+
+    second_owner = "credit-owner-two"
+    assert repository.claim_due(second_owner, 60)["job_id"] == second["job_id"]
+    assert repository.mark_submission_started(
+        second["job_id"],
+        second_owner,
+        daily_token_limit=200_000,
+    ) == "started", "零计费的终态失败不得占用当日 token 预算"
+
+    snapshot = repository.budget_snapshot(
+        daily_limit=100,
+        daily_budget_usd=100.0,
+        daily_token_limit=200_000,
+        cooldown_seconds=0,
+    )
+    assert snapshot["provider_credit_exhausted"] is True
+    assert snapshot["token_budget_used_tokens"] < 200_000
 
 
 def test_global_concurrency_limit_defers_a_second_paid_submission(tmp_path):

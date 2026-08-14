@@ -651,6 +651,13 @@ def response_terminal_error(response: Any) -> str | None:
             return "provider_incomplete_max_output_tokens"
         return "provider_incomplete"
     if status == "failed":
+        # 余额耗尽要与一般失败区分：它会瞬时击穿全部提交（2026-08-14 生产
+        # 155 连败），前端据此显示「供应商余额耗尽」而不是误导性的预算文案。
+        error_code = str(
+            getattr(getattr(response, "error", None), "code", "") or ""
+        )
+        if error_code == "credit_balance_exhausted":
+            return "provider_credit_exhausted"
         return "provider_failed"
     if status == "cancelled":
         return "provider_cancelled"
@@ -668,6 +675,23 @@ def response_terminal_error(response: Any) -> str | None:
             ):
                 return "provider_refusal"
     return None
+
+
+def response_error_detail(response: Any) -> str | None:
+    """供应商终态错误/未完成原因的现场证据（code + message），无则 None。"""
+
+    parts: list[str] = []
+    error = getattr(response, "error", None)
+    if error is not None:
+        code = str(getattr(error, "code", "") or "")
+        message = str(getattr(error, "message", "") or "")
+        if code or message:
+            parts.append(f"{code}: {message}".strip(": ").strip())
+    details = getattr(response, "incomplete_details", None)
+    reason = str(getattr(details, "reason", "") or "")
+    if reason:
+        parts.append(f"incomplete_reason={reason}")
+    return " | ".join(parts) or None
 
 
 def response_usage(response: Any) -> dict[str, int | None]:

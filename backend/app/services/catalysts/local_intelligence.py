@@ -118,6 +118,9 @@ SCHEDULED_TRANSIENT_AI_ERRORS = frozenset(
     {
         "ai_empty_response",
         "provider_failed",
+        # 余额耗尽在充值后即恢复——按瞬态处理，小时级重试在充值当刻自愈
+        # （2026-08-14 生产：credit_balance_exhausted 曾归入 provider_failed）。
+        "provider_credit_exhausted",
         "provider_incomplete",
         # Only the confirmed-terminal cancellation is retryable. The sibling
         # provider_poll_timeout code means cancellation was not confirmed;
