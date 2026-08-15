@@ -5,11 +5,12 @@ import inspect
 import logging
 import math
 import re
+import sqlite3
 import threading
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -60,6 +61,10 @@ class TaskSpec:
     drain_on_shutdown: bool = False
     manual_only: bool = False
     may_block_event_loop: bool = False
+    # 重启后沿用状态库里持久化的 next_run_at，而不是立即执行一轮。
+    # 只给重负载低频任务（如全量备份）用：进程重启（部署或崩溃恢复）
+    # 不应触发一次计划外的 GB 级磁盘拷贝。
+    honor_persisted_schedule: bool = False
     close: Callable[[], Awaitable[None] | None] | None = None
 
     def __post_init__(self) -> None:
@@ -136,18 +141,73 @@ class WorkerSupervisor:
 
         self.stop.set()
 
+    # 状态库写入的锁竞争兜底：维护任务备份 GB 级数据库时，同盘 I/O 风暴能把
+    # BEGIN IMMEDIATE 拖过 busy_timeout。状态记录是遥测不是正确性——这里失败
+    # 绝不能杀死任务循环（循环死→supervisor 杀进程→重启→备份从头再来→
+    # 风暴延续，2026-08-13/08-15 两次生产崩溃循环即此自馈闭环）。
+    # 租约围栏（WorkerLeaseLost）不属于锁竞争，照常上抛。
+    _STATE_LOCK_RETRIES = 3
+    _STATE_LOCK_RETRY_DELAY_SECONDS = 2.0
+
+    async def _state_call(self, func: Callable[..., Any], /, *args: Any) -> Any:
+        attempt = 0
+        while True:
+            try:
+                return await asyncio.to_thread(func, *args)
+            except sqlite3.OperationalError:
+                attempt += 1
+                if attempt > self._STATE_LOCK_RETRIES:
+                    raise
+                await asyncio.sleep(self._STATE_LOCK_RETRY_DELAY_SECONDS * attempt)
+
     async def _record(self, task: TaskSpec, **values: Any) -> None:
         token = self._token
         if token is None:
             raise WorkerLeaseLost("unified worker lease is unavailable")
-        await asyncio.to_thread(
-            self.repository.record_task,
-            self.owner_id,
-            token,
-            task.name,
-            enabled=task.enabled,
-            **values,
-        )
+
+        def write() -> None:
+            self.repository.record_task(
+                self.owner_id,
+                token,
+                task.name,
+                enabled=task.enabled,
+                **values,
+            )
+
+        try:
+            await self._state_call(write)
+        except sqlite3.OperationalError as error:
+            logger.warning(
+                "worker task status write dropped task=%s error=%s",
+                task.name,
+                error,
+            )
+
+    async def _finish_actions_guarded(
+        self,
+        task: TaskSpec,
+        token: int,
+        request_ids: Sequence[str],
+        **values: Any,
+    ) -> None:
+        def write() -> None:
+            self.repository.finish_actions(
+                self.owner_id,
+                token,
+                list(request_ids),
+                **values,
+            )
+
+        try:
+            await self._state_call(write)
+        except sqlite3.OperationalError as error:
+            # 未标记完成的手动请求会留在 claimed 状态等待过期回收；
+            # 比让循环陪葬好。
+            logger.warning(
+                "worker manual action finish dropped task=%s error=%s",
+                task.name,
+                error,
+            )
 
     async def _heartbeat(self, started: asyncio.Event | None = None) -> None:
         interval = max(0.05, min(30.0, self.lease_seconds / 3.0))
@@ -252,12 +312,28 @@ class WorkerSupervisor:
         token = self._token
         if token is None:
             raise WorkerLeaseLost("unified worker lease is unavailable")
-        manual_actions = await asyncio.to_thread(
-            self.repository.claim_actions,
-            self.owner_id,
-            token,
-            task.name,
-        )
+        try:
+            manual_actions = await self._state_call(
+                self.repository.claim_actions,
+                self.owner_id,
+                token,
+                task.name,
+            )
+        except sqlite3.OperationalError as error:
+            # 认领不到就整轮跳过：不确定手动请求是否在场时直接跑 runner
+            # 会让手动动作在下一轮被再次认领、重复执行。
+            logger.warning(
+                "worker task round skipped (state locked) task=%s error=%s",
+                task.name,
+                error,
+            )
+            payload = {
+                "status": "degraded",
+                "error_code": "worker_state_locked",
+                "next_delay_seconds": self._backoff(task, 1),
+            }
+            self._results[task.name] = payload
+            return payload
         manual_request_ids = [item["request_id"] for item in manual_actions]
         try:
             action_runner = getattr(task.runner, "run_for_actions", None)
@@ -295,9 +371,8 @@ class WorkerSupervisor:
                 details=details,
             )
             if manual_request_ids:
-                await asyncio.to_thread(
-                    self.repository.finish_actions,
-                    self.owner_id,
+                await self._finish_actions_guarded(
+                    task,
                     token,
                     manual_request_ids,
                     succeeded=False,
@@ -381,9 +456,8 @@ class WorkerSupervisor:
             "next_delay_seconds": delay,
         }
         if manual_request_ids:
-            await asyncio.to_thread(
-                self.repository.finish_actions,
-                self.owner_id,
+            await self._finish_actions_guarded(
+                task,
                 token,
                 manual_request_ids,
                 succeeded=not degraded,
@@ -400,6 +474,42 @@ class WorkerSupervisor:
         self._results[task.name] = payload
         return payload
 
+    async def _persisted_initial_delay(self, task: TaskSpec) -> float:
+        """Resume the stored schedule so restarts do not re-run heavy tasks."""
+
+        try:
+            states = await asyncio.to_thread(self.repository.task_states)
+        except (sqlite3.OperationalError, OSError, ValueError):
+            return 0.0
+        row = next(
+            (item for item in states if item.get("task_name") == task.name),
+            None,
+        )
+        raw = str((row or {}).get("next_run_at") or "")
+        if not raw:
+            return 0.0
+        try:
+            next_run = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return 0.0
+        if next_run.tzinfo is None or next_run.utcoffset() is None:
+            return 0.0
+        remaining = (next_run - utc_now()).total_seconds()
+        # 上限一个周期：时钟异常或脏数据不能把任务锁死到远未来。
+        return min(max(0.0, remaining), task.interval_seconds)
+
+    async def _has_pending_actions(self, task: TaskSpec) -> bool:
+        # 轮询本身每 0.5s 一次，锁竞争时当作「暂无手动请求」继续等即可。
+        try:
+            return bool(
+                await asyncio.to_thread(
+                    self.repository.has_pending_actions,
+                    task.name,
+                )
+            )
+        except sqlite3.OperationalError:
+            return False
+
     async def _wait_for_next(self, task: TaskSpec, delay: float) -> bool:
         """Wake scheduled loops promptly when the API queues a manual action."""
 
@@ -408,10 +518,7 @@ class WorkerSupervisor:
         loop = asyncio.get_running_loop()
         deadline = loop.time() + max(0.0, delay)
         while not self.stop.is_set():
-            if await asyncio.to_thread(
-                self.repository.has_pending_actions,
-                task.name,
-            ):
+            if await self._has_pending_actions(task):
                 return True
             remaining = deadline - loop.time()
             if remaining <= 0:
@@ -430,10 +537,7 @@ class WorkerSupervisor:
         """Wait indefinitely; manual-only tasks have no scheduled deadline."""
 
         while not self.stop.is_set():
-            if await asyncio.to_thread(
-                self.repository.has_pending_actions,
-                task.name,
-            ):
+            if await self._has_pending_actions(task):
                 return True
             try:
                 await asyncio.wait_for(self.stop.wait(), timeout=0.5)
@@ -481,6 +585,8 @@ class WorkerSupervisor:
                 raise
             return
         delay = 0.0
+        if task.honor_persisted_schedule:
+            delay = await self._persisted_initial_delay(task)
         try:
             while not self.stop.is_set():
                 if delay > 0 and not await self._wait_for_next(task, delay):

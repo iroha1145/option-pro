@@ -165,11 +165,18 @@ class WorkerStateRepository:
         if read_only:
             uri = self.path.resolve().as_uri() + "?mode=ro"
             connection = sqlite3.connect(uri, uri=True, timeout=2.0)
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA busy_timeout=2000")
         else:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            connection = sqlite3.connect(self.path, timeout=5.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA busy_timeout=5000")
+            # 30s 而不是 5s：维护任务备份 GB 级数据库时同盘 fsync 会把
+            # 毫秒级状态写事务拖到秒级，5s 的 BEGIN IMMEDIATE 超时曾把
+            # 整个 worker 送进崩溃循环（2026-08-13/08-15 生产事故）。
+            # 状态写入极小且不在事件循环线程里，等待优于报错；租约 60s、
+            # 心跳 20s，30s 上限不会让心跳误判丢租。
+            connection = sqlite3.connect(self.path, timeout=30.0)
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA busy_timeout=30000")
         try:
             yield connection
         finally:

@@ -2509,6 +2509,10 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             timeout_seconds=1800.0,
             failure_backoff_seconds=300.0,
             max_backoff_seconds=3600.0,
+            # 重启不重跑：全量备份约 3GB 磁盘拷贝，跟着进程重启立即执行会
+            # 与其余任务的启动风暴抢盘（2026-08-15 崩溃循环里每 5 分钟
+            # 一轮从头备份）。沿用状态库里的 next_run_at。
+            honor_persisted_schedule=True,
         ),
         TaskSpec(
             "stock_directory",

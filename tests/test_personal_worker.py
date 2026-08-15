@@ -1702,9 +1702,12 @@ def test_unexpected_task_loop_exit_terminates_supervisor_and_releases_lock(
         lock_path = tmp_path / "failed-loop.lock"
         original_record = repository.record_task
 
+        # 已知的瞬时锁竞争（sqlite3.OperationalError）如今被循环内兜底吞掉
+        # （见 test_transient_state_lock_timeout_does_not_kill_task_loop）；
+        # 这里用未知错误类验证 fail-fast 路径仍然成立。
         def fail_running_record(*args: object, **kwargs: object) -> None:
             if kwargs.get("status") == "running":
-                raise sqlite3.OperationalError("simulated state failure")
+                raise RuntimeError("simulated unexpected state failure")
             original_record(*args, **kwargs)
 
         repository.record_task = fail_running_record  # type: ignore[method-assign]
@@ -3175,3 +3178,200 @@ def test_default_task_inventory_and_maintenance_backup(
         spec for spec in massive_specs if spec.name == "stock_directory"
     )
     assert massive_directory.enabled is True
+
+
+def test_transient_state_lock_timeout_does_not_kill_task_loop(
+    tmp_path: Path,
+) -> None:
+    """备份 I/O 风暴下 record_task 的 BEGIN IMMEDIATE 超时曾杀死整个进程。
+
+    2026-08-13（85 连崩）/2026-08-15（38 连崩）生产事故：状态写入抛
+    sqlite3.OperationalError('database is locked') → 任务循环死亡 →
+    supervisor 杀进程 → 重启后备份从头再来 → 风暴延续。状态写入失败
+    必须重试后丢弃，任务循环继续活着。
+    """
+
+    async def scenario() -> None:
+        runs = asyncio.Event()
+        calls = 0
+
+        async def task_runner() -> TaskResult:
+            nonlocal calls
+            calls += 1
+            if calls >= 3:
+                runs.set()
+            return TaskResult(status="idle", next_delay_seconds=0.01)
+
+        repository = WorkerStateRepository(tmp_path / "locked.db")
+        real_record = repository.record_task
+        failures = {"remaining": 2}
+
+        def flaky_record(*args: object, **kwargs: object) -> None:
+            if failures["remaining"] > 0:
+                failures["remaining"] -= 1
+                raise sqlite3.OperationalError("database is locked")
+            real_record(*args, **kwargs)
+
+        repository.record_task = flaky_record  # type: ignore[method-assign]
+        supervisor = WorkerSupervisor(
+            repository,
+            (TaskSpec("ai_jobs", task_runner, 3600),),
+            owner_id="locked-worker",
+            lease_seconds=5,
+            process_lock=ProcessFileLock(tmp_path / "locked.lock"),
+        )
+        supervisor._STATE_LOCK_RETRY_DELAY_SECONDS = 0.01  # type: ignore[misc]
+        running = asyncio.create_task(supervisor.run_forever())
+        await asyncio.wait_for(runs.wait(), timeout=5)
+        assert not running.done(), "supervisor must survive transient lock timeouts"
+        supervisor.request_stop()
+        await asyncio.wait_for(running, timeout=5)
+
+    asyncio.run(scenario())
+
+
+def test_persistent_state_lock_drops_status_write_but_keeps_running(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        runs = asyncio.Event()
+        calls = 0
+
+        async def task_runner() -> TaskResult:
+            nonlocal calls
+            calls += 1
+            if calls >= 2:
+                runs.set()
+            return TaskResult(status="idle", next_delay_seconds=0.01)
+
+        repository = WorkerStateRepository(tmp_path / "dead-locked.db")
+
+        def always_locked(*args: object, **kwargs: object) -> None:
+            raise sqlite3.OperationalError("database is locked")
+
+        repository.record_task = always_locked  # type: ignore[method-assign]
+        supervisor = WorkerSupervisor(
+            repository,
+            (TaskSpec("catalyst_sync", task_runner, 3600),),
+            owner_id="dead-locked-worker",
+            lease_seconds=5,
+            process_lock=ProcessFileLock(tmp_path / "dead-locked.lock"),
+        )
+        supervisor._STATE_LOCK_RETRY_DELAY_SECONDS = 0.01  # type: ignore[misc]
+        running = asyncio.create_task(supervisor.run_forever())
+        await asyncio.wait_for(runs.wait(), timeout=5)
+        assert not running.done(), "status writes are telemetry; loops must survive"
+        supervisor.request_stop()
+        await asyncio.wait_for(running, timeout=5)
+
+    asyncio.run(scenario())
+
+
+def test_lease_lost_during_status_write_still_propagates(tmp_path: Path) -> None:
+    """锁竞争兜底绝不能吞掉租约围栏错误：丢租必须照常停机。"""
+
+    async def scenario() -> None:
+        repository = WorkerStateRepository(tmp_path / "fence.db")
+
+        def fence_lost(*args: object, **kwargs: object) -> None:
+            raise WorkerLeaseLost("unified worker lease was lost")
+
+        repository.record_task = fence_lost  # type: ignore[method-assign]
+
+        async def task_runner() -> TaskResult:
+            return TaskResult(status="idle", next_delay_seconds=0.01)
+
+        supervisor = WorkerSupervisor(
+            repository,
+            (TaskSpec("public_home", task_runner, 3600),),
+            owner_id="fence-worker",
+            lease_seconds=5,
+            process_lock=ProcessFileLock(tmp_path / "fence.lock"),
+        )
+        running = asyncio.create_task(supervisor.run_forever())
+        with pytest.raises(RuntimeError):
+            await asyncio.wait_for(running, timeout=5)
+
+    asyncio.run(scenario())
+
+
+def test_honor_persisted_schedule_skips_startup_run(tmp_path: Path) -> None:
+    """维护任务重启后要沿用持久化的 next_run_at，而不是立即重跑全量备份。"""
+
+    async def scenario() -> None:
+        repository = WorkerStateRepository(tmp_path / "sched.db")
+        repository.initialize()
+        seed_token = repository.acquire("seed-owner", lease_seconds=30)
+        assert seed_token is not None
+        future = datetime.now(timezone.utc) + timedelta(seconds=3600)
+        repository.record_task(
+            "seed-owner",
+            seed_token,
+            "maintenance",
+            enabled=True,
+            status="idle",
+            next_run_at=future,
+        )
+        repository.release("seed-owner", seed_token)
+
+        calls = 0
+
+        async def backup_runner() -> TaskResult:
+            nonlocal calls
+            calls += 1
+            return TaskResult(status="idle")
+
+        supervisor = WorkerSupervisor(
+            repository,
+            (
+                TaskSpec(
+                    "maintenance",
+                    backup_runner,
+                    21_600,
+                    honor_persisted_schedule=True,
+                ),
+            ),
+            owner_id="sched-worker",
+            lease_seconds=5,
+            process_lock=ProcessFileLock(tmp_path / "sched.lock"),
+        )
+        running = asyncio.create_task(supervisor.run_forever())
+        await asyncio.sleep(0.5)
+        assert calls == 0, "restart must not re-run a future-scheduled backup"
+        supervisor.request_stop()
+        await asyncio.wait_for(running, timeout=5)
+
+    asyncio.run(scenario())
+
+
+def test_honor_persisted_schedule_runs_when_overdue_or_unseeded(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        repository = WorkerStateRepository(tmp_path / "sched-due.db")
+        ran = asyncio.Event()
+
+        async def backup_runner() -> TaskResult:
+            ran.set()
+            return TaskResult(status="idle")
+
+        supervisor = WorkerSupervisor(
+            repository,
+            (
+                TaskSpec(
+                    "maintenance",
+                    backup_runner,
+                    21_600,
+                    honor_persisted_schedule=True,
+                ),
+            ),
+            owner_id="sched-due-worker",
+            lease_seconds=5,
+            process_lock=ProcessFileLock(tmp_path / "sched-due.lock"),
+        )
+        running = asyncio.create_task(supervisor.run_forever())
+        await asyncio.wait_for(ran.wait(), timeout=5)
+        supervisor.request_stop()
+        await asyncio.wait_for(running, timeout=5)
+
+    asyncio.run(scenario())
