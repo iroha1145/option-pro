@@ -731,8 +731,8 @@ def test_earnings_analysis_task_queues_only_new_reports_within_5_days(
     msft = repository.latest_for_ticker("earnings_impact", "MSFT")
     assert aapl is not None and aapl["submission_source"] == "scheduled"
     assert msft is not None and msft["submission_source"] == "scheduled"
-    assert aapl["priority"] == ai_runtime.EARNINGS_PRE_RELEASE_PRIORITY == 40
-    assert msft["priority"] == ai_runtime.EARNINGS_PRE_RELEASE_PRIORITY == 40
+    assert aapl["priority"] == ai_runtime.EARNINGS_PRE_RELEASE_PRIORITY == 72
+    assert msft["priority"] == ai_runtime.EARNINGS_PRE_RELEASE_PRIORITY == 72
     assert repository.latest_for_ticker("earnings_impact", "NVDA") is None
     assert repository.latest_for_ticker("earnings_impact", "GOOGL") is None
 

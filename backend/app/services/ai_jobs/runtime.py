@@ -60,7 +60,7 @@ AI_TASK_MAX_OUTPUT_TOKENS: dict[str, int] = {
 # pre-release work stays inside the configured base capacity, explicit report
 # analysis may use the first reserve, and post-release finalization alone may
 # use the larger reserve.
-EARNINGS_PRE_RELEASE_PRIORITY = 40
+EARNINGS_PRE_RELEASE_PRIORITY = 72
 EARNINGS_VISITOR_PRIORITY = 75
 EARNINGS_OWNER_PRIORITY = 80
 EARNINGS_FINAL_PRIORITY = 90
