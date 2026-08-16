@@ -516,6 +516,9 @@ def test_queue_reserves_are_tiered_and_keep_a_hard_total_cap(
         > runtime.EARNINGS_OWNER_PRIORITY
         > runtime.EARNINGS_VISITOR_PRIORITY
         > runtime.EARNINGS_PRE_RELEASE_PRIORITY
+        # == 新闻批量车道（local_intelligence news_impact priority=70）：
+        # 同级 FIFO 防双向饥饿（2026-08-15/16 两次生产事故）。
+        == 70
     )
     assert (
         runtime.EARNINGS_FINAL_QUEUE_RESERVE

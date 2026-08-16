@@ -60,7 +60,13 @@ AI_TASK_MAX_OUTPUT_TOKENS: dict[str, int] = {
 # pre-release work stays inside the configured base capacity, explicit report
 # analysis may use the first reserve, and post-release finalization alone may
 # use the larger reserve.
-EARNINGS_PRE_RELEASE_PRIORITY = 72
+#
+# 批量车道平权：预发布财报与新闻批量（local_intelligence 的 news_impact
+# priority=70）必须同级——同优先级下 dequeue 按 created_at 先来先服务，
+# 两个方向都饿不死。历史教训：40（低于新闻）时财报 24h 只过 1 条
+# （2026-08-15）；72（高于新闻）时财报季持续供给让新闻 22h 冻结
+# （2026-08-16）。终稿/手动/访客是有限突发的用户可见工作，保持高位。
+EARNINGS_PRE_RELEASE_PRIORITY = 70
 EARNINGS_VISITOR_PRIORITY = 75
 EARNINGS_OWNER_PRIORITY = 80
 EARNINGS_FINAL_PRIORITY = 90
