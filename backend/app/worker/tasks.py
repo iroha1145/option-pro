@@ -801,7 +801,7 @@ class CatalystSyncTask:
                 errors["local_intelligence"] = self._error_code(exc)
             else:
                 processed.append("local_intelligence")
-        if scheduled_due:
+        if scheduled_due and "news" not in errors and "calendar" not in errors:
             self._last_personal_sync_monotonic = clock
 
         # 变更日志保留：同步成功的整点周期里按节流间隔修剪。hasattr 守卫让
@@ -886,7 +886,9 @@ class CatalystSyncTask:
                 status="degraded",
                 error_code="catalyst_sync_degraded",
                 details=details,
-                next_delay_seconds=delay,
+                # Let the supervisor apply exponential backoff. A fixed 2s
+                # retry used to spin the worker and hide a broken cursor.
+                next_delay_seconds=None,
             )
         return TaskResult(
             status="idle",
@@ -1854,6 +1856,11 @@ class PublicHomeTask:
             try:
                 await asyncio.shield(child)
             except asyncio.CancelledError:
+                # 取消必须立刻返回：子任务留在 _inflight 单飞，下一轮
+                # 报 public_home_refresh_in_flight、之后收割结果（
+                # test_worker_cancelled_round_keeps_single_flight_and_later_harvests
+                # 钉住的契约）。在这里等子任务跑完会把慢快照拖成
+                # 停机死锁。
                 raise
             except Exception:
                 pass

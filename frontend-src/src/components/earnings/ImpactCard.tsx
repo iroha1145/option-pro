@@ -357,8 +357,19 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
 
   /* 排队、分析或自动终版期间只轮询报告级 GET。 */
   const shouldPoll = reportAnalysisNeedsPolling(analysis);
+  const pollDeadlineRef = useRef<number | null>(null);
+  if (shouldPoll && pollDeadlineRef.current == null) {
+    pollDeadlineRef.current = Date.now() + 5 * 60_000;
+  }
+  if (!shouldPoll) {
+    pollDeadlineRef.current = null;
+  }
   useEffect(() => {
     if (!ticker || !shouldPoll) return;
+    if (pollDeadlineRef.current != null && Date.now() >= pollDeadlineRef.current) {
+      setErrorMsg(__t('分析任务仍在处理中'));
+      return;
+    }
     const serverDelay = analysis?.retryAfterSeconds;
     const base = serverDelay != null && serverDelay > 0
       ? Math.max(1_000, serverDelay * 1_000)

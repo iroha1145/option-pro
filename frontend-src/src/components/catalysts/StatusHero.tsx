@@ -173,6 +173,12 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
           {newsQ.data && (
             <p className="mt-0.5 font-mono text-micro text-ink-400 tnum">
               {t('已分析')} <span className="text-ink-600">{newsQ.data.analyzed}</span> {t('条')}
+              {newsQ.data.pending > 0 && (
+                <>
+                  {' · '}
+                  {t('待中文')} <span className="text-ink-600">{newsQ.data.pending}</span>
+                </>
+              )}
             </p>
           )}
         </HeroCell>

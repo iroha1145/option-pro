@@ -175,6 +175,7 @@ interface FeedPanelProps {
 export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, onFeedResult, onClearFilters }: FeedPanelProps) {
   const [items, setItems] = useState<CatalystNewsItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hiddenUnanalyzed, setHiddenUnanalyzed] = useState(0);
   const [phase, setPhase] = useState<Phase>('loading');
   const [error, setError] = useState<ApiError | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -196,10 +197,29 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
     setPhase('loading');
     setError(null);
     try {
-      const res = await catalystsContract.feed({ ...toFeedQuery(filtersRef.current), limit: PAGE_SIZE });
+      const query = { ...toFeedQuery(filtersRef.current), limit: PAGE_SIZE };
+      let res = await catalystsContract.feed(query);
+      let hidden = res.hiddenUnanalyzed ?? 0;
+      let hops = 0;
+      while (res.items.length === 0 && res.nextCursor && hops < 8) {
+        hops += 1;
+        const more = await catalystsContract.feed({ ...query, cursor: res.nextCursor });
+        hidden += more.hiddenUnanalyzed ?? 0;
+        res = { ...more, total: res.total, hiddenUnanalyzed: hidden };
+      }
+      if (reqRef.current !== reqId) return;
+      if (res.items.length === 0 && hidden === 0) {
+        try {
+          const today = await catalystsContract.newsToday();
+          hidden = today.pending ?? 0;
+        } catch {
+          hidden = 0;
+        }
+      }
       if (reqRef.current !== reqId) return;
       setItems(res.items);
       setNextCursor(res.nextCursor);
+      setHiddenUnanalyzed(hidden);
       onFeedResult({ total: res.total, ok: true });
       setPhase('ready');
     } catch (e) {
@@ -284,8 +304,20 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
       ) : items.length === 0 && !nextCursor ? (
         <EmptyState
           image="/empty-news.svg"
-          title={hasFilters ? __t('这个角度暂时没有新闻') : __t('暂时没有新闻')}
-          description={hasFilters ? __t('放宽过滤条件，或清除后查看全量新闻流') : __t('新闻采集恢复后将自动出现在这里')}
+          title={
+            hasFilters
+              ? __t('这个角度暂时没有新闻')
+              : hiddenUnanalyzed > 0
+                ? __t('已收录、等中文分析')
+                : __t('暂时没有新闻')
+          }
+          description={
+            hasFilters
+              ? __t('放宽过滤条件，或清除后查看全量新闻流')
+              : hiddenUnanalyzed > 0
+                ? __t('新闻已入库，中文标题与摘要生成后会显示在这里')
+                : __t('新闻采集恢复后将自动出现在这里')
+          }
           action={
             hasFilters ? (
               <button

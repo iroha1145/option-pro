@@ -526,8 +526,12 @@ def test_invalid_or_revision_mismatched_analysis_never_labels_english_as_chinese
         "summary_zh": "English only",
     }
 
-    item = _service("read", engine=engine).feed(as_of=NOW)["items"][0]
+    service = _service("read", engine=engine)
+    payload = service.feed(as_of=NOW)
+    item = service.news(101, as_of=NOW)["item"]
 
+    assert payload["items"] == []
+    assert payload["hidden_unanalyzed"] == 1
     assert item["analysis"] is None
     assert item["analysis_status"] == "pending"
     assert item["title_zh"] == ""
@@ -685,6 +689,27 @@ def test_include_unanalyzed_is_reapplied_after_analysis_projection() -> None:
     assert payload["status"] == "empty"
 
 
+def test_feed_counts_untranslated_rows_as_hidden_unanalyzed() -> None:
+    engine = FakeIntelligence()
+    engine.item = {
+        **engine.item,
+        "analysis": None,
+        "analysis_status": "not_requested",
+        "title": "Chip company reports latest results",
+        "summary": "Revenue rose, but demand remains uncertain.",
+        "title_zh": "",
+        "summary_zh": "",
+        "_validation_title": "Chip company reports latest results",
+        "_validation_summary": "Revenue rose, but demand remains uncertain.",
+    }
+
+    payload = _service("read", engine=engine).feed(as_of=NOW)
+
+    assert payload["items"] == []
+    assert payload["hidden_unanalyzed"] == 1
+    assert payload["status"] == "empty"
+
+
 def test_news_available_after_as_of_is_not_projected() -> None:
     engine = FakeIntelligence()
     service = _service("read", engine=engine)
@@ -709,8 +734,11 @@ def test_analysis_available_after_as_of_is_hidden_but_news_remains_visible() -> 
     service = _service("read", engine=engine)
     historical = datetime(2026, 7, 15, 3, 58, 30, tzinfo=timezone.utc)
 
-    item = service.feed(as_of=historical)["items"][0]
+    payload = service.feed(as_of=historical)
+    item = service.news(101, as_of=historical)["item"]
 
+    assert payload["items"] == []
+    assert payload["hidden_unanalyzed"] == 1
     assert item["analysis"] is None
     assert item["title_zh"] == ""
     assert item["summary_zh"] == ""
@@ -816,11 +844,11 @@ def test_historical_news_never_exposes_future_job_state_or_result(
         cache_path=cache_path,
     )
 
-    feed_item = service.feed(as_of=NOW)["items"][0]
+    payload = service.feed(as_of=NOW)
     detail = service.news(101, as_of=NOW)
 
     assert detail is not None
-    assert feed_item["analysis_status"] == expected_status
+    assert payload["hidden_unanalyzed"] == 1
     assert detail["item"]["analysis_status"] == expected_status
     assert detail["analysis_job"] is None
     assert detail["item"]["analysis"] is None
@@ -1736,12 +1764,15 @@ def test_real_local_intelligence_does_not_relabel_source_english_as_chinese(
 
     payload = service.feed(as_of=NOW)
 
-    assert len(payload["items"]) == 1
-    assert payload["items"][0]["analysis"] is None
-    assert payload["items"][0]["title_zh"] == ""
-    assert payload["items"][0]["summary_zh"] == ""
-    assert "English source" not in str(payload["items"][0])
-    assert "等待生成" not in str(payload["items"][0])
+    assert payload["items"] == []
+    assert payload["hidden_unanalyzed"] == 1
+    detail = service.news(101, as_of=NOW)
+    assert detail is not None
+    assert detail["item"]["analysis"] is None
+    assert detail["item"]["title_zh"] == ""
+    assert detail["item"]["summary_zh"] == ""
+    assert "English source" not in str(detail["item"])
+    assert "等待生成" not in str(detail["item"])
 
 
 def test_web_reads_do_not_initialize_missing_worker_databases(tmp_path) -> None:

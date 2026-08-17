@@ -498,11 +498,12 @@ function qs(q: CatalystFeedQuery): string {
   const conf = q.minConfidence != null && q.minConfidence > 0 ? Math.round(q.minConfidence <= 1 ? q.minConfidence * 100 : q.minConfidence) : undefined;
   // UI 'pending'（未分析）↔ 个人版 'not_requested'
   const status = q.analysisStatus === 'pending' ? 'not_requested' : q.analysisStatus || undefined;
-  // 默认新闻流只展示已经通过中文校验的分析。用户明确筛选待处理
-  // 状态时才请求未分析项。文章整体中性仍可能包含有方向的个股影响，
-  // 因此文章流保留中性；股票影响榜另按非零个股影响严格过滤。
+  // Default feed includes unanalyzed rows so the list window matches
+  // summary.count / 今日新闻. Display still drops rows without Chinese
+  // titles. Filtering to completed analysis turns this off. Neutral
+  // articles stay in the article stream.
   const includeUnanalyzed =
-    q.includeUnanalyzed ?? Boolean(status && status !== 'completed');
+    q.includeUnanalyzed ?? (status ? status !== 'completed' : true);
   const includeNeutral = q.includeNeutral ?? true;
   const s = toQuery({
     ticker: q.ticker,
@@ -657,11 +658,18 @@ export const catalystsContract = {
   status: (): Promise<CatalystsStatusDetail> =>
     mockOr(() => fx2.getCatalystsStatusV2(), () => cachedGet('/catalysts/status').then(nStatus)),
   /** 今日新闻计数优先使用后端完整过滤窗口汇总；旧后端才退回当前页计数。 */
-  newsToday: (): Promise<{ count: number; analyzed: number; saturated: boolean }> =>
+  newsToday: (): Promise<{ count: number; analyzed: number; pending: number; saturated: boolean }> =>
     mockOr(
       async () => {
         const s = await fx2.getCatalystsStatusV2();
-        return { count: s.newsToday ?? 0, analyzed: s.analyzedToday ?? 0, saturated: false };
+        const count = s.newsToday ?? 0;
+        const analyzed = s.analyzedToday ?? 0;
+        return {
+          count,
+          analyzed,
+          pending: Math.max(0, count - analyzed),
+          saturated: false,
+        };
       },
       () =>
         cachedGet(`/catalysts/feed${qs({
@@ -678,24 +686,43 @@ export const catalystsContract = {
             'analyzedCount',
             'analyzed_count',
           );
+          const completePending = pickN(summary, 'pending');
+          const analyzed =
+            completeAnalyzed
+            ?? items.filter((i) => i.analysisStatus === 'completed').length;
+          const count = completeCount ?? items.length;
           return {
-            count: completeCount ?? items.length,
-            analyzed:
-              completeAnalyzed
-              ?? items.filter((i) => i.analysisStatus === 'completed').length,
+            count,
+            analyzed,
+            pending: completePending ?? Math.max(0, count - analyzed),
             saturated: completeCount === null && items.length >= 50,
           };
         }),
     ),
-  feed: (q: CatalystFeedQuery = {}): Promise<{ items: CatalystNewsItem[]; nextCursor: string | null; total: number }> =>
+  feed: (q: CatalystFeedQuery = {}): Promise<{
+    items: CatalystNewsItem[];
+    nextCursor: string | null;
+    total: number;
+    hiddenUnanalyzed: number;
+  }> =>
     mockOr(
-      () => fx2.getCatalystsFeedV2(q),
+      async () => {
+        const res = await fx2.getCatalystsFeedV2(q);
+        return { ...res, hiddenUnanalyzed: res.hiddenUnanalyzed ?? 0 };
+      },
       () =>
         cachedGet(`/catalysts/feed${qs(q)}`).then((d) => {
-          const items = unwrap(d, 'items')
-            .map(nNewsItem)
-            .filter((item) => item.titleZh && item.summaryZh);
-          return { items, nextCursor: pickS(asRec(d), 'next_cursor', 'nextCursor'), total: items.length };
+          const mapped = unwrap(d, 'items').map(nNewsItem);
+          const items = mapped.filter((item) => item.titleZh && item.summaryZh);
+          const summary = asRec(asRec(d).summary);
+          const pending = pickN(summary, 'pending') ?? 0;
+          const hiddenReported = pickN(asRec(d), 'hiddenUnanalyzed', 'hidden_unanalyzed');
+          return {
+            items,
+            nextCursor: pickS(asRec(d), 'next_cursor', 'nextCursor'),
+            total: pickN(summary, 'count') ?? items.length,
+            hiddenUnanalyzed: hiddenReported ?? Math.max(mapped.length - items.length, pending),
+          };
         }),
     ),
   news: (id: string): Promise<CatalystNewsItem> =>

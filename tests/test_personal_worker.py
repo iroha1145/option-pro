@@ -271,6 +271,55 @@ def test_manual_actions_are_idempotent_fenced_and_cooled_down(tmp_path: Path) ->
     assert next_request["status"] == "queued"
 
 
+def test_running_action_is_requeued_only_when_the_claim_fence_is_dead(
+    tmp_path: Path,
+) -> None:
+    repository = WorkerStateRepository(tmp_path / "stale-actions.db")
+    repository.initialize(now=NOW)
+    token = repository.acquire("worker", lease_seconds=24 * 3600, now=NOW)
+    assert token is not None
+    queued = repository.request_action(
+        "focus_refresh",
+        "focus_refresh",
+        "focus:stale-claim",
+        now=NOW,
+    )
+    claimed = repository.claim_actions(
+        "worker",
+        token,
+        "focus_refresh",
+        now=NOW + timedelta(seconds=2),
+    )
+    assert claimed[0]["request_id"] == queued["request_id"]
+
+    still_held = repository.request_action(
+        "focus_refresh",
+        "focus_refresh",
+        "focus:while-live",
+        now=NOW + timedelta(minutes=20),
+    )
+    assert still_held["reason"] == "already_running"
+    assert still_held["status"] == "running"
+
+    later = NOW + timedelta(minutes=21)
+    assert repository.acquire(
+        "replacement",
+        lease_seconds=120,
+        force=True,
+        now=later,
+    ) is not None
+    recovered = repository.request_action(
+        "focus_refresh",
+        "focus_refresh",
+        "focus:after-lease-lost",
+        now=later,
+    )
+    assert recovered["request_id"] == queued["request_id"]
+    assert recovered["status"] == "queued"
+    assert recovered["error_code"] == "action_lease_expired"
+    assert repository.has_pending_actions("focus_refresh") is True
+
+
 def test_manual_action_details_are_bounded_and_reject_sensitive_fields(
     tmp_path: Path,
 ) -> None:
@@ -2360,7 +2409,7 @@ def test_personal_catalyst_task_isolates_stream_failure(tmp_path: Path) -> None:
 
     assert result.status == "degraded"
     assert result.error_code == "catalyst_sync_degraded"
-    assert result.next_delay_seconds == 2
+    assert result.next_delay_seconds is None
     assert result.details["processed"] == ["calendar", "local_intelligence"]
     assert result.details["errors"] == {"news": "upstream_unavailable"}
     assert "private upstream detail" not in json.dumps(result.details)
