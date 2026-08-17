@@ -1855,15 +1855,13 @@ class PublicHomeTask:
             self._inflight[resource] = attempt
             try:
                 await asyncio.shield(child)
-            except asyncio.CancelledError as cancelled:
-                while not child.done():
-                    try:
-                        await asyncio.shield(child)
-                    except asyncio.CancelledError:
-                        continue
-                    except Exception:
-                        break
-                raise cancelled
+            except asyncio.CancelledError:
+                # 取消必须立刻返回：子任务留在 _inflight 单飞，下一轮
+                # 报 public_home_refresh_in_flight、之后收割结果（
+                # test_worker_cancelled_round_keeps_single_flight_and_later_harvests
+                # 钉住的契约）。在这里等子任务跑完会把慢快照拖成
+                # 停机死锁。
+                raise
             except Exception:
                 pass
             entries = await self._harvest(
