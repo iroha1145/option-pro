@@ -276,7 +276,7 @@ def test_stale_running_manual_action_is_requeued_and_can_be_claimed_again(
 ) -> None:
     repository = WorkerStateRepository(tmp_path / "stale-actions.db")
     repository.initialize(now=NOW)
-    token = repository.acquire("worker", lease_seconds=120, now=NOW)
+    token = repository.acquire("worker", lease_seconds=24 * 3600, now=NOW)
     assert token is not None
 
     queued = repository.request_action(
