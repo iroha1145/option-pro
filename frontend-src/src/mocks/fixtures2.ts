@@ -1554,15 +1554,22 @@ export function getCatalystsFeedV2(q: CatalystFeedQuery = {}): {
   items: CatalystNewsItem[];
   nextCursor: string | null;
   total: number;
+  hiddenUnanalyzed: number;
 } {
   ensureDemoJob();
   catalystsNews.forEach(syncNewsJob);
   const filtered = catalystsNews.filter((n) => matchNews(n, q));
   const limit = Math.max(1, Math.min(q.limit ?? 12, 100));
   const offset = Math.max(0, parseInt(q.cursor ?? '0', 10) || 0);
-  const items = filtered.slice(offset, offset + limit);
+  const page = filtered.slice(offset, offset + limit);
+  const items = page.filter((item) => item.titleZh && item.summaryZh);
   const nextCursor = offset + limit < filtered.length ? String(offset + limit) : null;
-  return { items, nextCursor, total: filtered.length };
+  return {
+    items,
+    nextCursor,
+    total: items.length,
+    hiddenUnanalyzed: page.length - items.length,
+  };
 }
 
 export function getNewsDetailV2(newsId: string): CatalystNewsItem {

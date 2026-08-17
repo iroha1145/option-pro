@@ -538,19 +538,55 @@ async def test_calendar_sync_applies_actual_from_a_later_upstream_revision(
     assert repository.state("calendar").updated_after == NEXT_AS_OF
 
 
+def test_changed_watermark_rejects_page_without_advancing_checkpoint(tmp_path):
+    repository = CatalystEtlRepository(tmp_path / "catalyst.db")
+    repository.initialize()
+    initial = repository.state("news")
+    repository.apply_news_page(
+        NewsChangesPage.model_validate(_first_news_page()),
+        expected_cursor=initial.cursor,
+        expected_generation=initial.generation,
+    )
+    checkpoint = repository.state("news")
+    changed = _second_news_page()
+    changed["watermark"] = {"sequence": 2, "as_of": NEXT_AS_OF}
+    changed["next_updated_after"] = NEXT_AS_OF
+
+    with pytest.raises(EtlWatermarkConflict, match="watermark_changed"):
+        repository.apply_news_page(
+            NewsChangesPage.model_validate(changed),
+            expected_cursor=checkpoint.cursor,
+            expected_generation=checkpoint.generation,
+        )
+
+    after = repository.state("news")
+    assert after.cursor == "news-page-2"
+    assert after.updated_after == EPOCH
+    assert repository.get_news(7, include_deleted=True)["deleted"] == 0
+
+
 @pytest.mark.anyio
-async def test_changed_watermark_rejects_page_without_advancing_checkpoint(tmp_path):
-    first_round = True
+async def test_changed_watermark_resets_stale_cursor_and_resumes_from_checkpoint(
+    tmp_path,
+):
+    requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal first_round
-        if first_round:
-            first_round = False
+        requests.append(request)
+        cursor = request.url.params.get("cursor")
+        if cursor == "news-page-2":
+            changed = _second_news_page()
+            changed["watermark"] = {"sequence": 2, "as_of": NEXT_AS_OF}
+            changed["next_updated_after"] = NEXT_AS_OF
+            return httpx.Response(200, json=changed)
+        if cursor:
+            raise AssertionError(f"unexpected cursor {cursor}")
+        if len(requests) == 1:
             return httpx.Response(200, json=_first_news_page())
-        changed = _second_news_page()
-        changed["watermark"] = {"sequence": 2, "as_of": NEXT_AS_OF}
-        changed["next_updated_after"] = NEXT_AS_OF
-        return httpx.Response(200, json=changed)
+        recovered = _second_news_page()
+        recovered["watermark"] = {"sequence": 2, "as_of": NEXT_AS_OF}
+        recovered["next_updated_after"] = NEXT_AS_OF
+        return httpx.Response(200, json=recovered)
 
     repository = CatalystEtlRepository(tmp_path / "catalyst.db")
     async with MacroLensEtlClient(
@@ -558,14 +594,20 @@ async def test_changed_watermark_rejects_page_without_advancing_checkpoint(tmp_p
         transport=httpx.MockTransport(handler),
     ) as client:
         sync = MacroLensIncrementalSync(client, repository)
-        await sync.sync_news(max_pages=1)
-        with pytest.raises(EtlWatermarkConflict):
-            await sync.sync_news()
+        result = await sync.sync_news()
 
+    assert result.complete is True
+    assert result.cursor_resets == 1
+    assert result.pages == 2
     checkpoint = repository.state("news")
-    assert checkpoint.cursor == "news-page-2"
-    assert checkpoint.updated_after == EPOCH
-    assert repository.get_news(7, include_deleted=True)["deleted"] == 0
+    assert checkpoint.cursor is None
+    assert checkpoint.updated_after == NEXT_AS_OF
+    assert checkpoint.completed_watermark_sequence == 2
+    assert checkpoint.reset_count == 1
+    assert repository.get_news(7, include_deleted=True)["deleted"] == 1
+    assert requests[0].url.params.get("cursor") is None
+    assert requests[1].url.params.get("cursor") == "news-page-2"
+    assert requests[2].url.params.get("cursor") is None
 
 
 def test_each_page_and_checkpoint_are_one_sqlite_transaction(tmp_path):

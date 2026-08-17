@@ -271,6 +271,61 @@ def test_manual_actions_are_idempotent_fenced_and_cooled_down(tmp_path: Path) ->
     assert next_request["status"] == "queued"
 
 
+def test_stale_running_manual_action_is_requeued_and_can_be_claimed_again(
+    tmp_path: Path,
+) -> None:
+    repository = WorkerStateRepository(tmp_path / "stale-actions.db")
+    repository.initialize(now=NOW)
+    token = repository.acquire("worker", lease_seconds=120, now=NOW)
+    assert token is not None
+
+    queued = repository.request_action(
+        "news_refresh",
+        "catalyst_sync",
+        "news-refresh:stale-claim",
+        cooldown_seconds=30,
+        now=NOW,
+    )
+    claimed = repository.claim_actions(
+        "worker",
+        token,
+        "catalyst_sync",
+        now=NOW + timedelta(seconds=2),
+    )
+    assert [item["request_id"] for item in claimed] == [queued["request_id"]]
+    assert claimed[0]["status"] == "running"
+    assert repository.has_pending_actions(
+        "catalyst_sync",
+        now=NOW + timedelta(minutes=5),
+    ) is False
+
+    recovered_at = NOW + timedelta(minutes=11)
+    reused = repository.request_action(
+        "news_refresh",
+        "catalyst_sync",
+        "news-refresh:after-stale-claim",
+        cooldown_seconds=30,
+        now=recovered_at,
+    )
+    assert reused["request_id"] == queued["request_id"]
+    assert reused["reason"] == "already_running"
+    assert reused["status"] == "queued"
+    assert reused["error_code"] == "action_claim_expired"
+    assert repository.has_pending_actions(
+        "catalyst_sync",
+        now=recovered_at,
+    ) is True
+
+    claimed_again = repository.claim_actions(
+        "worker",
+        token,
+        "catalyst_sync",
+        now=recovered_at + timedelta(seconds=1),
+    )
+    assert [item["request_id"] for item in claimed_again] == [queued["request_id"]]
+    assert claimed_again[0]["status"] == "running"
+
+
 def test_manual_action_details_are_bounded_and_reject_sensitive_fields(
     tmp_path: Path,
 ) -> None:
@@ -2360,7 +2415,7 @@ def test_personal_catalyst_task_isolates_stream_failure(tmp_path: Path) -> None:
 
     assert result.status == "degraded"
     assert result.error_code == "catalyst_sync_degraded"
-    assert result.next_delay_seconds == 2
+    assert result.next_delay_seconds is None
     assert result.details["processed"] == ["calendar", "local_intelligence"]
     assert result.details["errors"] == {"news": "upstream_unavailable"}
     assert "private upstream detail" not in json.dumps(result.details)

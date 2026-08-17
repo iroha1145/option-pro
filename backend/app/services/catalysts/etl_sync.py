@@ -13,7 +13,12 @@ from .etl_client import (
     HealthProbe,
     MacroLensEtlClient,
 )
-from .etl_repository import CatalystEtlRepository, StreamName
+from .etl_repository import (
+    RECOVERABLE_WATERMARK_CODES,
+    CatalystEtlRepository,
+    EtlWatermarkConflict,
+    StreamName,
+)
 
 
 MIN_NEWS_PAGE_LIMIT = 50
@@ -174,6 +179,29 @@ class MacroLensIncrementalSync:
                 continue
             except EtlCursorResetRequired as exc:
                 if state.cursor is None or resets >= 1:
+                    await _repository_call(
+                        self.repository.record_error,
+                        stream,
+                        exc.code,
+                    )
+                    raise
+                await _repository_call(
+                    self.repository.reset_cursor,
+                    stream,
+                    error_code=exc.code,
+                )
+                resets += 1
+                continue
+            except EtlWatermarkConflict as exc:
+                # A moved frozen window leaves the old cursor pointing at a
+                # snapshot that will never match again. Reset once and resume
+                # from the last completed checkpoint instead of retrying the
+                # same cursor every two seconds.
+                if (
+                    state.cursor is None
+                    or resets >= 1
+                    or str(exc.code) not in RECOVERABLE_WATERMARK_CODES
+                ):
                     await _repository_call(
                         self.repository.record_error,
                         stream,

@@ -16,6 +16,14 @@ import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
 
 const STAGES = [t('萌芽'), t('发酵'), t('主升'), t('退潮')] as const;
+const FOCUS_JOB_TERMINAL: ReadonlySet<string> = new Set([
+  'completed',
+  'failed',
+  'cancelled',
+  'canceled',
+  'budget_blocked',
+  'insufficient_context',
+]);
 const DIR_ARROW: Record<NewsClassification, { icon: 'arrow-up-right' | 'arrow-down-right' | 'minus'; cls: string }> = {
   bullish: { icon: 'arrow-up-right', cls: 'text-up-700 bg-up-50' },
   bearish: { icon: 'arrow-down-right', cls: 'text-down-700 bg-down-50' },
@@ -256,7 +264,7 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
         try {
           const next = await catalystsContract.focusCycleJob(j.cycleId!);
           setJob({ ...next });
-          if (next.status === 'completed' || next.status === 'failed') {
+          if (FOCUS_JOB_TERMINAL.has(next.status)) {
             stopPoll();
             if (next.status === 'completed') {
               toast.success(t('新焦点周期已生成'));

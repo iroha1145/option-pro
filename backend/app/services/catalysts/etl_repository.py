@@ -118,7 +118,9 @@ SCHEMA_CHECKSUM = hashlib.sha256(_SCHEMA_SQL.encode("utf-8")).hexdigest()
 
 
 class EtlRepositoryError(RuntimeError):
-    pass
+    def __init__(self, code: str = "macrolens_etl_failed") -> None:
+        super().__init__(code)
+        self.code = str(code)
 
 
 class EtlCheckpointConflict(EtlRepositoryError):
@@ -127,6 +129,17 @@ class EtlCheckpointConflict(EtlRepositoryError):
 
 class EtlWatermarkConflict(EtlRepositoryError):
     pass
+
+
+# Mid-pagination frozen-window moves are recoverable: drop the stale cursor
+# and resume from the last completed checkpoint. Protocol regressions and
+# reused sequences stay fatal so a corrupt page cannot be retried blindly.
+RECOVERABLE_WATERMARK_CODES = frozenset(
+    {
+        "macrolens_etl_news_watermark_changed",
+        "macrolens_etl_calendar_watermark_changed",
+    }
+)
 
 
 @dataclass(frozen=True)

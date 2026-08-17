@@ -657,11 +657,18 @@ export const catalystsContract = {
   status: (): Promise<CatalystsStatusDetail> =>
     mockOr(() => fx2.getCatalystsStatusV2(), () => cachedGet('/catalysts/status').then(nStatus)),
   /** 今日新闻计数优先使用后端完整过滤窗口汇总；旧后端才退回当前页计数。 */
-  newsToday: (): Promise<{ count: number; analyzed: number; saturated: boolean }> =>
+  newsToday: (): Promise<{ count: number; analyzed: number; pending: number; saturated: boolean }> =>
     mockOr(
       async () => {
         const s = await fx2.getCatalystsStatusV2();
-        return { count: s.newsToday ?? 0, analyzed: s.analyzedToday ?? 0, saturated: false };
+        const count = s.newsToday ?? 0;
+        const analyzed = s.analyzedToday ?? 0;
+        return {
+          count,
+          analyzed,
+          pending: Math.max(0, count - analyzed),
+          saturated: false,
+        };
       },
       () =>
         cachedGet(`/catalysts/feed${qs({
@@ -678,24 +685,42 @@ export const catalystsContract = {
             'analyzedCount',
             'analyzed_count',
           );
+          const completePending = pickN(summary, 'pending');
+          const analyzed =
+            completeAnalyzed
+            ?? items.filter((i) => i.analysisStatus === 'completed').length;
+          const count = completeCount ?? items.length;
           return {
-            count: completeCount ?? items.length,
-            analyzed:
-              completeAnalyzed
-              ?? items.filter((i) => i.analysisStatus === 'completed').length,
+            count,
+            analyzed,
+            pending: completePending ?? Math.max(0, count - analyzed),
             saturated: completeCount === null && items.length >= 50,
           };
         }),
     ),
-  feed: (q: CatalystFeedQuery = {}): Promise<{ items: CatalystNewsItem[]; nextCursor: string | null; total: number }> =>
+  feed: (q: CatalystFeedQuery = {}): Promise<{
+    items: CatalystNewsItem[];
+    nextCursor: string | null;
+    total: number;
+    hiddenUnanalyzed: number;
+  }> =>
     mockOr(
-      () => fx2.getCatalystsFeedV2(q),
+      async () => {
+        const res = await fx2.getCatalystsFeedV2(q);
+        return { ...res, hiddenUnanalyzed: res.hiddenUnanalyzed ?? 0 };
+      },
       () =>
         cachedGet(`/catalysts/feed${qs(q)}`).then((d) => {
-          const items = unwrap(d, 'items')
-            .map(nNewsItem)
-            .filter((item) => item.titleZh && item.summaryZh);
-          return { items, nextCursor: pickS(asRec(d), 'next_cursor', 'nextCursor'), total: items.length };
+          const mapped = unwrap(d, 'items').map(nNewsItem);
+          const items = mapped.filter((item) => item.titleZh && item.summaryZh);
+          const summary = asRec(asRec(d).summary);
+          const pending = pickN(summary, 'pending') ?? 0;
+          return {
+            items,
+            nextCursor: pickS(asRec(d), 'next_cursor', 'nextCursor'),
+            total: items.length,
+            hiddenUnanalyzed: Math.max(mapped.length - items.length, pending),
+          };
         }),
     ),
   news: (id: string): Promise<CatalystNewsItem> =>

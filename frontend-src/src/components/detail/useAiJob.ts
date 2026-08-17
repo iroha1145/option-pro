@@ -1,4 +1,4 @@
-/** AI 任务轮询 Hook：2.5s 节奏至 succeeded/failed/cancelled 终止（§11） */
+/** AI 任务轮询 Hook：2.5s 节奏至 succeeded/failed/cancelled 终止，总超时 5 分钟（§11） */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { aiJobsApi } from '@/api/modules/ai-jobs';
 import type { AiJob } from '@/api/types';
@@ -32,7 +32,14 @@ export function useAiJob() {
   const poll = useCallback(
     (id: string) => {
       stop();
+      const deadline = Date.now() + 5 * 60_000;
       timerRef.current = setInterval(async () => {
+        if (Date.now() >= deadline) {
+          if (!aliveRef.current) return;
+          setError(`${t('分析任务仍在处理中')} · ${t('稍后刷新页面可继续查看结果')}`);
+          stop();
+          return;
+        }
         try {
           const j = await aiJobsApi.get(id);
           if (!aliveRef.current) return;

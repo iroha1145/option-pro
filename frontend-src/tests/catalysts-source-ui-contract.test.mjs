@@ -208,6 +208,7 @@ test('今日新闻优先使用完整过滤窗口汇总而非首屏五十条', as
       summary: {
         count: 342,
         analyzed_count: 217,
+        pending: 125,
       },
     },
   });
@@ -216,8 +217,29 @@ test('今日新闻优先使用完整过滤窗口汇总而非首屏五十条', as
 
   assert.equal(today.count, 342);
   assert.equal(today.analyzed, 217);
+  assert.equal(today.pending, 125);
   assert.equal(today.saturated, false);
   assert.deepEqual(loaded.calls, [feedPath]);
+});
+
+test('新闻流把未过中文校验的条目计为 hiddenUnanalyzed 而不是可见新闻', async () => {
+  const loaded = loadCatalystsModule({
+    '/catalysts/feed?include_unanalyzed=false&include_neutral=true&limit=12': {
+      items: [
+        { news_id: 1, title_zh: '已译标题', summary_zh: '已译摘要' },
+        { news_id: 2, title_zh: '', summary_zh: '' },
+        { news_id: 3, title_zh: '只有标题' },
+      ],
+      summary: { pending: 4 },
+    },
+  });
+
+  const feed = await loaded.exports.catalystsContract.feed({ limit: 12 });
+
+  assert.equal(feed.items.length, 1);
+  assert.equal(feed.items[0].newsId, '1');
+  assert.equal(feed.hiddenUnanalyzed, 4);
+  assert.equal(feed.total, 1);
 });
 
 test('股票影响圆点由外层定位，缩放动画不会覆盖居中位移', () => {

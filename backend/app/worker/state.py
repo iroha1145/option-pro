@@ -14,6 +14,7 @@ from typing import Any, Iterator, Mapping, Sequence
 
 SCHEMA_VERSION = "optix-worker-v2"
 LOCK_NAME = "optix-worker"
+MANUAL_ACTION_CLAIM_TTL_SECONDS = 10 * 60
 _MAX_DETAILS_BYTES = 16 * 1024
 _ACTION_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9._:-]{1,200}$")
@@ -386,6 +387,25 @@ class WorkerStateRepository:
             return cursor.rowcount
 
     @staticmethod
+    def _recover_stale_running_actions_on(
+        connection: sqlite3.Connection,
+        observed: datetime,
+    ) -> int:
+        cutoff = _iso(observed - timedelta(seconds=MANUAL_ACTION_CLAIM_TTL_SECONDS))
+        return int(
+            connection.execute(
+                """
+                UPDATE worker_action_requests
+                SET status='queued',started_at=NULL,owner_id=NULL,fencing_token=NULL,
+                    error_code='action_claim_expired',updated_at=?
+                WHERE status='running'
+                  AND (started_at IS NULL OR started_at<=?)
+                """,
+                (_iso(observed), cutoff),
+            ).rowcount
+        )
+
+    @staticmethod
     def _action_item(row: sqlite3.Row) -> dict[str, Any]:
         item = dict(row)
         item["cooldown_seconds"] = float(item["cooldown_seconds"])
@@ -421,6 +441,7 @@ class WorkerStateRepository:
         observed_text = _iso(observed)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            self._recover_stale_running_actions_on(connection, observed)
             existing = connection.execute(
                 """
                 SELECT * FROM worker_action_requests
@@ -429,7 +450,7 @@ class WorkerStateRepository:
                 (action_type, idempotency_key),
             ).fetchone()
             if existing is not None:
-                connection.rollback()
+                connection.commit()
                 item = self._action_item(existing)
                 item.update({"reused": True, "reason": "idempotent"})
                 return item
@@ -442,7 +463,7 @@ class WorkerStateRepository:
                 (action_type,),
             ).fetchone()
             if active is not None:
-                connection.rollback()
+                connection.commit()
                 item = self._action_item(active)
                 item.update({"reused": True, "reason": "already_running"})
                 return item
@@ -457,7 +478,7 @@ class WorkerStateRepository:
             if recent is not None:
                 cooldown_until = _parse(recent["cooldown_until"])
                 if cooldown_until is not None and cooldown_until > observed:
-                    connection.rollback()
+                    connection.commit()
                     item = self._action_item(recent)
                     item.update({"reused": True, "reason": "cooldown"})
                     return item
@@ -490,18 +511,38 @@ class WorkerStateRepository:
         item.update({"reused": False, "reason": "queued"})
         return item
 
-    def has_pending_actions(self, task_name: str) -> bool:
+    def has_pending_actions(
+        self,
+        task_name: str,
+        *,
+        now: datetime | None = None,
+    ) -> bool:
         if not self.path.is_file():
             return False
-        with self._connect(read_only=True) as connection:
-            row = connection.execute(
-                """
-                SELECT 1 FROM worker_action_requests
-                WHERE task_name=? AND status='queued' LIMIT 1
-                """,
-                (task_name,),
-            ).fetchone()
-        return row is not None
+        observed = _as_utc(now or utc_now())
+        try:
+            with self._connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                self._recover_stale_running_actions_on(connection, observed)
+                row = connection.execute(
+                    """
+                    SELECT 1 FROM worker_action_requests
+                    WHERE task_name=? AND status='queued' LIMIT 1
+                    """,
+                    (task_name,),
+                ).fetchone()
+                connection.commit()
+            return row is not None
+        except sqlite3.OperationalError:
+            with self._connect(read_only=True) as connection:
+                row = connection.execute(
+                    """
+                    SELECT 1 FROM worker_action_requests
+                    WHERE task_name=? AND status='queued' LIMIT 1
+                    """,
+                    (task_name,),
+                ).fetchone()
+            return row is not None
 
     def claim_actions(
         self,
@@ -516,6 +557,7 @@ class WorkerStateRepository:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             self._assert_fence(connection, owner_id, fencing_token, observed)
+            self._recover_stale_running_actions_on(connection, observed)
             rows = connection.execute(
                 """
                 SELECT * FROM worker_action_requests

@@ -886,7 +886,9 @@ class CatalystSyncTask:
                 status="degraded",
                 error_code="catalyst_sync_degraded",
                 details=details,
-                next_delay_seconds=delay,
+                # Let the supervisor apply exponential backoff. A fixed 2s
+                # retry used to hammer a broken news cursor / upstream.
+                next_delay_seconds=None,
             )
         return TaskResult(
             status="idle",
