@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import Icon from '@/components/icons';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
@@ -48,10 +48,12 @@ function OwnerAnalysisProgressCard() {
   const [busy, setBusy] = useState(true);
   const progressQ = usePolling(fetchNewsAnalysisProgress, busy ? 5_000 : 30_000);
   const progress = progressQ.data;
-  useEffect(() => {
-    if (!progress) return;
-    setBusy(progress.waiting > 0 || progress.inProgress > 0 || progress.awaitingValidation > 0);
-  }, [progress]);
+  /* 渲染期校正而不是 useEffect：空闲降频（5s→30s）只依赖最新一次
+     轮询结果，effect 里 setState 会多一轮级联渲染（eslint 基线红线）。 */
+  const nextBusy = progress
+    ? progress.waiting > 0 || progress.inProgress > 0 || progress.awaitingValidation > 0
+    : busy;
+  if (nextBusy !== busy) setBusy(nextBusy);
 
   if (progressQ.loading && !progress) {
     return (
