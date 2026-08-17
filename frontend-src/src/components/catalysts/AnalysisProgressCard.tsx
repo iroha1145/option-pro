@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import Icon from '@/components/icons';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
@@ -44,8 +45,13 @@ function progressHeadline(progress: NewsAnalysisProgress): string {
 
 function OwnerAnalysisProgressCard() {
   const reduceMotion = useReducedMotion();
-  const progressQ = usePolling(fetchNewsAnalysisProgress, 5_000);
+  const [busy, setBusy] = useState(true);
+  const progressQ = usePolling(fetchNewsAnalysisProgress, busy ? 5_000 : 30_000);
   const progress = progressQ.data;
+  useEffect(() => {
+    if (!progress) return;
+    setBusy(progress.waiting > 0 || progress.inProgress > 0 || progress.awaitingValidation > 0);
+  }, [progress]);
 
   if (progressQ.loading && !progress) {
     return (

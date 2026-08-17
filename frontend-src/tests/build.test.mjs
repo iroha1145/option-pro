@@ -188,7 +188,7 @@ test('failed focus attempt keeps the latest successful result visible and retrya
 
 test('default catalyst feed requests translated analysis and preserves neutral articles', async () => {
   const source = await readFile(catalystApiSource, 'utf8');
-  assert.match(source, /q\.includeUnanalyzed \?\? Boolean\(status && status !== 'completed'\)/);
+  assert.match(source, /q\.includeUnanalyzed \?\? \(status \? status !== 'completed' : true\)/);
   assert.match(source, /q\.includeNeutral \?\? true/);
   assert.match(source, /include_unanalyzed: includeUnanalyzed/);
   assert.match(source, /include_neutral: includeNeutral/);

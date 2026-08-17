@@ -1,8 +1,10 @@
-/** AI 任务轮询 Hook：2.5s 节奏至 succeeded/failed/cancelled 终止（§11） */
+/** AI 任务轮询 Hook：2.5s 节奏至 succeeded/failed/cancelled 终止，总超时 5 分钟（§11） */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { aiJobsApi } from '@/api/modules/ai-jobs';
 import type { AiJob } from '@/api/types';
 import { t } from '../../i18n/core.ts';
+
+const TERMINAL: ReadonlySet<string> = new Set(['succeeded', 'failed', 'cancelled']);
 
 export function useAiJob() {
   const [job, setJob] = useState<AiJob | null>(null);
@@ -11,12 +13,14 @@ export function useAiJob() {
      「生成分析」按钮立刻恢复可点，双击会创建两个付费任务（个股路径的
      evidence_as_of 微秒时间戳让服务端 request_hash 必然不同、去重失效）。 */
   const [starting, setStarting] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const aliveRef = useRef(true);
+  const generationRef = useRef(0);
 
   const stop = useCallback(() => {
+    generationRef.current += 1;
     if (timerRef.current) {
-      clearInterval(timerRef.current);
+      clearTimeout(timerRef.current);
       timerRef.current = null;
     }
   }, []);
@@ -32,18 +36,33 @@ export function useAiJob() {
   const poll = useCallback(
     (id: string) => {
       stop();
-      timerRef.current = setInterval(async () => {
+      const generation = generationRef.current;
+      const deadline = Date.now() + 5 * 60_000;
+      const tick = async () => {
+        if (!aliveRef.current || generation !== generationRef.current) return;
+        if (Date.now() >= deadline) {
+          setError(`${t('分析任务仍在处理中')} · ${t('稍后刷新页面可继续查看结果')}`);
+          stop();
+          return;
+        }
         try {
           const j = await aiJobsApi.get(id);
-          if (!aliveRef.current) return;
+          if (!aliveRef.current || generation !== generationRef.current) return;
           setJob(j);
-          if (j.status === 'succeeded' || j.status === 'failed' || j.status === 'cancelled') stop();
+          if (TERMINAL.has(j.status)) {
+            stop();
+            return;
+          }
         } catch (e) {
-          if (!aliveRef.current) return;
+          if (!aliveRef.current || generation !== generationRef.current) return;
           setError(e instanceof Error ? e.message : t('任务查询失败'));
           stop();
+          return;
         }
-      }, 2500);
+        if (!aliveRef.current || generation !== generationRef.current) return;
+        timerRef.current = setTimeout(() => void tick(), 2500);
+      };
+      timerRef.current = setTimeout(() => void tick(), 2500);
     },
     [stop],
   );
@@ -60,6 +79,7 @@ export function useAiJob() {
         const j = await create();
         if (!aliveRef.current) return;
         setJob(j);
+        if (TERMINAL.has(j.status)) return;
         poll(j.id);
       } catch (e) {
         if (!aliveRef.current) return;

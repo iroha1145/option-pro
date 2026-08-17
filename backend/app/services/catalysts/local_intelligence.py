@@ -135,7 +135,9 @@ SCHEDULED_TRANSIENT_AI_ERRORS = frozenset(
 SCHEDULED_NEWS_RETRYABLE_ERRORS = SCHEDULED_TRANSIENT_AI_ERRORS
 SCHEDULED_FOCUS_RETRYABLE_ERRORS = SCHEDULED_TRANSIENT_AI_ERRORS
 MANUAL_REFRESH_CLAIM_TTL_SECONDS = 10 * 60
+FOCUS_PREPARING_TTL_SECONDS = 10 * 60
 MANUAL_REFRESH_TYPES = ("news", "calendar", "source_health")
+_UNANALYZED_STATUSES = frozenset({"", "not_requested", "pending"})
 ANALYSIS_LINK_BUSY_TIMEOUT_MS = 250
 # 变更日志修剪：下限必须大于公共 feed 窗口上限（7 天，api/catalysts.py 的
 # _PUBLIC_MAX_WINDOW_HOURS）——保留期内条目整体保留，窗口读语义不受影响。
@@ -515,6 +517,14 @@ def _is_sqlite_write_contention(error: BaseException) -> bool:
         return True
     message = str(error).casefold()
     return "database is locked" in message or "database table is locked" in message
+
+
+def _analysis_status_matches(actual: Any, requested: Any) -> bool:
+    wanted = str(requested or "")
+    have = str(actual or "")
+    if wanted in _UNANALYZED_STATUSES:
+        return have in _UNANALYZED_STATUSES
+    return have == wanted
 
 
 def _minute_bucket(value: datetime) -> str:
@@ -1425,8 +1435,10 @@ class LocalCatalystIntelligence:
                      )
                    ORDER BY c.change_sequence"""
             ).fetchall()
-        except sqlite3.OperationalError:
-            return 0
+        except sqlite3.OperationalError as error:
+            if _is_sqlite_write_contention(error):
+                return 0
+            raise
         inserted = 0
         observed = _iso()
         for row in rows:
@@ -3708,6 +3720,7 @@ class LocalCatalystIntelligence:
             connection.execute("BEGIN IMMEDIATE")
             try:
                 ingested = self._ingest_revisions(connection)
+                self._recover_stale_preparing_focus(connection, now=now)
                 recovered_links = self._recover_unlinked_news_jobs(
                     connection,
                     ai_jobs,
@@ -3846,6 +3859,7 @@ class LocalCatalystIntelligence:
             "fetched_at": row.get("fetched_at"),
             "updated_at": row.get("source_available_at"),
             "source_tickers": list(row.get("canonical_tickers") or []),
+            "source_count": int(row.get("source_count") or 1),
             "analysis_status": status,
             "analysis": result,
             "analyzed_at": available,
@@ -4100,7 +4114,10 @@ class LocalCatalystIntelligence:
                 continue
             if classification and result.get("classification") != classification:
                 continue
-            if analysis_status and item.get("analysis_status") != analysis_status:
+            if analysis_status and not _analysis_status_matches(
+                item.get("analysis_status"),
+                analysis_status,
+            ):
                 continue
             if not kwargs.get("include_unanalyzed", True) and not result:
                 continue
@@ -5971,6 +5988,7 @@ class LocalCatalystIntelligence:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
+                self._recover_stale_preparing_focus(connection, now=observed)
                 if force:
                     existing = connection.execute(
                         """SELECT cycle_id FROM catalyst_local_focus_cycles
@@ -6503,6 +6521,25 @@ class LocalCatalystIntelligence:
         ):
             payload["status"] = "cooldown"
         return payload
+
+    @staticmethod
+    def _recover_stale_preparing_focus(
+        connection: sqlite3.Connection,
+        *,
+        now: datetime,
+    ) -> int:
+        cutoff = _iso(now - timedelta(seconds=FOCUS_PREPARING_TTL_SECONDS))
+        return int(
+            connection.execute(
+                """UPDATE catalyst_local_focus_cycles
+                   SET status='failed',error_code='focus_prepare_expired',
+                       updated_at=?
+                   WHERE status='preparing'
+                     AND job_id LIKE 'intent:%'
+                     AND updated_at<=?""",
+                (_iso(now), cutoff),
+            ).rowcount
+        )
 
     @staticmethod
     def _recover_stale_manual_operations(

@@ -201,8 +201,7 @@ class WorkerSupervisor:
         try:
             await self._state_call(write)
         except sqlite3.OperationalError as error:
-            # 未标记完成的手动请求会留在 claimed 状态等待过期回收；
-            # 比让循环陪葬好。
+            # 未标记完成的手动请求留给死租约回收；比让循环陪葬好。
             logger.warning(
                 "worker manual action finish dropped task=%s error=%s",
                 task.name,
@@ -349,6 +348,21 @@ class WorkerSupervisor:
             if not isinstance(result, TaskResult):
                 raise TypeError("worker task must return TaskResult")
         except asyncio.CancelledError:
+            if manual_request_ids:
+                await self._finish_actions_guarded(
+                    task,
+                    token,
+                    manual_request_ids,
+                    succeeded=False,
+                    error_code="shutdown_cancelled",
+                    details={
+                        "task_status": "interrupted",
+                        "task_completed_at": utc_now().isoformat().replace(
+                            "+00:00", "Z"
+                        ),
+                    },
+                    now=utc_now(),
+                )
             raise
         except Exception as error:
             failures = self._failures[task.name] + 1

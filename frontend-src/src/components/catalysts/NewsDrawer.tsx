@@ -145,11 +145,21 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.newsId]);
 
-  /* 轮询任务至终态（退避 2s→3s→5s→8s→10s） */
+  /* 轮询任务至终态（退避 2s→3s→5s→8s→10s，总超时 5 分钟） */
+  const pollDeadlineRef = useRef<{ jobId: string; at: number } | null>(null);
   useEffect(() => {
     if (!job || TERMINAL.includes(job.status)) return;
+    if (pollDeadlineRef.current?.jobId !== job.jobId) {
+      pollDeadlineRef.current = { jobId: job.jobId, at: Date.now() + 5 * 60_000 };
+    }
+    const deadline = pollDeadlineRef.current.at;
     const BACKOFF = [2000, 3000, 5000, 8000, 10000];
     const tick = async () => {
+      if (Date.now() >= deadline) {
+        stopPoll();
+        toast.error(__t('分析任务仍在处理中'), __t('稍后刷新页面可继续查看结果'));
+        return;
+      }
       try {
         const next = await catalystsContract.analysisJob(job.jobId);
         setJob({ ...next });

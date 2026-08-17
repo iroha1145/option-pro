@@ -101,6 +101,13 @@ def _valid_zh_text(
         return None
 
 
+_UNANALYZED_STATUSES = frozenset({"", "not_requested", "pending"})
+
+
+def _displayable_zh(item: Mapping[str, Any]) -> bool:
+    return bool(str(item.get("title_zh") or "").strip() and str(item.get("summary_zh") or "").strip())
+
+
 class _LocalIntelligence(Protocol):
     def initialize(self) -> None: ...
     def status(
@@ -1160,6 +1167,7 @@ class PersonalCatalystService:
                 "stock_impacts": [],
                 "next_cursor": None,
                 "has_more": False,
+                "hidden_unanalyzed": 0,
                 "warnings": status.get("warnings", []),
             }
             payload["analysis_availability"] = status["analysis_availability"]
@@ -1187,6 +1195,7 @@ class PersonalCatalystService:
                 "stock_impacts": [],
                 "next_cursor": None,
                 "has_more": False,
+                "hidden_unanalyzed": 0,
                 "warnings": ["cache_unavailable"],
             }
         projected = self._project_news_envelope(
@@ -1206,11 +1215,14 @@ class PersonalCatalystService:
             if not kwargs.get("include_unanalyzed", True) and not has_analysis:
                 return False
             analysis_status = kwargs.get("analysis_status")
-            if (
-                analysis_status
-                and str(item.get("analysis_status") or "") != str(analysis_status)
-            ):
-                return False
+            if analysis_status:
+                wanted = str(analysis_status)
+                have = str(item.get("analysis_status") or "")
+                if wanted in _UNANALYZED_STATUSES:
+                    if have not in _UNANALYZED_STATUSES:
+                        return False
+                elif have != wanted:
+                    return False
             if not has_analysis:
                 return not any(
                     (
@@ -1260,9 +1272,12 @@ class PersonalCatalystService:
                 return False
             return True
 
-        projected["items"] = [
+        matched = [
             item for item in projected_items if matches_projected_filters(item)
         ]
+        visible = [item for item in matched if _displayable_zh(item)]
+        projected["items"] = visible
+        projected["hidden_unanalyzed"] = max(0, len(matched) - len(visible))
         if not projected["items"] and not projected.get("has_more"):
             projected["status"] = "empty"
         projected["analysis_availability"] = status["analysis_availability"]

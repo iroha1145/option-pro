@@ -7482,3 +7482,100 @@ def test_cached_feed_items_are_isolated_from_caller_mutation(
     assert fresh["title"] != "tampered"
     assert "HACK" not in fresh["source_tickers"]
     assert "_validation_title" in fresh
+
+
+def test_ingest_reraises_non_lock_operational_errors(tmp_path, monkeypatch):
+    etl, _ai, intelligence = _stack(tmp_path)
+    now = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(
+        etl,
+        [_news_change(1, 501, available_at=now - timedelta(minutes=3))],
+        as_of=now - timedelta(minutes=2),
+    )
+    original_connect = intelligence._connect
+
+    class _BrokenSelect:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def execute(self, statement, *args, **kwargs):
+            if "macrolens_etl_news_changes" in str(statement):
+                raise sqlite3.OperationalError("no such table: macrolens_etl_news_changes")
+            return self.connection.execute(statement, *args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(self.connection, name)
+
+    @contextmanager
+    def broken_connect():
+        with original_connect() as connection:
+            yield _BrokenSelect(connection)
+
+    monkeypatch.setattr(intelligence, "_connect", broken_connect)
+    with pytest.raises(sqlite3.OperationalError, match="no such table"):
+        intelligence.reconcile()
+
+
+def test_stale_preparing_focus_unblocks_a_new_revision(tmp_path, monkeypatch):
+    etl, ai, intelligence = _stack(tmp_path)
+    first_now = datetime(2026, 8, 17, 10, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: first_now)
+    _apply_news(
+        etl,
+        [_news_change(1, 88, available_at=first_now - timedelta(minutes=10))],
+        as_of=first_now - timedelta(minutes=9),
+    )
+    first_revision = intelligence.reconcile()["prepared_revision"]
+    stale_at = first_now - timedelta(minutes=11)
+    cycle_id = "mfc_" + "ab" * 16
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """INSERT INTO catalyst_local_focus_cycles(
+                   cycle_id,status,prepared_revision,snapshot_as_of,input_hash,
+                   job_id,payload_json,created_at,updated_at
+               ) VALUES(?,?,?,?,?,?,?,?,?)""",
+            (
+                cycle_id,
+                "preparing",
+                first_revision,
+                _iso(stale_at),
+                "a" * 64,
+                f"intent:{cycle_id}",
+                json.dumps({"cycle_id": cycle_id, "force": 0}),
+                _iso(stale_at),
+                _iso(stale_at),
+            ),
+        )
+        connection.commit()
+
+    second_now = first_now + timedelta(hours=2)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: second_now)
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                2,
+                89,
+                available_at=second_now - timedelta(minutes=1),
+                tickers=("AMD",),
+            )
+        ],
+        as_of=second_now,
+    )
+    second_revision = intelligence.reconcile()["prepared_revision"]
+    assert second_revision != first_revision
+    cycle = intelligence.request_market_focus_cycle(
+        expected_prepared_revision=second_revision,
+        as_of=second_now,
+    )
+    assert cycle["cycle_id"] != cycle_id
+    assert cycle["job_id"]
+    with sqlite3.connect(intelligence.db_path) as connection:
+        stale = connection.execute(
+            "SELECT status,error_code FROM catalyst_local_focus_cycles WHERE cycle_id=?",
+            (cycle_id,),
+        ).fetchone()
+    assert stale[0] == "failed"
+    assert stale[1] == "focus_prepare_expired"
+    assert ai.get_job(cycle["job_id"]) is not None

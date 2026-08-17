@@ -386,6 +386,58 @@ class WorkerStateRepository:
             return cursor.rowcount
 
     @staticmethod
+    def _recover_orphaned_running_actions_on(
+        connection: sqlite3.Connection,
+        observed: datetime,
+    ) -> int:
+        """Requeue running actions whose claiming fence is no longer live.
+
+        A live fence must keep its in-flight claim. Wall-clock TTL would
+        reclaim work that is still executing and run it twice.
+        """
+
+        lock = connection.execute(
+            "SELECT * FROM optix_worker_lock WHERE lock_name=?",
+            (LOCK_NAME,),
+        ).fetchone()
+        observed_text = _iso(observed)
+        if WorkerStateRepository._live(lock, observed):
+            return int(
+                connection.execute(
+                    """
+                    UPDATE worker_action_requests
+                    SET status='queued',started_at=NULL,owner_id=NULL,
+                        fencing_token=NULL,error_code='action_lease_expired',
+                        updated_at=?
+                    WHERE status='running'
+                      AND (
+                        owner_id IS NULL
+                        OR fencing_token IS NULL
+                        OR owner_id!=?
+                        OR fencing_token!=?
+                      )
+                    """,
+                    (
+                        observed_text,
+                        str(lock["owner_id"]),
+                        int(lock["fencing_token"]),
+                    ),
+                ).rowcount
+            )
+        return int(
+            connection.execute(
+                """
+                UPDATE worker_action_requests
+                SET status='queued',started_at=NULL,owner_id=NULL,
+                    fencing_token=NULL,error_code='action_lease_expired',
+                    updated_at=?
+                WHERE status='running'
+                """,
+                (observed_text,),
+            ).rowcount
+        )
+
+    @staticmethod
     def _action_item(row: sqlite3.Row) -> dict[str, Any]:
         item = dict(row)
         item["cooldown_seconds"] = float(item["cooldown_seconds"])
@@ -421,6 +473,7 @@ class WorkerStateRepository:
         observed_text = _iso(observed)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            self._recover_orphaned_running_actions_on(connection, observed)
             existing = connection.execute(
                 """
                 SELECT * FROM worker_action_requests
@@ -429,7 +482,7 @@ class WorkerStateRepository:
                 (action_type, idempotency_key),
             ).fetchone()
             if existing is not None:
-                connection.rollback()
+                connection.commit()
                 item = self._action_item(existing)
                 item.update({"reused": True, "reason": "idempotent"})
                 return item
@@ -442,7 +495,7 @@ class WorkerStateRepository:
                 (action_type,),
             ).fetchone()
             if active is not None:
-                connection.rollback()
+                connection.commit()
                 item = self._action_item(active)
                 item.update({"reused": True, "reason": "already_running"})
                 return item
@@ -457,7 +510,7 @@ class WorkerStateRepository:
             if recent is not None:
                 cooldown_until = _parse(recent["cooldown_until"])
                 if cooldown_until is not None and cooldown_until > observed:
-                    connection.rollback()
+                    connection.commit()
                     item = self._action_item(recent)
                     item.update({"reused": True, "reason": "cooldown"})
                     return item
@@ -516,6 +569,7 @@ class WorkerStateRepository:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             self._assert_fence(connection, owner_id, fencing_token, observed)
+            self._recover_orphaned_running_actions_on(connection, observed)
             rows = connection.execute(
                 """
                 SELECT * FROM worker_action_requests

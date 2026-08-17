@@ -62,6 +62,11 @@ export const CATALYSTS: Dict = {
   '新闻暂不可用': ['News unavailable', 'ニュースを取得できません'],
   '这个角度暂时没有新闻': ['No news for this view yet', 'この条件に該当するニュースはまだありません'],
   '暂时没有新闻': ['No news yet', 'ニュースはまだありません'],
+  '已收录、等中文分析': ['Collected — waiting for Chinese analysis', '収集済み、中国語分析待ち'],
+  '新闻已入库，中文标题与摘要生成后会显示在这里': [
+    'These items are already stored. Chinese titles and summaries will appear here after analysis.',
+    'ニュースはすでに取り込まれています。中国語の見出しと要約は分析後に表示されます。',
+  ],
   '放宽过滤条件，或清除后查看全量新闻流': [
     'Broaden your filters, or clear them to see the full news feed',
     '条件を緩めるか、フィルターを解除して全ニュースを表示してください',
@@ -220,6 +225,7 @@ export const CATALYSTS: Dict = {
   '未调用模型': ['Model was not called', 'モデルは呼び出されていません'],
   '可重试': ['You can retry', '再試行できます'],
   '任务已取消': ['Job cancelled', 'ジョブをキャンセルしました'],
+  '分析任务仍在处理中': ['The analysis job is still processing', '分析ジョブはまだ処理中です'],
   '分析任务已提交': ['Analysis job submitted', '分析ジョブを送信しました'],
   '强制重新分析': ['Forced re-analysis', '強制再分析'],
   '可在本页查看真实状态': ['You can track its real status on this page', 'このページで実際の状況を確認できます'],
@@ -303,6 +309,7 @@ export const CATALYSTS: Dict = {
   '· 已分析': ['· analyzed', '· 分析済み'],
   '今日新闻': ['News today', '本日のニュース'],
   '条 / 24h': ['/ 24h', '件 / 24h'],
+  '待中文': ['Awaiting Chinese', '中国語待ち'],
   '新闻与经济日历持续收录；每条新闻标注原始来源；滞后表示数据更新到了什么时候；影响分与置信度为 AI 估计': [
     'News and the economic calendar are continuously collected; each item is tagged with its original source; lag shows how current the data is; impact and confidence scores are AI estimates.',
     'ニュースと経済カレンダーは継続的に収集されています。各ニュースには元のソースが付記されます。遅延はデータがいつまで更新されているかを示します。インパクトスコアと信頼度はAIによる推定値です。',

@@ -801,7 +801,7 @@ class CatalystSyncTask:
                 errors["local_intelligence"] = self._error_code(exc)
             else:
                 processed.append("local_intelligence")
-        if scheduled_due:
+        if scheduled_due and "news" not in errors and "calendar" not in errors:
             self._last_personal_sync_monotonic = clock
 
         # 变更日志保留：同步成功的整点周期里按节流间隔修剪。hasattr 守卫让
@@ -886,7 +886,9 @@ class CatalystSyncTask:
                 status="degraded",
                 error_code="catalyst_sync_degraded",
                 details=details,
-                next_delay_seconds=delay,
+                # Let the supervisor apply exponential backoff. A fixed 2s
+                # retry used to spin the worker and hide a broken cursor.
+                next_delay_seconds=None,
             )
         return TaskResult(
             status="idle",
@@ -1853,8 +1855,15 @@ class PublicHomeTask:
             self._inflight[resource] = attempt
             try:
                 await asyncio.shield(child)
-            except asyncio.CancelledError:
-                raise
+            except asyncio.CancelledError as cancelled:
+                while not child.done():
+                    try:
+                        await asyncio.shield(child)
+                    except asyncio.CancelledError:
+                        continue
+                    except Exception:
+                        break
+                raise cancelled
             except Exception:
                 pass
             entries = await self._harvest(

@@ -183,6 +183,11 @@ export const DETAIL: Dict = {
 
   /* src/components/detail/useAiJob.ts */
   '任务查询失败': ['Failed to check task status', 'ジョブの状態確認に失敗しました'],
+  '分析任务仍在处理中': ['The analysis job is still processing', '分析ジョブはまだ処理中です'],
+  '稍后刷新页面可继续查看结果': [
+    'Refresh the page later to see the result',
+    'しばらくしてからページを更新すると結果を確認できます',
+  ],
   'AI 输出仅供研究 · 影响分为方向性估计 · 非收益预测 · 置信度非胜率': ['AI output is for research only · Impact score is a directional estimate, not a return forecast · Confidence is not a win rate', 'AI出力は研究目的のみです · インパクトスコアは方向性の推定であり、リターン予測ではありません · 信頼度は勝率ではありません'],
 
   /* src/pages/StockDetail.tsx */
