@@ -3,7 +3,7 @@
  * Durations stay in CSS custom properties; these helpers only read them and
  * toggle the documented class / attribute hooks (is-open, is-closing, is-shaking).
  */
-import { useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 export type OverlayPhase = 'closed' | 'preopen' | 'open' | 'closing';
 
@@ -117,6 +117,70 @@ export function replayShake(el: HTMLElement): void {
   el.classList.remove('is-shaking');
   void el.offsetWidth;
   el.classList.add('is-shaking');
+}
+
+/**
+ * Catalog error-shake classes for the wrap + the bordered input.
+ * These strings must land in React `className` — a later commit of
+ * `className={cn(...)}` would wipe classList-only toggles.
+ */
+export function catalogShakeStateClasses(
+  error: boolean,
+  shaking: boolean,
+): { wrap: string; input: string } {
+  return {
+    wrap: error ? 'is-error' : '',
+    input: [error ? 'is-error' : '', shaking ? 'is-shaking' : ''].filter(Boolean).join(' '),
+  };
+}
+
+/** React owner for the catalog shake: state → className, reflow, then replay. */
+export function useCatalogShake(holdMs = 1200) {
+  const [error, setError] = useState(false);
+  const [shaking, setShaking] = useState(false);
+  const inputRef = useRef<HTMLDivElement>(null);
+  const holdTimer = useRef(0);
+
+  const play = useCallback(() => {
+    setError(true);
+    setShaking(false);
+    if (holdTimer.current) window.clearTimeout(holdTimer.current);
+    holdTimer.current = window.setTimeout(() => {
+      setError(false);
+      setShaking(false);
+      holdTimer.current = 0;
+    }, holdMs);
+  }, [holdMs]);
+
+  const clear = useCallback(() => {
+    if (holdTimer.current) window.clearTimeout(holdTimer.current);
+    holdTimer.current = 0;
+    setError(false);
+    setShaking(false);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!error || shaking) return;
+    const el = inputRef.current;
+    if (el) void el.offsetWidth;
+    setShaking(true);
+  }, [error, shaking]);
+
+  useEffect(
+    () => () => {
+      if (holdTimer.current) window.clearTimeout(holdTimer.current);
+    },
+    [],
+  );
+
+  return {
+    error,
+    shaking,
+    inputRef,
+    classes: catalogShakeStateClasses(error, shaking),
+    play,
+    clear,
+  };
 }
 
 export function shakeDurationMs(cssText: string): number {

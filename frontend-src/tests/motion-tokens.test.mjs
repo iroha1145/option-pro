@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 import {
+  catalogShakeStateClasses,
   overlayClassName,
   overlayDataOpen,
   overlayTiming,
@@ -70,7 +71,8 @@ const SURFACES = [
   ['components/screener/SideCards.tsx', /t-acc/, 't-acc'],
   ['components/screener/SideCards.tsx', /t-acc-panel-inner/, 't-acc-panel-inner'],
   ['pages/Login.tsx', /t-input-wrap/, 't-input-wrap'],
-  ['pages/Login.tsx', /replayShake/, 'replayShake'],
+  ['pages/Login.tsx', /shake\.classes\.wrap/, 'shake wrap className'],
+  ['pages/Login.tsx', /shake\.classes\.input/, 'shake input className'],
 ];
 
 test('motion-token custom properties ship in transitions-root.css', async () => {
@@ -164,6 +166,28 @@ test('chrome sources wire documented t-* hooks and drop stacked framer enter/exi
   assert.doesNotMatch(method, /AnimatePresence/);
   const login = await source('pages/Login.tsx');
   assert.doesNotMatch(login, /animate-nudge-shake/);
+});
+
+test('Login renders is-error and is-shaking via React className, not classList', async () => {
+  const login = await source('pages/Login.tsx');
+  assert.match(login, /useCatalogShake/);
+  assert.match(login, /className=\{cn\(\s*'t-input-wrap',\s*shake\.classes\.wrap\)\}/);
+  assert.match(
+    login,
+    /className=\{cn\([\s\S]*shake\.classes\.input[\s\S]*shake\.error \? 'border-down-600'/,
+  );
+  assert.doesNotMatch(login, /classList\.add\(/);
+  assert.doesNotMatch(login, /classList\.remove\(/);
+  assert.doesNotMatch(login, /replayShake\(/);
+
+  const on = catalogShakeStateClasses(true, true);
+  assert.match(on.wrap, /\bis-error\b/);
+  assert.match(on.input, /\bis-error\b/);
+  assert.match(on.input, /\bis-shaking\b/);
+  const off = catalogShakeStateClasses(false, false);
+  assert.equal(off.wrap, '');
+  assert.equal(off.input, '');
+  assert.doesNotMatch(catalogShakeStateClasses(true, false).input, /\bis-shaking\b/);
 });
 
 test('overlayClassName / overlayVisible drive the documented state classes', () => {
