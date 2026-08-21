@@ -79,6 +79,16 @@ test('热点带用上了这个组件', async () => {
   assert.doesNotMatch(strip, /className="-mx-4 mt-4 overflow-x-auto/);
 });
 
+test('热点卡顶条被卡片圆角裁切，不会画出圆角', async () => {
+  const strip = await source('components/catalysts/HotspotsStrip.tsx');
+  assert.match(strip, /absolute inset-x-0 top-0 h-\[2px\]/);
+  assert.match(
+    strip,
+    /overflow-hidden rounded-lg border border-line bg-card/,
+    'heat bar is a 2px rect; without overflow-hidden it squares off the card corners',
+  );
+});
+
 test('板块 chip 条也用上了这个组件，且 tablist 语义留在原处', async () => {
   const chips = await source('components/sectors/SectorChips.tsx');
   // 实测 /sectors 上这条 chip 带藏掉 1474px（2117 轨道 / 643 视口）且没有任何控件

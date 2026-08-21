@@ -6,12 +6,17 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { AnimatePresence, motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
 import { stocksApi } from '@/api/modules/stocks';
 import { useAccess } from '@/hooks/useAccess';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { cn } from '@/lib/utils';
+import {
+  overlayClassName,
+  overlayVisible,
+  readRootDurationMs,
+  useOverlayPhase,
+} from '@/lib/transitions';
 import { pushRecent, readRecent } from '@/lib/recentTickers';
 import Icon, { type IconName } from '@/components/icons';
 import { NAV_ITEMS } from '@/components/Navbar';
@@ -77,6 +82,9 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
   const panelRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, open, { initialFocusRef: inputRef });
+  const closeMs = readRootDurationMs('--modal-close-dur', 150);
+  const phase = useOverlayPhase(open, closeMs);
+  const mounted = overlayVisible(open, phase);
 
   /* 全局快捷键 ⌘K / Ctrl+K 由 Layout 绑定；此处处理打开后逻辑 */
   useEffect(() => {
@@ -247,14 +255,14 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
   }, [clampedActive]);
 
   /* 面板打开时锁背景滚动（审计 2.2.14）：与 Drawer 同口径，滚轮不再穿透
-     到背后的页面。 */
+     到背后的页面。关闭动画期间仍锁，避免背后页面跟着滚。 */
   useEffect(() => {
-    if (!open) return;
+    if (!mounted) return;
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = '';
     };
-  }, [open]);
+  }, [mounted]);
 
   /* 分组渲染 */
   const groups: { name: string; items: (Entry & { idx: number })[] }[] = [];
@@ -265,20 +273,18 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
     else groups.push({ name: e.group, items: [item] });
   });
 
+  if (!mounted) return null;
+
   return (
-    <AnimatePresence>
-      {open && (
         <>
-          {/* 频率门禁：⌘K 为键盘高频动作，背板只保留 ≤80ms 淡入淡出 */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.08 }}
-            className="fixed inset-0 z-[80] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px]"
+          <div
+            className={cn('t-backdrop fixed inset-0 z-[80] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
             onClick={onClose}
           />
-          {/* 面板本体即时出现，无开/关动画 */}
+          {/* 居中交给外层 translate，避免 t-modal 的 scale 顶掉 -translate-x-1/2；
+              外壳 pointer-events-none：关闭动画期间不挡背板点击（面板自身由
+              t-modal.is-open 恢复 pointer-events）。 */}
+          <div className="pointer-events-none fixed left-1/2 top-[18vh] z-[81] w-[640px] max-w-[calc(100vw-24px)] -translate-x-1/2">
           <div
             ref={panelRef}
             role="dialog"
@@ -287,7 +293,10 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
             /* 键盘逻辑挂在面板上（审计 2.2.13）：焦点 Tab 进结果按钮后，
                ↑↓/Enter/Esc 依然生效（事件冒泡到这里统一处理）。 */
             onKeyDown={onKeyDown}
-            className="fixed left-1/2 top-[18vh] z-[81] w-[640px] max-w-[calc(100vw-24px)] -translate-x-1/2 overflow-hidden rounded-lg border border-line-strong bg-card/[0.88] backdrop-blur-xl backdrop-saturate-150 shadow-overlay"
+            className={cn(
+              't-modal overflow-hidden rounded-lg border border-line-strong bg-card/[0.88] backdrop-blur-xl backdrop-saturate-150 shadow-overlay',
+              overlayClassName(phase),
+            )}
           >
             {/* 顶边 brand 发丝线（纸面卡片签名） */}
             <div className="flex h-12 items-center gap-2.5 border-b border-line px-4">
@@ -383,8 +392,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
               <span className="flex items-center gap-1.5"><Kbd>Esc</Kbd> {__t('关闭')}</span>
             </div>
           </div>
+          </div>
         </>
-      )}
-    </AnimatePresence>
   );
 }

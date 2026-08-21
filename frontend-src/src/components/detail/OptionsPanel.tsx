@@ -15,6 +15,7 @@ import { useAccess } from '@/hooks/useAccess';
 import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
 import { SkeletonRows } from '@/components/shared/Skeleton';
+import MenuSelect from '@/components/shared/MenuSelect';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { fmtPrice, fmtRelative } from '@/lib/format';
@@ -367,7 +368,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
     [ticker, exp],
   );
   /* 到期日列表失败才整块空态；单个到期周的链失败只替换表格区域——
-     否则一个坏到期日会连带换掉 <select>，用户失去唯一的逃生控件，
+     否则一个坏到期日会连带换掉到期日选择，用户失去唯一的逃生控件，
      若坏的恰是 expirations[0]，整个期权页持续不可用。 */
   const providerError = expError ?? chainError;
   const retrySeconds = useRetryCountdown(
@@ -510,21 +511,13 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
     <div>
       {/* 到期日下拉 + DTE */}
       <div className="flex flex-wrap items-center gap-3">
-        <label className="relative inline-flex items-center">
-          <select
-            value={exp ?? ''}
-            onChange={(e) => setExpiration(e.target.value)}
-            className="h-9 appearance-none rounded-md border border-line-strong bg-card pl-3 pr-8 font-mono text-caption text-ink-800 tnum transition-shadow focus:shadow-focus-ring focus:outline-none"
-            aria-label={t("选择到期日")}
-          >
-            {expList.map((x) => (
-              <option key={x} value={x}>
-                {x} · DTE {dte(x)}
-              </option>
-            ))}
-          </select>
-          <Icon name="chevron-down" size={14} className="pointer-events-none absolute right-2.5 text-ink-400" />
-        </label>
+        <MenuSelect
+          ariaLabel={t('选择到期日')}
+          value={exp ?? expList[0]}
+          onChange={setExpiration}
+          options={expList.map((x) => ({ value: x, label: `${x} · DTE ${dte(x)}` }))}
+          triggerClassName="h-9 border-line-strong pl-3 text-ink-800"
+        />
         {shownChain && (
           <p className="text-micro text-ink-400">
             {t('标的价')}{' '}

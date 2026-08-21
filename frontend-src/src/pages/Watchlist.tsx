@@ -3,7 +3,7 @@
  * B0 页头带 · B1 概览统计（count-up）· B2 可排序表格/卡片（tick-flash）· B3 侧栏（信号/强度分布/市场时钟）
  * 轮询 60s · 空态 / 骨架 / 503 · 响应式
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
 import { stocksApi } from '@/api/modules/stocks';
@@ -31,13 +31,14 @@ import ChangeBadge from '@/components/shared/ChangeBadge';
 import StrengthBar from '@/components/shared/StrengthBar';
 import SignalChip from '@/components/shared/SignalChip';
 import Segmented from '@/components/shared/Segmented';
+import MenuSelect from '@/components/shared/MenuSelect';
 import DataTable, { type Column, type SortState } from '@/components/shared/DataTable';
 import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import SessionLED, { SessionDot } from '@/components/shared/SessionLED';
-import { SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
+import { SkeletonCard, SkeletonReveal, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
 import Icon from '@/components/icons';
 import { t } from '../i18n/core.ts';
@@ -238,60 +239,16 @@ const SORT_OPTIONS: { id: string; label: string; sort: SortState | null }[] = [
 ];
 
 function SortDropdown({ sort, onChange }: { sort: SortState | null; onChange: (s: SortState | null) => void }) {
-  const [open, setOpen] = useState(false);
   const current = SORT_OPTIONS.find((o) => o.sort?.key === sort?.key && o.sort?.desc === sort?.desc) ?? SORT_OPTIONS[0];
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    /* Escape 也能关（审计 2.5.8） */
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-2.5 text-caption text-ink-500 shadow-btn transition-colors hover:text-ink-800"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-      >
-        <Icon name="filter-funnel" size={13} />
-        <span className="font-mono">{current.label}</span>
-        <Icon name="chevron-down" size={12} className={cn('transition-transform duration-200', open && 'rotate-180')} />
-      </button>
-      {open && (
-        <div role="listbox" className="absolute right-0 top-9 z-30 w-40 overflow-hidden rounded-md border border-line bg-card shadow-sh-2">
-          {SORT_OPTIONS.map((o) => (
-            <button
-              key={o.id}
-              role="option"
-              aria-selected={current.id === o.id}
-              onClick={() => {
-                onChange(o.sort);
-                setOpen(false);
-              }}
-              className={cn(
-                'flex w-full items-center justify-between px-3 py-2 text-left font-mono text-caption transition-colors',
-                current.id === o.id ? 'bg-brand-50 text-brand-600' : 'text-ink-500 hover:bg-paper-2',
-              )}
-            >
-              {o.label}
-              {current.id === o.id && <Icon name="check" size={12} />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <MenuSelect
+      value={current.id}
+      onChange={(id) => onChange(SORT_OPTIONS.find((o) => o.id === id)?.sort ?? null)}
+      options={SORT_OPTIONS.map((o) => ({ value: o.id, label: o.label }))}
+      align="right"
+      leading={<Icon name="filter-funnel" size={13} />}
+      triggerClassName="px-2.5 text-ink-500 hover:text-ink-800"
+    />
   );
 }
 
@@ -942,11 +899,17 @@ export default function Watchlist() {
               位移换了个触发条件。真正的路由级 CLS 由 PageFallback 处理，这里
               负责的是数据状态之间的切换。 */}
           <div className="mt-4 min-h-[70vh]">
-            {loading ? (
-              <div className="card-surface">
-                <SkeletonRows rows={10} />
-              </div>
-            ) : err && !wl.data ? (
+            {/* transitions.dev 14：骨架不再硬切，数据到达后与真实表格交叉
+                淡化 + 交叉去模糊（--reveal-dur） */}
+            <SkeletonReveal
+              loading={loading}
+              skeleton={
+                <div className="card-surface">
+                  <SkeletonRows rows={10} />
+                </div>
+              }
+            >
+            {err && !wl.data ? (
               /* 失败但还有上一轮数据时不整块换错误页：一次 408/断网就把
                  「214 只标的」的统计和涨跌家数换成加载失败，同屏自相矛盾 */
               <div className="card-surface">
@@ -1050,6 +1013,7 @@ export default function Watchlist() {
                 ))}
               </div>
             )}
+            </SkeletonReveal>
             {progressive.hasMore && (
               <div ref={progressive.sentinelRef} className="mt-4 flex justify-center">
                 <button
@@ -1070,10 +1034,9 @@ export default function Watchlist() {
         {/* B3 右侧栏（4 列吸顶）。偏移 = Navbar 64px + 16px：IndexTape 不吸顶，
             按 116px 计会恒留 52px 空隙；与 Breakouts 的 top-20 同口径（审计 2.4.10） */}
         <aside className="grid grid-cols-1 gap-4 self-start md:grid-cols-2 lg:sticky lg:top-20 lg:col-span-4 lg:grid-cols-1" aria-label={t("侧栏")}>
+          <SkeletonReveal loading={!signalsQ.data && signalsQ.loading} skeleton={<SkeletonCard />}>
           {signalsQ.data ? (
             <SignalDistribution data={signalsQ.data} />
-          ) : signalsQ.loading ? (
-            <SkeletonCard />
           ) : (
             /* 失败 ≠ 永远加载中（审计 2.2.12）：骨架屏无限闪动会被读成
                「正在加载」，这里如实报错并给重试。 */
@@ -1089,6 +1052,7 @@ export default function Watchlist() {
               </button>
             </div>
           )}
+          </SkeletonReveal>
           {strengthQ.data?.aggregateAvailable && strengthQ.data.histogram.length > 0 ? (
             <StrengthHistogram histogram={strengthQ.data.histogram} />
           ) : strengthQ.loading ? (

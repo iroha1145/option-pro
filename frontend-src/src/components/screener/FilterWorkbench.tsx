@@ -5,12 +5,14 @@
  * 行3 板块多选（折叠 +N）· 价格区间 · 成交额下限 · 开始扫描（真实等待态）
  * 行 stagger 60ms；过滤器变更主按钮脉冲（box-shadow 呼吸 1.2s ×2）
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { SectorOption, StrengthProfile } from '@/api/types';
 import { cn } from '@/lib/utils';
+import { useTabsPill } from '@/lib/transitions';
 import Icon from '@/components/icons';
 import Segmented from '@/components/shared/Segmented';
+import MenuSelect from '@/components/shared/MenuSelect';
 import {
   DOLLAR_VOL_OPTIONS,
   PROFILE_CN,
@@ -48,13 +50,24 @@ function TierSegmented({
   onChange: (v: TierFilter) => void;
 }) {
   const scopeNote = coversPool ? __t('已评分候选池') : __t('当前快照返回的行');
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const pillRef = useRef<HTMLSpanElement>(null);
+  /* depKey 带上计数串：档位数字变了标签会变宽，pill 宽度要跟着重量一次 */
+  useTabsPill(
+    wrapRef,
+    pillRef,
+    TIER_OPTIONS.findIndex((o) => o.value === value),
+    TIER_OPTIONS.map((o) => counts[o.value]).join(','),
+  );
   return (
     <div
+      ref={wrapRef}
       role="tablist"
       aria-label={__t('强度分档 · 计数基于{scope}', { scope: scopeNote })}
       title={__t('分档计数基于{scope}', { scope: scopeNote })}
-      className="no-scrollbar inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-md border border-line bg-card-warm p-0.5"
+      className="t-tabs no-scrollbar max-w-full overflow-x-auto border border-line"
     >
+      <span ref={pillRef} className="t-tabs-pill shadow-btn" aria-hidden="true" />
       {TIER_OPTIONS.map((o, index) => {
         const active = value === o.value;
         return (
@@ -84,24 +97,12 @@ function TierSegmented({
               if (target < 0) return;
               event.preventDefault();
               onChange(TIER_OPTIONS[target].value);
-              const list = event.currentTarget.parentElement;
-              const next = list?.children[target];
-              if (next instanceof HTMLElement) next.focus();
+              const next = wrapRef.current?.querySelectorAll<HTMLElement>('.t-tab')[target];
+              next?.focus();
             }}
-            className={cn(
-              'relative shrink-0 whitespace-nowrap rounded-[6px] px-2.5 py-1 text-caption font-medium transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
-              active ? 'text-ink-800' : 'text-ink-400 hover:text-ink-600',
-            )}
+            className="t-tab shrink-0 whitespace-nowrap text-caption font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
           >
-            {active && (
-              <motion.span
-                layoutId="tier-thumb"
-                className="absolute inset-0 rounded-[6px] bg-card shadow-sh-1"
-                transition={{ duration: 0.26, ease: EASE_PAPER }}
-                aria-hidden="true"
-              />
-            )}
-            <span className="relative z-10 flex items-baseline gap-1">
+            <span className="flex items-baseline gap-1">
               {o.label}
               <span className={cn('font-mono text-[11px] leading-[14px] tnum', active ? 'text-brand-600' : 'text-ink-300')}>
                 {counts[o.value]}
@@ -117,37 +118,6 @@ function TierSegmented({
 /* ---------------- 小件：字段标签 ---------------- */
 function FieldLabel({ children }: { children: string }) {
   return <p className="mb-1.5 text-micro font-medium uppercase tracking-[0.08em] text-ink-400">{children}</p>;
-}
-
-/* ---------------- 小件：下拉选择（发丝边框 r-md） ---------------- */
-function SelectField({
-  value,
-  onChange,
-  options,
-  ariaLabel,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  options: { value: number; label: string }[];
-  ariaLabel: string;
-}) {
-  return (
-    <div className="relative">
-      <select
-        aria-label={ariaLabel}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="h-8 appearance-none rounded-md border border-line bg-card pl-2.5 pr-7 font-mono text-caption text-ink-600 tnum transition-colors hover:border-line-strong focus-visible:border-brand-400"
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <Icon name="chevron-down" size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-ink-400" />
-    </div>
-  );
 }
 
 /* ---------------- 价格区间输入（Mono，$ 前缀） ---------------- */
@@ -402,7 +372,7 @@ export default function FilterWorkbench({
         </div>
         <div>
           <FieldLabel>{__t('返回数量')}</FieldLabel>
-          <SelectField ariaLabel={__t("返回数量 Top N")} value={draft.topN} onChange={(topN) => patch({ topN })} options={TOPN_OPTIONS} />
+          <MenuSelect ariaLabel={__t("返回数量 Top N")} value={draft.topN} onChange={(topN) => patch({ topN })} options={TOPN_OPTIONS} />
         </div>
       </motion.div>
 
@@ -472,7 +442,7 @@ export default function FilterWorkbench({
         </div>
         <div data-screener-field="dollar-volume">
           <FieldLabel>{__t('成交额下限')}</FieldLabel>
-          <SelectField
+          <MenuSelect
             ariaLabel={__t("成交额下限")}
             value={draft.minDollarVol}
             onChange={(minDollarVol) => patch({ minDollarVol })}

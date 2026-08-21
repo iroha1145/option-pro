@@ -1,0 +1,556 @@
+/* transitions.dev catalog snippets — pasted verbatim from skill reference files.
+   Do not rewrite selectors, collapse shorthands, or strip will-change / reduced-motion. */
+
+/* —— 22-toast.md —— */
+.t-toast {
+  opacity: 0;
+  transform: translateY(var(--toast-distance)) scale(var(--toast-scale));
+  filter: blur(var(--toast-blur));
+  will-change: transform, opacity, filter;
+  transition:
+    opacity var(--toast-close) var(--toast-ease),
+    transform var(--toast-close) var(--toast-ease),
+    filter var(--toast-close) var(--toast-ease);
+}
+.t-toast.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0);
+  transition:
+    opacity var(--toast-open) var(--toast-ease),
+    transform var(--toast-open) var(--toast-ease),
+    filter var(--toast-open) var(--toast-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-toast { transition: none !important; }
+}
+
+/* —— 07-panel-reveal.md —— */
+.t-panel-slide {
+  transform: translateY(var(--panel-translate-y));
+  opacity: 0;
+  filter: blur(var(--panel-blur));
+  pointer-events: none;
+  transition:
+    transform var(--panel-close-dur) var(--panel-ease),
+    opacity   var(--panel-close-dur) var(--panel-ease),
+    filter    var(--panel-close-dur) var(--panel-ease);
+  will-change: transform, opacity, filter;
+}
+.t-panel-slide[data-open="true"] {
+  transform: translateY(0);
+  opacity: 1;
+  filter: blur(0);
+  pointer-events: auto;
+  transition:
+    transform var(--panel-open-dur) var(--panel-ease),
+    opacity   var(--panel-open-dur) var(--panel-ease),
+    filter    var(--panel-open-dur) var(--panel-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-panel-slide { transition: none !important; }
+}
+
+/* —— 06-modal.md —— */
+.t-modal {
+  transform-origin: center;
+  transform: scale(var(--modal-scale));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--modal-open-dur) var(--modal-ease),
+    opacity   var(--modal-open-dur) var(--modal-ease);
+  will-change: transform, opacity;
+}
+.t-modal.is-open {
+  transform: scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+.t-modal.is-closing {
+  transform: scale(var(--modal-scale-close));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--modal-close-dur) var(--modal-ease),
+    opacity   var(--modal-close-dur) var(--modal-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-modal { transition: none !important; }
+}
+
+/* —— 05-menu-dropdown.md —— */
+.t-dropdown {
+  transform-origin: top left;
+  transform: scale(var(--dropdown-pre-scale));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--dropdown-open-dur) var(--dropdown-ease),
+    opacity   var(--dropdown-open-dur) var(--dropdown-ease);
+  will-change: transform, opacity;
+}
+.t-dropdown[data-origin="top-right"]     { transform-origin: top right; }
+.t-dropdown[data-origin="top-center"]    { transform-origin: top center; }
+.t-dropdown[data-origin="bottom-left"]   { transform-origin: bottom left; }
+.t-dropdown[data-origin="bottom-center"] { transform-origin: bottom center; }
+.t-dropdown[data-origin="bottom-right"]  { transform-origin: bottom right; }
+
+.t-dropdown.is-open {
+  transform: scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+.t-dropdown.is-closing {
+  transform: scale(var(--dropdown-closing-scale));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--dropdown-close-dur) var(--dropdown-ease),
+    opacity   var(--dropdown-close-dur) var(--dropdown-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-dropdown { transition: none !important; }
+}
+
+/* —— 16-tabs-sliding.md —— */
+/* The bar is just a flex container with padding for the pill
+   to sit inside. Tabs sit on z-index: 1, the pill on z-index: 0,
+   so labels read above the pill background. */
+.t-tabs {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 48px;
+  background: var(--tabs-bar-bg);
+}
+.t-tab {
+  position: relative;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  height: 30px;
+  padding: 4px 12px;
+  color: var(--tabs-text-muted);
+  cursor: pointer;
+  border-radius: 48px;
+  z-index: 1;
+  transition: color var(--tabs-dur) var(--tabs-ease);
+}
+.t-tab:not([aria-selected="true"]):hover,
+.t-tab[aria-selected="true"] {
+  color: var(--tabs-text-active);
+}
+
+/* The pill: width + transform are written inline by JS so
+   the transition tweens between the previous and next
+   measured positions. */
+.t-tabs-pill {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  height: 30px;
+  width: 0;
+  background: var(--tabs-pill-bg);
+  border-radius: 48px;
+  transform: translateX(0);
+  transition:
+    transform var(--tabs-dur) var(--tabs-ease),
+    width     var(--tabs-dur) var(--tabs-ease);
+  will-change: transform, width;
+  z-index: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-tabs-pill, .t-tab { transition: none !important; }
+}
+
+/* —— 14-skeleton-reveal.md —— */
+/* The wrap stacks two layers on the same coordinates. The
+   skeleton owns the cold pulse + the fade-out side of the
+   reveal; the content owns the fade-in side. They share the
+   same duration / ease so the swap reads as one motion. */
+.t-skel { position: relative; }
+.t-skel-skeleton,
+.t-skel-content {
+  position: absolute;
+  inset: 0;
+}
+
+.t-skel-skeleton {
+  z-index: 1;
+  opacity: 1;
+  filter: blur(0);
+  transition:
+    opacity var(--reveal-dur) var(--reveal-ease),
+    filter  var(--reveal-dur) var(--reveal-ease);
+}
+.t-skel-content {
+  z-index: 2;
+  opacity: 0;
+  filter: blur(var(--reveal-blur));
+  transition:
+    opacity var(--reveal-dur) var(--reveal-ease),
+    filter  var(--reveal-dur) var(--reveal-ease);
+}
+.t-skel.is-revealed .t-skel-skeleton {
+  opacity: 0;
+  filter: blur(var(--reveal-blur));
+}
+.t-skel.is-revealed .t-skel-content {
+  opacity: 1;
+  filter: blur(0);
+}
+/* Snap-back when replaying: kill transitions so the reverse
+   (revealed → skeleton) is instant. Drop `.is-resetting`
+   after a forced reflow and the next reveal animates again. */
+.t-skel.is-resetting .t-skel-skeleton,
+.t-skel.is-resetting .t-skel-content {
+  transition: none !important;
+}
+
+/* Pulse: place the animation on the bar/avatar children, not
+   on the skeleton itself, so the skeleton's opacity / filter
+   stay free for the cross-fade transition above. */
+.t-skel-skeleton.is-pulsing > * {
+  animation: t-skel-pulse var(--pulse-dur) ease-in-out var(--pulse-count);
+}
+@keyframes t-skel-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: var(--pulse-min); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-skel-skeleton, .t-skel-content {
+    transition: none !important;
+  }
+  .t-skel-skeleton.is-pulsing > * { animation: none !important; }
+}
+
+/* —— 17-tooltip.md —— */
+.t-tt-wrap {
+  position: relative;
+  display: inline-block;
+}
+.t-tt {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translate(-50%, 0) scale(var(--tt-scale));
+  transform-origin: 50% 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--tt-bg);
+  color: var(--tt-fg);
+  white-space: nowrap;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 2px 6px 0 rgba(0, 0, 0, 0.05),
+    0 4px 42px 0 rgba(0, 0, 0, 0.06);
+  opacity: 0;
+  pointer-events: none;
+  /* Default rule controls the LEAVE state. transition-delay
+     stays unset so leaving plays without delay. */
+  transition:
+    opacity   var(--tt-out-dur) var(--tt-out-ease),
+    transform var(--tt-out-dur) var(--tt-out-ease);
+}
+/* The 50ms delay belongs ONLY to the hover rule so leaving
+   the trigger snaps the delay back to 0 and the disappear
+   plays immediately. */
+.t-tt-wrap:hover .t-tt,
+.t-tt-trigger:focus-visible + .t-tt {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+  transition-duration: var(--tt-in-dur);
+  transition-timing-function: var(--tt-in-ease);
+  transition-delay: var(--tt-delay);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-tt { transition: none !important; }
+}
+
+/* —— 21-accordion.md —— */
+/* grid-template-rows 0fr → 1fr gives a clean height animation
+   with no JS measurement; the inner element clips overflow. */
+.t-acc-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--acc-collapse) var(--acc-ease);
+}
+.t-acc[data-open="true"] .t-acc-panel {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--acc-expand) var(--acc-ease);
+}
+.t-acc-panel-inner {
+  overflow: hidden;
+  opacity: 0;
+  filter: blur(2px);
+  transition:
+    opacity var(--acc-collapse) var(--acc-ease),
+    filter var(--acc-collapse) var(--acc-ease);
+}
+.t-acc[data-open="true"] .t-acc-panel-inner {
+  opacity: 1;
+  filter: blur(0);
+  transition:
+    opacity var(--acc-expand) var(--acc-ease),
+    filter var(--acc-expand) var(--acc-ease);
+}
+/* Flip the chevron vertically to turn the "v" into a "^".
+   scaleY(-1) about the centre passes through a flat line at
+   the midpoint (same look as a `d:` path morph) but animates
+   in every browser, unlike CSS `d:` morphing (Chromium only).
+   The chevron path is symmetric about the 16x16 viewBox
+   centre, so the flip lands exactly on the "^"; non-scaling
+   -stroke keeps the stroke width constant through the flip. */
+.t-acc-chevron {
+  display: inline-flex;
+  transform: scaleY(1);
+  transform-origin: center;
+  transition: transform var(--acc-chevron) var(--acc-ease);
+}
+.t-acc-chevron path { vector-effect: non-scaling-stroke; }
+.t-acc[data-open="true"] .t-acc-chevron {
+  transform: scaleY(-1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-acc-panel, .t-acc-panel-inner, .t-acc-chevron {
+    transition: none !important;
+  }
+}
+
+/* —— 12-error-state-shake.md —— */
+/* Border-color tween. Define your input's default / focused
+   / error border-color in your own component CSS — this rule
+   only owns the interpolation. Use a constant border-width
+   across states so the tween never shifts inner content. */
+.t-input {
+  transition: border-color 150ms ease-out;
+  will-change: transform;
+}
+.t-input.is-error {
+  /* Error border auto-reverts on the hold timer, so the
+     fade-out uses the slower revert duration (matches the
+     message fade). */
+  transition: border-color var(--revert-dur, 280ms) ease-out;
+}
+
+/* Error message reveal. Visibility is delayed by --revert-dur
+   on hide so the message stays painted for the full opacity
+   fade-out. Entering .is-error drops the delay to 0 so the
+   message becomes visible immediately. */
+.t-error-msg {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity    var(--revert-dur, 280ms) ease-out,
+    visibility 0s linear var(--revert-dur, 280ms);
+}
+.t-input-wrap.is-error .t-error-msg {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity    var(--revert-dur, 280ms) ease-out,
+    visibility 0s linear 0s;
+}
+
+/* Multi-segment keyframe with per-stop easing so each leg
+   of the shake follows its own cubic-bezier independently.
+   %-stops are cumulative durations as a fraction of the
+   total (80, 60, 80, 60 = 280ms): 28.57%, 57.14%, 78.57%,
+   100%. Recompute if any segment duration changes. */
+.t-input.is-shaking {
+  animation: t-input-shake calc(
+      var(--shake-dur-a) * 2 + var(--shake-dur-b) * 2
+    ) linear;
+}
+@keyframes t-input-shake {
+  0%      { transform: translateX(0);                                 animation-timing-function: var(--shake-ease); }
+  28.57%  { transform: translateX(var(--shake-distance));             animation-timing-function: var(--shake-ease); }
+  57.14%  { transform: translateX(calc(var(--shake-distance) * -1)); animation-timing-function: var(--shake-ease); }
+  78.57%  { transform: translateX(var(--shake-overshoot));            animation-timing-function: var(--shake-ease); }
+  100%    { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-input { animation: none !important; transform: none !important; }
+}
+
+/* Paper Terminal color remaps for catalog tokens that carry demo colors.
+   Motion dimensions stay as shipped; only paint tokens bind to --paper/--ink/--card. */
+:root {
+  --tabs-text-muted: var(--ink-400);
+  --tabs-text-active: var(--ink-800);
+  --tabs-bar-bg: var(--card-warm);
+  --tabs-pill-bg: var(--card);
+  --tt-bg: var(--card);
+  --tt-fg: var(--ink-700);
+}
+
+/* Overlay backdrop (not a catalog snippet): fade only, no second enter/exit animator. */
+.t-backdrop {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-quick) var(--ease-smooth-out);
+}
+.t-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-backdrop { transition: none !important; }
+}
+
+/* Loading-only skeletons: keep the pulse layer in-flow so cards keep height
+   (catalog stacks both layers absolute, which collapses an empty wrap). */
+.t-skel[data-state="loading"] > .t-skel-skeleton {
+  position: relative;
+  inset: auto;
+}
+.t-skel[data-state="loading"] > .t-skel-content:empty {
+  display: none;
+}
+.t-skel[data-state="loading"] .skeleton-shimmer {
+  background-color: var(--line);
+}
+
+/* 加载态的 pulse 循环到数据到达为止：catalog 的 --pulse-count:1 是 demo 里
+   「脉冲一次后 JS 定时 reveal」的节拍，对时长未知的加载态会一秒后冻住。 */
+.t-skel[data-state="loading"] .t-skel-skeleton.is-pulsing > * {
+  animation-iteration-count: infinite;
+}
+/* 单一运动语言：t-skel 里 catalog pulse 接管加载态，退役旧 shimmer 扫光
+   （否则同一块骨架又闪又扫两套叠加）。t-skel 之外的散装 SkeletonBlock 不受影响。 */
+.t-skel .skeleton-shimmer::after {
+  content: none;
+  animation: none;
+}
+
+/* SkeletonReveal（catalog 14 的 reveal 半边）：reveal 期间内容层进入文档流
+   定高度、骨架层照 catalog 绝对覆盖淡出；done 后内容层清干净 filter/transition，
+   不给表格留永久合成层（filter 会劫持 fixed 后代的包含块）。 */
+.t-skel[data-state="reveal"] > .t-skel-content {
+  position: relative;
+  inset: auto;
+}
+.t-skel[data-state="done"] > .t-skel-content {
+  position: static;
+  inset: auto;
+  opacity: 1;
+  filter: none;
+  transition: none;
+}
+
+/* Paper Terminal geometry for catalog tabs：r-md 语言 + 旧 Segmented 的 30px
+   总高（catalog demo 是 48px 药丸 / 36px 高）。运动维度（--tabs-dur/--tabs-ease
+   + JS 写 transform/width）保持 catalog 原样。 */
+.t-tabs {
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+}
+.t-tab {
+  height: 26px;
+  padding: 2px 10px;
+  border-radius: 6px;
+}
+.t-tabs-pill {
+  top: 2px;
+  height: 26px;
+  border-radius: 6px;
+}
+
+/* Toast 堆叠坍缩：catalog 21 的 0fr↔1fr 手法配 catalog 22 的开合时钟，收起的
+   行连同行距（inner 的 padding-bottom，不用容器 gap）一起塌掉，剩余 toast 平滑
+   上移而不是跳位。settled 后放开 overflow 让 sh-2 阴影完整。 */
+.t-toast-row {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--toast-close) var(--toast-ease);
+}
+.t-toast-row.is-open {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--toast-open) var(--toast-ease);
+}
+.t-toast-row-inner {
+  overflow: hidden;
+  min-height: 0;
+  padding-bottom: 8px;
+}
+.t-toast-row.is-settled .t-toast-row-inner {
+  overflow: visible;
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-toast-row { transition: none !important; }
+}
+
+/* Portal-hosted InfoHint: tooltip is not a child of the wrap, so JS drives .is-shown.
+   Position uses fixed left/top; motion (opacity + scale) matches the catalog hover rule. */
+.t-tt[data-portal] {
+  position: fixed;
+  bottom: auto;
+  left: 0;
+  white-space: normal;
+  transform: scale(var(--tt-scale));
+  transform-origin: 50% 0%;
+}
+.t-tt[data-portal].is-shown {
+  opacity: 1;
+  transform: scale(1);
+  transition-duration: var(--tt-in-dur);
+  transition-timing-function: var(--tt-in-ease);
+  transition-delay: var(--tt-delay);
+}
+
+/* Login/password error border uses Paper Terminal down-600. Catalog only owns the tween. */
+.t-input.is-error {
+  border-color: var(--down-600);
+}
+
+/* catalog 12 的 .t-input 只 transition border-color，会顶掉组件原有的
+   box-shadow 过渡（focus 光环瞬跳）——补上合并声明，时值仍照 catalog。 */
+.t-input {
+  transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
+}
+.t-input.is-error {
+  transition: border-color var(--revert-dur, 280ms) ease-out, box-shadow 150ms ease-out;
+}
+
+/* 行内报错的占位高度用 0fr↔1fr 收放（catalog 21 的手法）：出现/消失都随
+   --revert-dur 平滑推开或收回下方内容，而不是 height:0 瞬间开合；文案本身的
+   透明度/可见性仍由 catalog 12 的 .t-error-msg 规则驱动。行距 6px 放在
+   msg 的 padding-top 里，随轨道一起收放。 */
+.t-input-wrap {
+  position: relative;
+}
+.t-input-wrap .t-error-track {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--revert-dur, 280ms) ease-out;
+}
+.t-input-wrap.is-error .t-error-track {
+  grid-template-rows: 1fr;
+}
+/* 裁剪层自己不许带 padding/margin（0fr 压不掉 padding，会留残条——
+   catalog 21 的 pitfall）；6px 行距放在其后代 msg 上，随裁剪一起收放。 */
+.t-input-wrap .t-error-track > .t-error-clip {
+  overflow: hidden;
+  min-height: 0;
+}
+.t-input-wrap .t-error-msg {
+  margin: 0;
+  padding-top: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-input-wrap .t-error-track { transition: none !important; }
+}

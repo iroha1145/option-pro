@@ -154,7 +154,7 @@ export default function InfoHint({
   return (
     <span
       ref={rootRef}
-      className={cn('relative inline-flex align-middle', className)}
+      className={cn('t-tt-wrap relative inline-flex align-middle', className)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => {
         setHovered(false);
@@ -171,7 +171,7 @@ export default function InfoHint({
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         className={cn(
-          'inline-flex cursor-help items-center rounded-full text-ink-300 outline-none transition-colors duration-fast',
+          't-tt-trigger inline-flex cursor-help items-center rounded-full text-ink-300 outline-none transition-colors duration-fast',
           'hover:text-brand-600 focus-visible:text-brand-600',
           open && 'text-brand-600',
         )}
@@ -204,10 +204,13 @@ export default function InfoHint({
             role="tooltip"
             /* pointer-events-none：浮层已不是触发器的后代，可交互时鼠标移进去会
                先触发根节点的 mouseleave 而闪烁。说明是只读文本，不需要指针。 */
+            data-portal=""
+            /* 内边距/圆角/底色/阴影全由 catalog .t-tt 供给（rounded-md、px-3
+               这类会被后加载的 catalog 覆盖成死类，留着只会误导）；border 仍走
+               设计系统的 line 色。 */
             className={cn(
-              'pointer-events-none fixed w-max rounded-md border border-line bg-card px-3 py-2.5 text-left shadow-sh-3',
-              'transition-opacity duration-fast',
-              coords ? 'opacity-100' : 'opacity-0',
+              't-tt pointer-events-none w-max border border-line text-left',
+              coords && 'is-shown',
             )}
             style={{
               zIndex: TOOLTIP_Z_INDEX,
