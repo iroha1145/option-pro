@@ -23,14 +23,14 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
       whileHover={openable ? { y: -3, transition: { duration: 0.24, ease: 'easeOut' } } : undefined}
       onClick={onOpen}
       disabled={!openable}
-      className={`group relative flex w-[260px] shrink-0 snap-start flex-col rounded-lg border border-line bg-card p-4 pt-3 text-left shadow-sh-1 transition-shadow duration-240 ease-out sm:w-[300px] ${
+      className={`group relative flex w-[260px] shrink-0 snap-start flex-col overflow-hidden rounded-lg border border-line bg-card p-4 pt-3 text-left shadow-sh-1 transition-shadow duration-240 ease-out sm:w-[300px] ${
         openable ? 'hover:shadow-sh-2' : 'cursor-default'
       }`}
     >
-      {/* 顶边热度渐变条 */}
+      {/* 顶边热度条：父级 overflow-hidden + rounded-lg 裁掉圆角外的直角 */}
       <span
         aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-[2px] rounded-t-lg"
+        className="absolute inset-x-0 top-0 h-[2px]"
         /* v8.1：撤跨色渐变（违反自家「禁跨色渐变」纪律）。热度=温度，单一暖色即语义；
            强度仍由 opacity 编码，数值另有 HeatMeter 承担。 */
         style={{ background: '#E8930C', opacity: Math.min(1, 0.3 + h.heat / 140) }}

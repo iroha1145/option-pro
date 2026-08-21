@@ -5,7 +5,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -60,6 +60,11 @@ const SURFACES = [
   ['components/CommandPalette.tsx', /['"]t-modal/, 't-modal (command palette)'],
   ['components/catalysts/ConfirmDialog.tsx', /['"]t-modal/, 't-modal (confirm)'],
   ['components/LanguageSwitcher.tsx', /t-dropdown/, 't-dropdown'],
+  ['components/shared/MenuSelect.tsx', /t-dropdown/, 't-dropdown (menu select)'],
+  ['components/screener/FilterWorkbench.tsx', /<MenuSelect/, 'MenuSelect (screener)'],
+  ['components/detail/OptionsPanel.tsx', /<MenuSelect/, 'MenuSelect (expirations)'],
+  ['pages/Watchlist.tsx', /<MenuSelect/, 'MenuSelect (watchlist sort)'],
+  ['components/catalysts/FilterBar.tsx', /<MenuSelect/, 'MenuSelect (catalyst status)'],
   ['components/shared/Segmented.tsx', /t-tabs/, 't-tabs'],
   ['components/shared/Segmented.tsx', /t-tabs-pill/, 't-tabs-pill'],
   ['components/shared/Segmented.tsx', /placeTabsPill/, 'placeTabsPill'],
@@ -166,6 +171,29 @@ test('chrome sources wire documented t-* hooks and drop stacked framer enter/exi
   assert.doesNotMatch(method, /AnimatePresence/);
   const login = await source('pages/Login.tsx');
   assert.doesNotMatch(login, /animate-nudge-shake/);
+  const workbench = await source('components/screener/FilterWorkbench.tsx');
+  assert.match(workbench, /<MenuSelect/);
+  const menu = await source('components/shared/MenuSelect.tsx');
+  assert.match(menu, /aria-haspopup="listbox"/);
+  assert.doesNotMatch(menu, /<select[\s>]/);
+});
+
+test('src ships no native select menus', async () => {
+  const files = [];
+  const walk = async (dir) => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const p = path.join(dir, entry.name);
+      if (entry.isDirectory()) await walk(p);
+      else if (/\.(tsx|ts)$/.test(entry.name)) files.push(p);
+    }
+  };
+  await walk(src);
+  const hits = [];
+  for (const file of files) {
+    const code = await readFile(file, 'utf8');
+    if (/<select[\s>]/.test(code)) hits.push(path.relative(src, file));
+  }
+  assert.deepEqual(hits, [], `native <select> still in ${hits.join(', ')}`);
 });
 
 test('Login renders is-error and is-shaking via React className, not classList', async () => {

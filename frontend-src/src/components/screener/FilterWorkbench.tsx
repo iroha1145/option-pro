@@ -11,6 +11,7 @@ import type { SectorOption, StrengthProfile } from '@/api/types';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import Segmented from '@/components/shared/Segmented';
+import MenuSelect from '@/components/shared/MenuSelect';
 import {
   DOLLAR_VOL_OPTIONS,
   PROFILE_CN,
@@ -117,37 +118,6 @@ function TierSegmented({
 /* ---------------- 小件：字段标签 ---------------- */
 function FieldLabel({ children }: { children: string }) {
   return <p className="mb-1.5 text-micro font-medium uppercase tracking-[0.08em] text-ink-400">{children}</p>;
-}
-
-/* ---------------- 小件：下拉选择（发丝边框 r-md） ---------------- */
-function SelectField({
-  value,
-  onChange,
-  options,
-  ariaLabel,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  options: { value: number; label: string }[];
-  ariaLabel: string;
-}) {
-  return (
-    <div className="relative">
-      <select
-        aria-label={ariaLabel}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="h-8 appearance-none rounded-md border border-line bg-card pl-2.5 pr-7 font-mono text-caption text-ink-600 tnum transition-colors hover:border-line-strong focus-visible:border-brand-400"
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <Icon name="chevron-down" size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-ink-400" />
-    </div>
-  );
 }
 
 /* ---------------- 价格区间输入（Mono，$ 前缀） ---------------- */
@@ -402,7 +372,7 @@ export default function FilterWorkbench({
         </div>
         <div>
           <FieldLabel>{__t('返回数量')}</FieldLabel>
-          <SelectField ariaLabel={__t("返回数量 Top N")} value={draft.topN} onChange={(topN) => patch({ topN })} options={TOPN_OPTIONS} />
+          <MenuSelect ariaLabel={__t("返回数量 Top N")} value={draft.topN} onChange={(topN) => patch({ topN })} options={TOPN_OPTIONS} />
         </div>
       </motion.div>
 
@@ -472,7 +442,7 @@ export default function FilterWorkbench({
         </div>
         <div data-screener-field="dollar-volume">
           <FieldLabel>{__t('成交额下限')}</FieldLabel>
-          <SelectField
+          <MenuSelect
             ariaLabel={__t("成交额下限")}
             value={draft.minDollarVol}
             onChange={(minDollarVol) => patch({ minDollarVol })}

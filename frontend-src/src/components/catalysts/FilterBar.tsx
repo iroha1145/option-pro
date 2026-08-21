@@ -1,7 +1,8 @@
 /** 过滤器条：ticker / window_hours / classification / analysis_status / min_confidence / min_abs_impact / multi_source_only */
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import Segmented from '@/components/shared/Segmented';
+import MenuSelect from '@/components/shared/MenuSelect';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import type { NewsAnalysisStatus, NewsClassification } from './api';
@@ -20,62 +21,16 @@ const STATUS_OPTIONS: { value: '' | NewsAnalysisStatus; label: string }[] = [
 ];
 
 function StatusDropdown({ value, onChange }: { value: '' | NewsAnalysisStatus; onChange: (v: '' | NewsAnalysisStatus) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    /* Escape 也能关（审计 2.5.8）：与 ScanHistoryPopover 同口径 */
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-  const current = STATUS_OPTIONS.find((o) => o.value === value) ?? STATUS_OPTIONS[0];
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className={cn(
-          'flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-caption shadow-btn transition-colors duration-fast',
-          value ? 'border-brand-400 bg-brand-50 text-brand-700' : 'border-line bg-card text-ink-500 hover:text-ink-800',
-        )}
-      >
-        <span className="font-mono">{current.label}</span>
-        <Icon name="chevron-down" size={12} className={cn('transition-transform duration-200', open && 'rotate-180')} />
-      </button>
-      {open && (
-        <div role="listbox" className="absolute left-0 top-9 z-30 w-36 overflow-hidden rounded-md border border-line bg-card shadow-sh-2">
-          {STATUS_OPTIONS.map((o) => (
-            <button
-              key={o.value || 'all'}
-              role="option"
-              aria-selected={o.value === value}
-              onClick={() => {
-                onChange(o.value);
-                setOpen(false);
-              }}
-              className={cn(
-                'flex w-full items-center justify-between px-3 py-2 text-left text-caption transition-colors',
-                o.value === value ? 'bg-brand-50 text-brand-600' : 'text-ink-500 hover:bg-paper-2',
-              )}
-            >
-              {o.label}
-              {o.value === value && <Icon name="check" size={12} />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <MenuSelect
+      value={value}
+      onChange={onChange}
+      options={STATUS_OPTIONS}
+      ariaLabel={t('全部状态')}
+      triggerClassName={
+        value ? 'border-brand-400 bg-brand-50 px-2.5 text-brand-700' : 'px-2.5 text-ink-500 hover:text-ink-800'
+      }
+    />
   );
 }
 

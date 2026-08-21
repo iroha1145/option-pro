@@ -3,7 +3,7 @@
  * B0 页头带 · B1 概览统计（count-up）· B2 可排序表格/卡片（tick-flash）· B3 侧栏（信号/强度分布/市场时钟）
  * 轮询 60s · 空态 / 骨架 / 503 · 响应式
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
 import { stocksApi } from '@/api/modules/stocks';
@@ -31,6 +31,7 @@ import ChangeBadge from '@/components/shared/ChangeBadge';
 import StrengthBar from '@/components/shared/StrengthBar';
 import SignalChip from '@/components/shared/SignalChip';
 import Segmented from '@/components/shared/Segmented';
+import MenuSelect from '@/components/shared/MenuSelect';
 import DataTable, { type Column, type SortState } from '@/components/shared/DataTable';
 import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
@@ -238,60 +239,16 @@ const SORT_OPTIONS: { id: string; label: string; sort: SortState | null }[] = [
 ];
 
 function SortDropdown({ sort, onChange }: { sort: SortState | null; onChange: (s: SortState | null) => void }) {
-  const [open, setOpen] = useState(false);
   const current = SORT_OPTIONS.find((o) => o.sort?.key === sort?.key && o.sort?.desc === sort?.desc) ?? SORT_OPTIONS[0];
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    /* Escape 也能关（审计 2.5.8） */
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-2.5 text-caption text-ink-500 shadow-btn transition-colors hover:text-ink-800"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-      >
-        <Icon name="filter-funnel" size={13} />
-        <span className="font-mono">{current.label}</span>
-        <Icon name="chevron-down" size={12} className={cn('transition-transform duration-200', open && 'rotate-180')} />
-      </button>
-      {open && (
-        <div role="listbox" className="absolute right-0 top-9 z-30 w-40 overflow-hidden rounded-md border border-line bg-card shadow-sh-2">
-          {SORT_OPTIONS.map((o) => (
-            <button
-              key={o.id}
-              role="option"
-              aria-selected={current.id === o.id}
-              onClick={() => {
-                onChange(o.sort);
-                setOpen(false);
-              }}
-              className={cn(
-                'flex w-full items-center justify-between px-3 py-2 text-left font-mono text-caption transition-colors',
-                current.id === o.id ? 'bg-brand-50 text-brand-600' : 'text-ink-500 hover:bg-paper-2',
-              )}
-            >
-              {o.label}
-              {current.id === o.id && <Icon name="check" size={12} />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <MenuSelect
+      value={current.id}
+      onChange={(id) => onChange(SORT_OPTIONS.find((o) => o.id === id)?.sort ?? null)}
+      options={SORT_OPTIONS.map((o) => ({ value: o.id, label: o.label }))}
+      align="right"
+      leading={<Icon name="filter-funnel" size={13} />}
+      triggerClassName="px-2.5 text-ink-500 hover:text-ink-800"
+    />
   );
 }
 
