@@ -3,7 +3,7 @@
  * Durations stay in CSS custom properties; these helpers only read them and
  * toggle the documented class / attribute hooks (is-open, is-closing, is-shaking).
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
 export type OverlayPhase = 'closed' | 'preopen' | 'open' | 'closing';
 
@@ -123,13 +123,17 @@ export function replayShake(el: HTMLElement): void {
  * Catalog error-shake classes for the wrap + the bordered input.
  * These strings must land in React `className` — a later commit of
  * `className={cn(...)}` would wipe classList-only toggles.
+ * `withMessage` keeps wrap/input orthogonal (catalog 12): the input owns
+ * border + shake, the wrap owns the inline message reveal — a server-side
+ * failure shakes the field without duplicating the live-region text below.
  */
 export function catalogShakeStateClasses(
   error: boolean,
   shaking: boolean,
+  withMessage = true,
 ): { wrap: string; input: string } {
   return {
-    wrap: error ? 'is-error' : '',
+    wrap: error && withMessage ? 'is-error' : '',
     input: [error ? 'is-error' : '', shaking ? 'is-shaking' : ''].filter(Boolean).join(' '),
   };
 }
@@ -138,19 +142,24 @@ export function catalogShakeStateClasses(
 export function useCatalogShake(holdMs = 1200) {
   const [error, setError] = useState(false);
   const [shaking, setShaking] = useState(false);
+  const [withMessage, setWithMessage] = useState(false);
   const inputRef = useRef<HTMLDivElement>(null);
   const holdTimer = useRef(0);
 
-  const play = useCallback(() => {
-    setError(true);
-    setShaking(false);
-    if (holdTimer.current) window.clearTimeout(holdTimer.current);
-    holdTimer.current = window.setTimeout(() => {
-      setError(false);
+  const play = useCallback(
+    (opts?: { message?: boolean }) => {
+      setError(true);
       setShaking(false);
-      holdTimer.current = 0;
-    }, holdMs);
-  }, [holdMs]);
+      setWithMessage(opts?.message ?? false);
+      if (holdTimer.current) window.clearTimeout(holdTimer.current);
+      holdTimer.current = window.setTimeout(() => {
+        setError(false);
+        setShaking(false);
+        holdTimer.current = 0;
+      }, holdMs);
+    },
+    [holdMs],
+  );
 
   const clear = useCallback(() => {
     if (holdTimer.current) window.clearTimeout(holdTimer.current);
@@ -177,10 +186,47 @@ export function useCatalogShake(holdMs = 1200) {
     error,
     shaking,
     inputRef,
-    classes: catalogShakeStateClasses(error, shaking),
+    classes: catalogShakeStateClasses(error, shaking, withMessage),
     play,
     clear,
   };
+}
+
+/**
+ * Shared owner for the sliding-tabs pill (catalog 16). `depKey` covers
+ * label/badge width changes that don't move the active index (e.g. the
+ * screener tier counts) — pass anything that changes the measured widths.
+ */
+export function useTabsPill(
+  wrapRef: RefObject<HTMLElement | null>,
+  pillRef: RefObject<HTMLElement | null>,
+  activeIndex: number,
+  depKey?: unknown,
+): void {
+  const firstPaint = useRef(true);
+
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    const pill = pillRef.current;
+    if (!wrap || !pill) return;
+    const tab = wrap.querySelectorAll<HTMLElement>('.t-tab')[activeIndex];
+    if (!tab) return;
+    const animate = !firstPaint.current;
+    firstPaint.current = false;
+    placeTabsPill(pill, tab, animate);
+  }, [wrapRef, pillRef, activeIndex, depKey]);
+
+  useLayoutEffect(() => {
+    const onResize = () => {
+      const wrap = wrapRef.current;
+      const pill = pillRef.current;
+      if (!wrap || !pill) return;
+      const active = wrap.querySelector<HTMLElement>('.t-tab[aria-selected="true"]');
+      if (active) placeTabsPill(pill, active, false);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [wrapRef, pillRef]);
 }
 
 export function shakeDurationMs(cssText: string): number {

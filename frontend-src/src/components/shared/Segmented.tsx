@@ -1,7 +1,7 @@
 /** Segmented 分段切换：transitions.dev tabs sliding（pill 250ms） */
-import { useLayoutEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { cn } from '@/lib/utils';
-import { placeTabsPill } from '@/lib/transitions';
+import { useTabsPill } from '@/lib/transitions';
 
 interface SegmentedProps<T extends string> {
   options: { value: T; label: string }[];
@@ -13,31 +13,7 @@ interface SegmentedProps<T extends string> {
 export default function Segmented<T extends string>({ options, value, onChange, className }: SegmentedProps<T>) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLSpanElement>(null);
-  const firstPaint = useRef(true);
-
-  useLayoutEffect(() => {
-    const wrap = wrapRef.current;
-    const pill = pillRef.current;
-    if (!wrap || !pill) return;
-    const idx = options.findIndex((o) => o.value === value);
-    const btn = wrap.querySelectorAll<HTMLElement>('.t-tab')[idx];
-    if (!btn) return;
-    const animate = !firstPaint.current;
-    firstPaint.current = false;
-    placeTabsPill(pill, btn, animate);
-  }, [value, options]);
-
-  useLayoutEffect(() => {
-    const onResize = () => {
-      const wrap = wrapRef.current;
-      const pill = pillRef.current;
-      if (!wrap || !pill) return;
-      const active = wrap.querySelector<HTMLElement>('.t-tab[aria-selected="true"]');
-      if (active) placeTabsPill(pill, active, false);
-    };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
+  useTabsPill(wrapRef, pillRef, options.findIndex((o) => o.value === value), options);
 
   return (
     <div
@@ -45,12 +21,12 @@ export default function Segmented<T extends string>({ options, value, onChange, 
       role="tablist"
       className={cn('t-tabs border border-line', className)}
     >
-      <span ref={pillRef} className="t-tabs-pill" aria-hidden="true" />
+      <span ref={pillRef} className="t-tabs-pill shadow-btn" aria-hidden="true" />
       {options.map((o, index) => (
         <button
           key={o.value}
           role="tab"
-          className="t-tab text-caption font-medium"
+          className="t-tab text-caption font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
           aria-selected={value === o.value}
           /* tablist 的标准键盘行为（审计 P3-5）：roving tabindex + 左右方向键 +
              Home/End。旧实现只有 role，Tab 会逐个停在每一项，方向键完全无效。 */

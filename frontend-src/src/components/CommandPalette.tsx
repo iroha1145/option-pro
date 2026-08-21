@@ -281,8 +281,10 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
             className={cn('t-backdrop fixed inset-0 z-[80] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
             onClick={onClose}
           />
-          {/* 居中交给外层 translate，避免 t-modal 的 scale 顶掉 -translate-x-1/2 */}
-          <div className="fixed left-1/2 top-[18vh] z-[81] w-[640px] max-w-[calc(100vw-24px)] -translate-x-1/2">
+          {/* 居中交给外层 translate，避免 t-modal 的 scale 顶掉 -translate-x-1/2；
+              外壳 pointer-events-none：关闭动画期间不挡背板点击（面板自身由
+              t-modal.is-open 恢复 pointer-events）。 */}
+          <div className="pointer-events-none fixed left-1/2 top-[18vh] z-[81] w-[640px] max-w-[calc(100vw-24px)] -translate-x-1/2">
           <div
             ref={panelRef}
             role="dialog"

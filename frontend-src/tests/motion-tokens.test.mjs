@@ -67,7 +67,7 @@ const SURFACES = [
   ['components/catalysts/FilterBar.tsx', /<MenuSelect/, 'MenuSelect (catalyst status)'],
   ['components/shared/Segmented.tsx', /t-tabs/, 't-tabs'],
   ['components/shared/Segmented.tsx', /t-tabs-pill/, 't-tabs-pill'],
-  ['components/shared/Segmented.tsx', /placeTabsPill/, 'placeTabsPill'],
+  ['components/shared/Segmented.tsx', /useTabsPill/, 'useTabsPill'],
   ['components/shared/Skeleton.tsx', /t-skel/, 't-skel'],
   ['components/shared/Skeleton.tsx', /t-skel-skeleton is-pulsing/, 't-skel-skeleton'],
   ['components/shared/InfoHint.tsx', /t-tt-wrap/, 't-tt-wrap'],
@@ -75,9 +75,15 @@ const SURFACES = [
   ['components/shared/InfoHint.tsx', /['"]t-tt /, 't-tt'],
   ['components/screener/SideCards.tsx', /t-acc/, 't-acc'],
   ['components/screener/SideCards.tsx', /t-acc-panel-inner/, 't-acc-panel-inner'],
+  ['components/screener/FilterWorkbench.tsx', /useTabsPill/, 'TierSegmented pill hook'],
+  ['components/screener/FilterWorkbench.tsx', /t-tabs-pill/, 'TierSegmented t-tabs-pill'],
   ['pages/Login.tsx', /t-input-wrap/, 't-input-wrap'],
-  ['pages/Login.tsx', /shake\.classes\.wrap/, 'shake wrap className'],
-  ['pages/Login.tsx', /shake\.classes\.input/, 'shake input className'],
+  ['pages/Login.tsx', /userShake\.classes\.wrap/, 'username shake wrap className'],
+  ['pages/Login.tsx', /pwShake\.classes\.input/, 'password shake input className'],
+  ['pages/Login.tsx', /t-error-track/, 'inline error height track'],
+  ['components/Toast.tsx', /t-toast-row/, 't-toast-row stack collapse'],
+  ['components/shared/Skeleton.tsx', /SkeletonReveal/, 'SkeletonReveal export'],
+  ['pages/Watchlist.tsx', /<SkeletonReveal/, 'SkeletonReveal (watchlist)'],
 ];
 
 test('motion-token custom properties ship in transitions-root.css', async () => {
@@ -199,10 +205,16 @@ test('src ships no native select menus', async () => {
 test('Login renders is-error and is-shaking via React className, not classList', async () => {
   const login = await source('pages/Login.tsx');
   assert.match(login, /useCatalogShake/);
-  assert.match(login, /className=\{cn\(\s*'t-input-wrap',\s*shake\.classes\.wrap\)\}/);
+  /* 每个字段一个实例：用户名为空抖用户名框，密码问题抖密码框 */
+  assert.match(login, /className=\{cn\('t-input-wrap mb-4',\s*userShake\.classes\.wrap\)\}/);
+  assert.match(login, /className=\{cn\('t-input-wrap',\s*pwShake\.classes\.wrap\)\}/);
+  assert.match(login, /userShake\.play\(\{ message: true \}\)/);
+  assert.match(login, /pwShake\.play\(\{ message: true \}\)/);
+  /* 服务端失败：抖动+红边但不带行内文案（底部 aria-live 状态行独占那份文案） */
+  assert.match(login, /pwShake\.play\(\);/);
   assert.match(
     login,
-    /className=\{cn\([\s\S]*shake\.classes\.input[\s\S]*shake\.error \? 'border-down-600'/,
+    /className=\{cn\([\s\S]*pwShake\.classes\.input[\s\S]*pwShake\.error \? 'border-down-600'/,
   );
   assert.doesNotMatch(login, /classList\.add\(/);
   assert.doesNotMatch(login, /classList\.remove\(/);
@@ -216,6 +228,61 @@ test('Login renders is-error and is-shaking via React className, not classList',
   assert.equal(off.wrap, '');
   assert.equal(off.input, '');
   assert.doesNotMatch(catalogShakeStateClasses(true, false).input, /\bis-shaking\b/);
+  /* withMessage=false：input 照常 is-error，wrap 不亮行内文案 */
+  const silent = catalogShakeStateClasses(true, true, false);
+  assert.equal(silent.wrap, '');
+  assert.match(silent.input, /\bis-error\b/);
+});
+
+test('loading skeletons pulse until data arrives, single motion language', async () => {
+  const catalog = await source('styles/transitions-catalog.css');
+  /* --pulse-count:1 是 demo 节拍；加载态必须循环，否则一秒后骨架冻住 */
+  assert.match(
+    catalog,
+    /\.t-skel\[data-state="loading"\] \.t-skel-skeleton\.is-pulsing > \* \{\s*animation-iteration-count: infinite;/,
+  );
+  /* catalog pulse 接管 t-skel 后，旧 shimmer 扫光在 t-skel 内退役（不许两套叠放） */
+  assert.match(catalog, /\.t-skel \.skeleton-shimmer::after \{\s*content: none;/);
+  /* reveal 半边：内容层在 reveal 进文档流、done 后清掉 filter/transition */
+  assert.match(catalog, /\.t-skel\[data-state="reveal"\] > \.t-skel-content/);
+  assert.match(catalog, /\.t-skel\[data-state="done"\] > \.t-skel-content \{[^}]*filter: none;/);
+});
+
+test('toast rows collapse on the toast clocks so the stack never jumps', async () => {
+  const catalog = await source('styles/transitions-catalog.css');
+  assert.match(catalog, /\.t-toast-row \{[^}]*grid-template-rows: 0fr;[^}]*var\(--toast-close\)/s);
+  assert.match(catalog, /\.t-toast-row\.is-open \{[^}]*grid-template-rows: 1fr;[^}]*var\(--toast-open\)/s);
+  assert.match(catalog, /\.t-toast-row \{ transition: none !important; \}/);
+  const toast = await source('components/Toast.tsx');
+  assert.match(toast, /t-toast-row-inner/);
+  assert.match(toast, /is-settled/);
+  /* 行距在 inner 的 padding 里，容器不再用 gap（gap 不会随行塌掉） */
+  assert.doesNotMatch(toast, /flex-col gap-2/);
+});
+
+test('tabs keep catalog motion but Paper Terminal geometry, focus ring restored', async () => {
+  const catalog = await source('styles/transitions-catalog.css');
+  const adaptation = catalog.slice(catalog.indexOf('Paper Terminal color remaps'));
+  assert.match(adaptation, /\.t-tabs \{[^}]*border-radius: 8px;/s);
+  assert.match(adaptation, /\.t-tabs-pill \{[^}]*height: 26px;/s);
+  const segmented = await source('components/shared/Segmented.tsx');
+  assert.match(segmented, /focus-visible:ring-2/);
+  assert.match(segmented, /t-tabs-pill shadow-btn/);
+  const workbench = await source('components/screener/FilterWorkbench.tsx');
+  assert.doesNotMatch(workbench, /layoutId="tier-thumb"/, 'TierSegmented must ride the catalog pill');
+});
+
+test('MenuSelect keeps the native-select keyboard contract it replaced', async () => {
+  const menu = await source('components/shared/MenuSelect.tsx');
+  assert.match(menu, /ArrowDown/);
+  assert.match(menu, /ArrowUp/);
+  assert.match(menu, /'Home'/);
+  assert.match(menu, /'End'/);
+  /* Esc / 选中后焦点回触发器；Tab 移出即收起 */
+  assert.match(menu, /triggerRef\.current\?\.focus\(\)/);
+  assert.match(menu, /relatedTarget/);
+  /* 展开后把焦点放到当前选中项 */
+  assert.match(menu, /\[role="option"\]\[aria-selected="true"\]/);
 });
 
 test('overlayClassName / overlayVisible drive the documented state classes', () => {

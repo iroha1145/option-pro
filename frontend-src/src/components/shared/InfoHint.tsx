@@ -205,8 +205,11 @@ export default function InfoHint({
             /* pointer-events-none：浮层已不是触发器的后代，可交互时鼠标移进去会
                先触发根节点的 mouseleave 而闪烁。说明是只读文本，不需要指针。 */
             data-portal=""
+            /* 内边距/圆角/底色/阴影全由 catalog .t-tt 供给（rounded-md、px-3
+               这类会被后加载的 catalog 覆盖成死类，留着只会误导）；border 仍走
+               设计系统的 line 色。 */
             className={cn(
-              't-tt pointer-events-none w-max rounded-md border border-line px-3 py-2.5 text-left shadow-sh-3',
+              't-tt pointer-events-none w-max border border-line text-left',
               coords && 'is-shown',
             )}
             style={{

@@ -60,8 +60,9 @@ export default function ConfirmDialog({
         onClick={onCancel}
         aria-hidden="true"
       />
-      {/* 水平居中交给外层 translate，避免 t-modal 的 scale transform 顶掉 -translate-x-1/2 */}
-      <div className="fixed left-1/2 top-[24vh] z-[86] w-[400px] max-w-[calc(100vw-32px)] -translate-x-1/2">
+      {/* 水平居中交给外层 translate，避免 t-modal 的 scale transform 顶掉
+          -translate-x-1/2；外壳 pointer-events-none，关闭动画期间不挡背板。 */}
+      <div className="pointer-events-none fixed left-1/2 top-[24vh] z-[86] w-[400px] max-w-[calc(100vw-32px)] -translate-x-1/2">
         <div
           ref={panelRef}
           role="alertdialog"

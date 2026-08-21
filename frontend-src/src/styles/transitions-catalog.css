@@ -424,6 +424,76 @@
   background-color: var(--line);
 }
 
+/* 加载态的 pulse 循环到数据到达为止：catalog 的 --pulse-count:1 是 demo 里
+   「脉冲一次后 JS 定时 reveal」的节拍，对时长未知的加载态会一秒后冻住。 */
+.t-skel[data-state="loading"] .t-skel-skeleton.is-pulsing > * {
+  animation-iteration-count: infinite;
+}
+/* 单一运动语言：t-skel 里 catalog pulse 接管加载态，退役旧 shimmer 扫光
+   （否则同一块骨架又闪又扫两套叠加）。t-skel 之外的散装 SkeletonBlock 不受影响。 */
+.t-skel .skeleton-shimmer::after {
+  content: none;
+  animation: none;
+}
+
+/* SkeletonReveal（catalog 14 的 reveal 半边）：reveal 期间内容层进入文档流
+   定高度、骨架层照 catalog 绝对覆盖淡出；done 后内容层清干净 filter/transition，
+   不给表格留永久合成层（filter 会劫持 fixed 后代的包含块）。 */
+.t-skel[data-state="reveal"] > .t-skel-content {
+  position: relative;
+  inset: auto;
+}
+.t-skel[data-state="done"] > .t-skel-content {
+  position: static;
+  inset: auto;
+  opacity: 1;
+  filter: none;
+  transition: none;
+}
+
+/* Paper Terminal geometry for catalog tabs：r-md 语言 + 旧 Segmented 的 30px
+   总高（catalog demo 是 48px 药丸 / 36px 高）。运动维度（--tabs-dur/--tabs-ease
+   + JS 写 transform/width）保持 catalog 原样。 */
+.t-tabs {
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+}
+.t-tab {
+  height: 26px;
+  padding: 2px 10px;
+  border-radius: 6px;
+}
+.t-tabs-pill {
+  top: 2px;
+  height: 26px;
+  border-radius: 6px;
+}
+
+/* Toast 堆叠坍缩：catalog 21 的 0fr↔1fr 手法配 catalog 22 的开合时钟，收起的
+   行连同行距（inner 的 padding-bottom，不用容器 gap）一起塌掉，剩余 toast 平滑
+   上移而不是跳位。settled 后放开 overflow 让 sh-2 阴影完整。 */
+.t-toast-row {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--toast-close) var(--toast-ease);
+}
+.t-toast-row.is-open {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--toast-open) var(--toast-ease);
+}
+.t-toast-row-inner {
+  overflow: hidden;
+  min-height: 0;
+  padding-bottom: 8px;
+}
+.t-toast-row.is-settled .t-toast-row-inner {
+  overflow: visible;
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-toast-row { transition: none !important; }
+}
+
 /* Portal-hosted InfoHint: tooltip is not a child of the wrap, so JS drives .is-shown.
    Position uses fixed left/top; motion (opacity + scale) matches the catalog hover rule. */
 .t-tt[data-portal] {
@@ -447,18 +517,40 @@
   border-color: var(--down-600);
 }
 
-/* Don't leave a residual text-height hole under the password field when the
-   catalog error message is hidden (opacity 0 still occupies flow otherwise). */
+/* catalog 12 的 .t-input 只 transition border-color，会顶掉组件原有的
+   box-shadow 过渡（focus 光环瞬跳）——补上合并声明，时值仍照 catalog。 */
+.t-input {
+  transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
+}
+.t-input.is-error {
+  transition: border-color var(--revert-dur, 280ms) ease-out, box-shadow 150ms ease-out;
+}
+
+/* 行内报错的占位高度用 0fr↔1fr 收放（catalog 21 的手法）：出现/消失都随
+   --revert-dur 平滑推开或收回下方内容，而不是 height:0 瞬间开合；文案本身的
+   透明度/可见性仍由 catalog 12 的 .t-error-msg 规则驱动。行距 6px 放在
+   msg 的 padding-top 里，随轨道一起收放。 */
 .t-input-wrap {
   position: relative;
 }
-.t-input-wrap .t-error-msg {
-  height: 0;
-  margin: 0;
-  overflow: hidden;
+.t-input-wrap .t-error-track {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--revert-dur, 280ms) ease-out;
 }
-.t-input-wrap.is-error .t-error-msg {
-  height: auto;
-  margin-top: 6px;
-  overflow: visible;
+.t-input-wrap.is-error .t-error-track {
+  grid-template-rows: 1fr;
+}
+/* 裁剪层自己不许带 padding/margin（0fr 压不掉 padding，会留残条——
+   catalog 21 的 pitfall）；6px 行距放在其后代 msg 上，随裁剪一起收放。 */
+.t-input-wrap .t-error-track > .t-error-clip {
+  overflow: hidden;
+  min-height: 0;
+}
+.t-input-wrap .t-error-msg {
+  margin: 0;
+  padding-top: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-input-wrap .t-error-track { transition: none !important; }
 }

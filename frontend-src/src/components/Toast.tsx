@@ -37,6 +37,7 @@ const BAR: Record<ToastKind, string> = {
 
 function ToastCard({ t, onDismiss }: { t: ToastItem; onDismiss: (id: number) => void }) {
   const [entered, setEntered] = useState(false);
+  const [settled, setSettled] = useState(false);
   useEffect(() => {
     let inner = 0;
     const outer = window.requestAnimationFrame(() => {
@@ -49,28 +50,46 @@ function ToastCard({ t, onDismiss }: { t: ToastItem; onDismiss: (id: number) => 
   }, []);
   const open = entered && !t.hiding;
 
+  /* 行高的 0fr↔1fr 只能在 inner overflow:hidden 时收缩；到位后放开 overflow，
+     让 sh-2 阴影不被裁。收起时（open=false）立即回到 hidden 再开始坍缩。 */
+  useEffect(() => {
+    if (!open) {
+      setSettled(false);
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setSettled(true),
+      readRootDurationMs('--toast-open', 350),
+    );
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
   return (
-    <div
-      role={t.kind === 'error' ? 'alert' : 'status'}
-      className={cn(
-        't-toast pointer-events-auto relative overflow-hidden rounded-md border border-line bg-card shadow-sh-2',
-        open && 'is-open',
-      )}
-      data-open={open ? 'true' : 'false'}
-    >
-      <span className={cn('absolute inset-y-0 left-0 w-[3px]', BAR[t.kind])} aria-hidden="true" />
-      <div className="flex items-start gap-2 py-2.5 pl-4 pr-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-body-s font-medium text-ink-800">{t.title}</p>
-          {t.description && <p className="mt-0.5 text-caption text-ink-500">{t.description}</p>}
-        </div>
-        <button
-          onClick={() => onDismiss(t.id)}
-          className="rounded-sm p-1 text-ink-400 transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-600 active:scale-95"
-          aria-label={__t('关闭通知')}
+    <div className={cn('t-toast-row', open && 'is-open', settled && 'is-settled')}>
+      <div className="t-toast-row-inner">
+        <div
+          role={t.kind === 'error' ? 'alert' : 'status'}
+          className={cn(
+            't-toast pointer-events-auto relative overflow-hidden rounded-md border border-line bg-card shadow-sh-2',
+            open && 'is-open',
+          )}
+          data-open={open ? 'true' : 'false'}
         >
-          <Icon name="x" size={13} />
-        </button>
+          <span className={cn('absolute inset-y-0 left-0 w-[3px]', BAR[t.kind])} aria-hidden="true" />
+          <div className="flex items-start gap-2 py-2.5 pl-4 pr-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-body-s font-medium text-ink-800">{t.title}</p>
+              {t.description && <p className="mt-0.5 text-caption text-ink-500">{t.description}</p>}
+            </div>
+            <button
+              onClick={() => onDismiss(t.id)}
+              className="rounded-sm p-1 text-ink-400 transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-600 active:scale-95"
+              aria-label={__t('关闭通知')}
+            >
+              <Icon name="x" size={13} />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -80,6 +99,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
   const idRef = useRef(0);
   const hideTimers = useRef(new Map<number, number>());
+  const itemsRef = useRef<ToastItem[]>([]);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   const remove = useCallback((id: number) => {
     setItems((prev) => prev.filter((t) => t.id !== id));
@@ -102,7 +125,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const toast = useCallback(
     (kind: ToastKind, title: string, description?: string) => {
       const id = ++idRef.current;
-      setItems((prev) => [...prev.slice(-3), { id, kind, title, description }]);
+      setItems((prev) => [...prev, { id, kind, title, description }]);
+      /* 上限 4 条：第 5 条到来让最老的走完整退场动画（行坍缩+淡出），
+         而不是像 slice 那样被瞬间抽走。镜像 ref 最多滞后一帧，只影响
+         并发风暴里短暂多出一条，随下一条到来即校正。 */
+      const visible = itemsRef.current.filter((t) => !t.hiding);
+      if (visible.length >= 4) dismiss(visible[0].id);
       /* 错误停留更久（审计 2.5.6）：失败原因 4 秒就消失，读屏 polite 队列
          常常还没轮到它，节点已经被移除。 */
       window.setTimeout(() => dismiss(id), kind === 'error' ? 8000 : 4000);
@@ -123,7 +151,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed right-4 top-[calc(3rem+8px)] z-[90] flex w-[320px] max-w-[calc(100vw-32px)] flex-col gap-2 md:top-[calc(4rem+8px)]">
+      {/* 行间距放在 t-toast-row-inner 的 padding 里（不用 gap）：收起的行连
+          同间距一起坍缩，剩余 toast 平滑上移而不是跳位。 */}
+      <div className="pointer-events-none fixed right-4 top-[calc(3rem+8px)] z-[90] flex w-[320px] max-w-[calc(100vw-32px)] flex-col md:top-[calc(4rem+8px)]">
         {items.map((t) => (
           <ToastCard key={t.id} t={t} onDismiss={dismiss} />
         ))}

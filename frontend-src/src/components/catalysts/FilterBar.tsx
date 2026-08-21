@@ -26,7 +26,7 @@ function StatusDropdown({ value, onChange }: { value: '' | NewsAnalysisStatus; o
       value={value}
       onChange={onChange}
       options={STATUS_OPTIONS}
-      ariaLabel={t('全部状态')}
+      ariaLabel={t('分析状态')}
       triggerClassName={
         value ? 'border-brand-400 bg-brand-50 px-2.5 text-brand-700' : 'px-2.5 text-ink-500 hover:text-ink-800'
       }

@@ -38,7 +38,7 @@ import SourceNote from '@/components/shared/SourceNote';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import SessionLED, { SessionDot } from '@/components/shared/SessionLED';
-import { SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
+import { SkeletonCard, SkeletonReveal, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
 import Icon from '@/components/icons';
 import { t } from '../i18n/core.ts';
@@ -899,11 +899,17 @@ export default function Watchlist() {
               位移换了个触发条件。真正的路由级 CLS 由 PageFallback 处理，这里
               负责的是数据状态之间的切换。 */}
           <div className="mt-4 min-h-[70vh]">
-            {loading ? (
-              <div className="card-surface">
-                <SkeletonRows rows={10} />
-              </div>
-            ) : err && !wl.data ? (
+            {/* transitions.dev 14：骨架不再硬切，数据到达后与真实表格交叉
+                淡化 + 交叉去模糊（--reveal-dur） */}
+            <SkeletonReveal
+              loading={loading}
+              skeleton={
+                <div className="card-surface">
+                  <SkeletonRows rows={10} />
+                </div>
+              }
+            >
+            {err && !wl.data ? (
               /* 失败但还有上一轮数据时不整块换错误页：一次 408/断网就把
                  「214 只标的」的统计和涨跌家数换成加载失败，同屏自相矛盾 */
               <div className="card-surface">
@@ -1007,6 +1013,7 @@ export default function Watchlist() {
                 ))}
               </div>
             )}
+            </SkeletonReveal>
             {progressive.hasMore && (
               <div ref={progressive.sentinelRef} className="mt-4 flex justify-center">
                 <button
@@ -1027,10 +1034,9 @@ export default function Watchlist() {
         {/* B3 右侧栏（4 列吸顶）。偏移 = Navbar 64px + 16px：IndexTape 不吸顶，
             按 116px 计会恒留 52px 空隙；与 Breakouts 的 top-20 同口径（审计 2.4.10） */}
         <aside className="grid grid-cols-1 gap-4 self-start md:grid-cols-2 lg:sticky lg:top-20 lg:col-span-4 lg:grid-cols-1" aria-label={t("侧栏")}>
+          <SkeletonReveal loading={!signalsQ.data && signalsQ.loading} skeleton={<SkeletonCard />}>
           {signalsQ.data ? (
             <SignalDistribution data={signalsQ.data} />
-          ) : signalsQ.loading ? (
-            <SkeletonCard />
           ) : (
             /* 失败 ≠ 永远加载中（审计 2.2.12）：骨架屏无限闪动会被读成
                「正在加载」，这里如实报错并给重试。 */
@@ -1046,6 +1052,7 @@ export default function Watchlist() {
               </button>
             </div>
           )}
+          </SkeletonReveal>
           {strengthQ.data?.aggregateAvailable && strengthQ.data.histogram.length > 0 ? (
             <StrengthHistogram histogram={strengthQ.data.histogram} />
           ) : strengthQ.loading ? (

@@ -83,6 +83,7 @@ export const CATALYSTS: Dict = {
   '信息不足': ['Insufficient info', '情報不足'],
   '分析失败': ['Analysis failed', '分析失敗'],
   '全部状态': ['All statuses', 'すべての状態'],
+  '分析状态': ['Analysis status', '分析ステータス'],
   '代码过滤': ['Ticker filter', '銘柄フィルター'],
   '按代码过滤': ['Filter by ticker', '銘柄コードで絞り込み'],
   '清除代码过滤': ['Clear ticker filter', '銘柄フィルターを解除'],

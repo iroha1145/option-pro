@@ -186,7 +186,11 @@ export default function Login() {
   const [capsLock, setCapsLock] = useState(false);
   const [state, setState] = useState<SubmitState>('idle');
   const [statusMsg, setStatusMsg] = useState<{ text: string; tone: 'error' | 'warn' } | null>(null);
-  const shake = useCatalogShake(1200);
+  /* catalog 12 一个实例管一块字段：哪个字段出错抖哪个，服务端失败抖密码框
+     （凭证类错误）但不带行内文案——那份文案由底部 aria-live 状态行独占，
+     避免同一段话在两处同时出现。 */
+  const userShake = useCatalogShake(1200);
+  const pwShake = useCatalogShake(1200);
   const [serviceDown, setServiceDown] = useState(false);
 
 
@@ -216,10 +220,6 @@ export default function Login() {
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
-
-  const doShake = () => {
-    shake.play();
-  };
 
   /* 账号相关的错误后端已给出中文说明，直接用；其余保持原有映射。 */
   const ACCOUNT_ERROR_CODES = new Set([
@@ -260,16 +260,18 @@ export default function Login() {
     if (state === 'verifying' || state === 'success' || serviceDown) return;
     if (!username.trim()) {
       setStatusMsg({ text: t('请输入用户名'), tone: 'error' });
-      doShake();
+      userShake.play({ message: true });
       return;
     }
     if (!password.trim()) {
       setStatusMsg({ text: t('请输入密码'), tone: 'error' });
-      doShake();
+      pwShake.play({ message: true });
       return;
     }
     setState('verifying');
     setStatusMsg(null);
+    userShake.clear();
+    pwShake.clear();
     try {
       const name = username.trim();
       if (mode === 'register') await register(name, password);
@@ -284,7 +286,7 @@ export default function Login() {
     } catch (err) {
       setState('error');
       setStatusMsg(mapError(err));
-      doShake();
+      pwShake.play();
     }
   };
 
@@ -460,13 +462,17 @@ export default function Login() {
             )}
 
             <form onSubmit={onSubmit} className="mt-5" noValidate>
-              <label className="mb-4 block">
+              <div className={cn('t-input-wrap mb-4', userShake.classes.wrap)}>
+              <label className="block">
                 <span className="mb-1.5 block text-caption font-medium text-ink-500">{t('用户名')}</span>
                 <div
+                  ref={userShake.inputRef}
                   className={cn(
-                    'flex h-12 items-center gap-2 rounded-sm border border-line-strong bg-card px-3',
+                    't-input flex h-12 items-center gap-2 rounded-sm border bg-card px-3',
                     'transition-[box-shadow,border-color] duration-fast',
                     'focus-within:border-brand-600 focus-within:shadow-focus-ring',
+                    userShake.classes.input,
+                    userShake.error ? 'border-down-600' : 'border-line-strong',
                   )}
                 >
                   <Icon name="command" size={16} className="shrink-0 text-ink-400" />
@@ -474,7 +480,10 @@ export default function Login() {
                     type="text"
                     value={username}
                     disabled={serviceDown || state === 'verifying' || state === 'success'}
-                    onChange={(e) => setUsername(e.target.value)}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      userShake.clear();
+                    }}
                     placeholder={mode === 'register' ? t('起一个用户名') : t('用户名')}
                     maxLength={32}
                     className="h-full min-w-0 flex-1 bg-transparent text-[16px] text-ink-800 outline-none placeholder:text-ink-300 disabled:opacity-60"
@@ -486,16 +495,22 @@ export default function Login() {
                   />
                 </div>
               </label>
-              <div className={cn('t-input-wrap', shake.classes.wrap)}>
+              <div className="t-error-track">
+                <div className="t-error-clip">
+                  <p className="t-error-msg text-caption text-down-700">{t('请输入用户名')}</p>
+                </div>
+              </div>
+              </div>
+              <div className={cn('t-input-wrap', pwShake.classes.wrap)}>
               <label className="block">
                 <span className="mb-1.5 block text-caption font-medium text-ink-500">{t('密码')}</span>
                 <div
-                  ref={shake.inputRef}
+                  ref={pwShake.inputRef}
                   className={cn(
                     't-input flex h-12 items-center gap-2 rounded-sm border bg-card px-3 transition-[box-shadow,border-color] duration-fast',
                     'focus-within:border-brand-600 focus-within:shadow-focus-ring',
-                    shake.classes.input,
-                    shake.error ? 'border-down-600' : 'border-line-strong',
+                    pwShake.classes.input,
+                    pwShake.error ? 'border-down-600' : 'border-line-strong',
                   )}
                 >
                   <Icon name="shield" size={16} className="shrink-0 text-ink-400" />
@@ -505,7 +520,7 @@ export default function Login() {
                     disabled={serviceDown || state === 'verifying' || state === 'success'}
                     onChange={(e) => {
                       setPassword(e.target.value);
-                      shake.clear();
+                      pwShake.clear();
                     }}
                     onKeyDown={(e) => setCapsLock(e.getModifierState?.('CapsLock') ?? false)}
                     onKeyUp={(e) => setCapsLock(e.getModifierState?.('CapsLock') ?? false)}
@@ -524,9 +539,11 @@ export default function Login() {
                   </button>
                 </div>
               </label>
-              <p className="t-error-msg mt-1.5 text-caption text-down-700">
-                {statusMsg?.tone === 'error' ? statusMsg.text : t('请输入密码')}
-              </p>
+              <div className="t-error-track">
+                <div className="t-error-clip">
+                  <p className="t-error-msg text-caption text-down-700">{t('请输入密码')}</p>
+                </div>
+              </div>
               </div>
               <p className={cn('mt-1.5 h-4 text-caption text-warn-600 transition-opacity', capsLock ? 'opacity-100' : 'opacity-0')}>
                 {t('Caps Lock 已开启')}
