@@ -78,6 +78,14 @@
     --input: 43 13% 83%;
     --ring: 232 74% 53%;
     --radius: 12px; /* v8 圆角回暖：r-lg 8→12 */
+
+    /* Catalog paint tokens → Paper Terminal (motion tokens live in transitions-root.css). */
+    --tabs-text-muted: var(--ink-400);
+    --tabs-text-active: var(--ink-800);
+    --tabs-bar-bg: var(--card-warm);
+    --tabs-pill-bg: var(--card);
+    --tt-bg: var(--card);
+    --tt-fg: var(--ink-700);
   }
 
   html {

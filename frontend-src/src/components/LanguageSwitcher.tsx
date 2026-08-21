@@ -1,21 +1,28 @@
 /**
- * 语言切换器（design.md §7.1 附）：桌面端挂在页头右侧操作区、登录/退出按钮左边；
+ * 语言切换器（design.md §7.1 附 + transitions.dev menu dropdown）
+ * 桌面端挂在页头右侧操作区、登录/退出按钮左边；
  * 移动端由 MobileDock 的「更多」抽屉复用同一组件。
  * 选择后 setLocale() 落盘 + 整页重载，不在这里做任何「立即生效」的局部渲染。
  */
 import { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import {
+  overlayClassName,
+  overlayVisible,
+  readRootDurationMs,
+  useOverlayPhase,
+} from '@/lib/transitions';
 import { LOCALES, getLocale, setLocale } from '../i18n/core.ts';
 import { t } from '../i18n/core.ts';
 import Icon from '@/components/icons';
-
-const SPRING_POP = { type: 'spring', stiffness: 520, damping: 32 } as const;
 
 export default function LanguageSwitcher({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const current = getLocale();
+  const closeMs = readRootDurationMs('--dropdown-close-dur', 150);
+  const phase = useOverlayPhase(open, closeMs);
+  const mounted = overlayVisible(open, phase);
 
   useEffect(() => {
     if (!open) return;
@@ -50,46 +57,44 @@ export default function LanguageSwitcher({ className }: { className?: string }) 
         <Icon name="languages" size={14} />
         <span className="font-mono text-[11px] tnum">{currentMeta.short}</span>
       </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            role="menu"
-            aria-label={t('界面语言')}
-            initial={{ opacity: 0, scale: 0.96, y: -4 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: -4, transition: { duration: 0.16 } }}
-            transition={SPRING_POP}
-            className="absolute right-0 top-10 z-40 w-[176px] origin-top-right rounded-md border border-line bg-card p-1.5 shadow-sh-2"
-          >
-            <p className="px-2 pb-1.5 pt-1 eyebrow">{t('界面语言')}</p>
-            <ul>
-              {LOCALES.map((l) => {
-                const active = l.code === current;
-                return (
-                  <li key={l.code}>
-                    <button
-                      role="menuitemradio"
-                      aria-checked={active}
-                      onClick={() => {
-                        setOpen(false);
-                        setLocale(l.code);
-                      }}
-                      className={cn(
-                        'flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left text-body-s transition-colors',
-                        active ? 'text-brand-600' : 'text-ink-700 hover:bg-paper-2',
-                      )}
-                    >
-                      <span className="w-4 shrink-0 font-mono text-[10px] text-ink-400">{l.short}</span>
-                      <span className="flex-1">{l.native}</span>
-                      {active && <Icon name="check" size={13} className="shrink-0" />}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {mounted && (
+        <div
+          role="menu"
+          aria-label={t('界面语言')}
+          data-origin="top-right"
+          className={cn(
+            't-dropdown absolute right-0 top-10 z-40 w-[176px] rounded-md border border-line bg-card p-1.5 shadow-sh-2',
+            overlayClassName(phase),
+          )}
+        >
+          <p className="px-2 pb-1.5 pt-1 eyebrow">{t('界面语言')}</p>
+          <ul>
+            {LOCALES.map((l) => {
+              const active = l.code === current;
+              return (
+                <li key={l.code}>
+                  <button
+                    role="menuitemradio"
+                    aria-checked={active}
+                    onClick={() => {
+                      setOpen(false);
+                      setLocale(l.code);
+                    }}
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left text-body-s transition-colors',
+                      active ? 'text-brand-600' : 'text-ink-700 hover:bg-paper-2',
+                    )}
+                  >
+                    <span className="w-4 shrink-0 font-mono text-[10px] text-ink-400">{l.short}</span>
+                    <span className="flex-1">{l.native}</span>
+                    {active && <Icon name="check" size={13} className="shrink-0" />}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

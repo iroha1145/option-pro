@@ -1,9 +1,14 @@
-/** 确认弹窗（design.md §4.3 模态：scale(.96)→1 + fade，spring-pop；ESC/背板关闭） */
+/** 确认弹窗（design.md §4.3 + transitions.dev modal：open 250ms / close 150ms） */
 import { useEffect, useRef } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
+import {
+  overlayClassName,
+  overlayVisible,
+  readRootDurationMs,
+  useOverlayPhase,
+} from '@/lib/transitions';
 import { t } from '../../i18n/core.ts';
 
 interface ConfirmDialogProps {
@@ -33,6 +38,9 @@ export default function ConfirmDialog({
   const panelRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   useFocusTrap(panelRef, open, { initialFocusRef: cancelRef });
+  const closeMs = readRootDurationMs('--modal-close-dur', 150);
+  const phase = useOverlayPhase(open, closeMs);
+  const mounted = overlayVisible(open, phase);
 
   useEffect(() => {
     if (!open) return;
@@ -43,68 +51,61 @@ export default function ConfirmDialog({
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onCancel]);
 
+  if (!mounted) return null;
+
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={onCancel}
-            className="fixed inset-0 z-[85] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px]"
-            aria-hidden="true"
-          />
-          <motion.div
-            ref={panelRef}
-            role="alertdialog"
-            aria-modal="true"
-            aria-label={title}
-            /* 水平居中交给 framer 的 x，不能用 Tailwind 的 -translate-x-1/2：动 scale 时
-               framer 写的内联 transform 会把那个 class 整个替换掉（实测 scale(0.96) 直接
-               顶掉 translateX(-200px)），400px 宽的对话框会稳定右偏 200px。 */
-            initial={{ opacity: 0, scale: 0.96, x: '-50%' }}
-            animate={{ opacity: 1, scale: 1, x: '-50%' }}
-            exit={{ opacity: 0, scale: 0.96, x: '-50%', transition: { duration: 0.16 } }}
-            transition={{ type: 'spring', stiffness: 520, damping: 32 }}
-            className="fixed left-1/2 top-[24vh] z-[86] w-[400px] max-w-[calc(100vw-32px)] rounded-xl border border-line bg-card p-5 shadow-sh-3"
-          >
-            <div className="flex items-start gap-3">
-              <span
-                className={cn(
-                  'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md',
-                  danger ? 'bg-down-50 text-down-600' : 'bg-ai-50 text-ai-600',
-                )}
-              >
-                <Icon name="spark-ai" size={18} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <h3 className="text-h3 text-ink-900">{title}</h3>
-                {description && <p className="mt-1.5 text-body-s leading-relaxed text-ink-500">{description}</p>}
-              </div>
+    <>
+      <div
+        className={cn('t-backdrop fixed inset-0 z-[85] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
+        onClick={onCancel}
+        aria-hidden="true"
+      />
+      {/* 水平居中交给外层 translate，避免 t-modal 的 scale transform 顶掉 -translate-x-1/2 */}
+      <div className="fixed left-1/2 top-[24vh] z-[86] w-[400px] max-w-[calc(100vw-32px)] -translate-x-1/2">
+        <div
+          ref={panelRef}
+          role="alertdialog"
+          aria-modal="true"
+          aria-label={title}
+          className={cn(
+            't-modal rounded-xl border border-line bg-card p-5 shadow-sh-3',
+            overlayClassName(phase),
+          )}
+        >
+          <div className="flex items-start gap-3">
+            <span
+              className={cn(
+                'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md',
+                danger ? 'bg-down-50 text-down-600' : 'bg-ai-50 text-ai-600',
+              )}
+            >
+              <Icon name="spark-ai" size={18} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-h3 text-ink-900">{title}</h3>
+              {description && <p className="mt-1.5 text-body-s leading-relaxed text-ink-500">{description}</p>}
             </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                ref={cancelRef}
-                onClick={onCancel}
-                className="rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:bg-paper-2"
-              >
-                {cancelLabel}
-              </button>
-              <button
-                onClick={onConfirm}
-                className={cn(
-                  'rounded-md px-3.5 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast hover:brightness-105',
-                  danger ? 'bg-down-600' : 'bg-brand-600',
-                )}
-              >
-                {confirmLabel}
-              </button>
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+          </div>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              ref={cancelRef}
+              onClick={onCancel}
+              className="rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:bg-paper-2"
+            >
+              {cancelLabel}
+            </button>
+            <button
+              onClick={onConfirm}
+              className={cn(
+                'rounded-md px-3.5 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast hover:brightness-105',
+                danger ? 'bg-down-600' : 'bg-brand-600',
+              )}
+            >
+              {confirmLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }

@@ -7,7 +7,7 @@
  *   错误映射：login_cooldown→连续登录失败，请稍后再试 / https_required→密码模式需 HTTPS / 其他→密码不正确
  * L3 移动单栏；「返回公开研究页面」链接；reduced-motion 降级；页面不可见暂停 K 线循环
  */
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useAccess } from '@/hooks/useAccess';
@@ -16,6 +16,7 @@ import { ApiError } from '@/api/client';
 import { useToast } from '@/components/Toast';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION } from '@/lib/motion';
+import { replayShake } from '@/lib/transitions';
 import Icon from '@/components/icons';
 import type { IconName } from '@/components/icons';
 import { t } from '../i18n/core.ts';
@@ -185,8 +186,9 @@ export default function Login() {
   const [capsLock, setCapsLock] = useState(false);
   const [state, setState] = useState<SubmitState>('idle');
   const [statusMsg, setStatusMsg] = useState<{ text: string; tone: 'error' | 'warn' } | null>(null);
-  const [shake, setShake] = useState(false);
   const [pwError, setPwError] = useState(false);
+  const inputWrapRef = useRef<HTMLDivElement>(null);
+  const inputShakeRef = useRef<HTMLDivElement>(null);
   const [serviceDown, setServiceDown] = useState(false);
 
 
@@ -218,8 +220,12 @@ export default function Login() {
   }, []);
 
   const doShake = () => {
-    setShake(true);
-    window.setTimeout(() => setShake(false), 420);
+    const wrap = inputWrapRef.current;
+    const input = inputShakeRef.current;
+    if (!wrap || !input) return;
+    wrap.classList.add('is-error');
+    input.classList.add('is-error');
+    replayShake(input);
   };
 
   /* 账号相关的错误后端已给出中文说明，直接用；其余保持原有映射。 */
@@ -415,10 +421,7 @@ export default function Login() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: DUR_SECTION, ease: [0.16, 1, 0.3, 1], delay: reduced ? 0 : 0.2 }}
-            className={cn(
-              'glass w-full max-w-[400px] rounded-xl border border-line p-9 shadow-sh-3 max-lg:p-6',
-              shake && 'animate-nudge-shake',
-            )}
+            className="glass w-full max-w-[400px] rounded-xl border border-line p-9 shadow-sh-3 max-lg:p-6"
           >
             <div className="flex items-start gap-3">
               <span className="mt-0.5 text-brand-600">
@@ -494,13 +497,15 @@ export default function Login() {
                   />
                 </div>
               </label>
+              <div ref={inputWrapRef} className={cn('t-input-wrap', pwError && 'is-error')}>
               <label className="block">
                 <span className="mb-1.5 block text-caption font-medium text-ink-500">{t('密码')}</span>
                 <div
+                  ref={inputShakeRef}
                   className={cn(
-                    'flex h-12 items-center gap-2 rounded-sm border bg-card px-3 transition-[box-shadow,border-color] duration-fast',
+                    't-input flex h-12 items-center gap-2 rounded-sm border bg-card px-3 transition-[box-shadow,border-color] duration-fast',
                     'focus-within:border-brand-600 focus-within:shadow-focus-ring',
-                    pwError ? 'border-down-600' : 'border-line-strong',
+                    pwError ? 'is-error border-down-600' : 'border-line-strong',
                   )}
                 >
                   <Icon name="shield" size={16} className="shrink-0 text-ink-400" />
@@ -508,7 +513,12 @@ export default function Login() {
                     type={showPw ? 'text' : 'password'}
                     value={password}
                     disabled={serviceDown || state === 'verifying' || state === 'success'}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setPwError(false);
+                      inputWrapRef.current?.classList.remove('is-error');
+                      inputShakeRef.current?.classList.remove('is-error');
+                    }}
                     onKeyDown={(e) => setCapsLock(e.getModifierState?.('CapsLock') ?? false)}
                     onKeyUp={(e) => setCapsLock(e.getModifierState?.('CapsLock') ?? false)}
                     placeholder={mode === 'register' ? t('设置密码') : t('输入密码')}
@@ -526,6 +536,10 @@ export default function Login() {
                   </button>
                 </div>
               </label>
+              <p className="t-error-msg mt-1.5 text-caption text-down-700">
+                {statusMsg?.tone === 'error' ? statusMsg.text : t('请输入密码')}
+              </p>
+              </div>
               <p className={cn('mt-1.5 h-4 text-caption text-warn-600 transition-opacity', capsLock ? 'opacity-100' : 'opacity-0')}>
                 {t('Caps Lock 已开启')}
               </p>

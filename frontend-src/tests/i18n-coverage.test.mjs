@@ -158,15 +158,14 @@ test('dict/*.ts 词条之间没有同 msgid 不同译文的冲突', () => {
  * 而不是放宽通用规则掩盖真正遗漏的包裹。
  */
 const KNOWN_TYPE_DISCRIMINANTS = new Set([
-  'components/CommandPalette.tsx:142 股票',
-  'components/CommandPalette.tsx:152 最近',
-  'components/CommandPalette.tsx:157 功能',
-  'components/CommandPalette.tsx:171 功能',
-  'components/CommandPalette.tsx:182 功能',
-  'components/CommandPalette.tsx:194 功能',
+  'components/CommandPalette.tsx:150 股票',
+  'components/CommandPalette.tsx:160 最近',
+  'components/CommandPalette.tsx:165 功能',
+  'components/CommandPalette.tsx:179 功能',
+  'components/CommandPalette.tsx:190 功能',
   // 客户账号退出/登录条目（#18）：group 判别字段，同上由渲染处 __t 包裹
-  'components/CommandPalette.tsx:196 功能',
-  'components/CommandPalette.tsx:208 功能',
+  'components/CommandPalette.tsx:204 功能',
+  'components/CommandPalette.tsx:216 功能',
   'components/detail/api.ts:457 数据不足',
   'components/detail/api.ts:459 偏多',
   'components/detail/api.ts:461 偏空',

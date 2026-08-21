@@ -1,6 +1,7 @@
-/** Segmented 分段切换：滑块 260ms ease-paper */
-import { useLayoutEffect, useRef, useState } from 'react';
+/** Segmented 分段切换：transitions.dev tabs sliding（pill 250ms） */
+import { useLayoutEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { placeTabsPill } from '@/lib/transitions';
 
 interface SegmentedProps<T extends string> {
   options: { value: T; label: string }[];
@@ -11,31 +12,45 @@ interface SegmentedProps<T extends string> {
 
 export default function Segmented<T extends string>({ options, value, onChange, className }: SegmentedProps<T>) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null);
+  const pillRef = useRef<HTMLSpanElement>(null);
+  const firstPaint = useRef(true);
 
   useLayoutEffect(() => {
     const wrap = wrapRef.current;
-    if (!wrap) return;
+    const pill = pillRef.current;
+    if (!wrap || !pill) return;
     const idx = options.findIndex((o) => o.value === value);
-    const btn = wrap.children[idx + 1] as HTMLElement | undefined; // +1 跳过滑块
-    if (btn) setThumb({ left: btn.offsetLeft, width: btn.offsetWidth });
+    const btn = wrap.querySelectorAll<HTMLElement>('.t-tab')[idx];
+    if (!btn) return;
+    const animate = !firstPaint.current;
+    firstPaint.current = false;
+    placeTabsPill(pill, btn, animate);
   }, [value, options]);
+
+  useLayoutEffect(() => {
+    const onResize = () => {
+      const wrap = wrapRef.current;
+      const pill = pillRef.current;
+      if (!wrap || !pill) return;
+      const active = wrap.querySelector<HTMLElement>('.t-tab[aria-selected="true"]');
+      if (active) placeTabsPill(pill, active, false);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   return (
     <div
       ref={wrapRef}
       role="tablist"
-      className={cn('relative inline-flex items-center gap-0.5 rounded-md border border-line bg-card-warm p-0.5', className)}
+      className={cn('t-tabs border border-line', className)}
     >
-      <span
-        aria-hidden="true"
-        className="absolute top-0.5 bottom-0.5 rounded-[4px] bg-card shadow-btn transition-[left,width,opacity] duration-ui ease-paper"
-        style={thumb ? { left: thumb.left, width: thumb.width } : { opacity: 0 }}
-      />
+      <span ref={pillRef} className="t-tabs-pill" aria-hidden="true" />
       {options.map((o, index) => (
         <button
           key={o.value}
           role="tab"
+          className="t-tab text-caption font-medium"
           aria-selected={value === o.value}
           /* tablist 的标准键盘行为（审计 P3-5）：roving tabindex + 左右方向键 +
              Home/End。旧实现只有 role，Tab 会逐个停在每一项，方向键完全无效。 */
@@ -59,13 +74,9 @@ export default function Segmented<T extends string>({ options, value, onChange, 
             if (target < 0) return;
             event.preventDefault();
             onChange(options[target].value);
-            const next = wrapRef.current?.children[target + 1];
-            if (next instanceof HTMLElement) next.focus();
+            const next = wrapRef.current?.querySelectorAll<HTMLElement>('.t-tab')[target];
+            next?.focus();
           }}
-          className={cn(
-            'relative z-10 rounded-[4px] px-3 py-1 text-caption font-medium transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
-            value === o.value ? 'text-ink-800' : 'text-ink-400 hover:text-ink-600',
-          )}
         >
           {o.label}
         </button>
