@@ -76,7 +76,11 @@ export function loadLayerSettings(identity: string, storage?: Storage | null): L
 export function saveLayerSettings(identity: string, settings: LayerSettings, storage?: Storage | null): void {
   const store = storage ?? (typeof localStorage === 'undefined' ? null : localStorage);
   if (!store) return;
-  store.setItem(layersStorageKey(identity), JSON.stringify(settings));
+  try {
+    store.setItem(layersStorageKey(identity), JSON.stringify(settings));
+  } catch {
+    /* QuotaExceededError / SecurityError：私密模式或额度满时不把异常抛到图层菜单 */
+  }
 }
 
 export function toggleLayer(settings: LayerSettings, layerId: string): LayerSettings {

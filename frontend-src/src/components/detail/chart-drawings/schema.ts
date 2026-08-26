@@ -64,7 +64,9 @@ export function normalizeColor(value: string): string {
 
 function parseIso(value: unknown): string | null {
   if (typeof value !== 'string' || !value.trim()) return null;
-  const text = value.endsWith('Z') ? value.slice(0, -1) + '+00:00' : value;
+  // RFC 3339：必须带 Z 或显式偏移。naive 本地时间不能按浏览器时区解析。
+  if (!/(Z|[+-]\d{2}:\d{2})$/i.test(value)) return null;
+  const text = value.endsWith('Z') || value.endsWith('z') ? value.slice(0, -1) + '+00:00' : value;
   const ms = Date.parse(text);
   if (!Number.isFinite(ms)) return null;
   return new Date(ms).toISOString();
@@ -130,11 +132,12 @@ export function parseDrawingDetailed(raw: unknown): SchemaOk<ChartDrawing> | Sch
   if (raw.text !== undefined && raw.text !== null) {
     if (typeof raw.text !== 'string') return { ok: false, error: 'illegal_text' };
     if (raw.text.length > DRAWING_TEXT_MAX) return { ok: false, error: 'illegal_text' };
-    if (raw.text.includes('<') || raw.text.includes('>')) return { ok: false, error: 'illegal_text' };
-    if (kind === 'text' && !raw.text.trim()) return { ok: false, error: 'illegal_text' };
+    if (raw.text.includes('<') || raw.text.includes('>') || raw.text.includes('\0')) {
+      return { ok: false, error: 'illegal_text' };
+    }
     text = raw.text;
   } else if (kind === 'text') {
-    return { ok: false, error: 'illegal_text' };
+    text = '';
   }
   if ('locked' in raw && typeof raw.locked !== 'boolean') return { ok: false, error: 'invalid_boolean' };
   if ('hidden' in raw && typeof raw.hidden !== 'boolean') return { ok: false, error: 'invalid_boolean' };
@@ -297,6 +300,5 @@ export function whitelistStyle(style: DrawingStyle): DrawingStyle | null {
 export function whitelistText(text: string): string | null {
   if (text.length > DRAWING_TEXT_MAX) return null;
   if (text.includes('<') || text.includes('>') || text.includes('\0')) return null;
-  if (!text.trim()) return null;
   return text;
 }

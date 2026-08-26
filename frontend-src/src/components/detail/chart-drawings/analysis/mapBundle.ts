@@ -399,7 +399,9 @@ export function filterOverlays(
     if (overlay.shapeQuality < settings.minShapeQuality && (overlay.kind === 'support_trend' || overlay.kind === 'resistance_trend' || overlay.kind === 'channel' || overlay.kind === 'triangle' || overlay.kind === 'wedge')) {
       return false;
     }
-    if (overlay.status === 'invalidated' && !settings.showInvalidated) return false;
+    if (overlay.status === 'invalidated') {
+      return settings.showInvalidated;
+    }
     if (settings.onlyActive && !ACTIVE_STATUSES.has(overlay.status) && overlay.status !== 'broken_up' && overlay.status !== 'broken_down') {
       return false;
     }
@@ -427,7 +429,10 @@ export function filterPanes(panes: AnalysisPane[], settings: LayerSettings): Ana
  */
 export function labelBudget(overlays: AnalysisOverlay[], settings: LayerSettings): AnalysisOverlay[] {
   const density = Math.max(0, Math.min(1, settings.labelDensity));
-  const cap = Math.max(0, Math.round(settings.maxLabels * density / 0.4));
+  const cap = Math.min(
+    settings.maxLabels,
+    Math.max(0, Math.round(settings.maxLabels * density)),
+  );
   return overlays
     .filter((overlay) => isPatternKind(overlay.kind))
     .sort((a, b) => b.displayPriority - a.displayPriority)

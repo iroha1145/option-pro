@@ -2,7 +2,7 @@
 
 import { autoPatternsToMarks, type DrawingMarks, type RenderContext } from '../renderer.ts';
 import { resolveAnchor } from '../projection.ts';
-import { barStampForRange, isPatternKind, type AnalysisOverlay } from './mapBundle.ts';
+import { barStampForRange, isPatternKind, type AnalysisOverlay, type AnalysisPane } from './mapBundle.ts';
 
 export interface OverlaySeriesLine {
   id: string;
@@ -182,9 +182,21 @@ export function overlaysToMarks(
       const hi = asNumber(overlay.geometry.high);
       const lo = asNumber(overlay.geometry.low);
       if (hi !== null && lo !== null) {
+        const startKey = typeof overlay.geometry.sessionStartBarKey === 'string'
+          ? overlay.geometry.sessionStartBarKey
+          : null;
+        const endKey = typeof overlay.geometry.sessionEndBarKey === 'string'
+          ? overlay.geometry.sessionEndBarKey
+          : null;
+        const start = startKey
+          ? Math.max(ctx.xMin, ctx.bars.findIndex((bar) => barStampForRange(bar.t, ctx.range) === startKey))
+          : ctx.xMin;
+        const end = endKey
+          ? Math.max(start, ctx.bars.findIndex((bar) => barStampForRange(bar.t, ctx.range) === endKey))
+          : ctx.xMax;
         areas.push([
-          { xAxis: ctx.xMin, yAxis: lo, itemStyle: { color: '#8A94B0', opacity: 0.08 } },
-          { xAxis: ctx.xMax, yAxis: hi },
+          { xAxis: start < 0 ? ctx.xMin : start, yAxis: lo, itemStyle: { color: '#8A94B0', opacity: 0.08 } },
+          { xAxis: end < 0 ? ctx.xMax : end, yAxis: hi },
         ]);
       }
       continue;
@@ -200,6 +212,104 @@ export function overlaysToMarks(
   }
 
   return { lines, points, areas, polygons, unresolvedIds: [] };
+}
+
+export interface PanePlotSeries {
+  key: string;
+  name: string;
+  data: Array<number | null>;
+  type: 'line' | 'bar';
+}
+
+export interface PanePlot {
+  id: string;
+  label: string;
+  kind: string;
+  yMin?: number;
+  yMax?: number;
+  markLines?: number[];
+  series: PanePlotSeries[];
+}
+
+function paneDates(pane: AnalysisPane, values: Array<number | null | undefined>): string[] {
+  if (pane.dates.length > values.length) return pane.dates.slice(0, values.length);
+  return pane.dates;
+}
+
+export function panesToOption(
+  panes: AnalysisPane[],
+  bars: { t: string }[],
+  range: string,
+): PanePlot[] {
+  return panes.map((pane) => {
+    const align = (key: string) => {
+      const values = pane.values[key] ?? [];
+      return alignSeriesToBars(values, paneDates(pane, values), bars, range);
+    };
+    if (pane.kind === 'rsi' || pane.id === 'rsi') {
+      return {
+        id: pane.id,
+        label: pane.label,
+        kind: 'rsi',
+        yMin: 0,
+        yMax: 100,
+        markLines: [30, 70],
+        series: [{ key: 'rsi', name: 'RSI', data: align('rsi'), type: 'line' }],
+      };
+    }
+    if (pane.kind === 'macd' || pane.id === 'macd') {
+      return {
+        id: pane.id,
+        label: pane.label,
+        kind: 'macd',
+        markLines: [0],
+        series: [
+          { key: 'macd', name: 'MACD', data: align('macd'), type: 'line' },
+          { key: 'signal', name: 'Signal', data: align('signal'), type: 'line' },
+          { key: 'histogram', name: 'Hist', data: align('histogram'), type: 'bar' },
+        ],
+      };
+    }
+    if (pane.kind === 'obv' || pane.id === 'obv') {
+      return {
+        id: pane.id,
+        label: pane.label,
+        kind: 'obv',
+        series: [{ key: 'obv', name: 'OBV', data: align('obv'), type: 'line' }],
+      };
+    }
+    if (pane.kind === 'clv' || pane.id === 'clv') {
+      return {
+        id: pane.id,
+        label: pane.label,
+        kind: 'clv',
+        yMin: -1,
+        yMax: 1,
+        markLines: [0],
+        series: [{ key: 'clv', name: 'CLV', data: align('clv'), type: 'line' }],
+      };
+    }
+    if (pane.kind === 'rs' || pane.id === 'spy_rs') {
+      return {
+        id: pane.id,
+        label: pane.label,
+        kind: 'rs',
+        markLines: [100],
+        series: [{ key: 'rs', name: pane.label, data: align('rs'), type: 'line' }],
+      };
+    }
+    return {
+      id: pane.id,
+      label: pane.label,
+      kind: pane.kind,
+      series: [{
+        key: 'position',
+        name: pane.label,
+        data: align('position'),
+        type: 'line',
+      }],
+    };
+  });
 }
 
 export function analysisLayout(paneCount: number): LayoutGrid[] {
@@ -218,7 +328,7 @@ export function analysisLayout(paneCount: number): LayoutGrid[] {
     paneH = 0;
   } else {
     volH = Math.min(11, usable * 0.12);
-    const paneBudget = Math.min(usable * 0.42, extra * 10);
+    const paneBudget = Math.min(usable * 0.42, extra * 16);
     paneH = paneBudget / extra;
     priceH = usable - volH - paneH * extra;
     if (priceH < 28) {

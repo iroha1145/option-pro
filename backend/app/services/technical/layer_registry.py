@@ -25,7 +25,7 @@ LAYERS: list[dict[str, Any]] = [
     {"id": "macd", "group": "pane", "kind": "macd", "label": "MACD"},
     {"id": "obv", "group": "pane", "kind": "obv", "label": "OBV"},
     {"id": "clv", "group": "pane", "kind": "clv", "label": "CLV"},
-    {"id": "range_persistence", "group": "pane", "kind": "range", "label": "Range Persistence"},
+    {"id": "range_persistence", "group": "pane", "kind": "range", "label": "60日区间位置"},
     {"id": "spy_rs", "group": "pane", "kind": "rs", "label": "SPY Relative Strength"},
     # strength_* 图层曾列在这里，但既没有后端 pane 也没有绘制路径，勾了什么都不会发生，
     # 已随前端 registry 一起删除。要恢复请连同 pane/绘制一起加，parity 测试会盯住两边。

@@ -149,6 +149,15 @@ CREATE TABLE IF NOT EXISTS account_chart_drawings (
 );
 CREATE INDEX IF NOT EXISTS idx_account_chart_drawings_scope
     ON account_chart_drawings(user_id, ticker, chart_range, adjustment);
+CREATE TABLE IF NOT EXISTS account_chart_drawing_scopes (
+    user_id TEXT NOT NULL
+        REFERENCES accounts(user_id) ON DELETE CASCADE,
+    ticker TEXT NOT NULL,
+    chart_range TEXT NOT NULL,
+    adjustment TEXT NOT NULL,
+    scope_revision INTEGER NOT NULL,
+    PRIMARY KEY (user_id, ticker, chart_range, adjustment)
+);
 """
 
 
@@ -298,14 +307,17 @@ def _parse_iso_time(value: str) -> str:
     text = str(value or "").strip()
     if not text:
         raise AccountError("invalid_time")
+    # RFC 3339：必须带 Z 或显式偏移。naive 本地时间不能偷偷当成 UTC。
     normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
     # 换算也得包进来：0001-01-01T00:00:00+00:01 这种格式合法但换到 UTC 会越过
     # datetime.min，astimezone 抛的是 OverflowError，漏在外面就是一个 500。
     try:
         parsed = datetime.fromisoformat(normalized)
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
+            raise AccountError("invalid_time")
         return parsed.astimezone(timezone.utc).isoformat()
+    except AccountError:
+        raise
     except (ValueError, OverflowError, OSError) as exc:
         raise AccountError("invalid_time") from exc
 
@@ -407,10 +419,8 @@ def validate_drawing_payload(raw: Mapping[str, Any], *, require_id: bool = True)
         if "<" in text or ">" in text or "\x00" in text:
             raise AccountError("invalid_text")
         text_out = text
-        if kind == "text" and not text_out.strip():
-            raise AccountError("invalid_text")
-    if kind == "text" and not (text_out or "").strip():
-        raise AccountError("invalid_text")
+    if kind == "text" and text_out is None:
+        text_out = ""
     try:
         z_order = int(raw.get("zOrder", 0))
     except (TypeError, ValueError) as exc:
@@ -461,6 +471,18 @@ def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _require_expected_scope_revision(value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise AccountError("invalid_payload")
+    return value
+
+
+_DRAWING_COLUMNS = (
+    "drawing_id, user_id, ticker, chart_range, adjustment, "
+    "kind, payload_json, revision, created_at, updated_at"
+)
+
+
 class AccountStore:
     """SQLite-backed accounts, sessions and personal watchlists."""
 
@@ -494,15 +516,15 @@ class AccountStore:
                 return
             with self._connect() as connection:
                 connection.executescript(_SCHEMA)
-                self._rebuild_legacy_drawings_table(connection)
+                self._migrate_chart_drawings(connection)
                 connection.commit()
             self._initialized = True
 
-    def _rebuild_legacy_drawings_table(self, connection: sqlite3.Connection) -> None:
-        """把开发库里旧的全局 drawing_id 主键换成 (user_id, drawing_id)。
+    def _migrate_chart_drawings(self, connection: sqlite3.Connection) -> None:
+        """Copy-forward: global drawing_id PK → (user_id, drawing_id); backfill scopes.
 
-        绘图功能还没上线，任何带旧主键的表都只可能是开发机上的临时数据，所以
-        直接丢掉重建；等有了线上数据，这里必须换成搬数据的正经迁移。
+        旧路径直接 DROP 会丢掉已有绘图。这里改名、建新表、INSERT SELECT，再删
+        临时表。scopes 表按已有行补 revision=1；已有 scope 行不覆盖。
         """
 
         pk_columns = [
@@ -510,10 +532,29 @@ class AccountStore:
             for row in connection.execute("PRAGMA table_info(account_chart_drawings)")
             if int(row["pk"]) > 0
         ]
-        if pk_columns != ["drawing_id"]:
-            return
-        connection.execute("DROP TABLE account_chart_drawings")
+        if pk_columns == ["drawing_id"]:
+            connection.execute(
+                "ALTER TABLE account_chart_drawings "
+                "RENAME TO account_chart_drawings_legacy_pk"
+            )
+            connection.executescript(_SCHEMA)
+            connection.execute(
+                f"""INSERT INTO account_chart_drawings
+                        ({_DRAWING_COLUMNS})
+                    SELECT {_DRAWING_COLUMNS}
+                      FROM account_chart_drawings_legacy_pk"""
+            )
+            connection.execute("DROP TABLE account_chart_drawings_legacy_pk")
         connection.executescript(_SCHEMA)
+        connection.execute(
+            """INSERT INTO account_chart_drawing_scopes
+                   (user_id, ticker, chart_range, adjustment, scope_revision)
+               SELECT user_id, ticker, chart_range, adjustment, 1
+                 FROM account_chart_drawings
+                GROUP BY user_id, ticker, chart_range, adjustment
+                ON CONFLICT(user_id, ticker, chart_range, adjustment)
+                DO NOTHING"""
+        )
 
     # ---------------- accounts ----------------
 
@@ -769,24 +810,91 @@ class AccountStore:
     # ---------------- chart drawings ----------------
 
     def _row_to_drawing(self, row: sqlite3.Row) -> dict[str, Any]:
-        payload = json.loads(str(row["payload_json"]))
-        return {
-            "schemaVersion": DRAWING_SCHEMA_VERSION,
-            "id": str(row["drawing_id"]),
-            "ticker": str(row["ticker"]),
-            "range": str(row["chart_range"]),
-            "adjustment": str(row["adjustment"]),
-            "kind": str(row["kind"]),
-            "anchors": payload.get("anchors", []),
-            "style": payload.get("style", {}),
-            "text": payload.get("text"),
-            "locked": bool(payload.get("locked", False)),
-            "hidden": bool(payload.get("hidden", False)),
-            "zOrder": int(payload.get("zOrder", 0)),
-            "revision": int(row["revision"]),
-            "createdAt": str(row["created_at"]),
-            "updatedAt": str(row["updated_at"]),
-        }
+        try:
+            payload = json.loads(str(row["payload_json"]))
+        except json.JSONDecodeError as exc:
+            raise AccountError("invalid_payload") from exc
+        if not isinstance(payload, dict):
+            raise AccountError("invalid_payload")
+        parsed = validate_drawing_payload(
+            {
+                "schemaVersion": payload.get("schemaVersion", DRAWING_SCHEMA_VERSION),
+                "id": str(row["drawing_id"]),
+                "ticker": str(row["ticker"]),
+                "range": str(row["chart_range"]),
+                "adjustment": str(row["adjustment"]),
+                "kind": payload.get("kind", row["kind"]),
+                "anchors": payload.get("anchors"),
+                "style": payload.get("style"),
+                "text": payload.get("text"),
+                "locked": payload.get("locked", False),
+                "hidden": payload.get("hidden", False),
+                "zOrder": payload.get("zOrder", 0),
+            },
+            require_id=True,
+        )
+        return self._parsed_to_drawing(
+            parsed,
+            revision=int(row["revision"]),
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+        )
+
+    def _read_scope_revision(
+        self,
+        connection: sqlite3.Connection,
+        user_id: str,
+        ticker: str,
+        chart_range: str,
+        adjustment: str,
+    ) -> int:
+        row = connection.execute(
+            """SELECT scope_revision FROM account_chart_drawing_scopes
+                WHERE user_id=? AND ticker=? AND chart_range=? AND adjustment=?""",
+            (user_id, ticker, chart_range, adjustment),
+        ).fetchone()
+        return 0 if row is None else int(row[0])
+
+    def _bump_scope_revision(
+        self,
+        connection: sqlite3.Connection,
+        user_id: str,
+        ticker: str,
+        chart_range: str,
+        adjustment: str,
+        expected: int,
+    ) -> int:
+        current = self._read_scope_revision(
+            connection, user_id, ticker, chart_range, adjustment
+        )
+        if current != expected:
+            raise AccountError("scope_revision_conflict")
+        new_revision = current + 1
+        connection.execute(
+            """INSERT INTO account_chart_drawing_scopes
+                   (user_id, ticker, chart_range, adjustment, scope_revision)
+               VALUES (?,?,?,?,?)
+               ON CONFLICT(user_id, ticker, chart_range, adjustment)
+               DO UPDATE SET scope_revision=excluded.scope_revision""",
+            (user_id, ticker, chart_range, adjustment, new_revision),
+        )
+        return new_revision
+
+    def scope_revision(
+        self,
+        user_id: str,
+        ticker: str,
+        chart_range: str,
+        adjustment: str = "raw",
+    ) -> int:
+        symbol = normalize_ticker(ticker)
+        range_key = normalize_chart_range(chart_range)
+        adj = normalize_chart_adjustment(adjustment)
+        self.initialize()
+        with self._connect() as connection:
+            return self._read_scope_revision(
+                connection, user_id, symbol, range_key, adj
+            )
 
     def _parsed_to_drawing(
         self,
@@ -821,6 +929,31 @@ class AccountStore:
             "updatedAt": updated_at,
         }
 
+    def list_drawings_page(
+        self,
+        user_id: str,
+        ticker: str,
+        chart_range: str,
+        adjustment: str = "raw",
+    ) -> tuple[list[dict[str, Any]], int]:
+        symbol = normalize_ticker(ticker)
+        range_key = normalize_chart_range(chart_range)
+        adj = normalize_chart_adjustment(adjustment)
+        self.initialize()
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""SELECT {_DRAWING_COLUMNS}
+                      FROM account_chart_drawings
+                     WHERE user_id=? AND ticker=? AND chart_range=? AND adjustment=?
+                     ORDER BY created_at, drawing_id""",
+                (user_id, symbol, range_key, adj),
+            ).fetchall()
+            drawings = [self._row_to_drawing(row) for row in rows]
+            revision = self._read_scope_revision(
+                connection, user_id, symbol, range_key, adj
+            )
+        return drawings, revision
+
     def list_drawings(
         self,
         user_id: str,
@@ -828,35 +961,31 @@ class AccountStore:
         chart_range: str,
         adjustment: str = "raw",
     ) -> list[dict[str, Any]]:
-        symbol = normalize_ticker(ticker)
-        range_key = normalize_chart_range(chart_range)
-        adj = normalize_chart_adjustment(adjustment)
-        self.initialize()
-        with self._connect() as connection:
-            rows = connection.execute(
-                """SELECT drawing_id, user_id, ticker, chart_range, adjustment,
-                          kind, payload_json, revision, created_at, updated_at
-                     FROM account_chart_drawings
-                    WHERE user_id=? AND ticker=? AND chart_range=? AND adjustment=?
-                    ORDER BY created_at, drawing_id""",
-                (user_id, symbol, range_key, adj),
-            ).fetchall()
-        return [self._row_to_drawing(row) for row in rows]
+        drawings, _revision = self.list_drawings_page(
+            user_id, ticker, chart_range, adjustment
+        )
+        return drawings
 
     def get_drawing(self, user_id: str, drawing_id: str) -> dict[str, Any] | None:
         drawing_id = normalize_drawing_id(drawing_id)
         self.initialize()
         with self._connect() as connection:
             row = connection.execute(
-                """SELECT drawing_id, user_id, ticker, chart_range, adjustment,
-                          kind, payload_json, revision, created_at, updated_at
-                     FROM account_chart_drawings
-                    WHERE user_id=? AND drawing_id=?""",
+                f"""SELECT {_DRAWING_COLUMNS}
+                      FROM account_chart_drawings
+                     WHERE user_id=? AND drawing_id=?""",
                 (user_id, drawing_id),
             ).fetchone()
         return None if row is None else self._row_to_drawing(row)
 
-    def create_drawing(self, user_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+    def create_drawing(
+        self,
+        user_id: str,
+        body: Mapping[str, Any],
+        *,
+        expected_scope_revision: int,
+    ) -> tuple[dict[str, Any], int]:
+        expected = _require_expected_scope_revision(expected_scope_revision)
         parsed = validate_drawing_payload(body, require_id=True)
         drawing_id = parsed["id"]
         self.initialize()
@@ -864,17 +993,47 @@ class AccountStore:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
-                """SELECT drawing_id, user_id, ticker, chart_range, adjustment,
-                          kind, payload_json, revision, created_at, updated_at
-                     FROM account_chart_drawings
-                    WHERE user_id=? AND drawing_id=?""",
+                f"""SELECT {_DRAWING_COLUMNS}
+                      FROM account_chart_drawings
+                     WHERE user_id=? AND drawing_id=?""",
                 (user_id, drawing_id),
             ).fetchone()
             if existing is not None:
-                # 重放同一个编号按成功处理，原样返回已存的行：客户端 outbox 丢了
-                # 响应就会重发，报 409 只会让它在这一条上无限重试。
+                same_scope = (
+                    str(existing["ticker"]) == parsed["ticker"]
+                    and str(existing["chart_range"]) == parsed["range"]
+                    and str(existing["adjustment"]) == parsed["adjustment"]
+                )
+                same_payload = (
+                    str(existing["kind"]) == parsed["kind"]
+                    and str(existing["payload_json"]) == parsed["payload_json"]
+                )
+                if same_scope and same_payload:
+                    # 丢失响应后的重放：同一条 payload 仍按成功返回，且不抬
+                    # scope_revision，这样客户端还能拿着旧 expected 重试。
+                    revision = self._read_scope_revision(
+                        connection,
+                        user_id,
+                        parsed["ticker"],
+                        parsed["range"],
+                        parsed["adjustment"],
+                    )
+                    connection.rollback()
+                    return self._row_to_drawing(existing), revision
                 connection.rollback()
-                return self._row_to_drawing(existing)
+                raise AccountError("drawing_id_conflict")
+            try:
+                new_revision = self._bump_scope_revision(
+                    connection,
+                    user_id,
+                    parsed["ticker"],
+                    parsed["range"],
+                    parsed["adjustment"],
+                    expected,
+                )
+            except AccountError:
+                connection.rollback()
+                raise
             range_count = int(
                 connection.execute(
                     """SELECT COUNT(*) FROM account_chart_drawings
@@ -913,11 +1072,14 @@ class AccountStore:
                 ),
             )
             connection.commit()
-        return self._parsed_to_drawing(
-            parsed,
-            revision=1,
-            created_at=now_iso,
-            updated_at=now_iso,
+        return (
+            self._parsed_to_drawing(
+                parsed,
+                revision=1,
+                created_at=now_iso,
+                updated_at=now_iso,
+            ),
+            new_revision,
         )
 
     def update_drawing(
@@ -927,9 +1089,15 @@ class AccountStore:
         body: Mapping[str, Any],
         *,
         expected_revision: int,
-    ) -> dict[str, Any]:
+        expected_scope_revision: int,
+    ) -> tuple[dict[str, Any], int]:
         drawing_id = normalize_drawing_id(drawing_id)
-        if not isinstance(expected_revision, int) or expected_revision < 1:
+        expected_scope = _require_expected_scope_revision(expected_scope_revision)
+        if (
+            isinstance(expected_revision, bool)
+            or not isinstance(expected_revision, int)
+            or expected_revision < 1
+        ):
             # 版本号本身不合法是请求写错了，不是版本冲突：只有 revision_conflict
             # 这一个码代表「别处改过了」，客户端要靠它决定是否弹重载对话框。
             raise AccountError("invalid_payload")
@@ -959,6 +1127,18 @@ class AccountStore:
             ):
                 connection.rollback()
                 raise AccountError("scope_mismatch")
+            try:
+                new_scope_revision = self._bump_scope_revision(
+                    connection,
+                    user_id,
+                    parsed["ticker"],
+                    parsed["range"],
+                    parsed["adjustment"],
+                    expected_scope,
+                )
+            except AccountError:
+                connection.rollback()
+                raise
             current_revision = int(row["revision"])
             if current_revision != expected_revision:
                 connection.rollback()
@@ -978,28 +1158,62 @@ class AccountStore:
                 ),
             )
             connection.commit()
-        return self._parsed_to_drawing(
-            parsed,
-            revision=current_revision + 1,
-            created_at=str(row["created_at"]),
-            updated_at=now_iso,
+        return (
+            self._parsed_to_drawing(
+                parsed,
+                revision=current_revision + 1,
+                created_at=str(row["created_at"]),
+                updated_at=now_iso,
+            ),
+            new_scope_revision,
         )
 
-    def delete_drawing(self, user_id: str, drawing_id: str) -> None:
-        """删除是幂等的：行本来就不在，也算删成功。
+    def delete_drawing(
+        self,
+        user_id: str,
+        drawing_id: str,
+        *,
+        expected_scope_revision: int,
+    ) -> tuple[bool, int | None]:
+        """删除是幂等的：行本来就不在，也算删成功，且不抬 scope_revision。
 
         没有墓碑表，重放的删除和多设备重复删除永远找不到行；报 404 的话客户端
         的 outbox 就再也丢不掉这个任务。别人的行照样删不到——user_id 是条件之一。
+        行还在时必须对上 expected_scope_revision，否则 409，避免清掉别人刚画的。
         """
 
+        expected = _require_expected_scope_revision(expected_scope_revision)
         drawing_id = normalize_drawing_id(drawing_id)
         self.initialize()
         with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """SELECT ticker, chart_range, adjustment
+                     FROM account_chart_drawings
+                    WHERE user_id=? AND drawing_id=?""",
+                (user_id, drawing_id),
+            ).fetchone()
+            if row is None:
+                connection.rollback()
+                return False, None
+            try:
+                new_revision = self._bump_scope_revision(
+                    connection,
+                    user_id,
+                    str(row["ticker"]),
+                    str(row["chart_range"]),
+                    str(row["adjustment"]),
+                    expected,
+                )
+            except AccountError:
+                connection.rollback()
+                raise
             connection.execute(
                 "DELETE FROM account_chart_drawings WHERE user_id=? AND drawing_id=?",
                 (user_id, drawing_id),
             )
             connection.commit()
+        return True, new_revision
 
     def replace_drawings_in_scope(
         self,
@@ -1008,9 +1222,12 @@ class AccountStore:
         chart_range: str,
         adjustment: str,
         drawings: Sequence[Mapping[str, Any]],
-    ) -> list[dict[str, Any]]:
+        *,
+        expected_scope_revision: int,
+    ) -> tuple[list[dict[str, Any]], int]:
         """Validate all, then replace the current ticker+range+adjustment set in one transaction."""
 
+        expected = _require_expected_scope_revision(expected_scope_revision)
         symbol = normalize_ticker(ticker)
         range_key = normalize_chart_range(chart_range)
         adj = normalize_chart_adjustment(adjustment)
@@ -1030,6 +1247,13 @@ class AccountStore:
         now_iso = _utcnow_iso()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            try:
+                new_revision = self._bump_scope_revision(
+                    connection, user_id, symbol, range_key, adj, expected
+                )
+            except AccountError:
+                connection.rollback()
+                raise
             other_count = int(
                 connection.execute(
                     """SELECT COUNT(*) FROM account_chart_drawings
@@ -1086,8 +1310,16 @@ class AccountStore:
                         now_iso,
                     ),
                 )
+            rows = connection.execute(
+                f"""SELECT {_DRAWING_COLUMNS}
+                      FROM account_chart_drawings
+                     WHERE user_id=? AND ticker=? AND chart_range=? AND adjustment=?
+                     ORDER BY created_at, drawing_id""",
+                (user_id, symbol, range_key, adj),
+            ).fetchall()
+            listed = [self._row_to_drawing(row) for row in rows]
             connection.commit()
-        return self.list_drawings(user_id, symbol, range_key, adj)
+        return listed, new_revision
 
     def delete_drawings_in_scope(
         self,
@@ -1095,13 +1327,23 @@ class AccountStore:
         ticker: str,
         chart_range: str,
         adjustment: str = "raw",
-    ) -> int:
+        *,
+        expected_scope_revision: int,
+    ) -> tuple[int, int]:
+        expected = _require_expected_scope_revision(expected_scope_revision)
         symbol = normalize_ticker(ticker)
         range_key = normalize_chart_range(chart_range)
         adj = normalize_chart_adjustment(adjustment)
         self.initialize()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            try:
+                new_revision = self._bump_scope_revision(
+                    connection, user_id, symbol, range_key, adj, expected
+                )
+            except AccountError:
+                connection.rollback()
+                raise
             cursor = connection.execute(
                 """DELETE FROM account_chart_drawings
                     WHERE user_id=? AND ticker=? AND chart_range=? AND adjustment=?""",
@@ -1109,7 +1351,7 @@ class AccountStore:
             )
             deleted = int(cursor.rowcount)
             connection.commit()
-        return deleted
+        return deleted, new_revision
 
     def delete_account(self, user_id: str) -> None:
         """Hard-delete one customer account; the FK cascade takes its rows too.

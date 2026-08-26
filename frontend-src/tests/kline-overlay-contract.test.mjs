@@ -37,10 +37,10 @@ test('基底失效时带子转灰并标注状态', () => {
   assert.match(kline, /阻力带（基底已失效）/);
 });
 
-test('结构与图表错版本时暂隐叠加（一致性闸门在 levelsAvailable 里）', () => {
+test('结构与图表错版本时暂隐叠加（一致性闸门在 analysisOk 里）', () => {
   assert.match(kline, /function overlaysConsistentWithBars\(/);
   assert.match(kline, /overlaysConsistentWithBars\(technical, bars\)/);
-  assert.match(kline, /levelsAvailable = overlays !== null && range === '1d' && mode === 'candle' && overlaysConsistent/);
+  assert.match(kline, /analysisOk = gateReason === 'ok' && \(range !== '1d' \|\| overlaysConsistent\)/);
   assert.match(kline, /days\.length - 1 - position <= 2/);
 });
 

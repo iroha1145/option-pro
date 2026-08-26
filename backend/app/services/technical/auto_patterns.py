@@ -98,12 +98,15 @@ def _anchor(times: Sequence[int], dates: Sequence[str], index: int, price: float
 
 
 def _pattern_id(kind: str, subtype: str, anchors: Sequence[Mapping[str, Any]]) -> str:
-    first = anchors[0]
-    last = anchors[-1]
-    raw = (
-        f"{ALGORITHM_VERSION}|{kind}|{subtype}|{first.get('barKey')}|"
-        f"{last.get('barKey')}|{first.get('price'):.4f}|{last.get('price'):.4f}"
-    )
+    parts = [ALGORITHM_VERSION, kind, subtype]
+    for item in anchors:
+        try:
+            price = float(item.get("price") or 0.0)
+        except (TypeError, ValueError):
+            price = 0.0
+        parts.append(str(item.get("barKey") or ""))
+        parts.append(f"{price:.4f}")
+    raw = "|".join(parts)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
@@ -534,6 +537,13 @@ def _pack(
     resistance_rail: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     public_anchors = [_strip_anchor(item) for item in anchors]
+    id_anchors: list[dict[str, Any]] = []
+    for group in (support_rail, resistance_rail, anchors, touch_anchors):
+        if not group:
+            continue
+        id_anchors.extend(_strip_anchor(item) for item in group)
+    if not id_anchors:
+        id_anchors = public_anchors
     shape_quality = float(eval_row.get("shapeQuality") or (eval_row.get("confidence") or 0) / 100.0)
     volume_confirmation = float(eval_row.get("volumeConfirmation") or 0.5)
     trend_alignment = float(eval_row.get("trendAlignment") or 0.5)
@@ -550,7 +560,7 @@ def _pack(
         *extra_rationale,
     ]
     return {
-        "id": _pattern_id(kind, subtype, public_anchors),
+        "id": _pattern_id(kind, subtype, id_anchors),
         "algorithmVersion": ALGORITHM_VERSION,
         "kind": kind,
         "subtype": subtype,
@@ -636,14 +646,26 @@ def _inside_fraction(
 
 
 def _alternates(support_touches: Sequence[int], resist_touches: Sequence[int]) -> bool:
-    events = sorted([(i, "s") for i in support_touches] + [(i, "r") for i in resist_touches])
-    if len(events) < 3:
-        return True
+    support = _dedupe_indexes(support_touches)
+    resist = _dedupe_indexes(resist_touches)
+    if len(support) < 2 or len(resist) < 2:
+        return False
+    events = sorted([(i, "s") for i in support] + [(i, "r") for i in resist])
+    if len(events) < 4:
+        return False
     switches = 0
     for prev, cur in zip(events, events[1:]):
         if prev[1] != cur[1]:
             switches += 1
-    return switches >= 1
+    if switches < 2:
+        return False
+    span = events[-1][0] - events[0][0]
+    if span <= 0:
+        return False
+    interior_lo = events[0][0] + 0.2 * span
+    interior_hi = events[-1][0] - 0.2 * span
+    interior = [index for index, _side in events if interior_lo <= index <= interior_hi]
+    return len(interior) >= 2
 
 
 def detect_auto_patterns(

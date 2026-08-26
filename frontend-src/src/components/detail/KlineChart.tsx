@@ -31,8 +31,9 @@ import {
   labelBudget,
   fingerprintForBundle,
   fingerprintDiagnosis,
+  closedBarsForFingerprint,
 } from './chart-drawings/analysis/mapBundle.ts';
-import { overlaysToMarks, overlaysToSeries, analysisLayout, alignSeriesToBars } from './chart-drawings/analysis/overlaysToMarks.ts';
+import { overlaysToMarks, overlaysToSeries, analysisLayout, panesToOption, type PanePlot } from './chart-drawings/analysis/overlaysToMarks.ts';
 import { loadLayerSettings, saveLayerSettings } from './chart-drawings/analysis/settings.ts';
 import type { LayerSettings } from './chart-drawings/analysis/settings.ts';
 import {
@@ -324,7 +325,7 @@ function buildOption(
   overlay?: MeasureOverlay | null,
   tech?: ReturnType<typeof technicalMarks> | null,
   extra?: { lines: object[]; points: object[]; areas: object[]; polygons?: { vertices: { x: number; y: number }[]; color: string; opacity: number }[] } | null,
-  analysis?: { showMa20?: boolean; extraMa?: { name: string; data: (number | null)[] }[]; panes?: { id: string; label: string; data: (number | null)[] }[] } | null,
+  analysis?: { showMa20?: boolean; extraMa?: { name: string; data: (number | null)[] }[]; panes?: PanePlot[] } | null,
   zoom?: ZoomWindow | null,
 ): ChartOption {
   const labels = bars.map((b) => fmtAxisLabel(b.t, range));
@@ -467,6 +468,32 @@ function buildOption(
   const panes = analysis?.panes ?? [];
   const grids = analysisLayout(panes.length);
   const axisIndexes = grids.map((_, index) => index);
+  const paneSeries = panes.flatMap((pane, paneIndex) => {
+    const axis = paneIndex + 2;
+    return pane.series.map((row, seriesIndex) => ({
+      type: row.type === 'bar' ? ('bar' as const) : ('line' as const),
+      name: row.name,
+      xAxisIndex: axis,
+      yAxisIndex: axis,
+      data: row.data,
+      showSymbol: false,
+      connectNulls: true,
+      barMaxWidth: 8,
+      lineStyle: {
+        color: seriesIndex === 0 ? CH.brand500 : seriesIndex === 1 ? CH.ai600 : CH.ink400,
+        width: 1,
+      },
+      itemStyle: row.type === 'bar' ? { color: CH.ink400 } : undefined,
+      tooltip: { show: true },
+      z: 2,
+    }));
+  });
+  const paneMarkLines = panes.map((pane, paneIndex) => ({
+    paneIndex,
+    marks: pane.markLines ?? [],
+    yMin: pane.yMin,
+    yMax: pane.yMax,
+  }));
   return {
     ...common,
     grid: grids,
@@ -481,20 +508,25 @@ function buildOption(
         ? { color: CH.ink400, fontSize: 11, fontFamily: '"IBM Plex Mono", monospace' }
         : { show: false },
     })),
-    yAxis: grids.map((_, index) => ({
-      type: 'value' as const,
-      gridIndex: index,
-      scale: true,
-      position: 'right' as const,
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: index === 0
-        ? { color: CH.ink400, fontSize: 11, fontFamily: '"IBM Plex Mono", monospace' }
-        : { show: false },
-      splitLine: index === 0
-        ? { lineStyle: { color: CH.lineChart, width: 1 } }
-        : { show: false },
-    })),
+    yAxis: grids.map((_, index) => {
+      const pane = index >= 2 ? panes[index - 2] : null;
+      return {
+        type: 'value' as const,
+        gridIndex: index,
+        scale: pane?.yMin == null && pane?.yMax == null,
+        min: pane?.yMin,
+        max: pane?.yMax,
+        position: 'right' as const,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: index === 0 || pane
+          ? { color: CH.ink400, fontSize: 11, fontFamily: '"IBM Plex Mono", monospace' }
+          : { show: false },
+        splitLine: index === 0
+          ? { lineStyle: { color: CH.lineChart, width: 1 } }
+          : { show: false },
+      };
+    }),
     tooltip: glassTooltip({
       trigger: 'axis',
       axisPointer: {
@@ -511,8 +543,10 @@ function buildOption(
         },
       },
       formatter: (params: unknown) => {
-        const arr = (params as { seriesType?: string; dataIndex: number }[]).filter((p) => p.seriesType !== 'line');
-        const idx = arr[0]?.dataIndex ?? 0;
+        const rows = params as { seriesType?: string; seriesName?: string; dataIndex: number; value?: unknown; data?: unknown }[];
+        const idx = rows.find((p) => p.seriesType === 'candlestick' || p.seriesType === 'bar')?.dataIndex
+          ?? rows[0]?.dataIndex
+          ?? 0;
         const b = bars[idx];
         if (!b) return '';
         const signedCell = (chg: number, pct: number | null) => {
@@ -539,6 +573,11 @@ function buildOption(
           row(t('开→收'), signedCell(chg, b.o ? (chg / b.o) * 100 : null)) +
           (gapChg !== null ? row(t('较前收'), signedCell(gapChg, (gapChg / prev!.c) * 100)) : '') +
           row(t('量'), fmtCompact(b.v)) +
+          panes.flatMap((pane) => pane.series.map((series) => {
+            const value = series.data[idx];
+            if (value == null) return '';
+            return row(series.name, Number(value).toFixed(series.name === 'OBV' ? 0 : 2));
+          })).join('') +
           `</div>`
         );
       },
@@ -597,18 +636,28 @@ function buildOption(
         tooltip: { show: false },
         z: 2,
       },
-      ...panes.map((pane, index) => ({
-        type: 'line' as const,
-        name: pane.label,
-        xAxisIndex: index + 2,
-        yAxisIndex: index + 2,
-        data: pane.data,
-        showSymbol: false,
-        connectNulls: true,
-        lineStyle: { color: CH.brand500, width: 1 },
-        tooltip: { show: false },
-        z: 2,
-      })),
+      ...paneSeries.map((series, index) => {
+        const paneMeta = paneMarkLines.find((row) => {
+          const start = panes.slice(0, row.paneIndex).reduce((sum, pane) => sum + pane.series.length, 0);
+          return index >= start && index < start + panes[row.paneIndex].series.length;
+        });
+        const isFirstOfPane = paneMeta
+          ? index === panes.slice(0, paneMeta.paneIndex).reduce((sum, pane) => sum + pane.series.length, 0)
+          : false;
+        return {
+          ...series,
+          markLine: isFirstOfPane && paneMeta && paneMeta.marks.length
+            ? {
+                symbol: 'none',
+                silent: true,
+                data: paneMeta.marks.map((value) => ({
+                  yAxis: value,
+                  lineStyle: { color: CH.ink300, width: 1, type: [4, 4] as number[] },
+                })),
+              }
+            : undefined,
+        };
+      }),
       ...(fillSeries ? [fillSeries] : []),
     ],
   } as ChartOption;
@@ -678,7 +727,6 @@ export default function KlineChart({
   const [measure, setMeasure] = useState<MeasureState>({ phase: 'idle' });
   const [basis, setBasis] = useState<MeasureBasis>('wick');
   const [chartInst, setChartInst] = useState<EChartsInstance | null>(null);
-  const [showLevels, setShowLevels] = useState(true);
   const measureActive = measure.phase !== 'idle';
   const { username, isOwner, isCustomer, canManageWatchlist } = useAccess();
   const reducedMotion = Boolean(useReducedMotion());
@@ -689,19 +737,23 @@ export default function KlineChart({
     () => (range === '1d' && bars ? overlaysConsistentWithBars(technical, bars) : false),
     [range, bars, technical],
   );
-  const levelsAvailable = overlays !== null && range === '1d' && mode === 'candle' && overlaysConsistent;
   const levelsInconsistent = overlays !== null && range === '1d' && mode === 'candle' && !overlaysConsistent;
   // 面积图没有影线可吸附，强制收盘口径；K线默认高—低，可切收盘
   const effectiveBasis: MeasureBasis = mode === 'area' ? 'close' : basis;
 
   // 锚点属于旧价格序列：切标的 / 周期 / 显示模式一律清除，不跨序列迁移
   const measureScope = `${ticker}|${range}|${mode}`;
+  const zoomScope = `${ticker}|${range}`;
   const [armedScope, setArmedScope] = useState(measureScope);
+  const [armedZoomScope, setArmedZoomScope] = useState(zoomScope);
   const zoomRef = useRef<ZoomWindow | null>(null);
   if (armedScope !== measureScope) {
     setArmedScope(measureScope);
     setMeasure({ phase: 'idle' });
-    zoomRef.current = null; // 换序列＝换 bar 索引，旧视窗没有意义
+  }
+  if (armedZoomScope !== zoomScope) {
+    setArmedZoomScope(zoomScope);
+    zoomRef.current = null; // 换序列＝换 bar 索引；面积/K 线切换要保住视窗
   }
 
   // 用户滚过的视窗记在 ref 里：option 每次重建（落笔、点选、拖拽提交、切图层）
@@ -714,9 +766,9 @@ export default function KlineChart({
       const next = readZoomWindow(chart, bars?.length ?? 0);
       if (next) zoomRef.current = next;
     };
-    chart.on('dataZoom', handler);
+    chart.on('datazoom', handler);
     return () => {
-      if (!chart.isDisposed()) chart.off('dataZoom', handler);
+      if (!chart.isDisposed()) chart.off('datazoom', handler);
     };
   }, [chartInst, bars]);
 
@@ -773,11 +825,6 @@ export default function KlineChart({
     return null;
   }, [measure, bars, measurement]);
 
-  const techMarks = useMemo(
-    () => (levelsAvailable && showLevels && data ? technicalMarks(overlays, data.bars) : null),
-    [levelsAvailable, showLevels, overlays, data],
-  );
-
   // 图层设置按身份分桶。useAccess 是异步落定的（AccessProvider 先渲染子树再等
   // /access/status），登录/登出也换 key 而不重挂载——只在初始化时读一次，就会拿
   // 匿名桶的默认值，之后第一次勾选又以「默认 + 单个改动」写进账号桶，把用户存的
@@ -813,11 +860,20 @@ export default function KlineChart({
     () => (data?.bars?.length ? fingerprintForBundle(analysisBundle, data.bars, range, fingerprintOpts) : null),
     [data, range, analysisBundle, fingerprintOpts],
   );
+  const gatedBars = useMemo(
+    () => (data?.bars?.length ? closedBarsForFingerprint(data.bars, range, {
+      ...fingerprintOpts,
+      throughDate: analysisBundle?.lastBarDate ?? null,
+    }) : []),
+    [analysisBundle?.lastBarDate, data, fingerprintOpts, range],
+  );
   const gateReason = analysisGate(analysisBundle, {
     range,
     adjustment: 'raw',
     ticker,
     dataThrough: range === '1d' ? technical?.data_through : analysisBundle?.dataThrough,
+    barCount: gatedBars.length || null,
+    lastClose: gatedBars.length ? gatedBars[gatedBars.length - 1]?.c ?? null : null,
     fingerprint: visibleFingerprint,
   });
   const analysisOk = gateReason === 'ok' && (range !== '1d' || overlaysConsistent);
@@ -890,23 +946,19 @@ export default function KlineChart({
     // 副图必须和 MA 走同一条按日期对齐的路：分析序列可能只覆盖 series_break_at
     // 之后的一段（长度 M < 图上 N 根），直接当成从索引 0 开始的裸数组，
     // 会把最近的动量值画到 N−M 根之前的老蜡烛底下。
-    const panes = analysisOk && data
-      ? visiblePanes.map((pane) => {
-        const series = pane.values.rsi ?? pane.values.macd ?? pane.values.histogram ?? pane.values.obv ?? pane.values.clv ?? pane.values.position ?? pane.values.rs ?? [];
-        // pane.dates 按同一副图里最长的一条铺开；本条更短就截到自己的长度，
-        // 否则 alignSeriesToBars 会因长度不等退回到「猜」的分支。
-        const dates = pane.dates.length > series.length ? pane.dates.slice(0, series.length) : pane.dates;
-        return { id: pane.id, label: pane.label, data: alignSeriesToBars(series, dates, data.bars, range) };
-      })
+    const compact = !drawing.expanded;
+    const limited = compact ? visiblePanes.slice(0, 1) : visiblePanes;
+    const panes = analysisOk && data && mode === 'candle'
+      ? panesToOption(limited, data.bars, range)
       : [];
-    return { showMa20, extraMa, panes };
-  }, [analysisOk, data, range, visibleOverlays, visiblePanes, layerSettings]);
+    return { showMa20: mode === 'candle' && showMa20, extraMa: mode === 'candle' ? extraMa : [], panes };
+  }, [analysisOk, data, drawing.expanded, mode, range, visibleOverlays, visiblePanes, layerSettings]);
 
   const option = useMemo(
     // zoomRef 是有意不进依赖的：滚轮缩放不该触发 option 重建，但每次真的重建时
     // 都要带上用户当前的视窗，否则 notMerge 会把 inside 缩放重置回默认窗口。
-    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, techMarks, extraMarks, analysisOption, zoomRef.current) : null),
-    [data, range, mode, prevClose, overlay, techMarks, extraMarks, analysisOption],
+    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, null, extraMarks, analysisOption, zoomRef.current) : null),
+    [data, range, mode, prevClose, overlay, extraMarks, analysisOption],
   );
 
   const chartBody = (
@@ -930,21 +982,11 @@ export default function KlineChart({
             value={mode}
             onChange={setMode}
           />
-          {overlays !== null && (
-            <span className="inline-flex items-center gap-1">
-              <button
-                type="button"
-                aria-pressed={levelsAvailable && showLevels}
-                aria-label={t('在图上叠加技术点位（阻力带/失效位/摆动点）')}
-                disabled={!levelsAvailable}
-                title={levelsAvailable ? undefined : t('技术点位按日线结构计算，仅日 K 线模式绘制')}
-                onClick={() => setShowLevels((prev) => !prev)}
-                className={cn(toggleButtonCls(levelsAvailable && showLevels), !levelsAvailable && 'cursor-not-allowed opacity-50')}
-              >
-                {t('技术点位')}
-              </button>
-              <InfoHint hint={STRUCTURE_HINTS.chart_overlays} side="bottom" align="end" size={12} />
-            </span>
+          {mode === 'area' && (
+            <span className="text-micro text-ink-400">{t('面积图不支持副图与均线叠加')}</span>
+          )}
+          {range === '1h' && (
+            <span className="text-micro text-ink-400">{t('1小时图无法在没有 5 分钟数据时绘制开盘区间')}</span>
           )}
           {measureActive && mode === 'candle' && (
             <button
@@ -1157,7 +1199,7 @@ export default function KlineChart({
       {data && (
         <OverlayLegend
           mode={mode}
-          shown={levelsAvailable && showLevels}
+          shown={analysisOk && visibleOverlays.length > 0}
           inconsistent={levelsInconsistent}
           hasBase={overlays?.resistance_high != null}
           baseStatus={overlays?.base_status ?? null}
@@ -1183,7 +1225,7 @@ export default function KlineChart({
             const touches = overlayRow.evidence.touches;
             return (
               <span key={overlayRow.id} title={t('几何质量不是胜率')}>
-                {t('形态 · {name} · 置信度 {n}', { name, n: Math.round(overlayRow.shapeQuality * 100) })}
+                {t('形态 · {name} · 几何质量 {n}', { name, n: Math.round(overlayRow.shapeQuality * 100) })}
                 {typeof touches === 'number' && touches > 0 ? ` · ${t('触碰 {n} 次', { n: touches })}` : ''}
               </span>
             );

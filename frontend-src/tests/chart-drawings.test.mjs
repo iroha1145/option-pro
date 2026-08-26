@@ -57,7 +57,7 @@ export {
 export { createHistory, historyPush, historyUndo, historyRedo, historyReplace, canUndo, canRedo } from ${JSON.stringify(files.history)};
 export {
   loadDrawings, saveDrawings, anonymousStorageKey, drawingsStorageKey, outboxStorageKey,
-  quarantineDrawings, quarantineKey,
+  quarantineDrawings, quarantineKey, drawingsFromCache,
 } from ${JSON.stringify(files.storage)};
 export {
   addDraftPoint, applyShiftToDraft, exclusiveTool, isTextInputTarget,
@@ -71,6 +71,7 @@ export {
   DrawingOutbox, diffPersistOps, mutableFieldsDiffer, applyPersistResponse,
   resolveListApply, resolveRetryAction, SCOPE_JOB_ID, keepLocalWithServerRevisions,
   regeneratePersistOps, resolveSyncFailure, applyKnownRevisions, latestKnownRevision, parsePersistJobs,
+  jobIsCurrent,
 } from ${JSON.stringify(files.sync)};
 export {
   dragMove, previewDragAnchors, applyPixelShiftConstraint, clampDragPoint, dragExceedsThreshold,
@@ -85,7 +86,7 @@ export {
   mapChartAnalysis, analysisMatchesChart, filterOverlays, filterPanes, labelBudget, barFingerprint,
   barFingerprintFromBars, closedBarsForFingerprint, canonicalBarPayload, sha256Hex,
 } from ${JSON.stringify(files.mapBundle)};
-export { overlaysToMarks, overlaysToSeries, analysisLayout, alignSeriesToBars } from ${JSON.stringify(files.overlaysToMarks)};
+export { overlaysToMarks, overlaysToSeries, analysisLayout, alignSeriesToBars, panesToOption } from ${JSON.stringify(files.overlaysToMarks)};
 `,
     'utf8',
   );
@@ -1321,7 +1322,8 @@ test('sync failures branch on the body code: only revision_conflict is a conflic
   assert.equal(resolveSyncFailure('create', 'drawing_exists', 409), 'drop');
   // 后端已幂等：删掉早就没有的行算成功，任务直接丢掉而不是永远重试。
   assert.equal(resolveSyncFailure('delete', 'drawing_not_found', 404), 'drop');
-  assert.equal(resolveSyncFailure('update', 'drawing_not_found', 404), 'drop');
+  assert.equal(resolveSyncFailure('update', 'drawing_not_found', 404), 'conflict');
+  assert.equal(resolveSyncFailure('update', 'scope_revision_conflict', 409), 'conflict');
   assert.equal(resolveSyncFailure('delete', null, 404), 'drop');
   // 400 是请求本身不合法，重放多少次都是同一个 400。
   assert.equal(resolveSyncFailure('update', 'invalid_price', 400), 'drop');
@@ -1575,4 +1577,198 @@ test('every drawing kind projects something hittable', async (t) => {
     const hittable = projected.segments.length > 0 || projected.fills.length > 0 || Boolean(projected.label);
     assert.equal(hittable, true, `${kind} has a hit region`);
   }
+});
+
+test('empty text drawings parse and naive times are rejected', async (t) => {
+  const { parseDrawingDetailed, whitelistText } = await loadDrawings(t);
+  const empty = parseDrawingDetailed({
+    schemaVersion: 1,
+    id: '11111111-1111-4111-8111-111111111111',
+    ticker: 'NVDA',
+    range: '1d',
+    adjustment: 'raw',
+    kind: 'text',
+    anchors: [{ time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 }],
+    style: { color: '#2E46E0', width: 2, dash: 'solid' },
+    text: '',
+    locked: false,
+    hidden: false,
+    zOrder: 0,
+  });
+  assert.equal(empty.ok, true);
+  assert.equal(empty.value.text, '');
+  assert.equal(whitelistText(''), '');
+  const naive = parseDrawingDetailed({
+    schemaVersion: 1,
+    id: '11111111-1111-4111-8111-111111111111',
+    ticker: 'NVDA',
+    range: '1d',
+    kind: 'horizontal',
+    anchors: [{ time: '2026-07-06T13:30:00', barKey: '2026-07-06', price: 10 }],
+    style: { color: '#2E46E0', width: 2, dash: 'solid' },
+    locked: false,
+    hidden: false,
+    zOrder: 0,
+  });
+  assert.equal(naive.ok, false);
+  const tokyo = parseDrawingDetailed({
+    schemaVersion: 1,
+    id: '11111111-1111-4111-8111-111111111111',
+    ticker: 'NVDA',
+    range: '1d',
+    kind: 'horizontal',
+    anchors: [{ time: '2026-07-06T22:30:00+09:00', barKey: '2026-07-06', price: 10 }],
+    style: { color: '#2E46E0', width: 2, dash: 'solid' },
+    locked: false,
+    hidden: false,
+    zOrder: 0,
+  });
+  const ny = parseDrawingDetailed({
+    schemaVersion: 1,
+    id: '11111111-1111-4111-8111-111111111111',
+    ticker: 'NVDA',
+    range: '1d',
+    kind: 'horizontal',
+    anchors: [{ time: '2026-07-06T09:30:00-04:00', barKey: '2026-07-06', price: 10 }],
+    style: { color: '#2E46E0', width: 2, dash: 'solid' },
+    locked: false,
+    hidden: false,
+    zOrder: 0,
+  });
+  const utc = parseDrawingDetailed({
+    schemaVersion: 1,
+    id: '11111111-1111-4111-8111-111111111111',
+    ticker: 'NVDA',
+    range: '1d',
+    kind: 'horizontal',
+    anchors: [{ time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 }],
+    style: { color: '#2E46E0', width: 2, dash: 'solid' },
+    locked: false,
+    hidden: false,
+    zOrder: 0,
+  });
+  assert.equal(tokyo.ok && ny.ok && utc.ok, true);
+  assert.equal(tokyo.value.anchors[0].time, ny.value.anchors[0].time);
+  assert.equal(ny.value.anchors[0].time, utc.value.anchors[0].time);
+});
+
+test('cache missing empty and corrupt are distinct; empty cache is authoritative', async (t) => {
+  const { loadDrawings: readDrawings, saveDrawings, drawingsFromCache } = await loadDrawings(t);
+  const mem = new Map();
+  const storage = {
+    getItem: (key) => (mem.has(key) ? mem.get(key) : null),
+    setItem: (key, value) => { mem.set(key, value); },
+    removeItem: (key) => { mem.delete(key); },
+  };
+  const missing = readDrawings('k', storage);
+  assert.equal(missing.ok, false);
+  assert.equal(missing.missing, true);
+  assert.deepEqual(drawingsFromCache(missing), []);
+  saveDrawings('k', [], storage);
+  const empty = readDrawings('k', storage);
+  assert.equal(empty.ok, true);
+  assert.equal(empty.state, 'empty');
+  assert.deepEqual(drawingsFromCache(empty), []);
+  storage.setItem('k', '{not json');
+  const corrupt = readDrawings('k', storage);
+  assert.equal(corrupt.ok, false);
+  assert.equal(corrupt.error, 'corrupt');
+});
+
+test('delayed AAPL job after MSFT setScope is ignored', async (t) => {
+  const { DrawingOutbox, applyPersistResponse, jobIsCurrent } = await loadDrawings(t);
+  const box = new DrawingOutbox(null);
+  const aapl = { identity: 'acct', ticker: 'AAPL', range: '1d', adjustment: 'raw' };
+  const msft = { identity: 'acct', ticker: 'MSFT', range: '1d', adjustment: 'raw' };
+  box.setScope(aapl);
+  const drawing = drawingOf('horizontal', [{ time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 }]);
+  box.enqueue({ drawingId: drawing.id, type: 'create', drawing });
+  const job = box.takeNext(drawing.id);
+  const aaplGen = job.scopeGeneration;
+  box.setScope(msft);
+  assert.equal(jobIsCurrent(job, box.getScope(), box.getScopeGeneration()), false);
+  const action = applyPersistResponse({
+    job,
+    currentScope: box.getScope(),
+    currentScopeGeneration: box.getScopeGeneration(),
+    latestGenerationForId: box.latestGeneration(drawing.id),
+    responseDrawing: { ...drawing, revision: 1 },
+  });
+  assert.equal(action.action, 'ignore');
+  assert.equal(box.getScope().ticker, 'MSFT');
+  assert.notEqual(box.getScopeGeneration(), aaplGen);
+});
+
+test('outbox hydrate drops cross-scope jobs', async (t) => {
+  const { parsePersistJobs } = await loadDrawings(t);
+  const scope = { identity: 'acct', ticker: 'MSFT', range: '1d', adjustment: 'raw' };
+  const drawing = drawingOf('horizontal', [{ time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 }]);
+  drawing.ticker = 'AAPL';
+  const jobs = parsePersistJobs({
+    jobs: [{
+      drawingId: drawing.id,
+      generation: 1,
+      type: 'create',
+      drawing,
+      scope: { identity: 'acct', ticker: 'AAPL', range: '1d', adjustment: 'raw' },
+    }],
+  }, scope, 2);
+  assert.equal(jobs.length, 0);
+});
+
+test('saveLayerSettings swallows quota errors', async (t) => {
+  const { saveLayerSettings, settingsFromPreset } = await loadDrawings(t);
+  const storage = {
+    getItem: () => null,
+    setItem: () => { const err = new Error('full'); err.name = 'QuotaExceededError'; throw err; },
+    removeItem: () => {},
+  };
+  saveLayerSettings('acct', settingsFromPreset('minimal'), storage);
+});
+
+test('kind-based panes expose MACD three series RSI rails and CLV axis', async (t) => {
+  const { panesToOption } = await loadDrawings(t);
+  const bars = barsFor(8);
+  const panes = panesToOption([
+    { id: 'rsi', label: 'RSI', kind: 'rsi', values: { rsi: [30, 50, 70, 40, 55, 60, 45, 50] }, dates: bars.map((bar) => bar.t.slice(0, 10)) },
+    { id: 'macd', label: 'MACD', kind: 'macd', values: { macd: [1, 2, 1, 0, -1, 0, 1, 2], signal: [0.5, 1, 1, 0.5, 0, 0, 0.5, 1], histogram: [0.5, 1, 0, -0.5, -1, 0, 0.5, 1] }, dates: bars.map((bar) => bar.t.slice(0, 10)) },
+    { id: 'clv', label: 'CLV', kind: 'clv', values: { clv: [0, 0.2, -0.1, 0.4, 0.1, 0, -0.2, 0.3] }, dates: bars.map((bar) => bar.t.slice(0, 10)) },
+    { id: 'obv', label: 'OBV', kind: 'obv', values: { obv: [1, 2, 3, 4, 5, 6, 7, 8] }, dates: bars.map((bar) => bar.t.slice(0, 10)) },
+  ], bars, '1d');
+  const rsi = panes.find((pane) => pane.kind === 'rsi');
+  const macd = panes.find((pane) => pane.kind === 'macd');
+  const clv = panes.find((pane) => pane.kind === 'clv');
+  assert.deepEqual(rsi.markLines, [30, 70]);
+  assert.equal(rsi.yMin, 0);
+  assert.equal(rsi.yMax, 100);
+  assert.equal(macd.series.length, 3);
+  assert.deepEqual(macd.series.map((row) => row.key).sort(), ['histogram', 'macd', 'signal']);
+  assert.equal(clv.yMin, -1);
+  assert.equal(clv.yMax, 1);
+  assert.deepEqual(clv.markLines, [0]);
+});
+
+test('breakout preset can show invalidated overlays', async (t) => {
+  const { filterOverlays, settingsFromPreset } = await loadDrawings(t);
+  const overlays = [
+    overlayOf('support_trend', { id: 'live', status: 'confirmed', displayPriority: 0.9 }),
+    overlayOf('support_trend', { id: 'dead', status: 'invalidated', displayPriority: 0.8 }),
+  ];
+  const breakout = settingsFromPreset('breakout');
+  const kept = filterOverlays(overlays, breakout);
+  assert.equal(kept.some((row) => row.id === 'dead'), true);
+  const minimal = settingsFromPreset('minimal');
+  const hidden = filterOverlays(overlays, minimal);
+  assert.equal(hidden.some((row) => row.id === 'dead'), false);
+});
+
+test('labelBudget never exceeds maxLabels', async (t) => {
+  const { labelBudget, settingsFromPreset } = await loadDrawings(t);
+  const overlays = Array.from({ length: 20 }, (_, index) => overlayOf('support_trend', {
+    id: `p${index}`,
+    displayPriority: 1 - index / 40,
+  }));
+  const settings = { ...settingsFromPreset('all'), maxLabels: 4, labelDensity: 1 };
+  const labels = labelBudget(overlays, settings);
+  assert.ok(labels.length <= settings.maxLabels);
 });

@@ -15,7 +15,7 @@ from __future__ import annotations
 import threading
 import time
 import math
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -208,6 +208,8 @@ _ERROR_STATUS = {
     "invalid_credentials": status.HTTP_401_UNAUTHORIZED,
     "watchlist_full": status.HTTP_409_CONFLICT,
     "revision_conflict": status.HTTP_409_CONFLICT,
+    "scope_revision_conflict": status.HTTP_409_CONFLICT,
+    "drawing_id_conflict": status.HTTP_409_CONFLICT,
     "drawings_range_full": status.HTTP_409_CONFLICT,
     "drawings_full": status.HTTP_409_CONFLICT,
     "drawing_not_found": status.HTTP_404_NOT_FOUND,
@@ -242,6 +244,8 @@ _ERROR_MESSAGE = {
     "payload_too_large": "绘图数据过大",
     "drawing_not_found": "绘图不存在",
     "revision_conflict": "绘图已被其他设备更新，请重新加载",
+    "scope_revision_conflict": "当前范围已被其他设备更新，请重新加载",
+    "drawing_id_conflict": "该绘图编号已用于不同内容或不同范围",
     "drawings_range_full": f"当前范围最多 {DRAWINGS_PER_RANGE_MAX} 个绘图",
     "drawings_full": "账户绘图数量已达上限",
     "scope_mismatch": "不能把绘图移动到其他标的或周期",
@@ -485,7 +489,7 @@ class DrawingStyleBody(BaseModel):
         return value
 
 
-class ChartDrawingCreateBody(BaseModel):
+class ChartDrawingFields(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schemaVersion: Literal[1]
@@ -502,12 +506,17 @@ class ChartDrawingCreateBody(BaseModel):
     zOrder: int = 0
 
 
+class ChartDrawingCreateBody(ChartDrawingFields):
+    expected_scope_revision: int = Field(ge=0)
+
+
 class ChartDrawingUpdateBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schemaVersion: Literal[1]
     id: str | None = Field(default=None, min_length=36, max_length=36)
     revision: int = Field(ge=1)
+    expected_scope_revision: int = Field(ge=0)
     ticker: str = Field(min_length=1, max_length=16)
     range: ChartRangeLiteral
     adjustment: Literal["raw"] = "raw"
@@ -524,7 +533,8 @@ class ChartDrawingReplaceBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schemaVersion: Literal[1]
-    drawings: list[ChartDrawingCreateBody] = Field(max_length=DRAWINGS_PER_RANGE_MAX)
+    expected_scope_revision: int = Field(ge=0)
+    drawings: list[ChartDrawingFields] = Field(max_length=DRAWINGS_PER_RANGE_MAX)
 
 
 def _scope_query(
@@ -552,7 +562,7 @@ def list_chart_drawings(
     account = require_personal_account(request)
     symbol, range_key, adj = _scope_query(ticker, range, adjustment)
     try:
-        drawings = get_account_store().list_drawings(
+        drawings, scope_revision = get_account_store().list_drawings_page(
             account.user_id, symbol, range_key, adj
         )
     except AccountError as exc:
@@ -561,6 +571,7 @@ def list_chart_drawings(
         {
             "drawings": drawings,
             "max_per_range": DRAWINGS_PER_RANGE_MAX,
+            "scope_revision": scope_revision,
         },
         headers={"Cache-Control": "no-store"},
     )
@@ -579,13 +590,16 @@ def replace_chart_drawings(
 ) -> Response:
     account = require_personal_account(request)
     symbol, range_key, adj = _scope_query(ticker, range, adjustment)
+    body = payload.model_dump()
+    expected = int(body.pop("expected_scope_revision"))
     try:
-        drawings = get_account_store().replace_drawings_in_scope(
+        drawings, scope_revision = get_account_store().replace_drawings_in_scope(
             account.user_id,
             symbol,
             range_key,
             adj,
-            payload.model_dump()["drawings"],
+            body["drawings"],
+            expected_scope_revision=expected,
         )
     except AccountError as exc:
         raise account_http_error(exc) from exc
@@ -593,6 +607,7 @@ def replace_chart_drawings(
         {
             "drawings": drawings,
             "max_per_range": DRAWINGS_PER_RANGE_MAX,
+            "scope_revision": scope_revision,
         },
         headers={"Cache-Control": "no-store"},
     )
@@ -607,15 +622,18 @@ def create_chart_drawing(
     payload: Annotated[ChartDrawingCreateBody, Body()],
 ) -> Response:
     account = require_personal_account(request)
+    body = payload.model_dump()
+    expected = int(body.pop("expected_scope_revision"))
     try:
-        created = get_account_store().create_drawing(
+        created, scope_revision = get_account_store().create_drawing(
             account.user_id,
-            payload.model_dump(),
+            body,
+            expected_scope_revision=expected,
         )
     except AccountError as exc:
         raise account_http_error(exc) from exc
     return JSONResponse(
-        created,
+        {**created, "scope_revision": scope_revision},
         status_code=status.HTTP_201_CREATED,
         headers={"Cache-Control": "no-store"},
     )
@@ -633,6 +651,7 @@ def update_chart_drawing(
     account = require_personal_account(request)
     body = payload.model_dump()
     expected = int(body.pop("revision"))
+    expected_scope = int(body.pop("expected_scope_revision"))
     body_id = body.pop("id", None)
     if body_id and body_id.lower() != drawing_id.lower():
         raise HTTPException(
@@ -640,15 +659,19 @@ def update_chart_drawing(
             detail={"code": "invalid_drawing_id", "message": "绘图编号与路径不一致"},
         )
     try:
-        updated = get_account_store().update_drawing(
+        updated, scope_revision = get_account_store().update_drawing(
             account.user_id,
             drawing_id,
             body,
             expected_revision=expected,
+            expected_scope_revision=expected_scope,
         )
     except AccountError as exc:
         raise account_http_error(exc) from exc
-    return JSONResponse(updated, headers={"Cache-Control": "no-store"})
+    return JSONResponse(
+        {**updated, "scope_revision": scope_revision},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.delete(
@@ -658,13 +681,21 @@ def update_chart_drawing(
 def delete_chart_drawing(
     request: Request,
     drawing_id: Annotated[str, Path(min_length=36, max_length=36)],
+    expected_scope_revision: Annotated[int, Query(ge=0)],
 ) -> Response:
     account = require_personal_account(request)
     try:
-        get_account_store().delete_drawing(account.user_id, drawing_id)
+        deleted, scope_revision = get_account_store().delete_drawing(
+            account.user_id,
+            drawing_id,
+            expected_scope_revision=expected_scope_revision,
+        )
     except AccountError as exc:
         raise account_http_error(exc) from exc
-    return JSONResponse({"ok": True}, headers={"Cache-Control": "no-store"})
+    body: dict[str, Any] = {"ok": True}
+    if deleted and scope_revision is not None:
+        body["scope_revision"] = scope_revision
+    return JSONResponse(body, headers={"Cache-Control": "no-store"})
 
 
 @router.delete(
@@ -675,17 +706,22 @@ def delete_chart_drawings_in_scope(
     request: Request,
     ticker: Annotated[str, Query(min_length=1, max_length=16)],
     range: Annotated[ChartRangeLiteral, Query()],
+    expected_scope_revision: Annotated[int, Query(ge=0)],
     adjustment: Annotated[Literal["raw"], Query()] = "raw",
 ) -> Response:
     account = require_personal_account(request)
     symbol, range_key, adj = _scope_query(ticker, range, adjustment)
     try:
-        deleted = get_account_store().delete_drawings_in_scope(
-            account.user_id, symbol, range_key, adj
+        deleted, scope_revision = get_account_store().delete_drawings_in_scope(
+            account.user_id,
+            symbol,
+            range_key,
+            adj,
+            expected_scope_revision=expected_scope_revision,
         )
     except AccountError as exc:
         raise account_http_error(exc) from exc
     return JSONResponse(
-        {"deleted": deleted},
+        {"deleted": deleted, "scope_revision": scope_revision},
         headers={"Cache-Control": "no-store"},
     )

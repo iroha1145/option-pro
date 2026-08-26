@@ -77,7 +77,7 @@ def test_rail_alternation_and_channel_width() -> None:
     from app.services.technical.auto_patterns import _alternates
 
     assert _alternates([10, 30], [20, 40]) is True
-    assert _alternates([10, 12, 14], [11]) is True
+    assert _alternates([10, 12, 14], [11]) is False
     rows = _detect(_zigzag(200, lambda i: 40 + 0.14 * i, lambda i: 52 + 0.14 * i))
     channel = next(row for row in rows if row["kind"] == "channel" and row["subtype"] == "rising")
     assert channel["shapeQuality"] >= 0.55
@@ -419,7 +419,15 @@ def test_spy_rs_nonempty_when_aligned_closes_passed() -> None:
     pane = next(row for row in bundle["indicatorPanes"] if row["id"] == "spy_rs")
     values = pane["values"]["rs"]
     assert any(value is not None for value in values)
-    assert values[-1] == round(series["closes"][-1] / spy[-1], 6)
+    first = next(i for i, value in enumerate(values) if value is not None)
+    assert values[first] == 100.0
+    stock0 = series["closes"][first]
+    spy0 = spy[first]
+    expected_last = round(
+        100.0 * (series["closes"][-1] / stock0) / (spy[-1] / spy0),
+        6,
+    )
+    assert values[-1] == expected_last
     empty = assemble_chart_analysis(series=series, data_through=series["dates"][-1], auto_patterns=[])
     assert all(row["id"] != "spy_rs" for row in empty["indicatorPanes"])
 
@@ -719,3 +727,92 @@ def test_no_pane_ships_without_a_registry_entry() -> None:
     assert "dollar_volume" not in pane_ids
     assert pane_ids <= {row["id"] for row in LAYERS}
     assert "dollarVolume" not in str(bundle)
+
+
+def test_range_position_pane_is_named_sixty_day() -> None:
+    series = _series(_zigzag(120, lambda i: 50 + 0.1 * i, lambda i: 60 + 0.1 * i))
+    bundle = assemble_chart_analysis(
+        series=series, data_through=series["dates"][-1], auto_patterns=[]
+    )
+    pane = next(row for row in bundle["indicatorPanes"] if row["id"] == "range_persistence")
+    assert pane["label"] == "60日区间位置"
+
+
+def test_opening_range_uses_last_session_bar_keys() -> None:
+    start = int(datetime(2025, 1, 6, 14, 30, tzinfo=timezone.utc).timestamp())
+    bars = []
+    price = 100.0
+    for i in range(78):
+        close = price + 0.05
+        bars.append(
+            {
+                "t": start + i * 300,
+                "o": price,
+                "h": close + 0.15,
+                "l": price - 0.1,
+                "c": close,
+                "v": 1_000 + i * 10,
+            }
+        )
+        price = close
+    bundle = assemble_intraday_analysis(bars, ticker="AAPL", chart_range="5m")
+    opening = next(row for row in bundle["overlays"] if row["kind"] == "opening_range")
+    geometry = opening["geometry"]
+    assert geometry["sessionStartBarKey"]
+    assert geometry["sessionEndBarKey"]
+    assert geometry["sessionStartBarKey"] != geometry["sessionEndBarKey"] or len(bars) == 1
+
+
+def test_one_hour_series_does_not_invent_opening_range() -> None:
+    start = int(datetime(2025, 1, 6, 14, 30, tzinfo=timezone.utc).timestamp())
+    bars = []
+    price = 100.0
+    for i in range(20):
+        close = price + 0.2
+        bars.append(
+            {
+                "t": start + i * 3600,
+                "o": price,
+                "h": close + 0.3,
+                "l": price - 0.2,
+                "c": close,
+                "v": 5_000,
+            }
+        )
+        price = close
+    bundle = assemble_intraday_analysis(bars, ticker="AAPL", chart_range="1h")
+    kinds = {row["kind"] for row in bundle["overlays"]}
+    assert "opening_range" not in kinds
+
+
+def test_dual_rail_alternation_requires_two_switches_and_spread() -> None:
+    from app.services.technical.auto_patterns import _alternates
+
+    assert _alternates([0, 1], [2, 3]) is False
+    assert _alternates([0, 8, 16], [4, 12, 20]) is True
+    clustered = _alternates([10, 11], [12, 13])
+    assert clustered is False
+
+
+def test_pattern_id_hashes_all_rail_anchors() -> None:
+    from app.services.technical.auto_patterns import _pattern_id
+
+    two = _pattern_id(
+        "channel",
+        "rising",
+        [
+            {"barKey": "2026-01-01", "price": 10},
+            {"barKey": "2026-01-10", "price": 12},
+        ],
+    )
+    four = _pattern_id(
+        "channel",
+        "rising",
+        [
+            {"barKey": "2026-01-01", "price": 10},
+            {"barKey": "2026-01-10", "price": 12},
+            {"barKey": "2026-01-02", "price": 14},
+            {"barKey": "2026-01-11", "price": 16},
+        ],
+    )
+    assert two != four

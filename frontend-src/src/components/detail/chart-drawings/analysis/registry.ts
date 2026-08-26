@@ -32,7 +32,7 @@ export const LAYERS: LayerDef[] = [
   { id: 'macd', group: 'pane', kind: 'macd', label: t('MACD') },
   { id: 'obv', group: 'pane', kind: 'obv', label: t('OBV') },
   { id: 'clv', group: 'pane', kind: 'clv', label: t('CLV') },
-  { id: 'range_persistence', group: 'pane', kind: 'range', label: t('Range Persistence') },
+  { id: 'range_persistence', group: 'pane', kind: 'range', label: t('60日区间位置') },
   { id: 'spy_rs', group: 'pane', kind: 'rs', label: t('SPY Relative Strength') },
 ];
 

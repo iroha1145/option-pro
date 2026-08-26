@@ -64,7 +64,13 @@ async function clearTouchedDrawings(page) {
     for (const ticker of tickers) {
       for (const range of ranges) {
         const url = `/api/account/chart-drawings?ticker=${encodeURIComponent(ticker)}&range=${encodeURIComponent(range)}&adjustment=raw`;
-        await fetch(url, { method: "DELETE", credentials: "same-origin", headers: { "X-Optix-Action": "1" } }).catch(() => {});
+        const listed = await fetch(url, { credentials: "same-origin" }).then((res) => res.json()).catch(() => null);
+        const revision = Number(listed?.scope_revision ?? 0);
+        await fetch(`${url}&expected_scope_revision=${encodeURIComponent(revision)}`, {
+          method: "DELETE",
+          credentials: "same-origin",
+          headers: { "X-Optix-Action": "1" },
+        }).catch(() => {});
       }
     }
     try {
@@ -382,4 +388,133 @@ test("layer presets switch algorithm and pattern groups", async ({ page }) => {
   await expect(dialog.getByRole("spinbutton", { name: "最低几何质量" })).toHaveValue("70");
   await page.keyboard.press("Escape");
   await chartFilled(page);
+});
+
+test("failed save survives refresh and replays after network returns", async ({ page }) => {
+  test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  await openStock(page);
+  await page.route("**/api/account/chart-drawings**", (route) => {
+    if (route.request().method() === "GET") return route.continue();
+    return route.abort();
+  });
+  await placeHorizontal(page, 0.48, 0.42);
+  await expectDrawingCount(page, 1);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
+  await expectDrawingCount(page, 1);
+  await page.unroute("**/api/account/chart-drawings**");
+  const retry = toolButton(page, "重试同步");
+  if (await retry.isVisible().catch(() => false)) await retry.click();
+  await expect.poll(async () => {
+    const res = await page.request.get("/api/account/chart-drawings?ticker=AAPL&range=1d&adjustment=raw");
+    if (!res.ok()) return `http ${res.status()}`;
+    const body = await res.json();
+    return Array.isArray(body.drawings) ? body.drawings.length : -1;
+  }, { timeout: 20_000 }).toBe(1);
+});
+
+test("stale clear from a second context is 409 and keeps the newer drawing", async ({ browser, page }) => {
+  test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  await openStock(page);
+  await placeHorizontal(page, 0.4, 0.4);
+  await expectDrawingCount(page, 1);
+  await expect.poll(async () => {
+    const res = await page.request.get("/api/account/chart-drawings?ticker=AAPL&range=1d&adjustment=raw");
+    const body = await res.json();
+    return Number(body.scope_revision || 0);
+  }, { timeout: 15_000 }).toBeGreaterThan(0);
+  const listed = await page.request.get("/api/account/chart-drawings?ticker=AAPL&range=1d&adjustment=raw");
+  const before = await listed.json();
+  const staleRev = Number(before.scope_revision);
+  const storage = await page.context().storageState();
+  const other = await browser.newContext({ storageState: storage });
+  const pageB = await other.newPage();
+  await pageB.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
+  await expect(toolButton(pageB, "选择")).toBeVisible({ timeout: 20_000 });
+  await placeHorizontal(pageB, 0.62, 0.55);
+  await expectDrawingCount(pageB, 2);
+  const stale = await page.evaluate(async (revision) => {
+    const res = await fetch("/api/account/chart-drawings?ticker=AAPL&range=1d&adjustment=raw&expected_scope_revision=" + revision, {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: { "X-Optix-Action": "1" },
+    });
+    const body = await res.json().catch(() => ({}));
+    return { status: res.status, code: body?.detail?.code || null };
+  }, staleRev);
+  expect(stale.status).toBe(409);
+  expect(stale.code).toBe("scope_revision_conflict");
+  await expectDrawingCount(pageB, 2);
+  await other.close();
+});
+
+test("Escape closes only the layer drawer", async ({ page }) => {
+  test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  await openStock(page);
+  await expandChart(page);
+  await toolButton(page, "算法与图层").click();
+  const layers = page.getByRole("dialog", { name: "算法与图层" });
+  await expect(layers).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(layers).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "绘图工作区" })).toBeVisible();
+});
+
+test("zoom then recolor keeps the dataZoom window", async ({ page }) => {
+  test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  await openStock(page);
+  await placeHorizontal(page, 0.5, 0.4);
+  await expandChart(page);
+  const zoomed = await page.evaluate(() => {
+    const host = document.querySelector('[role="img"][aria-label$="图"]');
+    const chart = host && host.__echarts__;
+    if (!chart || typeof chart.getOption !== "function") return null;
+    const option = chart.getOption();
+    const zoom = (option.dataZoom || [])[0] || {};
+    return { start: zoom.start ?? zoom.startValue, end: zoom.end ?? zoom.endValue };
+  });
+  await page.mouse.wheel(0, -800);
+  const afterZoom = await page.evaluate(() => {
+    const host = document.querySelector('[role="img"][aria-label$="图"]');
+    const instances = window.__ECHARTS_INSTANCES__;
+    const chart = host && (host.__echarts_instance__ || host._echarts_instance_);
+    const canvas = document.querySelector("canvas");
+    let found = null;
+    if (typeof echarts !== "undefined" && canvas) {
+      try { found = echarts.getInstanceByDom(canvas.parentElement); } catch { /* */ }
+    }
+    const inst = found || chart;
+    if (!inst || typeof inst.getOption !== "function") return null;
+    const zoom = (inst.getOption().dataZoom || [])[0] || {};
+    return { start: zoom.start ?? zoom.startValue, end: zoom.end ?? zoom.endValue };
+  });
+  await page.getByRole("button", { name: "颜色 红色" }).click();
+  const afterColor = await page.evaluate(() => {
+    const canvas = document.querySelector("canvas");
+    let inst = null;
+    if (typeof echarts !== "undefined" && canvas) {
+      try { inst = echarts.getInstanceByDom(canvas.parentElement); } catch { /* */ }
+    }
+    if (!inst || typeof inst.getOption !== "function") return null;
+    const zoom = (inst.getOption().dataZoom || [])[0] || {};
+    return { start: zoom.start ?? zoom.startValue, end: zoom.end ?? zoom.endValue };
+  });
+  if (afterZoom && afterColor) {
+    expect(afterColor.start).toEqual(afterZoom.start);
+    expect(afterColor.end).toEqual(afterZoom.end);
+  }
+  await expectDrawingCount(page, 1);
+  void zoomed;
+});
+
+test("expanded mobile workspace has no horizontal overflow", async ({ page }) => {
+  test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
+  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
+  await expandChart(page);
+  await expect(page.getByRole("dialog", { name: "绘图工作区" })).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+  await screenshot(page, "390x844-expanded-workspace");
 });

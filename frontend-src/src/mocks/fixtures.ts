@@ -459,7 +459,7 @@ function analysisPanes(bars: ChartBarEx[]): Record<string, unknown>[] {
     { id: 'macd', label: 'MACD', kind: 'macd', startIndex: 0, values: { macd, signal, histogram: macd.map((value, index) => round4(value - signal[index])) } },
     { id: 'obv', label: 'OBV', kind: 'obv', startIndex: 0, values: { obv } },
     { id: 'clv', label: 'CLV', kind: 'clv', startIndex: 0, values: { clv } },
-    { id: 'range_persistence', label: 'Range Persistence', kind: 'range', startIndex: 0, values: { position } },
+    { id: 'range_persistence', label: '60日区间位置', kind: 'range', startIndex: 0, values: { position } },
     { id: 'spy_rs', label: 'SPY Relative Strength', kind: 'rs', startIndex: 0, values: { rs: closes.map((c, index) => round4(c / (closes[0] || 1) / (1 + index * 0.0004))) } },
   ];
 }

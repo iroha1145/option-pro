@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
 
@@ -148,10 +149,71 @@ def _drawing(**overrides):
     return body
 
 
-def _create(client: TestClient, body: dict | None = None):
+def _scope_revision(client: TestClient, ticker="NVDA", chart_range="1d") -> int:
+    listed = client.get(
+        "/api/account/chart-drawings",
+        params={"ticker": ticker, "range": chart_range, "adjustment": "raw"},
+    )
+    if listed.status_code != 200:
+        return 0
+    return int(listed.json().get("scope_revision", 0))
+
+
+def _create(client: TestClient, body: dict | None = None, *, expected_scope_revision: int | None = None):
+    payload = dict(body or _drawing())
+    revision = (
+        expected_scope_revision
+        if expected_scope_revision is not None
+        else _scope_revision(client, payload["ticker"], payload["range"])
+    )
     return client.post(
         "/api/account/chart-drawings",
-        json=body or _drawing(),
+        json={**payload, "expected_scope_revision": revision},
+        headers=HEADERS,
+    )
+
+
+def _update(client: TestClient, body: dict, *, revision: int, expected_scope_revision: int | None = None):
+    scope_rev = (
+        expected_scope_revision
+        if expected_scope_revision is not None
+        else _scope_revision(client, body["ticker"], body["range"])
+    )
+    return client.put(
+        f"/api/account/chart-drawings/{body['id']}",
+        json={**body, "revision": revision, "expected_scope_revision": scope_rev},
+        headers=HEADERS,
+    )
+
+
+def _delete_one(client: TestClient, drawing_id: str, *, expected_scope_revision: int):
+    return client.delete(
+        f"/api/account/chart-drawings/{drawing_id}",
+        params={"expected_scope_revision": expected_scope_revision},
+        headers=HEADERS,
+    )
+
+
+def _clear_scope(
+    client: TestClient,
+    ticker="NVDA",
+    chart_range="1d",
+    *,
+    expected_scope_revision: int | None = None,
+):
+    revision = (
+        expected_scope_revision
+        if expected_scope_revision is not None
+        else _scope_revision(client, ticker, chart_range)
+    )
+    return client.delete(
+        "/api/account/chart-drawings",
+        params={
+            "ticker": ticker,
+            "range": chart_range,
+            "adjustment": "raw",
+            "expected_scope_revision": revision,
+        },
         headers=HEADERS,
     )
 
@@ -168,6 +230,7 @@ def test_initialize_is_idempotent_and_enables_wal_fk(store: AccountStore) -> Non
             )
         }
         assert "account_chart_drawings" in names
+        assert "account_chart_drawing_scopes" in names
     # New connections from the store always set WAL + FK.
     with store._connect() as connection:
         journal = connection.execute("PRAGMA journal_mode").fetchone()[0]
@@ -204,6 +267,26 @@ def test_old_database_gains_drawings_table_in_place(tmp_path) -> None:
 
 def test_legacy_global_drawing_id_primary_key_is_rebuilt(tmp_path) -> None:
     path = tmp_path / "legacy-pk.db"
+    payload = json.dumps(
+        {
+            "schemaVersion": 1,
+            "kind": "horizontal",
+            "anchors": [
+                {
+                    "time": "2026-07-06T13:30:00+00:00",
+                    "barKey": "2026-07-06",
+                    "price": 120.5,
+                }
+            ],
+            "style": {"color": "#2E46E0", "width": 2, "dash": "solid"},
+            "text": None,
+            "locked": False,
+            "hidden": False,
+            "zOrder": 0,
+        },
+        separators=(",", ":"),
+    )
+    drawing_id = str(uuid.uuid4())
     with sqlite3.connect(path) as connection:
         connection.executescript(_OLD_SCHEMA)
         connection.executescript(_OLD_DRAWINGS_TABLE)
@@ -211,6 +294,13 @@ def test_legacy_global_drawing_id_primary_key_is_rebuilt(tmp_path) -> None:
             """INSERT INTO accounts
                    (user_id, username, username_key, password_hash, created_at)
                VALUES ('usr_legacy', 'legacy', 'legacy', 'x', '2026-01-01T00:00:00+00:00')"""
+        )
+        connection.execute(
+            """INSERT INTO account_chart_drawings
+                   (drawing_id, user_id, ticker, chart_range, adjustment,
+                    kind, payload_json, revision, created_at, updated_at)
+               VALUES (?, 'usr_legacy', 'NVDA', '1d', 'raw', 'horizontal', ?, 1, ?, ?)""",
+            (drawing_id, payload, "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
         )
         connection.commit()
     upgraded = AccountStore(path)
@@ -222,8 +312,25 @@ def test_legacy_global_drawing_id_primary_key_is_rebuilt(tmp_path) -> None:
             if int(row[5]) > 0
         )
         accounts_left = connection.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
+        kept = connection.execute(
+            "SELECT COUNT(*) FROM account_chart_drawings WHERE drawing_id=?",
+            (drawing_id,),
+        ).fetchone()[0]
+        scopes = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='account_chart_drawing_scopes'"
+        ).fetchone()
+        scope_rev = connection.execute(
+            """SELECT scope_revision FROM account_chart_drawing_scopes
+                WHERE user_id='usr_legacy' AND ticker='NVDA' AND chart_range='1d' AND adjustment='raw'"""
+        ).fetchone()
     assert [name for _, name in key_columns] == ["user_id", "drawing_id"]
     assert accounts_left == 1
+    assert kept == 1
+    assert scopes is not None
+    assert int(scope_rev[0]) == 1
+    listed = upgraded.list_drawings("usr_legacy", "NVDA", "1d")
+    assert listed[0]["id"] == drawing_id
+    assert upgraded.scope_revision("usr_legacy", "NVDA", "1d") == 1
 
 
 def test_guest_cannot_read_or_write_drawings(client: TestClient) -> None:
@@ -270,29 +377,26 @@ def test_crud_round_trip_and_cache_control(client: TestClient) -> None:
     assert listed.headers.get("cache-control") == "no-store"
     assert listed.json()["drawings"][0]["id"] == body["id"]
     assert listed.json()["max_per_range"] == DRAWINGS_PER_RANGE_MAX
+    assert listed.json()["scope_revision"] == 1
+    assert payload["scope_revision"] == 1
 
-    updated = client.put(
-        f"/api/account/chart-drawings/{body['id']}",
-        json={
-            **body,
-            "revision": 1,
-            "style": {"color": "#E5484D", "width": 3, "dash": "dashed"},
-        },
-        headers=HEADERS,
+    updated = _update(
+        client,
+        {**body, "style": {"color": "#E5484D", "width": 3, "dash": "dashed"}},
+        revision=1,
     )
     assert updated.status_code == 200
     assert updated.json()["revision"] == 2
     assert updated.json()["style"]["color"] == "#E5484D"
-    deleted = client.delete(
-        f"/api/account/chart-drawings/{body['id']}",
-        headers=HEADERS,
-    )
+    assert updated.json()["scope_revision"] == 2
+    deleted = _delete_one(client, body["id"], expected_scope_revision=2)
     assert deleted.status_code == 200
     empty = client.get(
         "/api/account/chart-drawings",
         params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
     )
     assert empty.json()["drawings"] == []
+    assert empty.json()["scope_revision"] == 3
 
 
 def test_stale_revision_returns_409_twice(client: TestClient) -> None:
@@ -300,26 +404,19 @@ def test_stale_revision_returns_409_twice(client: TestClient) -> None:
     body = _drawing()
     created = _create(client, body)
     assert created.json()["revision"] == 1
-    first = client.put(
-        f"/api/account/chart-drawings/{body['id']}",
-        json={**body, "revision": 1, "locked": True},
-        headers=HEADERS,
-    )
+    first = _update(client, {**body, "locked": True}, revision=1)
     assert first.status_code == 200
     assert first.json()["revision"] == 2
-    stale = client.put(
-        f"/api/account/chart-drawings/{body['id']}",
-        json={**body, "revision": 1, "locked": False},
-        headers=HEADERS,
+    stale = _update(
+        client,
+        {**body, "locked": False},
+        revision=1,
+        expected_scope_revision=2,
     )
     assert stale.status_code == 409
     assert stale.json()["detail"]["code"] == "revision_conflict"
     # Current server body is still revision 2; a second stale write still 409.
-    again = client.put(
-        f"/api/account/chart-drawings/{body['id']}",
-        json={**body, "revision": 1},
-        headers=HEADERS,
-    )
+    again = _update(client, body, revision=1, expected_scope_revision=2)
     assert again.status_code == 409
     current = client.get(
         "/api/account/chart-drawings",
@@ -327,6 +424,7 @@ def test_stale_revision_returns_409_twice(client: TestClient) -> None:
     )
     assert current.json()["drawings"][0]["revision"] == 2
     assert current.json()["drawings"][0]["locked"] is True
+    assert current.json()["scope_revision"] == 2
 
 
 def test_scoped_bulk_clear_does_not_touch_other_ranges(client: TestClient) -> None:
@@ -337,13 +435,10 @@ def test_scoped_bulk_clear_does_not_touch_other_ranges(client: TestClient) -> No
     assert _create(client, daily).status_code == 201
     assert _create(client, weekly).status_code == 201
     assert _create(client, other).status_code == 201
-    cleared = client.delete(
-        "/api/account/chart-drawings",
-        params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
-        headers=HEADERS,
-    )
+    cleared = _clear_scope(client, "NVDA", "1d")
     assert cleared.status_code == 200
     assert cleared.json()["deleted"] == 1
+    assert cleared.json()["scope_revision"] == 2
     nvda_week = client.get(
         "/api/account/chart-drawings",
         params={"ticker": "NVDA", "range": "1w", "adjustment": "raw"},
@@ -367,19 +462,12 @@ def test_customer_drawings_are_isolated(client: TestClient, store: AccountStore)
         params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
     )
     assert listed.json()["drawings"] == []
-    stolen = client.put(
-        f"/api/account/chart-drawings/{first['id']}",
-        json={**first, "revision": 1},
-        headers=HEADERS,
-    )
+    stolen = _update(client, {**first, "revision": 1}, revision=1, expected_scope_revision=0)
     assert stolen.status_code == 404
     assert stolen.json()["detail"]["code"] == "drawing_not_found"
     # 删除是幂等的，所以这里是 200；但 DELETE 带着 user_id 条件，删掉的是「自己
     # 名下这个编号」（不存在），原主人的行必须一动不动。
-    removed = client.delete(
-        f"/api/account/chart-drawings/{first['id']}",
-        headers=HEADERS,
-    )
+    removed = _delete_one(client, first["id"], expected_scope_revision=0)
     assert removed.status_code == 200
     # Original owner still has the row.
     erin = store.authenticate("erin", "pw")
@@ -478,6 +566,7 @@ def test_nan_inf_and_nonpositive_prices_are_rejected(
                         }
                     ]
                 ),
+                expected_scope_revision=0,
             )
         assert excinfo.value.code == "invalid_price"
         with pytest.raises(AccountError):
@@ -525,13 +614,19 @@ def test_overlong_text_and_illegal_color(client: TestClient) -> None:
 
 def test_per_range_cap(store: AccountStore) -> None:
     session = store.register("leo", "pw")
+    revision = 0
     for index in range(DRAWINGS_PER_RANGE_MAX):
-        store.create_drawing(
+        _, revision = store.create_drawing(
             session.account.user_id,
             _drawing(id=str(uuid.uuid4()), zOrder=index),
+            expected_scope_revision=revision,
         )
     with pytest.raises(AccountError) as excinfo:
-        store.create_drawing(session.account.user_id, _drawing())
+        store.create_drawing(
+            session.account.user_id,
+            _drawing(),
+            expected_scope_revision=revision,
+        )
     assert excinfo.value.code == "drawings_range_full"
 
 
@@ -542,6 +637,7 @@ def test_payload_size_cap(monkeypatch: pytest.MonkeyPatch, store: AccountStore) 
         store.create_drawing(
             session.account.user_id,
             _drawing(kind="text", text="a" * 40),
+            expected_scope_revision=0,
         )
     assert excinfo.value.code == "payload_too_large"
 
@@ -551,33 +647,43 @@ def test_account_cap_on_create(
 ) -> None:
     monkeypatch.setattr(accounts_mod, "DRAWINGS_PER_ACCOUNT_MAX", 3)
     session = store.register("nate", "pw")
+    revision = 0
     for _ in range(3):
-        store.create_drawing(session.account.user_id, _drawing())
+        _, revision = store.create_drawing(
+            session.account.user_id,
+            _drawing(),
+            expected_scope_revision=revision,
+        )
     with pytest.raises(AccountError) as excinfo:
-        store.create_drawing(session.account.user_id, _drawing())
+        store.create_drawing(
+            session.account.user_id,
+            _drawing(),
+            expected_scope_revision=revision,
+        )
     assert excinfo.value.code == "drawings_full"
 
 
 def test_create_replay_returns_the_stored_row(client: TestClient) -> None:
-    """重放创建必须是成功：报 409 的话客户端 outbox 就永远卡在这一条上。"""
+    """同一 payload 重放必须成功且不抬 scope_revision；改 payload 则 409。"""
 
     _register(client, "xena", "pw")
     body = _drawing()
-    first = _create(client, body)
+    first = _create(client, body, expected_scope_revision=0)
     assert first.status_code == 201
-    replay = _create(client, body)
+    replay = _create(client, body, expected_scope_revision=0)
     assert replay.status_code == 201, replay.text
     assert replay.json() == first.json()
-    # 重放不是隐式更新：正文变了也只返回已存的那一版。
-    changed = _create(client, {**body, "locked": True})
-    assert changed.status_code == 201
-    assert changed.json()["locked"] is False
-    assert changed.json()["revision"] == 1
+    assert replay.json()["scope_revision"] == 1
+    changed = _create(client, {**body, "locked": True}, expected_scope_revision=1)
+    assert changed.status_code == 409
+    assert changed.json()["detail"]["code"] == "drawing_id_conflict"
     listed = client.get(
         "/api/account/chart-drawings",
         params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
     )
     assert len(listed.json()["drawings"]) == 1
+    assert listed.json()["drawings"][0]["locked"] is False
+    assert listed.json()["scope_revision"] == 1
 
 
 def test_delete_is_idempotent(client: TestClient) -> None:
@@ -586,18 +692,16 @@ def test_delete_is_idempotent(client: TestClient) -> None:
     _register(client, "yuri", "pw")
     body = _drawing()
     assert _create(client, body).status_code == 201
-    for _ in range(3):
-        removed = client.delete(
-            f"/api/account/chart-drawings/{body['id']}",
-            headers=HEADERS,
-        )
+    first = _delete_one(client, body["id"], expected_scope_revision=1)
+    assert first.status_code == 200
+    assert first.json() == {"ok": True, "scope_revision": 2}
+    for _ in range(2):
+        removed = _delete_one(client, body["id"], expected_scope_revision=2)
         assert removed.status_code == 200
         assert removed.json() == {"ok": True}
-    never_existed = client.delete(
-        f"/api/account/chart-drawings/{uuid.uuid4()}",
-        headers=HEADERS,
-    )
+    never_existed = _delete_one(client, str(uuid.uuid4()), expected_scope_revision=0)
     assert never_existed.status_code == 200
+    assert never_existed.json() == {"ok": True}
 
 
 def test_moving_a_drawing_to_another_scope_is_rejected(client: TestClient) -> None:
@@ -605,10 +709,11 @@ def test_moving_a_drawing_to_another_scope_is_rejected(client: TestClient) -> No
     body = _drawing()
     assert _create(client, body).status_code == 201
     for moved in ({"ticker": "AAPL"}, {"range": "1w"}):
-        response = client.put(
-            f"/api/account/chart-drawings/{body['id']}",
-            json={**body, **moved, "revision": 1},
-            headers=HEADERS,
+        response = _update(
+            client,
+            {**body, **moved},
+            revision=1,
+            expected_scope_revision=1,
         )
         assert response.status_code == 400, response.text
         assert response.json()["detail"]["code"] == "scope_mismatch"
@@ -638,7 +743,9 @@ def test_extreme_offset_time_is_invalid_not_a_crash(client: TestClient) -> None:
 
 def test_account_delete_cascades_drawings(store: AccountStore) -> None:
     session = store.register("nina", "pw")
-    created = store.create_drawing(session.account.user_id, _drawing())
+    created, _rev = store.create_drawing(
+        session.account.user_id, _drawing(), expected_scope_revision=0
+    )
     store.delete_account(session.account.user_id)
     with store._connect() as connection:
         leftover = connection.execute(
@@ -652,7 +759,9 @@ def test_owner_account_cannot_be_deleted(store: AccountStore) -> None:
     """owner 那行是 owner 全部个人数据的外键锚点，删掉等于清空。"""
 
     owner = store.ensure_owner_account()
-    store.create_drawing(owner.user_id, _drawing(ticker="MSFT"))
+    store.create_drawing(
+        owner.user_id, _drawing(ticker="MSFT"), expected_scope_revision=0
+    )
     with pytest.raises(AccountError) as excinfo:
         store.delete_account(OWNER_USER_ID)
     assert excinfo.value.code == "account_delete_forbidden"
@@ -665,9 +774,11 @@ def test_same_id_in_two_accounts_stays_isolated(store: AccountStore) -> None:
     first = store.register("omar", "pw")
     second = store.register("pia", "pw")
     body = _drawing()
-    mine = store.create_drawing(first.account.user_id, body)
-    theirs = store.create_drawing(
-        second.account.user_id, {**body, "ticker": "AAPL"}
+    mine, _mine_rev = store.create_drawing(
+        first.account.user_id, body, expected_scope_revision=0
+    )
+    theirs, _theirs_rev = store.create_drawing(
+        second.account.user_id, {**body, "ticker": "AAPL"}, expected_scope_revision=0
     )
     assert mine["id"] == theirs["id"] == body["id"]
     assert store.get_drawing(first.account.user_id, body["id"])["ticker"] == "NVDA"
@@ -679,12 +790,15 @@ def test_same_id_in_two_accounts_stays_isolated(store: AccountStore) -> None:
         body["id"],
         {**body, "ticker": "AAPL", "locked": True},
         expected_revision=1,
+        expected_scope_revision=1,
     )
     assert store.get_drawing(first.account.user_id, body["id"])["locked"] is False
     assert store.get_drawing(first.account.user_id, body["id"])["revision"] == 1
 
     # B 的删除同样只删掉 B 自己那条。
-    store.delete_drawing(second.account.user_id, body["id"])
+    store.delete_drawing(
+        second.account.user_id, body["id"], expected_scope_revision=2
+    )
     assert store.get_drawing(second.account.user_id, body["id"]) is None
     assert store.get_drawing(first.account.user_id, body["id"]) is not None
 
@@ -708,19 +822,31 @@ def test_create_then_get_body_twice(client: TestClient) -> None:
         match = next(item for item in listed.json()["drawings"] if item["id"] == body["id"])
         assert match["anchors"][0]["time"].startswith("2026-07-06")
         assert match["revision"] == 1
-        stale = client.put(
-            f"/api/account/chart-drawings/{body['id']}",
-            json={**body, "revision": 99},
-            headers=HEADERS,
-        )
+        stale = _update(client, body, revision=99)
         assert stale.status_code == 409
 
 
-def _replace(client: TestClient, drawings: list, ticker="NVDA", chart_range="1d"):
+def _replace(
+    client: TestClient,
+    drawings: list,
+    ticker="NVDA",
+    chart_range="1d",
+    *,
+    expected_scope_revision: int | None = None,
+):
+    revision = (
+        expected_scope_revision
+        if expected_scope_revision is not None
+        else _scope_revision(client, ticker, chart_range)
+    )
     return client.post(
         "/api/account/chart-drawings/replace",
         params={"ticker": ticker, "range": chart_range, "adjustment": "raw"},
-        json={"schemaVersion": 1, "drawings": drawings},
+        json={
+            "schemaVersion": 1,
+            "expected_scope_revision": revision,
+            "drawings": drawings,
+        },
         headers=HEADERS,
     )
 
@@ -781,7 +907,9 @@ def test_replace_keeps_id_another_account_already_holds(
 
     other = store.register("other-owner", "pw")
     shared = _drawing()
-    store.create_drawing(other.account.user_id, shared)
+    store.create_drawing(
+        other.account.user_id, shared, expected_scope_revision=0
+    )
     _register(client, "uma", "pw")
     response = _replace(client, [shared])
     assert response.status_code == 200, response.text
@@ -820,20 +948,35 @@ def test_account_cap_counts_other_scopes_on_replace(
     monkeypatch.setattr(accounts_mod, "DRAWINGS_PER_ACCOUNT_MAX", 3)
     session = store.register("abe", "pw")
     user_id = session.account.user_id
+    aapl_rev = 0
     for _ in range(2):
-        store.create_drawing(user_id, _drawing(ticker="AAPL"))
-    kept = store.create_drawing(user_id, _drawing())
+        _, aapl_rev = store.create_drawing(
+            user_id, _drawing(ticker="AAPL"), expected_scope_revision=aapl_rev
+        )
+    kept, nvda_rev = store.create_drawing(
+        user_id, _drawing(), expected_scope_revision=0
+    )
     with pytest.raises(AccountError) as excinfo:
         store.replace_drawings_in_scope(
-            user_id, "NVDA", "1d", "raw", [_drawing(), _drawing()]
+            user_id,
+            "NVDA",
+            "1d",
+            "raw",
+            [_drawing(), _drawing()],
+            expected_scope_revision=nvda_rev,
         )
     assert excinfo.value.code == "drawings_full"
     # 配额检查在 DELETE 之前，本作用域原有的行不能被这次失败吞掉。
     survivors = [row["id"] for row in store.list_drawings(user_id, "NVDA", "1d")]
     assert survivors == [kept["id"]]
     # 边界：2（其他作用域）+ 1 == 3，正好放得下。
-    replaced = store.replace_drawings_in_scope(
-        user_id, "NVDA", "1d", "raw", [_drawing()]
+    replaced, _rev = store.replace_drawings_in_scope(
+        user_id,
+        "NVDA",
+        "1d",
+        "raw",
+        [_drawing()],
+        expected_scope_revision=nvda_rev,
     )
     assert len(replaced) == 1
     assert replaced[0]["id"] != kept["id"]
@@ -853,3 +996,155 @@ def test_quota_409_carries_its_own_code(
     batch = _replace(client, [_drawing(), _drawing()])
     assert batch.status_code == 409
     assert batch.json()["detail"]["code"] == "drawings_full"
+
+
+def test_stale_scope_clear_and_replace_do_not_clobber(client: TestClient) -> None:
+    """Two readers share one scope_revision; A's write makes B's clear/replace 409."""
+
+    _register(client, "device-a", "pw-a")
+    original = _drawing()
+    created = _create(client, original, expected_scope_revision=0)
+    assert created.status_code == 201
+    assert created.json()["scope_revision"] == 1
+    listed = client.get(
+        "/api/account/chart-drawings",
+        params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
+    )
+    assert listed.json()["scope_revision"] == 1
+
+    extra = _drawing()
+    second = _create(client, extra, expected_scope_revision=1)
+    assert second.status_code == 201
+    assert second.json()["scope_revision"] == 2
+
+    stale_clear = _clear_scope(client, expected_scope_revision=1)
+    assert stale_clear.status_code == 409
+    assert stale_clear.json()["detail"]["code"] == "scope_revision_conflict"
+
+    stale_replace = _replace(client, [], expected_scope_revision=1)
+    assert stale_replace.status_code == 409
+    assert stale_replace.json()["detail"]["code"] == "scope_revision_conflict"
+
+    still = client.get(
+        "/api/account/chart-drawings",
+        params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
+    )
+    ids = {row["id"] for row in still.json()["drawings"]}
+    assert original["id"] in ids
+    assert extra["id"] in ids
+    assert still.json()["scope_revision"] == 2
+
+    fresh_clear = _clear_scope(client, expected_scope_revision=2)
+    assert fresh_clear.status_code == 200
+    assert fresh_clear.json()["deleted"] == 2
+    assert fresh_clear.json()["scope_revision"] == 3
+
+
+def test_create_same_id_different_scope_is_drawing_id_conflict(client: TestClient) -> None:
+    _register(client, "id-clash", "pw")
+    body = _drawing()
+    assert _create(client, body, expected_scope_revision=0).status_code == 201
+    moved = _create(
+        client,
+        {**body, "ticker": "AAPL"},
+        expected_scope_revision=0,
+    )
+    assert moved.status_code == 409
+    assert moved.json()["detail"]["code"] == "drawing_id_conflict"
+    aapl = client.get(
+        "/api/account/chart-drawings",
+        params={"ticker": "AAPL", "range": "1d", "adjustment": "raw"},
+    )
+    assert aapl.json()["drawings"] == []
+    nvda = client.get(
+        "/api/account/chart-drawings",
+        params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
+    )
+    assert nvda.json()["drawings"][0]["id"] == body["id"]
+
+
+def test_every_mutation_increments_scope_revision(client: TestClient) -> None:
+    _register(client, "rev-seq", "pw")
+    first = _drawing()
+    created = _create(client, first, expected_scope_revision=0)
+    assert created.json()["scope_revision"] == 1
+    updated = _update(client, {**first, "locked": True}, revision=1, expected_scope_revision=1)
+    assert updated.json()["scope_revision"] == 2
+    second = _drawing()
+    again = _create(client, second, expected_scope_revision=2)
+    assert again.json()["scope_revision"] == 3
+    removed = _delete_one(client, second["id"], expected_scope_revision=3)
+    assert removed.json()["scope_revision"] == 4
+    replaced = _replace(client, [_drawing()], expected_scope_revision=4)
+    assert replaced.json()["scope_revision"] == 5
+    cleared = _clear_scope(client, expected_scope_revision=5)
+    assert cleared.json()["scope_revision"] == 6
+    empty = client.get(
+        "/api/account/chart-drawings",
+        params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
+    )
+    assert empty.json()["drawings"] == []
+    assert empty.json()["scope_revision"] == 6
+
+
+def test_empty_text_drawing_is_legal(client: TestClient) -> None:
+    _register(client, "blank-text", "pw")
+    body = _drawing(kind="text", text="")
+    created = _create(client, body)
+    assert created.status_code == 201, created.text
+    assert created.json()["text"] == ""
+    updated = _update(client, {**body, "text": ""}, revision=1)
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["text"] == ""
+
+
+def test_naive_iso_time_is_rejected(client: TestClient) -> None:
+    _register(client, "naive-time", "pw")
+    response = _create(
+        client,
+        _drawing(
+            anchors=[
+                {"time": "2026-07-06T13:30:00", "barKey": "2026-07-06", "price": 120.5}
+            ]
+        ),
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "invalid_time"
+
+
+def test_html_and_nul_text_still_rejected(client: TestClient) -> None:
+    _register(client, "bad-text", "pw")
+    html = _create(client, _drawing(kind="text", text="<b>x</b>"))
+    assert html.status_code == 400
+    nul = _create(client, _drawing(kind="text", text="ok\x00no"))
+    assert nul.status_code == 400
+
+
+def test_missing_expected_scope_revision_is_422(client: TestClient) -> None:
+    _register(client, "no-rev", "pw")
+    body = _drawing()
+    created = client.post(
+        "/api/account/chart-drawings",
+        json=body,
+        headers=HEADERS,
+    )
+    assert created.status_code == 422
+    listed = client.get(
+        "/api/account/chart-drawings",
+        params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
+    )
+    assert listed.json()["drawings"] == []
+    assert listed.json()["scope_revision"] == 0
+
+
+def test_reinitialize_keeps_drawings_and_scope_revision(store: AccountStore) -> None:
+    session = store.register("keep-rows", "pw")
+    created, revision = store.create_drawing(
+        session.account.user_id, _drawing(), expected_scope_revision=0
+    )
+    assert revision == 1
+    store._initialized = False
+    store.initialize()
+    listed, again = store.list_drawings_page(session.account.user_id, "NVDA", "1d")
+    assert [row["id"] for row in listed] == [created["id"]]
+    assert again == 1

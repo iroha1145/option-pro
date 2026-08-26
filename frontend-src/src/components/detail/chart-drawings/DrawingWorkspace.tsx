@@ -74,11 +74,11 @@ export default function DrawingWorkspace({
         onKeepLocal={() => void controller.keepLocalConflict()}
         onTakeServer={() => void controller.takeServerConflict()}
       />
-      <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
-        <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-line bg-card">
+      <div className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden md:flex-row">
+        <div className="min-h-[240px] min-w-0 flex-1 overflow-hidden rounded-md border border-line bg-card md:min-h-[320px]">
           {children}
         </div>
-        <aside className="w-full shrink-0 overflow-auto rounded-md border border-line bg-card p-3 md:w-72">
+        <aside className="max-h-[40vh] w-full shrink-0 overflow-x-hidden overflow-y-auto rounded-md border border-line bg-card p-3 md:max-h-none md:w-72">
           <DrawingInspector
             drawing={controller.selected}
             drawings={controller.drawings}
@@ -89,7 +89,7 @@ export default function DrawingWorkspace({
             onStyle={controller.updateStyle}
             onText={(text) => {
               const clean = whitelistText(text);
-              if (clean) controller.patchSelected({ text: clean }, true);
+              if (clean !== null) controller.patchSelected({ text: clean }, true);
             }}
             onLock={() => controller.patchSelected({ locked: !controller.selected?.locked }, true)}
             onHide={() => controller.patchSelected({ hidden: !controller.selected?.hidden }, true)}

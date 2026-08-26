@@ -65,12 +65,15 @@ DELETE /api/account/chart-drawings?ticker=&range=&adjustment=
 - 修改请求同源（`Origin` + `X-Optix-Action: 1`）
 - `Cache-Control: no-store`
 - 每范围最多 500 个；每账户 2000 个；单对象 payload ≤ 16KiB
-- `revision` 乐观并发：创建为 1；更新带期望 revision；不匹配返回 **409 `revision_conflict`**，前端保留本地副本并让用户选择，不静默覆盖
-- **409 不等于版本冲突**：配额满也是 409（`drawings_range_full` / `drawings_full`）。每个错误响应都带机器可读的 `code`，客户端必须按 `code` 分支——只有 `revision_conflict` 才是真冲突。把配额当冲突处理会让「保留本地」把必败的创建无限重放
-- **重放幂等**：同一账户重复 POST 同一 `drawing_id` 返回已存的那行（不是 409）；DELETE 一行不存在的绘图是成功（无墓碑）。响应丢失后的重试因此能收敛，而不是把 outbox 卡死在 unsynced
-- 导入当前范围是事务替换：先校验全部，再删旧插入新。编号与**同账户的其他范围**冲突时改发新 UUID；跨账户不再冲突（见下）。空列表会清空当前范围。
+- GET 返回 `{drawings, max_per_range, scope_revision}`。每个 `user_id + ticker + range + adjustment` 范围有独立的 `scope_revision`（空范围为 0）
+- 所有写入（POST create / PUT / DELETE 一行 / DELETE 范围 / POST replace）携带 `expected_scope_revision`，在一条 `BEGIN IMMEDIATE` 事务里校验、变更、+1。不匹配返回 **409 `scope_revision_conflict`**，clear/replace 不能悄悄覆盖另一台设备的更新
+- 单条 `revision` 仍在：更新还带期望 drawing revision；不匹配返回 **409 `revision_conflict`**
+- **409 不等于版本冲突**：配额满也是 409（`drawings_range_full` / `drawings_full`）。每个错误响应都带机器可读的 `code`，客户端必须按 `code` 分支——只有 `revision_conflict` / `scope_revision_conflict` / `drawing_id_conflict` 是真冲突。把配额当冲突处理会让「保留本地」把必败的创建无限重放
+- **重放幂等**：同一账户 + 同一 `drawing_id` + 同一规范化 payload 的 POST 返回已存的那行且不抬 `scope_revision`；payload 或范围不同则 **409 `drawing_id_conflict`**（不会返回别的范围的行）。DELETE 一行不存在的绘图是成功且不抬 revision（无墓碑）。响应丢失后的重试因此能收敛
+- 导入当前范围是事务替换：先校验全部，再删旧插入新，并校验 `expected_scope_revision`。编号与**同账户的其他范围**冲突时改发新 UUID；跨账户不再冲突（见下）。空列表会清空当前范围。
+- 锚点时间必须是带 `Z` 或显式偏移的 RFC 3339；naive 本地时间拒绝。文字对象允许空字符串；NUL / HTML 标签 / 超长文本仍拒绝。
 
-SQLite 表 `account_chart_drawings` 在 `accounts.db`，WAL、外键、账户删除级联。主键是 **`(user_id, drawing_id)` 复合键**：绘图编号只在账户内唯一，所以两个账户可以各自持有同一个编号，创建他人编号也不再能通过「404 还是 201」反推对方是否存在。该表随功能一起引入且尚未上线，旧结构由 `initialize()` 就地重建；一旦上线，再改主键必须走搬数据的迁移。
+SQLite 表 `account_chart_drawings` 在 `accounts.db`，WAL、外键、账户删除级联。主键是 **`(user_id, drawing_id)` 复合键**：绘图编号只在账户内唯一，所以两个账户可以各自持有同一个编号，创建他人编号也不再能通过「404 还是 201」反推对方是否存在。范围版本记在 `account_chart_drawing_scopes`。`initialize()` 对旧的全局 `drawing_id` 主键做 copy-forward（改名 → 建新表 → `INSERT SELECT`），已有绘图行不会被 DROP 丢掉。
 
 ## 自动形态与统一图层
 
@@ -102,7 +105,7 @@ SQLite 表 `account_chart_drawings` 在 `accounts.db`，WAL、外键、账户删
 
 前端只在 `barFingerprint` + `ticker` + `range` + `adjustment` + `dataThrough` 与当前图一致时渲染。指纹是每根分析 K 线 `timestamp|open|high|low|close|volume|ext|quote_only` 的 SHA-256（算法串 `sha256-bar-ohlcv-v1`，随包下发；对不上就不画）。**这道闸门是失败即全隐，所以镜像必须逐位对齐**：后端哈希的是 `clean_series` 之后的行（会丢掉非有限值与 OHLC 不自洽的坏行），六位小数用显式的「远离零」半进位而不是 Python 默认的银行家舍入，两侧各钉同一个字面摘要做跨语言回归。包里带 `barCount` / `firstBarDate` / `lastBarDate`，前端据此按同一窗口取样，并在失配时显示可见的诊断行，而不是整套图层无声消失（CI 在闭市跑，盘中静默熄灯是看不见的）。待同步绘图队列按 `主体+ticker+range+adjustment` 持久化在 `option-pro:chart-drawing-outbox:v1`，与手绘文档和图层设置分开。SPY RS 只在能按日期对齐 SPY 收盘时下发，否则省略空副图。Strength 快照不一致时只显示快照日期，不生成价格几何。未收盘末根不进日线指标与形态。保留 `series_break_at`：断裂之后的一致段才分析。每条自动形态保留自己的 `volumeConfirmation`；量价模块只增加自己的 overlay。摆动点 HH/HL/LH/LL 由相邻已确认高低点比较得出，不是整段结构一个标签。
 
-「算法与图层」菜单由 Layer Registry 生成（不是在 `KlineChart.tsx` 里为每个算法写死开关）。预设：极简 / 结构分析 / 突破交易 / 动量 / 量价 / 全部。极简最多 3 个自动形态、6 个文字标签。设置键 `option-pro:chart-layers:v1:{principal}`，与手绘 `option-pro:chart-drawings:v1:…` 分开；登录主体持久化，访客用 localStorage。RSI/MACD/OBV/CLV/Range Persistence/SPY RS 走独立副图；Strength 标量走侧栏。手绘永远叠在自动层之上。自动层淡色虚线；测试/突破可强调。移动端菜单是底部抽屉。
+「算法与图层」菜单由 Layer Registry 生成（不是在 `KlineChart.tsx` 里为每个算法写死开关）。预设：极简 / 结构分析 / 突破交易 / 动量 / 量价 / 全部。极简最多 3 个自动形态、6 个文字标签。设置键 `option-pro:chart-layers:v1:{principal}`，与手绘 `option-pro:chart-drawings:v1:…` 分开；登录主体持久化，访客用 localStorage。RSI/MACD/OBV/CLV/60日区间位置/SPY RS 走独立副图（按 kind 画：RSI 0–100 + 30/70，MACD 三线+柱，CLV −1..1）；Strength 标量走侧栏。手绘永远叠在自动层之上。自动层淡色虚线；测试/突破可强调。移动端菜单是底部抽屉。面积图不画副图与均线。1 小时图没有 5 分钟数据时不发明 opening range。
 
 自动层不可编辑、独立开关、比手绘更淡更虚，且不覆盖现有技术点位开关。
 

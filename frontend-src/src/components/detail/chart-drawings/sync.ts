@@ -22,8 +22,18 @@ export interface PersistJob {
   type: PersistOpType;
   drawing?: ChartDrawing;
   drawings?: ChartDrawing[];
+  /** 发出请求时冻结的范围版本；await 之后只认这一份。 */
+  expectedScopeRevision?: number;
   /** 全局单调序号：范围级任务与单条任务靠它保持先后，不然清空会追上后画的线。 */
   seq?: number;
+}
+
+export function jobIsCurrent(
+  job: PersistJob,
+  currentScope: ScopeKey | null,
+  currentScopeGeneration: number,
+): boolean {
+  return scopeEquals(job.scope, currentScope) && job.scopeGeneration === currentScopeGeneration;
 }
 
 export function scopeEquals(a: ScopeKey | null, b: ScopeKey | null): boolean {
@@ -171,11 +181,14 @@ export function resolveSyncFailure(
   code: string | null,
   status: number | null,
 ): SyncFailureAction {
-  if (code === 'revision_conflict') return 'conflict';
+  if (code === 'revision_conflict' || code === 'scope_revision_conflict' || code === 'drawing_id_conflict') {
+    return 'conflict';
+  }
   if (code === 'drawings_range_full' || code === 'drawings_full') return 'quota';
   if (code === 'drawing_exists') return jobType === 'create' ? 'drop' : 'retry';
   if (code === 'drawing_not_found' || (status === 404 && code === null)) {
-    return jobType === 'delete' || jobType === 'update' ? 'drop' : 'retry';
+    if (jobType === 'update') return 'conflict';
+    return jobType === 'delete' ? 'drop' : 'retry';
   }
   // 400 是请求本身不合法（invalid_price / invalid_payload / scope_mismatch），
   // 重放多少次都是同一个 400，留在队列里只会把出口堵死。
@@ -195,6 +208,19 @@ const JOB_TYPES = new Set<PersistOpType>(['create', 'update', 'delete', 'clear',
  * localStorage 里的 outbox 同样是不可信输入：逐条按 schema 校验，坏行丢掉，
  * 免得把一条读不出来的负载重新 PUT 回服务器或写进本地状态。
  */
+function parseStoredScope(raw: unknown): ScopeKey | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  if (typeof row.identity !== 'string' || typeof row.ticker !== 'string') return null;
+  if (typeof row.range !== 'string' || typeof row.adjustment !== 'string') return null;
+  return {
+    identity: row.identity,
+    ticker: row.ticker,
+    range: row.range as ChartRange,
+    adjustment: row.adjustment as ChartAdjustment,
+  };
+}
+
 export function parsePersistJobs(
   raw: unknown,
   scope: ScopeKey,
@@ -212,16 +238,24 @@ export function parsePersistJobs(
     if (!drawingId) continue;
     const generation = Number(job.generation);
     if (!Number.isInteger(generation) || generation < 1) continue;
+    const storedScope = job.scope === undefined ? scope : parseStoredScope(job.scope);
+    if (!storedScope || !scopeEquals(storedScope, scope)) continue;
     const drawing = job.drawing === undefined ? undefined : parseDrawing(job.drawing);
     if ((type === 'create' || type === 'update') && !drawing) continue;
+    if (drawing && (drawing.ticker !== scope.ticker || drawing.range !== scope.range || drawing.adjustment !== scope.adjustment)) {
+      continue;
+    }
+    if (drawing && drawing.id !== drawingId) continue;
     let drawings: ChartDrawing[] | undefined;
     if (type === 'replace') {
       if (!Array.isArray(job.drawings)) continue;
       const parsed = job.drawings.map(parseDrawing);
       if (parsed.some((entry) => entry === null)) continue;
       drawings = parsed as ChartDrawing[];
+      if (drawings.some((entry) => entry.ticker !== scope.ticker || entry.range !== scope.range)) continue;
     }
     const seq = Number(job.seq);
+    const expected = Number(job.expectedScopeRevision);
     jobs.push({
       drawingId,
       generation,
@@ -230,6 +264,7 @@ export function parsePersistJobs(
       type,
       ...(drawing ? { drawing } : {}),
       ...(drawings ? { drawings } : {}),
+      ...(Number.isInteger(expected) && expected >= 0 ? { expectedScopeRevision: expected } : {}),
       seq: Number.isFinite(seq) ? seq : generation,
     });
   }
@@ -251,6 +286,7 @@ export function keepLocalWithServerRevisions(
 export class DrawingOutbox {
   private scopeGeneration = 0;
   private currentScope: ScopeKey | null = null;
+  private knownScopeRevision = 0;
   private chains = new Map<string, Chain>();
   private seqCounter = 0;
   private readonly store: StorageLike | null;
@@ -270,10 +306,20 @@ export class DrawingOutbox {
     return this.scopeGeneration;
   }
 
+  getScopeRevision(): number {
+    return this.knownScopeRevision;
+  }
+
+  setScopeRevision(revision: number): void {
+    if (!Number.isInteger(revision) || revision < 0) return;
+    this.knownScopeRevision = revision;
+  }
+
   setScope(scope: ScopeKey): number {
     if (this.currentScope) this.persistCurrent();
     this.currentScope = scope;
     this.scopeGeneration += 1;
+    this.knownScopeRevision = 0;
     this.chains.clear();
     this.hydrateCurrent();
     return this.scopeGeneration;
@@ -370,8 +416,8 @@ export class DrawingOutbox {
   private blockedHead(drawingId: string, head: PersistJob): boolean {
     const scopeSide = drawingId === SCOPE_JOB_ID;
     for (const [id, chain] of this.chains) {
-      if ((id === SCOPE_JOB_ID) === scopeSide) continue;
       if (chain.inflight) return true;
+      if ((id === SCOPE_JOB_ID) === scopeSide) continue;
       const first = chain.pending[0];
       if (first && (first.seq ?? 0) < (head.seq ?? 0)) return true;
     }
@@ -384,7 +430,9 @@ export class DrawingOutbox {
     if (this.blockedHead(drawingId, row.pending[0])) return null;
     const next = row.pending.shift();
     if (!next) return null;
+    next.expectedScopeRevision = this.knownScopeRevision;
     row.inflight = next;
+    this.persistCurrent();
     return row.inflight;
   }
 

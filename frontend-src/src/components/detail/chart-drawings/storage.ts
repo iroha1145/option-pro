@@ -38,8 +38,8 @@ export function outboxStorageKey(
 }
 
 export type LoadResult =
-  | { ok: true; drawings: ChartDrawing[] }
-  | { ok: false; error: string; drawings: ChartDrawing[]; recoverable: boolean };
+  | { ok: true; drawings: ChartDrawing[]; state: 'present' | 'empty' }
+  | { ok: false; error: string; drawings: ChartDrawing[]; recoverable: boolean; missing?: boolean };
 
 export function quarantineKey(key: string): string {
   return `${key}:quarantine`;
@@ -67,14 +67,16 @@ export function loadDrawings(
   storage?: StorageLike | null,
 ): LoadResult {
   const store = storage ?? (typeof localStorage === 'undefined' ? null : localStorage);
-  if (!store) return { ok: true, drawings: [] };
+  if (!store) return { ok: true, drawings: [], state: 'empty' };
   let raw: string | null;
   try {
     raw = store.getItem(key);
   } catch {
     return { ok: false, error: 'storage_blocked', drawings: [], recoverable: false };
   }
-  if (!raw) return { ok: true, drawings: [] };
+  if (raw == null || raw === '') {
+    return { ok: false, error: 'missing', drawings: [], recoverable: false, missing: true };
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -94,7 +96,19 @@ export function loadDrawings(
       recoverable: true,
     };
   }
-  return { ok: true, drawings: collected.drawings };
+  return {
+    ok: true,
+    drawings: collected.drawings,
+    state: collected.drawings.length ? 'present' : 'empty',
+  };
+}
+
+/** 有效空缓存是权威的，不能回落到上一个标的的内存列表。 */
+export function drawingsFromCache(cached: LoadResult): ChartDrawing[] {
+  if (cached.ok) return cached.drawings;
+  if (cached.missing) return [];
+  if (cached.recoverable) return cached.drawings;
+  return [];
 }
 
 export function saveDrawings(

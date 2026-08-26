@@ -17,7 +17,7 @@ const TOOLS: { id: DrawingTool; icon: IconName; label: string }[] = [
 
 function toolButtonCls(active: boolean): string {
   return cn(
-    'inline-flex size-8 items-center justify-center rounded-xs border text-ink-500 outline-none transition-colors duration-fast',
+    'inline-flex size-8 min-h-11 min-w-11 items-center justify-center rounded-xs border text-ink-500 outline-none transition-colors duration-fast md:size-8 md:min-h-8 md:min-w-8',
     'focus-visible:ring-2 focus-visible:ring-brand-500/30',
     active
       ? 'border-brand-400 bg-brand-50 text-brand-700 shadow-chip'
@@ -71,7 +71,7 @@ export default function DrawingToolbar({
     syncStatus === 'conflict'
       ? t('绘图冲突：已保留本地版本，请选择')
       : quotaBlocked
-        ? t('绘图数量已达上限，本图形只存在本机')
+        ? t('云端绘图配额已满，本次修改未保存，已恢复云端版本。')
       : syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed'
         ? t('未同步')
         : syncStatus === 'saving'

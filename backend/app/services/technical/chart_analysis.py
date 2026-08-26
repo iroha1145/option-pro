@@ -666,9 +666,20 @@ def _indicator_panes(
     aligned = _align_spy_closes(dates, spy_closes)
     rs: list[float | None] = [None] * len(closes)
     if aligned is not None:
+        base_stock: float | None = None
+        base_spy: float | None = None
         for i, (price, spy) in enumerate(zip(closes, aligned)):
-            if spy is not None and spy > 0 and price is not None:
-                rs[i] = round(float(price) / float(spy), 6)
+            if price is None or spy is None or price <= 0 or spy <= 0:
+                continue
+            if base_stock is None or base_spy is None:
+                base_stock = float(price)
+                base_spy = float(spy)
+                rs[i] = 100.0
+                continue
+            rs[i] = round(
+                100.0 * (float(price) / base_stock) / (float(spy) / base_spy),
+                6,
+            )
     panes = [
         _pane("rsi", "RSI", "rsi", {"rsi": rsi_series(closes)}),
         _pane("macd", "MACD", "macd", macd),
@@ -676,7 +687,7 @@ def _indicator_panes(
         _pane("clv", "CLV", "clv", {"clv": vol["clv"]}),
         _pane(
             "range_persistence",
-            "Range Persistence",
+            "60日区间位置",
             "range",
             {"position": range_position_series(closes, highs, lows)},
         ),
@@ -915,9 +926,15 @@ def _intraday_overlays(series: Mapping[str, list], data_through: str, chart_rang
         if sessions[i] == last_day and opening_start <= minutes[i] < opening_end
     ]
     expected_bars = 6 if chart_range == "5m" else (2 if chart_range == "15m" else 0)
+    # 1h 没有 5m 序列就不能发明 opening_range：一根 1h K 盖不住前 30 分钟。
+    if chart_range == "1h":
+        expected_bars = 0
+        opening_indexes = []
     opening_complete = bool(expected_bars and len(opening_indexes) >= expected_bars)
     opening_high = max(highs[i] for i in opening_indexes) if opening_indexes and opening_complete else None
     opening_low = min(lows[i] for i in opening_indexes) if opening_indexes and opening_complete else None
+    session_start_key = dates[session_start] if dates and 0 <= session_start < len(dates) else None
+    session_end_key = dates[-1] if dates else None
     last_vwap = next((value for value in reversed(vwap_values) if value is not None), None)
     hold_vwap = 0
     for i in range(n - 1, session_start - 1, -1):
@@ -1010,6 +1027,8 @@ def _intraday_overlays(series: Mapping[str, list], data_through: str, chart_rang
                     "low": opening_low,
                     "complete": opening_complete,
                     "styleHint": "auto-pale",
+                    "sessionStartBarKey": session_start_key,
+                    "sessionEndBarKey": session_end_key,
                 },
                 status="confirmed" if opening_complete else "forming",
                 direction="neutral",

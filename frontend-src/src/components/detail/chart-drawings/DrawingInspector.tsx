@@ -26,7 +26,14 @@ const IMPORT_ERROR: Record<string, string> = {
   unsupported_version: t('导入失败：数据无效'),
 };
 
-const COLORS = ['#2E46E0', '#0E9F6E', '#E5484D', '#E8930C', '#0B7285', '#3D4A68'];
+const COLORS: { value: string; name: string }[] = [
+  { value: '#2E46E0', name: t('颜色 蓝色') },
+  { value: '#0E9F6E', name: t('颜色 绿色') },
+  { value: '#E5484D', name: t('颜色 红色') },
+  { value: '#E8930C', name: t('颜色 橙色') },
+  { value: '#0B7285', name: t('颜色 青色') },
+  { value: '#3D4A68', name: t('颜色 墨色') },
+];
 const WIDTHS: DrawingStyle['width'][] = [1, 2, 3, 4];
 const DASHES: { id: DrawingStyle['dash']; label: string }[] = [
   { id: 'solid', label: t('实线') },
@@ -139,16 +146,16 @@ export default function DrawingInspector({
           <div className="flex flex-wrap gap-1" role="group" aria-label={t('颜色')}>
             {COLORS.map((color) => (
               <button
-                key={color}
+                key={color.value}
                 type="button"
-                aria-label={t('颜色')}
-                aria-pressed={drawing.style.color.toUpperCase() === color}
-                onClick={() => onStyle({ ...drawing.style, color })}
+                aria-label={color.name}
+                aria-pressed={drawing.style.color.toUpperCase() === color.value}
+                onClick={() => onStyle({ ...drawing.style, color: color.value })}
                 className={cn(
-                  'size-6 rounded-xs border outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
-                  drawing.style.color.toUpperCase() === color ? 'border-ink-700' : 'border-line',
+                  'size-6 min-h-11 min-w-11 rounded-xs border outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30 md:size-6 md:min-h-6 md:min-w-6',
+                  drawing.style.color.toUpperCase() === color.value ? 'border-ink-700' : 'border-line',
                 )}
-                style={{ background: color }}
+                style={{ background: color.value }}
               />
             ))}
           </div>
