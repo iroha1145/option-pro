@@ -2,7 +2,29 @@ import { useRef } from 'react';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { t } from '../../../i18n/core.ts';
-import type { ChartDrawing, DrawingStyle } from './types.ts';
+import type { ChartDrawing, DrawingKind, DrawingStyle } from './types.ts';
+
+const KIND_LABEL: Record<DrawingKind, string> = {
+  horizontal: t('水平线'),
+  segment: t('趋势线'),
+  ray: t('射线'),
+  channel: t('平行通道'),
+  rectangle: t('矩形'),
+  fibonacci: t('斐波那契'),
+  text: t('文字'),
+};
+
+const IMPORT_ERROR: Record<string, string> = {
+  invalid_json: t('导入失败：JSON 无效'),
+  too_many: t('导入失败：数量过多'),
+  too_large: t('导入失败：数据无效'),
+  illegal_text: t('导入失败：文字不合法'),
+  id_conflict: t('导入失败：编号冲突'),
+  invalid_boolean: t('导入失败：布尔字段无效'),
+  invalid_drawing: t('导入失败：数据无效'),
+  corrupt: t('导入失败：数据无效'),
+  unsupported_version: t('导入失败：数据无效'),
+};
 
 const COLORS = ['#2E46E0', '#0E9F6E', '#E5484D', '#E8930C', '#0B7285', '#3D4A68'];
 const WIDTHS: DrawingStyle['width'][] = [1, 2, 3, 4];
@@ -14,12 +36,18 @@ const DASHES: { id: DrawingStyle['dash']; label: string }[] = [
 
 export default function DrawingInspector({
   drawing,
+  drawings = [],
+  unresolvedIds = [],
+  importError = null,
   unresolved,
+  onSelect,
   onStyle,
   onText,
   onLock,
   onHide,
+  onToggleHidden,
   onDelete,
+  onDeleteId,
   onZ,
   onExport,
   onImportFile,
@@ -27,12 +55,18 @@ export default function DrawingInspector({
   onClear,
 }: {
   drawing: ChartDrawing | null;
+  drawings?: ChartDrawing[];
+  unresolvedIds?: string[];
+  importError?: string | null;
   unresolved: boolean;
+  onSelect?: (id: string) => void;
   onStyle: (style: DrawingStyle) => void;
   onText: (text: string) => void;
   onLock: () => void;
   onHide: () => void;
+  onToggleHidden?: (id: string) => void;
   onDelete: () => void;
+  onDeleteId?: (id: string) => void;
   onZ: (delta: number) => void;
   onExport: () => void;
   onImportFile: (text: string) => void;
@@ -40,9 +74,60 @@ export default function DrawingInspector({
   onClear: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const listed = [...drawings].sort((a, b) => a.zOrder - b.zOrder);
   return (
     <div className="flex flex-col gap-3 text-caption text-ink-600">
+      <p className="text-micro font-medium text-ink-500">{t('对象')}</p>
+      {listed.length === 0 ? (
+        <p className="text-micro text-ink-400">{t('当前没有手绘图形')}</p>
+      ) : (
+        <ul className="flex flex-col gap-1" aria-label={t('对象')}>
+          {listed.map((item) => {
+            const unresolvedItem = unresolvedIds.includes(item.id);
+            return (
+              <li key={item.id} className="flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-pressed={drawing?.id === item.id}
+                  onClick={() => onSelect?.(item.id)}
+                  className={cn(
+                    'min-w-0 flex-1 rounded-xs border px-2 py-1 text-left text-micro outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
+                    drawing?.id === item.id ? 'border-brand-400 bg-brand-50' : 'border-line',
+                  )}
+                >
+                  <span>{KIND_LABEL[item.kind]}</span>
+                  {item.hidden ? <span className="ml-1 text-ink-400">{t('已隐藏')}</span> : null}
+                  {item.locked ? <span className="ml-1 text-ink-400">{t('已锁定')}</span> : null}
+                  {unresolvedItem ? <span className="ml-1 text-warn-600">{t('未解析')}</span> : null}
+                  <span className="ml-1 font-mono text-ink-400">{t('层级 {n}', { n: item.zOrder })}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={item.hidden ? t('显示') : t('隐藏')}
+                  onClick={() => onToggleHidden?.(item.id)}
+                  className="rounded-xs border border-line px-1.5 py-1 text-micro"
+                >
+                  <Icon name={item.hidden ? 'eye' : 'eye-off'} size={13} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={t('删除图形')}
+                  onClick={() => onDeleteId?.(item.id)}
+                  className="rounded-xs border border-down-600/40 px-1.5 py-1 text-micro text-down-600"
+                >
+                  <Icon name="x" size={13} />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
       <p className="text-micro font-medium text-ink-500">{t('样式')}</p>
+      {importError && (
+        <p className="rounded-xs border border-warn-600/30 bg-warn-50 px-2 py-1 text-micro text-warn-600" role="alert">
+          {IMPORT_ERROR[importError] ?? t('导入失败：数据无效')}
+        </p>
+      )}
       {unresolved && (
         <p className="rounded-xs border border-warn-600/30 bg-warn-50 px-2 py-1 text-micro text-warn-600">
           {t('锚点无法解析（数据已更新）')}

@@ -520,6 +520,13 @@ class ChartDrawingUpdateBody(BaseModel):
     zOrder: int = 0
 
 
+class ChartDrawingReplaceBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal[1]
+    drawings: list[ChartDrawingCreateBody] = Field(max_length=DRAWINGS_PER_RANGE_MAX)
+
+
 def _scope_query(
     ticker: str,
     chart_range: str,
@@ -547,6 +554,38 @@ def list_chart_drawings(
     drawings = get_account_store().list_drawings(
         account.user_id, symbol, range_key, adj
     )
+    return JSONResponse(
+        {
+            "drawings": drawings,
+            "max_per_range": DRAWINGS_PER_RANGE_MAX,
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.post(
+    "/chart-drawings/replace",
+    dependencies=[Depends(require_same_origin_json)],
+)
+def replace_chart_drawings(
+    request: Request,
+    payload: Annotated[ChartDrawingReplaceBody, Body()],
+    ticker: Annotated[str, Query(min_length=1, max_length=16)],
+    range: Annotated[ChartRangeLiteral, Query()],
+    adjustment: Annotated[Literal["raw"], Query()] = "raw",
+) -> Response:
+    account = require_personal_account(request)
+    symbol, range_key, adj = _scope_query(ticker, range, adjustment)
+    try:
+        drawings = get_account_store().replace_drawings_in_scope(
+            account.user_id,
+            symbol,
+            range_key,
+            adj,
+            payload.model_dump()["drawings"],
+        )
+    except AccountError as exc:
+        raise account_http_error(exc) from exc
     return JSONResponse(
         {
             "drawings": drawings,

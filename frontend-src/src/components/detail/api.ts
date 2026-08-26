@@ -23,6 +23,7 @@ import { postAiJob } from '@/api/modules/ai-jobs';
 import * as fx from '@/mocks/fixtures';
 import * as fx2 from '@/mocks/fixtures2';
 import type { AiJob, StockChart, StockDetail, TechBaseStatus, TechnicalStructure, TechSwingPoint } from '@/api/types';
+import { mapTechnicalAutoFields } from './chart-drawings/autoPatterns.ts';
 import type {
   ChartBarEx,
   StockChartEx,
@@ -652,6 +653,7 @@ function mapTechnicalStructure(body: unknown): TechnicalStructure {
     });
   const lastBarRaw = asRec(r.last_bar);
   const lastBarPoint = mapSwingPoint(lastBarRaw);
+  const auto = mapTechnicalAutoFields(body);
   return {
     base,
     base_state,
@@ -729,6 +731,8 @@ function mapTechnicalStructure(body: unknown): TechnicalStructure {
         },
     series_break_at: pickS(r, 'series_break_at'),
     as_of: pickS(r, 'as_of', 'asOf'),
+    auto_patterns: auto.auto_patterns,
+    auto_patterns_version: auto.auto_patterns_version,
   };
 }
 

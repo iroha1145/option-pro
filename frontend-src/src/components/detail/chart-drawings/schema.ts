@@ -12,6 +12,14 @@ import {
 } from './types.ts';
 
 export const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
+export const NAMED_PAINT: Record<string, string> = {
+  brand: '#2E46E0',
+  up: '#0E9F6E',
+  down: '#E5484D',
+  ink: '#3D4A68',
+  warn: '#E8930C',
+  ai: '#0B7285',
+};
 export const PALETTE_COLORS = new Set([
   '#2E46E0',
   '#3B59F2',
@@ -22,13 +30,14 @@ export const PALETTE_COLORS = new Set([
   '#0B7285',
   '#3D4A68',
   '#8A94B0',
-  'brand',
-  'up',
-  'down',
-  'ink',
-  'warn',
-  'ai',
+  ...Object.keys(NAMED_PAINT),
 ]);
+
+export function resolvePaintColor(value: string): string {
+  if (NAMED_PAINT[value]) return NAMED_PAINT[value];
+  if (HEX_COLOR.test(value)) return value.toUpperCase();
+  return '#2E46E0';
+}
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const WIDTHS = new Set([1, 2, 3, 4]);
 const DASHES = new Set(['solid', 'dashed', 'dotted']);
@@ -92,63 +101,84 @@ function parseStyle(raw: unknown): DrawingStyle | null {
 }
 
 
-export function parseDrawing(raw: unknown): ChartDrawing | null {
-  if (!isRecord(raw)) return null;
-  if ('option' in raw || 'graphic' in raw || 'css' in raw) return null;
-  if (raw.schemaVersion !== SCHEMA_VERSION && raw.schemaVersion !== undefined) return null;
-  if (typeof raw.id !== 'string' || !UUID_RE.test(raw.id)) return null;
-  if (typeof raw.ticker !== 'string' || !raw.ticker.trim()) return null;
-  if (typeof raw.range !== 'string' || !CHART_RANGES.includes(raw.range as ChartDrawing['range'])) return null;
-  if (raw.adjustment !== undefined && raw.adjustment !== 'raw') return null;
-  if (typeof raw.kind !== 'string' || !DRAWING_KINDS.includes(raw.kind as DrawingKind)) return null;
+export function parseDrawingDetailed(raw: unknown): SchemaOk<ChartDrawing> | SchemaError {
+  if (!isRecord(raw)) return { ok: false, error: 'invalid_drawing' };
+  if ('option' in raw || 'graphic' in raw || 'css' in raw) return { ok: false, error: 'invalid_drawing' };
+  if (raw.schemaVersion !== SCHEMA_VERSION && raw.schemaVersion !== undefined) {
+    return { ok: false, error: 'unsupported_version' };
+  }
+  if (typeof raw.id !== 'string' || !UUID_RE.test(raw.id)) return { ok: false, error: 'invalid_drawing' };
+  if (typeof raw.ticker !== 'string' || !raw.ticker.trim()) return { ok: false, error: 'invalid_drawing' };
+  if (typeof raw.range !== 'string' || !CHART_RANGES.includes(raw.range as ChartDrawing['range'])) {
+    return { ok: false, error: 'invalid_drawing' };
+  }
+  if (raw.adjustment !== undefined && raw.adjustment !== 'raw') return { ok: false, error: 'invalid_drawing' };
+  if (typeof raw.kind !== 'string' || !DRAWING_KINDS.includes(raw.kind as DrawingKind)) {
+    return { ok: false, error: 'invalid_drawing' };
+  }
   const kind = raw.kind as DrawingKind;
-  if (!Array.isArray(raw.anchors) || raw.anchors.length !== ANCHOR_COUNTS[kind]) return null;
+  if (!Array.isArray(raw.anchors) || raw.anchors.length !== ANCHOR_COUNTS[kind]) {
+    return { ok: false, error: 'invalid_drawing' };
+  }
   const anchors = raw.anchors.map(parseAnchor);
-  if (anchors.some((item) => item === null)) return null;
+  if (anchors.some((item) => item === null)) return { ok: false, error: 'invalid_drawing' };
   const style = parseStyle(raw.style);
-  if (!style) return null;
+  if (!style) return { ok: false, error: 'invalid_drawing' };
   let text: string | undefined;
   if (raw.text !== undefined && raw.text !== null) {
-    if (typeof raw.text !== 'string') return null;
-    if (raw.text.length > DRAWING_TEXT_MAX) return null;
-    if (raw.text.includes('<') || raw.text.includes('>')) return null;
-    if (kind === 'text' && !raw.text.trim()) return null;
+    if (typeof raw.text !== 'string') return { ok: false, error: 'illegal_text' };
+    if (raw.text.length > DRAWING_TEXT_MAX) return { ok: false, error: 'illegal_text' };
+    if (raw.text.includes('<') || raw.text.includes('>')) return { ok: false, error: 'illegal_text' };
+    if (kind === 'text' && !raw.text.trim()) return { ok: false, error: 'illegal_text' };
     text = raw.text;
   } else if (kind === 'text') {
-    return null;
+    return { ok: false, error: 'illegal_text' };
   }
+  if ('locked' in raw && typeof raw.locked !== 'boolean') return { ok: false, error: 'invalid_boolean' };
+  if ('hidden' in raw && typeof raw.hidden !== 'boolean') return { ok: false, error: 'invalid_boolean' };
   const zOrderRaw = raw.zOrder === undefined ? 0 : Number(raw.zOrder);
-  if (!Number.isFinite(zOrderRaw) || Math.abs(zOrderRaw) > 1_000_000) return null;
+  if (!Number.isFinite(zOrderRaw) || Math.abs(zOrderRaw) > 1_000_000) return { ok: false, error: 'invalid_drawing' };
   const zOrder = Math.trunc(zOrderRaw);
   const revision = raw.revision === undefined ? 1 : Number(raw.revision);
-  if (!Number.isInteger(revision) || revision < 1) return null;
+  if (!Number.isInteger(revision) || revision < 1) return { ok: false, error: 'invalid_drawing' };
   return {
-    schemaVersion: 1,
-    id: raw.id.toLowerCase(),
-    ticker: raw.ticker.trim().toUpperCase(),
-    range: raw.range as ChartDrawing['range'],
-    adjustment: 'raw',
-    kind,
-    anchors: anchors as ChartDrawing['anchors'],
-    style,
-    text,
-    locked: Boolean(raw.locked),
-    hidden: Boolean(raw.hidden),
-    zOrder,
-    revision,
-    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : new Date(0).toISOString(),
-    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date(0).toISOString(),
+    ok: true,
+    value: {
+      schemaVersion: 1,
+      id: raw.id.toLowerCase(),
+      ticker: raw.ticker.trim().toUpperCase(),
+      range: raw.range as ChartDrawing['range'],
+      adjustment: 'raw',
+      kind,
+      anchors: anchors as ChartDrawing['anchors'],
+      style,
+      text,
+      locked: raw.locked === true,
+      hidden: raw.hidden === true,
+      zOrder,
+      revision,
+      createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : new Date(0).toISOString(),
+      updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date(0).toISOString(),
+    },
   };
+}
+
+export function parseDrawing(raw: unknown): ChartDrawing | null {
+  const parsed = parseDrawingDetailed(raw);
+  return parsed.ok ? parsed.value : null;
 }
 
 export function migrateStoredPayload(raw: unknown): SchemaOk<ChartDrawing[]> | SchemaError {
   if (raw == null) return { ok: true, value: [] };
   if (Array.isArray(raw)) {
     const drawings: ChartDrawing[] = [];
+    const seen = new Set<string>();
     for (const item of raw) {
-      const parsed = parseDrawing(item);
-      if (!parsed) return { ok: false, error: 'invalid_drawing' };
-      drawings.push(parsed);
+      const parsed = parseDrawingDetailed(item);
+      if (!parsed.ok) return parsed;
+      if (seen.has(parsed.value.id)) return { ok: false, error: 'id_conflict' };
+      seen.add(parsed.value.id);
+      drawings.push(parsed.value);
     }
     return { ok: true, value: drawings };
   }
@@ -163,10 +193,13 @@ export function migrateStoredPayload(raw: unknown): SchemaOk<ChartDrawing[]> | S
   const list = raw.drawings;
   if (!Array.isArray(list)) return { ok: false, error: 'corrupt' };
   const drawings: ChartDrawing[] = [];
+  const seen = new Set<string>();
   for (const item of list) {
-    const parsed = parseDrawing(item);
-    if (!parsed) return { ok: false, error: 'invalid_drawing' };
-    drawings.push(parsed);
+    const parsed = parseDrawingDetailed(item);
+    if (!parsed.ok) return parsed;
+    if (seen.has(parsed.value.id)) return { ok: false, error: 'id_conflict' };
+    seen.add(parsed.value.id);
+    drawings.push(parsed.value);
   }
   return { ok: true, value: drawings };
 }

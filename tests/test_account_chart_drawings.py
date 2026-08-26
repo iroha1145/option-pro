@@ -549,3 +549,77 @@ def test_create_then_get_body_twice(client: TestClient) -> None:
             headers=HEADERS,
         )
         assert stale.status_code == 409
+
+
+def _replace(client: TestClient, drawings: list, ticker="NVDA", chart_range="1d"):
+    return client.post(
+        "/api/account/chart-drawings/replace",
+        params={"ticker": ticker, "range": chart_range, "adjustment": "raw"},
+        json={"schemaVersion": 1, "drawings": drawings},
+        headers=HEADERS,
+    )
+
+
+def test_replace_current_scope_is_transactional(client: TestClient) -> None:
+    _register(client, "rhea", "pw")
+    original = _drawing()
+    assert _create(client, original).status_code == 201
+    replacement = _drawing(kind="segment", anchors=[
+        {"time": "2026-07-06T13:30:00Z", "barKey": "2026-07-06", "price": 10},
+        {"time": "2026-07-07T13:30:00Z", "barKey": "2026-07-07", "price": 12},
+    ])
+    replaced = _replace(client, [replacement])
+    assert replaced.status_code == 200, replaced.text
+    listed = client.get(
+        "/api/account/chart-drawings",
+        params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
+    )
+    ids = [row["id"] for row in listed.json()["drawings"]]
+    kinds = [row["kind"] for row in listed.json()["drawings"]]
+    assert original["id"] not in ids
+    assert kinds == ["segment"]
+    assert listed.json()["drawings"][0]["anchors"][1]["price"] == 12
+
+    empty = _replace(client, [])
+    assert empty.status_code == 200
+    after_empty = client.get(
+        "/api/account/chart-drawings",
+        params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
+    )
+    assert after_empty.json()["drawings"] == []
+
+
+def test_replace_partial_invalid_leaves_previous_set(client: TestClient) -> None:
+    _register(client, "seth", "pw")
+    original = _drawing()
+    assert _create(client, original).status_code == 201
+    bad = _drawing(
+        kind="horizontal",
+        anchors=[
+            {"time": "2026-07-06T13:30:00Z", "barKey": "2026-07-06", "price": 10},
+            {"time": "2026-07-07T13:30:00Z", "barKey": "2026-07-07", "price": 11},
+        ],
+    )
+    response = _replace(client, [bad])
+    assert response.status_code in {400, 422}
+    listed = client.get(
+        "/api/account/chart-drawings",
+        params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
+    )
+    assert listed.json()["drawings"][0]["id"] == original["id"]
+
+
+def test_replace_mints_id_when_another_account_holds_it(
+    store: AccountStore, client: TestClient
+) -> None:
+    other = store.register("other-owner", "pw")
+    stolen = _drawing()
+    store.create_drawing(other.account.user_id, stolen)
+    _register(client, "uma", "pw")
+    response = _replace(client, [stolen])
+    assert response.status_code == 200, response.text
+    minted = response.json()["drawings"]
+    assert len(minted) == 1
+    assert minted[0]["id"] != stolen["id"]
+    leftover = store.get_drawing(other.account.user_id, stolen["id"])
+    assert leftover is not None

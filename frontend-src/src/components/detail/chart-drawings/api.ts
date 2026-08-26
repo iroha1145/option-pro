@@ -65,6 +65,30 @@ export const drawingsApi = {
 
   clearScope: (ticker: string, range: ChartRange, adjustment: ChartAdjustment = 'raw') =>
     del<unknown>(`/account/chart-drawings?${scopeQuery(ticker, range, adjustment)}`),
+
+  replaceScope: (
+    ticker: string,
+    range: ChartRange,
+    drawings: ChartDrawing[],
+    adjustment: ChartAdjustment = 'raw',
+  ) =>
+    post<unknown>(`/account/chart-drawings/replace?${scopeQuery(ticker, range, adjustment)}`, {
+      schemaVersion: 1,
+      drawings: drawings.map((drawing) => ({
+        schemaVersion: 1,
+        id: drawing.id,
+        ticker: drawing.ticker,
+        range: drawing.range,
+        adjustment: drawing.adjustment,
+        kind: drawing.kind,
+        anchors: drawing.anchors,
+        style: drawing.style,
+        text: drawing.text ?? null,
+        locked: drawing.locked,
+        hidden: drawing.hidden,
+        zOrder: drawing.zOrder,
+      })),
+    }).then(parseList),
 };
 
 export function isAuthError(error: unknown): boolean {

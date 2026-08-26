@@ -3,10 +3,10 @@ import {
   channelEdges,
   clipRayToRect,
   fibonacciPrices,
-  horizontalProjection,
   normalizeRectangle,
 } from './geometry.ts';
 import { barKeyOf, resolveAnchor } from './projection.ts';
+import { resolvePaintColor } from './schema.ts';
 import type { ProjectedDrawing } from './hitTest.ts';
 import type { ChartDrawing, ChartRange, DrawingKind, Point, Segment } from './types.ts';
 
@@ -64,7 +64,7 @@ function coord(index: number, price: number) {
 
 function styleOf(drawing: ChartDrawing) {
   return {
-    color: drawing.style.color.startsWith('#') ? drawing.style.color : '#2E46E0',
+    color: resolvePaintColor(drawing.style.color),
     width: drawing.style.width,
     type: DASH[drawing.style.dash] ?? 'solid',
   };
@@ -96,8 +96,10 @@ export function geometryFromPoints(
   if (!points.length) return empty;
   const rect = { xMin: ctx.xMin, xMax: ctx.xMax, yMin: ctx.yMin, yMax: ctx.yMax };
   if (kind === 'horizontal') {
-    const line = horizontalProjection(points[0].y, ctx.xMin, ctx.xMax);
-    return { ...empty, segments: [line], horizontals: [{ price: points[0].y, label: String(points[0].y) }] };
+    return {
+      ...empty,
+      horizontals: [{ price: points[0].y, label: String(points[0].y) }],
+    };
   }
   if (kind === 'text') return empty;
   if (points.length < 2) return empty;
@@ -251,8 +253,23 @@ export function graphicFromOverlay(
   overlay: OverlayGeometry,
   toPixel: (point: Point) => Point | null,
   color: string,
+  options: { solid?: boolean; width?: number } = {},
 ): object[] {
   const elements: object[] = [];
+  const stroke = resolvePaintColor(color);
+  const lineDash = options.solid ? undefined : [4, 3];
+  const lineWidth = options.width ?? (options.solid ? 2 : 1.5);
+  overlay.fills.forEach((fill, index) => {
+    const points = fill.map((point) => toPixel(point)).filter((item): item is Point => item !== null);
+    if (points.length < 3) return;
+    elements.push({
+      type: 'polygon',
+      id: `overlay-fill-${index}`,
+      shape: { points: points.map((point) => [point.x, point.y]) },
+      style: { fill: stroke, opacity: 0.12, stroke: 'none' },
+      silent: true,
+    });
+  });
   overlay.segments.forEach((segment, index) => {
     const a = toPixel(segment.a);
     const b = toPixel(segment.b);
@@ -261,7 +278,7 @@ export function graphicFromOverlay(
       type: 'line',
       id: `overlay-seg-${index}`,
       shape: { x1: a.x, y1: a.y, x2: b.x, y2: b.y },
-      style: { stroke: color, lineWidth: 1.5, lineDash: [4, 3] },
+      style: { stroke, lineWidth, lineDash },
       silent: true,
     });
   });
@@ -272,7 +289,7 @@ export function graphicFromOverlay(
       type: 'circle',
       id: `overlay-anchor-${index}`,
       shape: { cx: pixel.x, cy: pixel.y, r: 5 },
-      style: { fill: '#FDFCF9', stroke: color, lineWidth: 2 },
+      style: { fill: '#FDFCF9', stroke, lineWidth: 2 },
       silent: true,
     });
   });

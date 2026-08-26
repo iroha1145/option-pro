@@ -260,6 +260,17 @@ def test_expirations_route_preserves_freshness_metadata(monkeypatch):
     assert result["stale_age_seconds"] == 42.0
 
 
+def _unavailable_finnhub():
+    async def unavailable(_today):
+        return earnings._finnhub_fetch_result(
+            configured=False,
+            succeeded=False,
+            error="not_configured",
+        )
+
+    return unavailable
+
+
 def test_earnings_reports_total_provider_failure(monkeypatch):
     class BrokenTicker:
         def __init__(self, _symbol):
@@ -267,6 +278,7 @@ def test_earnings_reports_total_provider_failure(monkeypatch):
 
     monkeypatch.setattr(earnings, "EARNINGS_TICKERS", ["AAA", "BBB"])
     monkeypatch.setattr(earnings.yf, "Ticker", BrokenTicker)
+    monkeypatch.setattr(earnings, "_fetch_finnhub_earnings", _unavailable_finnhub())
 
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(earnings._build_upcoming_earnings(date(2026, 7, 10)))
@@ -283,6 +295,7 @@ def test_earnings_treats_completely_empty_provider_payload_as_failure(monkeypatc
 
     monkeypatch.setattr(earnings, "EARNINGS_TICKERS", ["AAA", "BBB"])
     monkeypatch.setattr(earnings.yf, "Ticker", lambda _symbol: EmptyTicker())
+    monkeypatch.setattr(earnings, "_fetch_finnhub_earnings", _unavailable_finnhub())
 
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(earnings._build_upcoming_earnings(date(2026, 7, 10)))
@@ -316,6 +329,7 @@ def test_earnings_fetches_full_info_only_for_tickers_with_a_date(monkeypatch):
 
     monkeypatch.setattr(earnings, "EARNINGS_TICKERS", ["HIT", "MISS"])
     monkeypatch.setattr(earnings.yf, "Ticker", FakeTicker)
+    monkeypatch.setattr(earnings, "_fetch_finnhub_earnings", _unavailable_finnhub())
 
     payload = asyncio.run(earnings._build_upcoming_earnings(date(2026, 7, 10)))
 

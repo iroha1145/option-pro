@@ -55,6 +55,7 @@
 ```
 GET    /api/account/chart-drawings?ticker=&range=&adjustment=
 POST   /api/account/chart-drawings
+POST   /api/account/chart-drawings/replace?ticker=&range=&adjustment=
 PUT    /api/account/chart-drawings/{drawing_id}
 DELETE /api/account/chart-drawings/{drawing_id}
 DELETE /api/account/chart-drawings?ticker=&range=&adjustment=
@@ -64,7 +65,8 @@ DELETE /api/account/chart-drawings?ticker=&range=&adjustment=
 - 修改请求同源（`Origin` + `X-Optix-Action: 1`）
 - `Cache-Control: no-store`
 - 每范围最多 500 个；每账户 2000 个；单对象 payload ≤ 16KiB
-- `revision` 乐观并发：创建为 1；更新带期望 revision；不匹配返回 **409**，前端重新拉取，不静默覆盖
+- `revision` 乐观并发：创建为 1；更新带期望 revision；不匹配返回 **409**，前端保留本地副本并提示重试，不静默覆盖
+- 导入当前范围是事务替换：先校验全部，再删旧插入新。编号与其他账户或范围冲突时改发新 UUID。空列表会清空当前范围。
 
 SQLite 表 `account_chart_drawings` 在 `accounts.db`，WAL、外键、账户删除级联。旧库原地 `CREATE TABLE IF NOT EXISTS` 升级。
 
@@ -72,7 +74,7 @@ SQLite 表 `account_chart_drawings` 在 `accounts.db`，WAL、外键、账户删
 
 函数 `detect_auto_patterns` 只吃与 `/stocks/{ticker}/technical` 相同的 **1d + raw** 日线。无第三方、无 LLM、无定时任务、无前视。
 
-识别：上升支撑、下降阻力、升/降通道、对称/上升/下降三角形、升/降楔形、水平箱体。
+识别：上升支撑、下降阻力、升/降通道、对称/上升/下降三角形、升/降楔形、水平箱体。检测顺序是先按 `data_through` 截断，再取最近 252 根，再算 ATR 与摆动。单根支撑不会标 `broken_up`，单根阻力不会标 `broken_down`，两者都没有测量目标；通道 / 三角 / 楔 / 箱仍可按轨距投影。
 
 质量门：触碰次数、ATR 归一化残差、穿透、跨度、平行或收敛。置信度 0–100；界面默认只画 ≥ 70。测量目标标注为 **技术投影，不是价格预测**。算法版本 `optix-auto-patterns-v1`。结构数据与当前 K 线不同源时不画。
 

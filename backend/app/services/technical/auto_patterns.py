@@ -154,8 +154,6 @@ def _evaluate_line(
     invalidation_price = None
     measured_target = None
     direction = "neutral"
-    vol_med = _median(volumes[max(0, len(volumes) - 20) :]) or 1.0
-    last_vol = volumes[-1] if volumes else 0.0
     if side == "support":
         invalidation_price = last_expected - atr
         direction = "bullish" if slope > 0 else "bearish"
@@ -163,11 +161,7 @@ def _evaluate_line(
             status = "broken_down"
         elif abs(last_close - last_expected) <= 0.3 * atr:
             status = "testing"
-        if last_close > last_expected + 1.2 * atr and last_vol > 1.15 * vol_med:
-            status = "broken_up"
-            breakout_price = last_close
-            measured_target = last_close + height
-            score += 5.0
+        # A single support has no upside breakout or measured target.
     else:
         invalidation_price = last_expected + atr
         direction = "bearish" if slope < 0 else "bullish"
@@ -175,11 +169,7 @@ def _evaluate_line(
             status = "broken_up"
         elif abs(last_close - last_expected) <= 0.3 * atr:
             status = "testing"
-        if last_close < last_expected - 1.2 * atr and last_vol > 1.15 * vol_med:
-            status = "broken_down"
-            breakout_price = last_close
-            measured_target = last_close - height
-            score += 5.0
+        # A single resistance has no downside breakout or measured target.
     if penetrations >= 3 and status == "forming":
         status = "invalidated"
         score -= 12.0
@@ -301,6 +291,24 @@ def detect_auto_patterns(
     n = len(closes)
     if n < _MIN_BARS or not (len(highs) == len(lows) == len(times) == len(dates) == n):
         return []
+    # Truncate by data_through first so ATR and confirmed swings never see later bars.
+    if data_through:
+        keep_end = None
+        for index, day in enumerate(dates):
+            if day <= data_through:
+                keep_end = index
+        if keep_end is None:
+            return []
+        last = keep_end + 1
+        if last < _MIN_BARS:
+            return []
+        highs = highs[:last]
+        lows = lows[:last]
+        closes = closes[:last]
+        volumes = volumes[:last] if len(volumes) == n else [0.0] * last
+        times = times[:last]
+        dates = dates[:last]
+        n = last
     start = max(0, n - lookback)
     window_highs = highs[start:]
     window_lows = lows[start:]
@@ -308,7 +316,6 @@ def detect_auto_patterns(
     window_volumes = volumes[start:] if len(volumes) == n else [0.0] * (n - start)
     window_times = times[start:]
     window_dates = dates[start:]
-    offset = start
     atr = _atr(window_highs, window_lows, window_closes, window=14)
     if atr is None or atr <= 0:
         return []
@@ -317,25 +324,7 @@ def detect_auto_patterns(
     swing_lows = [(i, p) for i, p in swing_lows_raw]
     if len(swing_highs) < 2 and len(swing_lows) < 2:
         return []
-
-    cutoff = window_dates[-1]
-    if data_through < cutoff:
-        # Caller asked to evaluate only through data_through: drop later bars.
-        keep = [i for i, day in enumerate(window_dates) if day <= data_through]
-        if len(keep) < _MIN_BARS:
-            return []
-        last = keep[-1] + 1
-        window_highs = window_highs[:last]
-        window_lows = window_lows[:last]
-        window_closes = window_closes[:last]
-        window_volumes = window_volumes[:last]
-        window_times = window_times[:last]
-        window_dates = window_dates[:last]
-        swing_highs = [(i, p) for i, p in swing_highs if i < last]
-        swing_lows = [(i, p) for i, p in swing_lows if i < last]
-        atr = _atr(window_highs, window_lows, window_closes, window=14) or atr
-        cutoff = window_dates[-1]
-    data_through = cutoff
+    data_through = window_dates[-1]
 
     candidates: list[dict[str, Any]] = []
 

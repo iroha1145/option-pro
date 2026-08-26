@@ -157,6 +157,7 @@ _SAME_ORIGIN_JSON_ONLY_OPERATIONS = {
     ("POST", "/api/account/watchlist"),
     ("PUT", "/api/account/watchlist"),
     ("POST", "/api/account/chart-drawings"),
+    ("POST", "/api/account/chart-drawings/replace"),
     ("PUT", "/api/account/chart-drawings/{drawing_id}"),
 }
 

@@ -258,6 +258,7 @@ def test_no_lookahead_when_truncating_last_bars() -> None:
     from_full_cutoff = detect_auto_patterns(
         full_series, data_through=cutoff
     )
+    assert from_full_cutoff == from_truncated
     for row in from_truncated + from_full_cutoff:
         assert row["dataThrough"] <= cutoff
         for anchor in row["anchors"]:
@@ -291,6 +292,51 @@ def test_broken_status_and_measured_target_direction() -> None:
         assert row["measuredTargetNote"] == "technical_projection"
     for row in downs:
         assert row["measuredTarget"] < max(anchor["price"] for anchor in row["anchors"])
+
+
+def test_single_trend_status_and_no_measured_target() -> None:
+    bars = _zigzag(180, lambda i: 50 + 0.18 * i, lambda i: 62 + 0.18 * i)
+    last = bars[-1]
+    bars[-1] = {
+        **last,
+        "h": last["h"] * 1.4,
+        "c": last["h"] * 1.35,
+        "o": last["c"],
+        "v": 8_000_000,
+    }
+    rows = _detect(bars)
+    for row in rows:
+        if row["kind"] == "support_trend":
+            assert row["status"] in {"forming", "testing", "broken_down", "invalidated"}
+            assert row["measuredTarget"] is None
+        if row["kind"] == "resistance_trend":
+            assert row["status"] in {"forming", "testing", "broken_up", "invalidated"}
+            assert row["measuredTarget"] is None
+    down_bars = _zigzag(180, lambda i: 70 - 0.16 * i, lambda i: 84 - 0.16 * i)
+    down_last = down_bars[-1]
+    down_bars[-1] = {
+        **down_last,
+        "l": down_last["l"] * 0.6,
+        "c": down_last["l"] * 0.65,
+        "o": down_last["c"],
+        "v": 8_000_000,
+    }
+    down_rows = _detect(down_bars)
+    for row in down_rows:
+        if row["kind"] == "resistance_trend":
+            assert row["status"] in {"forming", "testing", "broken_up", "invalidated"}
+            assert row["measuredTarget"] is None
+        if row["kind"] == "support_trend":
+            assert row["status"] in {"forming", "testing", "broken_down", "invalidated"}
+            assert row["measuredTarget"] is None
+    patterned = [
+        row
+        for row in rows + down_rows
+        if row["kind"] in {"channel", "triangle", "wedge", "box"}
+        and row.get("measuredTarget") is not None
+    ]
+    for row in patterned:
+        assert row["kind"] in {"channel", "triangle", "wedge", "box"}
 
 
 def test_structure_payload_includes_auto_patterns() -> None:

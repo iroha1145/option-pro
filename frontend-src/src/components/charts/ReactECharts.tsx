@@ -9,20 +9,34 @@ interface ReactEChartsProps {
   onClick?: (params: unknown) => void;
   /** 实例创建后回调一次；实例随组件卸载 dispose，外部持有需以此回调刷新引用 */
   onInit?: (chart: EChartsInstance) => void;
+  /** After the chart resizes so pixel overlays can reproject from data coords. */
+  onResize?: (chart: EChartsInstance) => void;
   ariaLabel?: string;
 }
 
-export default function ReactECharts({ option, className, style, onClick, onInit, ariaLabel }: ReactEChartsProps) {
+export default function ReactECharts({ option, className, style, onClick, onInit, onResize, ariaLabel }: ReactEChartsProps) {
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<EChartsInstance | null>(null);
   const onInitRef = useRef(onInit);
-  onInitRef.current = onInit;
+  const onResizeRef = useRef(onResize);
+
+  useEffect(() => {
+    onInitRef.current = onInit;
+  }, [onInit]);
+
+  useEffect(() => {
+    onResizeRef.current = onResize;
+  }, [onResize]);
 
   useEffect(() => {
     if (!ref.current) return;
     const chart = echarts.init(ref.current, undefined, { renderer: 'canvas' });
     chartRef.current = chart;
-    const ro = new ResizeObserver(() => chart.resize());
+    const ro = new ResizeObserver(() => {
+      if (chart.isDisposed()) return;
+      chart.resize();
+      onResizeRef.current?.(chart);
+    });
     ro.observe(ref.current);
     onInitRef.current?.(chart);
     return () => {

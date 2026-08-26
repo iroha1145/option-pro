@@ -25,7 +25,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 from app.access import _b64decode, _b64encode  # shared encoding with owner hashes
 
@@ -304,6 +304,12 @@ def _parse_iso_time(value: str) -> str:
     return parsed.astimezone(timezone.utc).isoformat()
 
 
+def _require_bool(value: Any, code: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    raise AccountError(code)
+
+
 def _require_finite_price(value: Any) -> float:
     try:
         price = float(value)
@@ -427,8 +433,8 @@ def validate_drawing_payload(raw: Mapping[str, Any], *, require_id: bool = True)
             **({} if fill_opacity is None else {"fillOpacity": fill_opacity}),
         },
         "text": text_out,
-        "locked": bool(raw.get("locked", False)),
-        "hidden": bool(raw.get("hidden", False)),
+        "locked": _require_bool(raw.get("locked", False), "invalid_payload"),
+        "hidden": _require_bool(raw.get("hidden", False), "invalid_payload"),
         "zOrder": z_order,
     }
     encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
@@ -931,6 +937,84 @@ class AccountStore:
                 (drawing_id, user_id),
             )
             connection.commit()
+
+    def replace_drawings_in_scope(
+        self,
+        user_id: str,
+        ticker: str,
+        chart_range: str,
+        adjustment: str,
+        drawings: Sequence[Mapping[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Validate all, then replace the current ticker+range+adjustment set in one transaction."""
+
+        symbol = normalize_ticker(ticker)
+        range_key = normalize_chart_range(chart_range)
+        adj = normalize_chart_adjustment(adjustment)
+        if len(drawings) > DRAWINGS_PER_RANGE_MAX:
+            raise AccountError("drawings_range_full")
+        parsed_rows: list[dict[str, Any]] = []
+        for body in drawings:
+            parsed = validate_drawing_payload(body, require_id=True)
+            if (
+                parsed["ticker"] != symbol
+                or parsed["range"] != range_key
+                or parsed["adjustment"] != adj
+            ):
+                raise AccountError("scope_mismatch")
+            parsed_rows.append(parsed)
+        self.initialize()
+        now_iso = _utcnow_iso()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            other_count = int(
+                connection.execute(
+                    """SELECT COUNT(*) FROM account_chart_drawings
+                        WHERE user_id=? AND NOT (
+                            ticker=? AND chart_range=? AND adjustment=?
+                        )""",
+                    (user_id, symbol, range_key, adj),
+                ).fetchone()[0]
+            )
+            if other_count + len(parsed_rows) > DRAWINGS_PER_ACCOUNT_MAX:
+                connection.rollback()
+                raise AccountError("drawings_full")
+            connection.execute(
+                """DELETE FROM account_chart_drawings
+                    WHERE user_id=? AND ticker=? AND chart_range=? AND adjustment=?""",
+                (user_id, symbol, range_key, adj),
+            )
+            taken = {
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT drawing_id FROM account_chart_drawings"
+                )
+            }
+            for parsed in parsed_rows:
+                drawing_id = parsed["id"]
+                if drawing_id in taken:
+                    drawing_id = str(uuid.uuid4())
+                taken.add(drawing_id)
+                connection.execute(
+                    """INSERT INTO account_chart_drawings
+                           (drawing_id, user_id, ticker, chart_range, adjustment,
+                            kind, payload_json, revision, created_at, updated_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        drawing_id,
+                        user_id,
+                        parsed["ticker"],
+                        parsed["range"],
+                        parsed["adjustment"],
+                        parsed["kind"],
+                        parsed["payload_json"],
+                        1,
+                        now_iso,
+                        now_iso,
+                    ),
+                )
+            connection.commit()
+        return self.list_drawings(user_id, symbol, range_key, adj)
 
     def delete_drawings_in_scope(
         self,

@@ -26,6 +26,9 @@ async function loadDrawings(t) {
     storage: path.join(drawingsDir, 'storage.ts'),
     tools: path.join(drawingsDir, 'tools.ts'),
     renderer: path.join(drawingsDir, 'renderer.ts'),
+    autoPatterns: path.join(drawingsDir, 'autoPatterns.ts'),
+    sync: path.join(drawingsDir, 'sync.ts'),
+    drag: path.join(drawingsDir, 'drag.ts'),
   };
   await writeFile(
     entry,
@@ -42,7 +45,7 @@ export {
   hitTestProjected, pickTopHit, hitTestDrawings, DESKTOP_LINE_TOLERANCE_PX, TOUCH_LINE_TOLERANCE_PX,
 } from ${JSON.stringify(files.hitTest)};
 export { snapPointer, nearestPrice } from ${JSON.stringify(files.snap)};
-export { parseDrawing, validateImport, migrateStoredPayload, whitelistText, whitelistStyle, exportDrawings } from ${JSON.stringify(files.schema)};
+export { parseDrawing, parseDrawingDetailed, validateImport, migrateStoredPayload, whitelistText, whitelistStyle, exportDrawings, resolvePaintColor } from ${JSON.stringify(files.schema)};
 export { createHistory, historyPush, historyUndo, historyRedo, historyReplace, canUndo, canRedo } from ${JSON.stringify(files.history)};
 export { loadDrawings, saveDrawings, anonymousStorageKey, drawingsStorageKey } from ${JSON.stringify(files.storage)};
 export { addDraftPoint, applyShiftToDraft, exclusiveTool, isTextInputTarget } from ${JSON.stringify(files.tools)};
@@ -50,6 +53,12 @@ export {
   drawingsToMarks, drawingSegments, toProjectedDrawing, overlayMarks, selectionOverlay,
   draftOverlay, graphicFromOverlay, autoPatternGeometry, autoPatternsToMarks, fillIsAxisAligned,
 } from ${JSON.stringify(files.renderer)};
+export { mapAutoPatterns, mapAutoPatternItem, mapTechnicalAutoFields } from ${JSON.stringify(files.autoPatterns)};
+export {
+  DrawingOutbox, diffPersistOps, mutableFieldsDiffer, applyPersistResponse,
+  resolveListApply, resolveRetryAction, SCOPE_JOB_ID,
+} from ${JSON.stringify(files.sync)};
+export { dragMove, previewDragAnchors, applyPixelShiftConstraint } from ${JSON.stringify(files.drag)};
 `,
     'utf8',
   );
@@ -610,4 +619,207 @@ test('autoPatternsToMarks maps a 4-anchor triangle to two rails and a box to a r
   assert.equal(boxMarks.areas.length, 1);
   assert.equal(boxMarks.polygons.length, 0);
   assert.equal(boxMarks.lines.length, 4);
+});
+
+function validPattern(overrides = {}) {
+  return {
+    id: 'pat-1',
+    algorithmVersion: 'optix-auto-patterns-v1',
+    kind: 'support_trend',
+    subtype: 'rising',
+    direction: 'bullish',
+    anchors: [
+      { time: '2026-07-06T00:00:00+00:00', barKey: '2026-07-06', price: 10 },
+      { time: '2026-07-16T00:00:00+00:00', barKey: '2026-07-16', price: 14 },
+    ],
+    confidence: 82,
+    touches: 3,
+    formationStart: '2026-07-06',
+    formationEnd: '2026-07-16',
+    dataThrough: '2026-07-16',
+    status: 'forming',
+    breakoutPrice: null,
+    invalidationPrice: 9.2,
+    measuredTarget: null,
+    rationaleCodes: ['touches'],
+    ...overrides,
+  };
+}
+
+test('mapTechnicalStructure copies validated auto_patterns and drops invalid items', async (t) => {
+  const { mapTechnicalAutoFields, mapAutoPatterns } = await loadDrawings(t);
+  const body = {
+    as_of: '2026-07-16T20:00:00+00:00',
+    auto_patterns_version: 'optix-auto-patterns-v1',
+    auto_patterns: [
+      validPattern(),
+      validPattern({ id: 'bad-kind', kind: 'pitchfork' }),
+      validPattern({ id: 'bad-price', anchors: [{ time: 't', barKey: 'k', price: Number.NaN }, { time: 't2', barKey: 'k2', price: 4 }] }),
+      'not-an-object',
+    ],
+  };
+  const mapped = mapTechnicalAutoFields(body);
+  assert.equal(mapped.auto_patterns_version, 'optix-auto-patterns-v1');
+  assert.equal(mapped.auto_patterns.length, 1);
+  assert.equal(mapped.auto_patterns[0].id, 'pat-1');
+  assert.equal(mapped.auto_patterns[0].kind, 'support_trend');
+  assert.equal(mapAutoPatterns(body.auto_patterns).length, 1);
+  assert.notEqual(mapped.auto_patterns.length, 0);
+});
+
+test('named palette color down paints a non-brand hex', async (t) => {
+  const { drawingsToMarks, resolvePaintColor } = await loadDrawings(t);
+  assert.notEqual(resolvePaintColor('down'), '#2E46E0');
+  const bars = barsFor(4);
+  const drawing = drawingOf('segment', [
+    { time: bars[0].t, barKey: '2026-07-06', price: 10 },
+    { time: bars[2].t, barKey: '2026-07-08', price: 16 },
+  ], { style: { color: 'down', width: 2, dash: 'solid' } });
+  const marks = drawingsToMarks([drawing], ctxFor(bars));
+  assert.equal(marks.lines.length, 1);
+  assert.equal(marks.lines[0][0].lineStyle.color, resolvePaintColor('down'));
+  assert.notEqual(marks.lines[0][0].lineStyle.color, '#2E46E0');
+});
+
+test('import rejects string booleans and reports illegal text / id conflict', async (t) => {
+  const { validateImport, parseDrawingDetailed } = await loadDrawings(t);
+  const base = drawingOf('horizontal', [{ time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 }]);
+  const asFalse = validateImport({ schemaVersion: 1, drawings: [{ ...base, locked: 'false' }] });
+  assert.equal(asFalse.ok, false);
+  assert.equal(asFalse.error, 'invalid_boolean');
+  const detailed = parseDrawingDetailed({ ...base, hidden: 'false' });
+  assert.equal(detailed.ok, false);
+  const illegal = validateImport({
+    schemaVersion: 1,
+    drawings: [{ ...base, kind: 'text', text: '<script>', anchors: [{ time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 }] }],
+  });
+  assert.equal(illegal.ok, false);
+  assert.equal(illegal.error, 'illegal_text');
+  const conflict = validateImport({ schemaVersion: 1, drawings: [base, { ...base }] });
+  assert.equal(conflict.ok, false);
+  assert.equal(conflict.error, 'id_conflict');
+});
+
+test('a horizontal emits one labeled markLine, not a segment plus a label', async (t) => {
+  const { drawingsToMarks, drawingSegments } = await loadDrawings(t);
+  const bars = barsFor(6);
+  const ctx = ctxFor(bars);
+  const drawing = drawingOf('horizontal', [{ time: bars[2].t, barKey: '2026-07-08', price: 18 }]);
+  const geom = drawingSegments(drawing, ctx);
+  assert.equal(geom.segments.length, 0);
+  assert.equal(geom.horizontals.length, 1);
+  const marks = drawingsToMarks([drawing], ctx);
+  assert.equal(marks.lines.length, 1);
+  assert.equal(marks.lines[0][0].label.show, true);
+});
+
+test('Shift constraint in pixel space rewrites time and barKey', async (t) => {
+  const { applyPixelShiftConstraint, barKeyOf } = await loadDrawings(t);
+  const bars = barsFor(12);
+  const result = applyPixelShiftConstraint({
+    originPx: { x: 20, y: 40 },
+    pointerPx: { x: 80, y: 42 },
+    fromPixel: (x, y) => ({ barIndex: x / 10, price: 100 - y }),
+    bars,
+    range: '1d',
+  });
+  assert.ok(result);
+  assert.equal(result.time, bars[result.barIndex].t);
+  assert.equal(result.barKey, barKeyOf(bars[result.barIndex], '1d'));
+  assert.ok(Math.abs(result.barIndex - 8) <= 1);
+});
+
+test('drag preview leaves committed drawings unchanged', async (t) => {
+  const { dragMove } = await loadDrawings(t);
+  const bars = barsFor(12);
+  const origin = drawingOf('segment', [
+    { time: bars[1].t, barKey: '2026-07-07', price: 10 },
+    { time: bars[4].t, barKey: '2026-07-10', price: 16 },
+  ]);
+  const drawings = [origin];
+  const moved = dragMove({
+    drawings,
+    drag: {
+      id: origin.id,
+      mode: 'anchor',
+      anchorIndex: 1,
+      origin,
+      startPixel: { x: 0, y: 0 },
+      startData: { barIndex: 4, price: 16 },
+    },
+    pointer: { barIndex: 7, price: 22 },
+    bars,
+    range: '1d',
+  });
+  assert.equal(moved.drawings, drawings);
+  assert.deepEqual(moved.drawings[0].anchors, origin.anchors);
+  assert.equal(moved.preview.anchors[1].price, 22);
+  assert.equal(moved.preview.anchors[1].barKey, '2026-07-13');
+});
+
+test('outbox retry replays pending ops and ignores stale list tokens', async (t) => {
+  const {
+    DrawingOutbox, applyPersistResponse, resolveListApply, resolveRetryAction, diffPersistOps,
+  } = await loadDrawings(t);
+  const scope = { identity: 'acct', ticker: 'NVDA', range: '1d', adjustment: 'raw' };
+  const box = new DrawingOutbox();
+  box.setScope(scope);
+  const drawing = drawingOf('horizontal', [{ time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 }]);
+  box.enqueue({ drawingId: drawing.id, type: 'update', drawing: { ...drawing, style: { ...drawing.style, color: '#0E9F6E' } } });
+  const first = box.takeNext(drawing.id);
+  box.enqueue({ drawingId: drawing.id, type: 'update', drawing: { ...drawing, style: { ...drawing.style, color: '#E5484D' }, locked: true, hidden: true, zOrder: 8, text: 'note' } });
+  const latest = box.latestGeneration(drawing.id);
+  const action = applyPersistResponse({
+    job: first,
+    currentScope: box.getScope(),
+    currentScopeGeneration: box.getScopeGeneration(),
+    latestGenerationForId: latest,
+    responseDrawing: { ...drawing, revision: 2 },
+  });
+  assert.equal(action.action, 'revision');
+  assert.equal(action.revision, 2);
+  box.complete(drawing.id, first.generation);
+  const second = box.takeNext(drawing.id);
+  assert.equal(second.drawing.style.color, '#E5484D');
+  assert.equal(second.drawing.locked, true);
+  assert.equal(resolveRetryAction(box.isEmpty()), 'replay');
+  box.failKeep(drawing.id);
+  assert.equal(resolveListApply(box.isEmpty(), true), false);
+  assert.equal(resolveRetryAction(false), 'replay');
+  const other = { ...scope, ticker: 'AAPL' };
+  assert.equal(resolveListApply(true, false), false);
+  const stale = applyPersistResponse({
+    job: { ...second, scope },
+    currentScope: other,
+    currentScopeGeneration: 99,
+    latestGenerationForId: second.generation,
+    responseDrawing: { ...drawing, revision: 9 },
+  });
+  assert.equal(stale.action, 'ignore');
+  const ops = diffPersistOps(
+    [drawing],
+    [{ ...drawing, style: { ...drawing.style, color: '#E5484D' }, text: 'x', locked: true, hidden: true, zOrder: 4 }],
+  );
+  assert.equal(ops.length, 1);
+  assert.equal(ops[0].type, 'update');
+});
+
+test('replace import policy helper treats empty and swapped sets as the new list', async (t) => {
+  const { DrawingOutbox, SCOPE_JOB_ID } = await loadDrawings(t);
+  const box = new DrawingOutbox();
+  box.setScope({ identity: 'acct', ticker: 'NVDA', range: '1d', adjustment: 'raw' });
+  const a = drawingOf('horizontal', [{ time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 }]);
+  const b = drawingOf('segment', [
+    { time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 },
+    { time: '2026-07-07T13:30:00Z', barKey: '2026-07-07', price: 12 },
+  ], { id: '22222222-2222-4222-8222-222222222222' });
+  box.enqueue({ drawingId: SCOPE_JOB_ID, type: 'replace', drawings: [b] });
+  const job = box.takeNext(SCOPE_JOB_ID);
+  assert.equal(job.type, 'replace');
+  assert.equal(job.drawings[0].id, b.id);
+  assert.equal(job.drawings.some((item) => item.id === a.id), false);
+  box.complete(SCOPE_JOB_ID, job.generation);
+  box.enqueue({ drawingId: SCOPE_JOB_ID, type: 'replace', drawings: [] });
+  const empty = box.takeNext(SCOPE_JOB_ID);
+  assert.deepEqual(empty.drawings, []);
 });

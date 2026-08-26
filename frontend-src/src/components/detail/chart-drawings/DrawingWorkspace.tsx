@@ -55,7 +55,11 @@ export default function DrawingWorkspace({
         <aside className="w-full shrink-0 overflow-auto rounded-md border border-line bg-card p-3 md:w-72">
           <DrawingInspector
             drawing={controller.selected}
+            drawings={controller.drawings}
+            unresolvedIds={controller.unresolvedIds}
+            importError={controller.importError}
             unresolved={Boolean(controller.selected && controller.unresolvedIds.includes(controller.selected.id))}
+            onSelect={controller.setSelectedId}
             onStyle={controller.updateStyle}
             onText={(text) => {
               const clean = whitelistText(text);
@@ -63,7 +67,13 @@ export default function DrawingWorkspace({
             }}
             onLock={() => controller.patchSelected({ locked: !controller.selected?.locked }, true)}
             onHide={() => controller.patchSelected({ hidden: !controller.selected?.hidden }, true)}
+            onToggleHidden={(id) => {
+              const target = controller.drawings.find((item) => item.id === id);
+              if (!target) return;
+              controller.patchDrawing(id, { hidden: !target.hidden }, true);
+            }}
             onDelete={controller.deleteSelected}
+            onDeleteId={controller.deleteDrawing}
             onZ={(delta) => controller.patchSelected({ zOrder: (controller.selected?.zOrder ?? 0) + delta }, true)}
             onExport={() => {
               const blob = new Blob([controller.exportJson()], { type: 'application/json' });
@@ -75,12 +85,7 @@ export default function DrawingWorkspace({
               URL.revokeObjectURL(url);
             }}
             onImportFile={(text) => {
-              try {
-                const parsed = JSON.parse(text);
-                controller.importJson(parsed);
-              } catch {
-                // invalid JSON — do not pass null to importJson (would clear all drawings)
-              }
+              controller.importFromText(text);
             }}
             onImportLocal={() => controller.importAnonymous()}
             onClear={() => setConfirmClear(true)}
