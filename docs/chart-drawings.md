@@ -65,14 +65,18 @@ DELETE /api/account/chart-drawings?ticker=&range=&adjustment=
 - 修改请求同源（`Origin` + `X-Optix-Action: 1`）
 - `Cache-Control: no-store`
 - 每范围最多 500 个；每账户 2000 个；单对象 payload ≤ 16KiB
-- `revision` 乐观并发：创建为 1；更新带期望 revision；不匹配返回 **409**，前端保留本地副本并提示重试，不静默覆盖
-- 导入当前范围是事务替换：先校验全部，再删旧插入新。编号与其他账户或范围冲突时改发新 UUID。空列表会清空当前范围。
+- `revision` 乐观并发：创建为 1；更新带期望 revision；不匹配返回 **409 `revision_conflict`**，前端保留本地副本并让用户选择，不静默覆盖
+- **409 不等于版本冲突**：配额满也是 409（`drawings_range_full` / `drawings_full`）。每个错误响应都带机器可读的 `code`，客户端必须按 `code` 分支——只有 `revision_conflict` 才是真冲突。把配额当冲突处理会让「保留本地」把必败的创建无限重放
+- **重放幂等**：同一账户重复 POST 同一 `drawing_id` 返回已存的那行（不是 409）；DELETE 一行不存在的绘图是成功（无墓碑）。响应丢失后的重试因此能收敛，而不是把 outbox 卡死在 unsynced
+- 导入当前范围是事务替换：先校验全部，再删旧插入新。编号与**同账户的其他范围**冲突时改发新 UUID；跨账户不再冲突（见下）。空列表会清空当前范围。
 
-SQLite 表 `account_chart_drawings` 在 `accounts.db`，WAL、外键、账户删除级联。旧库原地 `CREATE TABLE IF NOT EXISTS` 升级。
+SQLite 表 `account_chart_drawings` 在 `accounts.db`，WAL、外键、账户删除级联。主键是 **`(user_id, drawing_id)` 复合键**：绘图编号只在账户内唯一，所以两个账户可以各自持有同一个编号，创建他人编号也不再能通过「404 还是 201」反推对方是否存在。该表随功能一起引入且尚未上线，旧结构由 `initialize()` 就地重建；一旦上线，再改主键必须走搬数据的迁移。
 
 ## 自动形态与统一图层
 
-`/stocks/{ticker}/technical` 现在附带纯数据合同 `chart_analysis`（`ChartAnalysisBundle`）：`ticker`、`range`、`adjustment`、`dataThrough`、`barFingerprint`、`overlays`、`indicatorPanes`、`strengthContext`。算法不返回 Apache ECharts `option` / `graphic`。个股图路径不跑 Strength Scanner。
+`/stocks/{ticker}/technical` 现在附带纯数据合同 `chart_analysis`（`ChartAnalysisBundle`）：`ticker`、`range`、`adjustment`、`dataThrough`、`dates`、`overlays`、`indicatorPanes`、`strengthContext`，以及指纹元信息 `fingerprintAlgorithm` / `barFingerprint` / `barCount` / `firstBarDate` / `lastBarDate`。算法不返回 Apache ECharts `option` / `graphic`。个股图路径不跑 Strength Scanner（`test_scanner_not_imported_by_chart_analysis` 钉住这条：可以用 `strength/scoring` 的 `score_intrinsic`，不能引入 scanner；两边共用的特征构造抽在 `strength/features.py`，避免详情页与雷达的家族分再次漂移）。
+
+日期数组 `dates` **只下发一份**，overlay 几何与副图各自带 `startIndex` 索引进去（`values[i]` 对应 `dates[startIndex + i]`，前置 warmup 的 null 被裁掉：ma200 是 199、macd 35、rsi 14）。形态只经 `overlays` 下发——早先同一份形态编码三遍、日期数组重复十来份，一个响应约 157KB，现在约 69KB。
 
 图层来源：
 
@@ -80,7 +84,7 @@ SQLite 表 `account_chart_drawings` 在 `accounts.db`，WAL、外键、账户删
 | --- | --- |
 | `price_action.py` | 摆动点、最近支撑阻力、HH/HL/LH/LL、K 线形态、Spring/Upthrust；每条事件带 `barKey` |
 | `base_structure.py` | 整理区 / 箱体的**唯一**事实源（阻力带、支撑带、pivot、invalidation、窗口共识） |
-| `vol_price_match.py` | 近 10 日量价摘要；副图提供 OBV / CLV / 美元成交额序列 |
+| `vol_price_match.py` | 近 10 日量价摘要；副图提供 OBV / CLV 序列（美元成交额两侧 registry 都没登记，客户端必然丢弃，已停止计算与下发；要加得先补 registry 条目与 i18n） |
 | `technical/indicators.py` | MA20/50/200 主图序列；RSI、MACD、Range Position 副图 |
 | `strength/scoring.py` 的 `score_intrinsic` | short/mid/long/trend/breakout/price_action 家族分与有效权重只进侧栏 `strengthContext`；`finalScore` / 横截面百分位保持 `None`，**不进** `shapeQuality` |
 | 日线突破 | 由基底状态映射 trigger / testing / failed |
@@ -96,7 +100,7 @@ SQLite 表 `account_chart_drawings` 在 `accounts.db`，WAL、外键、账户删
 
 自动形态画在图上的是 Theil–Sen 拟合轨（`fitAnchors` / `supportRail` / `resistanceRail`），触点 `touchAnchors` 只作解释，不决定画线。
 
-前端只在 `barFingerprint` + `ticker` + `range` + `adjustment` + `dataThrough` 与当前图一致时渲染。指纹是每根分析 K 线 `timestamp|open|high|low|close|volume|ext|quote_only` 的 SHA-256，由可见已收盘 K 线在前端重算，对不上就不画。待同步绘图队列按 `主体+ticker+range+adjustment` 持久化在 `option-pro:chart-drawing-outbox:v1`，与手绘文档和图层设置分开。SPY RS 只在能按日期对齐 SPY 收盘时下发，否则省略空副图。Strength 快照不一致时只显示快照日期，不生成价格几何。未收盘末根不进日线指标与形态。保留 `series_break_at`：断裂之后的一致段才分析。每条自动形态保留自己的 `volumeConfirmation`；量价模块只增加自己的 overlay。摆动点 HH/HL/LH/LL 由相邻已确认高低点比较得出，不是整段结构一个标签。
+前端只在 `barFingerprint` + `ticker` + `range` + `adjustment` + `dataThrough` 与当前图一致时渲染。指纹是每根分析 K 线 `timestamp|open|high|low|close|volume|ext|quote_only` 的 SHA-256（算法串 `sha256-bar-ohlcv-v1`，随包下发；对不上就不画）。**这道闸门是失败即全隐，所以镜像必须逐位对齐**：后端哈希的是 `clean_series` 之后的行（会丢掉非有限值与 OHLC 不自洽的坏行），六位小数用显式的「远离零」半进位而不是 Python 默认的银行家舍入，两侧各钉同一个字面摘要做跨语言回归。包里带 `barCount` / `firstBarDate` / `lastBarDate`，前端据此按同一窗口取样，并在失配时显示可见的诊断行，而不是整套图层无声消失（CI 在闭市跑，盘中静默熄灯是看不见的）。待同步绘图队列按 `主体+ticker+range+adjustment` 持久化在 `option-pro:chart-drawing-outbox:v1`，与手绘文档和图层设置分开。SPY RS 只在能按日期对齐 SPY 收盘时下发，否则省略空副图。Strength 快照不一致时只显示快照日期，不生成价格几何。未收盘末根不进日线指标与形态。保留 `series_break_at`：断裂之后的一致段才分析。每条自动形态保留自己的 `volumeConfirmation`；量价模块只增加自己的 overlay。摆动点 HH/HL/LH/LL 由相邻已确认高低点比较得出，不是整段结构一个标签。
 
 「算法与图层」菜单由 Layer Registry 生成（不是在 `KlineChart.tsx` 里为每个算法写死开关）。预设：极简 / 结构分析 / 突破交易 / 动量 / 量价 / 全部。极简最多 3 个自动形态、6 个文字标签。设置键 `option-pro:chart-layers:v1:{principal}`，与手绘 `option-pro:chart-drawings:v1:…` 分开；登录主体持久化，访客用 localStorage。RSI/MACD/OBV/CLV/Range Persistence/SPY RS 走独立副图；Strength 标量走侧栏。手绘永远叠在自动层之上。自动层淡色虚线；测试/突破可强调。移动端菜单是底部抽屉。
 

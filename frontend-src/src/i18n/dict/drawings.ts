@@ -16,6 +16,10 @@ export const DRAWINGS: Dict = {
   '重做': ['Redo', 'やり直す'],
   '自动结构': ['Auto structure', '自動構造'],
   '未同步': ['Not synced', '未同期'],
+  '绘图数量已达上限，本图形只存在本机': [
+    'Drawing limit reached — this shape stays on this device only',
+    '描画数の上限に達しました。この図形はこの端末にのみ保存されます',
+  ],
   '已同步': ['Synced', '同期済み'],
   '保存中': ['Saving', '保存中'],
   '绘图冲突：已重新加载服务器版本': ['Drawing conflict: reloaded the server version', '描画の衝突：サーバー版を再読み込みしました'],

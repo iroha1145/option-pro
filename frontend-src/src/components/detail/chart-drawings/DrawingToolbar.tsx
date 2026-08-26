@@ -64,9 +64,14 @@ export default function DrawingToolbar({
   onTakeServer?: () => void;
   compact?: boolean;
 }) {
+  /* 配额满与「没同步上」是两回事：任务已被丢弃，重试必然再失败，所以这里要
+     给出真实原因而不是通用的「未同步 + 重试同步」。 */
+  const quotaBlocked = syncStatus === 'unsynced' && syncHint === 'quota';
   const syncLabel =
     syncStatus === 'conflict'
       ? t('绘图冲突：已保留本地版本，请选择')
+      : quotaBlocked
+        ? t('绘图数量已达上限，本图形只存在本机')
       : syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed'
         ? t('未同步')
         : syncStatus === 'saving'
@@ -124,7 +129,7 @@ export default function DrawingToolbar({
       >
         <span className={cn('size-1.5 rounded-full', syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed' || syncStatus === 'conflict' ? 'bg-warn-600' : syncStatus === 'saving' ? 'bg-brand-400' : 'bg-up-600')} aria-hidden />
         <span>{syncStatus === 'guest' && compact ? t('未同步') : syncLabel}</span>
-        {(syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed') && (
+        {!quotaBlocked && (syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed') && (
           <button type="button" className="underline-offset-2 hover:underline" onClick={onRetry} aria-label={t('重试同步')}>
             {t('重试同步')}
           </button>
