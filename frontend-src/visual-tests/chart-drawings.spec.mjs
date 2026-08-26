@@ -318,8 +318,10 @@ test("undo color text lock delete then refresh", async ({ page }) => {
   await expect(row).toContainText("已锁定");
   await toolButton(page, "撤销").first().click();
   await expect(row).not.toContainText("已锁定");
-  // 撤销入队的 PUT 落地前刷新会把服务器上的「已锁定」读回来。
-  await expect(page.getByText("已同步").first()).toBeVisible({ timeout: 15_000 });
+  // 展开后页内那份工具条是 hidden，「已同步」要认工作区 dialog 里可见的那份。
+  await expect(
+    page.getByRole("dialog", { name: "绘图工作区" }).getByText("已同步"),
+  ).toBeVisible({ timeout: 15_000 });
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
   await expectDrawingCount(page, 1);
