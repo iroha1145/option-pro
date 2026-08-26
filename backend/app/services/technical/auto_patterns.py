@@ -260,8 +260,8 @@ def _pack(
         "anchors": public_anchors,
         "confidence": round(eval_row["confidence"], 1),
         "touches": int(eval_row["touches"]),
-        "formationStart": anchors[0]["barKey"],
-        "formationEnd": anchors[-1]["barKey"],
+        "formationStart": min(item["barKey"] for item in public_anchors),
+        "formationEnd": max(item["barKey"] for item in public_anchors),
         "dataThrough": data_through,
         "status": eval_row["status"],
         "breakoutPrice": (
@@ -535,7 +535,6 @@ def detect_auto_patterns(
                 _anchor(window_times, window_dates, resist["p0"][0], resist["p0"][1]),
                 _anchor(window_times, window_dates, resist["p1"][0], resist["p1"][1]),
             ]
-            anchors.sort(key=lambda item: item["barKey"])
             packed = _pack(
                 kind=kind,
                 subtype=subtype,

@@ -1,4 +1,5 @@
 /** Bar-key projection: persist time + price, re-resolve by identity, never migrate. */
+import { nudgePoint } from './geometry.ts';
 import type { ChartAdjustment, ChartRange, DrawingAnchor } from './types.ts';
 
 export interface TimedBar {
@@ -88,4 +89,29 @@ export function drawingsInScope<T extends { ticker: string; range: ChartRange; a
   adjustment: ChartAdjustment = 'raw',
 ): T[] {
   return drawings.filter((item) => sameScope(item, ticker, range, adjustment));
+}
+
+/**
+ * Nudge one focused anchor, or the whole drawing when focusIndex is null.
+ * Time steps move by bar index; price steps stay in data space. Missing barKeys
+ * are left untouched (no silent migration).
+ */
+export function nudgeAnchors(
+  anchors: DrawingAnchor[],
+  key: string,
+  large: boolean,
+  bars: TimedBar[],
+  range: ChartRange,
+  focusIndex: number | null,
+): DrawingAnchor[] {
+  return anchors.map((anchor, index) => {
+    if (focusIndex != null && index !== focusIndex) return anchor;
+    const barIndex = resolveAnchor(bars, anchor, range);
+    if (barIndex < 0) return anchor;
+    const moved = nudgePoint({ x: barIndex, y: anchor.price }, key, large);
+    const nextIndex = Math.max(0, Math.min(bars.length - 1, Math.round(moved.x)));
+    const bar = bars[nextIndex];
+    const price = Number.isFinite(moved.y) && moved.y > 0 ? moved.y : anchor.price;
+    return { time: bar.t, barKey: barKeyOf(bar, range), price };
+  });
 }

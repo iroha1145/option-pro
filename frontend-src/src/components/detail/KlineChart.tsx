@@ -278,7 +278,7 @@ function buildOption(
   prevClose?: number,
   overlay?: MeasureOverlay | null,
   tech?: ReturnType<typeof technicalMarks> | null,
-  extra?: { lines: object[]; points: object[]; areas: object[] } | null,
+  extra?: { lines: object[]; points: object[]; areas: object[]; polygons?: { vertices: { x: number; y: number }[]; color: string; opacity: number }[] } | null,
 ): ChartOption {
   const labels = bars.map((b) => fmtAxisLabel(b.t, range));
   const upFill = CH.up600;
@@ -290,6 +290,30 @@ function buildOption(
     points: [...(tech?.points ?? []), ...(extra?.points ?? []), ...measure.points],
     areas: [...(tech?.areas ?? []), ...(extra?.areas ?? []), ...measure.areas],
   };
+
+  const polygons = extra?.polygons ?? [];
+  const fillSeries = polygons.length
+    ? {
+        type: 'custom' as const,
+        name: 'drawing-fills',
+        clip: true,
+        silent: true,
+        xAxisIndex: 0,
+        yAxisIndex: 0,
+        z: 5,
+        data: polygons,
+        renderItem: (params: { dataIndex: number }, api: { coord: (value: number[]) => number[] }) => {
+          const poly = polygons[params.dataIndex];
+          if (!poly) return;
+          return {
+            type: 'polygon',
+            shape: { points: poly.vertices.map((vertex) => api.coord([vertex.x, vertex.y])) },
+            style: { fill: poly.color, opacity: poly.opacity },
+            silent: true,
+          };
+        },
+      }
+    : null;
 
   const common = {
     ...baseAnimation,
@@ -378,6 +402,7 @@ function buildOption(
           markArea: marks.areas.length ? { silent: true, data: marks.areas } : undefined,
           z: 3,
         },
+        ...(fillSeries ? [{ ...fillSeries, xAxisIndex: 0, yAxisIndex: 0 }] : []),
       ],
     } as ChartOption;
   }
@@ -528,6 +553,7 @@ function buildOption(
         tooltip: { show: false },
         z: 2,
       },
+      ...(fillSeries ? [fillSeries] : []),
     ],
   } as ChartOption;
 }
@@ -719,6 +745,7 @@ export default function KlineChart({
       lines: [...auto.lines, ...hand.lines],
       points: [...auto.points, ...hand.points],
       areas: [...auto.areas, ...hand.areas],
+      polygons: [...(auto.polygons ?? []), ...(hand.polygons ?? [])],
     };
   }, [data, drawing.autoPatternsEnabled, drawing.marks, overlaysConsistent, range, technical?.auto_patterns]);
 

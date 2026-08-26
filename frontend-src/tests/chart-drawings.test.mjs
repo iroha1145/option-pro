@@ -33,10 +33,10 @@ async function loadDrawings(t) {
 export {
   horizontalProjection, clipRayToRect, channelEdges, channelOffset,
   vectorsParallel, moveChannelWhole, moveChannelAnchor, normalizeRectangle,
-  fibonacciPrices, constrainByShift, applyAltNoSnap, distancePointToSegment,
+  fibonacciPrices, constrainByShift, applyAltNoSnap, distancePointToSegment, nudgePoint,
 } from ${JSON.stringify(files.geometry)};
 export {
-  barKeyOf, resolveBarKey, resolveAnchor, snapBarIndex, drawingScopeKey, drawingsInScope,
+  barKeyOf, resolveBarKey, resolveAnchor, snapBarIndex, drawingScopeKey, drawingsInScope, nudgeAnchors,
 } from ${JSON.stringify(files.projection)};
 export {
   hitTestProjected, pickTopHit, hitTestDrawings, DESKTOP_LINE_TOLERANCE_PX, TOUCH_LINE_TOLERANCE_PX,
@@ -46,7 +46,10 @@ export { parseDrawing, validateImport, migrateStoredPayload, whitelistText, whit
 export { createHistory, historyPush, historyUndo, historyRedo, historyReplace, canUndo, canRedo } from ${JSON.stringify(files.history)};
 export { loadDrawings, saveDrawings, anonymousStorageKey, drawingsStorageKey } from ${JSON.stringify(files.storage)};
 export { addDraftPoint, applyShiftToDraft, exclusiveTool, isTextInputTarget } from ${JSON.stringify(files.tools)};
-export { drawingsToMarks, drawingSegments } from ${JSON.stringify(files.renderer)};
+export {
+  drawingsToMarks, drawingSegments, toProjectedDrawing, overlayMarks, selectionOverlay,
+  draftOverlay, graphicFromOverlay, autoPatternGeometry, autoPatternsToMarks, fillIsAxisAligned,
+} from ${JSON.stringify(files.renderer)};
 `,
     'utf8',
   );
@@ -375,4 +378,236 @@ test('anonymous storage key matches the documented shape', async (t) => {
     anonymousStorageKey('NVDA', '1d', 'raw'),
     'option-pro:chart-drawings:v1:anonymous:NVDA:1d:raw',
   );
+});
+
+function barsFor(n = 12) {
+  return Array.from({ length: n }, (_, i) => {
+    const day = String(6 + i).padStart(2, '0');
+    return {
+      t: `2026-07-${day}T13:30:00Z`,
+      o: 10,
+      h: 30,
+      l: 5,
+      c: 15,
+    };
+  });
+}
+
+function drawingOf(kind, anchors, extra = {}) {
+  return {
+    schemaVersion: 1,
+    id: '11111111-1111-4111-8111-111111111111',
+    ticker: 'NVDA',
+    range: '1d',
+    adjustment: 'raw',
+    kind,
+    anchors,
+    style: { color: '#2E46E0', width: 2, dash: 'solid', fillOpacity: 0.2 },
+    locked: false,
+    hidden: false,
+    zOrder: 1,
+    revision: 1,
+    createdAt: '',
+    updatedAt: '',
+    ...extra,
+  };
+}
+
+function ctxFor(bars) {
+  return { bars, range: '1d', xMin: 0, xMax: bars.length - 1, yMin: 5, yMax: 30 };
+}
+
+test('toProjectedDrawing hit-tests rectangle fill, channel parallel, fib levels, and clipped rays', async (t) => {
+  const { toProjectedDrawing, hitTestProjected, drawingSegments, clipRayToRect } = await loadDrawings(t);
+  const bars = barsFor(12);
+  const ctx = ctxFor(bars);
+
+  const rectangle = drawingOf('rectangle', [
+    { time: bars[8].t, barKey: '2026-07-14', price: 25 },
+    { time: bars[1].t, barKey: '2026-07-07', price: 8 },
+  ]);
+  const rectProj = toProjectedDrawing(rectangle, ctx);
+  assert.ok(rectProj);
+  assert.equal(rectProj.segments.length, 4);
+  assert.equal(rectProj.fills.length, 1);
+  const inside = hitTestProjected(rectProj, { x: 4, y: 16 }, 'mouse');
+  assert.equal(inside?.kind, 'body');
+  const onEdge = hitTestProjected(rectProj, { x: 4, y: 8 }, 'mouse');
+  assert.ok(onEdge);
+
+  const channel = drawingOf('channel', [
+    { time: bars[0].t, barKey: '2026-07-06', price: 10 },
+    { time: bars[10].t, barKey: '2026-07-16', price: 20 },
+    { time: bars[2].t, barKey: '2026-07-08', price: 4 },
+  ]);
+  const chProj = toProjectedDrawing(channel, ctx);
+  assert.equal(chProj.segments.length, 2);
+  assert.equal(chProj.fills.length, 1);
+  const geom = drawingSegments(channel, ctx);
+  const parallel = geom.segments[1];
+  const midParallel = {
+    x: (parallel.a.x + parallel.b.x) / 2,
+    y: (parallel.a.y + parallel.b.y) / 2,
+  };
+  const railHit = hitTestProjected(chProj, midParallel, 'mouse');
+  assert.ok(railHit);
+  const firstSeg = geom.segments[0];
+  assert.equal(
+    firstSeg.a.x === parallel.a.x && firstSeg.a.y === parallel.a.y && firstSeg.b.x === parallel.b.x && firstSeg.b.y === parallel.b.y,
+    false,
+    'parallel rail is a distinct second segment, not the main line',
+  );
+
+  const fib = drawingOf('fibonacci', [
+    { time: bars[0].t, barKey: '2026-07-06', price: 10 },
+    { time: bars[10].t, barKey: '2026-07-16', price: 20 },
+  ]);
+  const fibProj = toProjectedDrawing(fib, ctx);
+  const half = hitTestProjected(fibProj, { x: 5, y: 15 }, 'mouse');
+  assert.ok(half);
+  const miss = hitTestProjected(fibProj, { x: 5, y: 40 }, 'mouse');
+  assert.equal(miss, null);
+
+  const ray = drawingOf('ray', [
+    { time: bars[1].t, barKey: '2026-07-07', price: 10 },
+    { time: bars[3].t, barKey: '2026-07-09', price: 14 },
+  ]);
+  const rayProj = toProjectedDrawing(ray, ctx);
+  const clipped = clipRayToRect({ x: 1, y: 10 }, { x: 3, y: 14 }, {
+    xMin: ctx.xMin, xMax: ctx.xMax, yMin: ctx.yMin, yMax: ctx.yMax,
+  });
+  assert.ok(clipped);
+  const beyondSecond = {
+    x: (3 + clipped.b.x) / 2,
+    y: (14 + clipped.b.y) / 2,
+  };
+  assert.ok(beyondSecond.x > 3, 'sample sits past the second anchor');
+  const rayHit = hitTestProjected(rayProj, beyondSecond, 'mouse');
+  assert.ok(rayHit);
+});
+
+test('selected segment overlay emits two anchor points and a rubber-band draft', async (t) => {
+  const { drawingsToMarks, graphicFromOverlay, draftOverlay } = await loadDrawings(t);
+  const bars = barsFor(6);
+  const ctx = ctxFor(bars);
+  const segment = drawingOf('segment', [
+    { time: bars[0].t, barKey: '2026-07-06', price: 10 },
+    { time: bars[2].t, barKey: '2026-07-08', price: 18 },
+  ]);
+  const idle = drawingsToMarks([segment], ctx);
+  assert.equal(idle.points.length, 0);
+  const selected = drawingsToMarks([segment], ctx, { selectedId: segment.id });
+  const coords = selected.points.map((point) => point.coord);
+  assert.equal(coords.length, 2);
+  assert.deepEqual(
+    [...coords].sort((a, b) => a[0] - b[0] || a[1] - b[1]),
+    [[0, 10], [2, 18]],
+  );
+  const graphic = graphicFromOverlay(
+    { anchors: [{ x: 0, y: 10 }, { x: 2, y: 18 }], segments: [{ a: { x: 0, y: 10 }, b: { x: 2, y: 18 } }], fills: [] },
+    (point) => point,
+    '#2E46E0',
+  );
+  assert.equal(graphic.filter((el) => el.type === 'circle').length, 2);
+  const draft = draftOverlay({ kind: 'segment', points: [{ barIndex: 0, price: 10 }, { barIndex: 3, price: 16 }] }, ctx);
+  assert.equal(draft.segments.length, 1);
+  assert.equal(draft.anchors.length, 2);
+});
+
+test('nudgeAnchors applies the shipped nudge helper to real bar-key anchors', async (t) => {
+  const { nudgeAnchors, nudgePoint, resolveAnchor } = await loadDrawings(t);
+  const bars = barsFor(12);
+  const anchors = [
+    { time: bars[2].t, barKey: '2026-07-08', price: 10 },
+    { time: bars[4].t, barKey: '2026-07-10', price: 20 },
+  ];
+  const whole = nudgeAnchors(anchors, 'ArrowUp', false, bars, '1d', null);
+  const expected0 = nudgePoint({ x: 2, y: 10 }, 'ArrowUp', false);
+  const expected1 = nudgePoint({ x: 4, y: 20 }, 'ArrowUp', false);
+  assert.equal(whole[0].price, expected0.y);
+  assert.equal(whole[1].price, expected1.y);
+  const one = nudgeAnchors(anchors, 'ArrowRight', true, bars, '1d', 0);
+  const moved = nudgePoint({ x: 2, y: 10 }, 'ArrowRight', true);
+  assert.equal(resolveAnchor(bars, one[0], '1d'), Math.round(moved.x));
+  assert.equal(one[1].barKey, anchors[1].barKey);
+  assert.equal(one[1].price, anchors[1].price);
+});
+
+test('tilted channel fill vertices stay parallel to the two rails, not a bounding box', async (t) => {
+  const { drawingsToMarks, drawingSegments, vectorsParallel, fillIsAxisAligned } = await loadDrawings(t);
+  const bars = barsFor(12);
+  const ctx = ctxFor(bars);
+  const channel = drawingOf('channel', [
+    { time: bars[0].t, barKey: '2026-07-06', price: 10 },
+    { time: bars[10].t, barKey: '2026-07-16', price: 22 },
+    { time: bars[2].t, barKey: '2026-07-08', price: 4 },
+  ]);
+  const geom = drawingSegments(channel, ctx);
+  assert.ok(geom.fill);
+  assert.equal(fillIsAxisAligned(geom.fill), false);
+  const marks = drawingsToMarks([channel], ctx);
+  assert.equal(marks.areas.length, 0);
+  assert.equal(marks.polygons.length, 1);
+  const verts = marks.polygons[0].vertices;
+  assert.deepEqual(verts, geom.fill);
+  assert.equal(vectorsParallel(verts[0], verts[1], verts[3], verts[2]), true);
+  assert.equal(vectorsParallel(geom.segments[0].a, geom.segments[0].b, verts[0], verts[1]), true);
+  assert.equal(vectorsParallel(geom.segments[1].a, geom.segments[1].b, verts[3], verts[2]), true);
+  const minX = Math.min(...verts.map((v) => v.x));
+  const maxX = Math.max(...verts.map((v) => v.x));
+  const minY = Math.min(...verts.map((v) => v.y));
+  const maxY = Math.max(...verts.map((v) => v.y));
+  const isBbox = verts.every((v) => (v.x === minX || v.x === maxX) && (v.y === minY || v.y === maxY))
+    && new Set(verts.map((v) => v.x)).size === 2
+    && new Set(verts.map((v) => v.y)).size === 2;
+  assert.equal(isBbox, false);
+});
+
+test('autoPatternsToMarks maps a 4-anchor triangle to two rails and a box to a rectangle', async (t) => {
+  const { autoPatternGeometry, autoPatternsToMarks, fillIsAxisAligned } = await loadDrawings(t);
+  const bars = barsFor(12);
+  const ctx = ctxFor(bars);
+  const triangle = {
+    id: 'tri',
+    kind: 'triangle',
+    subtype: 'symmetric',
+    confidence: 82,
+    status: 'forming',
+    anchors: [
+      { time: bars[1].t, barKey: '2026-07-07', price: 10 },
+      { time: bars[9].t, barKey: '2026-07-15', price: 16 },
+      { time: bars[1].t, barKey: '2026-07-07', price: 24 },
+      { time: bars[9].t, barKey: '2026-07-15', price: 18 },
+    ],
+  };
+  const triGeom = autoPatternGeometry(triangle, ctx);
+  assert.ok(triGeom);
+  assert.equal(triGeom.segments.length, 2);
+  assert.equal(triGeom.fill.length, 4);
+  const triMarks = autoPatternsToMarks([triangle], ctx, 70);
+  assert.equal(triMarks.lines.length, 2);
+  assert.equal(triMarks.polygons.length, 1);
+  assert.equal(triMarks.polygons[0].vertices.length, 4);
+
+  const box = {
+    id: 'box',
+    kind: 'box',
+    subtype: 'horizontal',
+    confidence: 88,
+    status: 'forming',
+    anchors: [
+      { time: bars[2].t, barKey: '2026-07-08', price: 11 },
+      { time: bars[8].t, barKey: '2026-07-14', price: 12 },
+      { time: bars[2].t, barKey: '2026-07-08', price: 21 },
+      { time: bars[8].t, barKey: '2026-07-14', price: 20 },
+    ],
+  };
+  const boxGeom = autoPatternGeometry(box, ctx);
+  assert.ok(boxGeom);
+  assert.equal(boxGeom.segments.length, 4);
+  assert.equal(fillIsAxisAligned(boxGeom.fill), true);
+  const boxMarks = autoPatternsToMarks([box], ctx, 70);
+  assert.equal(boxMarks.areas.length, 1);
+  assert.equal(boxMarks.polygons.length, 0);
+  assert.equal(boxMarks.lines.length, 4);
 });

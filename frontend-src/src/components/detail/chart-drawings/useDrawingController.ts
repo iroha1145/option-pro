@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EChartsInstance } from '@/lib/chart';
-import { barKeyOf, resolveAnchor, snapBarIndex } from './projection.ts';
+import { barKeyOf, nudgeAnchors, resolveAnchor, snapBarIndex } from './projection.ts';
 import { drawingsApi, isAuthError, isConflictError } from './api.ts';
-import { drawingsToMarks, type BarLike, type RenderContext } from './renderer.ts';
+import {
+  draftOverlay,
+  drawingsToMarks,
+  graphicFromOverlay,
+  projectToPixels,
+  selectionOverlay,
+  toProjectedDrawing,
+  type BarLike,
+  type OverlayGeometry,
+  type RenderContext,
+} from './renderer.ts';
 import { loadDrawings, saveDrawings, anonymousStorageKey, drawingsStorageKey } from './storage.ts';
 import { parseDrawing, exportDrawings, validateImport, whitelistStyle, whitelistText } from './schema.ts';
 import {
@@ -65,6 +75,7 @@ export function useDrawingController(args: {
   const [autoPatternsEnabled, setAutoPatternsEnabled] = useState(true);
   const [expanded, setExpanded] = useState(false);
   const [draftText, setDraftText] = useState('');
+  const [focusAnchor, setFocusAnchor] = useState<number | null>(null);
   const dragRef = useRef<{
     id: string;
     mode: 'anchor' | 'whole';
@@ -328,29 +339,17 @@ export function useDrawingController(args: {
   }, [args.bars, args.range]);
 
   const marks = useMemo(
-    () => (visibleCtx ? drawingsToMarks(drawings, visibleCtx) : { lines: [], areas: [], points: [], unresolvedIds: [] }),
-    [drawings, visibleCtx],
+    () => (visibleCtx
+      ? drawingsToMarks(drawings, visibleCtx, { selectedId, inProgress })
+      : { lines: [], areas: [], points: [], polygons: [], unresolvedIds: [] }),
+    [drawings, inProgress, selectedId, visibleCtx],
   );
 
   const projected: ProjectedDrawing[] = useMemo(() => {
     if (!visibleCtx) return [];
-    return drawings.map((drawing) => {
-      const geom = drawingsToMarks([drawing], visibleCtx);
-      const anchors = drawing.anchors.map((anchor) => {
-        const index = resolveAnchor(visibleCtx.bars, anchor, visibleCtx.range);
-        return { x: index, y: anchor.price };
-      }).filter((point) => point.x >= 0);
-      return {
-        id: drawing.id,
-        zOrder: drawing.zOrder,
-        locked: drawing.locked,
-        hidden: drawing.hidden,
-        anchors,
-        segments: [],
-        fills: [],
-        _geom: geom,
-      } as ProjectedDrawing;
-    });
+    return drawings
+      .map((drawing) => toProjectedDrawing(drawing, visibleCtx))
+      .filter((item): item is ProjectedDrawing => item !== null);
   }, [drawings, visibleCtx]);
 
   useEffect(() => {
@@ -423,33 +422,25 @@ export function useDrawingController(args: {
         }
         return;
       }
-      // select tool: hit-test in pixel space
-      const hits = drawingsRef.current.map((drawing) => {
-        const anchors = drawing.anchors.map((anchor) => {
-          const index = resolveAnchor(bars, anchor, args.range);
-          if (index < 0) return { x: -1e6, y: -1e6 };
-          const px = chart.convertToPixel({ gridIndex: 0 }, [index, anchor.price]) as number[];
-          return { x: px?.[0] ?? -1e6, y: px?.[1] ?? -1e6 };
-        });
-        const segments = [] as { a: Point; b: Point }[];
-        if (anchors.length >= 2 && anchors.every((item) => item.x > -1e5)) {
-          segments.push({ a: anchors[0], b: anchors[1] });
-        }
-        if (drawing.kind === 'horizontal' && anchors[0] && anchors[0].x > -1e5) {
-          const left = chart.convertToPixel({ gridIndex: 0 }, [0, drawing.anchors[0].price]) as number[];
-          const right = chart.convertToPixel({ gridIndex: 0 }, [bars.length - 1, drawing.anchors[0].price]) as number[];
-          segments.push({ a: { x: left[0], y: left[1] }, b: { x: right[0], y: right[1] } });
-        }
-        return {
-          id: drawing.id,
-          zOrder: drawing.zOrder,
-          locked: drawing.locked,
-          hidden: drawing.hidden,
-          anchors,
-          segments,
-          fills: [],
-        } satisfies ProjectedDrawing;
-      });
+      // select tool: hit-test in pixel space from the same geometry used to draw
+      const prices = bars.flatMap((bar) => [bar.h, bar.l]);
+      const ctx: RenderContext = {
+        bars,
+        range: args.range,
+        xMin: 0,
+        xMax: bars.length - 1,
+        yMin: Math.min(...prices),
+        yMax: Math.max(...prices),
+      };
+      const toPixel = (point: Point): Point | null => {
+        const px = chart.convertToPixel({ gridIndex: 0 }, [point.x, point.y]) as number[] | null;
+        if (!px || !Number.isFinite(px[0]) || !Number.isFinite(px[1])) return null;
+        return { x: px[0], y: px[1] };
+      };
+      const hits = drawingsRef.current
+        .map((drawing) => toProjectedDrawing(drawing, ctx))
+        .filter((item): item is ProjectedDrawing => item !== null)
+        .map((item) => projectToPixels(item, toPixel));
       const hit = hitTestDrawings(
         hits,
         { x: event.offsetX, y: event.offsetY },
@@ -458,9 +449,11 @@ export function useDrawingController(args: {
       );
       if (!hit) {
         setSelectedId(null);
+        setFocusAnchor(null);
         return;
       }
       setSelectedId(hit.id);
+      setFocusAnchor(hit.kind === 'anchor' ? hit.anchorIndex : null);
       const target = drawingsRef.current.find((item) => item.id === hit.id);
       if (!target || target.locked) return;
       dragRef.current = {
@@ -597,6 +590,31 @@ export function useDrawingController(args: {
         deleteSelected();
         return;
       }
+      if (
+        selectedId
+        && (event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+      ) {
+        event.preventDefault();
+        const target = drawingsRef.current.find((item) => item.id === selectedId);
+        if (!target || target.locked || !args.bars?.length) return;
+        const nextAnchors = nudgeAnchors(
+          target.anchors,
+          event.key,
+          event.shiftKey,
+          args.bars,
+          args.range,
+          focusAnchor,
+        );
+        const next = drawingsRef.current.map((item) => (
+          item.id === selectedId ? { ...item, anchors: nextAnchors, updatedAt: nowIso() } : item
+        ));
+        pushDrawings(next);
+        const updated = next.find((item) => item.id === selectedId);
+        if (updated && signedIn) {
+          if (styleTimer.current) clearTimeout(styleTimer.current);
+          styleTimer.current = setTimeout(() => void persistOne(updated, 'update'), 400);
+        }
+      }
       const meta = event.metaKey || event.ctrlKey;
       if (meta && event.key.toLowerCase() === 'z') {
         event.preventDefault();
@@ -611,7 +629,38 @@ export function useDrawingController(args: {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [deleteSelected, expanded, inProgress, redo, selectedId, tool, undo]);
+  }, [args.bars, args.range, deleteSelected, expanded, focusAnchor, inProgress, persistOne, pushDrawings, redo, selectedId, signedIn, tool, undo]);
+
+  useEffect(() => {
+    const chart = args.chart;
+    if (!chart || chart.isDisposed() || !visibleCtx) return;
+    const refresh = () => {
+      if (chart.isDisposed()) return;
+      const selected = drawingsRef.current.find((item) => item.id === selectedId && !item.hidden) ?? null;
+      const selectedGeom = selected ? selectionOverlay(selected, visibleCtx) : null;
+      const draftGeom = inProgress && inProgress.points.length ? draftOverlay(inProgress, visibleCtx) : null;
+      const overlay: OverlayGeometry = {
+        anchors: [...(selectedGeom?.anchors ?? []), ...(draftGeom?.anchors ?? [])],
+        segments: [...(selectedGeom?.segments ?? []), ...(draftGeom?.segments ?? [])],
+        fills: [...(selectedGeom?.fills ?? []), ...(draftGeom?.fills ?? [])],
+      };
+      const toPixel = (point: Point): Point | null => {
+        const px = chart.convertToPixel({ gridIndex: 0 }, [point.x, point.y]) as number[] | null;
+        if (!px || !Number.isFinite(px[0]) || !Number.isFinite(px[1])) return null;
+        return { x: px[0], y: px[1] };
+      };
+      chart.setOption(
+        { graphic: graphicFromOverlay(overlay, toPixel, '#2E46E0') },
+        { lazyUpdate: true },
+      );
+    };
+    refresh();
+    chart.on('datazoom', refresh);
+    return () => {
+      if (chart.isDisposed()) return;
+      chart.off('datazoom', refresh);
+    };
+  }, [args.chart, drawings, inProgress, selectedId, visibleCtx]);
 
   const importJson = useCallback((raw: unknown) => {
     const parsed = validateImport(raw);
