@@ -318,10 +318,15 @@ test("undo color text lock delete then refresh", async ({ page }) => {
   await expect(row).toContainText("已锁定");
   await toolButton(page, "撤销").first().click();
   await expect(row).not.toContainText("已锁定");
-  // 展开后页内那份工具条是 hidden，「已同步」要认工作区 dialog 里可见的那份。
-  await expect(
-    page.getByRole("dialog", { name: "绘图工作区" }).getByText("已同步"),
-  ).toBeVisible({ timeout: 15_000 });
+  // 不读工具条文案（同步标签会改）：等 GET 上的 locked 落地再刷新。
+  await expect.poll(async () => {
+    const res = await page.request.get("/api/account/chart-drawings?ticker=AAPL&range=1d&adjustment=raw");
+    if (!res.ok()) return `http ${res.status()}`;
+    const body = await res.json();
+    const drawings = body.drawings || [];
+    if (drawings.length !== 1) return `n=${drawings.length}`;
+    return drawings[0].locked ? "locked" : "unlocked";
+  }, { timeout: 15_000 }).toBe("unlocked");
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
   await expectDrawingCount(page, 1);
