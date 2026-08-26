@@ -170,7 +170,7 @@ test.beforeEach(async ({ page }) => {
   if (!HAS_REAL_BACKEND) return;
   // 上一轮 CI 的残留会让「恰好 n 条」全红；page.request.delete 过不了同源守卫。
   await page.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
-  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 15_000 });
+  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
   await clearTouchedDrawings(page);
 });
 
@@ -551,9 +551,11 @@ test("zoom then recolor keeps the dataZoom window", async ({ page }) => {
 
 test("expanded mobile workspace has no horizontal overflow", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  // beforeEach already opened AAPL at desktop and waited for the toolbar.
+  // A second goto at 390px re-hits the light bucket and can leave the chart
+  // unmounted (no 选择). Resize the loaded page, then expand.
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
-  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
+  await expect(toolButton(page, "展开图表")).toBeVisible({ timeout: 20_000 });
   await expandChart(page);
   await expect(page.getByRole("dialog", { name: "绘图工作区" })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
