@@ -34,7 +34,29 @@ async function closePalette(page) {
 /**
  * 装上按帧采样器（必须在触发动作**之前**调用）：元素不存在的帧自动跳过，
  * 上限 120 帧防止长测试堆积。
+ *
+ * 采的是**滑块相对当前高亮行的偏移**，不是视口绝对坐标：面板自己有入场
+ * 动画（t-modal 的位移/缩放），绝对坐标在开场那几帧会整体漂几个像素，用它
+ * 判「有没有从旧行滑过来」会把面板入场误判成滑块走位。相对量则两者同步
+ * 移动、恒为 0，而真出 bug 时（从上一次的 active 行补间过来）差值有整行高。
  */
+async function startGlideDeltaSampler(page) {
+  await page.evaluate((sel) => {
+    window.__rectSamples = [];
+    const tick = () => {
+      const glide = document.querySelector(sel);
+      const row = document.querySelector('#command-palette-listbox [role="option"][aria-selected="true"]');
+      if (glide && row && window.__rectSamples.length < 120) {
+        const g = glide.getBoundingClientRect();
+        const r = row.getBoundingClientRect();
+        window.__rectSamples.push({ dy: g.y - r.y, dh: g.height - r.height });
+      }
+      window.__rectRaf = requestAnimationFrame(tick);
+    };
+    tick();
+  }, GLIDE_SELECTOR);
+}
+
 async function startRectSampler(page, selector) {
   await page.evaluate((sel) => {
     window.__rectSamples = [];
@@ -57,18 +79,27 @@ async function stopRectSampler(page) {
   });
 }
 
-/** 采样序列里元素**没有走过位**：每一帧都落在最终位置的公差内。 */
-function expectNoTravel(samples, axes = ["y", "h"], tolerance = 1.5) {
+/** 每一帧滑块都贴在它那一行上——从没有从别处滑过来。 */
+function expectGlideNeverTravelled(samples, tolerance = 2) {
   expect(samples.length, "sampler must have caught at least one frame").toBeGreaterThan(0);
-  const last = samples[samples.length - 1];
   for (const sample of samples) {
-    for (const axis of axes) {
-      expect(
-        Math.abs(sample[axis] - last[axis]),
-        `${axis} must never travel: saw ${sample[axis]} before settling at ${last[axis]}`,
-      ).toBeLessThanOrEqual(tolerance);
-    }
+    expect(
+      Math.abs(sample.dy),
+      `glide must sit on its row every frame: saw a ${sample.dy}px offset`,
+    ).toBeLessThanOrEqual(tolerance);
+    expect(Math.abs(sample.dh), `glide height must match its row: saw ${sample.dh}px`).toBeLessThanOrEqual(tolerance);
   }
+}
+
+/** 等滑块落到目标行上（同批内换行是**允许**滑行的，所以要等它落定）。 */
+async function pollGlideOnRow(page, row) {
+  await expect
+    .poll(async () => {
+      const [g, r] = await Promise.all([glide(page).boundingBox(), row.boundingBox()]);
+      if (!g || !r) return Number.POSITIVE_INFINITY;
+      return Math.abs(g.y - r.y);
+    })
+    .toBeLessThanOrEqual(2);
 }
 
 test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
@@ -77,15 +108,13 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
   });
 
   test("highlight is visible on first open, placed without animating from a stale spot", async ({ page }) => {
-    await startRectSampler(page, GLIDE_SELECTOR);
+    await startGlideDeltaSampler(page);
     await openPalette(page);
     await expect(glide(page)).toHaveCSS("opacity", "1");
     const samples = await stopRectSampler(page);
-    /* 首绘是瞬放：采样器从面板出现的第一帧起就该一直在第一行 */
-    expectNoTravel(samples);
-    const rowBox = await paletteRow(page, 0).boundingBox();
-    expect(Math.abs(samples[samples.length - 1].y - rowBox.y)).toBeLessThanOrEqual(2);
-    expect(Math.abs(samples[samples.length - 1].h - rowBox.height)).toBeLessThanOrEqual(2);
+    /* 首绘是瞬放：采样器从面板出现的第一帧起，滑块就一直贴在高亮行上 */
+    expectGlideNeverTravelled(samples);
+    await expect(paletteRow(page, 0)).toHaveAttribute("aria-selected", "true");
   });
 
   test("reopening after moving the highlight does not tween it from the old row", async ({ page }) => {
@@ -98,13 +127,12 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
     await expect(paletteRow(page, 2)).toHaveAttribute("aria-selected", "true");
     await closePalette(page);
 
-    await startRectSampler(page, GLIDE_SELECTOR);
+    await startGlideDeltaSampler(page);
     await openPalette(page);
     await expect(glide(page)).toHaveCSS("opacity", "1");
     const samples = await stopRectSampler(page);
-    expectNoTravel(samples);
-    const rowBox = await paletteRow(page, 0).boundingBox();
-    expect(Math.abs(samples[samples.length - 1].y - rowBox.y)).toBeLessThanOrEqual(2);
+    expectGlideNeverTravelled(samples);
+    await expect(paletteRow(page, 0)).toHaveAttribute("aria-selected", "true");
   });
 
   test("clearing the query re-places the highlight instantly on the new batch", async ({ page }) => {
@@ -116,12 +144,12 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
     await expect(clear).toBeVisible();
     await page.keyboard.press("ArrowDown");
 
-    await startRectSampler(page, GLIDE_SELECTOR);
+    await startGlideDeltaSampler(page);
     await clear.click();
     await expect(paletteInput(page)).toHaveValue("");
     await expect(paletteRow(page, 0)).toHaveAttribute("aria-selected", "true");
     const samples = await stopRectSampler(page);
-    expectNoTravel(samples);
+    expectGlideNeverTravelled(samples);
   });
 
   test("clear button Enter clears the query and refocuses the input", async ({ page }) => {
@@ -171,8 +199,8 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
     await second.focus();
     await expect(second).toHaveAttribute("aria-selected", "true");
     await expect(paletteRow(page, 0)).toHaveAttribute("aria-selected", "false");
-    const [glideBox, rowBox] = await Promise.all([glide(page).boundingBox(), second.boundingBox()]);
-    expect(Math.abs(glideBox.y - rowBox.y), "glide must follow keyboard focus").toBeLessThanOrEqual(2);
+    /* 同一批内换行是允许滑行的，所以等它落定再比几何，而不是拿补间中途帧 */
+    await pollGlideOnRow(page, second);
   });
 
   test("IME composition keystrokes are not hijacked by the panel", async ({ page }) => {

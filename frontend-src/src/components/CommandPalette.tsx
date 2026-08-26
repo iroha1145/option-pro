@@ -92,15 +92,20 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
   const phase = useOverlayPhase(open, closeMs);
   const mounted = overlayVisible(open, phase);
 
-  /* 全局快捷键 ⌘K / Ctrl+K 由 Layout 绑定；此处处理打开后逻辑 */
+  /* 归零放在**收起之后**而不是打开时：打开时才清会让面板先按上一次的 active
+     渲染一帧、随后再被重置成 0，滑行高亮因此要落两次笔——第二次同批同元素，
+     就成了从上次那一行补间过来（阻断 1 的另一半）。收起后清则重开只落一次。 */
   useEffect(() => {
-    if (open) {
-      setQuery('');
-      setResults([]);
-      setSearchError(null);
-      setActive(0);
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
+    if (mounted) return;
+    setQuery('');
+    setResults([]);
+    setSearchError(null);
+    setActive(0);
+  }, [mounted]);
+
+  /* 全局快捷键 ⌘K / Ctrl+K 由 Layout 绑定；此处只负责打开后把焦点交给输入框 */
+  useEffect(() => {
+    if (open) requestAnimationFrame(() => inputRef.current?.focus());
   }, [open]);
 
   /* 防抖 200ms 搜索 */
