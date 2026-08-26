@@ -78,7 +78,8 @@ const SURFACES = [
   ['components/screener/SideCards.tsx', /t-acc-panel-inner/, 't-acc-panel-inner'],
   ['components/screener/FilterWorkbench.tsx', /GlidePill/, 'TierSegmented glide pill'],
   ['components/screener/FilterWorkbench.tsx', /SPRING_INDICATOR/, 'TierSegmented beui spring'],
-  ['components/shared/GlidePill.tsx', /layout="position"/, 'beui layoutId pill'],
+  ['components/screener/FilterWorkbench.tsx', /layoutScroll/, 'TierSegmented scroll-aware projection'],
+  ['components/shared/GlidePill.tsx', /layoutId=\{layoutId\}/, 'beui layoutId pill'],
   ['components/CommandPalette.tsx', /placeListGlide/, 'palette glide highlight'],
   ['pages/Login.tsx', /t-input-wrap/, 't-input-wrap'],
   ['pages/Login.tsx', /userShake\.classes\.wrap/, 'username shake wrap className'],
@@ -264,9 +265,13 @@ test('toast rows collapse on the toast clocks so the stack never jumps', async (
 });
 
 test('tabs ride the beui spring indicator with Paper Terminal geometry, focus ring restored', async () => {
-  /* 几何仍是 catalog 的纸面分段控件（8px 条 / 26px 高），指示器换成
+  /* 几何仍是 catalog 的纸面分段控件（8px 条 / 26px 高），指示器是
      beui.dev components/motion/tabs 的 layoutId 弹簧（SPRING_INDICATOR，
-     170/24/1.2）；reduced-motion 由 MotionConfig 归零。 */
+     170/24/1.2）；reduced-motion 由 MotionConfig 归零。
+     审查 #113 修正确认：layout="position" 只动位置、宽度瞬跳，禁用；
+     可横向滚动的 TierSegmented 用 layoutScroll（layoutRoot 只给 fixed 容器，
+     如 MobileDock 里的 Segmented）；指示器与按钮同级，方向键从最近的
+     tablist 查全体标签（wrapper 下 parentElement 只剩当前 wrapper）。 */
   const catalog = await source('styles/transitions-catalog.css');
   const adaptation = catalog.slice(catalog.indexOf('Paper Terminal color remaps'));
   assert.match(adaptation, /\.t-tabs \{[^}]*border-radius: 8px;/s);
@@ -275,13 +280,18 @@ test('tabs ride the beui spring indicator with Paper Terminal geometry, focus ri
   assert.match(motion, /damping: 24/);
   assert.match(motion, /mass: 1\.2/);
   const pill = await source('components/shared/GlidePill.tsx');
-  assert.match(pill, /layout="position"/);
+  assert.doesNotMatch(pill, /layout="position"/, 'position-only 投影让宽度瞬跳');
   assert.match(pill, /shadow-btn/);
   const segmented = await source('components/shared/Segmented.tsx');
   assert.match(segmented, /focus-visible:ring-2/);
   assert.match(segmented, /useReducedMotion/);
+  assert.match(segmented, /layoutRoot/, 'MobileDock 是 fixed 容器，Segmented 保持 layoutRoot');
+  assert.match(segmented, /closest<HTMLElement>\('\[role="tablist"\]'\)/);
   const workbench = await source('components/screener/FilterWorkbench.tsx');
   assert.match(workbench, /useReducedMotion/);
+  assert.match(workbench, /layoutScroll/);
+  assert.doesNotMatch(workbench, /layoutRoot/, '横向滚动 tabs 用 layoutScroll，不是 layoutRoot');
+  assert.match(workbench, /closest<HTMLElement>\('\[role="tablist"\]'\)/);
   assert.doesNotMatch(workbench, /useTabsPill/, 'TierSegmented rides the beui spring pill');
 });
 

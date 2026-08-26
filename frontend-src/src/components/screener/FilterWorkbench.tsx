@@ -55,9 +55,11 @@ function TierSegmented({
   const reduce = useReducedMotion();
   return (
     <MotionConfig transition={reduce ? { duration: 0 } : SPRING_INDICATOR}>
-    {/* beui motion tabs 滑行指示器；layoutRoot 把投影收进条内（可横向滚动） */}
+    {/* beui motion tabs 滑行指示器。layoutScroll：本条可横向滚动
+        （overflow-x-auto），布局测量必须计入容器滚动偏移，否则窄屏滚动
+        后切换标签滑块跳位；给 fixed 容器用的根投影模式不适用（阻断 3）。 */}
     <motion.div
-      layoutRoot
+      layoutScroll
       role="tablist"
       aria-label={__t('强度分档 · 计数基于{scope}', { scope: scopeNote })}
       title={__t('分档计数基于{scope}', { scope: scopeNote })}
@@ -66,45 +68,50 @@ function TierSegmented({
       {TIER_OPTIONS.map((o, index) => {
         const active = value === o.value;
         return (
-          <button
-            key={o.value}
-            role="tab"
-            aria-selected={active}
-            /* tablist 标准键盘行为，与 shared/Segmented 的 P3-5 口径一致
-               （审计 2.5.9）：roving tabindex + 方向键 + Home/End。 */
-            tabIndex={active ? 0 : -1}
-            onClick={() => onChange(o.value)}
-            onKeyDown={(event) => {
-              const step =
-                event.key === 'ArrowRight' || event.key === 'ArrowDown'
-                  ? 1
-                  : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
-                    ? -1
-                    : 0;
-              let target = -1;
-              if (step !== 0) {
-                target = (index + step + TIER_OPTIONS.length) % TIER_OPTIONS.length;
-              } else if (event.key === 'Home') {
-                target = 0;
-              } else if (event.key === 'End') {
-                target = TIER_OPTIONS.length - 1;
-              }
-              if (target < 0) return;
-              event.preventDefault();
-              onChange(TIER_OPTIONS[target].value);
-              const next = event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('.t-tab')[target];
-              next?.focus();
-            }}
-            className="t-tab shrink-0 whitespace-nowrap text-caption font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
-          >
+          /* 指示器与按钮同级：滑块垫在 z-10 透明按钮之下，不遮邻居文字 */
+          <div key={o.value} className="relative shrink-0">
             {active && <GlidePill layoutId={layoutId} />}
-            <span className="relative z-10 flex items-baseline gap-1">
-              {o.label}
-              <span className={cn('font-mono text-[11px] leading-[14px] tnum', active ? 'text-brand-600' : 'text-ink-300')}>
-                {counts[o.value]}
+            <button
+              role="tab"
+              aria-selected={active}
+              /* tablist 标准键盘行为，与 shared/Segmented 的 P3-5 口径一致
+                 （审计 2.5.9）：roving tabindex + 方向键 + Home/End。 */
+              tabIndex={active ? 0 : -1}
+              onClick={() => onChange(o.value)}
+              onKeyDown={(event) => {
+                const step =
+                  event.key === 'ArrowRight' || event.key === 'ArrowDown'
+                    ? 1
+                    : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+                      ? -1
+                      : 0;
+                let target = -1;
+                if (step !== 0) {
+                  target = (index + step + TIER_OPTIONS.length) % TIER_OPTIONS.length;
+                } else if (event.key === 'Home') {
+                  target = 0;
+                } else if (event.key === 'End') {
+                  target = TIER_OPTIONS.length - 1;
+                }
+                if (target < 0) return;
+                event.preventDefault();
+                onChange(TIER_OPTIONS[target].value);
+                /* 从最近的 tablist 查全体标签（wrapper 结构连锁修） */
+                const tabs = event.currentTarget
+                  .closest<HTMLElement>('[role="tablist"]')
+                  ?.querySelectorAll<HTMLElement>('.t-tab');
+                tabs?.[target]?.focus();
+              }}
+              className="t-tab relative z-10 shrink-0 whitespace-nowrap text-caption font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
+            >
+              <span className="flex items-baseline gap-1">
+                {o.label}
+                <span className={cn('font-mono text-[11px] leading-[14px] tnum', active ? 'text-brand-600' : 'text-ink-300')}>
+                  {counts[o.value]}
+                </span>
               </span>
-            </span>
-          </button>
+            </button>
+          </div>
         );
       })}
     </motion.div>

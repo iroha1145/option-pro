@@ -260,6 +260,11 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
       e.preventDefault();
       setActive((a) => (flat.length ? (a - 1 + flat.length) % flat.length : 0));
     } else if (e.key === 'Enter') {
+      /* 原生交互元素（清除钮/结果行按钮）让浏览器派发原生 click——面板级
+         Enter 只服务输入框。否则 preventDefault 会吃掉清除钮的点击行为，
+         还误把当前高亮结果的 action() 执行掉（审查 #113 阻断 2）。 */
+      const target = e.target as HTMLElement;
+      if (target.closest('button, a, [role="button"]')) return;
       e.preventDefault();
       flat[clampedActive]?.action();
     } else if (e.key === 'Escape') {
@@ -277,20 +282,26 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
   }, [clampedActive]);
 
   /* 滑行高亮定位：跟随 active 行（键盘 ↑↓ 与鼠标悬停同一套），首绘/列表
-     换批时瞬放不补间，行内切换才滑行。 */
+     换批时瞬放不补间，行内切换才滑行。
+     依赖必须带 mounted（审查 #113 阻断 1）：面板关闭时组件未挂载、高亮
+     节点不存在，effect 提前返回；随后打开时若其余依赖没变，effect 不再
+     执行，高亮会永远停在 height:0/opacity:0。 */
   useLayoutEffect(() => {
+    if (!mounted) {
+      glidePainted.current = false;
+      return;
+    }
     const glide = glideRef.current;
-    if (!glide) return;
     const row = listRef.current?.querySelector<HTMLElement>(`[data-idx="${clampedActive}"]`);
-    if (!row || flat.length === 0) {
-      glide.style.opacity = '0';
+    if (!glide || !row || flat.length === 0) {
+      if (glide) glide.style.opacity = '0';
       glidePainted.current = false;
       return;
     }
     glide.style.opacity = '1';
     placeListGlide(glide, row, glidePainted.current);
     glidePainted.current = true;
-  }, [clampedActive, flat.length, entries]);
+  }, [mounted, clampedActive, flat.length, entries]);
 
   /* 面板打开时锁背景滚动（审计 2.2.14）：与 Drawer 同口径，滚轮不再穿透
      到背后的页面。关闭动画期间仍锁，避免背后页面跟着滚。 */
