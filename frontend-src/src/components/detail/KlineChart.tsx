@@ -1193,6 +1193,7 @@ export default function KlineChart({
         settings={layerSettings}
         onChange={persistLayers}
         strengthContext={analysisBundle?.strengthContext ?? null}
+        mode={mode}
       />
 
       <p className={cn('mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-micro text-ink-400')}>

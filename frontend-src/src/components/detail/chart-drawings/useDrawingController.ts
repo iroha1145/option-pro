@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EChartsInstance } from '@/lib/chart';
 import { barKeyOf, nudgeAnchors, snapBarIndex } from './projection.ts';
-import { drawingErrorCode, drawingErrorStatus, drawingsApi, isAuthError } from './api.ts';
+import { drawingErrorCode, drawingErrorStatus, drawingsApi } from './api.ts';
 import { drainPersistJob } from './drain.ts';
+import {
+  applyConflictDecision,
+  completeScopeLoad,
+  previewScopeLoad,
+} from './scopeLoad.ts';
 import {
   draftOverlay,
   drawingsToMarks,
@@ -19,7 +24,6 @@ import {
   quarantineDrawings,
   saveDrawings,
   anonymousStorageKey,
-  drawingsFromCache,
   drawingsStorageKey,
 } from './storage.ts';
 import { exportDrawings, parseDrawing, validateImport, whitelistStyle, whitelistText } from './schema.ts';
@@ -51,12 +55,10 @@ import {
   applyPersistResponse,
   diffPersistOps,
   keepLocalWithServerRevisions,
-  conflictSnapshotUsable,
   mutableFieldsDiffer,
   patchRevision,
   regeneratePersistOps,
   replaceDrawing,
-  resolveListApply,
   resolveRetryAction,
   type PersistJob,
   type ScopeKey,
@@ -314,40 +316,34 @@ export function useDrawingController(args: {
     }
     const cached = loadDrawings(storageKey);
     if (!cached.ok && !cached.missing) quarantineDrawings(storageKey);
-    try {
-      const remote = await drawingsApi.list(args.ticker, args.range, adjustment);
-      const outbox = outboxRef.current;
-      if (outbox.getScopeGeneration() !== generation) return;
-      outbox.setScopeRevision(remote.scopeRevision);
-      lastServerRef.current = remote.drawings;
-      for (const item of remote.drawings) revisionsRef.current.set(item.id, item.revision);
-      if (!outbox.isEmpty()) {
-        // 有效空缓存也是权威的：绝不能回落到上一个标的的 drawingsRef。
-        const list = drawingsFromCache(cached);
-        writeLocal(list, false, { persist: 'skip' });
-        setHistory(createHistory(list));
-        outbox.stampRevisions(remote.drawings);
-        setSyncStatus('saving');
-        setSyncHint(null);
-        for (const id of outbox.readyIds()) void drainRef.current(id);
-        return;
-      }
-      if (!resolveListApply(outbox.isEmpty(), true)) return;
-      writeLocal(remote.drawings, false);
-      setHistory(createHistory(remote.drawings));
-      setSyncStatus('idle');
-      setSyncHint(null);
-    } catch (error) {
-      if (outboxRef.current.getScopeGeneration() !== generation) return;
-      const list = drawingsFromCache(cached);
-      writeLocal(list, false, { persist: cached.ok || list.length ? 'now' : 'skip' });
-      setHistory(createHistory(list));
-      if (isAuthError(error)) {
-        setSyncStatus('guest');
-        return;
-      }
-      setSyncStatus(outboxRef.current.isEmpty() ? 'load_failed' : 'write_failed');
-      setSyncHint('unsynced');
+    const preview = previewScopeLoad(cached);
+    // Apply cache (including authoritative empty) before GET so AAPL rows
+    // cannot stay editable under the MSFT storageKey while the list is in flight.
+    writeLocal(preview.drawings, false, { persist: preview.persist });
+    setHistory(createHistory(preview.drawings));
+    setSyncStatus(preview.status === 'load_failed' ? 'load_failed' : 'saving');
+    setSyncHint(preview.hint);
+    const outcome = await completeScopeLoad({
+      generation,
+      outbox: outboxRef.current,
+      cached,
+      list: () => drawingsApi.list(args.ticker, args.range, adjustment),
+      errorInfo: (error) => ({ code: drawingErrorCode(error), status: drawingErrorStatus(error) }),
+    });
+    if (outcome.foreign) return;
+    if (outcome.lastServer) {
+      lastServerRef.current = outcome.lastServer;
+      for (const item of outcome.lastServer) revisionsRef.current.set(item.id, item.revision);
+      outboxRef.current.stampRevisions(outcome.lastServer);
+    }
+    if (outcome.apply !== 'none') {
+      writeLocal(outcome.drawings, false, { persist: outcome.persist });
+      setHistory(createHistory(outcome.drawings));
+    }
+    setSyncStatus(outcome.status);
+    setSyncHint(outcome.hint);
+    if (outcome.drain) {
+      for (const id of outboxRef.current.readyIds()) void drainRef.current(id);
     }
   }, [adjustment, args.range, args.ticker, signedIn, storageKey, writeLocal]);
 
@@ -989,9 +985,13 @@ export function useDrawingController(args: {
     const generation = outbox.getScopeGeneration();
     const current = outbox.getScope();
     let snapshot = conflictServerRef.current;
-    if (snapshot && !conflictSnapshotUsable(snapshot, current, generation)) {
-      return;
-    }
+    const keepDecision = applyConflictDecision({
+      snapshot,
+      currentScope: current,
+      generation,
+      intent: 'keep',
+    });
+    if (keepDecision.action === 'ignore') return;
     if (!snapshot) {
       try {
         const remote = await drawingsApi.list(args.ticker, args.range, adjustment);
@@ -1032,7 +1032,13 @@ export function useDrawingController(args: {
     const outbox = outboxRef.current;
     const generation = outbox.getScopeGeneration();
     let snapshot = conflictServerRef.current;
-    if (snapshot && !conflictSnapshotUsable(snapshot, outbox.getScope(), generation)) return;
+    const takeDecision = applyConflictDecision({
+      snapshot,
+      currentScope: outbox.getScope(),
+      generation,
+      intent: 'take',
+    });
+    if (takeDecision.action === 'ignore') return;
     if (!snapshot) {
       try {
         const remote = await drawingsApi.list(args.ticker, args.range, adjustment);

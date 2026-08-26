@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { t } from '../../../i18n/core.ts';
 import { GROUPS, LAYERS, PRESETS, type PresetId } from './analysis/registry.ts';
 import { settingsFromPreset, toggleLayer, type LayerSettings } from './analysis/settings.ts';
+import { layerInputEnabled, type ChartRenderMode } from './scopeLoad.ts';
 
 const PRESET_ORDER: Exclude<PresetId, 'custom'>[] = [
   'minimal',
@@ -31,12 +32,14 @@ export default function LayerMenu({
   settings,
   onChange,
   strengthContext,
+  mode = 'candle',
 }: {
   open: boolean;
   onClose: () => void;
   settings: LayerSettings;
   onChange: (next: LayerSettings) => void;
   strengthContext?: Record<string, unknown> | null;
+  mode?: ChartRenderMode;
 }) {
   const families = (strengthContext?.families ?? null) as Record<string, { score?: number | null }> | null;
   return (
@@ -70,14 +73,21 @@ export default function LayerMenu({
             <ul className="flex flex-col gap-1">
               {LAYERS.filter((layer) => layer.group === group.id).map((layer) => {
                 const on = settings.enabled.includes(layer.id);
+                const gate = layerInputEnabled(layer, mode);
+                const reason = gate.reason ? t(gate.reason) : null;
                 return (
                   <li key={layer.id}>
-                    <label className="flex items-center gap-2">
+                    <label className={cn('flex items-center gap-2', !gate.enabled && 'text-ink-400')}>
                       <input
                         type="checkbox"
                         checked={on}
+                        disabled={!gate.enabled}
                         aria-label={layer.label}
-                        onChange={() => onChange(toggleLayer(settings, layer.id))}
+                        title={reason ?? undefined}
+                        onChange={() => {
+                          if (!gate.enabled) return;
+                          onChange(toggleLayer(settings, layer.id));
+                        }}
                       />
                       <span>{layer.label}</span>
                     </label>

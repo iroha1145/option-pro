@@ -34,6 +34,7 @@ async function loadDrawings(t) {
     overlaysToMarks: path.join(drawingsDir, 'analysis/overlaysToMarks.ts'),
     sha256: path.join(drawingsDir, 'analysis/sha256.ts'),
     drain: path.join(drawingsDir, 'drain.ts'),
+    scopeLoad: path.join(drawingsDir, 'scopeLoad.ts'),
     contract: path.join(drawingsDir, 'contract.ts'),
     zoom: path.join(drawingsDir, 'zoom.ts'),
   };
@@ -77,6 +78,9 @@ export {
   jobIsCurrent, jobBelongsToScope, settleJob, releaseInflight, conflictSnapshotUsable,
 } from ${JSON.stringify(files.sync)};
 export { drainPersistJob } from ${JSON.stringify(files.drain)};
+export {
+  previewScopeLoad, completeScopeLoad, applyConflictDecision, layerInputEnabled,
+} from ${JSON.stringify(files.scopeLoad)};
 export { parseList, parseSaved, DrawingContractError } from ${JSON.stringify(files.contract)};
 export { insideZoom, zoomFromOption } from ${JSON.stringify(files.zoom)};
 export {
@@ -1897,7 +1901,7 @@ test('update 404 while still local enters conflict and regenerates create/delete
 });
 
 test('delayed takeServerConflict for another scope is ignored', async (t) => {
-  const { DrawingOutbox, conflictSnapshotUsable } = await loadDrawings(t);
+  const { DrawingOutbox, conflictSnapshotUsable, applyConflictDecision, SCOPE_JOB_ID } = await loadDrawings(t);
   const box = new DrawingOutbox(null);
   const aapl = { identity: 'acct', ticker: 'AAPL', range: '1d', adjustment: 'raw' };
   const msft = { identity: 'acct', ticker: 'MSFT', range: '1d', adjustment: 'raw' };
@@ -1909,8 +1913,91 @@ test('delayed takeServerConflict for another scope is ignored', async (t) => {
     drawings: [drawingOf('horizontal', [ANCHOR_ONE], { ticker: 'AAPL' })],
   };
   const msftGen = box.setScope(msft);
+  box.enqueue({ drawingId: SCOPE_JOB_ID, type: 'clear' });
   assert.equal(conflictSnapshotUsable(snapshot, box.getScope(), msftGen), false);
+  const decision = applyConflictDecision({
+    snapshot,
+    currentScope: box.getScope(),
+    generation: box.getScopeGeneration(),
+    intent: 'take',
+  });
+  assert.equal(decision.action, 'ignore');
+  assert.equal(box.isEmpty(), false, 'foreign take must not cancelAll the current Outbox');
   assert.equal(box.getScope().ticker, 'MSFT');
+});
+
+test('empty cache + pending clear does not show the previous ticker before list resolves', async (t) => {
+  const {
+    DrawingOutbox, SCOPE_JOB_ID, previewScopeLoad, completeScopeLoad,
+    saveDrawings, loadDrawings: readDrawings, drawingsStorageKey,
+  } = await loadDrawings(t);
+  const store = memStore();
+  const aaplScope = { identity: 'acct', ticker: 'AAPL', range: '1d', adjustment: 'raw' };
+  const msftScope = { identity: 'acct', ticker: 'MSFT', range: '1d', adjustment: 'raw' };
+  const aapl = drawingOf('horizontal', [ANCHOR_ONE], { ticker: 'AAPL' });
+  saveDrawings(drawingsStorageKey('acct', 'AAPL', '1d', 'raw'), [aapl], store);
+  saveDrawings(drawingsStorageKey('acct', 'MSFT', '1d', 'raw'), [], store);
+
+  const box = new DrawingOutbox(store);
+  const aaplGen = box.setScope(aaplScope);
+  box.setScopeRevision(4);
+  box.setScope(msftScope);
+  box.enqueue({ drawingId: SCOPE_JOB_ID, type: 'clear' });
+  const msftGen = box.getScopeGeneration();
+  assert.notEqual(msftGen, aaplGen);
+
+  const cached = readDrawings(drawingsStorageKey('acct', 'MSFT', '1d', 'raw'), store);
+  assert.equal(cached.ok, true);
+  assert.equal(cached.state, 'empty');
+  const preview = previewScopeLoad(cached);
+  assert.deepEqual(preview.drawings, []);
+  assert.equal(preview.drawings.some((row) => row.ticker === 'AAPL'), false);
+  assert.equal(preview.status, 'idle');
+  assert.equal(box.getScope().ticker, 'MSFT');
+  assert.equal(box.getScopeRevision(), 0);
+  assert.equal(box.snapshot().some((job) => job.type === 'clear'), true);
+
+  let release;
+  const deferred = new Promise((resolve) => { release = resolve; });
+  const pending = completeScopeLoad({
+    generation: msftGen,
+    outbox: box,
+    cached,
+    list: () => deferred,
+  });
+  assert.deepEqual(previewScopeLoad(cached).drawings, [], 'still empty while GET is in flight');
+  release({ drawings: [aapl], scopeRevision: 9 });
+  const outcome = await pending;
+  assert.equal(outcome.foreign, false);
+  assert.equal(outcome.apply, 'cache');
+  assert.deepEqual(outcome.drawings, []);
+  assert.equal(outcome.status, 'saving');
+  assert.equal(outcome.drawings.some((row) => row.ticker === 'AAPL'), false);
+
+  let releaseStale;
+  const staleList = new Promise((resolve) => { releaseStale = resolve; });
+  const stale = completeScopeLoad({
+    generation: aaplGen,
+    outbox: box,
+    cached,
+    list: () => staleList,
+  });
+  releaseStale({ drawings: [aapl], scopeRevision: 1 });
+  const foreign = await stale;
+  assert.equal(foreign.foreign, true);
+  assert.equal(foreign.apply, 'none');
+  assert.deepEqual(foreign.drawings, []);
+});
+
+test('area mode disables pane and MA layer inputs', async (t) => {
+  const { layerInputEnabled, LAYERS } = await loadDrawings(t);
+  const byId = Object.fromEntries(LAYERS.map((layer) => [layer.id, layer]));
+  for (const id of ['rsi', 'macd', 'ma20']) {
+    assert.equal(layerInputEnabled(byId[id], 'area').enabled, false, id);
+    assert.equal(layerInputEnabled(byId[id], 'candle').enabled, true, id);
+  }
+  assert.equal(layerInputEnabled(byId.rsi, 'area').reason, '面积图不支持副图与均线叠加');
+  assert.equal(layerInputEnabled(byId.swings, 'area').enabled, true);
 });
 
 test('parseList and parseSaved throw on illegal server bodies', async (t) => {
